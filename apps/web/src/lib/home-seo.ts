@@ -10,7 +10,7 @@ interface BrowseSeoFilter {
 }
 
 /** Tham số URL làm kết quả khác "danh sách gốc" (khách tự lọc/sắp xếp/tìm): trang lọc là bản trùng nên không lập chỉ mục. */
-const NOINDEX_PARAMS = ['category', 'segment', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort'] as const;
+const NOINDEX_PARAMS = ['category', 'segment', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all'] as const;
 
 export function browseNoindex(params: URLSearchParams): boolean {
   if (normalizeSearchQuery(params.get('q'))) return true;

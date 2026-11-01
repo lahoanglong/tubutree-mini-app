@@ -155,4 +155,41 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
     expect(await screen.findByText('Miễn phí giao hàng cho đơn từ 200.000đ')).toBeInTheDocument();
     expect(screen.getByText(/Đặt định kỳ/)).toBeInTheDocument();
   });
+
+  it('dòng "Vận chuyển" chỉ gồm ai giao + phí/freeship; hàng Tubu giao hộ đối tác: dòng bấm được, tên truy cập không kèm câu giải thích dài', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ partnerOwned: true, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } }),
+    );
+    renderPdp();
+    const row = await screen.findByRole('button', { name: /^Vận chuyển/ });
+    expect(row).toHaveTextContent('Tubu Tree giao hàng');
+    expect(row).toHaveTextContent('Miễn phí giao hàng cho đơn từ 200.000đ');
+    expect(row).not.toHaveTextContent(/không dùng Điểm Xanh/);
+    expect(screen.getByTestId('pdp-shipping-notes')).toHaveTextContent(/không dùng Điểm Xanh/);
+  });
+
+  it('hàng gian hàng tự giao: dòng "Vận chuyển" không bấm được (không có Cam kết Tubu cho hàng này), COD và giá lẻ là chữ thường dưới dòng', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ fulfiller: { kind: 'MERCHANT', name: 'Shop A', shippingFee: 30_000, freeShipFrom: null } }),
+    );
+    renderPdp();
+    await screen.findByText('Shop A tự giao');
+    expect(screen.queryByRole('button', { name: /^Vận chuyển/ })).toBeNull();
+    expect(screen.getByText('Vận chuyển').closest('[role="button"]')).toBeNull();
+    const notes = screen.getByTestId('pdp-shipping-notes');
+    expect(notes).toHaveTextContent(/COD/);
+    expect(notes).toHaveTextContent(/chỉ bán theo giá lẻ/);
+    expect(notes.closest('[role="button"]')).toBeNull();
+  });
+
+  it('gian hàng tạm nghỉ: thông báo trạng thái là chữ thường, không bọc trong một nút bấm', async () => {
+    mocks.fetchProduct.mockResolvedValue(
+      product({ fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Shop A', shippingFee: null, freeShipFrom: null } }),
+    );
+    renderPdp();
+    const status = await screen.findByText('Shop A đang tạm nghỉ, chưa nhận đơn.');
+    expect(status).toHaveAttribute('role', 'status');
+    expect(status.closest('[role="button"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Vận chuyển/ })).toBeNull();
+  });
 });

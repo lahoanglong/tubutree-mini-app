@@ -79,9 +79,10 @@ function Block({ children }: { children: (m: Below) => ReactNode }) {
 // Hai kệ sản phẩm, Giờ vàng (HomeFlashSale ở home.tsx, nạp thẳng từ ../flash-sale) và dải Quà khách mới nằm trong gói đầu như trước khi tách khối: thẻ sản phẩm
 // đầu không đợi thêm một request chunk; Giờ vàng không hiện muộn hơn dữ liệu của nó (đo: nạp lười làm CLS khách mở lại tăng 0,0087 → 0,0211); dải quà là hero
 // trong màn đầu nên hai query của nó chạy ngay lượt vẽ đầu và nó tự thu về null (khách đã có đơn) mà không đợi chunk.
+// Bán chạy nhất ở lại gói đầu: khách mới không có Giờ vàng thì đó là kệ sản phẩm duy nhất, chunk hỏng/chậm không được làm nó biến mất hay bật ra dưới Danh mục.
 export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
-export const HomeBestSellerRail = () => <BestSellerRail />;
+export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => <BestSellerRail {...p} />;
 export const HomeBrandJourney = () => <Block>{(m) => <m.BrandJourney />}</Block>;
 export const HomeCommunityPreview = () => <Block>{(m) => <m.CommunityPreview />}</Block>;
 export const HomeNewCustomerGift = () => <NewCustomerGift />;
-export const HomeSuggestFeed = () => <Block>{(m) => <m.SuggestFeed />}</Block>;
+export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Block>{(m) => <m.SuggestFeed {...p} />}</Block>;

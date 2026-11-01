@@ -1,6 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { LayoutGrid } from 'lucide-react';
+import { categoryTrail, type CategoryNode } from '@tubutree/app-core/browse/category-tree';
 import { browseText } from '@/lib/browse-text';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { MIN_RATING_OPTION, PRICE_RANGES, activeFilterCount, priceRangeLabel, type SearchState } from '@/lib/search-state';
@@ -8,14 +10,19 @@ import { MIN_RATING_OPTION, PRICE_RANGES, activeFilterCount, priceRangeLabel, ty
 const ROW =
   'flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition hover:bg-forest-50';
 
+/** Số thương hiệu hiện sẵn; còn lại mở bằng "Thêm" (thương hiệu đang chọn luôn hiện). */
+const BRANDS_SHOWN = 6;
+
 /**
- * Cột lọc bên trái của trang Danh mục/Tìm kiếm từ lg: danh mục dạng danh sách, khoảng giá, còn hàng, đánh giá, thương hiệu.
- * Dùng đúng bộ lọc sẵn có (cùng `update` với hộp thoại Bộ lọc của điện thoại, cùng tham số URL), nhưng áp dụng ngay khi chọn
- * thay vì chờ nút "Xem kết quả". Dưới lg khung ẩn (display:none) và khách dùng hộp thoại như cũ.
+ * Cột lọc bên trái của trang Danh mục/Tìm kiếm từ lg: danh mục dạng cây (các gốc, con của gốc đang chọn), khoảng giá, còn hàng, đánh giá,
+ * thương hiệu. Dùng đúng bộ lọc sẵn có (cùng `update` với hộp thoại Bộ lọc của điện thoại, cùng tham số URL), nhưng áp dụng ngay khi chọn
+ * thay vì chờ nút "Xem kết quả". Dưới lg khung ẩn (display:none) và khách dùng hộp thoại như cũ. Cột là phần tử thường: không dính, không
+ * giới hạn cao, không cuộn riêng (`ListingLayout` cho nó 200px, cả trang cuộn chung).
  */
 export function FilterSidebar({
   state,
   entries,
+  tree,
   brands,
   onPickCategory,
   onClearCategory,
@@ -23,6 +30,8 @@ export function FilterSidebar({
 }: {
   state: SearchState;
   entries: CategoryEntry[];
+  /** Cây danh mục (`GET /categories`); thiếu thì chỉ có hàng gốc. */
+  tree?: CategoryNode[];
   brands: { brand: string; count: number }[];
   onPickCategory: (e: CategoryEntry) => void;
   onClearCategory: () => void;
@@ -32,32 +41,31 @@ export function FilterSidebar({
   const toggleBrand = (b: string) =>
     onPatch({ brands: state.brands.includes(b) ? state.brands.filter((x) => x !== b) : [...state.brands, b] });
   const filterCount = activeFilterCount(state);
+  const [allBrands, setAllBrands] = useState(false);
+  const activeRoot = state.category ? categoryTrail(tree, state.category)[0] : undefined;
+  const childrenOf = (rootKey: string): CategoryEntry[] => {
+    if (!activeRoot || activeRoot.id !== rootKey) return [];
+    return (activeRoot.children ?? [])
+      .filter((c) => c.id === state.category || c.productCount === undefined || c.productCount > 0)
+      .map((c) => ({ kind: 'category' as const, key: c.id, label: c.name, icon: LayoutGrid, image: c.image }));
+  };
+  const shownBrands = allBrands ? brands : brands.filter((b, i) => i < BRANDS_SHOWN || state.brands.includes(b.brand));
 
   return (
-    <aside
-      aria-label={browseText.filter.title}
-      data-testid="filter-sidebar"
-      className="hidden lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:block lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto lg:pr-1"
-    >
+    <aside aria-label={browseText.filter.title} data-testid="filter-sidebar" className="hidden lg:block">
       <Group title={browseText.categories}>
         <button type="button" aria-pressed={!hasCategory} onClick={onClearCategory} className={`${ROW} ${!hasCategory ? 'bg-forest-50 font-semibold text-forest-800' : 'text-stone-800'}`}>
           {browseText.sidebar.all}
         </button>
-        {entries.map((e) => {
-          const active = e.kind === 'category' ? state.category === e.key : state.segment === e.key;
-          return (
-            <button
-              key={`${e.kind}:${e.key}`}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onPickCategory(e)}
-              className={`${ROW} ${active ? 'bg-forest-50 font-semibold text-forest-800' : 'text-stone-800'}`}
-            >
-              <e.icon className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
-              <span className="min-w-0 break-words">{e.label}</span>
-            </button>
-          );
-        })}
+        {entries.map((e) => (
+          <div key={`${e.kind}:${e.key}`} className="flex flex-col">
+            <CategoryRow entry={e} active={e.kind === 'category' ? state.category === e.key : state.segment === e.key} onPick={onPickCategory} />
+            {e.kind === 'category' &&
+              childrenOf(e.key).map((c) => (
+                <CategoryRow key={c.key} entry={c} active={state.category === c.key} onPick={onPickCategory} nested />
+              ))}
+          </div>
+        ))}
       </Group>
 
       <Group title={browseText.filter.price}>
@@ -82,13 +90,21 @@ export function FilterSidebar({
 
       {brands.length > 0 && (
         <Group title={browseText.filter.brand}>
-          <div className="max-h-56 overflow-y-auto overscroll-contain">
-            {brands.map((b) => (
-              <Check key={b.brand} checked={state.brands.includes(b.brand)} onChange={() => toggleBrand(b.brand)}>
-                {b.brand}
-              </Check>
-            ))}
-          </div>
+          {shownBrands.map((b) => (
+            <Check key={b.brand} checked={state.brands.includes(b.brand)} onChange={() => toggleBrand(b.brand)}>
+              {b.brand}
+            </Check>
+          ))}
+          {brands.length > BRANDS_SHOWN && (
+            <button
+              type="button"
+              aria-expanded={allBrands}
+              onClick={() => setAllBrands((v) => !v)}
+              className={`${ROW} font-semibold text-forest-700`}
+            >
+              {allBrands ? browseText.sidebar.lessBrands : browseText.sidebar.moreBrands}
+            </button>
+          )}
         </Group>
       )}
 
@@ -102,6 +118,20 @@ export function FilterSidebar({
         </button>
       )}
     </aside>
+  );
+}
+
+function CategoryRow({ entry, active, onPick, nested }: { entry: CategoryEntry; active: boolean; onPick: (e: CategoryEntry) => void; nested?: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={() => onPick(entry)}
+      className={`${ROW} ${nested ? 'pl-8' : ''} ${active ? 'bg-forest-50 font-semibold text-forest-800' : 'text-stone-800'}`}
+    >
+      {!nested && <entry.icon className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />}
+      <span className="min-w-0 break-words">{entry.label}</span>
+    </button>
   );
 }
 

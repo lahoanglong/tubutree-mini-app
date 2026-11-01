@@ -129,6 +129,8 @@ export function mockPilotProduct(api: MockApi, opts: { addToCartDelayMs?: number
   api.get('/products/:slug', PILOT_PRODUCT);
   api.get('/products/:slug/related', []);
   api.get('/products/:slug/bought-together', []);
+  // PDP đọc dải "Có thể bạn cũng thích"; thiếu dòng này thì /products/:slug nuốt luôn đường for-you và trả về một sản phẩm.
+  api.get('/products/for-you', []);
   api.get('/products/:slug/reviews', { average: 0, count: 0, items: [] });
   api.get('/flash-sales/active', []);
   api.get('/cart', { ...PILOT_CART, items: [], subtotal: 0, itemCount: 0 });

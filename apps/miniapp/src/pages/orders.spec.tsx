@@ -32,7 +32,7 @@ vi.mock('../services/subscriptions-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('../components/home/best-seller-rail', () => ({ BestSellerRail: () => <div data-testid="best-seller-rail" /> }));
+vi.mock('../components/home/best-seller-rail', () => ({ BestSellerRailQuery: () => <div data-testid="best-seller-rail" /> }));
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import OrdersPage from './orders';

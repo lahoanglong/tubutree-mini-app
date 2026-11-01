@@ -42,7 +42,8 @@ function vnDay(ms: number): number {
   return Math.floor((ms + VN_OFFSET_MS) / DAY_MS);
 }
 
-function expiryText(endMs: number | null, now: number): string {
+/** Chữ hạn dùng: "Dùng đến 30/11", "Còn 2 ngày", "Hết hạn hôm nay"; hạn không đọc được (null) thì rỗng. */
+export function expiryText(endMs: number | null, now: number): string {
   if (endMs === null) return '';
   if (endMs - now <= 0) return fillCopy('coupon.expired');
   const days = vnDay(endMs) - vnDay(now);

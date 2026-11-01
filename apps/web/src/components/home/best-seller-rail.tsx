@@ -1,45 +1,53 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { homeCopy } from '@tubutree/app-core/home-copy';
+import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
-import type { PageResponse, ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
+import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
+import { shelf } from '@tubutree/app-core/merch/shelves';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
-import { Heading, ProductRail, Text } from '@/components/mini';
-import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
+import { ProductRail, SectionHeader } from '@/components/mini';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
 
-export const BEST_SELLER_LIMIT = 6;
+/** Số khung chờ: vừa đủ lấp một màn ở 375px (thẻ hạng rộng `--tile-w-sm`), phần dư cuộn ngang. */
+const SKELETON_COUNT = 5;
 
-/** "Bán chạy" một hàng cuộn ngang cho khách mới (bản web của `best-seller-rail.tsx`); khách cũ có tab "Bán chạy" trong lưới gợi ý cuối trang. */
-export function BestSellerRail({ initial }: { initial?: PageResponse<ProductCardData> }) {
-  const router = useRouter();
-  const q = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...(initial ? { initialData: initial, staleTime: 60_000 } : {}) }));
-  const items = q.data?.data ?? [];
-  if (!q.isLoading && items.length === 0) {
-    return q.isError ? <HomeBlockError title={homeCopy.bestSellers.title} error={q.error} onRetry={q.refetch} retrying={q.isFetching} /> : null;
+export interface BestSellerRailProps {
+  /** Đã qua `composeHomeShelves` (bỏ món trùng kệ trên, 3–10 món); dưới 3 món thì rỗng và khối ẩn. */
+  items: ProductCardData[];
+  /** Hạng thật của từng món (cùng chỉ số với `items`) khi kệ đã bỏ món trùng kệ trên; thiếu thì đánh #1..#n theo thứ tự. */
+  ranks?: readonly number[];
+  loading: boolean;
+  error?: unknown;
+  onRetry?: () => unknown;
+  retrying?: boolean;
+}
+
+/**
+ * Bán chạy nhất (Q18, bản web của `best-seller-rail.tsx` ở Mini App) cho MỌI khách: một hàng thẻ có hạng #1..#n xếp theo lượt bán 30 ngày, "Xem tất cả" tới trang
+ * xếp hạng. Đứng sau Danh mục; khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
+ */
+export function BestSellerRail({ items, ranks, loading, error, onRetry, retrying }: BestSellerRailProps) {
+  const title = fillCopy('rank.title');
+  if (!loading && items.length === 0) {
+    return error ? <HomeBlockError title={title} error={error} onRetry={() => onRetry?.()} retrying={retrying} /> : null;
   }
+  const seeAll = seeAllHref('home.bestSellers', 'web');
   return (
-    <section aria-label={homeCopy.bestSellers.title} style={{ padding: '8px 0 4px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
-        <Heading variant="title-sm" as="h2">
-          {homeCopy.bestSellers.title}
-        </Heading>
-        <button
-          type="button"
-          aria-label={`${homeCopy.bestSellers.seeAll} ${homeCopy.bestSellers.title}`}
-          className="tubu-press"
-          onClick={() => router.push(browseHref({ ...EMPTY_SEARCH_STATE, sort: 'best_seller' }))}
-          style={{ minHeight: 44, padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <Text variant="label" tone="brand">
-            {homeCopy.bestSellers.seeAll}
-          </Text>
-        </button>
-      </div>
-      <ProductRail label="Sản phẩm bán chạy" variant="rail-md" items={items} loading={q.isLoading} skeletonCount={BEST_SELLER_LIMIT} priorityCount={2} />
+    <section aria-label={title}>
+      <SectionHeader title={title} subtitle={fillCopy('rank.basis')} action={seeAll ? { to: seeAll } : undefined} />
+      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={2} />
     </section>
   );
+}
+
+const SHELF = shelf('home.bestSellers');
+
+/** Bán chạy nhất tự tải, cho màn không có kệ nào ở trên để chống trùng (tab Đơn hàng trống). Cùng khoá query với Trang chủ nên dùng chung dữ liệu đã tải. */
+export function BestSellerRailQuery() {
+  const q = useBlockQuery(useQuery(homeBestSellerQuery(coreHttp)));
+  const items = (q.data?.data ?? []).slice(0, SHELF.maxItems);
+  return <BestSellerRail items={items.length >= SHELF.minItems ? items : []} loading={q.isLoading} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />;
 }

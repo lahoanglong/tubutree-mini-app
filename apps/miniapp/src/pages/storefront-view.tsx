@@ -1,15 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2, Sparkles } from 'lucide-react';
-import {
-  OPEN_STOREFRONT_CTA,
-  OPEN_STOREFRONT_PROMPT,
-  SAMPLE_STOREFRONT_LABEL,
-  SAMPLE_STOREFRONT_NOTE,
-  sampleShareText,
-} from '@tubutree/app-core/storefront-signup';
-import { getPublicStorefront } from '../services/storefront-api';
+import { ChevronRight, Share2, Sparkles } from 'lucide-react';
+import { publicTier, planShopSections, shopTabs, storefrontStatsInput, uniqueShopProducts, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
+import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE, sampleShareText } from '@tubutree/app-core/storefront-signup';
+import { getPublicStorefront, type Storefront } from '../services/storefront-api';
 import { apiMediaUrl, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
@@ -20,12 +17,16 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { useAuthStore } from '../store/auth';
 import { ShareSheet } from '../components/share-sheet';
 import { TierBadge } from '../components/ui/tier-badge';
-import { StorePageShell } from '../components/store-page-shell';
-import { Text, Heading } from '../components/ui/text';
+import { Text } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Card } from '../components/ui/card';
-import { ProductGrid } from '../components/ui/product-grid';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
+import { ShopHeader } from '../components/ui/shop-header';
+import { ShopSection } from '../components/ui/shop-section';
+import { ShopStatsRow } from '../components/ui/shop-stats-row';
+import { ShopTopBar } from '../components/ui/shop-top-bar';
+import { ShopCategoriesTab } from '../components/shop-page/shop-categories-tab';
+import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
 
 /** Nhãn tin cậy chỉ cho gian hàng admin đã duyệt: tick và "CTV tuyển chọn" là lời cam kết của Tubu Tree, không phải của chủ shop tự gắn. */
 function trustBadgeLabel(sf: { type: 'CTV' | 'BRAND' | 'MERCHANT'; approved?: boolean }): string | null {
@@ -40,8 +41,6 @@ export default function StorefrontViewPage() {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: ['public-storefront', slug], queryFn: () => getPublicStorefront(slug), staleTime: 60_000 });
   const setSfContext = useStorefrontContext((s) => s.setContext);
-  const [shareOpen, setShareOpen] = useState(false);
-  const myReferralCode = useAuthStore((s) => s.user?.referralCode);
 
   const sf = q.data;
   useEffect(() => {
@@ -71,26 +70,67 @@ export default function StorefrontViewPage() {
     );
   }
 
+  return <StorefrontShop sf={sf} />;
+}
+
+/** Cao thanh nút lùi cố định (56) cộng vùng an toàn phía trên: thanh Sản phẩm/sắp xếp dính ngay dưới nó. */
+const STICKY_TOP = 'calc(var(--safe-top, 0px) + 56px)';
+const TABS_HEIGHT = 62;
+
+function StorefrontShop({ sf }: { sf: Storefront }) {
+  const navigate = useNavigate();
+  const [shareOpen, setShareOpen] = useState(false);
+  const [tab, setTab] = useState<ShopTabKey>('shop');
+  const [scopeId, setScopeId] = useState<string | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const myReferralCode = useAuthStore((s) => s.user?.referralCode);
+
   // Chỉ gian hàng CTV có mã giới thiệu để nhận ra chủ; chủ gian hàng đối tác chia sẻ từ trình dựng.
   const isOwner = Boolean(myReferralCode && sf.referralCode && myReferralCode.toUpperCase() === sf.referralCode.toUpperCase());
-  const collections = sf.collections.map((col) => ({ ...col, items: col.items.filter((it) => Boolean(it?.product)) })).filter((col) => col.items.length > 0);
+  const collections = useMemo(
+    () => sf.collections.map((col) => ({ ...col, items: col.items.filter((it) => Boolean(it?.product)) })).filter((col) => col.items.length > 0),
+    [sf.collections],
+  );
+  const plan = useMemo(() => planShopSections(collections), [collections]);
+  const stats = useMemo(() => storefrontStatsInput(collections), [collections]);
+  const allProducts = useMemo(() => uniqueShopProducts(collections), [collections]);
+  const scope = scopeId ? collections.find((c) => c.id === scopeId) : undefined;
+  const scopedProducts = useMemo(
+    () => (scope ? uniqueShopProducts([scope]) : allProducts).map((p) => ({ ...p, isFeatured: false })),
+    [scope, allProducts],
+  );
   const badgeLabel = trustBadgeLabel(sf);
+  const tier = publicTier(sf.ownerTier);
+  const tabs = shopTabs({ productCount: stats.productCount, hasCategories: collections.length > 1 }).map((t) => ({
+    key: t.key,
+    label: t.count === undefined ? t.label : `${t.label} (${t.count})`,
+  }));
+
+  const openTab = (key: string, scopeTo: string | null = null) => {
+    setTab(key as ShopTabKey);
+    setScopeId(scopeTo);
+    // Thanh tab dính nên nội dung mới đổi dưới tay khách: kéo thanh tab lên đầu thay vì để trang ở giữa chừng.
+    tabsRef.current?.scrollIntoView?.({ block: 'start' });
+  };
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
-      <StorePageShell
-        coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : sf.coverUrl}
-        coverHeight={84}
-        avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : sf.avatarUrl}
-        avatarFallback={<Sprout size={28} color="var(--color-text-inverse)" />}
-        avatarSize={58}
-        avatarMark={badgeLabel ? <CheckCircle2 size={20} color="var(--color-action-primary-bg)" aria-label="Đã được Tubu Tree duyệt" role="img" /> : undefined}
+      <ShopTopBar title={sf.title} />
+      <ShopHeader
         title={sf.title}
+        coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null}
+        avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null}
+        verified={Boolean(badgeLabel)}
+        note={sf.headerNote}
+        action={
+          isOwner ? (
+            <Button variant="secondary" icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
+              {fillCopy('shop.share')}
+            </Button>
+          ) : undefined
+        }
         badges={
           <>
-            {/* Huy hiệu xác thực — pill đặc (không phải soft-tone chuẩn của Badge) để giữ đúng
-             * trọng lượng thị giác "đã xác minh" như bản cũ (leaf-600 đặc/chữ trắng); override
-             * background/color sang token ngữ nghĩa DS v2 thay vì hex/--leaf-* cũ. */}
             {sf.isSample && <Badge tone="promo">{SAMPLE_STOREFRONT_LABEL}</Badge>}
             {badgeLabel && (
               <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -98,82 +138,70 @@ export default function StorefrontViewPage() {
                 {badgeLabel}
               </Badge>
             )}
-            {sf.ownerTier && <TierBadge name={sf.ownerTier.name} emoji={sf.ownerTier.emoji} />}
-            {sf.warehouseCity && (
-              <Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <MapPin size={12} />
-                Kho: {sf.warehouseCity}
-              </Badge>
-            )}
-            {/* Đã bỏ nhãn "VietQR trực tiếp" — audit A2-01=A5-02=A6-03 (2026-09-27): mọi thanh
-             * toán chuyển khoản đều đi qua checkout thật (tài khoản Tubu), không storefront nào
-             * tự nhận tiền trực tiếp, nên nhãn quảng cáo khả năng không còn tồn tại này là sai. */}
+            {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
           </>
         }
-        stickyBar={
-          isOwner ? (
-            <Button fullWidth icon={Share2} onPress={() => setShareOpen(true)}>
-              {vi.storefront.shareStore}
-            </Button>
-          ) : undefined
-        }
-      >
-        {sf.isSample && (
-          <Box px={4} mt={2}>
-            <Text variant="caption" tone="tertiary" as="div" data-testid="sample-note">{SAMPLE_STOREFRONT_NOTE}</Text>
-          </Box>
-        )}
-        {sf.headerNote && (
-          <Box px={4}>
-            <Text variant="body-sm" tone="secondary">{sf.headerNote}</Text>
-          </Box>
-        )}
+      />
+      <ShopStatsRow stats={shopStats(stats)} />
+      {sf.isSample && (
+        <Box px={4} mt={2}>
+          <Text variant="caption" tone="tertiary" as="div" data-testid="sample-note">{SAMPLE_STOREFRONT_NOTE}</Text>
+        </Box>
+      )}
 
-        {collections.length === 0 && (
-          <EmptyState
-            art="basket"
-            heading={vi.storefront.emptyHeading}
-            body={isOwner ? vi.storefront.emptyOwnerBody : vi.storefront.emptyBody}
-            ctaLabel={isOwner ? vi.storefront.addProduct : vi.storefront.viewProducts}
-            onCta={() => navigate(isOwner ? '/storefront' : '/browse')}
-          />
-        )}
+      {collections.length === 0 ? (
+        <EmptyState
+          art="basket"
+          heading={vi.storefront.emptyHeading}
+          body={isOwner ? vi.storefront.emptyOwnerBody : vi.storefront.emptyBody}
+          ctaLabel={isOwner ? vi.storefront.addProduct : vi.storefront.viewProducts}
+          onCta={() => navigate(isOwner ? '/storefront' : '/browse')}
+        />
+      ) : (
+        <>
+          <div ref={tabsRef} style={{ position: 'sticky', top: STICKY_TOP, zIndex: 3, background: 'var(--color-bg-canvas)', padding: '12px 16px 8px', minHeight: TABS_HEIGHT }}>
+            <SegmentedTabs items={tabs} value={tab} onChange={(k) => openTab(k)} />
+          </div>
 
-        {collections.map((col) => (
-          <Box key={col.id} mt={4} px={4}>
-            <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>{col.title}</Heading>
-            <ProductGrid
-              items={col.items.map((it) => ({ ...it.product, isFeatured: false }))}
-              variant="grid"
-              renderAfter={(_, i) => {
-                const note = col.items[i]?.note;
-                return note ? (
-                  <Box flex alignItems="center" style={{ gap: 4, marginTop: 4, background: 'var(--color-status-success-bg)', padding: '4px 8px', borderRadius: 10 }}>
-                    <MessageSquare size={12} color="var(--color-status-success-fg)" />
-                    <Text variant="caption" style={{ color: 'var(--color-status-success-fg)' }}>{note}</Text>
-                  </Box>
-                ) : null;
-              }}
-            />
-          </Box>
-        ))}
-        {!isOwner && sf.type === 'CTV' && (
-          <Box mt={6} px={4}>
-            <Card padding={16}>
-              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{OPEN_STOREFRONT_PROMPT}</Text>
-              <Button variant="secondary" fullWidth style={{ marginTop: 10 }} onPress={() => navigate('/storefront')}>
-                {OPEN_STOREFRONT_CTA}
-              </Button>
-            </Card>
-          </Box>
-        )}
-        {/* Không có nút dính đáy kéo khách rời gian hàng: lối sang danh mục chung chỉ là link phụ ở cuối trang. */}
-        {!isOwner && collections.length > 0 && (
-          <Box mt={4} px={4} style={{ textAlign: 'center' }}>
-            <Button variant="ghost" onPress={() => navigate('/browse')}>{vi.storefront.moreAtTubu}</Button>
-          </Box>
-        )}
-      </StorePageShell>
+          <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: `calc(var(--safe-top, 0px) + 56px + ${TABS_HEIGHT - 12}px)` }}>
+            {tab === 'shop' && (
+              <div style={{ padding: '0 16px' }}>
+                {plan.main.map((col) => (
+                  <ShopSection key={col.id} collection={col} onSeeAll={() => openTab('products', col.id)} />
+                ))}
+              </div>
+            )}
+            {tab === 'products' && (
+              <ShopProductsTab
+                key={scopeId ?? 'all'}
+                source={{ kind: 'local', products: scopedProducts }}
+                scope={scope ? { label: scope.title, onClear: () => setScopeId(null) } : undefined}
+              />
+            )}
+            {tab === 'categories' && <ShopCategoriesTab collections={collections} onOpen={(id) => openTab('products', id)} />}
+          </div>
+        </>
+      )}
+
+      {!isOwner && sf.type === 'CTV' && (
+        <Box mt={6} px={4} style={{ textAlign: 'center' }}>
+          <button
+            type="button"
+            className="tubu-press tubu-hit-44"
+            onClick={() => navigate('/storefront')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-secondary)' }}
+          >
+            {fillCopy('shop.learnStore')}
+            <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        </Box>
+      )}
+      {/* Không có nút dính đáy kéo khách rời gian hàng: lối sang danh mục chung chỉ là link phụ ở cuối trang. */}
+      {!isOwner && collections.length > 0 && (
+        <Box mt={2} px={4} style={{ textAlign: 'center' }}>
+          <Button variant="ghost" onPress={() => navigate('/browse')}>{vi.storefront.moreAtTubu}</Button>
+        </Box>
+      )}
 
       <ShareSheet
         visible={shareOpen}

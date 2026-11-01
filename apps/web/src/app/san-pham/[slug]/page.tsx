@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { AlertCircle, Check, ChevronRight, Truck } from 'lucide-react';
+import { AlertCircle, Check, ChevronRight } from 'lucide-react';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
@@ -17,8 +17,11 @@ import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
+import { PdpBundleSlots } from './pdp-bundle-slots';
+import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpRails } from './pdp-rails';
+import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -69,6 +72,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
   const fulfillerIsTubu = fulfillerText === 'Tubu Tree giao hàng';
   const retailOnly = isRetailOnly(product);
+  const soldText = formatSold(product.sold);
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
@@ -83,117 +87,150 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       >
         ← Về trang chủ
       </BackLink>
-      {/* Từ lg: ảnh và các khối đọc (thành phần, mô tả, đánh giá) ở cột trái, khối mua ở cột phải 400px dính dưới thanh đầu khi cuộn. */}
-      <div className="mt-2 grid grid-cols-1 gap-8 max-md:mt-0 max-md:gap-0 md:grid-cols-2 md:gap-y-0 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <ProductGallery images={images} name={product.name} />
-        <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
-        <div
-          data-testid="pdp-info"
-          className="min-w-0 max-md:bg-stone-0 max-md:p-4 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:-mx-1 lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto lg:px-1"
-        >
-          <div className="flex items-center justify-between gap-2">
-            {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
-            <Link
-              href={`/san-pham?brand=${encodeURIComponent(product.brand)}`}
-              aria-label={`Xem sản phẩm nhãn ${product.brand}`}
-              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[var(--color-text-secondary)] max-md:no-underline"
-            >
-              <span
-                data-testid="brand-dot"
-                aria-hidden="true"
-                className="hidden h-2 w-2 rounded-full max-md:block"
-                style={{ background: brandAccent(product.brand) }}
-              />
-              {product.brand}
-              <ChevronRight className="hidden h-4 w-4 text-[var(--color-text-tertiary)] max-md:block" aria-hidden="true" />
-            </Link>
-            <div className="flex items-center">
-              <WishlistHeart productId={product.id} />
-              <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
+      <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
+        <PdpLayout
+          gallery={
+            <div className="min-w-0">
+              <ProductGallery images={images} name={product.name} />
+              {/* Giờ vàng: giá deal nằm ngay dưới ảnh (đồng hồ, đã bán, giới hạn mua); hết giờ thì thanh biến mất, giá thường quay lại. */}
+              <PdpFlashBar product={product} />
             </div>
-          </div>
-          <h1 className="font-display text-2xl font-semibold text-stone-900 max-md:font-[family-name:var(--font-ui)] max-md:text-lg max-md:leading-[1.44] sm:text-3xl max-md:sm:text-lg">{product.name}</h1>
-          <PdpRating average={product.ratingAvg} count={product.reviewCount} />
-          <div className="flex flex-wrap items-baseline gap-x-3 max-md:flex-nowrap">
-            <PdpPrice product={product} />
-            {formatSold(product.sold) && <span className="mt-2 text-sm text-stone-500 max-md:ml-auto max-md:text-xs">{formatSold(product.sold)}</span>}
-          </div>
-          <PdpPointsEarn product={product} />
-          <PdpFlashMeta />
-          {shortDesc && (
-            <p data-testid="pdp-short-desc" className="mt-3 whitespace-pre-line break-words text-stone-600 max-md:mt-2 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
-              {shortDesc}
-            </p>
-          )}
-          {unavailableText ? (
-            <p
-              data-testid="pdp-unavailable"
-              role="status"
-              className="mt-2 flex items-start gap-1.5 rounded-control bg-warning-bg px-3 py-2 text-sm font-medium text-warning-fg"
-            >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{unavailableText}</span>
-            </p>
-          ) : (
-            fulfillerText && (
-              <p
-                data-testid="pdp-fulfiller"
-                className={`mt-2 flex items-start gap-1.5 text-sm text-stone-700 ${fulfillerIsTubu ? 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]' : ''}`}
-              >
-                <Truck className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-                <span>{fulfillerText}</span>
-              </p>
-            )
-          )}
-          {partnerNote && (
-            <p data-testid="pdp-partner-note" className="mt-1 text-xs text-stone-600">
-              {partnerNote}
-            </p>
-          )}
-          {!fromStore && <PdpFreeship />}
-
-          {product.certifications.length > 0 && (
-            <div data-testid="pdp-certs" className="mt-3 flex flex-wrap gap-2">
-              {product.certifications.map((c) => (
-                <span
-                  key={c}
-                  className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:text-[var(--color-text-brand)]"
+          }
+          info={
+            <div data-testid="pdp-info" className="flex min-w-0 flex-col max-md:bg-stone-0 max-md:p-4">
+              <div className="flex items-center justify-between gap-2">
+                {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
+                <Link
+                  href={`/san-pham?brand=${encodeURIComponent(product.brand)}`}
+                  aria-label={`Xem sản phẩm nhãn ${product.brand}`}
+                  className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[var(--color-text-secondary)] max-md:no-underline"
                 >
-                  <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
-                  <span>{c}</span>
-                </span>
-              ))}
+                  <span
+                    data-testid="brand-dot"
+                    aria-hidden="true"
+                    className="hidden h-2 w-2 rounded-full max-md:block"
+                    style={{ background: brandAccent(product.brand) }}
+                  />
+                  {product.brand}
+                  <ChevronRight className="hidden h-4 w-4 text-[var(--color-text-tertiary)] max-md:block" aria-hidden="true" />
+                </Link>
+                <div className="flex items-center">
+                  <WishlistHeart productId={product.id} />
+                  <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
+                </div>
+              </div>
+              <h1 className="font-display text-2xl font-semibold text-stone-900 max-md:font-[family-name:var(--font-ui)] max-md:text-lg max-md:leading-[1.44] sm:text-3xl max-md:sm:text-lg">{product.name}</h1>
+              {/* Giờ vàng: dòng giá trống nên "Đã bán" ở dòng đánh giá (PdpSold chọn chỗ); rỗng cả hai thì dòng không chiếm chỗ. */}
+              <div className="mt-1.5 flex items-center justify-between gap-2 empty:hidden">
+                <PdpRating average={product.ratingAvg} count={product.reviewCount} />
+                {soldText && <PdpSold text={soldText} product={product} slot="rating" />}
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-3 empty:hidden max-md:flex-nowrap">
+                <PdpPrice product={product} />
+                {soldText && <PdpSold text={soldText} product={product} slot="price" />}
+              </div>
+              <PdpPointsEarn product={product} />
+              {shortDesc && shortDesc !== description && (
+                <p data-testid="pdp-short-desc" className="mt-3 whitespace-pre-line break-words text-stone-600 max-md:mt-2 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
+                  {shortDesc}
+                </p>
+              )}
+
+              {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; "Phân loại ›" nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
+              <div className="mt-3">
+                <PdpCoupons productId={product.id} />
+                {(fulfillerText || !fromStore) && (
+                  <PdpShippingRow pressable={!fromStore}>
+                    {fulfillerText && (
+                      <p
+                        data-testid="pdp-fulfiller"
+                        className={`text-sm text-stone-700 ${fulfillerIsTubu ? 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]' : ''}`}
+                      >
+                        {fulfillerText}
+                      </p>
+                    )}
+                    {!fromStore && <PdpFreeship />}
+                  </PdpShippingRow>
+                )}
+                {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". */}
+                {(unavailableText || partnerNote) && (
+                  <div data-testid="pdp-shipping-notes" className="flex flex-col gap-1 py-2">
+                    {unavailableText && (
+                      <p
+                        data-testid="pdp-unavailable"
+                        role="status"
+                        className="flex items-start gap-1.5 rounded-control bg-warning-bg px-3 py-2 text-sm font-medium text-warning-fg"
+                      >
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{unavailableText}</span>
+                      </p>
+                    )}
+                    {partnerNote && (
+                      <p data-testid="pdp-partner-note" className="text-xs text-stone-600">
+                        {partnerNote}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/*
+                Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
+                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại kéo chứng nhận và "Đặt định kỳ" lên trước khối mua như Mini App
+                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước).
+              */}
+              {product.variations.length > 0 && (
+                <div className="max-md:order-2">
+                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
+                </div>
+              )}
+              {product.certifications.length > 0 && (
+                <div data-testid="pdp-certs" className="mt-3 flex flex-wrap gap-2">
+                  {product.certifications.map((c) => (
+                    <span
+                      key={c}
+                      className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:text-[var(--color-text-brand)]"
+                    >
+                      <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
+                      <span>{c}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!retailOnly && (
+                <div className="max-md:order-1">
+                  <PdpSubscribeRow slug={product.slug} variations={product.variations} />
+                </div>
+              )}
+
+              <div className="max-md:order-3">
+                {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
+                <PdpContentKitRow slug={product.slug} />
+                <PdpBundleSlots />
+              </div>
             </div>
-          )}
+          }
+          below={
+            /* Điện thoại: trang không đệm (ảnh tràn mép), nên các khối dưới tự đệm lại 16px. */
+            <div className="min-w-0 max-md:px-4 max-md:py-6">
+              {/* Q8: Đánh giá nhanh ngay sau Combo/Mua kèm (cuối khối thông tin), như Mini App; danh sách đầy đủ giữ chỗ cũ. */}
+              <PdpQuickReviews slug={product.slug} />
+              <PdpIngredients ingredients={product.ingredients} />
+              <PdpPromises>
+                <PdpChatButton productName={product.name} productSlug={product.slug} />
+              </PdpPromises>
+              {description && <PdpDescription text={description} />}
 
-          <PdpCoupons productId={product.id} />
-          {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} />}
+              {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
+              <Suspense fallback={<ProductReviewsFallback />}>
+                <ProductReviews slug={product.slug} />
+              </Suspense>
 
-          {product.variations.length > 0 && (
-            <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
-          )}
-
-          {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
-          <PdpContentKitRow slug={product.slug} />
-        </div>
-        </PdpSelectionProvider>
-
-      {/* Điện thoại: trang không đệm (ảnh tràn mép), nên các khối dưới tự đệm lại 16px. */}
-      <div className="min-w-0 max-md:px-4 max-md:py-6 md:col-span-2 lg:col-span-1">
-      <PdpIngredients ingredients={product.ingredients} />
-      <PdpPromises>
-        <PdpChatButton productName={product.name} productSlug={product.slug} />
-      </PdpPromises>
-      {description && <PdpDescription text={description} />}
-
-      {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
-      <Suspense fallback={<ProductReviewsFallback />}>
-        <ProductReviews slug={product.slug} />
-      </Suspense>
-
-      <PdpRails slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
-      </div>
-      </div>
+              <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
+            </div>
+          }
+        />
+      </PdpSelectionProvider>
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
     </main>

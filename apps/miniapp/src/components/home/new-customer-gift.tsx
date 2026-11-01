@@ -20,7 +20,7 @@ import { Icon } from '../ui/icon';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 
-const SECTION_PAD = '0 16px 12px';
+const SECTION_PAD = '0 16px';
 
 interface Benefit {
   icon: LucideIcon;

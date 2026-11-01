@@ -1,4 +1,4 @@
-import { HOME_FEATURED_LIMIT, HOME_SECTION_LIMIT, HomeService } from './home.service';
+import { HOME_BEST_SELLER_LIMIT, HOME_FEATURED_LIMIT, HOME_SECTION_LIMIT, HomeService } from './home.service';
 
 const page = (ids: string[]) => ({ data: ids.map((id) => ({ id })), meta: { page: 1, limit: 6, total: ids.length } });
 
@@ -48,7 +48,7 @@ describe('HomeService.getPublic', () => {
     const calls = catalog.list.mock.calls.map(([q]) => ({ sort: q.sort, limit: q.limit, page: q.page }));
     expect(calls).toEqual(
       expect.arrayContaining([
-        { sort: 'best_seller', limit: HOME_SECTION_LIMIT, page: 1 },
+        { sort: 'best_seller_30d', limit: HOME_BEST_SELLER_LIMIT, page: 1 },
         { sort: undefined, limit: HOME_FEATURED_LIMIT, page: 1 },
         { sort: 'newest', limit: HOME_SECTION_LIMIT, page: 1 },
       ]),
@@ -183,7 +183,7 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
     expect(r.activeOrderCount).toEqual({ count: 2 });
     expect(orders.activeCount).toHaveBeenCalledWith('u1');
     expect(r.forYou).toEqual([{ id: 'fy' }]);
-    expect(catalog.getForYou).toHaveBeenCalledWith('u1');
+    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { seed: expect.stringMatching(/^\d{8}$/) });
     expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
     expect(orders.list).toHaveBeenCalledWith('u1', { status: 'SHIPPING' }, 1, 1);
     expect(r.shippingOrders).toEqual(page(['o1']));
@@ -198,7 +198,7 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
       prisma.$queryRaw.mockReturnValue(new Promise(() => undefined));
       const pending = svc.getForUser('u1');
       await jest.advanceTimersByTimeAsync(1_100);
-      expect(catalog.getForYou).toHaveBeenCalledWith('u1');
+      expect(catalog.getForYou).toHaveBeenCalledWith('u1', { seed: expect.stringMatching(/^\d{8}$/) });
       const r = await pending;
       expect(r.forYou).toEqual([{ id: 'fy' }]);
       expect(r.activeOrderCount).toEqual({ count: 2 });
@@ -234,7 +234,7 @@ describe('HomeService.getForUser', () => {
     const r = await svc.getForUser('u1', 10);
     expect(purchased.list).not.toHaveBeenCalled();
     expect(orders.list).not.toHaveBeenCalled();
-    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: false });
+    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: false, seed: expect.stringMatching(/^\d{8}$/) });
     expect(r.purchasedItems).toEqual({ items: [], nextCursor: null });
     expect(r.shippingOrders).toEqual({ data: [], meta: { page: 1, limit: 1, total: 0 } });
     expect(r.activeOrderCount).toEqual({ count: 0 });
@@ -255,13 +255,22 @@ describe('HomeService.getForUser', () => {
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
   });
 
+  it('gợi ý của khối gộp dùng seed ngày VN của mốc request, đúng seed mà request lẻ /products/for-you gửi trong ngày', async () => {
+    const { svc, catalog } = setup();
+    // 17:30 UTC ngày 31/10 là 00:30 ngày 1/11 giờ VN; 16:59 UTC vẫn là ngày 31/10.
+    await svc.getForUser('u1', 10, Date.UTC(2026, 9, 31, 17, 30));
+    expect(catalog.getForYou).toHaveBeenLastCalledWith('u1', { hasOrders: false, seed: '20261101' });
+    await svc.getForUser('u1', 10, Date.UTC(2026, 9, 31, 16, 59));
+    expect(catalog.getForYou).toHaveBeenLastCalledWith('u1', { hasOrders: false, seed: '20261031' });
+  });
+
   it('chỉ có đơn đã huỷ: vẫn là khách mới (hỏi loyalty), nhưng có lịch sử đơn cho gợi ý', async () => {
     const { svc, loyalty, catalog, prisma, factRows } = setup();
     prisma.$queryRaw.mockResolvedValue(factRows({ CANCELLED: 2 }));
     const r = await svc.getForUser('u1');
     expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1', { hasPriorOrder: false });
     expect(r.newCustomerOffer).toEqual({ isNewCustomer: true, welcomeVoucher: null });
-    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: true });
+    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: true, seed: expect.stringMatching(/^\d{8}$/) });
   });
 
   it('một khối lỗi (vd subscriptions) không làm hỏng các khối khác', async () => {

@@ -18,6 +18,8 @@ export interface FlashItem {
   soldCount: number;
   quota: number;
   endAt: string;
+  /** Giới hạn mua mỗi khách; API cũ chưa trả thì không hiện dòng "Mỗi khách tối đa". */
+  perUserLimit?: number | null;
   /** Giờ máy chủ lúc dựng danh sách; thiếu thì dùng đồng hồ trình duyệt. */
   serverNow?: string;
 }

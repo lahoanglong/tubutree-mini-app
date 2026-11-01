@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Clock } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, Layers, Zap } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
   fetchBoughtTogether,
+  fetchForYou,
   getCart,
   addToCart,
   applyCoupon,
@@ -16,7 +17,7 @@ import {
   type FlashSaleActiveItem,
 } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
-import { getCoupons, type CouponDTO } from '../services/account-api';
+import { getCoupons } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
@@ -42,11 +43,12 @@ import { haptic } from '../utils/haptic';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
-import { useCountdown } from '../hooks/use-countdown';
 import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
+import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -66,11 +68,16 @@ import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
 import { ProductRail } from '../components/ui/product-rail';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
-import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
+import { FlashPriceBar } from '../components/product/flash-price-bar';
+import { PdpBundleSlots } from '../components/product/pdp-bundle-slots';
+import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
+import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
+import { PdpFeed } from '../components/product/pdp-feed';
+import { ListRow } from '../components/ui/list-row';
 
 const LOW_STOCK_THRESHOLD = 5;
 const ADDED_FLASH_MS = 1_200;
@@ -92,13 +99,6 @@ function merchantShippingLine(fee: number, freeShipFrom: number | null): string 
 function runningFlash(list: readonly FlashSaleActiveItem[] | undefined): FlashSaleActiveItem[] {
   const now = serverNow();
   return (list ?? []).filter((f) => isFlashRunning(f, now));
-}
-
-/** Nhãn ngắn cho voucher hiển thị ở PDP. */
-function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
-  return `Giảm ${formatVnd(c.value)}`;
 }
 
 export default function ProductDetailPage() {
@@ -143,6 +143,9 @@ export default function ProductDetailPage() {
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
+  const [offersOpen, setOffersOpen] = useState(false);
+  // Bộ đếm Giờ vàng báo hết giờ: tăng để trang tính lại `runningFlash` theo giờ máy chủ mà không đợi lần tải lại danh sách.
+  const [, setFlashTick] = useState(0);
   // "Bộ nội dung bán hàng" trước đây CHỈ mở được từ trình dựng gian hàng, tức CTV phải thêm
   // sản phẩm vào gian hàng mới lấy được bài mẫu — trong khi lúc cần là lúc đang xem sản phẩm
   // để đi đăng bài (P1-7). Cùng queryKey với trang CTV nên không tốn thêm request.
@@ -170,6 +173,14 @@ export default function ProductDetailPage() {
     queryKey: ['bought-together', slug],
     queryFn: () => fetchBoughtTogether(slug!),
     enabled: !!slug && product.isSuccess,
+  });
+  // Cùng khoá với lưới gợi ý Trang chủ: phản hồi `/products/for-you` không phụ thuộc sản phẩm đang xem nên mở món khác không gọi lại.
+  // Lỗi chỉ làm ẩn dải gợi ý; dạng dữ liệu sai thì `pdpShelves` coi như rỗng.
+  const feed = useQuery({
+    queryKey: ['for-you'],
+    queryFn: () => fetchForYou(),
+    enabled: !!slug && product.isSuccess,
+    staleTime: 5 * 60_000,
   });
   const cart = useQuery({
     queryKey: useCartKey(),
@@ -207,7 +218,6 @@ export default function ProductDetailPage() {
 
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
   const flashItem = selected ? runningFlash(flashQ.data).find((f) => f.variationId === selected.id) : undefined;
-  const flashLeft = useCountdown(flashItem?.endAt ?? null);
 
   // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
   useEffect(() => {
@@ -358,6 +368,8 @@ export default function ProductDetailPage() {
   const price = priceView.price;
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
+  const soldText = formatSold(p.sold);
+  const ratingData = reviews.data && reviews.data.count > 0 ? reviews.data : null;
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
@@ -423,6 +435,27 @@ export default function ProductDetailPage() {
     }
   };
 
+  // Chép mã vào bộ nhớ tạm; mã đã nằm sẵn trong ví nên chỉ nhắc chọn ở bước thanh toán.
+  const copyCoupon = (code: string) => {
+    haptic('light');
+    void copyText(code).then((ok) =>
+      notify(
+        ok
+          ? { text: `Đã chép mã ${code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`, type: 'success', duration: 2600 }
+          : { text: `Mã của bạn: ${code} — chọn ở bước thanh toán`, type: 'info', duration: 4000 },
+      ),
+    );
+  };
+
+  const onFlashEnd = () => {
+    setFlashTick((t) => t + 1);
+    void queryClient.invalidateQueries({ queryKey: ['flash-sales', 'active'] });
+  };
+
+  const scrollToId = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const shelves = pdpShelves({ currentId: p.id, boughtTogether: boughtTogether.data ?? [], brand: related.data ?? [], feed: feed.data ?? [] });
+
   const handleShare = () => {
     haptic('light');
     const code = user?.referralCode;
@@ -437,11 +470,93 @@ export default function ProductDetailPage() {
     );
   };
 
+  // Dòng "Vận chuyển ›" chỉ nói ai giao và phí/freeship (ngắn, tên truy cập gọn). Các lưu ý dài (thanh toán COD, chỉ bán giá lẻ, gian hàng
+  // tạm nghỉ) là chữ thường dưới bảng dòng: không nằm trong nút, và thông báo trạng thái không bị bọc trong một nút bấm.
+  const shippingLines: ReactNode[] = [];
+  const shippingNotes: ReactNode[] = [];
+  if (p.fulfiller?.kind === 'TUBU') {
+    shippingLines.push(
+      <div key="tubu" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+        Tubu Tree giao hàng
+      </div>,
+    );
+  }
+  if (merchant) {
+    shippingLines.push(
+      <div key="store-name" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+        {merchant.name} tự giao
+      </div>,
+    );
+    if (merchant.shippingFee != null) shippingLines.push(<div key="fee">{merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}</div>);
+    shippingNotes.push(<div key="cod">Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.</div>);
+    shippingNotes.push(<div key="retail">Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
+  }
+  if (unavailable) {
+    shippingNotes.push(
+      <div key="unavailable" role="status" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
+        {unavailable.reason === 'STORE_PAUSED' ? `${unavailable.name} đang tạm nghỉ, chưa nhận đơn.` : `${unavailable.name} đã ngừng bán trên Tubu Tree.`}
+      </div>,
+    );
+  }
+  if (!fromStore && p.partnerOwned) {
+    shippingNotes.push(<div key="partner">Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
+  }
+  // Badge freeship ở nơi ra quyết định mua (trước đây chỉ có ở giỏ).
+  if (!fromStore && freeshipFrom != null) {
+    shippingLines.push(
+      <div key="freeship" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+        {freeshipFrom > 0 ? vi.product.freeshipFrom(formatVnd(freeshipFrom)) : vi.product.freeshipAll}
+      </div>,
+    );
+  }
+  const infoRows: { key: string; icon: ReactNode; title: string; subtitle: ReactNode; onPress?: () => void }[] = [];
+  if (pdpCoupons.length > 0) {
+    infoRows.push({
+      key: 'offers',
+      icon: <Icon icon={Ticket} size="md" tone="brand" />,
+      title: fillCopy('pdp.offers'),
+      subtitle: fillCopy('pdp.offerCount', { n: pdpCoupons.length }),
+      onPress: () => setOffersOpen(true),
+    });
+  }
+  if (shippingLines.length > 0) {
+    // Hàng Tubu: bấm tới Cam kết Tubu (giao, đổi trả). Hàng gian hàng tự giao không có cam kết đó nên dòng chỉ để đọc, không bấm được.
+    infoRows.push({
+      key: 'shipping',
+      icon: <Icon icon={Truck} size="md" tone="brand" />,
+      title: fillCopy('pdp.shipping'),
+      subtitle: <>{shippingLines}</>,
+      onPress: fromStore ? undefined : () => scrollToId('pdp-promises'),
+    });
+  }
+  if (variations.length > 1 && selected) {
+    const sel = variationPricing(selected, flashList);
+    infoRows.push({
+      key: 'variation',
+      icon: <Icon icon={Layers} size="md" tone="brand" />,
+      title: fillCopy('pdp.variation'),
+      subtitle: `${selected.name} · ${formatVnd(sel.price)}`,
+      onPress: () => setSheetMode('add'),
+    });
+  }
+
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
 
       <StorefrontContextBar />
       <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
+      {flashItem && priceView.isFlash && (
+        <FlashPriceBar
+          price={price}
+          compareAt={originalPrice}
+          pct={flashPct}
+          endAt={flashItem.endAt}
+          soldPct={soldPercent(flashItem.soldCount, flashItem.quota)}
+          soldOut={flashItem.soldCount >= flashItem.quota}
+          perUserLimit={flashItem.perUserLimit}
+          onEnd={onFlashEnd}
+        />
+      )}
 
       {/* ── Info chính ── */}
       <Box p={4} style={{ background: 'var(--color-bg-surface)' }}>
@@ -490,42 +605,42 @@ export default function ProductDetailPage() {
         {/* Trang hero không có PageHeader nên tên sản phẩm là h1 duy nhất. */}
         <h1 style={PRODUCT_NAME_STYLE}>{p.name}</h1>
 
-        {reviews.data && reviews.data.count > 0 && (
+        {/* Giờ vàng: dòng giá trống (giá nằm ở FlashPriceBar dưới ảnh) nên "Đã bán" dời lên dòng đánh giá, không để một dòng gần như trống. */}
+        {(ratingData || (priceView.isFlash && soldText)) && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
-            <Stars value={reviews.data.average} size={14} />
-            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-              {reviews.data.average.toFixed(1)} · {reviews.data.count} đánh giá
-            </Text>
-          </Box>
-        )}
-
-        <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
-          <PriceTag value={price} compareAt={originalPrice} size="xl" />
-          {formatSold(p.sold) && (
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
-          )}
-        </Box>
-
-        <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
-
-        {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
-        {flashItem && priceView.isFlash && (
-          <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Badge tone="flash" size="sm">
-              -{flashPct}%
-            </Badge>
-            {flashLeft && (
-              <Badge tone="promo" size="sm" icon={Clock}>
-                {vi.flashSale.endsIn(flashLeft)}
-              </Badge>
+            {ratingData && (
+              <>
+                <Stars value={ratingData.average} size={14} />
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {ratingData.average.toFixed(1)} · {ratingData.count} đánh giá
+                </Text>
+              </>
             )}
-            {soldPercent(flashItem.soldCount, flashItem.quota) > 0 && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
+            {priceView.isFlash && soldText && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: ratingData ? 'auto' : 0 }}>
+                {soldText}
               </Text>
             )}
           </Box>
         )}
+
+        {!priceView.isFlash && (
+          <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
+            <PriceTag value={price} compareAt={originalPrice} size="xl" tone={originalPrice ? 'deal' : 'default'} />
+            {flashPct > 0 && (
+              <Badge tone="promo" size="sm">
+                -{flashPct}%
+              </Badge>
+            )}
+            {soldText && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>
+                {soldText}
+              </Text>
+            )}
+          </Box>
+        )}
+
+        <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
 
         {lowStock && (
           <Text size="xSmall" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
@@ -533,68 +648,11 @@ export default function ProductDetailPage() {
           </Text>
         )}
 
-        {p.shortDesc && (
+        {/* Mô tả ngắn trùng nguyên văn mô tả dài thì khách đọc hai lần: chỉ giữ ở mục Mô tả. */}
+        {p.shortDesc && p.shortDesc.trim() !== (p.description ?? '').trim() && (
           <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 8 }}>
             {p.shortDesc}
           </Text>
-        )}
-
-        {p.fulfiller?.kind === 'TUBU' && (
-          <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
-            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
-            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-              Tubu Tree giao hàng
-            </Text>
-          </Box>
-        )}
-
-        {merchant && (
-          <Box flex style={{ gap: 6, marginTop: 10 }}>
-            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
-            <Box>
-              <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-                {merchant.name} tự giao
-              </Text>
-              {merchant.shippingFee != null && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                  {merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}
-                </Text>
-              )}
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.
-              </Text>
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.
-              </Text>
-            </Box>
-          </Box>
-        )}
-
-        {unavailable && (
-          <Box flex role="status" style={{ gap: 6, marginTop: 10 }}>
-            <Truck size={15} color="var(--color-status-warning-fg)" strokeWidth={2} aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
-            <Text size="xSmall" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
-              {unavailable.reason === 'STORE_PAUSED'
-                ? `${unavailable.name} đang tạm nghỉ, chưa nhận đơn.`
-                : `${unavailable.name} đã ngừng bán trên Tubu Tree.`}
-            </Text>
-          </Box>
-        )}
-
-        {!fromStore && p.partnerOwned && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 10 }}>
-            Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.
-          </Text>
-        )}
-
-        {/* Badge freeship — tín hiệu vận chuyển ở nơi ra quyết định mua (trước đây chỉ có ở giỏ). */}
-        {!fromStore && freeshipFrom != null && (
-          <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
-            <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
-            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-              {freeshipFrom > 0 ? vi.product.freeshipFrom(formatVnd(freeshipFrom)) : vi.product.freeshipAll}
-            </Text>
-          </Box>
         )}
 
         {p.certifications.length > 0 && (
@@ -619,55 +677,6 @@ export default function ProductDetailPage() {
               </Text>
             ))}
           </Box>
-        )}
-
-        {/* Voucher khả dụng — chạm để COPY mã (áp ở giỏ). Discovery ưu đãi ngay tại PDP. */}
-        {pdpCoupons.length > 0 && (
-          <ScrollRow label="Mã giảm giá có thể dùng" style={{ gap: 8, marginTop: 12 }}>
-            {pdpCoupons.slice(0, 6).map((c) => (
-              <Box
-                key={c.code}
-                role="button"
-                {...rowKeyboardProps()}
-                aria-label={`Sao chép mã ${c.code}`}
-                className="tubu-press"
-                onClick={() => {
-                  haptic('light');
-                  void copyText(c.code).then((ok) =>
-                    notify(
-                      ok
-                        ? {
-                            text: `Đã chép mã ${c.code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`,
-                            type: 'success',
-                            duration: 2600,
-                          }
-                        : { text: `Mã của bạn: ${c.code} — chọn ở bước thanh toán`, type: 'info', duration: 4000 },
-                    ),
-                  );
-                }}
-                style={{
-                  flex: '0 0 auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 2,
-                  background: 'var(--color-voucher-bg)',
-                  border: '1px dashed var(--color-voucher-edge)',
-                  borderRadius: 'var(--radius-control)',
-                  padding: '6px 12px',
-                  minHeight: 44,
-                  justifyContent: 'center',
-                  boxSizing: 'border-box',
-                }}
-              >
-                <Text size="xSmall" bold style={{ color: 'var(--color-voucher-fg)' }}>
-                  {c.code} · {couponLabel(c)}
-                </Text>
-                {c.minOrder ? (
-                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>Đơn từ {formatVnd(c.minOrder)}</Text>
-                ) : null}
-              </Box>
-            ))}
-          </ScrollRow>
         )}
 
         {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
@@ -705,24 +714,54 @@ export default function ProductDetailPage() {
         )}
       </Box>
 
-      {/* ── Phân loại ── */}
-      {variations.length > 1 && (
-        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <SectionTitle>{vi.product.variations}</SectionTitle>
-          <Box flex style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            {variations.map((v) => (
-              <VariationChip
-                key={v.id}
-                variation={v}
-                active={selected?.id === v.id}
-                onClick={() => {
-                  haptic('light');
-                  setSelectedId(v.id);
-                }}
-              />
-            ))}
-          </Box>
+      {/* ── Dòng thông tin (Ưu đãi, Vận chuyển, Phân loại): mỗi dòng một "›" ── */}
+      {(infoRows.length > 0 || shippingNotes.length > 0) && (
+        <Box px={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          {infoRows.map((row, i) => (
+            <ListRow
+              key={row.key}
+              icon={row.icon}
+              title={row.title}
+              subtitle={row.subtitle}
+              trailing={row.onPress ? 'chevron' : undefined}
+              onPress={row.onPress}
+              style={i < infoRows.length - 1 ? { boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' } : undefined}
+            />
+          ))}
+          {variations.length > 1 && (
+            <div role="group" aria-label="Phân loại nhanh" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}>
+              {variations.map((v) => (
+                <VariationChip
+                  key={v.id}
+                  variation={v}
+                  pricing={variationPricing(v, flashList)}
+                  active={selected?.id === v.id}
+                  onClick={() => {
+                    haptic('light');
+                    setSelectedId(v.id);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+          {shippingNotes.length > 0 && (
+            <div
+              data-testid="pdp-shipping-notes"
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 12px',
+                fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)',
+              }}
+            >
+              {shippingNotes}
+            </div>
+          )}
         </Box>
+      )}
+
+      <PdpBundleSlots />
+
+      {reviews.data && reviews.data.count > 0 && (
+        <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />
       )}
 
       {/* ── Số lượng ── */}
@@ -850,7 +889,7 @@ export default function ProductDetailPage() {
       )}
 
       {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+      <Box id="pdp-promises" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <SectionTitle style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(config.returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null).map((t) => (
@@ -932,6 +971,8 @@ export default function ProductDetailPage() {
         />
       )}
 
+      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} onCopy={copyCoupon} />
+
       {slug && (
         <ContentKitSheet
           visible={showContentKit}
@@ -940,26 +981,28 @@ export default function ProductDetailPage() {
         />
       )}
 
-      {/* ── Thường mua kèm (§6.12 co-occurrence) ── */}
-      {(boughtTogether.data?.length ?? 0) > 0 && (
+      {/* ── Khách thường mua cùng (§6.12 co-occurrence; tên cũ "Thường mua kèm" nhường chữ "mua kèm" cho ưu đãi giảm giá) ── */}
+      {shelves.boughtTogether.length > 0 && (
         <>
           <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
             <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
-            <SectionTitle>Thường mua kèm</SectionTitle>
+            <SectionTitle>{fillCopy('pdp.boughtTogether')}</SectionTitle>
           </Box>
-          <ProductRail label="Thường mua kèm" variant="rail-md" items={boughtTogether.data ?? []} />
+          <ProductRail label={fillCopy('pdp.boughtTogether')} variant="rail-md" items={shelves.boughtTogether} />
         </>
       )}
 
       {/* ── Cùng thương hiệu ── */}
-      {(related.data?.length ?? 0) > 0 && (
+      {shelves.brand.length > 0 && (
         <>
           <Box pt={4} pb={2} px={4}>
             <SectionTitle>Cùng nhà {p.brand}</SectionTitle>
           </Box>
-          <ProductRail label={`Cùng nhà ${p.brand}`} variant="rail-md" items={related.data ?? []} />
+          <ProductRail label={`Cùng nhà ${p.brand}`} variant="rail-md" items={shelves.brand} />
         </>
       )}
+
+      <PdpFeed items={shelves.feed} />
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar
@@ -1159,13 +1202,15 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
   );
 }
 
-/** Chip phân loại 2 dòng: tên + giá. Hết hàng = mờ + gạch nhưng vẫn xem được. */
+/** Chip phân loại 2 dòng: tên + giá khách thật sự trả (đã áp Giờ vàng, như `variationPricing`). Hết hàng = mờ + gạch nhưng vẫn xem được. */
 function VariationChip({
   variation,
+  pricing,
   active,
   onClick,
 }: {
   variation: VariationDetail;
+  pricing: ReturnType<typeof variationPricing>;
   active: boolean;
   onClick: () => void;
 }) {
@@ -1199,8 +1244,24 @@ function VariationChip({
       >
         {variation.name}
       </Text>
-      <Text size="xSmall" style={{ color: active ? 'var(--color-text-brand)' : 'var(--color-text-disabled)' }}>
-        {out ? vi.product.outOfStock : formatVnd(variation.salePrice ?? variation.retailPrice)}
+      <Text
+        size="xSmall"
+        style={{
+          color: out ? 'var(--color-text-disabled)' : pricing.isFlash ? 'var(--color-text-price-deal)' : active ? 'var(--color-text-brand)' : 'var(--color-text-secondary)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 2,
+        }}
+      >
+        {out ? (
+          vi.product.outOfStock
+        ) : (
+          <>
+            {pricing.isFlash && <Zap size={12} strokeWidth={2} aria-hidden="true" />}
+            {formatVnd(pricing.price)}
+            {pricing.isFlash && <span style={SR_ONLY}>, {fillCopy('flash.title')}</span>}
+          </>
+        )}
       </Text>
     </Box>
   );

@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-/** WALLET_FORFEIT: xoá tài khoản, số dư Ví khách đã đồng ý bỏ bị trừ về 0 (from = số dư trước, to = 0).
+/** WALLET_FORFEIT: xoá tài khoản, số dư Ví bị trừ về 0 (from = số dư trước, to = 0); khách đã đồng ý bỏ, hoặc admin xử lý dù chưa đồng ý (reason nêu rõ, kèm lý do admin).
  * STOREFRONT_PARTNER: admin bật/tắt cờ đối tác của gian hàng do người này làm chủ (reason = id gian hàng). */
 export type UserAdminEventKind = 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT';
 
