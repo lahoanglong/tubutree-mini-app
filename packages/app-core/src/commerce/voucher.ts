@@ -44,6 +44,50 @@ export function couponLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>
   return fillCopy('coupon.amount', { amount: vnd(c.value) });
 }
 
+/**
+ * Nhãn trên thẻ phiếu: cùng ý với `couponLabel` nhưng số rút gọn một kiểu ("50k", "1,5tr") để phiếu không trộn "99.000đ" với "99k", và đủ ngắn để nằm một dòng ở 375px.
+ * Số đầy đủ chỉ ở tấm chi tiết (ux-copy `coupon.detailLines`). Giỏ và trang chi tiết sản phẩm vẫn dùng `couponLabel` đầy đủ.
+ */
+export function couponTitle(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
+  if (c.type === 'FREESHIP') return fillCopy('coupon.freeship');
+  if (c.type === 'PERCENT') {
+    return c.maxDiscount ? fillCopy('coupon.titlePercentMax', { pct: c.value, max: vndShort(c.maxDiscount) }) : fillCopy('coupon.percent', { pct: c.value });
+  }
+  return fillCopy('coupon.amount', { amount: vndShort(c.value) });
+}
+
+const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Các số mà chữ tự do nhắc tới, về cùng đơn vị: tiền ra đồng ("99.000đ", "99k", "1,5tr", "99000đ"), phần trăm ra số âm ("10%") để không lẫn với tiền.
+ * Số trần không đơn vị dưới 1.000 ("Tặng 5 lần") không phải tiền nên bỏ qua.
+ */
+function figuresIn(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(/(\d[\d.,]*)\s*(%|tr\b|k\b|đ|₫)?/gi)) {
+    const raw = m[1]!.replace(/[.,]+$/, '');
+    const unit = m[2]?.toLowerCase();
+    const decimal = Number(raw.replace(',', '.'));
+    const whole = Number(raw.replace(/[.,]/g, ''));
+    if (unit === '%') out.push(-whole);
+    else if (unit === 'tr') out.push(Math.round(decimal * 1_000_000));
+    else if (unit === 'k') out.push(Math.round(decimal * 1_000));
+    else if (unit || whole >= 1_000) out.push(whole);
+  }
+  return out.filter((n) => Number.isFinite(n) && n !== 0);
+}
+
+/**
+ * Tên admin đặt là chữ tự do và hay chép lại số đã có ở nhãn và điều kiện ("Giảm 10% tối đa 50.000đ" cạnh "Giảm 10%, tối đa 50k · Đơn từ 300k"): dòng phụ lặp,
+ * lại trộn hai cách ghi số. Tên chỉ nhắc số của chính mã (hoặc giống hệt nhãn) thì không thêm thông tin nào nên bỏ.
+ */
+function restatesCoupon(name: string, c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount' | 'minOrder'>, texts: readonly string[]): boolean {
+  if (texts.some((t) => t !== '' && fold(t) === fold(name))) return true;
+  const known = new Set([c.type === 'PERCENT' ? -c.value : c.type === 'AMOUNT' ? c.value : 0, c.maxDiscount ?? 0, c.minOrder ?? 0].filter((n) => n !== 0));
+  const mine = figuresIn(name);
+  return mine.length > 0 && mine.every((n) => known.has(n));
+}
+
 /** Số ngày lịch (giờ Việt Nam) kể từ epoch: hiệu hai số này là số ngày lịch còn lại, không phải cửa sổ 24 giờ. */
 function vnDay(ms: number): number {
   return Math.floor((ms + VN_OFFSET_MS) / DAY_MS);
@@ -83,14 +127,17 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
           : c.claimed === false
             ? 'collectable'
             : 'saved';
+  const title = couponTitle(c);
+  const condition = c.minOrder ? fillCopy('coupon.minOrder', { min: vndShort(c.minOrder) }) : '';
+  const named = c.title?.trim() || null;
   return {
     id: c.code,
     code: c.code,
-    title: couponLabel(c),
+    title,
     kind: c.type === 'FREESHIP' ? 'freeship' : c.shop ? 'shop' : 'discount',
-    condition: c.minOrder ? fillCopy('coupon.minOrder', { min: vndShort(c.minOrder) }) : '',
+    condition,
     expiry: expiryText(endMs, now),
-    name: c.title?.trim() || null,
+    name: named && !restatesCoupon(named, c, [title, condition]) ? named : null,
     quota:
       state === 'collectable' && typeof c.remaining === 'number' && c.remaining >= 1 && c.remaining <= QUOTA_SHOWN_MAX
         ? fillCopy('coupon.usesLeft', { n: c.remaining })

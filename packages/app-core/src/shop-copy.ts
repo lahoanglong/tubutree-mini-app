@@ -130,6 +130,7 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.amount': 'Giảm {amount}',
   'coupon.percent': 'Giảm {pct}%',
   'coupon.percentMax': 'Giảm {pct}% (tối đa {max})',
+  'coupon.titlePercentMax': 'Giảm {pct}%, tối đa {max}',
   'coupon.minOrder': 'Đơn từ {min}',
   'coupon.scopeAll': 'Mọi sản phẩm',
   'coupon.scopeBrand': 'Cho sản phẩm {name}',

@@ -135,6 +135,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.amount': 20,
   'coupon.percent': 12,
   'coupon.percentMax': 30,
+  'coupon.titlePercentMax': 22,
   'coupon.minOrder': 16,
   'coupon.scopeAll': 16,
   'coupon.scopeBrand': null,
