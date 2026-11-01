@@ -189,6 +189,11 @@ export function mockDiscovery(
     const data = opts.shipping && call.query.get('status') === 'SHIPPING' ? [makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' })] : [];
     return { data, meta: { page: 1, limit: 1, total: data.length } };
   });
+  api.get('/orders/home-todo', {
+    pending: null,
+    shipping: opts.shipping ? { order: makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' }), total: 1 } : null,
+    processing: null,
+  });
   api.get('/orders/:code', ({ params }) => makeOrder({ code: params.code!, status: 'SHIPPING', paymentStatus: 'PAID' }));
   api.get('/orders/me/returns', []);
   api.get('/me/subscriptions', opts.subscription ? [SUBSCRIPTION_4B] : []);

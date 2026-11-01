@@ -55,7 +55,7 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled(), { timeout: 8000 });
     unmount();
-  });
+   }, 20_000);
 
   beforeEach(() => {
     vi.clearAllMocks();

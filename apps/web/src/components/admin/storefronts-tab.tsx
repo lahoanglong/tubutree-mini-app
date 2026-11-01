@@ -99,12 +99,16 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
     onError: (e) => setQuickFailure(errorText(e)),
   });
 
-  const [changedAgain, setChangedAgain] = useState<ChangedAgain | null>(null);
+  const [changedAgain, setChangedAgain] = useState<Record<string, ChangedAgain>>({});
   const seen = useMutation({
     mutationFn: (r: AdminStorefrontRow) => markStorefrontContentSeen(r.id, r.contentChangedAt),
     onSuccess: (result, r) => {
       setQuickFailure(null);
-      setChangedAgain(changedAgainOf(result, r.contentChangedAt));
+      setChangedAgain((prev) => {
+        const { [r.id]: _old, ...rest } = prev;
+        const mark = changedAgainOf(result, r.contentChangedAt);
+        return mark ? { ...rest, [r.id]: mark } : rest;
+      });
       return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
     },
     onError: (e) => setQuickFailure(errorText(e)),
@@ -219,9 +223,9 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
             {(row.takenDownReason || row.hiddenReason) && (
               <p className="mt-2 break-words text-xs text-stone-600">{row.takenDownAt ? `Lý do gỡ: ${row.takenDownReason ?? '—'}` : row.hiddenReason}</p>
             )}
-            {showChangedAgain(row, changedAgain) && (
+            {showChangedAgain(row, changedAgain[row.id] ?? null) && (
               <div className="mt-2">
-                <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain.at)}</Notice>
+                <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain[row.id]!.at)}</Notice>
               </div>
             )}
             {changedAfterApproval(row) && (
