@@ -522,6 +522,21 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
   });
 
+  it('từ lg nửa dưới hai cột: Thành phần + Cam kết + Mô tả bên trái, Đánh giá bên phải; dải gợi ý vẫn cả bề ngang bên dưới', async () => {
+    const c = await mount();
+    await flush();
+    const cols = c.querySelector('[data-testid="pdp-below-cols"]')!;
+    expect(cols.className).toContain('lg:grid-cols-2');
+    const [left, right] = Array.from(cols.children) as HTMLElement[];
+    expect(left!.textContent).toContain('Cam kết Tubu');
+    expect(left!.textContent).toContain('Mô tả sản phẩm');
+    expect(left!.querySelector('#danh-gia')).toBeNull();
+    expect(right!.querySelector('#danh-gia')).not.toBeNull();
+    // Dải gợi ý là anh em kế tiếp của hai cột, không nằm trong cột nào.
+    expect(cols.nextElementSibling!.className).toContain('max-md:pb-6');
+    expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
+  });
+
   it('thanh Giờ vàng nằm ngay dưới ảnh, trước khối thông tin', async () => {
     api.flash = [FLASH];
     const c = await mount();

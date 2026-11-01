@@ -223,6 +223,9 @@ export function PdpFlashBar({ product }: { product: { variations: { id: string; 
       soldPct={soldPercent(item.soldCount, item.quota)}
       soldOut={item.soldCount >= item.quota}
       perUserLimit={item.perUserLimit}
+      // Máy tính: dải bo góc như ảnh và cách ảnh một nhịp; giá deal đã ở cột thông tin (PdpPrice) nên dòng giá của dải ẩn từ lg.
+      className="md:mt-3 md:rounded-sheet"
+      priceRowClassName="lg:hidden"
     />
   );
 }

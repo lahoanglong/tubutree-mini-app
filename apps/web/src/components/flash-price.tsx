@@ -13,8 +13,8 @@ type PdpVariation = { id: string; retailPrice: number; salePrice?: number | null
 
 /**
  * Giá lớn ở đầu trang chi tiết, theo phân loại đang chọn (cùng số với nút "Thêm vào giỏ"): giá đang bán, giá gốc gạch và nhãn giảm.
- * Chưa chọn phân loại nào thì ghi "Từ" giá thấp nhất. Phân loại đang Giờ vàng: giá deal nằm ở thanh Giờ vàng dưới ảnh (`PdpFlashBar`)
- * nên ở đây không hiện lần hai.
+ * Chưa chọn phân loại nào thì ghi "Từ" giá thấp nhất. Phân loại đang Giờ vàng: giá deal nằm ở thanh Giờ vàng dưới ảnh (`PdpFlashBar`);
+ * ở đây chỉ hiện thêm từ lg (khối `pdp-flash-price`), điện thoại và md không lặp.
  */
 export function PdpPrice({ product }: { product: PricedProduct & { variations: PdpVariation[] } }) {
   const flash = runningFlash(useActiveFlashSales());
@@ -32,7 +32,23 @@ export function PdpPrice({ product }: { product: PricedProduct & { variations: P
     );
   }
   const pricing = variationPricing(selected, flash);
-  if (pricing.isFlash) return null;
+  if (pricing.isFlash) {
+    // Máy tính (từ lg): thanh Giờ vàng nằm ở cột ảnh, xa nút mua, nên giá deal cũng nêu ở cột thông tin. Điện thoại và md không lặp:
+    // giá đã ở thanh dưới ảnh. Dùng testid riêng để `pdp-price` vẫn nghĩa là "giá lớn thường".
+    return (
+      <div data-testid="pdp-flash-price" className="mt-2 hidden flex-wrap items-baseline gap-x-2 gap-y-1 lg:flex">
+        <span data-testid="pdp-flash-price-value" className="text-2xl font-bold text-[color:var(--color-text-price-deal)]">
+          {formatVnd(pricing.price)}
+        </span>
+        {pricing.hasSale && <span className="text-sm text-stone-500 line-through">{formatVnd(pricing.originalPrice)}</span>}
+        {pricing.salePct > 0 && (
+          <Badge tone="promo" size="sm">
+            -{pricing.salePct}%
+          </Badge>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
       {/* Giá đang giảm màu giá deal (cam đậm, không đỏ) như PriceTag tone="deal" của Mini App; giá thường giữ chữ đen. */}

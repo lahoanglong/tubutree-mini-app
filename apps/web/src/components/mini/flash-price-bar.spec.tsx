@@ -36,6 +36,18 @@ describe('FlashPriceBar (web)', () => {
     expect(r.container.querySelector<HTMLElement>('[data-testid="flash-sold-track"]')!.style.background).toBe('var(--color-track)');
   });
 
+  it('className ở gốc và priceRowClassName ở dòng giá để trang web bo góc dải và ẩn giá lặp ở máy tính; không truyền thì không thêm lớp nào', () => {
+    r = render(<FlashPriceBar {...base} endAt={iso(3_600_000)} />);
+    expect(r.container.querySelector('[data-testid="flash-price-bar"]')!.className).toBe('');
+    expect(r.container.querySelector('[data-testid="flash-price-row"]')!.className).toBe('');
+    r.unmount();
+    r = render(<FlashPriceBar {...base} endAt={iso(3_600_000)} className="md:rounded-sheet" priceRowClassName="lg:hidden" />);
+    expect(r.container.querySelector('[data-testid="flash-price-bar"]')!.className).toBe('md:rounded-sheet');
+    const row = r.container.querySelector('[data-testid="flash-price-row"]')!;
+    expect(row.className).toBe('lg:hidden');
+    expect(row.textContent).toContain('84.000đ');
+  });
+
   it('"Mỗi khách tối đa n" chỉ hiện khi API gửi giới hạn', () => {
     r = render(<FlashPriceBar {...base} endAt={iso(3_600_000)} perUserLimit={5} />);
     expect(r.container.textContent).toContain('Mỗi khách tối đa 5');

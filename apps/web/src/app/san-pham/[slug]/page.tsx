@@ -250,16 +250,23 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           }
           below={
             <div className="min-w-0">
-              <PdpIngredients ingredients={product.ingredients} />
-              <PdpPromises>
-                <PdpChatButton productName={product.name} productSlug={product.slug} />
-              </PdpPromises>
-              {description && <PdpDescription text={description} />}
+              {/* Từ lg hai cột (nội dung bán hàng | đánh giá) để thanh phân bổ sao không kéo dài cả bề ngang 1200px; dưới lg vẫn xếp dọc như cũ. */}
+              <div data-testid="pdp-below-cols" className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
+                <div className="min-w-0">
+                  <PdpIngredients ingredients={product.ingredients} />
+                  <PdpPromises>
+                    <PdpChatButton productName={product.name} productSlug={product.slug} />
+                  </PdpPromises>
+                  {description && <PdpDescription text={description} />}
+                </div>
 
-              {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
-              <Suspense fallback={<ProductReviewsFallback />}>
-                <ProductReviews slug={product.slug} />
-              </Suspense>
+                {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
+                <div className="min-w-0">
+                  <Suspense fallback={<ProductReviewsFallback />}>
+                    <ProductReviews slug={product.slug} />
+                  </Suspense>
+                </div>
+              </div>
 
               {/* Điện thoại: trang không đệm (ảnh tràn mép), nên dải gợi ý tự đệm 16px; các khối trên là dải trắng tự đệm. */}
               <div className="max-md:px-4 max-md:pb-6">
