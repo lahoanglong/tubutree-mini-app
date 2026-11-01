@@ -29,6 +29,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
 import { cssUrl } from '@/lib/safe-color';
+import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
@@ -370,11 +371,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     lastOpened.current = id;
     setItemSort(false);
     if (sectionId !== null) {
-      router.replace(sectionHref(pathname, id));
+      shallowReplace(sectionHref(pathname, id));
       return;
     }
     pushedDetail.current = true;
-    router.push(sectionHref(pathname, id));
+    shallowPush(sectionHref(pathname, id));
   };
   function closeSection() {
     setItemSort(false);
@@ -382,7 +383,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       pushedDetail.current = false;
       router.back();
     } else {
-      router.replace(pathname);
+      shallowReplace(pathname);
     }
   }
 

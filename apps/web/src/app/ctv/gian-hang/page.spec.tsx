@@ -5,9 +5,13 @@ import { click, flush, render, typeInto, selectValue, type Rendered } from '@/te
 
 type Call = { method: string; path: string; body?: unknown; query?: unknown };
 
-/** Lịch sử giả của App Router: push/replace/back đổi `usePathname`/`useSearchParams` và `history.state.tubuDepth` (độ sâu mà nút lùi nổi đọc). */
+/**
+ * Lịch sử giả của App Router: push/replace/back đổi `usePathname`/`useSearchParams` và `history.state.tubuDepth` (độ sâu mà nút lùi nổi đọc).
+ * `window.history.pushState/replaceState` được vá như Next 15 (đồng bộ `useSearchParams` mà không gọi máy chủ); `routerCalls` ghi lại
+ * mọi lần gọi `router.push/replace` (soft navigation có thể tải RSC) để test khẳng định màn dựng không dùng chúng.
+ */
 const nav = vi.hoisted(() => {
-  interface Loc { path: string; search: string }
+  interface Loc { path: string; search: string; state?: Record<string, unknown> }
   const first = (): Loc => ({ path: '/ctv/gian-hang', search: '' });
   const n = {
     stack: [first()],
@@ -15,22 +19,39 @@ const nav = vi.hoisted(() => {
     listeners: new Set<() => void>(),
     get loc(): Loc { return n.stack[n.idx]!; },
     subscribe(l: () => void) { n.listeners.add(l); return () => { n.listeners.delete(l); }; },
+    routerCalls: [] as string[],
     emit() {
-      History.prototype.replaceState.call(window.history, { tubuDepth: n.idx }, '');
+      History.prototype.replaceState.call(window.history, { tubuDepth: n.idx, ...n.loc.state }, '');
       n.listeners.forEach((l) => l());
     },
-    reset() { n.stack = [first()]; n.idx = 0; n.emit(); },
+    reset() {
+      n.stack = [first()];
+      n.idx = 0;
+      n.routerCalls = [];
+      window.history.pushState = ((data: unknown, _unused: string, url?: string | URL | null) => n.to(String(url), false, data as Record<string, unknown> | undefined)) as History['pushState'];
+      window.history.replaceState = ((data: unknown, _unused: string, url?: string | URL | null) => n.to(String(url), true, data as Record<string, unknown> | undefined)) as History['replaceState'];
+      n.emit();
+    },
+    restore() {
+      delete (window.history as { pushState?: unknown }).pushState;
+      delete (window.history as { replaceState?: unknown }).replaceState;
+    },
     step(d: number) { n.idx = Math.min(Math.max(n.idx + d, 0), n.stack.length - 1); n.emit(); },
-    to(url: string, replace: boolean) {
+    to(url: string, replace: boolean, state?: Record<string, unknown>) {
       const u = new URL(url, `http://x${n.loc.path}`);
-      const loc: Loc = { path: u.pathname, search: u.search };
+      const loc: Loc = { path: u.pathname, search: u.search, ...(state && Object.keys(state).length ? { state } : {}) };
       if (replace) n.stack[n.idx] = loc;
       else { n.stack = [...n.stack.slice(0, n.idx + 1), loc]; n.idx += 1; }
       n.emit();
     },
     api: {} as { push: (u: string) => void; replace: (u: string) => void; back: () => void; forward: () => void },
   };
-  n.api = { push: (u) => n.to(u, false), replace: (u) => n.to(u, true), back: () => n.step(-1), forward: () => n.step(1) };
+  n.api = {
+    push: (u) => { n.routerCalls.push(`push ${u}`); n.to(u, false); },
+    replace: (u) => { n.routerCalls.push(`replace ${u}`); n.to(u, true); },
+    back: () => n.step(-1),
+    forward: () => n.step(1),
+  };
   return n;
 });
 
@@ -220,6 +241,7 @@ beforeEach(() => {
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+  nav.restore();
 });
 
 describe('/ctv/gian-hang — cổng vào theo phiên', () => {
@@ -1637,6 +1659,19 @@ describe('màn dựng theo khối (P10)', () => {
         expect($('[data-testid="section-detail"]')).toBeNull();
         expect(here()).toBe('/ctv/gian-hang');
         expect(document.activeElement).toBe(cardBtn('Bộ hai,'));
+      });
+
+      it('mở và đóng khối không dùng router.push/replace (soft navigation có thể tải RSC): địa chỉ đổi qua History API', async () => {
+        setThree();
+        mount();
+        await flush();
+        await openCard('Bộ hai,');
+        expect(here()).toBe('/ctv/gian-hang?khoi=c2');
+        expect($('[data-testid="section-detail"] h2')?.textContent).toBe('Bộ hai');
+        click(btn('Gian hàng của tôi', $('[data-testid="section-detail"]')!));
+        await flush();
+        expect(cards()).toHaveLength(3);
+        expect(nav.routerCalls).toEqual([]);
       });
 
       it('nút lùi của trình duyệt cũng về danh sách khối, tiến lại thì mở lại đúng khối đó', async () => {
