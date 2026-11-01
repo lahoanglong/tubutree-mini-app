@@ -81,6 +81,7 @@ describe('maskDobInput sửa giữa ô và dấu ngăn khác', () => {
   it('dán (inputType) năm vào sau "05/03" thiếu dấu ngăn thì dựng lại đủ 8 số', () => {
     expect(maskDobInput('05/031990', '05/03', 'insertFromPaste')).toBe('05/03/1990');
     expect(maskDobInput('05031990', '', 'insertFromPaste')).toBe('05/03/1990');
+    expect(maskDobInput(' 05031990 ', '05/03', 'insertFromPaste')).toBe('05/03/1990');
   });
   it('dán (inputType) đè chuỗi trùng đầu hoặc đuôi vẫn chuẩn hoá', () => {
     expect(maskDobInput('1/3/1990', '11/03/1990', 'insertFromPaste')).toBe('01/03/1990');

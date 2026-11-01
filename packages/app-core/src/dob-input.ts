@@ -80,7 +80,7 @@ export function maskDobInput(raw: string, prev?: string, inputType?: string): st
   const typed = raw.replace(/[^\d./\-\s,]/g, '');
   const t = typed.replace(/[.\-\s,]/g, '/');
   const digits = typed.replace(/\D/g, '');
-  const rebuild8 = digits.length === 8 && typed.length - digits.length < 2;
+  const rebuild8 = digits.length === 8 && typed.replace(/^[./\-\s,]+|[./\-\s,]+$/g, '').length - digits.length < 2;
   const replaced =
     prev === undefined ||
     prev === '' ||
