@@ -164,3 +164,9 @@
 - Phủ: P2 #3 (Task 2), #4 (Task 3), #5 (Task 5), #7 (Task 1); F9 MINOR (Task 4); F10a MINOR hai mục (Task 6); chụp so, e2e, gate (Task 7). Mục "ảnh sau F10a cũ" của MINOR F10a là việc chụp ảnh của gói F10a, không thuộc G4 (G4 chụp lại Trang chủ ở Task 7).
 - Tên nhất quán: `givenName`, `variationKey`, `flashShelfEntry`, `purchasedShelfEntry`, `flashVariationIds`, `excludeVariations`, `ranksAreSequential`, `rankPlain`, `rank.plain`, `slotItemNoteSpoken`, `noteSpoken`, `flash.limitSpoken`.
 - Không đụng file G1/G5/G6; `product-card-view.ts` (G5) không sửa vì phù hiệu không số đi qua prop `rankPlain` của thẻ, không qua `ProductCardView`.
+
+## Kết quả thực hiện (ghi sau khi chạy)
+
+- Việc phát sinh ngoài kế hoạch: (1) `member-card.tsx` hai app đổi `{' · '}` thành `{' · '}` vì dòng flex nuốt khoảng trắng đầu, tên gọi ngắn làm lộ "Chào An· Mầm Xanh" (ảnh `screens/G4/after/mini375-member.png` lúc đầu); (2) `queries/home.spec.ts` (app-core) còn giả định limit 12, gate bắt được, đổi sang `HOME_BEST_SELLER_LIMIT`; (3) e2e đỏ vì thiết kế mới, đã sửa: `home-h.miniapp.spec` và `shop.web.spec` (thẻ thành viên: lời chào theo tên gọi), `buy-flow-4b.miniapp.spec` (limit 24), `bundles.miniapp.spec` (thẻ "Bán chạy"), `shop.web.spec:751` ("Chào An").
+- Không tìm thấy câu "máy thật dùng chữ khác" trong `tile-metrics.ts`; bình luận số đo meta vốn đã nói đúng "Inter 12px/500". Thêm hai câu nói rõ Inter đi kèm app và rủi ro chỉ ở chữ dự phòng lúc swap.
+- Header web 1280 vẫn hiện "Lại" cho tài khoản thử "Nguyễn Thị Quay Lại" (đó là tên gọi thật của hồ sơ thử), không phải bỏ chữ "Lại" như đề bài hiểu nhầm.
