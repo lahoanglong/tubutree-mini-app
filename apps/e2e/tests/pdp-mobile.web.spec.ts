@@ -56,6 +56,86 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
 
     await page.screenshot({ path: testInfo.outputPath('pdp-web375.png'), fullPage: true });
   });
+  test('thứ tự khối ở 375px như Mini App: Đánh giá nhanh ngay sau Phân loại/Combo, các dải trắng cách nhau tối đa 8px, không tràn ngang', async ({ page, api, request }, testInfo) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    const review = (id: string, rating: number) => ({
+      id,
+      rating,
+      author: `Khách ${id}`,
+      avatar: null,
+      comment: `Nhận xét ${id}`,
+      images: [],
+      videoUrl: null,
+      verifiedPurchase: true,
+      createdAt: '2026-09-01T00:00:00.000Z',
+    });
+    api.get('/flash-sales/active', []);
+    api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+    api.get(`/products/${p!.slug}`, { variations: p!.variations });
+    api.get(`/products/${p!.slug}/related`, []);
+    api.get(`/products/${p!.slug}/bought-together`, []);
+    api.get('/products/for-you', []);
+    api.get('/products', { data: [], meta: { page: 1, limit: 12, total: 0 } });
+    api.get(`/products/${p!.slug}/reviews`, {
+      average: 4.5,
+      count: 2,
+      videoCount: 0,
+      distribution: { '5': 1, '4': 1 },
+      items: [review('a', 5), review('b', 4)],
+    });
+    api.get('/me/wishlist/ids', []);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(`/san-pham/${p!.slug}`);
+    await expect(page.locator('[data-section="pdp-quick-reviews"]')).toBeVisible();
+    await expect(page.locator('[data-section="pdp-reviews"]')).toBeVisible();
+
+    const blocks = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-section]'))
+        .map((el) => ({ id: el.dataset.section!, ...el.getBoundingClientRect().toJSON() }))
+        .filter((b) => b.height > 0)
+        .map((b) => ({ id: b.id, top: Math.round(b.y + window.scrollY), bottom: Math.round(b.y + window.scrollY + b.height) }))
+        .sort((a, b) => a.top - b.top || a.bottom - b.bottom),
+    );
+    const ids = blocks.map((b) => b.id);
+    // Thứ tự Mini App; khối nào sản phẩm này không có thì vắng, phần còn lại vẫn đúng thứ tự.
+    const MINI_ORDER = [
+      'pdp-main',
+      'pdp-certs',
+      'pdp-subscribe',
+      'pdp-offers',
+      'pdp-variation',
+      'pdp-variation-chips',
+      'pdp-notes',
+      'pdp-bundles',
+      'pdp-quick-reviews',
+      'pdp-quantity',
+      'pdp-groupbuy',
+      'pdp-ingredients',
+      'pdp-promises',
+      'pdp-description',
+      'pdp-reviews',
+    ];
+    expect(ids).toEqual(MINI_ORDER.filter((id) => ids.includes(id)));
+    expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-quantity'));
+    expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-reviews'));
+
+    // Từ Đánh giá nhanh trở xuống là các dải trắng riêng: khe giữa hai dải liền nhau là 8px (mt-2), không phải khoảng cream lớn.
+    const from = ids.indexOf('pdp-quick-reviews');
+    for (let i = from + 1; i < blocks.length; i++) {
+      const gap = blocks[i]!.top - blocks[i - 1]!.bottom;
+      expect(gap, `${blocks[i - 1]!.id} -> ${blocks[i]!.id}`).toBeGreaterThanOrEqual(0);
+      expect(gap, `${blocks[i - 1]!.id} -> ${blocks[i]!.id}`).toBeLessThanOrEqual(9);
+    }
+
+    // Hàng chip lọc của khối đánh giá đầy đủ như Mini App.
+    const chips = page.locator('[data-section="pdp-reviews"] button[aria-pressed]');
+    await expect(chips.first()).toHaveText('Tất cả');
+    await expect(chips).toHaveText(['Tất cả', '5 sao', '4 sao', '3 sao', 'Có ảnh']);
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+    await page.screenshot({ path: testInfo.outputPath('pdp-web375-order.png'), fullPage: true });
+  });
   test('khung chờ chi tiết SP: bấm Quay lại lúc trang SP còn đang tải thì ở lại /san-pham, không rời site và không lùi quá một trang', async ({ page, api }) => {
     api.get('/flash-sales/active', []);
     api.get('/categories', []);
