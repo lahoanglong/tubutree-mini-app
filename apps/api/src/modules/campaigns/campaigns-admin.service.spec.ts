@@ -49,6 +49,7 @@ function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id:
     campaignCoupon: { deleteMany: jest.fn().mockReturnValue('del-c'), createMany: jest.fn().mockReturnValue('add-c') },
     product: { findMany: jest.fn().mockResolvedValue(opts.products ?? []) },
     coupon: { findMany: jest.fn().mockResolvedValue(opts.coupons ?? []) },
+    $queryRaw: jest.fn().mockReturnValue('lock'),
     $transaction: jest.fn().mockResolvedValue([]),
   };
   return { svc: new CampaignsAdminService(prisma as never), prisma };
@@ -191,14 +192,14 @@ describe('CampaignsAdminService.setProducts', () => {
       { campaignId: 'c1', productId: 'p2', sortOrder: 0 },
       { campaignId: 'c1', productId: 'p1', sortOrder: 1 },
     ]);
-    expect(prisma.$transaction).toHaveBeenCalledWith(['del-p', 'add-p']);
+    expect(prisma.$transaction).toHaveBeenCalledWith(['lock', 'del-p', 'add-p']);
   });
 
   it('danh sách rỗng gỡ hết, không gọi createMany với mảng rỗng', async () => {
     const { svc, prisma } = setup();
     await expect(svc.setProducts('c1', [])).resolves.toEqual({ count: 0 });
     expect(prisma.campaignProduct.createMany).not.toHaveBeenCalled();
-    expect(prisma.$transaction).toHaveBeenCalledWith(['del-p']);
+    expect(prisma.$transaction).toHaveBeenCalledWith(['lock', 'del-p']);
   });
 
   it('quá 200 → 400, không chạm DB', async () => {
@@ -226,6 +227,7 @@ describe('CampaignsAdminService.setCoupons', () => {
       { campaignId: 'c1', couponId: 'k1', sortOrder: 0 },
       { campaignId: 'c1', couponId: 'k2', sortOrder: 1 },
     ]);
+    expect(prisma.$transaction).toHaveBeenCalledWith(['lock', 'del-c', 'add-c']);
   });
 
   it('mã thuộc lô thẻ in bị từ chối, nêu tên mã', async () => {

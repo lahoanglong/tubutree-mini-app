@@ -176,6 +176,14 @@ export class CampaignsAdminService {
     if (!found) throw new NotFoundException('Không tìm thấy chiến dịch.');
   }
 
+  /**
+   * Việc đầu của mỗi giao dịch "xoá hết rồi ghi lại": hai người thay danh sách cùng lúc thì người sau chờ ở đây tới khi người trước xong.
+   * Thiếu khoá thì cả hai cùng xoá một danh sách cũ rồi cùng ghi, và chiến dịch giữ lẫn sản phẩm của hai bên.
+   */
+  private lockRow(id: string) {
+    return this.prisma.$queryRaw`SELECT "id" FROM "campaigns" WHERE "id" = ${id} FOR UPDATE`;
+  }
+
   /** Thay hết danh sách sản phẩm; thứ tự gửi lên là thứ tự hiển thị. */
   async setProducts(id: string, productIds: readonly string[]): Promise<{ count: number }> {
     if (productIds.length > CAMPAIGN_MAX_PRODUCTS) {
@@ -192,7 +200,7 @@ export class CampaignsAdminService {
     const writes = ids.length > 0
       ? [clear, this.prisma.campaignProduct.createMany({ data: ids.map((productId, sortOrder) => ({ campaignId: id, productId, sortOrder })) })]
       : [clear];
-    await this.prisma.$transaction(writes);
+    await this.prisma.$transaction([this.lockRow(id), ...writes]);
     return { count: ids.length };
   }
 
@@ -218,7 +226,7 @@ export class CampaignsAdminService {
     const writes = codes.length > 0
       ? [clear, this.prisma.campaignCoupon.createMany({ data: codes.map((code, sortOrder) => ({ campaignId: id, couponId: byCode.get(code)!.id, sortOrder })) })]
       : [clear];
-    await this.prisma.$transaction(writes);
+    await this.prisma.$transaction([this.lockRow(id), ...writes]);
     return { count: codes.length };
   }
 }
