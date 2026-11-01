@@ -174,7 +174,6 @@ export const SHOP_COPY: Record<string, string> = {
 
   // Ưu đãi khi chưa đăng nhập: mỗi khối cần tài khoản một thẻ mời, một nhãn nút chung ở hai app
   'login.cta': 'Đăng nhập',
-  'zalo.link': 'Liên kết Zalo',
   'offers.guestPointsTitle': 'Điểm Xanh và điểm danh',
   'offers.guestPointsBody': 'Đăng nhập để xem điểm, hạng và điểm danh nhận thưởng mỗi ngày.',
   'offers.guestMineBody': 'Đăng nhập để xem mã bạn đã lưu và dùng ngay khi mua hàng.',

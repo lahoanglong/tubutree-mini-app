@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { homeCopy } from './home-copy';
 import { FORBIDDEN_TERMS, SHOP_COPY, fillCopy } from './shop-copy';
 import { SHOP_COPY_MAX } from './shop-copy-budget';
 
@@ -59,9 +60,11 @@ describe('SHOP_COPY', () => {
     expect(fillCopy('coupon.titlePercentMax', { pct: 10, max: '50k' })).toBe('Giảm 10%, tối đa 50k');
   });
 
-  it('G1: một nhãn liên kết Zalo cho khách Mini ở Ưu đãi, ngắn hơn ngân sách 14', () => {
-    expect(SHOP_COPY['zalo.link']).toBe('Liên kết Zalo');
-    expect(SHOP_COPY_MAX['zalo.link']).toBe(14);
+  it('H1: nhãn "Liên kết Zalo" chỉ có một nguồn (homeCopy.profile.guestCta), shop-copy không nhân đôi', () => {
+    expect(homeCopy.profile.guestCta).toBe('Liên kết Zalo');
+    expect(Object.keys(SHOP_COPY)).not.toContain('zalo.link');
+    expect(Object.keys(SHOP_COPY_MAX)).not.toContain('zalo.link');
+    expect(Object.values(SHOP_COPY)).not.toContain(homeCopy.profile.guestCta);
   });
 
   it('chữ chốt ở thiết kế §4 Q5 và Giờ vàng theo kế hoạch', () => {

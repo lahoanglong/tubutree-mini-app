@@ -166,6 +166,28 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
     // 5.000 không phải số của mã: để nguyên cả cụm.
     expect(view('Tặng 5.000 đồng vào ví', { value: 20_000 }).name).toBe('Tặng 5.000 đồng vào ví');
   });
+  it('đơn vị đôi ("20k vnđ", "20k đồng", "1,5tr đồng") là một con số: tiền tệ không ở lại làm đầu phần đuôi', () => {
+    const base = { value: 20_000, minOrder: 100_000 };
+    expect(view('Tặng 20k vnđ', base).name).toBeNull();
+    expect(view('Giảm 20k VND', base).name).toBeNull();
+    expect(view('Tặng 20k đồng', base).name).toBeNull();
+    expect(view('Tặng 20k đồng cho bạn mới', base).name).toBe('cho bạn mới');
+    expect(view('Tặng 20k vnđ cho bạn mới', base).name).toBe('cho bạn mới');
+    expect(view('Giảm 20k VND cho khách mới', base).name).toBe('cho khách mới');
+    expect(view('Giảm 1,5tr đồng cho khách mới', { value: 1_500_000, minOrder: 2_000_000 }).name).toBe('cho khách mới');
+    for (const t of ['Tặng 20k vnđ cho bạn mới', 'Tặng 20k đồng cho bạn mới', 'Giảm 20k VND cho khách mới', 'Mua 3 đơn giảm 20k đồng']) {
+      const name = view(t, base).name;
+      expect(name ?? '', t).not.toMatch(/k\s*(đồng|vnđ|VND)/i);
+      expect(name ?? '', t).not.toMatch(/^(đồng|vnđ|VND)/i);
+    }
+    // Số lạ: để nguyên cả cụm, kể cả chữ tiền tệ.
+    expect(view('Tặng 5k đồng vào ví', base).name).toBe('Tặng 5k đồng vào ví');
+    // "đồng" là chữ thường ("đồng hành"), không phải tiền: không bị nuốt.
+    expect(view('Giảm 20k đồng hành cùng bạn', base).name).toBe('đồng hành cùng bạn');
+    expect(view('Giảm 20k đồng loạt cho mọi đơn', base).name).toBe('đồng loạt cho mọi đơn');
+    expect(view('Giảm 20k đồng giá mọi món', base).name).toBe('đồng giá mọi món');
+    expect(view('Tặng 20k đồng ý nhận quà', base).name).toBe('đồng ý nhận quà');
+  });
   it('số nhỏ không đơn vị (số đơn, số lượt, số bạn) là thông tin riêng: tên giữ, không bị coi là nhắc lại mã', () => {
     const base = { value: 20_000, minOrder: 300_000 };
     expect(view('Giảm 20k cho 3 đơn', base).name).toBe('cho 3 đơn');
@@ -187,6 +209,17 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
     // Số lạ đứng giữa phần đầu: dừng ở đó, không cắt qua số của đơn.
     expect(view('Giảm 20k 3 đơn', base).name).toBe('3 đơn');
     expect(view('Tặng 3 đơn giảm 20k', base).name).toBe('Tặng 3 đơn giảm 20k');
+  });
+  it('phần đầu chỉ bị cắt khi chép đúng nhãn: số của đơn tối thiểu hay trần giảm đứng đầu tên thì tên giữ nguyên (số vẫn hiện trên phiếu)', () => {
+    // FREESHIP có trần 30k nhưng nhãn "Miễn phí giao hàng" không in số nào: "Freeship 30k" không chép nhãn.
+    const ship = { type: 'FREESHIP' as const, value: 0, maxDiscount: 30_000, minOrder: null };
+    expect(view('Freeship 30k cho đơn đầu', ship).name).toBe('Freeship 30k cho đơn đầu');
+    // Nhãn "Giảm 20k": 100k là đơn tối thiểu, không phải số của nhãn.
+    expect(view('Giảm 100k cho khách mới', { value: 20_000, minOrder: 100_000 }).name).toBe('Giảm 100k cho khách mới');
+    const pct = { type: 'PERCENT' as const, value: 10, maxDiscount: 50_000, minOrder: 300_000 };
+    // Nhãn "Giảm 10%, tối đa 50k": chữ và số đều của nhãn thì cắt; 300k (đơn tối thiểu) thì không.
+    expect(view('Giảm 10% tối đa 50k cho khách mới', pct).name).toBe('cho khách mới');
+    expect(view('Giảm 300k cho khách mới', pct).name).toBe('Giảm 300k cho khách mới');
   });
   it('tên không nhắc số thì giữ, kể cả có số khác', () => {
     expect(view('Quà khách mới').name).toBe('Quà khách mới');

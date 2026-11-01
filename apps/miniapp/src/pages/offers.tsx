@@ -124,7 +124,7 @@ export default function OffersPage() {
         <AuthPhaseView phase={phase} loading={pageSkeleton} />
       ) : (
         <>
-          <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={fillCopy('zalo.link')} />
+          <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={homeCopy.profile.guestCta} />
 
           <OffersPointsStrip loyalty={loyaltyQ} />
 
