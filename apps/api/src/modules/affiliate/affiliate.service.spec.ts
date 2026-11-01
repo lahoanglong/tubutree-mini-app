@@ -806,6 +806,10 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     const flashWith = (map: Map<string, unknown>) => ({
       resolveEffective: jest.fn().mockResolvedValue(map),
       consumeQuotas: jest.fn().mockImplementation(async (_tx: unknown, _u: string, lines: unknown[]) => lines.map(() => 'OK')),
+      overLimitError: jest.fn().mockImplementation(
+        async (_tx: unknown, id: string) =>
+          new BadRequestException({ statusCode: 400, error: 'Bad Request', code: 'FLASH_LIMIT', limit: 3, message: `Giá Giờ vàng chỉ áp cho 3 sản phẩm mỗi khách (${id}).` }),
+      ),
     });
 
     it('đang giờ vàng → đơn tính giá giờ vàng, giữ suất trong tx (theo tài khoản CTV), dòng mang flashSaleItemId', async () => {
@@ -847,11 +851,14 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       expect(commissionCreate).not.toHaveBeenCalled();
     });
 
-    it('vượt giới hạn mua (OVER_LIMIT) → giữ nguyên lỗi, không tạo đơn', async () => {
+    it('vượt giới hạn mua (OVER_LIMIT) → lỗi FLASH_LIMIT kèm limit của suất đó, không tạo đơn', async () => {
       const flash = flashWith(offer());
       flash.consumeQuotas.mockResolvedValue(['OVER_LIMIT']);
-      const { svc, orderCreate } = build({ variations: GRANOLA, flash });
-      await expect(svc.placeOrderForCustomer('ctv', DTO() as never)).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+      const { svc, orderCreate, prisma } = build({ variations: GRANOLA, flash });
+      const err = await svc.placeOrderForCustomer('ctv', DTO() as never).catch((e: BadRequestException) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'FLASH_LIMIT', limit: 3 });
+      expect(flash.overLimitError).toHaveBeenCalledWith(prisma, 'fi1');
       expect(orderCreate).not.toHaveBeenCalled();
     });
 
