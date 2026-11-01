@@ -1,7 +1,7 @@
 import { fillTemplate } from '../copy-template';
 import { SECTION_BUDGET, SHOP_MAX_SECTIONS } from './collection-view';
 import { planShopSections } from './shop-page';
-import type { MoveDirection } from '../storefront-order';
+import { moveInList, type MoveDirection } from '../storefront-order';
 
 export type { MoveDirection } from '../storefront-order';
 
@@ -169,6 +169,19 @@ export function suggestedSectionTitle(style: SectionStyle): string {
 
 export function moveButtonLabel(dir: MoveDirection, name: string, scope: 'item' | 'section' = 'item'): string {
   return `Đưa ${scope === 'section' ? 'khối ' : ''}${name} ${dir === 'up' ? 'lên' : 'xuống'}`;
+}
+
+/** Vì sao nút ↑↓ không dời được: ở rìa danh sách ("edge", kể cả id lạ) hay bị món ghim chặn ("pin"); dời được thì null. */
+export function moveBlockReason<T extends { id: string }>(
+  list: readonly T[],
+  id: string,
+  dir: MoveDirection,
+  sameGroup?: (a: T, b: T) => boolean,
+): 'edge' | 'pin' | null {
+  if (moveInList(list, id, dir, sameGroup)) return null;
+  const from = list.findIndex((r) => r.id === id);
+  const to = dir === 'up' ? from - 1 : from + 1;
+  return from < 0 || to < 0 || to >= list.length ? 'edge' : 'pin';
 }
 
 /** `index` tính từ 0, SAU khi dời. */

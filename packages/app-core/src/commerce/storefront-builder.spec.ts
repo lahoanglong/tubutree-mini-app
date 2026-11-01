@@ -10,6 +10,7 @@ import {
   isCustomerVisible,
   moveAnnouncement,
   moveBlockedAnnouncement,
+  moveBlockReason,
   moveButtonLabel,
   newSectionDto,
   overflowSectionsNotice,
@@ -203,6 +204,30 @@ describe('chữ nút sắp xếp', () => {
     expect(moveBlockedAnnouncement({ name: 'Kem', dir: 'up', reason: 'edge' })).toBe('Kem đã ở đầu danh sách');
     expect(moveBlockedAnnouncement({ name: 'Kem', dir: 'down', reason: 'edge' })).toBe('Kem đã ở cuối danh sách');
     expect(moveBlockedAnnouncement({ name: 'Kem', dir: 'up', reason: 'pin' })).toBe('Món ghim luôn nằm trên món thường.');
+  });
+});
+
+describe('lý do không dời được', () => {
+  const row = (id: string, isPinned = false) => ({ id, isPinned });
+  const same = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
+
+  it('đầu và cuối danh sách là "edge"; dời được là null', () => {
+    const list = [row('a'), row('b'), row('c')];
+    expect(moveBlockReason(list, 'a', 'up', same)).toBe('edge');
+    expect(moveBlockReason(list, 'c', 'down', same)).toBe('edge');
+    expect(moveBlockReason(list, 'b', 'up', same)).toBeNull();
+    expect(moveBlockReason(list, 'b', 'down', same)).toBeNull();
+  });
+
+  it('hàng xóm khác nhóm ghim là "pin", kể cả khi đi xuống từ món ghim cuối', () => {
+    const list = [row('p1', true), row('p2', true), row('n1'), row('n2')];
+    expect(moveBlockReason(list, 'n1', 'up', same)).toBe('pin');
+    expect(moveBlockReason(list, 'p2', 'down', same)).toBe('pin');
+    expect(moveBlockReason(list, 'p1', 'down', same)).toBeNull();
+  });
+
+  it('id lạ coi như không dời được ("edge") và không ném lỗi', () => {
+    expect(moveBlockReason([row('a')], 'zzz', 'up', same)).toBe('edge');
   });
 });
 
