@@ -170,4 +170,13 @@
 
 ## Kết quả
 
-(điền ở cuối)
+Gate `gate.sh --base fd851f2f9`: 18 PASS, 0 FAIL (app-core 2294, Mini 6275 cả TZ=UTC, web 9270, jest API 12562; bundle Mini entry 650/203 KB). e2e Mini cả bộ: 403 passed, 10 skipped, 0 failed. e2e web (web-gate, sáu spec của gói): 163 passed, 19 skipped; bốn ca mới của `cart-display.web.spec.ts` đỏ lần đầu vì bộ chọn nhãn sai (`has` lồng cùng gốc), sửa rồi chạy `--repeat-each=5` xanh 30/30 cùng ca Theo dõi (10/10); `pdp-mobile.web.spec.ts` 8 passed, không ca nào skipped. Ảnh 375px trước/sau ở `screens/H2/{before,after}/` (gitignore).
+
+## Lệch kế hoạch
+
+- **Task 1 và 2 một commit** (cùng sửa `gio-hang/page.tsx` và `cart-mini.spec.tsx`).
+- **Task 2:** không thêm token rãnh thứ hai; rãnh dùng `--color-track` đã có (đang là "rãnh thanh tiến độ", Mini `ProgressBar` dùng sẵn, preset Tailwind `bg-track`), chỉ thêm `--color-progress-fill-from`.
+- **Task 3:** Mini đã ra đúng 500 nên ca mới xanh ngay (chỉ ghim hiện trạng, không có bước đỏ).
+- **Task 5:** số nguyên (điểm một khách chấm) giữ "5 trên 5 sao"; chỉ số lẻ qua `formatRating`.
+- **Task 8:** chỉ ba file nguồn của kế hoạch. `group-buy.tsx`, `group-buy-view.tsx` ("Mua ngay với mã giảm n%"), `game-wheel.ts` và `home-copy.ts` (`groupBuyHint`, cùng câu với `GROUP_BUY_MENU_HINT`) vẫn còn "mã giảm" và vẫn trong `EXEMPT`; `REASON.COUPON` giữ, sửa lại câu giải thích.
+- **Task 4:** thêm prop `divider` cho `PdpCoupons` (hàng "Ưu đãi" cũng không kẻ khi là hàng cuối, như Mini), ngoài `PdpShippingRow` mà kế hoạch nêu.
