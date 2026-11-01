@@ -24,7 +24,7 @@ describe('CouponsController — POST /coupons/claim', () => {
 
   it('chuyển đúng userId và mã cho service', async () => {
     const claim = jest.fn().mockResolvedValue({ code: 'X' });
-    const ctrl = new CouponsController({ claim } as unknown as CouponClaimService);
+    const ctrl = new CouponsController({ claim } as unknown as CouponClaimService, {} as CouponCollectService);
     await ctrl.claim('u1', { code: 'abc' });
     expect(claim).toHaveBeenCalledWith('u1', 'abc');
   });
