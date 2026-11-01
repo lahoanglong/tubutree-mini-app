@@ -32,10 +32,27 @@ describe('useLoginWithNotice', () => {
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 
-  it('mất mạng lúc đăng nhập (status error): không báo lời khoá', async () => {
+  it('mất mạng hay 429 lúc đăng nhập (status error): báo câu lỗi phiên, không để nút bấm xong im lặng', async () => {
     mocks.state = { status: 'error', error: 'Mất kết nối.' };
     const { result } = renderHook(() => useLoginWithNotice());
     await result.current();
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối.', type: 'error' });
+  });
+
+  it('màn tự đổi sang lỗi phiên (sessionErrorShown): không báo lỗi phiên lần nữa, khoá vẫn báo', async () => {
+    mocks.state = { status: 'error', error: 'Mất kết nối.' };
+    const { result } = renderHook(() => useLoginWithNotice({ sessionErrorShown: true }));
+    await result.current();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    mocks.state = { status: 'idle', error: 'Tài khoản đã bị khoá.' };
+    await result.current();
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' });
+  });
+
+  it('khách thường (idle, không có lời nào): không báo', async () => {
+    const { result } = renderHook(() => useLoginWithNotice());
+    await result.current();
+    expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 });

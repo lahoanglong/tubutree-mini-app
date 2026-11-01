@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   openOAChat: vi.fn(),
   hasOA: true,
   search: '',
-  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' | 'idle', error: undefined as string | undefined },
+  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' | 'idle' | 'error', error: undefined as string | undefined },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -390,6 +390,19 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     fireEvent.click(await screen.findByRole('button', { name: 'Tiếp tục với Zalo' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('mất mạng khi bấm đăng nhập ở danh sách xem trước: trang tự đổi sang màn lỗi phiên nên không báo thêm thanh thông báo', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1')] });
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tiếp tục với Zalo' }));
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 
   it('bài xem trước không có nút thích/bình luận/mở bài: đọc xong chỉ có lối đăng nhập', async () => {

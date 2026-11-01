@@ -51,7 +51,7 @@ import { SEASON_PASS_ENABLED } from '../utils/features';
 
 export default function GamePage() {
   const phase = useAuthPhase();
-  const login = useLoginWithNotice();
+  const login = useLoginWithNotice({ sessionErrorShown: true });
   const couponUse = useCouponUse();
   const navigate = useNavigate();
   const publicConfig = usePublicConfig();

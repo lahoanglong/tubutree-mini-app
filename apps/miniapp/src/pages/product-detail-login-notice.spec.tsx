@@ -105,6 +105,16 @@ describe('ProductDetailPage — tài khoản bị khoá bấm mua', () => {
     expect(mocks.createGroupBuy).not.toHaveBeenCalled();
   });
 
+  it('mất mạng khi đăng nhập (status error): thanh báo câu lỗi phiên thay vì im lặng, không thêm giỏ', async () => {
+    mocks.login.mockImplementation(async () => {
+      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+    });
+    renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /^Mua ngay/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.', type: 'error' }));
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
   it('khách đăng xuất bình thường (login không ra lời máy chủ): mở đăng nhập, không có thanh báo', async () => {
     mocks.login.mockImplementation(async () => {});
     renderPdp();

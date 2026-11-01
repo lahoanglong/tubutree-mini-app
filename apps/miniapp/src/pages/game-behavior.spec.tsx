@@ -216,6 +216,18 @@ describe('GamePage — trạng thái trang', () => {
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
   });
 
+  it('mất mạng khi bấm đăng nhập ở cổng: trang tự đổi sang màn lỗi phiên nên không báo thêm thanh thông báo', async () => {
+    mocks.auth.status = 'idle';
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
   it('lỗi tải hồ sơ: báo lỗi rõ ràng và "Thử lại" tải lại hồ sơ, không dựng phần còn lại', async () => {
     mocks.api.getGameProfile.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ ...PROFILE });
     renderPage();

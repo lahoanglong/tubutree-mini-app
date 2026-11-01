@@ -34,7 +34,7 @@ export default function FeedPage() {
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
   // Danh sách xem trước không có chỗ nói lời khoá như cổng đăng nhập bên dưới (body={blocked}): báo bằng thanh thông báo.
-  const loginWithNotice = useLoginWithNotice();
+  const loginWithNotice = useLoginWithNotice({ sessionErrorShown: true });
   const blocked = useBlockedMessage();
   const authed = phase === 'authenticated';
   const navigate = useNavigate();
