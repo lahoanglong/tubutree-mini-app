@@ -24,6 +24,12 @@ describe('FlashPriceBar', () => {
     expect(screen.getByText('Đã bán 40%')).toBeInTheDocument();
   });
 
+  it('rãnh thanh đã bán dùng --color-track: nền thanh Giờ vàng đã là cam nhạt, rãnh cùng màu thì chữ "Đã bán" mất nền', () => {
+    render(<FlashPriceBar {...base} endAt={iso(3_600_000)} />);
+    expect(screen.getByTestId('flash-price-bar')).toHaveStyle({ background: 'var(--color-flash-bg)' });
+    expect(screen.getByTestId('flash-sold-track')).toHaveStyle({ background: 'var(--color-track)' });
+  });
+
   it('"Mỗi khách tối đa n" chỉ hiện khi API gửi giới hạn', () => {
     const { rerender } = render(<FlashPriceBar {...base} endAt={iso(3_600_000)} perUserLimit={5} />);
     expect(screen.getByText('Mỗi khách tối đa 5')).toBeInTheDocument();

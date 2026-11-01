@@ -42,7 +42,7 @@ export function FlashPriceBar({ price, compareAt, pct, endAt, soldPct, soldOut =
           </Badge>
         )}
       </div>
-      <FlashSoldBar soldPct={soldPct} soldOut={soldOut} />
+      <FlashSoldBar soldPct={soldPct} soldOut={soldOut} track="neutral" />
       {perUserLimit != null && perUserLimit > 0 && (
         <span style={{ fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-secondary)' }}>
           {fillCopy('flash.limit', { n: perUserLimit })}
