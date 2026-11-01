@@ -139,6 +139,24 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     for (const b of Array.from(c.querySelectorAll('button'))) expect(b.style.minHeight).toBe('44px');
   });
 
+  it('cột 5,5 hẹp (~62px): ô không đệm ngang để nhãn dùng đủ cột, nhãn chữ caption tối đa hai dòng, cao đúng LABEL_HEIGHT (H3 #5)', () => {
+    const { c } = mount(12);
+    const cell = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Danh mục 0')!;
+    expect(cell.style.paddingLeft).toBe('0px');
+    expect(cell.style.paddingRight).toBe('0px');
+    const label = Array.from(cell.querySelectorAll<HTMLElement>('*')).find((e) => e.textContent === 'Danh mục 0' && e.children.length === 0)!;
+    expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    expect(label.style.height).toBe(`${CATEGORY_LABEL_HEIGHT}px`);
+  });
+
+  it('cột 5,5 chỉ vừa ~62px: nhãn siết chữ -0,01em (cứu "Chăm sóc" dài 62,6px); lưới tới 10 ô cột 20% vẫn chữ thường (H3 #5)', () => {
+    const labelOf = (c: HTMLElement) =>
+      Array.from(c.querySelectorAll<HTMLElement>('button *')).find((e) => e.textContent === 'Danh mục 0' && e.children.length === 0)!;
+    expect(labelOf(mount(12).c).style.letterSpacing).toBe('-0.01em');
+    mounted!.unmount();
+    expect(labelOf(mount(6).c).style.letterSpacing).toBe('');
+  });
+
   it('đang tải: khung chờ 10 ô mặc định; theo số ô nhớ thì ít hơn (cộng ô "Tất cả"), tối đa 10', () => {
     const count = (over: Partial<React.ComponentProps<typeof CategoryRow>>) => {
       const { c } = mount(0, { isLoading: true, entries: [], ...over });

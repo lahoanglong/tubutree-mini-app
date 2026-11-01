@@ -117,6 +117,24 @@ describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
     for (const b of screen.getAllByRole('button')) expect(b).toHaveStyle({ minHeight: '44px' });
   });
 
+  it('cột 5,5 hẹp (~62px): ô không đệm ngang để nhãn dùng đủ cột, nhãn chữ caption tối đa hai dòng, cao đúng LABEL_HEIGHT (H3 #5)', () => {
+    renderRow(12);
+    const cell = screen.getByRole('button', { name: 'Danh mục 0' });
+    expect(cell.style.paddingLeft).toBe('0px');
+    expect(cell.style.paddingRight).toBe('0px');
+    const label = within(cell).getByText('Danh mục 0');
+    expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    expect(label).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
+  });
+
+  it('cột 5,5 chỉ vừa ~62px: nhãn siết chữ -0,01em (cứu "Chăm sóc" dài 62,6px); lưới tới 10 ô cột 20% vẫn chữ thường (H3 #5)', () => {
+    const wide = renderRow(12);
+    expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe('-0.01em');
+    wide.unmount();
+    renderRow(6);
+    expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe('');
+  });
+
   it('đang tải: khung chờ 10 ô mặc định; theo số ô nhớ thì ít hơn (cộng ô "Tất cả"), tối đa 10', () => {
     const first = render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} />);
     expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(10);
