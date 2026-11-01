@@ -200,6 +200,29 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('thẻ line: action là nút tuỳ ý cùng hàng, bấm không điều hướng; bấm tên vẫn là liên kết tới sản phẩm', () => {
+    const onPress = vi.fn();
+    const c = tile(viewOf({}, 'line'), 'line', {
+      action: (
+        <button type="button" aria-pressed={false} onClick={onPress}>
+          Nhắc tôi Serum
+        </button>
+      ),
+    });
+    const btn = c.querySelector('button[aria-pressed]') as HTMLButtonElement;
+    expect(btn.textContent).toBe('Nhắc tôi Serum');
+    click(btn);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(link(c).getAttribute('href')).toBe('/san-pham/serum-x');
+    expect(btn.parentElement!.style.zIndex).toBe('1');
+    expect(link(c).contains(btn)).toBe(false);
+  });
+
+  it('action chỉ có ở biến thể line (thẻ dọc không có chỗ cho nó)', () => {
+    const c = tile(viewOf({}, 'grid'), 'grid', { action: <button type="button">Nhắc tôi</button> });
+    expect(c.textContent).not.toContain('Nhắc tôi');
+  });
+
   it('thẻ line: nút phụ cùng hàng, mặc định nhãn "Thêm"', () => {
     const c = tile(viewOf({}, 'line'), 'line', { onAdd: () => {} });
     expect(Array.from(c.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Thêm']);

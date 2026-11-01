@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { cancelFlashReminder, setFlashReminder, type FlashSaleActiveItem, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
-import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
@@ -16,7 +15,7 @@ import { serverNow } from '@tubutree/app-core/server-clock';
 import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { soldPercent } from '@/lib/flash-display';
+import { flashCardProduct, soldPercent } from '@/lib/flash-display';
 import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
@@ -37,31 +36,6 @@ const SOLD_FOOTER_HEIGHT = 20;
 /** Cuối thẻ "Sắp diễn ra": 8 (cách giá) + 44 (nút nhắc). */
 const REMIND_FOOTER_HEIGHT = 52;
 const FLASH_SHELF = shelf('home.flash');
-
-/** Thẻ sản phẩm của một suất Giờ vàng: giá của đúng phân loại có suất (ghim phân loại để thẻ chỉ xét suất này). */
-function flashCardProduct(item: {
-  itemId: string;
-  productSlug: string;
-  productName: string;
-  thumbnail: string | null;
-  variationId: string;
-  retailPrice: number;
-  salePrice?: number | null;
-}): ProductCardData {
-  return {
-    id: item.itemId,
-    slug: item.productSlug,
-    name: item.productName,
-    brand: '',
-    thumbnail: item.thumbnail,
-    basePrice: item.retailPrice,
-    salePrice: item.salePrice ?? null,
-    repVariationId: item.variationId,
-    pinnedVariationId: item.variationId,
-    isFeatured: false,
-    inStock: true,
-  };
-}
 
 const subscribeNothing = () => () => {};
 

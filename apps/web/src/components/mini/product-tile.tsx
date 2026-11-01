@@ -40,6 +40,8 @@ export interface ProductTileProps {
   /** Phần cuối thẻ (thanh % đã bán, nút nhắc). Nơi gọi truyền `footerHeight` để thân thẻ giữ chiều cao cố định. */
   footer?: ReactNode;
   footerHeight?: number;
+  /** Nút tuỳ ý cuối hàng của thẻ `line` (Mua ngay, Nhắc tôi), thay chỗ nút `onAdd`; thẻ dọc không có chỗ nên bỏ qua. Nơi gọi tự đặt tên truy cập. */
+  action?: ReactNode;
   /** Chưa biết giá (đang tải): không in giá, vẫn giữ chỗ. */
   hidePrice?: boolean;
   onOpen?: () => void;
@@ -87,6 +89,7 @@ export function ProductTile({
   imageOverlay,
   footer,
   footerHeight,
+  action,
   hidePrice,
   onOpen,
 }: ProductTileProps) {
@@ -315,7 +318,16 @@ export function ProductTile({
         {footer}
         {onAdd && !isLine && <AddButton block label={addLabel} onAdd={onAdd} />}
       </div>
-      {onAdd && isLine && <AddButton label={addLabel} onAdd={onAdd} />}
+      {isLine && action ? <LineAction>{action}</LineAction> : onAdd && isLine && <AddButton label={addLabel} onAdd={onAdd} />}
+    </div>
+  );
+}
+
+/** Chỗ của `action` ở thẻ `line`: anh em của liên kết tên, nổi trên lớp phủ của nó; chặn click lan lên hàng cha như AddButton. */
+function LineAction({ children }: { children: ReactNode }) {
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', zIndex: 1, flex: '0 0 auto' }}>
+      {children}
     </div>
   );
 }
