@@ -90,6 +90,7 @@ import {
   type InboxKey,
   type OpsInbox,
   OPS_INBOX_QUERY_KEY,
+  invalidateInbox,
   type StaffPermission,
   type AdminOrder,
   getPosCreditEnabled,
@@ -880,7 +881,9 @@ function DealerRow({ app: a }: { app: DealerApp }) {
   const review = useMutation({
     mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
       reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : reason),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealers'] }),
+    // Số Chờ duyệt trên chip và hộp việc cùng đổi theo; lỗi cũng làm mới vì hồ sơ có thể đã bị người khác xử lý.
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-dealers'] }), invalidateInbox(qc)]),
+    onError: () => void invalidateInbox(qc),
   });
   // Từ chối là trạng thái cuối và lý do được gửi nguyên văn cho người nộp, nên bắt admin tự viết.
   // API báo lỗi (vd hồ sơ vừa bị admin khác xử lý) thì mở lại hộp với lý do đã gõ, không bắt gõ lại.
@@ -1303,7 +1306,8 @@ function OrdersTab({
       getOrderStatusCounts({ search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
     enabled: !badRange,
   });
-  const statusCount = (k: string) => (k ? countsQ.data?.byStatus[k] ?? 0 : countsQ.data?.all);
+  // Chưa có dữ liệu (đang tải, lỗi, khoảng ngày sai) thì không có số: in "(0)" sẽ bị đọc nhầm thành hết đơn.
+  const statusCount = (k: string) => (countsQ.data ? (k ? countsQ.data.byStatus[k] ?? 0 : countsQ.data.all) : undefined);
   const exportAll = async () => {
     setExportMsg(null);
     setExporting(true);

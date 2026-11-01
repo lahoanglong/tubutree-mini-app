@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryClient } from '@tanstack/react-query';
 import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
 import { ApiError } from '@/lib/client-api';
 
@@ -23,8 +23,16 @@ function defaultStaleTime(query: { queryKey: readonly unknown[] }): number {
   return typeof head === 'string' && head.startsWith('admin-') && !LIVE_ADMIN_KEY.test(head) ? ADMIN_STALE_MS : 0;
 }
 
+const isAdminKey = (query: { queryKey: readonly unknown[] }) => typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('admin-');
+
 export function createQueryClient(): QueryClient {
-  const client = new QueryClient({
+  // Mutation nào xong (thành công hay lỗi) cũng làm cũ mọi khoá admin: nhiều mutation chỉ làm mới khoá của mình, mà màn khác
+  // (Người dùng, hộp việc, số trên chip...) đọc cùng dữ liệu. staleTime 30 giây chỉ để đổi tab không gọi lại mạng.
+  const mutationCache = new MutationCache({
+    onSettled: () => void client.invalidateQueries({ predicate: isAdminKey }),
+  });
+  const client: QueryClient = new QueryClient({
+    mutationCache,
     defaultOptions: {
       queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false, staleTime: defaultStaleTime },
       mutations: { networkMode: 'always' },

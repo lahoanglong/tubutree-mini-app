@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from '@/lib/query-client';
 import AdminPage from './page';
 import { vnTodayKey } from '@/lib/admin-reports';
 import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
@@ -30,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   wasteArgs: [] as unknown[][],
   dealerArgs: [] as unknown[][],
   statusCountsCalls: [] as unknown[][],
+  statusCountsMode: 'ok' as 'ok' | 'fail' | 'pending',
   orders: [] as unknown[],
   users: [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -214,6 +218,8 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     getUserDetail: async (id: string) => mocks.userDetail(id),
     getOrderStatusCounts: async (...args: unknown[]) => {
       mocks.statusCountsCalls.push(args);
+      if (mocks.statusCountsMode === 'fail') throw new Error('500');
+      if (mocks.statusCountsMode === 'pending') return new Promise(() => undefined);
       return { all: 11, byStatus: { PENDING_PAYMENT: 4, DELIVERED: 7 } };
     },
     listOrders: async (...args: unknown[]) => {
@@ -333,6 +339,7 @@ beforeEach(() => {
   mocks.wasteArgs = [];
   mocks.dealerArgs = [];
   mocks.statusCountsCalls = [];
+  mocks.statusCountsMode = 'ok';
   mocks.orders = [];
   mocks.users = [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -645,6 +652,38 @@ describe('admin/page — tab Đơn hàng', () => {
     expect(select.parentElement!.className).toContain('flex-wrap');
   });
 
+  it('R-70: số trên chip chỉ hiện khi đã có dữ liệu; đang tải hoặc lỗi thì không in "(0)" (không đọc nhầm thành hết đơn)', async () => {
+    for (const mode of ['pending', 'fail'] as const) {
+      mocks.statusCountsMode = mode;
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      const chips = [...container.querySelectorAll('select[aria-label="Lọc đơn theo trạng thái"] option')].map((b) => b.textContent);
+      expect(chips.length).toBeGreaterThan(1);
+      for (const t of chips) expect(t).not.toMatch(/\(\d+\)/);
+    }
+  });
+
+  it('R-149: đổi qua lại Đơn ↔ Đại lý 3 vòng chỉ gọi danh sách mỗi tab một lần (staleTime 30 giây)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => root.render(<QueryClientProvider client={createQueryClient()}><AdminPage /></QueryClientProvider>));
+    mounted.push({ container, root, unmount: () => { act(() => root.unmount()); container.remove(); } });
+    await flush();
+    const goto = async (label: string) => {
+      const btn = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].find((b) => navLabel(b) === label)!;
+      click(btn);
+      await flush();
+    };
+    for (let i = 0; i < 3; i++) {
+      await goto('Đại lý');
+      await goto('Đơn hàng');
+    }
+    expect(mocks.listOrders).toHaveBeenCalledTimes(1);
+    expect(mocks.dealerArgs).toHaveLength(1);
+  });
+
   it('thanh phân trang xuống dòng được và nút Trước/Sau giữ nhãn', async () => {
     const { container } = await openOrders();
     const prev = [...container.querySelectorAll('button')].find((b) => b.textContent === '← Trang trước');
@@ -779,6 +818,16 @@ describe('admin/page — tab Đại lý', () => {
     await answerDialog(true, 'Ảnh CCCD bị mờ, nộp lại');
     expect(mocks.reviewDealerApp).toHaveBeenCalledTimes(1);
     expect(mocks.reviewDealerApp).toHaveBeenCalledWith('d1', false, undefined, 'Ảnh CCCD bị mờ, nộp lại');
+  });
+
+  it('R-148: duyệt hoặc từ chối xong thì hỏi lại hộp việc để số Chờ duyệt không cũ; lỗi cũng vậy (hồ sơ có thể đã bị người khác xử lý)', async () => {
+    const { container } = await openDealers();
+    mocks.reviewDealerApp.mockResolvedValue({});
+    const before = mocks.inbox.mock.calls.length;
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Từ chối')!);
+    await flush();
+    await answerDialog(true, 'Ảnh mờ');
+    expect(mocks.inbox.mock.calls.length).toBeGreaterThan(before);
   });
 
   it('Từ chối hồ sơ: huỷ hộp lý do thì không gọi API', async () => {

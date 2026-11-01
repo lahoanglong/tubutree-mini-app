@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { AdminService } from './admin.service';
 import { AdminController, ExportOrdersQuery, ListOrdersQuery, OrderStatusCountsQuery } from './admin.controller';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -272,6 +275,28 @@ describe('AdminController GET orders/status-counts (R-70)', () => {
       Reflect.getMetadata('staffPermissions', AdminController.prototype.orders),
     );
     expect(Reflect.getMetadata('roles', AdminController)).toEqual(['ADMIN']);
+  });
+
+  it('RolesGuard thật: ADMIN và staff CSKH/KHO/KE_TOAN qua; khách, đại lý, CTV, staff MARKETING hoặc không nhóm, không có người dùng bị chặn', () => {
+    const guard = new RolesGuard(new Reflector());
+    const can = (user: object | undefined) => {
+      const ctx = {
+        switchToHttp: () => ({ getRequest: () => ({ user }) }),
+        getHandler: () => AdminController.prototype.orderStatusCounts,
+        getClass: () => AdminController,
+      } as unknown as ExecutionContext;
+      try {
+        return guard.canActivate(ctx);
+      } catch (e) {
+        if (e instanceof ForbiddenException) return false;
+        throw e;
+      }
+    };
+    expect(can({ role: 'ADMIN' })).toBe(true);
+    for (const p of ['CSKH', 'KHO', 'KE_TOAN']) expect(can({ role: 'STAFF', staffPermissions: [p] })).toBe(true);
+    for (const u of [{ role: 'CUSTOMER' }, { role: 'DEALER' }, { role: 'AFFILIATE' }, { role: 'STAFF', staffPermissions: ['MARKETING'] }, { role: 'STAFF', staffPermissions: [] }, undefined]) {
+      expect(can(u)).toBe(false);
+    }
   });
 
   it('chuyển bộ lọc (không có status/trang) và người xem xuống service', async () => {

@@ -1,4 +1,4 @@
-import { QueryClient, QueryObserver } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { createQueryClient, shouldRetryQuery } from './query-client';
@@ -41,34 +41,23 @@ describe('createQueryClient (R-80)', () => {
   });
 });
 
-describe('đổi qua lại giữa hai tab admin (R-149)', () => {
-  // Mỗi lần mở tab là mount lại truy vấn của tab đó: staleTime 0 thì lần nào cũng gọi mạng.
-  async function switchTabs(client: ReturnType<typeof createQueryClient> | QueryClient, rounds: number) {
-    const calls = { orders: 0, dealers: 0 };
-    const fetchers = {
-      orders: ['admin-orders', 1] as const,
-      dealers: ['admin-dealers', 'PENDING'] as const,
-    };
-    const open = async (name: keyof typeof calls) => {
-      const obs = new QueryObserver(client, {
-        queryKey: [...fetchers[name]],
-        queryFn: async () => (calls[name] += 1),
-      });
-      const unsub = obs.subscribe(() => undefined);
-      await new Promise((r) => setTimeout(r, 0));
-      unsub();
-    };
-    for (let i = 0; i < rounds; i++) {
-      await open('orders');
-      await open('dealers');
-    }
-    return calls.orders + calls.dealers;
-  }
+describe('mutation thành công làm cũ mọi khoá admin (R-149)', () => {
+  it('khoá admin-* đang tươi bị đánh dấu cũ sau một mutation, khoá khác giữ nguyên', async () => {
+    const client = createQueryClient();
+    client.setQueryData(['admin-users', 1], { name: 'cũ' });
+    client.setQueryData(['admin-user-detail', 'u1'], { name: 'cũ' });
+    client.setQueryData(['products', 'x'], []);
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(false);
+    await client.getMutationCache().build(client, { mutationFn: async () => 'ok' }).execute(undefined);
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(['admin-user-detail', 'u1'])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(['products', 'x'])?.isInvalidated).toBe(false);
+  });
 
-  it('3 vòng Đơn ↔ Đại lý: trước 6 lần gọi mạng, sau 2 lần (mỗi tab một lần)', async () => {
-    const before = await switchTabs(new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }), 3);
-    const after = await switchTabs(createQueryClient(), 3);
-    expect(before).toBe(6);
-    expect(after).toBe(2);
+  it('mutation lỗi cũng làm cũ khoá admin (dữ liệu có thể đã đổi phía máy chủ)', async () => {
+    const client = createQueryClient();
+    client.setQueryData(['admin-ops-inbox'], { items: [] });
+    await client.getMutationCache().build(client, { mutationFn: async () => { throw new Error('x'); } }).execute(undefined).catch(() => undefined);
+    expect(client.getQueryState(['admin-ops-inbox'])?.isInvalidated).toBe(true);
   });
 });

@@ -822,8 +822,6 @@ export const vi = {
     pendingNotice: 'Bài đang chờ duyệt, sẽ hiện sau khi được duyệt 🌱',
     pendingBadge: 'Chờ duyệt',
     moderation: 'Kiểm duyệt cộng đồng',
-    tabPending: 'Chờ duyệt',
-    tabReports: 'Báo cáo',
     approve: 'Duyệt',
     reject: 'Từ chối',
     approved: 'Đã duyệt bài',
