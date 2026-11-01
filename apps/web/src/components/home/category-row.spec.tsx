@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => {
-  it('vùng tên "Danh mục" với tiêu đề h2 (SectionHeader); quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5 bề rộng', () => {
+  it('vùng tên "Danh mục" với tiêu đề h2 (SectionHeader); quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5,5 bề rộng (cột thứ 6 ló nửa cột)', () => {
     const { c, grid } = mount(12);
     const section = c.querySelector('section[aria-label="Danh mục"]')!;
     expect(section.querySelector('h2')?.textContent).toBe('Danh mục');
@@ -35,7 +35,41 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(grid.style.display).toBe('grid');
     expect(grid.style.gridAutoFlow).toBe('column');
     expect(grid.style.gridTemplateRows).toBe('repeat(2, auto)');
-    expect(grid.style.gridAutoColumns).toBe('20%');
+    expect(grid.style.gridAutoColumns).toMatch(/^calc\((18\.18\d*%|100% \/ 5\.5)\)$/);
+  });
+
+  it('quá 10 ô: tiêu đề có "Xem tất cả Danh mục" (onSeeAll); chạm gọi onSeeAll', () => {
+    const { c, onSeeAll } = mount(12);
+    const header = c.querySelector('[data-testid="section-header"]')!;
+    const action = header.querySelector<HTMLButtonElement>('button[aria-label="Xem tất cả Danh mục"]');
+    expect(action).not.toBeNull();
+    click(action);
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('tới 10 ô hoặc không có onSeeAll: tiêu đề không có "Xem tất cả"', () => {
+    for (const [n, over] of [[3, {}], [9, {}], [12, { onSeeAll: undefined }]] as const) {
+      const { c } = mount(n, over);
+      expect(c.querySelector('[data-testid="section-header"] button')).toBeNull();
+      mounted?.unmount();
+    }
+  });
+
+  it('web: hàng cuộn có nút ‹ › (chuột không vuốt ngang được), chỉ quá 10 ô; tới 10 ô không có nút', () => {
+    const proto = HTMLElement.prototype;
+    const orig = { sw: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), cw: Object.getOwnPropertyDescriptor(proto, 'clientWidth') };
+    Object.defineProperty(proto, 'scrollWidth', { configurable: true, get: () => 1000 });
+    Object.defineProperty(proto, 'clientWidth', { configurable: true, get: () => 400 });
+    try {
+      const next = 'button[aria-label="Xem các mục tiếp"]';
+      expect(mount(12).c.querySelector(next)).not.toBeNull();
+      mounted?.unmount();
+      expect(mount(6).c.querySelector(next)).toBeNull();
+    } finally {
+      if (orig.sw) Object.defineProperty(proto, 'scrollWidth', orig.sw);
+      if (orig.cw) Object.defineProperty(proto, 'clientWidth', orig.cw);
+      else delete (proto as unknown as Record<string, unknown>).clientWidth;
+    }
   });
 
   it('tới 10 ô (kể cả "Tất cả"): xếp theo hàng, 5 cột 1/5 bề rộng, không xếp theo cột', () => {
