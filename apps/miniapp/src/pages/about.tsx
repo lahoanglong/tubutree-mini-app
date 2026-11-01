@@ -9,7 +9,6 @@ import type { PublicConfig } from '../services/shop-api';
 import { callPhone } from '../services/zmp-bridge';
 import type { WebPolicySlug } from '../utils/web-policy';
 import { PolicySheet } from '../components/policy-sheet';
-import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Chip } from '../components/ui/chip';
 import { Icon } from '../components/ui/icon';
