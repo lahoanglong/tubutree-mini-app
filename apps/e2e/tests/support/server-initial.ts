@@ -62,7 +62,7 @@ export async function serverWithoutCampaigns(page: Page): Promise<{ found: () =>
       const response = await route.fetch();
       const rewritten = dropServerCampaigns(await response.text());
       found = rewritten.found;
-      const headers = { ...response.headers(), 'content-length': String(Buffer.byteLength(rewritten.html)) };
+      const headers: Record<string, string> = { ...response.headers(), 'content-length': String(Buffer.byteLength(rewritten.html)) };
       delete headers['content-encoding'];
       return route.fulfill({ response, headers, body: rewritten.html });
     },
