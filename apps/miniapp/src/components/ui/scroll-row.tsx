@@ -23,7 +23,8 @@ export function ScrollRow({ label, children, className, style, ...rest }: Scroll
       role="region"
       aria-label={label}
       className={['scroll-x', 'tubu-scroll-fade', className].filter(Boolean).join(' ')}
-      style={style}
+      // relative: chữ đọc ẩn (position:absolute) của PriceTag trong thẻ lấy khung relative gần nhất làm gốc; không có khung này nó thoát vùng cuộn và làm trang tràn ngang.
+      style={{ position: 'relative', ...style }}
       {...rest}
     >
       {children}
