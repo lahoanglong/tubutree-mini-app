@@ -81,10 +81,12 @@ import {
   actorUserId,
   assertClaimUsageLimit,
   assertCouponInput,
+  assertListable,
   assertNotOwnCoupon,
   assertStaffCouponCaps,
   assertStaffCreatedCoupons,
   assertStaffDailyBudget,
+  cleanCouponTitle,
   loadStaffCouponCaps,
   staffCouponExposure,
   SYSTEM_ACTOR,
@@ -1484,10 +1486,14 @@ export class AdminService {
     // DTO (RequiredScopeMeta) đã bắt buộc đúng field khi scope=TIER/USER_GROUP trước khi tới đây.
     scopeMeta?: { tierId?: string; userId?: string };
     newCustomerOnly?: boolean;
+    listed?: boolean;
+    title?: string;
   }, actor: CouponActor = SYSTEM_ACTOR) {
     const startAt = new Date(data.startAt);
     const endAt = new Date(data.endAt);
     assertCouponInput({ ...data, startAt, endAt });
+    // Mã tạo ở đây chưa thuộc lô nào (lô sinh qua AdminCouponBatchService, không nhận `listed`).
+    assertListable({ scope: data.scope, batch: null }, data.listed);
     const staffCaps = actor.staff ? await loadStaffCouponCaps(this.config) : null;
     if (staffCaps) assertStaffCouponCaps(data, staffCaps);
     // isCouponEligible so đúng id: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được.
@@ -1518,6 +1524,8 @@ export class AdminService {
           // user trong isCouponEligible (coupon-scope.ts) — KHÔNG AI DÙNG ĐƯỢC, không lỗi khi tạo.
           scopeMeta: data.scopeMeta ? (data.scopeMeta as object) : undefined,
           newCustomerOnly: data.newCustomerOnly ?? false,
+          listed: data.listed ?? false,
+          title: cleanCouponTitle(data.title),
           createdById: actorUserId(actor),
           updatedById: actorUserId(actor),
         },
@@ -1613,7 +1621,7 @@ export class AdminService {
   /** Sửa nhanh mã đang chạy: tắt/bật, gia hạn/rút ngắn, đổi tổng lượt. Không sửa giá trị (tạo mã mới). */
   async updateCoupon(
     id: string,
-    data: { isActive?: boolean; endAt?: string; usageLimit?: number | null },
+    data: { isActive?: boolean; endAt?: string; usageLimit?: number | null; listed?: boolean; title?: string | null },
     actor: CouponActor = SYSTEM_ACTOR,
   ) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
@@ -1631,8 +1639,11 @@ export class AdminService {
         raise = staffCouponExposure({ ...coupon, usageLimit }, staffCaps) - staffCouponExposure(coupon, staffCaps);
       }
     }
+    assertListable(coupon, data.listed);
     const patch: Prisma.CouponUpdateInput = {};
     if (data.isActive !== undefined) patch.isActive = data.isActive;
+    if (data.listed !== undefined) patch.listed = data.listed;
+    if (data.title !== undefined) patch.title = cleanCouponTitle(data.title);
     if (data.endAt !== undefined) {
       const endAt = new Date(data.endAt);
       if (endAt <= coupon.startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
