@@ -136,18 +136,19 @@ const LEAD_SYNONYMS = ['tang', 'freeship', 'ship'];
 
 /**
  * Dòng tên trên phiếu rất hẹp (~100px ở 375px, cạnh điều kiện) và đứng ngay dưới nhãn, nên phần đầu chép lại nhãn ("Giảm 20k" của "Giảm 20k cho 3 đơn")
- * chiếm đúng chỗ của phần mới ("cho 3 đơn") và đẩy phần mới ra khỏi tầm nhìn bằng "…". Chỉ cắt khi phần đầu có ít nhất một số của chính mã và mọi từ
+ * chiếm đúng chỗ của phần mới ("cho 3 đơn") và đẩy phần mới ra khỏi tầm nhìn bằng "…". Chỉ cắt khi phần đầu có ít nhất một số của NHÃN và mọi từ
  * đứng trước số đó là từ của nhãn: "Giảm giá khách VIP" (từ "giá" không thuộc nhãn) giữ nguyên, vì cắt "Giảm" ra "giá khách VIP" mất nghĩa.
+ * Số của mã mà nhãn không in (trần giảm của freeship, đơn tối thiểu) không đủ: "Freeship 30k cho đơn đầu" cắt ra "cho đơn đầu" thì phiếu không còn "30k" ở đâu cả.
  */
-function trimRepeatedLead(name: string, c: CouponTerms, title: string): string {
-  const known = knownFigures(c);
+function trimRepeatedLead(name: string, title: string): string {
+  const labelFigures = new Set(figuresIn(title));
   const lead = new Set([...LEAD_SYNONYMS, ...wordsOf(title)]);
   let cut = -1;
   for (const m of name.matchAll(/\S+/g)) {
     if (!wordsOf(m[0]).every((w) => lead.has(w))) break;
     const figures = figuresIn(m[0]);
     if (figures.length > 0) {
-      if (!figures.every((n) => known.has(n))) break;
+      if (!figures.every((n) => labelFigures.has(n))) break;
       cut = m.index! + m[0].length;
     } else if (/\d/.test(m[0])) break;
   }
@@ -205,7 +206,7 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
     kind: c.type === 'FREESHIP' ? 'freeship' : c.shop ? 'shop' : 'discount',
     condition,
     expiry: expiryText(endMs, now),
-    name: named && !restatesCoupon(named, c, [title, condition]) ? trimRepeatedLead(unifyFigures(named, c), c, title) : null,
+    name: named && !restatesCoupon(named, c, [title, condition]) ? trimRepeatedLead(unifyFigures(named, c), title) : null,
     quota:
       state === 'collectable' && typeof c.remaining === 'number' && c.remaining >= 1 && c.remaining <= QUOTA_SHOWN_MAX
         ? fillCopy('coupon.usesLeft', { n: c.remaining })

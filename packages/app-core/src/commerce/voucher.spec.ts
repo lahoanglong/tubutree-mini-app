@@ -188,6 +188,17 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
     expect(view('Giảm 20k 3 đơn', base).name).toBe('3 đơn');
     expect(view('Tặng 3 đơn giảm 20k', base).name).toBe('Tặng 3 đơn giảm 20k');
   });
+  it('phần đầu chỉ bị cắt khi chép đúng nhãn: số của đơn tối thiểu hay trần giảm đứng đầu tên thì tên giữ nguyên (số vẫn hiện trên phiếu)', () => {
+    // FREESHIP có trần 30k nhưng nhãn "Miễn phí giao hàng" không in số nào: "Freeship 30k" không chép nhãn.
+    const ship = { type: 'FREESHIP' as const, value: 0, maxDiscount: 30_000, minOrder: null };
+    expect(view('Freeship 30k cho đơn đầu', ship).name).toBe('Freeship 30k cho đơn đầu');
+    // Nhãn "Giảm 20k": 100k là đơn tối thiểu, không phải số của nhãn.
+    expect(view('Giảm 100k cho khách mới', { value: 20_000, minOrder: 100_000 }).name).toBe('Giảm 100k cho khách mới');
+    const pct = { type: 'PERCENT' as const, value: 10, maxDiscount: 50_000, minOrder: 300_000 };
+    // Nhãn "Giảm 10%, tối đa 50k": chữ và số đều của nhãn thì cắt; 300k (đơn tối thiểu) thì không.
+    expect(view('Giảm 10% tối đa 50k cho khách mới', pct).name).toBe('cho khách mới');
+    expect(view('Giảm 300k cho khách mới', pct).name).toBe('Giảm 300k cho khách mới');
+  });
   it('tên không nhắc số thì giữ, kể cả có số khác', () => {
     expect(view('Quà khách mới').name).toBe('Quà khách mới');
     expect(view('Tặng 5 lần dùng', { value: 30_000, minOrder: 199_000 }).name).toBe('Tặng 5 lần dùng');
