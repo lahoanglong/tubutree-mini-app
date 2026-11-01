@@ -3,12 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchFlash: vi.fn(), fetchPurchased: vi.fn(), fetchProducts: vi.fn(), status: 'authenticated' }));
+const mocks = vi.hoisted(() => ({ fetchFlash: vi.fn(), fetchPurchased: vi.fn(), fetchProducts: vi.fn(), fetchCombos: vi.fn(), status: 'authenticated' }));
 vi.mock('../../services/shop-api', () => ({
   fetchActiveFlashSales: mocks.fetchFlash,
   fetchPurchasedItems: mocks.fetchPurchased,
   fetchProducts: mocks.fetchProducts,
 }));
+vi.mock('../../services/bundle-api', () => ({ getHomeCombos: mocks.fetchCombos }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 
 import { useHomeShelves } from './use-home-shelves';
@@ -26,6 +27,12 @@ function setup(kind: 'returning' | 'new' | 'unknown') {
   return renderHook(() => useHomeShelves(kind), { wrapper });
 }
 
+const bundleOf = (id: string, over: Record<string, unknown> = {}) => ({
+  id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: '2099-01-01T00:00:00.000Z', anchorProductId: null,
+  items: ['a', 'b'].map((n) => ({ productId: `${id}${n}`, variationId: `v-${id}${n}`, maxQty: 1, addonPrice: null, inStock: true, product: card(`p1`) })),
+  ...over,
+});
+
 describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -33,6 +40,7 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     mocks.fetchFlash.mockResolvedValue(['a', 'b', 'c'].map(flash));
     mocks.fetchPurchased.mockResolvedValue({ items: [bought('b'), bought('x')], nextCursor: null });
     mocks.fetchProducts.mockResolvedValue(page(['a', 'x', 'p1', 'p2', 'p3', 'p4']));
+    mocks.fetchCombos.mockResolvedValue([]);
   });
 
   it('Bán chạy nhất lấy 12 món theo 30 ngày; bỏ món đã ở Giờ vàng (a) và Mua lại (x)', async () => {
@@ -130,6 +138,31 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
       expect(slugsOf(result.current.bestSellers)).toEqual(['d', 'p1', 'p2', 'p3']);
       expect(result.current.bestSellerRanks).toEqual([1, 2, 3, 4]);
       expect(result.current.flashSlugs.has('d')).toBe(false);
+    });
+  });
+
+  describe('combo toàn sàn', () => {
+    it('hai combo đang chạy lên kệ combos; combo không chiếm món: p1 vẫn ở Bán chạy nhất', async () => {
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
+      const { result } = setup('returning');
+      await waitFor(() => expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']));
+      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toContain('p1'));
+      expect(result.current.seen.has('sp-p1')).toBe(false);
+    });
+
+    it('một combo thì kệ ẩn (tối thiểu 2); combo đã quá hạn không tính', async () => {
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2', { endAt: '2000-01-01T00:00:00.000Z' })]);
+      const { result } = setup('returning');
+      await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
+      expect(result.current.combos).toEqual([]);
+    });
+
+    it('lỗi tải combo: kệ rỗng, các kệ khác không bị ảnh hưởng', async () => {
+      mocks.fetchCombos.mockRejectedValue(new Error('x'));
+      const { result } = setup('returning');
+      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
+      expect(result.current.combos).toEqual([]);
     });
   });
 });

@@ -143,4 +143,53 @@ describe('useHomeShelves (web)', () => {
     expect(latest!.bestSellers.map((p) => p.slug)).toEqual(['d', 'x', 'y', 'z']);
     expect(latest!.bestSellerRanks).toEqual([1, 2, 3, 4]);
   });
+
+  describe('kệ combo (P15)', () => {
+    const comboDto = (id: string, a: string, b: string, endAt = new Date(Date.now() + HOUR).toISOString()) => ({
+      id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt, anchorProductId: null,
+      items: [a, b].map((slug) => ({ productId: `p-${slug}`, variationId: `rv-${slug}`, maxQty: 1, addonPrice: null, inStock: true, product: card(slug) })),
+    });
+    const withCombos = (combos: unknown[]) =>
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/flash-sales/active') return [];
+        if (path === '/bundles/combos') return combos;
+        if (path.startsWith('/products')) return { data: ['x', 'y', 'z', 'w'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+        return [];
+      });
+
+    it('hỏi /bundles/combos với limit 4, ẩn danh (cùng request mà khối gộp /home thay thế)', async () => {
+      withCombos([]);
+      await mount('new');
+      expect(mocks.get).toHaveBeenCalledWith('/bundles/combos', { query: { limit: 4 }, anonymous: true });
+    });
+
+    it('từ 2 combo còn hạn trở lên thì có kệ; combo không chiếm món của Bán chạy nhất', async () => {
+      withCombos([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')]);
+      const s = await mount('new');
+      expect(s.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+      expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'y', 'z', 'w']);
+    });
+
+    it('dưới 2 combo hoặc combo đã hết hạn theo giờ máy chủ: kệ rỗng', async () => {
+      withCombos([comboDto('c1', 'x', 'y')]);
+      expect((await mount('new')).combos).toEqual([]);
+      mounted!.unmount();
+      resetFlashSales();
+      latest = null;
+      withCombos([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z', new Date(Date.now() - 1000).toISOString())]);
+      expect((await mount('new')).combos).toEqual([]);
+    });
+
+    it('API combo lỗi: kệ rỗng, các kệ khác vẫn có', async () => {
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/bundles/combos') throw new Error('offline');
+        if (path === '/flash-sales/active') return [];
+        if (path.startsWith('/products')) return { data: ['x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 3 } };
+        return [];
+      });
+      const s = await mount('new');
+      expect(s.combos).toEqual([]);
+      expect(s.bestSellers).toHaveLength(3);
+    });
+  });
 });

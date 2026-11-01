@@ -1,4 +1,5 @@
 import type { HomeMeDTO, HomePublicDTO } from './api/home';
+import { HOME_COMBOS_LIMIT } from './api/bundle';
 import { HOME_PURCHASED_LIMIT } from './api/home';
 import type { Query } from './http';
 
@@ -98,6 +99,9 @@ export function takeHomeRequest(feed: HomeFeed, path: string, query: Query | und
     case '/campaigns':
       // Khối gộp chỉ là banner đầu Trang chủ, chưa lọc đối tượng: OFFERS_TOP hay request có `audience` phải đi request lẻ.
       return only('placement') && q.placement === 'HOME_TOP' ? feed.takePublic('campaigns') : null;
+    case '/bundles/combos':
+      // Khối gộp đã cắt đúng số combo của kệ Trang chủ: hỏi số khác thì đi request lẻ.
+      return only('limit') && Number(q.limit) === HOME_COMBOS_LIMIT ? feed.takePublic('combos') : null;
     case '/flash-sales/upcoming':
       return keys.length === 0 ? feed.takeMe('flashUpcoming') : null;
     case '/products/for-you':

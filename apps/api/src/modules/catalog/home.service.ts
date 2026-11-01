@@ -8,6 +8,7 @@ import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { BundlesService, type BundleDTO } from '../bundles/bundles.service';
 import { listLiveBanners, type CampaignBannerDTO } from '../campaigns/campaign-public';
 import { paginated } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -24,6 +25,8 @@ export const HOME_FEATURED_LIMIT = HOME_SECTION_LIMIT * 2;
 // Kệ Bán chạy nhất của Trang chủ lấy dư 2 món so với tối đa 10 của kệ để còn đủ sau khi bỏ món đã nằm ở kệ trên (Giờ vàng, Mua lại).
 // Theo lượt bán 30 ngày, khớp HOME_BEST_SELLER_LIMIT của app-core (queries/home.ts) và homeProductSlot của Mini App.
 export const HOME_BEST_SELLER_LIMIT = 12;
+// Khớp HOME_COMBOS_LIMIT của app-core (queries/bundle.ts) và `maxItems` của kệ `home.combos`.
+export const HOME_COMBOS_LIMIT = 4;
 
 const PUBLIC_TTL_MS = 20_000;
 // Flash sale: quota giảm theo từng đơn và giờ vàng bắt đầu/kết thúc đúng mốc nên không được tươi kém
@@ -57,6 +60,8 @@ export class HomeService {
   // Tăng mỗi lần làm mới tay: lượt dựng đang bay lúc đó không được ghi bản cũ trở lại slot.
   private epoch = 0;
   private flashSlot = newSlot<Block<HomePublic['flashActive']>>();
+  // Dựng tay thay vì inject: BundlesModule import CatalogModule (cardsByIds), nên CatalogModule không import ngược lại (như banner dùng `listLiveBanners(prisma)`).
+  private readonly bundles: BundlesService;
 
   constructor(
     private readonly catalog: CatalogService,
@@ -68,7 +73,9 @@ export class HomeService {
     private readonly config: SystemConfigService,
     private readonly loyalty: LoyaltyService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.bundles = new BundlesService(prisma, catalog, config);
+  }
 
   private async block<T>(name: string, run: () => Promise<T>, deadline: number = Date.now() + BLOCK_TIMEOUT_MS): Promise<Block<T>> {
     const budget = Math.max(0, deadline - Date.now());
@@ -130,7 +137,7 @@ export class HomeService {
   }
 
   private async buildStatic(): Promise<HomeStatic> {
-    const [bestSellers, featured, newest, categories, brands, publicConfig, campaigns] = await Promise.all([
+    const [bestSellers, featured, newest, categories, brands, publicConfig, campaigns, combos] = await Promise.all([
       this.block('bestSellers', () => this.catalog.list(productQuery({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' }))),
       this.block('featured', () => this.catalog.list(productQuery({ limit: HOME_FEATURED_LIMIT }))),
       this.block('newest', () => this.catalog.list(productQuery({ sort: 'newest' }))),
@@ -140,8 +147,10 @@ export class HomeService {
       this.block('publicConfig', () => buildPublicConfig(this.config, tierLoaderOf(this.prisma))),
       // Banner đầu Trang chủ: không lọc đối tượng ở đây vì blob dùng chung cho mọi khách; app-core lọc NEW/RETURNING theo loại khách.
       this.block('campaigns', () => listLiveBanners(this.prisma, 'HOME_TOP')),
+      // Kệ combo toàn sàn: cùng dữ liệu `GET /bundles/combos?limit=4`, gộp vào đây để Trang chủ không tốn thêm request.
+      this.block('combos', () => this.bundles.homeCombos(HOME_COMBOS_LIMIT)),
     ]);
-    return { bestSellers, featured, newest, categories, brands, publicConfig, campaigns };
+    return { bestSellers, featured, newest, categories, brands, publicConfig, campaigns, combos };
   }
 
   /**
@@ -236,6 +245,7 @@ export interface HomePublic {
   brands: Block<Awaited2<CatalogService['brands']>>;
   publicConfig: Block<PublicConfigDTO>;
   campaigns: Block<CampaignBannerDTO[]>;
+  combos: Block<BundleDTO[]>;
 }
 
 type HomeStatic = Omit<HomePublic, 'flashActive'>;

@@ -377,6 +377,9 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/coupons/collectable/mine', { claimed: [], newCustomerOnly: [] });
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
+      // Combo ưu đãi / Mua kèm (PDP) và kệ Combo tiết kiệm (Trang chủ) là công khai và tự ẩn khi rỗng: mặc định không có bộ nào.
+      api.fallback('GET', '/bundles/combos', []);
+      api.fallback('GET', '/products/:slug/bundles', { combos: [], addons: [] });
       // Cá nhân, Trang chủ và chuông web chỉ đếm tin chưa đọc (không tải danh sách); mặc định không có tin nào.
       api.fallback('GET', '/me/notifications/unread-count', { count: 0 });
       if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
