@@ -187,3 +187,35 @@ Base d389e5d8b (trước đợt 3) so HEAD 77433c0d0, `vite build` cùng `VITE_A
 - Phủ yêu cầu: (1) Task 1-3 (lớp, thay thế, guard + fixture, số đo 375/768/1280 trước/sau); (2) Task 4 (Mini và web, có test); (3) Task 5; (4) Task 6; (5) Task 7 (đo + sửa vì lệch thật ở reduced-motion); (6) mục "Số đo bundle Mini" (đã đo, không có phần cắt rẻ, ghi số và lý do).
 - Tên nhất quán: `.tubu-bleed`, `.tubu-bleed-rail`, `.tubu-flash-fill`, `bleedViolations`/`bleedHits`, `commit`, `openFromHub` dùng cùng một tên ở mọi task.
 - Tỉ lệ: mỗi task một lệnh kiểm; thân hàm không chép vào plan.
+
+## Điều chỉnh lúc làm
+
+- Task 1 và 2 gộp một commit (`2c39511b0`): lớp mới, guard và các chỗ thay chung một vòng đỏ rồi xanh, tách ra thì guard đỏ suốt giữa hai commit.
+- Task 3 (Mini): guard Mini là `bleedHits` (chỉ bắt `margin: '0 -…'`); vùng chạm `margin: '-12px -6px'` của icon không bị coi là lề tràn mép.
+- Task 4 (Mini): gửi từ khoá TRỐNG ở hub không làm gì (plan ghi "giữ nguyên"); trước đây nó replace sang `/browse?q=` rỗng và ghi thêm một mục lịch sử. Web làm cùng cách.
+- Task 5: hàng sheet bỏ `border-b` của khung ngoài, gạch chân là bóng trong `inset 0 -1px 0` như Mini nên hàng cao đúng 44px; `panelAria` rút còn nhánh `aria-expanded` vì nhánh `sheet` giờ có hàng riêng.
+- Task 6: `MoreAtTubuLink` bọc bằng `<div data-testid="more-at-tubu">` thay `<p>` (khối `zaui-btn-container` trong `<p>` là HTML sai).
+- Task 7: lệch có thật (xem số đo), sửa đúng như plan; Mini chỉ đổi cách khai (lớp CSS), hành vi Mini không đổi.
+- Bundle Mini (mục 6): không có task mã, chỉ ghi số.
+- Ảnh 375px không có riêng hàng Giờ vàng: thanh Đã bán đã đo bằng số (bảng dưới) ở cả hai app.
+
+## Số đo sau
+
+Hình học các khối tràn mép (Next dev 3318, API giả 3316, Playwright; trước = bảng "Số đo trước"):
+
+- 375, 768, 1280: mọi `x`/`w` của ô tìm dính, lưới danh mục, kệ Bán chạy nhất (thẻ đầu x=12 ở 375, x=24 ở 768, x=64 ở 1280), chip gợi ý, hub `/san-pham`, SortBar giữ nguyên số trước.
+- Ba khác biệt không nhìn thấy: khung ngoài của dải lối tắt từ `x8 w359` thành `x0 w375` (lưới và ô bên trong giữ nguyên toạ độ); `max-width` của dải bộ lọc đang áp từ `none` thành `100%` ở 768/1280 (cùng `x`, `w`); chip danh mục con không đo trực tiếp (API giả không có danh mục con), cùng lớp với dải bộ lọc.
+
+Hàng mã giảm giá trong chân dính giỏ ở 375px (Mini `CouponRow` so web `CouponBox sheet`, hai trạng thái chưa áp và đã áp mã):
+
+- Hàng 343x44 ở cả hai, bóng gạch chân `0 -1px 0 inset` cùng màu, icon vé 20px tại x=16, chevron 16px tại x=343.
+- Nhãn 14px/500, gợi ý 13px/400 màu tertiary cắt "…", "Chọn mã" 13px/500 màu brand: giống nhau. Chênh còn lại: line-height 18px (Mini) so 20px (web), chiều rộng chữ chênh ~2px do font; không nhìn thấy.
+
+`/s/[slug]` ở 375px: nút "Xem thêm ở Tubu Tree" ở web đúng số của Mini (x82.1, rộng 210.8, cao 48, chữ 15px/600, xanh, `text-decoration: none`, bo 12px). Khoảng từ đáy dòng Tìm hiểu tới đỉnh nút: Mini 8,6px, web 9,0px (chênh 0,4px do khung dòng).
+
+Thanh Đã bán Giờ vàng (suất 10/50 = 20% ở cả hai app, tỉ lệ scaleX đọc ở 100ms / 300ms / 1000ms):
+
+| | trước, giảm chuyển động | sau, giảm chuyển động | sau, không ưu tiên |
+|---|---|---|---|
+| Mini | 0,2 / 0,2 / 0,2 | 0,2 / 0,2 / 0,2 | 0,067 / 0,169 / 0,2 |
+| web | 0,086 / 0,175 / 0,2 | 0,2 / 0,2 / 0,2 | 0,086 / 0,175 / 0,2 |
