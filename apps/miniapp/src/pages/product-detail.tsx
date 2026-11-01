@@ -710,7 +710,7 @@ export default function ProductDetailPage() {
 
       {/* ── Dòng thông tin (Ưu đãi, Vận chuyển) ›, ghi chú, chip phân loại; Số lượng liền ngay dưới. Không có dòng "Phân loại ›": chip đã nêu đủ tên, giá, hết hàng, và Thêm giỏ/Mua ngay vẫn mở bảng chọn ── */}
       {(infoRows.length > 0 || shippingNotes.length > 0 || variations.length > 1) && (
-        <Box px={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+        <Box px={4} pt={infoRows.length > 0 || shippingNotes.length > 0 ? 0 : 3} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           {infoRows.map((row, i) => (
             <ListRow
               key={row.key}
@@ -737,7 +737,7 @@ export default function ProductDetailPage() {
             <div
               role="group"
               aria-label="Phân loại nhanh"
-              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: infoRows.length > 0 || shippingNotes.length > 0 ? 0 : 12, paddingBottom: 12 }}
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}
             >
               {variations.map((v) => (
                 <VariationChip
