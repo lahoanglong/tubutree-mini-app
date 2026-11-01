@@ -117,3 +117,22 @@ describe('khách vãng lai (pointsBlocked = GUEST): không hứa Điểm Xanh', 
     expect(guestCheckInCopy.cta).toBe('Đăng nhập Zalo');
   });
 });
+
+describe('checkInCopy.ruleToggle', () => {
+  it('nút mở luật điểm danh có tên đọc riêng', () => {
+    expect(checkInCopy.ruleToggle).toBe('Luật điểm danh');
+  });
+  it('chữ nhìn thấy nằm trong tên đọc (WCAG 2.5.3 label-in-name)', () => {
+    expect(checkInCopy.ruleToggle.startsWith(checkInCopy.ruleToggleLabel)).toBe(true);
+  });
+});
+
+describe('checkInTodayLine short (thẻ gọn ở Ưu đãi)', () => {
+  const status = { todayPoints: 1000, todayWater: 65, tankFull: false, checkedInToday: false, pointsDone: false, waterDone: false } as const;
+  it('bản đầy đủ giữ "Hôm nay nhận", bản ngắn chỉ "Nhận" và cùng các vế còn thiếu', () => {
+    expect(checkInTodayLine(status)).toBe('Hôm nay nhận +1.000 Điểm Xanh · +65 giọt nước');
+    expect(checkInTodayLine(status, { short: true })).toBe('Nhận +1.000 Điểm Xanh · +65 giọt nước');
+    expect(checkInTodayLine({ ...status, pointsDone: true }, { short: true })).toBe('Nhận +65 giọt nước');
+    expect(checkInTodayLine({ ...status, checkedInToday: true }, { short: true })).toBeNull();
+  });
+});

@@ -122,6 +122,14 @@ export function mineRows(wallet: readonly CouponDTO[], now: number): VoucherRow[
   return sortVouchers([...wallet], now).map((c) => toRow(c, now));
 }
 
+/** Ưu đãi chỉ vẽ ngần này mã của khách (nguyên tắc 5: mỗi khối có trần), phần còn lại ở trang Mã giảm giá. */
+export const MINE_PREVIEW_MAX = 3;
+
+/** Lát cắt "Mã của tôi" cho Ưu đãi: `rows` đã sắp (mã sắp hết hạn trước, hết hạn cuối cùng) nên chỉ cắt đầu; `total` cho nút "Tất cả (n)". */
+export function minePreview<T>(rows: readonly T[]): { shown: T[]; total: number; hasMore: boolean } {
+  return { shown: rows.slice(0, MINE_PREVIEW_MAX), total: rows.length, hasMore: rows.length > MINE_PREVIEW_MAX };
+}
+
 /**
  * Tab Đã dùng–hết hạn, giữ thứ tự máy chủ (mới nhất trước). Trạng thái theo máy chủ: đồng hồ máy khách chậm vài giây không làm
  * mã hết hạn hiện như còn dùng được. Chữ hạn bỏ trống vì nhãn trạng thái đã nói đủ.

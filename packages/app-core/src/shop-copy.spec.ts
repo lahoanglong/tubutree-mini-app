@@ -52,6 +52,13 @@ describe('SHOP_COPY', () => {
     }
   });
 
+  it('chữ Ưu đãi của F10d: tiêu đề Giờ vàng hôm nay (Q10), một nhãn đăng nhập, nút Tất cả (n)', () => {
+    expect(SHOP_COPY['flash.todayTitle']).toBe('Giờ vàng hôm nay');
+    expect(SHOP_COPY['login.cta']).toBe('Đăng nhập');
+    expect(fillCopy('section.seeAllCount', { n: 8 })).toBe('Tất cả (8)');
+    expect(fillCopy('coupon.titlePercentMax', { pct: 10, max: '50k' })).toBe('Giảm 10%, tối đa 50k');
+  });
+
   it('chữ chốt ở thiết kế §4 Q5 và Giờ vàng theo kế hoạch', () => {
     expect(SHOP_COPY['rank.title']).toBe('Bán chạy nhất');
     expect(SHOP_COPY['badge.freeship']).toBe('Miễn phí giao hàng');

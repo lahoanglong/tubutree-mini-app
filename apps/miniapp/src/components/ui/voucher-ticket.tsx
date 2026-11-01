@@ -28,7 +28,7 @@ const STAMP: Partial<Record<VoucherView['state'], string>> = { used: 'coupon.use
 const TITLE_CLAMP: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
 const TITLE_ONE_LINE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 // Mask chỉ đọc độ trong suốt nên màu là `black` (không phải màu vẽ, không đi qua token). Hai nửa vòng khuyết ở mép trên và dưới cuống (răng cưa vé): hai lớp mask phủ mỗi lớp nửa chiều cao, cộng lại thành một vé liền.
-const NOTCH = 'radial-gradient(circle at 72px 0, transparent 6px, black 6.5px) top / 100% 51% no-repeat, radial-gradient(circle at 72px 100%, transparent 6px, black 6.5px) bottom / 100% 51% no-repeat';
+const NOTCH = 'radial-gradient(circle at 64px 0, transparent 6px, black 6.5px) top / 100% 51% no-repeat, radial-gradient(circle at 64px 100%, transparent 6px, black 6.5px) bottom / 100% 51% no-repeat';
 
 /**
  * Phiếu mã giảm giá dùng chung (thay ba kiểu vẽ rời: coupon-card, chip PDP, phiếu trang thương hiệu). Một nút chính; răng cưa và
@@ -43,9 +43,12 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
   // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), một dòng, quá dài thì cắt. Ticket/row thêm mã: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const showCode = variant !== 'chip' && Boolean(v.code);
-  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó.
+  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng hàng riêng, co bằng "…" (không đẩy điều kiện và mã xuống dòng,
+  // phiếu giữ ~88px); hàng chọn mã ở thanh toán giữ tên trong dòng meta.
   const name = variant !== 'chip' ? v.name : null;
-  const showMeta = Boolean(name) || Boolean(v.condition) || showCode;
+  const ticket = variant === 'ticket';
+  const metaName = ticket ? null : name;
+  const showMeta = Boolean(metaName) || Boolean(v.condition) || showCode;
   const showExpiry = !inactive && v.expiry !== '';
   const showQuota = !inactive && variant !== 'chip' && Boolean(v.quota);
   // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).
@@ -61,10 +64,15 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       <span style={{ ...(small ? TITLE_ONE_LINE : TITLE_CLAMP), fontSize: small ? 'var(--type-label-size)' : 'var(--type-body-sm-size)', lineHeight: small ? 'var(--type-label-lh)' : 'var(--type-body-sm-lh)', fontWeight: 700, color: text }}>
         {v.title}
       </span>
+      {ticket && name && (
+        <span data-testid="voucher-name" style={{ ...TITLE_ONE_LINE, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)' }}>
+          {name}
+        </span>
+      )}
       {showMeta && (
         <span id={`${uid}-meta`} data-testid="voucher-meta" style={{ display: 'block', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_ONE_LINE : null) }}>
-          {name}
-          {name && (v.condition || showCode) ? ' · ' : null}
+          {metaName}
+          {metaName && (v.condition || showCode) ? ' · ' : null}
           {v.condition}
           {v.condition && showCode ? ' · ' : null}
           {showCode && <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>{v.code}</span>}
@@ -92,7 +100,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       )}
     </>
   );
-  const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, textAlign: 'left', padding: variant === 'ticket' ? '10px 12px' : '6px 0' };
+  const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, textAlign: 'left', padding: variant === 'ticket' ? '10px 10px 10px 12px' : '6px 0' };
   const bodyNode = onDetail ? (
     <button
       type="button"
@@ -125,7 +133,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         alignSelf: 'center',
         minHeight: 36,
         minWidth: 44,
-        padding: '0 14px',
+        padding: '0 12px',
         border: 'none',
         borderRadius: 'var(--radius-pill)',
         fontFamily: 'inherit',
@@ -136,7 +144,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         cursor: blocked ? 'default' : 'pointer',
         background: blocked ? 'var(--color-action-primary-bg-disabled)' : 'var(--color-action-primary-bg)',
         color: blocked ? 'var(--color-text-secondary)' : 'var(--color-action-primary-fg)',
-        marginRight: variant === 'ticket' ? 12 : 0,
+        marginRight: variant === 'ticket' ? 10 : 0,
       }}
     >
       {primary.label}
@@ -155,7 +163,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       >
         <div
           data-testid="voucher-stub"
-          style={{ flex: '0 0 72px', width: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', background: inactive ? 'var(--color-bg-chip)' : palette.stubBg, color: inactive ? 'var(--color-text-tertiary)' : palette.stubFg }}
+          style={{ flex: '0 0 64px', width: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: inactive ? 'var(--color-bg-chip)' : palette.stubBg, color: inactive ? 'var(--color-text-tertiary)' : palette.stubFg }}
         >
           <Icon size={24} strokeWidth={1.75} aria-hidden="true" />
         </div>

@@ -88,6 +88,7 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 | phiếu mã giảm giá (`ticket`, `chip`, `row`) | `VoucherTicket` |
 | combo "Mua cả bộ" | `ComboCard` |
 | banner chiến dịch | `BannerCarousel` (nút dừng, tôn trọng giảm chuyển động, từ 5 giây mỗi ảnh) |
+| khối cần tài khoản khi chưa đăng nhập (Ưu đãi: Điểm Xanh và điểm danh, Mã của tôi) | `GuestLinkCard` (mỗi khối một thẻ, một nhãn nút "Đăng nhập" từ `login.cta`; Mini dùng lại thẻ mời liên kết Zalo cho tài khoản khách) |
 
 ### Trang shop
 
@@ -109,7 +110,6 @@ Thành phần các gói đang làm song song với gói này, tên đã chốt t
 |---|---|---|---|
 | `SectionCard` | P10 | 4b | một khối của gian hàng ở màn dựng `/storefront` |
 | `LayoutPicker` | P10 | 4b | chọn Lưới / Kệ ngang / Danh sách / Combo |
-| `GuestLinkCard` | P14 | 4b | khối cần tài khoản ở `/offers` cho khách chưa đăng nhập; Mini đã có thẻ cùng tên mời liên kết Zalo ở `apps/miniapp/src/components/home/guest-link-card.tsx`, P14 quyết dùng lại hay đặt tên khác |
 | `components/bundle/*` | P15 | 4c | khối combo và mua kèm ở chi tiết sản phẩm, giỏ, Trang chủ; kế hoạch chưa chốt tên thành phần |
 
 ## Luật kệ

@@ -18,9 +18,11 @@ import { browserStorage } from '@/lib/recently-viewed';
 import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 
 const FLASH_SHELF = shelf('offers.flash');
+// Hàng chữ "Kết thúc sau …" dưới tiêu đề: đồng hồ HH:MM:SS chỉ ở đầu khối Giờ vàng Trang chủ và trang Giờ vàng (Q3), ở Ưu đãi là chữ theo phút. Khung chờ cộng đúng chiều cao này.
+const FLASH_TEXT_ROW_H = 24;
 
 /**
- * Giờ vàng hôm nay ở Ưu đãi (Q10): cùng thẻ và một đồng hồ như Trang chủ, ít thẻ hơn (`offers.flash` tối đa 4). Cùng khoá và cùng hàm tải với khối
+ * Giờ vàng hôm nay ở Ưu đãi (Q10): cùng thẻ như Trang chủ, ít thẻ hơn (`offers.flash` tối đa 4), đồng hồ dạng chữ (Q3). Cùng khoá và cùng hàm tải với khối
  * Trang chủ nên `/flash-sales/active` chỉ bị gọi một lần. Không có suất còn giờ, hoặc tải lỗi, thì ẩn khối: đây là phần thêm của trang, Trang chủ mới là
  * nơi báo lỗi Giờ vàng. Lần mở trước có Giờ vàng thì lúc tải giữ chỗ bằng khung chờ của Trang chủ.
  */
@@ -42,10 +44,16 @@ export function OffersFlash() {
   }, [q.data, expiredTick]);
   const soonestEndAt = useMemo(() => live.reduce<string | null>((a, it) => (a === null || Date.parse(it.endAt) < Date.parse(a) ? it.endAt : a), null), [live]);
 
-  if (q.isLoading) return hinted ? <FlashSkeleton withNextSlot={false} /> : null;
+  if (q.isLoading) {
+    return hinted ? (
+      <div style={{ paddingBottom: FLASH_TEXT_ROW_H }}>
+        <FlashSkeleton withNextSlot={false} />
+      </div>
+    ) : null;
+  }
   if (live.length < FLASH_SHELF.minItems || soonestEndAt === null) return null;
 
-  const title = fillCopy('flash.title');
+  const title = fillCopy('flash.todayTitle');
   const seeAll = seeAllHref('offers.flash', 'web');
   return (
     <section aria-labelledby={titleId}>
@@ -54,9 +62,11 @@ export function OffersFlash() {
         title={title}
         icon="zap"
         tone="promo"
-        trailing={<Countdown endAt={soonestEndAt} mode="clock" onEnd={() => setExpiredTick((n) => n + 1)} />}
         action={seeAll ? { to: seeAll } : undefined}
       />
+      <div style={{ display: 'flex', alignItems: 'center', minHeight: FLASH_TEXT_ROW_H }}>
+        <Countdown endAt={soonestEndAt} mode="text" onEnd={() => setExpiredTick((n) => n + 1)} />
+      </div>
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">

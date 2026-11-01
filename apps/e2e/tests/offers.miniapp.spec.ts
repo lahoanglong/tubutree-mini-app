@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
-import { CATALOG, mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
+import { CATALOG, checkInStatus, mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
+import { expectChipHitArea44 } from './support/hit-area';
 import { mockNoSession } from './support/flash-slot-mocks';
 import { COLLECTABLE, mockCollectable, mockWallet } from './support/voucher-mocks';
 
@@ -31,13 +32,16 @@ test.describe('Ưu đãi — khách chưa đăng nhập', () => {
     mockFlash(api);
     mockCollectable(api);
     await page.goto('/offers');
-    await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible({ timeout: 15_000 });
     const collect = page.getByRole('region', { name: 'Nhận mã', exact: true });
     await expect(collect).toBeVisible();
     const save = collect.getByRole('button', { name: 'Lưu mã' });
     await expect(save).toHaveCount(3);
-    // Phần cần tài khoản không dựng cho khách.
+    // Phần cần tài khoản không dựng cho khách: mỗi khối một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện.
     await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Điểm Xanh và điểm danh', exact: true }).getByRole('button', { name: 'Đăng nhập', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByRole('button', { name: 'Đăng nhập', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Đổi quà', exact: true })).toBeVisible();
 
     const authCalls = () => api.callsTo('POST', '/auth/guest').length + api.callsTo('POST', '/auth/zalo-mini-app').length;
     await expect.poll(authCalls, { timeout: 10_000 }).toBeGreaterThan(0);
@@ -55,7 +59,7 @@ test.describe('Ưu đãi — khách chưa đăng nhập', () => {
     mockFlash(api);
     mockCollectable(api, []);
     await page.goto('/offers');
-    await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => api.callsTo('GET', '/coupons/collectable').length, { timeout: 10_000 }).toBeGreaterThan(0);
     await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toHaveCount(0);
     await expect(page.getByTestId('offers-collect-loading')).toHaveCount(0);
@@ -76,13 +80,94 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible();
     const ys = [
-      await regionTop(page, 'Giờ vàng'),
+      await regionTop(page, 'Giờ vàng hôm nay'),
       await regionTop(page, 'Nhận mã'),
       await regionTop(page, 'Điểm Xanh của bạn'),
       await regionTop(page, 'Mã của tôi'),
       await regionTop(page, 'Đổi quà'),
     ];
     expect(ys).toEqual([...ys].sort((a, b) => a - b));
+  });
+
+  test('ví 8 mã: Mã của tôi chỉ xếp 3 phiếu, nút "Tất cả (8)" mở trang Mã giảm giá tab Mã của tôi', async ({ page, api }) => {
+    const DAY = 86_400_000;
+    mockWallet(
+      api,
+      Array.from({ length: 8 }, (_, i) => ({ code: `MA${i}`, title: null, type: 'AMOUNT' as const, value: 10_000 * (i + 1), minOrder: 100_000, maxDiscount: null, endAt: new Date(Date.now() + (i + 3) * DAY).toISOString() })),
+    );
+    await page.goto('/offers');
+    const mine = page.getByRole('region', { name: 'Mã của tôi', exact: true });
+    await expect(mine.getByRole('group')).toHaveCount(3, { timeout: 15_000 });
+    // Tên đọc giữ đủ nhãn nhìn thấy, có tổng số (WCAG 2.5.3).
+    const all = mine.getByRole('button', { name: 'Tất cả (8) Mã của tôi' });
+    await expect(all).toHaveText('Tất cả (8)');
+    await all.click();
+    await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe('/vouchers?tab=mine');
+  });
+
+  test('Điểm danh gọn ở 375px với phần thưởng thật ("Nhận +1.000 Điểm Xanh · +65 giọt nước"): thẻ ≤160px, phần thưởng một dòng, luật gập sẵn, mở luật bằng một chạm rồi gập lại', async ({ page }) => {
+    await page.goto('/offers');
+    const card = page.getByTestId('daily-check-in');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card.getByText('Nhận +1.000 Điểm Xanh · +65 giọt nước')).toBeVisible();
+    const h = Math.round((await card.boundingBox())!.height);
+    expect(h, `thẻ điểm danh cao ${h}px`).toBeLessThanOrEqual(160);
+    const lineH = (await card.getByText('Nhận +1.000 Điểm Xanh · +65 giọt nước').boundingBox())!.height;
+    expect(lineH, 'dòng phần thưởng gãy dòng').toBeLessThanOrEqual(24);
+    const toggle = card.getByRole('button', { name: 'Luật điểm danh' });
+    await expect(toggle).toHaveText('Luật');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expectChipHitArea44(toggle, { minHeight: 24 });
+    await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeVisible();
+    await toggle.click();
+    await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeHidden();
+  });
+
+  for (const checkedIn of [false, true]) {
+    test(`khung chờ Điểm danh ${checkedIn ? 'khi đã điểm danh' : 'khi chưa điểm danh'}: thẻ thật cao đúng khung chờ, Mã của tôi và Đổi quà không bị đẩy`, async ({ page, api }) => {
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => { release = resolve; });
+      mockHomeEngagement(api, { checkedIn });
+      api.get('/me/daily-check-in', async () => {
+        await hold;
+        return checkInStatus(checkedIn);
+      });
+      await page.goto('/offers');
+      const section = page.getByRole('region', { name: 'Điểm danh mỗi ngày', exact: true });
+      const skeleton = section.locator('.tubu-skeleton');
+      await expect(skeleton).toBeVisible({ timeout: 15_000 });
+      // Mọi khối khác đã vẽ xong khi thẻ còn là khung chờ: cú nhảy đo được chỉ còn do thẻ về.
+      await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible();
+      await expect(page.getByTestId('offers-collect-loading')).toHaveCount(0);
+      const placeholderH = (await skeleton.boundingBox())!.height;
+      const mineY = await regionTop(page, 'Mã của tôi');
+      const rewardsY = await regionTop(page, 'Đổi quà');
+      release();
+      const card = page.getByTestId('daily-check-in');
+      await expect(card).toBeVisible({ timeout: 15_000 });
+      await expect(skeleton).toHaveCount(0);
+      expect((await card.boundingBox())!.height, 'thẻ thật lệch khung chờ').toBeCloseTo(placeholderH, 0);
+      expect(await regionTop(page, 'Mã của tôi'), 'Mã của tôi bị đẩy khi thẻ về').toBeCloseTo(mineY, 0);
+      expect(await regionTop(page, 'Đổi quà'), 'Đổi quà bị đẩy khi thẻ về').toBeCloseTo(rewardsY, 0);
+    });
+  }
+
+  test('Điểm danh gọn ở 320px: nút Điểm danh và nút luật nằm trọn trong thẻ, không tràn ngang', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.goto('/offers');
+    const card = page.getByTestId('daily-check-in');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const box = (await card.boundingBox())!;
+    for (const name of ['Điểm danh', 'Luật điểm danh']) {
+      const b = (await card.getByRole('button', { name, exact: true }).boundingBox())!;
+      expect(b.x, name).toBeGreaterThanOrEqual(box.x);
+      expect(b.x + b.width, name).toBeLessThanOrEqual(box.x + box.width + 0.5);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
   test('mã đã có trong ví không chiếm chỗ ở Nhận mã; Lưu mã gọi POST /coupons/claim đúng mã', async ({ page, api }) => {
@@ -102,9 +187,9 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     expect(api.callsTo('POST', '/coupons/claim')[0]!.body).toEqual({ code: 'FS99' });
   });
 
-  test('"Tất cả N mã" và "Xem tất cả" của Mã của tôi dẫn tới trang Mã giảm giá', async ({ page }) => {
+  test('"Tất cả (n)" của Nhận mã và "Xem tất cả" của Mã của tôi dẫn tới trang Mã giảm giá', async ({ page }) => {
     await page.goto('/offers');
-    await page.getByRole('button', { name: 'Xem tất cả Mã giảm giá' }).click();
+    await page.getByRole('button', { name: /^Tất cả \(\d+\) Mã giảm giá$/ }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/vouchers');
     await page.goBack();
     await page.getByRole('button', { name: 'Xem tất cả Mã của tôi' }).click();

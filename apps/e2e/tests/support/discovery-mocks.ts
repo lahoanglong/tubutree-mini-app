@@ -206,18 +206,27 @@ export function mockDiscovery(
 
 const ENGAGEMENT_NOW = '2026-10-18T08:00:00.000Z';
 
+/** Trạng thái điểm danh cùng dạng máy chủ thật trả: chưa điểm danh thì có phần thưởng hôm nay (dòng "Hôm nay nhận ..." làm thẻ gọn cao hơn lúc đã điểm danh). */
+export function checkInStatus(checkedIn: boolean) {
+  return {
+    checkedInToday: checkedIn,
+    streakDays: 1,
+    currentCycleDay: 1,
+    todayPoints: checkedIn ? 0 : 1_000,
+    todayWater: checkedIn ? 0 : 65,
+    pointsDone: checkedIn,
+    waterDone: checkedIn,
+    rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day, claimed: day === 1 && checkedIn, isToday: day === 1 })),
+  };
+}
+
 /**
  * Kịch bản "chưa điểm danh + có mã sắp hết hạn + Cộng đồng có bài": chạm chấm đỏ tab Ưu đãi (cả hai lý do) và khối Cộng đồng ở
  * Trang chủ. Đăng ký SAU mockDiscovery/mockSession để thắng các mặc định.
  */
 export function mockHomeEngagement(api: MockApi, opts: { checkedIn?: boolean; expiringInDays?: number | null } = {}): void {
   const { checkedIn = false, expiringInDays = 2 } = opts;
-  api.get('/me/daily-check-in', {
-    checkedInToday: checkedIn,
-    streakDays: 1,
-    currentCycleDay: 1,
-    rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day, claimed: day === 1 && checkedIn, isToday: day === 1 })),
-  });
+  api.get('/me/daily-check-in', checkInStatus(checkedIn));
   api.get('/me/coupons', expiringInDays === null ? [] : [
     { code: 'SAPHET', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: null, endAt: new Date(Date.now() + expiringInDays * 24 * 3_600_000).toISOString() },
   ]);

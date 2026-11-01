@@ -257,6 +257,7 @@ export const BUILDER_COPY = {
   back: 'Gian hàng của tôi',
   empty: 'Chưa có khối nào. Thêm khối đầu tiên để khách có gì xem.',
   itemsHeading: 'Sản phẩm trong khối',
+  addProduct: 'Thêm sản phẩm',
   renameSection: 'Đổi tên khối',
   deleteSection: 'Xoá khối',
   deleteSectionConfirm: 'Xoá khối này?',

@@ -113,7 +113,7 @@ describe('VouchersPage (Mini)', () => {
   it('khách chưa đăng nhập: tab Nhận mã gọi kho công khai, không gọi ví; thấy thẻ và nút Lưu mã', async () => {
     mocks.phase = 'guest';
     renderAt();
-    expect(await screen.findByText('Giảm 30.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Giảm 30k')).toBeInTheDocument();
     expect(callsTo('/coupons/collectable')).toHaveLength(1);
     expect(callsTo('/me/coupons')).toHaveLength(0);
     expect(callsTo('/me/coupons/history')).toHaveLength(0);
@@ -261,11 +261,12 @@ describe('VouchersPage (Mini)', () => {
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt hiện ở dòng meta', async () => {
+  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt hiện ở hàng riêng', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 5, claimedCount: 2 })];
     renderAt();
     expect(await screen.findByText('Còn 3 lượt')).toBeInTheDocument();
-    expect(screen.getByTestId('voucher-meta').textContent).toContain('Chào bạn mới · Đơn từ 199k · NEW10');
+    expect(screen.getByTestId('voucher-name').textContent).toBe('Chào bạn mới');
+    expect(screen.getByTestId('voucher-meta').textContent).toBe('Đơn từ 199k · NEW10');
   });
 
   it('có chữ "Mỗi đơn dùng 1 mã" trên trang', async () => {
@@ -275,32 +276,32 @@ describe('VouchersPage (Mini)', () => {
 
   it('chip Miễn phí giao hàng chỉ giữ mã freeship, chip có tên đọc và trạng thái chọn; không có chip Của shop', async () => {
     renderAt();
-    await screen.findByText('Giảm 30.000đ');
+    await screen.findByText('Giảm 30k');
     expect(screen.queryByRole('button', { name: 'Của shop' })).toBeNull();
     const chip = screen.getByRole('button', { name: 'Miễn phí giao hàng' });
     expect(chip).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(chip);
     expect(chip).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('Giảm 30.000đ')).toBeNull();
+    expect(screen.queryByText('Giảm 30k')).toBeNull();
     expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Miễn phí giao hàng']);
     fireEvent.click(screen.getByRole('button', { name: 'Giảm giá' }));
-    expect(screen.getByText('Giảm 30.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Giảm 30k')).toBeInTheDocument();
   });
 
   it('bộ lọc không có mã nào khớp: chữ "Không có mã nào ở mục này", bỏ lọc quay lại danh sách', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10')];
     renderAt();
-    await screen.findByText('Giảm 30.000đ');
+    await screen.findByText('Giảm 30k');
     fireEvent.click(screen.getByRole('button', { name: 'Miễn phí giao hàng' }));
     expect(screen.getByText('Không có mã nào ở mục này')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả' }));
-    expect(screen.getByText('Giảm 30.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Giảm 30k')).toBeInTheDocument();
   });
 
   it('đổi tab đặt lại bộ lọc và ghi ?tab= (replace) lên URL', async () => {
     responses['/me/coupons'] = [wallet('OWN')];
     renderAt();
-    await screen.findByText('Giảm 30.000đ');
+    await screen.findByText('Giảm 30k');
     fireEvent.click(screen.getByRole('button', { name: 'Miễn phí giao hàng' }));
     pickTab('Mã của tôi');
     expect(screen.getByTestId('loc').textContent).toBe('/vouchers?tab=mine');
@@ -346,7 +347,7 @@ describe('VouchersPage (Mini)', () => {
     expect(screen.getByText('Chưa tải được mã giảm giá')).toBeInTheDocument();
     responses['/coupons/collectable'] = [collectable('NEW10')];
     fireEvent.click(retry);
-    expect(await screen.findByText('Giảm 30.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Giảm 30k')).toBeInTheDocument();
     expect(callsTo('/coupons/collectable')).toHaveLength(2);
   });
 

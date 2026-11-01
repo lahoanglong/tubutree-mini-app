@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
-import { mineRows } from '@tubutree/app-core/commerce/voucher-center';
+import { mineRows, minePreview } from '@tubutree/app-core/commerce/voucher-center';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
@@ -20,7 +20,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { CampaignBanner } from '@/components/campaign/campaign-banner';
 import { readStoredHomeKind } from '@/components/home/use-home-customer-kind';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { OffersCollect } from '@/components/offers/offers-collect';
@@ -28,7 +28,7 @@ import { OffersFlash } from '@/components/offers/offers-flash';
 import { OffersPointsStrip } from '@/components/offers/offers-points-strip';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
-import { Card, EmptyState, Icon, ListRow, SectionHeader, Skeleton, Text, VoucherTicket } from '@/components/mini';
+import { Card, EmptyState, GuestLinkCard, Icon, ListRow, SectionHeader, Skeleton, VoucherTicket } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
 
@@ -44,8 +44,8 @@ function IconTile({ icon }: { icon: LucideIcon }) {
 
 /**
  * Trang Ưu đãi (Q10), bản web của `pages/offers.tsx` ở Mini App: Banner chiến dịch, Giờ vàng hôm nay, Nhận mã, dải Điểm Xanh gọn và Điểm danh,
- * Mã của tôi, Đổi quà và tiện ích. Ba khối đầu là công khai (khách chưa đăng nhập xem được, "Lưu mã" đi tới đăng nhập); từ dải Điểm Xanh trở xuống
- * cần tài khoản. Khung rộng, không còn khung Tài khoản: từ lg hàng Điểm Xanh | Điểm danh chia hai cột, Nhận mã và Mã của tôi xếp lưới ba cột.
+ * Mã của tôi, Đổi quà và tiện ích. Ba khối đầu là công khai (khách chưa đăng nhập xem được, "Lưu mã" đi tới đăng nhập); dải Điểm Xanh, Điểm danh và Mã của tôi
+ * cần tài khoản: khách chưa đăng nhập thấy mỗi khối một `GuestLinkCard` (cùng một nhãn nút) và Đổi quà vẫn hiện. Khung rộng, không còn khung Tài khoản: từ lg hàng Điểm Xanh | Điểm danh chia hai cột, Nhận mã và Mã của tôi xếp lưới ba cột.
  * `?section=coupons` cuộn tới Mã của tôi. Dòng "Tích điểm đơn sàn" chỉ hiện khi cấu hình bật và mở thông báo "cần mở trên Zalo" (web không có màn quét).
  */
 function OffersContent() {
@@ -70,6 +70,7 @@ function OffersContent() {
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
+  const mine = minePreview(rows);
   useMarkExpiringSeen(couponsQ.data);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
@@ -89,6 +90,31 @@ function OffersContent() {
     { icon: Sprout, title: 'Vườn Xanh', subtitle: 'Chăm cây nhận quà', to: '/vuon-xanh', show: true },
   ];
 
+  const rewardsSection = (
+    <section aria-label={homeCopy.offers.rewardsTitle}>
+      <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
+        {shortcuts
+          .filter((s) => s.show)
+          .map((s, i) => (
+            <ListRow
+              key={s.to}
+              icon={<IconTile icon={s.icon} />}
+              title={s.title}
+              subtitle={s.subtitle}
+              trailing="chevron"
+              onPress={() => (s.miniAppOnly ? setClaimNoticeOpen((o) => !o) : router.push(s.to))}
+              style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
+            />
+          ))}
+        {claimNoticeOpen && shortcuts.some((s) => s.miniAppOnly && s.show) && (
+          <div id="claim-notice">
+            <MiniAppOnlyNotice compact miniappPath="/points/scan" />
+          </div>
+        )}
+      </Card>
+    </section>
+  );
+
   const now = Date.now();
   const rest =
     phase === 'loading' ? (
@@ -100,29 +126,33 @@ function OffersContent() {
     ) : phase === 'unavailable' ? (
       <SessionUnavailable />
     ) : !authed ? (
-      <LoginRequired message={`${homeCopy.offers.loginTitle}. ${homeCopy.offers.loginBody}`} returnTo="/uu-dai" />
+      <>
+        {/* Mỗi khối cần tài khoản một thẻ mời, cùng một nhãn nút; Đổi quà và tiện ích vẫn hiện bên dưới. */}
+        <div data-testid="offers-guest-row" className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+          <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />
+          <GuestLinkCard title={fillCopy('coupon.tabMine')} body={fillCopy('offers.guestMineBody')} cta={fillCopy('login.cta')} />
+        </div>
+        {rewardsSection}
+      </>
     ) : (
       <>
         <div data-testid="offers-points-row" className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
           <OffersPointsStrip loyalty={loyaltyQ} />
           <section aria-label={checkInCopy.title}>
-            <DailyCheckInCard authed={authed} />
+            <DailyCheckInCard authed={authed} compact />
           </section>
         </div>
 
         <section id="coupons" ref={couponsRef} aria-labelledby="offers-mine-title">
+          {/* Không đặt `spoken`: tên đọc mặc định "Tất cả (8) Mã của tôi" giữ đủ nhãn nhìn thấy và tổng số. */}
           <SectionHeader
             id="offers-mine-title"
             title={fillCopy('coupon.tabMine')}
             icon="ticket"
-            trailing={
-              rows.length > 0 ? (
-                <Text variant="caption" tone="tertiary">
-                  {homeCopy.offers.couponsCount(rows.length)}
-                </Text>
-              ) : undefined
-            }
-            action={{ onPress: () => router.push('/ma-giam-gia?tab=mine'), spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }) }}
+            action={{
+              onPress: () => router.push('/ma-giam-gia?tab=mine'),
+              label: mine.hasMore ? fillCopy('section.seeAllCount', { n: mine.total }) : undefined,
+            }}
           />
           {couponNotice && (
             <p role={couponNotice.error ? 'alert' : 'status'} className={`mb-2 text-caption ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
@@ -133,9 +163,9 @@ function OffersContent() {
             <Skeleton height={88} radius="var(--radius-card)" />
           ) : couponsQ.isError ? (
             <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={errText(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
-          ) : rows.length > 0 ? (
+          ) : mine.total > 0 ? (
             <div data-testid="offers-mine-grid" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {rows.map((row) => (
+              {mine.shown.map((row) => (
                 <VoucherTicket
                   key={row.view.code}
                   voucher={row.view}
@@ -149,29 +179,7 @@ function OffersContent() {
             <EmptyState variant="inline" art="leaf" heading={homeCopy.offers.couponsEmptyHeading} body={homeCopy.offers.couponsEmptyBody} />
           )}
         </section>
-
-        <section aria-label={homeCopy.offers.rewardsTitle}>
-          <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
-            {shortcuts
-              .filter((s) => s.show)
-              .map((s, i) => (
-                <ListRow
-                  key={s.to}
-                  icon={<IconTile icon={s.icon} />}
-                  title={s.title}
-                  subtitle={s.subtitle}
-                  trailing="chevron"
-                  onPress={() => (s.miniAppOnly ? setClaimNoticeOpen((o) => !o) : router.push(s.to))}
-                  style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
-                />
-              ))}
-            {claimNoticeOpen && shortcuts.some((s) => s.miniAppOnly && s.show) && (
-              <div id="claim-notice">
-                <MiniAppOnlyNotice compact miniappPath="/points/scan" />
-              </div>
-            )}
-          </Card>
-        </section>
+        {rewardsSection}
       </>
     );
 

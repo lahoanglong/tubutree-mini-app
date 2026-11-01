@@ -5,6 +5,7 @@
 export const SHOP_COPY_MAX: Record<string, number | null> = {
   // Giờ vàng
   'flash.title': 12,
+  'flash.todayTitle': 18,
   'flash.seeAll': 10,
   'flash.tabsLabel': 12,
   'flash.chipsLabel': 12,
@@ -136,6 +137,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.amount': 20,
   'coupon.percent': 12,
   'coupon.percentMax': 30,
+  'coupon.titlePercentMax': 22,
   'coupon.minOrder': 16,
   'coupon.scopeAll': 16,
   'coupon.scopeBrand': null,
@@ -175,6 +177,11 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.newCustomerOnlyReason': null,
   'coupon.claimedIneligibleReason': null,
   'coupon.walletLoadError': null,
+
+  'login.cta': 12,
+  'offers.guestPointsTitle': 26,
+  'offers.guestPointsBody': null,
+  'offers.guestMineBody': null,
 
   // Combo và mua kèm
   'combo.title': null,
@@ -216,6 +223,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   // Bộ thành phần section-kit
   'section.seeAll': 10,
   'section.seeAllSpoken': null,
+  'section.seeAllCount': 14,
   'sort.groupLabel': 10,
   'sort.filter': 4,
   'sort.filterCount': 8,

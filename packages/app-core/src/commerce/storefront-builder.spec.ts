@@ -290,6 +290,10 @@ describe('dải Hành trình', () => {
 });
 
 describe('BUILDER_COPY', () => {
+  it('nút thêm món trong khối có một chữ chung cho hai app', () => {
+    expect(BUILDER_COPY.addProduct).toBe('Thêm sản phẩm');
+  });
+
   it('không dùng thuật ngữ cấm và không có dấu ba chấm', () => {
     for (const [key, text] of Object.entries(BUILDER_COPY)) {
       for (const t of FORBIDDEN_TERMS) expect(t.pattern.test(text), `${key}: ${text}`).toBe(false);

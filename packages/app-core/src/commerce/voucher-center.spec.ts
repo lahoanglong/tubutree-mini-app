@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CollectableCouponDTO, CollectableMineDTO } from '../api/coupon-collect';
 import type { CouponDTO, CouponHistoryDTO } from '../api/loyalty';
 import { voucherView } from './voucher';
-import { VOUCHER_TABS, collectRows, filterVouchers, historyRows, mineRows, voucherFilters, walletCodeSet } from './voucher-center';
+import { MINE_PREVIEW_MAX, VOUCHER_TABS, collectRows, filterVouchers, historyRows, mineRows, minePreview, voucherFilters, walletCodeSet } from './voucher-center';
 
 const NOW = Date.parse('2026-11-01T05:00:00Z');
 const D = 86_400_000;
@@ -233,6 +233,29 @@ describe('mineRows', () => {
     const [row] = mineRows([wallet('SHIP', { type: 'FREESHIP', value: 0, title: 'Giao miễn phí' })], NOW);
     expect(row!.view.kind).toBe('freeship');
     expect(row!.view.name).toBe('Giao miễn phí');
+  });
+});
+
+describe('minePreview (Ưu đãi chỉ vẽ ba mã, còn lại ở trang Mã giảm giá)', () => {
+  const rows = (n: number) => mineRows(Array.from({ length: n }, (_, i) => wallet(`C${i}`, { endAt: iso(NOW + (i + 1) * D) })), NOW);
+  it('trần là 3', () => {
+    expect(MINE_PREVIEW_MAX).toBe(3);
+  });
+  it('0, 1, 3 mã: không cắt, không "Tất cả (n)"', () => {
+    for (const n of [0, 1, 3]) {
+      const p = minePreview(rows(n));
+      expect(p).toMatchObject({ total: n, hasMore: false });
+      expect(p.shown).toHaveLength(n);
+    }
+  });
+  it('4 mã trở lên: cắt còn 3 theo thứ tự sắp hết hạn, hasMore, total là tổng', () => {
+    const p = minePreview(rows(8));
+    expect(p.shown.map((r) => r.view.code)).toEqual(['C0', 'C1', 'C2']);
+    expect(p).toMatchObject({ total: 8, hasMore: true });
+  });
+  it('mã hết hạn nằm cuối nên không chiếm ba chỗ đầu', () => {
+    const list = [wallet('OLD', { endAt: iso(NOW - D) }), ...Array.from({ length: 3 }, (_, i) => wallet(`OK${i}`, { endAt: iso(NOW + (i + 1) * D) }))];
+    expect(minePreview(mineRows(list, NOW)).shown.map((r) => r.view.code)).toEqual(['OK0', 'OK1', 'OK2']);
   });
 });
 

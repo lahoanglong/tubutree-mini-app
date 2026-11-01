@@ -185,8 +185,9 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const card = region(c, 'Điểm danh mỗi ngày')!;
     expect(card.textContent).toContain('Ngày 3/7');
     expect(card.textContent).toContain('N7');
-    click(card.querySelector('button:not([disabled])'));
-    click(card.querySelector('button'));
+    const checkInBtn = byText(card, 'button', /điểm danh/i);
+    click(checkInBtn);
+    click(checkInBtn);
     await flush(6);
     expect(state.posts.filter((p) => p === '/me/daily-check-in')).toHaveLength(1);
     expect(card.textContent).toContain('+3 Điểm Xanh · +10 giọt nước');
@@ -195,7 +196,8 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('đã điểm danh hôm nay: nút khoá', async () => {
     state.checkIn = { checkedInToday: true, streakDays: 3, currentCycleDay: 3, rewards: REWARDS };
     const c = await mount();
-    const btn = region(c, 'Điểm danh mỗi ngày')!.querySelector('button')!;
+    const btn = byText(region(c, 'Điểm danh mỗi ngày')!, 'button', /điểm danh/i) as HTMLButtonElement;
+    expect(btn.textContent).toBe('Đã điểm danh');
     expect(btn.disabled || btn.getAttribute('aria-disabled') === 'true').toBe(true);
   });
 
@@ -227,13 +229,30 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('Mã của tôi: thẻ phiếu có nhãn, điều kiện, hạn dùng và số mã; rỗng thì có câu hướng dẫn', async () => {
     let c = await mount();
     const coupons = region(c, 'Mã của tôi')!;
-    expect(coupons.textContent).toContain('Giảm 20.000đ');
-    expect(coupons.textContent).toContain('1 mã');
+    expect(coupons.textContent).toContain('Giảm 20k');
+    expect(coupons.textContent).not.toMatch(/\b1 mã/);
     expect(coupons.querySelector('[data-testid="voucher-meta"]')!.textContent).toContain('Đơn từ 150k');
     mounted.pop()!.unmount();
     state.coupons = [];
     c = await mount();
     expect(region(c, 'Mã của tôi')!.textContent).toContain('Chưa có mã giảm giá khả dụng');
+  });
+
+  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc giữ đủ số ("Tất cả (8) Mã của tôi")', async () => {
+    state.coupons = Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) }));
+    const c = await mount();
+    const mine = region(c, 'Mã của tôi')!;
+    expect(mine.querySelectorAll('[role="group"]')).toHaveLength(3);
+    const all = mine.querySelector('button[aria-label="Tất cả (8) Mã của tôi"]')!;
+    expect(all.textContent).toBe('Tất cả (8)');
+    click(all);
+    expect(state.push).toHaveBeenLastCalledWith('/ma-giam-gia?tab=mine');
+    mounted.pop()!.unmount();
+    state.coupons = state.coupons.slice(0, 3);
+    const d = await mount();
+    const three = region(d, 'Mã của tôi')!;
+    expect(three.querySelectorAll('[role="group"]')).toHaveLength(3);
+    expect(three.querySelector('button[aria-label="Xem tất cả Mã của tôi"]')!.textContent).toBe('Xem tất cả');
   });
 
   it('Mã của tôi lỗi: thông báo có lý do và nút Thử lại', async () => {
@@ -259,7 +278,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     const blocks = [
       c.querySelector('[data-offers-banner]'),
-      region(c, 'Giờ vàng'),
+      region(c, 'Giờ vàng hôm nay'),
       region(c, 'Nhận mã'),
       region(c, 'Điểm Xanh của bạn'),
       region(c, 'Mã của tôi'),
@@ -298,26 +317,24 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
-  it('khách chưa đăng nhập: vẫn thấy Giờ vàng và Nhận mã, rồi lời mời đăng nhập thay các khối cần tài khoản; không gọi API riêng của khách', async () => {
+  it('khách chưa đăng nhập: Giờ vàng, Nhận mã, rồi mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện; không gọi API riêng của khách', async () => {
     state.phase = 'guest';
     state.flash = [FLASH_ITEM];
     state.collectable = [OPEN_CODE];
     const c = await mount();
-    const flash = region(c, 'Giờ vàng')!;
-    const collect = region(c, 'Nhận mã')!;
-    expect(flash).not.toBeNull();
-    expect(collect).not.toBeNull();
-    expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
-    const login = c.querySelector('a[href^="/dang-nhap"]')!;
-    expect(login).not.toBeNull();
-    expect(flash.compareDocumentPosition(collect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(collect.compareDocumentPosition(login) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Giống Mini App: các khối cần tài khoản không có, kể cả lối tắt.
-    expect(region(c, 'Điểm Xanh của bạn')).toBeNull();
-    expect(region(c, 'Mã của tôi')).toBeNull();
-    expect(c.textContent).not.toContain(homeCopy.offers.rewardsTitle);
-    expect(c.textContent).not.toContain('Vườn Xanh');
-    expect(c.textContent).not.toContain(homeCopy.offers.myRewards);
+    const blocks = [region(c, 'Giờ vàng hôm nay'), region(c, 'Nhận mã'), region(c, 'Điểm Xanh và điểm danh'), region(c, 'Mã của tôi'), region(c, 'Đổi quà')];
+    blocks.forEach((b, i) => expect(b, `khối ${i}`).not.toBeNull());
+    for (let i = 1; i < blocks.length; i++) {
+      expect(blocks[i - 1]!.compareDocumentPosition(blocks[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
+    }
+    const logins = Array.from(c.querySelectorAll<HTMLAnchorElement>('a[href^="/dang-nhap"]'));
+    expect(logins.map((a) => a.textContent)).toEqual(['Đăng nhập', 'Đăng nhập']);
+    expect(logins.map((a) => a.getAttribute('href'))).toEqual(['/dang-nhap?returnTo=%2Fuu-dai', '/dang-nhap?returnTo=%2Fuu-dai']);
+    expect(blocks[3]!.contains(logins[1]!)).toBe(true);
+    expect(c.textContent).not.toContain('Đăng nhập để xem ưu đãi');
+    expect(c.textContent).not.toContain('Đăng nhập với Zalo');
+    expect(blocks[4]!.textContent).toContain(homeCopy.offers.myRewards);
+    expect(blocks[4]!.textContent).toContain('Vườn Xanh');
     expect(state.calls.filter((p) => !['/config/public', '/campaigns', '/flash-sales/active', '/coupons/collectable'].includes(p))).toEqual([]);
   });
 
@@ -337,6 +354,15 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
     expect(c.querySelector('[data-testid="offers-page-loading"]')).not.toBeNull();
+    expect(region(c, 'Đổi quà')).toBeNull();
+  });
+
+  it('phiên mất mạng (unavailable): nói mất kết nối, không mời đăng nhập, không có khối Đổi quà', async () => {
+    state.phase = 'unavailable';
+    const c = await mount();
+    expect(c.textContent).toContain('Không kết nối được với Tubu Tree');
+    expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
+    expect(region(c, 'Mã của tôi')).toBeNull();
   });
 });
 
@@ -372,7 +398,8 @@ describe('/uu-dai — banner đầu trang (OFFERS_TOP)', () => {
     state.campaigns = [campaign('a')];
     const c = await mount();
     expect(links(c)).toEqual(['/chien-dich/chien-dich-a']);
-    expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
+    expect(region(c, 'Mã của tôi')).not.toBeNull();
+    expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
   });
 
   it('lần trước có banner Ưu đãi và đang tải: giữ chỗ bằng khung chờ, là khối đầu tiên', async () => {
@@ -387,7 +414,7 @@ describe('/uu-dai — banner đầu trang (OFFERS_TOP)', () => {
     expect(frame!.parentElement!.firstElementChild).toBe(frame);
     await flush(8);
     expect(r.container.querySelector('[data-testid="offers-banner-loading"]')).toBeNull();
-    expect(region(r.container, 'Giờ vàng')).not.toBeNull();
+    expect(region(r.container, 'Giờ vàng hôm nay')).not.toBeNull();
   });
 
   it('không có chiến dịch: ẩn hẳn, không khối rỗng', async () => {

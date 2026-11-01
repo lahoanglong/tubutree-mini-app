@@ -6,7 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
-  phase: 'authenticated' as 'authenticated' | 'guest' | 'loading',
+  phase: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'unavailable',
+  login: vi.fn(),
   guest: false,
   search: '',
   cfg: { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true, vndPerPointRedeem: 1000 } } as Record<string, unknown>,
@@ -47,7 +48,7 @@ vi.mock('../store/auth', () => {
     status: 'authenticated',
     user: { id: 'u1', fullName: 'Lan', phone: mocks.guest ? null : '0901234567', zaloId: mocks.guest ? 'guest_1' : 'z1', pointsBalance: 100, pointsConvertedBalance: 20 },
     ensurePhone: mocks.ensurePhone,
-    login: vi.fn(),
+    login: mocks.login,
   });
   const useAuthStore = Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: () => state() });
   return { useAuthStore };
@@ -125,7 +126,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     for (const t of ['Đổi quà', 'Quà của tôi', 'Đổi rác lấy quà', 'Tích điểm đơn sàn', 'Mua chung nhóm']) {
       expect(screen.getByText(t)).toBeInTheDocument();
     }
-    expect(await screen.findByText('Giảm 25.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Giảm 25k')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Mã của tôi' })).toBeInTheDocument();
   });
 
@@ -157,6 +158,26 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     await waitFor(() => expect(mocks.postCheckIn).toHaveBeenCalledTimes(1));
   });
 
+  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc giữ đủ số ("Tất cả (8) Mã của tôi"), bỏ chữ "n mã" cũ', async () => {
+    mocks.getCoupons.mockResolvedValue(Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
+    const all = within(mine).getByRole('button', { name: 'Tất cả (8) Mã của tôi' });
+    expect(all).toHaveTextContent('Tất cả (8)');
+    expect(mine.textContent).not.toMatch(/\b8 mã/);
+    fireEvent.click(all);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
+  });
+
+  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút vẫn ghi "Xem tất cả" (chưa có gì bị ẩn)', async () => {
+    mocks.getCoupons.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
+    expect(within(mine).getByRole('button', { name: 'Xem tất cả Mã của tôi' })).toHaveTextContent('Xem tất cả');
+  });
+
   it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
@@ -166,7 +187,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
   it('?section=coupons cuộn tới phần mã giảm giá khi dữ liệu mã đã về', async () => {
     mocks.search = '?section=coupons';
     renderPage();
-    await screen.findByText('Giảm 25.000đ');
+    await screen.findByText('Giảm 25k');
     await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
   });
 
@@ -187,10 +208,10 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(await screen.findByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
   });
 
-  it('chưa đăng nhập → mời đăng nhập, không gọi API ưu đãi', async () => {
+  it('chưa đăng nhập → thẻ mời đăng nhập ở khối cần tài khoản, không gọi API ưu đãi', async () => {
     mocks.phase = 'guest';
     renderPage();
-    expect(await screen.findByText('Đăng nhập để xem ưu đãi')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' })).toBeInTheDocument();
     expect(mocks.getLoyalty).not.toHaveBeenCalled();
     expect(mocks.getCoupons).not.toHaveBeenCalled();
   });
@@ -257,7 +278,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     renderPage();
     const regions = [
       await screen.findByRole('region', { name: 'Chương trình nổi bật' }),
-      await screen.findByRole('region', { name: 'Giờ vàng' }),
+      await screen.findByRole('region', { name: 'Giờ vàng hôm nay' }),
       await screen.findByRole('region', { name: 'Nhận mã' }),
       await screen.findByRole('region', { name: /Điểm Xanh/ }),
       await screen.findByRole('region', { name: 'Mã của tôi' }),
@@ -268,20 +289,55 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     }
   });
 
-  it('khách chưa đăng nhập: vẫn thấy Giờ vàng và Nhận mã, rồi lời mời đăng nhập thay các khối cần tài khoản; không gọi API riêng của khách', async () => {
+  it('khách chưa đăng nhập: Giờ vàng, Nhận mã, rồi mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện; không gọi API riêng của khách', async () => {
     mocks.phase = 'guest';
     mocks.flash.mockResolvedValue([FLASH_ITEM]);
     mocks.collectable.mockResolvedValue([OPEN_CODE]);
     renderPage();
-    const flash = await screen.findByRole('region', { name: 'Giờ vàng' });
+    const flash = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
     const collect = await screen.findByRole('region', { name: 'Nhận mã' });
-    const login = await screen.findByText('Đăng nhập để xem ưu đãi');
-    expect(flash.compareDocumentPosition(collect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(collect.compareDocumentPosition(login) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Đăng nhập ngay' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: /Điểm Xanh/ })).toBeNull();
+    const points = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
+    const mine = screen.getByRole('region', { name: 'Mã của tôi' });
+    const rewards = screen.getByRole('region', { name: 'Đổi quà' });
+    const blocks = [flash, collect, points, mine, rewards];
+    for (let i = 1; i < blocks.length; i++) {
+      expect(blocks[i - 1]!.compareDocumentPosition(blocks[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
+    }
+    expect(screen.getAllByRole('button', { name: 'Đăng nhập' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Đăng nhập ngay' })).toBeNull();
+    expect(screen.queryByText('Đăng nhập để xem ưu đãi')).toBeNull();
+    expect(within(rewards).getByText('Quà của tôi')).toBeInTheDocument();
+    expect(within(rewards).getByText('Vườn Xanh')).toBeInTheDocument();
+    fireEvent.click(within(mine).getByRole('button', { name: 'Đăng nhập' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.getLoyalty).not.toHaveBeenCalled();
     expect(mocks.getCoupons).not.toHaveBeenCalled();
+  });
+
+  it('phiên đang khôi phục hoặc mất mạng: không mời đăng nhập (người dùng có thể đang có phiên)', async () => {
+    mocks.phase = 'loading';
+    const first = renderPage();
+    await screen.findByRole('region', { name: 'Chương trình nổi bật' }).catch(() => undefined);
+    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Đổi quà' })).toBeNull();
+    first.unmount();
+    mocks.phase = 'unavailable';
+    renderPage();
+    expect(await screen.findByRole('button', { name: /Thử lại/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Mã của tôi' })).toBeNull();
+  });
+
+  it('tài khoản thật đã đăng nhập: không có thẻ mời đăng nhập; tài khoản khách vẫn có thẻ liên kết Zalo như cũ', async () => {
+    const real = renderPage();
+    await screen.findByRole('region', { name: 'Mã của tôi' });
+    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Liên kết Zalo' })).toBeNull();
+    real.unmount();
+    mocks.guest = true;
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Liên kết Zalo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
   });
 
   it('Nhận mã tải lỗi: báo tại chỗ có "Thử lại", các khối khác vẫn vẽ', async () => {

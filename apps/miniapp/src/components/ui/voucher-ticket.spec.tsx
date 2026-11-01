@@ -6,7 +6,7 @@ import { VoucherTicket } from './voucher-ticket';
 const view = (patch: Partial<VoucherView> = {}): VoucherView => ({
   id: 'FUWA3E',
   code: 'FUWA3E',
-  title: 'Giảm 15% (tối đa 45.000đ)',
+  title: 'Giảm 15%, tối đa 45k',
   kind: 'discount',
   condition: 'Đơn từ 250k',
   expiry: 'Còn 2 ngày',
@@ -35,7 +35,7 @@ describe('VoucherTicket', () => {
     render(<VoucherTicket voucher={view({ state })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByText(stamp)).toBeVisible();
-    expect(screen.getByRole('group')).toHaveAccessibleName(`Giảm 15% (tối đa 45.000đ), ${stamp}`);
+    expect(screen.getByRole('group')).toHaveAccessibleName(`Giảm 15%, tối đa 45k, ${stamp}`);
   });
 
   it('ineligible: nút aria-disabled mô tả bằng reason, bấm không gọi onClick', () => {
@@ -111,13 +111,21 @@ describe('VoucherTicket', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
   });
 
-  it('tên admin đặt đứng đầu dòng meta, trước điều kiện và mã; chỉ có tên và mã thì không dấu "·" thừa', () => {
+  it('ticket: tên admin đặt có hàng riêng (một dòng, co bằng "…"), meta chỉ còn điều kiện và mã; row giữ tên đầu dòng meta', () => {
     const { rerender } = render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
-    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · Đơn từ 250k · FUWA3E');
+    expect(q('voucher-name')!.textContent).toBe('Chào bạn mới');
+    expect(q('voucher-name')!.style.whiteSpace).toBe('nowrap');
+    expect(q('voucher-name')!.style.textOverflow).toBe('ellipsis');
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
     rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="ticket" />);
-    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · FUWA3E');
+    expect(q('voucher-meta')!.textContent).toBe('FUWA3E');
+    rerender(<VoucherTicket voucher={view()} variant="ticket" />);
+    expect(q('voucher-name')).toBeNull();
     rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="row" />);
+    expect(q('voucher-name')).toBeNull();
     expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · Đơn từ 250k · FUWA3E');
+    rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · FUWA3E');
   });
 
   it('chip không vẽ tên: dòng meta một dòng chỉ còn điều kiện', () => {
@@ -150,7 +158,7 @@ describe('VoucherTicket', () => {
   });
 
   it('tiêu đề rất dài vẫn còn nút: thân co được (min-width 0), nút không co', () => {
-    render(<VoucherTicket voucher={view({ title: 'Giảm 15% (tối đa 45.000đ) cho mọi đơn hàng mỹ phẩm thiên nhiên của thương hiệu' })} variant="ticket" primary={{ label: 'Lưu mã', onClick: vi.fn() }} />);
+    render(<VoucherTicket voucher={view({ title: 'Giảm 15%, tối đa 45k cho mọi đơn hàng mỹ phẩm thiên nhiên của thương hiệu' })} variant="ticket" primary={{ label: 'Lưu mã', onClick: vi.fn() }} />);
     expect(q('voucher-body')!.style.minWidth).toBe('0px');
     expect(screen.getByRole('button', { name: 'Lưu mã' }).style.flex).toBe('0 0 auto');
   });

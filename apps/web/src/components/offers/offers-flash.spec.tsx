@@ -43,19 +43,40 @@ describe('OffersFlash (web) — Giờ vàng hôm nay ở trang Ưu đãi', () =>
     expect(c.innerHTML).toBe('');
   });
 
-  it('6 suất: đúng 4 thẻ (maxItems của kệ offers.flash), một đồng hồ, "Xem tất cả Giờ vàng" tới /gio-vang', async () => {
+  it('tiêu đề "Giờ vàng hôm nay"; đồng hồ là chữ "Kết thúc sau …" ở hàng riêng dưới tiêu đề, không có ô số HH:MM:SS (Q3)', async () => {
+    active = async () => many(3);
+    const c = await mount();
+    const region = c.querySelector('section[aria-labelledby]')!;
+    expect(region.querySelector('h2')!.textContent).toBe('Giờ vàng hôm nay');
+    const timer = region.querySelector('[role="timer"]')!;
+    expect(timer.textContent).toMatch(/^Kết thúc sau /);
+    expect(region.querySelectorAll('[data-testid="countdown-cell"]')).toHaveLength(0);
+    expect(region.querySelector('[data-testid="section-header"]')!.contains(timer)).toBe(false);
+  });
+
+  it('6 suất: đúng 4 thẻ (maxItems của kệ offers.flash), một đồng hồ, "Xem tất cả Giờ vàng hôm nay" tới /gio-vang', async () => {
     active = async () => many(6);
     const c = await mount();
     const region = c.querySelector('section[aria-labelledby]')!;
     expect(region.querySelectorAll('[data-testid="flash-sold-bar"]')).toHaveLength(4);
     expect(region.querySelectorAll('[role="timer"]')).toHaveLength(1);
-    expect(region.querySelector('a[aria-label="Xem tất cả Giờ vàng"]')!.getAttribute('href')).toBe('/gio-vang');
+    expect(region.querySelector('a[aria-label="Xem tất cả Giờ vàng hôm nay"]')!.getAttribute('href')).toBe('/gio-vang');
   });
 
   it('một sản phẩm hai phân loại cùng Giờ vàng chỉ một thẻ; suất đã hết giờ không hiện', async () => {
     active = async () => [item(1), item(1, { itemId: 'i1b', variationId: 'v2' }), item(2, { endAt: new Date(Date.now() - 1000).toISOString() })];
     const c = await mount();
     expect(c.querySelectorAll('[data-testid="flash-sold-bar"]')).toHaveLength(1);
+  });
+
+  it('suất hết giờ khi khách đang xem: cả khối (kể cả hàng chữ đồng hồ) biến mất, không để lại hàng trống', async () => {
+    const soon = () => new Date(Date.now() + 1_200).toISOString();
+    active = async () => [item(1, { endAt: soon() }), item(2, { endAt: soon() })];
+    const c = await mount();
+    expect(c.querySelector('section')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 1_800));
+    await flush(6);
+    expect(c.innerHTML).toBe('');
   });
 
   it('lỗi tải: ẩn khối, không báo lỗi (Trang chủ đã có khối lỗi Giờ vàng)', async () => {
