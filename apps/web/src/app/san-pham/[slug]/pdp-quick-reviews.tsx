@@ -6,7 +6,7 @@ import { pickQuickReviews } from '@tubutree/app-core/commerce/pdp-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { fetchProductReviews } from '@/lib/reviews-client';
 import { Stars } from './product-reviews';
-import { pdpSectionTitle } from './pdp-sections';
+import { pdpBand, pdpSectionTitle } from './pdp-sections';
 
 /**
  * "Đánh giá nhanh" (Q8): điểm + 2 đánh giá đầu, ưu tiên có ảnh. Dùng chung khoá `['reviews', slug]` với danh sách đầy đủ phía dưới nên
@@ -21,7 +21,7 @@ export function PdpQuickReviews({ slug }: { slug: string }) {
     <section
       aria-label="Đánh giá nhanh"
       data-section="pdp-quick-reviews"
-      className="mt-8 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4"
+      className={pdpBand}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">

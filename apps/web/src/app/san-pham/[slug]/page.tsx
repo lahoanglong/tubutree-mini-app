@@ -26,6 +26,7 @@ import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
 
 export const revalidate = 300;
 
@@ -105,7 +106,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <div data-testid="pdp-info" className="flex min-w-0 flex-col">
               <div
                 data-section="pdp-main"
-                className={`flex min-w-0 flex-col max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4 ${product.certifications.length > 0 ? '' : 'max-md:pb-4'}`}
+                className={`flex min-w-0 flex-col ${phoneBandPad} max-md:pt-4 ${product.certifications.length > 0 ? '' : 'max-md:pb-4'}`}
               >
               <div className="flex items-center justify-between gap-2">
                 {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
@@ -150,14 +151,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               </div>
 
               {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; chip phân loại và Số lượng nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
-              <div data-section="pdp-offers" className="mt-3 max-md:order-3 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:empty:hidden">
+              <div data-section="pdp-offers" className={`mt-3 max-md:order-3 max-md:mt-2 ${phoneBandPad} max-md:empty:hidden`}>
                 <PdpCoupons productId={product.id} />
                 {(fulfillerText || !fromStore) && (
                   <PdpShippingRow pressable={!fromStore}>
                     {fulfillerText && (
                       <p
                         data-testid="pdp-fulfiller"
-                        className={`text-sm text-stone-700 ${fulfillerIsTubu ? 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]' : ''}`}
+                        className={`text-sm text-stone-700 ${fulfillerIsTubu ? phoneBrandLabel : ''}`}
                       >
                         {fulfillerText}
                       </p>
@@ -171,7 +172,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   <div
                     data-testid="pdp-shipping-notes"
                     data-section="pdp-notes"
-                    className="flex flex-col gap-1 py-2 max-md:order-4 max-md:bg-[var(--color-bg-surface)] max-md:px-4"
+                    className={`flex flex-col gap-1 py-2 max-md:order-4 ${phoneBandPad}`}
                   >
                     {unavailableText && (
                       <p
@@ -212,7 +213,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <div
                   data-testid="pdp-certs"
                   data-section="pdp-certs"
-                  className="mt-3 flex flex-wrap gap-2 max-md:order-1 max-md:mt-0 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 max-md:pt-2.5"
+                  className={`mt-3 flex flex-wrap gap-2 max-md:order-1 max-md:mt-0 ${phoneBandPad} max-md:pb-4 max-md:pt-2.5`}
                 >
                   {product.certifications.map((c) => (
                     <span
@@ -226,7 +227,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
               {!retailOnly && (
-                <div data-section="pdp-subscribe" className="max-md:order-2 max-md:flex max-md:flex-col max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 max-md:empty:hidden">
+                <div data-section="pdp-subscribe" className={`max-md:order-2 max-md:flex max-md:flex-col ${phoneBandPad} max-md:pb-4 max-md:empty:hidden`}>
                   <PdpSubscribeRow slug={product.slug} variations={product.variations} />
                 </div>
               )}

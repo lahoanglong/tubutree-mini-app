@@ -663,6 +663,13 @@
       "miniapp": "apps/miniapp/src/components/product/flash-price-bar.tsx",
       "web": "apps/web/src/components/mini/flash-price-bar.tsx",
       "props": "FlashPriceBarProps",
+      "propsDiff": {
+        "webOnly": [
+          "className",
+          "priceRowClassName"
+        ],
+        "reason": "web có khổ máy tính: trang bo góc dải như ảnh (md) và ẩn dòng giá từ lg vì giá deal đã ở cột thông tin; Mini chỉ có khổ điện thoại"
+      },
       "screens": [
         "/product/:slug"
       ]

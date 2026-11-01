@@ -7,13 +7,14 @@ import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
+import { phoneBand, phoneBrandText } from '@/lib/phone-ui';
 
 /** Tiêu đề khối trong luồng mua (Q1): Inter 16/700, -0.01em ở mọi khổ, cùng số đo với `SectionTitle block` của Mini App. Fraunces chỉ cho tiêu đề trang. */
 export const pdpSectionTitle =
   'font-ui text-[length:var(--type-title-sm-size)] font-bold leading-[var(--type-title-sm-lh)] tracking-[-0.01em] text-[var(--color-text-primary)]';
 
 /** Dải trắng riêng của nửa dưới trang ở điện thoại: cách dải trên 8px, đệm 16px như Box p=4 mt=2 của Mini App. Máy tính giữ khoảng cách mt-8. */
-export const pdpBand = 'mt-8 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4';
+export const pdpBand = `mt-8 ${phoneBand}`;
 
 const COLLAPSED_LINES_THRESHOLD = 220;
 
@@ -89,7 +90,7 @@ export function PdpDescription({ text }: { text: string }) {
         {text}
       </p>
       {isLong && (
-        <button type="button" aria-expanded={expanded} aria-controls="pdp-description" onClick={() => setExpanded((e) => !e)} className={`${ui.btnText} max-md:px-0 max-md:no-underline max-md:text-[color:var(--color-text-brand)]`}>
+        <button type="button" aria-expanded={expanded} aria-controls="pdp-description" onClick={() => setExpanded((e) => !e)} className={`${ui.btnText} max-md:px-0 ${phoneBrandText}`}>
           {expanded ? 'Thu gọn' : 'Xem thêm'}
         </button>
       )}

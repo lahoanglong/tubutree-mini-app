@@ -11,7 +11,7 @@ import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
+import { phoneBand, phoneBandPad, phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
@@ -293,7 +293,7 @@ export default function AddToCart({
 
   if (blockedReason) {
     return (
-      <div className="mt-4 max-md:order-6 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
+      <div className={`mt-4 max-md:order-6 ${phoneBand}`}>
         <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
           Tạm thời chưa mua được
         </button>
@@ -331,7 +331,7 @@ export default function AddToCart({
           role="group"
           aria-labelledby="variation-label"
           data-section="pdp-variation-chips"
-          className="max-md:order-5 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3"
+          className={`max-md:order-5 ${phoneBandPad} max-md:pb-3`}
         >
           <div id="variation-label" className="text-sm font-semibold text-stone-900 max-md:sr-only">
             {fillCopy('pdp.variation')}
@@ -401,7 +401,7 @@ export default function AddToCart({
         <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
-      <div data-section="pdp-quantity" className="mt-4 flex items-center gap-3 max-md:order-6 max-md:mt-2 max-md:justify-between max-md:bg-[var(--color-bg-surface)] max-md:p-4">
+      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 max-md:order-6 max-md:justify-between ${phoneBand}`}>
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}

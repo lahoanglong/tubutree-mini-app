@@ -43,6 +43,7 @@ import { ContentKitSheet } from './content-kit-sheet';
 import { SubscribeSheet } from './subscribe-sheet';
 import { PointsEarnSheet } from './points-earn-sheet';
 import { actionErrorText } from '@/lib/error-text';
+import { phoneBand, phoneBrandLabel } from '@/lib/phone-ui';
 
 type PointsEarnProduct = {
   slug: string;
@@ -125,7 +126,7 @@ export function PdpFreeship() {
   });
   if (from == null) return null;
   return (
-    <p data-testid="pdp-freeship" className="text-sm font-medium text-forest-700 max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]">
+    <p data-testid="pdp-freeship" className={`text-sm font-medium text-forest-700 ${phoneBrandLabel}`}>
       {freeshipLine(from)}
     </p>
   );
@@ -343,7 +344,7 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
  * Hàng bấm cuối khối mua (nhóm mua chung, nội dung bán hàng). Máy tính: ô viền bo; điện thoại: dải trắng riêng cách dải trên 8px,
  * hàng bấm không viền như Box p=4 của Mini App.
  */
-const bandRow = 'mt-3 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4';
+const bandRow = `mt-3 ${phoneBand}`;
 const rowButton =
   'flex min-h-11 w-full items-center gap-3 rounded-control border border-stone-200 bg-stone-0 px-3 py-2.5 text-left max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0';
 

@@ -174,7 +174,7 @@ describe('khối nửa dưới là dải trắng cách nhau 8px ở điện tho�
     expect(long.querySelector('p')!.className).toContain('max-md:text-sm');
     const more = byText(long, 'button', 'Xem thêm')!;
     expect(more.className).toContain('max-md:no-underline');
-    expect(more.className).toContain('max-md:text-[color:var(--color-text-brand)]');
+    expect(more.className).toContain('max-md:text-[var(--color-text-brand)]');
   });
 });
 

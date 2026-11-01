@@ -18,3 +18,12 @@ export const phoneCaption = 'max-md:text-[length:var(--type-caption-size)] max-m
 
 /** Chữ thân 14px, dòng 22px như `Text variant="body-sm"` của Mini App. Ghép sau `text-sm` (dòng 20px ở máy tính). */
 export const phoneBodySm = 'max-md:leading-[var(--type-body-sm-lh)]';
+
+/** Dải trắng riêng của Mini App: nền surface, đệm 16px, cách dải trên 8px trên nền canvas. Ghép sau `mt-N` của máy tính (mt-N bị `max-md:mt-2` thắng ở điện thoại). */
+export const phoneBand = 'max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4';
+
+/** Dải trắng chỉ đệm ngang 16px, đệm dọc do khối tự đặt thêm (khối con của cột thông tin trang sản phẩm). */
+export const phoneBandPad = 'max-md:bg-[var(--color-bg-surface)] max-md:px-4';
+
+/** Nhãn nhỏ xanh đậm đậm nét như dòng "Tubu Tree giao hàng" và "Nhận Điểm Xanh" của Mini App. Ghép sau `text-sm`. */
+export const phoneBrandLabel = 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]';

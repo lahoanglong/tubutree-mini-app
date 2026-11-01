@@ -1,6 +1,6 @@
 'use client';
 
-import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
+import { cardPricing, runningFlash, variationPricing, type VariationPricing } from '@/lib/flash-price';
 import { usePdpSelection } from './pdp-selection';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
@@ -32,27 +32,20 @@ export function PdpPrice({ product }: { product: PricedProduct & { variations: P
     );
   }
   const pricing = variationPricing(selected, flash);
-  if (pricing.isFlash) {
-    // Máy tính (từ lg): thanh Giờ vàng nằm ở cột ảnh, xa nút mua, nên giá deal cũng nêu ở cột thông tin. Điện thoại và md không lặp:
-    // giá đã ở thanh dưới ảnh. Dùng testid riêng để `pdp-price` vẫn nghĩa là "giá lớn thường".
-    return (
-      <div data-testid="pdp-flash-price" className="mt-2 hidden flex-wrap items-baseline gap-x-2 gap-y-1 lg:flex">
-        <span data-testid="pdp-flash-price-value" className="text-2xl font-bold text-[color:var(--color-text-price-deal)]">
-          {formatVnd(pricing.price)}
-        </span>
-        {pricing.hasSale && <span className="text-sm text-stone-500 line-through">{formatVnd(pricing.originalPrice)}</span>}
-        {pricing.salePct > 0 && (
-          <Badge tone="promo" size="sm">
-            -{pricing.salePct}%
-          </Badge>
-        )}
-      </div>
-    );
-  }
+  return <PriceRow pricing={pricing} flash={pricing.isFlash} />;
+}
+
+/**
+ * Một dòng giá cho cả hai trường hợp: giá thường/giảm (`pdp-price`) và giá Giờ vàng (`pdp-flash-price`). Giờ vàng ở máy tính (từ lg): thanh Giờ vàng
+ * nằm ở cột ảnh, xa nút mua, nên cột thông tin cũng nêu giá deal; điện thoại và md không lặp vì giá đã ở thanh dưới ảnh. Testid riêng để
+ * `pdp-price` vẫn nghĩa là "giá lớn thường".
+ */
+function PriceRow({ pricing, flash }: { pricing: VariationPricing; flash: boolean }) {
+  const deal = flash || pricing.hasSale;
   return (
-    <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+    <div data-testid={flash ? 'pdp-flash-price' : undefined} className={`mt-2 flex-wrap items-baseline gap-x-2 gap-y-1 ${flash ? 'hidden lg:flex' : 'flex'}`}>
       {/* Giá đang giảm màu giá deal (cam đậm, không đỏ) như PriceTag tone="deal" của Mini App; giá thường giữ chữ đen. */}
-      <span data-testid="pdp-price" className={`text-2xl font-bold ${pricing.hasSale ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>
+      <span data-testid={flash ? 'pdp-flash-price-value' : 'pdp-price'} className={`text-2xl font-bold ${deal ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>
         {formatVnd(pricing.price)}
       </span>
       {pricing.hasSale && <span className="text-sm text-stone-500 line-through">{formatVnd(pricing.originalPrice)}</span>}
