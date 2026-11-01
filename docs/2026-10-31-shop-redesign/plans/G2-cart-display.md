@@ -167,3 +167,31 @@
 - [ ] **Step 2: ảnh**: `docs/2026-10-31-shop-redesign/screens/G2/g2-shots.{miniapp,web}.spec.ts` (gitignore; chép vào `apps/e2e/tests/` khi chạy, xoá sau): ảnh "trước" đã chụp ở base vào `screens/G2/before/` (Mini 375 và 320, web 375, 320, 1280, ba ca: thường, tổng 12.345.000đ + tiết kiệm 1.234.000đ, cộng combo), chạy lại với `SHOTS_PHASE=after`. So hai app ở 375 và 320.
 - [ ] **Step 3: gate**: tắt server chụp ảnh; `cd apps/e2e && E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3385 npx playwright test --workers=2 --reporter=line`; rồi `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 7d2fbce40 --out .../gate-G2.txt`. Bước FAIL: chạy lại ở base để phân biệt "có sẵn".
 - [ ] **Step 4: ghi** vào cuối plan này mục "Kết quả": commit, số đo chân dính 320px trước/sau, e2e cũ sửa theo thiết kế, đường dẫn ảnh; commit `docs(shop): G2 ghi kết quả`.
+
+---
+
+## Kết quả
+
+Nhánh `shop/G2-cart-display`, nền 7d2fbce40. Commit theo thứ tự: dfeac7f81 (kế hoạch + mock), acab542d3 (a), 1e34615ac + 37aef2e9c (d, e, f), 08acc0e56 (b), 6306e6d86 (c), f449fd1d5 + 764260340 (g), c9178ba7d + 9a5be4a6b (e2e web, trần chân dính).
+
+Đường tiền không đổi: không file nào của API, `unitPrice`, `total`, `subtotal`, `discount`, `comboDiscount`, `tierDiscount`; spec giữ nguyên số tổng/báo giá của mock.
+
+- (a) `cardPricing` gọi `strikePrice`; `strike-price.spec.ts` có ca thẻ (spy `strikePrice`); docstring `price.ts` nêu đủ ba nơi gọi.
+- (b) Chân dính: khối tổng `flex 1000 1 0` + nút `flex 1 0 9.25rem` trong hàng `flex-wrap`. Số tiền không bao giờ bị cắt hay viết tắt; không vừa thì nút xuống hàng riêng và giãn hết bề ngang (320px, tổng 12.345.000đ trở lên thì "Tiết kiệm" xuống hai dòng giữa "Tiết kiệm" và số, không ngắt giữa số). Chung hàng nút vẫn rộng đúng 148px (Mini và web 375px).
+- (c) `.tubu-scroll-pad-sticky-bar` dùng `var(--sticky-bar-h, calc(96px + var(--safe-bottom)))` + 8px; e2e: `scrollIntoView({ block: 'nearest' })` tới "Tăng số lượng" cuối giỏ, đỏ ở base với `--safe-bottom` 34px (nút kết thúc 682px, chân dính bắt đầu 640px), xanh sau sửa.
+- (d) `cartSaving(items, comboDiscount = 0)`; "Tiết kiệm" = 54.000đ ở ca 17.000 + 31.000 + 6.000 combo; một màu `--color-text-price-deal` (rgb(154, 82, 0)) cùng màu giá đang giảm ở giỏ hai app.
+- (e) Nhãn chung `cartTotalLabel` ("Tạm tính (đã giảm)" khi có giảm, "Tạm tính" khi không) cho 375, md, lg; hàng "Tạm tính" gốc chỉ hiện khi có giảm. Khoá `cart.subtotal`, `cart.subtotalNet` trong `SHOP_COPY` (ngân sách 10 và 20); bỏ khoá riêng `cart.subtotalAfterDiscount` của Mini.
+- (f) Web: nút "−" khoá khi số lượng ≤ 1; tên dòng `font-medium` (500) cả hai khổ, như Mini.
+- (g) Mini: Checkbox thêm prop `flush` (mặc định false) → lớp `.tubu-hit-flush` trong `tokens.css`: ô rộng 24, ảnh cách ô 12, vùng chạm vẫn 44 (bấm vào phần nhô ra vẫn đổi lựa chọn); thanh freeship dùng `--color-track`, `--color-action-secondary-border` → `--color-action-primary-bg`.
+
+Số đo chân dính (cao px, ca chưa đạt miễn phí giao + combo 6.000đ, 3 dòng): Mini 175 (trần cũ) → 185 đo thật, web 180 (trần cũ) → 196 đo thật, vì "Tiết kiệm" nay gồm combo nên ca chỉ có combo cũng có dòng thứ ba. Trần e2e nâng: Mini ≤190, web ≤200 (có chú thích trong spec).
+
+Lệch so với kế hoạch: Task 6 để lề âm của `flush` trong CSS (`.tubu-hit-flush`) thay vì `style` nội tuyến, vì ba số nội tuyến làm bánh cóc px của `form.tsx` tăng 5 → 8. Spec vitest kiểm lớp, e2e đo số thật. Baseline `ds-baseline.json` chỉ giảm: `pages/cart.tsx` 7 → 5, `gio-hang/page.tsx` max-md 78 → 77.
+
+E2E cũ sửa theo thiết kế: `cart-footer.miniapp.spec.ts` và `cart-footer.web.spec.ts` ca "có dòng giảm combo" (trần chiều cao + kiểm "Tiết kiệm 6.000đ"); các spec `page.spec.tsx` của web và `cart.spec.tsx` của Mini chuyển "Tổng" sang "Tạm tính (đã giảm)" / "Tạm tính".
+
+Kiểm chứng:
+- gate.sh: 0 FAIL (shared-types, tsc x5, eslint x3, vitest app-core 2284, miniapp 6258 và UTC 6258, web 9243, jest api 12562, lint-parity, vite-build, bundle-mini 648/202 KB). Log `.claude/worktrees/gate-G2.txt`.
+- E2E Mini đầy đủ (`E2E_SCOPE=miniapp --workers=2`): 399 passed.
+- E2E web qua `web-gate.sh`: `cart-display.web.spec.ts` 14 ca x 2 project xanh; `a11y-shop.web`, `ds-parity.shop`, `cart-footer.web`, `cart-lines.web` 32 xanh (cart-footer.web chạy lại riêng sau khi sửa trần: 14 xanh).
+- Ảnh trước/sau (gitignore): `docs/2026-10-31-shop-redesign/screens/G2/before/` và `.../after/` (Mini 375 + 320; web 375, 320, 1280; ba ca: thường, tổng 12.345.000đ + tiết kiệm 1.234.000đ, cộng combo).
