@@ -41,7 +41,7 @@ export function PdpQuickReviews({ average, count, items, onSeeAll }: PdpQuickRev
         {picked.map((r) => (
           <div key={r.id} data-testid="quick-review" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Stars value={r.rating} size={12} />
+              <Stars value={r.rating} size={12} spoken="score" />
               <Text variant="caption" tone="tertiary" as="span">
                 {r.author}
               </Text>

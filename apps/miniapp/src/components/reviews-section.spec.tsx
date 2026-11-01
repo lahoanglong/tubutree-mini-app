@@ -130,6 +130,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(title.style.fontFamily).toBe('var(--font-ui)');
     expect(title.style.fontSize).toBe('var(--type-title-sm-size)');
     expect(screen.getByText('4,3')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '4,3 trên 5 sao' })).toBeInTheDocument();
     expect(screen.getByText('Đã mua')).toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: '5 trên 5 sao' })).toHaveLength(2);
   });
@@ -807,8 +808,14 @@ describe('Stars', () => {
     expect(screen.queryByRole('img', { name: /4\.4/ })).toBeNull();
   });
 
-  it('điểm một khách chấm là số nguyên: vẫn "5 trên 5 sao", không "5,0"', () => {
+  it('điểm trung bình tròn đọc "5,0 trên 5 sao" như số đang hiện, không "5"', () => {
     render(<Stars value={5} />);
+    expect(screen.getByRole('img', { name: '5,0 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '5 trên 5 sao' })).toBeNull();
+  });
+
+  it('điểm một khách chấm (spoken="score") là số nguyên: "5 trên 5 sao", không "5,0"', () => {
+    render(<Stars value={5} spoken="score" />);
     expect(screen.getByRole('img', { name: '5 trên 5 sao' })).toBeInTheDocument();
   });
 });

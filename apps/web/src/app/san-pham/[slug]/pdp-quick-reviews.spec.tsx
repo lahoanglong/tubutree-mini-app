@@ -37,6 +37,9 @@ describe('PdpQuickReviews (web)', () => {
     await flush();
     expect(byText(container, 'h2', 'Đánh giá')).not.toBeNull();
     expect(container.textContent).toContain('4,4');
+    // Tên đọc của dải sao đầu khối là điểm trung bình (như số đang hiện); mỗi đánh giá là điểm một khách chấm.
+    const labels = Array.from(container.querySelectorAll('[role="img"]')).map((e) => e.getAttribute('aria-label'));
+    expect(labels).toEqual(['4,4 trên 5 sao', '5 trên 5 sao', '5 trên 5 sao']);
     expect(container.querySelectorAll('[data-testid="quick-review"]')).toHaveLength(2);
     expect(container.textContent).toContain('Dùng rất ổn c');
     click(byText(container, 'button', 'Xem tất cả (27)'));
