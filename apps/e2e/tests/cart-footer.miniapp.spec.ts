@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, makeUser, mockSession } from './support/mock-api';
+import { mockCheckout } from './support/checkout-mocks';
 import { mockFooterCart } from './support/cart-footer-mocks';
 
 /**
@@ -79,9 +80,40 @@ test.describe('Giỏ Mini App: chân dính gọn', () => {
     });
   }
 
+  // AnimationRoutes gắn trang mới TRƯỚC rồi mới tháo trang cũ sau hiệu ứng thoát: thanh dính của trang Thanh toán tháo SAU thanh của Giỏ. Tháo mà xoá
+  // `--sticky-bar-h` thì Giỏ rơi về số dự phòng (150px) thấp hơn chân thật (138px + vùng an toàn 34px) và che dòng cuối.
+  test('vào lại giỏ từ trang Thanh toán bằng Quay lại (--safe-bottom 34px): --sticky-bar-h còn đúng và dòng cuối nằm trên chân dính', async ({ page, api }) => {
+    mockCheckout(api);
+    mockFooterCart(api, { lines: 8, reached: true });
+    await setSafeBottom(page, 34);
+    await openCart(page);
+
+    await payButton(page).click();
+    await expect(page).toHaveURL(/\/checkout/);
+    await expect(page.getByRole('button', { name: /Đặt hàng/ })).toBeVisible({ timeout: 15_000 });
+    await page.goBack();
+    await expect(page).toHaveURL(/\/cart/);
+    await expect(payButton(page)).toBeVisible({ timeout: 15_000 });
+    // Chờ hiệu ứng thoát của trang Thanh toán xong: lúc đó DOM chỉ còn MỘT thanh dính (của Giỏ) và thanh Thanh toán đã chạy cleanup.
+    await expect(bar(page)).toHaveCount(1, { timeout: 15_000 });
+
+    const h = await barHeight(page);
+    expect(h, 'chân dính cao đúng đáy + vùng an toàn').toBeGreaterThan(138 - 1);
+    const published = await page.evaluate(() => document.documentElement.style.getPropertyValue('--sticky-bar-h'));
+    expect(published, `--sticky-bar-h=${published}, chân cao ${h}px`).toBe(`${Math.ceil((await bar(page).boundingBox())!.height)}px`);
+
+    const scroller = page.locator('.zaui-page', { has: page.getByTestId('cart-line').first() }).first();
+    await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(300);
+    const last = (await page.getByTestId('cart-line').last().boundingBox())!;
+    const top = (await bar(page).boundingBox())!.y;
+    expect(last.y + last.height, `dòng cuối kết thúc ở ${Math.round(last.y + last.height)}px, chân dính bắt đầu ở ${Math.round(top)}px`).toBeLessThanOrEqual(top);
+  });
+
   for (const [usable, maxSaving, text] of [
     [6, 60_000, '6 mã · giảm đến 60k'],
-    [9, 123_456, '9 mã · giảm đến 123.456đ'],
+    [9, 123_456, '9 mã · giảm đến 123k'],
+    [99, 1_234_567, '99 mã · giảm đến 1,2tr'],
   ] as const) {
     test(`gợi ý ${usable} mã dùng được, mã tốt nhất giảm ${maxSaving}: hiện đủ "${text}" trên một dòng, không bị cắt "…" (P1 #8)`, async ({ page, api }) => {
       mockFooterCart(api, { lines: 3, reached: true, hint: { usable, maxSaving } });
@@ -91,9 +123,9 @@ test.describe('Giỏ Mini App: chân dính gọn', () => {
       await expect(hint).toBeVisible();
       const fit = await hint.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
       expect(fit.scroll, `chữ gợi ý cần ${fit.scroll}px, chỗ có ${fit.client}px`).toBeLessThanOrEqual(fit.client);
-      // Số tròn nghìn (60k) vừa một dòng; số lẻ ghi đủ có thể xuống hai dòng nhưng hàng mã vẫn 44px và chân dính không cao thêm.
+      // Số tiền làm tròn xuống k/tr nên luôn một dòng, kể cả số lẻ (123.456đ, 1.234.567đ) và 99 mã; hàng mã vẫn 44px nên chân dính không cao thêm.
       const lines = Math.round((await hint.evaluate((el) => el.getBoundingClientRect().height)) / 16);
-      expect(lines, `gợi ý chiếm ${lines} dòng`).toBeLessThanOrEqual(maxSaving % 1_000 === 0 ? 1 : 2);
+      expect(lines, `gợi ý chiếm ${lines} dòng`).toBeLessThanOrEqual(1);
       expect(await barHeight(page), 'hàng mã vẫn 44px nên chân dính không cao thêm').toBeLessThanOrEqual(150);
       await expect(bar(page).getByRole('button', { name: /Mã giảm giá/ }).getByText('Chọn mã')).toBeVisible();
     });

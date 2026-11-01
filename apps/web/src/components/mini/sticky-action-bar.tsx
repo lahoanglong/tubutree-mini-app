@@ -36,7 +36,7 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
         {/* minWidth 0: flex item mặc định min-width:auto = bề rộng nội dung → hàng CTA không co được
             và tràn khỏi màn hình ở 320-390px (PDP "Mua ngay · giá" chạm 421px). Nút bên trong co/rút
             gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). Có `lead` thì nút tự giữ bề rộng (đủ nhãn "Thanh toán (n)"). */}
-        <div style={lead ? { flex: '0 0 auto', minWidth: 148 } : { flex: 1, minWidth: 0 }}>{primary}</div>
+        <div style={lead ? { flex: '0 0 auto', minWidth: '9.25rem' } : { flex: 1, minWidth: 0 }}>{primary}</div>
       </div>
     </div>
   );

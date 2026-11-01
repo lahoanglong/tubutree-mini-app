@@ -559,8 +559,8 @@ export default function CartPage() {
             {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App): nút giữ bề rộng riêng, khối tổng lấy phần còn lại. */}
             <div className="flex items-center gap-2.5">
               <div className="min-w-0 flex-1 whitespace-nowrap">
-                <div className="text-xs leading-4 text-stone-600">{shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'}</div>
-                <div data-testid="cart-total-value" className="text-lg font-bold leading-6 tabular-nums text-stone-900">
+                <div className="text-label text-stone-600">{shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'}</div>
+                <div data-testid="cart-total-value" className="text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
                   {formatVnd(payTotal)}
                 </div>
                 {saving > 0 && (
@@ -570,11 +570,11 @@ export default function CartPage() {
                 )}
               </div>
               {payHint ? (
-                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} min-w-[148px] shrink-0`}>
+                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} min-w-[9.25rem] shrink-0`}>
                   Thanh toán ({selectedCount})
                 </button>
               ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} min-w-[148px] shrink-0`}>
+                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} min-w-[9.25rem] shrink-0`}>
                   Thanh toán ({selectedCount})
                 </Link>
               )}

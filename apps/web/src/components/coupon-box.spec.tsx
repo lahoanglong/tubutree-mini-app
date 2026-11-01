@@ -673,7 +673,8 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     await flush(8);
     const row = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
     oneLine(row);
-    expect(row.textContent).toContain('1 mã · giảm đến 43.800đ');
+    // 43.800đ rút xuống 43k: "giảm đến" không nói quá mức giảm thật, và chữ không phụ thuộc số lẻ.
+    expect(row.textContent).toContain('1 mã · giảm đến 43k');
   });
 
   it('đang có mã: chip mã, số đã giảm và "Thay đổi" cùng một dòng', async () => {

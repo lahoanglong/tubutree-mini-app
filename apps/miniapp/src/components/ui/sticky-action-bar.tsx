@@ -10,6 +10,19 @@ export interface StickyActionBarProps {
   dense?: boolean;
 }
 
+// Biến `--sticky-bar-h` nằm ở <html> nên dùng chung cho cả cây. AnimationRoutes (react-transition-group) gắn trang MỚI rồi mới tháo trang cũ
+// sau hiệu ứng thoát (PDP/Thanh toán → Giỏ, hoặc Quay lại), nên thanh của trang cũ tháo SAU thanh của trang mới: tháo mà xoá biến vô điều kiện
+// thì trang mới mất giá trị và ResizeObserver không bắn lại vì thanh mới không đổi cỡ. Giữ danh sách thanh đang gắn theo thứ tự gắn; chỉ thanh
+// gắn sau cùng được ghi biến, thanh nào tháo thì biến trả về cho thanh còn lại (hết thanh mới xoá biến).
+const mountedBars: Array<{ el: HTMLElement }> = [];
+
+function publishBarHeight(): void {
+  const root = document.documentElement;
+  const top = mountedBars[mountedBars.length - 1];
+  if (!top) root.style.removeProperty('--sticky-bar-h');
+  else root.style.setProperty('--sticky-bar-h', `${Math.ceil(top.el.getBoundingClientRect().height)}px`);
+}
+
 /** Thanh CTA dính đáy — safe-area MỘT LẦN ở đây, không phải mỗi trang tự cộng (audit A4-21: 10
  * thanh tự vẽ, 3 thiếu safe-area hoàn toàn). */
 export function StickyActionBar({ primary, secondary, summary, lead, dense }: StickyActionBarProps) {
@@ -25,14 +38,17 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const root = document.documentElement;
-    const write = () => root.style.setProperty('--sticky-bar-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
-    write();
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(write);
+    const entry = { el };
+    mountedBars.push(entry);
+    publishBarHeight();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      if (mountedBars[mountedBars.length - 1] === entry) publishBarHeight();
+    });
     ro?.observe(el);
     return () => {
       ro?.disconnect();
-      root.style.removeProperty('--sticky-bar-h');
+      mountedBars.splice(mountedBars.indexOf(entry), 1);
+      publishBarHeight();
     };
   }, []);
   const pad = dense ? 10 : 16;
@@ -55,7 +71,7 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
         {/* minWidth 0: flex item mặc định min-width:auto = bề rộng nội dung → hàng CTA không co được
             và tràn khỏi màn hình ở 320-390px (PDP "Mua ngay · giá" chạm 421px). Nút bên trong co/rút
             gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). Có `lead` thì nút tự giữ bề rộng (đủ nhãn "Thanh toán (n)"). */}
-        <div style={lead ? { flex: '0 0 auto', minWidth: 148 } : { flex: 1, minWidth: 0 }}>{primary}</div>
+        <div style={lead ? { flex: '0 0 auto', minWidth: '9.25rem' } : { flex: 1, minWidth: 0 }}>{primary}</div>
       </div>
     </div>
   );

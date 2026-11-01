@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { StickyActionBar } from './sticky-action-bar';
 
 describe('StickyActionBar', () => {
@@ -73,5 +73,59 @@ describe('StickyActionBar: lead, dense, chiều cao', () => {
     unmount();
     expect(document.documentElement.style.getPropertyValue('--sticky-bar-h')).toBe('');
     rect.mockRestore();
+  });
+});
+
+// AnimationRoutes (react-transition-group) gắn trang mới TRƯỚC, tháo trang cũ SAU hiệu ứng thoát: PDP/Thanh toán → Giỏ (hay Quay lại) không được
+// làm Giỏ mất `--sticky-bar-h`, vì thanh của Giỏ không đổi cỡ nên ResizeObserver không bắn lại để ghi bù.
+describe('StickyActionBar: hai thanh cùng gắn (chuyển trang)', () => {
+  const barH = () => document.documentElement.style.getPropertyValue('--sticky-bar-h');
+  const heights: Record<string, number> = { cũ: 120, mới: 174 };
+  let rect: ReturnType<typeof vi.spyOn>;
+  let observers: Array<() => void>;
+
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { observers.push(cb); } observe() {} disconnect() {} });
+    rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { height: heights[this.textContent ?? ''] ?? 0 } as DOMRect;
+    });
+  });
+  afterEach(() => {
+    rect.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('tháo thanh gắn TRƯỚC (trang cũ) thì biến giữ giá trị của thanh gắn sau (trang mới)', () => {
+    const old = render(<StickyActionBar primary={<button>cũ</button>} />);
+    expect(barH()).toBe('120px');
+    const fresh = render(<StickyActionBar primary={<button>mới</button>} />);
+    expect(barH()).toBe('174px');
+    old.unmount();
+    expect(barH()).toBe('174px');
+    fresh.unmount();
+    expect(barH()).toBe('');
+  });
+
+  it('tháo thanh gắn SAU thì biến trả về giá trị của thanh còn lại, hết thanh mới xoá', () => {
+    const a = render(<StickyActionBar primary={<button>cũ</button>} />);
+    const b = render(<StickyActionBar primary={<button>mới</button>} />);
+    b.unmount();
+    expect(barH()).toBe('120px');
+    a.unmount();
+    expect(barH()).toBe('');
+  });
+
+  it('thanh không phải thanh trên cùng đổi cỡ thì không ghi đè biến của thanh trên cùng', () => {
+    const old = render(<StickyActionBar primary={<button>cũ</button>} />);
+    const fresh = render(<StickyActionBar primary={<button>mới</button>} />);
+    heights['cũ'] = 200;
+    observers[0]!();
+    expect(barH()).toBe('174px');
+    observers[1]!();
+    expect(barH()).toBe('174px');
+    heights['cũ'] = 120;
+    fresh.unmount();
+    old.unmount();
   });
 });

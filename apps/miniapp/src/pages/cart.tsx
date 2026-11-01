@@ -655,8 +655,8 @@ function CouponRow({
               )}
             </Box>
           ) : hint ? (
-            // Không cắt "…": số tiền lẻ không tròn nghìn (123.456đ) ghi đủ nên có thể xuống dòng; hai dòng 16px vẫn nằm gọn trong hàng 44px.
-            <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: '16px' }}>
+            // couponHintShort rút số tiền xuống k/tr nên một dòng ở 375px; không cắt "…" phòng khi máy 320px hay cỡ chữ lớn thì xuống dòng trong hàng 44px.
+            <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
               {couponHintShort(hint)}
             </Text>
           ) : (
@@ -809,12 +809,12 @@ function StickySummary({
           {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
               là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn, nhưng chỉ khi thật sự có giảm. */}
-          <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
             {comboDiscount + discount + tierDiscount > 0 ? vi.cart.subtotalAfterDiscount : vi.cart.subtotal}
           </div>
           <div
             data-testid="cart-total-value"
-            style={{ fontSize: 18, lineHeight: '24px', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+            style={{ fontSize: 'var(--type-title-md-size)', lineHeight: 'var(--type-title-md-lh)', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
           >
             {formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
           </div>
