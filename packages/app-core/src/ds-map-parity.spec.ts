@@ -173,3 +173,18 @@ describe('check-ds-parity CLI', () => {
     expect(r.stderr).toContain('sắp có');
   });
 });
+
+describe('ds-map.json thật', () => {
+  it('xanh với file thật và route-map.json', () => {
+    const mapPath = join(REPO, 'docs/design/ds-map.json');
+    expect(existsSync(mapPath)).toBe(true);
+    const routeMap = JSON.parse(readFileSync(join(REPO, 'packages/app-core/src/route-map.json'), 'utf8')) as { routes: { items: { miniapp: string }[] }[] };
+    const miniappRoutes = routeMap.routes.flatMap((g) => g.items.map((i) => i.miniapp));
+    const result = checkDsParity({
+      map: JSON.parse(readFileSync(mapPath, 'utf8')) as DsMap,
+      miniappRoutes,
+      readFile: (p) => (existsSync(join(REPO, p)) ? readFileSync(join(REPO, p), 'utf8') : null),
+    });
+    expect(result.errors).toEqual([]);
+  });
+});
