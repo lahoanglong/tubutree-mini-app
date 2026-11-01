@@ -172,6 +172,58 @@ test.describe('Mini App — Giờ vàng theo khung: khách chưa đăng nhập',
   });
 });
 
+test.describe('Mini App — Giờ vàng: bấm Nhắc tôi khi chưa đăng nhập rồi đăng nhập xong', () => {
+  /**
+   * Mở trang như khách (phiên bị từ chối), sang khung 20:00, cho lần đăng nhập kế thành công rồi bấm Nhắc tôi ĐÚNG MỘT lần có hiệu lực:
+   * chạm lúc phiên còn đang khôi phục bị bỏ qua nên chạm lại tới khi thấy đăng nhập chạy; lần chạm có hiệu lực dừng vòng lặp ngay,
+   * không chạm thêm (chạm thứ hai vào nút "Đã đặt nhắc" sẽ HUỶ nhắc, che mất lỗi cần bắt).
+   */
+  async function pressRemindThenLogin(page: import('@playwright/test').Page, api: MockApi, remindedIds: string[]) {
+    mockNoSession(api);
+    const reminded = mockFlashSlots(api, { remindedIds });
+    await page.goto('/flash-sale');
+    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    const remind = page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true });
+    await expect(remind).toBeVisible({ timeout: 10_000 });
+    const authCalls = () => api.callsTo('POST', '/auth/guest').length + api.callsTo('POST', '/auth/zalo-mini-app').length;
+    await expect.poll(authCalls, { timeout: 10_000 }).toBeGreaterThan(0);
+    // Phiên đã ở trạng thái khách: từ giờ đăng nhập thành công.
+    mockSession(api, makeUser({ id: 'user-late', fullName: 'Khách Vừa Đăng Nhập' }));
+    const before = authCalls();
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await remind.click();
+      try {
+        await expect.poll(authCalls, { timeout: 1_500 }).toBeGreaterThan(before);
+        return reminded;
+      } catch {
+        // phiên chưa sẵn sàng, cú chạm bị bỏ qua: chạm lại
+      }
+    }
+    throw new Error('Nhắc tôi không bao giờ mở đăng nhập');
+  }
+
+  test('món chưa nhắc: đăng nhập xong tự đặt nhắc đúng một lần, không bấm lần hai, nút đổi thành Đã đặt nhắc', async ({ page, api }) => {
+    const posted = api.waitForCall('POST', '/flash-sales/items/:id/remind', 15_000);
+    const reminded = await pressRemindThenLogin(page, api, []);
+    expect((await posted).path).toBe('/flash-sales/items/fi-21/remind');
+    await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('Tubu sẽ nhắc bạn lúc 20:00')).toBeVisible();
+    expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(1);
+    expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);
+    expect(reminded.has('fi-21')).toBe(true);
+  });
+
+  test('món đã nhắc từ trước (máy khác): đăng nhập xong không gọi POST lẫn DELETE, nút vẫn Đã đặt nhắc', async ({ page, api }) => {
+    const reminded = await pressRemindThenLogin(page, api, ['fi-21']);
+    await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    await page.waitForTimeout(500);
+    expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(0);
+    expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);
+    expect(reminded.has('fi-21')).toBe(true);
+  });
+});
+
 test.describe('Mini App — Trang chủ dẫn tới Giờ vàng', () => {
   test.beforeEach(({ api }) => {
     mockDiscovery(api, { returning: true });

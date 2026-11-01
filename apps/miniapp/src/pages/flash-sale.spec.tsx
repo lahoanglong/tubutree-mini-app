@@ -3,18 +3,28 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  openSnackbar: vi.fn(),
-  login: vi.fn(),
-  status: 'authenticated' as string,
-  http: vi.fn(),
-  fetchUpcoming: vi.fn(),
-  setReminder: vi.fn(),
-  cancelReminder: vi.fn(),
-  addToCart: vi.fn(),
-  fetchCategories: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const m = {
+    navigate: vi.fn(),
+    openSnackbar: vi.fn(),
+    login: vi.fn(),
+    status: 'authenticated' as string,
+    listeners: new Set<() => void>(),
+    /** Đổi trạng thái phiên và báo cho các trang đang render (cửa hàng giả phản ứng như zustand thật). */
+    setStatus: (_status: string): void => undefined,
+    http: vi.fn(),
+    fetchUpcoming: vi.fn(),
+    setReminder: vi.fn(),
+    cancelReminder: vi.fn(),
+    addToCart: vi.fn(),
+    fetchCategories: vi.fn(),
+  };
+  m.setStatus = (status) => {
+    m.status = status;
+    m.listeners.forEach((l) => l());
+  };
+  return m;
+});
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -31,9 +41,18 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
   addToCart: mocks.addToCart,
   fetchCategories: mocks.fetchCategories,
 }));
-vi.mock('../store/auth', () => {
+vi.mock('../store/auth', async () => {
+  const { useSyncExternalStore } = await import('react');
   const state = () => ({ status: mocks.status, login: mocks.login });
-  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: () => state() }) };
+  const subscribe = (l: () => void) => {
+    mocks.listeners.add(l);
+    return () => void mocks.listeners.delete(l);
+  };
+  const useStore = (sel?: (s: unknown) => unknown) => {
+    useSyncExternalStore(subscribe, () => mocks.status);
+    return sel ? sel(state()) : state();
+  };
+  return { useAuthStore: Object.assign(useStore, { getState: () => state() }) };
 });
 vi.mock('../components/ui/countdown', () => ({
   Countdown: ({ endAt, kind = 'ends', mode, onEnd }: { endAt: string; kind?: string; mode: string; onEnd?: () => void }) => (
@@ -265,6 +284,57 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.setReminder).not.toHaveBeenCalled();
+  });
+
+  describe('đăng nhập xong thì "Nhắc tôi" đã bấm tự được đặt', () => {
+    const UPCOMING_C = { itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt };
+
+    async function pressRemindAsGuest() {
+      serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+      renderPage();
+      await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+      fireEvent.click(screen.getAllByRole('tab')[1]!);
+      fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
+    }
+    /** Đăng nhập chạy như cửa hàng thật: 'loading' rồi kết thúc ở `final`. */
+    const loginEndsAt = (final: string) =>
+      mocks.login.mockImplementation(async () => {
+        act(() => mocks.setStatus('loading'));
+        await Promise.resolve();
+        await act(async () => mocks.setStatus(final));
+      });
+
+    it('món chưa nhắc: đặt nhắc đúng suất một lần, báo giờ nhắc, không bấm lần hai và không huỷ', async () => {
+      mocks.fetchUpcoming.mockResolvedValue([{ ...UPCOMING_C, reminded: false }]);
+      loginEndsAt('authenticated');
+      await pressRemindAsGuest();
+      await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledWith('c'));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Tubu sẽ nhắc bạn lúc 20:00' })));
+      expect(mocks.setReminder).toHaveBeenCalledTimes(1);
+      expect(mocks.cancelReminder).not.toHaveBeenCalled();
+    });
+
+    it('món đã được nhắc từ trước (máy khác): không gọi gì, vì bấm bật lại sẽ huỷ nhắc', async () => {
+      mocks.fetchUpcoming.mockResolvedValue([{ ...UPCOMING_C, reminded: true }]);
+      loginEndsAt('authenticated');
+      await pressRemindAsGuest();
+      await waitFor(() => expect(mocks.fetchUpcoming).toHaveBeenCalled());
+      expect(await screen.findByRole('button', { name: 'Đã đặt nhắc Sản phẩm c, bỏ nhắc' })).toHaveAttribute('aria-pressed', 'true');
+      expect(mocks.setReminder).not.toHaveBeenCalled();
+      expect(mocks.cancelReminder).not.toHaveBeenCalled();
+    });
+
+    it('đăng nhập không thành (phiên về khách): bỏ ý định, lần đăng nhập sau không tự đặt nhắc', async () => {
+      mocks.fetchUpcoming.mockResolvedValue([{ ...UPCOMING_C, reminded: false }]);
+      loginEndsAt('idle');
+      await pressRemindAsGuest();
+      await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+      await act(async () => mocks.setStatus('idle'));
+      act(() => mocks.setStatus('authenticated'));
+      await waitFor(() => expect(mocks.fetchUpcoming).toHaveBeenCalled());
+      await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' });
+      expect(mocks.setReminder).not.toHaveBeenCalled();
+    });
   });
 
   it('bấm Mua ngay mở đăng nhập, không thêm giỏ', async () => {
