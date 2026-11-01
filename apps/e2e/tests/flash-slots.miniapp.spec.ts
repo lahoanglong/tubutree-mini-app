@@ -208,7 +208,8 @@ test.describe('Mini App — Giờ vàng: bấm Nhắc tôi khi chưa đăng nh�
     const reminded = await pressRemindThenLogin(page, api, []);
     expect((await posted).path).toBe('/flash-sales/items/fi-21/remind');
     await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByText('Tubu sẽ nhắc bạn lúc 20:00')).toBeVisible();
+    // Câu báo nằm ở cả snackbar và vùng đọc ẩn (ghi sau một nhịp trễ), nên tìm theo chữ lúc thấy một lúc thấy hai: kiểm vùng đọc.
+    await expect(page.getByTestId('notify-status')).toHaveText('Tubu sẽ nhắc bạn lúc 20:00');
     expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(1);
     expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);
     expect(reminded.has('fi-21')).toBe(true);
