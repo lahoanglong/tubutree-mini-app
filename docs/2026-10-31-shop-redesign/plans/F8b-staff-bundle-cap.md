@@ -163,4 +163,9 @@ Dùng helper có sẵn `buyer(role?)`, `product`, `addVariation`, `bundle(kind, 
 
 ## Kết quả
 
-(điền ở Task 6)
+Gate `gate.sh --base abe9b159b` (log `.claude/worktrees/gate-F8b.txt`): 0 FAIL (tsc 6 gói, eslint api/miniapp/web, vitest app-core 2099, miniapp 6206 (cả UTC), web 9158, jest api 12558, lint:parity, vite-build, bundle-mini entry 645 KB / giới hạn 700). Race trên DB riêng cổng 25554: `bundle-price-parity` 25/25 (5 ca mới), `bundles-admin` 21/21 (1 ca mới), `cart-combo-equals-quote` 16, `coupon-preview-equals-quote` 5, `split-checkout` 1, `buyer-totals-regression` 11, `partner-goods-rules` 10. Cụm 25554 đã dừng.
+
+Chỗ làm khác kế hoạch:
+- Task 3 Step 2: chứng minh đỏ bằng cách tạm vô hiệu hoá điều kiện kẹp trong `combo.service.ts` (sửa một dòng rồi trả lại, `git diff` sạch), không phải bằng việc lấy lại file từ commit cũ (hook của máy chặn lệnh đó). Kết quả đỏ đúng lý do: 200.000 / 240.000 / 300.000 thay vì trần. Ca race mới của Task 4 chứng minh đỏ cùng cách (bỏ đối số `kept`).
+- Task 5 sửa thêm `buildBundleInput` (web): form chặn "giá kèm phải thấp hơn giá đang bán" ngay trước khi gọi API, nên chỉ sửa máy chủ chưa gỡ được MINOR 4 ở form.
+- Không chụp 375px và không chạy e2e Mini: F8b không đổi giao diện nào (chỉ logic điền sẵn của form admin và luật tiền ở API), không đụng Mini App.
