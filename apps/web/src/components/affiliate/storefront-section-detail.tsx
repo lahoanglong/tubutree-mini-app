@@ -150,7 +150,7 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
             </button>
           )}
         </div>
-        <ul className="grid list-none gap-x-6 p-0 md:grid-cols-2">
+        <ul className="grid list-none grid-cols-[minmax(0,1fr)] gap-x-6 p-0 md:grid-cols-2">
           {col.items.map((it) => (
             <ItemRow key={it.id} it={it} list={col.items} productMap={p.productMap} p={p} />
           ))}

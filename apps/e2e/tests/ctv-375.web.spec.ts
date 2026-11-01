@@ -142,6 +142,8 @@ test.describe('Web 375px: CTV, gian hàng, nhãn hàng, đại lý không tràn 
     api.get('/flash-sales/active', []);
     await page.goto('/ctv/gian-hang');
     await expect(page.getByText('Bộ sưu tập A')).toBeVisible();
+    await expectFits(page, 'gian-hang-danh-sach-khoi', testInfo);
+    await page.goto('/ctv/gian-hang?khoi=c1');
     await expect(page.getByText('Đã ghim')).toBeVisible();
     await expectFits(page, 'gian-hang-trinh-dung', testInfo);
   });
