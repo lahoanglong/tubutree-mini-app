@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/browse';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
-import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
+import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
 import { PURCHASED_RAIL_LIMIT } from '../reorder/purchased-rail';
 import { serverNow } from '../../utils/server-clock';
@@ -12,15 +12,6 @@ import { getHomeCombos } from '../../services/bundle-api';
 import { fetchActiveFlashSales, type FlashSaleActiveItem, type ProductCard } from '../../services/shop-api';
 import { homeBestSellerQuery } from './home-best-seller-query';
 import { useBlockQuery, type BlockQuery } from './use-block-query';
-
-/** Tập rỗng dùng chung để `flashVariationIds` giữ danh tính khi kệ Giờ vàng ẩn. */
-const NO_VARIATIONS: ReadonlySet<string> = new Set();
-
-/** Phân loại của mọi suất còn hạn thuộc các sản phẩm kệ Giờ vàng đang vẽ (mỗi sản phẩm một thẻ, nhưng mọi phân loại của nó đang giảm giá). */
-function flashVariationsOf(live: readonly FlashSaleActiveItem[], shown: readonly FlashSaleActiveItem[]): ReadonlySet<string> {
-  const shownSlugs = new Set(shown.map((f) => f.productSlug));
-  return new Set(live.filter((f) => shownSlugs.has(f.productSlug)).map((f) => f.variationId));
-}
 
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
@@ -92,9 +83,7 @@ export function useHomeShelves(kind: HomeKindState): HomeShelves {
       combos: composed.combos,
       bestSellers: composed.bestSellers.map((x) => x.product),
       bestSellerRanks: composed.bestSellers.map((x) => x.rank),
-      // Kệ ẩn (dưới mức tối thiểu) không chiếm gì nên không loại phân loại nào khỏi Mua lại; kệ hiện chỉ cắt còn `maxItems` sản phẩm, nên sản phẩm bị cắt không được loại
-      // (nếu loại, nó biến khỏi cả Giờ vàng lẫn Mua lại).
-      flashVariationIds: composed.flash.length > 0 ? flashVariationsOf(liveFlash, composed.flash) : NO_VARIATIONS,
+      flashVariationIds: flashExcludedVariations(liveFlash, composed.flash),
       seen: composed.seen,
     };
   }, [kind, flashData, purchasedData, bestData, combosData, expiredTick]);

@@ -29,6 +29,20 @@ export function purchasedShelfEntry<T extends { slug: string; variationId: strin
   return { id: variationKey(item.variationId), also: [item.slug], item };
 }
 
+/** Tập rỗng dùng chung để tập loại trừ giữ danh tính khi kệ Giờ vàng ẩn. */
+const NO_VARIATIONS: ReadonlySet<string> = new Set();
+
+/**
+ * Phân loại Mua lại phải bỏ vì đang Giờ vàng: mọi suất còn hạn (`live`) thuộc các sản phẩm kệ Giờ vàng đang vẽ (`shown`; mỗi sản phẩm một thẻ, nhưng mọi
+ * phân loại của nó đang giảm giá). Không rộng hơn kệ: kệ ẩn (dưới mức tối thiểu) không loại gì, sản phẩm bị cắt sau `maxItems` cũng không bị loại (nếu loại,
+ * nó biến khỏi cả Giờ vàng lẫn Mua lại).
+ */
+export function flashExcludedVariations<T extends { productSlug: string; variationId: string }>(live: readonly T[], shown: readonly T[]): ReadonlySet<string> {
+  if (shown.length === 0) return NO_VARIATIONS;
+  const shownSlugs = new Set(shown.map((f) => f.productSlug));
+  return new Set(live.filter((f) => shownSlugs.has(f.productSlug)).map((f) => f.variationId));
+}
+
 /**
  * Hạng thật liền từ 1 (1..k)? Kệ Bán chạy nhất chống trùng nên có thể mất hạng 1 hay hụt giữa dãy (hạng đang ở Giờ vàng, Mua lại, combo): khi đó thẻ
  * không ghi số (chỉ "Bán chạy") để khách không tưởng kệ lỗi; hạng liền thì giữ số.

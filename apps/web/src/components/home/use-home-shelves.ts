@@ -8,7 +8,7 @@ import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import type { BundleDTO } from '@tubutree/app-core/api/bundle';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
-import { comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
+import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { homeCombosQuery } from '@tubutree/app-core/queries/bundle';
 import { flashActiveQuery } from '@tubutree/app-core/queries/flash-sale';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
@@ -21,15 +21,6 @@ import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { useBlockQuery, type BlockQuery } from './use-block-query';
 
 const STALE = 60_000;
-
-/** Tập rỗng dùng chung để `flashVariationIds` giữ danh tính khi kệ Giờ vàng ẩn. */
-const NO_VARIATIONS: ReadonlySet<string> = new Set();
-
-/** Phân loại của mọi suất còn hạn thuộc các sản phẩm kệ Giờ vàng đang vẽ (mỗi sản phẩm một thẻ, nhưng mọi phân loại của nó đang giảm giá). */
-function flashVariationsOf(live: readonly FlashSaleActiveItem[], shown: readonly FlashSaleActiveItem[]): ReadonlySet<string> {
-  const shownSlugs = new Set(shown.map((f) => f.productSlug));
-  return new Set(live.filter((f) => shownSlugs.has(f.productSlug)).map((f) => f.variationId));
-}
 
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
@@ -115,9 +106,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
       combos: composed.combos,
       bestSellers: composed.bestSellers.map((x) => x.product),
       bestSellerRanks: composed.bestSellers.map((x) => x.rank),
-      // Kệ ẩn (dưới mức tối thiểu) không chiếm gì nên không loại phân loại nào khỏi Mua lại; kệ hiện chỉ cắt còn `maxItems` sản phẩm, nên sản phẩm bị cắt không được loại
-      // (nếu loại, nó biến khỏi cả Giờ vàng lẫn Mua lại).
-      flashVariationIds: composed.flash.length > 0 ? flashVariationsOf(liveFlash, composed.flash) : NO_VARIATIONS,
+      flashVariationIds: flashExcludedVariations(liveFlash, composed.flash),
       seen: composed.seen,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `expiredTick` chỉ để tính lại `serverNow()`.
