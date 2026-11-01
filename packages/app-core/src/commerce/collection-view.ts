@@ -1,8 +1,9 @@
 /** Số món tối đa mỗi bộ sưu tập hiện ở tab Shop theo bố cục; quá thì có lối "Tất cả (n)" sang tab Sản phẩm. */
 export const SECTION_BUDGET = { rail: 10, grid: 6, line: 5 } as const;
 /**
- * Kệ ngang có từ ngần này món trở xuống thì ở màn rộng (web từ lg) vừa một hàng mà không phải cuộn: sáu thẻ `--tile-w-md` 148px cùng khe 12px
- * chiếm 948px, nhỏ hơn bề rộng nội dung của khung `max-w-frame` ở lg. Khi đó web vẽ kệ thành lưới sáu cột lấp đầy hàng thay vì dồn thẻ sang trái.
+ * Kệ ngang có từ ngần này món trở xuống thì ở màn rộng (web từ lg) không vẽ thành kệ cuộn mà thành lưới cùng số cột với lưới Sản phẩm (5 cột lg, 6 cột xl), để thẻ cùng
+ * bề rộng với mọi lưới khác; hàng chưa đầy dồn trái như hàng cuối của lưới đó. Ngưỡng 6 vừa một hàng ở xl nhưng ở lg (5 cột) là 5 + 1: thẻ lẻ ở hàng hai
+ * là chủ ý (đúng như hàng cuối của lưới Sản phẩm), không hạ ngưỡng về 5 vì kệ sáu món sẽ lại thành kệ cuộn với thẻ khác bề rộng. Mini App và web dưới lg luôn là kệ ngang.
  */
 export const RAIL_AS_GRID_MAX = 6;
 export const railFitsRow = (count: number): boolean => Number.isInteger(count) && count >= 0 && count <= RAIL_AS_GRID_MAX;

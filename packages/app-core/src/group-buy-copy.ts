@@ -35,7 +35,7 @@ export function soloPricing(g: PriceFields, flash?: readonly FlashPriceItem[], n
 
 /** Điều khách nhận được khi nhóm đủ người: mã giảm cho đơn sau, không phải giảm ngay. Số người còn thiếu là ý riêng (`groupMissingLine`). */
 export function groupRewardLine(g: Pick<GroupBuy, 'discountPct' | 'unitPrice' | 'minOrder'>, formatVnd: (n: number) => string): string {
-  return `Đủ nhóm: mỗi người nhận mã giảm ${g.discountPct}% cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`;
+  return `Đủ nhóm: mỗi người nhận mã giảm giá ${g.discountPct}% cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`;
 }
 
 /** Số người còn thiếu để đủ nhóm, không âm. */

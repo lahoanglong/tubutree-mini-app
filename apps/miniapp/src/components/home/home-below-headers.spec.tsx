@@ -43,11 +43,30 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
   });
 
-  it('Hành trình nguyên liệu: thẻ bản đồ và chip nhãn vẫn bấm được', async () => {
+  it('Hành trình nguyên liệu: chip nhãn bấm được, nút "Xem bản đồ" ở tiêu đề là điều khiển đọc được duy nhất của trang bản đồ', async () => {
     wrap(<BrandJourney />);
     fireEvent.click(await screen.findByRole('button', { name: 'Tubu' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/brand/tubu');
-    expect(screen.getByRole('button', { name: /Xem bản đồ/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /bản đồ/i })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Xem bản đồ Hành trình nguyên liệu' })).toBeTruthy();
+  });
+
+  it('Hành trình nguyên liệu: thẻ bản đồ ẩn khỏi trình đọc và khỏi Tab (aria-hidden + tabIndex -1) nhưng chạm vẫn mở bản đồ (H3 #3)', async () => {
+    const { container } = wrap(<BrandJourney />);
+    await screen.findByRole('button', { name: 'Tubu' });
+    const card = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('nhãn Việt'))!;
+    expect(card.getAttribute('aria-hidden')).toBe('true');
+    expect(card.tabIndex).toBe(-1);
+    fireEvent.click(card);
+    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
+  });
+
+  it('Hành trình nguyên liệu: câu mô tả số nhãn vẫn đọc được đúng một lần dù thẻ bản đồ aria-hidden (H3 review)', async () => {
+    const { container } = wrap(<BrandJourney />);
+    await screen.findByRole('button', { name: 'Tubu' });
+    const spokenCopy = Array.from(container.querySelectorAll('span')).filter((e) => e.children.length === 0 && /nhãn Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
+    expect(spokenCopy).toHaveLength(1);
+    expect(spokenCopy[0]!.closest('button')).toBeNull();
   });
 
   it('Cộng đồng hỏi đáp: một SectionHeader, tiêu đề h2 chữ Inter, nút "Xem tất cả" mở /feed', async () => {

@@ -2,9 +2,11 @@ import path from 'path';
 import { seedDatabaseUrl } from './a11y-db';
 import { writableTempDb } from './waste-db';
 
-/** Gian hàng CTV mẫu có đủ ba loại khối để đo bố cục web 1280px của trang công khai (SSR từ API thật): kệ ít món, kệ nhiều món, combo. */
+/** Gian hàng CTV mẫu có đủ ba loại khối để đo bố cục web 1280px của trang công khai (SSR từ API thật): kệ ít món, kệ sáu món (đúng ngưỡng lưới), kệ nhiều món, combo. */
 export const LG_SHELVES_SLUG = 'g6-lg-shelves';
 export const LG_SHELF_FEW = 4;
+/** Đúng ngưỡng `RAIL_AS_GRID_MAX`: vẫn là lưới, nên ở lg (5 cột) xếp 5 + 1 và ở xl (6 cột) vừa một hàng. */
+export const LG_SHELF_SIX = 6;
 export const LG_SHELF_MANY = 8;
 export const LG_COMBO_ITEMS = 3;
 
@@ -39,6 +41,7 @@ export async function seedLgShelves(): Promise<boolean> {
               { title: 'Kệ ít món', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0, items: items(products.slice(0, LG_SHELF_FEW)) },
               { title: 'Combo thử', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 10, sortOrder: 1, items: items(products.slice(LG_SHELF_FEW, LG_SHELF_FEW + LG_COMBO_ITEMS)) },
               { title: 'Kệ nhiều món', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 2, items: items(products.slice(0, LG_SHELF_MANY)) },
+              { title: 'Kệ sáu món', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 3, items: items(products.slice(0, LG_SHELF_SIX)) },
             ],
           },
         },

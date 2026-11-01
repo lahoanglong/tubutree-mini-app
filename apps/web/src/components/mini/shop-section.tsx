@@ -49,8 +49,6 @@ const priceOf = (it: ShopSectionItem) => it.product.salePrice ?? it.product.base
  */
 const variationOf = (it: ShopSectionItem) => it.product.pinnedVariationId ?? it.product.repVariationId ?? it.variationId;
 const LINE_GRID = 'grid grid-cols-1 gap-3 md:grid-cols-2';
-/** Lưới thay kệ ít món ở lg: sáu cột bằng bề rộng khung, khe 12px như khe giữa các thẻ kệ. */
-const RAIL_AS_GRID = 'grid grid-cols-6 gap-3';
 
 /** Lỗi 4xx có lời nghiệp vụ ("Sản phẩm X đã hết hàng") thì đọc thẳng; còn lại câu cố định, vì lời "mạng chậm, chưa rõ đã xong chưa" sai nghĩa với lệnh tất cả-hoặc-không. */
 function comboErrorText(error: unknown): string {
@@ -151,7 +149,8 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
       )}
       {railAsGrid && (
         <div data-testid="shop-rail-lg" className="hidden lg:block">
-          <ProductGrid items={cards} variant="grid" className={RAIL_AS_GRID} showBrand={showBrand} showWishlist noteOf={noteOf} />
+          {/* Lưới mặc định (`GRID_PRODUCTS`: 5 cột lg, 6 cột xl) như tab Sản phẩm: thẻ cùng bề rộng; hàng chưa đầy dồn trái như hàng cuối của lưới đó. */}
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist noteOf={noteOf} />
         </div>
       )}
       {layout === 'grid' && (

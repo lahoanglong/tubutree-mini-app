@@ -14,6 +14,9 @@ describe('PdpQuickReviews', () => {
     // Tiêu đề khối là Inter (font-ui), không phải Fraunces của tiêu đề trang (§4 Q1).
     expect(title.style.fontFamily).toBe('var(--font-ui)');
     expect(screen.getByText(/4,4/)).toBeInTheDocument();
+    // Tên đọc của dải sao đầu khối là điểm trung bình (như số đang hiện); mỗi đánh giá là điểm một khách chấm.
+    expect(screen.getByRole('img', { name: '4,4 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: '5 trên 5 sao' })).toHaveLength(2);
     expect(screen.getAllByTestId('quick-review')).toHaveLength(2);
     expect(screen.getByText('Dùng rất ổn c')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả (27)' }));

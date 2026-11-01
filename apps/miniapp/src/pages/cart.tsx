@@ -767,7 +767,7 @@ function StickySummary({
                     style={{
                       width: `${progressPct}%`,
                       height: '100%',
-                      background: 'linear-gradient(90deg, var(--color-action-secondary-border), var(--color-action-primary-bg))',
+                      background: 'linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg))',
                       borderRadius: 'var(--radius-pill)',
                       transition: 'width var(--dur-slow) var(--ease-out)',
                     }}

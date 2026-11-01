@@ -59,9 +59,15 @@ type FormTarget =
   | { kind: 'new'; orderId: string; orderCode: string | null }
   | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
-export function Stars({ value, small = false }: { value: number; small?: boolean }) {
+/**
+ * Tên đọc của dải sao. 'avg' (mặc định): điểm trung bình, đọc đúng số đang hiện ("4,4", "5,0") như PdpRating.
+ * 'score': điểm một khách chấm, số nguyên 1..5 nên đọc "5" chứ không "5,0".
+ */
+const starsSpoken = (value: number, spoken: 'avg' | 'score'): string => (spoken === 'score' ? String(value) : formatRating(value) || String(value));
+
+export function Stars({ value, small = false, spoken = 'avg' }: { value: number; small?: boolean; spoken?: 'avg' | 'score' }) {
   return (
-    <span role="img" aria-label={`${value} trên 5 sao`} className="inline-flex whitespace-nowrap">
+    <span role="img" aria-label={`${starsSpoken(value, spoken)} trên 5 sao`} className="inline-flex whitespace-nowrap">
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
@@ -300,7 +306,7 @@ export function ProductReviews({ slug }: { slug: string }) {
                           <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs font-medium text-forest-800">Của bạn</span>
                         )}
                       </div>
-                      <Stars value={r.rating} small />
+                      <Stars value={r.rating} small spoken="score" />
                     </div>
                     <span className="flex-none text-xs text-stone-600">{formatDate(r.createdAt)}</span>
                   </div>

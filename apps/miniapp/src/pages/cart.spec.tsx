@@ -829,6 +829,10 @@ describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dí
     // Trang mua sắm chỉ dùng token ngữ nghĩa (P2 #15): rãnh --color-track, không trỏ bậc primitive --stone-200/--forest-200.
     expect(barEl.getAttribute('style')).toContain('var(--color-track)');
     expect(barEl.outerHTML).not.toMatch(/var\(--(?:stone|forest)-\d+\)/);
+    // Đầu dải màu của phần đã đầy là token riêng của thanh tiến độ (cùng web), không mượn token viền của nút phụ.
+    const fillEl = barEl.firstElementChild as HTMLElement;
+    expect(fillEl.getAttribute('style')).toContain('var(--color-progress-fill-from)');
+    expect(fillEl.getAttribute('style')).not.toContain('action-secondary-border');
     first.unmount();
     mocks.getCart.mockResolvedValue(summary({ subtotal: 250_000, freeship: true, items: [{ ...OK_LINE, unitPrice: 250_000, total: 250_000 }] }));
     renderPage();

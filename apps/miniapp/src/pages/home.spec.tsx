@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   fetchCategories: vi.fn(),
   fetchPurchasedItems: vi.fn(),
+  fetchFlash: vi.fn(),
   unreadCount: vi.fn(),
   coreGet: vi.fn(),
   auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'error', user: { id: 'u1' } as { id: string } | null },
@@ -24,7 +25,7 @@ vi.mock('../services/shop-api', () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCategories: mocks.fetchCategories,
   fetchPurchasedItems: mocks.fetchPurchasedItems,
-  fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
+  fetchActiveFlashSales: mocks.fetchFlash,
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
@@ -44,7 +45,11 @@ vi.mock('../store/auth', () => ({
 }));
 // Mỗi khối mới đã có test riêng; ở đây chỉ kiểm thứ tự, khối lỗi/khung chờ của Bán chạy và hành vi cấp trang.
 vi.mock('../components/flash-sale', () => ({ FlashSale: () => null, UpcomingFlashSales: () => null }));
-vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => <section aria-label="Mua lại" /> }));
+// Kệ Mua lại echo tập loại trừ Home truyền xuống (`data-excluded`) để test thấy Home có nối `flashVariationIds` vào kệ; phép lọc của kệ có test riêng.
+vi.mock('../components/reorder/purchased-rail', () => ({
+  PURCHASED_RAIL_LIMIT: 10,
+  PurchasedRail: ({ excludeVariations }: { excludeVariations?: ReadonlySet<string> }) => <section aria-label="Mua lại" data-excluded={[...(excludeVariations ?? [])].sort().join(',')} />,
+}));
 vi.mock('../components/home/member-card', () => ({
   MemberCard: () => <section aria-label="Thẻ thành viên" />,
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
@@ -114,6 +119,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.fetchCategories.mockResolvedValue([]);
     mocks.unreadCount.mockResolvedValue({ count: 0 });
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.fetchFlash.mockResolvedValue([]);
   });
 
   it('khách mới: thẻ Quà khách mới thay thẻ thành viên, có kệ Bán chạy nhất, không có Mua lại', async () => {
@@ -125,6 +131,15 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(block('member')).toBeNull();
     expect(NEW).not.toContain('purchased');
     expect(blockOrder()[blockOrder().length - 1]).toBe('suggest');
+  });
+
+  it('khách cũ: Home truyền mọi phân loại đang Giờ vàng (kể cả phân loại thứ hai của cùng sản phẩm) cho kệ Mua lại để bỏ (H3 #2)', async () => {
+    const f = (slug: string, variationId: string) => ({ itemId: `i-${variationId}`, variationId, productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' });
+    mocks.fetchFlash.mockResolvedValue([f('a', 'v-a-1l'), f('b', 'v-b'), f('c', 'v-c'), f('a', 'v-a-5l')]);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v-a-5l', slug: 'a' }], nextCursor: null });
+    renderHome();
+    await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Mua lại' })).toHaveAttribute('data-excluded', 'v-a-1l,v-a-5l,v-b,v-c'));
   });
 
   it('khách cũ: thẻ thành viên, Việc cần làm, lối tắt, Mua lại, Giờ vàng, Danh mục, ... lưới gợi ý cuối', async () => {

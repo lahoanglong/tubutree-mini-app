@@ -151,6 +151,17 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     expect(fill.style.width).toBe('58%');
   });
 
+  it('thanh tiến độ chỉ dùng token ngữ nghĩa như Mini App: rãnh bg-track, đầu dải --color-progress-fill-from, không bậc stone/forest (G2 MINOR)', async () => {
+    state.cart = cartOf([line({ quantity: 1, total: 289000 })], { subtotal: 289000, freeship: false });
+    const c = await mount();
+    const track = bar(c).querySelector<HTMLElement>('[data-testid="freeship-bar"]')!;
+    const fill = track.querySelector<HTMLElement>('[data-testid="freeship-fill"]')!;
+    expect(track.className).toMatch(/\bbg-track\b/);
+    expect(track.className).not.toMatch(/\bbg-stone-200\b/);
+    expect(fill.getAttribute('style')).toContain('var(--color-progress-fill-from)');
+    expect(track.outerHTML).not.toMatch(/var\(--(?:stone|forest)-\d+\)/);
+  });
+
   it('bỏ chọn hết: thanh dính vẫn nhắc đúng ngưỡng freeship (như StickySummary của Mini App), không "Mua thêm 0đ"', async () => {
     state.cart = cartOf([line({ id: 'a', quantity: 1, total: 289000 }), line({ id: 'b', quantity: 1, total: 289000 })], { subtotal: 578000, freeship: true });
     const c = await mount();
@@ -168,6 +179,14 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
       expect(box.className).toMatch(/\bh-6\b/);
       expect(box.querySelector('svg')).not.toBeNull();
     }
+  });
+
+  it('ô chọn của dòng giỏ chiếm cột 24px như Mini App (khung chạm 44px nhô ra, lớp tubu-hit-flush) và ảnh có testid cart-line-thumb (G2 MINOR, PL-19)', async () => {
+    const c = await mount();
+    const row = c.querySelector<HTMLElement>('[data-testid="cart-line"]')!;
+    const label = row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.closest('label')!;
+    expect(label.className).toMatch(/\btubu-hit-flush\b/);
+    expect(row.querySelector('[data-testid="cart-line-thumb"]')).not.toBeNull();
   });
 
   it('các khoản giảm nằm trên thanh dính, tạm tính là số đã giảm', async () => {

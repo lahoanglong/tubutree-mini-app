@@ -2208,7 +2208,8 @@ describe('màn dựng theo khối (P10)', () => {
   });
 });
 
-describe('từ lg: máy tính (G6 #35)', () => {
+describe('từ lg: máy tính (G6 #35, H3 #7)', () => {
+  // Hai nút lên hàng tiêu đề do CSS quyết định (không còn useMediaQuery): giả `matchMedia` ở hai khổ phải cho cùng một cây DOM.
   const realMatchMedia = window.matchMedia;
   const wide = (on: boolean) => {
     Object.defineProperty(window, 'matchMedia', {
@@ -2220,34 +2221,35 @@ describe('từ lg: máy tính (G6 #35)', () => {
   afterEach(() => {
     Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
   });
+  const slot = () => document.querySelector('[data-testid="builder-head-actions"]')!;
+  const names = (root: Element) => Array.from(root.querySelectorAll('button, a')).map((e) => e.textContent?.trim());
 
-  it('khổ nhỏ: thanh dính đáy có hai nút, ô hàng tiêu đề trống', async () => {
-    wide(false);
+  for (const on of [false, true]) {
+    it(`${on ? 'từ lg' : 'khổ nhỏ'}: thanh dính đáy (lg:hidden) và ô hàng tiêu đề (hidden lg:flex) đều có đúng hai nút ngay lần vẽ đầu, CSS chọn bản nhìn thấy`, async () => {
+      wide(on);
+      mount();
+      await flush();
+      const bar = document.querySelector('[data-testid="builder-bar"]')!;
+      expect(bar.className.split(/\s+/)).toContain('lg:hidden');
+      expect(slot().className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'lg:flex']));
+      expect(slot().closest('header')?.querySelector('h1')?.textContent).toBe('Gian hàng của tôi');
+      expect(names(slot())).toHaveLength(2);
+      expect(names(slot())[0]).toBe('Xem trước');
+      expect(names(bar)).toEqual(expect.arrayContaining(['Xem trước']));
+    });
+  }
+
+  it('hàng tiêu đề của trang cao tối thiểu 44px từ lg ở mọi trạng thái (tải, dựng) nên nút tới không làm tiêu đề dịch xuống (H3 #7)', async () => {
     mount();
+    expect(document.querySelector('header')!.className.split(/\s+/)).toContain('lg:min-h-11');
     await flush();
-    const bar = document.querySelector('[data-testid="builder-bar"]')!;
-    expect(bar.textContent).toContain('Xem trước');
-    expect(document.querySelector('[data-testid="builder-head-actions"]')!.textContent).toBe('');
+    expect(document.querySelector('header')!.className.split(/\s+/)).toContain('lg:min-h-11');
   });
 
-  it('từ lg: hai nút lên hàng tiêu đề và bỏ thanh dính đáy (nút vẫn là một bộ duy nhất, không nhân đôi)', async () => {
-    wide(true);
+  it('nút "Xem trước" ở hàng tiêu đề vẫn mở bản xem trước, nút ở thanh dính cũng vậy (cùng một handler)', async () => {
     mount();
     await flush();
-    const slot = document.querySelector('[data-testid="builder-head-actions"]')!;
-    expect(slot.closest('header')?.querySelector('h1')?.textContent).toBe('Gian hàng của tôi');
-    const inSlot = Array.from(slot.querySelectorAll('button, a')).map((e) => e.textContent?.trim());
-    expect(inSlot).toHaveLength(2);
-    expect(inSlot[0]).toBe('Xem trước');
-    expect(document.querySelector('[data-testid="builder-bar"]')).toBeNull();
-    expect(Array.from(document.querySelectorAll('button, a')).filter((e) => e.textContent?.trim() === 'Xem trước')).toHaveLength(1);
-  });
-
-  it('từ lg: nút "Xem trước" ở hàng tiêu đề vẫn mở bản xem trước', async () => {
-    wide(true);
-    mount();
-    await flush();
-    click(btn('Xem trước', document.querySelector('[data-testid="builder-head-actions"]') as HTMLElement));
+    click(btn('Xem trước', slot() as HTMLElement));
     await flush();
     expect(dialog()?.textContent).toContain('Xem trước');
   });
@@ -2264,17 +2266,16 @@ describe('từ lg: máy tính (G6 #35)', () => {
     expect(preview.closest('section')?.className).toContain('lg:col-start-2');
   });
 
-  it('từ lg: vào chi tiết khối rồi quay lại danh sách, hai nút vẫn ở hàng tiêu đề (ô hàng tiêu đề dựng lại khi đổi trang)', async () => {
-    wide(true);
+  it('vào chi tiết khối thì ô hàng tiêu đề và thanh dính trống; quay lại danh sách, ô được dựng lại và có hai nút', async () => {
     mount();
     await flush();
     await openFirstSection();
-    expect(document.querySelector('[data-testid="builder-head-actions"]')!.textContent).toBe('');
+    expect(slot().textContent).toBe('');
+    expect(document.querySelector('[data-testid="builder-bar"]')).toBeNull();
     act(() => nav.api.back());
     await flush();
-    const slot = document.querySelector('[data-testid="builder-head-actions"]')!;
-    expect(slot.isConnected).toBe(true);
-    expect(Array.from(slot.querySelectorAll('button, a')).map((e) => e.textContent?.trim())).toHaveLength(2);
-    expect(document.querySelector('[data-testid="builder-bar"]')).toBeNull();
+    expect(slot().isConnected).toBe(true);
+    expect(names(slot())).toHaveLength(2);
+    expect(document.querySelector('[data-testid="builder-bar"]')).not.toBeNull();
   });
 });

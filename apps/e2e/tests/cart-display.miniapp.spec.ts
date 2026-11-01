@@ -44,6 +44,15 @@ test.describe('Giỏ Mini App: Tiết kiệm (P2 #12)', () => {
   });
 });
 
+test.describe('Giỏ Mini App: tên dòng đậm như web (P2 #14, G2 MINOR)', () => {
+  test('tên dòng đậm 500: cùng độ đậm với web (cart-display.web.spec.ts)', async ({ page, api }) => {
+    await openCart(page, api, { lines: 3, reached: true });
+    const name = page.getByTestId('cart-line').first().getByRole('button', { name: 'Sản phẩm thử 1', exact: true });
+    const weight = await name.evaluate((el) => getComputedStyle(el).fontWeight);
+    expect(weight, 'ZaUI `Text bold` phải ra 500 để khớp web').toBe('500');
+  });
+});
+
 /** Khối tổng (`cart-total-value`, `cart-saving`) không được cắt chữ hay đè dưới nút: cùng hàng thì nằm hẳn bên trái nút, hoặc nút xuống hàng riêng. */
 async function expectNoOverlap(page: Page, width: number): Promise<void> {
   expect(await page.evaluate(() => document.documentElement.scrollWidth), 'trang không tràn ngang').toBeLessThanOrEqual(width);

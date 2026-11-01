@@ -9,7 +9,8 @@ const NUMBER =
 
 /**
  * Liên kết thật tới các trang của một danh sách (Danh mục, Bán chạy nhất). Điện thoại: "Trang trước / Trang sau" chỉ còn trong HTML (`sr-only`, như Mini App
- * chỉ có nút "Xem thêm"); bàn phím nhảy vào thì hiện ra (`focus-within`) để không có điểm Tab vô hình, từ md hiện hẳn.
+ * chỉ có nút "Xem thêm"); bàn phím nhảy vào thì hiện ra (`focus-within`) để không có điểm Tab vô hình, từ md hiện hẳn. Nav chỉ có đệm trên khi phần nó chứa nhìn thấy
+ * được (focus-within, từ md): ẩn thì nav cao 0, không để dải trống 12px dưới lưới.
  * Từ lg: dãy số trang (1 … 2 3 4 … 6), mỗi số là một liên kết. Nút "Xem thêm" chỉ chạy bằng JS nên crawler không đi qua được; canonical của
  * ?page=N tự trỏ về chính nó (home-seo), nên mỗi trang phải có ít nhất một liên kết nội bộ dẫn tới (cả hai kiểu đều có trong HTML, chỉ khác CSS).
  * `hrefFor` do trang gọi quyết định (giữ bộ lọc nào, trang 1 có `page` hay không).
@@ -29,7 +30,7 @@ export function NumberedPager({
 }) {
   if (startPage <= 1 && !hasNext) return null;
   return (
-    <nav aria-label={fillCopy('browse.pageLabel')} className="flex flex-col items-center gap-3 pt-3 text-sm">
+    <nav aria-label={fillCopy('browse.pageLabel')} className="flex flex-col items-center gap-3 text-sm focus-within:pt-3 md:pt-3">
       <div className="sr-only flex flex-wrap items-center justify-center gap-3 focus-within:not-sr-only md:not-sr-only lg:hidden">
         {startPage > 1 && (
           <Link href={hrefFor(startPage - 1)} rel="prev" className={`${ui.btnText} gap-1`}>

@@ -135,6 +135,7 @@ export function PdpFreeship() {
 /**
  * Dòng "Vận chuyển ›": ai giao và freeship, ngắn. Hàng Tubu bấm cuộn tới Cam kết Tubu; hàng gian hàng tự giao không có cam kết đó nên dòng chỉ
  * để đọc (không bấm, không "›"). Lưu ý dài và thông báo tạm nghỉ do trang cha dựng ngoài dòng. Nội dung nhận qua `children`.
+ * Luôn là hàng thông tin cuối nên không kẻ đường dưới (sau nó là chip phân loại, Mini cũng không kẻ ở hàng cuối).
  */
 export function PdpShippingRow({ children, pressable = true }: { children: ReactNode; pressable?: boolean }) {
   return (
@@ -144,16 +145,15 @@ export function PdpShippingRow({ children, pressable = true }: { children: React
       subtitle={<div className="flex flex-col gap-1 max-md:gap-0 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
       trailing={pressable ? 'chevron' : undefined}
       onPress={pressable ? () => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined}
-      style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}
     />
   );
 }
 
 /**
  * Dòng "Ưu đãi ›" ghi số mã khách đang có và dùng được cho sản phẩm này; bấm mở hộp thoại mã, chép mã (áp ở bước thanh toán, một đơn một mã).
- * Khách chưa đăng nhập không có ví mã nên không hiện.
+ * Khách chưa đăng nhập không có ví mã nên không hiện. `divider`: đường kẻ dưới hàng chỉ có khi sau nó còn hàng "Vận chuyển" (Mini kẻ giữa các hàng, hàng cuối không kẻ).
  */
-export function PdpCoupons({ productId }: { productId: string }) {
+export function PdpCoupons({ productId, divider = true }: { productId: string; divider?: boolean }) {
   const phase = useAuthPhase();
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: phase === 'authenticated' });
   const [open, setOpen] = useState(false);
@@ -183,7 +183,7 @@ export function PdpCoupons({ productId }: { productId: string }) {
           setNote(null);
           setOpen(true);
         }}
-        style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}
+        style={divider ? { boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' } : undefined}
       />
       <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.title')}>
         <div className="flex flex-col">

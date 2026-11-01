@@ -118,6 +118,17 @@
   transform: translate(-50%, -50%);
 }
 
+/* Ô chọn đầu dòng giỏ (điện thoại): khung chạm 44px chỉ chiếm 24px bề ngang bố cục như `.tubu-hit-flush` của Mini App (đệm 10px + lề âm 10px hai phía,
+   `min-width` thắng `w-9` mà không cần lớp `max-md:`), nên ô 24px cách ảnh đúng khoảng 12px của hàng; 44px chạm nhô lên đệm của thẻ và khe cột. Từ md giữ cột 36px cũ. */
+@media (max-width: 767.98px) {
+  .tubu-hit-flush {
+    box-sizing: border-box;
+    padding-inline: 10px;
+    margin-inline: -10px;
+    min-width: 44px;
+  }
+}
+
 /* ── Link nằm giữa câu (Điều khoản, Chính sách): đệm dọc của phần tử inline làm hộp chạm cao 44px mà không đổi chiều cao dòng ── */
 .tubu-inline-link {
   padding-block: 13px;

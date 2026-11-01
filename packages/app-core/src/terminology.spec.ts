@@ -126,7 +126,7 @@ const REASON = {
   STOCK: '"Chỉ còn n" viết trước đợt này; D2 chốt "Còn {n} sản phẩm" (brief §3.2), đổi thuộc gói chữ riêng',
   FLASH: '"giờ vàng" viết thường hoặc "Ưu đãi giờ vàng" (D2: luôn hoa chữ G, bỏ "Ưu đãi giờ vàng"); đổi thuộc gói chữ riêng',
   EXPIRY: '"HSD" viết tắt (D2: "Hạn dùng" hoặc "Dùng đến"); đổi thuộc gói chữ riêng, `/uu-dai` còn do P14 dựng lại',
-  COUPON: 'chữ Mua chung viết "mã giảm" thiếu chữ "giá" (D2: luôn "Mã giảm giá"); đổi thuộc gói chữ Mua chung riêng, hai app và `group-buy-copy.ts`/`pdp-logic.ts` cùng sửa một lượt',
+  COUPON: 'nhãn ô vòng quay "Mã giảm" (`game-wheel.ts`) còn thiếu chữ "giá" (D2: luôn "Mã giảm giá") vì ô hẹp; đổi khi vẽ lại vòng quay. Chữ Mua chung, Ưu đãi và Trang chủ đã đổi hết',
   LEGAL: 'văn bản pháp lý (điều khoản, bảo mật, đổi trả, vận chuyển): "chúng tôi" là chủ thể ký trong văn bản, đổi chữ cần chủ duyệt nội dung, không phải chữ giao diện',
 } as const;
 
@@ -227,10 +227,6 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/miniapp/src/components/loyalty/coupon-card.tsx', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/miniapp/src/pages/about-data.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/web/src/lib/faq-fallback.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
-  { file: 'apps/miniapp/src/pages/group-buy.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
-  { file: 'apps/miniapp/src/utils/group-buy-copy.ts', use: USE.coupon, max: 2, reason: REASON.COUPON },
-  { file: 'apps/web/src/app/mua-chung/group-buy-view.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
-  { file: 'apps/web/src/lib/pdp-logic.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
   { file: 'packages/app-core/src/legal.ts', use: USE.voice, max: 6, reason: REASON.LEGAL },
   { file: 'packages/app-core/src/game-newbie.ts', use: USE.ellipsis, max: 2, reason: REASON.ELLIPSIS },
   { file: 'packages/app-core/src/dealer-apply-copy.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
@@ -238,8 +234,6 @@ const EXEMPT: Exemption[] = [
   { file: 'packages/app-core/src/notification-route.ts', use: USE.flash, max: 2, reason: REASON.FLASH },
   { file: 'packages/app-core/src/variation-picker.ts', use: USE.stock, max: 1, reason: REASON.STOCK },
   { file: 'packages/app-core/src/game-wheel.ts', use: USE.coupon, max: 2, reason: REASON.COUPON },
-  { file: 'packages/app-core/src/group-buy-copy.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
-  { file: 'packages/app-core/src/home-copy.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
 ];
 
 // Đối chứng trên nguồn giả: mẫu quét phải bắt đúng chữ hiển thị và bỏ qua mã (comment, tên biến, className, import, kiểu literal).

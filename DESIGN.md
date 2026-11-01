@@ -37,7 +37,7 @@ Chỉ nêu token dùng cho mua sắm; danh sách đầy đủ ở `packages/desi
 | `--color-flash-fg` | chữ cam của khối Giờ vàng |
 | `--color-countdown-bg`, `--color-countdown-fg` | ô số đồng hồ Giờ vàng (nền tối, chữ sáng) |
 | `--color-voucher-bg`, `--color-voucher-fg`, `--color-voucher-edge`, `--color-voucher-stub-bg`, `--color-voucher-stub-fg` | phiếu mã giảm giá |
-| `--color-bg-media`, `--color-bg-cover`, `--color-bg-chip`, `--color-track` | nền ô ảnh, bìa shop chưa có ảnh, chip chưa chọn, rãnh thanh tiến độ |
+| `--color-bg-media`, `--color-bg-cover`, `--color-bg-chip`, `--color-track`, `--color-progress-fill-from` | nền ô ảnh, bìa shop chưa có ảnh, chip chưa chọn, rãnh thanh tiến độ, đầu dải màu của phần đã đầy (hai app cùng token) |
 | `--tile-w-sm` (128px), `--tile-w-md` (148px) | hai bề rộng thẻ kệ duy nhất |
 | `--type-price-tile-size`, `--type-price-tile-lh`, `--type-price-tile-weight` | giá trên thẻ: 16px, 1,25, 700 |
 | `--space-block` (16px), `--space-section` (24px) | khoảng giữa hai khối ở màn danh sách và ở màn nội dung |
@@ -245,3 +245,5 @@ Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì
 | 2026-11-02 | Dải "Có thể bạn cũng thích": khách web lấy 10 món bán chạy (`PDP_FEED_SOURCE_LIMIT`) | `/products/for-you` của API trả tối đa 10 món nên Mini chỉ có ngần ấy; nguồn khác nhau (bán chạy với gợi ý cá nhân) là chủ ý vì `for-you` cần đăng nhập, chỉ trần số món được cho bằng nhau |
 | 2026-11-02 | Nút "Mua ngay" ở Giờ vàng dùng `--color-flash-solid-bg` qua `Button` biến thể `flash`; bảng Token ghi rõ ngoại lệ này (G5 #22) | giữ màu đặc của nhãn Giờ vàng để nhãn và nút mua cùng một nhận diện; đổi màu nút sẽ làm Giờ vàng lệch khỏi thẻ ngay bên cạnh |
 | 2026-11-02 | Chân trang web ở 375px dài hơn Mini vì giữ liên kết pháp lý và đơn vị vận hành (G5 #38) | Mini không có chân trang; web là trang công khai nên cần các liên kết này; ghi ở mục Khuôn trang web để lần chụp so sau không coi là lỗi |
+| 2026-11-02 | Pager số ẩn ở điện thoại (sr-only, giữ liên kết cho SEO), "Xem thêm" là điều khiển chính; nav không đệm trên khi ẩn (H3 #4) | điện thoại giống Mini App chỉ có "Xem thêm"; liên kết trang vẫn có trong HTML cho crawler vì canonical của ?page=N trỏ về chính nó |
+| 2026-11-02 | Kệ ngang <= 6 món ở lg vẽ lưới cùng số cột lưới Sản phẩm (5 cột lg, 6 cột xl), hàng chưa đầy dồn trái; hai bản kệ + lưới chỉ khác nhau bằng CSS (H3 #6, #8) | thẻ phải bằng bề rộng thẻ của lưới Sản phẩm, giãn cột theo số món làm thẻ to hơn mọi lưới khác của web; chọn bản bằng JS làm trang công khai nháy khi hydrate nên giữ hai bản, bản ẩn `display:none` (không vào cây trợ năng, ảnh lazy không tải) |

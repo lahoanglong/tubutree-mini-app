@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOME_BEST_SELLER_LIMIT } from '../home-layout';
-import { comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
+import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
 const ids = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => e(`${prefix}${i}`, `${prefix}${i}`));
@@ -185,6 +185,25 @@ describe('Bán chạy nhất không tụt dưới 3 món khi có 3–4 combo (F9
     const board = slugs(12);
     const r = composeHomeShelves({ ...none, combos: [0, 1, 2, 3].map((k) => comboOf(`c${k}`, board.slice(k * 3, k * 3 + 3))), bestSellers: board.map((p) => e(p, p)) });
     expect(r.bestSellers).toEqual([]);
+  });
+});
+
+describe('flashExcludedVariations: Mua lại bỏ đúng những gì kệ Giờ vàng vẽ (H3)', () => {
+  const f = (productSlug: string, variationId: string) => ({ productSlug, variationId });
+  const live = [f('dau-goi', 'v1l'), f('dau-goi', 'v5l'), f('sua-tam', 's1'), f('kem', 'k1')];
+
+  it('kệ ẩn (không vẽ gì) thì không loại phân loại nào, cùng một tập rỗng mỗi lần', () => {
+    const a = flashExcludedVariations(live, []);
+    expect(a.size).toBe(0);
+    expect(flashExcludedVariations(live, [])).toBe(a);
+  });
+
+  it('sản phẩm đang vẽ: loại mọi phân loại còn hạn của nó, kể cả phân loại không lên thẻ', () => {
+    expect([...flashExcludedVariations(live, [live[0]!, live[2]!])].sort()).toEqual(['s1', 'v1l', 'v5l']);
+  });
+
+  it('sản phẩm bị cắt sau trần kệ không bị loại, để nó còn ở Mua lại', () => {
+    expect(flashExcludedVariations(live, [live[0]!]).has('k1')).toBe(false);
   });
 });
 

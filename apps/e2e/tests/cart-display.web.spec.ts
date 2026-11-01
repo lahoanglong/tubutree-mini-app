@@ -143,3 +143,33 @@ test.describe('Giỏ web: nút "−" và tên dòng như Mini (P2 #14)', () => {
     });
   }
 });
+
+test.describe('Giỏ web: ô chọn cột 24 + khoảng 12 như Mini (G2 MINOR, PL-19)', () => {
+  test('375px: ô chọn rộng 24, ảnh cách ô 12 (cùng x với Mini), vùng chạm vẫn 44 và bấm vào phần nhô ra vẫn đổi lựa chọn', async ({ page, api }) => {
+    await openCart(page, api, { lines: 3, reached: true }, { width: 375, height: 812 });
+
+    const row = page.getByTestId('cart-line').first();
+    const input = row.getByRole('checkbox');
+    const hit = row.locator('label:has(input[type="checkbox"])');
+    const [hitBox, controlBox, thumb, rowBox] = await Promise.all([hit.boundingBox(), input.locator('xpath=..').boundingBox(), row.getByTestId('cart-line-thumb').boundingBox(), row.boundingBox()]);
+    expect(Math.round(hitBox!.width), 'vùng chạm rộng 44').toBe(44);
+    expect(hitBox!.height).toBeGreaterThanOrEqual(44);
+    expect(Math.round(controlBox!.width)).toBe(24);
+    expect(Math.round(controlBox!.x - rowBox!.x), 'đệm trái của thẻ giữ 12').toBe(12);
+    expect(Math.round(thumb!.x - (controlBox!.x + controlBox!.width)), 'ô chọn cách ảnh 12px').toBe(12);
+
+    await expect(input).toBeChecked();
+    // Điểm nhô ra hai bên ô (đệm của thẻ, khe tới ảnh) vẫn thuộc vùng chạm: đổi lựa chọn.
+    await page.mouse.click(hitBox!.x + 3, hitBox!.y + hitBox!.height / 2);
+    await expect(input).not.toBeChecked();
+    await page.mouse.click(hitBox!.x + hitBox!.width - 3, hitBox!.y + hitBox!.height / 2);
+    await expect(input).toBeChecked();
+  });
+
+  test('1280px: cột ô chọn giữ 36px như cũ (chỉ khổ điện thoại đổi)', async ({ page, api }) => {
+    await openCart(page, api, { lines: 3, reached: true }, { width: 1280, height: 900 });
+    const row = page.getByTestId('cart-line').first();
+    const hit = row.locator('label:has(input[type="checkbox"])');
+    expect(Math.round((await hit.boundingBox())!.width)).toBe(36);
+  });
+});

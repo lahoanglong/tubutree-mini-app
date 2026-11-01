@@ -14,7 +14,7 @@ export function isRetailOnly(p: { fulfiller?: ProductFulfiller; partnerOwned?: b
 /** Đủ người thì mỗi thành viên nhận MÃ GIẢM, không phải giảm thẳng giá; số lấy từ /config/public để copy không nói sai khi admin đổi. */
 export function groupBuyPitch(cfg?: { discountPct: number; targetSize: number } | null): string {
   if (cfg && cfg.discountPct > 0 && cfg.targetSize > 0) {
-    return `Rủ đủ ${cfg.targetSize} người, mỗi người nhận mã giảm ${cfg.discountPct}% khi nhóm đủ`;
+    return `Rủ đủ ${cfg.targetSize} người, mỗi người nhận mã giảm giá ${cfg.discountPct}% khi nhóm đủ`;
   }
   return 'Rủ bạn bè cho đủ nhóm, mỗi người nhận mã giảm giá';
 }
