@@ -305,7 +305,7 @@ describe('PdpGroupBuyRow', () => {
   it('đăng nhập: POST /group-buy {productId} rồi sang /mua-chung/<id>', async () => {
     mocks.http.post.mockResolvedValue({ id: 'g1' });
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
-    expect(container.textContent).toContain('Rủ đủ 3 người, mỗi người nhận mã giảm 15% khi nhóm đủ');
+    expect(container.textContent).toContain('Rủ đủ 3 người, mỗi người nhận mã giảm giá 15% khi nhóm đủ');
     click(byText(container, 'button', /Mở nhóm mua chung/));
     await flush();
     expect(mocks.http.post).toHaveBeenCalledWith('/group-buy', { productId: 'p1' });

@@ -15,7 +15,7 @@ describe('isRetailOnly: hàng chỉ bán giá lẻ, không định kỳ, không 
 
 describe('groupBuyPitch', () => {
   it('có cấu hình thì ghi đúng số người và mức giảm', () => {
-    expect(groupBuyPitch({ discountPct: 15, targetSize: 3 })).toBe('Rủ đủ 3 người, mỗi người nhận mã giảm 15% khi nhóm đủ');
+    expect(groupBuyPitch({ discountPct: 15, targetSize: 3 })).toBe('Rủ đủ 3 người, mỗi người nhận mã giảm giá 15% khi nhóm đủ');
   });
   it('thiếu hoặc cấu hình hỏng thì không hứa con số', () => {
     expect(groupBuyPitch(undefined)).toBe('Rủ bạn bè cho đủ nhóm, mỗi người nhận mã giảm giá');
