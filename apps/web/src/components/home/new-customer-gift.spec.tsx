@@ -123,7 +123,11 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
   it('đang tải ưu đãi hoặc cấu hình: giữ chỗ bằng khung chờ cao bằng dải thật, không hiện số', async () => {
     offer = never;
     let c = await mount();
-    expect(c.querySelector('[data-testid="new-customer-gift-loading"]')).not.toBeNull();
+    const loading = c.querySelector<HTMLElement>('[data-testid="new-customer-gift-loading"]');
+    expect(loading).not.toBeNull();
+    // Lề giữa khối do vỏ khối đặt (home-view): khung chờ có đệm dọc riêng thì cao hơn dải thật, các khối dưới nhảy khi dải thật thay vào.
+    expect(loading!.className).not.toMatch(/(^|\s)(p|pt|pb|py)-/);
+    expect(loading!.style.padding).toBe('');
     expect(region(c)).toBeNull();
     mounted!.unmount();
     offer = OFFER;
