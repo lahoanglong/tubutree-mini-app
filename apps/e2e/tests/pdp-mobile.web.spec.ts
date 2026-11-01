@@ -72,7 +72,9 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     });
     api.get('/flash-sales/active', []);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
-    api.get(`/products/${p!.slug}`, { variations: p!.variations });
+    // Phân loại đầu hết hàng (nếu có từ hai phân loại), còn lại còn 3: để kiểm chip hết hàng khoá và dòng "Chỉ còn 3" ở khối thông tin chính.
+    const multi = p!.variations.length > 1;
+    api.get(`/products/${p!.slug}`, { variations: p!.variations.map((v, i) => ({ ...v, stock: multi && i === 0 ? 0 : 3 })) });
     api.get(`/products/${p!.slug}/related`, []);
     api.get(`/products/${p!.slug}/bought-together`, []);
     api.get('/products/for-you', []);
@@ -120,12 +122,52 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-quantity'));
     expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-reviews'));
 
-    // Từ Đánh giá nhanh trở xuống là các dải trắng riêng: khe giữa hai dải liền nhau là 8px (mt-2), không phải khoảng cream lớn.
-    const from = ids.indexOf('pdp-quick-reviews');
-    for (let i = from + 1; i < blocks.length; i++) {
-      const gap = blocks[i]!.top - blocks[i - 1]!.bottom;
-      expect(gap, `${blocks[i - 1]!.id} -> ${blocks[i]!.id}`).toBeGreaterThanOrEqual(0);
-      expect(gap, `${blocks[i - 1]!.id} -> ${blocks[i]!.id}`).toBeLessThanOrEqual(9);
+    // "Chỉ còn N" nằm trong khối thông tin chính (dưới giá/Điểm Xanh) như Mini App, không trôi xuống dải Phân loại.
+    const low = page.locator('[data-testid="pdp-low-stock"]');
+    await expect(low).toHaveText('Chỉ còn 3 sản phẩm');
+    const lowBox = (await low.boundingBox())!;
+    const mainBox = (await page.locator('[data-section="pdp-main"]').boundingBox())!;
+    expect(lowBox.y).toBeGreaterThanOrEqual(mainBox.y);
+    expect(lowBox.y + lowBox.height).toBeLessThanOrEqual(mainBox.y + mainBox.height + 1);
+
+    // Chip phân loại hết hàng khoá như chip của Mini App (không chọn được).
+    if (multi) {
+      const chips = page.locator('[data-section="pdp-variation-chips"] button[aria-pressed]');
+      await expect(chips.first()).toBeDisabled();
+      await expect(chips.nth(1)).toBeEnabled();
+      await chips.first().click({ force: true });
+      await expect(chips.first()).toHaveAttribute('aria-pressed', 'false');
+    }
+
+    // Từ Đánh giá nhanh trở xuống mỗi khối là một dải trắng riêng cách dải trên đúng 8px (mt-2) trên nền canvas. Đo chính các dải (phần tử
+    // nền surface, lấy phần tử trên cùng trong mỗi khối): vỏ khối `data-section` của Combo và Mua chung chưa chứa mt-2 của dải con, đo vỏ
+    // thì khe 0 (dính liền thành một mảng trắng) vẫn qua.
+    const bands = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.background = 'var(--color-bg-surface)';
+      document.body.appendChild(probe);
+      const surface = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const found: { id: string; top: number; bottom: number }[] = [];
+      const walk = (el: Element, id: string) => {
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && getComputedStyle(el).backgroundColor === surface) {
+          found.push({ id, top: Math.round(r.top + window.scrollY), bottom: Math.round(r.bottom + window.scrollY) });
+          return;
+        }
+        for (const child of Array.from(el.children)) walk(child, id);
+      };
+      document.querySelectorAll<HTMLElement>('[data-section]').forEach((el) => walk(el, el.dataset.section!));
+      return found.sort((x, y) => x.top - y.top || x.bottom - y.bottom);
+    });
+    const bandFrom = bands.findIndex((b) => b.id === 'pdp-quick-reviews');
+    expect(bandFrom, 'dải Đánh giá nhanh phải là dải nền surface').toBeGreaterThanOrEqual(0);
+    expect(bands.some((b) => b.id === 'pdp-quantity')).toBe(true);
+    expect(bands.some((b) => b.id === 'pdp-reviews')).toBe(true);
+    for (let i = bandFrom + 1; i < bands.length; i++) {
+      const gap = bands[i]!.top - bands[i - 1]!.bottom;
+      expect(gap, `${bands[i - 1]!.id} -> ${bands[i]!.id}`).toBeGreaterThanOrEqual(7);
+      expect(gap, `${bands[i - 1]!.id} -> ${bands[i]!.id}`).toBeLessThanOrEqual(9);
     }
 
     // Hàng chip lọc của khối đánh giá đầy đủ như Mini App.
