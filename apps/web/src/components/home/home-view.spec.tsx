@@ -17,7 +17,7 @@ vi.mock('@/lib/core-http', () => ({
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.phase === 'authenticated' ? mocks.user : null }) }));
 vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => '/' }));
 const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
@@ -80,6 +80,7 @@ beforeEach(() => {
     '/flash-sales/active': () => [],
     '/flash-sales/upcoming': () => [],
     '/campaigns': () => [],
+    '/bundles/combos': () => [],
   };
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
     const h = routes[path];
@@ -680,5 +681,36 @@ describe('HomeView — khung chờ chung ở cấp trang: truy vấn quyết đ�
     await tick(50);
     expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
     expect(region(live.container, 'Bán chạy nhất')!.textContent).toContain('Hạng nhất A');
+  });
+});
+
+describe('HomeView — Combo tiết kiệm (P15)', () => {
+  const comboItem = (id: string) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true, product: { ...card(id, `Món ${id}`), repVariationId: `v-${id}` } });
+  const combo = (id: string, a: string, b: string) => ({
+    id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + 86_400_000).toISOString(), anchorProductId: null, items: [comboItem(a), comboItem(b)],
+  });
+
+  it('có từ 2 combo: kệ đứng sau Bán chạy nhất, đúng thứ tự khối, hỏi /bundles/combos?limit=4', async () => {
+    routes['/bundles/combos'] = () => [combo('c1', 'm1', 'm2'), combo('c2', 'm3', 'm4')];
+    const c = await mount();
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
+    expect(region(c, 'Combo tiết kiệm')).not.toBeNull();
+    expect(block(c, 'combos').contains(region(c, 'Combo tiết kiệm'))).toBe(true);
+    expect(block(c, 'bestSellers').compareDocumentPosition(block(c, 'combos')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(calls('/bundles/combos')[0]![1]).toEqual({ query: { limit: 4 }, anonymous: true });
+  });
+
+  it('chỉ 1 combo hoặc API lỗi: ẩn hẳn kệ, trang vẫn đủ khối khác', async () => {
+    routes['/bundles/combos'] = () => [combo('c1', 'm1', 'm2')];
+    const one = await mount();
+    expect(region(one, 'Combo tiết kiệm')).toBeNull();
+    expect(region(one, 'Bán chạy nhất')).not.toBeNull();
+    mounted!.unmount();
+    routes['/bundles/combos'] = () => {
+      throw new Error('offline');
+    };
+    const failed = await mount();
+    expect(region(failed, 'Combo tiết kiệm')).toBeNull();
+    expect(region(failed, 'Bán chạy nhất')).not.toBeNull();
   });
 });

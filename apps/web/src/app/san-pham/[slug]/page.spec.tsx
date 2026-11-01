@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   reviews: null as unknown,
   related: [] as unknown,
   together: [] as unknown,
+  bundles: { combos: [], addons: [] } as unknown,
   serverFails: false,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -23,6 +24,7 @@ vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: () => ({
     get: async (path: string) => {
       if (api.serverFails) throw new Error('API tạm lỗi');
+      if (path.endsWith('/bundles')) return api.bundles;
       return path.endsWith('/related') ? api.related : api.together;
     },
   }),
@@ -74,6 +76,7 @@ beforeEach(() => {
   api.reviews = REVIEWS;
   api.related = [];
   api.together = [];
+  api.bundles = { combos: [], addons: [] };
   api.serverFails = false;
 });
 afterEach(() => {
@@ -573,8 +576,38 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(add.parentElement!.className).toContain('max-md:order-2');
   });
 
-  it('chưa có Combo/Mua kèm (P15 điền): không có khối giữ chỗ', async () => {
-    const c = await mount();
-    expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+  describe('Combo ưu đãi và Mua kèm deal sốc (P15)', () => {
+    const FUTURE = new Date(Date.now() + 86_400_000).toISOString();
+    const cardOf = (id: string) => ({ id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}` });
+    const itemOf = (id: string, addonPrice: number | null = null) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice, inStock: true, product: cardOf(id) });
+    const BUNDLES = {
+      combos: [{ id: 'c1', kind: 'BUNDLE_PCT', title: 'Combo gội xả', pct: 10, endAt: FUTURE, anchorProductId: null, items: [itemOf('a'), itemOf('b')] }],
+      addons: [{ id: 'a1', kind: 'ADDON', title: 'Kèm', pct: null, endAt: FUTURE, anchorProductId: 'p1', items: [itemOf('x', 60_000)] }],
+    };
+
+    it('chưa có bộ nào: không có khối giữ chỗ', async () => {
+      const c = await mount();
+      expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+    });
+
+    it('có bộ từ máy chủ: khối nằm ngay trong HTML dựng sẵn (không chờ trình duyệt tải thêm, nên không xê dịch trang)', async () => {
+      api.bundles = BUNDLES;
+      const html = await import('react-dom/server').then(async ({ renderToString }) => {
+        const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+        const ui = await ProductPage({ params: Promise.resolve({ slug: 'dau-goi-bo-ket' }) });
+        return renderToString(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
+      });
+      expect(html).toContain('data-testid="pdp-combos"');
+      expect(html).toContain('Combo gội xả');
+      expect(html).toContain('data-testid="pdp-addons"');
+      expect(html).toContain('Chỉ khi mua cùng Dầu gội bồ kết');
+    });
+
+    it('máy chủ lỗi: trang vẫn dựng, trình duyệt thử tải rồi ẩn khối khi cũng lỗi', async () => {
+      api.serverFails = true;
+      const c = await mount();
+      expect(c.querySelector('[data-testid="add-to-cart"]')).not.toBeNull();
+      expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+    });
   });
 });

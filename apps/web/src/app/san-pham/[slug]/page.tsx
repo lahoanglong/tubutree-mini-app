@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight } from 'lucide-react';
+import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
@@ -18,7 +19,7 @@ import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/pro
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
-import { PdpBundleSlots } from './pdp-bundle-slots';
+import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpRails } from './pdp-rails';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
@@ -58,9 +59,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product = await getProduct(slug);
   if (!product) notFound();
   const http = createServerHttp();
-  const [related, boughtTogether] = await Promise.all([
+  const [related, boughtTogether, bundles] = await Promise.all([
     orUndefined(fetchRelated(http, product.slug)),
     orUndefined(fetchBoughtTogether(http, product.slug)),
+    orUndefined(fetchProductBundles(http, product.slug)),
   ]);
 
   const images = galleryImages(product);
@@ -206,7 +208,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <div className="max-md:order-3">
                 {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
                 <PdpContentKitRow slug={product.slug} />
-                <PdpBundleSlots />
+                <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} />
               </div>
             </div>
           }

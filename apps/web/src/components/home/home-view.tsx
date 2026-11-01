@@ -28,6 +28,7 @@ import { BestSellerRail } from './best-seller-rail';
 import { BrandJourney } from './brand-journey';
 import { CategoryRow } from './category-row';
 import { CommunityPreview } from './community-preview';
+import { HomeCombos } from './home-combos';
 import { FlashSale } from './flash-sale';
 import { refreshHomeQueries } from './home-blocks';
 import { HomeBlockErrorSuppressed } from './home-block-error';
@@ -142,8 +143,8 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
     // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi banner chưa về mà lần trước máy này có.
     banner: banners.slides.length > 0 || (banners.loading && banners.hinted) ? <HomeBanner slides={banners.slides} /> : null,
-    // P15 (combo) nối dữ liệu; tới lúc đó khối rỗng và không giữ chỗ.
-    combos: null,
+    // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
+    combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid />,
     purchased: <PurchasedRail source="home_rail" restoring={restoring} exclude={shelves.flashSlugs} />,
     flash: (
