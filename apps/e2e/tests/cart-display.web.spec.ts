@@ -150,7 +150,7 @@ test.describe('Giỏ web: ô chọn cột 24 + khoảng 12 như Mini (G2 MINOR, 
 
     const row = page.getByTestId('cart-line').first();
     const input = row.getByRole('checkbox');
-    const hit = row.locator('label').filter({ has: input });
+    const hit = row.locator('label:has(input[type="checkbox"])');
     const [hitBox, controlBox, thumb, rowBox] = await Promise.all([hit.boundingBox(), input.locator('xpath=..').boundingBox(), row.getByTestId('cart-line-thumb').boundingBox(), row.boundingBox()]);
     expect(Math.round(hitBox!.width), 'vùng chạm rộng 44').toBe(44);
     expect(hitBox!.height).toBeGreaterThanOrEqual(44);
@@ -169,7 +169,7 @@ test.describe('Giỏ web: ô chọn cột 24 + khoảng 12 như Mini (G2 MINOR, 
   test('1280px: cột ô chọn giữ 36px như cũ (chỉ khổ điện thoại đổi)', async ({ page, api }) => {
     await openCart(page, api, { lines: 3, reached: true }, { width: 1280, height: 900 });
     const row = page.getByTestId('cart-line').first();
-    const hit = row.locator('label').filter({ has: row.getByRole('checkbox') });
+    const hit = row.locator('label:has(input[type="checkbox"])');
     expect(Math.round((await hit.boundingBox())!.width)).toBe(36);
   });
 });
