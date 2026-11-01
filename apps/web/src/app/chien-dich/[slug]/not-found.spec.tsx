@@ -27,6 +27,12 @@ describe('/chien-dich/[slug] — chương trình không còn', () => {
     expect(mocks.replace).toHaveBeenCalledWith('/');
   });
 
+  it('tiêu đề "Chương trình" nằm trong thanh PageHeader như Mini App, không ẩn', () => {
+    const r = render(<CampaignNotFound />);
+    mounted.push(r);
+    expect(r.container.querySelector('header[data-page-bleed] h1')?.textContent).toBe('Chương trình');
+  });
+
   it('có đúng một h1', () => {
     const r = render(<CampaignNotFound />);
     mounted.push(r);
