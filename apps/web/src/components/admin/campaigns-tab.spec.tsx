@@ -183,6 +183,18 @@ describe('CampaignsTab: tạo chiến dịch', () => {
     typeInto(field(c, 'Kết thúc: ngày'), end);
   };
 
+  it('vị trí Đầu Ưu đãi nhắc đặt chữ và logo ở dải giữa ảnh (web máy tính cắt banner xuống khung 4:1); Đầu Trang chủ không có lời nhắc', async () => {
+    const c = await mount();
+    await open(c);
+    expect(c.querySelector('[data-testid="offers-banner-safe-zone"]')).toBeNull();
+    selectValue(field(c, 'Vị trí'), 'OFFERS_TOP');
+    await flush(2);
+    expect(c.querySelector('[data-testid="offers-banner-safe-zone"]')!.textContent).toContain('dải giữa');
+    selectValue(field(c, 'Vị trí'), 'HOME_TOP');
+    await flush(2);
+    expect(c.querySelector('[data-testid="offers-banner-safe-zone"]')).toBeNull();
+  });
+
   it('gửi mốc theo giờ VN (+07:00) bất kể múi giờ máy: 01/11/2026 00:00 → 2026-10-31T17:00:00.000Z; mặc định Trang chủ, mọi khách, trang chiến dịch', async () => {
     const c = await mount();
     await open(c);

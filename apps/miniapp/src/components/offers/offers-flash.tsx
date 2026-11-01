@@ -47,6 +47,7 @@ export function OffersFlash() {
   if (live.length < FLASH_SHELF.minItems || soonestEndAt === null) return null;
 
   const title = fillCopy('flash.todayTitle');
+  // Giờ vàng là ngoại lệ của mẫu "Tất cả (n)": trang đích chia theo khung giờ (hôm nay, ngày mai, mỗi khung một danh sách) và các khung lần lượt hết giờ, nên không có một con số n đúng để hứa trước; nút giữ "Xem tất cả".
   const seeAll = seeAllHref('offers.flash');
   return (
     <section aria-labelledby={titleId} style={{ paddingTop: 12 }}>
