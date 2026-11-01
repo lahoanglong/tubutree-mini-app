@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click } from '@/test-utils/dom';
 import { mount } from '@/components/mini/harness';
@@ -43,11 +44,32 @@ describe('ScrollRail', () => {
     expect(next.getAttribute('aria-disabled')).toBe('false');
     expect(next.className).toMatch(/\bhidden\b/);
     expect(next.className).toMatch(/\bmd:flex\b/);
+    // Hết đường thì ẩn hẳn khỏi mắt (đè mép thẻ đầu kệ), nhưng vẫn là nút aria-disabled hiện mờ lại khi focus bàn phím; nút còn đường không bị ẩn.
+    for (const cls of ['aria-disabled:opacity-0', 'aria-disabled:pointer-events-none', 'aria-disabled:focus-visible:opacity-40']) expect(prev.className, cls).toContain(cls);
+    expect(prev.className).not.toContain('aria-disabled:opacity-40');
     const ul = c.querySelector('ul') as HTMLUListElement;
     ul.scrollBy = vi.fn() as unknown as typeof ul.scrollBy;
     click(prev);
     expect(ul.scrollBy).not.toHaveBeenCalled();
     click(next);
     expect(ul.scrollBy).toHaveBeenCalledWith({ left: 320, behavior: 'smooth' });
+  });
+
+  it('cuộn tới cuối: nút tiếp thành aria-disabled, nút trước bật (nút nào hết đường thì nút đó ẩn)', () => {
+    overflow();
+    const { container: c } = mount(
+      <ScrollRail className="flex overflow-x-auto">
+        <li>a</li>
+      </ScrollRail>,
+    );
+    const ul = c.querySelector('ul') as HTMLUListElement;
+    Object.defineProperty(ul, 'scrollLeft', { configurable: true, value: sizes.scrollWidth - sizes.clientWidth });
+    act(() => {
+      ul.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+    const next = c.querySelector('button[aria-label="Xem các mục tiếp"]') as HTMLButtonElement;
+    const prev = c.querySelector('button[aria-label="Xem các mục trước"]') as HTMLButtonElement;
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(prev.getAttribute('aria-disabled')).toBe('false');
   });
 });
