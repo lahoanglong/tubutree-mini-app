@@ -41,11 +41,14 @@ const ITEM = {
 };
 const many = (n: number, over: Record<string, unknown> = {}) =>
   Array.from({ length: n }, (_, i) => ({ ...ITEM, itemId: `i${i}`, productSlug: `p${i}`, productName: `Sản phẩm ${i}`, ...over }));
-const upcomingAt = (hours: number, n = 1) =>
-  Array.from({ length: n }, (_, i) => ({
+// Một mốc chung cho cả n món: gọi Date.now() riêng từng món thì máy CI chậm có lúc lệch 1ms, nextFlashSlot đếm thành "1 món".
+const upcomingAt = (hours: number, n = 1) => {
+  const startAt = new Date(Date.now() + hours * HOUR).toISOString();
+  return Array.from({ length: n }, (_, i) => ({
     itemId: `u${i}`, variationId: 'v', productSlug: `u${i}`, productName: `Sắp ${i}`, thumbnail: null, flashPrice: 1, retailPrice: 2,
-    startAt: new Date(Date.now() + hours * HOUR).toISOString(), reminded: false,
+    startAt, reminded: false,
   }));
+};
 
 describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
   beforeEach(() => {
@@ -178,8 +181,7 @@ describe('FlashSale — dòng suất kế tiếp', () => {
   it('suất kế mở sau 3 giờ: dòng có "Nhắc tôi" cao 44, bấm tới trang Giờ vàng (khách chưa đăng nhập vẫn thấy)', async () => {
     mocks.fetchUpcoming.mockResolvedValue(upcomingAt(3, 2));
     renderFlash({ items: many(3) });
-    // Dòng chờ fetchUpcoming rồi mới vẽ; CI tải nặng đã vượt mức chờ 1s mặc định một lần (run 41282913325).
-    const line = await screen.findByRole('button', { name: /^\d{2}:\d{2} · 2 món sắp mở/ }, { timeout: 5000 });
+    const line = await screen.findByRole('button', { name: /^\d{2}:\d{2} · 2 món sắp mở/ });
     expect(line).toHaveTextContent('Nhắc tôi');
     expect(line).toHaveStyle({ minHeight: '44px' });
     fireEvent.click(line);
