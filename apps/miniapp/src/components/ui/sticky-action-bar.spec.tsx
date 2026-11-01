@@ -42,7 +42,22 @@ describe('StickyActionBar: lead, dense, chiều cao', () => {
     const row = screen.getByText('Thanh toán').parentElement!.parentElement as HTMLElement;
     expect(row).toContainElement(screen.getByText('Tạm tính 100.000đ'));
     expect(screen.getByText('Tạm tính 100.000đ').parentElement!.nextElementSibling).toBe(screen.getByText('Thanh toán').parentElement);
-    expect((screen.getByText('Thanh toán').parentElement as HTMLElement).style.flex).toContain('0 0 auto');
+  });
+
+  // MINOR F10b: ở 320px khối `lead` chỉ còn ~130px, số tiền lớn hay "Tiết kiệm 12.345.000đ" không vừa. Hàng cuối xuống dòng có chủ đích:
+  // `lead` ưu tiên chiếm chỗ (grow 1000), nút chỉ giãn khi đứng một mình trên hàng của nó (grow 1, chung hàng thì phần dư chia 1000:1 ≈ 0).
+  it('`lead` + nút là hàng flex-wrap: lead grow 1000, nút basis 9.25rem grow 1 không co; lead không bị ép min-width 0 (để hàng xuống dòng thay vì cắt chữ)', () => {
+    render(<StickyActionBar primary={<button>Thanh toán</button>} lead={<span>Tạm tính 100.000đ</span>} />);
+    const lead = screen.getByText('Tạm tính 100.000đ').parentElement as HTMLElement;
+    const primary = screen.getByText('Thanh toán').parentElement as HTMLElement;
+    const row = primary.parentElement as HTMLElement;
+    expect(row.style.flexWrap).toBe('wrap');
+    expect(lead.style.flexGrow).toBe('1000');
+    expect(lead.style.flexShrink).toBe('1');
+    expect(lead.style.minWidth).toBe('');
+    expect(primary.style.flexGrow).toBe('1');
+    expect(primary.style.flexShrink).toBe('0');
+    expect(primary.style.flexBasis).toBe('9.25rem');
   });
 
   it('không có `lead` thì nút chiếm cả hàng như mọi trang khác', () => {

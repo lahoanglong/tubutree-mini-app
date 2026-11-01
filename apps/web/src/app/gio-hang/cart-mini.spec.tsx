@@ -188,6 +188,58 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
   });
 });
 
+// P2 #13, #14 của review hình bước chốt: một nhãn cho cùng một số ở 375 và 1280; nút − khoá ở số lượng 1 như Mini; tên dòng cùng độ đậm.
+describe('/gio-hang — một nhãn, nút − và tên dòng như Mini App (G2)', () => {
+  const summary = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-summary"]')!;
+  const decrease = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-label="Giảm số lượng Serum dưỡng ẩm"]')!;
+
+  it('có giảm: khung tóm tắt ghi "Tạm tính" (chưa giảm) rồi "Tạm tính (đã giảm)" cho số mà chân dính 375 cũng gọi như vậy; không còn nhãn "Tổng"', async () => {
+    state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
+    const c = await mount();
+    const text = summary(c).textContent!;
+    expect(text).toContain('Tạm tính578.000đ');
+    expect(text).toContain('Tạm tính (đã giảm)528.000đ');
+    expect(text).not.toMatch(/Tổng/);
+    expect(bar(c).textContent).toContain('Tạm tính (đã giảm)528.000đ');
+  });
+
+  it('chưa có giảm: hàng "Tạm tính" gộp ở trên không lặp lại (không hai hàng cùng nhãn cùng số); hàng cuối vẫn ghi "Tạm tính", không "Tổng"', async () => {
+    const c = await mount();
+    const text = summary(c).textContent!;
+    expect(c.querySelector('[data-testid="cart-summary-rows"]')!.textContent).not.toContain('Tạm tính');
+    expect(text).toContain('Tạm tính578.000đ');
+    expect(text).not.toMatch(/Tổng/);
+  });
+
+  it('nút − khoá khi số lượng là 1 (như Mini), bấm không gửi lệnh; số lượng 2 vẫn giảm được', async () => {
+    const updates: [string, number][] = [];
+    state.update = async (id, q) => {
+      updates.push([id, q]);
+      return state.cart;
+    };
+    state.cart = cartOf([line({ quantity: 1, total: 289000 })], { subtotal: 289000 });
+    const one = await mount();
+    expect(decrease(one).disabled).toBe(true);
+    click(decrease(one));
+    await flush(3);
+    expect(updates).toEqual([]);
+
+    state.cart = cartOf([line({ quantity: 2 })]);
+    const two = await mount();
+    expect(decrease(two).disabled).toBe(false);
+    click(decrease(two));
+    await flush(3);
+    expect(updates).toEqual([['i1', 1]]);
+  });
+
+  it('tên dòng ở điện thoại cùng độ đậm Mini (500), không nặng hơn (max-md:font-semibold)', async () => {
+    const c = await mount();
+    const name = c.querySelector<HTMLAnchorElement>('a[href="/san-pham/serum"].tubu-inline-link')!.parentElement!;
+    expect(name.className).toMatch(/\bfont-medium\b/);
+    expect(name.className).not.toMatch(/font-semibold/);
+  });
+});
+
 describe('/gio-hang — khổ điện thoại xếp như Mini App', () => {
   const asPhone = () =>
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(max-width: 767px)', addEventListener: () => {}, removeEventListener: () => {} }));

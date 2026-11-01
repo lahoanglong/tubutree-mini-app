@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { SHOP_COPY } from '@tubutree/app-core/shop-copy';
 import { vi } from './vi';
 
 /**
@@ -53,7 +54,7 @@ describe('"Miễn phí giao hàng" một cách ghi (D6-17)', () => {
   it('giỏ hàng', () => {
     expect(vi.cart.freeshipReached).toContain('miễn phí giao hàng');
     expect(vi.cart.freeshipProgress('50.000đ')).toBe('Mua thêm 50.000đ để được miễn phí giao hàng');
-    expect(vi.cart.subtotalAfterDiscount).not.toMatch(/ship/i);
+    expect(SHOP_COPY['cart.subtotalNet']).not.toMatch(/ship/i);
   });
 
   it('Trang chủ khách mới', () => {

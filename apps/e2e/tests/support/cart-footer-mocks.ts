@@ -16,6 +16,10 @@ export interface FooterCartOptions {
   deals?: boolean;
   /** Dòng đầu hết hàng (tồn 0): chân dính hiện lời báo và khoá nút. */
   outOfStock?: boolean;
+  /** Đơn giá mỗi dòng (thay 120.000 / 30.000 theo `reached`): dựng số lớn như tổng 12.345.000đ. */
+  unit?: number;
+  /** Dòng đầu có giá gạch cao hơn giá bán chừng này (tiết kiệm = saving × số lượng), như món sale. */
+  saving?: number;
 }
 
 export const FREESHIP_THRESHOLD = 200_000;
@@ -36,11 +40,12 @@ export function footerCart(o: FooterCartOptions = {}): CartSummary {
   const items: CartLine[] = Array.from({ length: count }, (_, i) => {
     const n = i + 1;
     // Reached: mỗi dòng 120.000 (>= ngưỡng ngay từ dòng đầu hai dòng); chưa đạt: 30.000 mỗi dòng nên 3 dòng vẫn dưới 200.000.
-    const unitPrice = reached ? 120_000 : 30_000;
+    const unitPrice = o.unit ?? (reached ? 120_000 : 30_000);
     const base = line(n, { unitPrice, total: unitPrice, listUnitPrice: unitPrice });
     if (o.deals && n === 1) return { ...base, unitPrice: 33_000, total: 33_000, listUnitPrice: 50_000, isFlash: true, flashEndAt: flashEnd, flashSaleItemId: 'ft-f1' };
     if (o.deals && n === 2) return { ...base, listUnitPrice: unitPrice + 31_000 };
     if (o.outOfStock && n === 1) return { ...base, stock: 0 };
+    if (o.saving && n === 1) return { ...base, listUnitPrice: unitPrice + o.saving };
     return base;
   });
   const subtotal = items.reduce((s, l) => s + l.total, 0);

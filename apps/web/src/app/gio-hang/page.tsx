@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
+import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -175,8 +176,11 @@ export default function CartPage() {
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
-  // Tiết kiệm nhờ giá giảm của dòng (chỉ hiển thị; tiền thật do máy chủ tính). Cùng phạm vi với tạm tính: dòng mua được đang chọn.
-  const saving = cartSaving(buyableSelected);
+  // Một nhãn cho số `payTotal` ở chân dính (375) và khung tóm tắt (md, lg), cùng chữ với Mini App; số này chưa gồm phí giao nên không ghi "Tổng".
+  const hasDiscount = shownCombo + shownDiscount + shownTier > 0;
+  const totalLabel = cartTotalLabel(shownCombo + shownDiscount + shownTier);
+  // Tiết kiệm = giá gạch của dòng mua được đang chọn + giảm combo đang hiện (chỉ hiển thị; tiền thật do máy chủ tính). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
+  const saving = cartSaving(buyableSelected, shownCombo);
   const onPay = () => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
   // Lý do nút Thanh toán đang khoá (lời giải thích đầy đủ nằm ở khung tóm tắt; thanh dính đáy nhắc lại ngay cạnh nút).
   const payHint =
@@ -327,7 +331,7 @@ export default function CartPage() {
                           chung một hàng như cũ.
                         */}
                         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
-                          <div className="basis-full break-words text-sm font-medium text-stone-900 max-md:pr-9 max-md:font-semibold">
+                          <div className="basis-full break-words text-sm font-medium text-stone-900 max-md:pr-9">
                             <Link href={`/san-pham/${it.slug}`} className="tubu-inline-link hover:underline">
                               {it.productName}
                             </Link>
@@ -379,7 +383,7 @@ export default function CartPage() {
                                 <button
                                   type="button"
                                   onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
-                                  disabled={busy}
+                                  disabled={busy || it.quantity <= 1}
                                   aria-label={`Giảm số lượng ${it.productName}`}
                                   className={qtyButton}
                                 >
@@ -431,10 +435,13 @@ export default function CartPage() {
 
           <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
-            <div className="flex justify-between text-sm">
-              <span className="text-stone-600">Tạm tính</span>
-              <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
-            </div>
+            {/* Có giảm thì hàng này là tiền hàng chưa trừ, hàng cuối là số đã giảm; chưa giảm thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
+            {hasDiscount && (
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-600">{cartTotalLabel(0)}</span>
+                <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
+              </div>
+            )}
             {shownCombo > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Giảm giá combo</span>
@@ -454,7 +461,7 @@ export default function CartPage() {
               </div>
             )}
             {saving > 0 && (
-              <div data-testid="cart-saving" className="mt-1 text-right text-caption font-medium text-success-fg">
+              <div data-testid="cart-saving" className="mt-1 text-right text-caption font-semibold text-[color:var(--color-text-price-deal)]">
                 {fillCopy('cart.saving', { x: formatVnd(saving) })}
               </div>
             )}
@@ -464,13 +471,13 @@ export default function CartPage() {
               <p className="mt-2 text-caption text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden lg:hidden">
-              <span>Tổng</span>
+              <span>{totalLabel}</span>
               <span>{formatVnd(payTotal)}</span>
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
             <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:py-4">
               <div className="mb-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
-                <span>Tổng</span>
+                <span>{totalLabel}</span>
                 <span>{formatVnd(payTotal)}</span>
               </div>
               {selectedItems.length === 0 ? (
@@ -556,25 +563,26 @@ export default function CartPage() {
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
-            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App): nút giữ bề rộng riêng, khối tổng lấy phần còn lại. */}
-            <div className="flex items-center gap-2.5">
-              <div className="min-w-0 flex-1 whitespace-nowrap">
-                <div className="text-label text-stone-600">{shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'}</div>
-                <div data-testid="cart-total-value" className="text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
+            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
+                rộng hơn chỗ còn lại (320px, 9 chữ số): nút xuống hàng riêng và giãn hết bề ngang thay vì cắt chữ hay chui dưới nút; chung hàng thì giữ 9.25rem. */}
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <div className="flex-[1000_1_0%]">
+                <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
+                <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
                   {formatVnd(payTotal)}
                 </div>
                 {saving > 0 && (
-                  <div data-testid="cart-saving" className="text-caption font-medium text-success-fg">
+                  <div data-testid="cart-saving" className="text-caption font-semibold text-[color:var(--color-text-price-deal)]">
                     {fillCopy('cart.saving', { x: formatVnd(saving) })}
                   </div>
                 )}
               </div>
               {payHint ? (
-                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} min-w-[9.25rem] shrink-0`}>
+                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
                   Thanh toán ({selectedCount})
                 </button>
               ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} min-w-[9.25rem] shrink-0`}>
+                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
                   Thanh toán ({selectedCount})
                 </Link>
               )}

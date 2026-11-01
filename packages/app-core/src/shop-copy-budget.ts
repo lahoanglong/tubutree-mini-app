@@ -219,6 +219,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'pdp.alsoLike': 24,
   'pdp.offerCount': 20,
   'cart.saving': 20,
+  'cart.subtotal': 10,
+  'cart.subtotalNet': 20,
 
   // Bộ thành phần section-kit
   'section.seeAll': 10,

@@ -11,8 +11,17 @@ export function lineSaving(l: { unitPrice: number; listUnitPrice?: number | null
   return was === null ? 0 : (was - l.unitPrice) * l.quantity;
 }
 
-export function cartSaving(items: readonly { unitPrice: number; listUnitPrice?: number | null; quantity: number }[]): number {
-  return items.reduce((sum, l) => sum + lineSaving(l), 0);
+/**
+ * "Tiết kiệm" của giỏ: giá gạch của các dòng + giảm combo đang hiển thị (`comboDiscount`, cùng số với dòng "Giảm giá combo", nên giỏ chọn một phần
+ * chưa có giá phần chọn thì truyền 0 chứ không mượn số của cả giỏ). Mã giảm giá và ưu đãi hạng không cộng: mỗi cái đã có dòng riêng ngay trên.
+ * Chỉ để hiển thị; số tiền khách trả do API tính.
+ */
+export function cartSaving(
+  items: readonly { unitPrice: number; listUnitPrice?: number | null; quantity: number }[],
+  comboDiscount = 0,
+): number {
+  const combo = Number.isFinite(comboDiscount) && comboDiscount > 0 ? comboDiscount : 0;
+  return items.reduce((sum, l) => sum + lineSaving(l), 0) + combo;
 }
 
 interface QuickReviewInput {

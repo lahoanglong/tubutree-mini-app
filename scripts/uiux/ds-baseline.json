@@ -17,7 +17,7 @@
     "pages/wishlist.tsx": 7
    },
    "primitive-color": {
-    "pages/cart.tsx": 7,
+    "pages/cart.tsx": 5,
     "pages/checkout.tsx": 5
    },
    "strike-element": {
@@ -150,7 +150,7 @@
   "apps/web/src/app/ctv/gian-hang/page.tsx": 3,
   "apps/web/src/app/ctv/page.tsx": 19,
   "apps/web/src/app/gio-hang/empty-cart.tsx": 3,
-  "apps/web/src/app/gio-hang/page.tsx": 78,
+  "apps/web/src/app/gio-hang/page.tsx": 77,
   "apps/web/src/app/gio-vang/flash-slots-view.tsx": 2,
   "apps/web/src/app/gioi-thieu/about-view.tsx": 37,
   "apps/web/src/app/ho-tro/chat/page.tsx": 7,

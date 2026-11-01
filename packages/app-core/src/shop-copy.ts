@@ -211,6 +211,8 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.alsoLike': 'Có thể bạn cũng thích',
   'pdp.offerCount': '{n} mã giảm giá',
   'cart.saving': 'Tiết kiệm {x}',
+  'cart.subtotal': 'Tạm tính',
+  'cart.subtotalNet': 'Tạm tính (đã giảm)',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',
