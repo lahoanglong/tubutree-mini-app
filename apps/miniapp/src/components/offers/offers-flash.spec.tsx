@@ -68,6 +68,13 @@ describe('OffersFlash — Giờ vàng hôm nay ở trang Ưu đãi', () => {
     expect(within(region).getAllByTestId('flash-sold-bar')).toHaveLength(1);
   });
 
+  it('suất hết giờ khi khách đang xem: cả khối (kể cả hàng chữ đồng hồ) biến mất, không để lại hàng trống', async () => {
+    mocks.fetchActive.mockResolvedValue([item(1, { endAt: new Date(Date.now() + 1_200).toISOString() }), item(2, { endAt: new Date(Date.now() + 1_200).toISOString() })]);
+    const { container } = renderFlash();
+    await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
+    await waitFor(() => expect(container).toBeEmptyDOMElement(), { timeout: 5_000 });
+  });
+
   it('lỗi tải: ẩn khối, không báo lỗi (Giờ vàng ở Ưu đãi là phần thêm, Trang chủ đã có khối lỗi)', async () => {
     mocks.fetchActive.mockRejectedValue(new Error('boom'));
     const { container } = renderFlash();

@@ -129,4 +129,15 @@ describe('DailyCheckInCard compact (Ưu đãi): luật gập lại', () => {
     expect(screen.queryByRole('button', { name: 'Luật điểm danh' })).toBeNull();
     expect(screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/)).toBeVisible();
   });
+
+  it('đã điểm danh hôm nay: nút khoá nhưng vẫn thấy ("Đã điểm danh"), nút luật vẫn bấm mở được', () => {
+    mocks.status = { ...base, checkedInToday: true };
+    render(<DailyCheckInCard authed compact />);
+    const done = screen.getByRole('button', { name: 'Đã điểm danh' });
+    expect(done).toBeVisible();
+    fireEvent.click(done);
+    expect(mocks.checkIn).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Luật điểm danh' }));
+    expect(screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/)).toBeVisible();
+  });
 });

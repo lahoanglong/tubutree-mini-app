@@ -99,4 +99,16 @@ describe('DailyCheckInCard compact (web, Ưu đãi): luật gập lại', () => 
     expect(mounted.container.querySelector('button[aria-expanded]')).toBeNull();
     expect(mounted.container.textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
   });
+
+  it('đã điểm danh hôm nay: nút khoá nhưng vẫn thấy ("Đã điểm danh"), nút luật vẫn bấm mở được', () => {
+    mocks.status = { ...base, checkedInToday: true };
+    mounted = render(<DailyCheckInCard authed compact />);
+    const c = mounted.container;
+    const done = [...c.querySelectorAll('button')].find((b) => b.textContent === 'Đã điểm danh')!;
+    expect(done).toBeTruthy();
+    click(done);
+    expect(mocks.checkIn).not.toHaveBeenCalled();
+    click(c.querySelector('button[aria-expanded]')!);
+    expect(c.querySelector<HTMLElement>('#' + CSS.escape(c.querySelector('button[aria-expanded]')!.getAttribute('aria-controls')!))!.hidden).toBe(false);
+  });
 });

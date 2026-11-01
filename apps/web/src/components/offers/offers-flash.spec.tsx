@@ -69,6 +69,16 @@ describe('OffersFlash (web) — Giờ vàng hôm nay ở trang Ưu đãi', () =>
     expect(c.querySelectorAll('[data-testid="flash-sold-bar"]')).toHaveLength(1);
   });
 
+  it('suất hết giờ khi khách đang xem: cả khối (kể cả hàng chữ đồng hồ) biến mất, không để lại hàng trống', async () => {
+    const soon = () => new Date(Date.now() + 1_200).toISOString();
+    active = async () => [item(1, { endAt: soon() }), item(2, { endAt: soon() })];
+    const c = await mount();
+    expect(c.querySelector('section')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 1_800));
+    await flush(6);
+    expect(c.innerHTML).toBe('');
+  });
+
   it('lỗi tải: ẩn khối, không báo lỗi (Trang chủ đã có khối lỗi Giờ vàng)', async () => {
     active = async () => {
       throw new Error('boom');
