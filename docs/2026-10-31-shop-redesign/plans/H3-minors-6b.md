@@ -171,3 +171,25 @@
 - Phủ spec: mười mục của gói H3 có task T1–T10; baseline/gate ở T11.
 - Giữ tên: không đổi chữ ký công khai; `HomeShelves.flashVariationIds` đổi nghĩa (rộng hơn), cùng tên, người dùng là `PurchasedRail excludeVariations` ở hai app.
 - Lệch có chủ đích đã nêu ở trước task: T5 (đã hai dòng), T8 (giữ hai bản, khoá bằng test).
+
+---
+
+## Ghi chú thực hiện
+
+Nhánh `shop/H3-minors-6b`, base `14fda531f`. Mười mục xong, mỗi mục một commit nhỏ (T1 `givenName`, T2 loại trừ Giờ vàng, T3 Hành trình nguyên liệu, T4 pager, T5 nhãn danh mục, T6+T8 kệ ít món, T7 nút trình dựng, T10 tương phản, baseline px).
+
+### Lệch kế hoạch
+- T5 (#5): đề bài nói nhãn một dòng, thực tế `Label` đã `WebkitLineClamp: 2` + chữ caption. Sửa theo số đo: bỏ đệm ngang `0 2px` của ô (rộng nhãn 58 → 62 px), thêm `letterSpacing: -0.01em` khi hàng cuộn (`tight={scrolls}`). Nhãn bị cắt ở 375px giảm 4 → 3 ("Chăm sóc cá nhân" hết cắt). Ba nhãn còn cắt vì từ đơn quá dài cho cột 62 px ("thiên nhiên" 69,9 px, "Nông sản &" 71,6 px, "Thực phẩm" 71 px): muốn hết hẳn phải rút tên danh mục hoặc đổi số cột, ngoài phạm vi gói; vẫn giữ cột ló 5,5.
+- T8 (#8): không đổi sang chọn một bản bằng JS vì sẽ nháy ở lg khi hydrate (cùng lỗi T7). Giữ hai bản `lg:hidden` (kệ) và `hidden lg:block` (lưới) do CSS `display:none` đưa bản ẩn ra khỏi cây trợ năng; mọi ảnh `loading="lazy"` nên bản ẩn không tải. Khoá bằng vitest (`shop-section.spec.tsx`) và e2e đếm thẻ nhìn thấy đúng bằng `LG_SHELF_FEW` ở 1280 và 375 với tên, href không lặp.
+- T6 (#6): lưới kệ ít món dùng `GRID_PRODUCTS` mặc định (2/md 3/lg 5/xl 6 cột), bỏ hằng `RAIL_AS_GRID`. `RAIL_AS_GRID_MAX` giữ 6: ở lg đúng 6 món xếp 5+1, ghi ở `collection-view.ts`.
+- T7 (#7): thay `useMediaQuery(LG_UP)` bằng CSS (`lg:hidden` cho thanh dưới, cổng `BUILDER_HEAD_SLOT` tìm bằng `useLayoutEffect` trước khi vẽ lần đầu); `PageHeader` có `lg:min-h-11` để hàng tiêu đề giữ chiều cao dù nút vào chậm. Bài e2e lấy mẫu từng khung `requestAnimationFrame`: tọa độ y của h1 lệch ≤ 1 px; chạy trên mã cũ đỏ (y 182 → 188), mã mới xanh. `page.spec.tsx` của `/ctv/gian-hang` viết lại khối "từ lg" cho đúng cơ chế mới.
+- T10 (#10): `mockBuilder` tách sang `tests/support/builder-web-mocks.ts` (file mới, không đụng `support/builder-mocks.ts` của các spec Mini). Bài tương phản đo bằng canvas, đã chứng minh bắt được lỗi (đổi màu tạm thì ra 2,44 < 4,5).
+- Không chụp được ảnh web 375 trước/sau cho hàng danh mục và pager số: cần API thật có danh mục/nhiều trang sản phẩm; trên DB seed của `web-gate.sh` vùng "Danh mục" của Trang chủ không hiện nên bài chụp tạm đỏ, đã xoá. Hàng danh mục web là bản sao mã Mini (cùng spec, cùng số đo), pager khoá bằng spec lớp CSS và `shop.web.spec.ts`. Ảnh Mini 375 trước/sau có đủ. Trình dựng: chỉ có ảnh sau (web 1280 và 375); hiệu ứng cũ là lệch một khung nên ảnh tĩnh không thể hiện, bằng chứng là bài lấy mẫu khung.
+
+### Soát nút ghost/icon Mini (#9)
+So `tokens.css` trước (`16a6d187a^`) và sau bằng `getBoundingClientRect` và ảnh 375px, các màn: địa chỉ, giỏ hàng, chat hỗ trợ, đại lý, sửa hồ sơ, mua chung, tích điểm, Ưu đãi, chi tiết đơn, đơn hàng, tài khoản, đổi rác, đổi rác mới, kho quà, quà của tôi, gian hàng, gói đăng ký, mã giảm giá, ví. Khác biệt đều đúng ý đổi (khung icon 24 → 16 px + 8 px lề, nút phụ không còn `min-width` 120 px và đệm 8 px, `tubu-btn-44` cao 44 ở gian hàng; 12 nút đổi kích thước: "Thể lệ" 125 → 85 px, nút QR của tích điểm 271 → 263 px). Không nút nào bị cắt chữ, tràn hàng hay lệch hàng, nên không đổi mã. Giới hạn: bản mock tour chỉ có vài nút ghost/icon mỗi màn.
+
+### Số đo và ảnh
+- Ảnh: `docs/2026-10-31-shop-redesign/screens/H3/{before,after}/` (gitignore): `mini375-home-categories.png`, `mini375-<màn>.png` 19 màn, `ghost-<màn>.json`; chỉ ở `after/`: `web1280-builder.png`, `web375-builder.png`.
+- Baseline px hạ ở hai `category-row.tsx` (Mini 9 → 8, web 7 → 6), commit `chore(ds): hạ baseline px của category-row hai app (H3 #5)`.
+- Web qua `web-gate.sh` (DB tạm): 168 đạt, 36 bỏ qua theo điều kiện của spec, 0 đỏ ở các spec thật (shop, affiliate, ctv-375, home-merged, home-banner-lg, a11y-shop, ds-parity.shop, builder-polish, tiles-scroll).
