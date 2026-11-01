@@ -4,7 +4,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
-import { BUNDLE_MAX_PCT_DEFAULT, BUNDLE_MAX_PCT_KEY, loadLiveBundles } from '../bundles/bundle-read';
+import { loadLiveBundles, readBundleMaxPct } from '../bundles/bundle-read';
 import { allocateBundleDiscounts, mergeMaxPerLine } from '../bundles/bundle-rules';
 
 export interface ComboLine {
@@ -101,8 +101,7 @@ export class ComboService {
     const store = await this.storefrontCombo(slug, lines, buyerId);
     const bundles = await loadLiveBundles(this.prisma, now, [...new Set(lines.map((l) => l.productId))]);
     if (bundles.length === 0) return store;
-    const configured = await this.config.get<number>(BUNDLE_MAX_PCT_KEY, BUNDLE_MAX_PCT_DEFAULT);
-    const maxPct = typeof configured === 'number' && Number.isFinite(configured) ? configured : BUNDLE_MAX_PCT_DEFAULT;
+    const maxPct = await readBundleMaxPct(this.config);
     const bundle = allocateBundleDiscounts(
       bundles,
       lines.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity ?? 1 })),

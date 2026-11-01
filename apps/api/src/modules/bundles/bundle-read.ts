@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import type { LiveBundle } from './bundle-rules';
 
@@ -9,6 +10,26 @@ export const BUNDLE_MAX_PCT_DEFAULT = 50;
 
 /** Đang chạy: bật và `startAt <= now < endAt`. Đúng lúc `endAt` là đã hết, nên bộ hết hạn giữa báo giá và đặt đơn làm tổng tăng và bị `TOTAL_CHANGED` chặn. */
 export const bundleLiveWhere = (now: Date) => ({ isActive: true, startAt: { lte: now }, endAt: { gt: now } }) satisfies Prisma.BundleWhereInput;
+
+/** Trần % đang cấu hình; giá trị cấu hình hỏng (không phải số hữu hạn) thì về mặc định, không để bộ giảm vô hạn. */
+export async function readBundleMaxPct(config: Pick<SystemConfigService, 'get'>): Promise<number> {
+  const configured = await config.get<number>(BUNDLE_MAX_PCT_KEY, BUNDLE_MAX_PCT_DEFAULT);
+  return typeof configured === 'number' && Number.isFinite(configured) ? configured : BUNDLE_MAX_PCT_DEFAULT;
+}
+
+/**
+ * Bộ có món (hoặc sản phẩm chính của ADDON) là hàng gian hàng đối tác bị bỏ cả bộ (`partner-goods.ts`: hàng đối tác chỉ bán giá lẻ),
+ * kể cả khi dữ liệu ghi tay hoặc sản phẩm đổi chủ về sau; ADDON mất sản phẩm chính (bị xoá) cũng không hợp lệ.
+ */
+export function isTubuOnlyBundle(b: {
+  kind: 'BUNDLE_PCT' | 'ADDON';
+  anchorProductId: string | null;
+  anchorProduct: { storefrontId: string | null } | null;
+  items: { product: { storefrontId: string | null } }[];
+}): boolean {
+  if (b.items.some((i) => isPartnerOwnedProduct(i.product))) return false;
+  return b.kind === 'ADDON' ? b.anchorProductId !== null && !isPartnerOwnedProduct(b.anchorProduct) : true;
+}
 
 const LIVE_SELECT = {
   id: true,
@@ -23,9 +44,7 @@ const LIVE_SELECT = {
 } satisfies Prisma.BundleSelect;
 
 /**
- * Bundle đang chạy có liên quan tới các sản phẩm trong giỏ (một truy vấn). Bộ có món hoặc sản phẩm chính là hàng của gian hàng
- * đối tác bị bỏ cả bộ (`partner-goods.ts`: hàng đối tác chỉ bán giá lẻ), kể cả khi dữ liệu ghi tay hoặc sản phẩm đổi chủ về sau;
- * ADDON mất sản phẩm chính (bị xoá) cũng không áp.
+ * Bundle đang chạy có liên quan tới các sản phẩm trong giỏ (một truy vấn), đã bỏ bộ vi phạm `isTubuOnlyBundle`.
  */
 export async function loadLiveBundles(prisma: Pick<PrismaService, 'bundle'>, now: Date, productIds: readonly string[]): Promise<LiveBundle[]> {
   if (productIds.length === 0) return [];
@@ -35,8 +54,7 @@ export async function loadLiveBundles(prisma: Pick<PrismaService, 'bundle'>, now
     select: LIVE_SELECT,
   });
   return rows
-    .filter((b) => b.items.every((i) => !isPartnerOwnedProduct(i.product)))
-    .filter((b) => (b.kind === 'ADDON' ? b.anchorProductId !== null && !isPartnerOwnedProduct(b.anchorProduct) : true))
+    .filter(isTubuOnlyBundle)
     .map((b) => ({
       id: b.id,
       kind: b.kind,
