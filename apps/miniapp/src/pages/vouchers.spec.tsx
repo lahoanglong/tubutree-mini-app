@@ -97,6 +97,7 @@ beforeEach(() => {
   mocks.guest = false;
   responses = {
     '/coupons/collectable': [collectable('NEW10', { title: 'Chào bạn mới' }), collectable('SHIP', { type: 'FREESHIP', value: 0 })],
+    '/coupons/collectable/mine': { claimed: [], newCustomerOnly: [] },
     '/me/coupons': [],
     '/me/coupons/history': [],
   };
@@ -116,6 +117,7 @@ describe('VouchersPage (Mini)', () => {
     expect(callsTo('/coupons/collectable')).toHaveLength(1);
     expect(callsTo('/me/coupons')).toHaveLength(0);
     expect(callsTo('/me/coupons/history')).toHaveLength(0);
+    expect(callsTo('/coupons/collectable/mine')).toHaveLength(0);
     expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(2);
     expect(tabs().getByRole('tab', { name: 'Nhận mã' })).toHaveAttribute('aria-selected', 'true');
   });
@@ -159,8 +161,47 @@ describe('VouchersPage (Mini)', () => {
     fireEvent.click(save[0]!);
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết lượt nhận.', type: 'error' }));
     await waitFor(() => expect(callsTo('/coupons/collectable').length).toBeGreaterThanOrEqual(2));
+    // Route kho có max-age=15: lần tải lại sau lỗi phải đổi khoá cache HTTP, không thì lấy lại bản cũ.
+    expect(callsTo('/coupons/collectable').some(([, opts]) => typeof (opts as { query?: { fresh?: unknown } } | undefined)?.query?.fresh === 'number')).toBe(true);
     expect(await screen.findByText('Đã hết lượt')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+  });
+
+  it('mã đã nhận mà đã dùng hết lượt cá nhân (ví không còn): không có nút Lưu mã, thẻ ghi Đã dùng, mã chưa nhận vẫn Lưu được', async () => {
+    responses['/coupons/collectable/mine'] = { claimed: ['NEW10'], newCustomerOnly: [] };
+    renderAt();
+    await screen.findByText('Đã dùng');
+    expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Dùng ngay' })).toBeNull();
+    expect(callsTo('/coupons/collectable/mine')).toHaveLength(1);
+  });
+
+  it('mã chỉ dành khách mới mà khách đã có đơn: ghi lý do, không có nút Lưu mã', async () => {
+    responses['/coupons/collectable'] = [collectable('NEWONLY', { newCustomerOnly: true }), collectable('SHIP', { type: 'FREESHIP', value: 0 })];
+    responses['/coupons/collectable/mine'] = { claimed: [], newCustomerOnly: ['NEWONLY'] };
+    renderAt();
+    expect(await screen.findByText('Chỉ dành cho khách đặt đơn đầu tiên')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+  });
+
+  it('phần riêng của khách chưa tải xong thì chưa vẽ thẻ (không nháy nút Lưu mã rồi biến mất)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.coreGet.mockImplementation(async (path: string) => {
+      if (path === '/coupons/collectable/mine') return new Promise((r) => (release = r));
+      return responses[path];
+    });
+    renderAt();
+    await waitFor(() => expect(callsTo('/coupons/collectable/mine')).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: 'Lưu mã' })).toBeNull();
+    release({ claimed: ['NEW10'], newCustomerOnly: [] });
+    expect(await screen.findByText('Đã dùng')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+  });
+
+  it('phần riêng của khách lỗi mạng: vẫn vẽ kho như cũ (máy chủ từ chối lúc nhận)', async () => {
+    responses['/coupons/collectable/mine'] = httpError(500, 'x');
+    renderAt();
+    expect(await screen.findAllByRole('button', { name: 'Lưu mã' })).toHaveLength(2);
   });
 
   it('tài khoản khách chưa liên kết bị từ chối: hiện đúng câu của máy chủ, không mở đăng nhập', async () => {

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   claimCoupon: vi.fn(),
   notify: vi.fn(),
+  get: vi.fn(),
 }));
 vi.mock('../store/auth', () => {
   const state = () => ({ status: mocks.status, login: mocks.login });
@@ -15,6 +16,7 @@ vi.mock('../store/auth', () => {
   return { useAuthStore };
 });
 vi.mock('../services/coupon-claim', () => ({ claimCoupon: mocks.claimCoupon }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('./use-notify', () => ({ useNotify: () => ({ notify: mocks.notify }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -26,13 +28,14 @@ function setup() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidate = vi.spyOn(qc, 'invalidateQueries');
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-  return { ...renderHook(() => useClaimCoupon(), { wrapper }), invalidate };
+  return { ...renderHook(() => useClaimCoupon(), { wrapper }), invalidate, qc };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.status = 'authenticated';
   mocks.claimCoupon.mockResolvedValue({ code: 'TUBU30', alreadyClaimed: false });
+  mocks.get.mockResolvedValue([]);
 });
 
 describe('useClaimCoupon', () => {
@@ -62,16 +65,41 @@ describe('useClaimCoupon', () => {
     expect(result.current.pendingCode).toBeNull();
   });
 
-  it('lỗi: báo đúng câu của máy chủ, làm mới danh sách kho (cache 30 giây có thể đã cũ), trả false', async () => {
+  it('lỗi: báo đúng câu của máy chủ, trả false', async () => {
     mocks.claimCoupon.mockRejectedValue(httpError(400, 'Mã giảm giá đã hết lượt nhận.'));
-    const { result, invalidate } = setup();
+    const { result } = setup();
     let ok: boolean | undefined;
     await act(async () => {
       ok = await result.current.claim('TUBU30');
     });
     expect(ok).toBe(false);
     expect(mocks.notify).toHaveBeenCalledWith({ text: 'Mã giảm giá đã hết lượt nhận.', type: 'error' });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable'] });
+    expect(result.current.pendingCode).toBeNull();
+  });
+
+  it('lỗi: tải lại kho bằng GET kèm tham số phá cache (route kho có max-age=15) và đưa danh sách mới vào cache, không invalidate thường', async () => {
+    const fresh = [{ code: 'TUBU30', usageLimit: 1, claimedCount: 1 }];
+    mocks.claimCoupon.mockRejectedValue(httpError(400, 'Mã giảm giá này đã được tài khoản khác nhận.'));
+    mocks.get.mockResolvedValue(fresh);
+    const { result, invalidate, qc } = setup();
+    await act(async () => {
+      await result.current.claim('TUBU30');
+    });
+    await vi.waitFor(() => expect(qc.getQueryData(['coupons', 'collectable'])).toEqual(fresh));
+    expect(mocks.get).toHaveBeenCalledWith('/coupons/collectable', { query: { fresh: expect.any(Number) } });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable', 'mine'] });
+  });
+
+  it('lỗi mạng khi tải lại kho không ném ra ngoài và không làm hook kẹt', async () => {
+    mocks.claimCoupon.mockRejectedValue(httpError(400, 'Mã giảm giá đã hết lượt nhận.'));
+    mocks.get.mockRejectedValue(new Error('offline'));
+    const { result } = setup();
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.claim('TUBU30');
+    });
+    expect(ok).toBe(false);
     expect(result.current.pendingCode).toBeNull();
   });
 

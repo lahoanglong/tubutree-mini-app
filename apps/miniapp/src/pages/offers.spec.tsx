@@ -86,7 +86,11 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     mocks.campaigns.mockResolvedValue([]);
     mocks.collectable.mockResolvedValue([]);
     mocks.flash.mockResolvedValue([]);
-    mocks.coreGet.mockImplementation((path: string, opts: unknown) => (path === '/coupons/collectable' ? mocks.collectable(path, opts) : mocks.campaigns(path, opts)));
+    mocks.coreGet.mockImplementation((path: string, opts: unknown) => {
+      if (path === '/coupons/collectable') return mocks.collectable(path, opts);
+      if (path === '/coupons/collectable/mine') return Promise.resolve({ claimed: [], newCustomerOnly: [] });
+      return mocks.campaigns(path, opts);
+    });
     mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 3, currentCycleDay: 4, todayPoints: 8, rewards: REWARDS });
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });

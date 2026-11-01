@@ -76,6 +76,7 @@ const cases: Case[] = [
   ['loyalty', (h) => loyalty.loyaltyQuery(h), ['loyalty'], '/me/loyalty'],
   ['coupons', (h) => loyalty.couponsQuery(h), ['coupons'], '/me/coupons'],
   ['collectableCoupons', (h) => loyalty.collectableCouponsQuery(h), ['coupons', 'collectable'], '/coupons/collectable'],
+  ['collectableMine', (h) => loyalty.collectableMineQuery(h), ['coupons', 'collectable', 'mine'], '/coupons/collectable/mine'],
   ['couponHistory', (h) => loyalty.couponHistoryQuery(h), ['coupons', 'history'], '/me/coupons/history'],
   ['pointsTxn', (h) => loyalty.pointsTxnQuery(h), ['points-txn'], '/me/points/transactions'],
   ['checkIn', (h) => loyalty.checkInQuery(h), ['loyalty-checkin'], '/me/daily-check-in'],
@@ -106,6 +107,18 @@ describe('queries — queryKey giống Mini App, queryFn gọi đúng đường 
     expect(calls).toHaveLength(0);
     await q.queryFn();
     expect(calls[0]!.path).toBe(path);
+  });
+});
+
+describe('queries — tải lại kho mã sau lỗi nhận mã', () => {
+  it('cùng khoá với kho thường (thẻ cập nhật theo), luôn đi mạng và gắn tham số phá cache HTTP', async () => {
+    const { http, calls } = fakeHttp(() => []);
+    const q = loyalty.freshCollectableCouponsQuery(http);
+    expect(q.queryKey).toEqual(loyalty.collectableCouponsQuery(http).queryKey);
+    expect(q.staleTime).toBe(0);
+    await q.queryFn();
+    expect(calls[0]!.path).toBe('/coupons/collectable');
+    expect(typeof (calls[0]!.opts?.query as { fresh?: unknown }).fresh).toBe('number');
   });
 });
 

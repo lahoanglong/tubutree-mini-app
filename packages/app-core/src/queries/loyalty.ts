@@ -16,7 +16,7 @@ import {
   type PointsTxn,
   type PointsTxnCursor,
 } from '../api/loyalty';
-import { fetchCollectableCoupons } from '../api/coupon-collect';
+import { fetchCollectableCoupons, fetchCollectableMine } from '../api/coupon-collect';
 import { WASTE_QUERY_KEYS } from '../api/waste';
 
 export const loyaltyQuery = (http: HttpClient) => ({ queryKey: ['loyalty'] as const, queryFn: () => getLoyalty(http) });
@@ -26,6 +26,20 @@ export const collectableCouponsQuery = (http: HttpClient) => ({
   queryKey: ['coupons', 'collectable'] as const,
   queryFn: () => fetchCollectableCoupons(http),
   staleTime: 30_000,
+});
+/** Phần riêng của khách trên kho (mã đã nhận, mã chỉ dành khách mới); chỉ bật khi đã đăng nhập. Nằm dưới khoá kho nên mọi invalidate ['coupons'] làm mới nó cùng lúc. */
+export const collectableMineQuery = (http: HttpClient) => ({
+  queryKey: ['coupons', 'collectable', 'mine'] as const,
+  queryFn: () => fetchCollectableMine(http),
+});
+/**
+ * Tải lại kho sau khi nhận mã bị từ chối (hết lượt, hết hạn...): dùng với `queryClient.fetchQuery`, staleTime 0 để luôn đi mạng, và
+ * `fresh` đổi khoá cache HTTP vì route kho có `max-age=15`. Cùng khoá react-query với `collectableCouponsQuery` nên mọi thẻ cập nhật theo.
+ */
+export const freshCollectableCouponsQuery = (http: HttpClient) => ({
+  queryKey: ['coupons', 'collectable'] as const,
+  queryFn: () => fetchCollectableCoupons(http, Date.now()),
+  staleTime: 0,
 });
 export const couponHistoryQuery = (http: HttpClient) => ({ queryKey: ['coupons', 'history'] as const, queryFn: () => getCouponHistory(http) });
 export const pointsTxnQuery = (http: HttpClient) => ({ queryKey: ['points-txn'] as const, queryFn: () => getPointsTransactions(http) });

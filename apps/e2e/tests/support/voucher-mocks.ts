@@ -1,4 +1,4 @@
-import type { CollectableCouponDTO } from '../../../../packages/app-core/src/api/coupon-collect';
+import type { CollectableCouponDTO, CollectableMineDTO } from '../../../../packages/app-core/src/api/coupon-collect';
 import type { CouponDTO, CouponHistoryDTO } from '../../../../packages/app-core/src/api/loyalty';
 import type { MockApi } from './mock-api';
 
@@ -27,6 +27,11 @@ export const HISTORY: CouponHistoryDTO[] = [
 /** `GET /coupons/collectable`: công khai, khách chưa đăng nhập cũng gọi. */
 export function mockCollectable(api: MockApi, items: CollectableCouponDTO[] = COLLECTABLE): void {
   api.get('/coupons/collectable', items);
+}
+
+/** `GET /coupons/collectable/mine`: cần đăng nhập; mã khách đã nhận mà ví không còn, mã chỉ dành khách mới khi khách đã có đơn. */
+export function mockCollectableMine(api: MockApi, mine: CollectableMineDTO): void {
+  api.get('/coupons/collectable/mine', mine);
 }
 
 /** `GET /me/coupons` (ví) và `GET /me/coupons/history` (tab Đã dùng–hết hạn). */

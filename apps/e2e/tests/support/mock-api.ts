@@ -373,6 +373,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/campaigns', []);
       // Kho mã công khai (khối Nhận mã ở Ưu đãi, trang Mã giảm giá) tự ẩn khi rỗng: mặc định chưa có mã nào để nhận.
       api.fallback('GET', '/coupons/collectable', []);
+      // Phần riêng của khách trên kho (mã đã nhận, mã chỉ-khách-mới): mặc định khách chưa nhận mã nào và chưa có đơn.
+      api.fallback('GET', '/coupons/collectable/mine', { claimed: [], newCustomerOnly: [] });
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
       // Cá nhân, Trang chủ và chuông web chỉ đếm tin chưa đọc (không tải danh sách); mặc định không có tin nào.

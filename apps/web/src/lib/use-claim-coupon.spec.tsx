@@ -5,10 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot } from 'react-dom/client';
 import { ApiError } from '@/lib/client-api';
 
-const mocks = vi.hoisted(() => ({ phase: 'authenticated' as 'authenticated' | 'guest' | 'unavailable' | 'loading', push: vi.fn(), post: vi.fn() }));
+const mocks = vi.hoisted(() => ({ phase: 'authenticated' as 'authenticated' | 'guest' | 'unavailable' | 'loading', push: vi.fn(), post: vi.fn(), get: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
-vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.post } }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.post, get: mocks.get } }));
 
 import { useClaimCoupon } from './use-claim-coupon';
 
@@ -32,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.phase = 'authenticated';
   mocks.post.mockResolvedValue({ code: 'NEW10', alreadyClaimed: false });
+  mocks.get.mockResolvedValue([]);
   mount();
 });
 
@@ -86,16 +87,39 @@ describe('useClaimCoupon (web)', () => {
     expect(api.pendingCode).toBeNull();
   });
 
-  it('lỗi máy chủ: đúng câu của máy chủ (error), làm mới danh sách kho vì cache có thể đã cũ, trả false', async () => {
+  it('lỗi máy chủ: đúng câu của máy chủ (error), trả false', async () => {
     mocks.post.mockRejectedValue(new ApiError('Mã giảm giá đã hết lượt nhận.', 400));
-    const invalidate = vi.spyOn(qc, 'invalidateQueries');
     let ok: boolean | undefined;
     await act(async () => {
       ok = await api.claim('NEW10');
     });
     expect(ok).toBe(false);
     expect(api.notice).toEqual({ code: 'NEW10', text: 'Mã giảm giá đã hết lượt nhận.', error: true });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable'] });
+  });
+
+  it('lỗi: tải lại kho bằng GET kèm tham số phá cache (route kho có max-age=15) và đưa danh sách mới vào cache, không invalidate thường', async () => {
+    const fresh = [{ code: 'NEW10', usageLimit: 1, claimedCount: 1 }];
+    mocks.post.mockRejectedValue(new ApiError('Mã giảm giá này đã được tài khoản khác nhận.', 400));
+    mocks.get.mockResolvedValue(fresh);
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await act(async () => {
+      await api.claim('NEW10');
+    });
+    await vi.waitFor(() => expect(qc.getQueryData(['coupons', 'collectable'])).toEqual(fresh));
+    expect(mocks.get).toHaveBeenCalledWith('/coupons/collectable', { query: { fresh: expect.any(Number) } });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable', 'mine'] });
+  });
+
+  it('lỗi mạng khi tải lại kho không ném ra ngoài và không làm hook kẹt', async () => {
+    mocks.post.mockRejectedValue(new ApiError('Mã giảm giá đã hết lượt nhận.', 400));
+    mocks.get.mockRejectedValue(new Error('offline'));
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await api.claim('NEW10');
+    });
+    expect(ok).toBe(false);
+    expect(api.pendingCode).toBeNull();
   });
 
   it('đang nhận: pendingCode là mã đó, chạm đúp chỉ gọi máy chủ một lần', async () => {

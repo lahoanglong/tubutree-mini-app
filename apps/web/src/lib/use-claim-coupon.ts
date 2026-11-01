@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { claimCoupon } from '@tubutree/app-core/api/coupon-claim';
+import { freshCollectableCouponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -22,7 +23,8 @@ const OFFLINE_TEXT = 'Không kết nối được với Tubu Tree. Bạn thử l
  * "Lưu mã" ở kho mã của web (cùng luật với `hooks/use-claim-coupon.ts` của Mini App): nhận mã vào ví qua `POST /coupons/claim`, đường
  * duy nhất và đã khoá theo mã ở máy chủ. Web không có snackbar nên câu báo trả ở `notice` để trang in một dòng `role="status"`/`role="alert"`.
  * Chưa đăng nhập thì chuyển tới đăng nhập kèm `returnTo` (đăng nhập xong quay lại đúng tab); phiên chưa khôi phục được thì báo mất mạng
- * chứ không mời đăng nhập lại; đang khôi phục thì bỏ qua. Lỗi nào cũng làm mới danh sách kho: cache 30 giây có thể còn giữ mã vừa hết lượt.
+ * chứ không mời đăng nhập lại; đang khôi phục thì bỏ qua. Lỗi nào cũng tải lại kho, nhưng bằng `freshCollectableCouponsQuery` chứ không invalidate
+ * thường: route kho có `Cache-Control: public, max-age=15` nên lần tải lại ngay sau lỗi dễ lấy đúng bản cũ trong cache trình duyệt.
  */
 export function useClaimCoupon(returnTo: string) {
   const router = useRouter();
@@ -55,7 +57,9 @@ export function useClaimCoupon(returnTo: string) {
         return true;
       } catch (e) {
         setNotice({ code, text: actionErrorText(e), error: true });
-        void qc.invalidateQueries({ queryKey: ['coupons', 'collectable'] });
+        void qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined);
+        void qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] });
+        void qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
         return false;
       } finally {
         busy.current = false;

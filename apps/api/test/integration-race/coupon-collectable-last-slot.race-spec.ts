@@ -4,7 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CouponClaimService } from '../../src/modules/coupons/coupon-claim.service';
 import { CouponCollectService } from '../../src/modules/coupons/coupon-collect.service';
-import { createUser, randCode, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * Kho mã (P14) trên Postgres thật: nhận lượt cuối của mã `listed` song song không vượt tổng lượt, và `/coupons/collectable`
@@ -32,7 +32,10 @@ describe('coupon-collectable-last-slot: kho mã (real Postgres)', () => {
 
   afterAll(async () => {
     // Mã nằm lại sẽ lọt vào /coupons/collectable của spec khác dùng chung DB race.
-    if (createdIds.length > 0) await prisma?.coupon.deleteMany({ where: { id: { in: createdIds } } });
+    if (createdIds.length > 0) {
+      await prisma?.couponRedemption.deleteMany({ where: { couponId: { in: createdIds } } });
+      await prisma?.coupon.deleteMany({ where: { id: { in: createdIds } } });
+    }
     await moduleRef?.close();
   });
 
@@ -112,6 +115,38 @@ describe('coupon-collectable-last-slot: kho mã (real Postgres)', () => {
       const codes = await collectableCodes();
       expect(codes).toContain(ok.code);
       for (const hidden of [notListed, expired, future, off]) expect(codes).not.toContain(hidden.code);
+    });
+  });
+
+  describe('mine: phần riêng của khách trên kho', () => {
+    it('khách nhận rồi dùng hết lượt cá nhân: mã vẫn trong kho nhưng nằm ở claimed của khách đó, không phải của khách khác', async () => {
+      const c = await coupon({ usageLimit: 100, perUserLimit: 1 });
+      const [a, b] = await Promise.all([realUser(), realUser()]);
+      await claims.claim(a.id, c.code);
+      await prisma.couponRedemption.create({ data: { couponId: c.id, userId: a.id } });
+      expect(await collectableCodes()).toContain(c.code);
+      expect((await collect.mine(a.id)).claimed).toContain(c.code);
+      expect((await collect.mine(b.id)).claimed).not.toContain(c.code);
+    });
+
+    it('mã chỉ-khách-mới: khách đã có đơn bị đánh dấu, khách chưa có đơn hoặc chỉ có đơn đã huỷ thì không', async () => {
+      const c = await coupon({ usageLimit: 100, newCustomerOnly: true });
+      const [fresh, returning, cancelledOnly] = await Promise.all([realUser(), realUser(), realUser()]);
+      await createOrder(prisma, { userId: returning.id });
+      await createOrder(prisma, { userId: cancelledOnly.id, status: 'CANCELLED' });
+      expect((await collect.mine(returning.id)).newCustomerOnly).toContain(c.code);
+      expect((await collect.mine(fresh.id)).newCustomerOnly).not.toContain(c.code);
+      expect((await collect.mine(cancelledOnly.id)).newCustomerOnly).not.toContain(c.code);
+    });
+
+    it('khách mới nhận mã chỉ-khách-mới rồi đặt đơn khác: mã nằm ở claimed, không lặp ở newCustomerOnly', async () => {
+      const c = await coupon({ usageLimit: 100, newCustomerOnly: true });
+      const u = await realUser();
+      await claims.claim(u.id, c.code);
+      await createOrder(prisma, { userId: u.id });
+      const mine = await collect.mine(u.id);
+      expect(mine.claimed).toContain(c.code);
+      expect(mine.newCustomerOnly).not.toContain(c.code);
     });
   });
 

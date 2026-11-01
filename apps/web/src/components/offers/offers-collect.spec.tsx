@@ -7,8 +7,9 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   push: vi.fn(),
   claim: vi.fn(),
-  state: { pendingCode: null as string | null, notice: null as { code: string; text: string; error: boolean } | null },
+  state: { pendingCode: null as string | null, notice: null as { code: string; text: string; error: boolean } | null, phase: 'guest' as 'authenticated' | 'guest' | 'loading' },
 }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.state.phase }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/use-claim-coupon', () => ({ useClaimCoupon: () => ({ claim: mocks.claim, pendingCode: mocks.state.pendingCode, notice: mocks.state.notice }) }));
@@ -25,6 +26,9 @@ const coupon = (code: string, over: Record<string, unknown> = {}) => ({
 });
 
 let collectable: unknown;
+let mine: unknown;
+const MINE_PATH = '/coupons/collectable/mine';
+const mineCalls = () => mocks.get.mock.calls.filter(([p]) => p === MINE_PATH);
 let mounted: Rendered | null = null;
 const mount = async (walletCodes: string[] = [], walletLoading = false) => {
   mounted = render(<OffersCollect walletCodes={new Set(walletCodes)} walletLoading={walletLoading} />);
@@ -39,8 +43,11 @@ beforeEach(() => {
   mocks.claim.mockReset();
   mocks.state.pendingCode = null;
   mocks.state.notice = null;
+  mocks.state.phase = 'guest';
   collectable = [];
-  mocks.get.mockReset().mockImplementation(async () => {
+  mine = { claimed: [], newCustomerOnly: [] };
+  mocks.get.mockReset().mockImplementation(async (path: string) => {
+    if (path === MINE_PATH) return mine;
     if (collectable instanceof Error) throw collectable;
     return collectable;
   });
@@ -64,12 +71,51 @@ describe('OffersCollect (web) — khối Nhận mã ở trang Ưu đãi', () => 
     expect(mocks.push).toHaveBeenCalledWith('/ma-giam-gia');
   });
 
-  it('mã đã có trong ví hoặc đã hết lượt không chiếm chỗ: chỉ mã nhận được ngay', async () => {
+  it('mã đã có trong ví hoặc đã hết lượt không chiếm chỗ: chỉ mã nhận được ngay; nhãn đếm đủ số thẻ /ma-giam-gia sẽ vẽ', async () => {
     collectable = [coupon('MINE'), coupon('FULL', { usageLimit: 3, claimedCount: 3 }), coupon('OPEN')];
     const c = await mount(['MINE']);
     expect(c.querySelectorAll('[role="group"]')).toHaveLength(1);
     expect(c.textContent).toContain('OPEN');
-    expect(c.querySelector('button[aria-label="Xem tất cả Mã giảm giá"]')!.textContent).toContain('Tất cả 1 mã');
+    // /ma-giam-gia tab Nhận mã vẽ cả mã đã lưu và mã hết lượt: 3 thẻ, không phải 1.
+    expect(c.querySelector('button[aria-label="Xem tất cả Mã giảm giá"]')!.textContent).toContain('Tất cả 3 mã');
+  });
+
+  it('khách chưa đăng nhập không gọi phần riêng của khách', async () => {
+    collectable = [coupon('A')];
+    await mount();
+    expect(mineCalls()).toHaveLength(0);
+  });
+
+  it('mã khách đã nhận mà ví không còn (đã dùng hết lượt cá nhân) không chiếm chỗ và không có nút Lưu mã', async () => {
+    mocks.state.phase = 'authenticated';
+    collectable = [coupon('USED', { usageLimit: 100, claimedCount: 10 }), coupon('OPEN')];
+    mine = { claimed: ['USED'], newCustomerOnly: [] };
+    const c = await mount();
+    expect(c.querySelectorAll('[role="group"]')).toHaveLength(1);
+    expect(c.textContent).toContain('OPEN');
+    expect(c.textContent).not.toContain('USED');
+    expect(c.querySelector('button[aria-label="Xem tất cả Mã giảm giá"]')!.textContent).toContain('Tất cả 2 mã');
+  });
+
+  it('mã chỉ dành khách mới mà khách đã có đơn không chiếm chỗ; chỉ còn mã ấy thì ẩn cả khối', async () => {
+    mocks.state.phase = 'authenticated';
+    collectable = [coupon('NEWONLY', { newCustomerOnly: true })];
+    mine = { claimed: [], newCustomerOnly: ['NEWONLY'] };
+    const c = await mount();
+    expect(mineCalls()).toHaveLength(1);
+    expect(c.innerHTML).toBe('');
+  });
+
+  it('phần riêng của khách chưa tải xong thì chưa vẽ thẻ Lưu mã (khỏi nháy rồi biến mất)', async () => {
+    mocks.state.phase = 'authenticated';
+    collectable = [coupon('USED'), coupon('OPEN')];
+    let release: (v: unknown) => void = () => undefined;
+    mocks.get.mockImplementation(async (path: string) => (path === MINE_PATH ? new Promise((r) => (release = r)) : collectable));
+    const c = await mount();
+    expect(buttons(c, 'Lưu mã')).toHaveLength(0);
+    release({ claimed: ['USED'], newCustomerOnly: [] });
+    await flush(6);
+    expect(buttons(c, 'Lưu mã')).toHaveLength(1);
   });
 
   it('không có mã nào nhận được: không vẽ gì', async () => {

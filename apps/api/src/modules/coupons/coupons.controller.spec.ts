@@ -54,3 +54,22 @@ describe('CouponsController — GET /coupons/collectable', () => {
     expect(await ctrl.collectable()).toEqual([{ code: 'X' }]);
   });
 });
+
+describe('CouponsController — GET /coupons/collectable/mine', () => {
+  const handler = CouponsController.prototype.collectableMine;
+
+  it('cần đăng nhập (không @Public), không cache chung, có throttle', () => {
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBeUndefined();
+    expect(Reflect.getMetadata(PUBLIC_CACHE_POLICY_KEY, handler)).toBeUndefined();
+    expect(Reflect.getMetadata('__httpCode__', handler)).toBeUndefined();
+    expect(Reflect.getMetadata('__headers__', handler)).toEqual([{ name: 'Cache-Control', value: 'private, no-store' }]);
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', handler)).toBe(60);
+  });
+
+  it('chuyển đúng userId cho service', async () => {
+    const mine = jest.fn().mockResolvedValue({ claimed: ['X'], newCustomerOnly: [] });
+    const ctrl = new CouponsController({} as CouponClaimService, { mine } as unknown as CouponCollectService);
+    expect(await ctrl.collectableMine('u1')).toEqual({ claimed: ['X'], newCustomerOnly: [] });
+    expect(mine).toHaveBeenCalledWith('u1');
+  });
+});

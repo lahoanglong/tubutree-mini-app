@@ -1,4 +1,4 @@
-import type { CollectableCouponDTO } from '../api/coupon-collect';
+import type { CollectableCouponDTO, CollectableMineDTO } from '../api/coupon-collect';
 import type { CouponDTO, CouponHistoryDTO } from '../api/loyalty';
 import { isCouponExpiring } from '../home-layout';
 import { fillCopy } from '../shop-copy';
@@ -11,6 +11,8 @@ export type VoucherFilter = 'all' | 'discount' | 'freeship' | 'shop' | 'expiring
 export interface VoucherRow {
   view: VoucherView;
   coupon: CouponDTO & VoucherFlags;
+  /** Lý do mã chưa nhận được ("Chỉ dành cho khách đặt đơn đầu tiên"); chỉ có ở dòng `ineligible`, truyền vào `reason` của thẻ. */
+  reason?: string;
 }
 
 export const VOUCHER_TABS: readonly { key: VoucherTab; label: string }[] = [
@@ -51,15 +53,27 @@ const toRow = (coupon: CouponDTO & VoucherFlags, now: number): VoucherRow => ({ 
 const STATE_RANK: Partial<Record<VoucherView['state'], number>> = { collectable: 0, saved: 1, soldout: 2 };
 
 /**
- * Tab Nhận mã. `walletCodes` là mã trong `/me/coupons` của khách (rỗng khi chưa đăng nhập). Mã khách đã nhận không bao giờ
- * thành "hết lượt" dù lượt cuối vừa bị nhận: khách đang giữ nó. Chưa nhận đứng trước, rồi đã lưu, rồi hết lượt/hết hạn;
- * mỗi nhóm sắp hết hạn trước.
+ * Tab Nhận mã. `walletCodes` là mã trong `/me/coupons` của khách (rỗng khi chưa đăng nhập). Ví chỉ giữ mã còn dùng được nên không đủ để biết
+ * khách đã nhận chưa: mã nhận rồi mà đã dùng hết lượt cá nhân biến khỏi ví, còn `/coupons/collectable` (công khai) vẫn trả nó. `mine` (khách đã
+ * đăng nhập) nói rõ hai trường hợp đó: mã đã nhận mà không còn trong ví thành `used`, mã chỉ-khách-mới của khách đã có đơn thành `ineligible` kèm
+ * lý do; cả hai đều không còn nút "Lưu mã" (bấm chỉ nhận lời từ chối của máy chủ). Thiếu `mine` thì mọi mã ngoài ví là chưa nhận như trước.
+ * Mã khách đã nhận không bao giờ thành "hết lượt" dù lượt cuối vừa bị nhận: khách đang giữ nó. Chưa nhận đứng trước, rồi đã lưu, rồi hết
+ * lượt/hết hạn; mỗi nhóm sắp hết hạn trước.
  */
-export function collectRows(collectable: readonly CollectableCouponDTO[], walletCodes: ReadonlySet<string>, now: number): VoucherRow[] {
+export function collectRows(
+  collectable: readonly CollectableCouponDTO[],
+  walletCodes: ReadonlySet<string>,
+  now: number,
+  mine?: CollectableMineDTO,
+): VoucherRow[] {
+  const taken = new Set(mine?.claimed);
+  const newOnly = new Set(mine?.newCustomerOnly);
   const rows = sortVouchers([...collectable], now).map((c) => {
-    const claimed = walletCodes.has(c.code);
+    const inWallet = walletCodes.has(c.code);
+    const spent = !inWallet && taken.has(c.code);
+    const gated = !inWallet && !spent && newOnly.has(c.code);
     const remaining = c.usageLimit === null ? null : Math.max(0, c.usageLimit - c.claimedCount);
-    return toRow(
+    const row = toRow(
       {
         code: c.code,
         type: c.type,
@@ -68,12 +82,15 @@ export function collectRows(collectable: readonly CollectableCouponDTO[], wallet
         maxDiscount: c.maxDiscount,
         endAt: c.endAt,
         title: c.title,
-        claimed,
-        soldOut: !claimed && remaining === 0,
+        claimed: inWallet || spent,
+        used: spent,
+        ineligible: gated,
+        soldOut: !inWallet && !spent && remaining === 0,
         remaining,
       },
       now,
     );
+    return gated ? { ...row, reason: fillCopy('coupon.newCustomerOnlyReason') } : row;
   });
   const rank = (r: VoucherRow) => STATE_RANK[r.view.state] ?? 3;
   return rows

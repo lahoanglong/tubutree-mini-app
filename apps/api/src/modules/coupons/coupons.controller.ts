@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
@@ -30,6 +30,17 @@ export class CouponsController {
   @Throttle({ default: { ttl: 60_000, limit: 60 } })
   collectable() {
     return this.collect.collectable();
+  }
+
+  /**
+   * Phần riêng của khách trên kho mã: mã đã nhận (kể cả đã dùng hết lượt, mà ví không còn hiện) và mã chỉ-khách-mới khi khách đã có đơn.
+   * Để thẻ không mời "Lưu mã" cho mã mà bấm vào chỉ nhận lời từ chối. `private, no-store`: khác với route kho, không để cache nào giữ chung.
+   */
+  @Get('collectable/mine')
+  @Header('Cache-Control', 'private, no-store')
+  @Throttle({ default: { ttl: 60_000, limit: 60 } })
+  collectableMine(@CurrentUser('sub') userId: string) {
+    return this.collect.mine(userId);
   }
 
   /** Nhận mã từ thẻ QR (`?claim=`) vào ví. Gọi lại với mã đã nhận trả kết quả cũ. Throttle theo khách chặn dò mã thẻ. */

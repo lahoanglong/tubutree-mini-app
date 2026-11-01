@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CollectableCouponDTO } from '../api/coupon-collect';
+import type { CollectableCouponDTO, CollectableMineDTO } from '../api/coupon-collect';
 import type { CouponDTO, CouponHistoryDTO } from '../api/loyalty';
 import { voucherView } from './voucher';
 import { VOUCHER_TABS, collectRows, filterVouchers, historyRows, mineRows, voucherFilters } from './voucher-center';
@@ -115,6 +115,52 @@ describe('collectRows', () => {
   it('coupon của dòng khớp view: voucherView(row.coupon) bằng row.view', () => {
     const [row] = collectRows([collectable('A', { usageLimit: 4, claimedCount: 1 })], new Set(), NOW);
     expect(voucherView(row!.coupon, NOW)).toEqual(row!.view);
+  });
+});
+
+describe('collectRows với phần riêng của khách (mine)', () => {
+  const mineOf = (over: Partial<CollectableMineDTO> = {}): CollectableMineDTO => ({ claimed: [], newCustomerOnly: [], ...over });
+
+  it('ví rỗng mà mã đã nhận (đã dùng hết lượt nên ví ẩn): không còn là collectable, thành used và đứng sau mã chưa nhận', () => {
+    const rows = collectRows([collectable('USED', { usageLimit: 100, claimedCount: 10 }), collectable('NEW')], new Set(), NOW, mineOf({ claimed: ['USED'] }));
+    expect(rows.map((r) => [r.view.code, r.view.state])).toEqual([
+      ['NEW', 'collectable'],
+      ['USED', 'used'],
+    ]);
+    expect(rows.filter((r) => r.view.state === 'collectable').map((r) => r.view.code)).toEqual(['NEW']);
+  });
+
+  it('mã đã nhận mà còn trong ví vẫn là saved: ví quyết định', () => {
+    const [row] = collectRows([collectable('A')], new Set(['A']), NOW, mineOf({ claimed: ['A'] }));
+    expect(row!.view.state).toBe('saved');
+  });
+
+  it('mã đã nhận cũng không thành hết lượt khi lượt cuối chính khách này lấy', () => {
+    const [row] = collectRows([collectable('A', { usageLimit: 1, claimedCount: 1 })], new Set(), NOW, mineOf({ claimed: ['A'] }));
+    expect(row!.view.state).toBe('used');
+  });
+
+  it('mã chỉ-khách-mới của khách cũ: ineligible kèm lý do, không phải collectable', () => {
+    const [row] = collectRows([collectable('NEWONLY', { newCustomerOnly: true })], new Set(), NOW, mineOf({ newCustomerOnly: ['NEWONLY'] }));
+    expect(row!.view.state).toBe('ineligible');
+    expect(row!.reason).toBe('Chỉ dành cho khách đặt đơn đầu tiên');
+  });
+
+  it('mã đã nhận ưu tiên hơn chỉ-khách-mới (khách đã có nó, lý do thật là đã dùng)', () => {
+    const [row] = collectRows([collectable('A', { newCustomerOnly: true })], new Set(), NOW, mineOf({ claimed: ['A'], newCustomerOnly: ['A'] }));
+    expect(row!.view.state).toBe('used');
+    expect(row!.reason).toBeUndefined();
+  });
+
+  it('không truyền mine (khách chưa đăng nhập, hoặc truy vấn lỗi) thì như cũ: mọi mã chưa có trong ví là collectable, không lý do', () => {
+    const rows = collectRows([collectable('A'), collectable('B')], new Set(), NOW);
+    expect(rows.map((r) => r.view.state)).toEqual(['collectable', 'collectable']);
+    expect(rows.every((r) => r.reason === undefined)).toBe(true);
+  });
+
+  it('coupon của dòng khớp view với cả mã used và ineligible', () => {
+    const rows = collectRows([collectable('U'), collectable('I', { newCustomerOnly: true })], new Set(), NOW, mineOf({ claimed: ['U'], newCustomerOnly: ['I'] }));
+    for (const r of rows) expect(voucherView(r.coupon, NOW)).toEqual(r.view);
   });
 });
 

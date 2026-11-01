@@ -162,6 +162,7 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.filterShop': 'Của shop',
   'coupon.filterExpiring': 'Sắp hết hạn',
   'coupon.tabsLabel': 'Nhóm mã giảm giá',
+  'coupon.newCustomerOnlyReason': 'Chỉ dành cho khách đặt đơn đầu tiên',
 
   // Combo và mua kèm
   'combo.title': 'Combo tiết kiệm',

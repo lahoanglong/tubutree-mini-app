@@ -3,8 +3,9 @@ import { useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { collectRows } from '@tubutree/app-core/commerce/voucher-center';
 import { collectSkeletonHeight, COLLECT_HINT_MAX, isCouponExpiring, readCollectHint, writeCollectHint } from '@tubutree/app-core/home-layout';
-import { collectableCouponsQuery } from '@tubutree/app-core/queries/loyalty';
+import { collectableCouponsQuery, collectableMineQuery } from '@tubutree/app-core/queries/loyalty';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useClaimCoupon } from '../../hooks/use-claim-coupon';
 import { getLoadErrorMessage } from '../../services/api';
 import { coreHttp } from '../../services/core-http';
@@ -17,7 +18,8 @@ import { VoucherTicket } from '../ui/voucher-ticket';
 const HEADER_HEIGHT = 44;
 
 /**
- * Nhận mã ở Ưu đãi (Q10): 3 mã đầu còn nhận được ngay; mã đã có trong ví hoặc hết lượt không chiếm chỗ (chúng nằm ở Mã của tôi và ở `/vouchers`).
+ * Nhận mã ở Ưu đãi (Q10): 3 mã đầu còn nhận được ngay; mã đã nhận (còn trong ví hay đã dùng hết), hết lượt hoặc chỉ dành khách mới mà khách đã có đơn
+ * không chiếm chỗ (chúng nằm ở Mã của tôi và ở `/vouchers`), nên thẻ ở đây luôn nhận được thật.
  * Khách chưa đăng nhập vẫn thấy mã, bấm "Lưu mã" mở đăng nhập. Không có mã nào thì ẩn khối; tải lỗi thì báo tại chỗ với "Thử lại", không kéo cả trang.
  * Lần mở trước có n thẻ thì lúc tải giữ chỗ đúng n thẻ (header + thẻ), nên khối vào chỗ không đẩy các khối dưới.
  */
@@ -26,17 +28,22 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
   const navigate = useNavigate();
   const { claim, pendingCode } = useClaimCoupon();
   const q = useQuery(collectableCouponsQuery(coreHttp));
+  const authed = useAuthPhase() === 'authenticated';
+  const mineQ = useQuery({ ...collectableMineQuery(coreHttp), enabled: authed });
   const [hinted] = useState(() => readCollectHint(browserStorage()));
 
-  const claimable = useMemo(() => collectRows(q.data ?? [], walletCodes, Date.now()).filter((r) => r.view.state === 'collectable'), [q.data, walletCodes]);
+  // Cả kho (kể cả mã đã lưu, đã dùng): nhãn "Tất cả n mã" phải bằng số thẻ `/vouchers` sẽ vẽ.
+  const all = useMemo(() => collectRows(q.data ?? [], walletCodes, Date.now(), mineQ.data), [q.data, walletCodes, mineQ.data]);
+  const claimable = useMemo(() => all.filter((r) => r.view.state === 'collectable'), [all]);
   const shown = claimable.slice(0, COLLECT_HINT_MAX);
-  const settled = q.isSuccess && !walletLoading;
+  const loadingMine = authed && mineQ.isLoading;
+  const settled = q.isSuccess && !walletLoading && !loadingMine;
   useEffect(() => {
     if (settled) writeCollectHint(browserStorage(), shown.length);
   }, [settled, shown.length]);
 
   const title = fillCopy('coupon.tabClaim');
-  if (q.isLoading || (walletLoading && q.isSuccess)) {
+  if (q.isLoading || ((walletLoading || loadingMine) && q.isSuccess)) {
     const height = collectSkeletonHeight(hinted);
     if (height === 0) return null;
     return (
@@ -64,7 +71,7 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
         title={title}
         icon="ticket"
         action={{
-          label: fillCopy('coupon.allCount', { n: claimable.length }),
+          label: fillCopy('coupon.allCount', { n: all.length }),
           onPress: () => navigate('/vouchers'),
           spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.title') }),
         }}

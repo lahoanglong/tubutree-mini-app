@@ -78,6 +78,7 @@ beforeEach(() => {
   mocks.use.mockReset();
   responses = {
     '/coupons/collectable': [collectable('NEW10', { title: 'Chào bạn mới' }), collectable('SHIP', { type: 'FREESHIP', value: 0 })],
+    '/coupons/collectable/mine': { claimed: [], newCustomerOnly: [] },
     '/me/coupons': [],
     '/me/coupons/history': [],
   };
@@ -101,6 +102,7 @@ describe('VouchersView (web)', () => {
     expect(callsTo('/coupons/collectable')).toHaveLength(1);
     expect(callsTo('/me/coupons')).toHaveLength(0);
     expect(callsTo('/me/coupons/history')).toHaveLength(0);
+    expect(callsTo('/coupons/collectable/mine')).toHaveLength(0);
     expect(buttons('Lưu mã')).toHaveLength(2);
     expect(tab('Nhận mã')!.getAttribute('aria-selected')).toBe('true');
   });
@@ -149,8 +151,36 @@ describe('VouchersView (web)', () => {
     const alert = [...document.querySelectorAll('[role="alert"]')].find((n) => n.textContent?.includes('Mã giảm giá đã hết lượt nhận.'));
     expect(alert).toBeTruthy();
     expect(callsTo('/coupons/collectable').length).toBeGreaterThanOrEqual(2);
+    // Route kho có max-age=15: lần tải lại sau lỗi phải đổi khoá cache HTTP, không thì lấy lại bản cũ.
+    expect(callsTo('/coupons/collectable').some(([, opts]) => typeof (opts as { query?: { fresh?: unknown } } | undefined)?.query?.fresh === 'number')).toBe(true);
     expect(text()).toContain('Đã hết lượt');
     expect(buttons('Lưu mã')).toHaveLength(1);
+  });
+
+  it('mã đã nhận mà đã dùng hết lượt cá nhân (ví không còn): không có nút Lưu mã, thẻ ghi Đã dùng, mã chưa nhận vẫn Lưu được', async () => {
+    responses['/coupons/collectable/mine'] = { claimed: ['NEW10'], newCustomerOnly: [] };
+    mount();
+    await flush();
+    expect(text()).toContain('Đã dùng');
+    expect(buttons('Lưu mã')).toHaveLength(1);
+    expect(button('Dùng ngay')).toBeNull();
+    expect(callsTo('/coupons/collectable/mine')).toHaveLength(1);
+  });
+
+  it('mã chỉ dành khách mới mà khách đã có đơn: ghi lý do, không có nút Lưu mã', async () => {
+    responses['/coupons/collectable'] = [collectable('NEWONLY', { newCustomerOnly: true }), collectable('SHIP', { type: 'FREESHIP', value: 0 })];
+    responses['/coupons/collectable/mine'] = { claimed: [], newCustomerOnly: ['NEWONLY'] };
+    mount();
+    await flush();
+    expect(text()).toContain('Chỉ dành cho khách đặt đơn đầu tiên');
+    expect(buttons('Lưu mã')).toHaveLength(1);
+  });
+
+  it('phần riêng của khách lỗi mạng: vẫn vẽ kho như cũ (máy chủ từ chối lúc nhận)', async () => {
+    responses['/coupons/collectable/mine'] = new ApiError('x', 500);
+    mount();
+    await flush(8);
+    expect(buttons('Lưu mã')).toHaveLength(2);
   });
 
   it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt ở dòng meta; có chữ "Mỗi đơn dùng 1 mã"', async () => {

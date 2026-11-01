@@ -67,7 +67,7 @@ function OffersContent() {
     if (wantsCoupons && couponsReady) couponsRef.current?.scrollIntoView?.({ block: 'start' });
   }, [wantsCoupons, couponsReady]);
 
-  const coupons = couponsQ.data ?? [];
+  const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
   useMarkExpiringSeen(couponsQ.data);

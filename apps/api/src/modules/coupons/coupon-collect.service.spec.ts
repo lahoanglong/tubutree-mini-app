@@ -98,3 +98,63 @@ describe('CouponCollectService.collectable', () => {
     expect(COLLECTABLE_LIMIT).toBe(50);
   });
 });
+
+describe('CouponCollectService.mine', () => {
+  const NOW = new Date('2026-11-15T03:00:00Z');
+  const slim = (id: string, code: string, newCustomerOnly = false) => ({ id, code, newCustomerOnly });
+
+  function makeMine(rows: unknown[], claimedIds: string[] = [], priorOrder = false) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const claimFindMany = jest.fn().mockResolvedValue(claimedIds.map((couponId) => ({ couponId })));
+    const orderFindFirst = jest.fn().mockResolvedValue(priorOrder ? { id: 'o1' } : null);
+    const prisma = {
+      coupon: { findMany },
+      couponClaim: { findMany: claimFindMany },
+      order: { findFirst: orderFindFirst },
+    } as unknown as PrismaService;
+    return { svc: new CouponCollectService(prisma), findMany, claimFindMany, orderFindFirst };
+  }
+
+  it('cùng tập mã với kho công khai: cùng where, cùng thứ tự, cùng trần', async () => {
+    const { svc, findMany } = makeMine([]);
+    await svc.mine('u1', NOW);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { listed: true, isActive: true, scope: 'CLAIM', batch: null, startAt: { lte: NOW }, endAt: { gte: NOW } },
+        orderBy: [{ endAt: 'asc' }, { id: 'asc' }],
+        take: COLLECTABLE_LIMIT,
+      }),
+    );
+  });
+
+  it('kho trống thì không đọc claim và không đọc đơn', async () => {
+    const { svc, claimFindMany, orderFindFirst } = makeMine([]);
+    expect(await svc.mine('u1', NOW)).toEqual({ claimed: [], newCustomerOnly: [] });
+    expect(claimFindMany).not.toHaveBeenCalled();
+    expect(orderFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('claimed là mã khách đã có dòng nhận, chỉ tính cho khách này', async () => {
+    const { svc, claimFindMany } = makeMine([slim('a', 'A'), slim('b', 'B'), slim('c', 'C')], ['a', 'c']);
+    expect((await svc.mine('u1', NOW)).claimed).toEqual(['A', 'C']);
+    expect(claimFindMany).toHaveBeenCalledWith({ where: { userId: 'u1', couponId: { in: ['a', 'b', 'c'] } }, select: { couponId: true } });
+  });
+
+  it('mã chỉ-khách-mới chưa nhận: khách đã có đơn thì vào newCustomerOnly, khách chưa có đơn thì không', async () => {
+    const rows = [slim('a', 'A'), slim('n', 'NEW', true)];
+    expect((await makeMine(rows, [], true).svc.mine('u1', NOW)).newCustomerOnly).toEqual(['NEW']);
+    expect((await makeMine(rows, [], false).svc.mine('u1', NOW)).newCustomerOnly).toEqual([]);
+  });
+
+  it('mã chỉ-khách-mới đã nhận chỉ nằm ở claimed, và không tốn truy vấn đơn nếu không còn mã nào cần xét', async () => {
+    const { svc, orderFindFirst } = makeMine([slim('n', 'NEW', true)], ['n'], true);
+    expect(await svc.mine('u1', NOW)).toEqual({ claimed: ['NEW'], newCustomerOnly: [] });
+    expect(orderFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('không có mã chỉ-khách-mới thì không đọc đơn', async () => {
+    const { svc, orderFindFirst } = makeMine([slim('a', 'A')], [], true);
+    await svc.mine('u1', NOW);
+    expect(orderFindFirst).not.toHaveBeenCalled();
+  });
+});

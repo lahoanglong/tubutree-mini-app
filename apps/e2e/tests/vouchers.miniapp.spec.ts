@@ -2,7 +2,7 @@ import { test, expect } from './support/mock-api';
 import { mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
 import { mockNoSession } from './support/flash-slot-mocks';
 import { expectChipHitArea44 } from './support/hit-area';
-import { WALLET, mockCollectable, mockCouponHistory, mockWallet } from './support/voucher-mocks';
+import { WALLET, mockCollectable, mockCollectableMine, mockCouponHistory, mockWallet } from './support/voucher-mocks';
 
 /**
  * Zalo Mini App E2E — Mã giảm giá (/vouchers): ba tab Nhận mã / Mã của tôi / Đã dùng–hết hạn trên URL (?tab=), chip lọc theo tab đang xem,
@@ -31,6 +31,17 @@ test.describe('Mã giảm giá — khách đã đăng nhập', () => {
     await expect(panel.getByRole('button', { name: 'Lưu mã' })).toHaveCount(2);
     await expect(panel.getByRole('group', { name: 'Giảm 30.000đ' }).getByRole('button', { name: 'Dùng ngay' })).toBeVisible();
     await expect(page.getByText('Mỗi đơn dùng 1 mã')).toBeVisible();
+  });
+
+  test('mã đã nhận mà đã dùng hết lượt cá nhân (ví không còn): ghi Đã dùng và không có nút Lưu mã', async ({ page, api }) => {
+    mockCollectableMine(api, { claimed: ['FS99'], newCustomerOnly: [] });
+    await page.goto('/vouchers');
+    const panel = page.getByRole('tabpanel', { name: 'Nhận mã' });
+    await expect(panel.getByRole('group')).toHaveCount(3, { timeout: 15_000 });
+    // KM30K đã lưu (Dùng ngay), FS99 đã dùng (không nút), chỉ GIAM10 còn Lưu mã.
+    await expect(panel.getByRole('button', { name: 'Lưu mã' })).toHaveCount(1);
+    await expect(panel.getByRole('group', { name: /Miễn phí giao hàng/ }).getByRole('button')).toHaveCount(0);
+    await expect(panel.getByRole('group', { name: /Miễn phí giao hàng/ }).getByText('Đã dùng')).toBeVisible();
   });
 
   test('đổi tab ghi ?tab= lên URL, chip lọc tính theo tab đang xem và đặt lại khi đổi tab', async ({ page }) => {

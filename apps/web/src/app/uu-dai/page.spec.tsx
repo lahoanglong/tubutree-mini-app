@@ -41,6 +41,7 @@ vi.mock('@/lib/core-http', () => {
     '/config/public': () => state.config,
     '/campaigns': () => state.campaigns,
     '/coupons/collectable': () => state.collectable,
+    '/coupons/collectable/mine': () => ({ claimed: [], newCustomerOnly: [] }),
     '/flash-sales/active': () => state.flash,
   };
   return {

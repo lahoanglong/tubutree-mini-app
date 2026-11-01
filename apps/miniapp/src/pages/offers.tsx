@@ -79,7 +79,7 @@ export default function OffersPage() {
     </div>
   );
 
-  const coupons = couponsQ.data ?? [];
+  const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
   useMarkExpiringSeen(couponsQ.data);

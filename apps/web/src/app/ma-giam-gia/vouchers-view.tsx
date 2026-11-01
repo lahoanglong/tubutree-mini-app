@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { collectRows, filterVouchers, historyRows, mineRows, voucherFilters, VOUCHER_TABS, type VoucherFilter, type VoucherRow, type VoucherTab } from '@tubutree/app-core/commerce/voucher-center';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring } from '@tubutree/app-core/home-layout';
-import { collectableCouponsQuery, couponHistoryQuery, couponsQuery } from '@tubutree/app-core/queries/loyalty';
+import { collectableCouponsQuery, collectableMineQuery, couponHistoryQuery, couponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Chip, EmptyState, SegmentedTabs, Skeleton, VoucherTicket } from '@/components/mini';
 import { LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -41,15 +41,16 @@ export default function VouchersView() {
 
   const collectableQ = useQuery(collectableCouponsQuery(coreHttp));
   const walletQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
+  const mineQ = useQuery({ ...collectableMineQuery(coreHttp), enabled: authed });
   const historyQ = useQuery({ ...couponHistoryQuery(coreHttp), enabled: authed && tab === 'history' });
 
   const now = Date.now();
   const walletCodes = useMemo(() => new Set((walletQ.data ?? []).map((c) => c.code)), [walletQ.data]);
   const rows = useMemo<VoucherRow[]>(() => {
-    if (tab === 'claim') return collectRows(collectableQ.data ?? [], walletCodes, Date.now());
+    if (tab === 'claim') return collectRows(collectableQ.data ?? [], walletCodes, Date.now(), mineQ.data);
     if (tab === 'mine') return mineRows(walletQ.data ?? [], Date.now());
     return historyRows(historyQ.data ?? [], Date.now());
-  }, [tab, collectableQ.data, walletCodes, walletQ.data, historyQ.data]);
+  }, [tab, collectableQ.data, walletCodes, mineQ.data, walletQ.data, historyQ.data]);
 
   const filters = voucherFilters(rows.map((r) => r.view));
   const activeFilter = filters.some((f) => f.key === filter) ? filter : 'all';
@@ -83,7 +84,7 @@ export default function VouchersView() {
     body = phase === 'loading' ? skeleton : phase === 'unavailable' ? <SessionUnavailable /> : <LoginRequired message={homeCopy.offers.loginBody} returnTo={returnTo} />;
   } else if (source.isError && rows.length === 0) {
     body = <ErrorState variant="inline" title={fillCopy('coupon.loadError')} message={loadErrorText(source.error)} onRetry={() => void source.refetch()} />;
-  } else if (source.isLoading || (tab === 'claim' && (authed ? walletQ.isLoading : phase === 'loading'))) {
+  } else if (source.isLoading || (tab === 'claim' && (authed ? walletQ.isLoading || mineQ.isLoading : phase === 'loading'))) {
     body = skeleton;
   } else if (rows.length === 0) {
     body = <EmptyState variant="inline" art="leaf" heading={emptyHeading(tab)} body={tab === 'mine' ? fillCopy('coupon.emptyMineBody') : undefined} />;
@@ -93,7 +94,7 @@ export default function VouchersView() {
     body = (
       <div data-testid="voucher-grid" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {shown.map((row) => (
-          <VoucherTicket key={row.view.code} voucher={row.view} variant="ticket" primary={primaryFor(row)} expiring={isCouponExpiring(row.coupon, now)} />
+          <VoucherTicket key={row.view.code} voucher={row.view} variant="ticket" primary={primaryFor(row)} reason={row.reason} expiring={isCouponExpiring(row.coupon, now)} />
         ))}
       </div>
     );

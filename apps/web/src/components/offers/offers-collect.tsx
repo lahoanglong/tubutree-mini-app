@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { collectRows } from '@tubutree/app-core/commerce/voucher-center';
 import { COLLECT_HINT_MAX, isCouponExpiring, readCollectHint, writeCollectHint } from '@tubutree/app-core/home-layout';
-import { collectableCouponsQuery } from '@tubutree/app-core/queries/loyalty';
+import { collectableCouponsQuery, collectableMineQuery } from '@tubutree/app-core/queries/loyalty';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { SectionHeader, Skeleton, VoucherTicket } from '@/components/mini';
 import { ErrorState } from '@/components/ui/error-state';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
 import { browserStorage } from '@/lib/recently-viewed';
@@ -21,7 +22,8 @@ const TICKET_HEIGHT = 88;
 const GRID = 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3';
 
 /**
- * Nhận mã ở Ưu đãi (Q10): 3 mã đầu còn nhận được ngay; mã đã có trong ví hoặc hết lượt không chiếm chỗ (chúng nằm ở Mã của tôi và ở `/ma-giam-gia`).
+ * Nhận mã ở Ưu đãi (Q10): 3 mã đầu còn nhận được ngay; mã đã nhận (còn trong ví hay đã dùng hết), hết lượt hoặc chỉ dành khách mới mà khách đã có đơn
+ * không chiếm chỗ (chúng nằm ở Mã của tôi và ở `/ma-giam-gia`), nên thẻ ở đây luôn nhận được thật.
  * Khách chưa đăng nhập vẫn thấy mã, bấm "Lưu mã" đi tới đăng nhập. Không có mã nào thì ẩn khối; tải lỗi thì báo tại chỗ với "Thử lại", không kéo cả trang.
  * Lần mở trước có n thẻ thì lúc tải giữ chỗ đúng n ô (tiêu đề + ô thẻ), nên khối vào chỗ không đẩy các khối dưới. Web không có snackbar: kết quả nhận mã là một dòng ngay dưới tiêu đề.
  */
@@ -30,17 +32,22 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
   const router = useRouter();
   const { claim, pendingCode, notice } = useClaimCoupon('/uu-dai');
   const q = useQuery(collectableCouponsQuery(coreHttp));
+  const authed = useAuthPhase() === 'authenticated';
+  const mineQ = useQuery({ ...collectableMineQuery(coreHttp), enabled: authed });
   const [hinted] = useState(() => readCollectHint(browserStorage()));
 
-  const claimable = useMemo(() => collectRows(q.data ?? [], walletCodes, Date.now()).filter((r) => r.view.state === 'collectable'), [q.data, walletCodes]);
+  // Cả kho (kể cả mã đã lưu, đã dùng): nhãn "Tất cả n mã" phải bằng số thẻ `/ma-giam-gia` sẽ vẽ.
+  const all = useMemo(() => collectRows(q.data ?? [], walletCodes, Date.now(), mineQ.data), [q.data, walletCodes, mineQ.data]);
+  const claimable = useMemo(() => all.filter((r) => r.view.state === 'collectable'), [all]);
   const shown = claimable.slice(0, COLLECT_HINT_MAX);
-  const settled = q.isSuccess && !walletLoading;
+  const loadingMine = authed && mineQ.isLoading;
+  const settled = q.isSuccess && !walletLoading && !loadingMine;
   useEffect(() => {
     if (settled) writeCollectHint(browserStorage(), shown.length);
   }, [settled, shown.length]);
 
   const title = fillCopy('coupon.tabClaim');
-  if (q.isLoading || (walletLoading && q.isSuccess)) {
+  if (q.isLoading || ((walletLoading || loadingMine) && q.isSuccess)) {
     if (hinted === 0) return null;
     return (
       <div data-testid="offers-collect-loading" aria-hidden="true">
@@ -71,7 +78,7 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
         title={title}
         icon="ticket"
         action={{
-          label: fillCopy('coupon.allCount', { n: claimable.length }),
+          label: fillCopy('coupon.allCount', { n: all.length }),
           onPress: () => router.push('/ma-giam-gia'),
           spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.title') }),
         }}
