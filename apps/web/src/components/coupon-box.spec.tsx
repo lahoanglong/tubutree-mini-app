@@ -604,6 +604,30 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
   });
 });
 
+describe('CouponBox — "Mỗi đơn dùng 1 mã"', () => {
+  it('dạng inline: mở hộp chọn mã thì thấy dòng nhắc, nằm sau danh sách mã', async () => {
+    state.coupons = [c('WELCOME30')];
+    const box = await mount();
+    // Hộp chọn thu gọn mặc định: dòng nhắc nằm trong khung đang ẩn.
+    expect(box.querySelector<HTMLElement>('#coupon-panel')!.hidden).toBe(true);
+    click(box.querySelector('button[aria-expanded]'));
+    await flush(3);
+    expect(box.querySelector<HTMLElement>('#coupon-panel')!.hidden).toBe(false);
+    const hint = byText(box, 'p', 'Mỗi đơn dùng 1 mã')!;
+    expect(hint).not.toBeNull();
+    expect(box.querySelector('ul[aria-label="Mã giảm giá của bạn"]')!.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('dạng bảng trượt: mở bảng thấy dòng nhắc, kể cả khi ví chưa có mã nào', async () => {
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} />);
+    mounted.push(r);
+    await flush(6);
+    click(r.container.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(byText(document.querySelector<HTMLElement>('[role="dialog"]')!, 'p', 'Mỗi đơn dùng 1 mã')).not.toBeNull();
+  });
+});
+
 describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dính đáy)', () => {
   const mountSheet = async (currentCode: string | null = null) => {
     const r = render(<CouponBox sheet currentCode={currentCode} subtotal={300000} />);

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, TriangleAlert } from 'lucide-react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
@@ -142,7 +143,7 @@ export function VoucherSheet({
       open={visible}
       onClose={onClose}
       title="Chọn mã giảm giá"
-      description="Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá"
+      description={fillCopy('coupon.oneCodeHint')}
     >
       <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
         {/* Section 1: Nhập mã thủ công (Phía trên) */}
