@@ -95,6 +95,20 @@
     "components/shop-page/shop-categories-tab.tsx": 1,
     "components/shop-page/shop-pager.tsx": 7
    },
+   "shadow-var-color": {
+    "app/cong-dong/[id]/page.tsx": 1,
+    "app/gio-hang/page.tsx": 1,
+    "app/mua-chung/group-buy-view.tsx": 1,
+    "app/tai-khoan/page.tsx": 2,
+    "app/tai-khoan/yeu-thich/quick-add.tsx": 1,
+    "app/thanh-toan/bank-transfer-panel.tsx": 1,
+    "components/affiliate/storefront-owner.tsx": 1,
+    "components/affiliate/storefront-signup.tsx": 1,
+    "components/catalog/wishlist-heart.tsx": 1,
+    "components/coupon-box.tsx": 1,
+    "components/order-mobile/mobile-ui.tsx": 1,
+    "lib/phone-ui.ts": 1
+   },
    "strike-element": {
     "app/merchant/product-form.tsx": 1
    },

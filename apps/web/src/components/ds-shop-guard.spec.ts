@@ -141,10 +141,17 @@ describe('ds-shop-guard mở rộng (web): luật có baseline chỉ giảm', ()
     ['tile-custom', 'components/home/new-rail.tsx', 'export const A = () => <ProductThumb src="a" />;'],
     ['strike-element', 'app/ban-chay/x.tsx', 'export const A = () => <s>10.000đ</s>;'],
     ['primitive-color', 'app/uu-dai/x.tsx', 'export const A = () => <div className="bg-stone-100 max-md:text-forest-700" />;'],
+    ['shadow-var-color', 'components/mini/z.tsx', 'export const A = () => <div className="max-md:shadow-[var(--elevation-1)]" />;'],
     ['zmp-ui-import', 'components/y.tsx', "import { Button } from 'zmp-ui';"],
     ['open-snackbar', 'lib/z.ts', "openSnackbar({ text: 'x' });"],
   ])('fixture cố ý vi phạm: %s ở %s bị bắt', (ruleId, rel, text) => {
     expect(check(rel, text).some((e) => e.startsWith(`${ruleId}:`) && e.includes(rel))).toBe(true);
+  });
+
+  it('thẻ sản phẩm có bóng elevation-1 thật (không phải lớp shadow-[var()] bị đọc là màu)', () => {
+    const tile = FILES.find((f) => f.rel === 'components/mini/product-tile.tsx')!;
+    expect(tile.text).toContain('[box-shadow:var(--elevation-1)]');
+    expect(ruleCounts({ platform: 'web', files: [tile] })['shadow-var-color']).toEqual({});
   });
 
   it('chỗ hợp lệ không bị bắt: lớp ngữ nghĩa, [var(--color-*)], thành phần nền components/mini', () => {

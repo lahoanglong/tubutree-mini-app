@@ -85,6 +85,13 @@ export const GUARD_RULES = [
     why: 'trang mua sắm dùng lớp ngữ nghĩa hoặc [var(--color-*)], không dùng bậc primitive (bg-stone-100, text-forest-700)',
   },
   {
+    id: 'shadow-var-color',
+    platform: 'web',
+    scope: everywhere,
+    pattern: /(?<![\w-])shadow-\[var\(--[\w-]+\)\]/,
+    why: 'Tailwind đọc shadow-[var(--x)] là MÀU bóng nên phần tử không có bóng nào (đo ds-parity ở thẻ sản phẩm): dùng [box-shadow:var(--x)]',
+  },
+  {
     id: 'zmp-ui-import',
     platform: 'web',
     scope: everywhere,

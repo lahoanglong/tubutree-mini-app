@@ -242,6 +242,8 @@ describe('ds-shop-rules: mỗi luật có ca vi phạm cố ý và ca đối ch�
     ['web', 'strike-element', 'app/ban-chay/z.tsx', 'export const A = () => <s>10.000đ</s>;'],
     ['web', 'primitive-color', 'app/ban-chay/z.tsx', 'export const A = () => <div className="bg-stone-100 hover:text-forest-700" />;'],
     ['web', 'primitive-color', 'components/home/w.tsx', "export const A = { color: 'var(--clay-600)' };"],
+    ['web', 'shadow-var-color', 'components/mini/z.tsx', 'export const A = () => <div className="shadow-[var(--elevation-1)] md:shadow-card" />;'],
+    ['web', 'shadow-var-color', 'app/gio-hang/page.tsx', 'export const A = () => <div className="max-md:shadow-[var(--elevation-1)]" />;'],
     ['web', 'zmp-ui-import', 'lib/anything.tsx', "import { Button } from 'zmp-ui';"],
     ['web', 'open-snackbar', 'lib/anything.ts', 'openSnackbar({ text: "x" });'],
   ];
@@ -261,6 +263,7 @@ describe('ds-shop-rules: mỗi luật có ca vi phạm cố ý và ca đối ch�
     ['miniapp', 'components/ui/price-tag.tsx', 'export const A = () => <del>10.000đ</del>;'],
     ['miniapp', 'pages/x.tsx', '// <ProductImage /> var(--stone-100)\nexport const A = 1;'],
     ['web', 'components/mini/x.tsx', 'export const A = () => <div className="bg-stone-100" />;'],
+    ['web', 'components/mini/y.tsx', 'export const A = () => <div className="[box-shadow:var(--elevation-1)] max-md:[box-shadow:var(--elevation-3)] shadow-card" />;'],
     ['web', 'components/mini/price-tag.tsx', 'export const A = () => <del>10.000đ</del>;'],
     ['web', 'app/ban-chay/z.tsx', 'export const A = () => <div className="bg-[var(--color-bg-media)] text-fg-secondary" />;'],
     ['web', 'app/tai-khoan/page.tsx', 'export const A = () => <div className="bg-stone-100" />;'],

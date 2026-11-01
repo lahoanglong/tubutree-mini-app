@@ -109,7 +109,7 @@ describe('ProductTile: biến thể và khung', () => {
   it('khổ máy tính: viền, bóng thẻ và nâng nhẹ khi rê chuột chỉ từ md; điện thoại là thẻ phẳng elevation-1 (không bóng inline)', () => {
     const c = tile(viewOf(), 'grid');
     const cls = shell(c).className;
-    expect(cls).toContain('shadow-[var(--elevation-1)]');
+    expect(cls).toContain('[box-shadow:var(--elevation-1)]');
     expect(cls).toContain('md:border');
     expect(cls).toContain('md:shadow-card');
     expect(cls).toContain('md:hover:-translate-y-1');
