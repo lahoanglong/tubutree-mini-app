@@ -1,4 +1,4 @@
-import { describe, it, expect, expectTypeOf, vi, beforeEach } from 'vitest';
+import { describe, it, expect, expectTypeOf, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('../store/storefront-context', () => ({ useStorefrontContext: { getState: vi.fn(() => ({ kind: 'ctv', slug: null })) } }));
@@ -6,6 +6,7 @@ vi.mock('../store/storefront-context', () => ({ useStorefrontContext: { getState
 import { api } from './api';
 import { HttpError } from './http';
 import { useStorefrontContext } from '../store/storefront-context';
+import { armHomeFeed, disarmHomeFeed } from './home-feed';
 import {
   addToCart,
   cancelOrder,
@@ -17,6 +18,7 @@ import {
   fetchCatalog,
   fetchCategories,
   fetchForYou,
+  fetchHasAnyOrder,
   fetchOrders,
   fetchPurchasedItems,
   normalizeRepurchaseResponse,
@@ -61,6 +63,38 @@ describe('shop-api — buy-flow 4a', () => {
     expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 1 }, {});
     await addToCart('v1', 2, 'repurchase');
     expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 2, addSource: 'repurchase' }, {});
+  });
+
+  describe('fetchHasAnyOrder (quà khách mới của tài khoản khách)', () => {
+    afterEach(() => {
+      disarmHomeFeed();
+      get.mockReset();
+    });
+
+    it('Trang chủ đang mở và /home/me có hasOrders: lấy từ đó, không gọi /orders', async () => {
+      get.mockImplementation(async (path: string) => (path === '/home/me' ? { data: { hasOrders: true } } : { data: {} }));
+      armHomeFeed(() => 'u1:g');
+      expect(await fetchHasAnyOrder()).toBe(true);
+      expect(get.mock.calls.map((c) => c[0])).toEqual(['/home/me']);
+    });
+
+    it('hasOrders=false vẫn là câu trả lời (không lùi về /orders)', async () => {
+      get.mockImplementation(async (path: string) => (path === '/home/me' ? { data: { hasOrders: false } } : { data: {} }));
+      armHomeFeed(() => 'u1:g');
+      expect(await fetchHasAnyOrder()).toBe(false);
+      expect(get.mock.calls.map((c) => c[0])).toEqual(['/home/me']);
+    });
+
+    it('API cũ không có hasOrders, hay Trang chủ chưa mở: lùi về GET /orders trang đầu limit 1 như trước', async () => {
+      get.mockImplementation(async (path: string) => (path === '/home/me' ? { data: { forYou: [] } } : { data: { data: [{ code: 'T1' }], meta: { page: 1, limit: 1, total: 1 } } }));
+      armHomeFeed(() => 'u1:g');
+      expect(await fetchHasAnyOrder()).toBe(true);
+      expect(get).toHaveBeenLastCalledWith('/orders', { params: { page: 1, limit: 1 } });
+      disarmHomeFeed();
+      get.mockReset().mockResolvedValue({ data: { data: [], meta: { page: 1, limit: 1, total: 0 } } });
+      expect(await fetchHasAnyOrder()).toBe(false);
+      expect(get).toHaveBeenCalledWith('/orders', { params: { page: 1, limit: 1 } });
+    });
   });
 
   it('fetchOrders đơn đang giao trang đầu limit 1 (Trang chủ, chat): gọi thẳng /orders, không đợi khối /home/me', async () => {

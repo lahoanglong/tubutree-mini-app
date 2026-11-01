@@ -187,11 +187,13 @@ export class HomeService {
     const facts = this.userFactsOrNull(userId);
     const own = <T>(name: string, run: () => Promise<T>) => this.block(name, run, deadline);
     const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f), deadline));
-    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
+    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
       withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders, seed }) : this.catalog.getForYou(userId, { seed }))),
       own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
       withFacts('activeOrderCount', async (f) => (f ? { count: f.active } : this.orders.activeCount(userId))),
+      // Cùng câu đếm với số đơn đang xử lý: tài khoản khách của Mini App hỏi "đã có đơn nào chưa" ở Trang chủ mà khỏi gọi /orders. Câu đếm hỏng thì null để client tự hỏi.
+      withFacts('hasOrders', async (f) => (f ? f.hasOrders : null)),
       own('subscriptions', () => this.subscriptions.list(userId)),
       own('notifications', () => this.notifications.listForUser(userId)),
       // Đã có đơn chưa huỷ thì kết quả luôn là "không phải khách mới", dù tài khoản thật hay khách vãng lai: khỏi đọc khách và đơn thêm lần nữa.
@@ -199,7 +201,7 @@ export class HomeService {
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
       withFacts('wasteOpenRequestCount', async (f) => f?.wasteOpen ?? this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
     ]);
-    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
+    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
   }
 }
 
@@ -231,6 +233,8 @@ export interface HomeMe {
   flashUpcoming: Block<Awaited2<FlashSaleService['listUpcoming']>>;
   purchasedItems: Block<Awaited2<PurchasedItemsService['list']>>;
   activeOrderCount: Block<Awaited2<OrdersService['activeCount']>>;
+  /** Khách có đơn nào (mọi trạng thái) chưa; null khi câu đếm hỏng. API cũ không có trường này. */
+  hasOrders: Block<boolean>;
   subscriptions: Block<Awaited2<SubscriptionsService['list']>>;
   notifications: Block<Awaited2<NotificationsService['listForUser']>>;
   newCustomerOffer: Block<Awaited2<LoyaltyService['getNewCustomerOffer']>>;

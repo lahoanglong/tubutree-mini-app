@@ -681,6 +681,12 @@ export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit 
     })
     .then((r) => r.data);
 };
+/** Khách đã có đơn nào chưa (mọi trạng thái): lấy từ /home/me khi Trang chủ đang mở, không thì một request /orders như trước. */
+export const fetchHasAnyOrder = async (): Promise<boolean> => {
+  const fromFeed = await takeMeBlock('hasOrders');
+  if (typeof fromFeed === 'boolean') return fromFeed;
+  return (await fetchOrders({}, 1, 1)).meta.total > 0;
+};
 /** Một phần của dải "Việc cần làm": đơn mới nhất của bộ lọc và tổng đơn khớp (meta.total của GET /orders). */
 export interface HomeTodoPart {
   order: OrderView;

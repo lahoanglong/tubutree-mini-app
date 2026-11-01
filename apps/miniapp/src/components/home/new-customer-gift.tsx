@@ -6,7 +6,7 @@ import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
 import { getErrorMessage } from '../../services/api';
-import { fetchOrders, getPublicConfig, type PublicConfig } from '../../services/shop-api';
+import { fetchHasAnyOrder, getPublicConfig, type PublicConfig } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { isGuestUser } from '../../utils/guest-user';
 import { vi } from '../../i18n/vi';
@@ -90,10 +90,10 @@ export function NewCustomerGift() {
     retry: false,
   });
 
-  // Máy chủ không phân biệt được tài khoản khách đã có đơn (luôn trả isNewCustomer=false), nên hỏi thẳng danh sách đơn: đã có đơn thì
-  // không hứa quà chào mừng dành cho khách chưa mua.
-  const ordersQ = useQuery({ queryKey: ['orders', 'home-has-any', userId], queryFn: () => fetchOrders({}, 1, 1), enabled: guestAccount, retry: false });
-  const guestHasOrders = guestAccount && (ordersQ.data?.meta.total ?? 0) > 0;
+  // Máy chủ không phân biệt được tài khoản khách đã có đơn (luôn trả isNewCustomer=false), nên hỏi riêng đã có đơn chưa (khối của
+  // /home/me, lùi về danh sách đơn): đã có đơn thì không hứa quà chào mừng dành cho khách chưa mua.
+  const ordersQ = useQuery({ queryKey: ['orders', 'home-has-any', userId], queryFn: fetchHasAnyOrder, enabled: guestAccount, retry: false });
+  const guestHasOrders = guestAccount && ordersQ.data === true;
 
   // Chưa biết có phải khách mới: giữ chỗ bằng khung chờ cao bằng dải thật (cũng là chiều cao thẻ thành viên) để trang không nhảy.
   // Lỗi tải hay thiếu cấu hình thì thu lại: khối quảng bá phụ, không đáng một thẻ lỗi và không được hiện số suy đoán.

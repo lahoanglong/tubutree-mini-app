@@ -279,6 +279,15 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
 });
 
 describe('HomeService.getForUser', () => {
+  it('hasOrders lấy từ cùng câu đếm (mọi trạng thái, kể cả đã huỷ), không thêm câu SQL; câu đếm lỗi thì null để client tự hỏi /orders', async () => {
+    const { svc, prisma, factRows } = setup();
+    expect((await svc.getForUser('u1')).hasOrders).toBe(false);
+    prisma.$queryRaw.mockResolvedValue(factRows({ CANCELLED: 1 }));
+    expect((await svc.getForUser('u1')).hasOrders).toBe(true);
+    prisma.$queryRaw.mockRejectedValue(new Error('boom'));
+    expect((await svc.getForUser('u1')).hasOrders).toBeNull();
+  });
+
   it('khách chưa có đơn: không gọi kệ Mua lại, danh sách đơn đang giao; đầu ra như trước (rỗng)', async () => {
     const { svc, purchased, orders, catalog } = setup();
     const r = await svc.getForUser('u1', 10);
