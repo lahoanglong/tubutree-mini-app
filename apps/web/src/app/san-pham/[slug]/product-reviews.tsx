@@ -59,9 +59,12 @@ type FormTarget =
   | { kind: 'new'; orderId: string; orderCode: string | null }
   | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
+// Điểm trung bình đọc đúng số đang hiện ("4,4"); điểm một khách chấm là số nguyên nên giữ "5", không "5,0".
+const starsSpoken = (value: number): string => (Number.isInteger(value) ? String(value) : formatRating(value));
+
 export function Stars({ value, small = false }: { value: number; small?: boolean }) {
   return (
-    <span role="img" aria-label={`${value} trên 5 sao`} className="inline-flex whitespace-nowrap">
+    <span role="img" aria-label={`${starsSpoken(value)} trên 5 sao`} className="inline-flex whitespace-nowrap">
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}

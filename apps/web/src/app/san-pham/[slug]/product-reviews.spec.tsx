@@ -50,7 +50,7 @@ vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   },
 }));
 
-import { ProductReviews } from './product-reviews';
+import { ProductReviews, Stars } from './product-reviews';
 
 const review = (id: string, rating: number, extra: Record<string, unknown> = {}) => ({
   id,
@@ -628,5 +628,18 @@ describe('ProductReviews — lần dựng đầu khớp HTML máy chủ', () => 
     expect(html).not.toContain('(3)');
     expect(html).not.toContain('Nhận xét a');
     expect(html).toContain('Đang tải');
+  });
+});
+
+describe('Stars: tên đọc theo vi-VN (G3 MINOR)', () => {
+  it('điểm trung bình 4.4 đọc "4,4 trên 5 sao" như số đang hiện, không "4.4"', () => {
+    const r = render(<Stars value={4.4} />);
+    mounted.push(r);
+    expect(r.container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('4,4 trên 5 sao');
+  });
+  it('điểm một khách chấm là số nguyên: vẫn "5 trên 5 sao", không "5,0"', () => {
+    const r = render(<Stars value={5} small />);
+    mounted.push(r);
+    expect(r.container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('5 trên 5 sao');
   });
 });
