@@ -72,10 +72,10 @@ function alphaColumns(buf: Buffer): { w: number; cols: boolean[] } {
   for (let y = 0; y < h; y++) {
     const filter = raw[y * (stride + 1)];
     for (let x = 0; x < stride; x++) {
-      const left = x >= 4 ? img[y * stride + x - 4] : 0;
-      const up = y ? img[(y - 1) * stride + x] : 0;
-      const upLeft = x >= 4 && y ? img[(y - 1) * stride + x - 4] : 0;
-      let v = raw[y * (stride + 1) + 1 + x];
+      const left = x >= 4 ? (img[y * stride + x - 4] ?? 0) : 0;
+      const up = y ? (img[(y - 1) * stride + x] ?? 0) : 0;
+      const upLeft = x >= 4 && y ? (img[(y - 1) * stride + x - 4] ?? 0) : 0;
+      let v = raw[y * (stride + 1) + 1 + x] ?? 0;
       if (filter === 1) v += left;
       else if (filter === 2) v += up;
       else if (filter === 3) v += (left + up) >> 1;
@@ -87,6 +87,6 @@ function alphaColumns(buf: Buffer): { w: number; cols: boolean[] } {
       img[y * stride + x] = v & 255;
     }
   }
-  const cols = Array.from({ length: w }, (_, x) => Array.from({ length: h }, (_, y) => img[y * stride + x * 4 + 3]).some((a) => a > 0));
+  const cols = Array.from({ length: w }, (_, x) => Array.from({ length: h }, (_, y) => img[y * stride + x * 4 + 3] ?? 0).some((a) => a > 0));
   return { w, cols };
 }
