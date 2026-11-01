@@ -3,7 +3,7 @@ import type { BestSellersBasis } from '@tubutree/app-core/api/browse';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { bestSellersBasisCopy } from '@tubutree/app-core/browse/best-sellers';
 import { shelf } from '@tubutree/app-core/merch/shelves';
-import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
+import { ranksAreSequential, seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { homeBestSellerQuery } from './home-best-seller-query';
 import { ProductRail } from '../ui/product-rail';
@@ -17,7 +17,7 @@ const SKELETON_COUNT = 5;
 export interface BestSellerRailProps {
   /** Đã qua `composeHomeShelves` (bỏ món trùng kệ trên, 3–10 món); dưới 3 món thì rỗng và khối ẩn. */
   items: ProductCardData[];
-  /** Hạng thật của từng món (cùng chỉ số với `items`) khi kệ đã bỏ món trùng kệ trên; thiếu thì đánh #1..#n theo thứ tự. */
+  /** Hạng thật của từng món (cùng chỉ số với `items`) khi kệ đã bỏ món trùng kệ trên; thiếu thì đánh #1..#n theo thứ tự. Hạng không liền từ 1 thì thẻ chỉ ghi "Bán chạy", không ghi số hụt. */
   ranks?: readonly number[];
   /** Thước đo xếp hạng; mặc định 30 ngày. `total` khi API cũ buộc kệ lùi về tổng lượt bán. */
   basis?: BestSellersBasis;
@@ -42,7 +42,7 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
       <div style={{ padding: '0 16px' }}>
         <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
       </div>
-      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} items={items} listSource="home_best_seller" loading={loading} skeletonCount={SKELETON_COUNT} />
+      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={ranks !== undefined && !ranksAreSequential(ranks)} items={items} listSource="home_best_seller" loading={loading} skeletonCount={SKELETON_COUNT} />
     </section>
   );
 }

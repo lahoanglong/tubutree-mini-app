@@ -219,6 +219,14 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect(part(c, 'image-badge')!.style.bottom).toBe('8px');
   });
 
+  it('rankPlain (hạng hụt vì kệ trên chiếm): ruy-băng ghi "Bán chạy" không số, màu hạng thường kể cả hạng 1, chữ đọc không nói hạng (P2 #4)', () => {
+    const c = tile(viewOf({}, 'rank', { rank: 1 }), 'rank', { rankPlain: true });
+    expect(part(c, 'rank')!.textContent).toBe('Bán chạy');
+    expect(part(c, 'rank')!.style.background).toBe('var(--color-rank-n-bg)');
+    expect(described(c)).toMatch(/^Bán chạy/);
+    expect(described(c)).not.toContain('Hạng');
+  });
+
   it('hạng top 3 dùng màu hạng riêng, từ 4 dùng màu hạng thường, thiếu rank thì không ruy-băng', () => {
     expect(part(tile(viewOf({}, 'rank', { rank: 1 }), 'rank'), 'rank')!.style.background).toBe('var(--color-rank-1-bg)');
     expect(part(tile(viewOf({}, 'rank', { rank: 4 }), 'rank'), 'rank')!.style.background).toBe('var(--color-rank-n-bg)');

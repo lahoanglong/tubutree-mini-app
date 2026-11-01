@@ -30,6 +30,14 @@ export function purchasedShelfEntry<T extends { slug: string; variationId: strin
 }
 
 /**
+ * Hạng thật liền từ 1 (1..k)? Kệ Bán chạy nhất chống trùng nên có thể mất hạng 1 hay hụt giữa dãy (hạng đang ở Giờ vàng, Mua lại, combo): khi đó thẻ
+ * không ghi số (chỉ "Bán chạy") để khách không tưởng kệ lỗi; hạng liền thì giữ số.
+ */
+export function ranksAreSequential(ranks: readonly number[]): boolean {
+  return ranks.every((r, i) => r === i + 1);
+}
+
+/**
  * Combo xếp theo id bộ nhưng chiếm cả slug các món của nó: Bán chạy nhất và lưới Gợi ý hôm nay bỏ món đã nằm trong combo. Combo chỉ chiếm xuống dưới,
  * không bị Giờ vàng hay Mua lại loại (xem `applyShelfDedupe`).
  */

@@ -224,6 +224,16 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect((container.querySelector('[data-ds-part="image-badge"]') as HTMLElement).style.bottom).toBe('8px');
   });
 
+  it('rankPlain (hạng hụt vì kệ trên chiếm): ruy-băng ghi "Bán chạy" không số, màu hạng thường kể cả hạng 1, chữ đọc không nói hạng (P2 #4)', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" rankPlain />);
+    const ribbon = container.querySelector('[data-ds-part="rank"]') as HTMLElement;
+    expect(ribbon).toHaveTextContent('Bán chạy');
+    expect(ribbon.textContent).not.toContain('#');
+    expect(ribbon.style.background).toBe('var(--color-rank-n-bg)');
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/^Bán chạy/);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).not.toHaveAccessibleDescription(/Hạng/);
+  });
+
   it('hạng top 3 dùng màu hạng riêng, từ 4 dùng màu hạng thường, thiếu rank thì không ruy-băng', () => {
     const one = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" />);
     expect((one.container.querySelector('[data-ds-part="rank"]') as HTMLElement).style.background).toBe('var(--color-rank-1-bg)');

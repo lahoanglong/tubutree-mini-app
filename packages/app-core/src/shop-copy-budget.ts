@@ -54,6 +54,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'rank.tabAll': 12,
   'rank.tabsLabel': 20,
   'rank.spoken': null,
+  'rank.plain': 10,
   'rank.seeAll': 10,
   'rank.emptyTitle': null,
   'rank.emptyCta': 27,

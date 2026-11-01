@@ -118,7 +118,7 @@ test.describe('Trang chủ: Combo tiết kiệm', () => {
     await expect(best.locator('[data-ds-part="rank"]').first()).toHaveText('#1');
   });
 
-  test('có 2 combo chứa ba món bán chạy nhất: kệ Bán chạy nhất bỏ ba món đó, thẻ còn lại giữ hạng thật (#4...)', async ({ page, api }) => {
+  test('có 2 combo chứa ba món bán chạy nhất: kệ Bán chạy nhất bỏ ba món đó, hạng hụt nên thẻ chỉ ghi "Bán chạy" không số (P2 #4)', async ({ page, api }) => {
     mockHomeCombos(api, homeCombos());
     await page.goto('/');
     const rail = page.getByRole('region', { name: 'Combo tiết kiệm', exact: true });
@@ -126,8 +126,8 @@ test.describe('Trang chủ: Combo tiết kiệm', () => {
     const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
     await expect(best).toBeVisible();
     for (const x of [XA_PHONG, BINH_SUA, NRC]) await expect(best.getByText(x.name)).toHaveCount(0);
-    // Hạng thật đi theo món: KEM (bán thứ 4) mở đầu kệ với #4, không đánh lại từ #1.
-    await expect(best.locator('[data-ds-part="rank"]').first()).toHaveText('#4');
+    // KEM (bán thứ 4) mở đầu kệ: hạng 1..3 đang ở combo nên dãy hạng không liền từ 1, thẻ không ghi số để khách không tưởng lỗi.
+    await expect(best.locator('[data-ds-part="rank"]').first()).toHaveText('Bán chạy');
   });
 
   test('chỉ 1 combo (dưới mức tối thiểu của kệ): không hiện kệ, Bán chạy nhất vẫn có', async ({ page, api }) => {

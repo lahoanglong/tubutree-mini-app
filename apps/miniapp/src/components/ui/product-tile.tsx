@@ -44,6 +44,8 @@ export interface ProductTileProps {
   action?: ReactNode;
   /** Chưa biết giá (đang tải): không in giá, vẫn giữ chỗ. */
   hidePrice?: boolean;
+  /** Hạng hụt vì kệ trên đã chiếm món (Bán chạy nhất đã chống trùng): ruy-băng ghi "Bán chạy" thay "#n" và dùng màu hạng thường, để khách không tưởng kệ lỗi. */
+  rankPlain?: boolean;
   /** State điều hướng (listSource, variationId của suất Giờ vàng, phân loại ghim). */
   navState?: Record<string, unknown>;
   onOpen?: () => void;
@@ -65,8 +67,8 @@ const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
 const NAME_LINES = (variant: CardVariant): 1 | 2 => (variant === 'flash' ? 1 : 2);
 const FIXED_LINE = (px: number): CSSProperties => ({ lineHeight: `${px}px` });
 
-function rankBackground(rank: number): { background: string; color: string } {
-  if (rank >= 1 && rank <= 3) return { background: `var(--color-rank-${rank}-bg)`, color: 'var(--color-rank-fg)' };
+function rankBackground(rank: number, plain: boolean): { background: string; color: string } {
+  if (!plain && rank >= 1 && rank <= 3) return { background: `var(--color-rank-${rank}-bg)`, color: 'var(--color-rank-fg)' };
   return { background: 'var(--color-rank-n-bg)', color: 'var(--color-rank-n-fg)' };
 }
 
@@ -93,6 +95,7 @@ export function ProductTile({
   dimMedia,
   action,
   hidePrice,
+  rankPlain = false,
   navState,
   onOpen,
 }: ProductTileProps) {
@@ -103,7 +106,7 @@ export function ProductTile({
   const hasBrand = view.brandLine !== null && (variant === 'grid' || variant === 'rail-md');
   const caption = CAPTION_NAME.has(variant);
   const hasMetaRow = variant === 'grid' || variant === 'rail-md' || variant === 'rank';
-  const rankSpoken = view.rank !== null && variant === 'rank' ? fillTileCopy('rank.spoken', { n: view.rank }) : null;
+  const rankSpoken = view.rank !== null && variant === 'rank' ? (rankPlain ? fillTileCopy('rank.plain') : fillTileCopy('rank.spoken', { n: view.rank })) : null;
   const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price]
     .filter((x): x is string => Boolean(x))
     .join(', ');
@@ -200,10 +203,10 @@ export function ProductTile({
                 fontSize: 'var(--type-label-size)',
                 fontWeight: 700,
                 fontVariantNumeric: 'tabular-nums',
-                ...rankBackground(view.rank),
+                ...rankBackground(view.rank, rankPlain),
               }}
             >
-              #{view.rank}
+              {rankPlain ? fillTileCopy('rank.plain') : `#${view.rank}`}
             </span>
           )}
           {imageBadge && !isLine && (

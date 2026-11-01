@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
+import { comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
 const ids = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => e(`${prefix}${i}`, `${prefix}${i}`));
@@ -160,6 +160,20 @@ describe('Mua lại chống trùng Giờ vàng theo phân loại (P2 #3)', () =>
   it('hai phân loại của một sản phẩm đều hiện ở Mua lại (không gộp theo slug)', () => {
     const r = composeHomeShelves({ ...none, purchased: [purchasedShelfEntry(boughtOf('can', 'v1l')), purchasedShelfEntry(boughtOf('can', 'v5l'))] });
     expect(r.purchased.map((p) => p.variationId)).toEqual(['v1l', 'v5l']);
+  });
+});
+
+describe('ranksAreSequential (P2 #4)', () => {
+  it('hạng liền từ 1 (1..k) giữ số; rỗng cũng tính là liền', () => {
+    expect(ranksAreSequential([1, 2, 3])).toBe(true);
+    expect(ranksAreSequential([1])).toBe(true);
+    expect(ranksAreSequential([])).toBe(true);
+  });
+
+  it('có hạng bị kệ trên chiếm (hụt giữa dãy hoặc mất hạng 1) thì không liền', () => {
+    expect(ranksAreSequential([1, 2, 4, 5])).toBe(false);
+    expect(ranksAreSequential([2, 3, 4])).toBe(false);
+    expect(ranksAreSequential([2])).toBe(false);
   });
 });
 
