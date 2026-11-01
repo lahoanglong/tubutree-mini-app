@@ -154,7 +154,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                       <button
                         type="button"
                         onClick={() => openTab('story')}
-                        className="tubu-press inline-flex min-h-11 items-center gap-0.5 text-[length:var(--type-label-size)] font-semibold text-[color:var(--color-text-brand)]"
+                        className="tubu-press tubu-hit-44 inline-flex items-center gap-0.5 text-[length:var(--type-label-size)] font-semibold text-[color:var(--color-text-brand)]"
                       >
                         {fillCopy('shop.readStory')}
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />

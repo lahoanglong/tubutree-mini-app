@@ -245,6 +245,14 @@ describe('trang thương hiệu — tab Câu chuyện', () => {
     expect(imgs[0]!.getAttribute('alt')).toBe('Fuwa3e, ảnh 1');
   });
 
+  it('nút "Đọc câu chuyện" nới vùng chạm bằng tubu-hit-44 chứ không dùng min-h-11 chiếm chỗ thật (G6 #24)', async () => {
+    mocks.brand = { ...BRAND, ...WITH_STORY };
+    const c = await live();
+    const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đọc câu chuyện'))!;
+    expect(btn.className).toContain('tubu-hit-44');
+    expect(btn.className).not.toContain('min-h-11');
+  });
+
   it('chưa có ghim trên bản đồ thì không hiện liên kết "Xem trên bản đồ"', async () => {
     mocks.brand = { ...BRAND, origin: 'Lâm Đồng, Việt Nam' };
     const c = await live();
