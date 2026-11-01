@@ -1,5 +1,7 @@
 import { test, expect } from './support/mock-api';
 import { SHOP_SLUG, SHOP_TITLE, mockShopPage } from './support/shop-page-mocks';
+import { mockBuilder } from './support/builder-mocks';
+import type { Page } from '@playwright/test';
 
 /**
  * Màn dựng gian hàng của CTV (`/storefront`) ở Mini App, 375px, và dải tab dính của trang gian hàng công khai mà màn dựng xem trước.
@@ -59,4 +61,88 @@ test.describe('Dải tab của trang gian hàng dính ngay dưới thanh nút l�
       expect(overlap).toBeLessThanOrEqual(10);
     });
   }
+});
+
+const openSection = async (page: Page, title: string) => {
+  await page.locator('[data-testid="section-card"] button').filter({ hasText: title }).first().click();
+  await expect(page.getByTestId('section-detail')).toBeVisible();
+};
+
+test.describe('Mini App: màn dựng gian hàng 375px', () => {
+  test.beforeEach(({ api }) => mockBuilder(api));
+
+  test('màn chính: ba thẻ khối, không ô tên ở cuối, không "Đưa lên", không tràn ngang, dải Hành trình 54–60px, một nút chính', async ({ page }) => {
+    await page.goto('/storefront');
+    await expect(page.getByTestId('section-card')).toHaveCount(3, { timeout: 15_000 });
+    await expect(page.getByLabel('Tên bộ sưu tập')).toHaveCount(0);
+    await expect(page.getByText('Đưa lên')).toHaveCount(0);
+    await expect(page.getByText('Đưa xuống')).toHaveCount(0);
+
+    const widths = await page.evaluate(() => [document.documentElement.scrollWidth, document.body.scrollWidth, document.querySelector('.zaui-page')?.scrollWidth ?? 0]);
+    for (const w of widths) expect(w).toBeLessThanOrEqual(375);
+
+    const strip = (await page.locator('button[data-reward]').boundingBox())!;
+    expect(strip.height).toBeGreaterThanOrEqual(54);
+    expect(strip.height).toBeLessThanOrEqual(60);
+
+    // Chỉ một nút chính trên màn: nút đăng ở thanh dính. Thêm khối, Sửa hồ sơ, Cài đặt, Xem trước đều là nút phụ.
+    await expect(page.getByRole('button', { name: 'Đăng lại' })).toBeVisible();
+    await expect(page.locator('button.zaui-btn-primary:visible')).toHaveCount(1);
+  });
+
+  test('chế độ Sắp xếp: mọi nút ↑↓ cao và rộng >= 44px; ↑ của món đầu là aria-disabled, vẫn giữ focus và không gọi API', async ({ page, api }) => {
+    await page.goto('/storefront');
+    await openSection(page, 'Bếp xanh');
+    await page.getByRole('button', { name: 'Sắp xếp', exact: true }).click();
+    const arrows = page.locator('button[data-move-id]');
+    await expect(arrows).toHaveCount(24);
+    for (const box of await Promise.all((await arrows.all()).map((b) => b.boundingBox()))) {
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    const first = page.getByRole('button', { name: 'Đưa Món 01 lên' });
+    await expect(first).toHaveAttribute('aria-disabled', 'true');
+    await first.focus();
+    await page.keyboard.press('Enter');
+    await expect(first).toBeFocused();
+    await expect(page.getByTestId('notify-status')).toHaveText('Món 01 đã ở đầu danh sách');
+    expect(api.callsTo('POST', '/storefront/me/collections/:id/items/reorder')).toHaveLength(0);
+  });
+
+  test('khối Lưới: chọn "Danh sách" chỉ gửi {layout:"STACK"}, xem trước đổi từ lưới sang hàng dòng', async ({ page, api }) => {
+    await page.goto('/storefront');
+    await openSection(page, 'Bếp xanh');
+    const frame = page.getByTestId('shop-section-preview');
+    await expect(frame.getByTestId('shop-grid')).toBeVisible();
+    await page.getByRole('radio', { name: /^Danh sách/ }).click();
+    await expect(frame.getByTestId('shop-line')).toBeVisible();
+    await expect(frame.getByTestId('shop-grid')).toHaveCount(0);
+    const patch = api.callsTo('PATCH', '/storefront/me/collections/:id');
+    expect(patch).toHaveLength(1);
+    expect(patch[0]!.path).toBe('/storefront/me/collections/c-grid');
+    expect(patch[0]!.body).toEqual({ layout: 'STACK' });
+  });
+
+  test('khối Kệ ngang: xem trước thẳng hàng như tab Shop thật (thẻ đầu cách mép khung 12px, tiêu đề 16px)', async ({ page }) => {
+    await page.goto('/storefront');
+    await openSection(page, 'Chăm sóc nhà cửa');
+    const frame = page.getByTestId('shop-section-preview');
+    const f = (await frame.boundingBox())!;
+    const tile = (await frame.locator('[data-ds="product-tile"]').first().boundingBox())!;
+    const title = (await frame.locator('h2').first().boundingBox())!;
+    expect(Math.abs(tile.x - f.x - 12)).toBeLessThanOrEqual(1);
+    expect(Math.abs(title.x - f.x - 16)).toBeLessThanOrEqual(1);
+  });
+
+  test('thêm khối Combo 15%: POST gửi kind COMBO và comboDiscountPct 15', async ({ page, api }) => {
+    await page.goto('/storefront');
+    await page.getByRole('button', { name: 'Thêm khối', exact: true }).click();
+    await page.getByRole('radio', { name: /^Combo/ }).click();
+    await page.getByLabel('Giảm khi mua cả bộ').fill('15');
+    await page.getByRole('button', { name: 'Tạo và thêm món' }).click();
+    await expect(page.getByTestId('section-detail')).toBeVisible();
+    const post = api.callsTo('POST', '/storefront/me/collections');
+    expect(post).toHaveLength(1);
+    expect(post[0]!.body).toMatchObject({ kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 15 });
+  });
 });
