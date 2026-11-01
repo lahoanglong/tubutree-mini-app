@@ -1611,6 +1611,16 @@ describe('admin/page — tab Flash Sale', () => {
     expect(container.textContent).toContain('Chưa có sản phẩm nào trong đợt này.');
   });
 
+  it('tab Giờ vàng có nút tạo khung mặc định và ô Thứ tự cho từng món (Q14), nút Lưu khoá khi chưa đổi', async () => {
+    mocks.flashSales = [SALE];
+    const { container } = await openSales();
+    expect(btn(container, 'Tạo khung giờ 2 ngày tới').disabled).toBe(false);
+    const order = container.querySelector<HTMLInputElement>('input[aria-label^="Thứ tự của"]');
+    expect(order?.value).toBe('0');
+    expect(order?.className).toContain('min-h-[44px]');
+    expect((container.querySelector('button[aria-label^="Lưu thứ tự của"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('sản phẩm trong đợt: dòng ngắt chữ được, Xoá là nút chữ danger 44px, thêm SP khoá tới khi chọn biến thể', async () => {
     mocks.flashSales = [SALE];
     const { container } = await openSales();
