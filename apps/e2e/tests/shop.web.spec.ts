@@ -616,13 +616,18 @@ test.describe('Web: nhãn hàng', () => {
     api.post(`/brand/${slug}/follow`, { following: true, followerCount: 4 });
     api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 3 });
     await page.goto(`/brand/${slug}`);
+    // Nút có sẵn trong HTML từ server nhưng bấm trước khi trang hydrate thì click mất (không có lời gọi POST). `aria-pressed` chỉ client đặt,
+    // và chỉ khi phiên đã đăng nhập: chờ nó là chờ trang đã hydrate xong.
+    const follow = page.getByRole('button', { name: 'Theo dõi', pressed: false });
+    await expect(follow).toBeVisible();
     // waitForCall chỉ tính lời gọi mới: đăng ký trước khi bấm, không thì mock trả ngay và lời gọi đã qua.
     const followed = api.waitForCall('POST', `/brand/${slug}/follow`);
-    await page.getByRole('button', { name: 'Theo dõi' }).click();
+    await follow.click();
     await followed;
-    await expect(page.getByRole('button', { name: 'Đang theo dõi' })).toBeVisible();
+    const following = page.getByRole('button', { name: 'Đang theo dõi', pressed: true });
+    await expect(following).toBeVisible();
     const unfollowed = api.waitForCall('DELETE', `/brand/${slug}/follow`);
-    await page.getByRole('button', { name: 'Đang theo dõi' }).click();
+    await following.click();
     await unfollowed;
     await expect(page.getByRole('button', { name: 'Theo dõi' })).toBeVisible();
   });
