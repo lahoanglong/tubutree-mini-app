@@ -93,6 +93,45 @@ describe('/gio-hang — thanh dính đáy', () => {
     expect(link.parentElement).toBe(total.parentElement!.parentElement);
   });
 
+  // P2 #12: "Tiết kiệm" gồm cả giảm combo (đúng số dòng "Giảm giá combo") và dùng MỘT màu deal như PDP.
+  describe('"Tiết kiệm" cộng cả giảm combo, một màu deal', () => {
+    const savings = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[data-testid="cart-saving"]'));
+
+    it('vừa giá gạch (34.000đ) vừa combo (5.000đ): khung tóm tắt và thanh dính cùng ghi 39.000đ, tổng phải trả không đổi', async () => {
+      state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 2, total: 66000 })], { subtotal: 66000, comboDiscount: 5000 });
+      const c = await mount();
+      expect(savings(c).length).toBeGreaterThanOrEqual(2);
+      expect(savings(c).map((e) => e.textContent)).toEqual(savings(c).map(() => 'Tiết kiệm 39.000đ'));
+      expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm)61.000đ');
+    });
+
+    it('chỉ có combo (không dòng nào gạch giá): vẫn ghi Tiết kiệm đúng số combo', async () => {
+      state.cart = cartOf([line({})], { comboDiscount: 5000 });
+      const c = await mount();
+      expect(savings(c).map((e) => e.textContent)).toContain('Tiết kiệm 5.000đ');
+    });
+
+    it('chọn một phần giỏ khi chưa có giá phần chọn: không mượn số combo của cả giỏ', async () => {
+      state.cart = cartOf(
+        [line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 }), line({ id: 'i2', variationId: 'v2', productName: 'Xà bông', unitPrice: 100000, quantity: 1, total: 100000 })],
+        { subtotal: 133000, comboDiscount: 15000 },
+      );
+      const c = await mount();
+      click(c.querySelector('input[aria-label="Chọn Xà bông để thanh toán"]'));
+      await flush(3);
+      expect(savings(c).map((e) => e.textContent)).toEqual(savings(c).map(() => 'Tiết kiệm 17.000đ'));
+    });
+
+    it('màu deal (--color-text-price-deal) như dòng "Tiết kiệm" của PDP, không còn xanh success', async () => {
+      state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
+      const c = await mount();
+      for (const el of savings(c)) {
+        expect(el.className).toContain('text-[color:var(--color-text-price-deal)]');
+        expect(el.className).not.toContain('text-success-fg');
+      }
+    });
+  });
+
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {
     const c = await mount();
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;

@@ -3,6 +3,7 @@ import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
+import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
   getCart,
@@ -340,7 +341,7 @@ export default function CartPage() {
           tubuOnlyFreeship={hasMerchant}
           tubuSelectedSubtotal={tubuSubtotal(buyableSelected)}
           onCheckout={goCheckout}
-          saving={cartSaving(buyableSelected)}
+          savingLines={buyableSelected}
           coupon={
             <CouponRow
               summary={summary}
@@ -692,7 +693,7 @@ function StickySummary({
   tubuOnlyFreeship,
   tubuSelectedSubtotal,
   onCheckout,
-  saving,
+  savingLines,
   coupon,
 }: {
   summary: CartSummary;
@@ -708,8 +709,8 @@ function StickySummary({
   tubuOnlyFreeship: boolean;
   tubuSelectedSubtotal: number;
   onCheckout: () => void;
-  /** Tiền khách tiết kiệm nhờ giá giảm của các dòng đang chọn (chỉ hiển thị, tiền thật do máy chủ tính). */
-  saving: number;
+  /** Các dòng mua được đang chọn: "Tiết kiệm" = giá gạch của chúng + giảm combo đang hiện (chỉ hiển thị, tiền thật do máy chủ tính). */
+  savingLines: readonly CartLine[];
   /** Hàng mã giảm giá: dính cùng tổng tiền để chọn mã xong là bấm Thanh toán luôn. */
   coupon: ReactNode;
 }) {
@@ -728,6 +729,8 @@ function StickySummary({
   const discount = shown?.discount ?? 0;
   const comboDiscount = shown?.comboDiscount ?? 0;
   const tierDiscount = shown?.tierDiscount ?? 0;
+  // Cùng số `comboDiscount` đang hiện ở dòng "Giảm giá combo" (0 khi chưa có giá phần chọn). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
+  const saving = cartSaving(savingLines, comboDiscount);
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const subsetNotice = !allSelected && priced?.couponCode ? priced.couponNotice : null;
@@ -810,7 +813,7 @@ function StickySummary({
               là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
               giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn, nhưng chỉ khi thật sự có giảm. */}
           <div style={{ fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
-            {comboDiscount + discount + tierDiscount > 0 ? vi.cart.subtotalAfterDiscount : vi.cart.subtotal}
+            {cartTotalLabel(comboDiscount + discount + tierDiscount)}
           </div>
           <div
             data-testid="cart-total-value"
@@ -819,7 +822,8 @@ function StickySummary({
             {formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
           </div>
           {saving > 0 && (
-            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-success)', display: 'block', whiteSpace: 'nowrap' }}>
+            // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md).
+            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block', whiteSpace: 'nowrap' }}>
               {fillCopy('cart.saving', { x: formatVnd(saving) })}
             </Text>
           )}
