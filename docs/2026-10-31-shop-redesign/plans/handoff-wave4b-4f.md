@@ -1,8 +1,8 @@
-# Bàn giao đợt 4b–4f (P10 trình dựng gian hàng, P14 mã giảm giá, P16 danh mục admin, F6 sửa việc mở, P17a cơ chế và tài liệu, P15 combo và mua kèm, F7a và F7b sửa lỗi nhỏ, F8 sửa nốt P15)
+# Bàn giao đợt 4b–5b (P10 trình dựng gian hàng, P14 mã giảm giá, P16 danh mục admin, F6 sửa việc mở, P17a/P17b cơ chế, tài liệu và bài kiểm chặn, P15 combo và mua kèm, F7a và F7b sửa lỗi nhỏ, F8 và F8b sửa nốt P15, F9 combo ở Trang chủ, F10a–F10d sửa P1 của bước chốt)
 
-Nhánh tích hợp `shop/2026-10-31-redesign`, HEAD lúc viết `abe9b159b` ("Merge shop/F8-bundles-followups vào nhánh tích hợp (đợt 4e)"). Nội dung ở đây là phần gộp thêm sau đợt 4a (xem `handoff-wave4a.md`). Chưa deploy gì từ các gói này. Deploy là việc chủ quyết, agent không tự deploy.
+Nhánh tích hợp `shop/2026-10-31-redesign`, PR #109 vào main. Nội dung ở đây là phần gộp thêm sau đợt 4a (xem `handoff-wave4a.md`). Chưa deploy gì từ các gói này. Deploy là việc chủ quyết, agent không tự deploy.
 
-Thứ tự gộp theo PROGRESS: P16, F6, P17a, main 7b77ee686 (#97, #102), P10, P14 (cổng kiểm đợt 4b e3229fe39, 0 FAIL, e2e Mini 318 xanh). Sau đó F7a, F7b, P15 và F8. Review: P16 và F6 APPROVE lượt 1; P10, P14 lượt 2; P17a lượt 3. P14 và P15 là đường tiền nên review đủ hai lượt. P15 và F8 còn thêm các vòng sửa theo reviewer Opus (ghi ở cuối `P15-bundles.md` và `F8-bundles-followups.md`).
+Thứ tự gộp theo PROGRESS: P16, F6, P17a, main 7b77ee686 (#97, #102), P10, P14 (cổng kiểm đợt 4b e3229fe39, 0 FAIL, e2e Mini 318 xanh). Sau đó F7a, F7b, P15, F8, main 2765aea5b (#111), F8b, main f7b7a09ef (#112), bước chốt chụp ảnh và review hình (`review/final-critique.md`), F9, F10a, F10b, F10c, F10d, sửa P1 số 2 của phiên chính, P17b. Review: P16 và F6 APPROVE lượt 1; P10, P14 lượt 2; P17a lượt 3. P14, P15, F8b và F10b là đường tiền nên review đủ hai lượt. P15 và F8 còn thêm các vòng sửa theo reviewer Opus (ghi ở cuối `P15-bundles.md` và `F8-bundles-followups.md`). F9, F10a–F10d APPROVE ở lượt 2; P17b qua 4 vòng (vòng 4 do phiên chính sửa, xem cuối `P17b-ratchets.md`).
 
 ## 1. Đã có gì
 
@@ -59,11 +59,36 @@ Thứ tự gộp theo PROGRESS: P16, F6, P17a, main 7b77ee686 (#97, #102), P10, 
 - Chữ "Tạm hết hàng" khác "Đã kết thúc". Mini giữ khối như web. Form admin báo đúng khoản giảm khi sửa giá kèm. Lời từ chối trần % nói đúng cơ sở ("so với giá lúc đặt giá kèm").
 - Cuối đợt có thêm hai sửa sau review của F8: trần nhân viên của bộ ADDON tính trên giá tham chiếu giữ lại (không theo giá sale đang thấp hơn), và sửa bộ ADDON không đặt lại giá tham chiếu theo giá hiện tại.
 
+**F8b, trần tiền nhân viên lúc tính tiền cho combo.** Chủ duyệt "sửa trước khi merge".
+- Bất biến: tổng khoản giảm mỗi đơn nhờ các bộ do NHÂN VIÊN tạo không vượt `coupon.staff_max_amount_vnd` ở mọi đường (giỏ, báo giá, xem trước mã, đặt đơn), dù nhiều bộ, dù giá tăng sau khi lưu.
+- "Nhân viên" là người tạo không được xác nhận là ADMIN (người tạo trống, tài khoản không còn hay vai trò khác đều bị kẹp). Bộ ADMIN không bị kẹp.
+- Phần bị cắt rút theo thứ tự `variationId` tăng dần nên không phụ thuộc thứ tự dòng giỏ. Chỉ tra vai trò khi tổng thô vượt trần (một truy vấn).
+- API công khai vẫn quảng cáo theo từng bộ; giỏ chỉ có thể thấp hơn tổng quảng cáo, không bao giờ cao hơn.
+
+**F9, combo ở phần tĩnh của Trang chủ và chống trùng §5.**
+- Kệ Combo chiếm các món của nó theo slug, nên Bán chạy nhất và Gợi ý hôm nay bỏ món đã nằm trong combo. Web đưa combo vào HTML đầu (`loadHomeInitial`), Mini giữ khung chờ Bán chạy nhất tới khi biết combo (có hạn chờ). Không thêm request.
+- Lệch có chủ đích (cần chủ ký, mục 3): combo chỉ chiếm xuống dưới, không bị Giờ vàng hay Mua lại loại. Nên cùng một món có thể hiện ở Mua lại và trong combo. Lý do: Mua lại về sau khung chờ; nếu combo bị loại thì cả kệ combo biến mất khi Mua lại về và trang nhảy.
+
+**F10a–F10d, sửa 18 P1 của bước chốt** (`review/final-critique.md`; P1 số 2 do phiên chính sửa).
+- F10a, thẻ và hàng cuộn: Trang chủ web 375 không còn tràn ngang (vùng cuộn có `position: relative` ở hai app); tên món ở thẻ Giờ vàng một dòng; dòng meta thẻ hẹp đổi bản gọn không cắt giữa số (ngưỡng container 131.98px, chữ dài hơn 21 ký tự gắn `data-long`); ghi chú Giờ vàng đặt con số lên trước ("Tối đa 2/khách").
+- F10b, giỏ và đầu trang (đường tiền, chỉ phần hiển thị): bốn trang Mini (Bán chạy nhất, Giờ vàng, Chiến dịch, Mã giảm giá) bỏ khoảng thừa đầu trang; một nguồn giá gạch cho thẻ, trang Giờ vàng và giỏ (`strikePrice`), "Tiết kiệm" khớp giá gạch đó; chân dính giỏ gọn (~140px, tổng và nút cùng hàng, đạt miễn phí giao chỉ còn một dòng chữ); gợi ý mã trong giỏ rút chữ. Số tiền khách trả không đổi (có spec).
+- F10c, PDP web: thứ tự khối 375 giống Mini (Đánh giá nhanh sau Phân loại/Combo), nửa dưới làm theo Mini (thẻ trắng, nút, chip lọc đánh giá), chip phân loại có ⚡ cho món Giờ vàng, tiêu đề khối từ 1280 dùng Inter.
+- F10d, Ưu đãi và mã: trình dựng web bỏ hàng đầu thừa ở chi tiết khối, nút "+ Thêm sản phẩm" rộng hết hàng; khối Giờ vàng ở Ưu đãi đếm ngược dạng chữ; "Mã của tôi" chỉ vẽ 3 phiếu + "Tất cả (n)"; thẻ Điểm danh gọn 156px, luật mở khi bấm; phiếu mã nhãn một dòng, một cách ghi số; Ưu đãi chưa đăng nhập có GuestLinkCard từng khối, giữ Đổi quà.
+- Phiên chính, P1 số 2: Trang chủ web từ lg có banner thì thẻ thành viên và Việc cần làm xếp dọc trong cột 4 (cạnh nhau thì cắt hết số điểm và tên).
+
+**P17b, bài kiểm chặn của cơ chế giữ khớp.** Không có gì để khách hay admin thấy.
+- Bánh cóc số px và lớp `max-md:` (`scripts/uiux/ds-ratchet.mjs`, baseline `scripts/uiux/ds-baseline.json` chỉ được giảm) nối vào `pnpm lint:parity`. Ai thêm số px cứng hay `max-md:` mới thì đỏ; sửa bớt thì chạy `node scripts/uiux/ds-ratchet.mjs --write` để hạ baseline.
+- `ds-shop-guard` hai app dùng luật chung (`scripts/uiux/ds-shop-rules.mjs`).
+- e2e `ds-parity.shop.spec.ts` so computed style 375px của thành phần Mini và web với một bảng chuẩn chung.
+- axe smoke 375px các màn mua sắm cả hai app (`a11y-shop.*.spec.ts`, axe-core 4.12.0, chỉ `serious`/`critical` chặn, vi phạm có sẵn ở `support/a11y-baseline.ts` kèm lý do). Web cần DB tạm có thương hiệu, sản phẩm, gian hàng công khai: `seedShopScreens()` tự seed; trên CI không seed được thì đỏ.
+
 **Sửa của phiên chính trên nhánh tích hợp (không thuộc gói nào).**
 - Hai race spec dùng chung một DB không còn đạp nhau: race danh mục tự dọn chỗ gốc (`withRootRoom` dùng chung, cả ca của F7b), và so mã có `title` (1f36e1a84, d1dd5ebf8).
 - Flake `flash-sale.spec`: chờ dòng suất kế lâu hơn trên CI (1f36e1a84).
 - e2e web theo trình dựng khối của P10 và phiếu mã của P14: web CTV tạo khối, chấm đỏ Ưu đãi (d5dd704ed).
 - Lỗi tràn ngang 375px ở danh sách món trong khối (web); e2e `ctv-375` mở chi tiết khối (8bb5838a6).
+- Flake `flash-sale.spec` gốc rễ: hai món "sắp diễn ra" dùng một mốc giờ chung, gọi `Date.now()` riêng từng món thì CI chậm lệch 1ms và đếm thành "1 món" (cf99f540f).
+- Flake `edit-profile.spec` (Mini): đợi giá trị điền sẵn chứ không chỉ đợi ô (115024ef7).
 - Các commit khác trong `git log 019e3d59d..HEAD` (script ops set-smtp và healthcheck, tài liệu review-1028, tối ưu Trang chủ R-16, `127de2c77`...) đến từ main và phiên khác, không thuộc bàn giao này.
 
 ## 2. Deploy (việc của chủ quyết)
@@ -80,7 +105,8 @@ Cấu hình hệ thống mới: không có khoá nào bắt buộc nạp. `bundl
 Các việc chính cần nhớ khi deploy:
 - Mini: entry 641 KB (giới hạn 700), tổng 2140 KB, vượt mốc cảnh báo 2048 từ trước (gate-P15).
 - API thêm đường công khai `GET /products/:slug/bundles`, `GET /bundles/combos` (đã đưa vào `PUBLIC_GET_PATHS`, không chờ phiên) và `GET /coupons/collectable`. Kiểm khoá cache của proxy cho ba đường này giống lần `/categories`.
-- `GET /home/me` bỏ khối `shippingOrders` (Trang chủ đã dùng `/orders/home-todo`). Bản Mini/web cũ còn chạy khi đang deploy có thể thiếu khối này, nên deploy API và web cùng lượt.
+- `GET /home/me` bỏ khối `shippingOrders` (Trang chủ đã dùng `/orders/home-todo`). Thay đổi này đến từ main (#111, R-194), không phải từ #109; nhắc ở đây vì #109 gộp main đó. Bản Mini/web cũ còn chạy khi đang deploy có thể thiếu khối này, nên deploy API và web cùng lượt.
+- F9: `GET /home` (phần tĩnh) có thêm `combos`. Bản app cũ bỏ qua khoá này, không vỡ.
 - Các lỗi chữ trong plan đã qua `terminology.spec`; không cần làm gì thêm.
 
 ## 3. Việc của chủ sau deploy
@@ -90,12 +116,13 @@ Các việc chính cần nhớ khi deploy:
 - **Chạy `recompute-sold` (ghi PROD).** `POST /admin/products/recompute-sold` đặt lại số bán 30 ngày cho kệ Bán chạy nhất. Không chạy thì số này bằng 0 đến lần cron 03:00 kế tiếp. Chỉ chạy khi chủ cho phép; agent không tự chạy.
 - **Nhập bộ combo và mua kèm đầu tiên** ở admin, mục "Combo và mua kèm". Tạo, thử trên điện thoại, kiểm giỏ.
 - **Bật mã vào kho mã (P14).** Mã cũ đều đang ẩn. Mở từng mã muốn công khai, bật "Hiện ở mục Nhận mã" và nhập tên hiển thị.
-- **Các quyết định chính sách combo P15 còn ghi "chờ chủ".** Hiện chỉ còn một: chống trùng ở Trang chủ (mục 4, ý 1). Hai mục kia (nhân viên tự hưởng, giá tham chiếu cho mua kèm) đã sửa ở F8, không cần chủ quyết nữa. Ngoài ra chủ nên biết và xác nhận: combo toàn sàn làm giảm hoa hồng CTV (đúng quyết định Q15, nhưng là hệ quả tiền thật).
+- **Ký lệch §5 của F9 (mục 4, ý 1).** Một món có thể hiện ở cả Mua lại và trong combo. Nếu chủ muốn đúng §5 ở mức món thì phải đổi cách tải Mua lại (vào khung chờ chung), có giá CLS.
+- **Hệ quả tiền cần biết:** combo toàn sàn làm giảm hoa hồng CTV (đúng quyết định Q15, nhưng là hệ quả tiền thật). Hai mục chính sách khác của P15 (nhân viên tự hưởng, giá tham chiếu cho mua kèm) đã sửa ở F8; trần nhân viên lúc tính tiền đã sửa ở F8b.
 
 ## 4. Rủi ro đã biết, giới hạn còn lại
 
-1. **Chống trùng Trang chủ của combo lệch §5 (chờ chủ ký).** Thứ tự đúng theo thiết kế là Giờ vàng, Mua lại, Combo, Bán chạy. Hiện món của combo vẫn có thể hiện lại ở Bán chạy nhất. Lý do chưa sửa: trên web, khối combo chỉ tải ở trình duyệt; nếu combo lấy món thì Bán chạy (đã có sẵn trong HTML) mất món sau hydrate, làm kệ nhảy và phá các ca CLS. Muốn đúng §5 phải đưa combo vào yêu cầu `/home` gộp ở máy chủ trước. Đang làm ở F9 (mục 5).
-2. **Trần nhân viên của combo chưa đủ lúc tính tiền.** Hai lỗi cộng dồn: nhiều bộ trong cùng một đơn cộng khoản giảm vượt trần; và combo theo % khi giá sản phẩm tăng sau lúc tạo thì khoản giảm tăng theo. Chủ đã duyệt sửa trước khi merge (F8b, mục 5). Cho tới khi F8b gộp, nên cân nhắc trước khi cho nhân viên tạo combo lớn.
+1. **Chống trùng Trang chủ của combo (F9, lệch §5 ở mức món, chờ chủ ký).** Combo đã chiếm món khỏi Bán chạy nhất và Gợi ý hôm nay. Còn lệch: món trong combo vẫn có thể hiện ở Mua lại. Bán chạy nhất có thể tụt dưới 3 món nếu có 3–4 combo dựng từ món bán chạy (hiện chỉ 0–2 combo); việc sau là nâng `HOME_BEST_SELLER_LIMIT` (đợt 6).
+2. **Trần nhân viên của combo lúc tính tiền: đã sửa ở F8b.** Không còn là rủi ro mở.
 3. **Giới hạn của F8 ("giữ khối").** Khi API báo `addonsSoldOut` (sản phẩm chính hết hàng, danh sách mua kèm rỗng) thì không có mã bộ để đối chiếu, nên coi mọi bộ đang giữ là hết hàng.
 4. **API công khai vẫn quảng cáo bộ cho chính nhân viên tạo** (cache chung). Giỏ chỉ giảm ít hơn quảng cáo, không bao giờ đắt hơn, giống Giờ vàng và mã giảm giá.
 5. **Không có quota toàn cục cho combo.** Chặn rủi ro bằng `maxQty` tối đa 10 mỗi đơn và bộ do nhân viên hoặc ADMIN tạo tay, có hạn.
@@ -107,10 +134,11 @@ Các việc chính cần nhớ khi deploy:
 11. **Đồng bộ Pancake và đường đối tác:** đường đối tác (`merchant.service`) không đi qua luật "chỉ gán vào mục lá" của P16 (ghi trong plan, giữ nguyên).
 12. **Máy tải nặng sinh FAIL giả** ở vitest nặng và một spec jest. Ca CLS chập chờn là lỗi thật, xem "Bẫy môi trường" của `handoff-wave4a.md`.
 
-## 5. Còn đang chạy (chưa gộp) lúc viết
+13. **Giới hạn đo chữ thẻ (F10a).** Ngưỡng dòng meta gọn 131.98px đo với Inter 12px/500 (font đi kèm app). Đổi cỡ chữ meta hay chữ "Đã bán" thì phải đo lại; vitest khoá độ dài 21 ký tự của chữ xấu nhất.
+14. **Ảnh "sau" của F10a, F10b, F10d chụp trước lượt sửa cuối** nên không phản ánh đúng bản cuối ở vài chỗ (ngưỡng meta, cỡ chữ tổng giỏ, "Tất cả (3)"). e2e đo vị trí và kích thước vẫn chạy trên bản cuối.
 
-Mục này sẽ được cập nhật khi các gói đó gộp vào nhánh tích hợp.
+## 5. Việc sau (đợt 6, nhánh riêng sau khi #109 vào main)
 
-- **F8b: trần tiền nhân viên lúc tính tiền cho combo.** Sửa hai lỗi cộng dồn nhiều bộ và combo % khi giá tăng. Chủ đã duyệt sửa trước khi merge.
-- **F9: combo vào phần tĩnh của `GET /home`** và chống trùng đúng §5 (Giờ vàng, Mua lại, Combo, Bán chạy). Đóng mục 4 ý 1 khi chủ ký.
-- **P17b: ratchet, e2e `ds-parity`, axe, `ds-shop-guard`.** Phần của P17 cần số đo sau đợt 4.
+- MINOR còn lại của F10 (chữ mã "Tặng 20k đồng", tên mã bị coi là nhắc lại mã, chấm đỏ Ưu đãi đánh dấu cả mã chưa vẽ, phiếu mã cao không đều, tổng giỏ 320px tràn với số lớn, `scroll-padding` giỏ chưa theo chiều cao chân dính thật, `cardPricing` chưa gọi thẳng `strikePrice`, link đánh giá web, tên đọc của "Tối đa n/khách").
+- 38 P2 của `review/final-critique.md` (trừ những mục cần chủ quyết).
+- `HOME_BEST_SELLER_LIMIT` theo số combo (F9).
