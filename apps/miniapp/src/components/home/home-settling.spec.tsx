@@ -11,6 +11,20 @@ describe('HomeSettlingSkeleton', () => {
     expect(heights).toEqual([h.shortcuts, h.flash, h.categories, h.products].map((n) => `${n}px`));
   });
 
+  it('có banner (lần mở trước có): banner đứng đầu, cao đúng tỉ lệ khung banner, các ô sau giữ nguyên', () => {
+    render(<HomeSettlingSkeleton banner />);
+    const children = Array.from(screen.getByTestId('home-settling').children) as HTMLElement[];
+    expect(children).toHaveLength(5);
+    expect(children[0]).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
+    const h = HOME_SETTLING_HEIGHTS;
+    expect(children.slice(1).map((el) => el.style.height)).toEqual([h.shortcuts, h.flash, h.categories, h.products].map((n) => `${n}px`));
+  });
+
+  it('không có banner (mặc định): không thêm ô nào', () => {
+    render(<HomeSettlingSkeleton banner={false} />);
+    expect(screen.getByTestId('home-settling').children).toHaveLength(4);
+  });
+
   it('danh mục theo số ô nhớ: tới 5 ô một hàng (148), từ 6 ô hai hàng (248)', () => {
     const categoriesHeight = (cells?: number) => {
       const { unmount } = render(<HomeSettlingSkeleton categoryCells={cells} />);

@@ -4,6 +4,7 @@ import { Fragment, useLayoutEffect, useMemo, type CSSProperties, type ReactNode 
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
+import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
@@ -18,6 +19,8 @@ import { armHomeFeed, disarmHomeFeed } from '@/lib/home-feed';
 import { HomeRestoreHintContext } from '@/lib/home-restore-context';
 import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
+import { HomeBanner } from '@/components/campaign/home-banner';
+import { useHomeBanners } from '@/components/campaign/use-home-banners';
 import { HubLayout } from '@/components/layouts/hub-layout';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
@@ -53,6 +56,8 @@ export interface HomeInitial {
   publicConfig?: PublicConfig;
   /** Suất Giờ vàng đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate làm cả trang nhảy. */
   flash?: FlashSaleActiveItem[];
+  /** Banner chiến dịch đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate. Rỗng nghĩa là server đã hỏi và không có. */
+  campaigns?: CampaignBanner[];
 }
 
 const STALE = 60_000;
@@ -110,9 +115,11 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
   const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: phase !== 'loading', staleTime: 30_000 });
   const todo = useHomeTodoQueries();
+  // Cùng khoá query với khối banner (không thêm request): khung chờ chung phải chờ cả banner, vì khối thật chưa mount trong lúc giữ khung chờ.
+  const banners = useHomeBanners(kind, initial.campaigns);
   const settling = useHomeSettling(
     kind,
-    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading,
+    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading || banners.loading,
     unavailable,
   );
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
@@ -120,7 +127,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
-    settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} />,
+    settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} banner={banners.hinted} />,
     search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && unavailable ? (
@@ -133,8 +140,9 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
-    // P11 (chiến dịch) và P15 (combo) nối dữ liệu; tới lúc đó hai khối rỗng và không giữ chỗ.
-    banner: null,
+    // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi banner chưa về mà lần trước máy này có.
+    banner: banners.slides.length > 0 || (banners.loading && banners.hinted) ? <HomeBanner slides={banners.slides} /> : null,
+    // P15 (combo) nối dữ liệu; tới lúc đó khối rỗng và không giữ chỗ.
     combos: null,
     shortcuts: <ShortcutGrid />,
     purchased: <PurchasedRail source="home_rail" restoring={restoring} exclude={shelves.flashSlugs} />,

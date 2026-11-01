@@ -1,4 +1,4 @@
-import { publicImage, publicImageRef, publicImages, publicProductThumb, storedThumbnailFor } from './public-image';
+import { isPublicImageKind, publicImage, publicImageRef, publicImages, publicProductThumb, storedThumbnailFor } from './public-image';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const SVG = 'data:image/svg+xml;base64,PHN2Zz4=';
@@ -34,5 +34,10 @@ describe('public-image', () => {
     expect(storedThumbnailFor('p1', PNG)).toBe(publicImageRef('product', 'p1', 0, PNG));
     expect(storedThumbnailFor('p1', 'https://x/a.jpg')).toBe('https://x/a.jpg');
     expect(storedThumbnailFor('p1', undefined)).toBeNull();
+  });
+
+  it('loại ảnh campaign hợp lệ, ảnh base64 của chiến dịch đi ra dạng đường dẫn cover', () => {
+    expect(isPublicImageKind('campaign')).toBe(true);
+    expect(publicImage('campaign', 'c1', 'cover', PNG)).toMatch(/^\/public-image\/campaign\/c1\/cover\?v=[0-9a-f]{16}$/);
   });
 });

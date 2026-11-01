@@ -26,6 +26,8 @@ import { homeBlockOrder } from './home-blocks';
 import { HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
+import { BANNER_HINT_KEY } from '@tubutree/app-core/home-layout';
+import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 
 const CONFIG = {
   freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30,
@@ -77,6 +79,7 @@ beforeEach(() => {
     '/feed': () => ({ posts: [] }),
     '/flash-sales/active': () => [],
     '/flash-sales/upcoming': () => [],
+    '/campaigns': () => [],
   };
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
     const h = routes[path];
@@ -237,6 +240,125 @@ describe('HomeView — HubLayout cho máy tính', () => {
   it('lối tắt 4 ô chỉ ở điện thoại: từ lg ẩn (thanh đầu website đã đủ lối vào)', async () => {
     const c = await mount();
     expect(block(c, 'shortcuts').querySelector('section')?.className).toContain('lg:hidden');
+  });
+});
+
+const campaign = (id: string, over: Partial<CampaignBanner> = {}): CampaignBanner => ({
+  id,
+  slug: `chien-dich-${id}`,
+  title: `Chiến dịch ${id}`,
+  image: `https://img.test/${id}.jpg`,
+  linkType: 'CAMPAIGN_PAGE',
+  linkValue: null,
+  audience: 'ALL',
+  startAt: '2020-01-01T00:00:00Z',
+  endAt: '2099-01-01T00:00:00Z',
+  ...over,
+});
+const calledCampaigns = () => calls('/campaigns');
+
+describe('HomeView — banner chiến dịch (P11)', () => {
+  const hubPart = (c: HTMLElement, name: string) => c.querySelector<HTMLElement>(`[data-hub-part="${name}"]`);
+  const bannerLinks = (c: HTMLElement) => Array.from(block(c, 'banner').querySelectorAll<HTMLAnchorElement>('a[href]'));
+
+  it('có chiến dịch trong dữ liệu server: banner có ngay (không gọi lại /campaigns), liên kết sang /chien-dich/[slug], ảnh có tên đọc', async () => {
+    const c = await mount(<HomeView initial={{ campaigns: [campaign('a')] }} />);
+    expect(bannerLinks(c).map((a) => a.getAttribute('href'))).toEqual(['/chien-dich/chien-dich-a']);
+    expect(block(c, 'banner').querySelector('img')!.getAttribute('alt')).toBe('Chiến dịch a');
+    expect(calledCampaigns()).toHaveLength(0);
+  });
+
+  it('có banner: HubLayout vẽ cột banner (lg: 8 cột) cạnh aside (4 cột); khối banner đứng đúng thứ tự homeBlockOrder', async () => {
+    const c = await mount(<HomeView initial={{ campaigns: [campaign('a')] }} />);
+    expect(hubPart(c, 'banner')!.className).toContain('lg:col-span-8');
+    expect(hubPart(c, 'aside')!.className).toContain('lg:col-span-4');
+    expect(hubPart(c, 'banner')!.contains(block(c, 'banner'))).toBe(true);
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
+  });
+
+  it('server đã hỏi và không có chiến dịch: ẩn hẳn, không khung banner, aside chiếm 12 cột, không khung chờ', async () => {
+    const c = await mount(<HomeView initial={{ campaigns: [] }} />);
+    expect(hubPart(c, 'banner')).toBeNull();
+    expect(hubPart(c, 'aside')!.className).toContain('lg:col-span-12');
+    expect(block(c, 'banner').childElementCount).toBe(0);
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+    expect(calledCampaigns()).toHaveLength(0);
+  });
+
+  it('server không có dữ liệu (API lỗi lúc dựng): client tự xin /campaigns?placement=HOME_TOP không đăng nhập rồi hiện banner', async () => {
+    routes['/campaigns'] = () => [campaign('b')];
+    const c = await mount();
+    expect(calledCampaigns()[0]).toEqual(['/campaigns', { query: { placement: 'HOME_TOP' }, anonymous: true }]);
+    expect(bannerLinks(c).map((a) => a.getAttribute('href'))).toEqual(['/chien-dich/chien-dich-b']);
+  });
+
+  it('/campaigns lỗi: không banner, không báo lỗi cho thứ khách không cần, trang vẫn đủ khối khác', async () => {
+    routes['/campaigns'] = () => Promise.reject(new ApiError('Máy chủ đang bận', 503));
+    const c = await mount();
+    expect(hubPart(c, 'banner')).toBeNull();
+    expect(c.textContent).not.toContain('Máy chủ đang bận');
+    expect(region(c, 'Gợi ý hôm nay')).not.toBeNull();
+  });
+
+  it('chiến dịch đã hết hạn lúc khách mở (trang ISR cũ): không hiện', async () => {
+    const c = await mount(<HomeView initial={{ campaigns: [campaign('old', { endAt: '2020-06-01T00:00:00Z' })] }} />);
+    expect(hubPart(c, 'banner')).toBeNull();
+  });
+
+  it('theo loại khách: chiến dịch NEW hiện cho khách mới, RETURNING không; khách cũ thì ngược lại', async () => {
+    const list = [campaign('all'), campaign('moi', { audience: 'NEW' }), campaign('cu', { audience: 'RETURNING' })];
+    const c = await mount(<HomeView initial={{ campaigns: list }} />);
+    expect(bannerLinks(c).map((a) => a.getAttribute('href'))).toEqual(['/chien-dich/chien-dich-all', '/chien-dich/chien-dich-moi']);
+    mounted?.unmount();
+    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    const c2 = await mount(<HomeView initial={{ campaigns: list }} />);
+    expect(bannerLinks(c2).map((a) => a.getAttribute('href'))).toEqual(['/chien-dich/chien-dich-all', '/chien-dich/chien-dich-cu']);
+  });
+
+  it('nhớ "lần mở này có banner" ở tubu_home_banner khi đã biết loại khách; không có banner thì ghi 0', async () => {
+    await mount(<HomeView initial={{ campaigns: [campaign('a')] }} />);
+    expect(localStorage.getItem(BANNER_HINT_KEY)).toBe('1');
+    mounted?.unmount();
+    await mount(<HomeView initial={{ campaigns: [] }} />);
+    expect(localStorage.getItem(BANNER_HINT_KEY)).toBe('0');
+  });
+
+  it('chưa biết loại khách (đang khôi phục phiên, máy chưa nhớ) thì KHÔNG ghi gợi ý: ghi 0 lúc đó làm lần mở sau của khách mới nhảy trang', async () => {
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    await mount(<HomeView initial={{ campaigns: [] }} />);
+    expect(localStorage.getItem(BANNER_HINT_KEY)).toBe('1');
+  });
+
+  it('giữ khung chờ chung khi lần mở trước có banner: khung banner đúng tỉ lệ đứng đầu khung chờ; không có gợi ý thì không giữ chỗ', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    mocks.get.mockImplementation(() => new Promise(() => undefined));
+    const none = await mount();
+    const noneKids = Array.from(none.querySelector('[data-testid="home-settling"]')!.children);
+    expect(noneKids).toHaveLength(4);
+    mounted?.unmount();
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    const hinted = await mount();
+    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(5);
+  });
+
+  it('banner chưa về mà máy nhớ lần trước có: khung giữ chỗ cùng tỉ lệ ở đúng vị trí banner; không nhớ thì không có gì', async () => {
+    const pending = deferred<unknown>();
+    mocks.phase = 'guest';
+    routes['/campaigns'] = () => pending.promise;
+    const none = await mount();
+    expect(none.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+    expect(hubPart(none, 'banner')).toBeNull();
+    mounted?.unmount();
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    const c = await mount();
+    const frame = c.querySelector<HTMLElement>('[data-testid="home-banner-loading"]')!;
+    expect(frame).not.toBeNull();
+    expect(frame.getAttribute('aria-hidden')).toBe('true');
+    expect(block(c, 'banner').contains(frame)).toBe(true);
+    pending.resolve([]);
   });
 });
 

@@ -109,6 +109,9 @@ export const SHOP_COPY: Record<string, string> = {
   'campaign.endedBody': 'Cảm ơn bạn đã ghé. Xem các ưu đãi đang có nhé.',
   'campaign.notFound': 'Không tìm thấy chương trình này',
   'campaign.share': 'Chia sẻ chương trình',
+  'campaign.copyCode': 'Sao chép mã',
+  'campaign.productsEmpty': 'Chương trình chưa có sản phẩm',
+  'campaign.backHome': 'Về trang chủ',
 
   // Mã giảm giá
   'coupon.title': 'Mã giảm giá',

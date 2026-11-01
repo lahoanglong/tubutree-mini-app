@@ -8,6 +8,7 @@ import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { listLiveBanners, type CampaignBannerDTO } from '../campaigns/campaign-public';
 import { paginated } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ACTIVE_ORDER_STATUSES } from '../orders/order-status-groups';
@@ -119,7 +120,7 @@ export class HomeService {
   }
 
   private async buildStatic(): Promise<HomeStatic> {
-    const [bestSellers, featured, newest, categories, brands, publicConfig] = await Promise.all([
+    const [bestSellers, featured, newest, categories, brands, publicConfig, campaigns] = await Promise.all([
       this.block('bestSellers', () => this.catalog.list(productQuery({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' }))),
       this.block('featured', () => this.catalog.list(productQuery({ limit: HOME_FEATURED_LIMIT }))),
       this.block('newest', () => this.catalog.list(productQuery({ sort: 'newest' }))),
@@ -127,8 +128,10 @@ export class HomeService {
       this.block('brands', () => this.catalog.brands()),
       // Khối "Quà khách mới" cần số công khai: gộp vào đây để mở Trang chủ không tốn thêm request /config/public.
       this.block('publicConfig', () => buildPublicConfig(this.config, tierLoaderOf(this.prisma))),
+      // Banner đầu Trang chủ: không lọc đối tượng ở đây vì blob dùng chung cho mọi khách; app-core lọc NEW/RETURNING theo loại khách.
+      this.block('campaigns', () => listLiveBanners(this.prisma, 'HOME_TOP')),
     ]);
-    return { bestSellers, featured, newest, categories, brands, publicConfig };
+    return { bestSellers, featured, newest, categories, brands, publicConfig, campaigns };
   }
 
   /**
@@ -222,6 +225,7 @@ export interface HomePublic {
   categories: Block<Awaited2<CatalogService['categories']>>;
   brands: Block<Awaited2<CatalogService['brands']>>;
   publicConfig: Block<PublicConfigDTO>;
+  campaigns: Block<CampaignBannerDTO[]>;
 }
 
 type HomeStatic = Omit<HomePublic, 'flashActive'>;

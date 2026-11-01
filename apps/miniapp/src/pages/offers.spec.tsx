@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getCheckIn: vi.fn(),
   postCheckIn: vi.fn(),
   ensurePhone: vi.fn(),
+  campaigns: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -31,6 +32,8 @@ vi.mock('../services/account-api', async (importOriginal) => ({
   getDailyCheckInStatus: mocks.getCheckIn,
   postDailyCheckIn: mocks.postCheckIn,
 }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.campaigns } }));
+vi.mock('../services/campaign-api', () => ({ fetchHomeCampaigns: vi.fn() }));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('../hooks/use-recycle-open-requests', () => ({ useRecycleOpenRequests: () => mocks.recycleOpen }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
@@ -66,8 +69,32 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true, vndPerPointRedeem: 1000 } };
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100, pointsConvertedBalance: 20, tier: { name: 'Mầm Xanh' }, nextTier: null });
     mocks.getCoupons.mockResolvedValue([COUPON]);
+    mocks.campaigns.mockResolvedValue([]);
     mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 3, currentCycleDay: 4, todayPoints: 8, rewards: REWARDS });
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('banner OFFERS_TOP nằm ngay dưới tiêu đề trang, trên cả thẻ Điểm Xanh', async () => {
+    const live = {
+      id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL',
+      startAt: new Date(Date.now() - 86_400_000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString(),
+    };
+    mocks.campaigns.mockResolvedValue([live]);
+    renderPage();
+    const banner = await screen.findByRole('region', { name: 'Chương trình nổi bật' });
+    expect(mocks.campaigns).toHaveBeenCalledWith('/campaigns', expect.objectContaining({ query: { placement: 'OFFERS_TOP' } }));
+    const points = await screen.findByRole('region', { name: /Điểm Xanh/ });
+    expect(banner.compareDocumentPosition(points) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Giữa Thu' })).toHaveAttribute('href', '/campaign/giua-thu');
+  });
+
+  it('khách chưa đăng nhập vẫn thấy banner đầu trang (ngoài nhánh đăng nhập)', async () => {
+    mocks.phase = 'guest';
+    mocks.campaigns.mockResolvedValue([
+      { id: 'c1', slug: 'a', title: 'Chương trình A', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL', startAt: new Date(Date.now() - 1000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString() },
+    ]);
+    renderPage();
+    expect(await screen.findByRole('link', { name: 'Chương trình A' })).toBeInTheDocument();
   });
 
   it('có đủ: thẻ Điểm Xanh và hạng, Điểm danh, Đổi quà, Quà của tôi, Đổi rác, Tích điểm đơn sàn, Mua chung, Mã giảm giá của tôi', async () => {

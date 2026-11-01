@@ -60,6 +60,7 @@ const OnboardingGate: ComponentType<{ openedFromPartnerLink?: boolean }> = ONBOA
   ? lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })))
   : () => null;
 const loadBrowse = () => import('../pages/browse');
+const CampaignPage = lazy(() => import('../pages/campaign'));
 const BrowsePage = lazy(loadBrowse);
 const BestSellersPage = lazy(() => import('../pages/best-sellers'));
 const loadProductDetail = () => import('../pages/product-detail');
@@ -218,6 +219,7 @@ export default function MyApp() {
                     <Route path="/" element={<RouteShell><HomePage /></RouteShell>} />
                     <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
                     <Route path="/best-sellers" element={<RouteShell skeleton="grid"><BestSellersPage /></RouteShell>} />
+                    <Route path="/campaign/:slug" element={<RouteShell skeleton="grid"><CampaignPage /></RouteShell>} />
                     <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />
                     <Route path="/cart" element={<RouteShell><CartPage /></RouteShell>} />
                     <Route path="/checkout" element={<RouteShell><CheckoutPage /></RouteShell>} />

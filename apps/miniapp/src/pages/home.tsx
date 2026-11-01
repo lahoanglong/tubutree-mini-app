@@ -1,10 +1,11 @@
-import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useState, type CSSProperties, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchUpcomingFlashSales } from '../services/shop-api';
 import { coreHttp } from '../services/core-http';
 import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
+import { useHomeBanners } from '../hooks/use-home-banners';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale } from '../components/flash-sale';
@@ -35,13 +36,14 @@ import { HomeHeader } from '../components/home/home-header';
 import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
-import { categorySkeletonCells, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
+import { categorySkeletonCells, homeRenderOrder, readBannerHint, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { haptic } from '../utils/haptic';
+import { browserStorage } from '../utils/recently-viewed';
 
 /**
  * Trang chủ (màn đầu gọn, món hàng lên đầu): header dính 56px (logo, ô tìm, chuông, giỏ) → thẻ thành viên một dòng (khách cũ) hoặc dải Quà khách mới
- * → Việc cần làm → banner (chờ P11) → 4 lối tắt + "Tất cả" → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo (chờ P15)
+ * → Việc cần làm → banner chiến dịch (ẩn hẳn khi không có) → 4 lối tắt + "Tất cả" → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo (chờ P15)
  * → Hành trình nguyên liệu → Cộng đồng (chỉ đọc) → MỘT lưới Gợi ý hôm nay cuộn vô tận. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web;
  * `useHomeShelves` chống trùng món giữa các kệ hàng. Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
@@ -80,9 +82,12 @@ export default function HomePage() {
   const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000, enabled: !restoring });
   const todo = useHomeTodoQueries();
   const belowState = useHomeBelow();
+  // Cùng khoá query với HomeBanner (không thêm request): khung chờ chung phải chờ cả banner, vì khối thật chưa mount trong lúc giữ khung chờ.
+  const banners = useHomeBanners(kind);
+  const [bannerHint] = useState(() => readBannerHint(browserStorage()));
   const settling = useHomeSettling(
     kind,
-    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading,
+    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading || banners.loading,
     sessionFailed,
   );
 
@@ -95,7 +100,7 @@ export default function HomePage() {
   };
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
-    settling: <HomeSettlingSkeleton categoryCells={categorySkeletonCells(categories.placeholderCount)} />,
+    settling: <HomeSettlingSkeleton categoryCells={categorySkeletonCells(categories.placeholderCount)} banner={bannerHint} />,
     search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && sessionFailed ? (
@@ -108,8 +113,8 @@ export default function HomePage() {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <HomeNewCustomerGift /> : null,
-    // P11 (chiến dịch) và P15 (combo) nối dữ liệu; tới lúc đó hai khối trả null và không giữ chỗ.
-    banner: <HomeBanner />,
+    // Banner tự ẩn khi không có chiến dịch; combo (P15) chưa có dữ liệu nên trả null và không giữ chỗ.
+    banner: <HomeBanner kind={kind} />,
     combos: <HomeCombos />,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.

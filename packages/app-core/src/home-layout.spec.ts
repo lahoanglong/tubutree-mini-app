@@ -5,6 +5,7 @@ import {
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, CATEGORY_CELL_HEIGHT,
+  BANNER_HINT_KEY, readBannerHint, writeBannerHint,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 import { routeUsable } from './merch/route-fallback';
@@ -147,6 +148,36 @@ describe('gợi ý nhớ Giờ vàng (có suất, có dòng suất kế)', () =>
     expect(readFlashSlotHint(boom)).toBe(false);
     expect(() => writeFlashHint(boom, true, true)).not.toThrow();
     expect(FLASH_NEXT_SLOT_HEIGHT).toBe(44);
+  });
+});
+
+describe('gợi ý nhớ banner chiến dịch', () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('khứ hồi: có banner → true, không → false; chưa nhớ hoặc không có kho → false (chờ im lặng)', () => {
+    const st = mem();
+    expect(readBannerHint(st)).toBe(false);
+    expect(readBannerHint(null)).toBe(false);
+    writeBannerHint(st, true);
+    expect(st.m.get(BANNER_HINT_KEY)).toBe('1');
+    expect(readBannerHint(st)).toBe(true);
+    writeBannerHint(st, false);
+    expect(st.m.get(BANNER_HINT_KEY)).toBe('0');
+    expect(readBannerHint(st)).toBe(false);
+  });
+  it('giá trị lạ → false; kho ném lỗi thì đọc và ghi đều không văng', () => {
+    const st = mem();
+    st.setItem(BANNER_HINT_KEY, 'yes');
+    expect(readBannerHint(st)).toBe(false);
+    const boom = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } };
+    expect(readBannerHint(boom)).toBe(false);
+    expect(() => writeBannerHint(boom, true)).not.toThrow();
+  });
+  it('khung chờ banner cao đúng tỉ lệ 5:2 ở bề rộng 375 trừ đệm 16 hai bên', () => {
+    expect(HOME_SETTLING_HEIGHTS.banner).toBe(Math.round((375 - 32) / 2.5));
+    expect(HOME_SETTLING_HEIGHTS.banner).toBe(137);
   });
 });
 

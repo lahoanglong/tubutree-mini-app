@@ -117,6 +117,7 @@ import { PartnerRulesCard } from '@/components/admin/partner-rules-card';
 import { ShopInfoCard } from '@/components/admin/shop-info-card';
 import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
+import { CampaignsTab } from '@/components/admin/campaigns-tab';
 import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
 import { DealerClaimsTab } from '@/components/admin/dealer-claims-tab';
@@ -214,6 +215,7 @@ type Tab =
   | 'coupons'
   | 'brands'
   | 'flashSales'
+  | 'campaigns'
   | 'faqs'
   | 'contentKit'
   | 'academy'
@@ -292,6 +294,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'flashSales', label: 'Giờ vàng' },
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
       { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
+      { k: 'campaigns', label: 'Chiến dịch' },
     ],
   },
   {
@@ -353,7 +356,7 @@ const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['waste'],
   CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community', 'supportChat'],
   KHO: ['inbox', 'orders', 'returns'],
-  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
+  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'campaigns', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'orders', 'externalClaims', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
 type WasteInboxKey =
@@ -754,6 +757,7 @@ export default function AdminPage() {
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
           {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}
+          {active === 'campaigns' && <CampaignsTab />}
           {active === 'faqs' && <FaqTab />}
           {active === 'contentKit' && <ContentKitTab />}
           {active === 'academy' && <AcademyTab />}
