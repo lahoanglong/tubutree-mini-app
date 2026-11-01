@@ -93,7 +93,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled();
 
     await email.fill('an@tubu.vn');
-    await page.getByLabel('Ngày sinh').fill('1990-05-01');
+    await page.getByLabel('Ngày sinh').fill('01/05/1990');
     const saved = api.waitForCall('PATCH', '/me');
     await page.getByRole('button', { name: 'Lưu thay đổi' }).click();
     await expect(page.getByText('01/05/1990').first()).toBeVisible();

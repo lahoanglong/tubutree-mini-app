@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
+import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
 import { updateMe } from '@tubutree/app-core/api/account';
 import { meQuery } from '@tubutree/app-core/queries/account';
 import { AvatarCropSheet } from '@/components/account/avatar-crop-sheet';
@@ -51,6 +52,8 @@ export default function EditProfilePage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [dob, setDob] = useState('');
+  const [dobText, setDobText] = useState('');
+  const [dobTouched, setDobTouched] = useState(false);
   // Chỉ nhận URL đã lưu (từ hồ sơ hoặc vừa tải lên Cloudinary): API không nhận base64 cho ảnh đại diện.
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -80,6 +83,9 @@ export default function EditProfilePage() {
   // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
   const dobNew = !me?.dob && dob !== '';
   const dobDisplay = formatDobDisplay(dob);
+  const dobEditable = !me?.dob;
+  const dobCheck = validateDobVn(dobText);
+  const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
   const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -155,6 +161,10 @@ export default function EditProfilePage() {
     setTouched(true);
     if (save.isPending || uploadingAvatar) return;
     if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
+    if (dobEditable && dobCheck.error) {
+      setDobTouched(true);
+      return;
+    }
     if (dobNew && !confirmingDob) {
       setConfirmingDob(true);
       return;
@@ -258,11 +268,22 @@ export default function EditProfilePage() {
       </Field>
 
       <div>
-        <Field label="Ngày sinh">
-          <input {...(me?.dob ? { type: 'text', value: formatDobDisplay(me.dob) || dob } : { type: 'date', lang: 'vi', value: dob })} readOnly={Boolean(me?.dob) || confirmingDob} autoComplete="bday" onChange={(e) => {
-              setDob(e.target.value);
+        <Field label="Ngày sinh" error={dobError ?? undefined}>
+          <input
+            {...(dobEditable
+              ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, maxLength: 10, autoComplete: 'bday', value: dobText }
+              : { type: 'text', value: formatDobDisplay(me?.dob) || dob })}
+            readOnly={!dobEditable || confirmingDob}
+            aria-invalid={dobError ? true : undefined}
+            onBlur={() => setDobTouched(true)}
+            onChange={(e) => {
+              const text = maskDobInput(e.target.value);
+              setDobText(text);
+              setDob(validateDobVn(text).iso ?? '');
               setConfirmingDob(false);
-            }} className={`${ui.field} ${FIELD_MINI}`} />
+            }}
+            className={`${dobError ? ui.fieldError : ui.field} ${FIELD_MINI}`}
+          />
         </Field>
         {dobDisplay && dobNew && <p className="mt-1 text-xs text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">

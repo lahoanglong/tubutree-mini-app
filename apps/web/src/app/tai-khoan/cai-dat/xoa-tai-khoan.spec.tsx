@@ -107,8 +107,7 @@ describe('/tai-khoan/cai-dat: xoá tài khoản', () => {
   it('máy chủ từ chối vì số dư đã đổi: bỏ tick, tải lại số dư, khách phải đồng ý lại với số mới', async () => {
     let calls = 0;
     mocks.get.mockImplementation(async (path: string) => {
-      if (path === '/faqs') return FAQS;
-      if (path === '/config/public') return { support: SUPPORT };
+      if (path === '/me/notifications/prefs') return { notifyPromo: true, notifyGarden: true };
       if (path === '/me/wallet') return { walletBalance: ++calls === 1 ? 20000 : 30000 };
       throw new Error(`unexpected ${path}`);
     });
