@@ -27,9 +27,10 @@ const PAGE_STYLE: CSSProperties = { background: 'var(--color-bg-canvas)', paddin
 
 /**
  * Tab và chip lọc dính chung một khối ngay dưới thanh lùi đặc (xem `/best-sellers`): hai hàng dính riêng sẽ phải đoán chiều cao
- * hàng tab để đặt hàng chip, lệch một pixel là thẻ lộ ra giữa hai hàng.
+ * hàng tab để đặt hàng chip, lệch một pixel là thẻ lộ ra giữa hai hàng. Trang không dùng lớp `page`: `top` là `--safe-top` và lớp `sticky-below-back` đẩy
+ * xuống dưới thanh lùi khi có nút lùi (xem `/best-sellers`).
  */
-const STICKY_BAR: CSSProperties = { position: 'sticky', top: 8, zIndex: 2, padding: '8px 16px 4px', background: 'var(--color-bg-canvas)' };
+const STICKY_BAR: CSSProperties = { position: 'sticky', top: 'var(--safe-top)', zIndex: 2, padding: '8px 16px 4px', background: 'var(--color-bg-canvas)' };
 const CHIP_ROW: CSSProperties = { display: 'flex', gap: 8, padding: '8px 0 4px' };
 
 const TAB_KEYS = VOUCHER_TABS.map((t) => t.key);
@@ -131,11 +132,11 @@ export default function VouchersPage() {
   }
 
   return (
-    <Page className="page" style={PAGE_STYLE}>
+    <Page style={PAGE_STYLE}>
       <PullToRefresh onRefresh={refresh} />
       <div ref={anchorRef} />
       <PageHeader title={fillCopy('coupon.title')} subtitle={fillCopy('coupon.oneCodeHint')} />
-      <div style={STICKY_BAR}>
+      <div className="sticky-below-back" style={STICKY_BAR}>
         <SegmentedTabs scroll label={fillCopy('coupon.tabsLabel')} items={[...VOUCHER_TABS]} value={tab} onChange={pickTab} />
         {!needsAccount && rows.length > 0 && (
           <div className="scroll-x" style={CHIP_ROW}>

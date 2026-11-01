@@ -91,7 +91,7 @@ export default function CampaignPage() {
   const productsLabel = fillCopy('campaign.sectionProducts');
   const showProducts = c.productCount > 0;
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 32 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 32 }}>
       <PageHeader title={c.title} {...(c.subtitle ? { subtitle: c.subtitle } : {})} />
       <div style={{ padding: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {c.image && (

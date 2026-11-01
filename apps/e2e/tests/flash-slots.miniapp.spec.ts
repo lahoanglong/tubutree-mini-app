@@ -70,12 +70,11 @@ test.describe('Mini App — Giờ vàng theo khung: khách đã đăng nhập', 
     await expect(tablist).toBeVisible({ timeout: 15_000 });
     await expect(buyButtons(page)).toHaveCount(14);
     const scroller = page.locator('.zaui-page', { has: tablist }).first();
-    const topBefore = (await tablist.boundingBox())!.y;
     await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
     await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(600);
     // Dính ngay dưới thanh đặc của nút lùi: cao 56px (cộng vùng an toàn, 0 ở trình duyệt thật). Cao hơn nữa thì có khe hở lộ thẻ món cuộn qua.
+    // Hàng tiêu đề trang cũng cao đúng 56px nên chỗ dính trùng chỗ nằm yên: đã cuộn quá 600px mà tab vẫn ở 56px là bằng chứng của việc dính.
     await expect.poll(async () => Math.round((await tablist.boundingBox())!.y), { timeout: 5_000 }).toBe(56);
-    expect((await tablist.boundingBox())!.y).toBeLessThan(topBefore);
     await expect(page.getByRole('timer')).toBeInViewport();
     await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeInViewport();
     await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();

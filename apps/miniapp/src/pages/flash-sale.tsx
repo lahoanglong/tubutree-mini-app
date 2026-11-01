@@ -43,19 +43,14 @@ const STRIP: React.CSSProperties = {
   background: 'var(--color-bg-surface)',
 };
 
-/** Thanh đặc của nút lùi cao 56px (+ vùng an toàn) và đệm đầu của `.page` khi có nút lùi là 48px (+ vùng an toàn): xem back-button.tsx, css/tokens.css. */
-const BACK_BAR_HEIGHT = 56;
-const PAGE_TOP_PADDING = 48;
-
 /**
  * Dải tab và đồng hồ dính khi cuộn (thiết kế §5): khung 14 món cao cỡ 1800px, khách cuộn xuống vẫn đổi được khung và thấy giờ còn lại mà không cuộn ngược.
- * `top` của phần tử dính đo từ mép NỘI DUNG của vùng cuộn (`.zaui-page`, đã đo ở WebKit lẫn Chromium), không từ mép ngoài: muốn dính ngay dưới thanh nút lùi
- * (56px + vùng an toàn tính từ đỉnh màn hình) thì trừ đệm đầu của trang (48px + vùng an toàn), còn 8px và không phụ thuộc tai thỏ. Vì vậy KHÔNG dùng lớp
- * `sticky-below-back` (nó ép `top` bằng 56px + vùng an toàn và dính thấp 48px). z-index dưới nút lùi (200) và trên thẻ món.
+ * Trang không dùng lớp `page` (PageHeader đã tự chừa chỗ cho nút lùi và vùng an toàn), nên `top` đo từ mép trên vùng cuộn: ghi `--safe-top` như trang
+ * Vườn Xanh, còn lớp `sticky-below-back` đẩy xuống dưới thanh lùi đặc (56px + vùng an toàn) khi có nút lùi. z-index dưới nút lùi (200) và trên thẻ món.
  */
 const STICKY: React.CSSProperties = {
   position: 'sticky',
-  top: BACK_BAR_HEIGHT - PAGE_TOP_PADDING,
+  top: 'var(--safe-top)',
   zIndex: 5,
   background: 'var(--color-bg-surface)',
   boxShadow: '0 1px 0 var(--color-border-subtle)',
@@ -266,7 +261,7 @@ export default function FlashSalePage() {
       );
     body = (
       <>
-        <div data-testid="flash-sticky" style={STICKY}>
+        <div data-testid="flash-sticky" className="sticky-below-back" style={STICKY}>
           <SlotTabs tabs={tabs} value={activeId} onChange={pick} panelId={panelId} />
           <div style={STRIP}>
             {activeTab.status === 'LIVE' ? (
@@ -318,7 +313,7 @@ export default function FlashSalePage() {
   }
 
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
       <PageHeader title={fillCopy('flash.title')} />
       <div role="status" style={endedNotice ? { padding: '8px 16px', background: 'var(--color-status-info-bg)', color: 'var(--color-status-info-fg)', fontSize: 'var(--type-body-sm-size)' } : undefined}>
         {endedNotice}
