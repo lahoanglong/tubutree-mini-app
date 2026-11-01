@@ -184,6 +184,9 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
     expect(view('Tặng 5k đồng vào ví', base).name).toBe('Tặng 5k đồng vào ví');
     // "đồng" là chữ thường ("đồng hành"), không phải tiền: không bị nuốt.
     expect(view('Giảm 20k đồng hành cùng bạn', base).name).toBe('đồng hành cùng bạn');
+    expect(view('Giảm 20k đồng loạt cho mọi đơn', base).name).toBe('đồng loạt cho mọi đơn');
+    expect(view('Giảm 20k đồng giá mọi món', base).name).toBe('đồng giá mọi món');
+    expect(view('Tặng 20k đồng ý nhận quà', base).name).toBe('đồng ý nhận quà');
   });
   it('số nhỏ không đơn vị (số đơn, số lượt, số bạn) là thông tin riêng: tên giữ, không bị coi là nhắc lại mã', () => {
     const base = { value: 20_000, minOrder: 300_000 };

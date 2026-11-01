@@ -61,8 +61,11 @@ const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/
 
 // Đơn vị chỉ tính khi không dính chữ cái liền sau ("10 trở lên" không phải "10tr"). Tiền viết bằng chữ ("đồng", "VND", "vnđ") cũng là đơn vị đồng:
 // nếu không, "20.000 đồng" bị đọc là số trần và "đồng" ở lại sau số đã rút gọn ("20k đồng"). Đơn vị đôi ("20k vnđ", "1,5tr đồng") là MỘT đơn vị:
-// chữ tiền tệ sau k/tr thuộc về con số, không ở lại làm đầu phần đuôi. "đồng hành", "đồng thời" là chữ thường, không phải tiền.
-const CURRENCY = String.raw`(?:(?:đồng|dong)(?!\p{L})(?!\s+(?:hành|thời|hanh|thoi)(?!\p{L}))|(?:vn[đd]|đ)(?!\p{L})|₫)`;
+// chữ tiền tệ sau k/tr thuộc về con số, không ở lại làm đầu phần đuôi. "đồng" đứng đầu một từ ghép ("đồng hành", "đồng loạt", "đồng giá", "đồng ý"...)
+// là chữ thường, không phải tiền: danh sách dưới đây (có dấu và không dấu) thêm khi gặp từ ghép mới.
+const DONG_COMPOUNDS = ['hành', 'thời', 'loạt', 'giá', 'ý', 'đều', 'bộ', 'nghiệp', 'hồ', 'phục', 'đội', 'minh', 'bằng', 'cảm', 'lòng', 'tâm', 'thuận', 'nhất', 'dạng', 'chí', 'hương', 'bào', 'hạng', 'tình', 'góp', 'khởi', 'ca'];
+const DONG_COMPOUND_SRC = [...new Set([...DONG_COMPOUNDS, ...DONG_COMPOUNDS.map(fold)])].join('|');
+const CURRENCY = String.raw`(?:(?:đồng|dong)(?!\p{L})(?!\s+(?:${DONG_COMPOUND_SRC})(?!\p{L}))|(?:vn[đd]|đ)(?!\p{L})|₫)`;
 const FIGURE_SRC = String.raw`(\d[\d.,]*)(\s*)(%|(?:tr|k)(?!\p{L})(?:\s*${CURRENCY})?|${CURRENCY})?`;
 const FIGURE_RE = new RegExp(FIGURE_SRC, 'giu');
 // Mỗi mục là một con số (cả cụm đơn vị) hoặc một từ dính liền: cùng cách chia với FIGURE_RE nên cụm "20k vnđ" không bị tách ở khoảng trắng.
@@ -103,7 +106,7 @@ function knownFigures(c: CouponTerms): Set<number> {
 const FILLER_WORDS = new Set(['va', 'cho', 'ban', 'tang', 'khi', 'mua', 'voi', 'ap', 'dung', 'freeship', 'ship']);
 
 // Cùng luật đơn vị với FIGURE_RE nhưng trên chữ đã `fold` (đ thành d, bỏ dấu).
-const FOLDED_CURRENCY = String.raw`(?:dong\b(?!\s+(?:hanh|thoi)\b)|vnd\b|d\b)`;
+const FOLDED_CURRENCY = String.raw`(?:dong\b(?!\s+(?:${DONG_COMPOUNDS.map(fold).join('|')})\b)|vnd\b|d\b)`;
 const FOLDED_FIGURE_RE = new RegExp(String.raw`\d[\d.,]*\s*(?:%|(?:tr|k)\b(?:\s*${FOLDED_CURRENCY})?|${FOLDED_CURRENCY})?`, 'g');
 
 const wordsOf = (s: string): string[] => fold(s).replace(FOLDED_FIGURE_RE, ' ').split(/[^a-z]+/).filter(Boolean);
