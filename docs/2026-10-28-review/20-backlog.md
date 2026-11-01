@@ -296,6 +296,43 @@ Ghi từ báo cáo worker và review Opus của từng gói (`reviews/<gói>-{b,
 | R-186 | P3 | quản trị lương (test web) | Test `chưa chọn loại, số tiền không hợp lệ hoặc thiếu lý do thì nút ghi bị khoá và không gọi API` chập chờn trên CI: `sheet()` trả null ở dòng 246 (`Cannot read properties of null (reading 'querySelector')`) vì sheet thưởng/phạt chưa mở xong khi runner tải nặng. Đỏ 1 lần ở CI PR #88 (nhánh chỉ đổi Mini App); chạy lại thì qua; gate máy xanh. | `apps/web/src/components/admin/payroll-admin-tab.spec.tsx:246,280` | Chờ sheet bằng `findBy…`/`waitFor` thay vì đọc DOM ngay sau `flush()`. Chỉ đổi test. |
 | R-187 | P3 | CTV (test Mini) | Test C-067 `lối tắt Chia sẻ mở bảng chia sẻ…` chập chờn trên CI: `findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ })` hết thời gian chờ mặc định 1 s khi dashboard CTV chưa dựng xong. Đỏ 2 lần liền ở CI PR #88 (nhánh không đụng trang CTV); máy chạy 5/5 xanh. Trên CI main `cb0007c35` ca đầu file mất 2,3 s, hai ca sau 1,0–1,4 s. | `apps/miniapp/src/pages/affiliate.spec.tsx:99,109,119` | ĐÃ SỬA ở PR #88 (`8b4af5988`): `{ timeout: 5000 }` cho ba lần chờ nút Chia sẻ. |
 
+## Sau đợt 31/10–01/11 (1028d, 1028e, 1028f)
+
+Bảng dưới thay trạng thái của các mục cùng số trong bảng "Mục trong gói chưa xong hoặc chỉ xong một phần" và bảng "Mục mới" ở trên.
+
+### Trạng thái
+
+| Mục | Trạng thái | Ở đâu | Ghi chú |
+|---|---|---|---|
+| R-180, R-183, R-184, R-186 | xong | PR #91 (1028d, main `5bc47c1a4`, đã deploy 01/11 07:44) | Chủ chốt nhãn lối tắt "Đơn sàn" và "Yêu cầu". R-185 để lại cho phiên CTV. |
+| R-53 | xong | đã có ở main `a5469abe9` | Rà mã 01/11 (agent Opus): phần còn lại đã làm ở các đợt sau. |
+| R-54 | xong | đã có ở main `a5469abe9` | Rà mã 01/11 (agent Opus): phần còn lại đã làm ở các đợt sau. |
+| R-56 | đóng | quyết định chủ 01/11 | Giữ cổng đăng nhập ở web, không làm endpoint đọc công khai. |
+| R-32 | xong | PR #100 (1028e-taikhoan, `357f33555`) | Chủ chọn câu ngắn của web cho cả hai nền: "Chuyển khoản trước <ngày giờ> — quá hạn đơn sẽ tự huỷ." |
+| R-55 | xong | PR #100 | Chủ chọn web theo Mini: "Sự kiện" là chip đầu, giữ một nút "Đăng bài". |
+| R-110 | xong | PR #100 | Ô ngày sinh gõ tay dd/mm/yyyy, dùng chung `app-core/dob-input.ts`; gửi API vẫn `yyyy-mm-dd`. |
+| R-111 | xong | PR #100 | "Xoá tài khoản" chuyển sang Cài đặt ở cả hai nền, ẩn với khách tạm. |
+| R-70 | một phần | PR #97 (1028e-quantri, `7b77ee686`) | Chip trạng thái đơn có số (API `GET /admin/orders/status-counts`). Còn lại xem R-189. |
+| R-75, R-148, R-149 | xong | PR #97 | Bộ tab kiểm duyệt dùng chung; tab Đại lý dạng chip có số; khung xương admin, `staleTime` 30 s cho khoá `admin-*`. |
+| R-24 | xong | PR #98 (1028e-do, `dd6397853`) | Lỗi #418 ở trang sản phẩm cho khách có phiên: 2/44 lượt trước sửa, 0/72 sau sửa. Số đo `perf/1028e-do/r24-*`. |
+| R-83 | để mở | PR #98 chỉ đo | Thẻ `<a>` 11,5–18 ms; `router.push` 73–88 ms (máy tải nặng có lượt 165 ms). Đo lại khi máy rảnh, thêm ca kệ Mua lại. |
+| R-82 | một phần | PR #98 chỉ đo | `GET /cart` giỏ 12 món: 7 câu SQL, có mã 8, không ghi. Đích độ trễ p97,5 ≤ 15 ms chưa kiểm được vì máy đo tải nặng. |
+| R-97 | xong | PR #104 (1028f-diem, `7682da5f0`) | Bấm dòng "Nhận ~X Điểm Xanh" mở popup "Cách tính Điểm Xanh". Không đổi luật điểm. |
+| R-16 | R16_STATUS | R16_WHERE | R16_NOTE |
+
+Cả #97, #98, #100, #104 đã merge vào main nhưng chưa deploy (PROD `01ede3876` lúc 01/11 13:00).
+
+### Mục mới
+
+| Mục | Ưu tiên | Màn | Vấn đề | Nguồn | Gợi ý |
+|---|---|---|---|---|---|
+| R-188 | P3 | admin (mọi tab) | Thao tác không ghi gì (bấm Huỷ trong hộp xác nhận, gửi từng tin chat CSKH) vẫn làm tải lại mọi query `admin-*` đang mở. Dữ liệu đúng, chỉ tốn request. | PR #97 (review Opus), `apps/web/src/lib/query-client.ts` | Cho mutation đặt `meta: { skipAdminInvalidate: true }`. |
+| R-189 | P3 | tab-orders (admin 375) | Phần còn lại của R-70: nút "Lọc (n)" mở ngăn kéo, mỗi đơn một thẻ ở 375, gộp ba nhóm chip. Nhãn tab kiểm duyệt web "Báo cáo vi phạm (1)" khác Mini "Báo cáo 1". | PR #97 | Làm cùng đợt quản trị sau. |
+| R-190 | P3 | hồ sơ (ngày sinh) | Dán kiểu Mỹ "3/5/1990" hoặc trình duyệt tự điền theo locale en-US ra "03/05/1990": hợp lệ nhưng đảo ngày và tháng. Có từ trước. Hộp xác nhận ngày sinh (chỉ đặt được một lần) là chốt chặn. | PR #100 (review Opus) | Khi nguồn là tự điền, đọc theo locale của trình duyệt. |
+| R-191 | P3 | test web | `site-header.spec.tsx` ca "HTML máy chủ" vẫn mock `useHydrated`, chưa chạy hook thật. Hai spec của R-24 chưa dọn mock và root trong `finally`, nên một ca đỏ có thể kéo ca sau đỏ theo. | PR #98 (review Opus) | Dọn trong `finally`; ca HTML máy chủ dùng `renderToString` thật. |
+| R-192 | P3 | home (Mini vãng lai) | Mini vãng lai gọi 10 API ở Trang chủ (có `/orders`, `/cart` của tài khoản khách tạm), web vãng lai gọi 2. | `perf/1028e-do/r16-result.json` | Xét bỏ lời gọi theo tài khoản khi khách tạm chưa có đơn và giỏ. |
+| R-193 | P3 | trang sản phẩm (web 375) | Popup "Cách tính Điểm Xanh" ở web không có thanh kéo trên đầu sheet và không có liên kết "Gửi đơn sàn để tích điểm" vì web chưa có trang gửi đơn sàn. | PR #104 | Thêm liên kết khi web có trang gửi đơn sàn. |
+
 ### Điều chủ cần biết (không phải lỗi)
 
 - Gộp chuỗi điểm danh (diemxanh): ngày chuyển đổi lấy theo chuỗi nước. Khách đang ở N6 của chu kỳ Điểm Xanh cũ mà chuỗi nước ở ngày 1 thì hôm chuyển nhận điểm ngày 2 thay vì ngày 7 (chênh 1.000 điểm nếu lẽ ra tới N7). Đây là hệ quả của cách chuyển đổi chủ đã duyệt.

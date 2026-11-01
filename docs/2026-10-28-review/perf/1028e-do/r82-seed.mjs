@@ -1,0 +1,22 @@
+// R-82: dựng giỏ lớn cho khách returning ở lane 3 (12 món, 2 món flash sale, 1 món hết hàng).
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+const WT = '/Users/longla/coding/tubutree-mini-app/.claude/worktrees/r1028e-do';
+const h = await import(WT + '/docs/2026-10-20-uat/tools/uat-harness/lib.mjs');
+const L = h.lane(3);
+const env = fs.readFileSync(WT + '/docs/2026-10-20-uat/tools/uat-harness/state/lane-3/lane.env', 'utf8').match(/^DATABASE_URL=(.*)$/m)[1];
+const { PrismaClient } = createRequire(WT + '/apps/api/package.json')('@prisma/client');
+const p = new PrismaClient({ datasources: { db: { url: env } } });
+const u = await h.findUser(L, 'returning');
+const COUPON = process.argv[2] || null;
+const vars = await p.variation.findMany({ where: { stock: { gt: 5 } }, take: 13, orderBy: { id: 'asc' } });
+console.log('user', u.id, 'variations', vars.length);
+const cart = await p.cart.upsert({ where: { userId: u.id }, update: { couponCode: COUPON }, create: { userId: u.id, couponCode: COUPON } });
+await p.cartItem.deleteMany({ where: { cartId: cart.id } });
+for (const v of vars.slice(0, 12)) await p.cartItem.create({ data: { cartId: cart.id, variationId: v.id, quantity: 1 } });
+await p.variation.update({ where: { id: vars[11].id }, data: { stock: 0 } });
+await p.flashSaleItem.deleteMany({ where: { flashSale: { title: 'R82 perf' } } });
+await p.flashSale.deleteMany({ where: { title: 'R82 perf' } });
+await p.flashSale.create({ data: { title: 'R82 perf', startAt: new Date(Date.now() - 3600e3), endAt: new Date(Date.now() + 30 * 86400e3), isActive: true, createdBy: u.id, items: { create: [0, 1].map((i) => ({ variationId: vars[i].id, flashPrice: Math.floor(vars[i].retailPrice * 0.8), quota: 100, perUserLimit: 5 })) } } });
+console.log('items', await p.cartItem.count({ where: { cartId: cart.id } }));
+await p.$disconnect();

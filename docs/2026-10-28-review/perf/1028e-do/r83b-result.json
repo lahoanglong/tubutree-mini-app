@@ -1,0 +1,27 @@
+[
+ {
+  "case": "router.push (gợi ý tìm kiếm, khách)",
+  "run": 1,
+  "ms": 96.5
+ },
+ {
+  "case": "router.push (gợi ý tìm kiếm, khách)",
+  "run": 2,
+  "ms": 129.2
+ },
+ {
+  "case": "router.push (gợi ý tìm kiếm, khách)",
+  "run": 3,
+  "ms": 120.7
+ },
+ {
+  "case": "router.push (gợi ý tìm kiếm, khách)",
+  "run": 4,
+  "ms": 82.9
+ },
+ {
+  "case": "router.push (gợi ý tìm kiếm, khách)",
+  "run": 5,
+  "ms": 153.2
+ }
+]

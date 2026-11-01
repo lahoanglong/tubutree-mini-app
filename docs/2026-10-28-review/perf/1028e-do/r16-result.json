@@ -1,0 +1,268 @@
+[
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "cold",
+  "total": 97,
+  "api": 20,
+  "dup": [
+   "/img x18"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "reopen",
+  "total": 96,
+  "api": 19,
+  "dup": [
+   "/img x17"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "cold",
+  "total": 103,
+  "api": 27,
+  "dup": [
+   "/img x17"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "reopen",
+  "total": 104,
+  "api": 28,
+  "dup": [
+   "/img x18"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "cold",
+  "total": 122,
+  "api": 47,
+  "dup": [
+   "/img x34",
+   "/orders x2"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/me/loyalty",
+   "/orders"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "reopen",
+  "total": 120,
+  "api": 45,
+  "dup": [
+   "/img x32",
+   "/orders x2"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/me/loyalty",
+   "/me/daily-check-in",
+   "/home/me",
+   "/feed",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/coupons",
+   "/orders"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "cold",
+  "api": 27,
+  "dup": [
+   "/img x17"
+  ],
+  "paths": [
+   "/home",
+   "/auth/guest",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/img",
+   "/me/coupons",
+   "/orders",
+   "/me/wishlist/ids",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "reopen",
+  "api": 26,
+  "dup": [
+   "/img x14"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/feed/public-preview",
+   "/orders",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/feed",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "cold",
+  "api": 23,
+  "dup": [
+   "/img x14"
+  ],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/img",
+   "/feed",
+   "/me/wishlist/ids"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "reopen",
+  "api": 24,
+  "dup": [
+   "/img x14"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/me/notifications/unread-count",
+   "/me/wishlist/ids",
+   "/me/daily-check-in",
+   "/cart",
+   "/me/coupons",
+   "/home/me",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "cold",
+  "api": 33,
+  "dup": [
+   "/orders x2",
+   "/img x21"
+  ],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/home/me",
+   "/me/coupons",
+   "/cart",
+   "/orders",
+   "/img",
+   "/me/loyalty",
+   "/feed",
+   "/me/wishlist/ids"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "reopen",
+  "api": 45,
+  "dup": [
+   "/img x32",
+   "/orders x2"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/me/daily-check-in",
+   "/me/notifications/unread-count",
+   "/me/wishlist/ids",
+   "/home/me",
+   "/feed",
+   "/me/coupons",
+   "/cart",
+   "/me/loyalty",
+   "/orders"
+  ]
+ }
+]
