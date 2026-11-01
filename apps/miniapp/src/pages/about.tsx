@@ -1,29 +1,17 @@
 import { useState } from 'react';
-import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Page, useNavigate } from 'zmp-ui';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, TreePine } from 'lucide-react';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
-import { formatVnd } from '../utils/format';
-import { getWallet, requestAccountDeletion } from '../services/account-api';
-import {
-  WALLET_FORFEIT_AGREE,
-  WALLET_FORFEIT_LOADING,
-  WALLET_FORFEIT_UNKNOWN,
-  canSubmitDeletion,
-  walletForfeitConsent,
-  walletForfeitNotice,
-} from '../utils/account-deletion-copy';
-import { getErrorMessage } from '../services/api';
 import type { PublicConfig } from '../services/shop-api';
-import { openOAChat, hasOA, callPhone } from '../services/zmp-bridge';
+import { callPhone } from '../services/zmp-bridge';
 import type { WebPolicySlug } from '../utils/web-policy';
 import { PolicySheet } from '../components/policy-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Chip } from '../components/ui/chip';
-import { Checkbox } from '../components/ui/form';
 import { Icon } from '../components/ui/icon';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { ListRow } from '../components/ui/list-row';
@@ -37,7 +25,9 @@ const ALL_CATS = 'Tất cả';
 
 /** "Đơn vị vận hành: tên · MST mã · địa chỉ"; ẩn phần chưa nhập, null khi không còn gì. */
 function operatorLine(company: PublicConfig['company']): string | null {
-  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(Boolean);
+  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(
+    Boolean,
+  );
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
 }
 const FAQ_SKELETON_ROWS = 4;
@@ -65,45 +55,30 @@ function HotlineButton({ phone }: { phone: string }) {
 }
 
 export default function AboutPage() {
-  const { openSnackbar } = useSnackbar();
   const [open, setOpen] = useState<number | null>(0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [forfeitAgreed, setForfeitAgreed] = useState(false);
-  const qc = useQueryClient();
-  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: confirmDelete });
-  const walletBalance = walletQ.data?.walletBalance;
   const [faqCat, setFaqCat] = useState<string>(ALL_CATS);
   // FAQ do admin nhập (tab Câu hỏi thường gặp); chưa có dòng nào hoặc lỗi mạng thì dùng bản dự phòng.
   const faqQ = useQuery({ queryKey: ['faqs'], queryFn: fetchFaqs, staleTime: 10 * 60_000 });
   const publicConfig = usePublicConfig();
   const navigate = useNavigate();
-  const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
+  const supportQ = useQuery({
+    queryKey: ['support-contact'],
+    queryFn: fetchSupportContact,
+    staleTime: 10 * 60_000,
+  });
   const faq = faqQ.data && faqQ.data.length > 0 ? faqQ.data : faqQ.isLoading ? [] : fallbackFaq(publicConfig);
   const faqCats = [ALL_CATS, ...new Set(faq.map((f) => f.cat))];
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.
   const supportRows = [
-    { label: 'Hotline', value: support?.hotline ? formatPhoneDisplay(support.hotline) : support?.hotline },
+    {
+      label: 'Hotline',
+      value: support?.hotline ? formatPhoneDisplay(support.hotline) : support?.hotline,
+    },
     { label: 'Zalo OA', value: support?.zaloOaName },
     { label: 'Email', value: support?.email },
   ].filter((r): r is { label: string; value: string } => Boolean(r.value));
 
-  // A1-03: nút này trước đây chỉ hiện snackbar giả, không gọi API nào. Giờ ghi nhận yêu cầu THẬT
-  // (KHÔNG xoá ngay — CSKH xử lý thủ công) + mở sẵn Zalo OA để khách có thể trao đổi trực tiếp
-  // luôn, thay vì chỉ chờ hotline gọi lại.
-  const deleteM = useMutation({
-    mutationFn: () => requestAccountDeletion(undefined, walletForfeitConsent(walletBalance, forfeitAgreed)),
-    onSuccess: (res) => {
-      openSnackbar({ text: res.message, type: 'info' });
-      if (hasOA) void openOAChat('Tôi muốn xoá tài khoản Tubu Tree');
-      setConfirmDelete(false);
-    },
-    onError: (e: unknown) => {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      setForfeitAgreed(false);
-      void qc.invalidateQueries({ queryKey: ['wallet'] });
-    },
-  });
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const operator = operatorLine(publicConfig.company);
   const bctUrl = publicConfig.company?.bctNoticeUrl ?? null;
@@ -117,7 +92,8 @@ export default function AboutPage() {
       <div style={{ margin: '12px 16px 0' }}>
         <div
           style={{
-            background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
+            background:
+              'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
             borderRadius: 'var(--radius-card)',
             padding: 20,
           }}
@@ -127,9 +103,8 @@ export default function AboutPage() {
             Sống Xanh An Lành
           </Heading>
           <Text variant="body-sm" tone="inverse" as="p" style={{ marginTop: 8 }}>
-            Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Chúng
-            tôi kết nối bạn với những thương hiệu Việt tử tế — minh bạch nguồn gốc, lành cho da, nhẹ
-            với đất.
+            Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Chúng tôi kết nối bạn với
+            những thương hiệu Việt tử tế — minh bạch nguồn gốc, lành cho da, nhẹ với đất.
           </Text>
         </div>
       </div>
@@ -165,7 +140,9 @@ export default function AboutPage() {
           return (
             <div
               key={item.q}
-              style={{ borderBottom: i < shownFaq.length - 1 ? '1px solid var(--color-border-subtle)' : 'none' }}
+              style={{
+                borderBottom: i < shownFaq.length - 1 ? '1px solid var(--color-border-subtle)' : 'none',
+              }}
             >
               <button
                 type="button"
@@ -220,7 +197,9 @@ export default function AboutPage() {
       {/* Hỗ trợ */}
       {(supportRows.length > 0 || publicConfig.chat?.enabled === true) && (
         <Section title="Hỗ trợ khách hàng">
-          {publicConfig.chat?.enabled === true && <LinkRow label="Chat với Tubu Tree" onClick={() => navigate('/chat')} last={supportRows.length === 0} />}
+          {publicConfig.chat?.enabled === true && (
+            <LinkRow label="Chat với Tubu Tree" onClick={() => navigate('/chat')} last={supportRows.length === 0} />
+          )}
           {supportRows.map((r, i) => (
             <KeyValueRow
               key={r.label}
@@ -256,66 +235,6 @@ export default function AboutPage() {
 
       {/* Nội dung điều khoản hiển thị ngay trong app (không rời mini app) */}
       <PolicySheet slug={policy} onClose={() => setPolicy(null)} />
-
-      {/* Xoá tài khoản */}
-      <div style={{ margin: '12px 16px 0' }}>
-        {!confirmDelete ? (
-          <ListRow destructive title="Xoá tài khoản" onPress={() => setConfirmDelete(true)} style={{ justifyContent: 'center', textAlign: 'center' }} />
-        ) : (
-          <Card padding={16} style={{ background: 'var(--color-status-danger-bg)' }}>
-            <Text variant="body-sm" tone="danger" as="p" style={{ fontWeight: 700 }}>
-              Xoá tài khoản vĩnh viễn?
-            </Text>
-            <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
-              Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản
-              CHƯA bị xoá ngay khi bạn bấm nút này.
-            </Text>
-            {walletQ.isLoading && (
-              <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 8 }}>
-                {WALLET_FORFEIT_LOADING}
-              </Text>
-            )}
-            {walletQ.isError && (
-              <div role="alert" style={{ marginTop: 8 }}>
-                <Text variant="caption" tone="danger" as="p">
-                  {WALLET_FORFEIT_UNKNOWN}
-                </Text>
-              </div>
-            )}
-            {walletBalance !== undefined && walletBalance > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <Text variant="body-sm" as="p" style={{ fontWeight: 700 }}>
-                  {walletForfeitNotice(formatVnd(walletBalance))}
-                </Text>
-                <div style={{ marginTop: 8 }}>
-                  <Checkbox checked={forfeitAgreed} onChange={() => setForfeitAgreed((v) => !v)} label={WALLET_FORFEIT_AGREE} />
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <Button
-                variant="secondary"
-                onPress={() => {
-                  setConfirmDelete(false);
-                  setForfeitAgreed(false);
-                }}
-                style={{ flex: '0 0 96px' }}
-              >
-                Huỷ
-              </Button>
-              <Button
-                variant="danger"
-                loading={deleteM.isPending}
-                disabled={!canSubmitDeletion(walletBalance, forfeitAgreed)}
-                onPress={() => deleteM.mutate()}
-                style={{ flex: 1 }}
-              >
-                Gửi yêu cầu xoá
-              </Button>
-            </div>
-          </Card>
-        )}
-      </div>
 
       <div style={{ height: 16 }} />
     </Page>

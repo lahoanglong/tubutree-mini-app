@@ -10,6 +10,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Text } from '../components/ui/text';
 import { useAuthStore } from '../store/auth';
+import { AccountDeletionSection } from '../components/account-deletion-section';
 import { isGuestUser } from '../components/coupon-claim-gate';
 import { haptic } from '../utils/haptic';
 import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
@@ -67,7 +68,11 @@ export default function SettingsPage() {
         }
         if (alive) setNotify(server);
       } catch {
-        if (alive) openSnackbarRef.current({ type: 'error', text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.' });
+        if (alive)
+          openSnackbarRef.current({
+            type: 'error',
+            text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.',
+          });
       }
     })();
     return () => {
@@ -151,7 +156,10 @@ export default function SettingsPage() {
                 <Text
                   as="div"
                   tone={active ? 'brand' : 'secondary'}
-                  style={{ fontWeight: active ? 700 : 400, fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15 }}
+                  style={{
+                    fontWeight: active ? 700 : 400,
+                    fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15,
+                  }}
                 >
                   A
                 </Text>
@@ -176,6 +184,9 @@ export default function SettingsPage() {
           </Button>
         </div>
       )}
+
+      {canLogout && <AccountDeletionSection />}
+      <div style={{ height: 16 }} />
     </Page>
   );
 }

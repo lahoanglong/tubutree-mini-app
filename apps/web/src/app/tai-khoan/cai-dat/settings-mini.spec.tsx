@@ -87,4 +87,13 @@ describe('cài đặt như Mini App (điện thoại)', () => {
     expect(container.textContent).not.toContain('phiên bản');
     expect(container.querySelector('[data-page-bleed] h1')!.textContent).toBe('Cài đặt');
   });
+
+  it('Xoá tài khoản chữ đỏ, nằm dưới Đăng xuất', async () => {
+    const { container } = await mount();
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const logout = buttons.findIndex((b) => b.textContent === 'Đăng xuất');
+    const del = buttons.findIndex((b) => b.textContent === 'Xoá tài khoản');
+    expect(del).toBeGreaterThan(logout);
+    expect(buttons[del]!.className).toContain('max-md:text-[color:var(--color-text-danger)]');
+  });
 });
