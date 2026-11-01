@@ -79,6 +79,18 @@ describe('ProductTile: biến thể và khung', () => {
     expect(text.style.lineHeight).toBe('22px');
   });
 
+  it('thẻ Giờ vàng cắt tên một dòng (Q11, cao 20px); các thẻ caption khác (rail-sm) vẫn hai dòng 40px', () => {
+    const name = 'Khăn ướt không cồn Bé Na';
+    const flash = tile(viewOf({ name }, 'flash'), 'flash');
+    const flashName = link(flash).firstElementChild as HTMLElement;
+    expect(flashName.style.webkitLineClamp).toBe('1');
+    expect(flashName.style.minHeight).toBe(`${TILE_METRICS.nameFlash}px`);
+    const rail = tile(viewOf({ name }, 'rail-sm'), 'rail-sm');
+    const railName = link(rail).firstElementChild as HTMLElement;
+    expect(railName.style.webkitLineClamp).toBe('2');
+    expect(railName.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+  });
+
   it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {
     const find = (c: HTMLElement, text: string) => Array.from(c.querySelectorAll<HTMLElement>('[data-ds-part="price"] span')).find((e) => e.textContent === text)!;
     const plain = tile(viewOf(), 'grid');

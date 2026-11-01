@@ -76,6 +76,19 @@ describe('ProductTile: biến thể và khung', () => {
     expect(text.style.lineHeight).toBe('22px');
   });
 
+  it('thẻ Giờ vàng cắt tên một dòng (Q11, cao 20px); các thẻ caption khác (rail-sm) vẫn hai dòng 40px', () => {
+    const name = 'Khăn ướt không cồn Bé Na';
+    const flash = render(<ProductTile view={viewOf({ name }, 'flash')} variant="flash" href="/p" />);
+    const flashName = screen.getByRole('button', { name }).firstElementChild as HTMLElement;
+    expect(flashName.style.webkitLineClamp).toBe('1');
+    expect(flashName.style.minHeight).toBe(`${TILE_METRICS.nameFlash}px`);
+    flash.unmount();
+    render(<ProductTile view={viewOf({ name }, 'rail-sm')} variant="rail-sm" href="/p" />);
+    const railName = screen.getByRole('button', { name }).firstElementChild as HTMLElement;
+    expect(railName.style.webkitLineClamp).toBe('2');
+    expect(railName.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+  });
+
   it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {
     const plain = render(<ProductTile view={viewOf()} variant="grid" href="/p" />);
     expect(within(plain.container).getByText('52.000đ').style.color).toBe('var(--color-text-price)');

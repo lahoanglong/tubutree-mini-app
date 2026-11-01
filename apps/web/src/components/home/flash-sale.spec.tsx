@@ -265,15 +265,15 @@ describe('FlashSale', () => {
     expect(c.querySelector('[data-testid="flash-sold-bar"]')?.getAttribute('data-state')).toBe('soldout');
   });
 
-  // D7-29: tên SP cao đúng 2 dòng, không lòi dòng 3. Thanh "đã bán" chỉ để trang trí (aria-hidden): chữ mang thông tin.
-  it('thanh "đã bán" luôn có chữ (kể cả chưa bán suất nào) và chỉ để trang trí; tên sản phẩm cao đúng hai dòng', async () => {
+  // D7-29: tên SP không lòi dòng thừa (Q11: thẻ Giờ vàng ở Trang chủ đúng một dòng). Thanh "đã bán" chỉ để trang trí (aria-hidden): chữ mang thông tin.
+  it('thanh "đã bán" luôn có chữ (kể cả chưa bán suất nào) và chỉ để trang trí; tên sản phẩm cao đúng một dòng', async () => {
     activeResult = async () => three({ soldCount: 4 });
     const c = await mount(<FlashSale />);
     expect(c.querySelector('[data-testid="flash-sold-bar"]')?.textContent).toContain('Đã bán 40%');
     expect(c.querySelector('[data-testid="flash-sold-track"]')?.getAttribute('aria-hidden')).toBe('true');
     const name = c.querySelector('a.tubu-tile-link > span') as HTMLElement;
-    expect(name.style.webkitLineClamp).toBe('2');
-    expect(name.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+    expect(name.style.webkitLineClamp).toBe('1');
+    expect(name.style.minHeight).toBe(`${TILE_METRICS.nameFlash}px`);
     expect(name.style.lineHeight).toBe('20px');
     mounted!.unmount();
     resetFlashSales();

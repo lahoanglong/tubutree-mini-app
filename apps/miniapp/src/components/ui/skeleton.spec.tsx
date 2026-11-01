@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
+import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import { Skeleton, ProductCardSkeleton, ProductTileSkeleton, LineItemSkeleton } from './skeleton';
 
@@ -47,6 +47,17 @@ describe('ProductTileSkeleton: dựng từ cùng số đo với thẻ thật (kh
     expect((container.querySelector('[data-testid="catalog-tile-skeleton-body"]') as HTMLElement).style.height).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
     const flash = render(<ProductTileSkeleton variant="flash" note footerHeight={28} />);
     expect((flash.container.querySelector('[data-testid="catalog-tile-skeleton-body"]') as HTMLElement).style.height).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
+  });
+
+  it('dải tên của khung chờ Giờ vàng một dòng như thẻ thật, rail-sm hai dòng', () => {
+    const nameBar = (variant: CardVariant) => {
+      const { container, unmount } = render(<ProductTileSkeleton variant={variant} />);
+      const h = (container.querySelector('[data-testid="catalog-tile-skeleton-body"] .tubu-skeleton') as HTMLElement).style.height;
+      unmount();
+      return h;
+    };
+    expect(nameBar('flash')).toBe(`${TILE_METRICS.nameFlash}px`);
+    expect(nameBar('rail-sm')).toBe(`${TILE_METRICS.nameCaption}px`);
   });
 
   it('ảnh giữ tỉ lệ 1:1 (trừ line), vỏ aria-hidden', () => {

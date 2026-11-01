@@ -10,8 +10,10 @@ export const TILE_METRICS = {
   brand: 16,
   /** Tên 2 dòng body-sm. */
   name: 44,
-  /** Tên 2 dòng caption (thẻ hẹp rail-sm, flash). */
+  /** Tên 2 dòng caption (thẻ hẹp rail-sm). */
   nameCaption: 40,
+  /** Tên 1 dòng caption: thẻ Giờ vàng ở Trang chủ chỉ có chỗ cho một dòng (thiết kế Q11), nên cắt "…" thay vì cao thêm 20px. */
+  nameFlash: 20,
   gap: 4,
   /** Khoảng giữa hàng giá và meta. */
   metaGap: 2,
@@ -47,7 +49,8 @@ export function tileBodyHeight(variant: CardVariant, o: TileBodyOptions = {}): n
     case 'rank':
       return M.inset + M.name + M.gap + M.price + M.compare + M.metaGap + M.meta + M.inset + extra;
     case 'rail-sm':
-    case 'flash':
       return M.inset + M.nameCaption + M.gap + M.price + M.compare + M.inset + extra;
+    case 'flash':
+      return M.inset + M.nameFlash + M.gap + M.price + M.compare + M.inset + extra;
   }
 }

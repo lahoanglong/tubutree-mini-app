@@ -572,7 +572,7 @@ export function purchasedSkeletonHeight(hint: PurchasedHint): number {
 }
 
 /** Chiều cao khối Giờ vàng chưa có dòng suất kế (đo thật Mini 375px: tiêu đề + một hàng thẻ). Khoảng cách tới khối kế do vỏ khối lo nên khung chờ cao đúng bằng số này. */
-export const FLASH_SKELETON_HEIGHT = 296;
+export const FLASH_SKELETON_HEIGHT = 276;
 
 /** Lưới Danh mục: ô vuông 56 + cách 4 + nhãn hai dòng 32; 5 cột, tối đa 10 ô một màn (2 hàng), hàng cách nhau 8, đệm trên 4 và dưới 8. */
 export const CATEGORY_TILE_SIZE = 56;

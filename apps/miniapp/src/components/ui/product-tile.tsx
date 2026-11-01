@@ -61,6 +61,8 @@ const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
 
 const STACKED: ReadonlySet<CardVariant> = new Set(['rail-sm', 'rail-md', 'flash', 'rank']);
 const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
+/** Thẻ Giờ vàng cắt tên một dòng (Q11); các thẻ còn lại hai dòng. */
+const NAME_LINES = (variant: CardVariant): 1 | 2 => (variant === 'flash' ? 1 : 2);
 const FIXED_LINE = (px: number): CSSProperties => ({ lineHeight: `${px}px` });
 
 function rankBackground(rank: number): { background: string; color: string } {
@@ -264,10 +266,10 @@ export function ProductTile({
             as="span"
             style={{
               display: '-webkit-box',
-              WebkitLineClamp: 2,
+              WebkitLineClamp: NAME_LINES(variant),
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              minHeight: isLine ? undefined : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
+              minHeight: isLine ? undefined : variant === 'flash' ? TILE_METRICS.nameFlash : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
               ...FIXED_LINE(nameLine),
               ...(isLine ? { fontWeight: 600 } : null),
             }}
