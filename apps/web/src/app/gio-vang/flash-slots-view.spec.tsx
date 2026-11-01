@@ -65,6 +65,7 @@ vi.mock('@/components/mini/countdown', () => ({
   ),
 }));
 
+import { PENDING_REMIND_KEY, rememberPendingRemind } from '@/lib/pending-remind';
 import FlashSlotsView from './flash-slots-view';
 
 const NOW = new Date('2026-11-01T06:00:00Z'); // 13:00 giờ VN
@@ -273,6 +274,21 @@ describe('Trang Giờ vàng (web): khách chưa đăng nhập', () => {
     expect(state.posts).toEqual([]);
   });
 
+  it('bấm Nhắc tôi nhớ suất lại (sessionStorage) trước khi đi đăng nhập, để đăng nhập xong tự đặt', async () => {
+    const c = await mount();
+    click(tabs(c)[1]!);
+    await flush(4);
+    click(named(c, 'Nhắc tôi Sản phẩm c'));
+    await flush(2);
+    expect(JSON.parse(sessionStorage.getItem(PENDING_REMIND_KEY)!)).toMatchObject({ itemId: 'c', startAt: S20.startAt });
+  });
+
+  it('khách quay về trang mà chưa đăng nhập (bỏ dở): ý định cũ bị xoá, lần đăng nhập sau không tự đặt nhắc', async () => {
+    rememberPendingRemind({ itemId: 'c', startAt: S20.startAt });
+    await mount();
+    expect(sessionStorage.getItem(PENDING_REMIND_KEY)).toBeNull();
+  });
+
   it('bấm Mua ngay đi tới đăng nhập, không thêm giỏ', async () => {
     const c = await mount();
     click(named(c, 'Mua ngay Sản phẩm a'));
@@ -335,6 +351,36 @@ describe('Trang Giờ vàng (web): Nhắc tôi khi đã đăng nhập', () => {
     await flush(6);
     expect(alertText(c)).not.toBeNull();
     expect(named(c, 'Nhắc tôi Sản phẩm c')!.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('Trang Giờ vàng (web): quay về sau đăng nhập với một Nhắc tôi đang chờ', () => {
+  const PENDING = { itemId: 'c', startAt: S20.startAt };
+
+  it('món chưa nhắc: tự đặt nhắc đúng suất một lần, xoá ý định, báo giờ nhắc; render lại không đặt lần hai', async () => {
+    rememberPendingRemind(PENDING);
+    const c = await mount();
+    await flush(10);
+    expect(state.posts).toEqual(['/flash-sales/items/c/remind']);
+    expect(state.deletes).toEqual([]);
+    expect(sessionStorage.getItem(PENDING_REMIND_KEY)).toBeNull();
+    expect(status(c).textContent).toBe('Tubu sẽ nhắc bạn lúc 20:00');
+  });
+
+  it('món đã được nhắc từ trước (máy khác): không gọi POST lẫn DELETE, vì bấm bật lại sẽ huỷ nhắc', async () => {
+    state.reminded = true;
+    rememberPendingRemind(PENDING);
+    await mount();
+    await flush(10);
+    expect(state.posts).toEqual([]);
+    expect(state.deletes).toEqual([]);
+    expect(sessionStorage.getItem(PENDING_REMIND_KEY)).toBeNull();
+  });
+
+  it('không có ý định chờ: vào trang như thường, không đặt nhắc nào', async () => {
+    await mount();
+    await flush(10);
+    expect(state.posts).toEqual([]);
   });
 });
 

@@ -2,12 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { CouponsService } from './coupons.service';
 import { CouponCleanupCron } from './coupon-cleanup.cron';
 import { CouponClaimService } from './coupon-claim.service';
+import { CouponCollectService } from './coupon-collect.service';
 import { CouponsController } from './coupons.controller';
 
 @Global()
 @Module({
   controllers: [CouponsController],
-  providers: [CouponsService, CouponCleanupCron, CouponClaimService],
-  exports: [CouponsService, CouponClaimService],
+  providers: [CouponsService, CouponCleanupCron, CouponClaimService, CouponCollectService],
+  exports: [CouponsService, CouponClaimService, CouponCollectService],
 })
 export class CouponsModule {}

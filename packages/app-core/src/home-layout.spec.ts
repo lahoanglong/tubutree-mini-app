@@ -5,7 +5,8 @@ import {
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, CATEGORY_CELL_HEIGHT,
-  BANNER_HINT_KEY, readBannerHint, writeBannerHint,
+  BANNER_HINT_KEY, OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint,
+  COLLECT_HINT_KEY, COLLECT_HINT_MAX, collectSkeletonHeight, readCollectHint, writeCollectHint,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -174,6 +175,19 @@ describe('gợi ý nhớ banner chiến dịch', () => {
     const boom = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } };
     expect(readBannerHint(boom)).toBe(false);
     expect(() => writeBannerHint(boom, true)).not.toThrow();
+  });
+  it('mỗi vị trí banner có gợi ý riêng: ghi khoá Ưu đãi không đổi khoá Trang chủ và ngược lại', () => {
+    const st = mem();
+    expect(OFFERS_BANNER_HINT_KEY).toBe('tubu_offers_banner');
+    expect(OFFERS_BANNER_HINT_KEY).not.toBe(BANNER_HINT_KEY);
+    writeBannerHint(st, true, OFFERS_BANNER_HINT_KEY);
+    expect(st.m.get(OFFERS_BANNER_HINT_KEY)).toBe('1');
+    expect(readBannerHint(st, OFFERS_BANNER_HINT_KEY)).toBe(true);
+    expect(readBannerHint(st)).toBe(false);
+    writeBannerHint(st, true);
+    writeBannerHint(st, false, OFFERS_BANNER_HINT_KEY);
+    expect(readBannerHint(st)).toBe(true);
+    expect(readBannerHint(st, OFFERS_BANNER_HINT_KEY)).toBe(false);
   });
   it('khung chờ banner cao đúng tỉ lệ 5:2 ở bề rộng 375 trừ đệm 16 hai bên', () => {
     expect(HOME_SETTLING_HEIGHTS.banner).toBe(Math.round((375 - 32) / 2.5));
@@ -441,5 +455,42 @@ describe('homeRenderOrder / homeSettling', () => {
     expect(homeSettling({ startedUnknown: true, kind: 'new', dataPending: false })).toBe(false);
     expect(homeSettling({ startedUnknown: false, kind: 'returning', dataPending: true })).toBe(false);
     expect(homeSettling({ startedUnknown: false, kind: 'unknown', dataPending: true })).toBe(false);
+  });
+});
+
+describe('gợi ý nhớ số mã ở khối Nhận mã của Ưu đãi', () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('khứ hồi 0 đến tối đa; chưa nhớ, giá trị lạ hay không có kho → 0 (chờ im lặng)', () => {
+    const st = mem();
+    expect(COLLECT_HINT_KEY).toBe('tubu_offers_collect');
+    expect(readCollectHint(st)).toBe(0);
+    expect(readCollectHint(null)).toBe(0);
+    writeCollectHint(st, 2);
+    expect(readCollectHint(st)).toBe(2);
+    st.setItem(COLLECT_HINT_KEY, 'abc');
+    expect(readCollectHint(st)).toBe(0);
+    st.setItem(COLLECT_HINT_KEY, '9');
+    expect(readCollectHint(st)).toBe(COLLECT_HINT_MAX);
+  });
+  it('ghi kẹp trong 0..tối đa và làm tròn xuống; kho ném lỗi thì không văng', () => {
+    const st = mem();
+    writeCollectHint(st, 7);
+    expect(st.m.get(COLLECT_HINT_KEY)).toBe(String(COLLECT_HINT_MAX));
+    writeCollectHint(st, -3);
+    expect(st.m.get(COLLECT_HINT_KEY)).toBe('0');
+    writeCollectHint(st, 1.9);
+    expect(st.m.get(COLLECT_HINT_KEY)).toBe('1');
+    const boom = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } };
+    expect(readCollectHint(boom)).toBe(0);
+    expect(() => writeCollectHint(boom, 2)).not.toThrow();
+  });
+  it('chiều cao khung chờ: 0 thẻ không giữ chỗ, mỗi thẻ 88px, cách nhau 12px', () => {
+    expect(collectSkeletonHeight(0)).toBe(0);
+    expect(collectSkeletonHeight(1)).toBe(88);
+    expect(collectSkeletonHeight(2)).toBe(2 * 88 + 12);
+    expect(collectSkeletonHeight(3)).toBe(3 * 88 + 2 * 12);
   });
 });

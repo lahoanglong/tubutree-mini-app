@@ -73,7 +73,8 @@ import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
-import { PdpBundleSlots } from '../components/product/pdp-bundle-slots';
+import { PdpBundles } from '../components/product/pdp-bundles';
+import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
@@ -164,6 +165,8 @@ export default function ProductDetailPage() {
   });
   // "Đã xem gần đây" (spec 5b.4): ghi khi PDP mở THÀNH CÔNG. Đặt trước mọi early-return (luật hook).
   useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);
+  // Combo/Mua kèm tải song song với sản phẩm; trang giữ khung chờ tối đa vài trăm ms để khối chèn cùng lần vẽ đầu, không đẩy các hàng bên dưới.
+  const bundlesWaiting = useBundlesWait(slug);
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
@@ -343,7 +346,7 @@ export default function ProductDetailPage() {
     onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  if (product.isLoading) return <PdpSkeleton />;
+  if (product.isLoading || (product.data && bundlesWaiting)) return <PdpSkeleton />;
   if (!product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -758,7 +761,7 @@ export default function ProductDetailPage() {
         </Box>
       )}
 
-      <PdpBundleSlots />
+      {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 
       {reviews.data && reviews.data.count > 0 && (
         <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />
@@ -854,7 +857,7 @@ export default function ProductDetailPage() {
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <SectionTitle style={{ marginBottom: 10 }}>Thành phần</SectionTitle>
+          <SectionTitle block style={{ marginBottom: 10 }}>Thành phần</SectionTitle>
           <Box flex flexDirection="column" style={{ gap: 10 }}>
             {p.ingredients.map((ing, i) => (
               <Box key={i} flex style={{ gap: 10 }}>
@@ -890,7 +893,7 @@ export default function ProductDetailPage() {
 
       {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
       <Box id="pdp-promises" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <SectionTitle style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
+        <SectionTitle block style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(config.returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null).map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
@@ -986,7 +989,7 @@ export default function ProductDetailPage() {
         <>
           <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
             <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
-            <SectionTitle>{fillCopy('pdp.boughtTogether')}</SectionTitle>
+            <SectionTitle block>{fillCopy('pdp.boughtTogether')}</SectionTitle>
           </Box>
           <ProductRail label={fillCopy('pdp.boughtTogether')} variant="rail-md" items={shelves.boughtTogether} />
         </>
@@ -996,7 +999,7 @@ export default function ProductDetailPage() {
       {shelves.brand.length > 0 && (
         <>
           <Box pt={4} pb={2} px={4}>
-            <SectionTitle>Cùng nhà {p.brand}</SectionTitle>
+            <SectionTitle block>Cùng nhà {p.brand}</SectionTitle>
           </Box>
           <ProductRail label={`Cùng nhà ${p.brand}`} variant="rail-md" items={shelves.brand} />
         </>
@@ -1273,7 +1276,7 @@ function CollapsibleDescription({ text }: { text: string }) {
   const isLong = text.length > 220;
   return (
     <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-      <SectionTitle>{vi.product.description}</SectionTitle>
+      <SectionTitle block>{vi.product.description}</SectionTitle>
       <Text
         size="small"
         style={{

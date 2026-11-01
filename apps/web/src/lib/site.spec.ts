@@ -151,6 +151,24 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
   });
 });
 
+describe('trang công khai nhưng noindex (/uu-dai, /ma-giam-gia)', () => {
+  it('NOINDEX_PUBLIC_PATHS nằm trong PRIVATE_PATHS, không lặp', async () => {
+    const { NOINDEX_PUBLIC_PATHS, PRIVATE_PATHS } = await loadSite();
+    expect(NOINDEX_PUBLIC_PATHS).toEqual(['/uu-dai', '/ma-giam-gia']);
+    expect(PRIVATE_PATHS).toEqual(expect.arrayContaining(NOINDEX_PUBLIC_PATHS));
+    expect(new Set(PRIVATE_PATHS).size).toBe(PRIVATE_PATHS.length);
+  });
+
+  it('robots vẫn Disallow cả dạng trần lẫn cây con và KHÔNG allow lại: Google chọn allow khi hai luật dài bằng nhau', async () => {
+    const robots = (await import('../app/robots')).default;
+    const rule = [robots().rules].flat()[0]!;
+    expect(rule.disallow).toEqual(expect.arrayContaining(['/uu-dai', '/uu-dai/', '/ma-giam-gia', '/ma-giam-gia/']));
+    const allow = [rule.allow].flat();
+    expect(allow).not.toContain('/uu-dai');
+    expect(allow).not.toContain('/ma-giam-gia');
+  });
+});
+
 describe('restoringBootScript', () => {
   const run = async (getItem: () => string | null) => {
     const { restoringBootScript } = await loadSite();

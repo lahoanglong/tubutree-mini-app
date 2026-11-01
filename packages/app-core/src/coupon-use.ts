@@ -1,4 +1,6 @@
 import type { CouponPreviewDTO } from '@tubutree/shared-types';
+import { vndShort } from './commerce/money';
+import { fillCopy } from './shop-copy';
 
 /** Chữ và điểm đến của nút "Sao chép" / "Dùng ngay" trên thẻ mã giảm giá (Mini App và web dùng chung). */
 export const couponUseCopy = {
@@ -35,6 +37,20 @@ export function couponHint(previews: readonly CouponPreviewDTO[] | null | undefi
 export function couponHintText(hint: CouponHint, formatMoney: (n: number) => string): string {
   const base = `Bạn có ${hint.count} mã dùng được`;
   return hint.maxSaving > 0 ? `${base} · giảm đến ${formatMoney(hint.maxSaving)}` : base;
+}
+
+/**
+ * Bản ngắn của `couponHintText` cho dòng một hàng ở chân dính giỏ (Mini App và web), nơi "Bạn có 6 mã dùng được · giảm đến 60.000đ" bị
+ * cắt "…" ở 375px. Số tiền luôn rút gọn xuống tròn nghìn (tới 1 triệu) hay tròn trăm nghìn (từ 1 triệu): "giảm đến" chỉ được nói thấp hơn
+ * mức giảm thật, không bao giờ cao hơn, và chữ không còn phụ thuộc số lẻ (123.456đ → 123k) nên một dòng ở 375px dù mã giảm bao nhiêu.
+ * Câu đầy đủ với số tiền chính xác vẫn dùng ở thanh toán và khung mở rộng (`couponHintText`).
+ */
+export function couponHintShort(hint: CouponHint): string {
+  if (!(hint.maxSaving > 0)) return fillCopy('coupon.hintShortPlain', { n: hint.count });
+  const unit = hint.maxSaving >= 1_000_000 ? 100_000 : 1_000;
+  const floored = Math.floor(hint.maxSaving / unit) * unit;
+  // Dưới 1.000đ không có dạng k: ghi đủ (vndShort trả lại "950đ").
+  return fillCopy('coupon.hintShort', { n: hint.count, x: vndShort(floored > 0 ? floored : hint.maxSaving) });
 }
 
 /** Giỏ có hàng thì tới giỏ (chọn sẵn mã ở đó), chưa có thì tới danh sách sản phẩm để mua. */

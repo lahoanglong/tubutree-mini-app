@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react';
-import { formatCountdown } from '@tubutree/app-core/countdown-format';
+import { countdownText } from '@tubutree/app-core/commerce/countdown';
 import { serverNow } from '../utils/server-clock';
 
-export { formatCountdown };
-
-/** Đếm ngược tới `target` (Date hoặc ISO string), cập nhật mỗi 30s. "Xh Ym"; '' nếu target null, không parse được hoặc đã qua. */
+/** Đếm ngược tới `target` (Date hoặc ISO string), cập nhật mỗi 30s. "2 giờ 05 phút" (`countdownText`); '' nếu target null, không parse được hoặc đã qua. */
 export function useCountdown(target: Date | string | null): string {
   const compute = () => {
     if (!target) return '';
     const targetMs = new Date(target).getTime();
-    if (Number.isNaN(targetMs)) return ''; // target không parse được (Invalid Date) → tránh "NaNh NaNm"
-    return formatCountdown(targetMs - serverNow());
+    if (Number.isNaN(targetMs)) return ''; // target không parse được (Invalid Date) → tránh chữ rác
+    return countdownText(targetMs - serverNow());
   };
   const [label, setLabel] = useState(compute);
   useEffect(() => {

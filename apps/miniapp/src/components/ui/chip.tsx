@@ -68,7 +68,7 @@ export function Chip({
     >
       {IconCmp && <Icon icon={IconCmp} size="sm" tone={selected ? 'inverse' : 'muted'} />}
       {children}
-      {typeof count === 'number' && <span style={{ opacity: 0.75 }}>({count})</span>}
+      {typeof count === 'number' && <span style={{ fontWeight: 500 }}>({count})</span>}
     </button>
   );
 }

@@ -14,12 +14,12 @@ import {
   type StorefrontCollectionEdit,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
+import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
 import { pickerQuery, storefrontCategoriesQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { isPartnerStore } from '@/lib/partner-store';
 import { ui } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { EmptyStateInline } from './storefront-inline';
 import { ErrorState } from '@/components/ui/error-state';
@@ -397,7 +397,7 @@ function ConfigForm({
   );
 }
 
-/** Sửa bộ sưu tập: chỉ đổi tên, giống Mini App (loại, bố cục, % giảm combo không có giao diện). */
+/** Đổi tên khối: chỉ đổi tên, giống Mini App (loại, bố cục, % giảm combo không có giao diện). */
 export function CollectionSheet({
   collection,
   onClose,
@@ -408,7 +408,7 @@ export function CollectionSheet({
   onSaved: Notify;
 }) {
   return (
-    <Sheet open={!!collection} onClose={onClose} title="Sửa bộ sưu tập">
+    <Sheet open={!!collection} onClose={onClose} title={BUILDER_COPY.renameSection}>
       {collection && <CollectionForm key={collection.id} collection={collection} onClose={onClose} onSaved={onSaved} />}
     </Sheet>
   );
@@ -420,7 +420,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
   const saveMut = useMutation({
     mutationFn: () => updateCollection(coreHttp, collection.id, { title: title.trim() }),
     onSuccess: () => {
-      onSaved('Đã lưu bộ sưu tập');
+      onSaved(BUILDER_COPY.sectionRenamed);
       onClose();
     },
     onError: (e) => setError(actErrText(e)),
@@ -428,43 +428,13 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
 
   return (
     <div className="flex flex-col gap-3">
-      <Field label="Tên bộ sưu tập">
+      <Field label={BUILDER_COPY.sectionName}>
         <input className={ui.field} maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
       <InlineError text={error} />
       <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!title.trim() || saveMut.isPending} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu'}
       </button>
-    </div>
-  );
-}
-
-/** Form tạo bộ sưu tập: chỉ cần TÊN do CTV đặt, giống Mini App. */
-export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { title: string }, onSuccess: () => void) => void; pending: boolean }) {
-  const [title, setTitle] = useState('');
-
-  const submit = () => {
-    if (!title.trim()) return;
-    // Chỉ xoá tên khi tạo xong: bị từ chối hay mất mạng thì CTV còn tên để sửa.
-    onCreate({ title: title.trim() }, () => setTitle(''));
-  };
-
-  return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
-      <div className="flex items-start gap-2">
-        <input
-          className={`${ui.field} flex-1`}
-          aria-label="Tên bộ sưu tập"
-          placeholder="Tên bộ sưu tập"
-          maxLength={80}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={!title.trim() || pending} onClick={submit}>
-          <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-          Tạo bộ sưu tập
-        </button>
-      </div>
     </div>
   );
 }

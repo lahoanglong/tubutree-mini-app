@@ -1,9 +1,6 @@
 import type { StorefrontStats } from '@tubutree/app-core/api/storefront';
 import { formatVnd } from '@/lib/format-vnd';
 
-export const LAYOUT_LABEL = { GRID: 'Lưới', CAROUSEL: 'Cuộn ngang', STACK: 'Xếp dọc' } as const;
-export const KIND_LABEL = { NORMAL: 'Thường', COMBO: 'Combo giảm giá' } as const;
-
 /** Chỗ khách mở gian hàng: subdomain khi cờ bật và đã có tên, ngược lại đường dẫn /s/<slug>. */
 export function storefrontHost(sf: { slug: string; subdomain?: string | null; subdomainEnabled?: boolean }): string {
   return sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`;

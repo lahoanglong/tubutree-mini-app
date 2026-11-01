@@ -163,7 +163,7 @@ export const updateCollection = (
   http: HttpClient,
   id: string,
   dto: { title?: string; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number },
-) => http.patch(`/storefront/me/collections/${id}`, dto);
+) => http.patch<StorefrontCollectionEdit>(`/storefront/me/collections/${id}`, dto);
 export const deleteCollection = (http: HttpClient, id: string) =>
   http.delete(`/storefront/me/collections/${id}`);
 

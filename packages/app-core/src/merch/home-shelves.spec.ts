@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeHomeShelves, seeAllHref, type ShelfEntry } from './home-shelves';
+import { comboShelfEntry, composeHomeShelves, seeAllHref, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
 const ids = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => e(`${prefix}${i}`, `${prefix}${i}`));
@@ -50,6 +50,72 @@ describe('composeHomeShelves', () => {
   it('giữ nguyên kiểu phần tử của từng kệ', () => {
     const r = composeHomeShelves({ ...none, flash: [e('x', { itemId: 1 }), e('y', { itemId: 2 }), e('z', { itemId: 3 })] });
     expect(r.flash[1]).toEqual({ itemId: 2 });
+  });
+});
+
+describe('combo chiếm món theo slug', () => {
+  const combo = (id: string, ...slugs: string[]) => comboShelfEntry({ id, items: slugs.map((slug) => ({ slug })) });
+  const slugs = (...list: string[]) => list.map((s) => e(s, s));
+
+  it('comboShelfEntry: id là id bộ, `also` là slug các món, `item` là chính view', () => {
+    const view = { id: 'c1', items: [{ slug: 'a' }, { slug: 'b' }] };
+    expect(comboShelfEntry(view)).toEqual({ id: 'c1', also: ['a', 'b'], item: view });
+  });
+
+  it('Bán chạy nhất bỏ món đã nằm trong combo; `seen` có món của combo để Gợi ý hôm nay cũng bỏ', () => {
+    const r = composeHomeShelves({
+      ...none,
+      combos: [combo('c1', 'a', 'b'), combo('c2', 'c', 'd')],
+      bestSellers: slugs('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'),
+    });
+    expect(r.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+    expect(r.bestSellers).toEqual(['e', 'f', 'g', 'h']);
+    expect([...r.seen].sort()).toEqual(['a', 'b', 'c', 'c1', 'c2', 'd', 'e', 'f', 'g', 'h']);
+  });
+
+  it('Giờ vàng giữ món trùng nhưng không loại combo: combo vẫn hiện và vẫn chiếm món của Bán chạy nhất', () => {
+    const r = composeHomeShelves({
+      ...none,
+      flash: slugs('a', 'x', 'y'),
+      combos: [combo('c1', 'a', 'b'), combo('c2', 'c', 'd')],
+      bestSellers: slugs('a', 'b', 'c', 'd', 'e', 'f', 'g'),
+    });
+    expect(r.flash).toEqual(['a', 'x', 'y']);
+    expect(r.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+    expect(r.bestSellers).toEqual(['e', 'f', 'g']);
+  });
+
+  it('Mua lại giữ món của mình nhưng không loại combo: Mua lại về sau không làm kệ combo biến mất', () => {
+    const combos = [combo('c1', 'a', 'b'), combo('c2', 'c', 'd')];
+    const bestSellers = slugs('a', 'b', 'c', 'd', 'e', 'f', 'g');
+    const before = composeHomeShelves({ ...none, combos, bestSellers });
+    const after = composeHomeShelves({ ...none, purchased: [e('b', 'mua')], combos, bestSellers });
+    expect(after.purchased).toEqual(['mua']);
+    expect(after.combos).toEqual(before.combos);
+    expect(after.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+    expect(after.bestSellers).toEqual(before.bestSellers);
+  });
+
+  it('dưới 2 combo thì kệ ẩn và KHÔNG chiếm món, Bán chạy nhất giữ đủ món', () => {
+    const r = composeHomeShelves({ ...none, combos: [combo('c1', 'a', 'b')], bestSellers: slugs('a', 'b', 'c', 'd') });
+    expect(r.combos).toEqual([]);
+    expect(r.bestSellers).toEqual(['a', 'b', 'c', 'd']);
+    expect(r.seen.has('c1')).toBe(false);
+  });
+
+  it('chống trùng làm Bán chạy nhất dưới 3 món thì ẩn, `seen` không giữ món của kệ đã ẩn', () => {
+    const r = composeHomeShelves({
+      ...none,
+      combos: [combo('c1', 'a', 'b'), combo('c2', 'c', 'd')],
+      bestSellers: slugs('a', 'b', 'c', 'e', 'f'),
+    });
+    expect(r.bestSellers).toEqual([]);
+    expect(r.seen.has('e')).toBe(false);
+  });
+
+  it('hai combo chung một món không loại nhau', () => {
+    const r = composeHomeShelves({ ...none, combos: [combo('c1', 'a', 'b'), combo('c2', 'b', 'c')] });
+    expect(r.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
   });
 });
 

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { strikePrice } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { CouponClaimService } from '../coupons/coupon-claim.service';
@@ -203,8 +204,9 @@ export class CartService {
         slug: it.variation.product.slug,
         thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         unitPrice,
-        // Giá niêm yết trước sale và Giờ vàng: FE gạch giá và tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì).
-        listUnitPrice: it.variation.retailPrice,
+        // Giá gạch theo đúng luật của thẻ, trang Giờ vàng và PDP (strikePrice): Giờ vàng thắng thì gạch giá đang bán, còn lại gạch giá niêm yết. FE gạch giá và
+        // tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì). Chỉ là số hiển thị: không số tiền nào của giỏ đọc trường này.
+        listUnitPrice: strikePrice({ retailPrice: it.variation.retailPrice, salePrice: it.variation.salePrice, flashPrice: flash?.flashPrice }),
         quantity: it.quantity,
         stock: it.variation.stock,
         weight: it.variation.weight ?? null,
@@ -323,21 +325,22 @@ export class CartService {
     };
   }
 
-  /** Phần hàng tính mã của giỏ: loại giờ vàng, trừ combo của gian hàng ghi công (cùng hàm với checkout). */
+  /**
+   * Phần hàng tính mã của giỏ: loại giờ vàng, trừ combo (cùng hàm với checkout). Combo gồm combo của gian hàng ghi công và bundle
+   * toàn sàn; bundle áp cả khi không có gian hàng nên luôn hỏi `computeForStorefront`.
+   */
   private async couponBaseAfterCombo(
-    lines: { variationId: string; productId: string; total: number; isFlash: boolean }[],
+    lines: { variationId: string; productId: string; total: number; quantity: number; isFlash: boolean }[],
     userId: string,
     storefrontSlug: string | undefined,
   ) {
     const nonFlash = lines.filter((l) => !l.isFlash);
     const storefront = storefrontSlug ? await resolvePublishedStorefront(this.prisma, await loadPublicVisibility(this.config), storefrontSlug) : null;
-    const combo = storefront
-      ? await this.combo.computeForStorefront(
-          storefront.slug,
-          nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
-          userId,
-        )
-      : { total: 0, perLine: {} };
+    const combo = await this.combo.computeForStorefront(
+      storefront?.slug ?? null,
+      nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity })),
+      userId,
+    );
     return { combo, ...goodsAfterComboOf(nonFlash, combo) };
   }
 

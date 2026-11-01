@@ -12,3 +12,8 @@ Khách dùng cùng một cửa hàng qua Mini App và qua website. Hai bên ph�
 - `route-map.json` ghi mỗi `<Route>` của `apps/miniapp/src/components/app.tsx` một dòng, kèm route web đích, `private`, và `pending: true` khi route web chưa có file. Xong route nào thì xoá `pending` của dòng đó.
 - Trước khi báo xong chạy `pnpm lint:parity` (`scripts/check-platform-parity.mjs`). Đỏ khi thiếu dòng, thừa dòng, `skip` thiếu lý do, hoặc dòng không `pending` mà web không có `page.tsx`/`route.ts`. `--strict` coi `pending` là lỗi.
 - Thiết kế đầy đủ: `docs/2026-10-19-web-parity/01-thiet-ke.md`.
+
+## Giao diện
+
+- Trước khi làm hay sửa màn mua sắm (Mini App hoặc web), đọc `.claude/skills/tubu-ui/SKILL.md` và `DESIGN.md`: thành phần nào dùng cho nhu cầu nào, khai kệ, khuôn trang web, lệnh kiểm. Không dựng thẻ sản phẩm, tiêu đề khối, nhãn, giá hay phiếu mới khi `docs/design/ds-map.json` đã có thành phần.
+- Chữ của màn gian hàng chỉ thêm vào `packages/app-core/src/shop-copy.ts`, kèm chỗ dùng và độ dài tối đa. Chạy `terminology.spec` và `shop-copy.spec` trước khi mở PR.

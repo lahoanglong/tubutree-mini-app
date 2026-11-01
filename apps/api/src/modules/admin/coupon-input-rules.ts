@@ -19,6 +19,26 @@ export function assertClaimUsageLimit(coupon: { scope?: string; batch?: string |
   }
 }
 
+/** Độ dài tối đa của tên hiển thị ở kho mã (vừa một dòng tiêu đề thẻ ở khổ 375). */
+export const COUPON_TITLE_MAX = 60;
+
+/**
+ * Chỉ mã CLAIM chung mới hiện ở kho mã: mã scope khác đã nằm sẵn trong ví khách đủ điều kiện (nhận là vô nghĩa), còn mã thuộc lô
+ * thẻ in là mã riêng từng thẻ, liệt kê công khai thì ai cũng nhận được. Tắt (`false`) hay không nhắc tới thì không chặn, để
+ * gỡ khỏi kho luôn làm được. Cặp với CHECK `coupons_listed_claim_only_chk` ở DB.
+ */
+export function assertListable(coupon: { scope?: string; batch?: string | null }, listed: boolean | undefined): void {
+  if (listed !== true) return;
+  if (coupon.batch) throw new BadRequestException('Mã thuộc lô thẻ in là mã riêng từng thẻ, không hiện ở mục Nhận mã được.');
+  if (coupon.scope !== 'CLAIM') throw new BadRequestException('Chỉ mã nhận qua thẻ (phạm vi CLAIM) mới hiện ở mục Nhận mã; mã loại khác đã nằm sẵn trong ví khách đủ điều kiện.');
+}
+
+/** Tên hiển thị: cắt khoảng trắng, rỗng thì bỏ (null). */
+export function cleanCouponTitle(title: string | null | undefined): string | null {
+  const t = title?.trim();
+  return t ? t : null;
+}
+
 /** Luật tiền và ngày chung cho mọi mã admin tạo (từng mã ở tab Voucher, lô mã thẻ hộp hàng). */
 export function assertCouponInput(data: {
   type: 'PERCENT' | 'AMOUNT' | 'FREESHIP';

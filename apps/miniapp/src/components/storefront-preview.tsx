@@ -1,22 +1,24 @@
 import { Sprout } from 'lucide-react';
+import { planShopSections } from '@tubutree/app-core/commerce/shop-page';
+import { visibleCollection } from '@tubutree/app-core/commerce/storefront-builder';
 import type { StorefrontEdit } from '../services/storefront-api';
 import { apiMediaUrl } from '../services/api';
 import { Heading, Text } from './ui/text';
-import { ProductCard } from './ui/product-card';
+import { ShopSection } from './ui/shop-section';
 
-const MAX_TILES = 4;
-
-/** Bản xem trước gian hàng cho chính chủ, dùng khi khách chưa xem được (nháp, chờ duyệt): cùng bố cục với trang công khai /s/:slug. */
+/**
+ * Bản xem trước gian hàng cho chính chủ, dùng khi khách chưa xem được (nháp, chờ duyệt): dựng bằng chính `ShopSection` của tab Shop
+ * của trang công khai /s/:slug, với đúng phần khách thấy (món ẩn bị bỏ) và đúng trần số khối. Khung `inert`: xem, không bấm.
+ */
 export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
-  const items = sf.collections.flatMap((c) => c.items).filter((it) => !it.isHidden && !it.hiddenReason);
-  const shown = items.slice(0, MAX_TILES);
+  const sections = planShopSections(sf.collections.map(visibleCollection)).main;
   const cover = sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null;
   const avatar = sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null;
 
   return (
     <div data-testid="storefront-preview" style={{ background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-card)', overflow: 'hidden', border: '1px solid var(--color-border-subtle)' }}>
       <div style={{ height: 72, background: cover ? `url("${cover.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--color-bg-cover)' }} />
-      <div style={{ padding: '0 12px 12px', marginTop: -24 }}>
+      <div style={{ padding: '0 16px 12px', marginTop: -24 }}>
         <div
           style={{
             width: 48, height: 48, borderRadius: '50%', background: 'var(--color-action-primary-bg)', border: '3px solid var(--color-bg-surface)',
@@ -28,17 +30,14 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         <Heading variant="title-md" as="h3" style={{ marginTop: 6 }}>{sf.title}</Heading>
         <Text variant="caption" tone="tertiary" as="div">/s/{sf.slug}</Text>
         {sf.headerNote && <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>{sf.headerNote}</Text>}
-        {shown.length === 0 ? (
+        {sections.length === 0 ? (
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 10 }}>Chưa có sản phẩm nào.</Text>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
-            {shown.map((it) => (
-              <ProductCard key={it.id} product={{ ...it.product, isFeatured: false }} variant="grid" showWishlist={false} />
+          <div {...({ inert: '' } as Record<string, string>)} style={{ marginTop: 10 }}>
+            {sections.map((c) => (
+              <ShopSection key={c.id} collection={c} preview />
             ))}
           </div>
-        )}
-        {items.length > shown.length && (
-          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>và {items.length - shown.length} sản phẩm khác</Text>
         )}
       </div>
     </div>

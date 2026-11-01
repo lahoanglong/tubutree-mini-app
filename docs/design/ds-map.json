@@ -1,0 +1,729 @@
+{
+  "$comment": "Bản đồ thành phần giao diện Mini App ↔ web (nguồn sự thật cùng DESIGN.md). scripts/check-ds-parity.mjs (trong pnpm lint:parity) kiểm: components có file và export ở cả hai app, cùng khoá props trừ lệch có lý do ở propsDiff (khoá đọc từ kiểu khai ở props, hoặc khi không khai thì từ kiểu tham số đầu của hàm thành phần; kiểu nằm ngoài file thì khai propsUncompared kèm lý do), screens là route Mini có trong route-map.json. screens là các màn mua sắm thành phần hiện diện qua chuỗi import (tính lúc lập bản đồ; thành phần nền như Button, Text, Icon dùng ở hầu hết màn nên không liệt kê). upcoming là thành phần gói khác đang làm: không kiểm file; gói nào xong thì chuyển dòng sang components.",
+  "components": [
+    {
+      "name": "Badge",
+      "miniapp": "apps/miniapp/src/components/ui/badge.tsx",
+      "web": "apps/web/src/components/mini/badge.tsx",
+      "props": "BadgeProps"
+    },
+    {
+      "name": "BannerCarousel",
+      "miniapp": "apps/miniapp/src/components/ui/banner-carousel.tsx",
+      "web": "apps/web/src/components/mini/banner-carousel.tsx",
+      "props": "BannerCarouselProps",
+      "screens": [
+        "/",
+        "/offers"
+      ]
+    },
+    {
+      "name": "BottomSheet",
+      "miniapp": "apps/miniapp/src/components/ui/bottom-sheet.tsx",
+      "web": "apps/web/src/components/mini/bottom-sheet.tsx",
+      "props": "BottomSheetProps"
+    },
+    {
+      "name": "Button",
+      "miniapp": "apps/miniapp/src/components/ui/button.tsx",
+      "web": "apps/web/src/components/mini/button.tsx",
+      "props": "ButtonProps",
+      "propsDiff": {
+        "webOnly": [
+          "type"
+        ],
+        "reason": "web có <form> HTML thật, mặc định \"button\" để nút trong form không tự gửi; Mini không có form HTML"
+      }
+    },
+    {
+      "name": "Card",
+      "miniapp": "apps/miniapp/src/components/ui/card.tsx",
+      "web": "apps/web/src/components/mini/card.tsx",
+      "props": "CardProps"
+    },
+    {
+      "name": "Chip",
+      "miniapp": "apps/miniapp/src/components/ui/chip.tsx",
+      "web": "apps/web/src/components/mini/chip.tsx",
+      "props": "ChipProps",
+      "screens": [
+        "/",
+        "/about",
+        "/admin",
+        "/admin/community",
+        "/affiliate",
+        "/brand/:slug",
+        "/browse",
+        "/checkout",
+        "/feed",
+        "/feed/:id",
+        "/feed/events",
+        "/flash-sale",
+        "/order/:code",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "ComboCard",
+      "miniapp": "apps/miniapp/src/components/ui/combo-card.tsx",
+      "web": "apps/web/src/components/mini/combo-card.tsx",
+      "props": "ComboCardProps",
+      "screens": [
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "Countdown",
+      "miniapp": "apps/miniapp/src/components/ui/countdown.tsx",
+      "web": "apps/web/src/components/mini/countdown.tsx",
+      "props": "CountdownProps",
+      "screens": [
+        "/",
+        "/cart",
+        "/flash-sale",
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "EmptyState",
+      "miniapp": "apps/miniapp/src/components/ui/empty-state.tsx",
+      "web": "apps/web/src/components/mini/empty-state.tsx",
+      "props": "EmptyStateProps"
+    },
+    {
+      "name": "FlashSoldBar",
+      "miniapp": "apps/miniapp/src/components/ui/flash-sold-bar.tsx",
+      "web": "apps/web/src/components/mini/flash-sold-bar.tsx",
+      "props": "FlashSoldBarProps",
+      "screens": [
+        "/",
+        "/flash-sale",
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "GuestLinkCard",
+      "miniapp": "apps/miniapp/src/components/home/guest-link-card.tsx",
+      "web": "apps/web/src/components/mini/guest-link-card.tsx",
+      "screens": [
+        "/offers"
+      ]
+    },
+    {
+      "name": "IconButton",
+      "miniapp": "apps/miniapp/src/components/ui/icon-button.tsx",
+      "web": "apps/web/src/components/mini/icon-button.tsx",
+      "props": "IconButtonProps"
+    },
+    {
+      "name": "Icon",
+      "miniapp": "apps/miniapp/src/components/ui/icon.tsx",
+      "web": "apps/web/src/components/mini/icon.tsx",
+      "props": "IconProps"
+    },
+    {
+      "name": "KeyValueRow",
+      "miniapp": "apps/miniapp/src/components/ui/key-value-row.tsx",
+      "web": "apps/web/src/components/mini/key-value-row.tsx",
+      "props": "KeyValueRowProps",
+      "screens": [
+        "/",
+        "/about",
+        "/admin",
+        "/affiliate",
+        "/cart",
+        "/checkout",
+        "/notifications",
+        "/order/:code",
+        "/orders"
+      ]
+    },
+    {
+      "name": "LayoutPicker",
+      "miniapp": "apps/miniapp/src/components/ui/layout-picker.tsx",
+      "web": "apps/web/src/components/mini/layout-picker.tsx",
+      "props": "LayoutPickerProps",
+      "screens": [
+        "/storefront"
+      ]
+    },
+    {
+      "name": "ListRow",
+      "miniapp": "apps/miniapp/src/components/ui/list-row.tsx",
+      "web": "apps/web/src/components/mini/list-row.tsx",
+      "props": "ListRowProps",
+      "screens": [
+        "/",
+        "/about",
+        "/academy",
+        "/academy/:courseId",
+        "/affiliate",
+        "/ai-advisor",
+        "/checkout",
+        "/game",
+        "/loyalty",
+        "/offers",
+        "/order/:code",
+        "/product/:slug",
+        "/profile",
+        "/recycle",
+        "/recycle/done/:id",
+        "/recycle/requests",
+        "/rewards",
+        "/rewards/mine",
+        "/settings"
+      ]
+    },
+    {
+      "name": "PriceTag",
+      "miniapp": "apps/miniapp/src/components/ui/price-tag.tsx",
+      "web": "apps/web/src/components/mini/price-tag.tsx",
+      "props": "PriceTagProps",
+      "screens": [
+        "/",
+        "/bank-payment/:code",
+        "/best-sellers",
+        "/brand/:slug",
+        "/browse",
+        "/campaign/:slug",
+        "/cart",
+        "/flash-sale",
+        "/notifications",
+        "/order/:code",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug",
+        "/storefront",
+        "/wishlist"
+      ]
+    },
+    {
+      "name": "ProductCard",
+      "miniapp": "apps/miniapp/src/components/ui/product-card.tsx",
+      "web": "apps/web/src/components/mini/product-card.tsx",
+      "props": "ProductCardProps",
+      "propsDiff": {
+        "miniOnly": [
+          "listSource"
+        ],
+        "webOnly": [
+          "priority"
+        ],
+        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priority: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần"
+      },
+      "screens": [
+        "/",
+        "/best-sellers",
+        "/brand/:slug",
+        "/browse",
+        "/campaign/:slug",
+        "/cart",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug",
+        "/storefront",
+        "/wishlist"
+      ]
+    },
+    {
+      "name": "ProductGrid",
+      "miniapp": "apps/miniapp/src/components/ui/product-grid.tsx",
+      "web": "apps/web/src/components/mini/product-grid.tsx",
+      "props": "ProductGridProps",
+      "propsDiff": {
+        "miniOnly": [
+          "columns",
+          "listSource"
+        ],
+        "webOnly": [
+          "className",
+          "priorityCount"
+        ],
+        "reason": "Mini chọn một cột cho hàng thẻ line bằng columns, web chọn lưới bằng className (LINE_GRID, GRID_PRODUCTS_WITH_FILTER); listSource: state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priorityCount: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần"
+      },
+      "screens": [
+        "/",
+        "/best-sellers",
+        "/brand/:slug",
+        "/browse",
+        "/campaign/:slug",
+        "/cart",
+        "/product/:slug",
+        "/s/:slug",
+        "/wishlist"
+      ]
+    },
+    {
+      "name": "ProductImage",
+      "miniapp": "apps/miniapp/src/components/ui/product-image.tsx",
+      "web": "apps/web/src/components/mini/product-image.tsx",
+      "propsDiff": {
+        "webOnly": [
+          "alt",
+          "className",
+          "priority",
+          "size"
+        ],
+        "reason": "web: alt cho ảnh có nghĩa, className và size để ảnh vừa khung của khuôn máy tính, priority (fetchPriority high) cho ảnh ứng viên LCP khi render server; Mini luôn vẽ ảnh trang trí đúng khung thẻ"
+      }
+    },
+    {
+      "name": "ProductRail",
+      "miniapp": "apps/miniapp/src/components/ui/product-rail.tsx",
+      "web": "apps/web/src/components/mini/product-rail.tsx",
+      "props": "ProductRailProps",
+      "propsDiff": {
+        "miniOnly": [
+          "listSource"
+        ],
+        "webOnly": [
+          "priorityCount"
+        ],
+        "reason": "listSource: state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priorityCount: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần"
+      },
+      "screens": [
+        "/",
+        "/brand/:slug",
+        "/browse",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "ProductThumb",
+      "miniapp": "apps/miniapp/src/components/ui/product-thumb.tsx",
+      "web": "apps/web/src/components/mini/product-thumb.tsx",
+      "props": "ProductThumbProps"
+    },
+    {
+      "name": "ProductTile",
+      "miniapp": "apps/miniapp/src/components/ui/product-tile.tsx",
+      "web": "apps/web/src/components/mini/product-tile.tsx",
+      "props": "ProductTileProps",
+      "propsDiff": {
+        "miniOnly": [
+          "navState"
+        ],
+        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu"
+      },
+      "screens": [
+        "/",
+        "/best-sellers",
+        "/brand/:slug",
+        "/browse",
+        "/campaign/:slug",
+        "/cart",
+        "/flash-sale",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug",
+        "/storefront",
+        "/wishlist"
+      ]
+    },
+    {
+      "name": "ProgressBar",
+      "miniapp": "apps/miniapp/src/components/ui/progress-bar.tsx",
+      "web": "apps/web/src/components/mini/progress-bar.tsx",
+      "props": "ProgressBarProps",
+      "screens": [
+        "/academy",
+        "/academy/:courseId",
+        "/affiliate",
+        "/dealer",
+        "/game",
+        "/group-buy",
+        "/group-buy/:id",
+        "/recycle",
+        "/recycle/desk",
+        "/recycle/done/:id",
+        "/recycle/new",
+        "/recycle/points",
+        "/recycle/r/:id/edit",
+        "/rewards",
+        "/rewards/mine",
+        "/storefront"
+      ]
+    },
+    {
+      "name": "QuantitySelector",
+      "miniapp": "apps/miniapp/src/components/ui/quantity-selector.tsx",
+      "web": "apps/web/src/components/mini/quantity-selector.tsx",
+      "props": "QuantitySelectorProps",
+      "propsDiff": {
+        "miniOnly": [
+          "editable",
+          "quickSteps"
+        ],
+        "reason": "bản web được map (components/mini/, sao Mini cũ, chỉ variation-sheet dùng) chưa có editable và quickSteps; bản web components/ui/quantity-selector.tsx đã có đủ và là bản add-to-cart, đặt lại, Đổi rác, đại lý dùng; hợp nhất hai bản web thuộc gói riêng"
+      },
+      "screens": [
+        "/",
+        "/cart",
+        "/dealer",
+        "/notifications",
+        "/order/:code",
+        "/orders",
+        "/product/:slug",
+        "/recycle/desk",
+        "/recycle/new",
+        "/recycle/points",
+        "/recycle/r/:id/edit",
+        "/wishlist"
+      ]
+    },
+    {
+      "name": "ScrollRow",
+      "miniapp": "apps/miniapp/src/components/ui/scroll-row.tsx",
+      "web": "apps/web/src/components/mini/scroll-row.tsx",
+      "props": "ScrollRowProps",
+      "propsDiff": {
+        "webOnly": [
+          "arrows"
+        ],
+        "reason": "nút ‹ › từ md cho người dùng chuột không vuốt ngang được; Mini chỉ vuốt"
+      },
+      "screens": [
+        "/",
+        "/about",
+        "/brand/:slug",
+        "/browse",
+        "/feed",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "SearchField",
+      "miniapp": "apps/miniapp/src/components/ui/search-field.tsx",
+      "web": "apps/web/src/components/mini/search-field.tsx",
+      "props": "SearchFieldProps",
+      "screens": [
+        "/addresses",
+        "/affiliate",
+        "/browse",
+        "/checkout",
+        "/dealer",
+        "/feed",
+        "/recycle/points"
+      ]
+    },
+    {
+      "name": "SectionCard",
+      "miniapp": "apps/miniapp/src/components/ui/section-card.tsx",
+      "web": "apps/web/src/components/mini/section-card.tsx",
+      "props": "SectionCardProps",
+      "screens": [
+        "/storefront"
+      ]
+    },
+    {
+      "name": "SectionHeader",
+      "miniapp": "apps/miniapp/src/components/ui/section-header.tsx",
+      "web": "apps/web/src/components/mini/section-header.tsx",
+      "props": "SectionHeaderProps",
+      "screens": [
+        "/",
+        "/brand/:slug",
+        "/browse",
+        "/campaign/:slug",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "SectionTitle",
+      "miniapp": "apps/miniapp/src/components/ui/section-title.tsx",
+      "web": "apps/web/src/components/mini/section-title.tsx",
+      "props": "SectionTitleProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "Section",
+      "miniapp": "apps/miniapp/src/components/ui/section.tsx",
+      "web": "apps/web/src/components/mini/section.tsx",
+      "props": "SectionProps",
+      "screens": [
+        "/browse",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "SegmentedTabs",
+      "miniapp": "apps/miniapp/src/components/ui/segmented-tabs.tsx",
+      "web": "apps/web/src/components/mini/segmented-tabs.tsx",
+      "props": "SegmentedTabsProps",
+      "screens": [
+        "/admin",
+        "/admin/community",
+        "/affiliate",
+        "/best-sellers",
+        "/brand-owner",
+        "/brand/:slug",
+        "/dealer",
+        "/game",
+        "/orders",
+        "/recycle/desk",
+        "/recycle/points",
+        "/recycle/requests",
+        "/rewards",
+        "/rewards/mine",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "ShopHeader",
+      "miniapp": "apps/miniapp/src/components/ui/shop-header.tsx",
+      "web": "apps/web/src/components/mini/shop-header.tsx",
+      "props": "ShopHeaderProps",
+      "propsDiff": {
+        "webOnly": [
+          "inStoreGrid"
+        ],
+        "reason": "đặt ô của đầu shop vào lưới StoreLayout từ lg; Mini không có khổ lg"
+      },
+      "screens": [
+        "/brand/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "ShopSection",
+      "miniapp": "apps/miniapp/src/components/ui/shop-section.tsx",
+      "web": "apps/web/src/components/mini/shop-section.tsx",
+      "props": "ShopSectionProps",
+      "screens": [
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "ShopStatsRow",
+      "miniapp": "apps/miniapp/src/components/ui/shop-stats-row.tsx",
+      "web": "apps/web/src/components/mini/shop-stats-row.tsx",
+      "screens": [
+        "/brand/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "ShopTopBar",
+      "miniapp": "apps/miniapp/src/components/ui/shop-top-bar.tsx",
+      "web": "apps/web/src/components/mini/shop-top-bar.tsx",
+      "props": "ShopTopBarProps",
+      "screens": [
+        "/brand/:slug",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "Skeleton",
+      "miniapp": "apps/miniapp/src/components/ui/skeleton.tsx",
+      "web": "apps/web/src/components/mini/skeleton.tsx",
+      "props": "SkeletonProps"
+    },
+    {
+      "name": "ProductTileSkeleton",
+      "miniapp": "apps/miniapp/src/components/ui/skeleton.tsx",
+      "web": "apps/web/src/components/mini/skeleton.tsx",
+      "props": "ProductTileSkeletonProps"
+    },
+    {
+      "name": "SlotTabs",
+      "miniapp": "apps/miniapp/src/components/ui/slot-tabs.tsx",
+      "web": "apps/web/src/components/mini/slot-tabs.tsx",
+      "props": "SlotTabsProps",
+      "screens": [
+        "/flash-sale"
+      ]
+    },
+    {
+      "name": "SortBar",
+      "miniapp": "apps/miniapp/src/components/ui/sort-bar.tsx",
+      "web": "apps/web/src/components/mini/sort-bar.tsx",
+      "props": "SortBarProps",
+      "screens": [
+        "/brand/:slug",
+        "/browse",
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "StickyActionBar",
+      "miniapp": "apps/miniapp/src/components/ui/sticky-action-bar.tsx",
+      "web": "apps/web/src/components/mini/sticky-action-bar.tsx",
+      "props": "StickyActionBarProps",
+      "screens": [
+        "/bank-payment/:code",
+        "/cart",
+        "/checkout",
+        "/dealer",
+        "/order/:code",
+        "/product/:slug",
+        "/recycle",
+        "/recycle/desk",
+        "/recycle/done/:id",
+        "/recycle/new",
+        "/recycle/points",
+        "/recycle/r/:id/edit",
+        "/storefront"
+      ]
+    },
+    {
+      "name": "Text",
+      "miniapp": "apps/miniapp/src/components/ui/text.tsx",
+      "web": "apps/web/src/components/mini/text.tsx",
+      "props": "TextProps"
+    },
+    {
+      "name": "Heading",
+      "miniapp": "apps/miniapp/src/components/ui/text.tsx",
+      "web": "apps/web/src/components/mini/text.tsx",
+      "props": "HeadingProps"
+    },
+    {
+      "name": "TierBadge",
+      "miniapp": "apps/miniapp/src/components/ui/tier-badge.tsx",
+      "web": "apps/web/src/components/mini/tier-badge.tsx",
+      "screens": [
+        "/s/:slug"
+      ]
+    },
+    {
+      "name": "StatTile",
+      "miniapp": "apps/miniapp/src/components/ui/tiles.tsx",
+      "web": "apps/web/src/components/mini/tiles.tsx",
+      "screens": [
+        "/brand-owner"
+      ]
+    },
+    {
+      "name": "Timeline",
+      "miniapp": "apps/miniapp/src/components/ui/timeline.tsx",
+      "web": "apps/web/src/components/mini/timeline.tsx",
+      "props": "TimelineProps",
+      "propsDiff": {
+        "miniOnly": [
+          "caption"
+        ],
+        "reason": "dải thu gọn của danh sách yêu cầu Đổi rác chỉ có ở Mini; web chưa dùng Timeline ở màn nào"
+      },
+      "screens": [
+        "/recycle",
+        "/recycle/done/:id",
+        "/recycle/r/:id"
+      ]
+    },
+    {
+      "name": "VoucherTicket",
+      "miniapp": "apps/miniapp/src/components/ui/voucher-ticket.tsx",
+      "web": "apps/web/src/components/mini/voucher-ticket.tsx",
+      "props": "VoucherTicketProps",
+      "screens": [
+        "/brand/:slug",
+        "/campaign/:slug",
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "WishlistHeart",
+      "miniapp": "apps/miniapp/src/components/wishlist-heart.tsx",
+      "web": "apps/web/src/components/catalog/wishlist-heart.tsx",
+      "propsDiff": {
+        "miniOnly": [
+          "size"
+        ],
+        "webOnly": [
+          "className"
+        ],
+        "reason": "Mini đổi cỡ icon tim bằng size; web cố định cỡ icon theo vùng chạm 44px và cho cha thêm lớp (className) để đặt vị trí trong khuôn"
+      },
+      "screens": [
+        "/",
+        "/best-sellers",
+        "/brand/:slug",
+        "/browse",
+        "/campaign/:slug",
+        "/cart",
+        "/orders",
+        "/product/:slug",
+        "/s/:slug",
+        "/storefront",
+        "/wishlist"
+      ]
+    },
+    {
+      "name": "FlashPriceBar",
+      "miniapp": "apps/miniapp/src/components/product/flash-price-bar.tsx",
+      "web": "apps/web/src/components/mini/flash-price-bar.tsx",
+      "props": "FlashPriceBarProps",
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
+      "name": "HomeBlockError",
+      "miniapp": "apps/miniapp/src/components/home/home-block-error.tsx",
+      "web": "apps/web/src/components/home/home-block-error.tsx",
+      "props": "HomeBlockErrorProps",
+      "propsDiff": {
+        "miniOnly": [
+          "seeAllRow"
+        ],
+        "reason": "khớp chiều cao khung chờ Mini khi khối có hoặc không có hàng \"Xem tất cả\" 44px; web chưa có cờ tương ứng"
+      },
+      "screens": [
+        "/",
+        "/orders"
+      ]
+    },
+    {
+      "name": "BackButton",
+      "miniapp": "apps/miniapp/src/components/back-button.tsx",
+      "web": "apps/web/src/components/mini/back-button.tsx",
+      "propsDiff": {
+        "webOnly": [
+          "fallbackHref",
+          "className"
+        ],
+        "reason": "web có lịch sử trình duyệt: fallbackHref là trang đích khi mở thẳng link chia sẻ, className để PageHeader ẩn nút nổi từ md; Mini lấy lịch sử từ zmp-ui nên không nhận props"
+      }
+    }
+  ],
+  "webOnly": [
+    {
+      "name": "HubLayout",
+      "web": "apps/web/src/components/layouts/hub-layout.tsx",
+      "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"
+    },
+    {
+      "name": "ListingLayout",
+      "web": "apps/web/src/components/layouts/listing-layout.tsx",
+      "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"
+    },
+    {
+      "name": "PdpLayout",
+      "web": "apps/web/src/components/layouts/pdp-layout.tsx",
+      "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"
+    },
+    {
+      "name": "StoreLayout",
+      "web": "apps/web/src/components/layouts/store-layout.tsx",
+      "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"
+    }
+  ],
+  "upcoming": [
+    {
+      "name": "components/bundle/*",
+      "package": "P15",
+      "wave": "4c",
+      "note": "khối combo ở PDP, giỏ và Trang chủ (Mini components/bundle/*, web components/bundle/*); kế hoạch chưa chốt tên thành phần, P15 thay bằng tên thật; ComboCard dùng lại từ components"
+    }
+  ]
+}

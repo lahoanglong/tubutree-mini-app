@@ -86,7 +86,7 @@ describe('khối shippingOrders đã bỏ khỏi /home/me', () => {
 
 describe('takeHomeRequest (web)', () => {
   beforeEach(() => {
-    fetchPublic.mockResolvedValue({ publicConfig: { freeshipThreshold: 1 }, flashActive: [{ id: 'f' }], campaigns: [{ id: 'c' }] });
+    fetchPublic.mockResolvedValue({ publicConfig: { freeshipThreshold: 1 }, flashActive: [{ id: 'f' }], campaigns: [{ id: 'c' }], combos: [{ id: 'cb' }] });
     fetchMe.mockResolvedValue({
       flashUpcoming: [{ id: 'u' }],
       forYou: [{ id: 'p' }],
@@ -121,6 +121,14 @@ describe('takeHomeRequest (web)', () => {
     expect(takeHomeRequest(feed, '/campaigns', { placement: 'HOME_TOP', audience: 'NEW' })).toBeNull();
     expect(takeHomeRequest(feed, '/campaigns', undefined)).toBeNull();
     expect(fetchPublic).not.toHaveBeenCalled();
+  });
+
+  it('combo toàn sàn: chỉ request limit=4 (đúng số của kệ) lấy từ khối gộp; limit khác hay thiếu đi request lẻ', async () => {
+    expect(await takeHomeRequest(feed, '/bundles/combos', { limit: 4 })).toEqual([{ id: 'cb' }]);
+    expect(fetchMe).not.toHaveBeenCalled();
+    expect(takeHomeRequest(feed, '/bundles/combos', { limit: 8 })).toBeNull();
+    expect(takeHomeRequest(feed, '/bundles/combos', undefined)).toBeNull();
+    expect(takeHomeRequest(feed, '/bundles/combos', { limit: 4, kind: 'x' })).toBeNull();
   });
 
   it('gợi ý cá nhân kèm seed ngày VN vẫn lấy từ khối gộp (lần đầu), không đẩy thêm request lẻ', async () => {

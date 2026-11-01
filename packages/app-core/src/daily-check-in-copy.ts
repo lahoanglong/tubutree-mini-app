@@ -5,9 +5,15 @@ const num = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleSt
 /** Chữ của khối điểm danh dùng chung cho Mini App và web (trang Điểm Xanh, Ưu đãi, Vườn Xanh). */
 export const checkInCopy = {
   title: 'Điểm danh mỗi ngày',
+  /** Tên đọc của nút mở/đóng đoạn luật ở bản gọn (Ưu đãi): đoạn luật dài không đứng sẵn trên thẻ. */
+  ruleToggle: 'Luật điểm danh',
+  /** Chữ nhìn thấy trên nút đó: ngắn để "Ngày 1/7" và nút luôn nằm một dòng cạnh nút Điểm danh ở 375px; nằm trọn trong tên đọc (WCAG 2.5.3). */
+  ruleToggleLabel: 'Luật',
   /** Vị trí trong lịch 7 ngày: một chuỗi chung cho Điểm Xanh và giọt nước ở Vườn Xanh. */
   cycleDay: (day: number) => `Ngày ${day}/7`,
   rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam). Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
+  todayLead: 'Hôm nay nhận',
+  todayLeadShort: 'Nhận',
   /** Phần nước còn thiếu nhưng bình đã đầy: không hứa giọt nước mà bình không chứa được. */
   tankFull: 'Bình nước đang đầy nên không cộng thêm giọt nước.',
   alreadyDone: 'Hôm nay bạn đã điểm danh rồi',
@@ -20,15 +26,21 @@ export const checkInCopy = {
   guestPoints: 'Đăng nhập Zalo để nhận Điểm Xanh',
 } as const;
 
-/** "Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước": chỉ liệt kê phần CÒN THIẾU (phần đã xong, hoặc thiếu số, thì bỏ vế đó). */
-export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'tankFull' | 'checkedInToday' | 'pointsDone' | 'waterDone' | 'pointsBlocked'>): string | null {
+/**
+ * "Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước": chỉ liệt kê phần CÒN THIẾU (phần đã xong, hoặc thiếu số, thì bỏ vế đó).
+ * `short` (thẻ gọn ở Ưu đãi, nơi dòng phải nằm một dòng ở 360px): "Nhận +1.000 Điểm Xanh · +10 giọt nước"; ô hôm nay đã được tô sáng ngay phía trên nên không cần chữ "Hôm nay".
+ */
+export function checkInTodayLine(
+  s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'tankFull' | 'checkedInToday' | 'pointsDone' | 'waterDone' | 'pointsBlocked'>,
+  opts: { short?: boolean } = {},
+): string | null {
   if (s.checkedInToday) return null;
   const parts: string[] = [];
   if (!s.pointsBlocked && !s.pointsDone && (s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
   if (!s.waterDone && (s.todayWater ?? 0) > 0) parts.push(`+${num(s.todayWater ?? 0)} giọt nước`);
   const tankFull = s.waterDone === false && s.tankFull === true;
   if (parts.length === 0) return tankFull ? checkInCopy.tankFull : null;
-  return `Hôm nay nhận ${parts.join(' · ')}${tankFull ? `. ${checkInCopy.tankFull}` : ''}`;
+  return `${opts.short ? checkInCopy.todayLeadShort : checkInCopy.todayLead} ${parts.join(' · ')}${tankFull ? `. ${checkInCopy.tankFull}` : ''}`;
 }
 
 /** Số giọt nước đã là TỔNG gồm các khoản thưởng; ghi chúng trong ngoặc để khách không cộng dồn lần hai. */

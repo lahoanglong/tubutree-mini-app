@@ -28,6 +28,13 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(section.querySelector('a[aria-label="Xem tất cả Bán chạy nhất"]')?.getAttribute('href')).toBe('/ban-chay');
   });
 
+  it('basis total (API cũ, xếp theo tổng lượt bán): phụ đề ghi "Theo tổng lượt bán", không còn "30 ngày qua"', () => {
+    mounted = render(<BestSellerRail items={cards(4)} basis="total" loading={false} />);
+    const section = mounted.container.querySelector('section[aria-label="Bán chạy nhất"]')!;
+    expect(section.textContent).toContain('Theo tổng lượt bán');
+    expect(section.textContent).not.toContain('30 ngày qua');
+  });
+
   it('mỗi thẻ có hạng #1, #2, #3... theo thứ tự lượt bán', () => {
     mounted = render(<BestSellerRail items={cards(4)} loading={false} />);
     const text = mounted.container.textContent ?? '';
@@ -69,6 +76,17 @@ describe('BestSellerRailQuery (tab Đơn hàng): tự tải, cùng khoá với T
     mounted = render(<BestSellerRailQuery />);
     await flush(8);
     expect(JSON.stringify(mocks.get.mock.calls[0])).toContain('best_seller_30d');
+    expect(mounted.container.textContent).toContain('#1');
+  });
+
+  it('API cũ từ chối best_seller_30d (400): tự lùi về best_seller và phụ đề ghi "Theo tổng lượt bán"', async () => {
+    mocks.get.mockImplementation(async (_path: string, opts?: { query?: { sort?: string } }) => {
+      if (opts?.query?.sort === 'best_seller_30d') throw Object.assign(new Error('bad'), { status: 400 });
+      return { data: cards(5), meta: { page: 1, limit: 12, total: 5 } };
+    });
+    mounted = render(<BestSellerRailQuery />);
+    await flush(8);
+    expect(mounted.container.textContent).toContain('Theo tổng lượt bán');
     expect(mounted.container.textContent).toContain('#1');
   });
 

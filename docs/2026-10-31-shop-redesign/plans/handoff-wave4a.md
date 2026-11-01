@@ -18,6 +18,7 @@ Sửa thêm trên nhánh tích hợp sau khi gộp:
 
 ## Deploy
 
+- Chủ chốt (qua c2, 01/11): hotfix #99 KHÔNG deploy riêng, lên PROD cùng #101. Người deploy: PROD hiện 6f4fd6733, rollback `:prev-a5469abe`; trước dep1 dời các file `.golive-*` của 6f4fd673 sang `/root/golive-archive/6f4fd673/`.
 - Hai migration mới: `20261101100000_campaigns` (chỉ thêm bảng Campaign/CampaignProduct/CampaignCoupon), `20261101100100_flash_item_sort_order` (thêm cột `FlashSaleItem.sortOrder`).
 - Khoá cấu hình `flashsale.slots` (P12, §4 Q14) nằm trong dữ liệu tham chiếu nạp kiểu createOnly (`APPROVED_LOADED_KEYS`). Chưa nạp thì `generateSlots` dùng mặc định trong mã 12:00/20:00.
 - P12 gỡ ràng buộc deploy của handoff-wave3: ô lối tắt Giờ vàng, "Xem tất cả" của khối Giờ vàng và "Nhắc tôi" (trên trang `/flash-sale`) trở lại. PROD hiện (6f4fd6733) đang thiếu ba thứ này vì chủ chọn deploy #95 trước.

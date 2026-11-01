@@ -154,11 +154,36 @@ describe('PdpRails', () => {
   });
 });
 
-describe('tiêu đề mục của trang sản phẩm khổ điện thoại giống Mini App (chữ không chân Inter, không serif)', () => {
+describe('khối nửa dưới là dải trắng cách nhau 8px ở điện thoại (như Mini App)', () => {
+  const band = (el: Element | null, id: string) => {
+    expect(el).not.toBeNull();
+    expect(el!.getAttribute('data-section')).toBe(id);
+    expect(el!.className).toContain('max-md:mt-2');
+    expect(el!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(el!.className).toContain('max-md:p-4');
+  };
+  it('Thành phần, Cam kết Tubu, Mô tả sản phẩm', () => {
+    band(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('section'), 'pdp-ingredients');
+    band(mount(<PdpPromises />).container.querySelector('section'), 'pdp-promises');
+    band(mount(<PdpDescription text="Ngắn gọn" />).container.querySelector('section'), 'pdp-description');
+  });
+  it('chữ phụ cỡ Mini App: cam kết 12px, mô tả 14px; "Xem thêm" là chữ thương hiệu không gạch chân', () => {
+    expect(mount(<PdpPromises />).container.querySelector('li')!.className).toContain('max-md:text-xs');
+    const long = mount(<PdpDescription text={'x'.repeat(300)} />).container;
+    expect(long.querySelector('p')!.className).toContain('max-md:text-sm');
+    const more = byText(long, 'button', 'Xem thêm')!;
+    expect(more.className).toContain('max-md:no-underline');
+    expect(more.className).toContain('max-md:text-[color:var(--color-text-brand)]');
+  });
+});
+
+describe('tiêu đề khối của trang sản phẩm: Inter 16/700 ở mọi khổ (Q1), không serif từ md', () => {
   const sans = (h: Element | null) => {
     expect(h).not.toBeNull();
-    expect(h!.className).toContain('max-md:font-ui');
-    expect(h!.className).toContain('max-md:font-semibold');
+    expect(h!.className).toContain('font-ui');
+    expect(h!.className).toContain('font-bold');
+    expect(h!.className).not.toContain('font-display');
+    expect(h!.className).not.toContain('max-md:');
   };
   it('Thành phần, Cam kết Tubu, Mô tả sản phẩm', () => {
     sans(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('h2'));

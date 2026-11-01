@@ -2,7 +2,7 @@ import { CATEGORY_GRID_MAX_CELLS, categoriesBlockHeight, HOME_SETTLING_HEIGHTS a
 import { Skeleton } from '@/components/mini';
 
 /**
- * Khung chờ chung cho mọi khối dưới thẻ thành viên: banner (chỉ khi lần mở trước có; từ lg ẩn vì banner thật nằm cạnh thẻ thành viên chứ không dưới nó), một hàng lối tắt (ẩn từ lg như `ShortcutGrid`, nếu không khi khối thật về, mọi khối dưới nhảy lên ~100px ở máy tính),
+ * Khung chờ chung cho mọi khối dưới thẻ thành viên: banner (prop `banner`, cho nơi không có `HubLayout`; Trang chủ không truyền vì khung giữ chỗ banner đứng ở slot banner của HubLayout, cột 8 từ lg), một hàng lối tắt (ẩn từ lg như `ShortcutGrid`, nếu không khi khối thật về, mọi khối dưới nhảy lên ~100px ở máy tính),
  * một khối ngang cỡ Giờ vàng, danh mục (số ô theo lần tải trước: một hàng khi ≤5 ô, hai hàng từ 6 ô), rồi hai hàng thẻ hàng.
  */
 export function HomeSettlingSkeleton({ categoryCells = CATEGORY_GRID_MAX_CELLS, banner = false }: { categoryCells?: number; banner?: boolean }) {

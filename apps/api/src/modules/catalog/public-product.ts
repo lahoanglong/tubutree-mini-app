@@ -16,3 +16,12 @@ export const PUBLIC_PRODUCT_WHERE = {
 export function isPublicProduct(p: { isActive: boolean; approvalStatus: string }): boolean {
   return p.isActive && p.approvalStatus === PUBLIC_PRODUCT_WHERE.approvalStatus;
 }
+
+/**
+ * Sản phẩm đang bán mà chưa có danh mục nào: khách không tìm thấy qua danh mục. Một nguồn cho số trên hộp việc admin và
+ * danh sách ở màn gán (`onSale` + `uncategorized`), để số trên thẻ bằng số dòng ở màn đích.
+ */
+export const UNCATEGORIZED_ON_SALE_WHERE = {
+  ...PUBLIC_PRODUCT_WHERE,
+  categoryIds: { isEmpty: true },
+} as const satisfies Prisma.ProductWhereInput;

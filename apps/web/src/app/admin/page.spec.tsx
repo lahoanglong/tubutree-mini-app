@@ -88,6 +88,7 @@ const mocks = vi.hoisted(() => ({
   deleteAcademyLesson: vi.fn(),
   inbox: vi.fn(),
   inboxExternal: null as Record<string, number> | null,
+  inboxUncategorized: 0,
   access: { role: 'STAFF', staffPermissions: [] as string[] },
   refundsCalls: 0,
   refundsArgs: [] as unknown[][],
@@ -172,6 +173,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'communityReports', count: 3 },
           { key: 'dealerApplications', count: 5 },
           { key: 'productsMissingImage', count: 4 },
+          ...(mocks.inboxUncategorized ? [{ key: 'productsUncategorized', count: mocks.inboxUncategorized }] : []),
           ...(mocks.inboxExternal ? [{ key: 'externalPoints', count: Object.values(mocks.inboxExternal).reduce((a, b) => a + b, 0), parts: mocks.inboxExternal }] : []),
         ],
       };
@@ -372,6 +374,7 @@ beforeEach(() => {
   ]) fn.mockReset();
   mocks.inbox.mockReset();
   mocks.inboxExternal = null;
+  mocks.inboxUncategorized = 0;
   mocks.todayCalls = 0;
   mocks.guestCount = 7;
   mocks.access = { role: 'STAFF', staffPermissions: [] };
@@ -451,7 +454,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(52);
+    expect(items).toHaveLength(53);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -460,7 +463,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     );
     expect(group('Bán hàng')).toContain('Sản phẩm');
     expect(group('Hay dùng')).toEqual(['Hôm nay', 'Đơn hàng', 'Sản phẩm', 'Người dùng', 'Chat CSKH', 'Cộng đồng', 'Mã giảm giá', 'Đổi rác', 'Gian hàng', 'Duyệt SP đối tác', 'Đại lý']);
-    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch']);
+    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch', 'Combo và mua kèm']);
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
@@ -2581,6 +2584,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Báo cáo',
       'Giờ vàng',
       'Chiến dịch',
+      'Combo và mua kèm',
       'Câu hỏi thường gặp',
       'Bộ nội dung CTV',
       'Học viện CTV',
@@ -2625,6 +2629,31 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       const cskh = await mount();
       expect(navItems(cskh.container)).not.toContain('Chiến dịch');
       expect(cskh.container.textContent).not.toContain('Chưa có chiến dịch nào');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('tab Combo và mua kèm: ADMIN và nhân viên MARKETING mở được bằng ?tab=bundles (tải /admin/bundles), đứng ngay sau Chiến dịch; nhân viên CSKH thì không thấy mục', async () => {
+    const api = mockFetch({ '/admin/bundles': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    try {
+      window.history.replaceState(null, '', '/admin?tab=bundles');
+      asStaff(['MARKETING']);
+      const marketing = await mount();
+      const items = navItems(marketing.container);
+      expect(items).toContain('Combo và mua kèm');
+      expect(items.indexOf('Combo và mua kèm')).toBe(items.indexOf('Chiến dịch') + 1);
+      expect(marketing.container.textContent).toContain('Chưa có combo hay mua kèm nào');
+      expect(api.calls.some((c) => c.url.includes('/admin/bundles'))).toBe(true);
+      marketing.unmount();
+      mounted = [];
+
+      window.history.replaceState(null, '', '/admin?tab=bundles');
+      asStaff(['CSKH']);
+      const cskh = await mount();
+      expect(navItems(cskh.container)).not.toContain('Combo và mua kèm');
+      expect(cskh.container.textContent).not.toContain('Chưa có combo hay mua kèm nào');
     } finally {
       vi.unstubAllGlobals();
     }
@@ -3934,7 +3963,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {
-    const api = mockFetch({ '/admin/storefronts': { body: { data: [], meta: { total: 0, page: 1, limit: 20 } } }, '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } }, '/admin/pancake/categories': { body: [] }, '/categories': { body: [] } });
+    const api = mockFetch({ '/admin/storefronts': { body: { data: [], meta: { total: 0, page: 1, limit: 20 } } }, '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } }, '/admin/pancake/categories': { body: [] }, '/admin/categories': { body: { items: [], limits: { maxRoots: 8, maxChildren: 8 } } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = await mount();
     click(container.querySelector('[data-inbox="storefrontsPending"]')!);
@@ -3948,6 +3977,26 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=productCategories');
     expect(api.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!.url).toContain('missingImage=1');
+  });
+
+  it('thẻ "Sản phẩm đang bán chưa có danh mục" mở tab Sản phẩm với chip chưa có danh mục (đang bán) bật sẵn', async () => {
+    mocks.inboxUncategorized = 3;
+    const api = mockFetch({
+      '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } },
+      '/admin/pancake/categories': { body: [] },
+      '/admin/categories': { body: { items: [], limits: { maxRoots: 8, maxChildren: 8 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="productsUncategorized"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=productCategories');
+    const chip = [...container.querySelectorAll('button[aria-pressed="true"]')].find((b) => b.textContent?.startsWith('Đang bán, chưa có danh mục'));
+    expect(chip?.textContent).toBe('Đang bán, chưa có danh mục (3)');
+    const last = api.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!.url;
+    expect(last).toContain('uncategorized=1');
+    expect(last).toContain('onSale=1');
+    expect(last).not.toContain('missingImage=1');
   });
 
   it('tab Người dùng: mặc định chỉ tài khoản thật, chip "Hiện cả khách vãng lai (n)" bật thì gửi guests', async () => {

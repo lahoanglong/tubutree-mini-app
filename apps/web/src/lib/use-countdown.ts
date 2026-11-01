@@ -1,16 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { formatCountdown } from '@tubutree/app-core/countdown-format';
+import { countdownText } from '@tubutree/app-core/commerce/countdown';
 import { serverNow } from '@tubutree/app-core/server-clock';
 
-export { formatCountdown };
+const read = (targetMs: number) => (Number.isNaN(targetMs) ? '' : countdownText(targetMs - serverNow()));
 
-const read = (targetMs: number) => (Number.isNaN(targetMs) ? '' : formatCountdown(targetMs - serverNow()));
-
-/** Đếm ngược tới `target` (Date hoặc ISO string), cập nhật mỗi 30s. "Xh Ym"; '' nếu target null, không parse được hoặc đã qua. */
+/** Đếm ngược tới `target` (Date hoặc ISO string), cập nhật mỗi 30s. "2 giờ 05 phút" (`countdownText`); '' nếu target null, không parse được hoặc đã qua. */
 export function useCountdown(target: Date | string | null): string {
-  // Không parse được (Invalid Date) → NaN → rỗng, tránh "NaNh NaNm".
+  // Không parse được (Invalid Date) → NaN → rỗng, tránh chữ rác.
   const targetMs = target ? new Date(target).getTime() : Number.NaN;
   const [label, setLabel] = useState(() => read(targetMs));
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Star, Video, type LucideIcon } from 'lucide-react';
+import { Check, Star, Video } from 'lucide-react';
 import {
   fetchReviews,
   createReview,
@@ -14,6 +14,7 @@ import {
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
+import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -29,14 +30,6 @@ import { SectionTitle } from './ui/section-title';
 import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
 
-type ReviewFilter = number | 'all' | 'photo' | 'video';
-
-interface FilterChipDef {
-  k: ReviewFilter;
-  label: string;
-  icon?: LucideIcon;
-  count?: number;
-}
 
 /** Dải sao tĩnh (hiển thị) — size tùy chỉnh. */
 export function Stars({ value, size = 14 }: { value: number; size?: number }) {
@@ -106,7 +99,7 @@ export function ReviewsSection({
   // không làm mất sao, nhận xét và ảnh/video đã upload (P1-2). Nháp gắn với đúng đánh giá đang soạn: mở đánh giá khác
   // thì form lấy nội dung của đánh giá đó. null = chưa gõ gì: form lấy đánh giá hiện có (sửa) hoặc form trống (viết mới).
   const [edited, setEdited] = useState<{ key: string; draft: ReviewDraft } | null>(null);
-  const [filter, setFilter] = useState<ReviewFilter>('all');
+  const [filter, setFilter] = useState<ReviewFilterKey>('all');
   const [visible, setVisible] = useState(5);
   const reviewsQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchReviews(slug) });
   // Chỉ hỏi khi đã đăng nhập; chưa đăng nhập thì vẫn hiện nút để còn mời login.
@@ -166,30 +159,14 @@ export function ReviewsSection({
           : null;
   const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
-  const filtered = (data?.items ?? []).filter((r) =>
-    filter === 'all'
-      ? true
-      : filter === 'photo'
-        ? r.images.length > 0
-        : filter === 'video'
-          ? !!r.videoUrl
-          : r.rating === filter,
-  );
-
-  const chips: FilterChipDef[] = [
-    { k: 'all', label: 'Tất cả' },
-    { k: 5, label: '5 sao' },
-    { k: 4, label: '4 sao' },
-    { k: 3, label: '3 sao' },
-    { k: 'photo', label: 'Có ảnh' },
-    ...((data?.videoCount ?? 0) > 0 ? [{ k: 'video' as const, label: 'Có video', icon: Video, count: data?.videoCount }] : []),
-  ];
+  const filtered = filterReviews(data?.items ?? [], filter);
+  const chips = reviewFilterChips(data?.videoCount);
 
   return (
     <section id="danh-gia" aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
       {/* Cao bằng nút đầu mục (48px): nút chỉ hiện khi can-review đã về, hàng không được nhảy lúc đó. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 48 }}>
-        <SectionTitle>Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}</SectionTitle>
+        <SectionTitle block>Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}</SectionTitle>
         {/* Chỉ mở ô soạn khi BE xác nhận đủ điều kiện. Trước đây mở cho mọi user đăng nhập,
             khách chưa mua chọn sao + upload ảnh/video xong mới nhận lỗi "chỉ đánh giá sản phẩm
             đã mua" — mất trắng công sức (P1-2). Mọi lần mua đã có đánh giá thì nút là sửa đánh giá mới nhất. */}
@@ -276,14 +253,14 @@ export function ReviewsSection({
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             {chips.map((f) => (
               <Chip
-                key={String(f.k)}
+                key={String(f.key)}
                 size="sm"
-                selected={filter === f.k}
-                icon={f.icon}
+                selected={filter === f.key}
+                icon={f.key === 'video' ? Video : undefined}
                 count={f.count}
                 onPress={() => {
                   haptic('light');
-                  setFilter(f.k);
+                  setFilter(f.key);
                   setVisible(5);
                 }}
               >

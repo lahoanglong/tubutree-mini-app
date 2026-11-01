@@ -63,7 +63,7 @@ export function ProductTileSkeleton({ variant = 'grid', brand, note = false, foo
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
       <div data-testid="catalog-tile-skeleton-body" style={{ height, padding: TILE_METRICS.inset, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
         {hasBrand && <Skeleton width={56} height={TILE_METRICS.brand - 4} style={{ marginBottom: 4 }} />}
-        <Skeleton width="90%" height={caption ? TILE_METRICS.nameCaption : TILE_METRICS.name} />
+        <Skeleton width="90%" height={variant === 'flash' ? TILE_METRICS.nameFlash : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name} />
         <div style={{ marginTop: 'auto', paddingTop: TILE_METRICS.gap }}>
           <Skeleton width={80} height={TILE_METRICS.price} />
           {stacked && <Skeleton width={48} height={TILE_METRICS.compare - 4} style={{ marginTop: 2, marginBottom: 2 }} />}

@@ -38,6 +38,17 @@ export function cardMetaLine(p: Pick<ProductCard, 'ratingAvg' | 'sold'>): string
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+/**
+ * Bản gọn của dòng meta cho thẻ hẹp (kệ hạng 128px: chữ nhìn thấy rộng 112px, "★ 4,7 · Đã bán 8,2k+" cần ~120px nên bị cắt giữa số): chỉ nói lượt bán,
+ * vì kệ hạng nói về doanh số, và giữ chữ "Đã bán" để "8,2k+" không mất nghĩa. Chưa có lượt bán thì còn lại sao. Có bản gọn khi và chỉ khi có `cardMetaLine`.
+ */
+export function cardMetaCompact(p: Pick<ProductCard, 'ratingAvg' | 'sold'>): string | null {
+  const sold = formatSoldShort(p.sold);
+  if (sold !== null) return sold;
+  const rating = formatRating(p.ratingAvg ?? 0);
+  return rating ? fillTemplate(META_COPY.rating, { avg: rating }) : null;
+}
+
 const UNIT: Record<string, number> = { k: 1e3, tr: 1e6, tỷ: 1e9 };
 
 /**

@@ -34,7 +34,7 @@ vi.mock('../services/core-http', () => ({
     get: (path: string) => {
       mocks.coreGet(path);
       if (path === '/me/notifications/unread-count') return mocks.unreadCount();
-      if (path === '/campaigns') return Promise.resolve([]);
+      if (path === '/campaigns' || path === '/bundles/combos') return Promise.resolve([]);
       return Promise.reject(new Error(`không mock ${path}`));
     },
   },
@@ -241,8 +241,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.auth.user = null;
     renderHome();
     await screen.findByRole('region', { name: 'Bán chạy nhất' });
-    // Chỉ banner (công khai) được gọi; không có gì của riêng người dùng.
-    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns')).toEqual([]);
+    // Chỉ banner và combo (công khai) được gọi; không có gì của riêng người dùng.
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns' && p !== '/bundles/combos')).toEqual([]);
     expect(mocks.fetchPurchasedItems).not.toHaveBeenCalled();
     expect(blockOrder()).toEqual(NEW);
   });
@@ -252,7 +252,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     renderHome();
     expect(await screen.findByRole('button', { name: 'Thông báo, 73 chưa đọc' })).toBeInTheDocument();
     // Một lời gọi đếm nhỏ, không tải trang tin nào: khách có hơn 50 tin chưa đọc thấy đúng số như ở Cá nhân.
-    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns')).toEqual(['/me/notifications/unread-count']);
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns' && p !== '/bundles/combos')).toEqual(['/me/notifications/unread-count']);
   });
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ', async () => {

@@ -70,6 +70,18 @@ export function campaignSlides(
   return slides;
 }
 
+/**
+ * Biết loại khách (mới hoặc cũ) rồi có slide nào mà lúc "chưa biết loại" chưa thấy không. `list` là danh sách MỌI đối tượng (API không lọc khi không hỏi
+ * `audience`), nên danh sách rỗng hay chỉ có chiến dịch ALL nghĩa là biết loại cũng không hiện thêm gì: khung giữ chỗ banner không còn lý do để giữ.
+ */
+export function campaignsRevealByKind(
+  list: readonly CampaignBanner[] | null | undefined,
+  o: { platform: 'mini' | 'web'; now?: number },
+): boolean {
+  const seen = new Set(campaignSlides(list, { ...o, kind: 'unknown' }).map((s) => s.id));
+  return (['new', 'returning'] as const).some((kind) => campaignSlides(list, { ...o, kind }).some((s) => !seen.has(s.id)));
+}
+
 function vnDayMonth(iso: string): string | null {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return null;

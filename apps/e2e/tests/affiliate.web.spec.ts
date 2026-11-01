@@ -279,30 +279,41 @@ test.describe('Web khách: CTV', () => {
   test('gian hàng: tạo bộ sưu tập (chỉ tên), thêm sản phẩm, đăng — đúng body như Mini App', async ({ page, api }) => {
     mockSession(api);
     let added = false;
+    let created = false;
+    const SOAP = { id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 };
     api.get('/storefront/me', () =>
-      SF({ collections: [{ id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: added ? [{ id: 'i2', productId: 'p2' }] : [] }] }),
+      SF({
+        collections: [
+          { id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [] },
+          ...(created ? [{ id: 'c2', title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: added ? [{ id: 'i2', productId: 'p2', note: null, isPinned: false, isHidden: false, sortOrder: 0, product: SOAP }] : [] }] : []),
+        ],
+      }),
     );
     api.get('/storefront/me/products', [{ id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 }]);
     api.get('/storefront/me/stats', EMPTY_STATS);
     api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
-    api.post('/storefront/me/collections', { id: 'c2', title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] });
+    api.post('/storefront/me/collections', () => {
+      created = true;
+      return { id: 'c2', title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] };
+    });
     api.post('/storefront/me/collections/:id/items', () => {
       added = true;
       return { id: 'i2', productId: 'p2' };
     });
     api.post('/storefront/me/publish', SF({ isPublished: true }));
     await page.goto('/ctv/gian-hang');
-    await page.getByLabel('Tên bộ sưu tập').fill('Combo Tết');
-    await expect(page.getByLabel('Loại bộ sưu tập')).toHaveCount(0);
-    await expect(page.getByLabel('Giảm giá combo (%)')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Tạo bộ sưu tập' }).click();
+    await page.getByRole('button', { name: 'Thêm khối', exact: true }).click();
+    await page.getByLabel('Tên khối').fill('Combo Tết');
+    await expect(page.getByLabel('Giảm khi mua cả bộ')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Tạo và thêm món' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections')).toHaveLength(1);
-    expect(api.callsTo('POST', '/storefront/me/collections')[0]!.body).toEqual({ title: 'Combo Tết' });
-    await page.getByRole('button', { name: 'Thêm sản phẩm' }).first().click();
+    expect(api.callsTo('POST', '/storefront/me/collections')[0]!.body).toEqual({ title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID' });
+    // Tạo khối xong, trang mở thẳng khối mới và bộ chọn sản phẩm tự mở (như Mini App): không bấm "Thêm sản phẩm" nữa.
     await page.getByRole('button', { name: 'Thêm Xà phòng' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections/:id/items')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/collections/:id/items')[0]!.body).toEqual({ productId: 'p2' });
     await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Gian hàng của tôi', exact: true }).click();
     await page.getByRole('button', { name: 'Gửi duyệt' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/publish')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/publish')[0]!.body).toEqual({ isPublished: true });

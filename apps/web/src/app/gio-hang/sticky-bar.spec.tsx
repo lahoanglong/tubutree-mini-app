@@ -72,6 +72,27 @@ describe('/gio-hang — thanh dính đáy', () => {
     expect(bar(c)!.textContent).toContain(`Tạm tính (đã giảm)${total}`);
   });
 
+  it('chân dính gọn: chưa đạt miễn phí giao có thanh tiến độ; đạt rồi chỉ còn một dòng chữ, không thanh', async () => {
+    const c = await mount();
+    expect(bar(c)!.querySelector('[data-testid="freeship-bar"]')).not.toBeNull();
+    state.cart = cartOf([line({})], { freeship: true, freeshipThreshold: 200000 });
+    const reached = await mount();
+    expect(bar(reached)!.textContent).toContain('Bạn được miễn phí giao hàng');
+    expect(bar(reached)!.querySelector('[data-testid="freeship-bar"]')).toBeNull();
+  });
+
+  it('chân dính gọn: nhãn và số tiền cùng một khối bên trái, nút Thanh toán là khối riêng cùng hàng', async () => {
+    state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
+    const c = await mount();
+    const total = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-value"]')!;
+    expect(total.textContent).toBe('33.000đ');
+    expect(total.parentElement!.textContent).toContain('Tạm tính');
+    expect(total.parentElement!.querySelector('[data-testid="cart-saving"]')).not.toBeNull();
+    const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
+    expect(total.parentElement!.contains(link)).toBe(false);
+    expect(link.parentElement).toBe(total.parentElement!.parentElement);
+  });
+
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {
     const c = await mount();
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;

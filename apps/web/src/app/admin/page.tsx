@@ -121,6 +121,7 @@ import { PartnerRulesCard } from '@/components/admin/partner-rules-card';
 import { ShopInfoCard } from '@/components/admin/shop-info-card';
 import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
+import { BundlesTab } from '@/components/admin/bundles-tab';
 import { CampaignsTab } from '@/components/admin/campaigns-tab';
 import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
@@ -223,6 +224,7 @@ type Tab =
   | 'brands'
   | 'flashSales'
   | 'campaigns'
+  | 'bundles'
   | 'faqs'
   | 'contentKit'
   | 'academy'
@@ -302,6 +304,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
       { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
       { k: 'campaigns', label: 'Chiến dịch' },
+      { k: 'bundles', label: 'Combo và mua kèm' },
     ],
   },
   {
@@ -363,7 +366,7 @@ const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['waste'],
   CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community', 'supportChat'],
   KHO: ['inbox', 'orders', 'returns'],
-  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'campaigns', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
+  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'campaigns', 'bundles', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'orders', 'externalClaims', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
 type WasteInboxKey =
@@ -450,7 +453,7 @@ export default function AdminPage() {
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra; from?: string; to?: string; userLabel?: string } | null>(null);
-  const [productsSeed, setProductsSeed] = useState(0);
+  const [productsSeed, setProductsSeed] = useState<{ n: number; view: 'missingImage' | 'uncategorized' } | null>(null);
   const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [deletionSeed, setDeletionSeed] = useState(0);
   const [reportsSeed, setReportsSeed] = useState(0);
@@ -596,8 +599,8 @@ export default function AdminPage() {
       setStorefrontSeed(Date.now());
       return setTab('storefronts');
     }
-    if (k === 'productsMissingImage') {
-      setProductsSeed(Date.now());
+    if (k === 'productsMissingImage' || k === 'productsUncategorized') {
+      setProductsSeed({ n: Date.now(), view: k === 'productsMissingImage' ? 'missingImage' : 'uncategorized' });
       return setTab('productCategories');
     }
     if (k === 'invoicePending') {
@@ -626,6 +629,7 @@ export default function AdminPage() {
         | 'accountDeletionPending'
         | 'externalPoints'
         | 'productsMissingImage'
+        | 'productsUncategorized'
         | WasteInboxKey
       >,
       Tab
@@ -706,7 +710,7 @@ export default function AdminPage() {
           {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
-          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed} initialMissingImage={productsSeed > 0} />}
+          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed?.n ?? 0} initialMissingImage={productsSeed?.view === 'missingImage'} initialUncategorized={productsSeed?.view === 'uncategorized'} />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab key={externalSeed?.n ?? 0} seed={externalSeed} isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
@@ -765,6 +769,7 @@ export default function AdminPage() {
           {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}
           {active === 'campaigns' && <CampaignsTab />}
+          {active === 'bundles' && <BundlesTab isAdmin={isAdmin} />}
           {active === 'faqs' && <FaqTab />}
           {active === 'contentKit' && <ContentKitTab />}
           {active === 'academy' && <AcademyTab />}

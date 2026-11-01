@@ -73,9 +73,14 @@ export default function StorefrontViewPage() {
   return <StorefrontShop sf={sf} />;
 }
 
-/** Cao thanh nút lùi cố định (56) cộng vùng an toàn phía trên: thanh Sản phẩm/sắp xếp dính ngay dưới nó. */
-const STICKY_TOP = 'calc(var(--safe-top, 0px) + 56px)';
-const TABS_HEIGHT = 62;
+/**
+ * Cao thanh nút lùi cố định (56): dải tab và thanh sắp xếp dính ngay dưới nó. `top` của phần tử dính đo từ mép NỘI DUNG của `.zaui-page`, mà trang
+ * `page-bleed` đã đệm đầu đúng vùng an toàn, nên KHÔNG cộng `--safe-top` nữa (cộng thì trên máy có tai thỏ dải tab hở đúng một vùng an toàn dưới thanh).
+ */
+const STICKY_TOP = '56px';
+/** Đo ở 375px: đệm 12 + dải tab 50 + đệm 8 = 70. Thanh sắp xếp chui dưới 8px đệm đáy (khoảng trống) cho khỏi hở một sợi khi chữ đổi cỡ, không chui vào phần chữ. */
+const TABS_HEIGHT = 70;
+const TABS_PAD_BOTTOM = 8;
 
 function StorefrontShop({ sf }: { sf: Storefront }) {
   const navigate = useNavigate();
@@ -159,11 +164,11 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
         />
       ) : (
         <>
-          <div ref={tabsRef} style={{ position: 'sticky', top: STICKY_TOP, zIndex: 3, background: 'var(--color-bg-canvas)', padding: '12px 16px 8px', minHeight: TABS_HEIGHT }}>
+          <div ref={tabsRef} style={{ position: 'sticky', top: STICKY_TOP, zIndex: 3, background: 'var(--color-bg-canvas)', padding: `12px 16px ${TABS_PAD_BOTTOM}px`, minHeight: TABS_HEIGHT }}>
             <SegmentedTabs items={tabs} value={tab} onChange={(k) => openTab(k)} />
           </div>
 
-          <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: `calc(var(--safe-top, 0px) + 56px + ${TABS_HEIGHT - 12}px)` }}>
+          <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: `${56 + TABS_HEIGHT - TABS_PAD_BOTTOM}px` }}>
             {tab === 'shop' && (
               <div style={{ padding: '0 16px' }}>
                 {plan.main.map((col) => (

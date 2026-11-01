@@ -46,6 +46,8 @@ export interface ProductRailProps {
   label: string;
   listSource?: string;
   showBrand?: boolean;
+  /** Mặc định có tim yêu thích; màn dựng gian hàng truyền false cho khung xem trước (khung inert, chủ chưa phải khách). */
+  showWishlist?: boolean;
   /** Đang tải: vẽ `skeletonCount` khung chờ cùng số đo với thẻ thật. */
   loading?: boolean;
   skeletonCount?: number;
@@ -54,7 +56,7 @@ export interface ProductRailProps {
   onOpen?: (product: ProductCardData, index: number) => void;
 }
 
-export function ProductRail({ items, variant, rankFrom, ranks, label, listSource, showBrand, loading = false, skeletonCount = 6, noteOf, onOpen }: ProductRailProps) {
+export function ProductRail({ items, variant, rankFrom, ranks, label, listSource, showBrand, showWishlist, loading = false, skeletonCount = 6, noteOf, onOpen }: ProductRailProps) {
   const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
   const reserveNote = notes?.some((n) => !!n) ?? false;
   return (
@@ -73,6 +75,7 @@ export function ProductRail({ items, variant, rankFrom, ranks, label, listSource
                 rank={ranks?.[i] ?? (rankFrom === undefined ? undefined : rankFrom + i)}
                 listSource={listSource}
                 showBrand={showBrand}
+                showWishlist={showWishlist}
                 note={notes?.[i] || (reserveNote ? '' : undefined)}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}
               />

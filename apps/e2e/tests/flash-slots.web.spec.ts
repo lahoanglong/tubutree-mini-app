@@ -154,5 +154,46 @@ test.describe('Web khách: Giờ vàng theo khung, chưa đăng nhập', () => {
     await page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true }).click();
     await expect(page).toHaveURL(/\/dang-nhap\?returnTo=%2Fgio-vang/);
     expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(0);
+    // Suất được nhớ qua vòng đăng nhập để đặt nốt khi khách quay về.
+    expect(JSON.parse((await page.evaluate(() => sessionStorage.getItem('tubu_pending_remind')))!)).toMatchObject({ itemId: 'fi-21' });
+  });
+});
+
+test.describe('Web khách: quay về /gio-vang sau đăng nhập với một Nhắc tôi đang chờ', () => {
+  /** Giả lập đúng thứ tự thật: khách đã bấm Nhắc tôi (ý định nằm ở sessionStorage), đi đăng nhập, rồi tải lại trang với phiên đã có. */
+  test.beforeEach(async ({ page, api }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+        if (!sessionStorage.getItem('tubu_pending_remind')) {
+          sessionStorage.setItem('tubu_pending_remind', JSON.stringify({ itemId: 'fi-21', startAt: '2026-11-01T13:00:00.000Z', at: Date.now() }));
+        }
+      } catch {
+        // không có storage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+    mockBuyer(api);
+  });
+
+  test('món chưa nhắc: tự đặt nhắc đúng một lần, ý định bị xoá, nút thành "Đã đặt nhắc"', async ({ page, api }) => {
+    mockFlashSlots(api);
+    const posted = api.waitForCall('POST', '/flash-sales/items/:id/remind');
+    await page.goto('/gio-vang');
+    expect((await posted).path).toBe('/flash-sales/items/fi-21/remind');
+    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(1);
+    expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);
+    expect(await page.evaluate(() => sessionStorage.getItem('tubu_pending_remind'))).toBeNull();
+  });
+
+  test('món đã nhắc từ trước (máy khác): không gọi POST lẫn DELETE', async ({ page, api }) => {
+    mockFlashSlots(api, { remindedIds: ['fi-21'] });
+    await page.goto('/gio-vang');
+    await expect.poll(() => api.callsTo('GET', '/flash-sales/upcoming').length).toBeGreaterThan(0);
+    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(0);
+    expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);
   });
 });

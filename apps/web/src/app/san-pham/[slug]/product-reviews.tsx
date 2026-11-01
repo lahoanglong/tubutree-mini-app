@@ -5,12 +5,15 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Star } from 'lucide-react';
+import { Check, Star, Video } from 'lucide-react';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useHydrated } from '@/lib/use-hydrated';
 import { apiMediaUrl } from '@/lib/client-api';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { Chip } from '@/components/mini/chip';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
 import {
@@ -31,7 +34,7 @@ import {
   type ReviewableOrder,
 } from '@/lib/reviews-client';
 import { EvidenceUpload } from '@/components/evidence-upload';
-import { pdpSectionTitle } from './pdp-sections';
+import { pdpBand, pdpSectionTitle } from './pdp-sections';
 import { reviewVideoConfig } from './review-video-config';
 import { actionErrorText } from '@/lib/error-text';
 
@@ -84,7 +87,7 @@ function forgetOrderParam() {
 /** Khung chờ khi trang được dựng sẵn (ISR): tham số mở form chỉ đọc được ở trình duyệt. Giữ id để link #danh-gia cuộn tới. */
 export function ProductReviewsFallback() {
   return (
-    <section id="danh-gia" aria-labelledby="danh-gia-title" className="mt-8 scroll-mt-20">
+    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20`}>
       <h2 id="danh-gia-title" className={pdpSectionTitle}>
         Đánh giá
       </h2>
@@ -111,6 +114,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   });
   const [target, setTarget] = useState<FormTarget | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [filter, setFilter] = useState<ReviewFilterKey>('all');
   const [notice, setNotice] = useState<string | null>(null);
 
   const elig = phase === 'authenticated' ? eligQ.data : undefined;
@@ -145,11 +149,12 @@ export function ProductReviews({ slug }: { slug: string }) {
   const data = hydrated ? listQ.data : undefined;
   const listLoading = listQ.isLoading || (!hydrated && !listQ.isError);
   const dist = data?.distribution ?? {};
-  const items = data?.items ?? [];
+  const items = filterReviews(data?.items ?? [], filter);
+  const chips = reviewFilterChips(data?.videoCount);
 
   return (
-    <section id="danh-gia" aria-labelledby="danh-gia-title" className="mt-8 scroll-mt-20">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 max-md:min-h-12">
         <h2 id="danh-gia-title" className={pdpSectionTitle}>
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
@@ -161,11 +166,11 @@ export function ProductReviews({ slug }: { slug: string }) {
         {elig && !target && (
           <>
             {nextOrder ? (
-              <button type="button" className={ui.btnSecondary} onClick={() => openForm(newTarget(nextOrder))}>
+              <button type="button" className={`${ui.btnSecondary} ${mini.ghost}`} onClick={() => openForm(newTarget(nextOrder))}>
                 Viết đánh giá
               </button>
             ) : elig.reason === 'ALL_REVIEWED' && latestMine ? (
-              <button type="button" className={ui.btnSecondary} onClick={() => openEdit(latestMine)}>
+              <button type="button" className={`${ui.btnSecondary} ${mini.ghost}`} onClick={() => openEdit(latestMine)}>
                 Sửa đánh giá của bạn
               </button>
             ) : elig.reason === 'NOT_PURCHASED' ? (
@@ -249,6 +254,25 @@ export function ProductReviews({ slug }: { slug: string }) {
             </ul>
           </div>
 
+          {/* Hàng chip lọc như Mini App: đổi bộ lọc thì danh sách về lại 5 dòng đầu. */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {chips.map((f) => (
+              <Chip
+                key={String(f.key)}
+                size="sm"
+                selected={filter === f.key}
+                icon={f.key === 'video' ? Video : undefined}
+                count={f.count}
+                onPress={() => {
+                  setFilter(f.key);
+                  setVisible(PAGE_SIZE);
+                }}
+              >
+                {f.label}
+              </Chip>
+            ))}
+          </div>
+
           <ul className="mt-3">
             {items.slice(0, visible).map((r) => {
               const mine = mineById.get(r.id);
@@ -313,8 +337,9 @@ export function ProductReviews({ slug }: { slug: string }) {
               );
             })}
           </ul>
+          {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
           {items.length > visible && (
-            <button type="button" className={`${ui.btnSecondary} w-full`} onClick={() => setVisible((v) => v + PAGE_SIZE)}>
+            <button type="button" className={`${ui.btnSecondary} ${mini.ghost} w-full`} onClick={() => setVisible((v) => v + PAGE_SIZE)}>
               Xem thêm ({items.length - visible})
             </button>
           )}

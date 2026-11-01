@@ -45,7 +45,7 @@ vi.mock('./content-kit-sheet', () => ({
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpLowStock, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
   { id: 'v1', stock: 0 },
@@ -252,7 +252,45 @@ describe('PdpSubscribeRow', () => {
   });
 });
 
+describe('PdpLowStock ("Còn N sản phẩm" dưới Điểm Xanh, đúng chữ Mini App ở điện thoại)', () => {
+  it('phân loại đang chọn còn từ 1 đến 5: nhắc "Còn N sản phẩm", chỉ hiện dưới md', async () => {
+    const { container } = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    const p = container.querySelector('[data-testid="pdp-low-stock"]')!;
+    expect(p.textContent).toBe('Còn 4 sản phẩm');
+    expect(p.className).toContain('md:hidden');
+  });
+  it('hết hàng hoặc còn nhiều hơn 5: không nhắc; lấy tồn kho thật thay bản ISR', async () => {
+    expect(mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />, 'v1').container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 6 });
+    const many = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    expect(many.container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 2 });
+    const few = mount(<PdpLowStock slug="dau-goi" variations={[{ id: 'v2', stock: 9 }]} />);
+    await flush();
+    expect(few.container.textContent).toBe('Còn 2 sản phẩm');
+  });
+});
+
+describe('PdpFreeship / PdpShippingRow: cỡ chữ như Mini App ở điện thoại', () => {
+  it('dòng miễn phí giao: 12px đậm màu thương hiệu dưới md (cùng dòng "Tubu Tree giao hàng")', async () => {
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0, freeshipThreshold: 150000 });
+    const { container } = mount(<PdpFreeship />);
+    await flush();
+    const p = container.querySelector('[data-testid="pdp-freeship"]')!;
+    expect(p.className).toContain('max-md:text-xs');
+    expect(p.className).toContain('max-md:font-semibold');
+    expect(p.className).toContain('max-md:text-[var(--color-text-brand)]');
+  });
+});
+
 describe('PdpGroupBuyRow', () => {
+  it('điện thoại: là dải trắng riêng (không viền, không bo) như Mini App', () => {
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    expect(container.firstElementChild!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(byText(container, 'button', /Mở nhóm mua chung/)!.className).toContain('max-md:border-0');
+  });
   it('đăng nhập: POST /group-buy {productId} rồi sang /mua-chung/<id>', async () => {
     mocks.http.post.mockResolvedValue({ id: 'g1' });
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
@@ -322,6 +360,12 @@ describe('PdpChatButton', () => {
     const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
     click(byText(container, 'button', 'Chat với Tubu Tree'));
     expect(mocks.oa.openChat).toHaveBeenCalledWith('Mình muốn hỏi về sản phẩm: Dầu gội');
+  });
+  it('điện thoại: nút phụ nền xanh nhạt không viền như ZaUI secondary của Mini App', () => {
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    const btn = byText(container, 'button', 'Chat với Tubu Tree')!;
+    expect(btn.className).toContain('max-md:border-transparent');
+    expect(btn.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
   it('OA chưa cấu hình thì không hiện nút', () => {
     mocks.oa.available = false;

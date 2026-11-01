@@ -62,6 +62,16 @@ describe('ScrollRow', () => {
     expect(region).not.toHaveAttribute('data-fade-end');
   });
 
+  it('vùng cuộn là khung định vị (position:relative): chữ đọc ẩn position:absolute của PriceTag ở trong không thoát ra làm tràn trang', () => {
+    render(<ScrollRow label="Kệ"><i /></ScrollRow>);
+    expect(screen.getByRole('region', { name: 'Kệ' }).style.position).toBe('relative');
+  });
+
+  it('style của nơi gọi vẫn thắng (đặt sau)', () => {
+    render(<ScrollRow label="Kệ" style={{ position: 'sticky' }}><i /></ScrollRow>);
+    expect(screen.getByRole('region', { name: 'Kệ' }).style.position).toBe('sticky');
+  });
+
   it('truyền được style/className/data-testid của chỗ gọi', () => {
     render(<ScrollRow label="X" className="mine" style={{ gap: 8 }} data-testid="rail"><i /></ScrollRow>);
     const el = screen.getByTestId('rail');

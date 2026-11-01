@@ -4,11 +4,16 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
+import { loadLiveBundles, readBundleMaxPct } from '../bundles/bundle-read';
+import { allocateBundleDiscounts, allocateBundleDiscountsCapped, isOwnStaffBundle, mergeMaxPerLine, type LiveBundle } from '../bundles/bundle-rules';
+import { loadStaffCouponCaps } from '../admin/coupon-input-rules';
 
 export interface ComboLine {
   variationId: string;
   productId: string;
   total: number;
+  /** Số lượng của dòng, để bundle chia đơn vị được hưởng; thiếu coi như 1 (chỉ test thuần gọi thiếu). */
+  quantity?: number;
 }
 export interface ComboResult {
   /** Tổng giảm combo (VND). */
@@ -72,7 +77,14 @@ export function goodsAfterComboOf(
   };
 }
 
-/** Tính giảm giá combo cho giỏ theo gian hàng (slug). Combo = collection kind=COMBO + comboDiscountPct. */
+const NO_COMBO: ComboResult = { total: 0, perLine: {} };
+
+/**
+ * Giảm giá combo của giỏ: combo của gian hàng đang ghi công (collection kind=COMBO + comboDiscountPct) hợp với bundle toàn sàn
+ * (`Bundle`, Tubu tài trợ). Mỗi dòng lấy khoản LỚN NHẤT giữa hai nguồn, không cộng dồn. Giỏ, báo giá, xem trước mã và đặt đơn đều
+ * gọi đúng hàm này nên số luôn khớp, và kết quả đi thẳng vào `comboPerLine`/`Order.comboDiscount` (hoa hồng, hoàn tiền đọc `paidTotal`).
+ * Tên giữ `computeForStorefront` vì nhiều spec đang dựng giả theo tên này; `slug` rỗng vẫn tính bundle.
+ */
 @Injectable()
 export class ComboService {
   constructor(
@@ -81,11 +93,51 @@ export class ComboService {
   ) {}
 
   /**
-   * `buyerId`: chủ gian hàng mua qua chính gian hàng của mình thì không có giảm combo — combo là ưu đãi
-   * gian hàng dành cho khách, không phải cách CTV tự giảm giá cho bản thân (MONEY-5).
+   * `buyerId`: chủ gian hàng mua qua chính gian hàng của mình thì không có giảm combo gian hàng — combo là ưu đãi
+   * gian hàng dành cho khách, không phải cách CTV tự giảm giá cho bản thân (MONEY-5). Bundle toàn sàn không có ngoại lệ này.
+   * `lines` là các dòng KHÔNG giờ vàng (dòng giờ vàng không nhận combo, cũng không tính vào điều kiện đủ bộ).
    */
-  async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
-    if (!slug || lines.length === 0) return { total: 0, perLine: {} };
+  async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string, now: Date = new Date()): Promise<ComboResult> {
+    if (lines.length === 0) return NO_COMBO;
+    const store = await this.storefrontCombo(slug, lines, buyerId);
+    const live = await loadLiveBundles(this.prisma, now, [...new Set(lines.map((l) => l.productId))]);
+    const bundles = await this.withoutOwnStaffBundles(live, buyerId);
+    if (bundles.length === 0) return store;
+    const maxPct = await readBundleMaxPct(this.config);
+    const bundleLines = lines.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity ?? 1 }));
+    // Trần chỉ kiểm từng bộ lúc ghi nên không chặn nhiều bộ cộng dồn hay giá tăng sau khi lưu: kẹp tổng bộ của nhân viên ở đây, nơi tiền thật mất đi.
+    const staffMax = (await loadStaffCouponCaps(this.config)).maxAmount;
+    const raw = allocateBundleDiscounts(bundles, bundleLines, maxPct);
+    // `raw` là cận trên của mọi kết quả sau khi kẹp: chưa vượt trần thì không bộ nào bị kẹp, khỏi tra vai trò người tạo.
+    const bundle = raw.total <= staffMax ? raw : allocateBundleDiscountsCapped(bundles, bundleLines, maxPct, { isStaff: await this.staffBundlePredicate(bundles), maxAmount: staffMax });
+    return mergeMaxPerLine(store, bundle);
+  }
+
+  /**
+   * Bộ do ADMIN tạo không bị trần nhân viên; mọi bộ khác bị kẹp, kể cả không rõ người tạo (`createdById` null, tài khoản không còn), cùng chiều với
+   * `isOwnStaffCoupon` (không rõ vai trò coi như nhân viên). Một truy vấn cho mọi người tạo của các bộ đang xét.
+   */
+  private async staffBundlePredicate(bundles: readonly LiveBundle[]): Promise<(b: LiveBundle) => boolean> {
+    const creatorIds = [...new Set(bundles.map((b) => b.createdById).filter((id): id is string => id !== null))];
+    const admins = creatorIds.length === 0 ? [] : await this.prisma.user.findMany({ where: { id: { in: creatorIds }, role: 'ADMIN' }, select: { id: true } });
+    const adminIds = new Set(admins.map((u) => u.id));
+    return (b) => b.createdById === null || !adminIds.has(b.createdById);
+  }
+
+  /**
+   * Nhân viên (không phải ADMIN) không hưởng bộ do chính mình tạo: cùng luật mã giảm giá (`isOwnStaffCoupon`) và Giờ vàng
+   * (`ownSalesBlocked`), vì bộ không có quota toàn cục nên tự tạo rồi tự đặt nhiều đơn là tự cấp tiền. Chỉ tra vai trò khi người mua
+   * thật sự là người tạo một bộ đang xét. API công khai không biết người mua (cache chung) nên vẫn quảng cáo; giỏ chỉ giảm ít hơn.
+   */
+  private async withoutOwnStaffBundles(bundles: LiveBundle[], buyerId: string | undefined): Promise<LiveBundle[]> {
+    if (!buyerId || !bundles.some((b) => b.createdById === buyerId)) return bundles;
+    const buyer = await this.prisma.user.findUnique({ where: { id: buyerId }, select: { role: true } });
+    const user = { id: buyerId, role: buyer?.role };
+    return bundles.filter((b) => !isOwnStaffBundle(b, user));
+  }
+
+  private async storefrontCombo(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
+    if (!slug) return NO_COMBO;
     const sf = await this.prisma.storefront.findFirst({
       where: { slug, ...publicStorefrontWhere(await loadPublicVisibility(this.config)) },
       select: {
@@ -99,8 +151,8 @@ export class ComboService {
         },
       },
     });
-    if (!sf) return { total: 0, perLine: {} };
-    if (buyerId && sf.ownerUserId === buyerId) return { total: 0, perLine: {} };
+    if (!sf) return NO_COMBO;
+    if (buyerId && sf.ownerUserId === buyerId) return NO_COMBO;
     // Clamp LẦN 2 tại nơi đọc — phòng dữ liệu ghi từ trước khi StorefrontService có trần
     // (hoặc ghi thẳng DB) vẫn không cho phép combo vượt trần hiện hành (P0,
     // docs/2026-09-08-review-progress.md). StorefrontService.clampComboPct là lớp chính (chặn

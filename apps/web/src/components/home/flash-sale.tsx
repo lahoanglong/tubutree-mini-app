@@ -39,7 +39,7 @@ const FLASH_SHELF = shelf('home.flash');
 
 const subscribeNothing = () => () => {};
 
-function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
+export function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
   return (
     <div data-testid="flash-sale-loading" aria-hidden="true">
       <Skeleton height={FLASH_SKELETON_HEIGHT + (withNextSlot ? FLASH_NEXT_SLOT_HEIGHT : 0)} radius="var(--radius-card)" />
@@ -191,7 +191,7 @@ function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null
  * dù danh sách chưa tải lại. Danh sách dựng sẵn (ISR) có thể cũ hơn giờ trình duyệt: trước hydrate coi suất còn giờ (đúng như HTML máy chủ đã vẽ),
  * sau hydrate tính theo giờ máy chủ thật.
  */
-function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
+export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
   const hydrated = useHydrated();
   useFlashExpiry(item.endAt);
   const end = Date.parse(item.endAt);
@@ -226,7 +226,7 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
       variant="flash"
       href={productHref(encodeURIComponent(item.productSlug))}
       // Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem.
-      note={startsIn ? flashSaleText.startsIn(startsIn) : flashSaleText.live}
+      note={startsIn ? fillCopy('flash.startsInTile', { t: startsIn }) : flashSaleText.live}
       footerHeight={startsIn ? REMIND_FOOTER_HEIGHT : undefined}
       footer={
         startsIn ? (

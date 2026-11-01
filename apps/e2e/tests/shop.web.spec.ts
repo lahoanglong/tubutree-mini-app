@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
-import { mockHomeEngagement } from './support/discovery-mocks';
+import { checkInStatus, mockHomeEngagement } from './support/discovery-mocks';
+import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './support/a11y-db';
 import { expectChipHitArea44 } from './support/hit-area';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
@@ -599,28 +600,30 @@ test.describe('Web: mua chung', () => {
 
 test.describe('Web: nhãn hàng', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  // Seed riêng (idempotent), không dựa vào a11y-shop.web.spec.ts chạy trước: chạy lẻ file này hay đổi thứ tự project vẫn có nhãn công khai.
+  test.beforeAll(async () => assertSeededOnCi(await seedShopScreens()));
 
-  async function firstBrandSlug(request: import('@playwright/test').APIRequestContext) {
-    const res = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);
-    if (!res?.ok()) return null;
-    return ((await res.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug ?? null;
-  }
+  const firstBrandSlug = (request: import('@playwright/test').APIRequestContext) => firstPublicBrandSlug(request, API_ORIGIN);
 
   test('đăng nhập: Theo dõi gửi POST rồi đổi thành Đang theo dõi; bấm lại gửi DELETE', async ({ page, api, request }) => {
     const slug = await firstBrandSlug(request);
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     await signedIn(page);
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/me/wishlist/ids', []);
     api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
     api.get(`/brand/${slug}/share-to-earn`, { eligible: false });
     api.post(`/brand/${slug}/follow`, { following: true, followerCount: 4 });
     api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 3 });
     await page.goto(`/brand/${slug}`);
+    // waitForCall chỉ tính lời gọi mới: đăng ký trước khi bấm, không thì mock trả ngay và lời gọi đã qua.
+    const followed = api.waitForCall('POST', `/brand/${slug}/follow`);
     await page.getByRole('button', { name: 'Theo dõi' }).click();
-    await api.waitForCall('POST', `/brand/${slug}/follow`);
+    await followed;
     await expect(page.getByRole('button', { name: 'Đang theo dõi' })).toBeVisible();
+    const unfollowed = api.waitForCall('DELETE', `/brand/${slug}/follow`);
     await page.getByRole('button', { name: 'Đang theo dõi' }).click();
-    await api.waitForCall('DELETE', `/brand/${slug}/follow`);
+    await unfollowed;
     await expect(page.getByRole('button', { name: 'Theo dõi' })).toBeVisible();
   });
 
@@ -641,6 +644,7 @@ test.describe('Web: nhãn hàng', () => {
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     await signedIn(page);
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/me/wishlist/ids', []);
     api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
     api.get(`/brand/${slug}/share-to-earn`, { eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: slug });
     await page.goto(`/brand/${slug}`);
@@ -693,9 +697,39 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
+
+  for (const checkedIn of [false, true]) {
+    test(`Ưu đãi ${checkedIn ? 'đã' : 'chưa'} điểm danh: khung chờ Điểm danh cao đúng thẻ thật, Mã của tôi và Đổi quà không bị đẩy khi thẻ về`, async ({ page, api }) => {
+      await login(page, api);
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => { release = resolve; });
+      mockHomeEngagement(api, { checkedIn, expiringInDays: 2 });
+      api.get('/me/daily-check-in', async () => {
+        await hold;
+        return checkInStatus(checkedIn);
+      });
+      await page.goto('/uu-dai');
+      const skeleton = page.getByRole('region', { name: 'Điểm danh mỗi ngày', exact: true }).locator('.tubu-skeleton');
+      await expect(skeleton).toBeVisible();
+      // Mọi khối khác đã vẽ xong khi thẻ còn là khung chờ: cú nhảy đo được chỉ còn do thẻ về.
+      await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByTestId('voucher-expiry').first()).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn' })).toBeVisible();
+      const top = async (name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!.y;
+      const placeholderH = (await skeleton.boundingBox())!.height;
+      const mineY = await top('Mã của tôi');
+      const rewardsY = await top('Đổi quà');
+      release();
+      const card = page.getByTestId('daily-check-in');
+      await expect(card).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      expect((await card.boundingBox())!.height, 'thẻ thật lệch khung chờ').toBeCloseTo(placeholderH, 0);
+      expect(await top('Mã của tôi'), 'Mã của tôi bị đẩy khi thẻ về').toBeCloseTo(mineY, 0);
+      expect(await top('Đổi quà'), 'Đổi quà bị đẩy khi thẻ về').toBeCloseTo(rewardsY, 0);
+    });
+  }
 
   test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt', async ({ page, api }) => {
     await login(page, api);
@@ -703,7 +737,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 
@@ -931,13 +965,12 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
 
 test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  test.beforeAll(async () => assertSeededOnCi(await seedShopScreens()));
   const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
 
   /** Thương hiệu công khai đầu tiên và tổng sản phẩm của nó (phân trang thật, 20 mỗi trang). */
   async function brandWithTotal(request: import('@playwright/test').APIRequestContext) {
-    const list = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);
-    if (!list?.ok()) return null;
-    const slug = ((await list.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug;
+    const slug = await firstPublicBrandSlug(request, API_ORIGIN);
     if (!slug) return null;
     const res = await request.get(`${API_ORIGIN}/api/brand/public/${slug}/products?page=1&limit=20`).catch(() => null);
     if (!res?.ok()) return null;
@@ -949,6 +982,11 @@ test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop'
     test.skip(!brand || brand.total === 0, 'DB e2e chưa có thương hiệu công khai nào có sản phẩm');
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
     api.get('/config/public', {});
+    // Tab Sản phẩm tải trang từ trình duyệt: chuyển sang API thật để ca vẫn rẽ nhánh theo tổng sản phẩm thật (brandWithTotal).
+    api.get(`/brand/public/${brand!.slug}/products`, async ({ call }) => {
+      const res = await request.get(`${API_ORIGIN}/api/brand/public/${brand!.slug}/products?${call.query.toString()}`);
+      return reply(res.status(), await res.json());
+    });
     await page.goto(`/brand/${brand!.slug}`);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('tab', { name: /^Sản phẩm/ }).click();

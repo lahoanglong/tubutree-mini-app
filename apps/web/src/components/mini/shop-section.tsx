@@ -141,12 +141,12 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
       <SectionHeader title={collection.title} action={action} />
       {layout === 'rail' && (
         <div data-testid="shop-rail">
-          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} noteOf={noteOf} />
+          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'grid' && (
         <div data-testid="shop-grid">
-          <ProductGrid items={cards} variant="grid" showBrand={showBrand} noteOf={noteOf} />
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'line' && (

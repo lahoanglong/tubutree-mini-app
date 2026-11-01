@@ -21,7 +21,7 @@ import {
   isFreeshipRedundant,
   sortCouponsForCart,
 } from '@/lib/coupon-view';
-import { autoCouponMemory, couponAutoCopy, couponHint, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
+import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
@@ -359,6 +359,7 @@ export function CouponBox({
           )}
         </>
       )}
+      <p className="mt-2 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
     </>
   );
 
@@ -385,11 +386,12 @@ export function CouponBox({
           </span>
         ) : (
           <span
-            className={`min-w-0 truncate text-caption font-normal ${
-              hint ? 'text-[color:var(--color-text-brand)]' : 'text-[color:var(--color-text-tertiary)]'
+            data-testid={hint ? 'coupon-hint' : undefined}
+            className={`min-w-0 text-caption font-normal ${
+              hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'truncate text-[color:var(--color-text-tertiary)]'
             }`}
           >
-            {hint ? couponHintText(hint, formatVnd) : 'Chọn hoặc nhập mã giảm giá'}
+            {hint ? couponHintShort(hint) : 'Chọn hoặc nhập mã giảm giá'}
           </span>
         )}
       </span>

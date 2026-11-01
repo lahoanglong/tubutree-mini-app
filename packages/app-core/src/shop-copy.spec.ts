@@ -25,6 +25,11 @@ const WORST: Record<string, string> = {
   clock: '03:15',
 };
 
+// Khoá cần giá trị xấu nhất riêng (số tiền rút gọn có thể ghi "999,9tr", dài hơn "999k" dùng chung cho x).
+const WORST_BY_KEY: Record<string, Record<string, string>> = {
+  'coupon.hintShort': { x: '999,9tr' },
+};
+
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);
 
 describe('SHOP_COPY', () => {
@@ -36,7 +41,7 @@ describe('SHOP_COPY', () => {
   it('mọi khoá có ngân sách thì chữ điền giá trị xấu nhất vẫn trong ngân sách', () => {
     for (const [key, max] of Object.entries(SHOP_COPY_MAX)) {
       if (max === null) continue;
-      expect(fillCopy(key, WORST).length, key).toBeLessThanOrEqual(max);
+      expect(fillCopy(key, { ...WORST, ...WORST_BY_KEY[key] }).length, key).toBeLessThanOrEqual(max);
     }
   });
 
@@ -45,6 +50,13 @@ describe('SHOP_COPY', () => {
       expect(hit(text), key).toEqual([]);
       expect(text, key).not.toContain('!');
     }
+  });
+
+  it('chữ Ưu đãi của F10d: tiêu đề Giờ vàng hôm nay (Q10), một nhãn đăng nhập, nút Tất cả (n)', () => {
+    expect(SHOP_COPY['flash.todayTitle']).toBe('Giờ vàng hôm nay');
+    expect(SHOP_COPY['login.cta']).toBe('Đăng nhập');
+    expect(fillCopy('section.seeAllCount', { n: 8 })).toBe('Tất cả (8)');
+    expect(fillCopy('coupon.titlePercentMax', { pct: 10, max: '50k' })).toBe('Giảm 10%, tối đa 50k');
   });
 
   it('chữ chốt ở thiết kế §4 Q5 và Giờ vàng theo kế hoạch', () => {
@@ -58,6 +70,7 @@ describe('SHOP_COPY', () => {
     expect(SHOP_COPY['stock.discontinued']).toBe('Ngừng bán');
     expect(fillCopy('flash.endsIn', { t: '02:05:33' })).toBe('Kết thúc sau 02:05:33');
     expect(SHOP_COPY['flash.endsLabel']).toBe('Kết thúc sau');
+    expect(fillCopy('flash.limitShort', { n: 2 })).toBe('Tối đa 2/khách');
     expect(SHOP_COPY['flash.justOpened']).toBe('Vừa mở bán');
     expect(SHOP_COPY['flash.almostGone']).toBe('Sắp hết');
     expect(SHOP_COPY['flash.soldOut']).toBe('Đã bán hết');
@@ -65,8 +78,8 @@ describe('SHOP_COPY', () => {
 });
 
 describe('FORBIDDEN_TERMS', () => {
-  const caught = ['Nhãn hàng', 'Top bán chạy', 'Freeship', 'Kho voucher', 'Flash sale', 'ưu đãi giờ vàng', 'HSD', 'Chỉ còn 3', 'Vui lòng', 'chúng tôi', 'cửa hàng', 'Đang tải...', '2h 05m'];
-  const skipped = ['Giờ vàng', 'Bán chạy nhất', 'Topping', 'Miễn phí giao hàng', 'Hạn dùng', 'Còn 3 sản phẩm', 'Đang tải…', 'Gian hàng', 'Mã giảm giá', 'Thương hiệu'];
+  const caught = ['Nhãn hàng', 'Top bán chạy', 'Freeship', 'Kho voucher', 'Flash sale', 'ưu đãi giờ vàng', 'HSD', 'Chỉ còn 3', 'Vui lòng', 'chúng tôi', 'cửa hàng', 'Đang tải...', '2h 05m', '2h 5m', 'nhận mã giảm 15%', 'Mã giảm'];
+  const skipped = ['Giờ vàng', 'Bán chạy nhất', 'Topping', 'Miễn phí giao hàng', 'Hạn dùng', 'Còn 3 sản phẩm', 'Đang tải…', 'Gian hàng', 'Mã giảm giá', 'nhận mã giảm giá 15%', 'Thương hiệu', 'Kết thúc sau 2 giờ 05 phút'];
 
   it.each(caught)('bắt "%s"', (text) => {
     expect(hit(text).length).toBeGreaterThan(0);

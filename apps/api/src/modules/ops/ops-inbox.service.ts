@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { vnDateKey } from '../../common/vn-time';
 import { COMMUNITY_MODERATORS, type StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
+import { UNCATEGORIZED_ON_SALE_WHERE } from '../catalog/public-product';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
 import { BANK_TRANSFER_TO_CONFIRM_WHERE, buildAdminOrderWhere, DEALER_TRANSFER_TO_CONFIRM_WHERE, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
@@ -65,7 +66,8 @@ export type InboxKey =
   | 'accountDeletionPending'
   | 'shiftsPending'
   | 'communityReports'
-  | 'productsMissingImage';
+  | 'productsMissingImage'
+  | 'productsUncategorized';
 
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
 type Audience = readonly StaffPermission[] | 'STAFF' | 'ADMIN';
@@ -176,6 +178,8 @@ export class OpsInboxService {
         oldest: async () => (await p.shift.findFirst({ where: PENDING_SHIFT_WHERE(now), orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
       },
       { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
+      // Cùng điều kiện với bộ lọc "Chưa có danh mục" ở màn gán (onSale + uncategorized): số trên thẻ bằng số dòng ở màn đích.
+      { key: 'productsUncategorized', audience: 'ADMIN', count: () => p.product.count({ where: UNCATEGORIZED_ON_SALE_WHERE }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
       { key: 'consignmentPending', audience: 'ADMIN', count: () => p.merchantPancakeLink.count({ where: CONSIGNMENT_PENDING_LINK_WHERE }) },

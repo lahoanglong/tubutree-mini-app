@@ -42,7 +42,8 @@ coverage/
 
 # Agent framework của bên thứ 3 (BMAD, Claude) — công cụ dev cục bộ, không thuộc source dự án
 .agents/
-.claude/
+.claude/*
+!.claude/skills/
 
 # Playwright (kết quả chạy local, đổi mỗi lần test — không phải nguồn)
 apps/e2e/playwright-report/

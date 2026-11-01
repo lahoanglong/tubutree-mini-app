@@ -121,7 +121,6 @@ export const vi = {
     priceChangedBody: 'Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.',
     priceChangedCta: 'Xem lại giỏ hàng',
     upcomingTitle: 'Sắp diễn ra',
-    startsIn: (t: string) => `Bắt đầu sau ${t}`,
     live: 'Đang diễn ra',
     remindMe: 'Nhắc tôi',
     reminded: 'Đã đặt nhắc',

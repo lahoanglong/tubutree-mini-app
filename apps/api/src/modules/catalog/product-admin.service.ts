@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { PrismaService } from '../../prisma/prisma.service';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 import { storedThumbnailFor } from '../../common/public-image';
+import { CATEGORY_MSG } from './category-tree';
 import { ImageResizeService } from './image-resize.service';
 
 export const PRODUCT_IMAGES_MAX = 8;
@@ -118,6 +119,12 @@ export class ProductAdminService {
       if (ids.length > 0) {
         const found = await this.prisma.category.count({ where: { id: { in: ids } } });
         if (found !== ids.length) throw new BadRequestException('Có danh mục không còn tồn tại, tải lại danh sách danh mục.');
+        // Chỉ hỏi các id mới thêm: sản phẩm đã gán vào một danh mục từ trước khi nó có mục con vẫn sửa được các trường khác.
+        const added = ids.filter((c) => !current.categoryIds.includes(c));
+        if (added.length > 0) {
+          const parent = await this.prisma.category.findMany({ where: { id: { in: added }, children: { some: {} } }, select: { name: true }, take: 1 });
+          if (parent[0]) throw new BadRequestException(CATEGORY_MSG.notLeaf(parent[0].name));
+        }
       }
       data.categoryIds = ids;
     }

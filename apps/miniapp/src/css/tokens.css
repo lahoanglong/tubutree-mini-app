@@ -65,7 +65,9 @@ body {
 body.with-back-btn .page {
   padding-top: calc(var(--safe-top) + 48px);
 }
-/* Thanh dính của trang (vd. tab Vườn Xanh) phải nằm dưới thanh đặc của nút back (cao 56px + vùng an toàn), không thì bị nó che khi cuộn. */
+/* Thanh dính của trang (vd. tab Vườn Xanh) phải nằm dưới thanh đặc của nút back (cao 56px + vùng an toàn), không thì bị nó che khi cuộn.
+   Chỉ đúng cho trang KHÔNG có đệm `.page` (Vườn Xanh, Giờ vàng, Bán chạy nhất, Mã giảm giá): `top` của phần tử dính đo từ mép nội dung của vùng cuộn nên trang có
+   `.page` (đệm 48px + vùng an toàn) phải tự trừ đệm đó, dùng lớp này sẽ hở 48px. Phần tử ghi sẵn `top: var(--safe-top)` cho lúc không có nút lùi. */
 body.with-back-btn .sticky-below-back {
   top: calc(var(--safe-top) + 56px) !important;
 }
@@ -269,6 +271,35 @@ body.with-back-btn .page.page-bleed {
     display: none;
   }
   .tubu-badge-short {
+    display: inline;
+  }
+}
+
+/* Dòng meta của thẻ ("★ 4,7 · Đã bán 8,2k+"): ô meta là container; chữ đầy đủ xấu nhất ("★ 5,0 · Đã bán 99,9k+", 21 ký tự) rộng 127,25px (Inter 12px/500, đo
+   ở Chromium) nên chỉ container hẹp hơn 132px (kệ hạng 112px, lưới 320px 122px) đổi sang chữ gọn ("Đã bán 8,2k+", thuộc tính data-compact), để không bao giờ cắt
+   giữa số; kệ rail-md (132px), lưới 360px (142px) và 375px (149px) vẫn giữ nguyên "★ ... · Đã bán ..." (§4 Q4). Lượt bán từ 100k ("123,4k+", "99,9tr+") làm chữ dài hơn 21 ký tự,
+   rộng tới ~137px, nên ô gắn data-long và chỉ giữ bản đầy đủ từ 148px. Chữ gọn đi qua ::after nên không thêm chữ vào DOM (ô meta aria-hidden, textContent vẫn là
+   chữ đầy đủ). Trình duyệt chưa có container query giữ bản đầy đủ. */
+.tubu-tile-meta {
+  container-type: inline-size;
+}
+.tubu-meta-text[data-compact]::after {
+  content: attr(data-compact);
+  display: none;
+}
+@container (max-width: 131.98px) {
+  .tubu-meta-text[data-compact] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact]::after {
+    display: inline;
+  }
+}
+@container (max-width: 147.98px) {
+  .tubu-meta-text[data-compact][data-long] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact][data-long]::after {
     display: inline;
   }
 }
