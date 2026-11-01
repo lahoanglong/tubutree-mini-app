@@ -12,6 +12,7 @@ vi.mock('../../services/shop-api', () => ({
 vi.mock('../../services/bundle-api', () => ({ getHomeCombos: mocks.fetchCombos }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 
+import { COMBO_HOLD_MS } from '@tubutree/app-core/merch/home-shelves';
 import { useHomeShelves } from './use-home-shelves';
 
 const flashEnding = (slug: string, endAt: string) => ({ itemId: `i-${slug}`, variationId: 'v', productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt });
@@ -159,27 +160,61 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
   });
 
   describe('combo toàn sàn', () => {
-    it('hai combo đang chạy lên kệ combos; combo không chiếm món: p1 vẫn ở Bán chạy nhất', async () => {
+    it('hai combo đang chạy lên kệ combos và chiếm món của mình: p1 rời Bán chạy nhất (hạng thật các món sau không đổi), `seen` có p1', async () => {
       mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
       const { result } = setup('returning');
       await waitFor(() => expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']));
-      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toContain('p1'));
-      expect(result.current.seen.has('sp-p1')).toBe(false);
+      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']));
+      expect(result.current.bestSellerRanks).toEqual([4, 5, 6]);
+      expect(result.current.seen.has('p1')).toBe(true);
     });
 
-    it('một combo thì kệ ẩn (tối thiểu 2); combo đã quá hạn không tính', async () => {
+    it('combo chứa món đang ở Giờ vàng thì bị bỏ cả bộ: kệ combos ẩn và không chiếm p1, Bán chạy nhất vẫn hiện p1', async () => {
+      mocks.fetchFlash.mockResolvedValue(['a', 'b', 'p1'].map(flash));
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
+      const { result } = setup('returning');
+      await waitFor(() => expect(result.current.flash).toHaveLength(3));
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
+      expect(result.current.combos).toEqual([]);
+      expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']);
+    });
+
+    it('một combo thì kệ ẩn (tối thiểu 2) và không chiếm món; combo đã quá hạn không tính', async () => {
       mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2', { endAt: '2000-01-01T00:00:00.000Z' })]);
       const { result } = setup('returning');
       await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
       await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
       expect(result.current.combos).toEqual([]);
+      expect(slugsOf(result.current.bestSellers)).toContain('p1');
+      expect(result.current.seen.has('c1')).toBe(false);
     });
 
-    it('lỗi tải combo: kệ rỗng, các kệ khác không bị ảnh hưởng', async () => {
+    it('lỗi tải combo: kệ rỗng, các kệ khác không bị ảnh hưởng và Bán chạy nhất không bị giữ khung chờ', async () => {
       mocks.fetchCombos.mockRejectedValue(new Error('x'));
       const { result } = setup('returning');
       await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
       expect(result.current.combos).toEqual([]);
+      expect(result.current.bestSellerQuery.isLoading).toBe(false);
+    });
+
+    it('combo về chậm hơn Bán chạy nhất: giữ khung chờ Bán chạy nhất tới khi biết combo, nên p1 không hiện rồi biến mất', async () => {
+      let resolveCombos!: (v: unknown[]) => void;
+      mocks.fetchCombos.mockReturnValue(new Promise((resolve) => (resolveCombos = resolve)));
+      const { result } = setup('returning');
+      await waitFor(() => expect(result.current.bestSellerQuery.data).toBeDefined());
+      expect(result.current.bestSellerQuery.isLoading).toBe(true);
+      act(() => resolveCombos([bundleOf('c1'), bundleOf('c2')]));
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
+      expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']);
+    });
+
+    it('combo không bao giờ về: quá COMBO_HOLD_MS thì Bán chạy nhất vẽ tiếp, không giữ khung chờ mãi', async () => {
+      mocks.fetchCombos.mockReturnValue(new Promise(() => {}));
+      const { result } = setup('returning');
+      await waitFor(() => expect(result.current.bestSellerQuery.data).toBeDefined());
+      expect(result.current.bestSellerQuery.isLoading).toBe(true);
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false), { timeout: COMBO_HOLD_MS + 1500 });
+      expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']);
     });
   });
 });
