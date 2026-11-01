@@ -23,7 +23,7 @@ export async function loadHomeTodo(list: ListFn, userId: string) {
   ]);
   const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
   // Cả ba lỗi thì lỗi như GET /orders; lỗi một phần thì phần còn lại vẫn hiện (như ba lời lẻ trước đây) và `partial` báo giao diện đừng ghi số dòng.
-  if (failed.length === results.length) throw failed[0].reason;
+  if (failed.length === results.length) throw failed[0]?.reason;
   const [pending, shipping, processing] = results.map((r) => (r.status === 'fulfilled' ? r.value : null));
   return { pending, shipping, processing, ...(failed.length > 0 ? { partial: true as const } : {}) };
 }

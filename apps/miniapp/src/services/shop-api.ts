@@ -695,6 +695,8 @@ export interface HomeTodo {
   pending: HomeTodoPart | null;
   shipping: HomeTodoPart | null;
   processing: HomeTodoPart | null;
+  /** Có khi một trong ba lời lỗi: phần đó là null chứ chưa chắc không có đơn. */
+  partial?: true;
 }
 /** Thay ba lời GET /orders?limit=1 (chờ thanh toán, đang giao, đang xử lý) ở Trang chủ bằng một. */
 export const fetchHomeTodo = () => api.get<HomeTodo>('/orders/home-todo').then((r) => r.data);
