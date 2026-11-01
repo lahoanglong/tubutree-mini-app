@@ -797,8 +797,19 @@ describe('ReviewsSection: can-review lỗi (R5-BUYER-3)', () => {
 describe('Stars', () => {
   it('có tên truy cập "n trên 5 sao" và vẽ 5 ngôi sao', () => {
     const { container } = render(<Stars value={3.6} size={12} />);
-    expect(screen.getByRole('img', { name: '3.6 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '3,6 trên 5 sao' })).toBeInTheDocument();
     expect(container.querySelectorAll('svg')).toHaveLength(5);
+  });
+
+  it('điểm trung bình 4.4 đọc "4,4 trên 5 sao" như số đang hiện (vi-VN), không "4.4"', () => {
+    render(<Stars value={4.4} />);
+    expect(screen.getByRole('img', { name: '4,4 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /4\.4/ })).toBeNull();
+  });
+
+  it('điểm một khách chấm là số nguyên: vẫn "5 trên 5 sao", không "5,0"', () => {
+    render(<Stars value={5} />);
+    expect(screen.getByRole('img', { name: '5 trên 5 sao' })).toBeInTheDocument();
   });
 });
 

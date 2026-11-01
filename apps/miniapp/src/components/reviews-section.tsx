@@ -32,10 +32,13 @@ import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
 
 
+// Điểm trung bình đọc đúng số đang hiện ("4,4"); điểm một khách chấm là số nguyên nên giữ "5", không "5,0".
+const starsSpoken = (value: number): string => (Number.isInteger(value) ? String(value) : formatRating(value));
+
 /** Dải sao tĩnh (hiển thị) — size tùy chỉnh. */
 export function Stars({ value, size = 14 }: { value: number; size?: number }) {
   return (
-    <span role="img" aria-label={`${value} trên 5 sao`} style={{ display: 'inline-flex', whiteSpace: 'nowrap', lineHeight: 1 }}>
+    <span role="img" aria-label={`${starsSpoken(value)} trên 5 sao`} style={{ display: 'inline-flex', whiteSpace: 'nowrap', lineHeight: 1 }}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
