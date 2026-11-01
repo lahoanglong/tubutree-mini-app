@@ -61,9 +61,14 @@ export function homeRenderOrder(kind: HomeKindState, settling: boolean): readonl
  * Thứ tự dựng khi máy chủ đã dựng bố cục khách mới (web: HTML đầu luôn là khách vãng lai) rồi khôi phục phiên mới cho biết đây là khách có tài khoản mà
  * máy chưa nhớ loại. Giữ các khối đã vẽ (Giờ vàng, Bán chạy, Gợi ý...) thay vì thay hết bằng khung chờ: chỉ dải quà khách mới đổi thành khung giữ
  * chỗ của thẻ thành viên (cùng chiều cao `HOME_HERO_HEIGHT`), khối riêng của khách cũ. Thứ tự khối là của khách mới, không xáo trộn.
+ * Biết là khách cũ thì Mua lại chen SAU Bán chạy nhất, không phải trước Danh mục như `RETURNING`: chen lên đó đẩy Danh mục và Bán chạy đang trong
+ * màn đầu xuống 148px (CLS ~0,12). Chỉ lần mở đầu trên máy chưa nhớ loại khách; lần sau máy đã nhớ, dựng đúng `RETURNING`.
  */
 export function homeKeptOrder(kind: HomeKindState): readonly HomeBlockId[] {
-  return NEW.map((id) => (id === 'welcome' && kind !== 'new' ? 'member' : id));
+  const kept = NEW.map((id) => (id === 'welcome' && kind !== 'new' ? 'member' : id));
+  if (kind !== 'returning') return kept;
+  const at = kept.indexOf('bestSellers') + 1;
+  return [...kept.slice(0, at), 'purchased', ...kept.slice(at)];
 }
 
 /** Giữ khung chờ tối đa chừng này: mạng chậm hay API lỗi không được giữ trắng cả trang. */

@@ -173,9 +173,9 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     suggest: <SuggestFeed initial={initial.suggest} seed={initial.suggestSeed} categories={categories.data ?? []} exclude={shelves.seen} />,
   };
 
-  // Giữ nội dung đã dựng cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết" (mạng chậm): bố cục "chưa biết" bỏ Bán chạy và dải quà,
-  // tới lúc biết là khách mới sẽ dựng lại, nội dung đã vẽ biến mất rồi hiện lại.
-  const order = startedNew && (settling || kind === 'unknown') ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
+  // HTML đầu đã là bố cục khách mới: giữ nguyên thứ tự đó suốt lượt xem này, cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết"
+  // (mạng chậm) lẫn khi đã biết là khách cũ (Mua lại chen dưới màn đầu, xem `homeKeptOrder`), để nội dung đã vẽ không biến mất hay bị đẩy xuống.
+  const order = startedNew ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
   const wrap = (id: HomeRenderBlock) => (
     <div key={id} data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined} style={id === 'search' || id === 'settling' ? undefined : BLOCK_GAP}>
       {blocks[id]}

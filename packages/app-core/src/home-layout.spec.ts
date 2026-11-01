@@ -395,7 +395,11 @@ describe('homeRenderOrder / homeSettling', () => {
     expect(kept).toContain('bestSellers');
     expect(kept.at(-1)).toBe('suggest');
     expect(kept).not.toContain('purchased');
-    expect(homeKeptOrder('returning')).toEqual(kept);
+  });
+  it('giữ nội dung đã dựng rồi biết là khách cũ: Mua lại chen SAU Bán chạy nhất (dưới màn đầu), các khối đã vẽ không bị đẩy xuống', () => {
+    const kept = homeKeptOrder('unknown');
+    const at = kept.indexOf('bestSellers') + 1;
+    expect(homeKeptOrder('returning')).toEqual([...kept.slice(0, at), 'purchased', ...kept.slice(at)]);
   });
   it('giữ nội dung đã dựng mà đã biết là khách mới: đúng bố cục khách mới, giữ dải quà', () => {
     expect(homeKeptOrder('new')).toEqual(homeBlockOrder('new'));

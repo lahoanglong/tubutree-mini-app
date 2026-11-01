@@ -400,7 +400,7 @@ describe('HomeView — khung chờ chung khi khôi phục phiên (web: khung hì
     expect(live.container.querySelector('[data-testid="member-card-loading"]')).not.toBeNull();
   });
 
-  it('phiên khôi phục xong là khách cũ: tới đúng thứ tự khách cũ (thêm Mua lại, Bán chạy nhất ở lại), không qua khung chờ chung', async () => {
+  it('phiên khôi phục xong là khách cũ: giữ thứ tự đã vẽ, Mua lại chen sau Bán chạy nhất (không đẩy khối trong màn đầu), không qua khung chờ chung', async () => {
     mocks.phase = 'guest';
     live = mountLive();
     await flush(10);
@@ -413,7 +413,9 @@ describe('HomeView — khung chờ chung khi khôi phục phiên (web: khung hì
     mocks.restoring = false;
     live.again();
     await flush(12);
-    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('returning')]);
+    expect(blockOrder(live.container)).toEqual([...homeKeptOrder('returning')]);
+    const order = blockOrder(live.container);
+    expect(order.indexOf('purchased')).toBe(order.indexOf('bestSellers') + 1);
     expect(region(live.container, 'Bán chạy nhất')).not.toBeNull();
     expect(region(live.container, 'Mua lại')).not.toBeNull();
   });

@@ -378,6 +378,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     api.get(`/products/${p.slug}/related`, []);
     api.get(`/products/${p.slug}/bought-together`, []);
     api.get('/products/for-you', []);
+    api.get('/products', { data: [], meta: { page: 1, limit: 12, total: 0 } }); // "Có thể bạn cũng thích" của khách vãng lai: bán chạy công khai
     api.get(`/products/${p.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
     api.get('/me/wishlist/ids', []);
     api.get('/me/coupons', over.coupons ?? [
