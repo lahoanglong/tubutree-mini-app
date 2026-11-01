@@ -129,45 +129,51 @@ export class BundlesAdminService {
     return this.get(created.id, now);
   }
 
+  /**
+   * Mọi kiểm tra (người tạo, khung giờ, nội dung, trần nhân viên) chạy trên dòng đọc SAU khi giữ khoá hàng. Đọc trước khoá thì hai PATCH
+   * đồng thời mỗi cái gộp `dto` của mình với dòng cũ rồi qua trần (một cái đổi % , một cái đổi món), ghép lại vượt `coupon.staff_max_amount_vnd`.
+   */
   async update(id: string, dto: UpdateBundleDto, actor: CouponActor, now: Date = new Date()): Promise<AdminBundle> {
-    const current = await this.prisma.bundle.findUnique({ where: { id }, include: DETAIL_INCLUDE });
-    if (!current) throw new NotFoundException('Không tìm thấy bộ combo/mua kèm.');
-    if (actor.staff) await this.assertStaffCreated(current.createdById);
-
-    const startAt = dto.startAt === undefined ? undefined : new Date(dto.startAt);
-    const endAt = dto.endAt === undefined ? undefined : new Date(dto.endAt);
-    if (startAt || endAt) assertBundleWindow(startAt ?? current.startAt, endAt ?? current.endAt);
-
-    // Chỉ khi đụng tới % / sản phẩm chính / món mới kiểm lại catalog và trần: bật/tắt, đổi tên hay thứ tự vẫn làm được khi
-    // sản phẩm trong bộ đã ngừng bán (đúng lúc cần tắt bộ).
-    let content: BundleContent | undefined;
-    let resolved: ResolvedBundleItem[] = [];
-    if (dto.pct !== undefined || dto.anchorProductId !== undefined || dto.items !== undefined) {
-      content = normalizeBundleContent(
-        {
-          kind: current.kind,
-          pct: dto.pct !== undefined ? dto.pct : current.pct,
-          anchorProductId: dto.anchorProductId !== undefined ? dto.anchorProductId : current.anchorProductId,
-          items: dto.items ?? current.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, maxQty: i.maxQty })),
-        },
-        await readBundleMaxPct(this.config),
-      );
-      resolved = await this.validateContent(content, actor);
-    }
-
-    const data: Prisma.BundleUpdateInput = {
-      ...(dto.title !== undefined ? { title: dto.title } : {}),
-      ...(startAt ? { startAt } : {}),
-      ...(endAt ? { endAt } : {}),
-      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-      ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
-      ...(content ? { pct: content.pct, anchorProduct: content.anchorProductId ? { connect: { id: content.anchorProductId } } : { disconnect: true } } : {}),
-    };
     await this.prisma.$transaction(async (tx) => {
-      // Hai người thay danh sách món cùng lúc: người sau chờ ở đây, không thì cả hai cùng xoá bản cũ rồi cùng ghi và bộ giữ món của cả hai.
+      // Hai người sửa cùng lúc: người sau chờ ở đây, rồi đọc lại bộ đã có thay đổi của người trước (nếu không, cả hai cùng xoá bản cũ rồi cùng ghi).
       await tx.$queryRaw`SELECT "id" FROM "bundles" WHERE "id" = ${id} FOR UPDATE`;
-      if (dto.items !== undefined && content) await tx.bundleItem.deleteMany({ where: { bundleId: id } });
-      await tx.bundle.update({ where: { id }, data: { ...data, ...(dto.items !== undefined && content ? { items: { create: withRefPrices(content, resolved) } } : {}) } });
+      const current = await tx.bundle.findUnique({ where: { id }, include: DETAIL_INCLUDE });
+      if (!current) throw new NotFoundException('Không tìm thấy bộ combo/mua kèm.');
+      if (actor.staff) await this.assertStaffCreated(current.createdById);
+
+      const startAt = dto.startAt === undefined ? undefined : new Date(dto.startAt);
+      const endAt = dto.endAt === undefined ? undefined : new Date(dto.endAt);
+      if (startAt || endAt) assertBundleWindow(startAt ?? current.startAt, endAt ?? current.endAt);
+
+      // Chỉ khi đụng tới % / sản phẩm chính / món mới kiểm lại catalog và trần: bật/tắt, đổi tên hay thứ tự vẫn làm được khi
+      // sản phẩm trong bộ đã ngừng bán (đúng lúc cần tắt bộ).
+      let content: BundleContent | undefined;
+      let resolved: ResolvedBundleItem[] = [];
+      if (dto.pct !== undefined || dto.anchorProductId !== undefined || dto.items !== undefined) {
+        content = normalizeBundleContent(
+          {
+            kind: current.kind,
+            pct: dto.pct !== undefined ? dto.pct : current.pct,
+            anchorProductId: dto.anchorProductId !== undefined ? dto.anchorProductId : current.anchorProductId,
+            items: dto.items ?? current.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, maxQty: i.maxQty })),
+          },
+          await readBundleMaxPct(this.config),
+        );
+        resolved = await this.validateContent(content, actor);
+      }
+
+      const replaceItems = dto.items !== undefined && content !== undefined;
+      const data: Prisma.BundleUpdateInput = {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(startAt ? { startAt } : {}),
+        ...(endAt ? { endAt } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(content ? { pct: content.pct, anchorProduct: content.anchorProductId ? { connect: { id: content.anchorProductId } } : { disconnect: true } } : {}),
+        ...(replaceItems ? { items: { create: withRefPrices(content!, resolved) } } : {}),
+      };
+      if (replaceItems) await tx.bundleItem.deleteMany({ where: { bundleId: id } });
+      await tx.bundle.update({ where: { id }, data });
     });
     return this.get(id, now);
   }

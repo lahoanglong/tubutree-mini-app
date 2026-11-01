@@ -7,6 +7,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { BundlesAdminService } from '../../src/modules/bundles/bundles-admin.service';
 import { loadLiveBundles } from '../../src/modules/bundles/bundle-read';
+import { bundleExposure } from '../../src/modules/bundles/bundle-rules';
 import { createRealUser, createUser, pinConfig, randCode, warmPool } from './helpers';
 
 /**
@@ -255,6 +256,45 @@ describe('Quản trị bundle (real Postgres)', () => {
       await expect(admin.update(adminOwned.id, { title: 'X' } as never, staff)).rejects.toBeInstanceOf(ForbiddenException);
       await expect(admin.remove(adminOwned.id, staff)).rejects.toBeInstanceOf(ForbiddenException);
       await admin.remove(mine.id, staff);
+      await prisma.user.deleteMany({ where: { id: staffUser.id } });
+    });
+
+    it('hai PATCH đồng thời, mỗi cái đúng trần khi đứng một mình nhưng ghép lại vượt: đúng một cái bị 403, bộ lưu xuống không vượt trần tiền', async () => {
+      restores.push(await pinConfig(prisma, 'coupon.staff_max_percent', 20));
+      // Cùng giá trị với ca trên: SystemConfigService nhớ giá trị đọc trong 60 giây nên hai ca không được ghim hai trần khác nhau.
+      restores.push(await pinConfig(prisma, 'coupon.staff_max_amount_vnd', 1_000_000));
+      const staffUser = await createRealUser(prisma, { role: 'STAFF' });
+      const staff = { id: staffUser.id, staff: true };
+      const price: Record<string, number> = {};
+      const [a, b, c, d] = [await product(100_000), await product(100_000), await product(5_000_000), await product(5_000_000)];
+      for (const [p, v] of [[a, 100_000], [b, 100_000], [c, 5_000_000], [d, 5_000_000]] as const) price[p.id] = v;
+      const mine = await create(pctBundle(a.id, b.id, { pct: 10 }), staff); // 10.000 + 10.000
+
+      // Ép hai lệnh cùng qua bước kiểm nội dung trước khi lệnh nào ghi (mã cũ kiểm TRƯỚC khoá nên cả hai thấy dòng cũ). Rào chờ tối đa
+      // 400ms: lệnh thứ hai bị khoá chặn thì rào tự nhả, không treo.
+      let arrived = 0;
+      let open!: () => void;
+      const gate = new Promise<void>((r) => (open = r));
+      const real = (admin as unknown as { validateContent: (...a: unknown[]) => Promise<unknown> }).validateContent.bind(admin);
+      const spy = jest.spyOn(admin as never, 'validateContent' as never).mockImplementation((async (...args: unknown[]) => {
+        if (++arrived >= 2) open();
+        await Promise.race([gate, new Promise((r) => setTimeout(r, 400))]);
+        return real(...args);
+      }) as never);
+      try {
+        const results = await Promise.allSettled([
+          admin.update(mine.id, { pct: 20 } as never, staff), // một mình: 20% × 200.000 = 40.000; ghép với món 5.000.000đ: 2.000.000 > 1.000.000
+          admin.update(mine.id, { items: [{ productId: c.id }, { productId: d.id }] } as never, staff), // một mình: 10% × 10.000.000 = 1.000.000 (đúng trần, không vượt)
+        ]);
+        const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+        expect(failed).toHaveLength(1);
+        expect(failed[0]!.reason).toBeInstanceOf(ForbiddenException);
+      } finally {
+        spy.mockRestore();
+      }
+      const row = await prisma.bundle.findUniqueOrThrow({ where: { id: mine.id }, include: { items: true } });
+      const exposure = bundleExposure({ kind: 'BUNDLE_PCT', pct: row.pct }, row.items.map((i) => ({ price: price[i.productId]!, addonPrice: null, maxQty: i.maxQty })));
+      expect(exposure).toBeLessThanOrEqual(1_000_000);
       await prisma.user.deleteMany({ where: { id: staffUser.id } });
     });
   });

@@ -45,17 +45,19 @@ const detailRow = (o: Record<string, unknown> = {}) => ({
   ...o,
 });
 
-function setup(o: { products?: unknown[]; current?: unknown; creatorRole?: string | null; maxPct?: number; caps?: Record<string, number> } = {}) {
+function setup(o: { products?: unknown[]; current?: unknown; locked?: unknown; creatorRole?: string | null; maxPct?: number; caps?: Record<string, number> } = {}) {
+  const current = o.current === undefined ? detailRow() : o.current;
   const tx = {
     $queryRaw: jest.fn().mockResolvedValue([]),
     bundleItem: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
-    bundle: { update: jest.fn().mockResolvedValue({}) },
+    // Dòng đọc SAU khi giữ khoá: mặc định cùng dòng với lần đọc ngoài giao dịch, test race cho nó khác đi.
+    bundle: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue(o.locked === undefined ? current : o.locked) },
   };
   const prisma = {
     product: { findMany: jest.fn().mockResolvedValue(o.products ?? [product('p1'), product('p2')]) },
     bundle: {
       create: jest.fn().mockResolvedValue({ id: 'b1' }),
-      findUnique: jest.fn().mockResolvedValue(o.current === undefined ? detailRow() : o.current),
+      findUnique: jest.fn().mockResolvedValue(current),
       findMany: jest.fn().mockResolvedValue([detailRow()]),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
@@ -191,7 +193,8 @@ describe('BundlesAdminService.update', () => {
     await expect(a.svc.update('b1', { title: 'A' } as never, STAFF, NOW)).rejects.toBeInstanceOf(ForbiddenException);
     const b = setup({ current: detailRow({ createdById: null }) });
     await expect(b.svc.update('b1', { title: 'A' } as never, STAFF, NOW)).rejects.toBeInstanceOf(ForbiddenException);
-    expect(a.prisma.$transaction).not.toHaveBeenCalled();
+    expect(a.tx.bundle.update).not.toHaveBeenCalled();
+    expect(b.tx.bundle.update).not.toHaveBeenCalled();
   });
 
   it('nhân viên sửa bộ của nhân viên được', async () => {
@@ -232,9 +235,9 @@ describe('BundlesAdminService.update', () => {
   });
 
   it('đổi pct kiểm lại trên nội dung gộp: vượt trần → 400, không ghi', async () => {
-    const { svc, prisma } = setup({ maxPct: 20 });
+    const { svc, tx } = setup({ maxPct: 20 });
     await expect(svc.update('b1', { pct: 30 } as never, ADMIN, NOW)).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.bundle.update).not.toHaveBeenCalled();
   });
 
   it('đặt pct cho bộ ADDON → 400', async () => {
@@ -244,9 +247,35 @@ describe('BundlesAdminService.update', () => {
   });
 
   it('dời giờ kiểm với giờ còn lại của bộ', async () => {
-    const { svc, prisma } = setup();
+    const { svc, tx } = setup();
     await expect(svc.update('b1', { endAt: '2026-11-04T00:00:00.000Z' } as never, ADMIN, NOW)).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.bundle.update).not.toHaveBeenCalled();
+  });
+
+  describe('kiểm trên dòng đọc SAU khi giữ khoá (hai PATCH đồng thời không lách trần nhân viên)', () => {
+    const stale = detailRow({ createdById: 'staff2' });
+    // Một PATCH khác vừa ghi xong: mỗi món được hưởng 2 đơn vị (dòng đọc ngoài giao dịch còn là 1 đơn vị).
+    const changed = detailRow({ createdById: 'staff2', items: detailRow().items.map((i) => ({ ...i, maxQty: 2 })) });
+
+    it('nội dung gộp với dòng đã khoá vượt trần tiền → 403, không ghi, dù dòng đọc trước khoá còn hợp lệ', async () => {
+      // 20% × 100.000 × 1 đơn vị × 2 món = 40.000 ≤ 50.000 (dòng cũ); trên dòng đã khoá: 80.000 > 50.000.
+      const { svc, tx } = setup({ creatorRole: 'STAFF', current: stale, locked: changed, caps: { maxPercent: 20, maxAmount: 50_000 } });
+      await expect(svc.update('b1', { pct: 20 } as never, STAFF, NOW)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(tx.bundle.update).not.toHaveBeenCalled();
+      expect(tx.bundleItem.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('cùng PATCH trên dòng cũ thì được (chứng minh ca trên đỏ vì dòng đã khoá, không vì dữ liệu)', async () => {
+      const { svc, tx } = setup({ creatorRole: 'STAFF', current: stale, caps: { maxPercent: 20, maxAmount: 50_000 } });
+      await svc.update('b1', { pct: 20 } as never, STAFF, NOW);
+      expect(tx.bundle.update).toHaveBeenCalled();
+    });
+
+    it('dòng bị xoá giữa lúc chờ khoá → 404, không ghi', async () => {
+      const { svc, tx } = setup({ current: detailRow(), locked: null });
+      await expect(svc.update('b1', { pct: 20 } as never, ADMIN, NOW)).rejects.toBeInstanceOf(NotFoundException);
+      expect(tx.bundle.update).not.toHaveBeenCalled();
+    });
   });
 
   it('nhân viên đổi nội dung vượt trần → 403', async () => {
