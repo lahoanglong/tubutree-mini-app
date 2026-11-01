@@ -104,12 +104,12 @@ describe('trang gian hàng /s/[slug] — gian hàng mẫu và lối mở gian h�
     expect(real.querySelector('[data-testid="sample-note"]')).toBeNull();
   });
 
-  it('gian hàng CTV của người khác: khách thấy một dòng chữ phụ "Tìm hiểu" như Mini App, không còn thẻ + nút Mở gian hàng; link dẫn tới /ctv/gian-hang, đủ 44px', async () => {
+  it('gian hàng CTV của người khác: khách thấy một dòng chữ phụ "Tìm hiểu" như Mini App, không còn thẻ + nút Mở gian hàng; link dẫn tới /ctv/gian-hang, vùng chạm 44px', async () => {
     const box = await html();
     const link = box.querySelector('[data-testid="learn-storefront"] a')!;
     expect(link.textContent).toBe('Muốn có gian hàng như này? Tìm hiểu');
     expect(link.getAttribute('href')).toBe('/ctv/gian-hang');
-    expect(link.className).toContain('min-h-11');
+    expect(link.className).toContain('tubu-hit-44');
     expect(link.querySelector('svg')).not.toBeNull();
     expect(box.querySelector('[data-testid="open-storefront-cta"]')).toBeNull();
     expect(box.textContent).not.toContain('Bạn cũng muốn có gian hàng như này?');
@@ -119,7 +119,8 @@ describe('trang gian hàng /s/[slug] — gian hàng mẫu và lối mở gian h�
   it('dòng "Tìm hiểu" nằm ngay trên link "Xem thêm ở Tubu Tree"', async () => {
     const box = await html();
     const learn = box.querySelector('[data-testid="learn-storefront"]')!;
-    const more = Array.from(box.querySelectorAll('p')).find((p) => p.textContent === 'Xem thêm ở Tubu Tree')!;
+    const more = box.querySelector('[data-testid="more-at-tubu"]')!;
+    expect(more.textContent).toBe('Xem thêm ở Tubu Tree');
     expect(learn.nextElementSibling).toBe(more);
   });
 
