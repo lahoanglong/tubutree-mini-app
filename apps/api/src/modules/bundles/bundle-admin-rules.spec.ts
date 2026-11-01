@@ -248,9 +248,10 @@ describe('keptRefPrices / capAtRefPrices: sửa bộ không làm giá tham chi�
     expect(keptRefPrices(pct, [old({ productId: 'p1', addonPrice: null, variationId: null, refPrice: 50_000 })])).toEqual([null, null]);
   });
 
-  it('giá dùng cho trần nhân viên là giá đang bán nhưng không vượt giá tham chiếu giữ lại (50k → 500k vẫn tính 50k; tụt còn 30k thì tính 30k)', () => {
+  it('giá dùng cho trần nhân viên là giá tham chiếu giữ lại, khoản giảm lớn nhất giỏ có thể cho (50k → 500k vẫn tính 50k; tụt còn 30k cũng tính 50k vì hết sale giá trở lại)', () => {
     expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000, cappedAt: 50_000 }]);
-    expect(capAtRefPrices([{ price: 30_000, maxPrice: 30_000 }], [50_000])).toEqual([{ price: 30_000, maxPrice: 30_000 }]);
+    expect(capAtRefPrices([{ price: 30_000, maxPrice: 30_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000, cappedAt: 50_000 }]);
+    expect(capAtRefPrices([{ price: 50_000, maxPrice: 50_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000 }]);
     expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [null])).toEqual([{ price: 500_000, maxPrice: 500_000 }]);
   });
 });

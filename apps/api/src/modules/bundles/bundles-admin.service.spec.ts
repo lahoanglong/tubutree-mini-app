@@ -298,6 +298,17 @@ describe('BundlesAdminService.update', () => {
       expect(reprice.tx.bundle.update).not.toHaveBeenCalled();
     });
 
+    it('nhân viên nâng maxQty lúc phân loại đang sale dưới giá tham chiếu → 403: trần tính trên giá tham chiếu, vì hết sale giỏ lại giảm đủ refPrice − giá kèm', async () => {
+      // Đang sale 46.000 thì mỗi đơn vị chỉ giảm 1.000đ, nhưng hết sale về 50.000 thì giảm 5.000đ: 10 đơn vị = 50.000đ > trần 30.000đ.
+      const sale = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 50_000, salePrice: 46_000, stock: 30 }] });
+      const mine = addon([pinnedItem({ addonPrice: 45_000 })], { createdById: 'staff2' });
+      const s = setup({ current: mine, creatorRole: 'STAFF', products: [product('p1'), sale] });
+      await expect(
+        s.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 45_000, variationId: 'p2-v', maxQty: 10 })] } as never, STAFF, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(s.tx.bundle.update).not.toHaveBeenCalled();
+    });
+
     it('chi tiết admin trả giá tham chiếu của từng món để form báo đúng khoản giảm giỏ sẽ cho', async () => {
       const s = setup({ current: addon([pinnedItem({ product: { ...detailRow().items[1]!.product, variations: risen.variations } })]) });
       const out = await s.svc.get('b1', NOW);

@@ -118,7 +118,7 @@ export interface ResolvedBundleItem {
    * loại ĐẮT NHẤT đang bán, vì giảm % áp cho mọi phân loại khách chọn chứ không riêng phân loại đại diện (rẻ nhất).
    */
   maxPrice: number;
-  /** Chỉ có sau `capAtRefPrices` khi giá tham chiếu giữ lại thấp hơn giá đang bán: `price` đã bị kẹp về đó, lời báo trần phải nói đúng cơ sở. */
+  /** Chỉ có sau `capAtRefPrices` khi giá tham chiếu giữ lại khác giá đang bán: `price` là giá tham chiếu đó, lời báo trần phải nói đúng cơ sở. */
   cappedAt?: number;
 }
 
@@ -175,14 +175,16 @@ export function keptRefPrices(content: BundleContent, previous: readonly StoredB
 }
 
 /**
- * Giá làm cơ sở cho trần nhân viên: giá đang bán nhưng không vượt giá tham chiếu giữ lại, đúng thứ giỏ dùng để tính khoản giảm
- * (`addonUnitDiscount`). Món không có giá tham chiếu giữ lại thì giữ nguyên giá đang bán.
+ * Giá làm cơ sở cho trần nhân viên: món giữ giá tham chiếu cũ thì lấy đúng giá tham chiếu, vì `refPrice − addonPrice` là khoản giảm lớn nhất
+ * giỏ có thể cho món đó (`addonUnitDiscount`). Không lấy giá đang bán dù đang thấp hơn: hết sale giá trở lại và khoản giảm lên đủ, nên tính
+ * theo giá sale thì nhân viên nâng được maxQty vượt trần tiền. Món không có giá tham chiếu giữ lại thì giữ nguyên giá đang bán (lúc lưu, giá
+ * tham chiếu được đặt bằng giá này).
  */
 export function capAtRefPrices(resolved: readonly ResolvedBundleItem[], kept: readonly (number | null)[]): ResolvedBundleItem[] {
   return resolved.map((r, i) => {
     const ref = kept[i];
     if (ref == null) return r;
-    return { price: Math.min(r.price, ref), maxPrice: Math.min(r.maxPrice, ref), ...(ref < r.price ? { cappedAt: ref } : {}) };
+    return { price: ref, maxPrice: ref, ...(ref !== r.price ? { cappedAt: ref } : {}) };
   });
 }
 
