@@ -19,7 +19,7 @@ export class UpdateCategoryDto {
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(CATEGORY_NAME_MAX) name?: string;
   /** `null` = chuyển lên tầng gốc; bỏ trường = giữ nguyên cha. */
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(64) parentId?: string | null;
-  @IsOptional() @IsBoolean() confirmDirectProducts?: boolean;
+  @OptionalNotNull() @IsBoolean() confirmDirectProducts?: boolean;
 }
 
 export class ReorderCategoriesDto {
