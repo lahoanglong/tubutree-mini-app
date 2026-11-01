@@ -16,7 +16,7 @@ import { useBlockQuery, type BlockQuery } from './use-block-query';
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
   flash: FlashSaleActiveItem[];
-  /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn). Combo là đơn vị nguyên: chiếm slug các món của nó, và chứa món của Giờ vàng/Mua lại thì bị bỏ cả bộ. */
+  /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn). Combo là đơn vị nguyên: chiếm slug các món của nó cho Bán chạy nhất và Gợi ý hôm nay, nhưng không bị Giờ vàng/Mua lại loại (Mua lại về sau cùng `/home/me`, loại theo nó thì kệ hiện rồi biến mất). */
   combos: ComboView[];
   /** Bán chạy nhất đã bỏ món trùng các kệ trên (≤10; rỗng khi dưới 3). */
   bestSellers: ProductCard[];

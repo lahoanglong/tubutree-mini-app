@@ -193,6 +193,15 @@ describe('loadHomeInitial: kệ combo có trong HTML đầu', () => {
     expect((await loadHomeInitial()).combos).toEqual([comboList[1]]);
   });
 
+  it('ghi lúc lấy combo (combosAt) để hydrate hỏi lại khi HTML ISR đã cũ; combo lỗi thì không có mốc', async () => {
+    const before = Date.now();
+    const initial = await loadHomeInitial();
+    expect(initial.combosAt).toBeGreaterThanOrEqual(before);
+    expect(initial.combosAt).toBeLessThanOrEqual(Date.now());
+    failCombos = true;
+    expect((await loadHomeInitial()).combosAt).toBeUndefined();
+  });
+
   it('không có combo nào thì trả mảng rỗng (khác undefined: server đã hỏi và không có)', async () => {
     comboList = [];
     expect((await loadHomeInitial()).combos).toEqual([]);

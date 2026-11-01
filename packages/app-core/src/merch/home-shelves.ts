@@ -10,8 +10,8 @@ export interface ShelfEntry<T> {
 }
 
 /**
- * Combo xếp theo id bộ nhưng chiếm cả slug các món của nó: Bán chạy nhất và lưới Gợi ý hôm nay bỏ món đã nằm trong combo, còn combo chứa món của
- * kệ hạng cao hơn (Giờ vàng, Mua lại) thì bị bỏ cả bộ.
+ * Combo xếp theo id bộ nhưng chiếm cả slug các món của nó: Bán chạy nhất và lưới Gợi ý hôm nay bỏ món đã nằm trong combo. Combo chỉ chiếm xuống dưới,
+ * không bị Giờ vàng hay Mua lại loại (xem `applyShelfDedupe`).
  */
 export function comboShelfEntry<V extends { id: string; items: readonly { slug: string }[] }>(view: V): ShelfEntry<V> {
   return { id: view.id, also: view.items.map((i) => i.slug), item: view };

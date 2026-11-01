@@ -31,7 +31,7 @@
 
 ## Review Focus
 
-1. Combo chứa món đã ở Giờ vàng hoặc Mua lại (kệ hạng cao hơn): bỏ CẢ combo (không cắt bớt món, bộ thiếu món là ưu đãi khác); combo bị bỏ không chiếm món. Test: Task 1 `home-shelves.spec`.
+1. Combo chứa món đã ở Giờ vàng hoặc Mua lại (kệ hạng cao hơn): combo KHÔNG bị loại (sửa sau review, xem "Sửa theo review vòng 1"; bản đầu bỏ cả combo và làm kệ combo hiện rồi biến mất khi Mua lại về sau). Test: Task 1 `shelves.spec` và `home-shelves.spec`, hook Mini và web.
 2. Sau chống trùng còn dưới 2 combo: kệ ẩn và không chiếm món, Bán chạy nhất giữ đủ món. Test: Task 1.
 3. Chống trùng làm Bán chạy nhất còn dưới 3 món: kệ ẩn gọn (không khung rỗng), `seen` không chứa món của kệ đã ẩn. Test: Task 1, Task 3.
 4. Hai combo dùng chung một món: không loại nhau (cùng kệ), món chỉ chiếm một lần. Test: Task 1.
@@ -146,4 +146,12 @@ Lý do: web có combo dựng sẵn trong HTML (ISR), nên lượt hydrate đầu
 
 - Phủ: §5 chống trùng combo (Task 1, 3, 4), "phần tĩnh GET /home" và "Mini qua home-feed, không thêm request" (có sẵn, Task 3 chạy lại `home-requests.spec`), web ở server (Task 4), `seen` tính combo (Task 1, 3, 4), hạng thật (Task 3, 4), hết hạn theo giờ máy chủ (Task 2, 3, 4), CLS (Task 5, 6).
 - Tên nhất quán: `comboShelfEntry`, `ShelfEntry.also`, `COMBO_HOLD_MS`, `comboView(b, now, liveAt)`, `COMBO_REVALIDATE_S`, `HomeInitial.combos`, `HomeShelvesInitial.combos`.
-- Quyết định lệch có chủ đích (ghi vào notes cho chủ): combo bị bỏ nguyên bộ khi chứa món của Giờ vàng/Mua lại; Bán chạy nhất có thể ẩn hẳn nếu combo chiếm gần hết 12 món lấy về (`HOME_BEST_SELLER_LIMIT`), chưa nâng giới hạn vì hiện chỉ 0–2 combo.
+- Quyết định lệch có chủ đích (ghi vào notes cho chủ): combo chỉ chiếm xuống dưới, không bị Giờ vàng/Mua lại loại (cùng một món có thể hiện ở Mua lại và trong combo; Giờ vàng đã được API lọc khi chọn combo); Bán chạy nhất có thể ẩn hẳn nếu combo chiếm gần hết 12 món lấy về (`HOME_BEST_SELLER_LIMIT`), chưa nâng giới hạn vì hiện chỉ 0–2 combo.
+
+## Sửa theo review vòng 1
+
+- MAJOR (Mua lại làm kệ combo biến mất): Mua lại tải riêng qua `/home/me` và không nằm trong khung chờ chung, nên khách cũ vẽ lần đầu với `purchased = []`, hai combo hiện; khi Mua lại về, combo chứa món đã mua bị loại, kệ biến mất, các khối dưới nhảy lên và món của combo quay về Bán chạy nhất. Sửa: `applyShelfDedupe` lọc phần tử theo `id` của chính nó (không theo `also`) nên combo không bị kệ hạng cao loại; combo vẫn chiếm `id` và mọi `also` cho kệ dưới. Quyết định lệch với §5 ở mức món: một món có thể hiện ở Mua lại và trong combo; kệ combo chỉ còn bị ẩn khi dưới 2 combo. Giờ vàng: API `homeCombos` đã bỏ bộ dính suất đang chạy. Test: `shelves.spec`, `home-shelves.spec`, hook Mini (Mua lại về sau combo, ghi số combo ở mọi lần vẽ) và hook web (HTML đầu có combo, Mua lại về sau).
+- MINOR web ISR cũ: `HomeInitial.combosAt` (lúc máy chủ lấy combo) đi vào `initialDataUpdatedAt`, nên HTML ISR cũ hơn 60 giây thì hydrate hỏi lại ngay; HTML còn tươi thì không thêm request. Test: `home-initial.spec`, hook web.
+- MINOR e2e "không hiện rồi biến mất": không làm được ở Playwright vì khung chờ chung của Trang chủ (dev server, tải khối lười) dài hơn hạn chờ combo, nên đặt `COMBO_HOLD_MS = 0` vẫn xanh (đã thử). Chuyển sang vitest: hook Mini ghi từng lần vẽ và khẳng định không có lần vẽ nào vừa hết chờ vừa có món của combo; đặt `COMBO_HOLD_MS = 0` làm hai ca đỏ. Tiêu đề ca e2e được sửa cho đúng điều nó đo (kệ cuối và CLS).
+- MINOR web HTML đầu: thay vì Playwright (cần seed combo vào DB của `web-gate.sh`, đổi Trang chủ của mọi ca web e2e và cả `e2e.yml`), thêm ca server render thật của `HomePage` trong `app/page.spec.tsx`: hai combo trùng món, HTML có kệ Combo, Bán chạy nhất không còn món trùng và bắt đầu từ #4.
+- MINOR Bán chạy nhất có thể xuống dưới 3 món khi có 3–4 combo dựng từ món bán chạy: chưa sửa, hiện chỉ 0–2 combo. Việc sau: nâng `HOME_BEST_SELLER_LIMIT` (API `home.service.ts` và `queries/home`) theo số combo hoặc chặn số món một combo được chiếm.

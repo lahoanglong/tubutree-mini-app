@@ -37,6 +37,7 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   // (cùng hành vi getListOrEmptyAtBuild). Riêng `next build` thường chạy khi API chưa lên: không ném, client tự tải lại.
   const failed = grids.find((g): g is PromiseRejectedResult => g.status === 'rejected');
   if (failed && grids.every((g) => g.status === 'rejected') && process.env.NEXT_PHASE !== 'phase-production-build') throw failed.reason;
+  const combosAt = Date.now();
   const [categories, brands, publicConfig, flash, campaigns, combos] = await Promise.all([
     orUndefined(fetchCategories(http)),
     orUndefined(fetchBrands(http)),
@@ -54,5 +55,5 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   const liveFlash = flash?.filter((it) => new Date(it.endAt).getTime() > Date.now());
   const liveCampaigns = campaigns?.filter((c) => new Date(c.endAt).getTime() > Date.now());
   const liveCombos = combos?.filter((b) => new Date(b.endAt).getTime() > Date.now());
-  return { bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash, campaigns: liveCampaigns, combos: liveCombos };
+  return { bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash, campaigns: liveCampaigns, combos: liveCombos, combosAt: liveCombos ? combosAt : undefined };
 }

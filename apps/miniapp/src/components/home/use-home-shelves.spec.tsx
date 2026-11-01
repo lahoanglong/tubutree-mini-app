@@ -22,10 +22,14 @@ const card = (slug: string) => ({ id: `id-${slug}`, slug, brand: '', name: slug,
 const page = (slugs: string[]) => ({ data: slugs.map(card), meta: { page: 1, limit: 12, total: slugs.length } });
 const slugsOf = (xs: { slug: string }[]) => xs.map((x) => x.slug);
 
-function setup(kind: 'returning' | 'new' | 'unknown') {
+function setup(kind: 'returning' | 'new' | 'unknown', onRender?: (shelves: ReturnType<typeof useHomeShelves>) => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-  return renderHook(() => useHomeShelves(kind), { wrapper });
+  return renderHook(() => {
+    const shelves = useHomeShelves(kind);
+    onRender?.(shelves);
+    return shelves;
+  }, { wrapper });
 }
 
 const bundleOf = (id: string, over: Record<string, unknown> = {}) => ({
@@ -169,14 +173,31 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
       expect(result.current.seen.has('p1')).toBe(true);
     });
 
-    it('combo chứa món đang ở Giờ vàng thì bị bỏ cả bộ: kệ combos ẩn và không chiếm p1, Bán chạy nhất vẫn hiện p1', async () => {
+    it('combo chứa món đang ở Giờ vàng vẫn hiện (Giờ vàng giữ p1, combo không bị loại): Bán chạy nhất vẫn bỏ p1', async () => {
       mocks.fetchFlash.mockResolvedValue(['a', 'b', 'p1'].map(flash));
       mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
       const { result } = setup('returning');
       await waitFor(() => expect(result.current.flash).toHaveLength(3));
       await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
-      expect(result.current.combos).toEqual([]);
+      expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
       expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']);
+    });
+
+    it('Mua lại về sau combo và giữ chính món của combo (p1): kệ combos không biến mất ở bất kỳ lần vẽ nào, Bán chạy nhất không đổi', async () => {
+      let resolvePurchased!: (v: unknown) => void;
+      mocks.fetchPurchased.mockReturnValue(new Promise((resolve) => (resolvePurchased = resolve)));
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
+      const combosPerRender: number[] = [];
+      const { result } = setup('returning', (shelves) => combosPerRender.push(shelves.combos.length));
+      await waitFor(() => expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']));
+      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['x', 'p2', 'p3', 'p4']));
+
+      act(() => resolvePurchased({ items: [bought('p1'), bought('x')], nextCursor: null }));
+      // Mua lại đã về: nó lấy x khỏi Bán chạy nhất, và combo giữ nguyên dù p1 (món của combo) cũng nằm trong Mua lại.
+      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']));
+      expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+      // Từ lần vẽ đầu có combo trở đi không có lần vẽ nào mất kệ.
+      expect(combosPerRender.slice(combosPerRender.indexOf(2))).not.toContain(0);
     });
 
     it('một combo thì kệ ẩn (tối thiểu 2) và không chiếm món; combo đã quá hạn không tính', async () => {
@@ -197,15 +218,18 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
       expect(result.current.bestSellerQuery.isLoading).toBe(false);
     });
 
-    it('combo về chậm hơn Bán chạy nhất: giữ khung chờ Bán chạy nhất tới khi biết combo, nên p1 không hiện rồi biến mất', async () => {
+    it('combo về chậm hơn Bán chạy nhất: giữ khung chờ Bán chạy nhất tới khi biết combo, nên p1 không hiện rồi biến mất ở lần vẽ nào', async () => {
       let resolveCombos!: (v: unknown[]) => void;
       mocks.fetchCombos.mockReturnValue(new Promise((resolve) => (resolveCombos = resolve)));
-      const { result } = setup('returning');
+      // Một lần vẽ mà khách thấy p1 ở Bán chạy nhất là: khối không ở trạng thái chờ (isLoading false) và danh sách có p1.
+      const drawnWithP1: boolean[] = [];
+      const { result } = setup('returning', (shelves) => drawnWithP1.push(!shelves.bestSellerQuery.isLoading && slugsOf(shelves.bestSellers).includes('p1')));
       await waitFor(() => expect(result.current.bestSellerQuery.data).toBeDefined());
       expect(result.current.bestSellerQuery.isLoading).toBe(true);
       act(() => resolveCombos([bundleOf('c1'), bundleOf('c2')]));
       await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
       expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']);
+      expect(drawnWithP1).not.toContain(true);
     });
 
     it('combo không bao giờ về: quá COMBO_HOLD_MS thì Bán chạy nhất vẽ tiếp, không giữ khung chờ mãi', async () => {

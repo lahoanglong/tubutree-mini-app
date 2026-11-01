@@ -25,7 +25,7 @@ const STALE = 60_000;
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
   flash: FlashSaleActiveItem[];
-  /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn). Combo là đơn vị nguyên: chiếm slug các món của nó, và chứa món của Giờ vàng/Mua lại thì bị bỏ cả bộ. */
+  /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn). Combo là đơn vị nguyên: chiếm slug các món của nó cho Bán chạy nhất và Gợi ý hôm nay, nhưng không bị Giờ vàng/Mua lại loại (Mua lại về sau cùng `/home/me`, loại theo nó thì kệ hiện rồi biến mất). */
   combos: ComboView[];
   /** Bán chạy nhất đã bỏ món trùng các kệ trên (≤10; rỗng khi dưới 3). */
   bestSellers: ProductCard[];
@@ -49,6 +49,8 @@ export interface HomeShelvesInitial {
   bestSellers?: BestSellersPage;
   /** Combo server dựng sẵn trong HTML đầu (rỗng: đã hỏi và không có; vắng: máy chủ hụt, client tự tải). */
   combos?: BundleDTO[];
+  /** Lúc máy chủ lấy `combos` (ms): ISR có thể phát HTML cũ hơn hạn dữ liệu, nên combo đã tắt không được coi là tươi thêm 60 giây sau hydrate. */
+  combosAt?: number;
 }
 
 /**
@@ -74,7 +76,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
   const bestSellerQuery = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...(initial.bestSellers ? { initialData: initial.bestSellers, staleTime: STALE } : {}) }));
 
   // Lỗi thì không có kệ, không báo lỗi: combo là phần thêm, không phải nội dung chính của Trang chủ.
-  const combosQuery = useQuery({ ...homeCombosQuery(coreHttp), staleTime: STALE, retry: 0, ...(initial.combos ? { initialData: initial.combos } : {}) });
+  const combosQuery = useQuery({ ...homeCombosQuery(coreHttp), staleTime: STALE, retry: 0, ...(initial.combos ? { initialData: initial.combos, initialDataUpdatedAt: initial.combosAt } : {}) });
 
   const hydrated = useHydrated();
   // `expiredTick` tăng khi suất sớm nhất đếm về 0 để tính lại theo giờ máy chủ, không phải chờ lần tải tiếp theo của danh sách suất.

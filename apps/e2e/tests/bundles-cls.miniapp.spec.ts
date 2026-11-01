@@ -128,7 +128,7 @@ test.describe('Trang chủ Mini: CLS của kệ Combo tiết kiệm', () => {
     expect(cls, `CLS ${cls.toFixed(4)} so với nền ${baseline.toFixed(4)}`).toBeLessThanOrEqual(baseline + 0.01);
   });
 
-  test('Bán chạy nhất có món của combo: bỏ món ấy ngay từ lần vẽ đầu (khung chờ giữ tới khi biết combo), không hiện rồi biến mất, CLS ≤ 0,02', async ({ page, api }) => {
+  test('Bán chạy nhất có món của combo (cùng request gộp): kệ không còn món ấy và CLS ≤ 0,02 (món không hiện rồi biến mất: vitest use-home-shelves giữ)', async ({ page, api }) => {
     mockMergedHomeWith(api, homeCombos());
     api.get('/home', {
       ...HOME_PUBLIC,

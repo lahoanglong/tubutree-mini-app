@@ -63,6 +63,8 @@ export interface HomeInitial {
   campaigns?: CampaignBanner[];
   /** Combo toàn sàn đang chạy lúc dựng trang: có trong HTML đầu nên kệ không chen vào sau hydrate, và Bán chạy nhất bỏ món của combo ngay trong HTML. Rỗng nghĩa là server đã hỏi và không có. */
   combos?: BundleDTO[];
+  /** Lúc máy chủ lấy `combos` (ms): để hydrate hỏi lại ngay khi HTML ISR đã cũ hơn hạn tươi. */
+  combosAt?: number;
 }
 
 const STALE = 60_000;
@@ -113,7 +115,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const startedNew = useStartedAsNew(kind);
 
   // Dữ liệu chung của các kệ hàng (Giờ vàng, Mua lại, Bán chạy nhất): cùng khoá query với khối nên không thêm request, chống trùng ở một chỗ.
-  const shelves = useHomeShelves(kind, { flash: initial.flash, bestSellers: initial.bestSellers, combos: initial.combos });
+  const shelves = useHomeShelves(kind, { flash: initial.flash, bestSellers: initial.bestSellers, combos: initial.combos, combosAt: initial.combosAt });
   const categories = useQuery({ ...categoriesQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.categories ? { initialData: initial.categories } : {}) });
 
   // Lần mở đầu chưa biết loại khách: các khối dưới thẻ thành viên chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các

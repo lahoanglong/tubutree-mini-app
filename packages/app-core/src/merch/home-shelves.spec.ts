@@ -73,27 +73,34 @@ describe('combo chiếm món theo slug', () => {
     expect([...r.seen].sort()).toEqual(['a', 'b', 'c', 'c1', 'c2', 'd', 'e', 'f', 'g', 'h']);
   });
 
-  it('combo chứa món của Giờ vàng thì bỏ cả combo; combo còn lại dưới 2 thì kệ ẩn và KHÔNG chiếm món', () => {
+  it('Giờ vàng giữ món trùng nhưng không loại combo: combo vẫn hiện và vẫn chiếm món của Bán chạy nhất', () => {
     const r = composeHomeShelves({
       ...none,
       flash: slugs('a', 'x', 'y'),
       combos: [combo('c1', 'a', 'b'), combo('c2', 'c', 'd')],
-      bestSellers: slugs('b', 'c', 'd', 'e'),
+      bestSellers: slugs('a', 'b', 'c', 'd', 'e', 'f', 'g'),
     });
     expect(r.flash).toEqual(['a', 'x', 'y']);
-    expect(r.combos).toEqual([]);
-    expect(r.bestSellers).toEqual(['b', 'c', 'd', 'e']);
-    expect(r.seen.has('c1')).toBe(false);
+    expect(r.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+    expect(r.bestSellers).toEqual(['e', 'f', 'g']);
   });
 
-  it('Mua lại giữ món của mình: combo chứa món đó bị bỏ, hai combo còn lại vẫn hiện', () => {
-    const r = composeHomeShelves({
-      ...none,
-      purchased: [e('b', 'mua')],
-      combos: [combo('c1', 'a', 'b'), combo('c2', 'c', 'd'), combo('c3', 'e', 'f')],
-    });
-    expect(r.purchased).toEqual(['mua']);
-    expect(r.combos.map((v) => v.id)).toEqual(['c2', 'c3']);
+  it('Mua lại giữ món của mình nhưng không loại combo: Mua lại về sau không làm kệ combo biến mất', () => {
+    const combos = [combo('c1', 'a', 'b'), combo('c2', 'c', 'd')];
+    const bestSellers = slugs('a', 'b', 'c', 'd', 'e', 'f', 'g');
+    const before = composeHomeShelves({ ...none, combos, bestSellers });
+    const after = composeHomeShelves({ ...none, purchased: [e('b', 'mua')], combos, bestSellers });
+    expect(after.purchased).toEqual(['mua']);
+    expect(after.combos).toEqual(before.combos);
+    expect(after.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+    expect(after.bestSellers).toEqual(before.bestSellers);
+  });
+
+  it('dưới 2 combo thì kệ ẩn và KHÔNG chiếm món, Bán chạy nhất giữ đủ món', () => {
+    const r = composeHomeShelves({ ...none, combos: [combo('c1', 'a', 'b')], bestSellers: slugs('a', 'b', 'c', 'd') });
+    expect(r.combos).toEqual([]);
+    expect(r.bestSellers).toEqual(['a', 'b', 'c', 'd']);
+    expect(r.seen.has('c1')).toBe(false);
   });
 
   it('chống trùng làm Bán chạy nhất dưới 3 món thì ẩn, `seen` không giữ món của kệ đã ẩn', () => {
