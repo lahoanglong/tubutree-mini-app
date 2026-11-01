@@ -105,18 +105,25 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
 
   return (
     <div data-testid="section-detail" className="space-y-4">
-      <div>
-        <div className="-ml-2 flex items-center justify-between">
+      {/* Dưới md như dải đầu của Mini App: nền surface tràn mép, nút lùi nổi của app đè lên góc trái nên hàng đầu chừa 52px; từ md là khối thường. */}
+      <div className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-2 max-md:pb-3 max-md:pt-2">
+        <div className="-ml-2 flex items-center justify-between max-md:ml-0 max-md:pl-[52px]">
           <button type="button" onClick={p.onBack} className="inline-flex min-h-11 items-center gap-0.5 px-2 text-sm font-medium text-forest-700">
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             {BUILDER_COPY.back}
           </button>
           <MenuButton label={BUILDER_COPY.sectionOptions} onPress={p.onMenu} />
         </div>
-        <h2 ref={p.headingRef} tabIndex={-1} className="break-words font-display text-xl font-semibold text-stone-900 outline-none">
-          {col.title}
-        </h2>
-        <p className="text-xs text-stone-600">{view.countText}</p>
+        <div className="max-md:px-2">
+          <h2
+            ref={p.headingRef}
+            tabIndex={-1}
+            className="break-words font-display text-xl font-semibold text-stone-900 outline-none max-md:text-[length:var(--type-title-lg-size)] max-md:leading-[var(--type-title-lg-lh)] max-md:tracking-[-0.01em]"
+          >
+            {col.title}
+          </h2>
+          <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] max-md:text-[color:var(--color-text-tertiary)]">{view.countText}</p>
+        </div>
       </div>
 
       <LayoutPicker value={p.pickedStyle ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
@@ -155,9 +162,9 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
             <ItemRow key={it.id} it={it} list={col.items} productMap={p.productMap} p={p} />
           ))}
         </ul>
-        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} mt-3`} onClick={p.onAddItem}>
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} mt-3 w-full md:w-auto`} onClick={p.onAddItem}>
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-          Thêm sản phẩm
+          {BUILDER_COPY.addProduct}
         </button>
       </div>
     </div>

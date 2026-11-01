@@ -1636,6 +1636,47 @@ describe('màn dựng theo khối (P10)', () => {
       expect(document.activeElement).toBe(cardBtn('Bộ hai,'));
     });
 
+    it('điện thoại: ở trang chi tiết dải tiêu đề của trang nhường chỗ (sr-only, vẫn một h1), danh sách giữ dải tiêu đề là con trực tiếp của khung', async () => {
+      setThree();
+      mount();
+      await flush();
+      const main = () => document.querySelector('main')!;
+      expect(main().querySelector(':scope > header[data-page-bleed]')).not.toBeNull();
+      expect(main().className).not.toContain('max-md:pt-0');
+      await openCard('Bộ hai,');
+      const wrapped = main().querySelector(':scope > div.max-md\\:sr-only > header[data-page-bleed]');
+      expect(wrapped).not.toBeNull();
+      expect(wrapped!.querySelector('h1')!.textContent).toBe('Gian hàng của tôi');
+      expect(main().querySelector(':scope > header[data-page-bleed]')).toBeNull();
+      expect(main().className).toContain('max-md:pt-0');
+      expect($$('h1')).toHaveLength(1);
+      click(btn('Gian hàng của tôi', $('[data-testid="section-detail"]')!));
+      await flush();
+      expect(main().querySelector(':scope > header[data-page-bleed]')).not.toBeNull();
+    });
+
+    it('?khoi= trỏ tới khối không còn: trình dựng vẽ danh sách nên dải tiêu đề của trang vẫn hiện', async () => {
+      setThree();
+      nav.to('/ctv/gian-hang?khoi=khong-con', true);
+      mount();
+      await flush();
+      expect($$('[data-testid="section-card"]')).toHaveLength(3);
+      expect(document.querySelector('main > header[data-page-bleed]')).not.toBeNull();
+      expect(document.querySelector('main > div.max-md\\:sr-only')).toBeNull();
+    });
+
+    it('trang chi tiết: hàng đầu chừa 52px cho nút lùi nổi; nút Thêm sản phẩm rộng hết hàng ở điện thoại', async () => {
+      setThree();
+      mount();
+      await flush();
+      await openCard('Bộ hai,');
+      const detail = $('[data-testid="section-detail"]')!;
+      const back = btn('Gian hàng của tôi', detail);
+      expect(back.parentElement!.className).toContain('max-md:pl-[52px]');
+      const add = btn('Thêm sản phẩm', detail);
+      expect(add.className).toContain('w-full');
+    });
+
     describe('lùi từ trang chi tiết (nút lùi nổi và nút lùi của trình duyệt)', () => {
       const mountWithBack = () => {
         const r = render(<><BackButton className="md:!hidden" /><StorefrontBuilderPage /></>);
