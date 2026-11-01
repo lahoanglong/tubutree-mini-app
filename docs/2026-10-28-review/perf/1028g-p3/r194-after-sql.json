@@ -1,0 +1,75 @@
+{
+ "shipping-first": {
+  "status": 200,
+  "sql": 10,
+  "hasShippingKey": false,
+  "orderSelects": 1,
+  "stmts": [
+   "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"noti",
+   " SELECT 'order' AS kind, o.status::text AS key, COUNT(*)::int AS n FROM orders o WHERE o.\"userId\" = $1 GROUP BY o.status UNION ALL SELECT 'w",
+   "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"q",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"id\") IN (SELECT \"t1\"",
+   "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"fla",
+   "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userI",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCo",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"publi",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs"
+  ]
+ },
+ "shipping-second": {
+  "status": 200,
+  "sql": 8,
+  "hasShippingKey": false,
+  "orderSelects": 0,
+  "stmts": [
+   "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"noti",
+   "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"q",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"id\") IN (SELECT \"t1\"",
+   "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userI",
+   "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"fla",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCo",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"publi"
+  ]
+ },
+ "noShipping-first": {
+  "status": 200,
+  "sql": 12,
+  "hasShippingKey": false,
+  "orderSelects": 1,
+  "stmts": [
+   "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"noti",
+   " SELECT 'order' AS kind, o.status::text AS key, COUNT(*)::int AS n FROM orders o WHERE o.\"userId\" = $1 GROUP BY o.status UNION ALL SELECT 'w",
+   "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"fla",
+   "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"q",
+   " SELECT oi.\"variationId\" AS \"variationId\", COUNT(DISTINCT o.id)::int AS \"timesBought\", MAX(o.\"createdAt\") AS \"lastPurchasedAt\" FROM order_it",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"pu",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"t",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"id\") IN (SELECT \"t1\"",
+   "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userI",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCo",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"publi"
+  ]
+ },
+ "noShipping-second": {
+  "status": 200,
+  "sql": 11,
+  "hasShippingKey": false,
+  "orderSelects": 1,
+  "stmts": [
+   " SELECT 'order' AS kind, o.status::text AS key, COUNT(*)::int AS n FROM orders o WHERE o.\"userId\" = $1 GROUP BY o.status UNION ALL SELECT 'w",
+   "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"q",
+   "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"fla",
+   " SELECT oi.\"variationId\" AS \"variationId\", COUNT(DISTINCT o.id)::int AS \"timesBought\", MAX(o.\"createdAt\") AS \"lastPurchasedAt\" FROM order_it",
+   "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"pu",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"t",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"id\") IN (SELECT \"t1\"",
+   "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userI",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCo",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"publi"
+  ]
+ }
+}
