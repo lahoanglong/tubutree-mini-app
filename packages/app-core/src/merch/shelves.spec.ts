@@ -138,4 +138,35 @@ describe('applyShelfDedupe', () => {
     applyShelfDedupe(input);
     expect(input).toEqual(copy);
   });
+
+  describe('khoá phụ `also` (combo chiếm các món của nó)', () => {
+    const entry = (id: string, ...also: string[]) => ({ id, also });
+
+    it('kệ sau bỏ món mà combo đã chiếm qua `also`; hai combo chung một món không loại nhau (cùng kệ)', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.bestSellers', items: items('p1', 'p2', 'p3', 'p4', 'p5', 'p6') },
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2'), entry('c2', 'p2')] },
+      ]);
+      expect(ids(out[1]!.items)).toEqual(['c1', 'c2']);
+      expect(ids(out[0]!.items)).toEqual(['p3', 'p4', 'p5', 'p6']);
+    });
+
+    it('combo chứa món đã bị kệ hạng cao chiếm thì bỏ CẢ combo; combo bị bỏ làm kệ dưới `minItems` thì ẩn và không chiếm món', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.flash', items: items('p1', 'p7', 'p8') },
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2'), entry('c2', 'p3', 'p4')] },
+        { id: 'home.bestSellers', items: items('p2', 'p3', 'p4', 'p9') },
+      ]);
+      expect(out[1]!.items).toEqual([]);
+      expect(ids(out[2]!.items)).toEqual(['p2', 'p3', 'p4', 'p9']);
+    });
+
+    it('món của combo không lọt sang kệ Gợi ý hôm nay (hạng thấp hơn)', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2'), entry('c2', 'p3', 'p4')] },
+        { id: 'home.suggest', items: items('p1', 'p3', 'p5', 'p6', 'p7', 'p8') },
+      ]);
+      expect(ids(out[1]!.items)).toEqual(['p5', 'p6', 'p7', 'p8']);
+    });
+  });
 });

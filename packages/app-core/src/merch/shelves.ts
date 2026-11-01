@@ -51,12 +51,17 @@ export function shelf(id: string): ShelfSpec {
   return spec;
 }
 
+/** Mọi khoá mà một phần tử chiếm: id của nó và các khoá phụ (slug các món của một combo). */
+const keysOf = (x: { id: string; also?: readonly string[] }): string[] => [x.id, ...(x.also ?? [])];
+
 /**
  * Chống trùng món giữa các kệ trên một màn. Kệ hạng cao (số nhỏ) chiếm món trước, bất kể thứ tự trong mảng đầu vào; kệ sau bỏ món đã bị
  * chiếm và món lặp trong chính nó, rồi cắt `maxItems`. Kệ còn dưới `minItems` trả [] và KHÔNG chiếm món: kệ đã ẩn mà vẫn giữ món
  * thì khách không thấy món đó ở đâu cả. Kệ không có hạng chỉ bị cắt. Kết quả giữ thứ tự đầu vào; id lạ ném lỗi.
+ * Phần tử có `also` (combo) là một đơn vị nguyên: chiếm cả `id` lẫn `also`, và chứa món đã bị kệ hạng cao chiếm thì bị bỏ cả đơn vị
+ * (bộ thiếu món là một ưu đãi khác, không cắt bớt món). Trùng trong chính một kệ vẫn chỉ xét theo `id`.
  */
-export function applyShelfDedupe<T extends { id: string }>(shelves: { id: string; items: T[] }[]): { id: string; items: T[] }[] {
+export function applyShelfDedupe<T extends { id: string; also?: readonly string[] }>(shelves: { id: string; items: T[] }[]): { id: string; items: T[] }[] {
   const specs = shelves.map((s) => shelf(s.id));
   const claimOrder = specs
     .map((spec, i) => ({ rank: spec.dedupeRank, i }))
@@ -66,10 +71,10 @@ export function applyShelfDedupe<T extends { id: string }>(shelves: { id: string
   const out: { id: string; items: T[] }[] = new Array(shelves.length);
   for (const { rank, i } of claimOrder) {
     const spec = specs[i]!;
-    const fresh = uniqueById(shelves[i]!.items).filter((x) => rank === null || !claimed.has(x.id));
+    const fresh = uniqueById(shelves[i]!.items).filter((x) => rank === null || keysOf(x).every((k) => !claimed.has(k)));
     const kept = fresh.slice(0, spec.maxItems);
     const shown = kept.length < spec.minItems ? [] : kept;
-    if (rank !== null) for (const x of shown) claimed.add(x.id);
+    if (rank !== null) for (const x of shown) for (const k of keysOf(x)) claimed.add(k);
     out[i] = { id: shelves[i]!.id, items: shown };
   }
   return out;
