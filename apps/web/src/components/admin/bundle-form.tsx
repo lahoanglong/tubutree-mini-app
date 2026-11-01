@@ -12,6 +12,7 @@ import {
   buildBundleInput,
   draftFromBundle,
   emptyBundleDraft,
+  keptRefPrice,
   type BundleDraft,
   type BundleDraftItem,
 } from '@/lib/admin-bundle-form';
@@ -30,6 +31,12 @@ function addonSaving(item: BundleDraftItem): string | null {
   const price = Number(item.addonPrice);
   if (price >= base) return null;
   return `Giảm ${vnd(base - price)} (${Math.round(((base - price) / base) * 100)}%)`;
+}
+
+/** Chỉ khi lưu sẽ giữ giá tham chiếu thấp hơn giá bán (giá kèm chưa sửa); sửa giá kèm thì máy chủ đặt lại theo giá đang bán nên không còn gì để nhắc. */
+function refNote(item: BundleDraftItem): string | null {
+  const ref = keptRefPrice(item);
+  return item.price !== null && ref !== null && ref < item.price ? `giảm tính theo giá ${vnd(ref)} lúc đặt giá kèm` : null;
 }
 
 /**
@@ -57,7 +64,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
     setDraft((d) =>
       d.items.some((i) => i.productId === p.id) || d.items.length >= maxItems
         ? d
-        : { ...d, items: [...d.items, { productId: p.id, name: p.label, variationId: null, variationName: null, price: null, refPrice: null, addonPrice: '', maxQty: '1' }] },
+        : { ...d, items: [...d.items, { productId: p.id, name: p.label, variationId: null, variationName: null, price: null, refPrice: null, savedAddonPrice: null, addonPrice: '', maxQty: '1' }] },
     );
   };
   const addAddonItem = (v: PickedAddonVariation) =>
@@ -66,7 +73,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
         ? d
         : {
             ...d,
-            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, refPrice: null, addonPrice: '', maxQty: '1' }],
+            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, refPrice: null, savedAddonPrice: null, addonPrice: '', maxQty: '1' }],
           },
     );
   const changeKind = (kind: AdminBundleKind) =>
@@ -160,9 +167,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
                     {i.name}
                     {i.variationName ? <span className="text-stone-500">{` · ${i.variationName}`}</span> : null}
                     {i.price !== null ? <span className="text-stone-500">{` · giá bán ${vnd(i.price)}`}</span> : null}
-                    {i.price !== null && i.refPrice !== null && i.refPrice < i.price ? (
-                      <span className="text-stone-500">{` · giảm tính theo giá ${vnd(i.refPrice)} lúc đặt giá kèm`}</span>
-                    ) : null}
+                    {refNote(i) ? <span className="text-stone-500">{` · ${refNote(i)}`}</span> : null}
                   </span>
                   <button type="button" aria-label={`Bỏ ${i.name} khỏi bộ`} onClick={() => set({ items: draft.items.filter((x) => x.productId !== i.productId) })} className={BTN_LINK_DANGER}>
                     Bỏ

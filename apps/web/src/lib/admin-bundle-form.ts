@@ -17,6 +17,8 @@ export interface BundleDraftItem {
   price: number | null;
   /** Giá tham chiếu máy chủ đã giữ cho món mua kèm của bộ có sẵn (trần khoản giảm); món vừa chọn chưa có (máy chủ lấy giá đang bán lúc lưu). */
   refPrice: number | null;
+  /** Giá kèm đã lưu của món (bộ có sẵn): `refPrice` chỉ còn hiệu lực khi ô giá kèm vẫn bằng số này (xem `keptRefPrice`). */
+  savedAddonPrice: number | null;
   /** Chữ gõ trong ô: để rỗng thì báo lỗi thay vì ngầm hiểu là 0đ. */
   addonPrice: string;
   maxQty: string;
@@ -52,6 +54,7 @@ export function draftFromBundle(b: AdminBundle): BundleDraft {
       variationName: i.variationName,
       price: i.price,
       refPrice: i.refPrice,
+      savedAddonPrice: i.addonPrice,
       addonPrice: i.addonPrice === null ? '' : String(i.addonPrice),
       maxQty: String(i.maxQty),
     })),
@@ -62,12 +65,25 @@ export function draftFromBundle(b: AdminBundle): BundleDraft {
   };
 }
 
+type AddonPriceFields = Pick<BundleDraftItem, 'price' | 'refPrice' | 'savedAddonPrice' | 'addonPrice'>;
+
 /**
- * Giá làm cơ sở khoản giảm của món mua kèm: giỏ chỉ giảm tối đa `min(giá đang bán, giá tham chiếu) − giá kèm` (`addonUnitDiscount` ở API),
- * nên phân loại tăng giá sau khi tạo không làm khoản giảm lớn lên. null khi chưa biết giá đang bán (món vừa chọn).
+ * Giá tham chiếu máy chủ SẼ giữ nếu lưu bây giờ: cùng luật `keptRefPrices` ở API (món không đổi giá kèm thì giữ, đổi giá kèm thì máy chủ
+ * lấy lại giá đang bán). Món đã đổi sản phẩm hay phân loại là một dòng mới của form nên không mang `refPrice` nào.
  */
-export const addonBasePrice = (i: { price: number | null; refPrice: number | null }): number | null =>
-  i.price === null ? null : i.refPrice === null ? i.price : Math.min(i.price, i.refPrice);
+export const keptRefPrice = (i: AddonPriceFields): number | null =>
+  i.refPrice !== null && i.savedAddonPrice !== null && /^\d+$/.test(i.addonPrice.trim()) && Number(i.addonPrice) === i.savedAddonPrice ? i.refPrice : null;
+
+/**
+ * Giá làm cơ sở khoản giảm của món mua kèm sau khi lưu: giỏ chỉ giảm tối đa `min(giá đang bán, giá tham chiếu) − giá kèm` (`addonUnitDiscount`
+ * ở API), nên phân loại tăng giá sau khi tạo không làm khoản giảm lớn lên, nhưng sửa giá kèm thì trần được đặt lại theo giá đang bán.
+ * null khi chưa biết giá đang bán (món vừa chọn).
+ */
+export const addonBasePrice = (i: AddonPriceFields): number | null => {
+  if (i.price === null) return null;
+  const ref = keptRefPrice(i);
+  return ref === null ? i.price : Math.min(i.price, ref);
+};
 
 const isIntText = (s: string): boolean => /^\d+$/.test(s.trim());
 const fail = (error: string) => ({ ok: false as const, error });

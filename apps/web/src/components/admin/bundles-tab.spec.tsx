@@ -360,6 +360,37 @@ describe('BundlesTab: sửa bộ', () => {
     expect(mocks.update.mock.calls[0]![1].items).toEqual([{ productId: 'p1', variationId: 'v1', addonPrice: 39_000, maxQty: 1 }]);
   });
 
+  it('sửa giá kèm của bộ mua kèm đã tăng giá: máy chủ đặt lại giá tham chiếu = giá đang bán, nên gợi ý tính theo giá đang bán (không còn theo 50.000đ); trả lại giá kèm cũ thì gợi ý về lại như giỏ', async () => {
+    mocks.get.mockResolvedValue(
+      row('a', {
+        kind: 'ADDON', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội',
+        items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: 'v1', variationName: '100g', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, price: 500_000 }],
+      }),
+    );
+    const c = await mount();
+    click(btn(c, 'Sửa bộ Bộ a'));
+    await flush(6);
+    expect(c.textContent).toContain('Giảm 11.000đ (22%)');
+
+    typeInto(field(c, 'Giá mua kèm Xà phòng'), '45000');
+    await flush(2);
+    let text = c.textContent ?? '';
+    expect(text).toContain('Giảm 455.000đ (91%)');
+    expect(text).not.toContain('Giảm 5.000đ');
+    expect(text).not.toContain('giảm tính theo giá');
+
+    typeInto(field(c, 'Giá mua kèm Xà phòng'), '399000');
+    await flush(2);
+    text = c.textContent ?? '';
+    expect(text).toContain('Giảm 101.000đ (20%)');
+
+    typeInto(field(c, 'Giá mua kèm Xà phòng'), '39000');
+    await flush(2);
+    text = c.textContent ?? '';
+    expect(text).toContain('Giảm 11.000đ (22%)');
+    expect(text).toContain('giảm tính theo giá 50.000đ');
+  });
+
   it('tải chi tiết lỗi: báo lỗi kèm Thử lại và Đóng', async () => {
     mocks.get.mockRejectedValueOnce(new Error('x'));
     const c = await mount();
