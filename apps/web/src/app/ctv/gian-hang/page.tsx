@@ -27,9 +27,9 @@ const TITLE = 'Gian hàng của tôi';
  * khung bỏ đệm đỉnh để dải đầu của khối bắt đầu từ mép trên, chừa chỗ cho nút lùi nổi bằng lề trái của chính nó.
  */
 function Shell({ children, detail = false, builder = false }: { children: ReactNode; detail?: boolean; builder?: boolean }) {
-  // `builder`: hàng tiêu đề có ô cho "Xem trước" và nút chính từ lg (trình dựng gắn nút vào đây; điện thoại dùng thanh dính đáy).
+  // `builder`: hàng tiêu đề có ô cho "Xem trước" và nút chính từ lg (trình dựng gắn nút vào đây; điện thoại dùng thanh dính đáy). Hàng cao tối thiểu 44px từ lg ở MỌI trạng thái của trang, để nút tới (cao 44px) không đẩy tiêu đề dịch xuống.
   const slot = builder ? <div id={BUILDER_HEAD_SLOT} data-testid={BUILDER_HEAD_SLOT} className="hidden shrink-0 items-center gap-2 lg:flex" /> : undefined;
-  const header = <PageHeader title={TITLE} parentHref="/ctv" className="md:mt-1" actions={slot} />;
+  const header = <PageHeader title={TITLE} parentHref="/ctv" className="md:mt-1 lg:min-h-11" actions={slot} />;
   return (
     <main className={`${PAGE_WIDE} py-6${detail ? ' max-md:pt-0' : ''}`}>
       <BackLink href="/ctv">

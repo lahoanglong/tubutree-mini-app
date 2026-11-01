@@ -56,8 +56,41 @@ test.describe('Trình dựng gian hàng web 1280px (G6 #35)', () => {
     const h1 = (await page.getByRole('heading', { level: 1, name: 'Gian hàng của tôi' }).boundingBox())!;
     const preview = (await slot.getByText('Xem trước').boundingBox())!;
     expect(Math.abs(preview.y + preview.height / 2 - (h1.y + h1.height / 2)), 'nút cùng hàng với tiêu đề').toBeLessThanOrEqual(24);
-    await expect(page.getByText('Xem trước', { exact: true })).toHaveCount(1);
-    await expect(page.getByTestId('builder-bar')).toHaveCount(0);
+    // Hai bản nút cùng có trong cây; CSS chỉ cho bản ở hàng tiêu đề nhìn thấy từ lg, thanh dính đáy là display:none.
+    await expect(page.locator('text="Xem trước"').locator('visible=true')).toHaveCount(1);
+    await expect(page.getByTestId('builder-bar')).toBeHidden();
+  });
+
+  test('hàng tiêu đề và hai nút đứng yên từ lần vẽ đầu: tiêu đề không dịch khi nút tới (H3 #7)', async ({ page }) => {
+    // Ghi vị trí h1 và nút đầu của ô hàng tiêu đề ở MỖI khung hình từ lúc tải trang.
+    await page.addInitScript(() => {
+      const frames: { h1: number | null; btn: number | null; btnShown: boolean }[] = [];
+      (window as unknown as { __frames: typeof frames }).__frames = frames;
+      const tick = () => {
+        const h1 = document.querySelector('h1');
+        const b = document.querySelector<HTMLElement>('[data-testid="builder-head-actions"] a, [data-testid="builder-head-actions"] button');
+        frames.push({ h1: h1 ? h1.getBoundingClientRect().y : null, btn: b ? b.getBoundingClientRect().y : null, btnShown: !!b && b.getClientRects().length > 0 });
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByTestId('builder-head-actions').getByText('Xem trước')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(600);
+    const frames = await page.evaluate(() => (window as unknown as { __frames: { h1: number | null; btn: number | null; btnShown: boolean }[] }).__frames);
+    const h1 = frames.map((f) => f.h1).filter((y): y is number => y !== null);
+    expect(h1.length, 'h1 có mặt ở nhiều khung').toBeGreaterThan(5);
+    expect(Math.max(...h1) - Math.min(...h1), `y của h1 qua các khung: ${[...new Set(h1)].join(', ')}`).toBeLessThanOrEqual(1);
+    const shown = frames.filter((f) => f.btnShown).map((f) => f.btn!);
+    expect(shown.length).toBeGreaterThan(5);
+    expect(Math.max(...shown) - Math.min(...shown), 'nút đứng yên từ khung đầu nhìn thấy').toBeLessThanOrEqual(1);
+  });
+
+  test('dưới lg (375px) ô hàng tiêu đề ẩn và thanh dính đáy hiện', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByTestId('builder-bar')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('builder-head-actions')).toBeHidden();
   });
 
   test('chi tiết khối: khung "Khách sẽ thấy" nằm cột phải, trang không tràn ngang', async ({ page }) => {
