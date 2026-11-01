@@ -72,6 +72,7 @@ import {
   type AcademyLessonContentType,
   type AdminQuickReply,
   countInvoicePending,
+  getOrderStatusCounts,
   countRecyclingAttention,
   countPancakeAttention,
   listDealerRewardClaims,
@@ -150,6 +151,9 @@ import {
   BTN_SMALL,
   chipClass,
   FIELD_CLASS,
+  ListSkeleton,
+  StatCardsSkeleton,
+  TableSkeleton,
   Field,
   INPUT_CLASS,
   ScrollRegion,
@@ -229,7 +233,7 @@ type Tab =
   | 'analytics'
   | 'reports';
 // Hai tab nặng, không phải trang vào mặc định: tách khỏi gói đầu của /admin để trang mở nhanh hơn.
-const tabLoading = () => <p className="text-sm text-stone-500">Đang tải…</p>;
+const tabLoading = () => <ListSkeleton label="Đang tải" rows={5} />;
 const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
 const CommunityModerationTab = dynamic(() => import('@/components/admin/community-moderation-tab').then((m) => m.CommunityModerationTab), { loading: tabLoading });
 
@@ -781,21 +785,25 @@ function DealersTab() {
   });
   const pending = filter === 'PENDING';
   const view = mergeQueuePages(q.data?.pages, pending);
+  // Dùng chung khoá và dữ liệu với hộp việc của tab Đơn hàng: không thêm request nặng.
+  const inboxQ = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
+  const pendingCount = inboxQ.data?.items.find((i) => i.key === 'dealerApplications')?.count;
 
   return (
     <div>
       <h2 className="mb-2 text-base font-semibold text-stone-900">Hồ sơ đại lý</h2>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select
-          aria-label="Lọc hồ sơ đại lý theo trạng thái"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className={`${FIELD_CLASS} ${TOUCH_H}`}
-        >
-          {DEALER_APP_FILTERS.map((f) => (
-            <option key={f.value} value={f.value}>{f.label}</option>
-          ))}
-        </select>
+        <div role="group" aria-label="Lọc hồ sơ đại lý theo trạng thái" className="-mx-1 flex max-w-full gap-2 overflow-x-auto px-1 pb-1">
+          {DEALER_APP_FILTERS.map((f) => {
+            const n = f.value === 'PENDING' ? pendingCount : undefined;
+            return (
+              <button key={f.value || 'all'} type="button" aria-pressed={filter === f.value} onClick={() => setFilter(f.value)} className={`${chipClass(filter === f.value)} shrink-0`}>
+                {f.label}
+                {n !== undefined && n > 0 && <span data-chip-count> ({n})</span>}
+              </button>
+            );
+          })}
+        </div>
         {q.data && (
           <span className="text-xs text-stone-500">
             {view.label} hồ sơ{pending ? ' · cũ nhất trước' : ''}
@@ -805,7 +813,7 @@ function DealersTab() {
       <QueueMoreNotice pending={pending} view={view} noun="hồ sơ" />
       <div className="mt-3 space-y-3">
         {q.isError && <LoadError message="Không tải được danh sách hồ sơ đại lý." onRetry={() => void q.refetch()} />}
-        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách hồ sơ…</p>}
+        {q.isLoading && <ListSkeleton label="Đang tải danh sách hồ sơ" rows={3} className="h-24" />}
         {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
         {q.data && view.items.length === 0 && <Empty>{pending ? 'Chưa có hồ sơ nào chờ duyệt. Hồ sơ xuất hiện khi khách gửi đơn đăng ký làm đại lý trong ứng dụng.' : 'Không có hồ sơ ở trạng thái này.'}</Empty>}
       </div>
@@ -975,7 +983,7 @@ function DashboardTab({
     queryFn: () => listPayouts('REQUESTED', 1, 1).then((r) => r.meta.total),
   });
 
-  if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải số liệu tổng quan…</p>;
+  if (q.isLoading) return <StatCardsSkeleton label="Đang tải số liệu tổng quan" />;
   if (q.isError || !q.data) return <LoadError message="Không tải được các chỉ số tổng quan." onRetry={() => void q.refetch()} />;
 
   const stats = q.data;
@@ -1288,6 +1296,14 @@ function OrdersTab({
       ),
     enabled: !badRange,
   });
+  // Số trên chip: cùng bộ lọc với danh sách trừ trạng thái. Khoá nằm dưới 'admin-orders' để mọi thao tác làm mới danh sách làm mới luôn số.
+  const countsQ = useQuery({
+    queryKey: ['admin-orders', 'status-counts', search, recycling, invoice, pancake, from, to, orderExtraFilters(extra)],
+    queryFn: () =>
+      getOrderStatusCounts({ search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
+    enabled: !badRange,
+  });
+  const statusCount = (k: string) => (k ? countsQ.data?.byStatus[k] ?? 0 : countsQ.data?.all);
   const exportAll = async () => {
     setExportMsg(null);
     setExporting(true);
@@ -1630,6 +1646,7 @@ function OrdersTab({
               {ORDER_STATUS_CHIPS.map((c) => (
                 <button key={c.k || 'all'} type="button" aria-pressed={status === c.k} onClick={() => handleStatusChange(c.k)} className={`${chipClass(status === c.k)} shrink-0`}>
                   {c.label}
+                  {statusCount(c.k) !== undefined && <span data-chip-count> ({statusCount(c.k)})</span>}
                 </button>
               ))}
             </div>
@@ -1640,14 +1657,21 @@ function OrdersTab({
               onChange={(e) => handleStatusChange(e.target.value)}
               className={`${FIELD_CLASS} ${TOUCH_H}`}
             >
-              <option value="">Tất cả trạng thái</option>
-              <option value="PENDING_PAYMENT">Chờ thanh toán</option>
-              <option value="CONFIRMED">Đã xác nhận</option>
-              <option value="PACKED">Đã đóng gói</option>
-              <option value="SHIPPING">Đang vận chuyển</option>
-              <option value="DELIVERED">Đã giao hàng</option>
-              <option value="CANCELLED">Đã huỷ</option>
-              <option value="RETURNED">Đã trả hàng</option>
+              {[
+                ['', 'Tất cả trạng thái'],
+                ['PENDING_PAYMENT', 'Chờ thanh toán'],
+                ['CONFIRMED', 'Đã xác nhận'],
+                ['PACKED', 'Đã đóng gói'],
+                ['SHIPPING', 'Đang vận chuyển'],
+                ['DELIVERED', 'Đã giao hàng'],
+                ['CANCELLED', 'Đã huỷ'],
+                ['RETURNED', 'Đã trả hàng'],
+              ].map(([k, label]) => (
+                <option key={k || 'all'} value={k}>
+                  {label}
+                  {statusCount(k!) !== undefined ? ` (${statusCount(k!)})` : ''}
+                </option>
+              ))}
             </select>
           )}
 
@@ -1724,7 +1748,7 @@ function OrdersTab({
           onRetry={() => void q.refetch()}
         />
       )}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách đơn hàng…</p>}
+      {q.isLoading && (narrow ? <ListSkeleton label="Đang tải danh sách đơn hàng" rows={5} className="h-20" /> : <TableSkeleton label="Đang tải danh sách đơn hàng" />)}
 
       {q.data && narrow && (
         // Điện thoại: mỗi đơn một thẻ (mã, tiền, trạng thái, khách, ngày) như "Đơn hàng mới nhất" ở Tổng quan; bảng 3 cột cuộn ngang cắt mất cột Tổng tiền.
@@ -2184,7 +2208,7 @@ function ReturnsTab({
 
       <div className="mt-3 space-y-3">
         {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => void q.refetch()} />}
-        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
+        {q.isLoading && <ListSkeleton label="Đang tải danh sách yêu cầu" rows={3} className="h-24" />}
         {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
         {q.data && view.items.length === 0 && <Empty>{search ? `Không có yêu cầu đổi/trả nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked: false }) ?? ''}`.trim() : 'Không có yêu cầu đổi/trả nào.'}</Empty>}
       </div>

@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   returnsArgs: [] as unknown[][],
   wasteArgs: [] as unknown[][],
   dealerArgs: [] as unknown[][],
+  statusCountsCalls: [] as unknown[][],
   orders: [] as unknown[],
   users: [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -165,6 +166,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'shiftsPending', count: 2 },
           { key: 'dealerCreditReported', count: 1 },
           { key: 'communityReports', count: 3 },
+          { key: 'dealerApplications', count: 5 },
           { key: 'productsMissingImage', count: 4 },
           ...(mocks.inboxExternal ? [{ key: 'externalPoints', count: Object.values(mocks.inboxExternal).reduce((a, b) => a + b, 0), parts: mocks.inboxExternal }] : []),
         ],
@@ -210,6 +212,10 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       return { filename: 'nguoi-dung-2026-10-14.csv', bytes: 10 };
     },
     getUserDetail: async (id: string) => mocks.userDetail(id),
+    getOrderStatusCounts: async (...args: unknown[]) => {
+      mocks.statusCountsCalls.push(args);
+      return { all: 11, byStatus: { PENDING_PAYMENT: 4, DELIVERED: 7 } };
+    },
     listOrders: async (...args: unknown[]) => {
       mocks.listOrders(...args);
       return { data: mocks.orders, meta: { total: 60, page: 1, limit: 20 } };
@@ -326,6 +332,7 @@ beforeEach(() => {
   mocks.returnsArgs = [];
   mocks.wasteArgs = [];
   mocks.dealerArgs = [];
+  mocks.statusCountsCalls = [];
   mocks.orders = [];
   mocks.users = [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -793,12 +800,14 @@ describe('admin/page — tab Đại lý', () => {
 
   it('R5-ADMIN-2: bộ lọc và hàng hồ sơ ghi trạng thái bằng tiếng Việt, không in mã PENDING/APPROVED/REJECTED', async () => {
     const { container } = await openDealers();
-    const filter = container.querySelector<HTMLSelectElement>('select[aria-label="Lọc hồ sơ đại lý theo trạng thái"]')!;
-    expect([...filter.options].map((o) => [o.value, o.textContent])).toEqual([
-      ['PENDING', 'Chờ duyệt'],
-      ['APPROVED', 'Đã duyệt'],
-      ['REJECTED', 'Đã từ chối'],
-      ['', 'Tất cả trạng thái'],
+    const group = container.querySelector('[role="group"][aria-label="Lọc hồ sơ đại lý theo trạng thái"]')!;
+    expect(container.querySelector('select[aria-label="Lọc hồ sơ đại lý theo trạng thái"]')).toBeNull();
+    // R-148: chip, số Chờ duyệt lấy từ khoá hộp việc dealerApplications.
+    expect([...group.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'Chờ duyệt (5)',
+      'Đã duyệt',
+      'Đã từ chối',
+      'Tất cả trạng thái',
     ]);
     const card = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Cửa hàng Xanh') && d.className.includes('rounded-card'))!;
     expect(card.textContent).toContain('Chờ duyệt');
@@ -807,11 +816,12 @@ describe('admin/page — tab Đại lý', () => {
 
   it('R5-ADMIN-2: đổi bộ lọc vẫn gửi giá trị API (APPROVED), chữ hiển thị chỉ là nhãn', async () => {
     const { container } = await openDealers();
-    const filter = container.querySelector<HTMLSelectElement>('select[aria-label="Lọc hồ sơ đại lý theo trạng thái"]')!;
-    selectValue(filter, 'APPROVED');
+    const group = container.querySelector('[role="group"][aria-label="Lọc hồ sơ đại lý theo trạng thái"]')!;
+    const chip = [...group.querySelectorAll('button')].find((x) => x.textContent === 'Đã duyệt')!;
+    click(chip);
     await flush();
     expect(mocks.dealerArgs.at(-1)![0]).toBe('APPROVED');
-    expect(filter.selectedOptions[0]!.textContent).toBe('Đã duyệt');
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD có viền token', async () => {
@@ -3904,8 +3914,13 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
       expect(container.querySelector('input[aria-label="Từ ngày"]')).toBeNull();
       expect(container.querySelector('select[aria-label="Lọc đơn theo loại đơn"]')).toBeNull();
       const status = container.querySelector('[role="group"][aria-label="Lọc đơn theo trạng thái"]')!;
-      expect([...status.querySelectorAll('button')].map((b) => b.textContent)).toContain('Chờ thanh toán');
-      click([...status.querySelectorAll('button')].find((b) => b.textContent === 'Chờ thanh toán')!);
+      // R-70: số theo trạng thái lấy từ GET /admin/orders/status-counts cùng bộ lọc (trừ trạng thái).
+      expect([...status.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+        'Tất cả (11)', 'Chờ thanh toán (4)', 'Đã xác nhận (0)', 'Đã đóng gói (0)', 'Đang giao (0)', 'Đã giao (7)', 'Đã huỷ (0)', 'Đã trả (0)',
+      ]);
+      expect(mocks.statusCountsCalls.at(-1)![0]).toEqual(expect.objectContaining({ pancake: 'attention' }));
+      expect(mocks.statusCountsCalls.at(-1)![0]).not.toHaveProperty('status');
+      click([...status.querySelectorAll('button')].find((b) => b.textContent === 'Chờ thanh toán (4)')!);
       await flush();
       expect(mocks.listOrders.mock.lastCall![1]).toBe('PENDING_PAYMENT');
       const open = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!;
