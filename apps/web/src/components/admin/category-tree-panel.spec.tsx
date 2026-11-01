@@ -61,7 +61,7 @@ interface Opts {
 }
 function setup(opts: Opts = {}) {
   let list = opts.list ?? fixture();
-  const m = mockFetch({
+  const m: ReturnType<typeof mockFetch> = mockFetch({
     '/admin/categories/order': (init) => {
       if (opts.mutate) return opts.mutate;
       const body = JSON.parse(String(init?.body)) as { parentId: string | null; orderedIds: string[] };
@@ -71,7 +71,16 @@ function setup(opts: Opts = {}) {
       };
       return { body: list };
     },
-    '/admin/categories/': () => opts.mutate ?? { body: row('X', 'x', null, 0) },
+    '/admin/categories/': (init) => {
+      if (opts.mutate) return opts.mutate;
+      // PATCH đổi cha thật: cây tải lại khác cây cũ, như máy chủ (react-query giữ nguyên tham chiếu khi dữ liệu y hệt).
+      if (init?.method === 'PATCH') {
+        const id = decodeURIComponent(m.calls.at(-1)!.url.split('/').pop()!);
+        const { parentId } = JSON.parse(String(init.body)) as { parentId?: string | null };
+        if (parentId !== undefined) list = { ...list, items: list.items.map((c) => (c.id === id ? { ...c, parentId } : c)) };
+      }
+      return { body: row('X', 'x', null, 0) };
+    },
     '/admin/categories': (init) => {
       if (init?.method === 'POST') return opts.mutate ?? { body: row('N', 'n', null, 9) };
       if (opts.listStatus) return { status: opts.listStatus, body: { message: 'Máy chủ lỗi.' } };
@@ -218,21 +227,46 @@ describe('CategoryTreePanel', () => {
     expect(document.activeElement).toBe(btn('Đổi tên "Chăm sóc cá nhân"'));
   });
 
-  it('ô "chuyển vào" chỉ có ở mục chưa có con và gửi PATCH { parentId }', async () => {
+  it('ô "chuyển vào" chỉ có ở mục chưa có con; chọn đích chưa ghi gì, bấm nút "Chuyển" mới gửi PATCH { parentId }', async () => {
     const { calls } = setup();
     await flush();
     expect(document.querySelector('select[aria-label="Chuyển \\"Nhà bếp\\" sang mục khác"]')).toBeNull();
     const sel = document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Giặt tẩy\\" sang mục khác"]')!;
     expect([...sel.options].map((o) => o.textContent)).toEqual(['Chuyển…', 'Vào "Nhà bếp"', 'Vào "Chăm sóc cá nhân"']);
+    expect(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')).toBeNull();
     selectValue(sel, 'A');
     await flush();
+    // Mũi tên trên ô chọn đóng lại cũng ra onChange: chọn xong không được chuyển ngay.
+    expect(calls('PATCH')).toHaveLength(0);
+    const confirmBtn = btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')!;
+    expect(confirmBtn.textContent).toBe('Chuyển');
+    click(confirmBtn);
+    await flush();
     expect(JSON.parse(String(calls('PATCH')[0]!.init!.body))).toEqual({ parentId: 'A' });
+    expect(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')).toBeNull();
+    expect(document.activeElement).toBe(btn('Đưa "Giặt tẩy" lên trên'));
     // Mục con có thêm lựa chọn "thành danh mục gốc".
     const child = document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Chén bát\\" sang mục khác"]')!;
     expect([...child.options].map((o) => o.textContent)).toContain('Thành danh mục gốc');
     selectValue(child, '__root__');
     await flush();
+    expect(calls('PATCH')).toHaveLength(1);
+    click(btn('Chuyển "Chén bát" thành danh mục gốc'));
+    await flush();
     expect(JSON.parse(String(calls('PATCH')[1]!.init!.body))).toEqual({ parentId: null });
+  });
+
+  it('chuyển bị máy chủ từ chối: lỗi hiện cạnh mục, lựa chọn và nút "Chuyển" còn nguyên để thử lại', async () => {
+    const msg = 'Danh mục "Nhà bếp" đã đủ 8 mục con. Xoá bớt một mục con trước khi thêm.';
+    const { container } = setup({ mutate: { status: 400, body: { message: msg } } });
+    await flush();
+    const sel = () => document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Giặt tẩy\\" sang mục khác"]')!;
+    selectValue(sel(), 'A');
+    click(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"'));
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
+    expect(sel().value).toBe('A');
+    expect(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')).not.toBeNull();
   });
 
   it('xoá hỏi xác nhận trước, chỉ gọi DELETE khi đồng ý', async () => {

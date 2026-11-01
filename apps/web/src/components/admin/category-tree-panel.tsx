@@ -51,6 +51,8 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
   const [ok, setOk] = useState('');
   const [failure, setFailure] = useState<Msg | null>(null);
   const [saving, setSaving] = useState(false);
+  // Đích đang chọn trong ô "Chuyển…" của từng mục: chọn chưa ghi gì, chỉ nút "Chuyển" mới gửi.
+  const [pick, setPick] = useState<Record<string, string>>({});
   const busy = useRef(false);
   const pendingFocus = useRef<string | null>(null);
   const hintId = useId();
@@ -139,15 +141,16 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     }
   };
 
-  const relocate = (item: AdminCategory, currentParent: string | null, value: string) => {
+  const relocate = async (item: AdminCategory, currentParent: string | null, value: string) => {
     if (!value) return;
     const target = value === ROOT_VALUE ? null : value;
     if (target === currentParent) return;
     const to = target ? tree.find((r) => r.id === target)?.name : null;
-    void run(item.id, () => updateAdminCategory(item.id, { parentId: target }), {
+    const moved = await run(item.id, () => updateAdminCategory(item.id, { parentId: target }), {
       text: to ? `Đã chuyển "${item.name}" vào "${to}".` : `Đã chuyển "${item.name}" thành danh mục gốc.`,
       focus: `move:${item.id}:up`,
     });
+    if (moved) setPick(({ [item.id]: _done, ...rest }) => rest);
   };
 
   const remove = async (item: AdminCategory, parentId: string | null) => {
@@ -236,6 +239,8 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     const hasChildren = !!node && node.children.length > 0;
     const renaming = form?.kind === 'rename' && form.id === item.id;
     const moveOpts = hasChildren ? [] : parentOptions(item, parentId);
+    const picked = moveOpts.find((o) => o.value === pick[item.id] && !o.disabled);
+    const pickedName = picked && picked.value !== ROOT_VALUE ? tree.find((r) => r.id === picked.value)?.name : null;
     const press = (dir: 'up' | 'down') => (dir === 'up' ? first : last) ? undefined : () => move(siblings, parentId, item, dir);
     return (
       <div className="space-y-2 py-2">
@@ -277,8 +282,8 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
             {moveOpts.length > 0 && (
               <select
                 aria-label={`Chuyển "${item.name}" sang mục khác`}
-                value=""
-                onChange={(e) => relocate(item, parentId, e.target.value)}
+                value={picked?.value ?? ''}
+                onChange={(e) => setPick((p) => ({ ...p, [item.id]: e.target.value }))}
                 className={`${FIELD_XS} max-w-[9.5rem]`}
               >
                 <option value="">Chuyển…</option>
@@ -288,6 +293,17 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
                   </option>
                 ))}
               </select>
+            )}
+            {picked && (
+              <button
+                type="button"
+                aria-label={pickedName ? `Chuyển "${item.name}" vào "${pickedName}"` : `Chuyển "${item.name}" thành danh mục gốc`}
+                disabled={saving}
+                onClick={() => void relocate(item, parentId, picked.value)}
+                className={BTN_XS_PRIMARY}
+              >
+                Chuyển
+              </button>
             )}
             <button type="button" aria-label={`Xoá "${item.name}"`} onClick={() => void remove(item, parentId)} className={BTN_XS_DANGER}>
               Xoá
