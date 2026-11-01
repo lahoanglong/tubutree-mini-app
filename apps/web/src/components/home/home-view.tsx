@@ -156,7 +156,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid />,
-    purchased: <PurchasedRail source="home_rail" restoring={restoring} exclude={shelves.flashSlugs} />,
+    purchased: <PurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (
       <FlashSale
         items={shelves.flash}

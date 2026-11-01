@@ -9,6 +9,26 @@ export interface ShelfEntry<T> {
   item: T;
 }
 
+/** Khoá chống trùng theo phân loại, có tiền tố để không bao giờ đụng slug sản phẩm hay id bộ. */
+const VARIATION_PREFIX = 'variation:';
+export const variationKey = (variationId: string): string => `${VARIATION_PREFIX}${variationId}`;
+
+/**
+ * Suất Giờ vàng khoá bằng slug (các kệ dưới chống trùng theo sản phẩm) và chiếm thêm phân loại của suất, để Mua lại chỉ bỏ ĐÚNG phân loại đang giảm giá:
+ * khách đã mua Can 5L vẫn thấy Can 5L khi Can 1L đang Giờ vàng.
+ */
+export function flashShelfEntry<T extends { productSlug: string; variationId: string }>(item: T): ShelfEntry<T> {
+  return { id: item.productSlug, also: [variationKey(item.variationId)], item };
+}
+
+/**
+ * Món Mua lại khoá bằng phân loại (nên chỉ trùng Giờ vàng khi cùng phân loại) nhưng vẫn chiếm slug của sản phẩm cho combo, Bán chạy nhất và Gợi ý hôm nay,
+ * những kệ chống trùng theo sản phẩm.
+ */
+export function purchasedShelfEntry<T extends { slug: string; variationId: string }>(item: T): ShelfEntry<T> {
+  return { id: variationKey(item.variationId), also: [item.slug], item };
+}
+
 /**
  * Combo xếp theo id bộ nhưng chiếm cả slug các món của nó: Bán chạy nhất và lưới Gợi ý hôm nay bỏ món đã nằm trong combo. Combo chỉ chiếm xuống dưới,
  * không bị Giờ vàng hay Mua lại loại (xem `applyShelfDedupe`).
@@ -42,6 +62,7 @@ export interface HomeShelvesResult<F, P, C, B> {
 /**
  * Chống trùng bốn kệ hàng của Trang chủ qua `SHELVES` (Giờ vàng > Mua lại > combos > Bán chạy nhất): kệ hạng cao giữ món, kệ sau bỏ món
  * đã bị chiếm rồi cắt `maxItems`; kệ dưới `minItems` ẩn và KHÔNG chiếm món. Một sản phẩm có hai phân loại cùng Giờ vàng chỉ một thẻ.
+ * Giờ vàng và Mua lại so với nhau theo PHÂN LOẠI (`flashShelfEntry`, `purchasedShelfEntry`); mọi kệ còn lại chống trùng theo slug.
  * `seen` gồm cả món của combo còn hiện (`also`), nên Gợi ý hôm nay cũng bỏ chúng.
  */
 export function composeHomeShelves<F, P, C, B>(input: HomeShelvesInput<F, P, C, B>): HomeShelvesResult<F, P, C, B> {
@@ -52,12 +73,10 @@ export function composeHomeShelves<F, P, C, B>(input: HomeShelvesInput<F, P, C, 
     { id: 'home.bestSellers', items: input.bestSellers },
   ]);
   const items = (i: number) => out[i]!.items;
+  // `seen` chỉ gồm slug: Gợi ý hôm nay chống trùng theo sản phẩm, khoá phân loại chỉ dùng giữa Giờ vàng và Mua lại.
   const seen = new Set<string>();
   for (let i = 0; i < out.length; i++)
-    for (const x of items(i)) {
-      seen.add(x.id);
-      for (const k of x.also ?? []) seen.add(k);
-    }
+    for (const x of items(i)) for (const k of [x.id, ...(x.also ?? [])]) if (!k.startsWith(VARIATION_PREFIX)) seen.add(k);
   return {
     flash: items(0).map((x) => x.item as F),
     purchased: items(1).map((x) => x.item as P),

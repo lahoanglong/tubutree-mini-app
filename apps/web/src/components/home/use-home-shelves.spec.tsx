@@ -85,8 +85,23 @@ describe('useHomeShelves (web)', () => {
     const s = await mount('new');
     expect(s.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
     expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'y', 'z', 'w']);
-    expect(Array.from(s.flashSlugs).sort()).toEqual(['a', 'b', 'c']);
+    // Chỉ phân loại của suất đang hiện (v0 của "a", không phải v2 của suất "a" thứ hai bị gộp).
+    expect(Array.from(s.flashVariationIds).sort()).toEqual(['v0', 'v1', 'v3']);
     expect(s.seen.has('a') && s.seen.has('x')).toBe(true);
+  });
+
+  it('Mua lại chống trùng theo phân loại: món đã mua "b" ở phân loại khác (pv-b) không nằm trong flashVariationIds, sản phẩm vẫn bị chiếm slug nên Bán chạy bỏ nó (P2 #3)', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return ['a', 'b', 'c'].map(flashItem);
+      if (path.startsWith('/products')) return { data: ['b', 'x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+      if (path.includes('purchased')) return { items: [purchased('b')], meta: { page: 1, limit: 10, total: 1 } };
+      return [];
+    });
+    const s = await mount('returning');
+    expect(s.flashVariationIds.has('pv-b')).toBe(false);
+    expect(s.flashVariationIds.has('v1')).toBe(true);
+    expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'y', 'z']);
+    expect(s.seen.has('b')).toBe(true);
   });
 
   it('khách cũ: món Mua lại cũng nằm trong seen (trừ món đã ở Giờ vàng); khách mới không gọi kệ Mua lại', async () => {
@@ -138,7 +153,7 @@ describe('useHomeShelves (web)', () => {
     });
     const s = await mount('new');
     expect(s.flash).toEqual([]);
-    expect(s.flashSlugs.size).toBe(0);
+    expect(s.flashVariationIds.size).toBe(0);
     expect(s.bestSellers.map((p) => p.slug)).toEqual(['a', 'b', 'c', 'x']);
     expect(s.bestSellerRanks).toEqual([1, 2, 3, 4]);
   });

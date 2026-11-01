@@ -15,9 +15,9 @@ vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string })
 import { COMBO_HOLD_MS } from '@tubutree/app-core/merch/home-shelves';
 import { useHomeShelves } from './use-home-shelves';
 
-const flashEnding = (slug: string, endAt: string) => ({ itemId: `i-${slug}`, variationId: 'v', productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt });
+const flashEnding = (slug: string, endAt: string) => ({ itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt });
 const flash = (slug: string) => flashEnding(slug, '2099-01-01T00:00:00.000Z');
-const bought = (slug: string) => ({ variationId: `v-${slug}`, productId: slug, slug, productName: slug, variationName: null, brand: '', thumbnail: null, price: 1, salePrice: null, stock: 3, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: '2026-01-01' });
+const bought = (slug: string, variationId = `v-${slug}`) => ({ variationId, productId: slug, slug, productName: slug, variationName: null, brand: '', thumbnail: null, price: 1, salePrice: null, stock: 3, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: '2026-01-01' });
 const card = (slug: string) => ({ id: `id-${slug}`, slug, brand: '', name: slug, thumbnail: null, basePrice: 1, salePrice: null, isFeatured: false, inStock: true });
 const page = (slugs: string[]) => ({ data: slugs.map(card), meta: { page: 1, limit: 12, total: slugs.length } });
 const slugsOf = (xs: { slug: string }[]) => xs.map((x) => x.slug);
@@ -55,10 +55,21 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     expect([...result.current.seen].sort()).toEqual(['a', 'b', 'c', 'p1', 'p2', 'p3', 'p4', 'x']);
   });
 
-  it('Giờ vàng giữ món trùng: Mua lại bỏ "b" (flashSlugs) còn "x"', async () => {
+  it('Giờ vàng giữ phân loại của mình: Mua lại bỏ đúng phân loại "v-b" (flashVariationIds) còn "x"', async () => {
     const { result } = setup('returning');
     await waitFor(() => expect(result.current.flash).toHaveLength(3));
-    expect([...result.current.flashSlugs].sort()).toEqual(['a', 'b', 'c']);
+    expect([...result.current.flashVariationIds].sort()).toEqual(['v-a', 'v-b', 'v-c']);
+  });
+
+  it('khách mua phân loại KHÁC của món đang Giờ vàng: phân loại đó không nằm trong flashVariationIds nên Mua lại vẫn hiện nó, còn sản phẩm bị chiếm slug nên Bán chạy nhất bỏ (P2 #3)', async () => {
+    mocks.fetchPurchased.mockResolvedValue({ items: [bought('b', 'v-b-5l'), bought('x')], nextCursor: null });
+    mocks.fetchProducts.mockResolvedValue(page(['b', 'p1', 'p2', 'p3']));
+    const { result } = setup('returning');
+    await waitFor(() => expect(result.current.flash).toHaveLength(3));
+    await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3']));
+    expect(result.current.flashVariationIds.has('v-b-5l')).toBe(false);
+    expect(result.current.flashVariationIds.has('v-b')).toBe(true);
+    expect(result.current.seen.has('b')).toBe(true);
   });
 
   it('khách mới: kệ Mua lại không chiếm món nào dù API có trả', async () => {
@@ -75,7 +86,7 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
     await waitFor(() => expect(result.current.flashQuery.isLoading).toBe(false));
     expect(result.current.flash).toEqual([]);
-    expect(result.current.flashSlugs.size).toBe(0);
+    expect(result.current.flashVariationIds.size).toBe(0);
     // Giờ vàng ẩn nên không chiếm "a": Bán chạy chỉ bỏ "x" của Mua lại, còn a + p1 = 2 món < 3 thì ẩn.
     expect(result.current.bestSellers).toEqual([]);
     expect(result.current.seen.has('p1')).toBe(false);
@@ -141,7 +152,7 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
       await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
       await waitFor(() => expect(result.current.flashQuery.isLoading).toBe(false));
       expect(result.current.flash).toEqual([]);
-      expect(result.current.flashSlugs.size).toBe(0);
+      expect(result.current.flashVariationIds.size).toBe(0);
       expect(slugsOf(result.current.bestSellers)).toEqual(['a', 'b', 'c', 'p1']);
       expect([...result.current.seen].sort()).toEqual(['a', 'b', 'c', 'p1']);
     });
@@ -159,7 +170,7 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
       expect(result.current.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
       expect(slugsOf(result.current.bestSellers)).toEqual(['d', 'p1', 'p2', 'p3']);
       expect(result.current.bestSellerRanks).toEqual([1, 2, 3, 4]);
-      expect(result.current.flashSlugs.has('d')).toBe(false);
+      expect(result.current.flashVariationIds.has('v-d')).toBe(false);
     });
   });
 
