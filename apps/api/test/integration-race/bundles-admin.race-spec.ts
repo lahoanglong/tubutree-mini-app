@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { ForbiddenException } from '@nestjs/common';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -79,9 +81,10 @@ describe('Quản trị bundle (real Postgres)', () => {
     expect(out.items.map((i) => [i.productId, i.maxQty, i.variationId])).toEqual([[a.id, 2, null], [b.id, 1, b.variationId]]);
     const live = await loadLiveBundles(prisma, NOW, [a.id]);
     const mine = live.find((x) => x.id === out.id)!;
+    expect(mine.createdById).toBe('it-admin');
     expect(mine.items).toEqual([
-      { productId: a.id, variationId: null, addonPrice: null, maxQty: 2 },
-      { productId: b.id, variationId: b.variationId, addonPrice: null, maxQty: 1 },
+      { productId: a.id, variationId: null, addonPrice: null, refPrice: null, maxQty: 2 },
+      { productId: b.id, variationId: b.variationId, addonPrice: null, refPrice: null, maxQty: 1 },
     ]);
   });
 
@@ -149,6 +152,41 @@ describe('Quản trị bundle (real Postgres)', () => {
     const before = await prisma.bundle.count();
     await expect(admin.create(pctBundle(a.id, partner.id) as never, ADMIN)).rejects.toMatchObject({ status: 400 });
     expect(await prisma.bundle.count()).toBe(before);
+  });
+
+  describe('migration bundle_item_ref_price', () => {
+    const migration = readFileSync(join(__dirname, '../../prisma/migrations/20261101130000_bundle_item_ref_price/migration.sql'), 'utf8');
+    const backfill = migration.split('-- backfill-begin')[1]!.split('-- backfill-end')[0]!;
+
+    it('backfill: món ADDON ghim phân loại nhận giá đang bán (sale ưu tiên), món không ghim và BUNDLE_PCT giữ NULL, chạy lại không đổi', async () => {
+      const [anchor, pinned, loose, c] = [await product(), await product(), await product(), await product()];
+      await prisma.variation.update({ where: { id: pinned.variationId }, data: { salePrice: 70_000 } });
+      const addon = await create({
+        kind: 'ADDON',
+        title: `IT ${randCode(6)}`,
+        anchorProductId: anchor.id,
+        startAt: START,
+        endAt: END,
+        items: [{ productId: pinned.id, variationId: pinned.variationId, addonPrice: 10_000 }],
+      });
+      const pct = await create(pctBundle(loose.id, c.id, { items: [{ productId: loose.id, variationId: loose.variationId }, { productId: c.id }] }));
+      // Hàng cũ trước migration không có giá tham chiếu: đưa về đúng trạng thái đó rồi chạy câu backfill thật của file migration.
+      await prisma.bundleItem.updateMany({ where: { bundleId: { in: [addon.id, pct.id] } }, data: { refPrice: null } });
+      await prisma.$executeRawUnsafe(backfill);
+      const read = async (bundleId: string) => (await prisma.bundleItem.findMany({ where: { bundleId }, orderBy: { sortOrder: 'asc' }, select: { refPrice: true } })).map((i) => i.refPrice);
+      expect(await read(addon.id)).toEqual([70_000]);
+      expect(await read(pct.id)).toEqual([null, null]);
+      await prisma.$executeRawUnsafe(backfill);
+      expect(await read(addon.id)).toEqual([70_000]);
+    });
+
+    it('CHECK: giá tham chiếu âm bị từ chối, 0 hợp lệ', async () => {
+      const [a, b] = [await product(), await product()];
+      const { id } = await create(pctBundle(a.id, b.id));
+      const extra = await product();
+      await expect(prisma.bundleItem.create({ data: { bundleId: id, productId: extra.id, refPrice: -1 } })).rejects.toBeDefined();
+      await expect(prisma.bundleItem.create({ data: { bundleId: id, productId: extra.id, refPrice: 0 } })).resolves.toBeDefined();
+    });
   });
 
   describe('CHECK của migration chặn dữ liệu ghi thẳng DB', () => {
