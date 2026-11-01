@@ -170,18 +170,20 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
   });
 
-  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút vẫn ghi "Xem tất cả" (chưa có gì bị ẩn)', async () => {
+  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút cũng ghi "Tất cả (3)" (một mẫu, đếm đúng số trang đích sẽ vẽ)', async () => {
     mocks.getCoupons.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
     renderPage();
     const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
     await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
-    expect(within(mine).getByRole('button', { name: 'Xem tất cả Mã của tôi' })).toHaveTextContent('Xem tất cả');
+    expect(within(mine).getByRole('button', { name: 'Tất cả (3) Mã của tôi' })).toHaveTextContent('Tất cả (3)');
   });
 
-  it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà', async () => {
+  it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà, không có nút xem tất cả', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
     expect(await screen.findByText('Chưa có mã giảm giá khả dụng')).toBeInTheDocument();
+    const mine = screen.getByRole('region', { name: 'Mã của tôi' });
+    expect(within(mine).queryByRole('button', { name: /tất cả/i })).toBeNull();
   });
 
   it('?section=coupons cuộn tới phần mã giảm giá khi dữ liệu mã đã về', async () => {
@@ -261,11 +263,11 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(expiries[1]!.style.color).toBe('var(--color-text-tertiary)');
   });
 
-  it('Mã của tôi: mỗi thẻ có nút "Dùng ngay"; "Xem tất cả" tới /vouchers?tab=mine', async () => {
+  it('Mã của tôi: mỗi thẻ có nút "Dùng ngay"; "Tất cả (n)" tới /vouchers?tab=mine', async () => {
     renderPage();
     const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
     expect(await within(mine).findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
-    fireEvent.click(within(mine).getByRole('button', { name: /Xem tất cả/ }));
+    fireEvent.click(within(mine).getByRole('button', { name: /Tất cả \(1\)/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
   });
 
