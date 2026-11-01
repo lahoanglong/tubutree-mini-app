@@ -1,0 +1,81 @@
+[
+ {
+  "case": "a-the-a (lưới /san-pham, khách)",
+  "run": 1,
+  "ms": 11.5
+ },
+ {
+  "case": "a-the-a (lưới /san-pham, khách)",
+  "run": 2,
+  "ms": 12.8
+ },
+ {
+  "case": "a-the-a (lưới /san-pham, khách)",
+  "run": 3,
+  "ms": 11.5
+ },
+ {
+  "case": "a-the-a (lưới /san-pham, khách)",
+  "run": 4,
+  "ms": 12.7
+ },
+ {
+  "case": "a-the-a (lưới /san-pham, khách)",
+  "run": 5,
+  "ms": 13
+ },
+ {
+  "case": "a-the-a (Trang chủ, khách)",
+  "run": 1,
+  "ms": 11.5
+ },
+ {
+  "case": "a-the-a (Trang chủ, khách)",
+  "run": 2,
+  "ms": 14.4
+ },
+ {
+  "case": "a-the-a (Trang chủ, khách)",
+  "run": 3,
+  "ms": 14.2
+ },
+ {
+  "case": "a-the-a (Trang chủ, khách)",
+  "run": 4,
+  "ms": 13.6
+ },
+ {
+  "case": "a-the-a (Trang chủ, khách)",
+  "run": 5,
+  "ms": 18.1
+ },
+ {
+  "case": "router.push (kệ Mua lại, returning)",
+  "run": 1,
+  "ms": null
+ },
+ {
+  "case": "router.push (kệ Mua lại, returning)",
+  "run": 2,
+  "ms": null
+ },
+ {
+  "case": "router.push (kệ Mua lại, returning)",
+  "run": 3,
+  "ms": null
+ },
+ {
+  "case": "router.push (kệ Mua lại, returning)",
+  "run": 4,
+  "ms": null
+ },
+ {
+  "case": "router.push (kệ Mua lại, returning)",
+  "run": 5,
+  "ms": null
+ },
+ {
+  "case": "404 trang SP không tồn tại",
+  "status": 404
+ }
+]

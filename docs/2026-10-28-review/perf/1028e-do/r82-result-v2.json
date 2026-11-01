@@ -1,0 +1,66 @@
+{
+ "note": "R-82 đo lại SQL GET /cart lần 2, flash sale 'R82 perf' createdBy=uat_admin (flash áp dụng: 2 món isFlash=true, hết hàng 1 món). Không đo độ trễ.",
+ "commit_base": "6f4fd6733 + merge",
+ "load_average_at_measure": "26-27 (máy tải nặng, không đo độ trễ)",
+ "runs": {
+  "no_coupon": {
+   "first_call_sql": 9,
+   "second_call_sql": 7,
+   "second_select": 6,
+   "second_write": 0,
+   "second_tables": [
+    "SELECT:SELECT \"public\".\"carts\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"users\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"cart_items\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"variations\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"products\".\"id\", \"public",
+    "SELECT:SELECT i.\"id\", i.\"variationId\", i.\"flas",
+    "SELECT:membership_tiers"
+   ],
+   "first_tables": [
+    "SELECT:SELECT \"public\".\"referral_touches\".\"id\",",
+    "SELECT:SELECT \"public\".\"carts\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"users\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"cart_items\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"variations\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"products\".\"id\", \"public",
+    "SELECT:SELECT i.\"id\", i.\"variationId\", i.\"flas",
+    "SELECT:membership_tiers",
+    "SELECT:SELECT \"public\".\"system_configs\".\"key\","
+   ]
+  },
+  "coupon_XANH10": {
+   "first_call_sql": 10,
+   "second_call_sql": 8,
+   "second_select": 7,
+   "second_write": 0,
+   "second_tables": [
+    "SELECT:SELECT \"public\".\"carts\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"users\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"cart_items\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"variations\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"products\".\"id\", \"public",
+    "SELECT:SELECT i.\"id\", i.\"variationId\", i.\"flas",
+    "SELECT:SELECT \"public\".\"coupons\".\"id\", \"public\"",
+    "SELECT:membership_tiers"
+   ],
+   "first_tables": [
+    "SELECT:SELECT \"public\".\"referral_touches\".\"id\",",
+    "SELECT:SELECT \"public\".\"carts\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"users\".\"id\", \"public\".\"",
+    "SELECT:SELECT \"public\".\"cart_items\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"variations\".\"id\", \"publ",
+    "SELECT:SELECT \"public\".\"products\".\"id\", \"public",
+    "SELECT:SELECT i.\"id\", i.\"variationId\", i.\"flas",
+    "SELECT:SELECT \"public\".\"coupons\".\"id\", \"public\"",
+    "SELECT:membership_tiers",
+    "SELECT:SELECT \"public\".\"system_configs\".\"key\","
+   ]
+  }
+ },
+ "previous_second_call_sql_with_flash_blocked": {
+  "no_coupon_old_flash_blocked": 8,
+  "coupon_old_flash_blocked": 9,
+  "after_old_flash_blocked": 8
+ }
+}
