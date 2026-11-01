@@ -23,6 +23,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'flash.almostGone': 16,
   'flash.left': 16,
   'flash.soldOut': 16,
+  'flash.outOfStock': 16,
   'flash.limit': 20,
   'flash.buy': 12,
   'flash.remind': 12,

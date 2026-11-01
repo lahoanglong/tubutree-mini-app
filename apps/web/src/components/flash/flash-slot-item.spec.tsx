@@ -130,6 +130,19 @@ describe('FlashSlotItem (web): khung sắp diễn ra', () => {
     expect(onToggleRemind).not.toHaveBeenCalled();
   });
 
+  it('món hết hàng ở khung sắp mở: dòng "Hết hàng" ngoài phần mờ, nút khoá trỏ aria-describedby tới nó; khung đang chạy không thêm dòng này', () => {
+    const c = show({ ...ITEM, soldOut: true, soldCount: 0 }, { slotStatus: 'UPCOMING' });
+    const remind = button(c, 'Nhắc tôi Serum Bã Trầu')!;
+    const reason = c.querySelector(`[id="${remind.getAttribute('aria-describedby')}"]`) as HTMLElement;
+    expect(reason.textContent).toBe('Hết hàng');
+    expect(c.textContent).not.toContain('Đã bán');
+    for (let n: HTMLElement | null = reason; n && n !== c; n = n.parentElement) expect(n.style.opacity).toBe('');
+    const live = show({ ...ITEM, soldOut: true, soldCount: 10 });
+    expect(live.textContent).toContain('Đã bán hết');
+    expect(live.textContent).not.toContain('Hết hàng');
+    expect(button(live, 'Mua ngay Serum Bã Trầu')!.getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('món hết hàng nhưng khách đã đặt nhắc từ trước: vẫn bỏ nhắc được', () => {
     const onToggleRemind = vi.fn();
     const c = show({ ...ITEM, soldOut: true }, { slotStatus: 'UPCOMING', reminded: true, onToggleRemind });
