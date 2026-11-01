@@ -1,0 +1,297 @@
+[
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "cold",
+  "total": 22,
+  "api": 3,
+  "apiNoImg": 3,
+  "cart": [],
+  "orders": [],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/flash-sales/upcoming",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "reopen",
+  "total": 22,
+  "api": 3,
+  "apiNoImg": 3,
+  "cart": [],
+  "orders": [],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/flash-sales/upcoming",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "cold",
+  "total": 29,
+  "api": 10,
+  "apiNoImg": 10,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "reopen",
+  "total": 33,
+  "api": 10,
+  "apiNoImg": 10,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "cold",
+  "total": 31,
+  "api": 12,
+  "apiNoImg": 12,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [
+   "/orders/home-todo -> 200"
+  ],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/me/loyalty",
+   "/orders/home-todo"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "reopen",
+  "total": 31,
+  "api": 12,
+  "apiNoImg": 12,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [
+   "/orders/home-todo -> 200"
+  ],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/loyalty",
+   "/me/daily-check-in",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/coupons",
+   "/orders/home-todo"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "cold",
+  "api": 10,
+  "apiNoImg": 10,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [
+   "/orders?page=1&limit=1 -> 200"
+  ],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/guest",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/me/wishlist/ids",
+   "/orders",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "reopen",
+  "api": 11,
+  "apiNoImg": 11,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [
+   "/orders?page=1&limit=1 -> 200"
+  ],
+  "dup": [],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/orders",
+   "/cart",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/home/me",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "cold",
+  "api": 9,
+  "apiNoImg": 9,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/me/wishlist/ids",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "reopen",
+  "api": 10,
+  "apiNoImg": 10,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [],
+  "dup": [],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/home/me",
+   "/feed",
+   "/cart",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "cold",
+  "api": 11,
+  "apiNoImg": 11,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [
+   "/orders/home-todo -> 200"
+  ],
+  "dup": [],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/me/coupons",
+   "/home/me",
+   "/orders/home-todo",
+   "/me/loyalty",
+   "/me/wishlist/ids",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "reopen",
+  "api": 12,
+  "apiNoImg": 12,
+  "cart": [
+   "/cart -> 200"
+  ],
+  "orders": [
+   "/orders/home-todo -> 200"
+  ],
+  "dup": [],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/me/daily-check-in",
+   "/me/notifications/unread-count",
+   "/me/wishlist/ids",
+   "/home/me",
+   "/me/coupons",
+   "/cart",
+   "/feed",
+   "/me/loyalty",
+   "/orders/home-todo"
+  ]
+ }
+]
