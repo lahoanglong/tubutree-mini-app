@@ -13,13 +13,17 @@ const api = vi.hoisted(() => ({
   together: [] as unknown,
   bundles: { combos: [], addons: [] } as unknown,
   serverFails: false,
+  auth: { status: 'idle', initialized: true, sessionUnavailable: false, user: null } as Record<string, unknown>,
+  coupons: [] as unknown[],
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProduct: async () => api.product,
 }));
 vi.mock('@/components/add-to-cart', () => ({ default: () => <div data-testid="add-to-cart" /> }));
-vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => Promise.reject(new Error('offline')), post: vi.fn() } }));
+vi.mock('@/lib/core-http', () => ({
+  coreHttp: { get: async (path: string) => (path === '/me/coupons' ? api.coupons : Promise.reject(new Error('offline'))), post: vi.fn() },
+}));
 vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: () => ({
     get: async (path: string) => {
@@ -31,12 +35,13 @@ vi.mock('@/lib/core-http-server', () => ({
 }));
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: 'idle', initialized: true, sessionUnavailable: false }) }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => api.auth }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
   fetchProductReviews: async () => api.reviews,
   fetchCanReview: async () => {
-    throw new Error('khách chưa đăng nhập không hỏi can-review');
+    if (api.auth.status !== 'authenticated') throw new Error('khách chưa đăng nhập không hỏi can-review');
+    return { canReview: false, reason: 'NOT_PURCHASED' };
   },
 }));
 
@@ -78,6 +83,8 @@ beforeEach(() => {
   api.together = [];
   api.bundles = { combos: [], addons: [] };
   api.serverFails = false;
+  api.auth = { status: 'idle', initialized: true, sessionUnavailable: false, user: null };
+  api.coupons = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -673,5 +680,50 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
       expect(c.querySelector('[data-testid="add-to-cart"]')).not.toBeNull();
       expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
     });
+  });
+});
+
+// Dây `divider` của PdpCoupons ở page.tsx: đường kẻ dưới hàng "Ưu đãi" chỉ có khi sau nó còn hàng "Vận chuyển" (Mini kẻ giữa các hàng, hàng cuối không kẻ).
+// pdp-extras.spec chỉ kiểm prop; spec cấp trang này kiểm điều kiện thật với khách đã đăng nhập (khách chưa đăng nhập không có ví mã nên PdpCoupons trả null).
+describe('/san-pham/[slug] — đường kẻ dưới hàng Ưu đãi (divider) ở cấp trang', () => {
+  const COUPON = { code: 'ALL', type: 'AMOUNT', value: 20000, minOrder: null, maxDiscount: null, endAt: '2026-12-01' };
+  const offersRows = (c: HTMLElement) => {
+    const section = c.querySelector<HTMLElement>('[data-section="pdp-offers"]')!;
+    const rowOf = (label: string) =>
+      Array.from(section.querySelectorAll<HTMLElement>('div')).find((d) => d.style.display === 'flex' && d.style.minHeight === '44px' && d.textContent?.startsWith(label)) ?? null;
+    return { offers: rowOf('Ưu đãi'), shipping: rowOf('Vận chuyển') };
+  };
+  const hasLine = (el: HTMLElement) => el.style.boxShadow.includes('inset 0 -1px 0');
+  const signIn = () => {
+    api.auth = { status: 'authenticated', initialized: true, sessionUnavailable: false, user: { id: 'u1', fullName: 'Lan An' } };
+    api.coupons = [COUPON];
+  };
+
+  it('chỉ có "Ưu đãi" (gian hàng tạm nghỉ, không có hàng Vận chuyển): hàng Ưu đãi là hàng cuối nên không có đường kẻ dưới', async () => {
+    signIn();
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const { offers, shipping } = offersRows(await mount());
+    expect(offers, 'khách đã đăng nhập có mã dùng được thì phải có hàng Ưu đãi').not.toBeNull();
+    expect(shipping).toBeNull();
+    expect(hasLine(offers!)).toBe(false);
+  });
+
+  it('Tubu giao hàng: có cả Ưu đãi và Vận chuyển; Ưu đãi có đường kẻ dưới, Vận chuyển (hàng cuối) không', async () => {
+    signIn();
+    api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
+    const { offers, shipping } = offersRows(await mount());
+    expect(offers).not.toBeNull();
+    expect(shipping).not.toBeNull();
+    expect(hasLine(offers!)).toBe(true);
+    expect(hasLine(shipping!)).toBe(false);
+  });
+
+  it('gian hàng đối tác tự giao (MERCHANT): hàng Vận chuyển vẫn vẽ nên Ưu đãi có đường kẻ dưới', async () => {
+    signIn();
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null } };
+    const { offers, shipping } = offersRows(await mount());
+    expect(offers).not.toBeNull();
+    expect(shipping).not.toBeNull();
+    expect(hasLine(offers!)).toBe(true);
   });
 });
