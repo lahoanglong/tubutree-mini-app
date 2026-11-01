@@ -73,7 +73,7 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formKey]);
 
-  // Sau khi cây sắp lại, nút đã bấm bị React chuyển chỗ trong DOM và trình duyệt bỏ focus: trả focus về đúng nút.
+  // Ô nhập đóng đi, mục bị xoá hoặc chuyển chỗ làm focus rơi về body: sau khi cây tải lại, trả focus về đúng nút vừa thao tác.
   useEffect(() => {
     const key = pendingFocus.current;
     if (key && focusKey(key)) pendingFocus.current = null;

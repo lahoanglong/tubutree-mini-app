@@ -118,7 +118,7 @@ describe('CategoryTreePanel', () => {
     expect(document.activeElement).toBe(btn('Đưa "Giặt tẩy" lên trên'));
   });
 
-  it('↓ ở gốc đầu: nút bị chuyển chỗ nhưng focus vẫn ở nút đó (jsdom không tự bỏ focus, Chromium thật kiểm ở Playwright)', async () => {
+  it('↓ ở gốc đầu: sau khi cây sắp lại focus vẫn ở nút đã bấm', async () => {
     const { container } = setup();
     await flush();
     const down = btn('Đưa "Nhà bếp" xuống dưới')!;
