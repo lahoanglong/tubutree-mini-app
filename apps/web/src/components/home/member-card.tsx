@@ -73,7 +73,7 @@ export function MemberCard() {
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
               {card.tierName && (
                 <span style={{ flex: '0 0 auto' }}>
-                  {' · '}
+                  {'\u00A0· '}
                   <Icon icon={Leaf} size="sm" tone="brand" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
                 </span>
               )}

@@ -62,6 +62,14 @@ describe('MemberCard web — lời chào bằng tên gọi (P2 #7)', () => {
     expect(c.textContent).not.toContain('Nguyễn');
   });
 
+  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng đầu phần hạng không bị dòng flex nuốt', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    const c = await mount(<MemberCard />);
+    const tier = Array.from(c.querySelectorAll('span')).find((s) => s.textContent?.includes('Mầm Xanh') && s.children.length > 0)!;
+    expect(tier.textContent).toMatch(/^\u00A0· /);
+  });
+
   it('chưa có họ tên thì chào bạn', async () => {
     mocks.fullName = null;
     mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });

@@ -3,14 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ haptic: vi.fn(), fullName: 'Nguyễn Thị Quay Lại' as string | null }));
+const mocks = vi.hoisted(() => ({ haptic: vi.fn(), fullName: 'Nguyễn Thị Quay Lại' as string | null, loyalty: vi.fn(() => new Promise(() => {})) }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { fullName: string | null; pointsBalance: number }; status: string }) => unknown) =>
     sel({ user: { fullName: mocks.fullName, pointsBalance: 120 }, status: 'authenticated' }),
 }));
-vi.mock('../../services/account-api', () => ({ getLoyalty: () => new Promise(() => {}) }));
+vi.mock('../../services/account-api', () => ({ getLoyalty: () => mocks.loyalty() }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ loyalty: { vndPerPointRedeem: 1000 } }) }));
 vi.mock('../../hooks/use-check-in', () => ({
   useCheckIn: () => ({ view: { canCheckIn: true, buttonLabel: 'Điểm danh' }, pending: false, checkIn: vi.fn(), message: null }),
@@ -33,6 +33,15 @@ describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
     mocks.fullName = null;
     render(<MemberCard />);
     expect(screen.getByText('Chào bạn')).toBeInTheDocument();
+  });
+
+  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng đầu phần hạng không bị dòng flex nuốt', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.loyalty.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    render(<MemberCard />);
+    const tier = (await screen.findByText(/Mầm Xanh/)).closest('span')!;
+    expect(tier.textContent).toMatch(/^\u00A0· /);
+    mocks.loyalty.mockImplementation(() => new Promise(() => {}));
   });
 });
 
