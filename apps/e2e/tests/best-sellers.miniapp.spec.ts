@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect, reply } from './support/mock-api';
-import { BINH_SUA, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
+import { BINH_SUA, CATEGORY_TREE, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
 import { expectChipHitArea44 } from './support/hit-area';
 
 /**
@@ -30,6 +30,23 @@ test.describe('Bán chạy nhất — trang xếp hạng', () => {
 
     const listCalls = productQueries(api.callsTo('GET', '/products'));
     expect(listCalls).toEqual([{ sort: 'best_seller_30d', limit: '20', page: '1' }]);
+  });
+
+  test('cây danh mục chưa về: ?category= không mang tên "Tất cả"; cây về thì mang tên danh mục', async ({ page, api }) => {
+    mockDiscovery(api, { tree: true });
+    // Giữ cây danh mục tới khi test nhả: không dựa vào độ trễ cố định (khẳng định có thử lại sẽ đợi qua cả lúc cây về).
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    api.get('/categories', async () => {
+      await held;
+      return CATEGORY_TREE;
+    });
+    await page.goto('/best-sellers?category=cat-baby');
+    await expect(grid(page)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-label', 'Bán chạy nhất');
+    release();
+    await expect(page.getByRole('tabpanel', { name: 'Cho bé' })).toBeVisible({ timeout: 15_000 });
+    await expect(tablist(page).getByRole('tab', { name: 'Cho bé' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('chạm tab danh mục: URL ?category=, hạng đánh lại từ #1 trong danh mục; "Tất cả" trả về bảng chung', async ({ page, api }) => {

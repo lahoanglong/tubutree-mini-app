@@ -36,6 +36,16 @@ export function bestSellerScope(tabs: BestSellerTab[] | null, category: string |
   return { tab: BEST_SELLERS_ALL_KEY, category: undefined };
 }
 
+/**
+ * Tên của vùng danh sách theo tab đang chọn. Đang lọc một danh mục mà cây chưa về (`tabs = null`) thì chưa biết tên danh mục: dùng tên trang
+ * thay vì "Tất cả", vì vùng này đang chỉ chứa món của danh mục đó. Cây đã về thì tên tab (id không có trong cây đã được `bestSellerScope` đưa về "Tất cả").
+ */
+export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string): string {
+  if (tab === BEST_SELLERS_ALL_KEY) return fillCopy('rank.tabAll');
+  if (tabs === null) return fillCopy('rank.title');
+  return tabs.find((t) => t.key === tab)?.label ?? fillCopy('rank.tabAll');
+}
+
 /** Hạng của thẻ đầu khi danh sách bắt đầu từ `startPage` (web mở thẳng `?page=N`); số trang hỏng thì về hạng 1. */
 export function bestSellersRankFrom(startPage: number): number {
   return Number.isFinite(startPage) && startPage >= 1 ? (Math.floor(startPage) - 1) * BEST_SELLERS_PAGE_LIMIT + 1 : 1;

@@ -151,6 +151,18 @@ describe('BestSellersView — tiêu đề, tab, hạng', () => {
     }
   });
 
+  it('đang lọc theo danh mục mà cây chưa về: vùng danh sách mang tên trang chứ không phải "Tất cả"; cây về thì mang tên danh mục', async () => {
+    nav.search = 'category=c-baby';
+    let release!: () => void;
+    routes['/categories'] = () => new Promise((resolve) => { release = () => resolve(TREE); });
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[role="tabpanel"]')!.getAttribute('aria-label')).toBe('Bán chạy nhất');
+    release();
+    await flush();
+    expect(container.querySelector('[role="tabpanel"]')!.getAttribute('aria-label')).toBe('Cho bé');
+  });
+
   it('vào thẳng ?category=<gốc>: tab đó được chọn; id lạ sau khi cây tải thì "Tất cả" không lọc', async () => {
     nav.search = 'category=c-baby';
     const first = mount();
