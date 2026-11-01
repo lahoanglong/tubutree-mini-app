@@ -95,6 +95,12 @@ describe('takeHomeRequest (web)', () => {
     expect(fetchMe).toHaveBeenCalledTimes(1);
   });
 
+  it('gợi ý cá nhân kèm seed ngày VN vẫn lấy từ khối gộp (lần đầu), không đẩy thêm request lẻ', async () => {
+    expect(await takeHomeRequest(feed, '/products/for-you', { seed: '20261101' })).toEqual([{ id: 'p' }]);
+    expect(fetchMe).toHaveBeenCalledTimes(1);
+    expect(takeHomeRequest(feed, '/products/for-you', { seed: '20261101', page: 2 })).toBeNull();
+  });
+
   it('tham số lệch thì không phải request của Trang chủ (null, không gọi gộp)', () => {
     expect(takeHomeRequest(feed, '/me/purchased-items', { limit: 20 })).toBeNull();
     expect(takeHomeRequest(feed, '/me/purchased-items', { limit: 10, cursor: 'x' })).toBeNull();

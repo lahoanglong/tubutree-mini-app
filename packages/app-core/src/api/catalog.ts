@@ -90,6 +90,8 @@ export interface CatalogQuery {
   maxPrice?: number;
   inStock?: boolean;
   minRating?: number;
+  /** Ngày VN `YYYYMMDD` (`vnDateSeed`): xoay thứ tự mặc định ổn định trong ngày cho Gợi ý hôm nay. API cũ không biết tham số này. */
+  seed?: string;
 }
 export interface CatalogPage extends PageResponse<ProductCard> {
   /** API cũ (trước 4b) từ chối bộ lọc mới → đã tải lại KHÔNG kèm bộ lọc; UI báo nhẹ. */
@@ -187,8 +189,19 @@ export interface BrandCount {
 }
 export const fetchBrands = (http: HttpClient) => http.get<BrandCount[]>('/brands');
 export const fetchRelated = (http: HttpClient, slug: string) => http.get<ProductCard[]>(`/products/${slug}/related`);
-/** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập). */
-export const fetchForYou = (http: HttpClient) => http.get<ProductCard[]>('/products/for-you');
+/**
+ * Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập). `seed` (ngày VN) xoay thứ tự trong ngày; API cũ từ chối tham số lạ bằng 400
+ * thì gọi lại không kèm seed, khách vẫn có gợi ý.
+ */
+export async function fetchForYou(http: HttpClient, query: { seed?: string } = {}): Promise<ProductCard[]> {
+  if (!query.seed) return http.get<ProductCard[]>('/products/for-you');
+  try {
+    return await http.get<ProductCard[]>('/products/for-you', { query: { seed: query.seed } });
+  } catch (err) {
+    if (errorStatus(err) !== 400) throw err;
+    return http.get<ProductCard[]>('/products/for-you');
+  }
+}
 export const fetchBoughtTogether = (http: HttpClient, slug: string) =>
   http.get<ProductCard[]>(`/products/${slug}/bought-together`);
 export const suggestProducts = (http: HttpClient, q: string) =>
@@ -196,7 +209,7 @@ export const suggestProducts = (http: HttpClient, q: string) =>
 export const fetchCategories = (http: HttpClient) => http.get<CategoryDTO[]>('/categories');
 
 /** Tham số mà API trước 4b không biết — ValidationPipe `forbidNonWhitelisted` trả 400 nếu gửi. */
-const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating'] as const;
+const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating', 'seed'] as const;
 
 /** Chỉ gửi tham số có giá trị — API cũ không bị 400 vì những bộ lọc khách không dùng. */
 export function catalogParams(query: CatalogQuery): Record<string, string | number> {
@@ -211,6 +224,7 @@ export function catalogParams(query: CatalogQuery): Record<string, string | numb
   if (query.maxPrice != null) params.maxPrice = query.maxPrice;
   if (query.inStock) params.inStock = 'true';
   if (query.minRating != null) params.minRating = query.minRating;
+  if (query.seed) params.seed = query.seed;
   return params;
 }
 

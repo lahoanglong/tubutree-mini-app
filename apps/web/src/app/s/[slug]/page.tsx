@@ -1,30 +1,16 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import {
-  CheckCircle2,
-  Globe,
-  MapPin,
-  MessageSquare,
-  Sprout,
-  PackageSearch,
-  Phone,
-  CreditCard,
-  ShieldCheck,
-  RotateCcw,
-  Sparkles,
-} from 'lucide-react';
-import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE, sampleShareText } from '@tubutree/app-core/storefront-signup';
+import { Globe, MapPin, PackageSearch, Phone, CreditCard, ShieldCheck, RotateCcw } from 'lucide-react';
+import { sampleShareText } from '@tubutree/app-core/storefront-signup';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
-import { getReturnWindowDays, getStorefront, type ProductCard as ProductCardData } from '@/lib/api';
+import { getReturnWindowDays, getStorefront } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
-import { MoreAtTubuLink, OpenStorefrontCta, StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
+import { LearnStorefrontLink, MoreAtTubuLink, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
-import { ProductCard } from '@/components/mini/product-card';
-import { safeHexColor } from '@/lib/safe-color';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { GRID_PRODUCTS } from '@/lib/product-grid';
+import { StorefrontBody } from '@/components/shop-page/storefront-body';
 
 export const revalidate = 300;
 
@@ -60,12 +46,8 @@ export default async function StorefrontPage({
   if (!sf) notFound();
   const returns = returnsPromise(await getReturnWindowDays());
 
-  // Màu chủ đề do chủ gian hàng chọn (dữ liệu, không phải token) — CHỈ dùng làm điểm nhấn không mang chữ
-  // (ảnh bìa, avatar, thanh tiêu đề bộ sưu tập). Mọi chữ dùng token để luôn đủ tương phản bất kể màu họ chọn.
-  // Chỉ nhận #RGB/#RRGGBB: màu do chủ gian hàng nhập đi thẳng vào style (D15-01).
-  const themeColor = safeHexColor(sf.themeColor) ?? 'var(--color-action-primary-bg)';
   // Chỉ gian hàng tự giao mới gửi hàng từ kho riêng; gian hàng CTV/nhãn hàng bán hàng kho Tubu, địa chỉ cũ còn lưu không được
-  // hiện như "kho xuất hàng" (SELLER-8).
+  // hiện như "kho xuất hàng" (SELLER-8). Vì vậy kho không đi xuống thân trang client: chỉ khối dựng sẵn bên dưới mới có chữ kho.
   const selfFulfils = isPartnerStore(sf);
   const warehouseParts = [
     sf.warehouseAddress,
@@ -80,160 +62,53 @@ export default async function StorefrontPage({
     .map((c) => ({ ...c, items: (c.items ?? []).filter((it) => Boolean(it?.product)) }))
     .filter((c) => c.items.length > 0);
 
-  return (
-    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 md:py-8 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
-      {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
-      <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
+  const intro = (
+    <>
+      {sf.subdomainEnabled && sf.subdomain && (
+        <p className="flex items-center gap-1 px-4 pt-2 text-xs font-medium text-stone-600 md:px-0">
+          <Globe className="h-3.5 w-3.5 text-stone-500" aria-hidden="true" />
+          <span>https://{sf.subdomain}.tubutree.com</span>
+        </p>
+      )}
 
-      {/* ── Storefront Banner Cover ── */}
-      <div className="relative mb-6 overflow-hidden rounded-sheet shadow-card max-md:mb-0 max-md:rounded-none max-md:shadow-none">
-        {sf.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={sf.coverUrl}
-            alt={sf.title}
-            className="h-48 w-full object-cover max-md:h-[84px] md:h-64"
-          />
-        ) : (
-          // Điện thoại: dải xanh đậm phẳng như Mini App; máy tính giữ gradient theo màu chủ đề.
-          <div
-            data-testid="storefront-cover"
-            className="h-36 w-full bg-[linear-gradient(135deg,var(--sf-theme)_0%,var(--sf-end)_100%)] [--sf-end:var(--color-bg-inverse)] [--sf-theme:var(--sf-owner)] max-md:h-[84px] max-md:[--sf-end:var(--forest-700)] max-md:[--sf-theme:var(--forest-700)] md:h-48"
-            style={{ '--sf-owner': themeColor } as React.CSSProperties}
-          />
-        )}
-        {/* Soft gradient overlay at bottom of cover */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900/40 via-transparent to-transparent max-md:hidden" />
-      </div>
-
-      {/* ── Brand Identity & Header Card ── */}
-      <div
-        data-testid="storefront-header"
-        className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card max-md:-mt-[29px] max-md:mb-0 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:py-0 max-md:shadow-none md:-mt-20 md:p-7"
-      >
-        <div className="flex flex-col gap-4 max-md:gap-0 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-4 max-md:flex-col max-md:gap-2">
-            {/* Brand Avatar */}
-            <div className="relative shrink-0">
-              {sf.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={sf.avatarUrl}
-                  alt={sf.title}
-                  data-testid="storefront-avatar"
-                  className="h-16 w-16 rounded-card border-4 border-stone-0 object-cover shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:shadow-none md:h-20 md:w-20"
-                />
-              ) : (
-                <div
-                  data-testid="storefront-avatar"
-                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] bg-[var(--sf-owner)] max-md:bg-[var(--color-action-primary-bg)] max-md:shadow-none md:h-20 md:w-20 sm:text-3xl"
-                  style={{ '--sf-owner': themeColor } as React.CSSProperties}
+      {(fullWarehouseAddress || contactPhone) && (
+        <div className="mx-4 mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-card border border-stone-200 bg-stone-50 p-3.5 text-xs text-stone-700 md:mx-0">
+          {fullWarehouseAddress && (
+            <div className="flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+              <span>
+                <strong className="font-semibold text-stone-900">Kho xuất hàng:</strong>{' '}
+                {fullWarehouseAddress}
+              </span>
+            </div>
+          )}
+          {contactPhone && (
+            <div className="flex items-center gap-1.5">
+              <Phone className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+              <span>
+                <strong className="font-semibold text-stone-900">Hotline:</strong>{' '}
+                <a
+                  href={`tel:${contactPhone}`}
+                  className="inline-flex min-h-11 items-center font-semibold text-stone-900 underline hover:text-forest-700"
                 >
-                  <span className="max-md:hidden">{sf.title.slice(0, 1).toUpperCase()}</span>
-                  <Sprout className="hidden h-7 w-7 max-md:block" aria-hidden="true" />
-                </div>
-              )}
-              {/* Tick xanh chỉ cho gian hàng admin đã duyệt: không phải mọi CTV một chạm đều "tuyển chọn". */}
-              {badgeLabel && (
-                <div data-verified-mark className="absolute -bottom-1.5 -right-1.5 rounded-full bg-stone-0 p-0.5 shadow-card">
-                  <CheckCircle2 className="h-5 w-5 fill-forest-600 text-stone-0" aria-hidden="true" />
-                  <span className="sr-only">Đã được Tubu Tree duyệt</span>
-                </div>
-              )}
+                  {contactPhone}
+                </a>
+              </span>
             </div>
-
-            {/* Brand Title & Meta */}
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
-                  {sf.title}
-                </h1>
-                {sf.isSample && (
-                  <span className="inline-flex items-center rounded-full bg-promo-bg px-2.5 py-0.5 text-xs font-semibold text-promo-fg">
-                    {SAMPLE_STOREFRONT_LABEL}
-                  </span>
-                )}
-                {badgeLabel && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-forest-700 px-2.5 py-0.5 text-xs font-semibold text-stone-0 shadow-card">
-                    <Sparkles className="h-3 w-3" aria-hidden="true" />
-                    {badgeLabel}
-                  </span>
-                )}
-                {sf.ownerTier && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-semibold text-warning-fg ring-1 ring-inset ring-warning-fg">
-                    <span aria-hidden="true">{sf.ownerTier.emoji}</span>
-                    {sf.ownerTier.name}
-                  </span>
-                )}
-              </div>
-
-              {sf.subdomainEnabled && sf.subdomain && (
-                <p className="flex items-center gap-1 text-xs font-medium text-stone-600">
-                  <Globe className="h-3.5 w-3.5 text-stone-500" aria-hidden="true" />
-                  <span>https://{sf.subdomain}.tubutree.com</span>
-                </p>
-              )}
-            </div>
-          </div>
-          {/* Điện thoại luôn có thanh dính như Mini App; máy tính chỉ khi có sản phẩm (gian hàng rỗng đã có nút riêng). */}
-          <div className={collections.length > 0 ? 'md:shrink-0' : 'md:hidden'}>
-            <StorefrontAction slug={sf.slug} title={sf.title} referralCode={sf.referralCode} />
-          </div>
+          )}
         </div>
+      )}
+      {/* Đã BỎ card "Thanh toán trực tiếp cho Đối tác" (VietQR thẳng vào bankBin/bankAccountNo
+       * của storefront) — audit A2-01=A5-02=A6-03 (2026-09-27): mã QR này không gắn với đơn
+       * hàng/số tiền nào (chỉ addInfo=DONHANG_<slug>, không phải mã đơn thật), nên khách quét
+       * và chuyển khoản xong là MẤT DẤU VẾT hoàn toàn — không đơn nào được tạo, không cách nào
+       * đối soát. Quyết định: MỌI thanh toán chuyển khoản đều phải đi qua checkout thật (nhận
+       * tiền vào tài khoản Tubu, xem bank-transfer.service.ts) để có đơn + đối soát; không
+       * storefront nào (CTV/dealer/brand) được nhận tiền trực tiếp cho tới khi có một hệ thống
+       * đối tác-tự-thu-tiền thật sự (xem A5-34, còn mở). */}
 
-        {sf.isSample && (
-          <p data-testid="sample-note" className="mt-3 text-xs text-stone-600 max-md:mt-2">
-            {SAMPLE_STOREFRONT_NOTE}
-          </p>
-        )}
-
-        {/* Bio / Slogan */}
-        {sf.headerNote && (
-          <p className="mt-4 border-t border-stone-200 pt-3.5 text-sm leading-relaxed text-stone-700 max-md:mt-2 max-md:border-t-0 max-md:pt-0 max-md:text-[var(--color-text-secondary)]">
-            {sf.headerNote}
-          </p>
-        )}
-
-        {/* Warehouse & Dispatch Origin */}
-        {(fullWarehouseAddress || contactPhone) && (
-          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 rounded-card border border-stone-200 bg-stone-50 p-3.5 text-xs text-stone-700">
-            {fullWarehouseAddress && (
-              <div className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-                <span>
-                  <strong className="font-semibold text-stone-900">Kho xuất hàng:</strong>{' '}
-                  {fullWarehouseAddress}
-                </span>
-              </div>
-            )}
-            {contactPhone && (
-              <div className="flex items-center gap-1.5">
-                <Phone className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-                <span>
-                  <strong className="font-semibold text-stone-900">Hotline:</strong>{' '}
-                  <a
-                    href={`tel:${contactPhone}`}
-                    className="inline-flex min-h-11 items-center font-semibold text-stone-900 underline hover:text-forest-700"
-                  >
-                    {contactPhone}
-                  </a>
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-        {/* Đã BỎ card "Thanh toán trực tiếp cho Đối tác" (VietQR thẳng vào bankBin/bankAccountNo
-         * của storefront) — audit A2-01=A5-02=A6-03 (2026-09-27): mã QR này không gắn với đơn
-         * hàng/số tiền nào (chỉ addInfo=DONHANG_<slug>, không phải mã đơn thật), nên khách quét
-         * và chuyển khoản xong là MẤT DẤU VẾT hoàn toàn — không đơn nào được tạo, không cách nào
-         * đối soát. Quyết định: MỌI thanh toán chuyển khoản đều phải đi qua checkout thật (nhận
-         * tiền vào tài khoản Tubu, xem bank-transfer.service.ts) để có đơn + đối soát; không
-         * storefront nào (CTV/dealer/brand) được nhận tiền trực tiếp cho tới khi có một hệ thống
-         * đối tác-tự-thu-tiền thật sự (xem A5-34, còn mở). */}
-      </div>
-
-      {/* ── Trust Ribbon ── */}
-      <section aria-labelledby="cam-ket-gian-hang" className="mb-8 max-md:hidden">
+      {/* ── Trust Ribbon: chỉ từ md; điện thoại giống Mini App không có dải này ── */}
+      <section aria-labelledby="cam-ket-gian-hang" className="mt-4 max-md:hidden">
         <h2 id="cam-ket-gian-hang" className="sr-only">
           Cam kết của gian hàng
         </h2>
@@ -258,40 +133,34 @@ export default async function StorefrontPage({
           )}
         </div>
       </section>
+    </>
+  );
 
-      {/* ── Product Collections ── */}
+  return (
+    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 md:py-8 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
+      {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
+      <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
+
+      <StorefrontBody
+        storefront={{
+          slug: sf.slug,
+          title: sf.title,
+          type: sf.type,
+          isPartner: sf.isPartner,
+          isSample: sf.isSample,
+          headerNote: sf.headerNote,
+          coverUrl: sf.coverUrl,
+          avatarUrl: sf.avatarUrl,
+          ownerTier: sf.ownerTier,
+          referralCode: sf.referralCode,
+          collections,
+        }}
+        badgeLabel={badgeLabel}
+        intro={intro}
+      />
+
       {collections.length === 0 && <StorefrontEmpty referralCode={sf.referralCode} />}
-      {collections.map((c) => (
-        <section key={c.id} className="mt-8 max-md:mt-4 max-md:px-4">
-          <div className="mb-4 flex items-center gap-2.5 max-md:mb-2">
-            <span
-              aria-hidden="true"
-              className="h-5 w-1.5 rounded-full max-md:hidden"
-              style={{ backgroundColor: themeColor }}
-            />
-            <h2 className="font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] md:text-xl">{c.title}</h2>
-            <span className="text-xs text-stone-600 max-md:hidden">({c.items?.length ?? 0} sản phẩm)</span>
-          </div>
-
-          {/* Trang máy chủ không đưa được hàm xuống ProductGrid (`renderAfter`), nên ô lưới của ghi chú chủ gian hàng dựng tại đây cùng cấu trúc ul > li. */}
-          <ul role="list" data-testid="catalog-grid" className={GRID_PRODUCTS} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {c.items.map((it) => (
-              <li key={it.id} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                  <ProductCard product={it.product as ProductCardData} variant="grid" />
-                </div>
-                {it.note && (
-                  <p className="mt-1 flex items-start gap-1 rounded-control bg-success-bg px-2 py-1 text-xs text-success-fg">
-                    <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                    <span>{it.note}</span>
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      {sf.type === 'CTV' && <OpenStorefrontCta referralCode={sf.referralCode} />}
+      {sf.type === 'CTV' && <LearnStorefrontLink referralCode={sf.referralCode} />}
       {collections.length > 0 && <MoreAtTubuLink referralCode={sf.referralCode} />}
     </main>
   );

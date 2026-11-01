@@ -19,6 +19,9 @@ export interface StorefrontItem {
     inStock: boolean;
     /** Ngày tạo (ISO) để thẻ hiện nhãn Mới; API cũ chưa trả. */
     createdAt?: string;
+    /** Phân loại đại diện (đã lấy giá) và phân loại CTV ghim: "Thêm cả combo" cần một variationId cho mỗi món. API cũ chưa trả. */
+    repVariationId?: string;
+    pinnedVariationId?: string;
   };
 }
 export interface StorefrontItemEdit extends StorefrontItem {

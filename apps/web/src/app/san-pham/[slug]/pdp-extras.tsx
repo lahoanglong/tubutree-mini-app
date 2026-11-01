@@ -1,14 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Clock, Leaf, MessageCircle, Megaphone, Repeat, Truck, Users } from 'lucide-react';
+import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
+import { voucherView } from '@tubutree/app-core/commerce/voucher';
+import { serverNow } from '@tubutree/app-core/server-clock';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
-import { Badge } from '@/components/ui/badge';
+import { BottomSheet } from '@/components/mini/bottom-sheet';
+import { FlashPriceBar } from '@/components/mini/flash-price-bar';
+import { Icon } from '@/components/mini/icon';
+import { ListRow } from '@/components/mini/list-row';
+import { VoucherTicket } from '@/components/mini/voucher-ticket';
 import { usePdpSelection } from '@/components/pdp-selection';
 import { tierEarnOf } from '@tubutree/app-core/points-earn-tier';
 import { useAuth } from '@/lib/auth-context';
@@ -20,11 +27,11 @@ import { soldPercent } from '@/lib/flash-display';
 import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
 import { pointsEarnPreview, pointsEarnText } from '@/lib/points-earn';
 import { loginHref } from '@/lib/return-to';
-import { couponLabel, freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
+import { freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
 import { getCart, getProductStock } from '@/lib/shop-client';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
-import { useCountdown } from '@/lib/use-countdown';
+import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { ContentKitSheet } from './content-kit-sheet';
@@ -51,6 +58,7 @@ function tierEarnFor(phase: string, tierId: string | null | undefined, loyalty: 
 /** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
 export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
   const flash = runningFlash(useActiveFlashSales());
+  useFlashListExpiry(flash);
   const selection = usePdpSelection();
   const phase = useAuthPhase();
   const config = usePublicConfig();
@@ -91,19 +99,39 @@ export function PdpFreeship() {
   });
   if (from == null) return null;
   return (
-    <p data-testid="pdp-freeship" className="mt-2 flex items-start gap-1.5 text-sm font-medium text-forest-700">
-      <Truck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <span>{freeshipLine(from)}</span>
+    <p data-testid="pdp-freeship" className="text-sm font-medium text-forest-700">
+      {freeshipLine(from)}
     </p>
   );
 }
 
-/** Mã giảm giá khách đang có và dùng được cho sản phẩm này; chạm để chép mã (áp ở bước thanh toán). Khách chưa đăng nhập không có ví mã nên không hiện. */
+/**
+ * Dòng "Vận chuyển ›": ai giao và freeship, ngắn. Hàng Tubu bấm cuộn tới Cam kết Tubu; hàng gian hàng tự giao không có cam kết đó nên dòng chỉ
+ * để đọc (không bấm, không "›"). Lưu ý dài và thông báo tạm nghỉ do trang cha dựng ngoài dòng. Nội dung nhận qua `children`.
+ */
+export function PdpShippingRow({ children, pressable = true }: { children: ReactNode; pressable?: boolean }) {
+  return (
+    <ListRow
+      icon={<Icon icon={Truck} size="md" tone="brand" />}
+      title={fillCopy('pdp.shipping')}
+      subtitle={<div className="flex flex-col gap-1 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
+      trailing={pressable ? 'chevron' : undefined}
+      onPress={pressable ? () => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined}
+      style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}
+    />
+  );
+}
+
+/**
+ * Dòng "Ưu đãi ›" ghi số mã khách đang có và dùng được cho sản phẩm này; bấm mở hộp thoại mã, chép mã (áp ở bước thanh toán, một đơn một mã).
+ * Khách chưa đăng nhập không có ví mã nên không hiện.
+ */
 export function PdpCoupons({ productId }: { productId: string }) {
   const phase = useAuthPhase();
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: phase === 'authenticated' });
+  const [open, setOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const list = pdpCoupons(couponsQ.data, productId).slice(0, 6);
+  const list = pdpCoupons(couponsQ.data, productId);
   if (list.length === 0) return null;
 
   const onCopy = async (code: string) => {
@@ -116,51 +144,75 @@ export function PdpCoupons({ productId }: { productId: string }) {
     setNote(ok ? `Đã chép mã ${code} — mã đã có sẵn trong ví, chọn ở bước thanh toán` : `Mã của bạn: ${code} — chọn ở bước thanh toán`);
   };
 
+  const now = serverNow();
   return (
-    <div className="mt-3">
-      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 pb-1 max-md:-mx-4 max-md:overflow-x-auto max-md:px-4 max-md:pt-1 md:grid md:grid-cols-2">
-        {list.map((c) => (
-          <li key={c.code} className="shrink-0 md:min-w-0">
-            <button
-              type="button"
-              aria-label={`Sao chép mã ${c.code}`}
-              onClick={() => void onCopy(c.code)}
-              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-[color:var(--clay-500)] bg-[color:var(--clay-50)] px-3 py-1.5 text-left md:w-full"
-            >
-              <span className="text-caption font-bold text-[color:var(--clay-700)]">
-                {c.code} · {couponLabel(c)}
-              </span>
-              {c.minOrder ? <span className="text-caption text-[color:var(--color-text-tertiary)]">Đơn từ {formatVnd(c.minOrder)}</span> : null}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {note && (
-        <p role="status" className="mt-1 text-sm text-success-fg">
-          {note}
-        </p>
-      )}
-    </div>
+    <>
+      <ListRow
+        icon={<Icon icon={Ticket} size="md" tone="brand" />}
+        title={fillCopy('pdp.offers')}
+        subtitle={fillCopy('pdp.offerCount', { n: list.length })}
+        trailing="chevron"
+        onPress={() => {
+          setNote(null);
+          setOpen(true);
+        }}
+        style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}
+      />
+      <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.title')}>
+        <div className="flex flex-col">
+          {list.map((c) => (
+            <VoucherTicket key={c.code} variant="row" voucher={voucherView(c, now)} primary={{ label: fillCopy('coupon.copy'), onClick: () => void onCopy(c.code) }} />
+          ))}
+        </div>
+        <p className="mt-3 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
+        {note && (
+          <p role="status" className="mt-2 text-sm text-success-fg">
+            {note}
+          </p>
+        )}
+      </BottomSheet>
+    </>
   );
 }
 
-/** Đếm ngược và tỉ lệ đã bán của đợt Giờ vàng gắn đúng phân loại đang chọn. Danh sách đợt tự làm mới mỗi 60 giây (`useActiveFlashSales`). */
-export function PdpFlashMeta() {
+/**
+ * Thanh Giờ vàng dưới ảnh: giá deal, -%, "Kết thúc sau …", đã bán % của đợt gắn đúng phân loại đang chọn. Danh sách đợt tự làm mới mỗi
+ * 60 giây (`useActiveFlashSales`); hết giờ khi khách đang xem thì thanh biến mất đúng mốc, trang quay về giá thường không cần tải lại.
+ */
+export function PdpFlashBar({ product }: { product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] } }) {
   const flash = runningFlash(useActiveFlashSales());
+  useFlashListExpiry(flash);
   const selectedId = usePdpSelection()?.selectedId;
   const item = flash.find((f) => f.variationId === selectedId);
-  const left = useCountdown(item?.endAt ?? null);
-  if (!item) return null;
+  const selected = product.variations.find((v) => v.id === selectedId);
+  if (!item || !selected) return null;
+  const pricing = variationPricing(selected, flash);
+  if (!pricing.isFlash) return null;
   return (
-    <p data-testid="pdp-flash-meta" className="mt-2 flex flex-wrap items-center gap-2 text-sm text-stone-600">
-      {left && (
-        <Badge tone="promo" size="sm" icon={Clock}>
-          Còn {left}
-        </Badge>
-      )}
-      {soldPercent(item.soldCount, item.quota) > 0 && <span>Đã bán {soldPercent(item.soldCount, item.quota)}%</span>}
-    </p>
+    <FlashPriceBar
+      price={pricing.price}
+      compareAt={pricing.hasSale ? pricing.originalPrice : null}
+      pct={pricing.salePct}
+      endAt={item.endAt}
+      soldPct={soldPercent(item.soldCount, item.quota)}
+      soldOut={item.soldCount >= item.quota}
+      perUserLimit={item.perUserLimit}
+    />
   );
+}
+
+/**
+ * "Đã bán 1,2k+" nằm bên phải dòng giá. Phân loại đang Giờ vàng thì dòng giá trống (giá lên thanh Giờ vàng dưới ảnh), nên số này dời lên
+ * dòng đánh giá thay vì để một dòng gần như trống chiếm chỗ (khung 1280×800 rất sát). Server chưa biết Giờ vàng nên HTML đầu vẫn ở dòng giá.
+ */
+export function PdpSold({ text, product, slot }: { text: string; product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] }; slot: 'price' | 'rating' }) {
+  const flash = runningFlash(useActiveFlashSales());
+  useFlashListExpiry(flash);
+  const selectedId = usePdpSelection()?.selectedId;
+  const selected = product.variations.find((v) => v.id === selectedId);
+  const isFlash = selected ? variationPricing(selected, flash).isFlash : false;
+  if ((slot === 'rating') !== isFlash) return null;
+  return <span className={slot === 'price' ? 'mt-2 text-sm text-stone-500 max-md:ml-auto max-md:text-xs' : 'text-sm text-stone-500 max-md:text-xs'}>{text}</span>;
 }
 
 interface PdpVariation {

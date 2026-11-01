@@ -484,7 +484,7 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
   const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
   afterEach(() => openedFrom(''));
 
-  it('phân loại có đợt Giờ vàng: nhãn trên nút chọn, giá Giờ vàng ở nút thêm vào giỏ, ghi giá gốc và hạn', async () => {
+  it('phân loại có đợt Giờ vàng: nhãn trên nút chọn, giá Giờ vàng ở nút thêm vào giỏ', async () => {
     openedFrom('?v=v2');
     mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
     mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
@@ -494,9 +494,8 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(chip.textContent).toContain('200.000đ');
     expect(chip.textContent).toContain('Giờ vàng');
     expect((byText(container, 'button', /250ml/) as HTMLButtonElement).textContent).not.toContain('Giờ vàng');
-    expect(container.querySelector('[data-testid="flash-price-note"]')!.textContent).toBe(
-      'Giá Giờ vàng 200.000đ, giá gốc 300.000đ · đến 23:00 14/10/2099',
-    );
+    // Giá deal, giá gốc và "Kết thúc sau …" nằm ở thanh Giờ vàng dưới ảnh (PdpFlashBar); ở khối mua không lặp lại bằng một câu riêng.
+    expect(container.querySelector('[data-testid="flash-price-note"]')).toBeNull();
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 200.000đ');
   });
 
@@ -911,5 +910,53 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     await flush();
     expect(sheet()).toBeNull();
     expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+  });
+});
+
+describe('AddToCart — dòng "Phân loại ›" và hết giờ Giờ vàng (P8)', () => {
+  const rowButton = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.startsWith('Phân loại')) ?? null;
+
+  it('nhiều phân loại: có dòng "Phân loại ›" (chỉ điện thoại) ghi phân loại đang chọn và giá khách trả; bấm mở bảng chọn', async () => {
+    const realMatchMedia = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: q.includes('max-width: 767px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
+    try {
+      mocks.sheetProps = null;
+      const { container } = mount();
+      await flush();
+      const row = rowButton(container)!;
+      expect(row).not.toBeNull();
+      // Ẩn bằng khối bọc: ListRow đặt display:flex inline nên class md:hidden trên chính nó không thắng được.
+      expect(row.parentElement?.className).toContain('md:hidden');
+      expect(row.textContent).toContain('250ml');
+      expect(row.textContent).toContain('150.000đ');
+      click(row);
+      await flush();
+      expect(mocks.sheetProps).not.toBeNull();
+    } finally {
+      window.matchMedia = realMatchMedia;
+    }
+  });
+
+  it('một phân loại: không có dòng "Phân loại ›"', async () => {
+    const { container } = mount([VARIATIONS[0]!]);
+    await flush();
+    expect(rowButton(container)).toBeNull();
+  });
+
+  it('hết giờ Giờ vàng khi khách đang xem: giá chip và nút về giá thường, không cần tải lại', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([
+      { itemId: 'f1', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 240000, retailPrice: 300000, salePrice: null, soldCount: 1, quota: 10, endAt: new Date(Date.now() + 700).toISOString() },
+    ]);
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', /^500ml/));
+    await flush();
+    expect(byText(container, 'button', /^500ml/)!.textContent).toContain('240.000đ');
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1000));
+    });
+    expect(byText(container, 'button', /^500ml/)!.textContent).toContain('300.000đ');
+    expect(byText(container, 'button', /^500ml/)!.textContent).not.toContain('Giờ vàng');
+    expect(addButton(container).textContent).toContain('300.000đ');
   });
 });

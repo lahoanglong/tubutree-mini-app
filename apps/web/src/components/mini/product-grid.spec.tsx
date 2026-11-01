@@ -62,6 +62,13 @@ describe('ProductGrid', () => {
     expect(c.querySelector('button[aria-label="Thêm p2"]')).not.toBeNull();
   });
 
+  it('noteOf đưa ghi chú vào trong thẻ; thẻ không ghi chú giữ chỗ dòng đó', async () => {
+    const c = await mount(<ProductGrid items={ITEMS.slice(0, 3)} variant="grid" noteOf={(p, i) => (i === 1 ? `Dùng hằng ngày (${p.id})` : undefined)} />);
+    expect(Array.from(c.querySelectorAll('[data-ds-part="note"]')).map((n) => n.textContent)).toEqual(['', 'Dùng hằng ngày (p2)', '']);
+    const none = await mount(<ProductGrid items={ITEMS.slice(0, 3)} variant="grid" noteOf={() => undefined} />);
+    expect(none.querySelectorAll('[data-ds-part="note"]').length).toBe(0);
+  });
+
   it('cùng một sản phẩm xuất hiện hai lần vẫn dựng đủ hai ô (khoá theo id và vị trí)', async () => {
     const c = await mount(<ProductGrid items={[item(1), item(1)]} variant="grid" />);
     expect(c.querySelectorAll('li').length).toBe(2);
@@ -69,6 +76,11 @@ describe('ProductGrid', () => {
 });
 
 describe('ProductRail', () => {
+  it('noteOf đưa ghi chú vào thẻ của kệ', async () => {
+    const c = await mount(<ProductRail items={ITEMS.slice(0, 3)} variant="rail-md" label="Nổi bật" noteOf={(_, i) => (i === 0 ? 'Mình dùng mỗi ngày' : undefined)} />);
+    expect(Array.from(c.querySelectorAll('[data-ds-part="note"]')).map((n) => n.textContent)).toEqual(['Mình dùng mỗi ngày', '', '']);
+  });
+
   it('bề rộng ô theo biến thể: 128 cho rail-sm/rank/flash, 148 cho rail-md', async () => {
     const width = async (variant: 'rail-sm' | 'rail-md' | 'rank' | 'flash') =>
       ((await mount(<ProductRail items={ITEMS.slice(0, 1)} variant={variant} label="Kệ" />)).querySelector('a.tubu-tile-link')!.closest('[style*="flex: 0 0 auto"]') as HTMLElement).style.width;

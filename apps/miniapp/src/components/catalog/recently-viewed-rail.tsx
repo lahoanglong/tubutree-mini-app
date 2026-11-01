@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRecentlyViewed } from '../../hooks/use-recently-viewed';
 import { fetchProductsBySlugs } from '../../services/shop-api';
+import { shelf } from '@tubutree/app-core/merch/shelves';
 import { vi } from '../../i18n/vi';
 import { ProductCard } from '../ui/product-card';
 import { RailCell, RailShell } from '../ui/product-rail';
-import { Heading } from '../ui/text';
+import { Section } from '../ui/section';
+import { SectionHeader } from '../ui/section-header';
 
 /**
  * "Đã xem gần đây" (spec 5b.4): thẻ `rail-sm` của bộ thẻ chung. Dữ liệu lưu ở máy chỉ có slug, tên, ảnh (không có đánh giá hay id), nên
@@ -12,6 +14,7 @@ import { Heading } from '../ui/text';
  * Tên + ảnh đọc đồng bộ từ localStorage nên thẻ hiện ngay và không nhảy bố cục khi mount. GIÁ thì KHÔNG lưu (R4-BUYER-5): hỏi giá hiện
  * hành theo slug và để `ProductCard` tính Giờ vàng như thẻ ở lưới, nên hai nơi cùng màn hình không bao giờ lệch giá. Chưa có giá (đang tải,
  * lỗi mạng, API cũ) thì thẻ không in giá (`hidePrice`) thay vì in giá cũ; sản phẩm đã ẩn/chưa duyệt thì thẻ biến mất.
+ * Kho lưu giữ 20 món nhưng dải chỉ hiện `shelf('browse.recent').maxItems` món mới xem nhất, tính sau khi bỏ món đã gỡ.
  */
 export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title?: string }) {
   const stored = useRecentlyViewed();
@@ -23,14 +26,12 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
     staleTime: 30_000,
   });
   const live = new Map((productsQ.data ?? []).map((p) => [p.slug, p]));
-  const items = productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored;
+  const items = (productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) return null;
   return (
-    <div style={{ padding: '8px 0 4px' }}>
-      <div style={{ padding: '0 16px 8px' }}>
-        <Heading variant="title-sm" as="h2">
-          {title}
-        </Heading>
+    <Section id="browse-recent">
+      <div style={{ padding: '0 16px' }}>
+        <SectionHeader title={title} />
       </div>
       <RailShell label={title}>
         {items.map((it) => {
@@ -59,6 +60,6 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
           );
         })}
       </RailShell>
-    </div>
+    </Section>
   );
 }

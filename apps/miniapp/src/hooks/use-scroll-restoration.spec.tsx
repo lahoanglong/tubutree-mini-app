@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { act, render } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SCROLL_KEY_PREFIX, useScrollRestoration } from './use-scroll-restoration';
 
@@ -229,5 +229,100 @@ describe('useScrollRestoration — sessionStorage không dùng được', () => 
     vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => { throw new Error('blocked'); });
     const { unmount } = render(<MemoryRouter future={FUTURE}><Harness k="q=x" ready /></MemoryRouter>);
     expect(() => unmount()).not.toThrow();
+  });
+});
+
+/** Khoá lấy từ URL như trang Danh mục: mỗi lần đổi `?…` là đổi khoá ngay trong trang đang mở. */
+function LocationHarness() {
+  const { search } = useLocation();
+  return <Harness k={search} ready />;
+}
+
+function renderInPage(initial: string[], index = initial.length - 1) {
+  return render(
+    <MemoryRouter initialEntries={initial} initialIndex={index} future={FUTURE}>
+      <NavProbe />
+      <Routes>
+        <Route path="/browse" element={<LocationHarness />} />
+        <Route path="/pdp" element={<div data-testid="pdp" />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe('useScrollRestoration — đổi khoá ngay trong trang (hub ↔ danh sách)', () => {
+  it('PUSH sang khoá khác (chạm ô danh mục ở hub) → danh sách bắt đầu từ đầu trang, vị trí hub được lưu', () => {
+    renderInPage(['/browse']);
+    scroller().scrollTop = 640;
+    act(() => { navigate('/browse?category=a'); });
+    expect(stored('')).toBe('640');
+    expect(scroller().scrollTop).toBe(0);
+  });
+
+  it('Back (POP) về khoá đã lưu → khôi phục vị trí của khoá đó dù trang không bị gỡ và được mở bằng PUSH', () => {
+    renderInPage(['/pdp'], 0);
+    act(() => { navigate('/browse'); });
+    scroller().scrollTop = 640;
+    act(() => { navigate('/browse?category=a'); });
+    scroller().scrollTop = 90;
+    act(() => { navigate(-1); });
+    expect(stored('?category=a')).toBe('90');
+    expect(scroller().scrollTop).toBe(640);
+  });
+
+  it('Back rồi tiến PUSH tới khoá đã từng xem → vẫn từ đầu trang (không khôi phục khi không phải POP)', () => {
+    renderInPage(['/browse']);
+    scroller().scrollTop = 640;
+    act(() => { navigate('/browse?category=a'); });
+    act(() => { navigate(-1); });
+    act(() => { navigate('/browse?category=a'); });
+    expect(scroller().scrollTop).toBe(0);
+  });
+
+  it('PUSH lại đúng URL khi trang vẫn còn gắn (Back rồi chạm ngay lúc trang cũ chưa trượt ra hết, zmp-ui dùng lại phần tử) → về đầu trang', () => {
+    renderInPage(['/browse?sort=best_seller']);
+    scroller().scrollTop = 900;
+    act(() => { navigate('/browse?sort=best_seller'); });
+    expect(scroller().scrollTop).toBe(0);
+  });
+
+  it('REPLACE đúng URL hiện tại → giữ nguyên vị trí cuộn', () => {
+    renderInPage(['/browse?sort=best_seller']);
+    scroller().scrollTop = 900;
+    act(() => { navigate('/browse?sort=best_seller', { replace: true }); });
+    expect(scroller().scrollTop).toBe(900);
+  });
+
+  it('REPLACE sang khoá khác (đổi sắp xếp, gỡ chip) → giữ nguyên vị trí cuộn', () => {
+    renderInPage(['/browse?all=1']);
+    scroller().scrollTop = 300;
+    act(() => { navigate('/browse?sort=newest', { replace: true }); });
+    expect(scroller().scrollTop).toBe(300);
+  });
+
+  it('nội dung mới ngắn hơn làm trình duyệt kẹp scrollTop → vẫn lưu vị trí đọc TRƯỚC khi đổi, không phải giá trị đã bị kẹp', () => {
+    let maxScroll = 10_000;
+    const base = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!;
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) { return Math.min(base.get!.call(this) as number, maxScroll); },
+      set(this: Element, v: number) { base.set!.call(this, v); },
+    });
+    function ShorterContent() {
+      const { search } = useLocation();
+      maxScroll = search ? 100 : 10_000; // nội dung của khoá mới chỉ cao 100px
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={['/browse']} future={FUTURE}>
+        <NavProbe />
+        <Routes>
+          <Route path="/browse" element={<><LocationHarness /><ShorterContent /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    scroller().scrollTop = 640;
+    act(() => { navigate('/browse?category=a'); });
+    expect(stored('')).toBe('640');
   });
 });

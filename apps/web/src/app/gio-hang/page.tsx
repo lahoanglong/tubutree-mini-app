@@ -5,7 +5,10 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
 import { CouponBox, couponPreviewKey, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -21,15 +24,17 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
-import { KeyValueRow, ProductThumb } from '@/components/mini';
+import { Badge, Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
 
-// Ô −/+ của dòng giỏ: từ md nút trần trong khung viền chung; ở điện thoại là hai ô vuông có viền tách rời như QuantitySelector của Mini App.
+// Ô −/+ của dòng giỏ: từ md nút trần 44px trong khung viền chung; ở điện thoại là hai ô vuông 36px có viền tách rời như QuantitySelector size sm của
+// Mini App, vùng chạm vẫn 44x44 nhờ .tubu-hit-44-square (giãn 4px mỗi phía, nằm trong khe 8px nên không chồng nút bên cạnh). Ô 44px làm bộ đếm
+// rộng ~134px, giá + bộ đếm không vừa cột chữ ~203px ở 375px và bộ đếm rớt xuống hàng riêng.
 const qtyButton =
-  'flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
+  'tubu-hit-44-square flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 max-md:h-9 max-md:w-9 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
 
 const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
 
@@ -37,6 +42,8 @@ const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math
 
 export default function CartPage() {
   const phase = useAuthPhase();
+  // Điện thoại: hàng mã giảm giá nằm trong thanh dính đáy (như Mini App); khổ lớn hơn: trong khung tóm tắt. Một thẻ duy nhất, nên chọn chỗ bằng JS.
+  const phoneCoupon = useMediaQuery('(max-width: 767px)');
   const qc = useQueryClient();
   const cartKeyNow = useCartKey();
   const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
@@ -87,6 +94,8 @@ export default function CartPage() {
     [],
   );
   // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
+  // Hết giờ Giờ vàng khi khách đang xem: lấy lại giỏ để máy chủ tính lại giá, không cần tải trang.
+  const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
   const removeWithUndo = (line: CartLine) =>
     remove.mutate(line.id, {
       onSuccess: () => {
@@ -166,6 +175,8 @@ export default function CartPage() {
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
+  // Tiết kiệm nhờ giá giảm của dòng (chỉ hiển thị; tiền thật do máy chủ tính). Cùng phạm vi với tạm tính: dòng mua được đang chọn.
+  const saving = cartSaving(buyableSelected);
   const onPay = () => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
   // Lý do nút Thanh toán đang khoá (lời giải thích đầy đủ nằm ở khung tóm tắt; thanh dính đáy nhắc lại ngay cạnh nút).
   const payHint =
@@ -179,6 +190,24 @@ export default function CartPage() {
   const showFreeship = !!cart && (!hasMerchant || freeshipBase > 0);
   const freeshipPct = cart && cart.freeshipThreshold > 0 ? Math.min(100, Math.round((freeshipBase / cart.freeshipThreshold) * 100)) : 100;
   const showBar = !cartQ.isLoading && !cartQ.isError && !!cart && cart.items.length > 0;
+
+  const couponBox = (sheet: boolean) => (
+    <CouponBox
+      sheet={sheet}
+      currentCode={cart!.couponCode}
+      appliedDiscount={shownDiscount}
+      subtotal={selectedSubtotal}
+      // Câu giải thích chỉ hiện khi thuộc phần đang hiển thị: cả giỏ, hoặc giá phần chọn đã có; chưa có thì thôi (không mượn câu của cả giỏ).
+      notice={shown?.couponNotice ?? null}
+      // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
+      preview={
+        selectedItems.length === 0
+          ? undefined
+          : { storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }
+      }
+      previewKey={couponPreviewKey(selectedItems)}
+    />
+  );
 
   return (
     <Shell>
@@ -269,8 +298,9 @@ export default function CartPage() {
                     const soldOut = it.stock <= 0;
                     const atMax = !soldOut && it.quantity >= it.stock;
                     const busy = busyItemId === it.id;
+                    const compareAt = lineCompareAt(it);
                     return (
-                      <div key={it.id} className="flex gap-3 p-3 max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
+                      <div key={it.id} data-testid="cart-line" className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
                         <label className="relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
                           <span className={miniCheckboxWrap}>
                             <input
@@ -287,48 +317,65 @@ export default function CartPage() {
                           href={`/san-pham/${it.slug}`}
                           tabIndex={-1}
                           aria-hidden="true"
-                          className="flex-none"
+                          className="flex-none max-md:self-start"
                         >
                           <ProductThumb src={it.thumbnail} alt="" size={64} />
                         </Link>
-                        <div className="min-w-0 flex-1">
-                          <div className="break-words text-sm font-medium text-stone-900 max-md:font-semibold">
+                        {/*
+                          Cột chữ là hàng tự xuống dòng để điện thoại xếp lại đúng thứ tự của Mini App chỉ bằng `order`: tên, phân loại, nhãn Giờ vàng +
+                          "Kết thúc sau …", lưu ý, [giá + bộ đếm cùng một hàng], Thành tiền; thùng rác ở góc trên phải. Từ md giá và nhãn Giờ vàng nằm
+                          chung một hàng như cũ.
+                        */}
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+                          <div className="basis-full break-words text-sm font-medium text-stone-900 max-md:pr-9 max-md:font-semibold">
                             <Link href={`/san-pham/${it.slug}`} className="tubu-inline-link hover:underline">
                               {it.productName}
                             </Link>
                           </div>
-                          <div className="break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="font-semibold text-stone-900">{formatVnd(it.unitPrice)}</span>
-                            {it.isFlash && (
-                              <span
-                                data-testid="cart-flash-badge"
-                                className="inline-flex items-center gap-0.5 rounded-full bg-promo-bg px-2 py-0.5 text-caption font-bold text-promo-fg"
-                              >
-                                <Zap className="h-3 w-3" aria-hidden="true" />
-                                Giá Giờ vàng
+                          <div className="basis-full break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
+                          <div className="mt-1 flex items-baseline gap-x-2 max-md:order-3 max-md:mt-1.5 max-md:flex-col max-md:items-start max-md:gap-0">
+                            {/* Điện thoại: giá 14/20 và giá gạch 12/16 như PriceTag sm + stack của Mini App, khối giá cao 36 bằng bộ đếm nên dòng giảm giá không cao hơn dòng thường. */}
+                            <span className={`font-semibold max-md:text-[length:var(--type-price-sm-size)] max-md:leading-5 max-md:tabular-nums ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
+                            {compareAt && (
+                              <span className="text-caption text-[color:var(--color-text-price-compare)] line-through max-md:text-[length:var(--type-label-size)] max-md:leading-4 max-md:tabular-nums">
+                                {formatVnd(compareAt)}
                               </span>
                             )}
-                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
-                              <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
-                            )}
                           </div>
+                          {it.isFlash && (
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 max-md:order-1 max-md:basis-full max-md:gap-x-1.5">
+                              <span data-testid="cart-flash-badge">
+                                <Badge tone="promo" size="sm" icon={Zap}>
+                                  Giờ vàng
+                                </Badge>
+                              </span>
+                              {it.flashEndAt ? (
+                                <span className="text-caption text-stone-600">
+                                  <Countdown endAt={it.flashEndAt} mode="text" onEnd={refreshCart} />
+                                </span>
+                              ) : (
+                                it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
+                                  <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
+                                )
+                              )}
+                            </div>
+                          )}
                           {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
                           {it.quantity > 1 && !(update.isPending && update.variables?.id === it.id) && (
-                            <div className="text-caption tabular-nums text-stone-600 md:hidden">Thành tiền {formatVnd(it.total)}</div>
+                            <div className="basis-full text-caption tabular-nums text-stone-600 max-md:order-4 max-md:mt-0.5 md:hidden">Thành tiền {formatVnd(it.total)}</div>
                           )}
-                          {it.flashLimitNotice && <p className="mt-1 text-caption font-medium text-warning-fg">{it.flashLimitNotice}</p>}
+                          {it.flashLimitNotice && <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{it.flashLimitNotice}</p>}
                           {soldOut && (
-                            <p className="mt-1 text-caption font-semibold text-danger-fg">
+                            <p className="mt-1 basis-full text-caption font-semibold text-danger-fg max-md:order-2">
                               Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
                             </p>
                           )}
                           {!soldOut && atMax && (
-                            <p className="mt-1 text-caption font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
+                            <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">Chỉ còn {it.stock} sản phẩm</p>
                           )}
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 max-md:mt-2 max-md:gap-y-1">
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
                             {!soldOut && (
-                              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:gap-3 max-md:rounded-none max-md:border-0">
+                              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
                                 <button
                                   type="button"
                                   onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
@@ -359,7 +406,7 @@ export default function CartPage() {
                               onClick={() => removeWithUndo(it)}
                               disabled={busy}
                               aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
-                              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:ml-auto max-md:min-w-11 max-md:justify-center max-md:px-0 ${
+                              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0 ${
                                 soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
                               }`}
                             >
@@ -368,7 +415,7 @@ export default function CartPage() {
                             </button>
                           </div>
                           {failedItemId === it.id && (
-                            <p role="alert" className="mt-1 text-caption text-danger-fg">
+                            <p role="alert" className="mt-1 basis-full text-caption text-danger-fg max-md:order-5">
                               {actionErrorText(update.error ?? remove.error)}
                             </p>
                           )}
@@ -406,21 +453,13 @@ export default function CartPage() {
                 <span>-{formatVnd(shownTier)}</span>
               </div>
             )}
+            {saving > 0 && (
+              <div data-testid="cart-saving" className="mt-1 text-right text-caption font-medium text-success-fg">
+                {fillCopy('cart.saving', { x: formatVnd(saving) })}
+              </div>
+            )}
             </div>
-            <CouponBox
-              currentCode={cart.couponCode}
-              appliedDiscount={shownDiscount}
-              subtotal={selectedSubtotal}
-              // Câu giải thích chỉ hiện khi thuộc phần đang hiển thị: cả giỏ, hoặc giá phần chọn đã có; chưa có thì thôi (không mượn câu của cả giỏ).
-              notice={shown?.couponNotice ?? null}
-              // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
-              preview={
-                selectedItems.length === 0
-                  ? undefined
-                  : { storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }
-              }
-              previewKey={couponPreviewKey(selectedItems)}
-            />
+            {!phoneCoupon && couponBox(false)}
             {!allSelected && !priced && cart.couponCode && (
               <p className="mt-2 text-caption text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}
@@ -491,6 +530,7 @@ export default function CartPage() {
               {payHint}
             </p>
           )}
+          {phoneCoupon && couponBox(true)}
           <div className="pb-1 pt-1">
             {showFreeship && (
               <div className="mb-0.5">
@@ -517,6 +557,11 @@ export default function CartPage() {
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
             <KeyValueRow label={shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'} value={formatVnd(payTotal)} emphasis />
+            {saving > 0 && (
+              <div data-testid="cart-saving" className="text-right text-caption font-medium text-success-fg">
+                {fillCopy('cart.saving', { x: formatVnd(saving) })}
+              </div>
+            )}
             {payHint ? (
               <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
                 Thanh toán ({selectedCount})

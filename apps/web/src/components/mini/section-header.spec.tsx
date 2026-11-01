@@ -66,6 +66,18 @@ describe('SectionHeader (web)', () => {
     mount(<SectionHeader title="Mã giảm giá" action={{ label: 'Tất cả 12 mã', to: '/ma-giam-gia' }} />);
     expect(q('a')!.getAttribute('aria-label')).toBe('Tất cả 12 mã Mã giảm giá');
   });
+
+  it('action.onPress: là nút (không điều hướng) gọi hàm của nơi dùng; tên đọc lấy từ spoken', () => {
+    const onPress = vi.fn();
+    mount(<SectionHeader title="Bếp xanh" action={{ label: 'Tất cả (14)', onPress, spoken: 'Xem tất cả 14 sản phẩm trong Bếp xanh' }} />);
+    expect(q('a')).toBeNull();
+    const btn = q('button')!;
+    expect(btn.getAttribute('aria-label')).toBe('Xem tất cả 14 sản phẩm trong Bếp xanh');
+    expect(btn.textContent).toBe('Tất cả (14)');
+    expect(btn.style.minHeight).toBe('44px');
+    btn.click();
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Section (web)', () => {

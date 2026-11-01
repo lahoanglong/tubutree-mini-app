@@ -62,7 +62,7 @@ export function CommunityPreview() {
     navigate(to);
   };
   return (
-    <section aria-label={homeCopy.community.title} style={{ padding: '8px 16px' }}>
+    <section aria-label={homeCopy.community.title} style={{ padding: '0 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 44 }}>
         <Heading variant="title-sm" as="h2">
           {homeCopy.community.title}

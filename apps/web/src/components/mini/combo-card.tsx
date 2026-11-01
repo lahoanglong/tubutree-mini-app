@@ -69,7 +69,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         >
           {title}
         </h3>
-        {pctShown > 0 && saving > 0 && (
+        {pctShown > 0 && saving > 0 && !soldOut && (
           <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
             <Badge tone="promo" size="sm">{fillCopy('combo.badge', { pct: pctShown })}</Badge>
           </span>
@@ -111,7 +111,8 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10, flexWrap: 'wrap', lineHeight: 'var(--type-caption-lh)' }}>
         <span style={{ fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>{fillCopy('combo.setLabel')}</span>
-        <PriceTag value={comboTotal} compareAt={total} size="md" />
+        {/* Tạm hết: khoản tiết kiệm không mua được nên không gạch giá cũ và không tô màu giảm. */}
+        <PriceTag value={comboTotal} compareAt={soldOut ? undefined : total} size="md" tone={saving > 0 && !soldOut ? 'deal' : 'default'} />
       </div>
       {saving > 0 && !soldOut && (
         <div style={{ marginTop: 2, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)' }}>
@@ -121,7 +122,8 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
 
       <div style={{ marginTop: 10 }}>
         {soldOut ? (
-          <Button fullWidth aria-disabled style={SOLD_OUT_BUTTON}>
+          // Tên nút kèm tên combo: hai combo cùng hết hàng trên một trang không trùng tên.
+          <Button fullWidth aria-disabled aria-label={fillCopy('combo.soldOutSpoken', { title })} style={SOLD_OUT_BUTTON}>
             {fillCopy('combo.soldOut')}
           </Button>
         ) : (

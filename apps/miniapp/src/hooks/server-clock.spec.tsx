@@ -58,19 +58,21 @@ describe('Đồng hồ máy chủ cho giờ vàng (D14-05)', () => {
   });
 
   it('thẻ giờ vàng ở Trang chủ: suất còn 8 phút theo máy chủ vẫn có đồng hồ khi điện thoại nhanh 10 phút', async () => {
-    mocks.get.mockResolvedValue({ data: [item(endAtServerPlus(8))] });
+    mocks.get.mockResolvedValue({ data: [] });
+    syncServerClock(SERVER_NOW.toISOString());
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const items = [1, 2, 3].map((n) => ({ ...item(endAtServerPlus(8)), itemId: `i${n}`, productSlug: `p${n}` }));
     render(
       <QueryClientProvider client={qc}>
-        <FlashSale />
+        <FlashSale items={items} loading={false} />
       </QueryClientProvider>,
     );
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 8; i += 1) {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
     }
-    expect(screen.getByRole('timer')).toHaveTextContent('0h 08m');
+    expect(screen.getByRole('timer')).toHaveTextContent(/^0[78]:\d{2}$/);
   });
 
   it('API cũ không trả serverNow: giữ đồng hồ điện thoại như trước', async () => {

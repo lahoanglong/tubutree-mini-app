@@ -115,8 +115,6 @@ export const vi = {
 
   flashSale: {
     badge: 'Giờ vàng',
-    sectionTitle: 'Ưu đãi giờ vàng',
-    sectionName: 'Ưu đãi giờ vàng',
     endsIn: (t: string) => `Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',
@@ -420,7 +418,7 @@ export const vi = {
   browse: {
     title: 'Danh mục',
     categoryChips: 'Đổi danh mục',
-    viewBrand: (brand: string) => `Xem trang nhãn hàng ${brand}`,
+    viewBrand: (brand: string) => `Xem trang thương hiệu ${brand}`,
     searchPlaceholder: 'Tìm sản phẩm...',
     searchLabel: 'Tìm sản phẩm',
     clearSearch: 'Xoá từ khoá',

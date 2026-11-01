@@ -132,7 +132,7 @@ Mini App: `apps/miniapp/src/components/ui/<tên>.tsx`. Web: `apps/web/src/compon
 | `VoucherTicket` | P5 | `voucher: VoucherView; variant: 'ticket' \| 'chip' \| 'row'; primary?: { label: string; onClick(): void; busy?: boolean }; onDetail?(): void` |
 | `ComboCard` | P5 | `title: string; items: ProductCardView[]; pct: number; total: number; comboTotal: number; onAddAll(): void; busy?: boolean` |
 | `BannerCarousel` | P5 | `slides: { id: string; image: string; alt: string; href: string }[]; intervalMs?: number` (mặc định 5000; yêu cầu a11y P0 ở `review/a11y.md` mục B) |
-| `ShopHeader`, `ShopStatsRow`, `ShopTopBar`, `ShopSection` | P9 | xem P9 |
+| `ShopHeader`, `ShopStatsRow`, `ShopTopBar`, `ShopSection` | P9 | xem P9. Ràng buộc bố cục: `ShopSection` (Mini) đặt trong cột có lề trang 16px (kệ CAROUSEL lùi lề âm đúng 16px, như BLEED của web). P10 dùng `ShopSection` làm xem trước: hoặc khung xem trước giữ cột lề 16px, hoặc thêm prop `bleed?: boolean` (mặc định true) vào `ShopSection` Mini để tắt lề âm; không để khung khác lề mà vẫn dùng mặc định. `ShopHeader` (web) có prop `inStoreGrid` (mặc định false): chỉ truyền true khi nằm trong `header` của `StoreLayout` (từ lg gốc `lg:contents`, bìa và thông tin là ô của lưới); không truyền thì giữ bố cục điện thoại ở mọi khổ, nên xem trước gian hàng ở lg dùng `ShopHeader` trần |
 
 ### API (P3a, P3b tạo; tên hàm app-core là giao diện)
 

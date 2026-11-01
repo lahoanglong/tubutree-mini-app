@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getDealerMe: vi.fn(),
   copyText: vi.fn(),
   fetchFlash: vi.fn(),
+  fetchBrandProducts: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -30,6 +31,7 @@ vi.mock('../services/brand-api', () => ({
   getBrandFollowState: mocks.getBrandFollowState,
   followBrand: mocks.followBrand,
   unfollowBrand: mocks.unfollowBrand,
+  fetchBrandProducts: mocks.fetchBrandProducts,
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -46,6 +48,9 @@ vi.mock('../components/share-sheet', () => ({
 }));
 
 import BrandViewPage from './brand-view';
+
+const openTab = (name: string | RegExp) => fireEvent.click(screen.getByRole('tab', { name }));
+const featured = () => within(screen.getByTestId('brand-featured'));
 
 const BRAND = {
   id: 'b1', slug: 'sachi', name: 'Sachi', logoUrl: null, coverUrl: null, tagline: 'Sống xanh mỗi ngày',
@@ -81,40 +86,37 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     mocks.fetchFlash.mockResolvedValue([]);
   });
 
-  it('hiện tên nhãn, tagline, số theo dõi và các khối nội dung', async () => {
+  it('hiện tên nhãn, tagline, số theo dõi và các khối của tab Shop', async () => {
     renderPage();
     expect(await screen.findByRole('heading', { level: 1, name: 'Sachi' })).toBeInTheDocument();
     expect(screen.getByText('Sống xanh mỗi ngày')).toBeInTheDocument();
-    expect(screen.getByText('12 người theo dõi')).toBeInTheDocument();
-    for (const h of ['Chứng nhận', 'Khuyến mãi', 'Sản phẩm', 'Chương trình đại lý', 'Câu chuyện thương hiệu']) {
-      expect(screen.getByRole('heading', { level: 2, name: h })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '12 người theo dõi' })).toBeInTheDocument();
+    for (const h of ['Chứng nhận', 'Mã giảm giá của shop', 'Câu chuyện thương hiệu', 'Sản phẩm nổi bật', 'Chương trình đại lý']) {
+      const heading = screen.getByRole('heading', { level: 2, name: h });
+      expect(heading).toBeInTheDocument();
+      // Q1: tiêu đề khối là Inter (SectionHeader), không phải Fraunces của tiêu đề trang.
+      expect(heading.style.fontFamily).toBe('var(--font-ui)');
     }
     expect(screen.getByText('Câu chuyện của Sachi')).toBeInTheDocument();
     expect(screen.getByText(/Đạt doanh số 50\.000\.000đ \/ quý/)).toBeInTheDocument();
   });
 
-  it('D15-01: viền khuyến mãi chỉ nhận màu hex, mọi giá trị khác bị bỏ để không chèn được CSS', async () => {
+  it('D15-01: màu khuyến mãi từ dữ liệu không còn vào style (không chèn được CSS)', async () => {
     const promo = (id: string, themeColor: string | null) => ({ ...BRAND.promotions[0]!, id, title: `KM ${id}`, couponCode: null, themeColor });
     mocks.getPublicBrand.mockResolvedValue({
       ...BRAND,
-      promotions: [
-        promo('hex', '#16a34a'),
-        promo('named', 'red'),
-        promo('inject', 'red;position:fixed;inset:0;background:url(https://evil.example/x.png)'),
-      ],
+      promotions: [promo('hex', '#16a34a'), promo('inject', 'red;position:fixed;inset:0;background:url(https://evil.example/x.png)')],
     });
     renderPage();
-    const card = async (id: string) => (await screen.findByText(`KM ${id}`)).parentElement!;
-    expect((await card('hex')).style.borderColor).toBe('rgb(22, 163, 74)');
-    expect((await card('named')).style.borderColor).not.toBe('red');
-    expect((await card('inject')).getAttribute('style') ?? '').not.toMatch(/position|evil|inset/);
+    await screen.findByRole('group', { name: 'KM inject' });
+    expect(document.body.innerHTML).not.toMatch(/evil\.example|position:\s*fixed;\s*inset/);
   });
 
   it('Theo dõi gọi followBrand theo slug', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Theo dõi/ }));
     await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledWith('sachi'));
-    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text: expect.stringContaining('Đã theo dõi thương hiệu') }));
   });
 
   it('đang theo dõi thì bấm lại gọi unfollowBrand', async () => {
@@ -126,7 +128,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
 
   it('chạm mã khuyến mãi chép mã và báo thành công', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép mã TUBU20' }));
+    fireEvent.click(within(await screen.findByRole('group', { name: 'MUA 2 TẶNG 1' })).getByRole('button', { name: 'Sao chép' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('TUBU20'));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Đã chép mã TUBU20') })),
@@ -136,20 +138,30 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
   it('chép mã thất bại vẫn hiện mã để khách tự nhập', async () => {
     mocks.copyText.mockResolvedValue(false);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép mã TUBU20' }));
+    fireEvent.click(within(await screen.findByRole('group', { name: 'MUA 2 TẶNG 1' })).getByRole('button', { name: 'Sao chép' }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Mã giảm giá: TUBU20', type: 'info' })),
     );
   });
 
+  it('kệ "Sản phẩm nổi bật" lùi lề âm 16px bù lề trang, thẻ đầu kệ thẳng với tiêu đề như web (không thụt thêm 16px)', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Sản phẩm nổi bật' });
+    const rail = screen.getByTestId('brand-featured-rail');
+    expect(rail.style.marginLeft).toBe('-16px');
+    expect(rail.style.marginRight).toBe('-16px');
+    expect(within(rail).getByRole('region', { name: 'Sản phẩm nổi bật' })).toBeInTheDocument();
+  });
+
   it('Giờ vàng: thẻ sản phẩm hiện giá Giờ vàng như Trang chủ và web (B-24)', async () => {
     mocks.fetchFlash.mockResolvedValue([{ itemId: 'i1', variationId: 'v1', productSlug: 'nrc-sachi', productName: 'Nước rửa chén Sachi', thumbnail: null, flashPrice: 60000, retailPrice: 100000, salePrice: 80000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' }]);
     renderPage();
-    const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
-    await waitFor(() => expect(within(grid).getByText('60.000đ')).toBeInTheDocument());
-    expect(within(grid).getByText('80.000đ')).toBeInTheDocument();
-    expect(within(grid).getByText('Giờ vàng -25%')).toBeInTheDocument();
-    expect(within(grid).queryByText('100.000đ')).toBeNull();
+    await screen.findByRole('heading', { level: 2, name: 'Sản phẩm nổi bật' });
+    const grid = within(screen.getByTestId('brand-featured'));
+    await waitFor(() => expect(grid.getByText('60.000đ')).toBeInTheDocument());
+    expect(grid.getByText('80.000đ')).toBeInTheDocument();
+    expect(grid.getByText('Giờ vàng -25%')).toBeInTheDocument();
+    expect(grid.queryByText('100.000đ')).toBeNull();
   });
 
   describe('hàng Pancake: giá bán nằm ở phân loại, API trả giá của phân loại mặc định (B-24)', () => {
@@ -158,7 +170,8 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     const open = async () => {
       mocks.getPublicBrand.mockResolvedValue({ ...BRAND, products: [hatDieu] });
       renderPage();
-      return (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
+      await screen.findByRole('heading', { level: 2, name: 'Sản phẩm nổi bật' });
+      return screen.getByTestId('brand-featured');
     };
 
     it('đang bán 159.000đ, Giờ vàng 119.000đ: thẻ gạch 159.000đ, -25%, như trang chi tiết', async () => {
@@ -189,14 +202,16 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
 
   it('bấm sản phẩm mở trang chi tiết', async () => {
     renderPage();
-    const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
-    fireEvent.click(within(grid).getByText('Nước rửa chén Sachi'));
+    await screen.findByRole('heading', { level: 2, name: 'Sản phẩm nổi bật' });
+    fireEvent.click(featured().getByText('Nước rửa chén Sachi'));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc-sachi', undefined);
   });
 
   it('có xuất xứ và ảnh câu chuyện: hiện cùng khối câu chuyện, nút "Xem trên bản đồ" mở /brand-story', async () => {
     mocks.getPublicBrand.mockResolvedValue({ ...BRAND, slug: 'fuwa3e', name: 'Fuwa3e', origin: 'Lâm Đồng, Việt Nam', storyImages: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] });
     renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Fuwa3e' });
+    openTab('Câu chuyện');
     expect(await screen.findByText('Xuất xứ: Lâm Đồng, Việt Nam')).toBeInTheDocument();
     const gallery = screen.getByRole('region', { name: 'Ảnh câu chuyện thương hiệu' });
     expect(within(gallery).getAllByRole('img')).toHaveLength(2);
@@ -207,6 +222,8 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
   it('nhãn chưa có ghim trên bản đồ thì không hiện nút "Xem trên bản đồ"', async () => {
     mocks.getPublicBrand.mockResolvedValue({ ...BRAND, origin: 'Lâm Đồng, Việt Nam' });
     renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Sachi' });
+    openTab('Câu chuyện');
     expect(await screen.findByText('Xuất xứ: Lâm Đồng, Việt Nam')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Xem trên bản đồ' })).toBeNull();
   });
@@ -260,10 +277,10 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('nhãn không có (404): báo "Không tìm thấy nhãn hàng", nút sang Danh mục, không Thử lại, không hỏi theo dõi/chia sẻ', async () => {
+  it('thương hiệu không có (404): báo "Không tìm thấy thương hiệu", nút sang Danh mục, không Thử lại, không hỏi theo dõi/chia sẻ', async () => {
     mocks.getPublicBrand.mockRejectedValue({ isHttpError: true, response: { status: 404 } });
     renderPage();
-    expect(await screen.findByText('Không tìm thấy nhãn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Không tìm thấy thương hiệu')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /thử lại/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Xem Danh mục' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
@@ -292,19 +309,19 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     expect(cert.textContent).toBe('USDA Organic');
   });
 
-  it('mã khuyến mãi là nút cao ít nhất 44px', async () => {
+  it('nút Sao chép của phiếu mã là nút thật có vùng chạm 44px', async () => {
     renderPage();
-    const chip = await screen.findByRole('button', { name: 'Sao chép mã TUBU20' });
-    expect(chip.tagName).toBe('BUTTON');
-    expect(parseInt(chip.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    const btn = within(await screen.findByRole('group', { name: 'MUA 2 TẶNG 1' })).getByRole('button', { name: 'Sao chép' });
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.className).toContain('tubu-hit-44');
   });
 
   it('CTV đủ điều kiện nhưng nhãn chưa có tỉ lệ hoa hồng: banner vẫn chia sẻ được, không in "nhận tới % hoa hồng"', async () => {
     for (const rate of [0, null, undefined]) {
       mocks.getBrandShareToEarn.mockResolvedValue({ eligible: true, maxAffiliateRate: rate, referralCode: 'AFF1', brandSlug: 'sachi' });
       const { unmount } = renderPage();
-      const banner = await screen.findByRole('button', { name: /Chia sẻ nhãn này/ });
-      expect(banner).toHaveTextContent('Chia sẻ nhãn này');
+      const banner = await screen.findByRole('button', { name: /Chia sẻ thương hiệu này/ });
+      expect(banner).toHaveTextContent('Chia sẻ thương hiệu này');
       expect(banner.textContent).not.toMatch(/hoa hồng|nhận tới|%/);
       unmount();
     }
@@ -313,7 +330,7 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
   it('banner share-to-earn là nút thật có thể dùng bàn phím', async () => {
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: 'sachi' });
     renderPage();
-    const banner = await screen.findByRole('button', { name: /Chia sẻ nhãn này — nhận tới 15% hoa hồng/ });
+    const banner = await screen.findByRole('button', { name: /Chia sẻ thương hiệu này — nhận tới 15% hoa hồng/ });
     expect(banner.tagName).toBe('BUTTON');
   });
 });
@@ -347,5 +364,78 @@ describe('BrandViewPage — hàng chứng nhận cuộn ngang focus được (ax
     const region = await screen.findByRole('region', { name: 'Chứng nhận' });
     // tabindex đến từ phép đo sau commit (effect rồi setState), không có sẵn lúc vùng vừa hiện: phải chờ chứ không đọc ngay.
     await waitFor(() => expect(region).toHaveAttribute('tabindex', '0'));
+  });
+});
+
+describe('BrandViewPage — khung shop (tab, Theo dõi ở đầu, Sản phẩm phân trang thật)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getPublicBrand.mockResolvedValue(BRAND);
+    mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
+    mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false });
+    mocks.copyText.mockResolvedValue(true);
+    mocks.fetchFlash.mockResolvedValue([]);
+  });
+
+  it('tab: Shop | Sản phẩm (40) lấy productCount, không phải 30 món đầu; không có tab Danh mục', async () => {
+    const products = Array.from({ length: 30 }, (_, i) => ({ ...BRAND.products[0]!, id: `pr${i}`, slug: `sp-${i}`, name: `SP ${i}` }));
+    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, products, productCount: 40 });
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Sachi' });
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Shop', 'Sản phẩm (40)', 'Câu chuyện']);
+    expect(screen.getByRole('tab', { name: 'Shop', selected: true })).toBeInTheDocument();
+    expect(featured().getAllByRole('button', { name: /^SP \d+$/ })).toHaveLength(10);
+    expect(screen.getByRole('button', { name: 'Xem tất cả 40 sản phẩm trong Sản phẩm nổi bật' })).toHaveTextContent('Tất cả (40)');
+  });
+
+  it('API cũ thiếu productCount: đếm theo danh sách, không "NaN"; không có story/xuất xứ/ảnh thì không có tab Câu chuyện', async () => {
+    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, story: null, origin: null, storyImages: [] });
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Sachi' });
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Shop', 'Sản phẩm (1)']);
+    expect(document.body.textContent).not.toContain('NaN');
+  });
+
+  it('Theo dõi và Chia sẻ nằm ở đầu shop, không còn thanh dính đáy', async () => {
+    renderPage();
+    const follow = await screen.findByRole('button', { name: 'Theo dõi' });
+    const cover = screen.getByTestId('shop-cover').parentElement!;
+    expect(cover.contains(follow)).toBe(true);
+    expect(cover.contains(screen.getByRole('button', { name: 'Chia sẻ' }))).toBe(true);
+    expect(document.querySelector('[data-testid="sticky-bar"]')).toBeNull();
+  });
+
+  it('chưa đăng nhập: bấm Theo dõi báo cần đăng nhập, không hỏi trạng thái theo dõi', async () => {
+    mocks.authStatus = 'unauthenticated';
+    mocks.followBrand.mockRejectedValue(new Error('401'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Theo dõi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: 'Cần đăng nhập để theo dõi thương hiệu.' })));
+    expect(mocks.getBrandFollowState).not.toHaveBeenCalled();
+  });
+
+  it('tab Sản phẩm: tải trang 1 của API thương hiệu, "Xem thêm" gọi trang 2, thẻ không in tên thương hiệu', async () => {
+    const page = (from: number, count: number) => ({
+      data: Array.from({ length: count }, (_, i) => ({ ...BRAND.products[0]!, id: `x${from + i}`, slug: `x-${from + i}`, name: `Hàng ${from + i}`, brand: 'Sachi', isFeatured: false })),
+      meta: { page: 1, limit: 20, total: 25 },
+    });
+    mocks.fetchBrandProducts.mockResolvedValueOnce(page(1, 20)).mockResolvedValueOnce(page(21, 5));
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Sachi' });
+    openTab(/^Sản phẩm/);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Hàng \d+$/ })).toHaveLength(20));
+    expect(mocks.fetchBrandProducts).toHaveBeenNthCalledWith(1, 'sachi', { page: 1, limit: 20, sort: undefined });
+    expect(document.querySelector('[data-ds-part="brand"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm' }));
+    await waitFor(() => expect(mocks.fetchBrandProducts).toHaveBeenNthCalledWith(2, 'sachi', { page: 2, limit: 20, sort: undefined }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^Hàng \d+$/ })).toHaveLength(25));
+  });
+
+  it('"Đọc câu chuyện" ở tab Shop mở tab Câu chuyện', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đọc câu chuyện' }));
+    expect(screen.getByRole('tab', { name: 'Câu chuyện', selected: true })).toBeInTheDocument();
   });
 });

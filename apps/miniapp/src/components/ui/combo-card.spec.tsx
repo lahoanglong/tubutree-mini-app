@@ -111,7 +111,7 @@ describe('ComboCard', () => {
     const onAddAll = vi.fn();
     render(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={onAddAll} />);
     expect(screen.queryByRole('button', { name: /Thêm cả combo/ })).toBeNull();
-    const btn = screen.getByRole('button', { name: 'Combo tạm hết' });
+    const btn = screen.getByRole('button', { name: 'Combo tạm hết: Combo giặt sạch' });
     expect(btn).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(btn);
     fireEvent.click(btn);
@@ -119,10 +119,36 @@ describe('ComboCard', () => {
     expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
   });
 
+  it('giá cả bộ màu giá giảm khi có tiết kiệm, giá thường khi không có', () => {
+    const { unmount } = render(<ComboCard {...base} items={items(3)} onAddAll={() => {}} />);
+    expect(screen.getByText('337.300đ').style.color).toBe('var(--color-text-price-deal)');
+    unmount();
+    render(<ComboCard {...base} comboTotal={374000} items={items(3)} onAddAll={() => {}} />);
+    expect(screen.getByText('374.000đ').style.color).toBe('var(--color-text-price)');
+  });
+
+  it('tạm hết: bỏ nhãn "Combo -n%" và giá gạch (khoản tiết kiệm không mua được), giá không còn màu giảm', () => {
+    render(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={() => {}} />);
+    expect(screen.queryByText(/Combo -/)).toBeNull();
+    expect(screen.queryByText('374.000đ')).toBeNull();
+    expect(screen.getByText('337.300đ').style.color).toBe('var(--color-text-price)');
+  });
+
+  it('hai combo cùng hết hàng trên một trang có tên nút khác nhau', () => {
+    render(
+      <>
+        <ComboCard {...base} title="Combo A" items={[item(1, { stock: 'out' })]} onAddAll={() => {}} />
+        <ComboCard {...base} title="Combo B" items={[item(2, { stock: 'out' })]} onAddAll={() => {}} />
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'Combo tạm hết: Combo A' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Combo tạm hết: Combo B' })).toBeInTheDocument();
+  });
+
   it('hết hàng và đang busy: vẫn đọc "Combo tạm hết" (không spinner che nhãn), vẫn không gọi', () => {
     const onAddAll = vi.fn();
     render(<ComboCard {...base} items={[item(1, { stock: 'out' })]} onAddAll={onAddAll} busy />);
-    const btn = screen.getByRole('button', { name: 'Combo tạm hết' });
+    const btn = screen.getByRole('button', { name: 'Combo tạm hết: Combo giặt sạch' });
     expect(btn).not.toHaveAttribute('aria-busy');
     fireEvent.click(btn);
     expect(onAddAll).not.toHaveBeenCalled();

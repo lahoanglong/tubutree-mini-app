@@ -603,3 +603,59 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(r.container.textContent).toContain('Bạn có 2 mã dùng được');
   });
 });
+
+describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dính đáy)', () => {
+  const mountSheet = async (currentCode: string | null = null) => {
+    const r = render(<CouponBox sheet currentCode={currentCode} subtotal={300000} />);
+    mounted.push(r);
+    await flush(6);
+    return r.container;
+  };
+
+  it('chỉ còn một hàng mở hộp thoại; ô nhập và danh sách mã chưa dựng trong thân', async () => {
+    state.coupons = [c('WELCOME30')];
+    const box = await mountSheet();
+    const row = box.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    expect(row.getAttribute('aria-expanded')).toBeNull();
+    expect(box.querySelector('input[name="coupon-code"]')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('bấm hàng mở bảng, dùng mã trong bảng thì áp mã và đóng bảng', async () => {
+    state.coupons = [c('WELCOME30')];
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    click(dialog.querySelector('button[aria-label$="mã WELCOME30"]'));
+    await flush(6);
+    expect(state.applied).toEqual(['WELCOME30']);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('đang có mã: hàng hiện mã, bảng có nút "Bỏ mã đang áp dụng"', async () => {
+    state.coupons = [c('WELCOME30')];
+    const box = await mountSheet('WELCOME30');
+    expect(box.textContent).toContain('WELCOME30');
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    click(byText(dialog, 'button', 'Bỏ mã đang áp dụng'));
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('mã sai: lỗi hiện ngay trong bảng (bảng che phần thân) và bảng vẫn mở', async () => {
+    state.applyError = new Error('Mã không hợp lệ');
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    typeInto(dialog.querySelector('input[name="coupon-code"]'), 'SAI');
+    click(byText(dialog, 'button', 'Áp dụng'));
+    await flush(6);
+    const still = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(still.querySelector('[role="alert"]')).not.toBeNull();
+    expect(box.querySelector('[role="alert"]')).toBeNull();
+  });
+});

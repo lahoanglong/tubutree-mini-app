@@ -59,7 +59,7 @@ export function CommunityPreview() {
       }));
   if (rows.length === 0) return null;
   return (
-    <section aria-label={homeCopy.community.title} style={{ padding: '8px 0' }}>
+    <section aria-label={homeCopy.community.title}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 44 }}>
         <Heading variant="title-sm" as="h2">
           {homeCopy.community.title}

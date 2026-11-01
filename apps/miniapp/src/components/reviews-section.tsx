@@ -186,7 +186,7 @@ export function ReviewsSection({
   ];
 
   return (
-    <section aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
+    <section id="danh-gia" aria-label="Đánh giá sản phẩm" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
       {/* Cao bằng nút đầu mục (48px): nút chỉ hiện khi can-review đã về, hàng không được nhảy lúc đó. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 48 }}>
         <SectionTitle>Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}</SectionTitle>

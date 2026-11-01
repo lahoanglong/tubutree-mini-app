@@ -28,3 +28,18 @@ describe('CatalogController.categories', () => {
     expect(catalog.categories).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('CatalogController.forYou — seed ngày', () => {
+  const build = () => {
+    const catalog = { getForYou: jest.fn().mockResolvedValue([]) };
+    return { catalog, controller: new CatalogController(catalog as unknown as CatalogService) };
+  };
+
+  it('chuyển seed xuống service; không seed thì gọi như cũ (không khoá seed)', async () => {
+    const { catalog, controller } = build();
+    await controller.forYou('u1', { seed: '20261101' });
+    expect(catalog.getForYou).toHaveBeenLastCalledWith('u1', { seed: '20261101' });
+    await controller.forYou('u1', {});
+    expect(catalog.getForYou).toHaveBeenLastCalledWith('u1', {});
+  });
+});

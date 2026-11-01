@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
@@ -18,8 +18,17 @@ import { Icon } from '../ui/icon';
 import { ListRow } from '../ui/list-row';
 import { Skeleton } from '../ui/skeleton';
 
-const SECTION_PAD = '0 16px 12px';
-const ROW_PADDING = '8px 4px';
+const SECTION_PAD = '0 16px';
+/** Mỗi việc đúng một dòng 64px (HM-06): `todoSkeletonHeight` cũng tính theo số này. Đường kẻ giữa hai dòng là bóng trong, không cộng chiều cao. */
+const ROW_HEIGHT = 64;
+const rowStyle = (divider: boolean): CSSProperties => ({
+  height: ROW_HEIGHT,
+  padding: '0 12px 0 8px',
+  boxSizing: 'border-box',
+  ...(divider ? { boxShadow: 'inset 0 1px 0 var(--color-border-subtle)' } : {}),
+});
+// Viền trái 3px màu cảnh báo là dấu hiệu "việc cần làm"; viền ngoài là bóng trong để thẻ không cao thêm 2px so với khung chờ.
+const CARD_STYLE: CSSProperties = { border: 'none', borderLeft: '3px solid var(--color-status-warning-fg)', boxShadow: 'inset 0 0 0 1px var(--color-border-subtle)', overflow: 'hidden' };
 
 /** Đơn chuyển khoản chờ tiền: giờ còn lại và nút "Thanh toán ngay" mở thẳng trang chuyển khoản. */
 function PendingPaymentRow({ order }: { order: OrderView }) {
@@ -49,7 +58,7 @@ function PendingPaymentRow({ order }: { order: OrderView }) {
         )
       }
       onPress={payable ? undefined : () => navigate(`/order/${encodeURIComponent(order.code)}`)}
-      style={{ padding: ROW_PADDING }}
+      style={rowStyle(false)}
     />
   );
 }
@@ -134,27 +143,27 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
 
   return (
     <section aria-label={homeCopy.todo.title} style={{ padding: SECTION_PAD }}>
-      <Card variant="outline" padding={8}>
-        {payOrder && <PendingPaymentRow order={payOrder} />}
+      <Card variant="outline" padding={0} style={CARD_STYLE}>
+        {payOrder && <div data-todo-row style={{ height: ROW_HEIGHT }}><PendingPaymentRow order={payOrder} /></div>}
         {showShip && shipOrder && (
-          <ListRow
+          <div data-todo-row style={{ height: ROW_HEIGHT }}><ListRow
             icon={<Icon icon={Truck} tone="brand" />}
             title={shipTotal > 1 ? homeCopy.todo.shippingMany(shipTotal) : homeCopy.todo.shipping(shipOrder.code)}
             subtitle={homeCopy.todo.shippingHint}
             trailing="chevron"
             onPress={() => navigate(shipTotal > 1 ? '/orders?tab=shipping' : `/order/${encodeURIComponent(shipOrder.code)}`)}
-            style={{ padding: ROW_PADDING, borderTop: payOrder ? '1px solid var(--color-border-subtle)' : undefined }}
-          />
+            style={rowStyle(Boolean(payOrder))}
+          /></div>
         )}
         {showPrep && prepOrder && (
-          <ListRow
+          <div data-todo-row style={{ height: ROW_HEIGHT }}><ListRow
             icon={<Icon icon={PackageCheck} tone="brand" />}
             title={prepTotal > 1 ? homeCopy.todo.preparingMany(prepTotal) : homeCopy.todo.preparing(prepOrder.code)}
             subtitle={homeCopy.todo.preparingHint}
             trailing="chevron"
             onPress={() => navigate(prepTotal > 1 ? '/orders?tab=processing' : `/order/${encodeURIComponent(prepOrder.code)}`)}
-            style={{ padding: ROW_PADDING, borderTop: payOrder || showShip ? '1px solid var(--color-border-subtle)' : undefined }}
-          />
+            style={rowStyle(Boolean(payOrder || showShip))}
+          /></div>
         )}
       </Card>
     </section>

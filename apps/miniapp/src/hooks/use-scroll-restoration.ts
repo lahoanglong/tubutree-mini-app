@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useNavigationType } from './use-navigation-type';
 
 export const SCROLL_KEY_PREFIX = 'tubu_scroll:';
@@ -36,6 +37,9 @@ function load(key: string): number | null {
  * dù sessionStorage còn vị trí cũ của cùng URL. Loại điều hướng chốt ở lần mount (thay đổi khoá
  * khi đang ở trang là `replace` đổi bộ lọc → không bao giờ khôi phục). Khôi phục MỘT lần mỗi khoá,
  * và chỉ khi danh sách đã có dữ liệu (`ready`).
+ *
+ * Đổi khoá ngay trong trang (hub ↔ danh sách; trang không bị gỡ): loại điều hướng của LẦN ĐỔI ĐÓ quyết định. PUSH (chạm ô danh
+ * mục) → đầu trang; POP (Back) → khôi phục vị trí đã lưu của khoá mới; REPLACE (đổi sắp xếp, gỡ chip) → giữ nguyên vị trí.
  */
 export function useScrollRestoration(key: string, ready: boolean): { anchorRef: RefObject<HTMLDivElement> } {
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -45,6 +49,13 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
   const restoredFor = useRef<string | null>(null);
   // Vị trí cuộn gần nhất đã thấy — phòng khi phần tử đã bị gỡ khỏi DOM lúc cleanup (scrollTop = 0).
   const lastY = useRef(0);
+  // Vị trí đọc ngay khi khoá đổi, TRƯỚC khi commit: nội dung mới có thể ngắn hơn và trình duyệt kẹp `scrollTop` về cuối trang mới.
+  const prevKey = useRef(key);
+  const leavingY = useRef<number | null>(null);
+  if (prevKey.current !== key) {
+    leavingY.current = scrollerOf(anchorRef.current)?.scrollTop ?? null;
+    prevKey.current = key;
+  }
 
   // Layout effect (không phải useEffect) để cleanup khi unmount chạy TRƯỚC khi React gỡ DOM của trang.
   useLayoutEffect(() => {
@@ -62,9 +73,30 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
       clearTimeout(timer);
       scroller.removeEventListener('scroll', onScroll);
       // Rời trang / đổi khoá: lưu vị trí của khoá CŨ ngay.
-      save(key, scroller.isConnected ? scroller.scrollTop : lastY.current);
+      save(key, leavingY.current ?? (scroller.isConnected ? scroller.scrollTop : lastY.current));
+      leavingY.current = null;
     };
   }, [key]);
+
+  // Theo từng lượt điều hướng (`location.key`), không chỉ theo khoá: zmp-ui khoá phần tử trang theo pathname, nên PUSH lại đúng URL
+  // lúc trang cũ còn đang trượt ra (Back rồi chạm ngay) dùng lại chính phần tử đó với scrollTop cũ, khoá không đổi.
+  const navKey = useLocation().key;
+  const seenNav = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const first = seenNav.current === null;
+    seenNav.current = navKey;
+    if (first) return;
+    restoredFor.current = null;
+    if (navType === 'POP') {
+      eligibleKey.current = key;
+      return;
+    }
+    if (navType !== 'PUSH') return;
+    const scroller = scrollerOf(anchorRef.current);
+    if (scroller) scroller.scrollTop = 0;
+    lastY.current = 0;
+    // navType cố ý không nằm trong deps: chỉ đọc nó đúng lúc điều hướng.
+  }, [key, navKey]);
 
   // Layout effect của trang chạy SAU layout effect của <Page> con (Page tự cuộn về 0 khi mount).
   useLayoutEffect(() => {

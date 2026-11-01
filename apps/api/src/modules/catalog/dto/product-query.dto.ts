@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { PaginationQuery } from '../../../common/pagination';
+import { SEED_PATTERN } from '../catalog-seed';
 import { SEARCH_Q_MAX_LENGTH } from './suggest-query.dto';
 
 /** Query string luôn là chuỗi: 'true'/'1' → true, 'false'/'0' → false; giá trị khác để IsBoolean từ chối. */
@@ -45,4 +46,8 @@ export class ProductQuery extends PaginationQuery {
   /** Điểm đánh giá trung bình tối thiểu (ratingAvg). Miniapp gửi 4 ("Từ 4★"). */
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(5)
   minRating?: number;
+
+  /** Ngày VN `YYYYMMDD`: xoay thứ tự mặc định (không `sort`, không `q`) ổn định trong ngày. Bỏ qua khi khách đã chọn cách sắp. */
+  @IsOptional() @IsString() @Matches(SEED_PATTERN)
+  seed?: string;
 }

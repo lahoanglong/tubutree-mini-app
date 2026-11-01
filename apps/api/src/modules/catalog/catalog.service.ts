@@ -18,6 +18,7 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImages, publicProductThumb } from '../../common/public-image';
 import { publicImage } from '../../common/public-image';
+import { seedHash, seededOrder } from './catalog-seed';
 import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 
 /**
@@ -192,9 +193,11 @@ export class CatalogService {
    * Trang sản phẩm công khai cho một điều kiện lọc có sẵn: `/products` (bộ lọc của query) và trang thương hiệu (theo nhãn) dùng chung
    * cách xếp, phân trang và dựng thẻ, không có đường thứ hai.
    */
-  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice'>) {
+  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice' | 'q' | 'seed'>) {
     const { page, limit, sort } = query;
     const price = priceRange(query.minPrice, query.maxPrice);
+    // Seed ngày chỉ xoay thứ tự mặc định: khách đã chọn cách sắp hay đang tìm chữ thì giữ đúng thứ tự họ yêu cầu.
+    if (query.seed && !sort && !query.q?.trim()) return this.listSeeded(where, page, limit, query.seed, price);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
     if (sort === 'best_seller_30d') return this.listBestSellers30d(where, page, limit, price);
     if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
@@ -211,6 +214,25 @@ export class CatalogService {
       this.prisma.product.count({ where }),
     ]);
     return paginated(await this.toCards(items), page, limit, total);
+  }
+
+  /**
+   * Thứ tự mặc định xoay theo ngày (`seededOrder`): cùng đường xếp hạng và bộ nhớ 60 giây với Bán chạy, nên cuộn nhiều trang trong ngày
+   * không quét lại catalog. Khoá nhớ mang theo `seed` để ngày mới không dùng nhầm thứ tự hôm qua.
+   */
+  private listSeeded(where: Prisma.ProductWhereInput, page: number, limit: number, seed: string, price?: PriceBounds) {
+    return this.listRanked<{ id: string; brandId: string | null }>(
+      where,
+      page,
+      limit,
+      { id: true, brandId: true },
+      null,
+      price,
+      [{ id: 'asc' }],
+      Boolean(price),
+      (rows) => seededOrder(rows, seed),
+      `seed:${seed}`,
+    );
   }
 
   /**
@@ -282,8 +304,10 @@ export class CatalogService {
     price?: PriceBounds,
     orderBy?: Prisma.ProductOrderByWithRelationInput[],
     needsPrice = true,
+    arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
+    cacheTag = '',
   ) {
-    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice);
+    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag);
     const { skip, take } = skipTake(page, limit);
     const pageIds = rankedIds.slice(skip, skip + take);
     if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
@@ -308,10 +332,12 @@ export class CatalogService {
     price: PriceBounds | undefined,
     orderBy: Prisma.ProductOrderByWithRelationInput[] | undefined,
     needsPrice: boolean,
+    arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
+    cacheTag = '',
   ): Promise<string[]> {
     // Thứ hạng phụ thuộc giá (xếp giá, lọc giá) đổi ngay khi Giờ vàng bắt đầu/hết hoặc giá sửa nên không nhớ.
     const cacheable = !needsPrice && !price;
-    const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice }) : '';
+    const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag }) : '';
     const now = Date.now();
     const hit = cacheable && key.length <= 2000 ? this.rankCache.get(key) : undefined;
     if (hit && hit.expiresAt > now) return hit.ids;
@@ -331,6 +357,7 @@ export class CatalogService {
         return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
       });
     }
+    if (arrange) ranked = arrange(ranked);
     const ids = ranked.map((r) => r.id);
     if (cacheable && key.length <= 2000) {
       if (this.rankCache.size >= this.RANK_MAX_KEYS) this.rankCache.delete(this.rankCache.keys().next().value as string);
@@ -569,7 +596,7 @@ export class CatalogService {
    *
    * `known.hasOrders === false` = người gọi đã biết khách chưa có đơn nào (Home đếm sẵn): khỏi đọc lịch sử mua.
    */
-  async getForYou(userId: string, known: { hasOrders?: boolean } = {}) {
+  async getForYou(userId: string, known: { hasOrders?: boolean; seed?: string } = {}) {
     const TAKE = 10;
     const RECENT_ITEMS = 20;
 
@@ -630,7 +657,14 @@ export class CatalogService {
       const pb = purchased.has(b.id) ? 1 : 0;
       return pa !== pb ? pa - pb : sold(b) - sold(a);
     });
-    return this.toCards(sorted.slice(0, TAKE));
+    // Có seed ngày thì chọn TAKE món từ 2×TAKE ứng viên đầu bằng hạt giống: gợi ý đổi theo ngày mà vẫn ổn định trong ngày; không seed giữ đúng như cũ.
+    const picked = known.seed
+      ? sorted
+          .slice(0, TAKE * 2)
+          .sort((a, b) => seedHash(known.seed!, a.id) - seedHash(known.seed!, b.id))
+          .slice(0, TAKE)
+      : sorted.slice(0, TAKE);
+    return this.toCards(picked);
   }
 
   async brands() {
