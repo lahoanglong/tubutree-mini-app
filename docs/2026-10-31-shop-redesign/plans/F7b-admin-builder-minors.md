@@ -180,3 +180,10 @@ Lệnh kiểm một file: `cd apps/web && npx vitest run src/<đường dẫn>`;
 - Phủ 9 việc: P16-1 T1; P16-2 T2; P16-3 T3; P16-4 T4+T5; P16-5 T5; P10-6 T7; P10-7 T9; P10-8 T8+T10; P10-9 T6.
 - Nhất quán tên: `CATEGORY_PARENT_HAS_PRODUCTS`, `confirmDirectProducts`, `builderSection`, `shallowPush/shallowReplace`, `SectionStyleDeps` (không còn `isPending`) dùng giống nhau từ T4 đến T10.
 - Rủi ro ghi sẵn cho notes: T8 phụ thuộc `idx > 0 → navigate(-1)` của `back-button.tsx` Mini (file của F7a); T4 ép xác nhận ở API nên gọi API trực tiếp (không qua panel) phải gửi `confirmDirectProducts`; T5 đổi số mặc định của hộp việc trong e2e (3 → 1).
+
+## Lệch kế hoạch khi làm
+
+- Race spec: gốc seed của DB IT đều đang giữ sản phẩm gắn thẳng (6–12 sản phẩm mỗi gốc), nên mọi ca cũ tạo con dưới gốc seed phải mang `confirmDirectProducts: true` (helper `under`); ca race mới dùng một gốc mới trống (tạo rồi xoá trong ca để trả chỗ gốc cho ca "đủ 8 gốc").
+- T5 thêm một ca e2e 375px cho nút "Chuyển" (`relocate-pick-375.png`) và T8 thêm một ca e2e Mini cho mở thẳng `?khoi=` (router thật của react-router, không phải lịch sử giả).
+- Cổng Mini e2e dùng 3347 thay vì 3343 vì 3343 đang do `fake-api.js` của phiên F7a giữ (không phải tiến trình của gói này).
+- Ảnh web màn dựng 375px chụp bằng một spec tạm trong project Web Admin (mock API) rồi xoá; ảnh nằm ở `screens/F7b/`.
