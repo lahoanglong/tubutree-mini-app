@@ -11,7 +11,7 @@ import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { timeAgo } from '@/components/community/post-parts';
-import { Card, Heading, Icon, ListRow, Text } from '@/components/mini';
+import { Card, Icon, ListRow, SectionHeader, Text } from '@/components/mini';
 
 const PREVIEW_COUNT = 2;
 
@@ -60,21 +60,7 @@ export function CommunityPreview() {
   if (rows.length === 0) return null;
   return (
     <section aria-label={homeCopy.community.title}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 44 }}>
-        <Heading variant="title-sm" as="h2">
-          {homeCopy.community.title}
-        </Heading>
-        <button
-          type="button"
-          className="tubu-press"
-          onClick={() => router.push('/cong-dong')}
-          style={{ minHeight: 44, padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <Text variant="label" tone="brand">
-            {homeCopy.community.seeAll}
-          </Text>
-        </button>
-      </div>
+      <SectionHeader title={homeCopy.community.title} action={{ label: homeCopy.community.seeAll, to: '/cong-dong' }} />
       <Card variant="outline" padding={0}>
         {rows.map((r, i) => (
           <ListRow
