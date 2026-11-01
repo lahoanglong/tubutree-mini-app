@@ -11,14 +11,14 @@ function Row({ icon, children }: { icon: LucideIcon; children: React.ReactNode }
       <span style={{ width: 20, flex: '0 0 auto', display: 'flex', justifyContent: 'center', paddingTop: 1 }}>
         <Icon icon={icon} size="sm" tone="brand" />
       </span>
-      <Text variant="body-sm" as="div" style={{ minWidth: 0 }}>
+      <Text variant="body-sm" as="div" style={{ minWidth: 0, fontSize: 14, lineHeight: '20px' }}>
         {children}
       </Text>
     </div>
   );
 }
 
-const linkStyle = { minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'none', border: 0, padding: 0, color: 'var(--color-text-brand)', fontWeight: 600, fontSize: 'inherit', fontFamily: 'inherit' } as const;
+const linkStyle = { minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'none', border: 0, padding: 0, color: 'var(--color-text-brand)', fontWeight: 600, fontSize: 14, lineHeight: '20px', fontFamily: 'inherit' } as const;
 
 /** Popup "Cách tính Điểm Xanh" mở từ dòng "Nhận ~X Điểm Xanh" ở PDP. Chữ và số do `pointsEarnPopup` (app-core) dựng sẵn, giống web. */
 export function PointsEarnSheet({ open, onClose, popup }: { open: boolean; onClose: () => void; popup: PointsEarnPopup }) {
@@ -31,8 +31,8 @@ export function PointsEarnSheet({ open, onClose, popup }: { open: boolean; onClo
     <BottomSheet open={open} onClose={onClose} title={popup.title}>
       <div data-testid="points-earn-popup" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Row icon={Sparkles}>{popup.tier}</Row>
-        <Row icon={ShoppingBag}>{popup.tilde}</Row>
-        <Row icon={Truck}>{popup.delivered}</Row>
+        {popup.tilde && <Row icon={ShoppingBag}>{popup.tilde}</Row>}
+        {popup.delivered && <Row icon={Truck}>{popup.delivered}</Row>}
         {popup.marketplace && <Row icon={Leaf}>{popup.marketplace}</Row>}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
           <button type="button" style={linkStyle} onClick={() => go('/loyalty')}>

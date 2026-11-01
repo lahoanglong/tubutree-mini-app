@@ -46,6 +46,14 @@ describe('PointsEarnLine — bấm mở popup Cách tính Điểm Xanh', () => {
     expect(btn).toHaveTextContent('Nhận ~6.936 Điểm Xanh');
     expect(parseInt(btn.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(btn.style.marginBottom).not.toMatch(/^-/);
+  });
+
+  it('liên kết trong popup cùng cỡ chữ với dòng chữ (không inherit)', () => {
+    render(<PointsEarnLine goods={289000} authStatus="authenticated" tierId="t1" />);
+    const link = within(openPopup()).getByRole('button', { name: 'Xem các hạng Điểm Xanh' });
+    expect(link.style.fontSize).toBe('14px');
+    expect(link.style.lineHeight).toBe('20px');
   });
 
   it('có hạng: popup nói hạng và hệ số theo tierId', () => {

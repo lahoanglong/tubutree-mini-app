@@ -27,12 +27,20 @@ describe('popup Cách tính Điểm Xanh (PDP)', () => {
   it('giải thích dấu "~" và điểm vào khi giao thành công', () => {
     const p = pointsEarnPopup({ tier: null, guest: false, marketplace: null });
     expect(p.tilde).toMatch(/giảm giá.*mã.*điểm/);
+    expect(p.tilde).not.toMatch(/một chút/);
     expect(p.delivered).toBe('Nhận Điểm Xanh khi đơn giao thành công');
   });
 
   it('đơn sàn: có thì nguyên câu, không thì ẩn (null)', () => {
     expect(pointsEarnPopup({ tier: null, guest: false, marketplace: 'Đơn sàn 1% · x' }).marketplace).toBe('Đơn sàn 1% · x');
     expect(pointsEarnPopup({ tier: null, guest: false, marketplace: null }).marketplace).toBeNull();
+  });
+
+  it('dòng chung chung (không có "~"): bỏ mục giải thích "~" và mục trùng chữ với dòng', () => {
+    const p = pointsEarnPopup({ tier: null, guest: false, generic: true, marketplace: null });
+    expect(p.tilde).toBeNull();
+    expect(p.delivered).toBeNull();
+    expect(p.tier).not.toMatch(/×/);
   });
 
   it('nhãn bấm có chữ đọc màn hình', () => {

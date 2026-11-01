@@ -440,6 +440,7 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
       expect(btn().tagName).toBe('BUTTON');
       expect(btn().getAttribute('aria-label')).toContain('Xem cách tính Điểm Xanh');
       expect(btn().className).toContain('min-h-11');
+      expect(btn().className).not.toMatch(/-mb-/);
       expect(line()).toBe('Nhận ~173 Điểm Xanh');
       expect(dialog()).toBeNull();
     });
@@ -481,6 +482,23 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
       await mountEarn();
       openPopup();
       expect(dialog()?.textContent).toContain('Đơn sàn 1% · Mua tại Tubu Tree từ 2%, nhân theo hạng');
+    });
+
+    it('từ md: hộp giữa màn hình (Sheet chuẩn), dưới md: sheet đáy', async () => {
+      mocks.user = { tierId: 't1' };
+      await mountEarn();
+      openPopup();
+      expect(dialog()?.parentElement?.className).toContain('md:items-center');
+      expect(dialog()?.className).toContain('md:max-w-lg');
+    });
+
+    it('web chưa có trang gửi đơn sàn: có câu đơn sàn nhưng không có liên kết /points/scan', async () => {
+      mocks.user = { tierId: 't1' };
+      mocks.config = { ...mocks.config, loyalty: { ...(mocks.config.loyalty as object), earnPct: 2, marketplaceEarnPct: 1, marketplaceClaimEnabled: true } } as typeof mocks.config;
+      await mountEarn();
+      openPopup();
+      expect(dialog()?.textContent).toContain('Đơn sàn 1%');
+      expect(dialog()?.querySelector('a[href="/points/scan"]')).toBeNull();
     });
 
     it('Esc đóng popup và trả focus về dòng; nút Đóng cũng đóng được', async () => {

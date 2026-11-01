@@ -22,7 +22,7 @@ function tierEarnFor(authStatus: string, tierId: string | null | undefined, loya
 
 /**
  * Dòng "Nhận … Điểm Xanh" dưới giá ở PDP (D2-07c), bấm mở popup Cách tính Điểm Xanh. `goods` là giá trị hàng đang chọn (đơn giá × số lượng).
- * Vùng bấm cao 44px bằng padding bù margin âm: dòng không đẩy nội dung bên dưới.
+ * Vùng bấm cao 44px dôi lên phía trên (margin trên âm, chữ nằm đáy nút): không chồng lên phần tử bên dưới và không đẩy nội dung.
  */
 export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; authStatus: string; tierId?: string | null }) {
   const config = usePublicConfig();
@@ -35,6 +35,7 @@ export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; a
   const popup = pointsEarnPopup({
     tier,
     guest: authStatus !== 'authenticated' && authStatus !== 'loading',
+    generic: preview === 'generic',
     marketplace: boost?.kind === 'compare' ? vi.externalPoints.boostSub(percentLabel(boost.marketplacePct), percentLabel(boost.appPct)) : null,
   });
   return (
@@ -44,7 +45,7 @@ export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; a
         aria-label={`${text}. ${POINTS_EARN_POPUP.rowAria}`}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, margin: '-7px 0 -13px', padding: 0, background: 'none', border: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+        style={{ display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 44, margin: '-20px 0 0', padding: '0 0 4px', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
       >
         <Leaf size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
         <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
