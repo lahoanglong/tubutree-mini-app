@@ -175,6 +175,7 @@
   --color-bg-cover: var(--forest-700); /* bìa gian hàng/thương hiệu chưa có ảnh */
   --color-bg-chip: var(--stone-100); /* chip nhỏ chưa chọn, nhãn tĩnh */
   --color-track: var(--stone-200); /* rãnh thanh tiến độ */
+  --color-progress-fill-from: var(--forest-200); /* đầu dải màu của phần đã đầy trên rãnh; đích là --color-action-primary-bg */
   --color-media-outline: rgba(28,26,22,.06); /* viền mảnh quanh ảnh trắng trên nền trắng */
   --color-verified-bg: var(--forest-600);
   --color-verified-fg: var(--stone-0);

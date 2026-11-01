@@ -305,7 +305,7 @@ export default function CartPage() {
                     const compareAt = lineCompareAt(it);
                     return (
                       <div key={it.id} data-testid="cart-line" className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
-                        <label className="relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
+                        <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
                           <span className={miniCheckboxWrap}>
                             <input
                               type="checkbox"
@@ -321,6 +321,7 @@ export default function CartPage() {
                           href={`/san-pham/${it.slug}`}
                           tabIndex={-1}
                           aria-hidden="true"
+                          data-testid="cart-line-thumb"
                           className="flex-none max-md:self-start"
                         >
                           <ProductThumb src={it.thumbnail} alt="" size={64} />
@@ -550,11 +551,11 @@ export default function CartPage() {
                 </div>
                 {/* Đã đạt thì chỉ còn dòng chữ: thanh đầy 100% không nói thêm gì mà tốn chiều cao của chân dính (giống Mini App). */}
                 {!freeshipReached && (
-                  <div data-testid="freeship-bar" aria-hidden="true" className="mt-1 h-1 overflow-hidden rounded-full bg-stone-200">
+                  <div data-testid="freeship-bar" aria-hidden="true" className="mt-1 h-1 overflow-hidden rounded-full bg-track">
                     <div
                       data-testid="freeship-fill"
                       className="h-full rounded-full transition-[width]"
-                      style={{ width: `${freeshipPct}%`, background: 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))' }}
+                      style={{ width: `${freeshipPct}%`, background: 'linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg))' }}
                     />
                   </div>
                 )}
