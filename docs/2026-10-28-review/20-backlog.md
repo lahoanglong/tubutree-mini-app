@@ -320,7 +320,7 @@ Bảng dưới thay trạng thái của các mục cùng số trong bảng "Mụ
 | R-97 | xong | PR #104 (1028f-diem, `7682da5f0`) | Bấm dòng "Nhận ~X Điểm Xanh" mở popup "Cách tính Điểm Xanh". Không đổi luật điểm. |
 | R-16 | xong | PR #107 (1028f-donhang, `cefec4276`) và PR #106 | `GET /orders/home-todo` thay ba lời `/orders` của dải Việc cần làm. Khách cũ: web 13 → 12, Mini 13/14 → 12/13 (mở lạnh/mở lại). Lời `/products` trang 1 lưới Gợi ý hôm nay ở Mini do phiên e1 bỏ ở PR #106 (`d3f7599e3`), nên Mini mở lại dự kiến còn 12; chưa đo lại sau khi gộp hai PR. Số đo `perf/1028f-donhang/`. |
 
-Cả #97, #98, #100, #104, #107 đã merge vào main nhưng chưa deploy (PROD `01ede3876` lúc 01/11 14:00).
+Cả #97, #98, #100, #104, #107 đã merge vào main và đã lên PROD ở bản `cefec4276` (deploy chiều 01/11, phiên c2, không migration).
 
 ### Mục mới
 
