@@ -260,7 +260,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       renderPage();
       fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '0503' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-      expect(await screen.findByText('Nhập đủ ngày/tháng/năm, ví dụ 05/03/1990.')).toBeInTheDocument();
+      expect(await screen.findByText('Nhập đủ ngày/tháng/năm, ngày và tháng gõ 2 số, ví dụ 05/03/1990.')).toBeInTheDocument();
       expect(mocks.updateMe).not.toHaveBeenCalled();
     });
 

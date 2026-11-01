@@ -228,6 +228,14 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(input.value).toBe('29/02/2000');
   });
 
+  it('gõ 5/3/1990 tự thành 05/03/1990 (thêm số 0)', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    const input = field(container, 'Ngày sinh');
+    typeInto(input, '5/3/1990');
+    expect(input.value).toBe('05/03/1990');
+  });
+
   it('ngày không có thật hoặc tương lai: báo lỗi rõ và không gửi', async () => {
     mocks.get.mockResolvedValue({ ...ME, dob: null });
     const { container } = await mount();
@@ -250,7 +258,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     typeInto(field(container, 'Ngày sinh'), '0503');
     click(saveBtn(container));
     await flush(2);
-    expect(container.textContent).toContain('Nhập đủ ngày/tháng/năm, ví dụ 05/03/1990.');
+    expect(container.textContent).toContain('Nhập đủ ngày/tháng/năm, ngày và tháng gõ 2 số, ví dụ 05/03/1990.');
     expect(mocks.patch).not.toHaveBeenCalled();
   });
 

@@ -38,7 +38,6 @@ export default function EditProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarChanged, setAvatarChanged] = useState(false);
   const canChangeAvatar = isCloudinaryConfigured();
-  const [dob, setDob] = useState('');
   const [dobText, setDobText] = useState('');
   const [dobTouched, setDobTouched] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -57,15 +56,15 @@ export default function EditProfilePage() {
       setEmail(meQ.data.email ?? '');
       // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
       setAvatarUrl(meQ.data.avatarUrl || useAuthStore.getState().user?.avatarUrl || null);
-      setDob(meQ.data.dob ?? '');
     }
   }, [meQ.data]);
 
   // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
-  const dobNew = !meQ.data?.dob && dob !== '';
-  const dobDisplay = formatDobDisplay(dob);
   const dobEditable = !meQ.data?.dob;
   const dobCheck = validateDobVn(dobText);
+  const dob = dobEditable ? (dobCheck.iso ?? '') : (meQ.data?.dob ?? '');
+  const dobNew = dobEditable && dob !== '';
+  const dobDisplay = formatDobDisplay(dob);
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
@@ -271,7 +270,7 @@ export default function EditProfilePage() {
             <Field label="Ngày sinh" error={dobError ?? undefined}>
               <input
                 {...(dobEditable
-                  ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, maxLength: 10, autoComplete: 'bday', value: dobText }
+                  ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, autoComplete: 'bday', value: dobText }
                   : { type: 'text', value: formatDobDisplay(meQ.data?.dob) || dob })}
                 readOnly={!dobEditable || confirmingDob}
                 aria-invalid={dobError ? true : undefined}
@@ -279,7 +278,6 @@ export default function EditProfilePage() {
                 onChange={(e) => {
                   const text = maskDobInput(e.target.value);
                   setDobText(text);
-                  setDob(validateDobVn(text).iso ?? '');
                   setConfirmingDob(false);
                 }}
                 style={{
@@ -288,7 +286,7 @@ export default function EditProfilePage() {
                   minHeight: 44,
                   padding: 12,
                   borderRadius: 'var(--radius-control)',
-                  border: '1px solid var(--color-border-default)',
+                  border: `1px solid ${dobError ? 'var(--color-status-danger-fg)' : 'var(--color-border-default)'}`,
                   fontFamily: 'inherit',
                   fontSize: 'var(--type-body-sm-size)',
                   background: 'var(--color-bg-surface)',

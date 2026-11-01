@@ -51,7 +51,6 @@ export default function EditProfilePage() {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [dob, setDob] = useState('');
   const [dobText, setDobText] = useState('');
   const [dobTouched, setDobTouched] = useState(false);
   // Chỉ nhận URL đã lưu (từ hồ sơ hoặc vừa tải lên Cloudinary): API không nhận base64 cho ảnh đại diện.
@@ -75,16 +74,16 @@ export default function EditProfilePage() {
     setEmail(me.email ?? '');
     // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
     setAvatarUrl(me.avatarUrl || user?.avatarUrl || null);
-    setDob(me.dob ?? '');
     // Chỉ nạp lại khi /me đổi, không theo `user`: phiên đổi sau khi lưu không được ghi đè chữ khách đang gõ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
   // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
-  const dobNew = !me?.dob && dob !== '';
-  const dobDisplay = formatDobDisplay(dob);
   const dobEditable = !me?.dob;
   const dobCheck = validateDobVn(dobText);
+  const dob = dobEditable ? (dobCheck.iso ?? '') : (me?.dob ?? '');
+  const dobNew = dobEditable && dob !== '';
+  const dobDisplay = formatDobDisplay(dob);
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
@@ -271,7 +270,7 @@ export default function EditProfilePage() {
         <Field label="Ngày sinh" error={dobError ?? undefined}>
           <input
             {...(dobEditable
-              ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, maxLength: 10, autoComplete: 'bday', value: dobText }
+              ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, autoComplete: 'bday', value: dobText }
               : { type: 'text', value: formatDobDisplay(me?.dob) || dob })}
             readOnly={!dobEditable || confirmingDob}
             aria-invalid={dobError ? true : undefined}
@@ -279,7 +278,6 @@ export default function EditProfilePage() {
             onChange={(e) => {
               const text = maskDobInput(e.target.value);
               setDobText(text);
-              setDob(validateDobVn(text).iso ?? '');
               setConfirmingDob(false);
             }}
             className={`${dobError ? ui.fieldError : ui.field} ${FIELD_MINI}`}

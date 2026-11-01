@@ -12,6 +12,11 @@ describe('maskDobInput', () => {
   it('bỏ ký tự lạ và giới hạn 8 số', () => {
     expect(maskDobInput('05a/03-1990999')).toBe('05/03/1990');
   });
+  it('gõ ngày/tháng một số rồi / thì tự thêm số 0', () => {
+    expect(maskDobInput('5/3/1990')).toBe('05/03/1990');
+    expect(maskDobInput('5/')).toBe('05');
+    expect(maskDobInput('05/3/')).toBe('05/03');
+  });
   it('xoá lùi về dấu / không bị dính lại', () => {
     expect(maskDobInput('05/')).toBe('05');
     expect(maskDobInput('05/0')).toBe('05/0');
@@ -28,6 +33,7 @@ describe('validateDobVn', () => {
   it('gõ dở thì báo nhập đủ dd/mm/yyyy', () => {
     expect(validateDobVn('05/03', NOW)).toEqual({ iso: null, error: DOB_ERRORS.incomplete });
     expect(DOB_ERRORS.incomplete).toMatch(/dd\/mm\/yyyy|ngày\/tháng\/năm/);
+    expect(DOB_ERRORS.incomplete).toMatch(/2 số/);
   });
   it('29/02 chỉ có ở năm nhuận', () => {
     expect(validateDobVn('29/02/2000', NOW).iso).toBe('2000-02-29');
