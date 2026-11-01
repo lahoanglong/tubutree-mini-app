@@ -97,37 +97,55 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   }
 
   const rootCount = () => prisma.category.count({ where: { parentId: null } });
+  /**
+   * Trên CI các spec trước để lại gốc trong cùng DB (đã thấy 11 > trần 8): tạm dời gốc không phải của spec này vào một gốc giữ chỗ
+   * để có chỗ trống, chạy xong trả lại nguyên chỗ cũ.
+   */
+  async function withRootRoom(run: () => Promise<void>) {
+    const others = (await prisma.category.findMany({ where: { parentId: null, NOT: mine }, select: { id: true } })).map((r) => r.id);
+    const holder = others.length > 0 ? await prisma.category.create({ data: { name: name('giu-cho'), slug: `it-cat-${tag}-giu-cho` } }) : null;
+    if (holder) await prisma.category.updateMany({ where: { id: { in: others } }, data: { parentId: holder.id } });
+    try {
+      await run();
+    } finally {
+      if (holder) {
+        await prisma.category.updateMany({ where: { id: { in: others } }, data: { parentId: null } });
+        await prisma.category.delete({ where: { id: holder.id } });
+      }
+    }
+  }
   // Gốc seed của DB IT đang giữ sản phẩm gắn thẳng; các ca dưới đây thử trần/thứ tự chứ không thử luật xác nhận nên đã xác nhận sẵn.
   const under = (parentId: string, label: string) => svc.create('it', { name: name(label), parentId, confirmDirectProducts: true });
   const childrenOf = (parentId: string) => prisma.category.findMany({ where: { parentId }, orderBy: { sortOrder: 'asc' } });
 
-  it('tạo mục con và gán SP vào cùng gốc lá song song: không bao giờ ra gốc vừa có con vừa giữ SP mà chưa ai xác nhận', async () => {
-    // Gốc seed đều đang giữ sản phẩm nên cần một gốc mới trống, không sản phẩm.
-    if ((await rootCount()) >= CATEGORY_MAX_ROOTS) throw new Error('Ca này cần một chỗ gốc trống trong DB IT.');
-    const host = (await svc.create('it', { name: name('goc-chay-dua') })).id;
-    const p = await product('chay-dua');
-    try {
-      const [created, assigned] = await Promise.allSettled([
-        svc.create('it', { name: name('con-chay-dua'), parentId: host }),
-        products.assign('it', [p.id], host, 'ADD'),
-      ]);
-      const hasChild = (await childrenOf(host)).length > 0;
-      const holdsProduct = (await categoriesOf(p.id)).includes(host);
-      expect(hasChild && holdsProduct).toBe(false);
-      // Thua cuộc đua thì bị từ chối đúng lý do, không phải lỗi lạ.
-      if (created.status === 'rejected') {
-        expect(created.reason).toBeInstanceOf(BadRequestException);
-        expect((created.reason as BadRequestException).getResponse()).toMatchObject({ code: CATEGORY_PARENT_HAS_PRODUCTS });
+  it('tạo mục con và gán SP vào cùng gốc lá song song: không bao giờ ra gốc vừa có con vừa giữ SP mà chưa ai xác nhận', () =>
+    withRootRoom(async () => {
+      // Gốc seed đều đang giữ sản phẩm nên cần một gốc mới trống, không sản phẩm.
+      if ((await rootCount()) >= CATEGORY_MAX_ROOTS) throw new Error('Ca này cần một chỗ gốc trống trong DB IT.');
+      const host = (await svc.create('it', { name: name('goc-chay-dua') })).id;
+      const p = await product('chay-dua');
+      try {
+        const [created, assigned] = await Promise.allSettled([
+          svc.create('it', { name: name('con-chay-dua'), parentId: host }),
+          products.assign('it', [p.id], host, 'ADD'),
+        ]);
+        const hasChild = (await childrenOf(host)).length > 0;
+        const holdsProduct = (await categoriesOf(p.id)).includes(host);
+        expect(hasChild && holdsProduct).toBe(false);
+        // Thua cuộc đua thì bị từ chối đúng lý do, không phải lỗi lạ.
+        if (created.status === 'rejected') {
+          expect(created.reason).toBeInstanceOf(BadRequestException);
+          expect((created.reason as BadRequestException).getResponse()).toMatchObject({ code: CATEGORY_PARENT_HAS_PRODUCTS });
+        }
+        if (assigned.status === 'rejected') expect((assigned.reason as Error).message).toContain('có mục con');
+        expect([created.status, assigned.status].filter((x) => x === 'fulfilled')).toHaveLength(1);
+      } finally {
+        // Trả lại chỗ gốc: ca "đủ 8 gốc" bên dưới đếm số gốc có sẵn.
+        await products.assign('it', [p.id], host, 'REMOVE');
+        await prisma.category.deleteMany({ where: { parentId: host } });
+        await prisma.category.delete({ where: { id: host } });
       }
-      if (assigned.status === 'rejected') expect((assigned.reason as Error).message).toContain('có mục con');
-      expect([created.status, assigned.status].filter((x) => x === 'fulfilled')).toHaveLength(1);
-    } finally {
-      // Trả lại chỗ gốc: ca "đủ 8 gốc" bên dưới đếm số gốc có sẵn.
-      await products.assign('it', [p.id], host, 'REMOVE');
-      await prisma.category.deleteMany({ where: { parentId: host } });
-      await prisma.category.delete({ where: { id: host } });
-    }
-  });
+    }));
 
   it('5 lệnh thêm mục con song song vào cha còn 2 chỗ: đúng 2 thành công, 3 bị 400, cha có đúng 8 con', async () => {
     for (let i = 0; i < CATEGORY_MAX_CHILDREN - 2; i++) await under(capParent, `con-${i}`);
@@ -234,13 +252,8 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
     expect(await categoriesOf(id)).toEqual([adminLeaf.id]);
   });
 
-  it('3 lệnh thêm gốc song song khi chỉ còn 1 chỗ: đúng 1 thành công, tổng gốc không vượt 8', async () => {
-    // Trên CI các spec trước để lại gốc trong cùng DB (đã thấy 11 > trần 8): tạm dời gốc không phải của spec này vào một gốc giữ chỗ
-    // để có chỗ trống, xong trả lại nguyên chỗ cũ.
-    const others = (await prisma.category.findMany({ where: { parentId: null, NOT: mine }, select: { id: true } })).map((r) => r.id);
-    const holder = others.length > 0 ? await prisma.category.create({ data: { name: name('giu-cho'), slug: `it-cat-${tag}-giu-cho` } }) : null;
-    if (holder) await prisma.category.updateMany({ where: { id: { in: others } }, data: { parentId: holder.id } });
-    try {
+  it('3 lệnh thêm gốc song song khi chỉ còn 1 chỗ: đúng 1 thành công, tổng gốc không vượt 8', () =>
+    withRootRoom(async () => {
       const existing = await rootCount();
       expect(existing).toBeLessThanOrEqual(CATEGORY_MAX_ROOTS - 1);
       for (let i = existing; i < CATEGORY_MAX_ROOTS - 1; i++) await svc.create('it', { name: name(`goc-${i}`) });
@@ -250,11 +263,5 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
 
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       expect(await rootCount()).toBe(CATEGORY_MAX_ROOTS);
-    } finally {
-      if (holder) {
-        await prisma.category.updateMany({ where: { id: { in: others } }, data: { parentId: null } });
-        await prisma.category.delete({ where: { id: holder.id } });
-      }
-    }
-  });
+    }));
 });
