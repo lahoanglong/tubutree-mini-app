@@ -155,3 +155,9 @@
 **Test cũ sửa theo thiết kế mới:** `flash-slots.miniapp.spec.ts` (bỏ so `topBefore`: hàng dính nay bằng đúng vị trí tự nhiên), `flash-sale.spec.tsx` (`top` là `var(--safe-top)`), `cart.service.spec.ts` (ca Giờ vàng kỳ vọng `listUnitPrice` 50.000), `cart.spec.tsx` Mini và `coupon-box.spec.tsx` web (chữ gợi ý bản ngắn). Không có test nào hỏng vì hồi quy.
 
 **E2E Mini cả bộ** (`E2E_SCOPE=miniapp --workers=2`): 354 passed, 10 skipped, 0 failed.
+
+**Gate** (`gate.sh ... --base 201046ff2`, log ở `.claude/worktrees/gate-F10b.txt`): PASS shared-types, tsc-api/web/miniapp/app-core, eslint-api/miniapp/web, vitest-app-core 2115, vitest-web 9160, jest-api 539 suite / 12562 ca, lint-parity, vite-build, bundle-mini entry 645/201 KB (trần 700).
+- FAIL tsc-e2e: lỗi thật của gói (`s.sticky` có thể undefined trong closure ở `page-title-row.miniapp.spec.ts`), đã sửa ở c0e86828f, `tsc --noEmit` e2e chạy lại xanh.
+- FAIL vitest-miniapp (5 file, 7 ca) và vitest-miniapp-utc (7 file, 10 ca): hai lần hỏng KHÁC bộ file, đều dạng hết hạn 5000ms/đồng hồ giả lúc máy hết RAM; không file nào do gói đụng tới. Chạy lại riêng 9 file đã hỏng (flash-sale, suggest-feed, shop-products-tab, subscriptions-panel, product-detail-info, brand-view, loyalty-behavior, offers, storefront-builder) ở múi giờ máy và `TZ=UTC`: 9/9 file, 312/312 ca xanh. Chưa chạy lại cả bộ Mini lần hai (hết RAM).
+- Race (cụm riêng 25557): 4 suite / 29 ca xanh ở Task 2 (cart-combo-equals-quote có ca Giờ vàng thắng giá sale, cart-batch, cart-batch-checkout, catalog-flash-card-price); cụm đã tắt.
+- e2e web `cart-footer.web.spec.ts` (6 ca) chạy với API giả (`/api/health`, `/products`, `/categories`, `/brands`) + `next dev` cổng 3370/3371, project "Web Customer Mobile": xanh. Chưa chạy qua `web-gate.sh` (cần DB + Docker): để CI.
