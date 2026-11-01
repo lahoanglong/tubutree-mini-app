@@ -192,4 +192,4 @@ So `tokens.css` trước (`16a6d187a^`) và sau bằng `getBoundingClientRect` v
 ### Số đo và ảnh
 - Ảnh: `docs/2026-10-31-shop-redesign/screens/H3/{before,after}/` (gitignore): `mini375-home-categories.png`, `mini375-<màn>.png` 19 màn, `ghost-<màn>.json`; chỉ ở `after/`: `web1280-builder.png`, `web375-builder.png`.
 - Baseline px hạ ở hai `category-row.tsx` (Mini 9 → 8, web 7 → 6), commit `chore(ds): hạ baseline px của category-row hai app (H3 #5)`.
-- Web qua `web-gate.sh` (DB tạm): 168 đạt, 36 bỏ qua theo điều kiện của spec, 0 đỏ ở các spec thật (shop, affiliate, ctv-375, home-merged, home-banner-lg, a11y-shop, ds-parity.shop, builder-polish, tiles-scroll).
+- Web qua `web-gate.sh` (DB tạm): 168 đạt, 36 bỏ qua (spec tự bỏ theo khổ/project, chưa xem lý do từng bài), 0 đỏ ở các spec thật (shop, affiliate, ctv-375, home-merged, home-banner-lg, a11y-shop, ds-parity.shop, builder-polish, tiles-scroll).
