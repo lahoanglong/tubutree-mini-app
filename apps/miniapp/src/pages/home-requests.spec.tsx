@@ -45,6 +45,7 @@ const PUBLIC_FEED = {
   categories: [],
   brands: [{ brand: 'Cobote', count: 3 }],
   campaigns: [],
+  combos: [],
   publicConfig: {
     freeshipThreshold: 350_000,
     subscribeDiscountPct: 0.17,
@@ -172,6 +173,32 @@ describe('Trang chủ gộp request (C-037)', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().filter((p) => p === '/campaigns')).toHaveLength(1);
     expect(mocks.get.mock.calls.find(([u]) => u === '/campaigns')?.[1]).toMatchObject({ params: { placement: 'HOME_TOP' } });
+  });
+
+  it('combo toàn sàn đến từ khối gộp /home: hiện kệ "Combo tiết kiệm", không thêm request /bundles/combos', async () => {
+    const bundle = (id: string) => ({
+      id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + 86_400_000).toISOString(), anchorProductId: null,
+      items: ['a', 'b'].map((n) => ({ productId: `${id}${n}`, variationId: `v-${id}${n}`, maxQty: 1, addonPrice: null, inStock: true, product: card(`${id}${n}`, `Món ${id}${n}`) })),
+    });
+    mocks.routes['/home'] = () => ({ data: { ...PUBLIC_FEED, combos: [bundle('c1'), bundle('c2')] } });
+    mocks.routes['/home/me'] = () => ({ data: ME_FEED });
+    renderHome();
+    expect(await screen.findByRole('region', { name: 'Combo tiết kiệm' })).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths()).not.toContain('/bundles/combos');
+  });
+
+  it('API gộp cũ chưa có khối combos: lùi về một request lẻ /bundles/combos?limit=4, lỗi thì kệ ẩn', async () => {
+    const { combos: _dropped, ...oldPublic } = PUBLIC_FEED;
+    mocks.routes['/home'] = () => ({ data: oldPublic });
+    mocks.routes['/home/me'] = () => ({ data: ME_FEED });
+    mocks.routes['/bundles/combos'] = () => ({ data: [] });
+    renderHome();
+    expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths().filter((p) => p === '/bundles/combos')).toHaveLength(1);
+    expect(mocks.get.mock.calls.find(([u]) => u === '/bundles/combos')?.[1]).toMatchObject({ params: { limit: 4 } });
+    expect(screen.queryByRole('region', { name: 'Combo tiết kiệm' })).toBeNull();
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {

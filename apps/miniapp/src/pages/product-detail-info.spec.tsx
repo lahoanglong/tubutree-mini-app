@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   fetchForYou: vi.fn(),
   fetchReviews: vi.fn(),
   getCoupons: vi.fn(),
+  getProductBundles: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -29,6 +30,7 @@ vi.mock('../services/shop-api', () => ({
   addToCart: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({ getCoupons: mocks.getCoupons }));
+vi.mock('../services/bundle-api', () => ({ getProductBundles: mocks.getProductBundles }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
@@ -82,6 +84,7 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     mocks.fetchForYou.mockResolvedValue([]);
     mocks.fetchReviews.mockResolvedValue({ count: 0, average: 0, items: [] });
     mocks.getCoupons.mockResolvedValue([]);
+    mocks.getProductBundles.mockResolvedValue({ combos: [], addons: [] });
   });
 
   it('có mã dùng được: dòng "Ưu đãi" ghi số mã, bấm mở hộp thoại "Mã giảm giá"; mã mua chung của SP khác không tính', async () => {
@@ -147,7 +150,23 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     expect(screen.queryByRole('heading', { name: 'Khách thường mua cùng' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
+    await waitFor(() => expect(mocks.getProductBundles).toHaveBeenCalledWith('xa-phong'));
     expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+  });
+
+  it('có combo và mua kèm: hiện hai khối ngay trên đánh giá, mua kèm ghi điều kiện mua cùng sản phẩm này', async () => {
+    const item = (id: string, o: Record<string, unknown> = {}) => ({
+      productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true,
+      product: { ...card(id), repVariationId: `v-${id}`, isFeatured: false }, ...o,
+    });
+    mocks.getProductBundles.mockResolvedValue({
+      combos: [{ id: 'c1', kind: 'BUNDLE_PCT', title: 'Bộ đôi', pct: 10, endAt: END, anchorProductId: null, items: [item('p1'), item('p2')] }],
+      addons: [{ id: 'a1', kind: 'ADDON', title: 'Kèm', pct: null, endAt: END, anchorProductId: 'p1', items: [item('p3', { addonPrice: 40_000 })] }],
+    });
+    renderPdp();
+    expect(await screen.findByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
+    const addons = screen.getByRole('region', { name: 'Mua kèm deal sốc' });
+    expect(within(addons).getByText('Chỉ khi mua cùng Xà phòng sả chanh')).toBeInTheDocument();
   });
 
   it('dải gợi ý trả sai dạng (không phải mảng): trang vẫn dựng, chỉ ẩn dải đó', async () => {

@@ -73,7 +73,7 @@ import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
-import { PdpBundleSlots } from '../components/product/pdp-bundle-slots';
+import { PdpBundles } from '../components/product/pdp-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
@@ -758,7 +758,7 @@ export default function ProductDetailPage() {
         </Box>
       )}
 
-      <PdpBundleSlots />
+      {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 
       {reviews.data && reviews.data.count > 0 && (
         <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />
