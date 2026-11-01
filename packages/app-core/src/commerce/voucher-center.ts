@@ -13,6 +13,8 @@ export interface VoucherRow {
   coupon: CouponDTO & VoucherFlags;
   /** Lý do mã chưa nhận được ("Chỉ dành cho khách đặt đơn đầu tiên"); chỉ có ở dòng `ineligible`, truyền vào `reason` của thẻ. */
   reason?: string;
+  /** Mã đã nhận nhưng ví chưa tải được nên chưa biết còn dùng được không: thẻ không có nút, không nhãn "Đã dùng". */
+  unverified?: true;
 }
 
 export const VOUCHER_TABS: readonly { key: VoucherTab; label: string }[] = [
@@ -53,25 +55,39 @@ const toRow = (coupon: CouponDTO & VoucherFlags, now: number): VoucherRow => ({ 
 const STATE_RANK: Partial<Record<VoucherView['state'], number>> = { collectable: 0, saved: 1, soldout: 2 };
 
 /**
- * Tab Nhận mã. `walletCodes` là mã trong `/me/coupons` của khách (rỗng khi chưa đăng nhập). Ví chỉ giữ mã còn dùng được nên không đủ để biết
- * khách đã nhận chưa: mã nhận rồi mà đã dùng hết lượt cá nhân biến khỏi ví, còn `/coupons/collectable` (công khai) vẫn trả nó. `mine` (khách đã
- * đăng nhập) nói rõ hai trường hợp đó: mã đã nhận mà không còn trong ví thành `used`, mã chỉ-khách-mới của khách đã có đơn thành `ineligible` kèm
- * lý do; cả hai đều không còn nút "Lưu mã" (bấm chỉ nhận lời từ chối của máy chủ). Thiếu `mine` thì mọi mã ngoài ví là chưa nhận như trước.
- * Mã khách đã nhận không bao giờ thành "hết lượt" dù lượt cuối vừa bị nhận: khách đang giữ nó. Chưa nhận đứng trước, rồi đã lưu, rồi hết
- * lượt/hết hạn; mỗi nhóm sắp hết hạn trước.
+ * Tập mã trong ví cho tab Nhận mã. Ví lỗi mà chưa có dữ liệu nào thì `null` (chưa biết, khác với ví rỗng): `collectRows` cần phân biệt, vì ví là
+ * thứ duy nhất nói mã đã nhận còn dùng được hay đã dùng hết. Lỗi mà react-query còn giữ dữ liệu của lần tải trước thì dùng dữ liệu đó.
+ */
+export function walletCodeSet(wallet: readonly CouponDTO[] | undefined, failed: boolean): ReadonlySet<string> | null {
+  if (wallet === undefined && failed) return null;
+  return new Set((wallet ?? []).map((c) => c.code));
+}
+
+/**
+ * Tab Nhận mã. `walletCodes` là mã trong `/me/coupons` của khách (rỗng khi chưa đăng nhập, `null` khi ví tải lỗi). Ví chỉ giữ mã còn dùng được nên
+ * không đủ để biết khách đã nhận chưa: mã nhận rồi mà đã dùng hết lượt cá nhân biến khỏi ví, còn `/coupons/collectable` (công khai) vẫn trả nó. `mine`
+ * (khách đã đăng nhập) nói rõ các trường hợp đó: mã đã nhận mà không còn trong ví thành `used`; mã đã nhận nhưng chỉ dành khách mới mà khách đã có đơn
+ * (`claimedIneligible`) và mã chỉ-khách-mới chưa nhận (`newCustomerOnly`) thành `ineligible` kèm lý do; không mã nào còn nút "Lưu mã" (bấm chỉ nhận lời từ
+ * chối của máy chủ). Ví lỗi thì không đủ căn cứ nói "đã dùng": mã đã nhận hiện `saved` kèm `unverified` (không nút), chỉ `claimedIneligible` của API còn đúng.
+ * Thiếu `mine` thì mọi mã ngoài ví là chưa nhận như trước. Mã khách đã nhận không bao giờ thành "hết lượt" dù lượt cuối vừa bị nhận: khách đang giữ nó.
+ * Chưa nhận đứng trước, rồi đã lưu, rồi hết lượt/hết hạn; mỗi nhóm sắp hết hạn trước.
  */
 export function collectRows(
   collectable: readonly CollectableCouponDTO[],
-  walletCodes: ReadonlySet<string>,
+  walletCodes: ReadonlySet<string> | null,
   now: number,
   mine?: CollectableMineDTO,
 ): VoucherRow[] {
   const taken = new Set(mine?.claimed);
   const newOnly = new Set(mine?.newCustomerOnly);
+  const lapsed = new Set(mine?.claimedIneligible);
   const rows = sortVouchers([...collectable], now).map((c) => {
-    const inWallet = walletCodes.has(c.code);
-    const spent = !inWallet && taken.has(c.code);
-    const gated = !inWallet && !spent && newOnly.has(c.code);
+    const inWallet = walletCodes?.has(c.code) ?? false;
+    const held = !inWallet && taken.has(c.code);
+    const lapsedHeld = held && lapsed.has(c.code);
+    const unverified = held && walletCodes === null && !lapsedHeld;
+    const spent = held && walletCodes !== null && !lapsedHeld;
+    const gated = !inWallet && !held && newOnly.has(c.code);
     const remaining = c.usageLimit === null ? null : Math.max(0, c.usageLimit - c.claimedCount);
     const row = toRow(
       {
@@ -82,15 +98,17 @@ export function collectRows(
         maxDiscount: c.maxDiscount,
         endAt: c.endAt,
         title: c.title,
-        claimed: inWallet || spent,
+        claimed: inWallet || held,
         used: spent,
-        ineligible: gated,
-        soldOut: !inWallet && !spent && remaining === 0,
+        ineligible: gated || lapsedHeld,
+        soldOut: !inWallet && !held && remaining === 0,
         remaining,
       },
       now,
     );
-    return gated ? { ...row, reason: fillCopy('coupon.newCustomerOnlyReason') } : row;
+    if (gated) return { ...row, reason: fillCopy('coupon.newCustomerOnlyReason') };
+    if (lapsedHeld) return { ...row, reason: fillCopy('coupon.claimedIneligibleReason') };
+    return unverified ? { ...row, unverified: true as const } : row;
   });
   const rank = (r: VoucherRow) => STATE_RANK[r.view.state] ?? 3;
   return rows

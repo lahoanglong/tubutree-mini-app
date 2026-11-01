@@ -98,6 +98,23 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     expect(result.current.bestSellerRanks).toEqual([1, 3, 4, 5]);
   });
 
+  it('bestSellerBasis là days30 khi API trả theo 30 ngày', async () => {
+    const { result } = setup('returning');
+    await waitFor(() => expect(result.current.bestSellers.length).toBeGreaterThan(0));
+    expect(result.current.bestSellerBasis).toBe('days30');
+  });
+
+  it('API cũ từ chối best_seller_30d (400): kệ lùi về best_seller, vẫn có món và bestSellerBasis là total', async () => {
+    mocks.fetchProducts.mockImplementation(async (params: { sort?: string }) => {
+      if (params.sort === 'best_seller_30d') throw { response: { status: 400 } };
+      return page(['p1', 'p2', 'p3', 'p4']);
+    });
+    const { result } = setup('new');
+    await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
+    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 12, sort: 'best_seller' });
+    expect(result.current.bestSellerBasis).toBe('total');
+  });
+
   it('không có món nào bị bỏ thì hạng là #1..#n', async () => {
     mocks.fetchFlash.mockResolvedValue([]);
     mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3', 'p4']));

@@ -7,12 +7,7 @@ import type { PageResponse, ProductCard } from './catalog';
  * (400, `forbidNonWhitelisted`) nên lùi về `best_seller` (tổng lượt bán) thay vì để kệ trống.
  */
 export async function fetchBestSellers(http: HttpClient, limit = 10): Promise<ProductCard[]> {
-  try {
-    return (await http.get<PageResponse<ProductCard>>('/products', { query: { sort: 'best_seller_30d', limit } })).data;
-  } catch (err) {
-    if (errorStatus(err) !== 400) throw err;
-    return (await http.get<PageResponse<ProductCard>>('/products', { query: { sort: 'best_seller', limit } })).data;
-  }
+  return (await bestSellersWithBasis((sort) => http.get<PageResponse<ProductCard>>('/products', { query: { sort, limit } }))).data;
 }
 
 /** Thước đo của một trang Bán chạy nhất: 30 ngày gần đây (`best_seller_30d`) hay tổng lượt bán (`best_seller`, khi API cũ từ chối thước đo mới). */
@@ -24,19 +19,26 @@ export interface BestSellersPage extends PageResponse<ProductCard> {
 }
 
 /**
+ * Chạy `load('best_seller_30d')`; API cũ từ chối thước đo đó (400, `forbidNonWhitelisted`) thì lùi về `load('best_seller')` để kệ không trống, và ghi `basis`
+ * để nơi vẽ nói đúng thước đo ("30 ngày qua" sai trên bảng xếp theo tổng lượt bán). Lỗi khác 400 ném tiếp. Dùng chung cho trang Bán chạy nhất và kệ Trang chủ
+ * (mỗi nơi tự cấp cách gọi: web đi qua `HttpClient`, Mini App qua `fetchProducts` có đường tắt khối `/home`).
+ */
+export async function bestSellersWithBasis(load: (sort: 'best_seller_30d' | 'best_seller') => Promise<PageResponse<ProductCard>>): Promise<BestSellersPage> {
+  try {
+    return { ...(await load('best_seller_30d')), basis: 'days30' };
+  } catch (err) {
+    if (errorStatus(err) !== 400) throw err;
+    return { ...(await load('best_seller')), basis: 'total' };
+  }
+}
+
+/**
  * Một trang của "Bán chạy nhất": 20 món xếp theo lượt bán 30 ngày, tuỳ chọn một danh mục gốc (API gồm cả con). Lùi về `best_seller` khi API
- * cũ từ chối `best_seller_30d` (400), như `fetchBestSellers`, để trang không trắng; `basis` cho trang biết đang xếp theo thước đo nào để không ghi
- * "30 ngày qua" trên bảng xếp theo tổng lượt bán. Trả cả `meta` vì trang web phân trang số.
+ * cũ từ chối `best_seller_30d` (xem `bestSellersWithBasis`), để trang không trắng. Trả cả `meta` vì trang web phân trang số.
  */
 export async function fetchBestSellersPage(
   http: HttpClient,
   { category, page, limit = 20 }: { category?: string; page: number; limit?: number },
 ): Promise<BestSellersPage> {
-  const query = (sort: 'best_seller_30d' | 'best_seller') => ({ sort, limit, page, ...(category ? { category } : {}) });
-  try {
-    return { ...(await http.get<PageResponse<ProductCard>>('/products', { query: query('best_seller_30d') })), basis: 'days30' };
-  } catch (err) {
-    if (errorStatus(err) !== 400) throw err;
-    return { ...(await http.get<PageResponse<ProductCard>>('/products', { query: query('best_seller') })), basis: 'total' };
-  }
+  return bestSellersWithBasis((sort) => http.get<PageResponse<ProductCard>>('/products', { query: { sort, limit, page, ...(category ? { category } : {}) } }));
 }

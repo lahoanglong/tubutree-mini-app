@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
+import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/browse';
+import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
@@ -29,12 +30,14 @@ export interface HomeShelves {
   bestSellers: ProductCard[];
   /** Hạng thật của từng món ở `bestSellers` (cùng chỉ số): vị trí trong danh sách xếp theo lượt bán 30 ngày, tính trước khi bỏ món trùng kệ trên. */
   bestSellerRanks: number[];
+  /** Thước đo của bảng xếp hạng: `total` khi API cũ chưa có `best_seller_30d` và kệ lùi về tổng lượt bán (phụ đề không được ghi "30 ngày"). */
+  bestSellerBasis: BestSellersBasis;
   /** Slug các món Giờ vàng đang giữ: Mua lại bỏ chúng đi. */
   flashSlugs: ReadonlySet<string>;
   /** Slug mọi món đang hiện ở kệ hàng: lưới Gợi ý hôm nay bỏ chúng. */
   seen: ReadonlySet<string>;
   flashQuery: BlockQuery<FlashSaleActiveItem[]>;
-  bestSellerQuery: BlockQuery<PageResponse<ProductCard>>;
+  bestSellerQuery: BlockQuery<BestSellersPage>;
   /** Khối Giờ vàng gọi khi đồng hồ về 0: suất hết giờ rời kệ và thôi chiếm món, món đó trở lại các kệ dưới. */
   onFlashEnd: () => void;
 }
@@ -42,7 +45,7 @@ export interface HomeShelves {
 export interface HomeShelvesInitial {
   /** Suất Giờ vàng server dựng sẵn trong HTML đầu. */
   flash?: FlashSaleActiveItem[];
-  bestSellers?: PageResponse<ProductCard>;
+  bestSellers?: BestSellersPage;
 }
 
 /**
@@ -77,6 +80,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
   const flashData = flashQuery.data;
   const purchasedData = purchased.data?.items;
   const bestData = bestSellerQuery.data?.data;
+  const bestSellerBasis: BestSellersBasis = bestSellerQuery.data?.basis ?? 'days30';
   const combosData = combosQuery.data;
   // Chỉ phụ thuộc dữ liệu (không phải đối tượng query, đổi mỗi lần vẽ) để `seen` giữ nguyên danh tính khi dữ liệu chưa đổi.
   const shelves = useMemo(() => {
@@ -98,5 +102,5 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `expiredTick` chỉ để tính lại `serverNow()`.
   }, [kind, flashData, purchasedData, bestData, combosData, hydrated, expiredTick]);
-  return { ...shelves, flashQuery, bestSellerQuery, onFlashEnd };
+  return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery, onFlashEnd };
 }

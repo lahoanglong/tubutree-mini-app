@@ -3,6 +3,7 @@
 import { Fragment, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
@@ -46,7 +47,7 @@ import { useHomeShelves } from './use-home-shelves';
 
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
-  bestSellers?: PageResponse<ProductCard>;
+  bestSellers?: BestSellersPage;
   /** Trang 1 của lưới gợi ý (chip "Tất cả"), xếp theo `suggestSeed`. */
   suggest?: PageResponse<ProductCard>;
   /** Hạt giống ngày VN lúc dựng trang: client dùng lại đúng hạt giống này để dữ liệu dựng sẵn khớp khoá và lưới không đổi thứ tự sau hydrate. */
@@ -142,8 +143,11 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
     // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi lần trước máy này có banner mà nó chưa về
-    // hoặc còn chờ biết loại khách (chiến dịch riêng của loại khách chỉ hiện sau đó).
-    banner: banners.slides.length > 0 || (banners.hinted && (banners.loading || settling)) ? <HomeBanner slides={banners.slides} /> : null,
+    // hoặc còn chờ biết loại khách MÀ có chiến dịch riêng của loại khách sẽ hiện sau đó (server đã trả danh sách mọi đối tượng: không có thì chờ cũng vô ích).
+    banner:
+      banners.slides.length > 0 || (banners.hinted && (banners.loading || (settling && banners.revealable))) ? (
+        <HomeBanner slides={banners.slides} />
+      ) : null,
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid />,
@@ -172,6 +176,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       <BestSellerRail
         items={shelves.bestSellers}
         ranks={shelves.bestSellerRanks}
+        basis={shelves.bestSellerBasis}
         loading={shelves.bestSellerQuery.isLoading}
         error={shelves.bestSellerQuery.error}
         onRetry={shelves.bestSellerQuery.refetch}

@@ -419,11 +419,13 @@ describe('UpcomingFlashSales', () => {
     expect(mocks.get).not.toHaveBeenCalled();
   });
 
-  it('còn thời gian: "Bắt đầu sau Xh YYm" và nút nhắc cao tối thiểu 44px', async () => {
+  it('còn thời gian: "Sau 59 phút" theo luật chữ (không "0h 59m"), ngắn để vừa thẻ 112px, và nút nhắc cao tối thiểu 44px', async () => {
     upcomingResult = async () => [upcoming()];
     const c = await mount(<UpcomingFlashSales />);
     expect(c.querySelector('h2')?.textContent).toContain('Sắp diễn ra');
-    expect(c.textContent).toMatch(/Bắt đầu sau \d+h \d{2}m/);
+    expect(c.textContent).toMatch(/Sau (\d+ giờ \d{2} phút|\d+ phút)/);
+    expect(c.textContent).not.toMatch(/Bắt đầu sau/);
+    expect(c.textContent).not.toMatch(/\d+h \d+m/);
     expect(byText(c, 'button', 'Nhắc tôi')).not.toBeNull();
     expect(smallTouchTargets(c)).toEqual([]);
   });

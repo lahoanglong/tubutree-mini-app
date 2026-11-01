@@ -15,6 +15,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'flash.endsIn': 22,
   'flash.endsLabel': 12,
   'flash.startsIn': 22,
+  'flash.startsInTile': 18,
   'flash.startsAt': 22,
   'flash.startsAtDay': 23,
   'flash.badge': 14,
@@ -168,6 +169,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.filterExpiring': 14,
   'coupon.tabsLabel': null,
   'coupon.newCustomerOnlyReason': null,
+  'coupon.claimedIneligibleReason': null,
+  'coupon.walletLoadError': null,
 
   // Combo và mua kèm
   'combo.title': null,

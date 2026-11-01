@@ -148,6 +148,7 @@ export default function HomePage() {
       <HomeBestSellerRail
         items={shelves.bestSellers}
         ranks={shelves.bestSellerRanks}
+        basis={shelves.bestSellerBasis}
         loading={shelves.bestSellerQuery.isLoading}
         error={shelves.bestSellerQuery.error}
         onRetry={shelves.bestSellerQuery.refetch}

@@ -1,14 +1,16 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/browse';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
-import { HOME_BEST_SELLER_LIMIT, type HomeKindState } from '@tubutree/app-core/home-layout';
+import type { HomeKindState } from '@tubutree/app-core/home-layout';
 import { composeHomeShelves } from '@tubutree/app-core/merch/home-shelves';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
 import { PURCHASED_RAIL_LIMIT } from '../reorder/purchased-rail';
 import { serverNow } from '../../utils/server-clock';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
 import { getHomeCombos } from '../../services/bundle-api';
-import { fetchActiveFlashSales, fetchProducts, type FlashSaleActiveItem, type PageResponse, type ProductCard } from '../../services/shop-api';
+import { fetchActiveFlashSales, type FlashSaleActiveItem, type ProductCard } from '../../services/shop-api';
+import { homeBestSellerQuery } from './home-best-seller-query';
 import { useBlockQuery, type BlockQuery } from './use-block-query';
 
 export interface HomeShelves {
@@ -20,12 +22,14 @@ export interface HomeShelves {
   bestSellers: ProductCard[];
   /** Hạng thật của từng món ở `bestSellers` (cùng chỉ số): vị trí trong danh sách xếp theo lượt bán 30 ngày, tính trước khi bỏ món trùng kệ trên. */
   bestSellerRanks: number[];
+  /** Thước đo của bảng xếp hạng: `total` khi API cũ chưa có `best_seller_30d` và kệ lùi về tổng lượt bán (phụ đề không được ghi "30 ngày"). */
+  bestSellerBasis: BestSellersBasis;
   /** Slug các món Giờ vàng đang giữ: Mua lại bỏ chúng đi. */
   flashSlugs: ReadonlySet<string>;
   /** Slug mọi món đang hiện ở kệ hàng: lưới Gợi ý hôm nay bỏ chúng. */
   seen: ReadonlySet<string>;
   flashQuery: BlockQuery<FlashSaleActiveItem[]>;
-  bestSellerQuery: BlockQuery<PageResponse<ProductCard>>;
+  bestSellerQuery: BlockQuery<BestSellersPage>;
   /** Khối Giờ vàng gọi khi đồng hồ về 0: suất hết giờ rời kệ và thôi chiếm món, món đó trở lại các kệ dưới. */
   onFlashEnd: () => void;
 }
@@ -39,9 +43,7 @@ export interface HomeShelves {
 export function useHomeShelves(kind: HomeKindState): HomeShelves {
   const flashQuery = useBlockQuery(useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }));
   const purchased = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const bestSellerQuery = useBlockQuery(
-    useQuery({ queryKey: ['products', 'home-best-seller'], queryFn: () => fetchProducts({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' }) }),
-  );
+  const bestSellerQuery = useBlockQuery(useQuery(homeBestSellerQuery));
 
   const combosQuery = useQuery({ queryKey: bundleKeys.homeCombos, queryFn: getHomeCombos, staleTime: 60_000, retry: false });
 
@@ -52,6 +54,7 @@ export function useHomeShelves(kind: HomeKindState): HomeShelves {
   const flashData = flashQuery.data;
   const purchasedData = purchased.data?.items;
   const bestData = bestSellerQuery.data?.data;
+  const bestSellerBasis: BestSellersBasis = bestSellerQuery.data?.basis ?? 'days30';
   const combosData = combosQuery.data;
   // Chỉ phụ thuộc dữ liệu (không phải đối tượng query, đổi mỗi lần vẽ) để `seen` giữ nguyên danh tính khi dữ liệu chưa đổi; `expiredTick` chỉ để tính lại `serverNow()`.
   const shelves = useMemo(() => {
@@ -72,5 +75,5 @@ export function useHomeShelves(kind: HomeKindState): HomeShelves {
       seen: composed.seen,
     };
   }, [kind, flashData, purchasedData, bestData, combosData, expiredTick]);
-  return { ...shelves, flashQuery, bestSellerQuery, onFlashEnd };
+  return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery, onFlashEnd };
 }

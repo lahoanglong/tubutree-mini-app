@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'r
 import { Page } from 'zmp-ui';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { collectRows, filterVouchers, historyRows, mineRows, voucherFilters, VOUCHER_TABS, type VoucherFilter, type VoucherRow, type VoucherTab } from '@tubutree/app-core/commerce/voucher-center';
+import { collectRows, filterVouchers, historyRows, mineRows, voucherFilters, VOUCHER_TABS, walletCodeSet, type VoucherFilter, type VoucherRow, type VoucherTab } from '@tubutree/app-core/commerce/voucher-center';
 import { isCouponExpiring } from '@tubutree/app-core/home-layout';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { collectableCouponsQuery, collectableMineQuery, couponHistoryQuery, couponsQuery } from '@tubutree/app-core/queries/loyalty';
@@ -56,7 +56,8 @@ export default function VouchersPage() {
   const historyQ = useQuery({ ...couponHistoryQuery(coreHttp), enabled: authed && tab === 'history' });
 
   const now = Date.now();
-  const walletCodes = useMemo(() => new Set((walletQ.data ?? []).map((c) => c.code)), [walletQ.data]);
+  // `null` = ví tải lỗi và chưa có dữ liệu nào: không đủ căn cứ nói mã đã nhận là "Đã dùng" (xem `collectRows`).
+  const walletCodes = useMemo(() => walletCodeSet(walletQ.data, walletQ.isError), [walletQ.data, walletQ.isError]);
   const rows = useMemo<VoucherRow[]>(() => {
     if (tab === 'claim') return collectRows(collectableQ.data ?? [], walletCodes, Date.now(), mineQ.data);
     if (tab === 'mine') return mineRows(walletQ.data ?? [], Date.now());
@@ -84,6 +85,7 @@ export default function VouchersPage() {
     Promise.all([collectableQ.refetch(), authed ? walletQ.refetch() : null, authed ? mineQ.refetch() : null, authed && tab === 'history' ? historyQ.refetch() : null]);
 
   const primaryFor = (row: VoucherRow) => {
+    if (row.unverified) return undefined;
     if (row.view.state === 'collectable') {
       return { label: fillCopy('coupon.save'), onClick: () => void claim(row.view.code), busy: pendingCode === row.view.code };
     }
@@ -147,6 +149,11 @@ export default function VouchersPage() {
       </div>
       {authed && tab !== 'claim' && <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={homeCopy.profile.guestCta} />}
       <div role="tabpanel" aria-label={activeLabel} style={{ padding: '8px 16px 24px' }}>
+        {tab === 'claim' && authed && walletCodes === null && (
+          <div style={{ marginBottom: 12 }}>
+            <ErrorState variant="inline" title={fillCopy('coupon.walletLoadError')} message={getLoadErrorMessage(walletQ.error)} retrying={walletQ.isFetching} onRetry={() => void walletQ.refetch()} />
+          </div>
+        )}
         {body}
       </div>
     </Page>

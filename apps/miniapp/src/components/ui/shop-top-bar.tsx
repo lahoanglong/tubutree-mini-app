@@ -10,8 +10,8 @@ export interface ShopTopBarProps {
 /**
  * Tên shop trên thanh đầu khi khách cuộn qua bìa (critique-store ST-04): mất ngữ cảnh "đang ở shop nào" là lỗi cũ. Nút lùi và nền đặc
  * của thanh là của `BackButton` (cùng vùng cố định); thanh này chỉ thêm chữ ở giữa, chừa 56px trái cho nút lùi và 96px phải cho viên
- * thuốc của Zalo, và không bắt chạm. zIndex 200 (không phải 199 như nền của `BackButton`): `BackButton` dựng sau trang nên cùng 199 thì nền
- * đặc của nó che mất chữ; nút lùi cũng 200 nhưng dựng sau nên vẫn nằm trên, và 64px đệm trái giữ chữ không chạm nút.
+ * thuốc của Zalo, và không bắt chạm. zIndex 200, giữa nền của `BackButton` (199) và nút lùi (201): cùng 199 thì nền đặc của nó che mất chữ; nút lùi
+ * 201 nên luôn nằm trên thanh này dù `BackButton` đứng trước trang trong DOM (để Tab gặp nó đầu tiên), và 64px đệm trái giữ chữ không chạm nút.
  */
 export function ShopTopBar({ title, threshold = SHOP_COVER_HEIGHT - 56 }: ShopTopBarProps) {
   const [shown, setShown] = useState(false);

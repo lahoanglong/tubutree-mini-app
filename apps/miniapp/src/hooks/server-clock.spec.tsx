@@ -32,14 +32,14 @@ describe('Đồng hồ máy chủ cho giờ vàng (D14-05)', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it('điện thoại nhanh 10 phút, suất còn 8 phút theo máy chủ: useCountdown vẫn hiện "0h 08m", không rỗng', async () => {
+  it('điện thoại nhanh 10 phút, suất còn 8 phút theo máy chủ: useCountdown vẫn hiện "8 phút", không rỗng', async () => {
     mocks.get.mockResolvedValue({ data: [item(endAtServerPlus(8))] });
     await fetchActiveFlashSales();
     const { result } = renderHook(() => useCountdown(endAtServerPlus(8)));
-    expect(result.current).toBe('0h 08m');
+    expect(result.current).toBe('8 phút');
   });
 
-  it('điện thoại chậm 10 phút, suất đã hết theo máy chủ: không còn đếm "0h 05m"', async () => {
+  it('điện thoại chậm 10 phút, suất đã hết theo máy chủ: không còn đếm "5 phút"', async () => {
     const slowPhone = new Date(SERVER_NOW.getTime() - 10 * 60_000);
     vi.setSystemTime(slowPhone);
     const endAt = new Date(SERVER_NOW.getTime() - 5 * 60_000).toISOString();
@@ -80,6 +80,6 @@ describe('Đồng hồ máy chủ cho giờ vàng (D14-05)', () => {
     mocks.get.mockResolvedValue({ data: [legacy] });
     await fetchActiveFlashSales();
     const { result } = renderHook(() => useCountdown(legacy.endAt));
-    expect(result.current).toBe('0h 08m');
+    expect(result.current).toBe('8 phút');
   });
 });

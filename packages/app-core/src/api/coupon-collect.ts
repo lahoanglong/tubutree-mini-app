@@ -29,6 +29,11 @@ export interface CollectableMineDTO {
   claimed: string[];
   /** Mã chỉ dành cho khách mới, khi khách đã có đơn. */
   newCustomerOnly: string[];
+  /**
+   * Mã khách đã nhận nhưng không còn áp dụng: chỉ dành cho khách mới, khách đã có đơn mà chưa dùng nó. Ví ẩn mã này như mã đã dùng, nên thiếu trường
+   * này thì không phân biệt được; thiếu hẳn trường (API cũ) thì mọi mã đã nhận ngoài ví coi là đã dùng như trước.
+   */
+  claimedIneligible?: string[];
 }
 
 /**

@@ -363,13 +363,39 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
   });
 
-  it('khung chờ chung + có gợi ý banner + server đã hỏi và không có chiến dịch cho mọi người: vẫn giữ chỗ trong lúc chờ (chiến dịch riêng của loại khách có thể hiện khi biết loại)', async () => {
+  const settlingWithHint = async (campaigns: CampaignBanner[] | undefined) => {
     mocks.phase = 'loading';
     mocks.restoring = true;
     localStorage.setItem(BANNER_HINT_KEY, '1');
     mocks.get.mockImplementation(() => new Promise(() => undefined));
-    const c = await mount(<HomeView initial={{ campaigns: [] }} />);
+    return mount(<HomeView initial={campaigns ? { campaigns } : {}} />);
+  };
+
+  it('khung chờ chung + có gợi ý banner + server đã hỏi và không có chiến dịch nào (mọi đối tượng): không giữ chỗ, biết loại khách cũng không hiện thêm banner', async () => {
+    const c = await settlingWithHint([]);
     expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')).toBeNull();
+  });
+
+  it('khung chờ chung + có gợi ý + server chỉ có chiến dịch RETURNING: giữ chỗ (khách cũ sẽ thấy khi biết loại)', async () => {
+    const c = await settlingWithHint([campaign('r', { audience: 'RETURNING' })]);
+    expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+  });
+
+  it('khung chờ chung + có gợi ý + server chỉ có chiến dịch NEW: giữ chỗ (khách mới sẽ thấy khi biết loại)', async () => {
+    const c = await settlingWithHint([campaign('n', { audience: 'NEW' })]);
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+  });
+
+  it('khung chờ chung + có gợi ý + chiến dịch riêng đã hết hạn theo giờ máy: không giữ chỗ', async () => {
+    const c = await settlingWithHint([campaign('r', { audience: 'RETURNING', endAt: '2020-06-01T00:00:00Z' })]);
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+  });
+
+  it('khung chờ chung + có gợi ý + server không có dữ liệu chiến dịch (API lỗi lúc dựng): vẫn giữ chỗ trong lúc chờ client hỏi', async () => {
+    const c = await settlingWithHint(undefined);
     expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
   });
 

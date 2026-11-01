@@ -212,6 +212,8 @@ export default function MyApp() {
             <NotifyRegion />
             <ZMPRouter>
               <ScreenTracker />
+              {/* Thứ tự Tab theo DOM: nút lùi (fixed, góc trên trái) đứng trước nội dung chính và thanh dưới để bàn phím và trình đọc màn hình gặp nó đầu tiên. */}
+              <BackButton />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}
               <LivePathnameProvider>
               <NavigationTypeProvider>
@@ -288,7 +290,6 @@ export default function MyApp() {
               </NavigationTypeProvider>
               </LivePathnameProvider>
               <BottomNav />
-              <BackButton />
               {ONBOARDING_SURVEY_ENABLED && (
                 <SilentBoundary>
                   <Suspense fallback={null}>

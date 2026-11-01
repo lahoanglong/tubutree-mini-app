@@ -3,7 +3,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { formatCountdown } from './commerce/countdown';
+import { countdownText } from './commerce/countdown';
 import { FORBIDDEN_TERMS } from './shop-copy';
 
 /**
@@ -443,10 +443,13 @@ describe('mã thật của apps/miniapp và apps/web', () => {
     expect(off).toEqual([]);
   });
 
-  // Chữ cũ của khối "Sắp diễn ra" ở Giờ vàng Trang chủ (Mini `components/flash-sale.tsx`, web `components/home/flash-sale.tsx`) ghép "Bắt đầu sau ${formatCountdown(...)}" trong chuỗi template, ngoài tầm quét chữ thô và ngoài ROOTS.
-  // Khi hai app đổi sang countdownText thì ca này thành xanh, vitest báo "expected to fail": lúc đó bỏ `.fails`.
-  it.fails('formatCountdown không còn ra dạng cấm "2h 05m" (D2 countdownText)', () => {
-    const shown = formatCountdown(2 * 3_600_000 + 5 * 60_000);
+  // Khối "Sắp diễn ra" của Giờ vàng Trang chủ (Mini `components/flash-sale.tsx`, web `components/home/flash-sale.tsx`) ghép "Sau {t}" (`flash.startsInTile`) qua `fillCopy`, ngoài tầm
+  // quét chữ thô, nên `t` phải đến từ `countdownText` ("2 giờ 05 phút"). `formatCountdown` ("2h 05m") đã xoá; ca này giữ cho nó không quay lại qua một file giao diện.
+  it('không file giao diện nào còn dùng formatCountdown, và chữ đếm ngược không dính dạng cấm "2h 05m" (D2 countdownText)', () => {
+    const users = sources.filter((s) => !NOT_SCANNED.some((re) => re.test(s.file)) && /\bformatCountdown\b/.test(s.text)).map((s) => s.file);
+    expect(users).toEqual([]);
+    const shown = countdownText(2 * 3_600_000 + 5 * 60_000);
+    expect(shown).toBe('2 giờ 05 phút');
     expect(FORBIDDEN_TERMS.filter((t) => t.pattern.test(shown)).map((t) => t.use)).toEqual([]);
   });
 });

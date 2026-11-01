@@ -26,6 +26,7 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.endsIn': 'Kết thúc sau {t}',
   'flash.endsLabel': 'Kết thúc sau',
   'flash.startsIn': 'Bắt đầu sau {t}',
+  'flash.startsInTile': 'Sau {t}',
   'flash.startsAt': 'Mở lúc {time}',
   'flash.startsAtDay': 'Mở lúc {time} ngày {day}',
   'flash.justOpened': 'Vừa mở bán',
@@ -163,6 +164,8 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.filterExpiring': 'Sắp hết hạn',
   'coupon.tabsLabel': 'Nhóm mã giảm giá',
   'coupon.newCustomerOnlyReason': 'Chỉ dành cho khách đặt đơn đầu tiên',
+  'coupon.claimedIneligibleReason': 'Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng',
+  'coupon.walletLoadError': 'Chưa tải được mã bạn đã lưu',
 
   // Combo và mua kèm
   'combo.title': 'Combo tiết kiệm',

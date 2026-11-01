@@ -18,6 +18,7 @@ import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdoma
 import { isStorefrontApproved, ownerStorefrontState, publicStorefrontWhere } from './storefront-visibility';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
 import { contentChangedPatch } from './storefront-content-change';
+import { childrenByParent, expandCategoryScope } from '../catalog/category-scope';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -530,9 +531,11 @@ export class StorefrontService {
     const sf = await this.assertOwnedStorefront(userId);
     const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
     if (!category) throw new BadRequestException('Danh mục không tồn tại.');
+    // Admin chỉ gán sản phẩm vào danh mục lá (P16) mà bộ chọn mẫu cũng liệt kê mục cha: chọn cha phải lấy cả sản phẩm của mục con.
+    const scope = expandCategoryScope(childrenByParent(await this.prisma.category.findMany({ select: { id: true, parentId: true } })), categoryId);
     const products = await this.prisma.product.findMany({
       // Như picker (SELLER-15, D3-16): món đối tác chờ duyệt/bị từ chối vào gian hàng thì khách không thấy.
-      where: { categoryIds: { has: categoryId }, isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' },
+      where: { categoryIds: { hasSome: scope }, isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED' },
       orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
       take: 8,
       select: { id: true },

@@ -205,6 +205,32 @@ describe('VouchersPage (Mini)', () => {
     expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
   });
 
+  it('mã khách-mới đã nhận mà khách đã có đơn (claimedIneligible): ghi "không còn áp dụng", không ghi Đã dùng, không có nút Lưu mã hay Dùng ngay', async () => {
+    responses['/coupons/collectable'] = [collectable('NEWONLY', { newCustomerOnly: true }), collectable('SHIP', { type: 'FREESHIP', value: 0 })];
+    responses['/coupons/collectable/mine'] = { claimed: ['NEWONLY'], newCustomerOnly: [], claimedIneligible: ['NEWONLY'] };
+    renderAt();
+    expect(await screen.findByText('Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng')).toBeInTheDocument();
+    expect(screen.queryByText('Đã dùng')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Dùng ngay' })).toBeNull();
+  });
+
+  it('ví tải lỗi: mã đã nhận không bị ghi Đã dùng, không có nút Dùng ngay, có dải báo lỗi và Thử lại tải lại ví', async () => {
+    responses['/coupons/collectable/mine'] = { claimed: ['NEW10'], newCustomerOnly: [] };
+    responses['/me/coupons'] = httpError(500, 'x');
+    renderAt();
+    expect(await screen.findByText('Chưa tải được mã bạn đã lưu')).toBeInTheDocument();
+    expect(screen.queryByText('Đã dùng')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dùng ngay' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
+    const before = callsTo('/me/coupons').length;
+    responses['/me/coupons'] = [wallet('NEW10')];
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(callsTo('/me/coupons').length).toBeGreaterThan(before));
+    expect(await screen.findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
+    expect(screen.queryByText('Chưa tải được mã bạn đã lưu')).toBeNull();
+  });
+
   it('phần riêng của khách chưa tải xong thì chưa vẽ thẻ (không nháy nút Lưu mã rồi biến mất)', async () => {
     let release: (v: unknown) => void = () => undefined;
     mocks.coreGet.mockImplementation(async (path: string) => {
