@@ -209,6 +209,19 @@ describe('assertStaffBundleCaps: trần nhân viên', () => {
     expect(() => assertStaffBundleCaps(mild, same(50_000), caps)).not.toThrow();
   });
 
+  it('ADDON đã kẹp theo giá tham chiếu (50k → 500k): lời từ chối nói giá lúc đặt giá kèm, không nói "giá đang bán" 500k; chưa kẹp thì vẫn nói giá đang bán', () => {
+    const c = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 30_000, variationId: 'p2-a' })] }), 50);
+    const capped = capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000]);
+    const cappedMsg = msg(() => assertStaffBundleCaps(c, capped, caps));
+    expect(cappedMsg).toContain('20%');
+    expect(cappedMsg).toContain('giá lúc đặt giá kèm');
+    expect(cappedMsg).toContain('50.000');
+    expect(cappedMsg).not.toContain('giá đang bán');
+    const live = msg(() => assertStaffBundleCaps(c, same(50_000), caps));
+    expect(live).toContain('so với giá đang bán');
+    expect(live).not.toContain('giá lúc đặt giá kèm');
+  });
+
   it('ADDON ghim phân loại đắt: % giảm tính trên giá phân loại ghim (500k → giá kèm 40k là giảm 92%) → 403', () => {
     const c = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 40_000, variationId: 'p2-l' })] }), 50);
     expect(() => assertStaffBundleCaps(c, same(500_000), { ...caps, maxAmount: 10_000_000 })).toThrow(ForbiddenException);
@@ -236,7 +249,7 @@ describe('keptRefPrices / capAtRefPrices: sửa bộ không làm giá tham chi�
   });
 
   it('giá dùng cho trần nhân viên là giá đang bán nhưng không vượt giá tham chiếu giữ lại (50k → 500k vẫn tính 50k; tụt còn 30k thì tính 30k)', () => {
-    expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000 }]);
+    expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000, cappedAt: 50_000 }]);
     expect(capAtRefPrices([{ price: 30_000, maxPrice: 30_000 }], [50_000])).toEqual([{ price: 30_000, maxPrice: 30_000 }]);
     expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [null])).toEqual([{ price: 500_000, maxPrice: 500_000 }]);
   });

@@ -118,6 +118,8 @@ export interface ResolvedBundleItem {
    * loại ĐẮT NHẤT đang bán, vì giảm % áp cho mọi phân loại khách chọn chứ không riêng phân loại đại diện (rẻ nhất).
    */
   maxPrice: number;
+  /** Chỉ có sau `capAtRefPrices` khi giá tham chiếu giữ lại thấp hơn giá đang bán: `price` đã bị kẹp về đó, lời báo trần phải nói đúng cơ sở. */
+  cappedAt?: number;
 }
 
 const effective = (v: { retailPrice: number; salePrice: number | null }) => v.salePrice ?? v.retailPrice;
@@ -179,7 +181,8 @@ export function keptRefPrices(content: BundleContent, previous: readonly StoredB
 export function capAtRefPrices(resolved: readonly ResolvedBundleItem[], kept: readonly (number | null)[]): ResolvedBundleItem[] {
   return resolved.map((r, i) => {
     const ref = kept[i];
-    return ref == null ? r : { price: Math.min(r.price, ref), maxPrice: Math.min(r.maxPrice, ref) };
+    if (ref == null) return r;
+    return { price: Math.min(r.price, ref), maxPrice: Math.min(r.maxPrice, ref), ...(ref < r.price ? { cappedAt: ref } : {}) };
   });
 }
 
@@ -196,7 +199,9 @@ export function assertStaffBundleCaps(content: BundleContent, resolved: readonly
     content.items.forEach((it, i) => {
       const price = resolved[i]?.price ?? 0;
       if (price > 0 && (price - (it.addonPrice ?? price)) * 100 > caps.maxPercent * price) {
-        throw deny(`Nhân viên đặt giá mua kèm giảm tối đa ${caps.maxPercent}% so với giá đang bán.`);
+        const cappedAt = resolved[i]?.cappedAt;
+        const base = cappedAt === undefined ? 'giá đang bán' : `giá lúc đặt giá kèm (${formatVnd(cappedAt)})`;
+        throw deny(`Nhân viên đặt giá mua kèm giảm tối đa ${caps.maxPercent}% so với ${base}.`);
       }
     });
   }
