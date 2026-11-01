@@ -185,8 +185,9 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const card = region(c, 'Điểm danh mỗi ngày')!;
     expect(card.textContent).toContain('Ngày 3/7');
     expect(card.textContent).toContain('N7');
-    click(card.querySelector('button:not([disabled])'));
-    click(card.querySelector('button'));
+    const checkInBtn = byText(card, 'button', /điểm danh/i);
+    click(checkInBtn);
+    click(checkInBtn);
     await flush(6);
     expect(state.posts.filter((p) => p === '/me/daily-check-in')).toHaveLength(1);
     expect(card.textContent).toContain('+3 Điểm Xanh · +10 giọt nước');
@@ -195,7 +196,8 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('đã điểm danh hôm nay: nút khoá', async () => {
     state.checkIn = { checkedInToday: true, streakDays: 3, currentCycleDay: 3, rewards: REWARDS };
     const c = await mount();
-    const btn = region(c, 'Điểm danh mỗi ngày')!.querySelector('button')!;
+    const btn = byText(region(c, 'Điểm danh mỗi ngày')!, 'button', /điểm danh/i) as HTMLButtonElement;
+    expect(btn.textContent).toBe('Đã điểm danh');
     expect(btn.disabled || btn.getAttribute('aria-disabled') === 'true').toBe(true);
   });
 
@@ -236,12 +238,12 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(region(c, 'Mã của tôi')!.textContent).toContain('Chưa có mã giảm giá khả dụng');
   });
 
-  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc vẫn là "Xem tất cả Mã của tôi"', async () => {
+  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc giữ đủ số ("Tất cả (8) Mã của tôi")', async () => {
     state.coupons = Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) }));
     const c = await mount();
     const mine = region(c, 'Mã của tôi')!;
     expect(mine.querySelectorAll('[role="group"]')).toHaveLength(3);
-    const all = mine.querySelector('button[aria-label="Xem tất cả Mã của tôi"]')!;
+    const all = mine.querySelector('button[aria-label="Tất cả (8) Mã của tôi"]')!;
     expect(all.textContent).toBe('Tất cả (8)');
     click(all);
     expect(state.push).toHaveBeenLastCalledWith('/ma-giam-gia?tab=mine');

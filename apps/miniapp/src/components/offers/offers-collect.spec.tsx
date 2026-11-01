@@ -62,15 +62,16 @@ beforeEach(() => {
 });
 
 describe('OffersCollect — khối Nhận mã ở trang Ưu đãi', () => {
-  it('5 mã chưa nhận: chỉ 3 thẻ đầu, nút "Lưu mã" gọi claim, "Tất cả 5 mã" tới /vouchers', async () => {
+  it('5 mã chưa nhận: chỉ 3 thẻ đầu, nút "Lưu mã" gọi claim, "Tất cả (5)" tới /vouchers', async () => {
     collectable = ['A', 'B', 'C', 'D', 'E'].map((c, i) => coupon(c, { endAt: new Date(Date.now() + (i + 2) * DAY).toISOString() }));
     renderCollect();
     const region = await screen.findByRole('region', { name: 'Nhận mã' });
     expect(within(region).getAllByRole('group')).toHaveLength(3);
     fireEvent.click(within(region).getAllByRole('button', { name: 'Lưu mã' })[0]!);
     expect(mocks.claim).toHaveBeenCalledWith('A');
-    const all = within(region).getByRole('button', { name: 'Xem tất cả Mã giảm giá' });
-    expect(all).toHaveTextContent('Tất cả 5 mã');
+    // Tên đọc chứa đủ nhãn nhìn thấy (có tổng số) cộng đích đến.
+    const all = within(region).getByRole('button', { name: 'Tất cả (5) Mã giảm giá' });
+    expect(all).toHaveTextContent('Tất cả (5)');
     fireEvent.click(all);
     expect(mocks.navigate).toHaveBeenCalledWith('/vouchers');
   });
@@ -82,7 +83,7 @@ describe('OffersCollect — khối Nhận mã ở trang Ưu đãi', () => {
     expect(within(region).getAllByRole('group')).toHaveLength(1);
     expect(within(region).getByText(/OPEN/)).toBeInTheDocument();
     // /vouchers tab Nhận mã vẽ cả mã đã lưu và mã hết lượt: 3 thẻ, không phải 1.
-    expect(within(region).getByRole('button', { name: 'Xem tất cả Mã giảm giá' })).toHaveTextContent('Tất cả 3 mã');
+    expect(within(region).getByRole('button', { name: 'Tất cả (3) Mã giảm giá' })).toHaveTextContent('Tất cả (3)');
   });
 
   it('khách chưa đăng nhập không gọi phần riêng của khách', async () => {
@@ -101,7 +102,7 @@ describe('OffersCollect — khối Nhận mã ở trang Ưu đãi', () => {
     expect(within(region).getAllByRole('group')).toHaveLength(1);
     expect(within(region).getByText(/OPEN/)).toBeInTheDocument();
     expect(within(region).queryByText(/USED/)).toBeNull();
-    expect(within(region).getByRole('button', { name: 'Xem tất cả Mã giảm giá' })).toHaveTextContent('Tất cả 2 mã');
+    expect(within(region).getByRole('button', { name: 'Tất cả (2) Mã giảm giá' })).toHaveTextContent('Tất cả (2)');
   });
 
   it('mã chỉ dành khách mới mà khách đã có đơn không chiếm chỗ; chỉ còn mã ấy thì ẩn cả khối', async () => {

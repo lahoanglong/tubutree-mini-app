@@ -130,6 +130,7 @@ export default function OffersPage() {
 
           {/* Mã của tôi */}
           <section id="coupons" ref={couponsRef} aria-labelledby="offers-mine-title" style={{ padding: '12px 16px 0' }}>
+            {/* Không đặt `spoken`: tên đọc mặc định "Tất cả (8) Mã của tôi" giữ đủ nhãn nhìn thấy và tổng số. */}
             <SectionHeader
               id="offers-mine-title"
               title={fillCopy('coupon.tabMine')}
@@ -137,7 +138,6 @@ export default function OffersPage() {
               action={{
                 onPress: () => navigate('/vouchers?tab=mine'),
                 label: mine.hasMore ? fillCopy('section.seeAllCount', { n: mine.total }) : undefined,
-                spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }),
               }}
             />
             {couponsQ.isLoading ? (

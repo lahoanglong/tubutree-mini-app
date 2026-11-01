@@ -64,6 +64,8 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
   if (shown.length === 0) return null;
 
   const now = Date.now();
+  // Cùng cách ghi với "Mã của tôi" ("Tất cả (n)"); tên đọc mang đủ nhãn nhìn thấy cộng đích đến.
+  const seeAll = fillCopy('section.seeAllCount', { n: all.length });
   return (
     <section aria-labelledby={titleId} style={{ padding: '12px 16px 0' }}>
       <SectionHeader
@@ -71,9 +73,9 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
         title={title}
         icon="ticket"
         action={{
-          label: fillCopy('coupon.allCount', { n: all.length }),
+          label: seeAll,
           onPress: () => navigate('/vouchers'),
-          spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.title') }),
+          spoken: `${seeAll} ${fillCopy('coupon.title')}`,
         }}
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

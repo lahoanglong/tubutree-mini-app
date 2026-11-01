@@ -158,12 +158,12 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     await waitFor(() => expect(mocks.postCheckIn).toHaveBeenCalledTimes(1));
   });
 
-  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc vẫn là "Xem tất cả Mã của tôi", bỏ chữ "n mã" cũ', async () => {
+  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc giữ đủ số ("Tất cả (8) Mã của tôi"), bỏ chữ "n mã" cũ', async () => {
     mocks.getCoupons.mockResolvedValue(Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
     renderPage();
     const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
     await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
-    const all = within(mine).getByRole('button', { name: 'Xem tất cả Mã của tôi' });
+    const all = within(mine).getByRole('button', { name: 'Tất cả (8) Mã của tôi' });
     expect(all).toHaveTextContent('Tất cả (8)');
     expect(mine.textContent).not.toMatch(/\b8 mã/);
     fireEvent.click(all);
