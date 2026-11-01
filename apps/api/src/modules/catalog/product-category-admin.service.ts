@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decodeListCursor, encodeListCursor } from '../affiliate/commission-admin.service';
+import { CatalogService } from './catalog.service';
+import { CATEGORY_MSG, CATEGORY_TREE_LOCK } from './category-tree';
+import { HomeService } from './home.service';
+import { PUBLIC_PRODUCT_WHERE } from './public-product';
 import { escapePrismaLike, foldVietnamese } from './search-text';
 
 export const CATEGORY_ASSIGN_MAX_PRODUCTS = 500;
@@ -15,12 +19,18 @@ export type CategoryAssignMode = 'ADD' | 'REMOVE';
 export class ProductCategoryAdminService {
   private readonly logger = new Logger(ProductCategoryAdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalog: CatalogService,
+    private readonly home: HomeService,
+  ) {}
 
   /** Sắp (tên, id), keyset như màn hoa hồng: sản phẩm vừa được gán rời bộ lọc "chưa có danh mục" thì trang sau vẫn đúng. */
   async listProducts(opts: {
     q?: string;
     uncategorized?: boolean;
+    /** Chỉ sản phẩm đang bán thật (bật và đã duyệt): cùng điều kiện với số "chưa có danh mục" của hộp việc. */
+    onSale?: boolean;
     missingImage?: boolean;
     source?: 'pancake' | 'all';
     categoryId?: string;
@@ -32,6 +42,7 @@ export class ProductCategoryAdminService {
     const and: Prisma.ProductWhereInput[] = [];
     if (opts.source === 'pancake') and.push({ pancakeId: { not: null }, NOT: { pancakeId: { startsWith: 'seed-' } } });
     if (opts.uncategorized) and.push({ categoryIds: { isEmpty: true } });
+    if (opts.onSale) and.push(PUBLIC_PRODUCT_WHERE);
     // Đang bán mà chưa có ảnh nào: khách thấy ô trống ở danh mục.
     if (opts.missingImage) and.push({ isActive: true, images: { isEmpty: true } });
     if (opts.categoryId) and.push({ categoryIds: { has: opts.categoryId } });
@@ -40,6 +51,7 @@ export class ProductCategoryAdminService {
         OR: [
           { nameSearch: { contains: escapePrismaLike(foldVietnamese(q)) } },
           { variations: { some: { sku: { contains: escapePrismaLike(q), mode: 'insensitive' } } } },
+          { brand: { contains: escapePrismaLike(q), mode: 'insensitive' } },
         ],
       });
     }
@@ -65,7 +77,8 @@ export class ProductCategoryAdminService {
 
   /**
    * ADD: thêm danh mục vào sản phẩm chưa có; REMOVE: gỡ khỏi sản phẩm đang có. Một câu SQL nguyên tử theo từng sản
-   * phẩm nên không đè danh mục khác admin vừa gán song song.
+   * phẩm nên không đè danh mục khác admin vừa gán song song. `COALESCE` vì hàng cũ có thể mang NULL (xem migration
+   * product_category_ids_default): `x = ANY(NULL)` là NULL nên câu gán sẽ lặng lẽ bỏ qua hàng đó.
    */
   async assign(adminId: string, productIds: string[], categoryId: string, mode: CategoryAssignMode) {
     const ids = [...new Set(productIds)];
@@ -73,23 +86,47 @@ export class ProductCategoryAdminService {
     if (ids.length > CATEGORY_ASSIGN_MAX_PRODUCTS) {
       throw new BadRequestException(`Mỗi lần chỉ gán tối đa ${CATEGORY_ASSIGN_MAX_PRODUCTS} sản phẩm.`);
     }
-    const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
-    if (!category) throw new NotFoundException('Danh mục không tồn tại (có thể vừa bị xoá) — tải lại danh sách danh mục.');
-    const found = await this.prisma.product.count({ where: { id: { in: ids } } });
-    if (found !== ids.length) {
-      throw new BadRequestException(`${ids.length - found} sản phẩm đã chọn không còn tồn tại — tải lại danh sách.`);
+    // ADD giữ khoá cây rồi mới kiểm lá và ghi: một admin vừa thêm mục con vào danh mục này thì lệnh gán phải thấy mục con, không lọt vào cha.
+    const { category, changed } = mode === 'ADD' ? await this.addToLeaf(ids, categoryId) : await this.removeFrom(ids, categoryId);
+    if (changed > 0) {
+      this.catalog.invalidateCategoryCache();
+      this.home.invalidateStatic();
     }
-    const changed =
-      mode === 'ADD'
-        ? await this.prisma.$executeRaw`
-            UPDATE "products" SET "categoryIds" = array_append("categoryIds", ${categoryId}), "updatedAt" = now()
-            WHERE "id" = ANY(${ids}) AND NOT (${categoryId} = ANY("categoryIds"))`
-        : await this.prisma.$executeRaw`
-            UPDATE "products" SET "categoryIds" = array_remove("categoryIds", ${categoryId}), "updatedAt" = now()
-            WHERE "id" = ANY(${ids}) AND ${categoryId} = ANY("categoryIds")`;
     this.logger.log(
       `Admin ${adminId} ${mode === 'ADD' ? 'gán' : 'gỡ'} danh mục "${category.name}" (${categoryId}) cho ${changed}/${ids.length} sản phẩm.`,
     );
     return { requested: ids.length, changed, unchanged: ids.length - changed, category: { id: category.id, name: category.name } };
+  }
+
+  private async addToLeaf(ids: string[], categoryId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${CATEGORY_TREE_LOCK}))`;
+      const category = await tx.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
+      if (!category) throw new NotFoundException(CATEGORY_MSG.notFound());
+      if ((await tx.category.count({ where: { parentId: categoryId } })) > 0) throw new BadRequestException(CATEGORY_MSG.notLeaf(category.name));
+      await this.assertProductsExist(tx, ids);
+      const changed = await tx.$executeRaw`
+        UPDATE "products" SET "categoryIds" = array_append(COALESCE("categoryIds", ARRAY[]::text[]), ${categoryId}), "updatedAt" = now()
+        WHERE "id" = ANY(${ids}) AND NOT (${categoryId} = ANY(COALESCE("categoryIds", ARRAY[]::text[])))`;
+      return { category, changed };
+    });
+  }
+
+  /** Gỡ không kiểm lá: dọn được sản phẩm đã gán vào danh mục trước khi nó có mục con. */
+  private async removeFrom(ids: string[], categoryId: string) {
+    const category = await this.prisma.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
+    if (!category) throw new NotFoundException(CATEGORY_MSG.notFound());
+    await this.assertProductsExist(this.prisma, ids);
+    const changed = await this.prisma.$executeRaw`
+      UPDATE "products" SET "categoryIds" = array_remove("categoryIds", ${categoryId}), "updatedAt" = now()
+      WHERE "id" = ANY(${ids}) AND ${categoryId} = ANY("categoryIds")`;
+    return { category, changed };
+  }
+
+  private async assertProductsExist(db: Pick<PrismaService, 'product'>, ids: string[]): Promise<void> {
+    const found = await db.product.count({ where: { id: { in: ids } } });
+    if (found !== ids.length) {
+      throw new BadRequestException(`${ids.length - found} sản phẩm đã chọn không còn tồn tại — tải lại danh sách.`);
+    }
   }
 }

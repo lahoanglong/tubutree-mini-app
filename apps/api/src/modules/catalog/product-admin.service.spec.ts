@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
+import { CATEGORY_MSG } from './category-tree';
 import { ProductAdminController, UpdateProductDto } from './product-admin.controller';
 import { ProductAdminService } from './product-admin.service';
 
@@ -28,11 +29,11 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(current: ReturnType<typeof row> | null = row(), categories = 1, sellableVariations = 1) {
+function setup(current: ReturnType<typeof row> | null = row(), categories = 1, sellableVariations = 1, parents: { name: string }[] = []) {
   const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...current, ...data }));
   const prisma = {
     product: { findUnique: jest.fn().mockResolvedValue(current), update },
-    category: { count: jest.fn().mockResolvedValue(categories) },
+    category: { count: jest.fn().mockResolvedValue(categories), findMany: jest.fn().mockResolvedValue(parents) },
     variation: { count: jest.fn().mockResolvedValue(sellableVariations) },
   };
   const imageResize = { invalidateRegistry: jest.fn() };
@@ -91,6 +92,21 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     await svc.update('a1', 'p1', { description: '  Mô tả mới  ', shortDesc: '   ', isFeatured: true, categoryIds: ['c1', 'c1'] });
     expect(prisma.category.count).toHaveBeenCalledWith({ where: { id: { in: ['c1'] } } });
     expect(update.mock.calls[0][0].data).toEqual({ description: 'Mô tả mới', shortDesc: null, isFeatured: true, categoryIds: ['c1'] });
+  });
+
+  it('thêm danh mục có mục con vào sản phẩm → 400 nêu tên, không ghi; kiểm lá chỉ với id mới thêm', async () => {
+    const { svc, update, prisma } = setup(row({ categoryIds: ['cu'] }), 2, 1, [{ name: 'Gia dụng' }]);
+    await expect(svc.update('a1', 'p1', { categoryIds: ['cu', 'cha'] })).rejects.toThrow(CATEGORY_MSG.notLeaf('Gia dụng'));
+    expect(update).not.toHaveBeenCalled();
+    // `cu` đã có sẵn trên sản phẩm nên không bị hỏi lại (dữ liệu gán vào cha từ trước vẫn giữ được khi sửa trường khác).
+    expect(prisma.category.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['cha'] }, children: { some: {} } });
+  });
+
+  it('giữ nguyên danh mục cũ (kể cả cha có con) khi sửa: không kiểm lá, không lỗi', async () => {
+    const { svc, update, prisma } = setup(row({ categoryIds: ['cha'] }), 1, 1, [{ name: 'Gia dụng' }]);
+    await svc.update('a1', 'p1', { categoryIds: ['cha'] });
+    expect(prisma.category.findMany).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalled();
   });
 
   it('danh mục không tồn tại → 400, không ghi', async () => {

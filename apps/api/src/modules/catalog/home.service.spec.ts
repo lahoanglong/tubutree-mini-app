@@ -74,6 +74,16 @@ describe('HomeService.getPublic', () => {
     expect(catalog.categories).toHaveBeenCalledTimes(2);
   });
 
+  it('invalidateStatic: lần gọi kế tiếp dựng lại khối danh mục dù cache 20s còn hạn', async () => {
+    const { svc, catalog } = setup();
+    await svc.getPublic(1000);
+    svc.invalidateStatic();
+    catalog.categories.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+    const r = await svc.getPublic(1000 + 1_000);
+    expect(r.categories).toEqual([{ id: 'c1' }, { id: 'c2' }]);
+    expect(catalog.categories).toHaveBeenCalledTimes(2);
+  });
+
   it('bản có khối lỗi chỉ cache 3s để thử lại sớm', async () => {
     const { svc, catalog } = setup();
     catalog.brands.mockRejectedValueOnce(new Error('x'));

@@ -437,7 +437,7 @@ model Product {
   shortDesc        String?
   images           String[]
   thumbnail        String?
-  categoryIds      String[]
+  categoryIds      String[]              @default([])
   tags             String[]
   isActive         Boolean               @default(true)
   /// REMOVED = đồng bộ Pancake tự tắt vì sản phẩm không còn trên Pancake (xem Variation.pancakeHold).

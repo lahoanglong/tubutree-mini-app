@@ -445,7 +445,7 @@ export default function AdminPage() {
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra; from?: string; to?: string; userLabel?: string } | null>(null);
-  const [productsSeed, setProductsSeed] = useState(0);
+  const [productsSeed, setProductsSeed] = useState<{ n: number; view: 'missingImage' | 'uncategorized' } | null>(null);
   const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [deletionSeed, setDeletionSeed] = useState(0);
   const [reportsSeed, setReportsSeed] = useState(0);
@@ -591,8 +591,8 @@ export default function AdminPage() {
       setStorefrontSeed(Date.now());
       return setTab('storefronts');
     }
-    if (k === 'productsMissingImage') {
-      setProductsSeed(Date.now());
+    if (k === 'productsMissingImage' || k === 'productsUncategorized') {
+      setProductsSeed({ n: Date.now(), view: k === 'productsMissingImage' ? 'missingImage' : 'uncategorized' });
       return setTab('productCategories');
     }
     if (k === 'invoicePending') {
@@ -621,6 +621,7 @@ export default function AdminPage() {
         | 'accountDeletionPending'
         | 'externalPoints'
         | 'productsMissingImage'
+        | 'productsUncategorized'
         | WasteInboxKey
       >,
       Tab
@@ -701,7 +702,7 @@ export default function AdminPage() {
           {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
-          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed} initialMissingImage={productsSeed > 0} />}
+          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed?.n ?? 0} initialMissingImage={productsSeed?.view === 'missingImage'} initialUncategorized={productsSeed?.view === 'uncategorized'} />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab key={externalSeed?.n ?? 0} seed={externalSeed} isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}

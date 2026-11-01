@@ -5,59 +5,86 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   ASSIGN_MAX,
   assignCategory,
-  listCategoryOptions,
+  listAdminCategories,
   listCategoryProducts,
   listPancakeCategories,
+  type CategoryOption,
   type CategoryProduct,
 } from '@/lib/product-categories';
-import { getOpsInbox, invalidateInbox } from '@/lib/admin-client';
+import { buildCategoryTree } from '@/lib/category-tree';
+import { getOpsInbox, invalidateInbox, type InboxKey } from '@/lib/admin-client';
+import { CategoryTreePanel } from './category-tree-panel';
 import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
 
 const LIST_KEY = ['admin-category-products'] as const;
+const OPTIONS_KEY = ['admin-category-options'] as const;
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
 /**
- * "Danh mục sản phẩm": đồng bộ Pancake không gán danh mục, nên đây là nơi gán/gỡ danh mục hàng loạt cho sản phẩm
- * (lọc "chưa có danh mục", chỉ hàng Pancake, đang bán mà thiếu ảnh, tìm theo tên/SKU) và sửa ảnh, mô tả của từng sản phẩm. Đồng bộ không ghi đè danh mục đã gán ở đây.
+ * "Sản phẩm": dựng cây danh mục hai tầng (≤8 gốc × ≤8 con), rồi gán/gỡ danh mục hàng loạt cho sản phẩm. Chỉ gán vào danh mục
+ * lá (mục không có mục con). Đồng bộ Pancake không gán danh mục, nên đây cũng là nơi xử lý "đang bán mà chưa có danh mục"
+ * (thẻ hộp việc mở thẳng chip đó), lọc theo tên/thương hiệu/SKU, và sửa ảnh, mô tả từng sản phẩm. Đồng bộ không ghi đè danh mục đã gán ở đây.
  */
-export function ProductCategoriesTab({ initialMissingImage = false }: { initialMissingImage?: boolean } = {}) {
+export function ProductCategoriesTab({
+  initialMissingImage = false,
+  initialUncategorized = false,
+}: { initialMissingImage?: boolean; initialUncategorized?: boolean } = {}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [typed, setTyped] = useState('');
-  const [uncategorized, setUncategorized] = useState(false);
+  const [uncategorized, setUncategorized] = useState(initialUncategorized);
   const [pancakeOnly, setPancakeOnly] = useState(false);
   const [missingImage, setMissingImage] = useState(initialMissingImage);
-  const missingImageCount = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data?.items.find((i) => i.key === 'productsMissingImage')?.count;
-  const uncategorizedCount = useQuery({
-    queryKey: [...LIST_KEY, 'uncategorized-count'],
-    queryFn: () => listCategoryProducts({ q: '', uncategorized: true, pancakeOnly: false, missingImage: false }),
-    staleTime: 60_000,
-  }).data?.total;
+  // Mở từ thẻ hộp việc là đang đi gán sản phẩm: thu cây lại để danh sách sản phẩm lên đầu màn hình điện thoại.
+  const [treeOpen, setTreeOpen] = useState(!(initialMissingImage || initialUncategorized));
+  const inbox = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data;
+  const inboxCount = (key: InboxKey) => inbox?.items.find((i) => i.key === key)?.count;
+  const missingImageCount = inboxCount('productsMissingImage');
+  const uncategorizedCount = inboxCount('productsUncategorized');
   const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryId, setCategoryId] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const q = useDebounced(typed.trim(), 300);
 
+  // "Chưa có danh mục" luôn đi cùng onSale: số trên chip là số hàng đang bán, danh sách phải khớp với số đó.
   const list = useInfiniteQuery({
     queryKey: [...LIST_KEY, q, uncategorized, pancakeOnly, missingImage],
-    queryFn: ({ pageParam }) => listCategoryProducts({ q, uncategorized, pancakeOnly, missingImage, cursor: pageParam }),
+    queryFn: ({ pageParam }) => listCategoryProducts({ q, uncategorized, onSale: uncategorized, pancakeOnly, missingImage, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
-  const cats = useQuery({ queryKey: ['admin-category-options'], queryFn: listCategoryOptions, staleTime: 30_000 });
-  const catName = useMemo(() => new Map((cats.data ?? []).map((c) => [c.id, c.name])), [cats.data]);
+  const cats = useQuery({ queryKey: OPTIONS_KEY, queryFn: listAdminCategories, staleTime: 30_000 });
+  // Thứ tự cây: gốc rồi các con ngay sau; tên mục con kèm tên cha để hai mục con cùng tên không lẫn nhau.
+  const options = useMemo(
+    () =>
+      buildCategoryTree(cats.data?.items ?? []).flatMap((root) => [
+        { id: root.id, name: root.name, label: root.children.length ? `${root.name} (có mục con)` : `${root.name} (${root.productCount})`, productCount: root.productCount, hasChildren: root.children.length > 0 },
+        ...root.children.map((c) => ({ id: c.id, name: `${root.name} › ${c.name}`, label: `— ${c.name} (${c.productCount})`, productCount: c.productCount, hasChildren: false })),
+      ]),
+    [cats.data],
+  );
+  const catName = useMemo(() => new Map(options.map((c) => [c.id, c.name])), [options]);
+  const drawerCategories = useMemo<CategoryOption[]>(
+    () => options.map((c) => ({ id: c.id, name: c.name, productCount: c.productCount, hasChildren: c.hasChildren })),
+    [options],
+  );
   const products: CategoryProduct[] = list.data?.pages.flatMap((p) => p.items) ?? [];
   const total = list.data?.pages[0]?.total;
   const picked = products.filter((p) => selected.has(p.id));
   const allShown = products.length > 0 && picked.length === products.length;
-  const chosen = cats.data?.find((c) => c.id === categoryId);
-  // Cùng một sự cố máy chủ làm hỏng cả hai truy vấn thì chỉ nói một lần.
+  const chosen = options.find((c) => c.id === categoryId);
+  const canAdd = !!chosen && !chosen.hasChildren && picked.length > 0;
+  // Cùng một sự cố máy chủ làm hỏng cả hai truy vấn thì chỉ nói một lần (ở dòng lỗi danh sách, có "Thử lại" gọi lại cả hai).
   const catsErrorText = errText(cats.error, 'Không tải được danh sách danh mục.');
   const listErrorText = errText(list.error, 'Không tải được danh sách sản phẩm.');
+  const treeError = cats.isError && !(list.isError && catsErrorText === listErrorText) ? catsErrorText : null;
+
+  const refreshAfterTreeChange = () =>
+    Promise.all([qc.invalidateQueries({ queryKey: OPTIONS_KEY }), qc.invalidateQueries({ queryKey: LIST_KEY }), invalidateInbox(qc)]);
 
   const mut = useMutation({
     mutationFn: (v: { mode: 'ADD' | 'REMOVE' }) => assignCategory(picked.map((p) => p.id), categoryId, v.mode),
@@ -68,7 +95,8 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
       });
       setSelected(new Set());
       void qc.invalidateQueries({ queryKey: LIST_KEY });
-      void qc.invalidateQueries({ queryKey: ['admin-category-options'] });
+      void qc.invalidateQueries({ queryKey: OPTIONS_KEY });
+      void invalidateInbox(qc);
     },
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không lưu được danh mục.') }),
   });
@@ -83,6 +111,7 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
 
   const run = async (mode: 'ADD' | 'REMOVE') => {
     if (!chosen || picked.length === 0 || mut.isPending) return;
+    if (mode === 'ADD' && chosen.hasChildren) return;
     if (picked.length > ASSIGN_MAX) return setMsg({ ok: false, text: `Mỗi lần chỉ gán tối đa ${ASSIGN_MAX} sản phẩm.` });
     setMsg(null);
     const ok = await confirm({
@@ -103,16 +132,26 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
       <div>
         <h2 className="font-display text-lg font-semibold text-stone-900">Sản phẩm</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Sửa ảnh, mô tả, ẩn hoặc hiện từng sản phẩm; chọn nhiều sản phẩm để gán một danh mục. Hàng từ Pancake chưa có danh mục thì chưa hiện trong
-          trang danh mục của Mini App.
+          Dựng cây danh mục, rồi chọn nhiều sản phẩm để gán vào một danh mục lá; sửa ảnh, mô tả, ẩn hoặc hiện từng sản phẩm. Sản phẩm chưa có danh mục thì
+          chưa hiện trong trang danh mục của Mini App.
         </p>
       </div>
+
+      <CategoryTreePanel
+        data={cats.data}
+        loading={cats.isLoading}
+        error={treeError}
+        onRetry={() => void cats.refetch()}
+        onChanged={refreshAfterTreeChange}
+        open={treeOpen}
+        onToggle={() => setTreeOpen((v) => !v)}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
-          aria-label="Tìm theo tên sản phẩm hoặc SKU"
-          placeholder="Tìm tên sản phẩm hoặc SKU"
+          aria-label="Tìm theo tên, thương hiệu hoặc SKU"
+          placeholder="Tìm tên, thương hiệu hoặc SKU"
           maxLength={64}
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
@@ -139,21 +178,24 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
           className={`${FIELD_XS} w-full sm:w-64`}
         >
           <option value="">Chọn danh mục…</option>
-          {(cats.data ?? []).map((c) => (
+          {options.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
-              {c.productCount !== undefined ? ` (${c.productCount})` : ''}
+              {c.label}
             </option>
           ))}
         </select>
-        <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('ADD')} className={BTN_XS_PRIMARY}>
+        <button type="button" disabled={!canAdd || mut.isPending} onClick={() => void run('ADD')} aria-describedby={chosen?.hasChildren ? 'assign-leaf-hint' : undefined} className={BTN_XS_PRIMARY}>
           Gán danh mục
         </button>
         <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('REMOVE')} className={BTN_XS_DANGER}>
           Gỡ danh mục
         </button>
       </div>
-      {cats.isError && !(list.isError && catsErrorText === listErrorText) && <Notice tone="danger" role="alert">{catsErrorText}</Notice>}
+      {chosen?.hasChildren && (
+        <p id="assign-leaf-hint" role="status" className="text-xs text-warning-fg">
+          Mục này có mục con. Chọn một mục con để gán.
+        </p>
+      )}
       {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
 
       {list.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
@@ -174,7 +216,7 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
       )}
       {list.isSuccess && products.length === 0 && (
         <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
-          {q ? `Không có sản phẩm nào khớp "${q}".` : uncategorized ? 'Không còn sản phẩm nào chưa có danh mục.' : 'Chưa có sản phẩm nào.'}
+          {q ? `Không có sản phẩm nào khớp "${q}".` : uncategorized ? 'Không còn sản phẩm đang bán nào chưa có danh mục.' : 'Chưa có sản phẩm nào.'}
         </p>
       )}
       {products.length > 0 && (
@@ -231,13 +273,9 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
       {editing && (
         <ProductEditDrawer
           id={editing}
-          categories={cats.data ?? []}
+          categories={drawerCategories}
           onClose={() => setEditing(null)}
-          onSaved={() => {
-            void qc.invalidateQueries({ queryKey: LIST_KEY });
-            void qc.invalidateQueries({ queryKey: ['admin-category-options'] });
-            void invalidateInbox(qc);
-          }}
+          onSaved={() => void refreshAfterTreeChange()}
         />
       )}
 

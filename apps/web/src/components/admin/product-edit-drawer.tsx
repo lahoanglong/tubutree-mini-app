@@ -144,12 +144,26 @@ function Form({ product, categories, onClose, onSaved }: { product: ProductDetai
       <div>
         <div className="mb-1 text-sm font-medium text-stone-900">Danh mục</div>
         <div className="flex flex-wrap gap-2">
-          {categories.map((c) => (
-            <button key={c.id} type="button" aria-pressed={categoryIds.includes(c.id)} onClick={() => toggleCat(c.id)} className={chipClass(categoryIds.includes(c.id))}>
-              {c.name}
-            </button>
-          ))}
+          {categories.map((c) => {
+            const on = categoryIds.includes(c.id);
+            // Mục có mục con không nhận thêm sản phẩm; nếu dữ liệu cũ đã nằm ở đó thì vẫn cho gỡ.
+            return (
+              <button
+                key={c.id}
+                type="button"
+                aria-pressed={on}
+                disabled={!!c.hasChildren && !on}
+                onClick={() => toggleCat(c.id)}
+                className={`${chipClass(on)} disabled:opacity-50`}
+              >
+                {c.name}
+              </button>
+            );
+          })}
         </div>
+        {categories.some((c) => c.hasChildren) && (
+          <p className="mt-1 text-xs text-stone-600">Mục có mục con không nhận sản phẩm: chọn một mục con của nó.</p>
+        )}
       </div>
 
       {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}

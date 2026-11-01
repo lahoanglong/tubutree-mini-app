@@ -1,4 +1,5 @@
 import { OpsInboxService } from './ops-inbox.service';
+import { UNCATEGORIZED_ON_SALE_WHERE } from '../catalog/public-product';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
@@ -341,7 +342,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     const res = await svc.counts({ role: 'ADMIN' }, now);
 
     expect(keys(res)).toEqual([
-      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'productsUncategorized', 'merchantOverdue', 'merchantProducts',
       'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'dealerCreditReported', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
@@ -465,7 +466,7 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
   const now = new Date('2026-10-28T03:00:00Z');
   const find = (res: { items: { key: string; count: number; hoursLeft?: number }[] }, key: string) => res.items.find((i) => i.key === key);
 
-  const withMocks = (over: { bank?: number; oldest?: Date | null; dealerBank?: number; dealerOldest?: Date | null; stores?: number; reports?: number; noImage?: number }) => {
+  const withMocks = (over: { bank?: number; oldest?: Date | null; dealerBank?: number; dealerOldest?: Date | null; stores?: number; reports?: number; noImage?: number; uncategorized?: number }) => {
     const base = build({ config: { 'orders.pending_payment_ttl_hours': 24, 'orders.dealer_pending_payment_ttl_hours': 72 } });
     const prisma = (base.svc as unknown as { prisma: Record<string, any> }).prisma;
     prisma.order.count.mockImplementation((a?: { where?: { paymentMethod?: string; type?: string } }) =>
@@ -477,7 +478,9 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     });
     prisma.storefront.count.mockResolvedValue(over.stores ?? 0);
     prisma.communityReport.count.mockResolvedValue(over.reports ?? 0);
-    prisma.product.count.mockImplementation((a?: { where?: { images?: unknown } }) => Promise.resolve(a?.where?.images ? (over.noImage ?? 0) : 0));
+    prisma.product.count.mockImplementation((a?: { where?: { images?: unknown; categoryIds?: unknown } }) =>
+      Promise.resolve(a?.where?.images ? (over.noImage ?? 0) : a?.where?.categoryIds ? (over.uncategorized ?? 0) : 0),
+    );
     return { ...base, prisma };
   };
 
@@ -605,6 +608,17 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     const res = await base.svc.counts({ role: 'ADMIN' }, now);
     expect(find(res, 'storefrontsPending')?.count ?? 0).toBe(0);
     expect(prisma.storefront.count).not.toHaveBeenCalled();
+  });
+
+  it('productsUncategorized: chỉ ADMIN, đếm đúng sản phẩm đang bán chưa có danh mục (cùng điều kiện với màn gán)', async () => {
+    const { svc, prisma } = withMocks({ uncategorized: 12 });
+
+    const admin = await svc.counts({ role: 'ADMIN' }, now);
+    expect(find(admin, 'productsUncategorized')?.count).toBe(12);
+    expect(prisma.product.count).toHaveBeenCalledWith({ where: UNCATEGORIZED_ON_SALE_WHERE });
+    expect(UNCATEGORIZED_ON_SALE_WHERE).toEqual({ isActive: true, approvalStatus: 'APPROVED', categoryIds: { isEmpty: true } });
+    const cskh = await svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] }, now);
+    expect(find(cskh, 'productsUncategorized')).toBeUndefined();
   });
 
   it('storefrontsPending, productsMissingImage: chỉ ADMIN; communityReports: người kiểm duyệt cộng đồng', async () => {

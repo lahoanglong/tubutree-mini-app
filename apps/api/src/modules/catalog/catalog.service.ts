@@ -137,8 +137,8 @@ export class CatalogService {
   // !!! HẠN CHẾ — KHÔNG AN TOÀN KHI SCALE:
   // - Cache PER-INSTANCE (field RAM) → khi tăng số replica API ≥ 2, mỗi replica có cache
   //   riêng + skew tới 60s giữa các replica → khách thấy dữ liệu khác nhau giữa request.
-  // - Sync Pancake job + admin sửa Category KHÔNG gọi invalidate → brand/category mới
-  //   trễ tới 60s. Tăng TTL ở đây mà không có invalidate sẽ làm vấn đề rõ hơn.
+  // - Sync Pancake job KHÔNG gọi invalidate → brand mới trễ tới 60s; admin đổi cây danh mục thì gọi
+  //   `invalidateCategoryCache()` (chỉ instance nhận lệnh). Tăng TTL ở đây mà không có invalidate sẽ làm vấn đề rõ hơn.
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
@@ -722,6 +722,12 @@ export class CatalogService {
       }
     }
     return scope;
+  }
+
+  /** Admin đổi cây danh mục: `/categories`, `?flat=1` và phạm vi lọc theo cha đọc lại ngay thay vì chờ hết 60 giây. */
+  invalidateCategoryCache(): void {
+    this.categoriesCache = null;
+    this.categoryChildrenCache = null;
   }
 
   /**

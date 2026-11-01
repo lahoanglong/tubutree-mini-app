@@ -83,6 +83,7 @@ const mocks = vi.hoisted(() => ({
   deleteAcademyLesson: vi.fn(),
   inbox: vi.fn(),
   inboxExternal: null as Record<string, number> | null,
+  inboxUncategorized: 0,
   access: { role: 'STAFF', staffPermissions: [] as string[] },
   refundsCalls: 0,
   refundsArgs: [] as unknown[][],
@@ -166,6 +167,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'dealerCreditReported', count: 1 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
+          ...(mocks.inboxUncategorized ? [{ key: 'productsUncategorized', count: mocks.inboxUncategorized }] : []),
           ...(mocks.inboxExternal ? [{ key: 'externalPoints', count: Object.values(mocks.inboxExternal).reduce((a, b) => a + b, 0), parts: mocks.inboxExternal }] : []),
         ],
       };
@@ -358,6 +360,7 @@ beforeEach(() => {
   ]) fn.mockReset();
   mocks.inbox.mockReset();
   mocks.inboxExternal = null;
+  mocks.inboxUncategorized = 0;
   mocks.todayCalls = 0;
   mocks.guestCount = 7;
   mocks.access = { role: 'STAFF', staffPermissions: [] };
@@ -3875,7 +3878,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {
-    const api = mockFetch({ '/admin/storefronts': { body: { data: [], meta: { total: 0, page: 1, limit: 20 } } }, '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } }, '/admin/pancake/categories': { body: [] }, '/categories': { body: [] } });
+    const api = mockFetch({ '/admin/storefronts': { body: { data: [], meta: { total: 0, page: 1, limit: 20 } } }, '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } }, '/admin/pancake/categories': { body: [] }, '/admin/categories': { body: { items: [], limits: { maxRoots: 8, maxChildren: 8 } } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = await mount();
     click(container.querySelector('[data-inbox="storefrontsPending"]')!);
@@ -3889,6 +3892,26 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=productCategories');
     expect(api.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!.url).toContain('missingImage=1');
+  });
+
+  it('thẻ "Sản phẩm đang bán chưa có danh mục" mở tab Sản phẩm với chip chưa có danh mục (đang bán) bật sẵn', async () => {
+    mocks.inboxUncategorized = 3;
+    const api = mockFetch({
+      '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } },
+      '/admin/pancake/categories': { body: [] },
+      '/admin/categories': { body: { items: [], limits: { maxRoots: 8, maxChildren: 8 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="productsUncategorized"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=productCategories');
+    const chip = [...container.querySelectorAll('button[aria-pressed="true"]')].find((b) => b.textContent?.startsWith('Chưa có danh mục'));
+    expect(chip?.textContent).toBe('Chưa có danh mục (3)');
+    const last = api.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!.url;
+    expect(last).toContain('uncategorized=1');
+    expect(last).toContain('onSale=1');
+    expect(last).not.toContain('missingImage=1');
   });
 
   it('tab Người dùng: mặc định chỉ tài khoản thật, chip "Hiện cả khách vãng lai (n)" bật thì gửi guests', async () => {
