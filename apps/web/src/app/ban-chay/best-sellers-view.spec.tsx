@@ -274,4 +274,22 @@ describe('BestSellersView — rỗng và lỗi', () => {
     await flush();
     expect(ranks(container)).toHaveLength(40);
   });
+
+  it('dòng thước đo: "Theo lượt bán 30 ngày qua"; API cũ từ chối best_seller_30d (400) thì lùi về best_seller và ghi "Theo tổng lượt bán"', async () => {
+    const first = mount();
+    await flush();
+    expect(first.container.textContent).toContain('Theo lượt bán 30 ngày qua');
+    expect(first.container.textContent).not.toContain('Theo tổng lượt bán');
+    first.unmount();
+
+    routes['/products'] = (q) => {
+      if (q?.sort === 'best_seller_30d') throw Object.assign(new Error('400'), { status: 400 });
+      return pageOf(1, 20, 1, 45);
+    };
+    const legacy = mount();
+    await flush();
+    expect(productCalls().map((q) => q?.sort)).toContain('best_seller');
+    expect(legacy.container.textContent).toContain('Theo tổng lượt bán');
+    expect(legacy.container.textContent).not.toContain('Theo lượt bán 30 ngày qua');
+  });
 });

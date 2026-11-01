@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { CategoryDTO, PageResponse, ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import {
-  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHref, bestSellersRankFrom,
+  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersHref, bestSellersRankFrom,
 } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
@@ -115,7 +115,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
   return (
     <>
       <ListingBreadcrumb trail={[{ label: fillCopy('browse.crumbHome'), href: '/' }, { label: title }]} />
-      <PageHeader title={title} subtitle={fillCopy('rank.basis')} parentHref="/" />
+      <PageHeader title={title} subtitle={bestSellersBasisCopy(products.data?.pages)} parentHref="/" />
       {/* Hàng tab dính dưới thanh lùi đặc ở điện thoại (`sticky-below-back` đặt top đúng), dưới thanh đầu từ md. */}
       <div className="sticky-below-back sticky top-0 z-[2] -mx-4 bg-[var(--color-bg-canvas)] px-4 py-2 md:top-[var(--header-h)] md:mx-0 md:px-0">
         <div className="md:w-fit md:max-w-full">

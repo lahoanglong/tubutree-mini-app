@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHref, bestSellersRankFrom } from './best-sellers';
+import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersHref, bestSellersRankFrom } from './best-sellers';
 import type { CategoryNode } from './category-tree';
 
 const node = (id: string, over: Partial<CategoryNode> = {}): CategoryNode => ({
@@ -49,6 +49,20 @@ describe('bestSellerPanelLabel', () => {
   it('cây đã về: tên danh mục của tab đang chọn; tab không có trong cây thì "Tất cả" (khớp bestSellerScope)', () => {
     expect(bestSellerPanelLabel(tabs, 'c2')).toBe('Danh mục c2');
     expect(bestSellerPanelLabel(tabs, 'khong-co')).toBe('Tất cả');
+  });
+});
+
+describe('bestSellersBasisCopy', () => {
+  it('chưa có dữ liệu, trang thiếu trường basis (cache cũ) hay trang theo 30 ngày: "Theo lượt bán 30 ngày qua"', () => {
+    expect(bestSellersBasisCopy(undefined)).toBe('Theo lượt bán 30 ngày qua');
+    expect(bestSellersBasisCopy([])).toBe('Theo lượt bán 30 ngày qua');
+    expect(bestSellersBasisCopy([{}])).toBe('Theo lượt bán 30 ngày qua');
+    expect(bestSellersBasisCopy([{ basis: 'days30' }, { basis: 'days30' }])).toBe('Theo lượt bán 30 ngày qua');
+  });
+
+  it('có trang nào theo tổng lượt bán (API lùi về best_seller): "Theo tổng lượt bán", kể cả khi chỉ một trang sau lùi', () => {
+    expect(bestSellersBasisCopy([{ basis: 'total' }])).toBe('Theo tổng lượt bán');
+    expect(bestSellersBasisCopy([{ basis: 'days30' }, { basis: 'total' }])).toBe('Theo tổng lượt bán');
   });
 });
 

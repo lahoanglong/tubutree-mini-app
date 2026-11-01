@@ -196,5 +196,15 @@ describe('BestSellersPage (Mini)', () => {
     renderAt();
     await screen.findByText('Sản phẩm 1');
     expect(productCalls().map((q) => q.sort)).toEqual(['best_seller_30d', 'best_seller']);
+    // Đang xếp theo tổng lượt bán nên dòng thước đo không được vẫn ghi "30 ngày qua".
+    expect(screen.getByText('Theo tổng lượt bán')).toBeInTheDocument();
+    expect(screen.queryByText('Theo lượt bán 30 ngày qua')).not.toBeInTheDocument();
+  });
+
+  it('API có best_seller_30d: dòng thước đo ghi "Theo lượt bán 30 ngày qua"', async () => {
+    renderAt();
+    await screen.findByText('Sản phẩm 1');
+    expect(screen.getByText('Theo lượt bán 30 ngày qua')).toBeInTheDocument();
+    expect(screen.queryByText('Theo tổng lượt bán')).not.toBeInTheDocument();
   });
 });

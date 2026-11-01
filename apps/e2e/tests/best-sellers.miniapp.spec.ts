@@ -24,12 +24,23 @@ test.describe('Bán chạy nhất — trang xếp hạng', () => {
     await expect(tablist(page).getByRole('tab')).toHaveText(['Tất cả', 'Chăm sóc da', 'Tẩy rửa sinh học', 'Cho bé'], { timeout: 15_000 });
     await expect(tablist(page).getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true');
     await expect(ranks(page)).toHaveCount(20, { timeout: 15_000 });
+    await expect(page.getByText('Theo lượt bán 30 ngày qua', { exact: true })).toBeVisible();
     await expect(ranks(page).first()).toHaveText('#1');
     await expect(ranks(page).nth(19)).toHaveText('#20');
     await expect(grid(page).getByRole('button').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name));
 
     const listCalls = productQueries(api.callsTo('GET', '/products'));
     expect(listCalls).toEqual([{ sort: 'best_seller_30d', limit: '20', page: '1' }]);
+  });
+
+  test('API cũ từ chối best_seller_30d (400): trang lùi về best_seller và dòng thước đo ghi "Theo tổng lượt bán"', async ({ page, api }) => {
+    mockDiscovery(api, { legacy: true });
+    await page.goto('/best-sellers');
+    await expect(page.getByRole('heading', { level: 1, name: 'Bán chạy nhất' })).toBeVisible({ timeout: 15_000 });
+    await expect(grid(page)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Theo tổng lượt bán', { exact: true })).toBeVisible();
+    await expect(page.getByText('Theo lượt bán 30 ngày qua')).toHaveCount(0);
+    expect(productQueries(api.callsTo('GET', '/products')).map((q) => q.sort)).toEqual(['best_seller_30d', 'best_seller']);
   });
 
   test('cây danh mục chưa về: ?category= không mang tên "Tất cả"; cây về thì mang tên danh mục', async ({ page, api }) => {

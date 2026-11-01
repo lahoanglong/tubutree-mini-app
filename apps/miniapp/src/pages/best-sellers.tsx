@@ -2,7 +2,7 @@ import { useRef, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersRankFrom } from '@tubutree/app-core/browse/best-sellers';
+import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersRankFrom } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -74,7 +74,7 @@ export default function BestSellersPage() {
           (restoreRef as { current: HTMLDivElement | null }).current = el;
         }}
       />
-      <PageHeader title={fillCopy('rank.title')} subtitle={fillCopy('rank.basis')} />
+      <PageHeader title={fillCopy('rank.title')} subtitle={bestSellersBasisCopy(products.data?.pages)} />
       <div style={TABS_BAR}>
         <SegmentedTabs scroll label={fillCopy('rank.tabsLabel')} items={tabItems} value={scope.tab} onChange={pickTab} />
       </div>
