@@ -16,6 +16,14 @@ describe('NumberedPager', () => {
     for (const cls of ['sr-only', 'focus-within:not-sr-only', 'md:not-sr-only', 'lg:hidden']) expect(block.className, cls).toContain(cls);
   });
 
+  it('điện thoại: nav không đệm trên (phần số đã sr-only nên không còn dải trống), đệm lại từ md và khi bàn phím vào trong (H3 #4)', () => {
+    const nav = pager().querySelector('nav')!;
+    const classes = nav.className.split(/\s+/);
+    expect(classes).not.toContain('pt-3');
+    expect(classes).toContain('md:pt-3');
+    expect(classes).toContain('focus-within:pt-3');
+  });
+
   it('trang đầu không có liên kết Trang trước; trang sau có, trỏ về trang liền trước của danh sách đã tải', () => {
     expect(pager().querySelector('a[rel="prev"]')).toBeNull();
     const prev = pager({ startPage: 3, lastPage: 4 }).querySelector<HTMLAnchorElement>('a[rel="prev"]')!;
