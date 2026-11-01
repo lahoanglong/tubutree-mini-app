@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +29,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { cssUrl } from '@/lib/safe-color';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
@@ -117,6 +119,9 @@ function ConfirmSheet({
   );
 }
 
+/** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
+export const BUILDER_HEAD_SLOT = 'builder-head-actions';
+
 export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -126,6 +131,12 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const notify: Notify = (text, error = false) => setNotice({ text, error });
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [kitSlug, setKitSlug] = useState<string | null>(null);
+  // Một bộ nút ở hai chỗ theo khổ (thanh dính đáy ở điện thoại, hàng tiêu đề từ lg) mang trạng thái nên chỉ vẽ một chỗ, không nhân đôi bằng lớp `lg:hidden`.
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setHeadSlot(wide ? document.getElementById(BUILDER_HEAD_SLOT) : null);
+  }, [wide]);
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -419,6 +430,40 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const pickedStyle = sectionCol && sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
   const overflow = overflowSectionsNotice(sf.collections);
 
+  // "Xem trước" và nút chính (Chia sẻ / Đăng): một nguồn cho thanh dính đáy (`grow` = flex-1, hai nút bằng nhau) và hàng tiêu đề từ lg (bề rộng theo chữ).
+  const actions = (grow: string) => (
+    <>
+      {view.canShare ? (
+        <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} ${grow}`}>
+          Xem trước
+        </Link>
+      ) : (
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} ${grow}`} onClick={() => setPreviewOpen(true)}>
+          Xem trước
+        </button>
+      )}
+      {view.canShare ? (
+        <button type="button" className={`${ui.btnPrimary} min-w-0 ${grow} max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
+          <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Chia sẻ
+        </button>
+      ) : sf.isPublished ? (
+        <button
+          type="button"
+          className={`${ui.btnPrimary} min-w-0 ${grow}`}
+          disabled
+          aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
+        >
+          {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
+        </button>
+      ) : (
+        <button type="button" className={`${ui.btnPrimary} ${grow}`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
+          {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="pb-4">
       <div role="status" aria-live="polite">
@@ -429,27 +474,25 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       </div>
 
       {sectionCol ? (
-        <div className="lg:max-w-2xl">
-          <StorefrontSectionDetail
-            col={sectionCol}
-            productMap={productMap}
-            sortMode={itemSort}
-            headingRef={headingRef}
-            pickedStyle={pickedStyle}
-            onBack={closeSection}
-            onMenu={() => setColMenuId(sectionCol.id)}
-            onStyle={(style) => {
-              if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
-            }}
-            onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
-            onAddItem={() => setPickerCol(sectionCol.id)}
-            onToggleSort={() => setItemSort((v) => !v)}
-            onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
-            onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
-            onItemMenu={setItemMenuId}
-            onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
-          />
-        </div>
+        <StorefrontSectionDetail
+          col={sectionCol}
+          productMap={productMap}
+          sortMode={itemSort}
+          headingRef={headingRef}
+          pickedStyle={pickedStyle}
+          onBack={closeSection}
+          onMenu={() => setColMenuId(sectionCol.id)}
+          onStyle={(style) => {
+            if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
+          }}
+          onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
+          onAddItem={() => setPickerCol(sectionCol.id)}
+          onToggleSort={() => setItemSort((v) => !v)}
+          onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
+          onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
+          onItemMenu={setItemMenuId}
+          onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
+        />
       ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
           <div className="lg:col-start-1">
@@ -538,40 +581,18 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         </div>
       )}
 
-      {!sectionCol && (
-        <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
+      {!sectionCol && !wide && (
+        <div data-testid="builder-bar" className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
           {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
-          <div className="mx-auto flex max-w-5xl gap-2">
-            {view.canShare ? (
-              <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} flex-1`}>
-                Xem trước
-              </Link>
-            ) : (
-              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setPreviewOpen(true)}>
-                Xem trước
-              </button>
-            )}
-            {view.canShare ? (
-              <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1 max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
-                <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Chia sẻ
-              </button>
-            ) : sf.isPublished ? (
-              <button
-                type="button"
-                className={`${ui.btnPrimary} min-w-0 flex-1`}
-                disabled
-                aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
-              >
-                {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
-              </button>
-            ) : (
-              <button type="button" className={`${ui.btnPrimary} flex-1`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
-                {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
-              </button>
-            )}
-          </div>
+          <div className="mx-auto flex max-w-5xl gap-2">{actions('flex-1')}</div>
         </div>
+      )}
+      {!sectionCol && wide && headSlot && createPortal(
+        <>
+          {!sf.isPublished && itemCount === 0 && <p className="text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
+          {actions('')}
+        </>,
+        headSlot,
       )}
 
       <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={sf.slug} title={sf.title} referralCode={sf.referralCode ?? null} />

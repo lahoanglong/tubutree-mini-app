@@ -2207,3 +2207,60 @@ describe('màn dựng theo khối (P10)', () => {
     });
   });
 });
+
+describe('từ lg: máy tính (G6 #35)', () => {
+  const realMatchMedia = window.matchMedia;
+  const wide = (on: boolean) => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({ matches: on && query.includes('1024'), media: query, addEventListener() {}, removeEventListener() {} }),
+    });
+  };
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
+  });
+
+  it('khổ nhỏ: thanh dính đáy có hai nút, ô hàng tiêu đề trống', async () => {
+    wide(false);
+    mount();
+    await flush();
+    const bar = document.querySelector('[data-testid="builder-bar"]')!;
+    expect(bar.textContent).toContain('Xem trước');
+    expect(document.querySelector('[data-testid="builder-head-actions"]')!.textContent).toBe('');
+  });
+
+  it('từ lg: hai nút lên hàng tiêu đề và bỏ thanh dính đáy (nút vẫn là một bộ duy nhất, không nhân đôi)', async () => {
+    wide(true);
+    mount();
+    await flush();
+    const slot = document.querySelector('[data-testid="builder-head-actions"]')!;
+    expect(slot.closest('header')?.querySelector('h1')?.textContent).toBe('Gian hàng của tôi');
+    const inSlot = Array.from(slot.querySelectorAll('button, a')).map((e) => e.textContent?.trim());
+    expect(inSlot).toHaveLength(2);
+    expect(inSlot[0]).toBe('Xem trước');
+    expect(document.querySelector('[data-testid="builder-bar"]')).toBeNull();
+    expect(Array.from(document.querySelectorAll('button, a')).filter((e) => e.textContent?.trim() === 'Xem trước')).toHaveLength(1);
+  });
+
+  it('từ lg: nút "Xem trước" ở hàng tiêu đề vẫn mở bản xem trước', async () => {
+    wide(true);
+    mount();
+    await flush();
+    click(btn('Xem trước', document.querySelector('[data-testid="builder-head-actions"]') as HTMLElement));
+    await flush();
+    expect(dialog()?.textContent).toContain('Xem trước');
+  });
+
+  it('chi tiết khối từ lg: hai cột, khung "Khách sẽ thấy" nằm cột phải thay vì để trống', async () => {
+    wide(true);
+    mount();
+    await flush();
+    await openFirstSection();
+    const detail = document.querySelector('[data-testid="section-detail"]')!;
+    expect(detail.className).toContain('lg:grid');
+    expect(detail.closest('.lg\\:max-w-2xl')).toBeNull();
+    const preview = document.querySelector('[data-testid="shop-section-preview"]')!;
+    expect(preview.closest('section')?.className).toContain('lg:col-start-2');
+  });
+});
