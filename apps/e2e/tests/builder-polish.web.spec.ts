@@ -2,7 +2,7 @@ import { expect, reply, test } from './support/mock-api';
 import { mockBuilder, setBuilderSession } from './support/builder-web-mocks';
 import { mockDiscovery } from './support/discovery-mocks';
 import { assertSeededOnCi } from './support/a11y-db';
-import { LG_COMBO_ITEMS, LG_SHELF_FEW, LG_SHELF_MANY, LG_SHELVES_SLUG, seedLgShelves } from './support/lg-shelves-db';
+import { LG_COMBO_ITEMS, LG_SHELF_FEW, LG_SHELF_MANY, LG_SHELF_SIX, LG_SHELVES_SLUG, seedLgShelves } from './support/lg-shelves-db';
 
 /**
  * G6 (P2 #35, #36): web máy tính 1280px. Trình dựng: hai nút lên hàng tiêu đề (không thanh dính đáy), chi tiết khối hai cột. Trang gian hàng công khai:
@@ -134,6 +134,31 @@ test.describe('Gian hàng công khai web (G6 #36)', () => {
     await expect(page.getByTestId('shop-combo')).toBeVisible({ timeout: 20_000 });
     await expectProductsGridColumns(page, 1100);
   });
+
+  // Ngưỡng RAIL_AS_GRID_MAX (6 món) vẫn là lưới chuẩn của trang: ở lg 5 cột nên sáu món xếp 5 + 1 (thẻ lẻ ở hàng hai, dồn trái, cùng bề rộng), ở xl 6 cột nên vừa một hàng.
+  for (const [label, width, perRow] of [['1100px (lg, 5 cột)', 1100, 5], ['1280px (xl, 6 cột)', 1280, 6]] as const) {
+    test(`${label}: kệ đúng ${LG_SHELF_SIX} món là lưới chuẩn, ${perRow} thẻ ở hàng đầu`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(`/s/${LG_SHELVES_SLUG}`);
+      const six = section(page, 'Kệ sáu món');
+      const grid = six.getByTestId('shop-rail-lg');
+      await expect(grid).toBeVisible({ timeout: 20_000 });
+      const box = (await grid.boundingBox())!;
+      const tiles = await grid.locator('[data-ds="product-tile"]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
+      expect(tiles).toHaveLength(LG_SHELF_SIX);
+      const cols = COLUMNS_AT(width);
+      const expected = (box.width - GAP * (cols - 1)) / cols;
+      for (const t of tiles) expect(Math.abs(t.width - expected), `thẻ rộng ${t.width}px, lưới Sản phẩm ${cols} cột cho ${expected}px`).toBeLessThanOrEqual(1);
+      const firstRow = tiles.filter((t) => Math.abs(t.top - tiles[0]!.top) <= 1);
+      expect(firstRow, 'số thẻ ở hàng đầu').toHaveLength(perRow);
+      if (perRow < LG_SHELF_SIX) {
+        const rest = tiles.slice(perRow);
+        expect(rest, 'thẻ lẻ ở hàng hai').toHaveLength(LG_SHELF_SIX - perRow);
+        expect(rest[0]!.top, 'hàng hai nằm dưới hàng đầu').toBeGreaterThan(tiles[0]!.bottom - 1);
+        expect(Math.abs(rest[0]!.left - box.x), 'thẻ lẻ dồn trái, cùng cột với thẻ đầu').toBeLessThanOrEqual(1);
+      }
+    });
+  }
 
   for (const [label, width] of [['1280px', 1280], ['375px', 375]] as const) {
     test(`${label}: kệ ít món chỉ có một bản thẻ trong cây trợ năng và một bản ảnh nhìn thấy (bản kia display:none)`, async ({ page }) => {
