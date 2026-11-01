@@ -17,6 +17,7 @@ import { Icon } from '@/components/mini/icon';
 import { ListRow } from '@/components/mini/list-row';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
 import { usePdpSelection } from '@/components/pdp-selection';
+import { LOW_STOCK_NOTICE, useProductStock } from '@/components/pdp-stock';
 import { tierEarnOf } from '@tubutree/app-core/points-earn-tier';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -32,7 +33,7 @@ import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
 import { freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
-import { getCart, getProductStock } from '@/lib/shop-client';
+import { getCart } from '@/lib/shop-client';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -245,13 +246,30 @@ interface PdpVariation {
   stock: number;
 }
 
+/**
+ * "Chỉ còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh như Mini App (điện thoại). Máy tính giữ dòng này trong khối mua
+ * (`AddToCart`, ngay dưới chip), nên bản này ẩn từ md. Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
+ */
+export function PdpLowStock({ slug, variations }: { slug: string; variations: { id: string; stock: number }[] }) {
+  const sel = usePdpSelection();
+  const stockQ = useProductStock(slug);
+  const selected = variations.find((v) => v.id === sel?.selectedId);
+  const stock = selected ? (stockQ.data?.[selected.id] ?? selected.stock) : 0;
+  if (stock <= 0 || stock > LOW_STOCK_NOTICE) return null;
+  return (
+    <p data-testid="pdp-low-stock" className="mt-1 text-xs font-medium text-warning-fg md:hidden">
+      Chỉ còn {stock} sản phẩm
+    </p>
+  );
+}
+
 /** Dòng "Đặt định kỳ" mở sheet tạo gói; chỉ có với hàng Tubu còn hàng ở phân loại đang chọn. */
 export function PdpSubscribeRow({ slug, variations }: { slug: string; variations: PdpVariation[] }) {
   const router = useRouter();
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
   const sel = usePdpSelection();
-  const stockQ = useQuery({ queryKey: ['product-stock', slug], queryFn: () => getProductStock(slug), staleTime: 30_000, retry: 0 });
+  const stockQ = useProductStock(slug);
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

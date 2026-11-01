@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Layers, ShoppingCart, Zap } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { addToCart, applyCoupon, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
+import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
@@ -23,6 +23,7 @@ import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { usePdpSelection } from './pdp-selection';
+import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -46,9 +47,6 @@ function isPhoneWidth(): boolean {
     return false;
   }
 }
-
-/** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
-const LOW_STOCK_NOTICE = 5;
 
 /** Mã của nhóm mua chung (`GBUY-<nhóm>-<người>`), đúng dạng máy chủ cấp. */
 const GROUP_COUPON_CODE = /^GBUY-[A-Z0-9-]+$/;
@@ -81,12 +79,7 @@ export default function AddToCart({
   const qc = useQueryClient();
   const phase = useAuthPhase();
   // Tồn kho trong HTML là bản ISR (tối đa 5 phút tuổi). Khi mở trang hỏi lại tồn kho thật; lỗi/chưa xong thì dùng bản ISR.
-  const stockQ = useQuery({
-    queryKey: ['product-stock', slug],
-    queryFn: () => getProductStock(slug),
-    staleTime: 30_000,
-    retry: 0,
-  });
+  const stockQ = useProductStock(slug);
   const variations = useMemo(
     () => isrVariations.map((v) => ({ ...v, stock: stockQ.data?.[v.id] ?? v.stock })),
     [isrVariations, stockQ.data],
@@ -370,10 +363,17 @@ export default function AddToCart({
                   key={v.id}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => {
-                    userPicked.current = true;
-                    setSelectedId(v.id);
-                  }}
+                  // Hết hàng thì khoá hẳn như chip của Mini App: không chọn được (chọn xong nút mua chỉ đổi thành "Hết hàng", khó hiểu) và control
+                  // đang khoá được miễn luật tương phản, nên chữ mờ "Hết hàng" không bị tính là chữ nhạt đang tương tác.
+                  disabled={out}
+                  onClick={
+                    out
+                      ? undefined
+                      : () => {
+                          userPicked.current = true;
+                          setSelectedId(v.id);
+                        }
+                  }
                   // Điện thoại: hai dòng (tên / giá) như chip của Mini App, viền 1,5px. Từ md giữ "tên · giá" một dòng để nút mua còn trong 1280×800.
                   className={`min-h-11 rounded-control border px-4 text-sm transition max-md:flex max-md:flex-col max-md:items-start max-md:border-[1.5px] max-md:px-3.5 max-md:py-2 max-md:text-left ${
                     active
@@ -413,8 +413,9 @@ export default function AddToCart({
         </div>
       )}
 
+      {/* Điện thoại: dòng này nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
-        <p className="mt-3 text-sm font-medium text-warning-fg max-md:order-7 max-md:mt-0 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3 max-md:text-xs">Chỉ còn {selected!.stock} sản phẩm</p>
+        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
       <div data-section="pdp-quantity" className="mt-4 flex items-center gap-3 max-md:order-10 max-md:mt-2 max-md:justify-between max-md:bg-[var(--color-bg-surface)] max-md:p-4">

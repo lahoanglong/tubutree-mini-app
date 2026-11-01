@@ -18,7 +18,7 @@ import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
 import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpRails } from './pdp-rails';
@@ -139,6 +139,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 {soldText && <PdpSold text={soldText} product={product} slot="price" />}
               </div>
               <PdpPointsEarn product={product} />
+              {/* Gian hàng tạm nghỉ thì khối mua không dựng ("Tạm thời chưa mua được"), nên không nhắc chốt sớm. */}
+              {!unavailableText && <PdpLowStock slug={product.slug} variations={product.variations} />}
               {shortDesc && shortDesc !== description && (
                 <p data-testid="pdp-short-desc" className="mt-3 whitespace-pre-line break-words text-stone-600 max-md:mt-2 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
                   {shortDesc}
@@ -191,10 +193,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
-                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng `max-md:order-N` theo thứ tự của Mini App (các hàng
-                hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước): thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích),
-                Ưu đãi + Vận chuyển 3, Phân loại 4, chip phân loại 5, ghi chú vận chuyển 6, "Chỉ còn N" 7, Combo/Mua kèm 8, Đánh giá nhanh 9,
-                Số lượng 10, Mở nhóm mua chung + Nội dung bán hàng 11. Phân loại, chip và Số lượng là ruột của AddToCart (gốc `contents`).
+                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng `max-md:order-N` theo thứ tự của Mini App:
+                thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích), Ưu đãi + Vận chuyển 3, Phân loại 4,
+                chip phân loại 5, ghi chú vận chuyển 6, Combo/Mua kèm 8, Đánh giá nhanh 9, Số lượng 10, Mở nhóm mua chung + Nội dung bán hàng 11.
+                Phân loại, chip và Số lượng là ruột của AddToCart (gốc `contents`).
+                Hệ quả: thứ tự nhìn và thứ tự Tab/TalkBack lệch nhau ở điện thoại. Tab đi Ưu đãi/Vận chuyển, Phân loại, chip, rồi Số lượng
+                (trong DOM đứng ngay sau chip, trên màn hình nằm sau Combo và Đánh giá nhanh), thanh dính đáy, rồi mới tới chứng nhận, Đặt định kỳ,
+                Combo, Đánh giá nhanh. Chấp nhận để Số lượng và nút mua giữ chỗ cũ ở máy tính; nút mua thật của điện thoại ở thanh dính đáy
+                nên không phụ thuộc thứ tự này. Muốn khớp hoàn toàn thì tách hàng Số lượng khỏi AddToCart và dựng lại sau Đánh giá nhanh.
                 Bộ hết hạn hay tắt khi trang ISR đã cũ thì khối KHÔNG bị gỡ (PdpBundles giữ chỗ, ghi "Đã kết thúc"), nên chỗ này không nhảy; chỉ bộ
                 mới hiện sau khi tải (máy chủ lỗi lúc dựng, hay bộ vừa tạo sau lần dựng trang) là chèn thêm, như Mini App.
               */}

@@ -530,6 +530,30 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     expect(out.textContent).not.toContain('150.000đ');
     expect(out.querySelector('.line-through')!.textContent).toBe('250ml');
   });
+
+  it('chip hết hàng khoá như chip của Mini App: disabled, bấm vào không đổi phân loại đang chọn', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 9 });
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    const out = byText(container, 'button', /250ml/) as HTMLButtonElement;
+    const other = byText(container, 'button', /500ml/) as HTMLButtonElement;
+    expect(out.disabled).toBe(true);
+    expect(other.disabled).toBe(false);
+    expect(other.getAttribute('aria-pressed')).toBe('true');
+    click(out);
+    await flush();
+    expect(out.getAttribute('aria-pressed')).toBe('false');
+    expect(other.getAttribute('aria-pressed')).toBe('true');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
+  });
+
+  it('"Chỉ còn N" trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 3, v2: 9 });
+    const { container } = mount();
+    await flush();
+    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Chỉ còn 3 sản phẩm')!;
+    expect(note.className).toContain('max-md:hidden');
+  });
 });
 
 describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', () => {

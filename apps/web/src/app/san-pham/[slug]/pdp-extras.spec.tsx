@@ -45,7 +45,7 @@ vi.mock('./content-kit-sheet', () => ({
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpLowStock, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
   { id: 'v1', stock: 0 },
@@ -249,6 +249,27 @@ describe('PdpSubscribeRow', () => {
     click(byText(container, 'button', /Đặt định kỳ/));
     expect(container.querySelector('[role="alert"]')!.textContent).toContain('Chưa kết nối được tới Tubu Tree');
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('PdpLowStock ("Chỉ còn N" dưới Điểm Xanh, như Mini App ở điện thoại)', () => {
+  it('phân loại đang chọn còn từ 1 đến 5: nhắc "Chỉ còn N sản phẩm", chỉ hiện dưới md', async () => {
+    const { container } = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    const p = container.querySelector('[data-testid="pdp-low-stock"]')!;
+    expect(p.textContent).toBe('Chỉ còn 4 sản phẩm');
+    expect(p.className).toContain('md:hidden');
+  });
+  it('hết hàng hoặc còn nhiều hơn 5: không nhắc; lấy tồn kho thật thay bản ISR', async () => {
+    expect(mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />, 'v1').container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 6 });
+    const many = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    expect(many.container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 2 });
+    const few = mount(<PdpLowStock slug="dau-goi" variations={[{ id: 'v2', stock: 9 }]} />);
+    await flush();
+    expect(few.container.textContent).toBe('Chỉ còn 2 sản phẩm');
   });
 });
 
