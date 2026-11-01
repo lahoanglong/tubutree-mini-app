@@ -1,11 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import type { CampaignLinkType } from '@prisma/client';
+import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 
 export type CampaignStatus = 'live' | 'scheduled' | 'ended' | 'off';
 
 const SLUG_MAX = 80;
 const ENTITY_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
-const INTERNAL_PATH_MAX = 200;
 
 /** "Chiến dịch Giữa Thu" → "chien-dich-giua-thu". Tiêu đề toàn ký hiệu vẫn ra một slug dùng được. */
 export function slugFromTitle(title: string): string {
@@ -22,15 +22,15 @@ export function slugFromTitle(title: string): string {
 }
 
 /**
- * Đích bấm lưu cùng chiến dịch. Chỉ nhận đường dẫn của chính app: `//host` và `/\host` là URL ngoài khi trình duyệt phân giải,
- * `javascript:`/`https:` không bắt đầu bằng `/`.
+ * Đích bấm lưu cùng chiến dịch. Đích nội bộ chỉ nhận đúng giá trị trong CAMPAIGN_INTERNAL_TARGETS: app chỉ dựng liên kết cho các đích đó,
+ * nên đường dẫn khác (kể cả `/cart` hợp lệ về hình thức) lưu được thì banner lặng lẽ biến mất; `//host`, `javascript:` cũng bị chặn theo.
  */
 export function normalizeLink(linkType: CampaignLinkType, raw: string | null | undefined): string | null {
   if (linkType === 'CAMPAIGN_PAGE') return null;
   const value = typeof raw === 'string' ? raw.trim() : '';
   if (linkType === 'URL_INTERNAL') {
-    if (!value.startsWith('/') || value.startsWith('//') || /[\s\\]/.test(value) || value.length > INTERNAL_PATH_MAX) {
-      throw new BadRequestException('Đích nội bộ phải là đường dẫn của app, bắt đầu bằng một dấu "/", không khoảng trắng.');
+    if (!CAMPAIGN_INTERNAL_TARGETS.some((t) => t.value === value)) {
+      throw new BadRequestException(`Đích nội bộ phải chọn trong danh sách: ${CAMPAIGN_INTERNAL_TARGETS.map((t) => t.label).join(', ')}.`);
     }
     return value;
   }

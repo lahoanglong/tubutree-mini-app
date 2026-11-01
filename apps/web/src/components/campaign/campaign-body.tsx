@@ -67,7 +67,7 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={c.image}
-            alt={c.title}
+            alt=""
             decoding="async"
             className="md:max-h-80"
             style={{ display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', objectFit: 'cover', borderRadius: 'var(--radius-media)' }}

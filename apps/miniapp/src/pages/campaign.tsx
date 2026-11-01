@@ -97,7 +97,7 @@ export default function CampaignPage() {
         {c.image && (
           <img
             src={c.image}
-            alt={c.title}
+            alt=""
             decoding="async"
             style={{ display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', objectFit: 'cover', borderRadius: 'var(--radius-media)' }}
           />

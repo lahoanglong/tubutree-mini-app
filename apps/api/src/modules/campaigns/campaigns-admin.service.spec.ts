@@ -216,6 +216,32 @@ describe('CampaignsAdminService.setProducts', () => {
   });
 });
 
+const fkViolation = (field: string) => new Prisma.PrismaClientKnownRequestError('fk', { code: 'P2003', clientVersion: 'test', meta: { field_name: field } });
+
+describe('P2003 khi mục bị xoá giữa lúc kiểm và ghi', () => {
+  it('setProducts: sản phẩm vừa xoá → 400, chiến dịch vừa xoá → 404', async () => {
+    const a = setup({ products: [{ id: 'p1' }] });
+    a.prisma.$transaction.mockRejectedValue(fkViolation('CampaignProduct_productId_fkey (index)'));
+    await expect(a.svc.setProducts('c1', ['p1'])).rejects.toBeInstanceOf(BadRequestException);
+    const b = setup({ products: [{ id: 'p1' }] });
+    b.prisma.$transaction.mockRejectedValue(fkViolation('CampaignProduct_campaignId_fkey (index)'));
+    await expect(b.svc.setProducts('c1', ['p1'])).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('setCoupons: mã vừa xoá → 400, chiến dịch vừa xoá → 404; lỗi khác vẫn ném nguyên', async () => {
+    const coupons = [{ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null }];
+    const a = setup({ coupons });
+    a.prisma.$transaction.mockRejectedValue(fkViolation('CampaignCoupon_couponId_fkey (index)'));
+    await expect(a.svc.setCoupons('c1', ['THU10'])).rejects.toBeInstanceOf(BadRequestException);
+    const b = setup({ coupons });
+    b.prisma.$transaction.mockRejectedValue(fkViolation('CampaignCoupon_campaignId_fkey (index)'));
+    await expect(b.svc.setCoupons('c1', ['THU10'])).rejects.toBeInstanceOf(NotFoundException);
+    const c = setup({ coupons });
+    c.prisma.$transaction.mockRejectedValue(new Error('boom'));
+    await expect(c.svc.setCoupons('c1', ['THU10'])).rejects.toThrow('boom');
+  });
+});
+
 describe('CampaignsAdminService.setCoupons', () => {
   const coupon = (over: Record<string, unknown> = {}) => ({ id: 'k1', code: 'THU10', scope: 'PUBLIC', batch: null, ...over });
 
