@@ -21,18 +21,19 @@ import { pdpSectionTitle } from './pdp-sections';
 
 const STALE_MS = 30_000;
 const ADDED_FLASH_MS = 1_200;
-const SURFACE = 'bg-[var(--color-bg-surface)] p-4 md:rounded-xl';
+/** Cột thông tin của trang đã đệm 16px hai bên: khối không tự đệm thêm (Mini App đệm trong khối trắng tràn mép nên chữ vẫn thẳng hàng 16px). */
+const SURFACE = 'py-2';
 
 function AddonRowView({ row, on, onToggle }: { row: AddonRow; on: boolean; onToggle: () => void }) {
   return (
     <label data-testid="addon-row" className="flex min-h-16 cursor-pointer items-center gap-3 py-2">
-      <span className="flex h-11 w-6 flex-none items-center justify-center">
+      <span className="flex h-11 w-11 flex-none items-center">
         <input
           type="checkbox"
           aria-label={fillCopy('addon.pickSpoken', { name: row.name, price: vnd(row.addonPrice), pct: row.savingPct })}
           checked={on}
           onChange={onToggle}
-          className="h-5 w-5 accent-forest-600"
+          className="h-6 w-6 accent-forest-600"
         />
       </span>
       <ProductThumb src={row.thumbnail} alt="" size={48} />
