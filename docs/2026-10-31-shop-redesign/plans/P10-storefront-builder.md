@@ -272,7 +272,27 @@ Hành vi: màn chính `Builder` = tiêu đề + trạng thái → (LIVE) hàng t
 
 ## Điều chỉnh lúc làm
 
-(điền khi làm: chỗ lệch kế hoạch, số đo thanh dính, ca e2e cũ sửa theo thiết kế)
+**Số đo thanh dính của trang gian hàng Mini (`storefront-view.tsx`, 375px, Playwright)**
+
+- Việc mở của wave4a nói dải tab có thể hở 48px dưới thanh nút lùi. Đo thực tế: với vùng an toàn 0px, đáy thanh nút lùi 56px, đỉnh dải tab 56px, hở 0px (code cũ đúng ở mức này). Hở 48px là suy đoán từ trang Giờ vàng (trang đó dùng `.page` đệm đầu 48px, trang gian hàng dùng `.page-bleed` đệm đầu chỉ đúng vùng an toàn).
+- Lỗi có thật nhưng khác: `top` của phần tử dính đo từ mép nội dung của `.zaui-page`, mà đệm đầu của trang đã là `--safe-top`, nên `calc(var(--safe-top) + 56px)` cộng vùng an toàn hai lần. Giả lập `--safe-top: 44px`: dải tab hở đúng 44px (đỉnh dải 144px, đáy thanh 100px). Sửa: `STICKY_TOP = '56px'`; sau sửa hở 0px ở cả hai mức vùng an toàn.
+- Thanh sắp xếp của tab Sản phẩm: dải tab thực cao 70px (đệm 12 + dải 50 + đệm 8), không phải 62px như hằng số cũ, nên thanh sắp xếp chui 20px dưới dải và cắt mất nửa trên chữ "Phổ biến / Mới / Bán chạy / Giá". Sửa: `TABS_HEIGHT = 70`, `--sort-bar-top = 56 + 70 - 8` (chui 8px dưới đệm đáy trống); đo lại 6 đến 10px ở cả hai mức vùng an toàn.
+- `brand-view.tsx` dùng đúng hai công thức cũ (cộng `--safe-top`, trừ 12): chưa sửa vì thuộc P17; gói đó nên áp cùng phép đo (`apps/e2e/tests/storefront-builder.miniapp.spec.ts`, nhóm "Dải tab của trang gian hàng dính").
+
+**Chỗ lệch kế hoạch**
+
+- Các thành phần web (`SectionCard`, `LayoutPicker`, `MoveButtons`, `QuestStrip`) được chuyển từ bản Mini đã có test rồi mới viết spec; không đi đúng thứ tự đỏ rồi xanh từng thành phần. Trang chi tiết Mini (`section-detail.tsx`) không có spec riêng, được phủ bởi `storefront-builder.spec.tsx`.
+- `StorefrontNewSection` và `StorefrontSectionDetail` ở web không có prop `onNotice`: màn dựng giữ mọi thông báo.
+- `updateCollection` đổi kiểu trả về thành `StorefrontCollectionEdit` ở `packages/app-core/src/api/storefront.ts` và `apps/miniapp/src/services/storefront-api.ts`, vì API trả về bộ sưu tập thuần (không có món) và màn đọc lại `layout` / `comboDiscountPct` máy chủ đã lưu.
+- Xem trước ở màn dựng và ở bước 4 của đăng ký dựng bằng `ShopSection` thật nên thẻ có tim và gọi `GET /me/wishlist/ids`; làm e2e đăng ký đỏ. Sửa mã chứ không sửa test: `ShopSection` ở chế độ `preview` tắt tim, `ProductRail` nhận `showWishlist` như `ProductGrid` (Mini và web, có test).
+- Sau khi so ảnh 375px: Mini đẩy lối quay về danh sách khối qua nút lùi nổi của app (trước đó bị đè mất chữ); web dùng kiểu điện thoại của Mini cho nút "Sắp xếp" và nút "Nhận điểm". Ảnh ở `docs/2026-10-31-shop-redesign/screens/P10/` (bị gitignore). Còn lệch nhỏ chấp nhận: web giữ thanh h1 "Gian hàng của tôi" ở trang chi tiết (h1 duy nhất của trang), Mini thay bằng tiêu đề khối là h1.
+- Bundle: entry Mini 631 KB (630 KB trước), tổng 2152 KB; trình dựng nạp lười nên không đổi đáng kể.
+
+**Test cũ đổi theo thiết kế mới**
+
+- Mini `storefront-builder.spec.tsx`: bỏ "tạo bộ sưu tập cần tên" (form ở cuối trang không còn; ca tương đương nằm ở `new-section-sheet.spec.tsx` và nhóm "thêm khối"); "món đã ghim có nhãn" dùng `findAllByTestId('item-row')` vì món cũng nằm trong khung xem trước.
+- Web `page.spec.tsx`: thao tác món và bộ sưu tập mở thẻ khối trước (`openFirstSection`); mũi tên mang tên món và chỉ hiện khi bật Sắp xếp (ca "Đưa lên" / "Đưa xuống" viết lại theo `Đưa Món hai lên`, `aria-disabled` thay cho `disabled`); thống kê chỉ hiện khi LIVE và bảng theo sản phẩm gập sau nút "Theo sản phẩm"; nhiệm vụ nằm trong sheet mở từ dải Hành trình; thứ tự trên màn chính là Thống kê, Hành trình, các khối (thay cho luật "Hành trình đứng đầu khi chưa nhận đủ"); bỏ hai ca form tạo bộ sưu tập ở cuối trang; nhãn combo là "Combo -12% · 1 món" trên thẻ khối. Web `storefront-sheets.spec.tsx` bị xoá cùng `NewCollectionForm`; `storefront-preview.spec.tsx` giữ nguyên ý (không tim, inert) sau khi `ShopSection` tắt tim ở preview.
+- E2E Mini: không sửa ca cũ nào; một ca cũ (đăng ký 4 bước) đỏ vì lời gọi chưa mock do thẻ có tim, đã sửa mã như trên.
 
 ## Self-review
 
