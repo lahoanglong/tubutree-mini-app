@@ -22,6 +22,9 @@ import { useBlockQuery, type BlockQuery } from './use-block-query';
 
 const STALE = 60_000;
 
+/** Tập rỗng dùng chung để `flashVariationIds` giữ danh tính khi kệ Giờ vàng ẩn. */
+const NO_VARIATIONS: ReadonlySet<string> = new Set();
+
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
   flash: FlashSaleActiveItem[];
@@ -33,7 +36,7 @@ export interface HomeShelves {
   bestSellerRanks: number[];
   /** Thước đo của bảng xếp hạng: `total` khi API cũ chưa có `best_seller_30d` và kệ lùi về tổng lượt bán (phụ đề không được ghi "30 ngày"). */
   bestSellerBasis: BestSellersBasis;
-  /** Phân loại của các suất Giờ vàng đang hiện: Mua lại bỏ đúng những phân loại này (không bỏ phân loại khác của cùng sản phẩm). */
+  /** Mọi phân loại đang Giờ vàng còn hạn (kể cả phân loại thứ hai của sản phẩm mà kệ chỉ vẽ một thẻ), khi kệ Giờ vàng đang hiện: Mua lại bỏ đúng những phân loại này, không bỏ phân loại khác của cùng sản phẩm. */
   flashVariationIds: ReadonlySet<string>;
   /** Slug mọi món đang hiện ở kệ hàng (kể cả món trong combo): lưới Gợi ý hôm nay bỏ chúng. */
   seen: ReadonlySet<string>;
@@ -91,8 +94,10 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
   // Chỉ phụ thuộc dữ liệu (không phải đối tượng query, đổi mỗi lần vẽ) để `seen` giữ nguyên danh tính khi dữ liệu chưa đổi.
   const shelves = useMemo(() => {
     const now = serverNow();
+    // Danh sách gốc còn hạn, trước khi chống trùng theo slug: mỗi sản phẩm chỉ một thẻ ở kệ Giờ vàng nhưng MỌI phân loại của nó đang giảm giá.
+    const liveFlash = (flashData ?? []).filter((item) => !hydrated || Date.parse(item.endAt) > now);
     const composed = composeHomeShelves({
-      flash: (flashData ?? []).filter((item) => !hydrated || Date.parse(item.endAt) > now).map(flashShelfEntry),
+      flash: liveFlash.map(flashShelfEntry),
       purchased: kind === 'returning' ? (purchasedData ?? []).map(purchasedShelfEntry) : [],
       // Trước hydrate không kiểm hạn combo (`liveAt` -∞): HTML dựng sẵn đã lọc theo giờ máy chủ lúc dựng, nên hydrate vẽ đúng các combo đó rồi mới kiểm hạn thật.
       combos: (combosData ?? []).flatMap((b) => comboView(b, now, hydrated ? now : Number.NEGATIVE_INFINITY) ?? []).map(comboShelfEntry),
@@ -104,7 +109,8 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
       combos: composed.combos,
       bestSellers: composed.bestSellers.map((x) => x.product),
       bestSellerRanks: composed.bestSellers.map((x) => x.rank),
-      flashVariationIds: new Set(composed.flash.map((it) => it.variationId)) as ReadonlySet<string>,
+      // Kệ ẩn (dưới mức tối thiểu) không chiếm gì nên không loại phân loại nào khỏi Mua lại.
+      flashVariationIds: composed.flash.length > 0 ? (new Set(liveFlash.map((it) => it.variationId)) as ReadonlySet<string>) : NO_VARIATIONS,
       seen: composed.seen,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `expiredTick` chỉ để tính lại `serverNow()`.
