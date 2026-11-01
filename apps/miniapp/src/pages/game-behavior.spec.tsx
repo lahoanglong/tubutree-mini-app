@@ -144,6 +144,7 @@ async function openTab(name: 'Hôm nay' | 'Vườn') {
 beforeEach(() => {
   mocks.publicConfig.waste.enabled = true;
   vi.clearAllMocks();
+  mocks.login.mockReset();
   mocks.getDailyCheckInStatus.mockResolvedValue(null);
   mocks.auth.status = 'authenticated';
   mocks.auth.error = undefined;
@@ -203,10 +204,14 @@ describe('GamePage — trạng thái trang', () => {
   it('tài khoản bị khoá: cổng nói lời máy chủ ngay, bấm đăng nhập lại thì thanh thông báo nhắc lại', async () => {
     mocks.auth.status = 'idle';
     mocks.auth.error = 'Tài khoản đã bị khoá.';
+    // Lời mới sau login() khác lời cũ: thanh báo phải đọc lại trạng thái sau login(), không dùng lời đã có trước cú bấm.
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth.error = 'Tài khoản đã bị khoá đến 05/11.';
+    });
     renderPage();
     expect(screen.getByText('Tài khoản đã bị khoá.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá đến 05/11.', type: 'error' }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
   });

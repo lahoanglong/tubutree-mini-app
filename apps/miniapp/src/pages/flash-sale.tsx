@@ -110,8 +110,8 @@ export default function FlashSalePage() {
     refetchInterval: activeTab?.status === 'LIVE' ? LIVE_ITEMS_REFETCH_MS : false,
   });
 
-  // Phiên đang khôi phục thì chờ: mở thêm một lần đăng nhập song song chỉ làm hai lời gọi dẫm lên nhau.
   const loginWithNotice = useLoginWithNotice();
+  // Phiên đang khôi phục thì chờ: mở thêm một lần đăng nhập song song chỉ làm hai lời gọi dẫm lên nhau.
   const login = () => {
     if (authStatus !== 'loading') void loginWithNotice();
   };

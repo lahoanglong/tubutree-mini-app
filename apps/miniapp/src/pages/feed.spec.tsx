@@ -89,6 +89,8 @@ const lastFeedArgs = () => mocks.getFeed.mock.calls.at(-1)![0];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks không bỏ mockImplementationOnce chưa dùng: test hỏng trước cú bấm sẽ để lại cho test sau.
+  mocks.login.mockReset();
   mocks.search = '';
   mocks.auth.status = 'authenticated';
   mocks.auth.error = undefined;

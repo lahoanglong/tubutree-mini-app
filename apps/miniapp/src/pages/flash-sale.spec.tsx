@@ -114,6 +114,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   vi.clearAllMocks();
+  // clearAllMocks không bỏ mockImplementationOnce chưa dùng: test hỏng trước cú bấm sẽ để lại cho test sau.
+  mocks.login.mockReset();
   mocks.status = 'authenticated';
   mocks.error = undefined;
   mocks.fetchUpcoming.mockResolvedValue([]);
