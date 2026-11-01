@@ -150,4 +150,9 @@
 
 ## Điều chỉnh lúc làm
 
-(điền khi làm)
+- Mini cũng đổi: `SectionTitle` thêm prop `block` (Inter 700, -0.01em) và các tiêu đề khối PDP của Mini dùng nó, vì luật Q1 đòi 16/700 mà Mini đang 16/600. Test `product-detail-chat.spec.tsx` sửa theo (600 thành 700).
+- Bộ lọc đánh giá (chip, lọc theo sao/ảnh/video) gom vào `packages/app-core/src/commerce/review-filter.ts` để hai app dùng chung; Mini đổi sang dùng nó, hành vi không đổi.
+- Xếp khối ở điện thoại dùng một cột flex `pdp-info` với `max-md:order-N` và `max-md:contents` trên vỏ AddToCart (không tách AddToCart thành nhiều component). Máy tính giữ nguyên thứ tự HTML để nút Thêm vào giỏ còn trong khung 1280x800. Đánh giá nhanh nằm trong cột thông tin ở mọi khổ.
+- `pdp-bundles.tsx` không sửa: dải trắng và khe 8px của Combo/Mua kèm đặt ở khối bọc trong `page.tsx` (`max-md:[&_section]`, `max-md:[&>div]:mt-2`).
+- `test-utils/a11y.ts`: `smallTouchTargets` nhận thêm lớp `tubu-hit-44` (Chip vẽ vùng chạm 44px bằng ::after); không có thì hàng chip lọc đánh giá bị báo nhầm.
+- Chụp tự kiểm bằng API giả (Next dev 3374, Vite 3373): Mini và web375 khác nhau chủ yếu ở hàng Đặt định kỳ (web có, Mini không hiện cho khách) nên mọi khối phía dưới lệch 44-64px; trình tự khối, khe 8px, tiêu đề Inter 16/700 khớp.
