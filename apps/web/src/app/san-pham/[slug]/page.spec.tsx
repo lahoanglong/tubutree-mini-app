@@ -570,10 +570,10 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(subscribe).toBeDefined();
     expect(after(add, certs)).toBe(true);
     expect(after(add, subscribe)).toBe(true);
-    // Điện thoại giữ thứ tự như Mini App: chứng nhận (order 0) → Đặt định kỳ (1) → Combo/Mua kèm (2) → khối mua (3) → Mở nhóm mua chung (4).
+    // Điện thoại giữ thứ tự như Mini App: chứng nhận (order 0) → Đặt định kỳ (1) → khối mua (2) → Combo/Mua kèm (3) → Mở nhóm mua chung (4).
     expect(certs.className).not.toMatch(/order-/);
     expect(subscribe.closest('.max-md\\:order-1')).not.toBeNull();
-    expect(add.parentElement!.className).toContain('max-md:order-3');
+    expect(add.parentElement!.className).toContain('max-md:order-2');
   });
 
   describe('Combo ưu đãi và Mua kèm deal sốc (P15)', () => {
@@ -603,16 +603,16 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
       expect(html).toContain('Chỉ khi mua cùng Dầu gội bồ kết');
     });
 
-    it('điện thoại: Combo/Mua kèm đứng trước khối mua (Số lượng) và Mở nhóm mua chung như Mini App; máy tính giữ khối mua trước trong HTML', async () => {
+    it('điện thoại: Combo/Mua kèm đứng SAU khối mua (chèn hay gỡ khối sau khi tải không đẩy nút Thêm vào giỏ ở màn đầu), trước Mở nhóm mua chung; HTML giữ khối mua trước', async () => {
       api.bundles = BUNDLES;
       const c = await mount();
       const order = (el: Element | null) => Number(/max-md:order-(\d)/.exec(el?.className ?? '')?.[1] ?? 0);
       const slots = c.querySelector('[data-testid="pdp-bundle-slots"]')!;
       const add = c.querySelector('[data-testid="add-to-cart"]')!;
       const wrapper = (el: Element) => el.closest('[class*="max-md:order-"]')!;
-      expect(order(wrapper(slots))).toBeLessThan(order(add.parentElement));
+      expect(order(wrapper(slots))).toBeGreaterThan(order(add.parentElement));
       const group = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Mở nhóm mua chung'));
-      if (group) expect(order(wrapper(group))).toBeGreaterThan(order(add.parentElement));
+      if (group) expect(order(wrapper(group))).toBeGreaterThan(order(wrapper(slots)));
       expect(Boolean(add.compareDocumentPosition(slots) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     });
 

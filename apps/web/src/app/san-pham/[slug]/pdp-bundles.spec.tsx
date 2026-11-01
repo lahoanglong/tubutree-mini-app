@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, type ReactElement } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BundleDTO, BundleItemDTO, ProductBundles } from '@tubutree/app-core/api/bundle';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
@@ -102,6 +106,87 @@ describe('PdpBundles (web): dữ liệu server của trang ISR có thể cũ t�
     const { c } = await mountAt(Date.now() - 1_000);
     expect(mocks.get).not.toHaveBeenCalled();
     expect(c.querySelector('[data-testid="pdp-combos"]')).not.toBeNull();
+  });
+});
+
+describe('PdpBundles (web): HTML dựng sẵn (ISR) và lần hydrate đầu phải khớp, dù trang đã cũ hay đồng hồ máy lệch', () => {
+  const NOW = new Date('2026-11-01T20:00:00Z').getTime();
+  const END = new Date(NOW + 2 * 3_600_000).toISOString();
+  const bundles = (): ProductBundles => ({ combos: [combo('c1', [item('a'), item('b')], { endAt: END })], addons: [addon('a1', [item('x', { addonPrice: 60_000 })], { endAt: END })] });
+  const ui = (client: QueryClient) => (
+    <QueryClientProvider client={client}>
+      <PdpBundles slug="sp-anchor" productName="Xà phòng sả" initialBundles={bundles()} initialFetchedAt={NOW} />
+    </QueryClientProvider>
+  );
+
+  afterEach(() => vi.useRealTimers());
+
+  async function hydrateAt(visitTime: number) {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    const html = renderToString(ui(new QueryClient()));
+    expect(html).toContain('Combo ưu đãi');
+    expect(html).toContain('Mua kèm deal sốc');
+    vi.setSystemTime(visitTime);
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    // Dữ liệu cũ hơn 30 giây nên trình duyệt tải lại ngay; nhánh này không có API thật nên hỏng và giữ dữ liệu cũ.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(client), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    return {
+      errors,
+      final: container,
+      cleanup: () => {
+        act(() => root.unmount());
+        container.remove();
+      },
+    };
+  }
+
+  /** Lần vẽ đầu của trình duyệt dùng cùng nhánh với máy chủ (chưa hydrate): chạy nó ở giờ khách mở trang phải ra đúng HTML đã dựng. */
+  const firstPassAt = (visitTime: number) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    const built = renderToString(ui(new QueryClient()));
+    vi.setSystemTime(visitTime);
+    const firstClientPass = renderToString(ui(new QueryClient()));
+    return { built, firstClientPass };
+  };
+
+  it('bộ hết hạn sau lúc dựng HTML nhưng trước lúc khách mở trang (HTML cũ hàng giờ): lần vẽ đầu của trình duyệt giống HTML đã dựng, hydrate không lỗi', async () => {
+    const { built, firstClientPass } = firstPassAt(NOW + 3 * 3_600_000);
+    expect(built).toContain('Combo ưu đãi');
+    expect(firstClientPass).toBe(built);
+    const r = await hydrateAt(NOW + 3 * 3_600_000);
+    expect(r.errors).toEqual([]);
+    r.cleanup();
+  });
+
+  it('đồng hồ điện thoại lệch vài phút quanh giờ kết thúc: lần vẽ đầu vẫn giống HTML đã dựng', async () => {
+    for (const skew of [-4 * 60_000, 4 * 60_000]) {
+      const { built, firstClientPass } = firstPassAt(NOW + 2 * 3_600_000 + skew);
+      expect(firstClientPass).toBe(built);
+    }
+    const r = await hydrateAt(NOW + 2 * 3_600_000 + 4 * 60_000);
+    expect(r.errors).toEqual([]);
+    r.cleanup();
+  });
+
+  it('sau khi hydrate xong mới lọc theo giờ: bộ đã hết hạn rời trang (không đứng mãi)', async () => {
+    const r = await hydrateAt(NOW + 3 * 3_600_000);
+    await act(async () => {
+      await new Promise((res) => setTimeout(res, 0));
+    });
+    expect(r.final.querySelector('[data-testid="pdp-combos"]')).toBeNull();
+    expect(r.final.querySelector('[data-testid="pdp-addons"]')).toBeNull();
+    r.cleanup();
   });
 });
 

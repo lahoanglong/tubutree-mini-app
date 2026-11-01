@@ -14,8 +14,10 @@ import { Button } from '@/components/mini/button';
 import { ComboCard } from '@/components/mini/combo-card';
 import { PriceTag } from '@/components/mini/price-tag';
 import { ProductThumb } from '@/components/mini/product-thumb';
+import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import { coreHttp } from '@/lib/core-http';
 import { useBundleAdd, type BundleAddResult } from '@/lib/use-bundle-add';
+import { useHydrated } from '@/lib/use-hydrated';
 import { PdpBundleSlots } from './pdp-bundle-slots';
 import { pdpSectionTitle } from './pdp-sections';
 
@@ -28,13 +30,16 @@ function AddonRowView({ row, on, onToggle }: { row: AddonRow; on: boolean; onTog
   return (
     <label data-testid="addon-row" className="flex min-h-16 cursor-pointer items-center gap-3 py-2">
       <span className="flex h-11 w-11 flex-none items-center">
-        <input
-          type="checkbox"
-          aria-label={fillCopy('addon.pickSpoken', { name: row.name, price: vnd(row.addonPrice), pct: row.savingPct })}
-          checked={on}
-          onChange={onToggle}
-          className="h-6 w-6 accent-forest-600"
-        />
+        <span className={miniCheckboxWrap}>
+          <input
+            type="checkbox"
+            aria-label={fillCopy('addon.pickSpoken', { name: row.name, price: vnd(row.addonPrice), pct: row.savingPct })}
+            checked={on}
+            onChange={onToggle}
+            className={miniCheckbox}
+          />
+          <CheckMark />
+        </span>
       </span>
       <ProductThumb src={row.thumbnail} alt="" size={48} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -82,7 +87,10 @@ export function PdpBundles({
   useEffect(() => () => clearTimeout(flashTimer.current), []);
   const query = useQuery({ ...productBundlesQuery(coreHttp, slug), initialData: initialBundles, initialDataUpdatedAt: initialFetchedAt, staleTime: STALE_MS, retry: 0 });
 
-  const now = serverNow();
+  // Trang ISR có thể cũ hàng giờ: trước khi hydrate vẽ đúng như máy chủ đã vẽ (giờ lúc lấy dữ liệu, mọi bộ còn hạn), nếu không lần vẽ đầu
+  // của trình duyệt lệch HTML ("Hydration failed") và khối biến mất. Sau hydrate mới lọc theo giờ đã đồng bộ với máy chủ.
+  const hydrated = useHydrated();
+  const now = hydrated ? serverNow() : (initialFetchedAt ?? serverNow());
   const combos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
   const rows = addonRows(query.data?.addons ?? [], now);
   if (combos.length === 0 && rows.length === 0) return null;

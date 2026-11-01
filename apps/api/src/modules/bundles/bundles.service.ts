@@ -78,10 +78,14 @@ export class BundlesService {
 
   /**
    * Combo (BUNDLE_PCT) có sản phẩm này và bộ mua kèm (ADDON) mà sản phẩm này là sản phẩm chính. Sản phẩm không công khai → 404;
-   * hàng gian hàng đối tác → rỗng (hàng đó chỉ bán giá lẻ).
+   * hàng gian hàng đối tác → rỗng (hàng đó chỉ bán giá lẻ). Sản phẩm chính hết hàng thì không có bộ mua kèm: khách thêm được món kèm
+   * mà không bỏ được món chính vào giỏ, giỏ sẽ tính món kèm giá thường. Combo vẫn hiện (thẻ báo "tạm hết" theo từng món).
    */
   async forProduct(slug: string, now: Date = new Date()): Promise<{ combos: BundleDTO[]; addons: BundleDTO[] }> {
-    const product = await this.prisma.product.findFirst({ where: { slug, ...PUBLIC_PRODUCT_WHERE }, select: { id: true, storefrontId: true } });
+    const product = await this.prisma.product.findFirst({
+      where: { slug, ...PUBLIC_PRODUCT_WHERE },
+      select: { id: true, storefrontId: true, variations: { where: { isActive: true, stock: { gt: 0 } }, select: { id: true }, take: 1 } },
+    });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     if (isPartnerOwnedProduct(product)) return { combos: [], addons: [] };
     const rows = await this.prisma.bundle.findMany({
@@ -90,8 +94,9 @@ export class BundlesService {
       orderBy: BUNDLE_ORDER,
       take: FETCH_CAP,
     });
+    const anchorBuyable = product.variations.length > 0;
     const shown = await this.toPublic(
-      rows.filter((r) => (r.kind === 'ADDON' ? r.anchorProductId === product.id : true)),
+      rows.filter((r) => (r.kind === 'ADDON' ? anchorBuyable && r.anchorProductId === product.id : true)),
       now,
     );
     return {
