@@ -117,6 +117,18 @@ describe('Quản trị bundle (real Postgres)', () => {
     expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: addon.id } })).refPrice).toBe(500_000);
   });
 
+  it('sửa bộ ADDON qua form (gửi lại nguyên món) khi phân loại ghim đang sale xuống 30.000đ, thấp hơn giá kèm 39.000đ: không 400, giá tham chiếu giữ 50.000, giỏ giảm 0 lúc đang sale và 11.000 khi hết sale', async () => {
+    const [a, b] = [await product(), await product(50_000)];
+    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 39_000 }] });
+    await prisma.variation.update({ where: { id: b.variationId }, data: { salePrice: 30_000 } });
+    const out = await admin.update(addon.id, { title: 'Đổi tên khi đang sale', items: [{ productId: b.id, variationId: b.variationId, addonPrice: 39_000 }] } as never, ADMIN);
+    expect(out.title).toBe('Đổi tên khi đang sale');
+    expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: addon.id } })).refPrice).toBe(50_000);
+    const live = (await loadLiveBundles(prisma, NOW, [a.id])).find((x) => x.id === addon.id)!;
+    expect(addonUnitDiscount(30_000, 39_000, live.items[0]!.refPrice)).toBe(0);
+    expect(addonUnitDiscount(50_000, 39_000, live.items[0]!.refPrice)).toBe(11_000);
+  });
+
   it('tắt bộ rồi bộ không còn vào đường tính tiền; bật lại thì vào', async () => {
     const [a, b] = [await product(), await product()];
     const { id } = await create(pctBundle(a.id, b.id));

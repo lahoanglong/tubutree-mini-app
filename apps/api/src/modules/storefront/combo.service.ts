@@ -5,7 +5,8 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
 import { loadLiveBundles, readBundleMaxPct } from '../bundles/bundle-read';
-import { allocateBundleDiscounts, isOwnStaffBundle, mergeMaxPerLine, type LiveBundle } from '../bundles/bundle-rules';
+import { allocateBundleDiscounts, allocateBundleDiscountsCapped, isOwnStaffBundle, mergeMaxPerLine, type LiveBundle } from '../bundles/bundle-rules';
+import { loadStaffCouponCaps } from '../admin/coupon-input-rules';
 
 export interface ComboLine {
   variationId: string;
@@ -103,12 +104,24 @@ export class ComboService {
     const bundles = await this.withoutOwnStaffBundles(live, buyerId);
     if (bundles.length === 0) return store;
     const maxPct = await readBundleMaxPct(this.config);
-    const bundle = allocateBundleDiscounts(
-      bundles,
-      lines.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity ?? 1 })),
-      maxPct,
-    );
+    const bundleLines = lines.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity ?? 1 }));
+    // Trần chỉ kiểm từng bộ lúc ghi nên không chặn nhiều bộ cộng dồn hay giá tăng sau khi lưu: kẹp tổng bộ của nhân viên ở đây, nơi tiền thật mất đi.
+    const staffMax = (await loadStaffCouponCaps(this.config)).maxAmount;
+    const raw = allocateBundleDiscounts(bundles, bundleLines, maxPct);
+    // `raw` là cận trên của mọi kết quả sau khi kẹp: chưa vượt trần thì không bộ nào bị kẹp, khỏi tra vai trò người tạo.
+    const bundle = raw.total <= staffMax ? raw : allocateBundleDiscountsCapped(bundles, bundleLines, maxPct, { isStaff: await this.staffBundlePredicate(bundles), maxAmount: staffMax });
     return mergeMaxPerLine(store, bundle);
+  }
+
+  /**
+   * Bộ do ADMIN tạo không bị trần nhân viên; mọi bộ khác bị kẹp, kể cả không rõ người tạo (`createdById` null, tài khoản không còn), cùng chiều với
+   * `isOwnStaffCoupon` (không rõ vai trò coi như nhân viên). Một truy vấn cho mọi người tạo của các bộ đang xét.
+   */
+  private async staffBundlePredicate(bundles: readonly LiveBundle[]): Promise<(b: LiveBundle) => boolean> {
+    const creatorIds = [...new Set(bundles.map((b) => b.createdById).filter((id): id is string => id !== null))];
+    const admins = creatorIds.length === 0 ? [] : await this.prisma.user.findMany({ where: { id: { in: creatorIds }, role: 'ADMIN' }, select: { id: true } });
+    const adminIds = new Set(admins.map((u) => u.id));
+    return (b) => b.createdById === null || !adminIds.has(b.createdById);
   }
 
   /**

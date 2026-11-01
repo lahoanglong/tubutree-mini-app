@@ -172,6 +172,29 @@ describe('resolveBundleItems: sản phẩm và phân loại', () => {
     const onB = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 70_000, variationId: 'p2-b' })] }), 50);
     expect(resolveBundleItems(onB, catalog(prod('p1'), prod('p2')))).toEqual([{ price: 80_000, maxPrice: 80_000 }]);
   });
+
+  describe('món giữ giá tham chiếu cũ (sửa bộ qua form luôn gửi lại cả món): giá kèm so với giá tham chiếu, không với giá sale hiện tại', () => {
+    const onSale = (salePrice: number) =>
+      prod('p2', { variations: [{ id: 'p2-a', sku: 'p2-a', retailPrice: 60_000, salePrice, stock: 5 }] });
+    const c = normalizeBundleContent(addonInput(), 50); // giá kèm 39.000đ
+
+    it('phân loại ghim đang sale xuống 30.000đ (thấp hơn giá kèm) nhưng giá tham chiếu giữ lại 50.000đ: hợp lệ, giá trả về vẫn là giá đang bán', () => {
+      expect(resolveBundleItems(c, catalog(prod('p1'), onSale(30_000)), [50_000])).toEqual([{ price: 30_000, maxPrice: 30_000 }]);
+    });
+
+    it('cùng nội dung mà món không giữ giá tham chiếu (null hoặc không truyền): vẫn 400 theo giá đang bán', () => {
+      expect(msg(() => resolveBundleItems(c, catalog(prod('p1'), onSale(30_000)), [null]))).toContain('thấp hơn giá đang bán (30.000');
+      expect(msg(() => resolveBundleItems(c, catalog(prod('p1'), onSale(30_000))))).toContain('thấp hơn giá đang bán (30.000');
+    });
+
+    it('giá kèm không thấp hơn chính giá tham chiếu giữ lại (dữ liệu hỏng): 400, lời nói đúng cơ sở', () => {
+      expect(msg(() => resolveBundleItems(c, catalog(prod('p1'), onSale(30_000)), [39_000]))).toContain('giá lúc đặt giá kèm (39.000');
+    });
+
+    it('giá đang bán tăng lên 500.000đ, tham chiếu 50.000đ: vẫn hợp lệ như cũ', () => {
+      expect(resolveBundleItems(c, catalog(prod('p1'), onSale(500_000)), [50_000])).toEqual([{ price: 500_000, maxPrice: 500_000 }]);
+    });
+  });
 });
 
 describe('assertStaffBundleCaps: trần nhân viên', () => {

@@ -679,4 +679,106 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     const rest = computeReturnShares(order, new Map([[itemA.id, 1]]), new Map([[itemC.id, 1]]), { shopFault: false, priorShipping: 0 });
     expect(shares.goods + rest.goods).toBe(r.o.total - r.o.shippingFee);
   });
+
+  describe('trần tổng khoản giảm của bộ do nhân viên tạo (coupon.staff_max_amount_vnd, mặc định 100.000đ)', () => {
+    const STAFF_CAP = 100_000;
+    const creator = (role: 'STAFF' | 'ADMIN') => createUser(prisma, { role }).then((u) => u.id);
+    /** Bộ mua kèm: chính `anchor`, món ghim `x` giá tham chiếu 340.000đ (giá lúc tạo) giá kèm 240.000đ → mỗi bộ giảm đúng bằng trần khi đứng một mình. */
+    const addonOn = (anchor: { productId: string }, x: { productId: string; variationId: string }, createdById: string | null) =>
+      bundle('ADDON', [{ productId: x.productId, variationId: x.variationId, addonPrice: 240_000 }], { anchor: anchor.productId, createdById: createdById ?? undefined });
+    const fillCart = async (userId: string, variationIds: string[]) => {
+      for (const variationId of variationIds) await cart.addItem(userId, { variationId, quantity: 1 });
+    };
+
+    it('hai bộ ADDON của hai nhân viên, mỗi bộ đúng trần một mình, giỏ có cả hai: giảm đúng trần (không phải 200.000đ); giỏ = báo giá = đơn; công khai vẫn quảng cáo từng bộ', async () => {
+      const [s1, s2] = [await creator('STAFF'), await creator('STAFF')];
+      const [main, x, y] = [await product(80_000), await product(340_000), await product(340_000)];
+      await addonOn(main, x, s1);
+      await addonOn(main, y, s2);
+      const b = await buyer();
+      await fillCart(b.userId, [main.variationId, x.variationId, y.variationId]);
+
+      const r = await cartQuoteOrder(b);
+      expect(r.c.comboDiscount).toBe(STAFF_CAP);
+      expect(r.q.comboDiscount).toBe(STAFF_CAP);
+      expect(r.numbers).toEqual({ cart: 660_000, quote: 660_000, order: 660_000 }); // 760.000đ − 100.000đ
+      expect(paidOf(r.o, main.variationId)).toBe(80_000);
+      expect(paidOf(r.o, x.variationId)! + paidOf(r.o, y.variationId)!).toBe(580_000);
+      expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(2);
+    });
+
+    it('BUNDLE_PCT 30% của nhân viên sau khi giá hai món tăng 150.000đ → 400.000đ (thô 240.000đ), rồi thêm phân loại 2.000.000đ không ghim (thô 720.000đ): đều kẹp ở trần', async () => {
+      const staff = await creator('STAFF');
+      const [a, c] = [await product(150_000), await product(150_000)];
+      await bundle('BUNDLE_PCT', [{ productId: a.productId }, { productId: c.productId }], { pct: 30, createdById: staff });
+      await prisma.variation.updateMany({ where: { id: { in: [a.variationId, c.variationId] } }, data: { retailPrice: 400_000 } });
+
+      const raised = await buyer();
+      await fillCart(raised.userId, [a.variationId, c.variationId]);
+      const r1 = await cartQuoteOrder(raised);
+      expect(r1.c.comboDiscount).toBe(STAFF_CAP);
+      expect(r1.numbers).toEqual({ cart: 700_000, quote: 700_000, order: 700_000 });
+
+      const aBig = await addVariation(a.productId, 2_000_000);
+      const big = await buyer();
+      await fillCart(big.userId, [aBig, c.variationId]);
+      const r2 = await cartQuoteOrder(big);
+      expect(r2.c.comboDiscount).toBe(STAFF_CAP);
+      expect(r2.numbers).toEqual({ cart: 2_300_000, quote: 2_300_000, order: 2_300_000 });
+    });
+
+    it('cùng nội dung nhưng bộ do ADMIN tạo: không bị kẹp (200.000đ cho hai bộ ADDON, 240.000đ cho BUNDLE_PCT sau tăng giá); giỏ = báo giá = đơn', async () => {
+      const admin = await creator('ADMIN');
+      const [main, x, y] = [await product(80_000), await product(340_000), await product(340_000)];
+      await addonOn(main, x, admin);
+      await addonOn(main, y, admin);
+      const b = await buyer();
+      await fillCart(b.userId, [main.variationId, x.variationId, y.variationId]);
+      const r = await cartQuoteOrder(b);
+      expect(r.c.comboDiscount).toBe(2 * STAFF_CAP);
+      expect(r.numbers).toEqual({ cart: 560_000, quote: 560_000, order: 560_000 });
+
+      const [a, c] = [await product(150_000), await product(150_000)];
+      await bundle('BUNDLE_PCT', [{ productId: a.productId }, { productId: c.productId }], { pct: 30, createdById: admin });
+      await prisma.variation.updateMany({ where: { id: { in: [a.variationId, c.variationId] } }, data: { retailPrice: 400_000 } });
+      const raised = await buyer();
+      await fillCart(raised.userId, [a.variationId, c.variationId]);
+      const r2 = await cartQuoteOrder(raised);
+      expect(r2.c.comboDiscount).toBe(240_000);
+      expect(r2.numbers).toEqual({ cart: 560_000, quote: 560_000, order: 560_000 });
+    });
+
+    it('trộn ADMIN và nhân viên: phần ADMIN nguyên vẹn, phần nhân viên kẹp riêng ở trần; hai khách thêm dòng theo thứ tự ngược nhau ra cùng số từng dòng', async () => {
+      const [admin, s1, s2] = [await creator('ADMIN'), await creator('STAFF'), await creator('STAFF')];
+      const [main, x, y, z] = [await product(80_000), await product(340_000), await product(340_000), await product(340_000)];
+      await addonOn(main, x, admin);
+      await addonOn(main, y, s1);
+      await addonOn(main, z, s2);
+      const order = [main.variationId, x.variationId, y.variationId, z.variationId];
+
+      const forward = await buyer();
+      await fillCart(forward.userId, order);
+      const backward = await buyer();
+      await fillCart(backward.userId, [...order].reverse());
+      const [f, k] = [await cartQuoteOrder(forward), await cartQuoteOrder(backward)];
+
+      expect(f.c.comboDiscount).toBe(2 * STAFF_CAP);
+      expect(f.numbers).toEqual({ cart: 900_000, quote: 900_000, order: 900_000 }); // 1.100.000đ − 100.000đ (ADMIN) − 100.000đ (nhân viên đã kẹp)
+      expect(paidOf(f.o, x.variationId)).toBe(240_000); // ADMIN nguyên vẹn
+      expect(paidOf(f.o, y.variationId)! + paidOf(f.o, z.variationId)!).toBe(580_000);
+      expect(k.c.comboDiscount).toBe(f.c.comboDiscount);
+      for (const v of order) expect(paidOf(k.o, v)).toBe(paidOf(f.o, v));
+    });
+
+    it('người tạo không rõ (createdById null) bị kẹp như nhân viên', async () => {
+      const [main, x, y] = [await product(80_000), await product(340_000), await product(340_000)];
+      await addonOn(main, x, null);
+      await addonOn(main, y, null);
+      const b = await buyer();
+      await fillCart(b.userId, [main.variationId, x.variationId, y.variationId]);
+      const r = await cartQuoteOrder(b);
+      expect(r.c.comboDiscount).toBe(STAFF_CAP);
+      expect(r.numbers).toEqual({ cart: 660_000, quote: 660_000, order: 660_000 });
+    });
+  });
 });
