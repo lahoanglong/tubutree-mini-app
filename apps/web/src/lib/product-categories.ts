@@ -66,9 +66,10 @@ export const listCategoryProducts = (p: { q?: string; uncategorized: boolean; on
   return apiFetch<CategoryProductsPage>(`/admin/product-categories/products?${sp.toString()}`);
 };
 export const listAdminCategories = () => apiFetch<AdminCategoryList>('/admin/categories');
-export const createAdminCategory = (body: { name: string; parentId?: string | null }) =>
+/** `confirmDirectProducts`: admin đã đồng ý để gốc đang có sản phẩm gắn thẳng thành mục cha (máy chủ trả `CATEGORY_PARENT_HAS_PRODUCTS` khi thiếu). */
+export const createAdminCategory = (body: { name: string; parentId?: string | null; confirmDirectProducts?: boolean }) =>
   apiFetch<AdminCategory>('/admin/categories', { method: 'POST', body });
-export const updateAdminCategory = (id: string, body: { name?: string; parentId?: string | null }) =>
+export const updateAdminCategory = (id: string, body: { name?: string; parentId?: string | null; confirmDirectProducts?: boolean }) =>
   apiFetch<AdminCategory>(`/admin/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body });
 export const reorderAdminCategories = (parentId: string | null, orderedIds: string[]) =>
   apiFetch<AdminCategoryList>('/admin/categories/order', { method: 'PUT', body: { parentId, orderedIds } });

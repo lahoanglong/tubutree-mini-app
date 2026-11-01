@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { CATEGORY_PARENT_HAS_PRODUCTS } from '@tubutree/shared-types';
 import { ApiError } from '@/lib/client-api';
 import { buildCategoryTree, canAddChild, canAddRoot, moveInOrder, type CategoryNode } from '@/lib/category-tree';
 import {
@@ -20,6 +21,8 @@ type Msg = { at: string; text: string };
 
 const NAME_MAX = 60;
 const ROOT_VALUE = '__root__';
+/** Admin bấm Huỷ ở hộp xác nhận giữa chừng: không phải lỗi, không báo gì. */
+class Declined extends Error {}
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Không lưu được danh mục.');
 const formKeyOf = (f: Form | null) => (!f ? '' : f.kind === 'add' ? `add:${f.parentId ?? 'root'}` : `rename:${f.id}`);
 
@@ -97,6 +100,7 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
       void onChanged();
       return true;
     } catch (e) {
+      if (e instanceof Declined) return false;
       setFailure({ at, text: errText(e) });
       // 404/409: cây admin đang xem đã cũ so với máy chủ, tải lại để lần thử sau đúng dữ liệu.
       if (e instanceof ApiError && (e.status === 404 || e.status === 409)) void onChanged();
@@ -104,6 +108,21 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     } finally {
       busy.current = false;
       setSaving(false);
+    }
+  };
+
+  /**
+   * Gốc đang có sản phẩm gắn thẳng sẽ thành mục cha mà vẫn giữ chúng: máy chủ đòi xác nhận bằng 400 mã riêng (đếm lúc ghi, dưới khoá cây).
+   * Hỏi bằng đúng câu của máy chủ, đồng ý thì gửi lại có cờ; Huỷ thì để nguyên ô nhập/lựa chọn.
+   */
+  const askParentConfirm = async (send: (confirmed: boolean) => Promise<unknown>, confirmLabel: string) => {
+    try {
+      return await send(false);
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.code !== CATEGORY_PARENT_HAS_PRODUCTS) throw e;
+      const yes = await confirm({ title: 'Mục này đang có sản phẩm gắn thẳng', message: e.message, confirmLabel });
+      if (!yes) throw new Declined();
+      return send(true);
     }
   };
 
@@ -134,7 +153,7 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     if (form.kind === 'add') {
       const at = formKeyOf(form);
       const body = form.parentId ? { name, parentId: form.parentId } : { name };
-      void run(at, () => createAdminCategory(body), { text: `Đã thêm "${name}".`, focus: `add:${form.parentId ?? 'root'}`, closeForm: true });
+      void run(at, () => askParentConfirm((confirmed) => createAdminCategory(confirmed ? { ...body, confirmDirectProducts: true } : body), 'Vẫn thêm'), { text: `Đã thêm "${name}".`, focus: `add:${form.parentId ?? 'root'}`, closeForm: true });
     } else {
       const id = form.id;
       void run(formKeyOf(form), () => updateAdminCategory(id, { name }), { text: `Đã đổi tên thành "${name}".`, focus: `rename:${id}`, closeForm: true });
@@ -146,7 +165,7 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     const target = value === ROOT_VALUE ? null : value;
     if (target === currentParent) return;
     const to = target ? tree.find((r) => r.id === target)?.name : null;
-    const moved = await run(item.id, () => updateAdminCategory(item.id, { parentId: target }), {
+    const moved = await run(item.id, () => askParentConfirm((confirmed) => updateAdminCategory(item.id, confirmed ? { parentId: target, confirmDirectProducts: true } : { parentId: target }), 'Vẫn chuyển'), {
       text: to ? `Đã chuyển "${item.name}" vào "${to}".` : `Đã chuyển "${item.name}" thành danh mục gốc.`,
       focus: `move:${item.id}:up`,
     });
