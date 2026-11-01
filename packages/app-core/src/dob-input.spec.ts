@@ -39,6 +39,14 @@ describe('maskDobInput sửa giữa ô và dấu ngăn khác', () => {
     expect(maskDobInput('05/3/', '05/3')).toBe('05/03');
     expect(maskDobInput('5.', '5')).toBe('05');
   });
+  it('gõ từng ký tự hết 8 số vẫn ra dd/mm/yyyy', () => {
+    let v = '';
+    for (const ch of '05031990') v = maskDobInput(v + ch, v);
+    expect(v).toBe('05/03/1990');
+    v = '';
+    for (const ch of '5.3.1990') v = maskDobInput(v + ch, v);
+    expect(v).toBe('05/03/1990');
+  });
   it('coi . - khoảng trắng như /', () => {
     expect(maskDobInput('5.3.1990')).toBe('05/03/1990');
     expect(maskDobInput('5-3-1990')).toBe('05/03/1990');

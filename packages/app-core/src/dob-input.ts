@@ -35,6 +35,11 @@ export function maskDobInput(raw: string, prev?: string): string {
     const last = i === parts.length - 1;
     if (pasted ? !last || trailing : last && typedForward) parts[i] = `0${parts[i]}`;
   }
+  const appended = prev !== undefined && !pasted && raw.length > prev.length && raw.startsWith(prev);
+  if (appended && parts.length === 2 && parts[0]!.length === 2 && parts[1]!.length > 2) {
+    parts.push(parts[1]!.slice(2));
+    parts[1] = parts[1]!.slice(0, 2);
+  }
   if (parts.length === 3) parts[2] = parts[2]!.slice(0, 4);
   return parts.join('/');
 }
