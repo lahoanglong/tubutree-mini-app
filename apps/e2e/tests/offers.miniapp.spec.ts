@@ -85,6 +85,21 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     expect(ys).toEqual([...ys].sort((a, b) => a - b));
   });
 
+  test('ví 8 mã: Mã của tôi chỉ xếp 3 phiếu, nút "Tất cả (8)" mở trang Mã giảm giá tab Mã của tôi', async ({ page, api }) => {
+    const DAY = 86_400_000;
+    mockWallet(
+      api,
+      Array.from({ length: 8 }, (_, i) => ({ code: `MA${i}`, title: null, type: 'AMOUNT' as const, value: 10_000 * (i + 1), minOrder: 100_000, maxDiscount: null, endAt: new Date(Date.now() + (i + 3) * DAY).toISOString() })),
+    );
+    await page.goto('/offers');
+    const mine = page.getByRole('region', { name: 'Mã của tôi', exact: true });
+    await expect(mine.getByRole('group')).toHaveCount(3, { timeout: 15_000 });
+    const all = mine.getByRole('button', { name: 'Xem tất cả Mã của tôi' });
+    await expect(all).toHaveText('Tất cả (8)');
+    await all.click();
+    await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe('/vouchers?tab=mine');
+  });
+
   test('mã đã có trong ví không chiếm chỗ ở Nhận mã; Lưu mã gọi POST /coupons/claim đúng mã', async ({ page, api }) => {
     api.post('/coupons/claim', ({ call }) => {
       const code = (call.body as { code: string }).code;

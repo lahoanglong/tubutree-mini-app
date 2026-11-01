@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
-import { mineRows } from '@tubutree/app-core/commerce/voucher-center';
+import { mineRows, minePreview } from '@tubutree/app-core/commerce/voucher-center';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
@@ -26,7 +26,6 @@ import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { SectionHeader } from '../components/ui/section-header';
 import { Skeleton } from '../components/ui/skeleton';
-import { Text } from '../components/ui/text';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { GuestLinkCard } from '../components/home/guest-link-card';
@@ -82,6 +81,7 @@ export default function OffersPage() {
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
+  const mine = minePreview(rows);
   useMarkExpiringSeen(couponsQ.data);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
@@ -131,22 +131,19 @@ export default function OffersPage() {
               id="offers-mine-title"
               title={fillCopy('coupon.tabMine')}
               icon="ticket"
-              trailing={
-                rows.length > 0 ? (
-                  <Text variant="caption" tone="tertiary">
-                    {homeCopy.offers.couponsCount(rows.length)}
-                  </Text>
-                ) : undefined
-              }
-              action={{ onPress: () => navigate('/vouchers?tab=mine'), spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }) }}
+              action={{
+                onPress: () => navigate('/vouchers?tab=mine'),
+                label: mine.hasMore ? fillCopy('section.seeAllCount', { n: mine.total }) : undefined,
+                spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }),
+              }}
             />
             {couponsQ.isLoading ? (
               <Skeleton height={88} radius="var(--radius-card)" />
             ) : couponsQ.isError ? (
               <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={getLoadErrorMessage(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
-            ) : rows.length > 0 ? (
+            ) : mine.total > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {rows.map((row) => (
+                {mine.shown.map((row) => (
                   <VoucherTicket
                     key={row.view.code}
                     voucher={row.view}

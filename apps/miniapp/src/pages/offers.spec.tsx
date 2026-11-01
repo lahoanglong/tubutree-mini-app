@@ -125,7 +125,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     for (const t of ['Đổi quà', 'Quà của tôi', 'Đổi rác lấy quà', 'Tích điểm đơn sàn', 'Mua chung nhóm']) {
       expect(screen.getByText(t)).toBeInTheDocument();
     }
-    expect(await screen.findByText('Giảm 25.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Giảm 25k')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Mã của tôi' })).toBeInTheDocument();
   });
 
@@ -157,6 +157,26 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     await waitFor(() => expect(mocks.postCheckIn).toHaveBeenCalledTimes(1));
   });
 
+  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc vẫn là "Xem tất cả Mã của tôi", bỏ chữ "n mã" cũ', async () => {
+    mocks.getCoupons.mockResolvedValue(Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
+    const all = within(mine).getByRole('button', { name: 'Xem tất cả Mã của tôi' });
+    expect(all).toHaveTextContent('Tất cả (8)');
+    expect(mine.textContent).not.toMatch(/\b8 mã/);
+    fireEvent.click(all);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
+  });
+
+  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút vẫn ghi "Xem tất cả" (chưa có gì bị ẩn)', async () => {
+    mocks.getCoupons.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
+    expect(within(mine).getByRole('button', { name: 'Xem tất cả Mã của tôi' })).toHaveTextContent('Xem tất cả');
+  });
+
   it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
@@ -166,7 +186,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
   it('?section=coupons cuộn tới phần mã giảm giá khi dữ liệu mã đã về', async () => {
     mocks.search = '?section=coupons';
     renderPage();
-    await screen.findByText('Giảm 25.000đ');
+    await screen.findByText('Giảm 25k');
     await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
   });
 

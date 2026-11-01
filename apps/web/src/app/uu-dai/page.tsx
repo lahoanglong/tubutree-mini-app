@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
-import { mineRows } from '@tubutree/app-core/commerce/voucher-center';
+import { mineRows, minePreview } from '@tubutree/app-core/commerce/voucher-center';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
@@ -28,7 +28,7 @@ import { OffersFlash } from '@/components/offers/offers-flash';
 import { OffersPointsStrip } from '@/components/offers/offers-points-strip';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
-import { Card, EmptyState, Icon, ListRow, SectionHeader, Skeleton, Text, VoucherTicket } from '@/components/mini';
+import { Card, EmptyState, Icon, ListRow, SectionHeader, Skeleton, VoucherTicket } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
 
@@ -70,6 +70,7 @@ function OffersContent() {
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
+  const mine = minePreview(rows);
   useMarkExpiringSeen(couponsQ.data);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
@@ -115,14 +116,11 @@ function OffersContent() {
             id="offers-mine-title"
             title={fillCopy('coupon.tabMine')}
             icon="ticket"
-            trailing={
-              rows.length > 0 ? (
-                <Text variant="caption" tone="tertiary">
-                  {homeCopy.offers.couponsCount(rows.length)}
-                </Text>
-              ) : undefined
-            }
-            action={{ onPress: () => router.push('/ma-giam-gia?tab=mine'), spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }) }}
+            action={{
+              onPress: () => router.push('/ma-giam-gia?tab=mine'),
+              label: mine.hasMore ? fillCopy('section.seeAllCount', { n: mine.total }) : undefined,
+              spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }),
+            }}
           />
           {couponNotice && (
             <p role={couponNotice.error ? 'alert' : 'status'} className={`mb-2 text-caption ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
@@ -133,9 +131,9 @@ function OffersContent() {
             <Skeleton height={88} radius="var(--radius-card)" />
           ) : couponsQ.isError ? (
             <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={errText(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
-          ) : rows.length > 0 ? (
+          ) : mine.total > 0 ? (
             <div data-testid="offers-mine-grid" className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {rows.map((row) => (
+              {mine.shown.map((row) => (
                 <VoucherTicket
                   key={row.view.code}
                   voucher={row.view}

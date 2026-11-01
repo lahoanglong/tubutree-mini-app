@@ -227,13 +227,30 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('Mã của tôi: thẻ phiếu có nhãn, điều kiện, hạn dùng và số mã; rỗng thì có câu hướng dẫn', async () => {
     let c = await mount();
     const coupons = region(c, 'Mã của tôi')!;
-    expect(coupons.textContent).toContain('Giảm 20.000đ');
-    expect(coupons.textContent).toContain('1 mã');
+    expect(coupons.textContent).toContain('Giảm 20k');
+    expect(coupons.textContent).not.toMatch(/\b1 mã/);
     expect(coupons.querySelector('[data-testid="voucher-meta"]')!.textContent).toContain('Đơn từ 150k');
     mounted.pop()!.unmount();
     state.coupons = [];
     c = await mount();
     expect(region(c, 'Mã của tôi')!.textContent).toContain('Chưa có mã giảm giá khả dụng');
+  });
+
+  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc vẫn là "Xem tất cả Mã của tôi"', async () => {
+    state.coupons = Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) }));
+    const c = await mount();
+    const mine = region(c, 'Mã của tôi')!;
+    expect(mine.querySelectorAll('[role="group"]')).toHaveLength(3);
+    const all = mine.querySelector('button[aria-label="Xem tất cả Mã của tôi"]')!;
+    expect(all.textContent).toBe('Tất cả (8)');
+    click(all);
+    expect(state.push).toHaveBeenLastCalledWith('/ma-giam-gia?tab=mine');
+    mounted.pop()!.unmount();
+    state.coupons = state.coupons.slice(0, 3);
+    const d = await mount();
+    const three = region(d, 'Mã của tôi')!;
+    expect(three.querySelectorAll('[role="group"]')).toHaveLength(3);
+    expect(three.querySelector('button[aria-label="Xem tất cả Mã của tôi"]')!.textContent).toBe('Xem tất cả');
   });
 
   it('Mã của tôi lỗi: thông báo có lý do và nút Thử lại', async () => {
