@@ -33,7 +33,7 @@ const BEST = [
   card('b4', 'Túi vải canvas', { sold: 999, ratingAvg: 4.2 }),
   card('b5', 'Ống hút tre', { ratingAvg: 4.9, sold: 1_234 }),
 ];
-const FEED = [card('f1', 'Sản phẩm gợi ý một', { sold: 340 }), card('f2', 'Sản phẩm gợi ý hai dài hơn một chút', { sold: 1_234 }), card('f3', 'Gợi ý ba', { sold: 8_200 }), card('f4', 'Gợi ý bốn', { sold: 52 })];
+const FEED = [card('f1', 'Sản phẩm gợi ý một', { sold: 340 }), card('f2', 'Sản phẩm gợi ý hai dài hơn một chút', { sold: 1_234 }), card('f3', 'Gợi ý ba', { sold: 8_200 }), card('f4', 'Gợi ý bốn', { sold: 52 }), card('f5', 'Gợi ý năm', { sold: 123_400 })];
 
 /** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (chép từ shop.web.spec.ts). */
 async function refetchStale(page: Page, api: MockApi, method: string, pattern: string, minCalls = 1) {
@@ -92,14 +92,28 @@ async function shot(target: Page | Locator, name: string): Promise<void> {
   await target.screenshot({ path: join(out, `${name}.png`) });
 }
 
-async function clippedMeta(page: Page): Promise<string[]> {
-  return page.evaluate(() =>
-    Array.from(document.querySelectorAll<HTMLElement>('[data-ds-part="meta"]'))
-      .filter((el) => (el.textContent ?? '').trim() !== '' && el.getBoundingClientRect().width > 0)
-      .filter((el) => el.scrollWidth > el.clientWidth)
-      .map((el) => `${el.closest<HTMLElement>('[data-ds="product-tile"]')?.dataset.dsVariant ?? '?'}: "${Array.from(el.children).find((c) => getComputedStyle(c).display !== 'none')?.textContent ?? el.textContent}" ${el.scrollWidth}>${el.clientWidth}`),
+interface MetaCell { variant: string; text: string; width: number; clipped: boolean }
+
+/**
+ * Mọi ô meta có chữ trong `root`: chữ NHÌN THẤY (bản đầy đủ, hoặc bản gọn đi qua ::after khi container hẹp làm ẩn bản đầy đủ), bề rộng ô và có bị cắt không (ô nowrap +
+ * ellipsis nên bị cắt thì scrollWidth lớn hơn clientWidth). Ô rộng 0 vẫn được trả về, để test bắt ô co về 0 thay vì lọc bỏ.
+ */
+async function metaCells(root: Locator): Promise<MetaCell[]> {
+  return root.evaluate((el) =>
+    Array.from(el.querySelectorAll<HTMLElement>('[data-ds-part="meta"]'))
+      .filter((m) => (m.textContent ?? '').trim() !== '')
+      .map((m) => {
+        const holder = m.querySelector<HTMLElement>('.tubu-meta-text');
+        const full = holder?.querySelector<HTMLElement>('.tubu-meta-full');
+        const text = !holder || !full || getComputedStyle(full).display !== 'none'
+          ? (m.textContent ?? '').trim()
+          : getComputedStyle(holder, '::after').content.replace(/^"|"$/g, '');
+        return { variant: m.closest<HTMLElement>('[data-ds="product-tile"]')?.dataset.dsVariant ?? '?', text, width: m.getBoundingClientRect().width, clipped: m.scrollWidth > m.clientWidth };
+      }),
   );
 }
+
+const describeCell = (c: MetaCell) => `${c.variant} "${c.text}" ${c.width}px${c.clipped ? ' bị cắt' : ''}`;
 
 async function openHome(page: Page, api: MockApi, width = 375): Promise<void> {
   await page.setViewportSize({ width, height: 812 });
@@ -139,17 +153,39 @@ test.describe('Web 375px: thẻ và hàng cuộn của Trang chủ', () => {
   });
 
   for (const width of [375, 320]) {
-    test(`${width}px: dòng meta của kệ Bán chạy nhất và lưới Gợi ý không bị cắt giữa số`, async ({ page, api }) => {
+    test(`${width}px: dòng meta của kệ Bán chạy nhất (thẻ hẹp) nói "Đã bán n" và không bị cắt; lưới Gợi ý cũng không bị cắt`, async ({ page, api }) => {
       mockHome(api);
       await openHome(page, api, width);
       const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
       await best.scrollIntoViewIfNeeded();
       await shot(best, `home-best-${width}`);
+      // Kệ hạng 112px chữ nhìn thấy: chữ đầy đủ ("★ 4,7 · Đã bán 8,2k+" 119px) không vừa nên mọi thẻ nói lượt bán bằng bản gọn; thẻ thiếu sao giữ nguyên chữ.
+      const rank = await metaCells(best);
+      expect(rank.map((c) => c.text)).toEqual(['Đã bán 8,2k+', 'Đã bán 99,9k+', 'Đã bán 12', 'Đã bán 999', 'Đã bán 1,2k+']);
+      expect(rank.filter((c) => c.width <= 0 || c.clipped).map(describeCell)).toEqual([]);
       await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
-      expect(await clippedMeta(page)).toEqual([]);
+      const all = await metaCells(page.locator('body'));
+      expect(all.length).toBeGreaterThan(rank.length);
+      expect(all.filter((c) => c.width <= 0 || c.clipped).map(describeCell)).toEqual([]);
     });
   }
+
+  test('360px (điện thoại Android phổ biến nhất): lưới Gợi ý hôm nay rộng 142px vẫn giữ sao ở dòng meta, lượt bán từ 100k đổi sang bản gọn thay vì bị cắt', async ({ page, api }) => {
+    mockHome(api);
+    await openHome(page, api, 360);
+    const grid = page.getByRole('region', { name: 'Gợi ý hôm nay' });
+    await grid.scrollIntoViewIfNeeded();
+    await expect(grid.locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
+    await shot(grid, 'home-grid-360');
+    const cells = await metaCells(grid);
+    expect(cells.length).toBeGreaterThan(0);
+    for (const c of cells) {
+      expect(c.width, describeCell(c)).toBeGreaterThanOrEqual(132);
+      expect(c.clipped, describeCell(c)).toBe(false);
+    }
+    expect(cells.map((c) => c.text)).toEqual(['★ 4,7 · Đã bán 340', '★ 4,7 · Đã bán 1,2k+', '★ 4,7 · Đã bán 8,2k+', '★ 4,7 · Đã bán 52', 'Đã bán 123,4k+']);
+  });
 });
 
 test.describe('Web 375px: ghi chú Giờ vàng ở /gio-vang', () => {
