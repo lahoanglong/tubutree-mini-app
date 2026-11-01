@@ -967,6 +967,8 @@ export interface AdminFlashSaleItem {
   quota: number;
   soldCount: number;
   perUserLimit: number;
+  /** Số nhỏ lên trước trong khung; mặc định 0. */
+  sortOrder?: number;
 }
 export interface AdminFlashSale {
   id: string;
@@ -986,6 +988,10 @@ export const addFlashSaleItem = (saleId: string, body: { variationId: string; fl
   apiFetch(`/admin/flash-sales/${saleId}/items`, { method: 'POST', body });
 export const deleteFlashSaleItem = (itemId: string) =>
   apiFetch(`/admin/flash-sales/items/${itemId}`, { method: 'DELETE' });
+export const updateFlashItemOrder = (itemId: string, sortOrder: number) =>
+  apiFetch(`/admin/flash-sales/items/${itemId}`, { method: 'PATCH', body: { sortOrder } });
+export const generateFlashSlots = (days: number) =>
+  apiFetch<{ created: number; skipped: number }>('/admin/flash-sales/generate-slots', { method: 'POST', body: { days } });
 
 // ── FAQ / câu trả lời nhanh (CSKH + nạp vào ngữ cảnh AI tư vấn) ──
 export interface AdminFaq {

@@ -30,12 +30,11 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     mocks.openRequests = false;
   });
 
-  it('cờ bật hết: 4 ô cố định (Mã giảm giá, Đổi rác, Mua chung, Đổi quà) và ô "Tất cả", không cuộn ngang; chưa có trang Giờ vàng nên chưa có ô Giờ vàng', () => {
+  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Tất cả", không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
     render(<ShortcutGrid />);
     const buttons = screen.getAllByRole('button');
     expect(buttons).toHaveLength(5);
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Mã giảm giá', 'Đổi rác', 'Mua chung', 'Đổi quà', 'Tất cả']);
-    expect(screen.queryByRole('button', { name: /Giờ vàng/ })).toBeNull();
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Tất cả']);
     expect(screen.getByRole('region', { name: 'Lối tắt' }).querySelector('[data-testid="shortcut-grid"]')).toHaveStyle({ display: 'grid' });
     expect(screen.queryByRole('group', { name: /vuốt ngang/ })).toBeNull();
   });
@@ -52,16 +51,17 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     }
   });
 
-  it('Mã giảm giá tới mã của tôi, Đổi rác, Mua chung, Đổi quà tới đúng trang', () => {
+  it('Giờ vàng tới trang Giờ vàng, Mã giảm giá tới mã của tôi, Đổi rác, Mua chung tới đúng trang; Đổi quà nằm trong "Tất cả"', () => {
     render(<ShortcutGrid />);
+    fireEvent.click(screen.getByRole('button', { name: /Giờ vàng/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/flash-sale');
     fireEvent.click(screen.getByRole('button', { name: /Mã giảm giá/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?section=coupons');
     fireEvent.click(screen.getByRole('button', { name: /Đổi rác/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     fireEvent.click(screen.getByRole('button', { name: /Mua chung/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
-    fireEvent.click(screen.getByRole('button', { name: /Đổi quà/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/rewards');
+    expect(screen.queryByRole('button', { name: /Đổi quà/ })).toBeNull();
   });
 
   it('"Tất cả" mở hộp thoại liệt kê đủ mục còn hiển thị; chọn mục đóng hộp và điều hướng', async () => {
@@ -69,7 +69,7 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
-    expect(rows(dialog)).toHaveLength(8);
+    expect(rows(dialog)).toHaveLength(9);
     fireEvent.click(within(dialog).getByRole('button', { name: /Đơn hàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tất cả lối tắt' })).toBeNull());
@@ -84,13 +84,13 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(await screen.findByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
   });
 
-  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 6 mục', async () => {
+  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 7 mục', async () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     render(<ShortcutGrid />);
-    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Mã giảm giá', 'Mua chung', 'Đổi quà', 'Đơn hàng', 'Tất cả']);
+    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Tất cả']);
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
-    expect(rows(dialog)).toHaveLength(6);
+    expect(rows(dialog)).toHaveLength(7);
     expect(within(dialog).queryByRole('button', { name: /Đổi rác/ })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /sàn khác/ })).toBeNull();
   });

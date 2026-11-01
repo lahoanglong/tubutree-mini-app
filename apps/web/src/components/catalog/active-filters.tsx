@@ -19,7 +19,7 @@ export function ActiveFilters({ chips, filtersIgnored, onPatch }: ActiveFiltersP
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {chips.length > 0 && (
-        <div role="group" aria-label={browseText.activeFilters} className="scroll-x -mx-4 px-4 md:mx-0 md:px-0" style={{ gap: 8, paddingTop: 6, paddingBottom: 6, maxWidth: 'none' }}>
+        <div role="group" aria-label={browseText.activeFilters} className="scroll-x tubu-bleed px-4 md:px-0" style={{ gap: 8, paddingTop: 6, paddingBottom: 6 }}>
           {chips.map((c) => (
             <Chip key={c.key} selected ariaLabel={browseText.removeFilter(c.label)} onPress={() => onPatch(c.patch)}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</span>

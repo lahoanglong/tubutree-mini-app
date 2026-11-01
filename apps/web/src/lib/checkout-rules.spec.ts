@@ -3,6 +3,7 @@ import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
   isCartFixableError,
+  cartFixableNotice,
   isInvoiceValid,
   outOfStockLine,
   overStockMessage,
@@ -90,6 +91,17 @@ describe('lỗi chỉ sửa được ở giỏ', () => {
     expect(isCartFixableError('Hết suất ưu đãi.')).toBe(true);
     expect(isCartFixableError('Vượt giới hạn mua ưu đãi.')).toBe(true);
     expect(isCartFixableError('Địa chỉ không hợp lệ.')).toBe(false);
+  });
+  it('cartFixableNotice: FLASH_LIMIT nói giới hạn bằng câu của kế hoạch (limit thắng message), câu cũ giữ nguyên, lỗi khác là null', () => {
+    const flash = Object.assign(new Error('Vượt giới hạn.'), { code: 'FLASH_LIMIT', limit: 2 });
+    expect(cartFixableNotice(flash, 'Vượt giới hạn.')).toBe('Giá Giờ vàng chỉ áp cho 2 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.');
+    const noLimit = Object.assign(new Error('x'), { code: 'FLASH_LIMIT' });
+    expect(cartFixableNotice(noLimit, 'Giá Giờ vàng chỉ áp cho 3 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.')).toBe(
+      'x',
+    );
+    expect(cartFixableNotice(new Error('Vượt giới hạn mua ưu đãi.'), 'Vượt giới hạn mua ưu đãi.')).toBe('Vượt giới hạn mua ưu đãi.');
+    expect(cartFixableNotice(new Error('Địa chỉ không hợp lệ.'), 'Địa chỉ không hợp lệ.')).toBeNull();
+    expect(cartFixableNotice(null, null)).toBeNull();
   });
   it('outOfStockLine chọn dòng đầu tiên vượt tồn hoặc hết hàng', () => {
     const items = [

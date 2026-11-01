@@ -472,6 +472,7 @@ model Product {
   pancakeLinkedOut MerchantPancakeLink[] @relation("PancakeLinkOrigin")
   /// Bản sửa nội dung đang chờ duyệt của sản phẩm đang bán (R3-MERCHANT-4); sản phẩm vẫn bán với nội dung của chính dòng này.
   editDraft        ProductEditDraft?
+  campaignLinks    CampaignProduct[]
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -549,6 +550,74 @@ model BrandPromotion {
 
   @@index([brandId, isActive])
   @@map("brand_promotions")
+}
+
+enum CampaignPlacement {
+  HOME_TOP
+  OFFERS_TOP
+}
+
+enum CampaignLinkType {
+  CAMPAIGN_PAGE
+  PRODUCT
+  CATEGORY
+  URL_INTERNAL
+}
+
+enum CampaignAudience {
+  ALL
+  NEW
+  RETURNING
+}
+
+/// Chiến dịch khuyến mãi toàn sàn: một banner (đầu Trang chủ hoặc đầu Ưu đãi) và trang riêng `/campaign/:slug` gom sản phẩm + mã giảm giá.
+model Campaign {
+  id        String            @id @default(cuid())
+  slug      String            @unique
+  title     String
+  subtitle  String?
+  placement CampaignPlacement
+  /// Ảnh banner kiêm ảnh đầu trang chiến dịch: link https hoặc data URL (phát công khai qua `publicImage('campaign', id, 'cover', …)`).
+  image     String
+  linkType  CampaignLinkType  @default(CAMPAIGN_PAGE)
+  /// PRODUCT/CATEGORY: slug; URL_INTERNAL: route Mini App bắt đầu bằng "/"; CAMPAIGN_PAGE không dùng.
+  linkValue String?
+  audience  CampaignAudience  @default(ALL)
+  startAt   DateTime
+  endAt     DateTime
+  sortOrder Int               @default(0)
+  isActive  Boolean           @default(true)
+  products  CampaignProduct[]
+  coupons   CampaignCoupon[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([placement, isActive, startAt, endAt])
+  @@map("campaigns")
+}
+
+model CampaignProduct {
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+
+  @@id([campaignId, productId])
+  @@index([productId])
+  @@map("campaign_products")
+}
+
+model CampaignCoupon {
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  couponId   String
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+
+  @@id([campaignId, couponId])
+  @@index([couponId])
+  @@map("campaign_coupons")
 }
 
 enum DealerRewardType {
@@ -815,6 +884,7 @@ model FlashSaleItem {
   quota        Int
   soldCount    Int                 @default(0)
   perUserLimit Int
+  sortOrder    Int                 @default(0)
   purchases    FlashSalePurchase[]
   reminders    FlashSaleReminder[]
 
@@ -1391,6 +1461,7 @@ model Coupon {
   /// Cách dựng link QR của lô ({ page: 'home'|'scan', src?, card? }), cùng giá trị trên mọi mã của lô; null = lô tạo trước khi có cột (link `/?claim=`).
   batchLink       Json?
   claims          CouponClaim[]
+  campaignLinks   CampaignCoupon[]
   /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
   /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
   createdById     String?

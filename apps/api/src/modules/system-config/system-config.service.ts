@@ -17,6 +17,7 @@ import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
 import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/catalog-launch-date';
+import { FLASH_SLOTS_KEY, flashSlotsProblem } from '../flash-sale/flash-slots';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
   EXTERNAL_LOOKUP_ENABLED_KEY,
@@ -442,6 +443,8 @@ export class SystemConfigService {
       }
       return null;
     },
+    // Lưới khung mặc định của nút "Tạo khung giờ" ở tab Giờ vàng: mốc sai thì nút sinh ra đợt lệch giờ.
+    [FLASH_SLOTS_KEY]: flashSlotsProblem,
     ...WASTE_JSON_RULES,
   };
 

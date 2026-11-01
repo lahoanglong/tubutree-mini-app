@@ -80,4 +80,26 @@ describe('/thanh-toan — lỗi đặt đơn như Mini App', () => {
     expect(m.cart.mock.calls.length).toBeGreaterThan(carts);
     expect(m.quote.mock.calls.length).toBeGreaterThan(quotes);
   });
+
+  it('FLASH_LIMIT: banner "sửa ở giỏ" với câu giới hạn của máy chủ, tải lại giỏ, không lặp thêm một khối lỗi thứ hai', async () => {
+    const message = 'Giá Giờ vàng chỉ áp cho 2 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.';
+    m.placeOrder.mockRejectedValue(new ApiError(message, 400, 'FLASH_LIMIT'));
+    const r = await mount();
+    const carts = m.cart.mock.calls.length;
+    click(placeButton(r));
+    await flush(8);
+    const banner = r.container.querySelector('[data-testid="checkout-cart-issue"]')!;
+    expect(banner.textContent).toContain(message);
+    expect(banner.querySelector('a')!.getAttribute('href')).toBe('/gio-hang');
+    expect(m.cart.mock.calls.length).toBeGreaterThan(carts);
+    expect(Array.from(r.container.querySelectorAll('[role="alert"]')).filter((a) => a.textContent?.includes(message))).toHaveLength(1);
+  });
+
+  it('câu cũ "Vượt giới hạn mua ưu đãi." vẫn là banner sửa ở giỏ', async () => {
+    m.placeOrder.mockRejectedValue(new ApiError('Vượt giới hạn mua ưu đãi.', 400));
+    const r = await mount();
+    click(placeButton(r));
+    await flush(8);
+    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('Vượt giới hạn mua ưu đãi.');
+  });
 });

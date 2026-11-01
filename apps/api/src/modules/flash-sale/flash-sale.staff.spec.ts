@@ -268,6 +268,27 @@ describe('FlashSaleService — nhân viên không đụng đợt của quản tr
     expect(prisma.flashSaleItem.delete).not.toHaveBeenCalled();
   });
 
+  it('ghim thứ tự món (sortOrder): món của đợt ADMIN → nhân viên 403; đợt của nhân viên và ADMIN thì được', async () => {
+    const denied = adminSale();
+    denied.prisma.flashSaleItem.update = jest.fn();
+    await expect(denied.svc().setItemSortOrder('fi1', 2, STAFF)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(denied.prisma.flashSaleItem.update).not.toHaveBeenCalled();
+    const ok = setup();
+    ok.prisma.flashSaleItem.update = jest.fn().mockResolvedValue({ id: 'fi1', sortOrder: 2 });
+    await ok.svc().setItemSortOrder('fi1', 2, STAFF);
+    await adminSale().svc().setItemSortOrder('fi1', 2, ADMIN).catch(() => undefined);
+    expect(ok.prisma.flashSaleItem.update).toHaveBeenCalledWith({ where: { id: 'fi1' }, data: { sortOrder: 2 } });
+  });
+
+  it('thêm món có thể kèm sortOrder; không kèm thì không ghi cột (mặc định 0)', async () => {
+    const { prisma, svc } = setup();
+    await svc().addItem('s1', { variationId: 'v1', flashPrice: 90_000, quota: 5, perUserLimit: 1, sortOrder: 4 }, ADMIN);
+    expect(prisma.flashSaleItem.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ sortOrder: 4 }) });
+    await svc().addItem('s1', { variationId: 'v1', flashPrice: 90_000, quota: 5, perUserLimit: 1 }, ADMIN);
+    const data = (prisma.flashSaleItem.create.mock.calls.at(-1)![0] as { data: Record<string, unknown> }).data;
+    expect(data).not.toHaveProperty('sortOrder');
+  });
+
   it('đợt không rõ người tạo (createdBy rỗng hoặc tài khoản đã xoá) cũng thuộc quản trị viên', async () => {
     const { svc } = setup({ createdBy: null });
     await expect(svc().updateSale('s1', { isActive: true }, STAFF)).rejects.toBeInstanceOf(ForbiddenException);

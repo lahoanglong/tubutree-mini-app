@@ -232,8 +232,7 @@ export function CouponBox({
     if (best) autoMutate(best);
   }, [autoApply, memoryUserId, memory, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate]);
   const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
-  // Hàng mở bảng (sheet) là nút mở hộp thoại; ngoài ra là nút bung/thu panel ngay dưới nó.
-  const panelAria = sheet ? ({ 'aria-haspopup': 'dialog' } as const) : ({ 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const);
+  const panelAria = { 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const;
 
   const panelBody = (
     <>
@@ -363,17 +362,57 @@ export function CouponBox({
     </>
   );
 
+  // Điện thoại trong thanh dính: đúng CouponRow của Mini (pages/cart.tsx), MỘT dòng 44px. Nhãn 14px đậm 500, gợi ý và chữ phải 13px (Text small
+  // và xSmall của zmp-ui). Gạch chân là bóng trong như Mini nên dòng không cao thêm 1px vì viền.
+  const sheetRow = (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      aria-haspopup="dialog"
+      className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left shadow-[inset_0_-1px_0_var(--color-border-subtle)]"
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <Ticket className="h-5 w-5 flex-none text-[color:var(--clay-700)]" aria-hidden="true" />
+        <span className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
+        {currentCode ? (
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
+              {currentCode}
+            </span>
+            {appliedDiscount > 0 && (
+              <span className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">-{formatVnd(appliedDiscount)}</span>
+            )}
+          </span>
+        ) : (
+          <span
+            className={`min-w-0 truncate text-caption font-normal ${
+              hint ? 'text-[color:var(--color-text-brand)]' : 'text-[color:var(--color-text-tertiary)]'
+            }`}
+          >
+            {hint ? couponHintText(hint, formatVnd) : 'Chọn hoặc nhập mã giảm giá'}
+          </span>
+        )}
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+        {currentCode ? 'Thay đổi' : actionLabel}
+        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+      </span>
+    </button>
+  );
+
   return (
     <div
       className={
         sheet
-          ? 'border-b border-[var(--color-border-subtle)]'
+          ? undefined
           : `mt-3 border-t border-stone-200 pt-3 max-md:mt-0 max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] ${
               band ? 'max-md:p-4' : 'max-md:rounded-card max-md:p-3 max-md:shadow-[var(--elevation-1)]'
             }`
       }
     >
-      {currentCode ? (
+      {sheet ? (
+        sheetRow
+      ) : currentCode ? (
         <>
           <div className="flex items-center justify-between rounded-control border border-dashed border-promo-solid bg-promo-bg pl-3 max-md:hidden">
             <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">

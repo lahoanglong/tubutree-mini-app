@@ -113,6 +113,7 @@ const PUBLIC_GET_PATHS = [
   /^\/categories$/,
   /^\/brands$/,
   /^\/flash-sales\/active$/,
+  /^\/flash-sales\/slots(?:\/[^/]+\/items)?$/,
   /^\/config\/public$/,
 ];
 

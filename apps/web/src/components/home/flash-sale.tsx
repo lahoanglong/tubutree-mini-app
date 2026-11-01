@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { cancelFlashReminder, setFlashReminder, type FlashSaleActiveItem, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
-import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
@@ -16,7 +15,7 @@ import { serverNow } from '@tubutree/app-core/server-clock';
 import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { soldPercent } from '@/lib/flash-display';
+import { flashCardProduct, soldPercent } from '@/lib/flash-display';
 import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
@@ -37,31 +36,6 @@ const SOLD_FOOTER_HEIGHT = 20;
 /** Cuối thẻ "Sắp diễn ra": 8 (cách giá) + 44 (nút nhắc). */
 const REMIND_FOOTER_HEIGHT = 52;
 const FLASH_SHELF = shelf('home.flash');
-
-/** Thẻ sản phẩm của một suất Giờ vàng: giá của đúng phân loại có suất (ghim phân loại để thẻ chỉ xét suất này). */
-function flashCardProduct(item: {
-  itemId: string;
-  productSlug: string;
-  productName: string;
-  thumbnail: string | null;
-  variationId: string;
-  retailPrice: number;
-  salePrice?: number | null;
-}): ProductCardData {
-  return {
-    id: item.itemId,
-    slug: item.productSlug,
-    name: item.productName,
-    brand: '',
-    thumbnail: item.thumbnail,
-    basePrice: item.retailPrice,
-    salePrice: item.salePrice ?? null,
-    repVariationId: item.variationId,
-    pinnedVariationId: item.variationId,
-    isFeatured: false,
-    inStock: true,
-  };
-}
 
 const subscribeNothing = () => () => {};
 
@@ -174,8 +148,8 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
 }
 
 /**
- * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. Chưa có trang đó (`href` null)
- * thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới trang không có gì để nhắc là lạc.
+ * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. `href` null (kệ không khai lối xem
+ * tất cả) thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới nơi không có gì để nhắc là lạc.
  */
 function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null }) {
   const label = (
@@ -278,8 +252,8 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
 
 /**
  * "Sắp diễn ra" — flash sale đã lên lịch nhưng chưa mở bán, cho khách đặt nhắc. Cần đăng nhập (API lấy userId từ phiên để trả
- * trạng thái reminded) → chỉ chạy khi đã đăng nhập. Đặt/huỷ nhắc cập nhật ngay, lỗi thì hoàn lại. Trang Giờ vàng (P12) dùng khối này;
- * Trang chủ chỉ còn dòng "suất kế" dưới kệ Giờ vàng.
+ * trạng thái reminded) → chỉ chạy khi đã đăng nhập. Đặt/huỷ nhắc cập nhật ngay, lỗi thì hoàn lại. Trang Giờ vàng (`app/gio-vang`) có
+ * nút nhắc riêng theo từng suất; Trang chủ chỉ còn dòng "suất kế" dưới kệ Giờ vàng.
  */
 export function UpcomingFlashSales() {
   const qc = useQueryClient();

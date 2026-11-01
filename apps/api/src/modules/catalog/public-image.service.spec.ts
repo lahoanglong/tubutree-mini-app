@@ -5,7 +5,7 @@ import { PublicImageService } from './public-image.service';
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
 /** `product`: dòng của findFirst (thumbnail); `images`: kết quả của truy vấn một phần tử `images[n]`. */
-function make(rows: { product?: object | null; images?: (string | null)[]; brand?: object | null; course?: object | null }) {
+function make(rows: { product?: object | null; images?: (string | null)[]; brand?: object | null; course?: object | null; campaign?: object | null }) {
   const prisma = {
     $queryRaw: jest.fn(async (q: { values: unknown[] }) => {
       const n = Number(q.values[0]) - 1;
@@ -15,6 +15,7 @@ function make(rows: { product?: object | null; images?: (string | null)[]; brand
     product: { findFirst: jest.fn().mockResolvedValue(rows.product ?? null) },
     brand: { findFirst: jest.fn().mockResolvedValue(rows.brand ?? null) },
     course: { findFirst: jest.fn().mockResolvedValue(rows.course ?? null) },
+    campaign: { findFirst: jest.fn().mockResolvedValue(rows.campaign ?? null) },
   };
   return { svc: new PublicImageService(prisma as never), prisma };
 }
@@ -91,5 +92,16 @@ describe('PublicImageService', () => {
 
   it('ảnh không phải raster (SVG) → 404', async () => {
     await expect(make({ images: ['data:image/svg+xml;base64,PHN2Zz4='] }).svc.get('product', 'p1', '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('banner chiến dịch: chỉ ô cover của chiến dịch đang bật; không tồn tại hay đã tắt → 404, ô khác → 404', async () => {
+    const { svc, prisma } = make({ campaign: { image: PNG } });
+    const v = publicImageVersion('campaign', 'c1', 'cover', PNG);
+    expect(await svc.get('campaign', 'c1', 'cover', v)).toMatchObject({ mime: 'image/png', versionOk: true });
+    expect(prisma.campaign.findFirst).toHaveBeenCalledWith({ where: { id: 'c1', isActive: true }, select: { image: true } });
+    expect((await svc.get('campaign', 'c1', 'cover', 'sai')).versionOk).toBe(false);
+    await expect(svc.get('campaign', 'c1', 'thumb', undefined)).rejects.toBeInstanceOf(NotFoundException);
+    prisma.campaign.findFirst.mockResolvedValue(null);
+    await expect(svc.get('campaign', 'c1', 'cover', undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 });

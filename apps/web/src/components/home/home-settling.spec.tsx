@@ -40,4 +40,18 @@ describe('HomeSettlingSkeleton', () => {
     expect(categoriesHeight(6)).toBe('248px');
     expect(categoriesHeight(undefined)).toBe(`${HOME_SETTLING_HEIGHTS.categories}px`);
   });
+
+  it('banner=true (lần mở trước máy này có banner): thêm khung đầu tiên đúng tỉ lệ banner, chiều cao theo bề rộng; từ lg ẩn như lối tắt vì banner thật nằm cạnh thẻ thành viên', () => {
+    mounted = render(<HomeSettlingSkeleton banner />);
+    const kids = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children) as HTMLElement[];
+    expect(kids).toHaveLength(5);
+    expect(kids[0]!.className).toContain('lg:hidden');
+    expect((kids[0]!.firstElementChild as HTMLElement).style.aspectRatio).toBe('var(--banner-ratio)');
+    expect((kids[0]!.firstElementChild as HTMLElement).style.height).toBe('auto');
+  });
+
+  it('không có banner thì không giữ chỗ (mặc định): trang không có chiến dịch không thừa khoảng trống', () => {
+    mounted = render(<HomeSettlingSkeleton />);
+    expect(mounted.container.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+  });
 });

@@ -22,6 +22,8 @@ import { formatVnd } from '@/lib/format-vnd';
 import { useMarkExpiringSeen } from '@/lib/use-offers-dot';
 import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { CampaignBanner } from '@/components/campaign/campaign-banner';
+import { readStoredHomeKind } from '@/components/home/use-home-customer-kind';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { CouponActions } from '@/components/loyalty/coupon-actions';
@@ -82,7 +84,7 @@ function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
 
 /**
  * Trang Ưu đãi (phương án A), bản web của `pages/offers.tsx` ở Mini App: thẻ Điểm Xanh và hạng, Điểm danh, Đổi quà và tiện ích,
- * Mã giảm giá của tôi. `?section=coupons` cuộn tới danh sách mã. Dòng "Tích điểm đơn sàn" chỉ hiện khi cấu hình bật và mở thông báo "cần mở trên Zalo" (web không có màn quét).
+ * Mã giảm giá của tôi, và banner chiến dịch ở đầu trang (ẩn hẳn khi không có). `?section=coupons` cuộn tới danh sách mã. Dòng "Tích điểm đơn sàn" chỉ hiện khi cấu hình bật và mở thông báo "cần mở trên Zalo" (web không có màn quét).
  */
 function OffersContent() {
   const router = useRouter();
@@ -283,6 +285,8 @@ function OffersContent() {
   return (
     <main className={`${PAGE_NARROW} py-6 max-md:pt-0`}>
       <PageHeader title={homeCopy.offers.title} />
+      {/* Khách chưa đăng nhập là khách mới; đã đăng nhập mà máy chưa nhớ loại (hoặc đang khôi phục phiên) thì chưa biết: chỉ thấy chiến dịch cho mọi người. */}
+      <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : phase === 'guest' ? 'new' : 'unknown'} />
       <div className="mt-3">{body}</div>
     </main>
   );

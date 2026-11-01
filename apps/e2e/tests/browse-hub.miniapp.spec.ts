@@ -80,15 +80,16 @@ test.describe('Danh mục — hub', () => {
     await expect(page.getByRole('button', { name: 'Xem tất cả sản phẩm' })).toBeVisible();
   });
 
-  test('kệ Bán chạy nhất: 10 thẻ có hạng #1…#10; "Xem tất cả" mở danh sách xếp theo bán chạy', async ({ page, api }) => {
+  test('kệ Bán chạy nhất: 10 thẻ có hạng #1…#10; "Xem tất cả" mở trang Bán chạy nhất (xếp hạng 30 ngày, 20 món)', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse');
     const shelf = page.getByRole('region', { name: 'Bán chạy nhất' });
     await expect(shelf).toBeVisible({ timeout: 15_000 });
     await expect(shelf.locator('[data-ds-part="rank"]')).toHaveText(Array.from({ length: 10 }, (_, i) => `#${i + 1}`));
     await page.getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }).click();
-    await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Bán chạy', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/\/best-sellers$/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 1, name: 'Bán chạy nhất' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('catalog-grid').locator('[data-ds-part="rank"]').first()).toHaveText('#1', { timeout: 15_000 });
   });
 
   test('hub → danh sách → Back: về hub (không tải danh sách ở hub) và khôi phục vị trí cuộn của hub', async ({ page, api }) => {

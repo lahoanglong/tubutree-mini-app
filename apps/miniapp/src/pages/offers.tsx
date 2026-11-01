@@ -11,6 +11,7 @@ import { getCoupons, getLoyalty } from '../services/account-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { readStoredHomeKind } from '../hooks/use-home-customer-kind';
 import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
 import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -27,6 +28,7 @@ import { Heading, Text } from '../components/ui/text';
 import { CouponCard } from '../components/loyalty/coupon-card';
 import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { GuestLinkCard } from '../components/home/guest-link-card';
+import { CampaignBanner } from '../components/campaign/campaign-banner';
 
 function IconTile({ icon }: { icon: LucideIcon }) {
   return (
@@ -98,6 +100,8 @@ export default function OffersPage() {
   return (
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
       <PageHeader title={homeCopy.offers.title} back={false} />
+      {/* Khách chưa đăng nhập là khách mới; đã đăng nhập mà máy chưa nhớ loại thì chưa biết (chỉ thấy chiến dịch cho mọi người). */}
+      <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : 'new'} />
       {!authed ? (
         <AuthPhaseView
           phase={phase}

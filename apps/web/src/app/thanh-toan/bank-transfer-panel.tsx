@@ -8,7 +8,7 @@ import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
-import { BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
+import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import type { SaveImageResult } from '@tubutree/app-core/bridge';
 import { platformBridge } from '@/lib/platform-bridge';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -286,7 +286,7 @@ export function BankTransferPanel({
       {data.paymentDeadline && (
         <div className={DEADLINE_BOX}>
           <p role="note" className="mt-1 text-center text-xs font-medium text-warning-fg max-md:mt-0 max-md:text-left max-md:text-sm max-md:text-[color:var(--color-status-warning-fg)]">
-            Chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b> — quá hạn đơn sẽ tự huỷ.
+            {BANK_DEADLINE_LEAD} <b>{formatDateTime(data.paymentDeadline)}</b> {BANK_DEADLINE_TAIL}
           </p>
           {/* Không phải vùng đọc tự động: đồng hồ đổi mỗi 15 giây, đọc lại liên tục sẽ làm phiền người dùng trình đọc màn hình. */}
           {remaining.text && (

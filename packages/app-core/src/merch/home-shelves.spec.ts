@@ -55,13 +55,23 @@ describe('composeHomeShelves', () => {
 
 describe('seeAllHref', () => {
   it('lấy ở SHELVES và đi qua liveRoute', () => {
-    expect(seeAllHref('home.bestSellers')).toBe('/browse?sort=best_seller');
+    expect(seeAllHref('home.bestSellers')).toBe('/best-sellers');
+    expect(seeAllHref('home.bestSellers', 'web')).toBe('/ban-chay');
+    expect(seeAllHref('browse.bestSellers')).toBe('/best-sellers');
     expect(seeAllHref('home.purchased')).toBe('/orders');
     expect(seeAllHref('home.purchased', 'web')).toBe('/tai-khoan/don-hang');
   });
-  it('Giờ vàng chưa có trang riêng (P12): không trỏ vào Ưu đãi, trả null để khối ẩn "Xem tất cả"', () => {
-    expect(seeAllHref('home.flash')).toBeNull();
-    expect(seeAllHref('home.flash', 'web')).toBeNull();
+  it('kệ đang lọc theo danh mục: lối xem tất cả giữ `category` (cùng thước đo 30 ngày ở trang đích), chỉ với route nhận tham số này', () => {
+    expect(seeAllHref('home.bestSellers', 'mini', { category: 'c1' })).toBe('/best-sellers?category=c1');
+    expect(seeAllHref('home.bestSellers', 'web', { category: 'c 1' })).toBe('/ban-chay?category=c+1');
+    expect(seeAllHref('home.bestSellers', 'web', { category: null })).toBe('/ban-chay');
+    expect(seeAllHref('home.purchased', 'mini', { category: 'c1' })).toBe('/orders');
+  });
+  it('Giờ vàng có trang riêng (P12): "Xem tất cả" của khối Trang chủ và của /offers trỏ tới đó', () => {
+    expect(seeAllHref('home.flash')).toBe('/flash-sale');
+    expect(seeAllHref('home.flash', 'web')).toBe('/gio-vang');
+    expect(seeAllHref('offers.flash')).toBe('/flash-sale');
+    expect(seeAllHref('offers.flash', 'web')).toBe('/gio-vang');
   });
   it('kệ không có lối xem tất cả trả null', () => {
     expect(seeAllHref('home.combos')).toBeNull();

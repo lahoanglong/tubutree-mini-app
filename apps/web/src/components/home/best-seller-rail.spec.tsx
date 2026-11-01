@@ -25,7 +25,7 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     const section = mounted.container.querySelector('section[aria-label="Bán chạy nhất"]')!;
     expect(section.querySelector('h2')?.textContent).toBe('Bán chạy nhất');
     expect(section.textContent).toContain('Theo lượt bán 30 ngày qua');
-    expect(section.querySelector('a[aria-label="Xem tất cả Bán chạy nhất"]')?.getAttribute('href')).toBe('/san-pham?sort=best_seller');
+    expect(section.querySelector('a[aria-label="Xem tất cả Bán chạy nhất"]')?.getAttribute('href')).toBe('/ban-chay');
   });
 
   it('mỗi thẻ có hạng #1, #2, #3... theo thứ tự lượt bán', () => {

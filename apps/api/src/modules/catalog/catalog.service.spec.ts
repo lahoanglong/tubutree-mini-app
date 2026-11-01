@@ -1709,3 +1709,22 @@ describe('CatalogService.getForYou — seed ngày', () => {
   });
 });
 
+
+describe('CatalogService.cardsByIds (trang chiến dịch)', () => {
+  const setup = (products: ReturnType<typeof card>[]) => {
+    const findMany = jest.fn().mockResolvedValue(products);
+    return { findMany, svc: new CatalogService({ product: { findMany } } as unknown as PrismaService) };
+  };
+
+  it('trả thẻ đúng thứ tự của danh sách id, bỏ id không còn công khai', async () => {
+    const { svc, findMany } = setup([card('p1'), card('p3')]);
+    expect((await svc.cardsByIds(['p3', 'p2', 'p1'])).map((c) => c.id)).toEqual(['p3', 'p1']);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: ['p3', 'p2', 'p1'] }, isActive: true, approvalStatus: 'APPROVED' } }));
+  });
+
+  it('danh sách rỗng: trả [] và không đụng DB', async () => {
+    const { svc, findMany } = setup([]);
+    expect(await svc.cardsByIds([])).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});

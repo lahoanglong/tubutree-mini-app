@@ -95,6 +95,9 @@ export function takeHomeRequest(feed: HomeFeed, path: string, query: Query | und
       return keys.length === 0 ? feed.takePublic('publicConfig') : null;
     case '/flash-sales/active':
       return keys.length === 0 ? feed.takePublic('flashActive') : null;
+    case '/campaigns':
+      // Khối gộp chỉ là banner đầu Trang chủ, chưa lọc đối tượng: OFFERS_TOP hay request có `audience` phải đi request lẻ.
+      return only('placement') && q.placement === 'HOME_TOP' ? feed.takePublic('campaigns') : null;
     case '/flash-sales/upcoming':
       return keys.length === 0 ? feed.takeMe('flashUpcoming') : null;
     case '/products/for-you':

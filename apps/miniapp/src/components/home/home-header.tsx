@@ -13,8 +13,9 @@ import { Text } from '../ui/text';
 // Hiện 83x30; ảnh 249x90 (3x) đủ nét cho màn 3x mà nhẹ (bản gốc 1059x384 ở assets/tubu-logo.png nặng ~54 KB). Khai báo cả hai để trình duyệt giữ chỗ trước khi ảnh tải.
 const LOGO_HEIGHT = 30;
 const LOGO_WIDTH = 83;
-// Chỉ lấy dấu logo (khối vuông có lá) ở mép trái ảnh: chữ "Tubu Tree" đi kèm sẽ chiếm chỗ của ô tìm ở 375px.
-const LOGO_MARK_WIDTH = 26;
+// Chỉ lấy dấu logo (khối vuông có lá) ở mép trái ảnh: chữ "Tubu Tree" đi kèm sẽ chiếm chỗ của ô tìm ở 375px. Dấu hết ở cột 58/249 của ảnh,
+// chữ bắt đầu ở cột 63: 20px (= cột 60) cắt đúng khe trống; rộng hơn sẽ lộ một dải chữ "T"/"S" bên phải.
+const LOGO_MARK_WIDTH = 20;
 
 /**
  * Đầu Trang chủ: MỘT hàng dính cao `HOME_HEADER_HEIGHT` (56px) gồm dấu logo, ô tìm, chuông (badge số chưa đọc, P1-8) và giỏ. Thay hàng logo

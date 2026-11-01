@@ -8,7 +8,7 @@ import { timingSafeEqual } from 'node:crypto';
 const same = (a: unknown, b: string) => typeof a === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 /**
- * Byte của ảnh base64 đang hiện công khai (đích của `publicImageRef`): sản phẩm đã duyệt, nhãn và khoá học đã công bố.
+ * Byte của ảnh base64 đang hiện công khai (đích của `publicImageRef`): sản phẩm đã duyệt, nhãn và khoá học đã công bố, chiến dịch đang bật.
  * Mỗi lần chỉ đọc đúng một ảnh từ Postgres: mảng `images` của sản phẩm có thể nặng hàng chục MB, một trang danh mục xin cả chục ảnh.
  *
  * Sản phẩm đang chờ duyệt lại (đối tác đổi mã/liên kết) vẫn phát ảnh nếu từng được duyệt (`approvedAt`): giỏ, đơn cũ và hàng đã mua
@@ -66,6 +66,12 @@ export class PublicImageService {
         slot = n;
         image = await this.storyImage(id, n);
       }
+    } else if (kind === 'campaign') {
+      if (slotRaw !== 'cover') throw notFound();
+      slot = 'cover';
+      // Không lọc theo lịch: chiến dịch vừa hết giờ vẫn có ảnh cho trang đã mở sẵn; chỉ chiến dịch bị tắt hẳn mới không phát.
+      const c = await this.prisma.campaign.findFirst({ where: { id, isActive: true }, select: { image: true } });
+      image = c?.image;
     } else {
       if (slotRaw !== 'cover') throw notFound();
       slot = 'cover';

@@ -1,11 +1,12 @@
 import 'reflect-metadata';
-import type { INestApplication } from '@nestjs/common';
+import { BadRequestException, type INestApplication } from '@nestjs/common';
 import { GUARDS_METADATA, HEADERS_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
+import { PUBLIC_CACHE_POLICY_KEY } from '../../common/decorators/public-cache.decorator';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
@@ -37,6 +38,43 @@ describe('FlashSaleController — /upcoming công khai (khách chưa đăng nh�
     await ctl.upcoming('u1');
     await ctl.upcoming(undefined);
     expect(svc.listUpcoming.mock.calls).toEqual([['u1'], [undefined]]);
+  });
+});
+
+describe('FlashSaleController — khung giờ công khai cho trang Giờ vàng', () => {
+  const policy = (name: keyof FlashSaleController) => Reflect.getMetadata(PUBLIC_CACHE_POLICY_KEY, handler(name));
+
+  it('slots và slotItems: @Public + cache LIVE (không đọc JWT, không theo khách)', () => {
+    for (const name of ['slots', 'slotItems'] as const) {
+      expect(isPublic(name)).toBe(true);
+      expect(policy(name)).toBe('LIVE');
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler(name))).toBeUndefined();
+    }
+  });
+
+  it('slots và slotItems chuyển thẳng cho service', async () => {
+    const svc = { listSlots: jest.fn().mockResolvedValue({ slots: [] }), listSlotItems: jest.fn().mockResolvedValue({ items: [] }) };
+    const ctl = new FlashSaleController(svc as unknown as FlashSaleService);
+    await ctl.slots();
+    await ctl.slotItems('s1');
+    expect(svc.listSlots).toHaveBeenCalledTimes(1);
+    expect(svc.listSlotItems).toHaveBeenCalledWith('s1');
+  });
+
+  it('active: không có limit thì lấy đủ; limit 1..50 chuyển cho service', async () => {
+    const svc = { listActive: jest.fn().mockResolvedValue([]) };
+    const ctl = new FlashSaleController(svc as unknown as FlashSaleService);
+    await ctl.active();
+    await ctl.active('1');
+    await ctl.active('50');
+    expect(svc.listActive.mock.calls).toEqual([[undefined, undefined], [undefined, 1], [undefined, 50]]);
+  });
+
+  it.each(['0', '51', '-3', '2.5', 'abc', ''])('active: limit=%j ngoài 1..50 hoặc không phải số nguyên bị 400', (raw) => {
+    const svc = { listActive: jest.fn() };
+    const ctl = new FlashSaleController(svc as unknown as FlashSaleService);
+    expect(() => ctl.active(raw)).toThrow(BadRequestException);
+    expect(svc.listActive).not.toHaveBeenCalled();
   });
 });
 

@@ -495,6 +495,13 @@ body.with-back-btn .page.page-bleed {
   }
 }
 
+/* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra; luật `*` của prefers-reduced-motion ở cuối file rút còn 0,01ms. */
+.tubu-flash-fill {
+  transition-property: transform;
+  transition-duration: 600ms;
+  transition-timing-function: var(--p-ease-out);
+}
+
 /* Container cuộn ngang an toàn trong flex cha (Rule 9b.2) */
 .scroll-x {
   display: flex;
@@ -502,6 +509,16 @@ body.with-back-btn .page.page-bleed {
   min-width: 0;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Tràn mép: khối lùi lề âm đúng --space-block của cột chứa (lề trang 16px) để chạm mép màn hình, như `.tubu-bleed` của web (mini.css, nơi chỉ
+ * áp dưới md; Mini luôn là khổ điện thoại nên không có mốc md). Một nguồn thay `margin: '0 -16px'` viết tay từng file; đứng sau `.scroll-x`
+ * để `max-width: none` thắng khi hai lớp đi cùng nhau.
+ */
+.tubu-bleed {
+  margin-inline: calc(var(--space-block) * -1);
+  max-width: none;
 }
 
 /*

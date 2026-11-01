@@ -4,21 +4,15 @@ import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as RouteFallback from '@tubutree/app-core/merch/route-fallback';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
 import { TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
 // Chép ý nghĩa flash-sale.spec của Mini App: giờ vàng đang chạy, sắp diễn ra + nhắc, tải lại sau lỗi, giá khớp giá thật.
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), del: vi.fn(), phase: 'guest', flashPage: false }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), del: vi.fn(), phase: 'guest' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post, delete: mocks.del } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => false }));
-// Trang Giờ vàng riêng chưa có (P12): mặc định lối vào ẩn; `flashPage` bật để kiểm cả nhánh khi trang đã có.
-vi.mock('@tubutree/app-core/merch/route-fallback', async (importOriginal) => {
-  const actual = await importOriginal<typeof RouteFallback>();
-  return { ...actual, routeUsable: (r: string) => (r === '/flash-sale' && mocks.flashPage) || actual.routeUsable(r) };
-});
 
 import { FlashSale as FlashSaleBlock, UpcomingFlashSales } from './flash-sale';
 import { useHomeShelves } from './use-home-shelves';
@@ -61,7 +55,6 @@ const mount = async (ui: React.ReactElement) => {
 beforeEach(() => {
   resetFlashSales();
   mocks.phase = 'guest';
-  mocks.flashPage = false;
   activeResult = async () => [];
   upcomingResult = async () => [];
   mocks.post.mockReset().mockResolvedValue({});
@@ -203,7 +196,7 @@ describe('FlashSale', () => {
     expect((await mount(<FlashSale />)).textContent).toBe('');
   });
 
-  it('tiêu đề h2 "Giờ vàng" kiểu promo, MỘT đồng hồ ở đầu khối (trên hàng thẻ), chưa có trang Giờ vàng thì không có "Xem tất cả", thẻ hiện -% / giá giờ vàng / giá gạch / đã bán', async () => {
+  it('tiêu đề h2 "Giờ vàng" kiểu promo, MỘT đồng hồ ở đầu khối (trên hàng thẻ), "Xem tất cả" dẫn tới /gio-vang, thẻ hiện -% / giá giờ vàng / giá gạch / đã bán', async () => {
     activeResult = async () => three();
     const c = await mount(<FlashSale />);
     const section = c.querySelector('section')!;
@@ -214,19 +207,12 @@ describe('FlashSale', () => {
     expect(timers).toHaveLength(1);
     expect(timers[0]!.getAttribute('aria-label')).toMatch(/^Kết thúc sau/);
     expect(timers[0]!.querySelectorAll('[data-testid="countdown-cell"]')).toHaveLength(3);
-    expect(section.querySelector('a[aria-label="Xem tất cả Giờ vàng"]')).toBeNull();
+    expect(section.querySelector('a[aria-label="Xem tất cả Giờ vàng"]')?.getAttribute('href')).toBe('/gio-vang');
     expect(c.textContent).toContain('-20%');
     expect(c.textContent).toContain('80.000đ');
     expect(struck(c)?.textContent).toBe('100.000đ');
     expect(c.textContent).toContain('Đã bán 20%');
     expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')).not.toBeNull();
-  });
-
-  it('có trang Giờ vàng: "Xem tất cả" dẫn tới đó', async () => {
-    mocks.flashPage = true;
-    activeResult = async () => three();
-    const c = await mount(<FlashSale />);
-    expect(c.querySelector('a[aria-label="Xem tất cả Giờ vàng"]')?.getAttribute('href')).toBe('/uu-dai');
   });
 
   it('dưới 3 suất: ẩn cả khối (kệ mỏng không đáng một khối)', async () => {
@@ -355,29 +341,15 @@ describe('FlashSale — dòng "suất kế" và giữ chỗ khi tải', () => {
     try { localStorage.clear(); if (hint) localStorage.setItem(FLASH_HINT_KEY, hint); } catch { /* không có kho */ }
   };
 
-  it('suất sắp mở trong 6 giờ, chưa có trang Giờ vàng: dòng thông tin "HH:MM · n món sắp mở" dưới kệ, không liên kết, không hứa "Nhắc tôi"; ghi dấu nhớ có dòng suất kế', async () => {
+  it('suất sắp mở trong 6 giờ: dòng có "Nhắc tôi" dẫn tới trang Giờ vàng; ghi dấu nhớ có dòng suất kế', async () => {
     withStorage(null);
-    const startAt = new Date(Date.now() + 2 * HOUR).toISOString();
-    activeResult = async () => three();
-    upcomingResult = async () => [upcoming({ startAt }), upcoming({ itemId: 'u2', productSlug: 'sp-u2', startAt })];
-    const c = await mount(<FlashSale />);
-    const line = c.querySelector('[data-testid="flash-next-slot"]') as HTMLElement;
-    expect(line.textContent).toMatch(/^\d{2}:\d{2} · 2 món sắp mở$/);
-    expect(line.tagName).not.toBe('A');
-    expect((line as HTMLElement).style.minHeight).toBe(`${FLASH_NEXT_SLOT_HEIGHT}px`);
-    expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('2');
-  });
-
-  it('suất sắp mở trong 6 giờ, có trang Giờ vàng: dòng có "Nhắc tôi" dẫn tới trang Giờ vàng', async () => {
-    withStorage(null);
-    mocks.flashPage = true;
     const startAt = new Date(Date.now() + 2 * HOUR).toISOString();
     activeResult = async () => three();
     upcomingResult = async () => [upcoming({ startAt }), upcoming({ itemId: 'u2', productSlug: 'sp-u2', startAt })];
     const c = await mount(<FlashSale />);
     const line = c.querySelector('[data-testid="flash-next-slot"]') as HTMLElement;
     expect(line.textContent).toMatch(/^\d{2}:\d{2} · 2 món sắp mởNhắc tôi$/);
-    expect(line.getAttribute('href')).toBe('/uu-dai');
+    expect(line.getAttribute('href')).toBe('/gio-vang');
     expect(line.getBoundingClientRect().height).toBeGreaterThanOrEqual(0);
     expect((line as HTMLElement).style.minHeight).toBe(`${FLASH_NEXT_SLOT_HEIGHT}px`);
     expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('2');

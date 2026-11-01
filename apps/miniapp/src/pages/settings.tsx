@@ -10,6 +10,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Text } from '../components/ui/text';
 import { useAuthStore } from '../store/auth';
+import { AccountDeletionSection } from '../components/account-deletion-section';
 import { isGuestUser } from '../components/coupon-claim-gate';
 import { haptic } from '../utils/haptic';
 import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
@@ -176,6 +177,9 @@ export default function SettingsPage() {
           </Button>
         </div>
       )}
+
+      {canLogout && <AccountDeletionSection />}
+      <div style={{ height: 16 }} />
     </Page>
   );
 }

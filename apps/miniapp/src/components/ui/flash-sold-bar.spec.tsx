@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FlashSoldBar } from './flash-sold-bar';
@@ -24,6 +26,17 @@ describe('FlashSoldBar', () => {
     render(<FlashSoldBar soldPct={68} />);
     expect(fill()!.style.transform).toBe('scaleX(0.68)');
     expect(fill()!.style.transformOrigin).toBe('left');
+  });
+
+  // Chuyển động của phần đã bán nằm ở CSS (.tubu-flash-fill) chứ không inline, để cả hai app cùng một luật và web tắt được bằng
+  // prefers-reduced-motion (Mini đã có luật toàn cục; web thì không, nên thanh web từng vẫn chạy 600ms khi khách chọn giảm chuyển động).
+  it('phần đã bán là lớp tubu-flash-fill, không ghi transition inline; CSS gắn transform 600ms cho lớp đó', () => {
+    render(<FlashSoldBar soldPct={68} />);
+    expect(fill()!.className).toBe('tubu-flash-fill');
+    expect(fill()!.style.transitionDuration).toBe('');
+    expect(fill()!.style.transitionProperty).toBe('');
+    const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-flash-fill\s*\{[^}]*transition-property:\s*transform[^}]*transition-duration:\s*600ms/);
   });
 
   it('hết suất: chữ "Đã bán hết" thắng phần trăm, không phần cam', () => {

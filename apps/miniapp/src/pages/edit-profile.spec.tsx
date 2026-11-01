@@ -114,7 +114,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     mocks.getMe.mockResolvedValue({ ...ME, dob: null });
     renderPage();
     fireEvent.change(await screen.findByLabelText('Họ và tên'), { target: { value: '  Lan B  ' } });
-    fireEvent.change(screen.getByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+    fireEvent.change(screen.getByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
     await waitFor(() =>
@@ -167,7 +167,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       mocks.getMe.mockResolvedValue({ ...ME, dob: null });
       mocks.updateMe.mockRejectedValueOnce(new Error('avatarUrl must be a URL')).mockResolvedValueOnce({ avatarUrl: null });
       renderPage();
-      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
       await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
@@ -189,7 +189,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     it('chọn ngày sinh mới: hiện ngày dd/MM/yyyy, hỏi xác nhận TRƯỚC khi lưu; Sửa lại thì chưa gửi gì', async () => {
       mocks.getMe.mockResolvedValue({ ...ME, dob: null });
       renderPage();
-      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
       expect(screen.getByText('Ngày đã chọn: 03/02/1991')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(screen.getByText('Ngày sinh 03/02/1991 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     it('đang hỏi xác nhận ngày sinh: các ô nhập bị khoá, bấm Sửa lại thì mở lại', async () => {
       mocks.getMe.mockResolvedValue({ ...ME, dob: null });
       renderPage();
-      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(screen.getByLabelText('Ngày sinh')).toHaveAttribute('readonly');
       expect(screen.getByLabelText('Họ và tên')).toHaveAttribute('readonly');
@@ -224,6 +224,55 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       expect(screen.queryByRole('button', { name: 'Xác nhận' })).toBeNull();
       await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+    });
+
+    it('ô ngày sinh là ô chữ dd/mm/yyyy (không phải type=date), tự thêm dấu / khi gõ liền số (R-110)', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      const input = (await screen.findByLabelText('Ngày sinh')) as HTMLInputElement;
+      expect(input.type).toBe('text');
+      expect(input.placeholder).toBe('dd/mm/yyyy');
+      fireEvent.change(input, { target: { value: '29022000' } });
+      expect(input.value).toBe('29/02/2000');
+    });
+
+    it('ngày không có thật (29/02/2023): báo lỗi rõ ràng và không gửi', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '29/02/2023' } });
+      expect(screen.getByText('Ngày này không có thật. Kiểm tra lại ngày và tháng nhé.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(mocks.updateMe).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('ngày tương lai: báo lỗi và không gửi', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '01/01/2999' } });
+      expect(screen.getByText('Ngày sinh không thể ở tương lai. Kiểm tra lại năm nhé.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(mocks.updateMe).not.toHaveBeenCalled();
+    });
+
+    it('gõ dở rồi bấm Lưu: báo nhập đủ ngày/tháng/năm, không gửi', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '0503' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(await screen.findByText('Nhập đủ ngày/tháng/năm, ngày và tháng gõ 2 số, ví dụ 05/03/1990.')).toBeInTheDocument();
+      expect(mocks.updateMe).not.toHaveBeenCalled();
+    });
+
+    it('29/02/2000 hợp lệ: xác nhận rồi gửi dob dạng ISO 2000-02-29', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '29/02/2000' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(screen.getByText('Ngày sinh 29/02/2000 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận' }));
+      await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+      expect(mocks.updateMe.mock.calls[0]![0].dob).toBe('2000-02-29');
     });
 
     it('đã có ngày sinh: ô chỉ đọc và có câu nhắc liên hệ CSKH', async () => {

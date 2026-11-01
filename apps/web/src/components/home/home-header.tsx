@@ -14,8 +14,9 @@ import tubuLogo from '@/assets/tubu-logo-home.png';
 
 const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[var(--color-action-secondary-bg)] text-[var(--color-text-primary)]';
 
-// Chỉ lấy dấu logo (khối vuông có lá) ở mép trái ảnh: chữ "Tubu Tree" đi kèm sẽ chiếm chỗ của ô tìm ở 375px (giống Mini App).
-const LOGO_MARK_WIDTH = 26;
+// Chỉ lấy dấu logo (khối vuông có lá) ở mép trái ảnh: chữ "Tubu Tree" đi kèm sẽ chiếm chỗ của ô tìm ở 375px (giống Mini App). Dấu hết ở
+// cột 58/249 của ảnh, chữ bắt đầu ở cột 63: 20px (= cột 60) cắt đúng khe trống; rộng hơn sẽ lộ một dải chữ "T"/"S" bên phải.
+const LOGO_MARK_WIDTH = 20;
 
 /**
  * Đầu Trang chủ ở điện thoại, như `HomeHeader` của Mini App: MỘT hàng cao 56px gồm dấu logo (tên trang cho trình đọc màn hình), ô tìm, chuông
