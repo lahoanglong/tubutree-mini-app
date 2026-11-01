@@ -202,6 +202,7 @@ export function mockTourWorld(api: MockApi, user: AuthUser): void {
   api.get('/me/purchased-items', { items: [], nextCursor: null });
   api.get('/me/subscriptions', []);
   api.get('/orders/active-count', { count: 1 });
+  api.get('/orders/home-todo', { pending: null, shipping: { order: tourOrder(ORDER_SHIPPING, 'SHIPPING'), total: 1 }, processing: null });
   api.get('/orders', ({ call }): PageResponse<OrderView> => {
     const status = call.query.get('status');
     const all = [tourOrder(ORDER_SHIPPING, 'SHIPPING'), tourOrder(ORDER_DELIVERED, 'DELIVERED')];

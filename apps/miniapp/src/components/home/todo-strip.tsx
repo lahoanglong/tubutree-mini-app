@@ -6,7 +6,7 @@ import { homeCopy } from '@tubutree/app-core/home-copy';
 import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
 import { ACTIVE_ORDER_COUNT_KEY } from '../../hooks/use-active-order-count';
 import { useRemaining } from '../../hooks/use-remaining';
-import { fetchActiveOrderCount, fetchOrders, type OrderView } from '../../services/shop-api';
+import { fetchActiveOrderCount, fetchHomeTodo, type OrderView } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
@@ -77,29 +77,15 @@ export function useHomeTodoQueries() {
   // Cùng khoá và hàm tải với useActiveOrderCount (thanh đáy) để dùng chung dữ liệu, nhưng cần cả trạng thái đã tải xong hay chưa.
   const countQ = useQuery({ queryKey: ACTIVE_ORDER_COUNT_KEY, queryFn: fetchActiveOrderCount, enabled: authed, staleTime: 30_000, retry: false });
   const enabled = authed && (countQ.data ?? 0) > 0;
-  const pending = useQuery({
-    queryKey: ['orders', 'home-todo-pending'],
-    queryFn: () => fetchOrders({ status: 'PENDING_PAYMENT' }, 1, 1),
+  const todoQ = useQuery({
+    queryKey: ['orders', 'home-todo'],
+    queryFn: fetchHomeTodo,
     enabled,
     staleTime: 30_000,
     retry: false,
   });
-  const shipping = useQuery({
-    queryKey: ['orders', 'home-strip'],
-    queryFn: () => fetchOrders({ status: 'SHIPPING' }, 1, 1),
-    enabled,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const processing = useQuery({
-    queryKey: ['orders', 'home-processing'],
-    queryFn: () => fetchOrders({ group: 'processing' }, 1, 1),
-    enabled,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const loading = authed && (countQ.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
-  return { authed, countQ, enabled, pending, shipping, processing, loading };
+  const loading = authed && (countQ.isPending || (enabled && todoQ.isLoading));
+  return { authed, countQ, enabled, todoQ, loading };
 }
 
 /**
@@ -109,14 +95,14 @@ export function useHomeTodoQueries() {
  */
 export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const navigate = useNavigate();
-  const { authed, countQ, enabled, pending, shipping, processing, loading } = useHomeTodoQueries();
+  const { authed, countQ, enabled, todoQ, loading } = useHomeTodoQueries();
   const userId = useAuthStore((s) => s.user?.id);
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
-  const payOrder = pending.data?.data[0];
-  const shipOrder = shipping.data?.data[0];
-  const shipTotal = shipping.data?.meta.total ?? 0;
-  const prepOrder = processing.data?.data[0];
-  const prepTotal = processing.data?.meta.total ?? 0;
+  const payOrder = todoQ.data?.pending?.order;
+  const shipOrder = todoQ.data?.shipping?.order;
+  const shipTotal = todoQ.data?.shipping?.total ?? 0;
+  const prepOrder = todoQ.data?.processing?.order;
+  const prepTotal = todoQ.data?.processing?.total ?? 0;
   // Tối đa hai dòng để khối gọn: đơn chờ thanh toán, đơn đang giao, rồi đơn đang chuẩn bị theo thứ tự đó.
   const showShip = Boolean(shipOrder);
   const showPrep = Boolean(prepOrder) && (payOrder ? 1 : 0) + (shipOrder ? 1 : 0) < 2;
@@ -124,7 +110,7 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const settled =
     authed &&
     (enabled
-      ? !pending.isLoading && !shipping.isLoading && !processing.isLoading && !pending.isError && !shipping.isError && !processing.isError
+      ? !todoQ.isLoading && !todoQ.isError && !todoQ.data?.partial
       : countQ.isSuccess);
   useEffect(() => {
     if (settled && userId) writeTodoRows(browserStorage(), userId, rows);
