@@ -65,13 +65,16 @@ export function StickyActionBar({ primary, secondary, summary, lead, dense }: St
       }}
     >
       {summary}
-      <div style={{ display: 'flex', gap: 10, alignItems: lead ? 'center' : undefined }}>
-        {lead && <div style={{ flex: 1, minWidth: 0 }}>{lead}</div>}
+      {/* Có `lead` thì hàng cuối xuống dòng có chủ đích khi khối tổng không vừa (máy 320px, số tiền 9 chữ số, "Tiết kiệm 12.345.000đ"):
+          `lead` grow 1000 và không bị ép min-width 0, nên nó chiếm hết chỗ và hàng chỉ xuống dòng khi chữ không ngắt được của nó rộng hơn chỗ còn lại,
+          thay vì cắt hay chui dưới nút. Nút grow 1: chung hàng với `lead` thì phần dư chia 1000:1 nên giữ ~9.25rem; xuống hàng riêng thì giãn hết bề ngang. */}
+      <div style={{ display: 'flex', gap: 10, alignItems: lead ? 'center' : undefined, ...(lead ? { flexWrap: 'wrap', rowGap: 'var(--space-stack-xs)' } : null) }}>
+        {lead && <div style={{ flexGrow: 1000, flexShrink: 1, flexBasis: 0 }}>{lead}</div>}
         {secondary}
         {/* minWidth 0: flex item mặc định min-width:auto = bề rộng nội dung → hàng CTA không co được
             và tràn khỏi màn hình ở 320-390px (PDP "Mua ngay · giá" chạm 421px). Nút bên trong co/rút
             gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). Có `lead` thì nút tự giữ bề rộng (đủ nhãn "Thanh toán (n)"). */}
-        <div style={lead ? { flex: '0 0 auto', minWidth: '9.25rem' } : { flex: 1, minWidth: 0 }}>{primary}</div>
+        <div style={lead ? { flexGrow: 1, flexShrink: 0, flexBasis: '9.25rem' } : { flex: 1, minWidth: 0 }}>{primary}</div>
       </div>
     </div>
   );

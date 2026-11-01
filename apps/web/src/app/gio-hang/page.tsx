@@ -563,11 +563,12 @@ export default function CartPage() {
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
-            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App): nút giữ bề rộng riêng, khối tổng lấy phần còn lại. */}
-            <div className="flex items-center gap-2.5">
-              <div className="min-w-0 flex-1 whitespace-nowrap">
-                <div className="text-label text-stone-600">{totalLabel}</div>
-                <div data-testid="cart-total-value" className="text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
+            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
+                rộng hơn chỗ còn lại (320px, 9 chữ số): nút xuống hàng riêng và giãn hết bề ngang thay vì cắt chữ hay chui dưới nút; chung hàng thì giữ 9.25rem. */}
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <div className="flex-[1000_1_0%]">
+                <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
+                <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
                   {formatVnd(payTotal)}
                 </div>
                 {saving > 0 && (
@@ -577,11 +578,11 @@ export default function CartPage() {
                 )}
               </div>
               {payHint ? (
-                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} min-w-[9.25rem] shrink-0`}>
+                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
                   Thanh toán ({selectedCount})
                 </button>
               ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} min-w-[9.25rem] shrink-0`}>
+                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
                   Thanh toán ({selectedCount})
                 </Link>
               )}

@@ -132,6 +132,26 @@ describe('/gio-hang — thanh dính đáy', () => {
     });
   });
 
+  // MINOR F10b: máy 320px, khối tổng chỉ còn ~130px. Hàng cuối xuống dòng có chủ đích thay vì cắt chữ hay chui dưới nút (cùng khuôn với StickyActionBar Mini).
+  it('hàng tổng + nút là flex-wrap: khối tổng grow 1000 không min-w-0, nút basis 9.25rem grow 1 không co; số tiền và nhãn không ngắt, "Tiết kiệm" được xuống dòng', async () => {
+    state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
+    const c = await mount();
+    const total = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-value"]')!;
+    const lead = total.parentElement!;
+    const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
+    const row = lead.parentElement!;
+    expect(row.className).toMatch(/\bflex-wrap\b/);
+    expect(lead.className).toContain('flex-[1000_1_0%]');
+    expect(lead.className).not.toMatch(/\bmin-w-0\b/);
+    expect(lead.className).not.toMatch(/\bwhitespace-nowrap\b/);
+    expect(total.className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(lead.firstElementChild!.className).toMatch(/\bwhitespace-nowrap\b/);
+    const saving = lead.querySelector<HTMLElement>('[data-testid="cart-saving"]')!;
+    expect(saving.className).not.toMatch(/\bwhitespace-nowrap\b/);
+    expect(link.className).toContain('flex-[1_0_9.25rem]');
+    expect(link.className).not.toMatch(/\bshrink-0\b|\bmin-w-\[9\.25rem\]/);
+  });
+
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {
     const c = await mount();
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;

@@ -822,8 +822,9 @@ function StickySummary({
             {formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
           </div>
           {saving > 0 && (
-            // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md).
-            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block', whiteSpace: 'nowrap' }}>
+            // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md). Được xuống dòng tại khoảng trắng
+            // ("Tiết kiệm" / "12.345.000đ") khi khối tổng hẹp ở 320px; số tiền không có điểm ngắt nên không bao giờ bị cắt giữa số.
+            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block' }}>
               {fillCopy('cart.saving', { x: formatVnd(saving) })}
             </Text>
           )}
