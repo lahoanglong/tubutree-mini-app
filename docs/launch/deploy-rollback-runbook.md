@@ -565,6 +565,10 @@ Các biến báo động vận hành (secret trừ khi ghi khác), dùng bởi `
 
 Và cho backup (hành động `crontab`): variable `BACKUP_RCLONE_REMOTE`, secret `BACKUP_HEALTHCHECK_URL`. Cho cấp admin đầu tiên: secret `ADMIN_PHONE`. Các khoá tích hợp (Pancake, Gomdon, Zalo, ZaloPay, Accesstrade) đã liệt kê ở `ops.yml`.
 
+Khi workflow VM chưa bật, làm tay từ máy người vận hành (có khoá SSH tới VPS):
+- Email báo động qua Gmail: `bash tools/ops/set-smtp.sh`. Script hỏi ẩn mật khẩu ứng dụng Gmail và ghi 7 biến vào `.env`, có bản sao lưu `.env.bak-smtp-*`. Sau đó script tạo lại API; API không healthy thì trả `.env` cũ.
+- Báo khi backup lỗi: `bash tools/ops/set-healthcheck.sh`. Script hỏi ẩn URL `hc-ping.com` và gắn `HEALTHCHECK_URL` vào dòng cron `backup-db.sh`, có bản sao lưu `/root/crontab.bak-hc-*`. Cuối cùng script ping thử một lần.
+
 Lưu ý khi dùng lại `ops.yml`: các hành động `backup`, `gin`, `crontab`, `grant-admin` tự chạy `git pull --ff-only origin main` trên máy chủ trước, nên máy chủ phải pull được từ origin và nhánh `main` phải là nhánh đang chạy. Nếu deploy bằng `git bundle` từ nhánh khác thì đừng dùng các hành động đó, làm tay.
 
 ## 3. Chọn giờ deploy
