@@ -18,7 +18,11 @@ export function PdpQuickReviews({ slug }: { slug: string }) {
   if (!q.data || picked.length === 0) return null;
   const { average, count } = q.data;
   return (
-    <section aria-label="Đánh giá nhanh" className="mt-8">
+    <section
+      aria-label="Đánh giá nhanh"
+      data-section="pdp-quick-reviews"
+      className="mt-8 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4"
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className={pdpSectionTitle}>{fillCopy('pdp.reviews')}</h2>

@@ -6,10 +6,13 @@ import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
-import { mini } from '@/components/order-mobile/mobile-ui';
 
-/** Tiêu đề mục: serif trên máy tính, trên điện thoại là SectionTitle không chân của Mini App. */
-export const pdpSectionTitle = `${ui.sectionTitle} ${mini.sectionTitle}`;
+/** Tiêu đề khối trong luồng mua (Q1): Inter 16/700, -0.01em ở mọi khổ, cùng số đo với `SectionTitle block` của Mini App. Fraunces chỉ cho tiêu đề trang. */
+export const pdpSectionTitle =
+  'font-ui text-[length:var(--type-title-sm-size)] font-bold leading-[var(--type-title-sm-lh)] tracking-[-0.01em] text-[var(--color-text-primary)]';
+
+/** Dải trắng riêng của nửa dưới trang ở điện thoại: cách dải trên 8px, đệm 16px như Box p=4 mt=2 của Mini App. Máy tính giữ khoảng cách mt-8. */
+export const pdpBand = 'mt-8 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4';
 
 const COLLAPSED_LINES_THRESHOLD = 220;
 
@@ -34,7 +37,7 @@ export function PdpRating({ average, count }: { average: number | undefined; cou
 export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['ingredients'] }) {
   if (!ingredients || ingredients.length === 0) return null;
   return (
-    <section className="mt-8">
+    <section data-section="pdp-ingredients" className={pdpBand}>
       <h2 className={pdpSectionTitle}>Thành phần</h2>
       <ul className="mt-3 flex flex-col gap-2.5">
         {ingredients.map((ing, i) => (
@@ -59,11 +62,11 @@ export function PdpPromises({ children }: { children?: React.ReactNode }) {
   const { returnWindowDays } = usePublicConfig();
   const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null);
   return (
-    <section id="pdp-promises" className="mt-8 scroll-mt-20">
+    <section id="pdp-promises" data-section="pdp-promises" className={`${pdpBand} scroll-mt-20`}>
       <h2 className={pdpSectionTitle}>Cam kết Tubu</h2>
       <ul className="mt-2 flex flex-col gap-1.5">
         {promises.map((t) => (
-          <li key={t} className="flex items-center gap-2 text-sm text-stone-700">
+          <li key={t} className="flex items-center gap-2 text-sm text-stone-700 max-md:text-xs max-md:text-[var(--color-text-secondary)]">
             <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
             {t}
           </li>
@@ -79,13 +82,13 @@ export function PdpDescription({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > COLLAPSED_LINES_THRESHOLD;
   return (
-    <section className="mt-8">
+    <section data-section="pdp-description" className={pdpBand}>
       <h2 className={pdpSectionTitle}>Mô tả sản phẩm</h2>
-      <p id="pdp-description" className={`mt-2 whitespace-pre-line break-words text-stone-700 ${isLong && !expanded ? 'line-clamp-4' : ''}`}>
+      <p id="pdp-description" className={`mt-2 whitespace-pre-line break-words text-stone-700 max-md:mt-1.5 max-md:text-sm max-md:text-[var(--color-text-secondary)] ${isLong && !expanded ? 'line-clamp-4' : ''}`}>
         {text}
       </p>
       {isLong && (
-        <button type="button" aria-expanded={expanded} aria-controls="pdp-description" onClick={() => setExpanded((e) => !e)} className={ui.btnText}>
+        <button type="button" aria-expanded={expanded} aria-controls="pdp-description" onClick={() => setExpanded((e) => !e)} className={`${ui.btnText} max-md:px-0 max-md:no-underline max-md:text-[color:var(--color-text-brand)]`}>
           {expanded ? 'Thu gọn' : 'Xem thêm'}
         </button>
       )}

@@ -46,6 +46,17 @@ describe('PdpQuickReviews (web)', () => {
     target.remove();
   });
 
+  it('điện thoại: là một dải trắng riêng cách dải trên 8px (như Mini App), có data-section cho bài so thứ tự', async () => {
+    mocks.fetchProductReviews.mockResolvedValue({ average: 4.4, count: 27, distribution: {}, items: [item('a')] });
+    const { container } = mount(<PdpQuickReviews slug="dau-goi" />);
+    await flush();
+    const section = container.querySelector('section[aria-label="Đánh giá nhanh"]')!;
+    expect(section.getAttribute('data-section')).toBe('pdp-quick-reviews');
+    expect(section.className).toContain('max-md:mt-2');
+    expect(section.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(section.className).toContain('max-md:p-4');
+  });
+
   it('không có đánh giá có chữ, đang tải hoặc lỗi thì không dựng gì', async () => {
     mocks.fetchProductReviews.mockResolvedValue({ average: 4, count: 3, distribution: {}, items: [item('a', { comment: null })] });
     const none = mount(<PdpQuickReviews slug="a" />);

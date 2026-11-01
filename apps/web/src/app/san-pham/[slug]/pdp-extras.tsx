@@ -17,6 +17,7 @@ import { Icon } from '@/components/mini/icon';
 import { ListRow } from '@/components/mini/list-row';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
 import { usePdpSelection } from '@/components/pdp-selection';
+import { LOW_STOCK_NOTICE, useProductStock } from '@/components/pdp-stock';
 import { tierEarnOf } from '@tubutree/app-core/points-earn-tier';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -32,11 +33,12 @@ import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
 import { freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
-import { getCart, getProductStock } from '@/lib/shop-client';
+import { getCart } from '@/lib/shop-client';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 import { ContentKitSheet } from './content-kit-sheet';
 import { SubscribeSheet } from './subscribe-sheet';
 import { PointsEarnSheet } from './points-earn-sheet';
@@ -123,7 +125,7 @@ export function PdpFreeship() {
   });
   if (from == null) return null;
   return (
-    <p data-testid="pdp-freeship" className="text-sm font-medium text-forest-700">
+    <p data-testid="pdp-freeship" className="text-sm font-medium text-forest-700 max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]">
       {freeshipLine(from)}
     </p>
   );
@@ -138,7 +140,7 @@ export function PdpShippingRow({ children, pressable = true }: { children: React
     <ListRow
       icon={<Icon icon={Truck} size="md" tone="brand" />}
       title={fillCopy('pdp.shipping')}
-      subtitle={<div className="flex flex-col gap-1 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
+      subtitle={<div className="flex flex-col gap-1 max-md:gap-0 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
       trailing={pressable ? 'chevron' : undefined}
       onPress={pressable ? () => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined}
       style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}
@@ -244,13 +246,31 @@ interface PdpVariation {
   stock: number;
 }
 
+/**
+ * "Còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh, đúng chữ của Mini App (`vi.product.lowStock`, D2 chốt "Còn {n} sản phẩm").
+ * Máy tính giữ dòng cũ "Chỉ còn N" trong khối mua (`AddToCart`, ngay dưới chip; chữ đó thuộc gói chữ riêng), nên bản này ẩn từ md.
+ * Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
+ */
+export function PdpLowStock({ slug, variations }: { slug: string; variations: { id: string; stock: number }[] }) {
+  const sel = usePdpSelection();
+  const stockQ = useProductStock(slug);
+  const selected = variations.find((v) => v.id === sel?.selectedId);
+  const stock = selected ? (stockQ.data?.[selected.id] ?? selected.stock) : 0;
+  if (stock <= 0 || stock > LOW_STOCK_NOTICE) return null;
+  return (
+    <p data-testid="pdp-low-stock" className="mt-1 text-xs font-medium text-warning-fg md:hidden">
+      Còn {stock} sản phẩm
+    </p>
+  );
+}
+
 /** Dòng "Đặt định kỳ" mở sheet tạo gói; chỉ có với hàng Tubu còn hàng ở phân loại đang chọn. */
 export function PdpSubscribeRow({ slug, variations }: { slug: string; variations: PdpVariation[] }) {
   const router = useRouter();
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
   const sel = usePdpSelection();
-  const stockQ = useQuery({ queryKey: ['product-stock', slug], queryFn: () => getProductStock(slug), staleTime: 30_000, retry: 0 });
+  const stockQ = useProductStock(slug);
   const [open, setOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -316,6 +336,14 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
   );
 }
 
+/**
+ * Hàng bấm cuối khối mua (nhóm mua chung, nội dung bán hàng). Máy tính: ô viền bo; điện thoại: dải trắng riêng cách dải trên 8px,
+ * hàng bấm không viền như Box p=4 của Mini App.
+ */
+const bandRow = 'mt-3 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4';
+const rowButton =
+  'flex min-h-11 w-full items-center gap-3 rounded-control border border-stone-200 bg-stone-0 px-3 py-2.5 text-left max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0';
+
 /** "Mở nhóm mua chung": tạo nhóm rồi sang trang nhóm để rủ bạn. Chưa đăng nhập thì sang đăng nhập và quay lại trang này. */
 export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: string }) {
   const router = useRouter();
@@ -343,12 +371,12 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
   };
 
   return (
-    <div className="mt-3">
+    <div className={bandRow}>
       <button
         type="button"
         onClick={onClick}
         disabled={create.isPending}
-        className="flex min-h-11 w-full items-center gap-3 rounded-control border border-stone-200 bg-stone-0 px-3 py-2.5 text-left disabled:opacity-60"
+        className={`${rowButton} disabled:opacity-60`}
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-forest-50">
           <Users className="h-5 w-5 text-forest-700" aria-hidden="true" />
@@ -377,12 +405,8 @@ export function PdpContentKitRow({ slug }: { slug: string }) {
   const meQ = useQuery({ ...affiliateMeQuery(coreHttp), enabled: phase === 'authenticated', staleTime: 5 * 60_000 });
   if (meQ.data?.isAffiliate !== true) return null;
   return (
-    <div className="mt-3">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex min-h-11 w-full items-center gap-3 rounded-control border border-stone-200 bg-stone-0 px-3 py-2.5 text-left"
-      >
+    <div className={bandRow}>
+      <button type="button" onClick={() => setOpen(true)} className={rowButton}>
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-forest-50">
           <Megaphone className="h-5 w-5 text-forest-700" aria-hidden="true" />
         </span>
@@ -408,7 +432,7 @@ export function PdpChatButton({ productName, productSlug }: { productName: strin
   const oa = platformBridge.oa.available;
   if (chatReady) {
     return (
-      <Link href={`/ho-tro/chat?product=${encodeURIComponent(productSlug)}`} className={`${ui.btnSecondary} mt-3 gap-2`}>
+      <Link href={`/ho-tro/chat?product=${encodeURIComponent(productSlug)}`} className={`${ui.btnSecondary} ${mini.secondary} mt-3 gap-2`}>
         <MessageCircle className="h-4 w-4" aria-hidden="true" />
         Chat với Tubu Tree
       </Link>
@@ -422,14 +446,14 @@ export function PdpChatButton({ productName, productSlug }: { productName: strin
         <button
           type="button"
           onClick={() => void platformBridge.oa.openChat(`Mình muốn hỏi về sản phẩm: ${productName}`)}
-          className={`${ui.btnSecondary} mt-3 gap-2`}
+          className={`${ui.btnSecondary} ${mini.secondary} mt-3 gap-2`}
         >
           <MessageCircle className="h-4 w-4" aria-hidden="true" />
           Chat với Tubu Tree
         </button>
       )}
       {invite && (
-        <Link href={loginHref(`/ho-tro/chat?product=${encodeURIComponent(productSlug)}`)} className={`${ui.btnSecondary} mt-3 gap-2`}>
+        <Link href={loginHref(`/ho-tro/chat?product=${encodeURIComponent(productSlug)}`)} className={`${ui.btnSecondary} ${mini.secondary} mt-3 gap-2`}>
           <MessageCircle className="h-4 w-4" aria-hidden="true" />
           Đăng nhập để chat với Tubu Tree
         </Link>

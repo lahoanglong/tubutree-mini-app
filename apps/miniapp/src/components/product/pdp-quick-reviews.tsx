@@ -22,7 +22,7 @@ export function PdpQuickReviews({ average, count, items, onSeeAll }: PdpQuickRev
     <section aria-label="Đánh giá nhanh" style={{ background: 'var(--color-bg-surface)', padding: 16, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <SectionTitle>{fillCopy('pdp.reviews')}</SectionTitle>
+          <SectionTitle block>{fillCopy('pdp.reviews')}</SectionTitle>
           <Stars value={average} size={14} />
           <Text variant="caption" tone="secondary" as="span">
             {formatRating(average)} · {count}
