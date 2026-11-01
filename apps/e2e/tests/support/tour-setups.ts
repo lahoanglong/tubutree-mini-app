@@ -2,6 +2,7 @@ import type { RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { CTV_DASHBOARD } from './affiliate-mocks';
 import { mockAffiliateDashboard } from './affiliate-mocks';
 import { BANK_QR } from './checkout-mocks';
+import { mockFlashSlots } from './flash-slot-mocks';
 import { publicConfig, type MockApi } from './mock-api';
 import { wasteDetail, wastePoint, mockDeskStaff, mockWasteCustomer, WASTE_ITEMS } from './waste-mocks';
 import { PERSONA, TOUR_PRODUCT_SLUG, seedCatalog, productCard, tourCart, tourOrder } from './tour-world';
@@ -160,6 +161,9 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
     api.post('/me/support-chat/read', { ok: true });
     api.get('/me/support-chat/summary', { unreadCount: 0 });
     api.get('/config/public', publicConfig({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } }, support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null } } as never));
+  },
+  '/flash-sale': (api) => {
+    mockFlashSlots(api);
   },
   '/group-buy': (api) => api.get('/group-buy', [GROUP('g1'), GROUP('g2')]),
   '/group-buy/:id': (api) => {

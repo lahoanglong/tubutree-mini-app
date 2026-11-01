@@ -884,6 +884,7 @@ model FlashSaleItem {
   quota        Int
   soldCount    Int                 @default(0)
   perUserLimit Int
+  sortOrder    Int                 @default(0)
   purchases    FlashSalePurchase[]
   reminders    FlashSaleReminder[]
 

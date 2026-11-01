@@ -1,11 +1,21 @@
-import { Controller, Delete, Get, Header, Param, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Delete, Get, Header, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { FlashSaleService } from './flash-sale.service';
 
-// Không @Public() ở class: /remind cần userId từ JWT. /active và /upcoming công khai (khách chưa đăng nhập vẫn xem được Giờ vàng).
+const ACTIVE_LIMIT_MAX = 50;
+
+/** `?limit=` tuỳ chọn, số nguyên 1..50; sai thì 400 chứ không lặng lẽ bỏ qua (khách thấy ngay lỗi thay vì danh sách dài bất ngờ). */
+function parseActiveLimit(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const n = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!(n >= 1 && n <= ACTIVE_LIMIT_MAX)) throw new BadRequestException(`limit phải là số nguyên từ 1 đến ${ACTIVE_LIMIT_MAX}.`);
+  return n;
+}
+
+// Không @Public() ở class: /remind cần userId từ JWT. /active, /slots và /upcoming công khai (khách chưa đăng nhập vẫn xem được Giờ vàng).
 @Controller('flash-sales')
 export class FlashSaleController {
   constructor(private readonly flashSale: FlashSaleService) {}
@@ -13,8 +23,23 @@ export class FlashSaleController {
   @Public()
   @PublicCache('LIVE')
   @Get('active')
-  active() {
-    return this.flashSale.listActive();
+  active(@Query('limit') limit?: string) {
+    return this.flashSale.listActive(undefined, parseActiveLimit(limit));
+  }
+
+  /** Các khung Giờ vàng của trang /flash-sale. Không phụ thuộc người gọi nên cache chung được. */
+  @Public()
+  @PublicCache('LIVE')
+  @Get('slots')
+  slots() {
+    return this.flashSale.listSlots();
+  }
+
+  @Public()
+  @PublicCache('LIVE')
+  @Get('slots/:id/items')
+  slotItems(@Param('id') id: string) {
+    return this.flashSale.listSlotItems(id);
   }
 
   /**

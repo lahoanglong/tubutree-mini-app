@@ -55,3 +55,5 @@ export type { ShopTopBarProps } from './shop-top-bar';
 export { ComboCard } from './combo-card';
 export type { ComboCardProps, ComboCardItem } from './combo-card';
 export { BannerCarousel, type BannerSlide, type BannerCarouselProps } from './banner-carousel';
+export { SlotTabs, slotTabId } from './slot-tabs';
+export type { SlotTabsProps } from './slot-tabs';

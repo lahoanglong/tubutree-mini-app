@@ -1,7 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
 import { tileBodyHeight } from './commerce/tile-metrics';
-import { routeUsable } from './merch/route-fallback';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -155,13 +154,11 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
 ];
 
 /**
- * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt hoặc chưa có trang đích (`routeUsable`) bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
+ * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
  * đổi nhãn thành "Yêu cầu" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
  */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
   return HOME_SHORTCUTS.flatMap((s): HomeShortcutSpec[] => {
-    // Trang Giờ vàng chưa có (P12): Ưu đãi không có Giờ vàng nên ô này bị bỏ, mục kế lấp chỗ.
-    if (s.id === 'flash' && !routeUsable('/flash-sale')) return [];
     if (s.flag === 'waste') {
       if (flags.wasteEnabled) return [s];
       return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_SHORTCUT_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];

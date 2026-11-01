@@ -57,6 +57,7 @@ describe('SHOP_COPY', () => {
     expect(SHOP_COPY['stock.out']).toBe('Tạm hết hàng');
     expect(SHOP_COPY['stock.discontinued']).toBe('Ngừng bán');
     expect(fillCopy('flash.endsIn', { t: '02:05:33' })).toBe('Kết thúc sau 02:05:33');
+    expect(SHOP_COPY['flash.endsLabel']).toBe('Kết thúc sau');
     expect(SHOP_COPY['flash.justOpened']).toBe('Vừa mở bán');
     expect(SHOP_COPY['flash.almostGone']).toBe('Sắp hết');
     expect(SHOP_COPY['flash.soldOut']).toBe('Đã bán hết');

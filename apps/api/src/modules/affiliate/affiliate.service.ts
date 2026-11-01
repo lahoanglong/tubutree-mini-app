@@ -23,7 +23,6 @@ import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import {
-  FLASH_OVER_LIMIT_MSG,
   FlashQuotaLineError,
   FlashSaleService,
   type EffectivePrice,
@@ -824,7 +823,7 @@ export class AffiliateService {
 
   /**
    * Giữ suất giờ vàng của các dòng trong transaction đơn hộ (như checkout, khoá theo pha: xem FlashSaleService.consumeQuotas).
-   * Ném lỗi của dòng hỏng đầu tiên theo thứ tự dòng: vượt giới hạn mua giữ nguyên lỗi; hết suất hoặc hết giờ giữa lúc tính giá
+   * Ném lỗi của dòng hỏng đầu tiên theo thứ tự dòng: vượt giới hạn mua báo FLASH_LIMIT kèm giới hạn của suất đó; hết suất hoặc hết giờ giữa lúc tính giá
    * và lúc ghi đơn thì báo PRICE_CHANGED để CTV xem giá mới, không âm thầm tính giá giờ vàng đã hết. Thua tranh khoá → 503 thử
    * lại, không báo hết suất cho một lỗi không liên quan tới suất.
    */
@@ -862,7 +861,7 @@ export class AffiliateService {
     }
     const failed = outcomes.findIndex((o) => o !== 'OK');
     if (failed < 0) return;
-    if (outcomes[failed] === 'OVER_LIMIT') throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+    if (outcomes[failed] === 'OVER_LIMIT') throw await this.flashSale.overLimitError(tx, flash[failed]!.flashSaleItemId);
     this.logger.error(`consumeQuotas hết suất cho đơn hộ ${code}, flashSaleItemId=${flash[failed]!.flashSaleItemId}`);
     throw priceChanged(flash[failed]!.productName);
   }

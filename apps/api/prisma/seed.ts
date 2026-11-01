@@ -134,6 +134,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'flashsale.min_discount_pct', value: 0, category: 'flashsale', description: 'Mức giảm tối thiểu để tạo item flash (0 = tắt validate)' },
   { key: 'flashsale.max_discount_pct', value: 0.9, category: 'flashsale', description: 'Mức giảm tối đa của giá flash so với giá đang bán (phân số; 0.9 = giá flash ≥ 10% giá bán, 1 = không chặn)', createOnly: true },
   { key: 'flashsale.max_duration_days', value: 31, category: 'flashsale', description: 'Số ngày tối đa của một đợt flash sale', createOnly: true },
+  { key: 'flashsale.slots', value: ['12:00', '20:00'], category: 'flashsale', description: 'Khung giờ mặc định của Giờ vàng (giờ Việt Nam, "HH:MM", 1 đến 6 mốc tăng dần). Nút "Tạo khung giờ" ở tab Giờ vàng sinh đợt rỗng 2 giờ từ các mốc này; đợt tạo tay giờ khác vẫn hiện bình thường', createOnly: true },
   { key: 'catalog.loved_min_rating', value: 4.8, category: 'catalog', description: 'Nhãn "Được yêu thích" trên thẻ sản phẩm: điểm đánh giá trung bình tối thiểu (0 đến 5; mặc định 4.8). Sản phẩm phải đạt cả ba ngưỡng catalog.loved_*', createOnly: true },
   { key: 'catalog.loved_min_reviews', value: 20, category: 'catalog', description: 'Nhãn "Được yêu thích": số đánh giá tối thiểu (số nguyên, mặc định 20)', createOnly: true },
   { key: 'catalog.loved_min_sold', value: 50, category: 'catalog', description: 'Nhãn "Được yêu thích": tổng đã bán tối thiểu, gồm cả số nhập tay từ sàn ngoài (số nguyên, mặc định 50)', createOnly: true },

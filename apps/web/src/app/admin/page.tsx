@@ -104,6 +104,8 @@ import {
 import { PancakeSyncBadge, PancakeSyncPanel } from '@/components/admin/pancake-sync';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { ClaimCampaignPanel } from '@/components/admin/claim-campaign-panel';
+import { FlashItemOrder } from '@/components/admin/flash-item-order';
+import { FlashSlotGenerator } from '@/components/admin/flash-slot-generator';
 import { DealerCreditPanel } from '@/components/admin/dealer-credit-panel';
 import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { ReturnRow } from '@/components/admin/return-request-row';
@@ -3172,6 +3174,11 @@ function FlashSalesTab() {
         {msg && <p className={`mt-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       </div>
 
+      <div className={CARD_CLASS}>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Khung giờ mặc định</h2>
+        <FlashSlotGenerator onDone={() => void qc.invalidateQueries({ queryKey: ['admin-flash-sales'] })} />
+      </div>
+
       <div className="space-y-3">
         {q.isError && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
         {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
@@ -3355,6 +3362,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
               <span className="min-w-0 break-words">
                 {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
               </span>
+              <FlashItemOrder key={`${it.id}:${it.sortOrder ?? 0}`} itemId={it.id} sortOrder={it.sortOrder} label={variationLabels.labelFor(it.variationId)} onSaved={() => void refresh()} />
               <button
                 onClick={async () => {
                   const label = variationLabels.labelFor(it.variationId);
