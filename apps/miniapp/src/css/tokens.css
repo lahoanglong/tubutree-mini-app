@@ -131,8 +131,10 @@ body.with-back-btn .page.page-bleed {
   scroll-padding-top: calc(var(--safe-top) + 64px);
   scroll-padding-bottom: calc(72px + var(--safe-bottom));
 }
+/* Thanh dính đáy: chừa đúng chiều cao thật của nó (`--sticky-bar-h` do StickyActionBar đo, đã gồm vùng an toàn) cộng khe 8px. Chân giỏ cao 138–190px,
+   số 96px cố định để Tab đưa ô cuối xuống dưới chân (WCAG 2.4.11); chưa có biến (thanh chưa đo xong) thì giữ 96px + vùng an toàn như cũ. */
 .tubu-scroll-pad-sticky-bar {
-  scroll-padding-bottom: calc(96px + var(--safe-bottom));
+  scroll-padding-bottom: calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px);
 }
 
 /* ── Pressable: phản hồi chạm cho mọi element bấm được ── */

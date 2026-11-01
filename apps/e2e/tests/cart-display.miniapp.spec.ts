@@ -86,18 +86,19 @@ test.describe('Giỏ Mini App: chân dính với số lớn (MINOR F10b)', () =>
   });
 });
 
-// Project "Zalo Mini App" chạy WebKit (iPhone 12): trên macOS phím Tab của WebKit bỏ qua nút và ô chọn gốc (chỉ dừng ở phần tử có tabindex), nên không thể
-// "bấm Tab tới nút +". Bàn phím và trình đọc màn hình đều đưa focus bằng `focus()` rồi trình duyệt cuộn theo `scroll-padding`: đo đúng cơ chế đó.
-test.describe('Giỏ Mini App: focus vào ô cuối giỏ không nằm dưới chân dính (MINOR F10b, WCAG 2.4.11)', () => {
+// Project "Zalo Mini App" chạy WebKit (iPhone 12): trên macOS phím Tab của WebKit bỏ qua nút và ô chọn gốc (chỉ dừng ở phần tử có tabindex), và `focus()`
+// đưa phần tử ra GIỮA khung (nên không đo được scroll-padding). Khi Tab tới phần tử còn ở ngoài khung, trình duyệt cuộn tối thiểu (`block: 'nearest'`)
+// tới cạnh khung trừ `scroll-padding`: đo đúng cơ chế đó bằng `scrollIntoView({ block: 'nearest' })` từ đầu trang.
+test.describe('Giỏ Mini App: cuộn tối thiểu tới ô cuối giỏ không để nó nằm dưới chân dính (MINOR F10b, WCAG 2.4.11)', () => {
   for (const safe of [0, 34] as const) {
-    test(`--safe-bottom ${safe}px: nút "Tăng số lượng" của dòng cuối nhận focus từ đầu trang thì nằm trên chân dính`, async ({ page, api }) => {
+    test(`--safe-bottom ${safe}px: nút "Tăng số lượng" của dòng cuối nằm trên chân dính`, async ({ page, api }) => {
       await setSafeBottom(page, safe);
       await openCart(page, api, { lines: 8, reached: true });
 
       const scroller = page.locator('.zaui-page', { has: page.getByTestId('cart-line').first() }).first();
       await scroller.evaluate((el) => el.scrollTo(0, 0));
       const target = page.getByRole('button', { name: 'Tăng số lượng' }).last();
-      await target.focus();
+      await target.evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
       await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(300);
       await page.waitForTimeout(300);
       const box = (await target.boundingBox())!;
