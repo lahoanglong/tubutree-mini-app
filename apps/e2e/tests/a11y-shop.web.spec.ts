@@ -8,6 +8,7 @@ import { blockingViolations, runAxe, staleBaseline } from './support/axe';
 import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, assertSeededOnCi, firstPublicBrandSlug, seedDatabaseUrl, seedShopScreens } from './support/a11y-db';
 import { mockFlashSlots } from './support/flash-slot-mocks';
 import { mockCollectable } from './support/voucher-mocks';
+import { mockBuilder, setBuilderSession } from './support/builder-web-mocks';
 
 /**
  * Web khách, axe smoke 375px bảy màn mua sắm (bản web của a11y-shop.miniapp.spec.ts; P17b, review/a11y.md C7): Trang chủ, Danh mục (hub và danh sách), chi tiết sản phẩm,
@@ -104,6 +105,50 @@ test.describe('axe smoke web 375px: serious/critical', () => {
       expect(staleBaseline('web', screen.name, found)).toEqual([]);
     });
   }
+});
+
+test.describe('axe smoke web 375px: chi tiết khối của trình dựng gian hàng (G6 #25)', () => {
+  const SCREEN = 'Chi tiết khối (trình dựng)';
+  test.beforeEach(async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ 375px chỉ chạy ở project Web Customer Mobile');
+    await setBuilderSession(page);
+    // Khối Combo: có ô % và nút "Lưu" đang tắt (chưa đổi số), nút phụ tắt là điều #25 sửa màu.
+    mockBuilder(api, { combo: true });
+  });
+
+  test('axe serious/critical (gồm color-contrast) ở chi tiết khối', async ({ page }) => {
+    await page.goto('/ctv/gian-hang?khoi=c1');
+    await expect(page.getByTestId('shop-section-preview')).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveTitle(/\S/, { timeout: 20_000 });
+    await page.evaluate(() => document.fonts.ready);
+    const found = await runAxe(page);
+    expect(blockingViolations('web', SCREEN, found)).toEqual([]);
+    expect(staleBaseline('web', SCREEN, found)).toEqual([]);
+  });
+
+  // axe bỏ qua nút `disabled` ở color-contrast, nên #25 (nút tắt cùng màu, đọc được) phải đo thẳng màu đã tính.
+  test('nút phụ đang tắt ("Lưu" của ô %) chữ trên nền đạt 4,5:1', async ({ page }) => {
+    await page.goto('/ctv/gian-hang?khoi=c1');
+    const save = page.locator('button.tubu-phone-secondary:disabled', { hasText: 'Lưu' });
+    await expect(save).toBeVisible({ timeout: 20_000 });
+    const ratio = await save.evaluate((el) => {
+      const toRgb = (css: string): [number, number, number] => {
+        const ctx = document.createElement('canvas').getContext('2d')!;
+        ctx.fillStyle = css;
+        ctx.fillRect(0, 0, 1, 1);
+        const d = ctx.getImageData(0, 0, 1, 1).data;
+        return [d[0]!, d[1]!, d[2]!];
+      };
+      const lum = ([r, g, b]: [number, number, number]) => {
+        const f = (v: number) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+      };
+      const cs = getComputedStyle(el);
+      const [a, b] = [lum(toRgb(cs.color)), lum(toRgb(cs.backgroundColor))];
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    });
+    expect(ratio, `tỉ lệ tương phản của nút phụ tắt: ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 test.describe('axe smoke web: bài tự kiểm', () => {

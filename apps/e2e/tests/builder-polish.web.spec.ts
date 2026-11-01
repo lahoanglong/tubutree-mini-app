@@ -1,4 +1,5 @@
-import { expect, reply, test, type MockApi } from './support/mock-api';
+import { expect, reply, test } from './support/mock-api';
+import { mockBuilder, setBuilderSession } from './support/builder-web-mocks';
 import { mockDiscovery } from './support/discovery-mocks';
 import { assertSeededOnCi } from './support/a11y-db';
 import { LG_COMBO_ITEMS, LG_SHELF_FEW, LG_SHELF_MANY, LG_SHELVES_SLUG, seedLgShelves } from './support/lg-shelves-db';
@@ -10,41 +11,10 @@ import { LG_COMBO_ITEMS, LG_SHELF_FEW, LG_SHELF_MANY, LG_SHELVES_SLUG, seedLgShe
  */
 test.use({ viewport: { width: 1280, height: 800 } });
 
-const USER = { id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER', pointsBalance: 0, walletBalance: 0 };
-const product = (n: number) => ({ id: `p${n}`, name: `Sản phẩm số ${n}`, slug: `sp-${n}`, brand: 'Tubu', basePrice: 120_000, salePrice: null, thumbnail: null, repVariationId: `v${n}`, inStock: true });
-
-function mockBuilder(api: MockApi) {
-  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
-  api.get('/me', () => USER);
-  api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
-  api.get('/affiliate/me', { isAffiliate: true, canRegister: true, canOpenStorefront: true, referralCode: 'AN123', walletBalance: 0 });
-  api.get('/storefront/me', {
-    id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: null, avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null,
-    subdomain: null, isPublished: true, status: 'LIVE', referralCode: 'AN123', subdomainEnabled: false, publicHiddenReason: null,
-    collections: [{
-      id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'CAROUSEL', comboDiscountPct: null, sortOrder: 0,
-      items: [1, 2, 3, 4].map((n, k) => ({ id: `i${n}`, productId: `p${n}`, note: null, isPinned: false, isHidden: false, hiddenReason: null, sortOrder: k, product: product(n) })),
-    }],
-  });
-  api.get('/categories', []);
-  api.get('/storefront/me/products', []);
-  api.get('/storefront/me/stats', { orders7d: 0, orders30d: 0, revenue30d: 0, commission30d: 0, byProduct: [] });
-  api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
-  api.get('/me/wishlist/ids', []);
-  api.get('/flash-sales/active', []);
-  api.get('/cart', { items: [], total: 0 });
-}
-
 test.describe('Trình dựng gian hàng web 1280px (G6 #35)', () => {
   test.beforeEach(async ({ page, api }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer', 'khổ máy tính chỉ chạy ở project Web Customer');
-    await page.addInitScript(() => {
-      try {
-        localStorage.setItem('tubu_web_session', '1');
-      } catch {
-        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
-      }
-    });
+    await setBuilderSession(page);
     mockBuilder(api);
   });
 
