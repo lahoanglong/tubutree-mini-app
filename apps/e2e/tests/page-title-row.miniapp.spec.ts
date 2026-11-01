@@ -68,14 +68,15 @@ for (const safe of SAFE_TOPS) {
         expect(h.x, 'tiêu đề chừa chỗ cho nút Quay lại bên trái').toBeGreaterThanOrEqual(56);
       });
 
-      if (!s.sticky) continue;
+      const sticky = s.sticky;
+      if (!sticky) continue;
       test(`${s.name}: hàng dính dính khít dưới thanh lùi khi cuộn, không hở`, async ({ page, api }) => {
         mockAll(api);
         // Viewport thấp hơn để cả trang Mã giảm giá (chỉ 3 phiếu) đủ dài mà cuộn tới chỗ hàng dính bám.
         await page.setViewportSize({ width: 375, height: 380 });
         await setSafeTop(page, safe);
         await page.goto(s.url);
-        const bar = s.sticky(page);
+        const bar = sticky(page);
         await expect(bar).toBeVisible({ timeout: 15_000 });
         const scroller = page.locator('.zaui-page', { has: bar }).first();
         await scroller.evaluate((el) => el.scrollTo(0, 5000));
