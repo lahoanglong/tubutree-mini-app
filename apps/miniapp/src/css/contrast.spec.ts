@@ -64,6 +64,7 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-rank-fg', '--color-rank-3-bg'],
     ['--color-rank-n-fg', '--color-rank-n-bg'],
     ['--color-verified-fg', '--color-verified-bg'],
+    ['--color-action-secondary-fg-disabled', '--color-action-secondary-bg-disabled'],
   ];
 
   it.each(pairs)('%s trên %s', (fg, bg) => {
