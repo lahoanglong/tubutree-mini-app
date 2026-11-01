@@ -187,12 +187,12 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     expect(api.callsTo('POST', '/coupons/claim')[0]!.body).toEqual({ code: 'FS99' });
   });
 
-  test('"Tất cả (n)" của Nhận mã và "Xem tất cả" của Mã của tôi dẫn tới trang Mã giảm giá', async ({ page }) => {
+  test('"Tất cả (n)" của Nhận mã và của Mã của tôi cùng một mẫu, dẫn tới trang Mã giảm giá', async ({ page }) => {
     await page.goto('/offers');
     await page.getByRole('button', { name: /^Tất cả \(\d+\) Mã giảm giá$/ }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/vouchers');
     await page.goBack();
-    await page.getByRole('button', { name: 'Xem tất cả Mã của tôi' }).click();
+    await page.getByRole('button', { name: /^Tất cả \(\d+\) Mã của tôi$/ }).click();
     await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe('/vouchers?tab=mine');
   });
 });
