@@ -74,7 +74,8 @@ describe('DailyCheckInCard compact (web, Ưu đãi): luật gập lại', () => 
     mocks.status = base;
     mounted = render(<DailyCheckInCard authed compact />);
     const c = mounted.container;
-    expect(toggleOf(c).textContent).toBe('Luật điểm danh');
+    expect(toggleOf(c).textContent).toBe('Luật');
+    expect(toggleOf(c).getAttribute('aria-label')).toBe('Luật điểm danh');
     expect(toggleOf(c).getAttribute('aria-expanded')).toBe('false');
     expect(ruleOf(c).hidden).toBe(true);
     expect(ruleOf(c).textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
@@ -98,6 +99,32 @@ describe('DailyCheckInCard compact (web, Ưu đãi): luật gập lại', () => 
     mounted = render(<DailyCheckInCard authed />);
     expect(mounted.container.querySelector('button[aria-expanded]')).toBeNull();
     expect(mounted.container.textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
+  });
+
+  it('nút luật đứng cạnh "Ngày n/7" dưới tiêu đề; đoạn luật mở ngay dưới hàng đầu, trước 7 ô', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed compact />);
+    const c = mounted.container;
+    const heading = c.querySelector('h2')!;
+    expect(heading.parentElement!.contains(toggleOf(c))).toBe(true);
+    expect(heading.parentElement!.textContent).toContain('Ngày 1/7');
+    const firstDay = c.querySelector('[aria-label="Ngày 1: +1.000 Điểm Xanh"]')!;
+    expect(ruleOf(c).compareDocumentPosition(firstDay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('hàng cuối dưới 7 ô luôn có một dòng chữ nhỏ: phần thưởng hôm nay, hoặc "đã điểm danh" khi xong (thẻ không đổi cao sau khi điểm danh)', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed compact />);
+    expect(mounted.container.textContent).toContain('Nhận +1.000 Điểm Xanh · +10 giọt nước');
+    expect(mounted.container.textContent).not.toContain('Hôm nay bạn đã điểm danh rồi');
+    mounted.unmount();
+    mocks.status = { ...base, checkedInToday: true, todayPoints: 0, todayWater: 0, pointsDone: true, waterDone: true };
+    mounted = render(<DailyCheckInCard authed compact />);
+    expect(mounted.container.textContent).toContain('Hôm nay bạn đã điểm danh rồi');
+    expect(mounted.container.textContent).not.toContain('Hôm nay nhận');
+    mounted.unmount();
+    mounted = render(<DailyCheckInCard authed />);
+    expect(mounted.container.textContent).not.toContain('Hôm nay bạn đã điểm danh rồi');
   });
 
   it('đã điểm danh hôm nay: nút khoá nhưng vẫn thấy ("Đã điểm danh"), nút luật vẫn bấm mở được', () => {

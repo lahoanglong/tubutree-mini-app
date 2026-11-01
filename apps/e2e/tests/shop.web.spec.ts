@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
-import { mockHomeEngagement } from './support/discovery-mocks';
+import { checkInStatus, mockHomeEngagement } from './support/discovery-mocks';
 import { expectChipHitArea44 } from './support/hit-area';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
@@ -696,6 +696,36 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
+
+  for (const checkedIn of [false, true]) {
+    test(`Ưu đãi ${checkedIn ? 'đã' : 'chưa'} điểm danh: khung chờ Điểm danh cao đúng thẻ thật, Mã của tôi và Đổi quà không bị đẩy khi thẻ về`, async ({ page, api }) => {
+      await login(page, api);
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => { release = resolve; });
+      mockHomeEngagement(api, { checkedIn, expiringInDays: 2 });
+      api.get('/me/daily-check-in', async () => {
+        await hold;
+        return checkInStatus(checkedIn);
+      });
+      await page.goto('/uu-dai');
+      const skeleton = page.getByRole('region', { name: 'Điểm danh mỗi ngày', exact: true }).locator('.tubu-skeleton');
+      await expect(skeleton).toBeVisible();
+      // Mọi khối khác đã vẽ xong khi thẻ còn là khung chờ: cú nhảy đo được chỉ còn do thẻ về.
+      await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByTestId('voucher-expiry').first()).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn' })).toBeVisible();
+      const top = async (name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!.y;
+      const placeholderH = (await skeleton.boundingBox())!.height;
+      const mineY = await top('Mã của tôi');
+      const rewardsY = await top('Đổi quà');
+      release();
+      const card = page.getByTestId('daily-check-in');
+      await expect(card).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      expect((await card.boundingBox())!.height, 'thẻ thật lệch khung chờ').toBeCloseTo(placeholderH, 0);
+      expect(await top('Mã của tôi'), 'Mã của tôi bị đẩy khi thẻ về').toBeCloseTo(mineY, 0);
+      expect(await top('Đổi quà'), 'Đổi quà bị đẩy khi thẻ về').toBeCloseTo(rewardsY, 0);
+    });
+  }
 
   test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt', async ({ page, api }) => {
     await login(page, api);

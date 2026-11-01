@@ -3,13 +3,13 @@ import { expect, type Locator } from '@playwright/test';
 /**
  * Chip md nhìn cao 36px, vùng chạm 44px do `.tubu-hit-44::after` giãn dọc quanh tâm. Đo bằng `elementFromPoint` cách tâm ±21px:
  * hàng cuộn ngang (`overflow`) cắt mất phần giãn thì điểm đó rơi ra ngoài chip. `control`: điểm cách tâm ±30px phải KHÔNG trúng
- * (đối chứng, phép đo không vô nghĩa); chỉ bật khi quanh chip không có chip khác theo chiều dọc.
+ * (đối chứng, phép đo không vô nghĩa); chỉ bật khi quanh chip không có chip khác theo chiều dọc. `minHeight`: chiều cao nhìn thấy tối thiểu (nút chữ nhỏ như "Luật" thấp hơn chip, 24px).
  * Cuộn chip về giữa khung trước khi đo: mép trên có thể bị ô tìm dính che, mép dưới bị thanh đáy cố định che.
  */
-export async function expectChipHitArea44(chip: Locator, { control = false }: { control?: boolean } = {}): Promise<void> {
+export async function expectChipHitArea44(chip: Locator, { control = false, minHeight = 36 }: { control?: boolean; minHeight?: number } = {}): Promise<void> {
   await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = (await chip.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(36);
+  expect(box.height).toBeGreaterThanOrEqual(minHeight);
   const hit = await chip.evaluate(
     (el, b) => {
       const x = b.x + b.width / 2;

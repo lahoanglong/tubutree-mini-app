@@ -130,6 +130,33 @@ describe('DailyCheckInCard compact (Ưu đãi): luật gập lại', () => {
     expect(screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/)).toBeVisible();
   });
 
+  it('nút luật đứng cạnh "Ngày n/7" dưới tiêu đề: chữ nhìn thấy "Luật", tên đọc "Luật điểm danh"; đoạn luật mở ngay dưới hàng đầu, trước 7 ô', () => {
+    render(<DailyCheckInCard authed compact />);
+    const toggle = screen.getByRole('button', { name: 'Luật điểm danh' });
+    expect(toggle).toHaveTextContent(/^Luật$/);
+    const heading = screen.getByRole('heading', { name: 'Điểm danh mỗi ngày' });
+    expect(heading.parentElement).toContainElement(toggle);
+    expect(heading.parentElement).toHaveTextContent('Ngày 1/7');
+    const rule = screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/).parentElement!;
+    const firstDay = screen.getByLabelText('Ngày 1: +1.000 Điểm Xanh');
+    expect(rule.compareDocumentPosition(firstDay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('hàng cuối dưới 7 ô luôn có một dòng chữ nhỏ: phần thưởng hôm nay, hoặc "đã điểm danh" khi xong (thẻ không đổi cao sau khi điểm danh)', () => {
+    const { unmount } = render(<DailyCheckInCard authed compact />);
+    expect(screen.getByText('Nhận +1.000 Điểm Xanh · +10 giọt nước')).toBeInTheDocument();
+    expect(screen.queryByText('Hôm nay bạn đã điểm danh rồi')).toBeNull();
+    unmount();
+    mocks.status = { ...base, checkedInToday: true, todayPoints: 0, todayWater: 0, pointsDone: true, waterDone: true };
+    const done = render(<DailyCheckInCard authed compact />);
+    expect(screen.getByText('Hôm nay bạn đã điểm danh rồi')).toBeInTheDocument();
+    expect(screen.queryByText(/Hôm nay nhận/)).toBeNull();
+    done.unmount();
+    // Bản đầy đủ (trang Điểm Xanh) không có dòng này: nút khoá đã đủ nói.
+    render(<DailyCheckInCard authed />);
+    expect(screen.queryByText('Hôm nay bạn đã điểm danh rồi')).toBeNull();
+  });
+
   it('đã điểm danh hôm nay: nút khoá nhưng vẫn thấy ("Đã điểm danh"), nút luật vẫn bấm mở được', () => {
     mocks.status = { ...base, checkedInToday: true };
     render(<DailyCheckInCard authed compact />);
