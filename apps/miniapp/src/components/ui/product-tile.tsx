@@ -3,7 +3,7 @@ import { useNavigate } from 'zmp-ui';
 import { Zap } from 'lucide-react';
 import type { CardBadge, CardVariant, ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
-import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 import { haptic } from '../../utils/haptic';
 import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
@@ -61,6 +61,8 @@ const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
 
 const STACKED: ReadonlySet<CardVariant> = new Set(['rail-sm', 'rail-md', 'flash', 'rank']);
 const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
+/** Thẻ Giờ vàng cắt tên một dòng (Q11); các thẻ còn lại hai dòng. */
+const NAME_LINES = (variant: CardVariant): 1 | 2 => (variant === 'flash' ? 1 : 2);
 const FIXED_LINE = (px: number): CSSProperties => ({ lineHeight: `${px}px` });
 
 function rankBackground(rank: number): { background: string; color: string } {
@@ -264,10 +266,10 @@ export function ProductTile({
             as="span"
             style={{
               display: '-webkit-box',
-              WebkitLineClamp: 2,
+              WebkitLineClamp: NAME_LINES(variant),
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              minHeight: isLine ? undefined : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
+              minHeight: isLine ? undefined : variant === 'flash' ? TILE_METRICS.nameFlash : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
               ...FIXED_LINE(nameLine),
               ...(isLine ? { fontWeight: 600 } : null),
             }}
@@ -312,13 +314,20 @@ export function ProductTile({
           {hasMetaRow && (
             <Text
               data-ds-part="meta"
+              className="tubu-tile-meta"
               variant="label"
               tone="tertiary"
               as="div"
               aria-hidden
               style={{ height: TILE_METRICS.meta, marginTop: TILE_METRICS.metaGap, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.meta) }}
             >
-              {view.meta}
+              {view.metaCompact && view.metaCompact !== view.meta ? (
+                <span className="tubu-meta-text" data-compact={view.metaCompact} data-long={(view.meta?.length ?? 0) > META_SHORT_MAX_CHARS ? '' : undefined}>
+                  <span className="tubu-meta-full">{view.meta}</span>
+                </span>
+              ) : (
+                view.meta
+              )}
             </Text>
           )}
         </div>

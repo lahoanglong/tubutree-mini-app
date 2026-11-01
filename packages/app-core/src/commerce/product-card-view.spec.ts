@@ -174,6 +174,18 @@ describe('khe nhãn theo biến thể', () => {
     expect(rich('flash').imageBadge).not.toHaveProperty('short');
   });
 
+  it('metaCompact (bản gọn cho thẻ hẹp) có ở mọi biến thể, meta và bản đọc giữ nguyên bản đầy đủ', () => {
+    for (const variant of ['grid', 'rail-sm', 'rail-md', 'flash', 'rank', 'line'] as const) {
+      const v = view({ product: product({ ratingAvg: 4.8, sold: 1234 }), variant });
+      expect(v.metaCompact, variant).toBe('Đã bán 1,2k+');
+      expect(v.meta, variant).toBe('★ 4,8 · Đã bán 1,2k+');
+      expect(v.spoken.meta, variant).toBe('4,8 sao, đã bán hơn 1.200');
+    }
+    const bare = view({ product: product({ ratingAvg: undefined, sold: undefined }) });
+    expect(bare.meta).toBeNull();
+    expect(bare.metaCompact).toBeNull();
+  });
+
   it('rank có nhãn ảnh, không nhãn đầu tên; line không nhãn nào', () => {
     expect(rich('rank').imageBadge?.kind).toBe('flash');
     expect(rich('rank').label).toBeNull();

@@ -275,6 +275,35 @@ body.with-back-btn .page.page-bleed {
   }
 }
 
+/* Dòng meta của thẻ ("★ 4,7 · Đã bán 8,2k+"): ô meta là container; chữ đầy đủ xấu nhất ("★ 5,0 · Đã bán 99,9k+", 21 ký tự) rộng 127,25px (Inter 12px/500, đo
+   ở Chromium) nên chỉ container hẹp hơn 132px (kệ hạng 112px, lưới 320px 122px) đổi sang chữ gọn ("Đã bán 8,2k+", thuộc tính data-compact), để không bao giờ cắt
+   giữa số; kệ rail-md (132px), lưới 360px (142px) và 375px (149px) vẫn giữ nguyên "★ ... · Đã bán ..." (§4 Q4). Lượt bán từ 100k ("123,4k+", "99,9tr+") làm chữ dài hơn 21 ký tự,
+   rộng tới ~137px, nên ô gắn data-long và chỉ giữ bản đầy đủ từ 148px. Chữ gọn đi qua ::after nên không thêm chữ vào DOM (ô meta aria-hidden, textContent vẫn là
+   chữ đầy đủ). Trình duyệt chưa có container query giữ bản đầy đủ. */
+.tubu-tile-meta {
+  container-type: inline-size;
+}
+.tubu-meta-text[data-compact]::after {
+  content: attr(data-compact);
+  display: none;
+}
+@container (max-width: 131.98px) {
+  .tubu-meta-text[data-compact] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact]::after {
+    display: inline;
+  }
+}
+@container (max-width: 147.98px) {
+  .tubu-meta-text[data-compact][data-long] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact][data-long]::after {
+    display: inline;
+  }
+}
+
 /* ── Ô tìm kiếm (SearchField): ẩn nút "x" gốc của WebKit/Blink (trùng nút xoá của DS) + vòng focus
    của khung (WCAG 2.4.7; ô nhập tự bỏ outline nên khung phải báo thay). Border nằm trong style
    nội tuyến nên vòng focus dùng box-shadow. ── */

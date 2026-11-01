@@ -103,10 +103,13 @@ export function slotListView(items: readonly FlashSlotItem[], categoryId: string
   return [...rows.filter((it) => !it.soldOut), ...rows.filter((it) => it.soldOut)];
 }
 
-/** Dòng ghi chú dưới giá của một món: tên phân loại có suất (chỉ khi sản phẩm nhiều phân loại) và giới hạn mua mỗi khách. Rỗng khi không có gì để nói. */
+/**
+ * Dòng ghi chú dưới giá của một món: giới hạn mua mỗi khách rồi tên phân loại (chỉ khi sản phẩm nhiều phân loại). Con số giới hạn đứng ĐẦU vì ghi chú
+ * một dòng nowrap bị cắt ở đuôi trên thẻ 375px: tên phân loại bị cắt thì khách vẫn thấy mình mua được mấy, còn mất con số thì dòng vô nghĩa. Rỗng khi không có gì để nói.
+ */
 export function slotItemNote(item: Pick<FlashSlotItem, 'variationName' | 'perUserLimit'>): string {
-  const limit = Number.isFinite(item.perUserLimit) && item.perUserLimit > 0 ? fillCopy('flash.limit', { n: item.perUserLimit }) : null;
-  return [item.variationName, limit].filter((x): x is string => Boolean(x)).join(' · ');
+  const limit = Number.isFinite(item.perUserLimit) && item.perUserLimit > 0 ? fillCopy('flash.limitShort', { n: item.perUserLimit }) : null;
+  return [limit, item.variationName].filter((x): x is string => Boolean(x)).join(' · ');
 }
 
 /** Tên đọc của nút "Mua ngay": nhãn nhìn thấy cộng tên sản phẩm, để danh sách nhiều nút giống nhau vẫn phân biệt được. */

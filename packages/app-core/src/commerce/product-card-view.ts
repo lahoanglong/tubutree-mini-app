@@ -1,7 +1,7 @@
 import type { ProductCard } from '../api/catalog';
 import { cardPricing, type FlashPriceItem } from '../flash-price';
 import { isNewProduct } from '../product-badges';
-import { cardMetaLine, cardMetaSpoken } from './card-meta';
+import { cardMetaCompact, cardMetaLine, cardMetaSpoken } from './card-meta';
 import { vnd } from './money';
 import { fillTileCopy, type TileCopyKey } from './tile-copy';
 
@@ -49,6 +49,8 @@ export interface ProductCardView {
   /** Một nhãn đứng đầu dòng tên: combo > Tubu chọn > Được yêu thích > Mới > Miễn phí giao hàng. */
   label: CardBadge | null;
   meta: string | null;
+  /** Bản gọn của `meta` (chỉ "Đã bán 8,2k+") cho thẻ quá hẹp; thẻ chọn bản vừa chỗ theo bề rộng ô meta. Optional để fixture của gói khác vẫn biên dịch. */
+  metaCompact?: string | null;
   stock: 'in' | 'out';
   stockText: string | null;
   rank: number | null;
@@ -126,6 +128,7 @@ export function productCardView(input: ProductCardInput): ProductCardView {
     imageBadge,
     label,
     meta: cardMetaLine(p),
+    metaCompact: cardMetaCompact(p),
     stock: inStock ? 'in' : 'out',
     stockText,
     rank: input.rank ?? null,
