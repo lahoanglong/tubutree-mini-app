@@ -45,6 +45,8 @@ export const envSchema = z.object({
   // chối MỌI request bằng 401 khi NODE_ENV=production (không silently no-op) — xem
   // zalo-oa-webhook.controller.ts. Chỉ để trống khi CHƯA đăng ký webhook này trên Zalo OA dashboard.
   ZALO_OA_WEBHOOK_SECRET: z.string().default(''),
+  // API Key Zalo tạo khi bấm Cập nhật ở Open APIs (mini.zalo.me/developers): ký webhook Mini App (rút đồng ý/xoá dữ liệu) trong header x-zevent-signature. Rỗng = webhook từ chối mọi request (401).
+  ZALO_OPEN_API_KEY: z.string().default(''),
   // Cầu nối Zalo cá nhân (apps/zalo-bridge) cho chat CSKH. URL trống = chưa nối, mọi lệnh trả BRIDGE_NOT_CONFIGURED.
   ZALO_BRIDGE_URL: z.union([z.literal(''), z.string().url()]).default(''),
   ZALO_BRIDGE_SECRET: z.string().default(''),

@@ -356,6 +356,48 @@ describe('UsersService.requestAccountDeletion', () => {
   });
 });
 
+describe('UsersService.requestAccountDeletionByZaloId', () => {
+  function build(found: { id: string } | null, existing: unknown = null) {
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ walletBalance: 0 }]),
+      accountDeletionRequest: {
+        findFirst: jest.fn().mockResolvedValue(existing),
+        create: jest.fn().mockResolvedValue({ id: 'req1', createdAt: new Date('2026-10-31T00:00:00Z') }),
+        update: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(found),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', fullName: 'A', phone: null }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    } as Record<string, unknown>;
+    prisma.$transaction = (fn: (tx: unknown) => unknown) => fn(prisma);
+    return prisma as unknown as PrismaService;
+  }
+
+  it('khớp zaloId → tạo yêu cầu xoá PENDING (không ẩn danh ngay), kèm lý do', async () => {
+    const prisma = build({ id: 'u1' });
+    const res = await new UsersService(prisma).requestAccountDeletionByZaloId('z1', 'lý do');
+    expect(res).toEqual({ userId: 'u1', alreadyRequested: false });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { zaloId: 'z1' }, select: { id: true } });
+    expect(prisma.accountDeletionRequest.create).toHaveBeenCalledWith({ data: { userId: 'u1', reason: 'lý do' } });
+  });
+
+  it('đã có yêu cầu PENDING → không tạo thêm', async () => {
+    const prisma = build({ id: 'u1' }, { id: 'r0', createdAt: new Date(), status: 'PENDING' });
+    const res = await new UsersService(prisma).requestAccountDeletionByZaloId('z1', 'x');
+    expect(res).toEqual({ userId: 'u1', alreadyRequested: true });
+    expect(prisma.accountDeletionRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('không có user khớp → no-op', async () => {
+    const prisma = build(null);
+    const res = await new UsersService(prisma).requestAccountDeletionByZaloId('z-la', 'x');
+    expect(res).toEqual({ userId: null, alreadyRequested: false });
+    expect(prisma.accountDeletionRequest.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('UsersService.requestAccountDeletion — số dư Ví và đồng ý bỏ số dư', () => {
   function build(balance: number, existing: unknown = null) {
     const update = jest.fn();
