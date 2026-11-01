@@ -693,7 +693,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
 
@@ -703,7 +703,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 
