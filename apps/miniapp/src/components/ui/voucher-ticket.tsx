@@ -1,4 +1,4 @@
-import { useId, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useId, type CSSProperties, type ReactNode } from 'react';
 import { Store, Tag, Truck, type LucideIcon } from 'lucide-react';
 import type { VoucherView } from '@tubutree/app-core/commerce/voucher';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -45,7 +45,8 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   // hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const showCode = variant !== 'chip' && Boolean(v.code);
   // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng hàng riêng, co bằng "…" (không đẩy điều kiện và mã xuống dòng,
-  // phiếu giữ ~88px); hàng chọn mã ở thanh toán giữ tên trong dòng meta.
+  // phiếu giữ ~88px); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
+  // ngay dưới nhãn hoặc sau điều kiện, đứng đầu dòng thì thành mảnh lơ lửng.
   const name = variant !== 'chip' ? v.name : null;
   const ticket = variant === 'ticket';
   const metaName = ticket ? null : name;
@@ -77,17 +78,19 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
     if (quotaNode) footItems.push({ key: 'quota', node: quotaNode });
     if (codeNode) footItems.push({ key: 'code', node: <span style={{ ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span> });
   }
+  const metaParts: ReactNode[] = [v.condition || null, metaName, codeInMeta ? codeNode : null].filter(Boolean);
   const metaNode = showMeta && (
     <span
       id={`${uid}-meta`}
       data-testid="voucher-meta"
       style={{ display: 'block', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_CLAMP : null), ...(ticket ? { flex: '0 0 auto', maxWidth: '100%' } : null) }}
     >
-      {metaName}
-      {metaName && (v.condition || codeInMeta) ? ' · ' : null}
-      {v.condition}
-      {v.condition && codeInMeta ? ' · ' : null}
-      {codeInMeta && codeNode}
+      {metaParts.map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 ? ' · ' : null}
+          {part}
+        </Fragment>
+      ))}
     </span>
   );
   // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).

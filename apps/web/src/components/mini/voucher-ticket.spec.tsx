@@ -102,7 +102,7 @@ describe('VoucherTicket (web)', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
   });
 
-  it('ticket: tên admin đặt có hàng riêng (một dòng, co bằng "…"), meta chỉ còn điều kiện và mã; row giữ tên đầu dòng meta; chip không vẽ tên', () => {
+  it('ticket: tên admin đặt có hàng riêng (một dòng, co bằng "…"), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện; chip không vẽ tên', () => {
     const a = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
     expect(q('voucher-name')!.textContent).toBe('Chào bạn mới');
     expect(q('voucher-name')!.style.whiteSpace).toBe('nowrap');
@@ -118,7 +118,7 @@ describe('VoucherTicket (web)', () => {
     c.unmount();
     const d = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="row" />);
     expect(q('voucher-name')).toBeNull();
-    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · Đơn từ 250k · FUWA3E');
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · Chào bạn mới · FUWA3E');
     d.unmount();
     const e = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="row" />);
     expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · FUWA3E');
@@ -126,6 +126,20 @@ describe('VoucherTicket (web)', () => {
     mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="chip" />);
     expect(q('voucher-name')).toBeNull();
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+  });
+
+  it('row: tên đã cắt ("cho 3 đơn") đứng sau điều kiện, không dẫn đầu dòng meta; ticket giữ tên ở hàng riêng', () => {
+    const voucher = view({ title: 'Giảm 20k', condition: 'Đơn từ 100k', code: 'GIAM20', id: 'GIAM20', name: 'cho 3 đơn' });
+    const a = mount(<VoucherTicket voucher={voucher} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 100k · cho 3 đơn · GIAM20');
+    expect(q('voucher-meta')!.textContent!.startsWith('cho')).toBe(false);
+    a.unmount();
+    const b = mount(<VoucherTicket voucher={{ ...voucher, condition: '' }} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('cho 3 đơn · GIAM20');
+    b.unmount();
+    mount(<VoucherTicket voucher={voucher} variant="ticket" />);
+    expect(q('voucher-name')!.textContent).toBe('cho 3 đơn');
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 100k');
   });
 
   it('ticket: điều kiện và tên admin cùng một hàng (điều kiện trước, nguyên khối; tên sau, co bằng "…"), mã nằm ở hàng đáy', () => {
