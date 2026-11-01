@@ -7,6 +7,10 @@ import type { HomeService } from '../../src/modules/catalog/home.service';
 import { CategoryAdminService } from '../../src/modules/catalog/category-admin.service';
 import { CATEGORY_MAX_CHILDREN, CATEGORY_MAX_ROOTS, CATEGORY_MSG, CATEGORY_TREE_LOCK } from '../../src/modules/catalog/category-tree';
 import { ProductCategoryAdminService } from '../../src/modules/catalog/product-category-admin.service';
+import { PancakeSyncService } from '../../src/modules/integrations/pancake/pancake-sync.service';
+import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
+import type { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
+import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { randCode, warmPool } from './helpers';
 
 /**
@@ -51,6 +55,45 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   const product = (suffix: string) =>
     prisma.product.create({ data: { pancakeId: `it-cat-p-${tag}-${suffix}`, brand: 'IT', slug: `it-cat-${tag}-p-${suffix}`, name: `IT cat ${tag} ${suffix}`, description: 'IT', basePrice: 100_000 } });
   const categoriesOf = async (id: string) => (await prisma.product.findUniqueOrThrow({ where: { id }, select: { categoryIds: true } })).categoryIds;
+
+  /** Một lượt đồng bộ Pancake chỉ có sản phẩm `pancakeId`, nhóm hàng Pancake `11` ánh xạ tới `target`; `afterRead` chạy ngay sau khi đồng bộ đọc sản phẩm. */
+  async function syncOnce(pancakeId: string, target: string, afterRead?: () => Promise<unknown>) {
+    let hooked = !afterRead;
+    const syncPrisma = new Proxy(prisma, {
+      get(t, k, r) {
+        if (k !== 'product') return Reflect.get(t, k, r);
+        return new Proxy(t.product, {
+          get(pt, pk, pr) {
+            if (pk !== 'findUnique') return Reflect.get(pt, pk, pr);
+            return async (args: never) => {
+              const row = await pt.findUnique(args);
+              if (!hooked) {
+                hooked = true;
+                await afterRead!();
+              }
+              return row;
+            };
+          },
+        });
+      },
+    });
+    const client = {
+      isConfigured: () => true,
+      fetchProducts: jest
+        .fn()
+        .mockResolvedValueOnce({
+          success: true,
+          total_pages: 1,
+          total_entries: 1,
+          data: [{ id: pancakeId, name: `IT cat ${tag} sync`, category_ids: [11], variations: [{ id: `${pancakeId}-v`, sku: `ITCAT-${tag}`, retail_price: 100_000, remain_quantity: 3, fields: {} }] }],
+        })
+        .mockResolvedValue({ success: true, data: [], total_pages: 1, total_entries: 1 }),
+    } as unknown as PancakeClient;
+    const lifecycle = { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) } as unknown as LifecycleService;
+    const config = { get: async () => ({ '11': target }) } as unknown as SystemConfigService;
+    const sync = new PancakeSyncService(syncPrisma as never, client, lifecycle, undefined, config);
+    return sync.syncProducts(new Date(Date.now() - 60_000).toISOString());
+  }
 
   const rootCount = () => prisma.category.count({ where: { parentId: null } });
   const childrenOf = (parentId: string) => prisma.category.findMany({ where: { parentId }, orderBy: { sortOrder: 'asc' } });
@@ -136,6 +179,28 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
     expect(outcome).toBeInstanceOf(BadRequestException);
     expect((outcome as BadRequestException).message).toBe(CATEGORY_MSG.notLeaf(root.name));
     expect(await categoriesOf(p.id)).not.toContain(root.id);
+  });
+
+  it('đồng bộ Pancake: sản phẩm chưa có danh mục được điền theo bản đồ, lần sau không đổi', async () => {
+    const mapped = await svc.create('it', { name: name('la-ban-do'), parentId: orderParent });
+    const pancakeId = `it-cat-p-${tag}-sync1`;
+    await syncOnce(pancakeId, mapped.id);
+    const p = await prisma.product.findUniqueOrThrow({ where: { pancakeId } });
+    expect(p.categoryIds).toEqual([mapped.id]);
+    await syncOnce(pancakeId, mapped.id);
+    expect((await prisma.product.findUniqueOrThrow({ where: { pancakeId } })).categoryIds).toEqual([mapped.id]);
+  });
+
+  it('đồng bộ Pancake đọc sản phẩm "chưa có danh mục" rồi admin gán xen giữa: danh mục admin còn nguyên, không bị đè', async () => {
+    const adminLeaf = await svc.create('it', { name: name('la-admin'), parentId: orderParent });
+    const mapped = await svc.create('it', { name: name('la-ban-do-2'), parentId: orderParent });
+    const pancakeId = `it-cat-p-${tag}-sync2`;
+    await prisma.product.create({ data: { pancakeId, brand: 'IT', slug: `it-cat-${tag}-p-sync2`, name: `IT cat ${tag} sync`, description: 'IT', basePrice: 100_000 } });
+    const id = (await prisma.product.findUniqueOrThrow({ where: { pancakeId } })).id;
+
+    await syncOnce(pancakeId, mapped.id, () => products.assign('it', [id], adminLeaf.id, 'ADD'));
+
+    expect(await categoriesOf(id)).toEqual([adminLeaf.id]);
   });
 
   it('3 lệnh thêm gốc song song khi chỉ còn 1 chỗ: đúng 1 thành công, tổng gốc không vượt 8', async () => {

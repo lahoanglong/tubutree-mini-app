@@ -96,13 +96,17 @@ export class PancakeSyncService implements OnModuleInit {
     @Optional() private readonly systemConfig?: SystemConfigService,
   ) {}
 
-  /** Danh mục Tubu hợp lệ để ánh xạ tới; nhớ 60 giây để lượt đồng bộ hàng trăm sản phẩm không hỏi lại mỗi dòng. */
+  /**
+   * Danh mục Tubu hợp lệ để ánh xạ tới: chỉ danh mục lá (không là cha của danh mục nào), vì sản phẩm chỉ gán vào lá. Nhớ 60
+   * giây để lượt đồng bộ hàng trăm sản phẩm không hỏi lại mỗi dòng.
+   */
   private categoryIdsCache: { ids: Set<string>; at: number } | null = null;
 
   private async validCategoryIds(): Promise<Set<string>> {
     if (this.categoryIdsCache && Date.now() - this.categoryIdsCache.at < 60_000) return this.categoryIdsCache.ids;
-    const rows = await this.prisma.category.findMany({ select: { id: true } });
-    this.categoryIdsCache = { ids: new Set(rows.map((r) => r.id)), at: Date.now() };
+    const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+    const parents = new Set(rows.map((r) => r.parentId).filter((id): id is string => !!id));
+    this.categoryIdsCache = { ids: new Set(rows.filter((r) => !parents.has(r.id)).map((r) => r.id)), at: Date.now() };
     return this.categoryIdsCache.ids;
   }
 
@@ -437,7 +441,6 @@ export class PancakeSyncService implements OnModuleInit {
             ...baseData,
             ...productHold,
             ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
-            ...(mappedCats.length ? { categoryIds: mappedCats } : {}),
           },
         })
       : await this.prisma.product.create({
@@ -451,6 +454,12 @@ export class PancakeSyncService implements OnModuleInit {
             categoryIds: mappedCats,
           },
         });
+
+    // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
+    // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.
+    if (existing && mappedCats.length) {
+      await this.prisma.product.updateMany({ where: { id: existing.id, categoryIds: { isEmpty: true } }, data: { categoryIds: mappedCats } });
+    }
 
     // Biến thể giảm sâu nhất theo % — giá cũ/mới của nó đi vào nội dung thông báo và để xét ngưỡng giảm tối thiểu.
     let bestDrop: { oldPrice: number; newPrice: number } | null = null;
