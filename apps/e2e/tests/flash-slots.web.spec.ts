@@ -78,7 +78,9 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
     await expect(tablist).toBeVisible();
     await expect(buyButtons(page)).toHaveCount(14);
     const sticky = page.getByTestId('flash-sticky');
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    // Cuộn tới món cuối, không tới đáy tài liệu: ở đáy, chân trang (cao thấp tuỳ font của máy) chiếm màn hình, khối nội dung hết chỗ
+    // và đẩy dải tab lên theo đúng luật sticky.
+    await rowOf(buyButtons(page).last()).evaluate((el) => el.scrollIntoView({ block: 'end' }));
     await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(600);
     // `top` đã tính: điện thoại là dưới thanh nút lùi (56px), máy tính là dưới thanh đầu trang của site (--header-h).
     const stickyTop = await sticky.evaluate((el) => parseFloat(getComputedStyle(el).top));
