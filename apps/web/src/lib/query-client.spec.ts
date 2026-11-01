@@ -1,4 +1,3 @@
-import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { createQueryClient, shouldRetryQuery } from './query-client';
