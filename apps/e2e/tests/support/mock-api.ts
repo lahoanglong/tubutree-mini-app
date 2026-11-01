@@ -371,6 +371,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/config/public', {});
       // Banner chiến dịch (Trang chủ, Ưu đãi) là công khai và tự ẩn khi không có: mặc định không có chiến dịch nào.
       api.fallback('GET', '/campaigns', []);
+      // Kho mã công khai (khối Nhận mã ở Ưu đãi, trang Mã giảm giá) tự ẩn khi rỗng: mặc định chưa có mã nào để nhận.
+      api.fallback('GET', '/coupons/collectable', []);
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
       // Cá nhân, Trang chủ và chuông web chỉ đếm tin chưa đọc (không tải danh sách); mặc định không có tin nào.

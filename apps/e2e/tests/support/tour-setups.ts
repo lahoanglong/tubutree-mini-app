@@ -4,6 +4,7 @@ import { mockAffiliateDashboard } from './affiliate-mocks';
 import { BANK_QR } from './checkout-mocks';
 import { mockFlashSlots } from './flash-slot-mocks';
 import { publicConfig, type MockApi } from './mock-api';
+import { mockCollectable, mockCouponHistory, mockWallet } from './voucher-mocks';
 import { wasteDetail, wastePoint, mockDeskStaff, mockWasteCustomer, WASTE_ITEMS } from './waste-mocks';
 import { PERSONA, TOUR_PRODUCT_SLUG, seedCatalog, productCard, tourCart, tourOrder } from './tour-world';
 
@@ -164,6 +165,15 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
   },
   '/flash-sale': (api) => {
     mockFlashSlots(api);
+  },
+  '/offers': (api) => {
+    mockCollectable(api);
+    mockWallet(api);
+  },
+  '/vouchers': (api) => {
+    mockCollectable(api);
+    mockWallet(api);
+    mockCouponHistory(api);
   },
   '/group-buy': (api) => api.get('/group-buy', [GROUP('g1'), GROUP('g2')]),
   '/group-buy/:id': (api) => {

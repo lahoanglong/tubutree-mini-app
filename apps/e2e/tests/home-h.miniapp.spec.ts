@@ -155,7 +155,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
     await expect(page.getByRole('heading', { name: /Ưu đãi/ }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
 
@@ -165,7 +165,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible({ timeout: 15_000 });
