@@ -430,6 +430,7 @@ export function loyaltyDefaults(api: MockApi): void {
   api.fallback('GET', '/feed/public-preview', { posts: [] });
 }
 
+const EMPTY_HOME_TODO = { pending: null, shipping: null, processing: null };
 const ZERO_ORDER_COUNTS = { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 };
 
 /**
@@ -446,6 +447,7 @@ function shellDefaults(api: MockApi): void {
   });
   api.fallback('GET', '/orders/active-count', { count: 0 });
   api.fallback('GET', '/orders/status-counts', ZERO_ORDER_COUNTS);
+  api.fallback('GET', '/orders/home-todo', EMPTY_HOME_TODO);
   // Menu tài khoản của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
   api.fallback('GET', '/waste/desk/points', []);
   api.fallback('GET', '/me/subscriptions', []);
@@ -503,6 +505,8 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   api.get('/orders/active-count', { count: 0 });
   // Số đơn theo tab của trang Cá nhân (một lời gọi); mặc định không có đơn nào.
   api.get('/orders/status-counts', ZERO_ORDER_COUNTS);
+  // Dải "Việc cần làm" ở Trang chủ (chỉ gọi khi badge > 0): mặc định không có việc.
+  api.get('/orders/home-todo', EMPTY_HOME_TODO);
   // Cá nhân của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
   api.get('/waste/desk/points', []);
   // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
