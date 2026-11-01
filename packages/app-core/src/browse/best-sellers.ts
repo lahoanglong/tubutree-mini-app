@@ -1,4 +1,4 @@
-import type { BestSellersBasis } from '../api/browse';
+import type { BestSellersPage } from '../api/browse';
 import { fillCopy } from '../shop-copy';
 import { HUB_CATEGORY_MAX } from './hub';
 import type { CategoryNode } from './category-tree';
@@ -51,7 +51,7 @@ export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string):
  * Dòng thước đo dưới tiêu đề. Chỉ ghi "30 ngày qua" khi mọi trang đã tải đều xếp theo 30 ngày: có trang nào lùi về tổng lượt bán (API cũ trả 400 cho
  * `best_seller_30d`) thì bảng đang trộn hoặc hoàn toàn theo tổng, và câu "30 ngày" sẽ sai. Thiếu dữ liệu hay thiếu `basis` (cache cũ) coi như 30 ngày.
  */
-export function bestSellersBasisCopy(pages: readonly { basis?: BestSellersBasis }[] | undefined): string {
+export function bestSellersBasisCopy(pages: readonly Partial<BestSellersPage>[] | undefined): string {
   return pages?.some((p) => p.basis === 'total') ? fillCopy('rank.basisAll') : fillCopy('rank.basis');
 }
 
