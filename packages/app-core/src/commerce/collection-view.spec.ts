@@ -4,7 +4,7 @@ import { RAIL_AS_GRID_MAX, SECTION_BUDGET, SHOP_MAX_SECTIONS, collectionView, ra
 const items = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}` }));
 
 describe('railFitsRow', () => {
-  it('kệ ngang từ 6 món trở xuống vừa một hàng ở màn rộng; 7 món trở lên thì phải cuộn', () => {
+  it('kệ ngang từ 6 món trở xuống được vẽ thành lưới ở màn rộng (sáu món là 5 + 1 ở lg, một hàng ở xl); 7 món trở lên vẫn là kệ cuộn', () => {
     expect(RAIL_AS_GRID_MAX).toBe(6);
     for (const n of [0, 1, 4, 6]) expect(railFitsRow(n), `${n} món`).toBe(true);
     for (const n of [7, 10, 14]) expect(railFitsRow(n), `${n} món`).toBe(false);

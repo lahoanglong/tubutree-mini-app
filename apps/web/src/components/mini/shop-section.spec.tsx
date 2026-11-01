@@ -105,16 +105,33 @@ describe('ShopSection (web) vẽ theo layout', () => {
 describe('ShopSection (web) từ lg (G6 #36)', () => {
   const rail = (n: number, preview = false) => <ShopSection collection={col({ layout: 'CAROUSEL', items: many(n) })} preview={preview} />;
 
-  it('kệ ngang ít món (<= 6): kệ giữ cho dưới lg, thêm lưới sáu cột chỉ hiện từ lg, cùng số thẻ', async () => {
+  it('kệ ngang ít món (<= 6): kệ giữ cho dưới lg, thêm lưới cùng cột với lưới Sản phẩm chỉ hiện từ lg, cùng số thẻ', async () => {
     const c = await mount(rail(4));
     const railBox = c.querySelector('[data-testid="shop-rail"]')!;
     const gridBox = c.querySelector('[data-testid="shop-rail-lg"]')!;
     expect(railBox.className).toContain('lg:hidden');
     expect(gridBox.className).toContain('hidden');
     expect(gridBox.className).toContain('lg:block');
-    expect(gridBox.querySelector('ul')!.className).toContain('grid-cols-6');
+    // Cùng lớp cột với lưới Sản phẩm (`GRID_PRODUCTS`): thẻ bằng bề rộng thẻ của lưới đó, không tự đặt sáu cột riêng (H3 #6).
+    const gridClasses = gridBox.querySelector('ul')!.className.split(/\s+/);
+    for (const cls of ['grid-cols-2', 'md:grid-cols-3', 'lg:grid-cols-5', 'xl:grid-cols-6', 'md:gap-4']) expect(gridClasses, cls).toContain(cls);
+    expect(gridClasses).not.toContain('grid-cols-6');
     expect(tiles(c, 'shop-rail')).toBe(4);
     expect(tiles(c, 'shop-rail-lg')).toBe(4);
+  });
+
+  it('hai bản của kệ ít món chỉ cách nhau bằng CSS (một bản display:none ở mỗi khổ), cùng thẻ và ảnh đều lazy nên bản ẩn không tải ảnh (H3 #8)', async () => {
+    const withImage = (n: number) => item(n, { thumbnail: `https://cdn.test/sp-${n}.jpg` });
+    const c = await mount(<ShopSection collection={col({ layout: 'CAROUSEL', items: [1, 2, 3, 4].map(withImage) })} />);
+    const railBox = c.querySelector('[data-testid="shop-rail"]')!;
+    const gridBox = c.querySelector('[data-testid="shop-rail-lg"]')!;
+    // Dưới lg `shop-rail-lg` có `hidden`, từ lg `shop-rail` có `lg:hidden`: luôn đúng một bản nhìn thấy.
+    expect(gridBox.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'lg:block']));
+    expect(railBox.className.split(/\s+/)).toContain('lg:hidden');
+    const imgs = (box: Element) => Array.from(box.querySelectorAll('img'));
+    expect(imgs(railBox)).toHaveLength(4);
+    expect(imgs(gridBox)).toHaveLength(4);
+    for (const img of [...imgs(railBox), ...imgs(gridBox)]) expect(img.getAttribute('loading')).toBe('lazy');
   });
 
   it('kệ nhiều món (> 6): chỉ có kệ ngang cuộn, không lưới thứ hai', async () => {

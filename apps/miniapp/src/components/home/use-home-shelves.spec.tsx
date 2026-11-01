@@ -73,6 +73,43 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     expect(result.current.seen.has('b')).toBe(true);
   });
 
+  it('sản phẩm có hai phân loại cùng Giờ vàng, khách đã mua phân loại bị ẩn khỏi kệ: Mua lại không hiện nó (H3 #2)', async () => {
+    mocks.fetchFlash.mockResolvedValue([flash('a'), { ...flash('a'), itemId: 'i-a-5l', variationId: 'v-a-5l' }, flash('b'), flash('c')]);
+    const hidden = bought('a', 'v-a-5l');
+    mocks.fetchPurchased.mockResolvedValue({ items: [hidden, bought('x')], nextCursor: null });
+    mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3']));
+    const { result } = setup('returning');
+    await waitFor(() => expect(result.current.flash).toHaveLength(3));
+    expect(result.current.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
+    expect(result.current.flash.some((f) => f.variationId === 'v-a-5l')).toBe(false);
+    expect(result.current.flashVariationIds.has('v-a-5l')).toBe(true);
+    const rail = [hidden, bought('x')].filter((p) => !result.current.flashVariationIds.has(p.variationId));
+    expect(rail.map((p) => p.slug)).toEqual(['x']);
+  });
+
+  it('9 sản phẩm Giờ vàng, kệ chỉ vẽ 8: sản phẩm bị cắt khỏi kệ không nằm trong tập loại trừ, khách đã mua nó vẫn thấy ở Mua lại (H3 #2)', async () => {
+    const slugs = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9'];
+    mocks.fetchFlash.mockResolvedValue([...slugs.map(flash), { ...flash('f1'), itemId: 'i-f1-5l', variationId: 'v-f1-5l' }]);
+    mocks.fetchPurchased.mockResolvedValue({ items: [bought('f9'), bought('x')], nextCursor: null });
+    mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3']));
+    const { result } = setup('returning');
+    await waitFor(() => expect(result.current.flash).toHaveLength(8));
+    expect(result.current.flash.map((f) => f.productSlug)).toEqual(slugs.slice(0, 8));
+    expect(result.current.flashVariationIds.has('v-f9')).toBe(false);
+    expect(result.current.flashVariationIds.has('v-f8')).toBe(true);
+    expect(result.current.flashVariationIds.has('v-f1-5l')).toBe(true);
+    // 8 sản phẩm đang vẽ (f1 có thêm phân loại 5L) = 9 phân loại; v-f9 không có.
+    expect(result.current.flashVariationIds.size).toBe(9);
+  });
+
+  it('suất của phân loại thứ hai đã quá giờ thì không nằm trong tập loại trừ (H3 #2)', async () => {
+    mocks.fetchFlash.mockResolvedValue([flash('a'), flash('b'), flash('c'), { ...flashEnding('a', '2000-01-01T00:00:00.000Z'), itemId: 'i-a-5l', variationId: 'v-a-5l' }]);
+    mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3']));
+    const { result } = setup('returning');
+    await waitFor(() => expect(result.current.flash).toHaveLength(3));
+    expect([...result.current.flashVariationIds].sort()).toEqual(['v-a', 'v-b', 'v-c']);
+  });
+
   it('khách mới: kệ Mua lại không chiếm món nào dù API có trả', async () => {
     const { result } = setup('new');
     await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['x', 'p1', 'p2', 'p3', 'p4']));

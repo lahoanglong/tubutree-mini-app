@@ -35,18 +35,19 @@ const cellStyle = {
   gap: 4,
   minHeight: 44,
   minWidth: 0,
-  padding: '0 2px',
+  padding: 0,
   border: 'none',
   background: 'transparent',
   fontFamily: 'inherit',
   cursor: 'pointer',
 } as const;
 
-function Label({ children }: { children: string }) {
+/** `tight`: cột 5,5 chỉ rộng ~62px, siết chữ -0,01em (như tiêu đề khối) để "Chăm sóc" (62,6px) vừa dòng thay vì rơi xuống dòng ba. */
+function Label({ children, tight = false }: { children: string; tight?: boolean }) {
   return (
     <Text
       variant="caption"
-      style={{ textAlign: 'center', fontWeight: 600, width: '100%', height: LABEL_HEIGHT, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}
+      style={{ textAlign: 'center', fontWeight: 600, width: '100%', height: LABEL_HEIGHT, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere', ...(tight ? { letterSpacing: '-0.01em' } : null) }}
     >
       {children}
     </Text>
@@ -99,7 +100,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
                       <Icon icon={e.icon} size="lg" tone="current" />
                     )}
                   </span>
-                  <Label>{e.label}</Label>
+                  <Label tight={scrolls}>{e.label}</Label>
                 </button>
               );
             })}
@@ -108,7 +109,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
                 <span aria-hidden style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
                   <Icon icon={LayoutGrid} size="lg" tone="current" />
                 </span>
-                <Label>{homeCopy.categories.all}</Label>
+                <Label tight={scrolls}>{homeCopy.categories.all}</Label>
               </button>
             )}
           </>

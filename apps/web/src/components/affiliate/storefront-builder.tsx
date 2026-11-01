@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -29,7 +29,6 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
-import { LG_UP, useMediaQuery } from '@/lib/use-media-query';
 import { cssUrl } from '@/lib/safe-color';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
@@ -119,6 +118,9 @@ function ConfirmSheet({
   );
 }
 
+/** `useLayoutEffect` chạy trước khi trình duyệt vẽ nhưng cảnh báo khi dựng ở máy chủ (không có gì để bố trí ở đó); máy chủ dùng `useEffect` (không chạy). */
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
 /** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
 export const BUILDER_HEAD_SLOT = 'builder-head-actions';
 
@@ -131,12 +133,12 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const notify: Notify = (text, error = false) => setNotice({ text, error });
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [kitSlug, setKitSlug] = useState<string | null>(null);
-  // Một bộ nút ở hai chỗ theo khổ (thanh dính đáy ở điện thoại, hàng tiêu đề từ lg) mang trạng thái nên chỉ vẽ một chỗ, không nhân đôi bằng lớp `lg:hidden`.
-  const wide = useMediaQuery(LG_UP);
+  // Một bộ nút ở hai chỗ (thanh dính đáy `lg:hidden`, ô hàng tiêu đề `hidden lg:flex`): CSS chọn bản nhìn thấy theo khổ nên không có khung nào nút ở sai chỗ
+  // (quyết định bằng JS media query từng làm nút tới trễ một khung và đẩy hàng tiêu đề ~14px). Cả hai bản đọc cùng `actions()` nên chung trạng thái "Đang gửi…".
   const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
-  // Chạy sau mỗi lần vẽ: trang dựng lại hàng tiêu đề khi vào/ra chi tiết khối (ô mới là nút DOM khác), nên không giữ nút DOM cũ theo `wide`.
-  useEffect(() => {
-    const el = wide ? document.getElementById(BUILDER_HEAD_SLOT) : null;
+  // Chạy sau mỗi lần vẽ, trước khi trình duyệt vẽ: trang dựng lại hàng tiêu đề khi vào/ra chi tiết khối (ô mới là nút DOM khác), nên không giữ nút DOM cũ.
+  useIsoLayoutEffect(() => {
+    const el = document.getElementById(BUILDER_HEAD_SLOT);
     setHeadSlot((cur) => (cur === el ? cur : el));
   });
   const [configOpen, setConfigOpen] = useState(false);
@@ -583,13 +585,13 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         </div>
       )}
 
-      {!sectionCol && !wide && (
-        <div data-testid="builder-bar" className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
+      {!sectionCol && (
+        <div data-testid="builder-bar" className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3 lg:hidden" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
           {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
           <div className="mx-auto flex max-w-5xl gap-2">{actions('flex-1')}</div>
         </div>
       )}
-      {!sectionCol && wide && headSlot && createPortal(
+      {!sectionCol && headSlot && createPortal(
         <>
           {!sf.isPublished && itemCount === 0 && <p className="text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
           {actions('')}
