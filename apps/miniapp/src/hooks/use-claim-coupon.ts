@@ -1,0 +1,52 @@
+import { useCallback, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { claimCoupon } from '../services/coupon-claim';
+import { getErrorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
+import { haptic } from '../utils/haptic';
+import { useNotify } from './use-notify';
+
+/**
+ * "Lưu mã" ở kho mã: nhận mã vào ví qua `POST /coupons/claim` (đường duy nhất, đã khoá theo mã ở máy chủ). Chưa đăng nhập thì mở
+ * đăng nhập chứ không gọi máy chủ (khỏi 401); tài khoản khách chưa liên kết bị máy chủ từ chối và câu từ chối được báo nguyên văn.
+ * Lỗi nào cũng làm mới danh sách kho: cache 30 giây có thể còn giữ mã vừa hết lượt.
+ */
+export function useClaimCoupon() {
+  const qc = useQueryClient();
+  const { notify } = useNotify();
+  const [pendingCode, setPendingCode] = useState<string | null>(null);
+  // Khoá đồng bộ: setState chưa kịp cập nhật giữa hai lần chạm sát nhau.
+  const busy = useRef(false);
+
+  const claim = useCallback(
+    async (code: string): Promise<boolean> => {
+      if (busy.current) return false;
+      const auth = useAuthStore.getState();
+      if (auth.status !== 'authenticated') {
+        haptic('light');
+        void auth.login();
+        return false;
+      }
+      busy.current = true;
+      setPendingCode(code);
+      try {
+        await claimCoupon(code);
+        haptic('light');
+        notify({ text: fillCopy('coupon.savedToast'), type: 'success' });
+        await qc.invalidateQueries({ queryKey: ['coupons'] });
+        return true;
+      } catch (e) {
+        notify({ text: getErrorMessage(e), type: 'error' });
+        void qc.invalidateQueries({ queryKey: ['coupons', 'collectable'] });
+        return false;
+      } finally {
+        busy.current = false;
+        setPendingCode(null);
+      }
+    },
+    [notify, qc],
+  );
+
+  return { claim, pendingCode };
+}
