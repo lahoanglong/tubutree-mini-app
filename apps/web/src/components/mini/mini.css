@@ -345,9 +345,17 @@
   }
   .tubu-press,
   .tubu-press-card,
-  .tubu-btn {
+  .tubu-btn,
+  .tubu-flash-fill {
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra. Mini có luật `*` toàn cục cho prefers-reduced-motion, web chỉ có luật từng lớp. */
+.tubu-flash-fill {
+  transition-property: transform;
+  transition-duration: 600ms;
+  transition-timing-function: var(--p-ease-out);
 }
 
 .scroll-x {
@@ -356,6 +364,28 @@
   min-width: 0;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Tràn mép (một nguồn cho mọi khối cần chạm mép màn hình, như Mini App không có đệm trang quanh khối): lùi lề âm đúng --space-block của
+ * khung trang. Đệm ngang bên trong (px-4...) vẫn do nơi dùng đặt để nội dung thẳng cột trang. Phải đứng SAU .scroll-x: cùng độ đặc hiệu,
+ * luật sau thắng, nên hàng cuộn đã nới lề không bị `max-width: 100%` cắt lại. `.tubu-bleed` chỉ dưới md (đúng mốc của `max-md:`: từ md khối
+ * nằm trong khung); `.tubu-bleed-rail` là kệ sản phẩm, từ md lùi đúng đệm 12px của kệ để thẻ đầu thẳng tiêu đề.
+ */
+@media not all and (min-width: 768px) {
+  .tubu-bleed {
+    margin-inline: calc(var(--space-block) * -1);
+    max-width: none;
+  }
+}
+.tubu-bleed-rail {
+  margin-inline: calc(var(--space-block) * -1);
+  max-width: none;
+}
+@media (min-width: 768px) {
+  .tubu-bleed-rail {
+    margin-inline: calc(var(--p-space-4) * -1);
+  }
 }
 
 /* Nút: bản DOM của zmp-ui Button (lớp zaui-btn*) với đúng kích thước/màu bản Mini App. */

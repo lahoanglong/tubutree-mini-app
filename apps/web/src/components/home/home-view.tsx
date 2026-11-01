@@ -221,7 +221,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
 }
 
 // Header 56px dính đầu trang khi cuộn ở điện thoại; từ md thanh đầu website đã có ô tìm nên trả về bình thường.
-const STICKY_SEARCH = 'sticky top-0 z-20 -mx-4 bg-[var(--color-bg-canvas)] px-4 md:static md:mx-0 md:bg-transparent md:px-0';
+const STICKY_SEARCH = 'tubu-bleed sticky top-0 z-20 bg-[var(--color-bg-canvas)] px-4 md:static md:bg-transparent md:px-0';
 
 // Khoảng cách giữa các khối đặt ở vỏ khối (CS-05), khối con không tự đặt đệm trên/dưới. Khối rỗng (không dữ liệu) có lề sập qua nên không để lại khoảng trống.
 const BLOCK_GAP: CSSProperties = { marginTop: 'var(--space-block)' };

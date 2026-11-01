@@ -18,8 +18,8 @@ const WIDTH: Record<RailVariant, string> = {
   'rail-md': 'var(--tile-w-md)',
 };
 
-/** Lề âm của kệ (xem `RailShell`); `max-w-none` để ScrollRow không bị `max-width:100%` cắt lại bề rộng đã nới. */
-const BLEED = '-mx-4 max-w-none md:-mx-3';
+/** Lề âm của kệ (xem `RailShell`) do lớp dùng chung `.tubu-bleed-rail` (mini.css): cũng bỏ `max-width:100%` của ScrollRow để bề rộng đã nới không bị cắt lại. */
+const BLEED = 'tubu-bleed-rail';
 
 /**
  * Khung kệ ngang. Đệm của kệ chừa chỗ cho bóng và vòng focus của thẻ (cuộn ngang cắt phần tràn); các ô xếp trong một hàng flex căng

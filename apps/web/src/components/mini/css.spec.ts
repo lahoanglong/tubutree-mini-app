@@ -46,6 +46,14 @@ describe('mini.css', () => {
   });
 });
 
+describe('mini.css: thanh Đã bán của Giờ vàng', () => {
+  it('.tubu-flash-fill mang transition transform 600ms và bị prefers-reduced-motion rút còn 0,01ms như Mini (luật * toàn cục của Mini)', () => {
+    expect(css).toMatch(/\.tubu-flash-fill\s*\{[^}]*transition-property:\s*transform[^}]*transition-duration:\s*600ms/);
+    const reduce = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(reduce).toMatch(/\.tubu-flash-fill[^{]*\{[^}]*transition-duration:\s*0\.01ms\s*!important/);
+  });
+});
+
 describe('mini.css không đổi giao diện máy tính', () => {
   it('ẩn nút xoá native của ô tìm chỉ trong SearchField, không phải mọi [role=search]', () => {
     expect(css).not.toMatch(/\[role=['"]search['"]\][^{]*cancel-button/);
@@ -84,3 +92,29 @@ describe('mini.css: icon nảy khi chọn tab (polish PL-10)', () => {
   });
 });
 
+
+describe('mini.css: tràn mép dùng chung (.tubu-bleed, .tubu-bleed-rail)', () => {
+  const plain = strip(css);
+  /** Phần thân của các `@media <điều kiện> { ... }` cấp một có điều kiện đúng bằng `cond`. */
+  const mediaBodies = (cond: string) => [...plain.matchAll(new RegExp(`@media ${cond.replace(/[().]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\n\\}`, 'g'))].map((m) => m[1]).join('\n');
+  const outsideMedia = plain.replace(/@media[^{]*\{[\s\S]*?\n\}/g, '');
+
+  it('.tubu-bleed chỉ có luật dưới md: lề âm đúng --space-block và bỏ max-width để .scroll-x không cắt lại', () => {
+    const phone = mediaBodies('not all and (min-width: 768px)');
+    expect(phone).toMatch(/\.tubu-bleed\s*\{[^}]*margin-inline:\s*calc\(var\(--space-block\)\s*\*\s*-1\)[^}]*max-width:\s*none/);
+    expect(outsideMedia).not.toMatch(/\.tubu-bleed(?![\w-])/);
+    expect(mediaBodies('(min-width: 768px)')).not.toMatch(/\.tubu-bleed(?![\w-])/);
+  });
+
+  it('.tubu-bleed-rail lùi --space-block ở mọi khổ và đúng đệm 12px của kệ (--p-space-4) từ md', () => {
+    expect(outsideMedia).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*calc\(var\(--space-block\)\s*\*\s*-1\)[^}]*max-width:\s*none/);
+    expect(mediaBodies('(min-width: 768px)')).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*calc\(var\(--p-space-4\)\s*\*\s*-1\)/);
+  });
+
+  it('cả hai lớp đứng SAU .scroll-x (cùng độ đặc hiệu: luật sau thắng, max-width:100% không cắt hàng đã nới)', () => {
+    const scrollX = plain.indexOf('.scroll-x {');
+    expect(scrollX).toBeGreaterThan(-1);
+    expect(plain.indexOf('.tubu-bleed {')).toBeGreaterThan(scrollX);
+    expect(plain.indexOf('.tubu-bleed-rail {')).toBeGreaterThan(scrollX);
+  });
+});

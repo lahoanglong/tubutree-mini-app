@@ -66,7 +66,7 @@ const browseHref = (patch: Partial<SearchState>) => `/browse?${serializeSearchSt
  * Trang Danh mục / Tìm kiếm (spec 5b.2) — hai chế độ theo URL. Gốc `/browse` chưa tìm, chưa lọc, chưa `all=1` là HUB (ô danh mục,
  * Đã xem, Bán chạy nhất, thương hiệu; KHÔNG tải danh sách). Có từ khoá, danh mục, bộ lọc, sắp xếp hoặc `all=1` là DANH SÁCH: thanh
  * sắp xếp dính, một tiêu đề + số kết quả, chip danh mục con, lưới 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL
- * (`useSearchState`, replace) → quay lại từ PDP giữ nguyên, vị trí cuộn khôi phục theo khoá URL. Từ hub chạm ô là PUSH (Back về hub).
+ * (`useSearchState`, replace) → quay lại từ PDP giữ nguyên, vị trí cuộn khôi phục theo khoá URL. Từ hub chạm ô hoặc gửi từ khoá là PUSH (Back về hub).
  * Gõ chỉ hiện GỢI Ý; Enter / chạm gợi ý mới ghi `q`.
  *
  * Khôi phục cuộn: `anchorRef` luôn được vẽ (không đặt sau điều kiện) và `ready` = hub đã vẽ, hoặc trang 1 của danh sách đã vẽ, VÀ không
@@ -178,6 +178,12 @@ export default function BrowsePage() {
     stopEditing();
     setDraft(t);
     if (t.length >= 2) setRecent(pushRecentSearch(t));
+    // Từ hub gửi từ khoá là mở MỚI như chạm ô danh mục: PUSH (Back về hub) và hook cuộn đưa danh sách về đầu trang; REPLACE giữ nguyên vị
+    // trí cuộn sâu của hub nên danh sách mới hiện từ giữa trang. Gửi trống ở hub không có gì để mở.
+    if (hubState) {
+      if (t !== '') navigate(browseHref({ q: t }));
+      return;
+    }
     scrollToListTop();
     update({ q: t });
   };

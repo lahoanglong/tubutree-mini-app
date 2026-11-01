@@ -21,6 +21,16 @@ function sources(dir: string): string[] {
 const FILES = sources(SRC).map((path) => ({ rel: relative(SRC, path).split(sep).join('/'), text: readFileSync(path, 'utf8') }));
 const hits = (re: RegExp, allow: readonly string[] = []) => FILES.filter((f) => re.test(f.text) && !allow.includes(f.rel)).map((f) => f.rel);
 
+/**
+ * Lề âm tay (gói F3): ở home, catalog, shop-page, mini mọi khối tràn mép dùng `.tubu-bleed`/`.tubu-bleed-rail` (mini.css, file định nghĩa lớp
+ * nên không bị quét: chỉ quét .ts/.tsx). `-mx-N` của Tailwind hay `margin: '0 -16px'` viết tay từng file đã làm mỗi nơi một số đo và một mốc md.
+ */
+const BLEED_SCOPE = /^components\/(home|catalog|shop-page|mini)\//;
+const HAND_BLEED = /(?<![\w-])-mx-[\w.[\]]+|margin:\s*['"]0 -|margin(?:Inline|Left|Right)\w*:\s*-/;
+export function bleedViolations(files: readonly { rel: string; text: string }[]): string[] {
+  return files.filter((f) => BLEED_SCOPE.test(f.rel) && HAND_BLEED.test(f.text)).map((f) => f.rel);
+}
+
 describe('ds-shop-guard (web)', () => {
   it('quét được nguồn (không để các ca dưới đúng vì thư mục rỗng)', () => {
     expect(FILES.length).toBeGreaterThan(200);
@@ -56,5 +66,25 @@ describe('ds-shop-guard (web)', () => {
 
   it('chỉ product-tile vẽ vỏ thẻ sản phẩm (data-ds="product-tile")', () => {
     expect(hits(/data-ds=["']product-tile["']/, ['components/mini/product-tile.tsx'])).toEqual([]);
+  });
+
+  it('không lề âm tay ở home, catalog, shop-page, mini: dùng .tubu-bleed', () => {
+    expect(bleedViolations(FILES)).toEqual([]);
+  });
+
+  it('bleedViolations bắt lề âm tay (fixture cố ý vi phạm) và bỏ qua chỗ hợp lệ', () => {
+    const bad = [
+      { rel: 'components/home/x.tsx', text: '<div className="max-md:-mx-4 px-4" />' },
+      { rel: 'components/mini/y.tsx', text: "<div style={{ margin: '0 -16px' }} />" },
+      { rel: 'components/catalog/z.tsx', text: "const C = '-mx-4 md:-mx-3';" },
+      { rel: 'components/shop-page/w.tsx', text: '<div style={{ marginLeft: -8 }} />' },
+    ];
+    expect(bleedViolations(bad)).toEqual(bad.map((f) => f.rel));
+    const ok = [
+      { rel: 'components/home/a.tsx', text: '<div className="tubu-bleed px-4" />' },
+      { rel: 'components/loyalty/mini-surface.tsx', text: "export const miniBleed = 'max-md:-mx-4';" }, // ngoài phạm vi
+      { rel: 'components/mini/b.tsx', text: '<div className="mx-auto -mt-2" />' }, // lề âm dọc không thuộc luật này
+    ];
+    expect(bleedViolations(ok)).toEqual([]);
   });
 });

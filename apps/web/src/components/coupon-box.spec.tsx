@@ -621,6 +621,49 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  // Hàng này là CouponRow của Mini (pages/cart.tsx): MỘT dòng 44px, icon 20, "Mã giảm giá", gợi ý cắt bằng "…", "Chọn mã ›".
+  // Bản cũ có ô icon 36px và cột hai dòng (nhãn trên, gợi ý dưới) nên cao hơn Mini và chiếm chỗ của thanh dính.
+  const oneLine = (row: HTMLElement) => {
+    expect(row.className).toMatch(/\bmin-h-11\b/);
+    expect(row.querySelector('.flex-col'), 'không cột hai dòng').toBeNull();
+    expect(row.querySelector('.h-9.w-9'), 'không ô icon 36px').toBeNull();
+    expect(row.querySelector('svg.h-5.w-5'), 'icon vé 20px').not.toBeNull();
+  };
+
+  it('chưa có mã: một dòng, gợi ý cắt "…" và "Chọn mã" ở mép phải', async () => {
+    const box = await mountSheet();
+    const row = box.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    oneLine(row);
+    expect(row.textContent).toContain('Mã giảm giá');
+    const hint = [...row.querySelectorAll('span')].find((el) => el.children.length === 0 && el.textContent === 'Chọn hoặc nhập mã giảm giá')!;
+    expect(hint.className).toMatch(/\btruncate\b/);
+    expect(hint.className).toMatch(/\bmin-w-0\b/);
+    expect(row.textContent!.endsWith('Chọn mã')).toBe(true);
+  });
+
+  it('chưa có mã nhưng có mã dùng được: gợi ý "Bạn có N mã" cũng nằm trong dòng đó', async () => {
+    state.coupons = [c('GIAM30')];
+    state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} preview={{ itemIds: ['i1'] }} previewKey="k" />);
+    mounted.push(r);
+    await flush(8);
+    const row = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    oneLine(row);
+    expect(row.textContent).toContain('Bạn có 1 mã dùng được');
+  });
+
+  it('đang có mã: chip mã, số đã giảm và "Thay đổi" cùng một dòng', async () => {
+    const r = render(<CouponBox sheet currentCode="WELCOME30" appliedDiscount={30000} subtotal={300000} />);
+    mounted.push(r);
+    await flush(6);
+    const row = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    oneLine(row);
+    expect(row.textContent).toContain('WELCOME30');
+    expect(row.textContent).toContain('-30.000đ');
+    expect(row.textContent!.endsWith('Thay đổi')).toBe(true);
+    expect(row.className).not.toMatch(/\bmd:hidden\b/);
+  });
+
   it('bấm hàng mở bảng, dùng mã trong bảng thì áp mã và đóng bảng', async () => {
     state.coupons = [c('WELCOME30')];
     const box = await mountSheet();

@@ -26,7 +26,7 @@ const isDesktop = () => typeof window.matchMedia === 'function' && window.matchM
 
 // Điện thoại: hàng chip dính ngay dưới header dính của Trang chủ (h-14 = 56px), dưới z-index của header (z-20), tràn mép màn như Mini. Từ md thanh đầu
 // website lo phần đầu trang nên hàng chip nằm trong khung và không dính.
-const CHIPS_CLASS = 'max-md:sticky max-md:top-14 max-md:z-10 max-md:-mx-4 max-md:max-w-none max-md:bg-[var(--color-bg-canvas)] max-md:px-4';
+const CHIPS_CLASS = 'tubu-bleed max-md:sticky max-md:top-14 max-md:z-10 max-md:bg-[var(--color-bg-canvas)] max-md:px-4';
 
 export interface SuggestFeedProps {
   /** Trang 1 của chip "Tất cả" do server dựng sẵn trong HTML (SEO); xếp theo `seed`. */

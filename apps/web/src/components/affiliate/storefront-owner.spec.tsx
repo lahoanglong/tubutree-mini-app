@@ -59,6 +59,26 @@ describe('StorefrontAction', () => {
   });
 });
 
+describe('MoreAtTubuLink — hình dạng như Mini App', () => {
+  it('là nút ghost xanh (zaui-btn-tertiary tubu-btn, 44px, không gạch chân) cách dòng "Tìm hiểu" 8px, không còn link gạch chân mt-4', () => {
+    state.ref = undefined;
+    state.catalogReady = true;
+    mounted = render(<MoreAtTubuLink referralCode="ctv123" />);
+    const wrap = mounted.container.querySelector<HTMLElement>('[data-testid="more-at-tubu"]')!;
+    expect(wrap.className).toMatch(/\bmt-2\b/);
+    expect(wrap.className).not.toMatch(/\bmt-4\b/);
+    expect(wrap.className).toMatch(/\bmax-md:px-4\b/);
+    const a = wrap.querySelector<HTMLAnchorElement>('a')!;
+    expect(a.className).toMatch(/\bzaui-btn-tertiary\b/);
+    expect(a.className).toMatch(/\btubu-btn\b/);
+    expect(a.className).not.toMatch(/underline/);
+    expect(a.style.minHeight).toBe('44px');
+    expect(a.querySelector('.zaui-btn-container')).not.toBeNull();
+    // <a> với khối bên trong không được nằm trong <p> (HTML không hợp lệ).
+    expect(mounted.container.querySelector('p')).toBeNull();
+  });
+});
+
 describe('LearnStorefrontLink', () => {
   it('khách thấy dòng "Tìm hiểu" dẫn tới /ctv/gian-hang; chủ gian hàng (so mã không phân biệt hoa thường) không thấy', () => {
     state.ref = undefined;
@@ -66,6 +86,9 @@ describe('LearnStorefrontLink', () => {
     const a = mounted.container.querySelector('a')!;
     expect(a.textContent).toBe('Muốn có gian hàng như này? Tìm hiểu');
     expect(a.getAttribute('href')).toBe('/ctv/gian-hang');
+    // Như Mini (tubu-press tubu-hit-44): dòng cao bằng chữ phụ, vùng chạm 44px do ::after, không min-h-11 làm dòng cao 44px.
+    expect(a.className).toMatch(/\btubu-hit-44\b/);
+    expect(a.className).not.toMatch(/\bmin-h-11\b/);
     mounted.unmount();
     state.ref = 'CTV123';
     mounted = render(<LearnStorefrontLink referralCode="ctv123" />);

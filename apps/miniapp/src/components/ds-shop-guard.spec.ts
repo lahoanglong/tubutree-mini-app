@@ -20,6 +20,14 @@ function sources(dir: string): string[] {
 const FILES = sources(SRC).map((path) => ({ rel: relative(SRC, path).split(sep).join('/'), text: readFileSync(path, 'utf8') }));
 const hits = (re: RegExp, allow: readonly string[] = []) => FILES.filter((f) => re.test(f.text) && !allow.includes(f.rel)).map((f) => f.rel);
 
+/**
+ * Lề âm tay (gói F3): kệ tràn mép dùng `.tubu-bleed` (css/tokens.css), không `margin: '0 -16px'` viết tay từng file. Chỉ bắt lề ngang kiểu `'0 -Npx'`:
+ * các lề âm nhỏ làm rộng vùng chạm (`'-12px -6px'`) là kỹ thuật khác.
+ */
+export function bleedHits(files: readonly { rel: string; text: string }[]): string[] {
+  return files.filter((f) => /margin:\s*['"]0 -/.test(f.text)).map((f) => f.rel);
+}
+
 describe('ds-shop-guard (Mini App)', () => {
   it('không còn thẻ cũ: CatalogTile, RelatedTile, ProductTileProduct, priceOverride, components/product-card', () => {
     expect(hits(/\bCatalogTile\b|\bRelatedTile\b|\bProductTileProduct\b|\bpriceOverride\b/)).toEqual([]);
@@ -50,5 +58,14 @@ describe('ds-shop-guard (Mini App)', () => {
 
   it('chỉ product-tile vẽ vỏ thẻ sản phẩm (data-ds="product-tile")', () => {
     expect(hits(/data-ds=["']product-tile["']/, ['components/ui/product-tile.tsx'])).toEqual([]);
+  });
+
+  it('không lề âm tay margin: 0 -Npx: dùng .tubu-bleed', () => {
+    expect(bleedHits(FILES)).toEqual([]);
+  });
+
+  it('bleedHits bắt lề âm tay (fixture cố ý vi phạm) và bỏ qua lề âm vùng chạm', () => {
+    expect(bleedHits([{ rel: 'components/ui/x.tsx', text: "<div style={{ margin: '0 -16px' }} />" }])).toEqual(['components/ui/x.tsx']);
+    expect(bleedHits([{ rel: 'pages/y.tsx', text: "style={{ minHeight: 44, margin: '-12px -6px' }}" }, { rel: 'pages/z.tsx', text: '<div className="tubu-bleed" />' }])).toEqual([]);
   });
 });
