@@ -36,7 +36,7 @@ describe('FlashSoldBar (web)', () => {
     expect(q('flash-sold-track')!.style.background).toBe('var(--color-flash-bg)');
     mount(<FlashSoldBar soldPct={68} track="neutral" />);
     const tracks = document.querySelectorAll<HTMLElement>('[data-testid="flash-sold-track"]');
-    expect(tracks[tracks.length - 1].style.background).toBe('var(--color-track)');
+    expect(tracks[tracks.length - 1]!.style.background).toBe('var(--color-track)');
   });
 
   it('hết suất: "Đã bán hết" thắng phần trăm, không phần cam', () => {
