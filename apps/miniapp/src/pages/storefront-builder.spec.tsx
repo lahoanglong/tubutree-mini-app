@@ -1,8 +1,34 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+/** Lịch sử giả đủ dùng cho trang: đẩy/thay mục, lùi bằng số âm, báo cho `useLocation` vẽ lại; `window.history.state.idx` bắt chước react-router để nút lùi nổi đọc được. */
+const router = vi.hoisted(() => {
+  interface Loc { pathname: string; search: string; state: unknown }
+  const first = (): Loc => ({ pathname: '/storefront', search: '', state: null });
+  const r = {
+    stack: [first()],
+    idx: 0,
+    listeners: new Set<() => void>(),
+    get loc(): Loc { return r.stack[r.idx]!; },
+    subscribe(l: () => void) { r.listeners.add(l); return () => { r.listeners.delete(l); }; },
+    sync() { window.history.replaceState({ idx: r.idx }, ''); r.listeners.forEach((l) => l()); },
+    reset() { r.stack = [first()]; r.idx = 0; r.sync(); },
+    go(to: string | number, opts?: { replace?: boolean; state?: unknown }) {
+      if (typeof to === 'number') {
+        r.idx = Math.min(Math.max(r.idx + to, 0), r.stack.length - 1);
+      } else {
+        const u = new URL(to, 'http://x');
+        const loc: Loc = { pathname: u.pathname, search: u.search, state: opts?.state ?? null };
+        if (opts?.replace) r.stack[r.idx] = loc;
+        else { r.stack = [...r.stack.slice(0, r.idx + 1), loc]; r.idx += 1; }
+      }
+      r.sync();
+    },
+  };
+  return r;
+});
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
@@ -27,15 +53,18 @@ const mocks = vi.hoisted(() => ({
   shareSheet: vi.fn(),
   announce: vi.fn(),
 }));
-vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
-  Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
-    visible ? <div data-testid="sheet">{children}</div> : null,
-  useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/storefront', search: '', state: null }),
-  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
-}));
+vi.mock('zmp-ui', async (importOriginal) => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    ...(await importOriginal<Record<string, unknown>>()),
+    Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
+    Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
+      visible ? <div data-testid="sheet">{children}</div> : null,
+    useNavigate: () => mocks.navigate,
+    useLocation: () => useSyncExternalStore(router.subscribe, () => router.loc),
+    useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+  };
+});
 vi.mock('../services/storefront-api', () => ({ ...mocks }));
 vi.mock('../components/share-sheet', () => ({
   ShareSheet: (props: { visible: boolean }) => {
@@ -58,6 +87,7 @@ vi.mock('../hooks/use-notify', async (importOriginal) => ({
   announce: mocks.announce,
 }));
 
+import BackButton from '../components/back-button';
 import StorefrontBuilderPage from './storefront-builder';
 
 const product = {
@@ -121,6 +151,8 @@ async function openQuests() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  router.reset();
+  mocks.navigate.mockImplementation((to: string | number, opts?: { replace?: boolean; state?: unknown }) => router.go(to, opts));
   mocks.getMyStorefront.mockResolvedValue(storefront());
   mocks.getQuests.mockResolvedValue(quests);
   mocks.getStorefrontStats.mockResolvedValue(stats);
@@ -238,7 +270,7 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledWith('i1', { isHidden: true }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
-    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi bộ sưu tập' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi khối' }));
     expect(mocks.removeItem).not.toHaveBeenCalled();
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Xoá sản phẩm này khỏi gian hàng?')).toBeInTheDocument();
@@ -252,11 +284,11 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     await openCard();
     fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
     const sheet = await screen.findByTestId('sheet');
-    expect(within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi bộ sưu tập']);
+    expect(within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi khối']);
     fireEvent.click(within(sheet).getByRole('button', { name: 'Ghim lên đầu' }));
     expect(screen.queryByRole('button', { name: 'Ghim lên đầu' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ẩn sản phẩm' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Xoá khỏi bộ sưu tập' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xoá khỏi khối' })).toBeNull();
   });
 
   it('món đã ghim có nhãn "Đã ghim" ngay trên hàng (ghim nằm trong menu "⋯" nên không còn dấu nào khác); món thường không có', async () => {
@@ -292,7 +324,7 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     const size = (btn: HTMLElement) => (btn.className.includes('touch-target')
       ? { w: 44, h: 44 }
       : { w: parseFloat(btn.style.minWidth), h: parseFloat(btn.style.minHeight) });
-    for (const name of ['Tuỳ chọn sản phẩm', 'Tuỳ chọn bộ sưu tập']) {
+    for (const name of ['Tuỳ chọn sản phẩm', 'Tuỳ chọn khối']) {
       const box = size(screen.getAllByRole('button', { name })[0]!);
       expect(box.w, `${name} rộng`).toBeGreaterThanOrEqual(44);
       expect(box.h, `${name} cao`).toBeGreaterThanOrEqual(44);
@@ -336,11 +368,11 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     expect(screen.queryByText('Thêm lý do giới thiệu')).not.toBeInTheDocument();
   });
 
-  it('đổi tên bộ sưu tập: sheet có tiêu đề, Lưu gửi tên mới', async () => {
+  it('đổi tên khối: sheet có tiêu đề, Lưu gửi tên mới', async () => {
     renderPage();
     await openCard();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn bộ sưu tập' }));
-    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Đổi tên bộ sưu tập' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Đổi tên khối' }));
     const sheet = await screen.findByTestId('sheet');
     const input = within(sheet).getByDisplayValue('Bộ sưu tập A');
     fireEvent.change(input, { target: { value: ' Bộ B ' } });
@@ -348,19 +380,19 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledWith('c1', { title: 'Bộ B' }));
   });
 
-  it('xoá bộ sưu tập phải xác nhận; Huỷ thì không gọi API', async () => {
+  it('xoá khối phải xác nhận; Huỷ thì không gọi API', async () => {
     renderPage();
     await openCard();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn bộ sưu tập' }));
-    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá bộ sưu tập' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
     const sheet = await screen.findByTestId('sheet');
-    expect(within(sheet).getByText('Xoá bộ sưu tập này?')).toBeInTheDocument();
+    expect(within(sheet).getByText('Xoá khối này?')).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole('button', { name: 'Huỷ' }));
     expect(mocks.deleteCollection).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn bộ sưu tập' }));
-    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá bộ sưu tập' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
     const sheet2 = await screen.findByTestId('sheet');
-    fireEvent.click(within(sheet2).getByRole('button', { name: 'Xoá bộ sưu tập' }));
+    fireEvent.click(within(sheet2).getByRole('button', { name: 'Xoá khối' }));
     await waitFor(() => expect(mocks.deleteCollection).toHaveBeenCalledWith('c1'));
   });
 
@@ -1101,7 +1133,30 @@ describe('Màn dựng theo khối (P10)', () => {
       }
       fireEvent.change(pct, { target: { value: '99' } });
       fireEvent.click(createBtn());
-      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledWith(expect.objectContaining({ kind: 'COMBO', comboDiscountPct: 30 })));
+      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledWith(expect.objectContaining({ kind: 'COMBO', comboDiscountPct: 99 })));
+    });
+
+    it('tạo Combo mà máy chủ hạ % xuống (trần 20): báo "Mức giảm tối đa hiện là 20%."; không hạ thì không báo', async () => {
+      mocks.createCollection.mockResolvedValue(created({ kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 20 }));
+      const group = await openSheet();
+      fireEvent.click(within(group).getByRole('radio', { name: /Combo/ }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Giảm khi mua cả bộ' }), { target: { value: '50' } });
+      fireEvent.click(createBtn());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mức giảm tối đa hiện là 20%.', type: 'warning' }));
+      expect(mocks.createCollection).toHaveBeenCalledWith(expect.objectContaining({ comboDiscountPct: 50 }));
+    });
+
+    it('tạo Combo mà máy chủ giữ nguyên % đã gửi: không có cảnh báo', async () => {
+      const made = created({ kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 15 });
+      mocks.createCollection.mockResolvedValue(made);
+      const group = await openSheet();
+      mocks.getMyStorefront.mockResolvedValue(storefront({ collections: [...three().collections, made] }));
+      fireEvent.click(within(group).getByRole('radio', { name: /Combo/ }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Giảm khi mua cả bộ' }), { target: { value: '15' } });
+      fireEvent.click(createBtn());
+      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalled());
+      await screen.findByTestId('section-detail');
+      expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
     });
 
     it('máy chủ từ chối: tên còn nguyên, báo lỗi, sheet không đóng', async () => {
@@ -1137,6 +1192,104 @@ describe('Màn dựng theo khối (P10)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
       expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
       expect(card(/^Bộ hai,/)).toHaveFocus();
+    });
+
+    describe('lùi từ trang chi tiết (nút lùi nổi và nút lùi của máy)', () => {
+      const renderWithBack = () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+        return render(<QueryClientProvider client={qc}><BackButton /><StorefrontBuilderPage /></QueryClientProvider>);
+      };
+      const here = () => `${router.loc.pathname}${router.loc.search}`;
+
+      it('mở khối là thêm một mục lịch sử của /storefront (?khoi=); nút "Quay lại" nổi trả về danh sách khối, không rời màn dựng', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        renderWithBack();
+        await openSection(/^Bộ hai,/);
+        expect(here()).toBe('/storefront?khoi=c2');
+        expect(router.stack).toHaveLength(2);
+        fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(screen.queryByTestId('section-detail')).not.toBeInTheDocument();
+        expect(here()).toBe('/storefront');
+        expect(card(/^Bộ hai,/)).toHaveFocus();
+      });
+
+      it('nút lùi của máy (popstate) cũng về danh sách khối', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        renderPage();
+        await openSection(/^Bộ một,/);
+        act(() => router.go(-1));
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(here()).toBe('/storefront');
+      });
+
+      it('lùi rồi tiến lại thì trang chi tiết mở lại đúng khối đó', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        renderPage();
+        await openSection(/^Bộ hai,/);
+        act(() => router.go(-1));
+        await screen.findAllByTestId('section-card');
+        act(() => router.go(1));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Bộ hai' })).toBeInTheDocument();
+      });
+
+      it('"Gian hàng của tôi" trong trang lùi đúng một mục lịch sử (cùng chỗ với nút lùi nổi)', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        renderPage();
+        await openSection(/^Bộ một,/);
+        fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(router.idx).toBe(0);
+      });
+
+      it('mở thẳng bằng link có ?khoi= (không có danh sách phía trước): vào trang chi tiết, "Gian hàng của tôi" thay mục hiện tại thay vì lùi ra ngoài', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        router.go('/storefront?khoi=c2', { replace: true });
+        renderPage();
+        expect(await screen.findByRole('heading', { level: 1, name: 'Bộ hai' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(router.stack).toHaveLength(1);
+        expect(here()).toBe('/storefront');
+      });
+
+      it('khối đang mở bị xoá: về danh sách khối, không kẹt ở trang chi tiết trống', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        renderPage();
+        await openSection(/^Bộ một,/);
+        fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn khối' }));
+        fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
+        fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
+        await waitFor(() => expect(mocks.deleteCollection).toHaveBeenCalledWith('c1'));
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(here()).toBe('/storefront');
+      });
+
+      it('?khoi= trỏ tới khối không còn: hiện danh sách khối', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        router.go('/storefront?khoi=khong-co', { replace: true });
+        renderPage();
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+      });
+    });
+
+    it('menu của khối và tên gọi trong trang chi tiết đều nói "khối", không lẫn "bộ sưu tập"', async () => {
+      mocks.getMyStorefront.mockResolvedValue(three());
+      renderPage();
+      await openSection(/^Bộ một,/);
+      fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn khối' }));
+      const sheet = await screen.findByTestId('sheet');
+      expect(within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Đổi tên khối', 'Xoá khối']);
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Đổi tên khối' }));
+      expect(within(await screen.findByTestId('sheet')).getByRole('textbox', { name: 'Đổi tên khối' })).toBeInTheDocument();
+    });
+
+    it('khung xem trước ghi rõ là chỉ để xem (nút "Thêm cả combo" trong đó không bấm được)', async () => {
+      mocks.getMyStorefront.mockResolvedValue(three());
+      renderPage();
+      await openSection(/^Bộ ba,/);
+      expect(screen.getByText('Chỉ để xem, chưa bấm được.')).toBeInTheDocument();
+      expect(screen.getByTestId('shop-section-preview')).toHaveAttribute('inert');
     });
 
     it.each([
@@ -1210,6 +1363,56 @@ describe('Màn dựng theo khối (P10)', () => {
       expect(within(group).getByRole('radio', { name: /Lưới/ })).toHaveAttribute('aria-checked', 'true');
     });
 
+    describe('chọn kiểu bằng bàn phím (mũi tên đổi ô ngay mỗi lần bấm)', () => {
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const radioOf = (name: RegExp) => within(screen.getByRole('radiogroup', { name: 'Kiểu hiển thị' })).getByRole('radio', { name });
+
+      it('Lưới → Danh sách → Kệ ngang: ô cuối hiện ngay nhưng chỉ có một lần ghi, gửi ô cuối', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        mocks.updateCollection.mockResolvedValue({});
+        renderPage();
+        await openSection(/^Bộ một,/);
+        fireEvent.keyDown(radioOf(/Lưới/), { key: 'ArrowRight' });
+        fireEvent.keyDown(radioOf(/Danh sách/), { key: 'ArrowRight' });
+        expect(radioOf(/Kệ ngang/)).toHaveAttribute('aria-checked', 'true');
+        expect(mocks.updateCollection).not.toHaveBeenCalled();
+        await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledTimes(1));
+        expect(mocks.updateCollection).toHaveBeenCalledWith('c1', { layout: 'CAROUSEL' });
+        await wait(500);
+        expect(mocks.updateCollection).toHaveBeenCalledTimes(1);
+        expect(mocks.announce.mock.calls.filter(([, text]) => text === 'Đã đổi kiểu hiển thị.')).toHaveLength(1);
+      });
+
+      it('đổi đi rồi về đúng ô đang lưu: không gửi gì', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        renderPage();
+        await openSection(/^Bộ một,/);
+        fireEvent.keyDown(radioOf(/Lưới/), { key: 'ArrowRight' });
+        fireEvent.keyDown(radioOf(/Danh sách/), { key: 'ArrowLeft' });
+        expect(radioOf(/Lưới/)).toHaveAttribute('aria-checked', 'true');
+        await wait(600);
+        expect(mocks.updateCollection).not.toHaveBeenCalled();
+        expect(radioOf(/Lưới/)).toHaveAttribute('aria-checked', 'true');
+      });
+
+      it('lần ghi trước chưa xong thì lần chọn kế tiếp chờ, không gửi chồng; xong rồi mới gửi ô cuối', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        let first!: (v: unknown) => void;
+        mocks.updateCollection.mockReturnValueOnce(new Promise((r) => { first = r; })).mockResolvedValue({});
+        renderPage();
+        await openSection(/^Bộ một,/);
+        fireEvent.click(radioOf(/Danh sách/));
+        await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledTimes(1));
+        fireEvent.click(radioOf(/Kệ ngang/));
+        await wait(700);
+        expect(mocks.updateCollection).toHaveBeenCalledTimes(1);
+        expect(radioOf(/Kệ ngang/)).toHaveAttribute('aria-checked', 'true');
+        first({ layout: 'STACK' });
+        await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledTimes(2));
+        expect(mocks.updateCollection).toHaveBeenNthCalledWith(2, 'c1', { layout: 'CAROUSEL' });
+      });
+    });
+
     it('khối Thường khoá ô Combo, khối Combo khoá ba ô còn lại; bấm ô khoá không gọi API', async () => {
       mocks.getMyStorefront.mockResolvedValue(three());
       renderPage();
@@ -1258,12 +1461,45 @@ describe('Màn dựng theo khối (P10)', () => {
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu mức giảm 15%.', type: 'success' }));
     });
 
-    it('nhập 50: gửi 30 (trần mặc định)', async () => {
-      mocks.updateCollection.mockResolvedValue({ id: 'c3', comboDiscountPct: 30 });
+    it('trần cấu hình do máy chủ giữ: nhập 35 gửi đúng 35 (không bị cắt về 30 ở máy khách) và báo đã lưu 35', async () => {
+      mocks.updateCollection.mockResolvedValue({ id: 'c3', comboDiscountPct: 35 });
       await open();
-      fireEvent.change(pctInput(), { target: { value: '50' } });
+      fireEvent.change(pctInput(), { target: { value: '35' } });
       fireEvent.click(saveBtn());
-      await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledWith('c3', { comboDiscountPct: 30 }));
+      await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledWith('c3', { comboDiscountPct: 35 }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu mức giảm 35%.', type: 'success' }));
+    });
+
+    it('dòng gợi ý không ghi số trần cố định; mức đang là 30 mà nhập 50 thì nút Lưu vẫn bấm được và máy chủ trả lời trần', async () => {
+      mocks.getMyStorefront.mockResolvedValue(storefront({
+        collections: [section('c3', 'Bộ ba', mkItems('c', 3), { kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 30 })],
+      }));
+      mocks.updateCollection.mockResolvedValue({ id: 'c3', comboDiscountPct: 30 });
+      renderPage();
+      await openSection(/^Bộ ba,/);
+      expect(screen.getByTestId('combo-pct-hint').textContent).not.toMatch(/\d/);
+      fireEvent.change(pctInput(), { target: { value: '50' } });
+      expect(saveBtn()).not.toBeDisabled();
+      fireEvent.click(saveBtn());
+      await waitFor(() => expect(mocks.updateCollection).toHaveBeenCalledWith('c3', { comboDiscountPct: 50 }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mức giảm tối đa hiện là 30%.', type: 'warning' }));
+      expect(pctInput().value).toBe('30');
+      expect(screen.getByTestId('combo-pct-hint')).toHaveTextContent('Mức giảm tối đa hiện là 30%.');
+    });
+
+    it('đang lưu: nút báo bận và bấm lại không gửi lần hai, không có hai thông báo', async () => {
+      let resolve!: (v: unknown) => void;
+      mocks.updateCollection.mockReturnValue(new Promise((r) => { resolve = r; }));
+      await open();
+      fireEvent.change(pctInput(), { target: { value: '15' } });
+      fireEvent.click(saveBtn());
+      await waitFor(() => expect(saveBtn()).toHaveAttribute('aria-busy', 'true'));
+      fireEvent.click(saveBtn());
+      fireEvent.click(saveBtn());
+      expect(mocks.updateCollection).toHaveBeenCalledTimes(1);
+      resolve({ id: 'c3', comboDiscountPct: 15 });
+      await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy', 'true'));
+      expect(mocks.openSnackbar.mock.calls.filter(([o]) => (o as { text: string }).text === 'Đã lưu mức giảm 15%.')).toHaveLength(1);
     });
 
     it('máy chủ kẹp thấp hơn (trần 20): ô hiện 20 và báo mức tối đa', async () => {
@@ -1294,6 +1530,16 @@ describe('Màn dựng theo khối (P10)', () => {
       expect(screen.getByRole('button', { name: 'Xong' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
       expect(screen.queryByRole('button', { name: /^Đưa / })).not.toBeInTheDocument();
+    });
+
+    it('Sắp xếp ẩn khung xem trước (danh sách ↑↓ lên màn đầu); Xong thì khung hiện lại', async () => {
+      await detailWith(abc());
+      expect(screen.getByTestId('shop-section-preview')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Sắp xếp' }));
+      expect(screen.queryByTestId('shop-section-preview')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Đưa Món B lên' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+      expect(screen.getByTestId('shop-section-preview')).toBeInTheDocument();
     });
 
     it('nút ↑ của món đầu là aria-disabled (không disabled), giữ focus, không gọi API và báo "đã ở đầu danh sách"', async () => {

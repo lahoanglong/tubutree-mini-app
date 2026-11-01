@@ -123,6 +123,24 @@ test.describe('Mini App: màn dựng gian hàng 375px', () => {
     expect(patch[0]!.body).toEqual({ layout: 'STACK' });
   });
 
+  test('khối đang mở: nút "Quay lại" nổi và nút lùi của trình duyệt đều về danh sách khối, không rời /storefront', async ({ page }) => {
+    await page.goto('/storefront');
+    await openSection(page, 'Bếp xanh');
+    await expect(page).toHaveURL(/\/storefront\?khoi=/);
+    // Nút tròn nổi của app (aria-label "Quay lại") khác với liên kết "Gian hàng của tôi" trong trang, nhưng giờ cùng về danh sách khối.
+    await page.getByRole('button', { name: 'Quay lại', exact: true }).click();
+    await expect(page.getByTestId('section-card')).toHaveCount(3);
+    await expect(page.getByTestId('section-detail')).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe('/storefront');
+    expect(new URL(page.url()).search).toBe('');
+
+    await openSection(page, 'Bếp xanh');
+    await page.goBack();
+    await expect(page.getByTestId('section-card')).toHaveCount(3);
+    await expect(page.getByTestId('section-detail')).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe('/storefront');
+  });
+
   test('khối Kệ ngang: xem trước thẳng hàng như tab Shop thật (thẻ đầu cách mép khung 12px, tiêu đề 16px)', async ({ page }) => {
     await page.goto('/storefront');
     await openSection(page, 'Chăm sóc nhà cửa');

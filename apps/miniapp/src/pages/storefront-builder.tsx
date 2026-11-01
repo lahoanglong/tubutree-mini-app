@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
+import { Input, Page, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Pin, Eye, EyeOff, Trash2, Settings, Pencil, UserRoundCog, Plus, Share2,
@@ -16,8 +16,8 @@ import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, with
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import {
-  BUILDER_COPY, builderCopy, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
-  sectionCardView, sectionStyleOf, type SectionStyle, type newSectionDto,
+  BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
+  sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatPoints } from '../utils/format';
@@ -45,6 +45,7 @@ import { NewSectionSheet } from '../components/storefront-builder/new-section-sh
 import { ProfileSheet } from '../components/storefront-builder/profile-sheet';
 import { QuestList } from '../components/storefront-builder/quest-panel';
 import { SectionDetail } from '../components/storefront-builder/section-detail';
+import { useSectionStyle } from '../components/storefront-builder/use-section-style';
 import { CARD_MARGIN, SCROLL_BODY } from '../components/storefront-builder/shared';
 import { StatsSection } from '../components/storefront-builder/stats-panel';
 import { StorefrontSignupFlow } from './storefront-signup';
@@ -126,6 +127,7 @@ const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.i
 function Builder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const { openSnackbar } = useSnackbar();
   const { notify } = useNotify();
   const [pickerCol, setPickerCol] = useState<string | null>(null);
@@ -139,8 +141,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [newOpen, setNewOpen] = useState(false);
   const [itemMenuId, setItemMenuId] = useState<string | null>(null);
   const [colMenuId, setColMenuId] = useState<string | null>(null);
-  // Trang chi tiết là một góc nhìn trong trang, không phải route: không đụng route-map, nút lùi của hệ thống vẫn thoát khỏi trình dựng.
-  const [sectionId, setSectionId] = useState<string | null>(null);
+  // Trang chi tiết là một mục lịch sử của chính /storefront (`?khoi=`), không phải route mới: nút lùi nổi và nút lùi của máy trả về danh sách khối.
+  const sectionId = sectionIdFromSearch(location.search);
   const [sectionSort, setSectionSort] = useState(false);
   const [itemSort, setItemSort] = useState(false);
   const view = storefrontStatusView(sf);
@@ -193,7 +195,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
   const newColMut = useMutation({
     mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(dto),
-    onSuccess: (created) => {
+    onSuccess: (created, dto) => {
       haptic('light');
       // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
       qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: [...old.collections, { ...created, items: created.items ?? [] }] } : old));
@@ -201,6 +203,11 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       openSection(created.id);
       setPickerCol(created.id);
       void refresh();
+      // Máy chủ kẹp `%` theo trần cấu hình: thấp hơn số vừa nhập thì nói rõ, không để CTV tưởng đã được đúng số đó.
+      if (dto.kind === 'COMBO' && typeof dto.comboDiscountPct === 'number') {
+        const out = comboPctOutcome(dto.comboDiscountPct, created.comboDiscountPct);
+        if (out.clamped) notify({ text: out.text, type: 'warning' });
+      }
     },
     onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -231,6 +238,15 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       void refresh();
     },
     onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onSettled: (_d, _e, v) => sectionStyle.settled(v.id, v.layout),
+  });
+  const sectionStyle = useSectionStyle({
+    send: (v) => layoutMut.mutate(v),
+    isPending: () => layoutMut.isPending,
+    currentOf: (id) => {
+      const c = qc.getQueryData<StorefrontEdit | null>(['my-storefront'])?.collections.find((x) => x.id === id);
+      return c ? sectionStyleOf(c) : null;
+    },
   });
   const comboMut = useMutation({
     mutationFn: (v: { id: string; pct: number }) => updateCollection(v.id, { comboDiscountPct: v.pct }),
@@ -241,14 +257,12 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const saveComboPct = async (id: string, pct: number): Promise<number | null> => {
     try {
       const data = await comboMut.mutateAsync({ id, pct });
-      const saved = typeof data?.comboDiscountPct === 'number' ? data.comboDiscountPct : pct;
+      const out = comboPctOutcome(pct, data?.comboDiscountPct);
       haptic('light');
-      patchCollection(id, { comboDiscountPct: saved });
-      notify(saved < pct
-        ? { text: builderCopy('comboPctClamped', { n: saved }), type: 'warning' }
-        : { text: builderCopy('comboPctSaved', { n: saved }), type: 'success' });
+      patchCollection(id, { comboDiscountPct: out.saved });
+      notify({ text: out.text, type: out.clamped ? 'warning' : 'success' });
       void refresh();
-      return saved;
+      return out.saved;
     } catch (e) {
       notify({ text: getErrorMessage(e), type: 'error' });
       return null;
@@ -356,11 +370,14 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     savedScroll.current = pageEl()?.scrollTop ?? 0;
     lastOpened.current = id;
     setItemSort(false);
-    setSectionId(id);
+    // Mục lịch sử mới có đánh dấu để đóng lại bằng lùi một bước; không có `from` nên nút lùi nổi cũng chỉ lùi về đúng danh sách.
+    navigate(sectionHref(location.pathname, id), { replace: sectionId !== null, state: { builderSection: true } });
   };
   function closeSection() {
     setItemSort(false);
-    setSectionId(null);
+    // Mở thẳng bằng link có ?khoi= (không có mục danh sách phía trước) thì thay mục hiện tại thay vì lùi ra khỏi màn dựng.
+    if ((location.state as { builderSection?: boolean } | null)?.builderSection) navigate(-1);
+    else navigate(location.pathname, { replace: true });
   }
   const inDetail = sectionCol !== null;
   useEffect(() => {
@@ -390,7 +407,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             ? [
                 { key: 'pin', label: menuItem.isPinned ? vi.storefront.unpinItem : vi.storefront.pinItem, icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
                 { key: 'hide', label: menuItem.isHidden ? vi.storefront.showItem : vi.storefront.hideItem, icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
-                { key: 'remove', label: vi.storefront.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItemId(menuItem.id) },
+                { key: 'remove', label: BUILDER_COPY.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItemId(menuItem.id) },
               ]
             : []
         }
@@ -402,8 +419,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         actions={
           menuCol
             ? [
-                { key: 'rename', label: vi.storefront.renameCollection, icon: Pencil, onPress: () => setRenaming({ id: menuCol.id, title: menuCol.title }) },
-                { key: 'delete', label: vi.storefront.deleteCollection, icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
+                { key: 'rename', label: BUILDER_COPY.renameSection, icon: Pencil, onPress: () => setRenaming({ id: menuCol.id, title: menuCol.title }) },
+                { key: 'delete', label: BUILDER_COPY.deleteSection, icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
               ]
             : []
         }
@@ -446,11 +463,11 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         {pickerCol && <PickerSheet collectionId={pickerCol} onAdded={() => { void refresh(); }} onClose={() => setPickerCol(null)} />}
       </BottomSheet>
 
-      <BottomSheet open={!!renaming} onClose={() => setRenaming(null)} title={vi.storefront.renameCollection}>
+      <BottomSheet open={!!renaming} onClose={() => setRenaming(null)} title={BUILDER_COPY.renameSection}>
         {renaming && (
           <>
             <Input
-              aria-label={vi.storefront.renameCollection}
+              aria-label={BUILDER_COPY.renameSection}
               value={renaming.title}
               onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
             />
@@ -467,7 +484,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         )}
       </BottomSheet>
 
-      <BottomSheet open={!!confirmDeleteCol} onClose={() => setConfirmDeleteCol(null)} title={vi.storefront.deleteCollectionConfirm}>
+      <BottomSheet open={!!confirmDeleteCol} onClose={() => setConfirmDeleteCol(null)} title={BUILDER_COPY.deleteSectionConfirm}>
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
           <Button variant="secondary" style={{ flex: 1 }} onPress={() => setConfirmDeleteCol(null)}>
             {vi.common.cancel}
@@ -478,7 +495,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             loading={deleteColMut.isPending}
             onPress={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
           >
-            {vi.storefront.deleteCollection}
+            {BUILDER_COPY.deleteSection}
           </Button>
         </div>
       </BottomSheet>
@@ -559,7 +576,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   );
 
   if (sectionCol) {
-    const layoutBusy: SectionStyle | null = layoutMut.isPending && layoutMut.variables?.id === sectionCol.id ? layoutMut.variables.layout : null;
+    const pickedStyle = sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
     return (
       <BuilderShell bare style={{ paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
         <SectionDetail
@@ -567,12 +584,11 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           productMap={productMap}
           sortMode={itemSort}
           headingRef={headingRef}
-          layoutBusy={layoutBusy}
+          pickedStyle={pickedStyle}
           onBack={closeSection}
           onMenu={() => setColMenuId(sectionCol.id)}
           onStyle={(style) => {
-            if (style === 'COMBO' || style === sectionStyleOf(sectionCol)) return;
-            layoutMut.mutate({ id: sectionCol.id, layout: style });
+            if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
           }}
           onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
           onAddItem={() => setPickerCol(sectionCol.id)}

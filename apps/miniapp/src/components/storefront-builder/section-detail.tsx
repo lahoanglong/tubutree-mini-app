@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import { Input } from 'zmp-ui';
 import { ChevronLeft, Ellipsis, MessageSquarePlus, Pin, Plus } from 'lucide-react';
 import {
-  BUILDER_COPY, parseComboPct, sectionCardView, sectionStyleOf, styleLockNote, styleOptions, visibleCollection,
+  BUILDER_COPY, builderCopy, parseComboPct, sectionCardView, sectionStyleOf, styleLockNote, styleOptions, visibleCollection,
   type MoveDirection, type SectionStyle,
 } from '@tubutree/app-core/commerce/storefront-builder';
 import type { PickerProduct, StorefrontCollectionEdit, StorefrontItemEdit } from '../../services/storefront-api';
@@ -26,8 +26,8 @@ export interface SectionDetailProps {
   productMap: Map<string, PickerProduct>;
   sortMode: boolean;
   headingRef: Ref<HTMLHeadingElement>;
-  /** Kiểu đang gửi lên máy chủ: bộ chọn hiện ngay, không chờ tải lại. */
-  layoutBusy: SectionStyle | null;
+  /** Kiểu vừa chọn mà máy chủ chưa lưu xong: bộ chọn hiện ngay, không chờ gửi và tải lại. */
+  pickedStyle: SectionStyle | null;
   onBack: () => void;
   onMenu: () => void;
   onStyle: (style: SectionStyle) => void;
@@ -48,13 +48,28 @@ const caption = { fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-
 
 function ComboPctField({ pct, onSave }: { pct: number | null; onSave: (n: number) => Promise<number | null> }) {
   const [text, setText] = useState(pct === null ? '' : String(pct));
+  const [saving, setSaving] = useState(false);
+  // Trần thật do máy chủ giữ; chỉ biết nó khi lần lưu vừa rồi bị hạ xuống, lúc đó dòng gợi ý nói đúng số ấy.
+  const [cap, setCap] = useState<number | null>(null);
+  const inflight = useRef(false);
   useEffect(() => setText(pct === null ? '' : String(pct)), [pct]);
   const parsed = parseComboPct(text);
   const save = async () => {
-    if (parsed === null) return;
-    const saved = await onSave(parsed);
-    if (saved !== null) setText(String(saved));
+    if (parsed === null || inflight.current) return;
+    inflight.current = true;
+    setSaving(true);
+    try {
+      const saved = await onSave(parsed);
+      if (saved !== null) {
+        setText(String(saved));
+        setCap(saved < parsed ? saved : null);
+      }
+    } finally {
+      inflight.current = false;
+      setSaving(false);
+    }
   };
+  const warn = cap !== null || (parsed !== null && String(parsed) !== text.trim());
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
@@ -63,9 +78,11 @@ function ComboPctField({ pct, onSave }: { pct: number | null; onSave: (n: number
             <Input inputMode="numeric" maxLength={3} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
         </div>
-        <Button variant="secondary" disabled={parsed === null || parsed === pct} onPress={save}>{BUILDER_COPY.comboPctSave}</Button>
+        <Button variant="secondary" loading={saving} disabled={parsed === null || parsed === pct} onPress={save}>{BUILDER_COPY.comboPctSave}</Button>
       </div>
-      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>{BUILDER_COPY.comboPctHint}</Text>
+      <div data-testid="combo-pct-hint" style={{ ...caption, marginTop: 4, color: warn ? 'var(--color-status-warning-fg)' : 'var(--color-text-tertiary)' }}>
+        {cap !== null ? builderCopy('comboPctClamped', { n: cap }) : BUILDER_COPY.comboPctHint}
+      </div>
     </div>
   );
 }
@@ -97,7 +114,7 @@ export function SectionDetail(p: SectionDetailProps) {
             <Icon icon={ChevronLeft} size="sm" tone="brand" />
             <Text variant="body-sm" tone="brand">{BUILDER_COPY.back}</Text>
           </button>
-          <RowIconButton icon={Ellipsis} label={vi.storefront.moreCollectionActions} onPress={p.onMenu} />
+          <RowIconButton icon={Ellipsis} label={BUILDER_COPY.sectionOptions} onPress={p.onMenu} />
         </div>
         <div style={{ padding: '0 8px' }}>
           <h1
@@ -116,16 +133,20 @@ export function SectionDetail(p: SectionDetailProps) {
       </div>
 
       <div style={{ padding: '16px 16px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <LayoutPicker value={p.layoutBusy ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
+        <LayoutPicker value={p.pickedStyle ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
         {col.kind === 'COMBO' && <ComboPctField pct={col.comboDiscountPct} onSave={p.onComboPct} />}
         {view.warnings.map((w) => (
           <div key={w} role="status" style={{ ...caption, color: 'var(--color-status-warning-fg)' }}>{w}</div>
         ))}
       </div>
 
-      {shown.items.length > 0 && (
+      {/* Sắp xếp cần danh sách ↑↓ ngay màn đầu; khung xem trước cao cả ngàn px sẽ đẩy nó xuống, nên ẩn trong chế độ này. */}
+      {shown.items.length > 0 && !p.sortMode && (
         <section style={{ marginTop: 16 }}>
-          <Text variant="label" tone="secondary" as="div" style={{ padding: '0 16px 6px' }}>{BUILDER_COPY.preview}</Text>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 16px 6px' }}>
+            <Text variant="label" tone="secondary" as="div">{BUILDER_COPY.preview}</Text>
+            <Text variant="caption" tone="tertiary" as="div">{BUILDER_COPY.previewNote}</Text>
+          </div>
           {/* Khung rộng đúng bề ngang màn hình, lề 16px như tab Shop thật: kệ ngang lùi lề âm đúng 16px nên thẻ đầu thẳng với tiêu đề. */}
           <div
             data-testid="shop-section-preview"

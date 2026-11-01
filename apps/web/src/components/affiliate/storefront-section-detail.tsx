@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { ChevronLeft, Ellipsis, MessageSquarePlus, Pin, Plus } from 'lucide-react';
 import {
-  BUILDER_COPY, parseComboPct, sectionCardView, sectionStyleOf, styleLockNote, styleOptions, visibleCollection,
+  BUILDER_COPY, builderCopy, parseComboPct, sectionCardView, sectionStyleOf, styleLockNote, styleOptions, visibleCollection,
   type MoveDirection, type SectionStyle,
 } from '@tubutree/app-core/commerce/storefront-builder';
 import type { PickerProduct, StorefrontCollectionEdit, StorefrontItemEdit } from '@tubutree/app-core/api/storefront';
@@ -23,8 +23,8 @@ export interface StorefrontSectionDetailProps {
   productMap: Map<string, PickerProduct>;
   sortMode: boolean;
   headingRef: Ref<HTMLHeadingElement>;
-  /** Kiểu đang gửi lên máy chủ: bộ chọn hiện ngay, không chờ tải lại. */
-  layoutBusy: SectionStyle | null;
+  /** Kiểu vừa chọn mà máy chủ chưa lưu xong: bộ chọn hiện ngay, không chờ gửi và tải lại. */
+  pickedStyle: SectionStyle | null;
   onBack: () => void;
   onMenu: () => void;
   onStyle: (style: SectionStyle) => void;
@@ -44,15 +44,27 @@ const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.i
 function ComboPctField({ pct, onSave }: { pct: number | null; onSave: (n: number) => Promise<number | null> }) {
   const [text, setText] = useState(pct === null ? '' : String(pct));
   const [saving, setSaving] = useState(false);
+  // Trần thật do máy chủ giữ; chỉ biết nó khi lần lưu vừa rồi bị hạ xuống, lúc đó dòng gợi ý nói đúng số ấy.
+  const [cap, setCap] = useState<number | null>(null);
+  const inflight = useRef(false);
   useEffect(() => setText(pct === null ? '' : String(pct)), [pct]);
   const parsed = parseComboPct(text);
   const save = async () => {
-    if (parsed === null || saving) return;
+    if (parsed === null || inflight.current) return;
+    inflight.current = true;
     setSaving(true);
-    const saved = await onSave(parsed);
-    setSaving(false);
-    if (saved !== null) setText(String(saved));
+    try {
+      const saved = await onSave(parsed);
+      if (saved !== null) {
+        setText(String(saved));
+        setCap(saved < parsed ? saved : null);
+      }
+    } finally {
+      inflight.current = false;
+      setSaving(false);
+    }
   };
+  const warn = cap !== null || (parsed !== null && String(parsed) !== text.trim());
   return (
     <div>
       <div className="flex items-end gap-2">
@@ -61,11 +73,13 @@ function ComboPctField({ pct, onSave }: { pct: number | null; onSave: (n: number
             <input className={ui.field} aria-label={BUILDER_COPY.comboPct} inputMode="numeric" maxLength={3} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
         </div>
-        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={parsed === null || parsed === pct || saving} onClick={() => void save()}>
-          {BUILDER_COPY.comboPctSave}
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={parsed === null || parsed === pct || saving} aria-busy={saving || undefined} onClick={() => void save()}>
+          {saving ? 'Đang lưu…' : BUILDER_COPY.comboPctSave}
         </button>
       </div>
-      <p className="mt-1 text-xs text-stone-600">{BUILDER_COPY.comboPctHint}</p>
+      <p data-testid="combo-pct-hint" className={`mt-1 text-xs ${warn ? 'text-warning-fg' : 'text-stone-600'}`}>
+        {cap !== null ? builderCopy('comboPctClamped', { n: cap }) : BUILDER_COPY.comboPctHint}
+      </p>
     </div>
   );
 }
@@ -97,7 +111,7 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             {BUILDER_COPY.back}
           </button>
-          <MenuButton label="Tuỳ chọn bộ sưu tập" onPress={p.onMenu} />
+          <MenuButton label={BUILDER_COPY.sectionOptions} onPress={p.onMenu} />
         </div>
         <h2 ref={p.headingRef} tabIndex={-1} className="break-words font-display text-xl font-semibold text-stone-900 outline-none">
           {col.title}
@@ -105,7 +119,7 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
         <p className="text-xs text-stone-600">{view.countText}</p>
       </div>
 
-      <LayoutPicker value={p.layoutBusy ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
+      <LayoutPicker value={p.pickedStyle ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
       {col.kind === 'COMBO' && <ComboPctField pct={col.comboDiscountPct} onSave={p.onComboPct} />}
       {view.warnings.map((w) => (
         <div key={w} role="status" className="text-xs text-warning-fg">
@@ -113,9 +127,13 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
         </div>
       ))}
 
-      {shown.items.length > 0 && (
+      {/* Sắp xếp cần danh sách ↑↓ ngay màn đầu; khung xem trước cao cả ngàn px sẽ đẩy nó xuống, nên ẩn trong chế độ này. */}
+      {shown.items.length > 0 && !p.sortMode && (
         <section>
-          <div className="mb-1.5 text-xs font-medium text-stone-700">{BUILDER_COPY.preview}</div>
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <div className="text-xs font-medium text-stone-700">{BUILDER_COPY.preview}</div>
+            <div className="text-xs text-stone-600">{BUILDER_COPY.previewNote}</div>
+          </div>
           {/* Khung rộng đúng bề ngang màn hình ở điện thoại, lề 16px như tab Shop thật: kệ ngang lùi lề âm đúng 16px nên thẻ đầu thẳng với tiêu đề. */}
           <div data-testid="shop-section-preview" inert className="tubu-bleed overflow-hidden border-y border-stone-200 bg-stone-50 px-4 md:rounded-card md:border">
             <ShopSection collection={shown} preview />

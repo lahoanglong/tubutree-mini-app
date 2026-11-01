@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Trash2, UserRoundCog } from 'lucide-react';
 import {
@@ -19,8 +20,8 @@ import {
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, storefrontPublishCopy, storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import {
-  BUILDER_COPY, builderCopy, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
-  sectionCardView, sectionStyleOf, type SectionStyle, type newSectionDto,
+  BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
+  sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
@@ -36,6 +37,7 @@ import { SectionCard } from '@/components/mini/section-card';
 import { StorefrontNewSection } from './storefront-new-section';
 import { StorefrontPreview } from './storefront-preview';
 import { StorefrontSectionDetail } from './storefront-section-detail';
+import { useSectionStyle } from './use-section-style';
 import { ContentKitSheet, StorefrontShareSheet } from './storefront-share';
 import { QuestList, StatsSection } from './storefront-panels';
 import { storefrontHost } from './storefront-rules';
@@ -116,6 +118,9 @@ function ConfirmSheet({
 
 export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [notice, setNotice] = useState<Notice>(null);
   const notify: Notify = (text, error = false) => setNotice({ text, error });
   const [pickerCol, setPickerCol] = useState<string | null>(null);
@@ -129,8 +134,9 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const [newOpen, setNewOpen] = useState(false);
   const [itemMenuId, setItemMenuId] = useState<string | null>(null);
   const [colMenuId, setColMenuId] = useState<string | null>(null);
-  // Trang chi tiết là một góc nhìn trong trang, không phải route: h1 của trang vẫn là "Gian hàng của tôi".
-  const [sectionId, setSectionId] = useState<string | null>(null);
+  // Trang chi tiết là một mục lịch sử của chính trang này (`?khoi=`), không phải route mới: nút lùi nổi (điện thoại) và nút lùi của trình duyệt
+  // trả về danh sách khối. h1 của trang vẫn là "Gian hàng của tôi".
+  const sectionId = sectionIdFromSearch(searchParams.toString());
   const [sectionSort, setSectionSort] = useState(false);
   const [itemSort, setItemSort] = useState(false);
   const view = storefrontStatusView(sf);
@@ -189,7 +195,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   });
   const newColMut = useMutation({
     mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(coreHttp, dto),
-    onSuccess: (created) => {
+    onSuccess: (created, dto) => {
       // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
       qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) =>
         old && created?.id ? { ...old, collections: [...old.collections, { ...created, items: created.items ?? [] }] } : old,
@@ -200,6 +206,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         setPickerCol(created.id);
       }
       void refresh();
+      // Máy chủ kẹp `%` theo trần cấu hình: thấp hơn số vừa nhập thì nói rõ, không để CTV tưởng đã được đúng số đó.
+      if (dto.kind === 'COMBO' && typeof dto.comboDiscountPct === 'number') {
+        const out = comboPctOutcome(dto.comboDiscountPct, created?.comboDiscountPct);
+        if (out.clamped) notify(out.text, true);
+      }
     },
     onError: fail,
   });
@@ -226,6 +237,15 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       void refresh();
     },
     onError: fail,
+    onSettled: (_d, _e, v) => sectionStyle.settled(v.id, v.layout),
+  });
+  const sectionStyle = useSectionStyle({
+    send: (v) => layoutMut.mutate(v),
+    isPending: () => layoutMut.isPending,
+    currentOf: (id) => {
+      const c = qc.getQueryData<StorefrontEdit | null>(['my-storefront'])?.collections.find((x) => x.id === id);
+      return c ? sectionStyleOf(c) : null;
+    },
   });
   const comboMut = useMutation({
     mutationFn: (v: { id: string; pct: number }) => updateCollection(coreHttp, v.id, { comboDiscountPct: v.pct }),
@@ -234,11 +254,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const saveComboPct = async (id: string, pct: number): Promise<number | null> => {
     try {
       const data = await comboMut.mutateAsync({ id, pct });
-      const saved = typeof data?.comboDiscountPct === 'number' ? data.comboDiscountPct : pct;
-      patchCollection(id, { comboDiscountPct: saved });
-      notify(saved < pct ? builderCopy('comboPctClamped', { n: saved }) : builderCopy('comboPctSaved', { n: saved }), saved < pct);
+      const out = comboPctOutcome(pct, data?.comboDiscountPct);
+      patchCollection(id, { comboDiscountPct: out.saved });
+      notify(out.text, out.clamped);
       void refresh();
-      return saved;
+      return out.saved;
     } catch (e) {
       fail(e);
       return null;
@@ -344,14 +364,27 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   // Mở/đóng trang chi tiết: vào tiêu đề khối khi mở; khi lùi lại thì về đúng thẻ vừa mở.
   const headingRef = useRef<HTMLHeadingElement>(null);
   const lastOpened = useRef<string | null>(null);
+  // Mục lịch sử của trang chi tiết là do chính màn này thêm thì đóng bằng lùi một bước; mở thẳng bằng link có ?khoi= (hoặc F5) thì không có
+  // mục danh sách phía trước, lùi sẽ rời màn dựng nên thay mục hiện tại.
+  const pushedDetail = useRef(false);
   const openSection = (id: string) => {
     lastOpened.current = id;
     setItemSort(false);
-    setSectionId(id);
+    if (sectionId !== null) {
+      router.replace(sectionHref(pathname, id));
+      return;
+    }
+    pushedDetail.current = true;
+    router.push(sectionHref(pathname, id));
   };
   function closeSection() {
     setItemSort(false);
-    setSectionId(null);
+    if (sectionId !== null && pushedDetail.current) {
+      pushedDetail.current = false;
+      router.back();
+    } else {
+      router.replace(pathname);
+    }
   }
 
   // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
@@ -375,7 +408,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       ?.focus();
   }, [inDetail]);
 
-  const layoutBusy: SectionStyle | null = sectionCol && layoutMut.isPending && layoutMut.variables?.id === sectionCol.id ? layoutMut.variables.layout : null;
+  const pickedStyle = sectionCol && sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
   const overflow = overflowSectionsNotice(sf.collections);
 
   return (
@@ -394,12 +427,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             productMap={productMap}
             sortMode={itemSort}
             headingRef={headingRef}
-            layoutBusy={layoutBusy}
+            pickedStyle={pickedStyle}
             onBack={closeSection}
             onMenu={() => setColMenuId(sectionCol.id)}
             onStyle={(style) => {
-              if (style === 'COMBO' || style === sectionStyleOf(sectionCol)) return;
-              layoutMut.mutate({ id: sectionCol.id, layout: style });
+              if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
             }}
             onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
             onAddItem={() => setPickerCol(sectionCol.id)}
@@ -552,20 +584,20 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             ? [
                 { key: 'pin', label: menuItem.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu', icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
                 { key: 'hide', label: menuItem.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm', icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
-                { key: 'remove', label: 'Xoá khỏi bộ sưu tập', icon: Trash2, danger: true, onPress: () => setConfirmDeleteItem(menuItem.id) },
+                { key: 'remove', label: BUILDER_COPY.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItem(menuItem.id) },
               ]
             : []
         }
       />
       <ActionMenu
         open={!!menuCol}
-        title={menuCol?.title ?? 'Bộ sưu tập'}
+        title={menuCol?.title ?? BUILDER_COPY.sections}
         onClose={() => setColMenuId(null)}
         actions={
           menuCol
             ? [
-                { key: 'rename', label: 'Sửa bộ sưu tập', icon: Pencil, onPress: () => setEditingCol(menuCol.id) },
-                { key: 'delete', label: 'Xoá bộ sưu tập', icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
+                { key: 'rename', label: BUILDER_COPY.renameSection, icon: Pencil, onPress: () => setEditingCol(menuCol.id) },
+                { key: 'delete', label: BUILDER_COPY.deleteSection, icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
               ]
             : []
         }
@@ -584,8 +616,8 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       />
       <ConfirmSheet
         open={!!confirmDeleteCol}
-        title="Xoá bộ sưu tập này?"
-        actionLabel="Xoá bộ sưu tập"
+        title={BUILDER_COPY.deleteSectionConfirm}
+        actionLabel={BUILDER_COPY.deleteSection}
         pending={deleteColMut.isPending}
         onClose={() => setConfirmDeleteCol(null)}
         onConfirm={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}

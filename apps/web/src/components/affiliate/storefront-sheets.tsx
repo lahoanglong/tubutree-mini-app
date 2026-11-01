@@ -14,6 +14,7 @@ import {
   type StorefrontCollectionEdit,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
+import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
 import { pickerQuery, storefrontCategoriesQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
@@ -396,7 +397,7 @@ function ConfigForm({
   );
 }
 
-/** Sửa bộ sưu tập: chỉ đổi tên, giống Mini App (loại, bố cục, % giảm combo không có giao diện). */
+/** Đổi tên khối: chỉ đổi tên, giống Mini App (loại, bố cục, % giảm combo không có giao diện). */
 export function CollectionSheet({
   collection,
   onClose,
@@ -407,7 +408,7 @@ export function CollectionSheet({
   onSaved: Notify;
 }) {
   return (
-    <Sheet open={!!collection} onClose={onClose} title="Sửa bộ sưu tập">
+    <Sheet open={!!collection} onClose={onClose} title={BUILDER_COPY.renameSection}>
       {collection && <CollectionForm key={collection.id} collection={collection} onClose={onClose} onSaved={onSaved} />}
     </Sheet>
   );
@@ -419,7 +420,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
   const saveMut = useMutation({
     mutationFn: () => updateCollection(coreHttp, collection.id, { title: title.trim() }),
     onSuccess: () => {
-      onSaved('Đã lưu bộ sưu tập');
+      onSaved(BUILDER_COPY.sectionRenamed);
       onClose();
     },
     onError: (e) => setError(actErrText(e)),
@@ -427,7 +428,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
 
   return (
     <div className="flex flex-col gap-3">
-      <Field label="Tên bộ sưu tập">
+      <Field label={BUILDER_COPY.sectionName}>
         <input className={ui.field} maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
       <InlineError text={error} />

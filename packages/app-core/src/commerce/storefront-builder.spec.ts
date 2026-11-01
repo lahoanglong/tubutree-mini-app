@@ -7,6 +7,7 @@ import {
   LAYOUT_LABEL,
   SECTION_STYLES,
   clampComboPct,
+  comboPctOutcome,
   isCustomerVisible,
   moveAnnouncement,
   moveBlockedAnnouncement,
@@ -16,6 +17,8 @@ import {
   overflowSectionsNotice,
   parseComboPct,
   questStripView,
+  sectionHref,
+  sectionIdFromSearch,
   sectionCardView,
   sectionStyleOf,
   styleLockNote,
@@ -72,23 +75,35 @@ describe('nhãn và kiểu khối', () => {
 });
 
 describe('% combo', () => {
-  it('clampComboPct: số nguyên trong [0, trần]', () => {
-    expect(clampComboPct(50)).toBe(30);
+  it('clampComboPct: số nguyên trong [0, giới hạn DTO]; trần cấu hình của máy chủ không bị đoán trước', () => {
+    expect(clampComboPct(150)).toBe(100);
+    expect(clampComboPct(50)).toBe(50);
     expect(clampComboPct(12.6)).toBe(13);
     expect(clampComboPct(-4)).toBe(0);
     expect(clampComboPct(Number.NaN)).toBe(0);
     expect(clampComboPct(50, 40)).toBe(40);
   });
 
-  it('parseComboPct: chỉ nhận số nguyên dương, quá trần thì kẹp', () => {
+  it('parseComboPct: chỉ nhận số nguyên dương; trần cấu hình (có thể là 40) không bị cắt về 30 ở máy khách', () => {
     expect(parseComboPct('15')).toBe(15);
     expect(parseComboPct(' 15 ')).toBe(15);
-    expect(parseComboPct('99')).toBe(30);
+    expect(parseComboPct('35')).toBe(35);
+    expect(parseComboPct('99')).toBe(99);
+    expect(parseComboPct('150')).toBe(100);
+    expect(parseComboPct('99', 30)).toBe(30);
     for (const bad of ['', 'abc', '0', '-3', '1.5', '1000']) expect(parseComboPct(bad), bad).toBeNull();
   });
 
-  it('newSectionDto: combo gửi kind, layout, comboDiscountPct đã kẹp; kiểu thường không có comboDiscountPct', () => {
-    expect(newSectionDto({ style: 'COMBO', title: ' Bộ đôi ', comboPct: 50 })).toEqual({ title: 'Bộ đôi', kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 30 });
+  it('comboPctOutcome: máy chủ lưu thấp hơn số gửi thì báo đã hạ; bằng hoặc thiếu thì báo đã lưu', () => {
+    expect(comboPctOutcome(50, 30)).toEqual({ saved: 30, clamped: true, text: 'Mức giảm tối đa hiện là 30%.' });
+    expect(comboPctOutcome(25, 25)).toEqual({ saved: 25, clamped: false, text: 'Đã lưu mức giảm 25%.' });
+    expect(comboPctOutcome(25, undefined)).toEqual({ saved: 25, clamped: false, text: 'Đã lưu mức giảm 25%.' });
+    expect(comboPctOutcome(25, null).clamped).toBe(false);
+  });
+
+  it('newSectionDto: combo gửi kind, layout, comboDiscountPct trong giới hạn DTO; kiểu thường không có comboDiscountPct', () => {
+    expect(newSectionDto({ style: 'COMBO', title: ' Bộ đôi ', comboPct: 50 })).toEqual({ title: 'Bộ đôi', kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 50 });
+    expect(newSectionDto({ style: 'COMBO', title: 'A', comboPct: 400 }).comboDiscountPct).toBe(100);
     expect(newSectionDto({ style: 'COMBO', title: 'A' }).comboDiscountPct).toBe(10);
     const grid = newSectionDto({ style: 'GRID', title: 'A' });
     expect(grid).toEqual({ title: 'A', kind: 'NORMAL', layout: 'GRID' });
@@ -98,6 +113,22 @@ describe('% combo', () => {
 
   it('suggestedSectionTitle: có gợi ý cho từng kiểu', () => {
     for (const s of SECTION_STYLES) expect(suggestedSectionTitle(s).length).toBeGreaterThan(2);
+  });
+});
+
+describe('địa chỉ trang chi tiết khối', () => {
+  it('sectionHref ghi id vào ?khoi= (có mã hoá) và sectionIdFromSearch đọc lại đúng', () => {
+    expect(sectionHref('/storefront', 'c1')).toBe('/storefront?khoi=c1');
+    const href = sectionHref('/ctv/gian-hang', 'a b&c');
+    expect(href).toBe('/ctv/gian-hang?khoi=a%20b%26c');
+    expect(sectionIdFromSearch(href.slice(href.indexOf('?')))).toBe('a b&c');
+  });
+
+  it('sectionIdFromSearch: không có tham số hoặc rỗng thì là danh sách khối (null)', () => {
+    expect(sectionIdFromSearch('')).toBeNull();
+    expect(sectionIdFromSearch('?khoi=')).toBeNull();
+    expect(sectionIdFromSearch('?x=1')).toBeNull();
+    expect(sectionIdFromSearch('?x=1&khoi=c2')).toBe('c2');
   });
 });
 
@@ -263,6 +294,13 @@ describe('BUILDER_COPY', () => {
     for (const [key, text] of Object.entries(BUILDER_COPY)) {
       for (const t of FORBIDDEN_TERMS) expect(t.pattern.test(text), `${key}: ${text}`).toBe(false);
     }
+  });
+
+  it('một tên gọi "khối" cho mọi chữ của màn dựng; chữ về trần % không ghi số cố định (trần là cấu hình của máy chủ)', () => {
+    for (const [key, text] of Object.entries(BUILDER_COPY)) expect(/bộ sưu tập/i.test(text), `${key}: ${text}`).toBe(false);
+    expect(/\d/.test(BUILDER_COPY.comboPctHint)).toBe(false);
+    expect(BUILDER_COPY.renameSection).toBe('Đổi tên khối');
+    expect(BUILDER_COPY.deleteSection).toBe('Xoá khối');
   });
 
   it('builderCopy điền {n}, thiếu biến thì ném lỗi', () => {

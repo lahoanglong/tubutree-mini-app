@@ -19,24 +19,48 @@ export const STYLE_HINT: Record<SectionStyle, string> = {
   COMBO: '2–5 món, giảm giá cả bộ',
 };
 
-/** Trần mặc định của `storefront.max_combo_pct` bên API; máy chủ vẫn là nơi kẹp thật, màn chỉ kẹp sớm. */
-export const COMBO_PCT_DEFAULT_MAX = 30;
+/**
+ * Giới hạn của DTO (`@Max(100)`), không phải trần giảm giá: trần thật là cấu hình `storefront.max_combo_pct` mà API chưa trả về cho màn,
+ * nên màn chỉ chặn số vô lý và để máy chủ kẹp, rồi đọc lại số đã lưu (`comboPctOutcome`) để nói rõ khi nó thấp hơn số vừa nhập.
+ */
+export const COMBO_PCT_API_MAX = 100;
 export const COMBO_PCT_NEW_DEFAULT = 10;
 export const COMBO_MIN_ITEMS = 2;
 export const COMBO_MAX_ITEMS = 5;
 
 /** Số nguyên trong [0, max]; giá trị không hữu hạn là 0 (không giảm). */
-export function clampComboPct(pct: number, max: number = COMBO_PCT_DEFAULT_MAX): number {
+export function clampComboPct(pct: number, max: number = COMBO_PCT_API_MAX): number {
   if (!Number.isFinite(pct)) return 0;
   return Math.min(Math.max(Math.round(pct), 0), max);
 }
 
-/** Ô nhập %: chỉ số nguyên 1–3 chữ số, >0; quá trần thì kẹp. Còn lại null (Lưu bị tắt). */
-export function parseComboPct(text: string, max: number = COMBO_PCT_DEFAULT_MAX): number | null {
+/** Ô nhập %: chỉ số nguyên 1–3 chữ số, >0; quá giới hạn DTO thì kẹp. Còn lại null (Lưu bị tắt). */
+export function parseComboPct(text: string, max: number = COMBO_PCT_API_MAX): number | null {
   const t = text.trim();
   if (!/^\d{1,3}$/.test(t)) return null;
   const n = Number(t);
   return n > 0 ? clampComboPct(n, max) : null;
+}
+
+/** Kết quả một lần ghi `%` combo: số máy chủ đã lưu (thiếu trong phản hồi thì coi là số đã gửi) và câu báo; thấp hơn số gửi nghĩa là máy chủ đã kẹp theo trần cấu hình. */
+export function comboPctOutcome(sent: number, saved: number | null | undefined): { saved: number; clamped: boolean; text: string } {
+  const value = typeof saved === 'number' ? saved : sent;
+  const clamped = value < sent;
+  return { saved: value, clamped, text: builderCopy(clamped ? 'comboPctClamped' : 'comboPctSaved', { n: value }) };
+}
+
+/**
+ * Khối đang mở ở trang chi tiết nằm trên địa chỉ (`?khoi=<id>`), không chỉ trong state của trang: mỗi lần mở là một mục lịch sử,
+ * nên nút lùi nổi và nút lùi của máy trả về danh sách khối thay vì rời cả màn dựng.
+ */
+export const SECTION_PARAM = 'khoi';
+
+export function sectionIdFromSearch(search: string): string | null {
+  return new URLSearchParams(search).get(SECTION_PARAM) || null;
+}
+
+export function sectionHref(pathname: string, id: string): string {
+  return `${pathname}?${SECTION_PARAM}=${encodeURIComponent(id)}`;
 }
 
 export interface BuilderItem {
@@ -221,12 +245,12 @@ export const BUILDER_COPY = {
   sort: 'Sắp xếp',
   sortDone: 'Xong',
   addSection: 'Thêm khối',
-  viewAsGuest: 'Xem như khách',
   styleLabel: 'Kiểu hiển thị',
   preview: 'Khách sẽ thấy',
+  previewNote: 'Chỉ để xem, chưa bấm được.',
   comboPct: 'Giảm khi mua cả bộ',
   comboPctSave: 'Lưu mức giảm',
-  comboPctHint: 'Tối đa 30%',
+  comboPctHint: 'Nhập số nguyên; quá mức tối đa Tubu cho phép sẽ tự hạ về mức đó.',
   comboPctClamped: 'Mức giảm tối đa hiện là {n}%.',
   comboPctSaved: 'Đã lưu mức giảm {n}%.',
   layoutSaved: 'Đã đổi kiểu hiển thị.',
@@ -235,6 +259,10 @@ export const BUILDER_COPY = {
   itemsHeading: 'Sản phẩm trong khối',
   renameSection: 'Đổi tên khối',
   deleteSection: 'Xoá khối',
+  deleteSectionConfirm: 'Xoá khối này?',
+  sectionOptions: 'Tuỳ chọn khối',
+  sectionRenamed: 'Đã đổi tên khối',
+  removeItem: 'Xoá khỏi khối',
   createAndAdd: 'Tạo và thêm món',
   sectionName: 'Tên khối',
   stats30: 'Thống kê 30 ngày',
