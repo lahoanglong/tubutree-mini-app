@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, byText, click, confirmDialog, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), picked: 0 }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), picked: 0, pickPrice: 50_000 }));
 vi.mock('@/lib/admin-bundles-client', () => ({
   listAdminBundles: mocks.list,
   getAdminBundle: mocks.get,
@@ -27,14 +27,14 @@ vi.mock('./product-picker', () => ({
   ),
 }));
 
-// Món mua kèm chọn theo phân loại: mỗi lần bấm "Thêm món mua kèm" chọn món kế tiếp (p1/v1, p2/v2, ...), giá bán 50.000đ.
+// Món mua kèm chọn theo phân loại: mỗi lần bấm "Thêm món mua kèm" chọn món kế tiếp (p1/v1, p2/v2, ...), giá bán `mocks.pickPrice` (mặc định 50.000đ).
 vi.mock('./bundle-addon-picker', () => ({
   AddonVariationPicker: ({ onPick }: { onPick: (v: { productId: string; productName: string; variationId: string; variationName: string; price: number }) => void }) => (
     <button
       type="button"
       onClick={() => {
         mocks.picked += 1;
-        onPick({ productId: `p${mocks.picked}`, productName: `Món ${mocks.picked}`, variationId: `v${mocks.picked}`, variationName: '250ml', price: 50_000 });
+        onPick({ productId: `p${mocks.picked}`, productName: `Món ${mocks.picked}`, variationId: `v${mocks.picked}`, variationName: '250ml', price: mocks.pickPrice });
       }}
     >
       Chọn: Thêm món mua kèm
@@ -91,6 +91,7 @@ const save = async (c: HTMLElement) => {
 
 beforeEach(() => {
   mocks.picked = 0;
+  mocks.pickPrice = 50_000;
   mocks.list.mockReset().mockResolvedValue([row('a')]);
   mocks.get.mockReset().mockResolvedValue(row('a'));
   mocks.create.mockReset().mockResolvedValue(row('new1'));
@@ -389,6 +390,57 @@ describe('BundlesTab: sửa bộ', () => {
     text = c.textContent ?? '';
     expect(text).toContain('Giảm 11.000đ (22%)');
     expect(text).toContain('giảm tính theo giá 50.000đ');
+  });
+
+  describe('xoá rồi thêm lại đúng món mua kèm cũ (cùng sản phẩm và phân loại)', () => {
+    const savedAddon = () =>
+      row('a', {
+        kind: 'ADDON', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội',
+        items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: 'v1', variationName: '100g', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, price: 500_000 }],
+      });
+    const reopen = async () => {
+      mocks.get.mockResolvedValue(savedAddon());
+      mocks.pickPrice = 500_000; // giá nay của phân loại ghim: đã tăng từ 50.000đ
+      const c = await mount();
+      click(btn(c, 'Sửa bộ Bộ a'));
+      await flush(6);
+      click(btn(c, 'Bỏ Xà phòng khỏi bộ'));
+      await flush(2);
+      await pickAddon(c); // mock chọn p1/v1 = đúng món vừa bỏ, tên "Món 1"
+      return c;
+    };
+
+    it('lấy lại giá tham chiếu 50.000đ: gợi ý Giảm 11.000đ (22%) như giỏ sẽ cho, không phải 461.000đ; Lưu gửi đủ món', async () => {
+      const c = await reopen();
+      typeInto(field(c, 'Giá mua kèm Món 1'), '39000');
+      await flush(2);
+      const text = c.textContent ?? '';
+      expect(text).toContain('Giảm 11.000đ (22%)');
+      expect(text).not.toContain('461.000');
+      expect(text).toContain('giảm tính theo giá 50.000đ');
+      await save(c);
+      expect(mocks.update.mock.calls[0]![1].items).toEqual([{ productId: 'p1', variationId: 'v1', addonPrice: 39_000, maxQty: 1 }]);
+    });
+
+    it('gõ giá kèm khác giá đã lưu thì máy chủ đặt lại theo giá đang bán: gợi ý tính theo 500.000đ', async () => {
+      const c = await reopen();
+      typeInto(field(c, 'Giá mua kèm Món 1'), '45000');
+      await flush(2);
+      expect(c.textContent).toContain('Giảm 455.000đ (91%)');
+    });
+
+    it('món thực sự mới (khác phân loại) không mượn giá tham chiếu của món cũ', async () => {
+      mocks.get.mockResolvedValue(savedAddon());
+      mocks.picked = 1; // lần chọn kế tiếp là p2/v2, không phải p1/v1 đã lưu
+      mocks.pickPrice = 500_000;
+      const c = await mount();
+      click(btn(c, 'Sửa bộ Bộ a'));
+      await flush(6);
+      await pickAddon(c);
+      typeInto(field(c, 'Giá mua kèm Món 2'), '39000');
+      await flush(2);
+      expect(c.textContent).toContain('Giảm 461.000đ (92%)');
+    });
   });
 
   it('tải chi tiết lỗi: báo lỗi kèm Thử lại và Đóng', async () => {

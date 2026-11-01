@@ -13,6 +13,7 @@ import {
   draftFromBundle,
   emptyBundleDraft,
   keptRefPrice,
+  savedPricesFor,
   type BundleDraft,
   type BundleDraftItem,
 } from '@/lib/admin-bundle-form';
@@ -73,7 +74,8 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
         ? d
         : {
             ...d,
-            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, refPrice: null, savedAddonPrice: null, addonPrice: '', maxQty: '1' }],
+            // Thêm lại đúng món đã lưu của bộ này thì lấy lại giá tham chiếu, đúng như máy chủ sẽ giữ khi giá kèm không đổi.
+            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, ...savedPricesFor(initial, v.productId, v.variationId), addonPrice: '', maxQty: '1' }],
           },
     );
   const changeKind = (kind: AdminBundleKind) =>

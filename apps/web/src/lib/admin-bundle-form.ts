@@ -75,6 +75,21 @@ export const keptRefPrice = (i: AddonPriceFields): number | null =>
   i.refPrice !== null && i.savedAddonPrice !== null && /^\d+$/.test(i.addonPrice.trim()) && Number(i.addonPrice) === i.savedAddonPrice ? i.refPrice : null;
 
 /**
+ * Giá tham chiếu và giá kèm đã lưu của món (cùng sản phẩm, cùng phân loại) trong bộ đang sửa. Xoá món rồi thêm lại đúng món đó là
+ * thao tác bình thường (đổi ý, bấm nhầm), nhưng máy chủ vẫn giữ giá tham chiếu cũ cho món không đổi giá kèm (`keptRefPrices`): nếu form
+ * coi đó là món mới thì báo khoản giảm theo giá đang bán (vd 461.000đ) trong khi giỏ chỉ giảm 11.000đ. Bộ đang tạo (không có `initial`)
+ * hay món khác phân loại thì không có gì để lấy lại.
+ */
+export function savedPricesFor(
+  initial: Pick<AdminBundle, 'items'> | undefined,
+  productId: string,
+  variationId: string | null,
+): { refPrice: number | null; savedAddonPrice: number | null } {
+  const same = variationId === null ? undefined : initial?.items.find((i) => i.productId === productId && i.variationId === variationId);
+  return { refPrice: same?.refPrice ?? null, savedAddonPrice: same?.addonPrice ?? null };
+}
+
+/**
  * Giá làm cơ sở khoản giảm của món mua kèm sau khi lưu: giỏ chỉ giảm tối đa `min(giá đang bán, giá tham chiếu) − giá kèm` (`addonUnitDiscount`
  * ở API), nên phân loại tăng giá sau khi tạo không làm khoản giảm lớn lên, nhưng sửa giá kèm thì trần được đặt lại theo giá đang bán.
  * null khi chưa biết giá đang bán (món vừa chọn).
@@ -126,7 +141,10 @@ export function buildBundleInput(d: BundleDraft): { ok: true; input: AdminBundle
   for (const i of d.items) {
     if (!i.variationId) return fail(`Chọn phân loại cho "${i.name}": giá mua kèm chỉ áp cho đúng phân loại đó.`);
     if (!isIntText(i.addonPrice)) return fail(`Nhập giá mua kèm cho "${i.name}" (số nguyên từ 0 đồng trở lên).`);
-    if (i.price !== null && Number(i.addonPrice) >= i.price) return fail(`Giá mua kèm của "${i.name}" phải thấp hơn giá đang bán (${vnd(i.price)}).`);
+    // Món giữ giá tham chiếu cũ (không đổi giá kèm) so với giá tham chiếu, cùng luật `resolveBundleItems` ở API: phân loại đang sale xuống dưới giá kèm vẫn sửa được bộ.
+    const ref = keptRefPrice(i);
+    const base = ref ?? i.price;
+    if (base !== null && Number(i.addonPrice) >= base) return fail(`Giá mua kèm của "${i.name}" phải thấp hơn ${ref === null ? 'giá đang bán' : 'giá lúc đặt giá kèm'} (${vnd(base)}).`);
   }
   return {
     ok: true,

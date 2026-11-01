@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminBundle } from './admin-bundles-client';
-import { addonBasePrice, buildBundleInput, draftFromBundle, emptyBundleDraft, keptRefPrice, type BundleDraft, type BundleDraftItem } from './admin-bundle-form';
+import { addonBasePrice, buildBundleInput, draftFromBundle, emptyBundleDraft, keptRefPrice, savedPricesFor, type BundleDraft, type BundleDraftItem } from './admin-bundle-form';
 
 const item = (productId: string, o: Partial<BundleDraftItem> = {}): BundleDraftItem => ({
   productId, name: `SP ${productId}`, variationId: null, variationName: null, price: null, refPrice: null, savedAddonPrice: null, addonPrice: '', maxQty: '1', ...o,
@@ -122,5 +122,49 @@ describe('addonBasePrice: giá làm cơ sở khoản giảm của giỏ', () => 
   it('món vừa chọn (chưa lưu giá kèm nào) không có giá tham chiếu giữ lại', () => {
     expect(keptRefPrice(kept({ refPrice: null, savedAddonPrice: null }))).toBeNull();
     expect(keptRefPrice(kept({ savedAddonPrice: null }))).toBeNull();
+  });
+});
+
+describe('savedPricesFor: thêm lại đúng món cũ thì lấy lại giá tham chiếu và giá kèm đã lưu', () => {
+  const initial = {
+    items: [
+      { productId: 'p2', productName: 'Dầu gội', productSlug: 'dau-goi', variationId: 'v2', variationName: '250ml', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, price: 500_000 },
+      { productId: 'p3', productName: 'Sữa tắm', productSlug: 'sua-tam', variationId: 'v3', variationName: '1l', addonPrice: 60_000, refPrice: null, maxQty: 1, price: 90_000 },
+    ],
+  } as Pick<AdminBundle, 'items'>;
+
+  it('cùng sản phẩm và phân loại: trả lại giá đã lưu của bộ', () => {
+    expect(savedPricesFor(initial, 'p2', 'v2')).toEqual({ refPrice: 50_000, savedAddonPrice: 39_000 });
+  });
+
+  it('dòng cũ chưa có giá tham chiếu: giữ nguyên null cho giá tham chiếu nhưng vẫn trả giá kèm đã lưu', () => {
+    expect(savedPricesFor(initial, 'p3', 'v3')).toEqual({ refPrice: null, savedAddonPrice: 60_000 });
+  });
+
+  it('khác phân loại, khác sản phẩm, hay đang tạo bộ mới (không có initial): không có gì để lấy lại', () => {
+    expect(savedPricesFor(initial, 'p2', 'v-khac')).toEqual({ refPrice: null, savedAddonPrice: null });
+    expect(savedPricesFor(initial, 'p9', 'v2')).toEqual({ refPrice: null, savedAddonPrice: null });
+    expect(savedPricesFor(initial, 'p2', null)).toEqual({ refPrice: null, savedAddonPrice: null });
+    expect(savedPricesFor(undefined, 'p2', 'v2')).toEqual({ refPrice: null, savedAddonPrice: null });
+  });
+});
+
+describe('buildBundleInput: món giữ giá tham chiếu cũ (cùng luật resolveBundleItems ở API)', () => {
+  const kept = (o: Partial<BundleDraftItem> = {}) => pinned('p1', { price: 30_000, refPrice: 50_000, savedAddonPrice: 39_000, addonPrice: '39000', ...o });
+
+  it('phân loại ghim đang sale xuống 30.000đ, thấp hơn giá kèm 39.000đ nhưng giá kèm vẫn thấp hơn giá tham chiếu giữ lại 50.000đ: cho lưu', () => {
+    expect(error(addon({ items: [kept()] }))).toBeNull();
+  });
+
+  it('đổi giá kèm thì không còn giá tham chiếu giữ lại: so với giá đang bán, vẫn từ chối', () => {
+    expect(error(addon({ items: [kept({ addonPrice: '45000' })] }))).toContain('thấp hơn giá đang bán');
+  });
+
+  it('món vừa chọn (không có giá tham chiếu giữ lại) giá đang bán 30.000đ, giá kèm 39.000đ: vẫn từ chối như cũ', () => {
+    expect(error(addon({ items: [kept({ refPrice: null, savedAddonPrice: null })] }))).toContain('thấp hơn giá đang bán');
+  });
+
+  it('giá kèm không thấp hơn chính giá tham chiếu giữ lại: từ chối, lời nói đúng cơ sở', () => {
+    expect(error(addon({ items: [kept({ refPrice: 39_000 })] }))).toContain('giá lúc đặt giá kèm');
   });
 });
