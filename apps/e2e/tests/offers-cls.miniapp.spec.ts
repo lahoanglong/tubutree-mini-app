@@ -78,7 +78,7 @@ async function openOffers(page: Page, api: MockApi, o: { banner: boolean; hint: 
   }, o.hint);
   await page.goto('/offers');
   // Mọi khối khác đã vẽ xong khi banner còn bị giữ.
-  await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true })).toBeVisible();
   await expect(page.getByTestId('offers-collect-loading')).toHaveCount(0);
@@ -90,7 +90,7 @@ test.describe('Ưu đãi Mini — CLS khi có banner OFFERS_TOP', () => {
   test('máy nhớ lần trước có banner: khung chờ cùng tỉ lệ giữ chỗ nên banner về muộn không đẩy khối nào (CLS ≤ 0,02)', async ({ page, api }) => {
     const release = await openOffers(page, api, { banner: true, hint: true });
     await expect(page.getByTestId('offers-banner-loading')).toBeVisible();
-    const before = (await page.getByRole('region', { name: 'Giờ vàng', exact: true }).boundingBox())!.y;
+    const before = (await page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true }).boundingBox())!.y;
     await resetCls(page);
     release();
     await expect(page.getByRole('region', { name: 'Chương trình nổi bật' })).toBeVisible({ timeout: 15_000 });
@@ -98,7 +98,7 @@ test.describe('Ưu đãi Mini — CLS khi có banner OFFERS_TOP', () => {
     const { value, detail } = await settledCls(page);
     expect(value, `CLS ${value.toFixed(4)}: ${detail}`).toBeLessThanOrEqual(0.02);
     // Cùng một kết luận bằng toạ độ: Giờ vàng đứng nguyên chỗ.
-    expect((await page.getByRole('region', { name: 'Giờ vàng', exact: true }).boundingBox())!.y).toBeCloseTo(before, 0);
+    expect((await page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true }).boundingBox())!.y).toBeCloseTo(before, 0);
   });
 
   test('đối chứng: máy không nhớ banner mà banner về muộn thì Giờ vàng bị đẩy xuống (phép đo không vô nghĩa)', async ({ page, api }) => {

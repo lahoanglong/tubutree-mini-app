@@ -29,7 +29,7 @@ test.describe('Web khách: Ưu đãi, chưa đăng nhập', () => {
 
   test('/uu-dai: thấy Giờ vàng và Nhận mã; Lưu mã chuyển tới đăng nhập kèm returnTo, không gọi claim', async ({ page, api }) => {
     await page.goto('/uu-dai');
-    await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible();
     const collect = page.getByRole('region', { name: 'Nhận mã', exact: true });
     await expect(collect).toBeVisible();
     await expect(collect.getByRole('button', { name: 'Lưu mã' })).toHaveCount(COLLECTABLE.length);

@@ -259,7 +259,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     const blocks = [
       c.querySelector('[data-offers-banner]'),
-      region(c, 'Giờ vàng'),
+      region(c, 'Giờ vàng hôm nay'),
       region(c, 'Nhận mã'),
       region(c, 'Điểm Xanh của bạn'),
       region(c, 'Mã của tôi'),
@@ -303,7 +303,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
     state.flash = [FLASH_ITEM];
     state.collectable = [OPEN_CODE];
     const c = await mount();
-    const flash = region(c, 'Giờ vàng')!;
+    const flash = region(c, 'Giờ vàng hôm nay')!;
     const collect = region(c, 'Nhận mã')!;
     expect(flash).not.toBeNull();
     expect(collect).not.toBeNull();
@@ -387,7 +387,7 @@ describe('/uu-dai — banner đầu trang (OFFERS_TOP)', () => {
     expect(frame!.parentElement!.firstElementChild).toBe(frame);
     await flush(8);
     expect(r.container.querySelector('[data-testid="offers-banner-loading"]')).toBeNull();
-    expect(region(r.container, 'Giờ vàng')).not.toBeNull();
+    expect(region(r.container, 'Giờ vàng hôm nay')).not.toBeNull();
   });
 
   it('không có chiến dịch: ẩn hẳn, không khối rỗng', async () => {

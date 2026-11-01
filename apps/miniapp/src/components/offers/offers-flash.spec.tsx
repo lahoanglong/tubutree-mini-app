@@ -40,10 +40,21 @@ describe('OffersFlash — Giờ vàng hôm nay ở trang Ưu đãi', () => {
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
-  it('6 suất: đúng 4 thẻ (maxItems của kệ offers.flash), một đồng hồ, "Xem tất cả Giờ vàng" tới /flash-sale', async () => {
+  it('tiêu đề "Giờ vàng hôm nay"; đồng hồ là chữ "Kết thúc sau …" ở hàng riêng dưới tiêu đề, không có ô số HH:MM:SS (Q3)', async () => {
+    mocks.fetchActive.mockResolvedValue(many(3));
+    renderFlash();
+    const region = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
+    expect(within(region).getByRole('heading', { level: 2 })).toHaveTextContent('Giờ vàng hôm nay');
+    const timer = within(region).getByRole('timer');
+    expect(timer.textContent).toMatch(/^Kết thúc sau /);
+    expect(within(region).queryAllByTestId('countdown-cell')).toHaveLength(0);
+    expect(within(region).getByTestId('section-header')).not.toContainElement(timer);
+  });
+
+  it('6 suất: đúng 4 thẻ (maxItems của kệ offers.flash), một đồng hồ, "Xem tất cả Giờ vàng hôm nay" tới /flash-sale', async () => {
     mocks.fetchActive.mockResolvedValue(many(6));
     renderFlash();
-    const region = await screen.findByRole('region', { name: 'Giờ vàng' });
+    const region = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
     expect(within(region).getAllByTestId('flash-sold-bar')).toHaveLength(4);
     expect(within(region).getAllByRole('timer')).toHaveLength(1);
     fireEvent.click(within(region).getByRole('button', { name: /Xem tất cả/ }));
@@ -53,7 +64,7 @@ describe('OffersFlash — Giờ vàng hôm nay ở trang Ưu đãi', () => {
   it('một sản phẩm hai phân loại cùng Giờ vàng chỉ một thẻ; suất đã hết giờ không hiện', async () => {
     mocks.fetchActive.mockResolvedValue([item(1), item(1, { itemId: 'i1b', variationId: 'v2' }), item(2, { endAt: new Date(Date.now() - 1000).toISOString() })]);
     renderFlash();
-    const region = await screen.findByRole('region', { name: 'Giờ vàng' });
+    const region = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
     expect(within(region).getAllByTestId('flash-sold-bar')).toHaveLength(1);
   });
 

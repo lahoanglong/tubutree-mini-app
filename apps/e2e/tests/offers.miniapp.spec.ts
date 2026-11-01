@@ -31,7 +31,7 @@ test.describe('Ưu đãi — khách chưa đăng nhập', () => {
     mockFlash(api);
     mockCollectable(api);
     await page.goto('/offers');
-    await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible({ timeout: 15_000 });
     const collect = page.getByRole('region', { name: 'Nhận mã', exact: true });
     await expect(collect).toBeVisible();
     const save = collect.getByRole('button', { name: 'Lưu mã' });
@@ -55,7 +55,7 @@ test.describe('Ưu đãi — khách chưa đăng nhập', () => {
     mockFlash(api);
     mockCollectable(api, []);
     await page.goto('/offers');
-    await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => api.callsTo('GET', '/coupons/collectable').length, { timeout: 10_000 }).toBeGreaterThan(0);
     await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toHaveCount(0);
     await expect(page.getByTestId('offers-collect-loading')).toHaveCount(0);
@@ -76,7 +76,7 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible();
     const ys = [
-      await regionTop(page, 'Giờ vàng'),
+      await regionTop(page, 'Giờ vàng hôm nay'),
       await regionTop(page, 'Nhận mã'),
       await regionTop(page, 'Điểm Xanh của bạn'),
       await regionTop(page, 'Mã của tôi'),

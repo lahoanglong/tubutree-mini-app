@@ -257,7 +257,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     renderPage();
     const regions = [
       await screen.findByRole('region', { name: 'Chương trình nổi bật' }),
-      await screen.findByRole('region', { name: 'Giờ vàng' }),
+      await screen.findByRole('region', { name: 'Giờ vàng hôm nay' }),
       await screen.findByRole('region', { name: 'Nhận mã' }),
       await screen.findByRole('region', { name: /Điểm Xanh/ }),
       await screen.findByRole('region', { name: 'Mã của tôi' }),
@@ -273,7 +273,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     mocks.flash.mockResolvedValue([FLASH_ITEM]);
     mocks.collectable.mockResolvedValue([OPEN_CODE]);
     renderPage();
-    const flash = await screen.findByRole('region', { name: 'Giờ vàng' });
+    const flash = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
     const collect = await screen.findByRole('region', { name: 'Nhận mã' });
     const login = await screen.findByText('Đăng nhập để xem ưu đãi');
     expect(flash.compareDocumentPosition(collect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
