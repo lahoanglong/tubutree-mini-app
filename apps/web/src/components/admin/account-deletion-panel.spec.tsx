@@ -152,6 +152,23 @@ describe('AccountDeletionPanel (C-016)', () => {
     expect(call?.init?.body).toBe(JSON.stringify({ note: 'đã gọi xác nhận' }));
   });
 
+  it('ghi chú xử lý chứa số điện thoại: hiện lỗi ngay dưới ô và khoá nút Xử lý; bỏ số đi thì mở lại', async () => {
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [req()] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AccountDeletionPanel />);
+    await flush();
+    const btn = byText(container, 'button', 'Xử lý') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    typeInto(field(container, 'Ghi chú xử lý (tuỳ chọn)'), 'đã gọi khách 0912 345 678');
+    await flush();
+    expect(container.textContent).toContain('Ghi chú không được chứa số điện thoại của khách');
+    expect(btn.disabled).toBe(true);
+    typeInto(field(container, 'Ghi chú xử lý (tuỳ chọn)'), 'đơn TUBUSUB7659607093 đã huỷ');
+    await flush();
+    expect(container.textContent).not.toContain('Ghi chú không được chứa số điện thoại');
+    expect(btn.disabled).toBe(false);
+  });
+
   describe('xoá dù còn tiền Ví', () => {
     const wallet = (balance: number, code = 'WALLET_BALANCE') =>
       req({
