@@ -55,8 +55,16 @@ export interface WalletOverride {
   expectedWalletBalance: number;
 }
 
-/** Số điện thoại Việt Nam (0/84/+84 + đầu số 3,5,7,8,9 + 8 chữ số, cho phép cách bằng khoảng trắng, dấu chấm, gạch); không bắt mã đơn, số tiền, mốc giờ. Lý do admin không được chứa vì nó không bị ẩn danh. */
-export const PHONE_LIKE = /(?<![\p{L}\d])(?:\+?84|0)[\s.\-]*[35789](?:[\s.\-]*\d){8}(?!\d)/u;
+/** Gạch mềm, ký tự độ rộng 0, BOM: bỏ khỏi lý do trước khi kiểm và lưu, để không chèn vào giữa số điện thoại mà lọt. */
+export const INVISIBLE_CHARS = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
+/**
+ * Số điện thoại Việt Nam: 0, 84, +84 hay (+84), đầu số 3/5/7/8/9, rồi 8 chữ số; giữa các nhóm cho phép khoảng trắng, chấm, gạch,
+ * gạch dưới, gạch chéo, ngoặc. Bắt cả số dính liền chữ ("sdt0912345678"). Lý do admin không được chứa vì nó không bị ẩn danh.
+ */
+export const PHONE_LIKE = /(?<!\d)(?:\(?\+?84\)?|0)[\s.\-_/()]*[35789](?:[\s.\-_/()]*\d){8}(?!\d)/u;
+/** Phần số ngẫu nhiên của mã đơn (TUBUSUB0912...) có thể trông như số điện thoại: bỏ mã đơn ra trước khi dò. */
+const ORDER_CODE = /TUBU[A-Z]*\d+/gi;
+export const containsPhone = (s: string) => PHONE_LIKE.test(s.replace(INVISIBLE_CHARS, '').replace(ORDER_CODE, ' '));
 export const codePoints = (s: string) => [...s].length;
 
 export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';
@@ -170,12 +178,12 @@ export class AccountDeletionService {
   async process(requestId: string, adminId: string, adminNote?: string, override?: WalletOverride) {
     let ov: WalletOverride | undefined;
     if (override) {
-      const reason = typeof override.reason === 'string' ? override.reason.trim() : '';
+      const reason = typeof override.reason === 'string' ? override.reason.replace(INVISIBLE_CHARS, '').trim() : '';
       const n = codePoints(reason);
       if (n < OVERRIDE_REASON_MIN || n > OVERRIDE_REASON_MAX) {
         throw new BadRequestException(`Lý do xoá dù còn tiền Ví phải từ ${OVERRIDE_REASON_MIN} đến ${OVERRIDE_REASON_MAX} ký tự.`);
       }
-      if (PHONE_LIKE.test(reason)) {
+      if (containsPhone(reason)) {
         throw new BadRequestException('Lý do không được chứa số điện thoại của khách (lý do không bị ẩn danh), hãy bỏ đi.');
       }
       if (!Number.isInteger(override.expectedWalletBalance) || override.expectedWalletBalance < 1) {

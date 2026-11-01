@@ -202,7 +202,18 @@ describe('AccountDeletionPanel (C-016)', () => {
       expect(d.textContent).toContain('không được chứa số điện thoại');
     });
 
-    it.each(['khách 0912345678 đồng ý', 'khách 0912.345.678 đồng ý', 'khách +84 912 345 678 đồng ý', 'khách 84912345678 đồng ý', 'khách 0912  345 678 đồng ý'])(
+    it.each([
+      'khách 0912345678 đồng ý',
+      'khách 0912.345.678 đồng ý',
+      'khách +84 912 345 678 đồng ý',
+      'khách 84912345678 đồng ý',
+      'khách 0912  345 678 đồng ý',
+      'Khach goi sdt0912345678 xin huy',
+      'khách (+84) 912345678 đồng ý',
+      'khách 0912/345/678 đồng ý',
+      'khách 0912_345_678 đồng ý',
+      'khách 091\u200B2345678 đồng ý',
+    ])(
       'số điện thoại bị chặn: %s',
       async (text) => {
         const { container } = await setup(wallet(50_000));
@@ -215,7 +226,13 @@ describe('AccountDeletionPanel (C-016)', () => {
       },
     );
 
-    it.each(['đơn TUBU2610310012 đã huỷ', 'đơn TUBUSUB7659607093 chờ xử lý', 'Ví 500.000.000đ do lỗi nạp', 'thu hồi lúc 2026-11-01 07:43'])(
+    it.each([
+      'đơn TUBU2610310012 đã huỷ',
+      'đơn TUBUSUB7659607093 chờ xử lý',
+      'đơn TUBUSUB0912345678 chờ xử lý',
+      'Ví 500.000.000đ do lỗi nạp',
+      'thu hồi lúc 2026-11-01 07:43',
+    ])(
       'mã đơn, số tiền, mốc giờ không bị coi là số điện thoại: %s',
       async (text) => {
         const { container } = await setup(wallet(50_000));

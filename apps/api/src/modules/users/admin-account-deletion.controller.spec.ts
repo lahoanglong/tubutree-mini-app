@@ -53,7 +53,6 @@ describe('AdminAccountDeletionController (C-016)', () => {
 
     it.each([
       ['thiếu lý do', { overrideWalletBalance: { expectedWalletBalance: 5000 } }],
-      ['lý do ngắn (sau khi cắt)', { overrideWalletBalance: { reason: '  ngắn quá  ', expectedWalletBalance: 5000 } }],
       ['lý do trống', { overrideWalletBalance: { reason: '          ', expectedWalletBalance: 5000 } }],
       ['thiếu số dư xác nhận', { overrideWalletBalance: { reason: 'khách mất liên lạc' } }],
       ['số dư xác nhận 0', { overrideWalletBalance: { reason: 'khách mất liên lạc', expectedWalletBalance: 0 } }],
@@ -61,6 +60,10 @@ describe('AdminAccountDeletionController (C-016)', () => {
       ['lý do quá 500 ký tự', { overrideWalletBalance: { reason: 'a'.repeat(501), expectedWalletBalance: 5000 } }],
     ])('400: %s', async (_n, body) => {
       await expect(pipe.transform(body, meta())).rejects.toBeDefined();
+    });
+
+    it('độ dài tối thiểu để service đếm theo điểm mã: 5 "❤️" (10 điểm mã) qua được DTO', async () => {
+      await expect(pipe.transform({ overrideWalletBalance: { reason: '❤️'.repeat(5), expectedWalletBalance: 5000 } }, meta())).resolves.toBeDefined();
     });
   });
 });

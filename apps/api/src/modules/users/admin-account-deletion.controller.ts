@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { AccountDeletionService, OVERRIDE_REASON_MAX, OVERRIDE_REASON_MIN, type DeletionListStatus } from './account-deletion.service';
+import { AccountDeletionService, OVERRIDE_REASON_MAX, type DeletionListStatus } from './account-deletion.service';
 
 class ListDeletionRequestsQuery {
   @IsOptional() @IsIn(['PENDING', 'RESOLVED', 'ALL']) status?: DeletionListStatus;
@@ -12,7 +12,8 @@ class ListDeletionRequestsQuery {
 class WalletOverrideDto {
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @MinLength(OVERRIDE_REASON_MIN)
+  @IsNotEmpty()
+  // Độ dài tối thiểu kiểm ở AccountDeletionService.process (đếm theo điểm mã, như web); MaxLength ở đây chỉ chặn body quá to.
   @MaxLength(OVERRIDE_REASON_MAX)
   reason!: string;
 

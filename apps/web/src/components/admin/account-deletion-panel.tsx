@@ -46,7 +46,11 @@ export const listDeletionRequests = (status: DeletionStatusFilter) =>
 
 export const OVERRIDE_REASON_MIN = 10;
 export const OVERRIDE_REASON_MAX = 500;
-const PHONE_LIKE = /(?<![\p{L}\d])(?:\+?84|0)[\s.\-]*[35789](?:[\s.\-]*\d){8}(?!\d)/u;
+// Cùng quy tắc với PHONE_LIKE/containsPhone ở account-deletion.service.ts (API).
+const INVISIBLE_CHARS = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
+const PHONE_LIKE = /(?<!\d)(?:\(?\+?84\)?|0)[\s.\-_/()]*[35789](?:[\s.\-_/()]*\d){8}(?!\d)/u;
+const ORDER_CODE = /TUBU[A-Z]*\d+/gi;
+const containsPhone = (t: string) => PHONE_LIKE.test(t.replace(INVISIBLE_CHARS, '').replace(ORDER_CODE, ' '));
 const codePoints = (t: string) => [...t].length;
 
 export interface WalletOverrideInput {
@@ -186,10 +190,10 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
         maxLength: OVERRIDE_REASON_MAX,
         required: true,
         validate: (t) => {
-          const n = codePoints(t.trim());
+          const n = codePoints(t.replace(INVISIBLE_CHARS, '').trim());
           if (n < OVERRIDE_REASON_MIN) return `Lý do cần ít nhất ${OVERRIDE_REASON_MIN} ký tự.`;
           if (n > OVERRIDE_REASON_MAX) return `Lý do tối đa ${OVERRIDE_REASON_MAX} ký tự.`;
-          if (PHONE_LIKE.test(t)) return 'Lý do không được chứa số điện thoại của khách.';
+          if (containsPhone(t)) return 'Lý do không được chứa số điện thoại của khách.';
           return null;
         },
       },

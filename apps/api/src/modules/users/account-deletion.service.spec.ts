@@ -335,6 +335,13 @@ describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý b�
       ['chứa số 84 liền', { reason: 'khách 84912345678 đồng ý', expectedWalletBalance: 20_000 }],
       ['chứa số cách hai khoảng trắng', { reason: 'khách 0912  345 678 đồng ý', expectedWalletBalance: 20_000 }],
       ['chứa số điện thoại có dấu chấm', { reason: 'khách 0912.345.678 đồng ý qua điện thoại', expectedWalletBalance: 20_000 }],
+      ['số dính liền chữ', { reason: 'Khach goi sdt0912345678 xin huy', expectedWalletBalance: 20_000 }],
+      ['số dính sau chữ có dấu', { reason: 'khách báo sđt0912345678 rồi', expectedWalletBalance: 20_000 }],
+      ['(+84) có ngoặc', { reason: 'khách (+84) 912345678 đồng ý', expectedWalletBalance: 20_000 }],
+      ['+84 (91) có ngoặc giữa số', { reason: 'khách +84 (91) 234 5678 đồng ý', expectedWalletBalance: 20_000 }],
+      ['cách bằng gạch chéo', { reason: 'khách 0912/345/678 đồng ý', expectedWalletBalance: 20_000 }],
+      ['cách bằng gạch dưới', { reason: 'khách 0912_345_678 đồng ý', expectedWalletBalance: 20_000 }],
+      ['chèn ký tự độ rộng 0', { reason: 'khách 091\u200B2345678 đồng ý', expectedWalletBalance: 20_000 }],
       ['mười emoji (10 ký tự điểm mã, 20 đơn vị) đủ dài nhưng 9 emoji thì ngắn', { reason: '😀'.repeat(9), expectedWalletBalance: 20_000 }],
       ['thiếu số dư xác nhận', { reason, expectedWalletBalance: 0 }],
     ])('lý do/số xác nhận %s → 400, không động tới giao dịch', async (_n, o) => {
@@ -344,7 +351,13 @@ describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý b�
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it.each(['đơn TUBU2610310012 đã huỷ', 'đơn TUBUSUB7659607093 chờ xử lý', 'Ví 500.000.000đ do lỗi nạp', 'thu hồi lúc 2026-11-01 07:43'])(
+    it.each([
+      'đơn TUBU2610310012 đã huỷ',
+      'đơn TUBUSUB7659607093 chờ xử lý',
+      'đơn TUBUSUB0912345678 chờ xử lý',
+      'Ví 500.000.000đ do lỗi nạp',
+      'thu hồi lúc 2026-11-01 07:43',
+    ])(
       'lý do hợp lệ có mã đơn, số tiền hay mốc giờ vẫn nhận: %s',
       async (reason) => {
         const { svc } = withWallet(20_000, null);
