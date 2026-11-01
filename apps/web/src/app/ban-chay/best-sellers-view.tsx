@@ -13,7 +13,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { NumberedPager } from '@/components/catalog/numbered-pager';
 import { EmptyState } from '@/components/empty-state';
 import { ListingBreadcrumb } from '@/components/layouts/listing-layout';
-import { PRIORITY_CARDS, ProductGrid, SegmentedTabs } from '@/components/mini';
+import { Button, PRIORITY_CARDS, ProductGrid, SegmentedTabs } from '@/components/mini';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
@@ -21,7 +21,6 @@ import { parsePage } from '@/lib/catalog-filter';
 import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
-import { ui } from '@/lib/guest-ui';
 import { useShellPathname } from '@/lib/shell-pathname';
 
 /** Trang đầu do server tải sẵn cho đúng URL (`category`, `?page=`): hiện ngay và cho crawler, rồi React Query tiếp quản. */
@@ -87,7 +86,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
     if (listLength > from) gridRef.current?.querySelector<HTMLElement>(`ul[data-testid="catalog-grid"] li:nth-child(${from + 1}) a`)?.focus();
   }, [listLength, fetchingMore]);
   const loadMore = () => {
-    // aria-disabled không chặn click như `disabled`: bỏ qua lần bấm khi đang tải để không gọi hai trang cùng lúc.
+    // Button đang `loading` không nhận chạm, nhưng thẻ này còn gọi được từ nơi khác: không gọi hai trang cùng lúc.
     if (products.isFetchingNextPage) return;
     focusFrom.current = list.length;
     products.fetchNextPage().catch(() => {
@@ -139,23 +138,23 @@ export default function BestSellersView({ initial = null, categories: initialCat
             {products.isError && (
               <div role="alert" className="flex flex-wrap items-center justify-center gap-2 pt-4">
                 <p className="text-sm text-danger-fg">{browseText.loadMoreFailed}</p>
-                <button
-                  type="button"
-                  disabled={products.isFetching}
-                  onClick={() => {
+                <Button
+                  variant="secondary"
+                  loading={products.isFetching}
+                  onPress={() => {
                     (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined);
                   }}
-                  className={ui.btnSecondary}
+                  style={{ minWidth: 0 }}
                 >
                   {browseText.retry}
-                </button>
+                </Button>
               </div>
             )}
             {products.hasNextPage && !products.isFetchNextPageError && (
               <div className="flex justify-center pt-4 lg:hidden">
-                <button type="button" aria-disabled={products.isFetchingNextPage || undefined} onClick={loadMore} className={`${ui.btnSecondary} min-w-40 aria-disabled:opacity-60`}>
+                <Button variant="secondary" loading={products.isFetchingNextPage} onPress={loadMore} style={{ minWidth: 160 }}>
                   {browseText.loadMore}
-                </button>
+                </Button>
               </div>
             )}
             <NumberedPager

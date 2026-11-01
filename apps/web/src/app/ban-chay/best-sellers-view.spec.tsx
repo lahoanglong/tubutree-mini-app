@@ -177,6 +177,7 @@ describe('BestSellersView — dữ liệu server, trang số, Xem thêm', () => 
     await flush();
     const more = byText(container, 'button', 'Xem thêm')!;
     expect(more.parentElement!.className).toContain('lg:hidden');
+    expect(more.className, 'cùng nút phụ của Mini (khổ điện thoại giống Mini App)').toContain('zaui-btn-secondary');
     click(more);
     await flush();
     expect(productCalls().at(-1)).toMatchObject({ page: 2 });
