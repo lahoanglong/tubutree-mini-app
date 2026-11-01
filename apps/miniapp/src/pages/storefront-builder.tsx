@@ -1,62 +1,61 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp, Plus, Check, Share2, ImagePlus,
-  ChevronUp, ChevronDown, Ellipsis,
+  Pin, Eye, EyeOff, Trash2, Settings, Pencil, UserRoundCog, Plus, Share2,
   type LucideIcon,
 } from 'lucide-react';
 import {
   getMyStorefront, publishStorefront, updateStorefront,
   createCollection, updateCollection, deleteCollection, updateItem, removeItem, pickerProducts,
-  reorderCollections, reorderItems,
-  getQuests, claimQuest, getStorefrontStats,
-  type StorefrontEdit, type PickerProduct, type QuestList,
+  reorderCollections, reorderItems, getQuests,
+  type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
+import {
+  BUILDER_COPY, builderCopy, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
+  sectionCardView, sectionStyleOf, type SectionStyle, type newSectionDto,
+} from '@tubutree/app-core/commerce/storefront-builder';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
-import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../utils/storefront-theme';
+import { announce, useNotify } from '../hooks/use-notify';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
-import { Field } from '../components/ui/form';
-import { Icon, type IconProps } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
-import { PriceTag } from '../components/ui/price-tag';
-import { ProgressBar } from '../components/ui/progress-bar';
-import { rowKeyboardProps } from '../components/ui/row-keyboard';
+import { MoveButtons } from '../components/ui/move-buttons';
+import { QuestStrip } from '../components/ui/quest-strip';
+import { SectionCard } from '../components/ui/section-card';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
-import { ImageUpload } from '../components/image-upload';
 import { ShareSheet } from '../components/share-sheet';
 import { PickerSheet } from '../components/storefront-pickers';
 import { StorefrontPreview } from '../components/storefront-preview';
+import { MerchantConfigSheet } from '../components/storefront-builder/config-sheet';
+import { NewSectionSheet } from '../components/storefront-builder/new-section-sheet';
+import { ProfileSheet } from '../components/storefront-builder/profile-sheet';
+import { QuestList } from '../components/storefront-builder/quest-panel';
+import { SectionDetail } from '../components/storefront-builder/section-detail';
+import { CARD_MARGIN, SCROLL_BODY } from '../components/storefront-builder/shared';
+import { StatsSection } from '../components/storefront-builder/stats-panel';
 import { StorefrontSignupFlow } from './storefront-signup';
-import { isPartnerStore } from '../utils/partner-store';
 
 const CONFIG_TITLE = 'Cài đặt gian hàng';
 
-/** Thẻ cách mép trang 16px, cách thẻ kế 12px — dùng chung cho mọi khối trong trang. */
-const CARD_MARGIN: CSSProperties = { margin: '0 16px 12px' };
-
-/** Form dài trong sheet: giới hạn chiều cao để sheet không phủ kín tới đỉnh màn hình. */
-const SCROLL_BODY: CSSProperties = { maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain' };
-
-/** Mỗi nhánh render có đúng một h1 (PageHeader) và cùng nền. */
-function BuilderShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+/** Mỗi nhánh render có đúng một h1 và cùng nền; trang chi tiết khối tự vẽ h1 (tên khối) nên không dùng PageHeader. */
+function BuilderShell({ children, style, bare }: { children: ReactNode; style?: CSSProperties; bare?: boolean }) {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', ...style }}>
-      <PageHeader title={vi.storefront.title} />
+      {!bare && <PageHeader title={vi.storefront.title} />}
       {children}
     </Page>
   );
@@ -96,27 +95,6 @@ export default function StorefrontBuilderPage() {
   );
 }
 
-/** Nút chỉ-icon trong hàng/thẻ: vùng chạm 44px và cho chỉnh tông icon (IconButton của DS chưa có `tone`). */
-function RowIconButton({
-  icon, label, tone = 'muted', disabled, onPress,
-}: { icon: LucideIcon; label: string; tone?: NonNullable<IconProps['tone']>; disabled?: boolean; onPress: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      className="tubu-press touch-target"
-      onClick={onPress}
-      style={{
-        minWidth: 44, minHeight: 44, flexShrink: 0, border: 'none', background: 'transparent', borderRadius: 'var(--radius-pill)',
-        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
-      }}
-    >
-      <Icon icon={icon} size="sm" tone={tone} />
-    </button>
-  );
-}
-
 interface MenuAction { key: string; label: string; icon: LucideIcon; danger?: boolean; onPress: () => void }
 
 /** Menu "⋯": mỗi thao tác là một hàng có chữ, thao tác không hoàn tác đứng cuối và có màu cảnh báo. */
@@ -149,6 +127,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [contentKitSlug, setContentKitSlug] = useState<string | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
@@ -156,13 +135,18 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [questOpen, setQuestOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
   const [itemMenuId, setItemMenuId] = useState<string | null>(null);
   const [colMenuId, setColMenuId] = useState<string | null>(null);
+  // Trang chi tiết là một góc nhìn trong trang, không phải route: không đụng route-map, nút lùi của hệ thống vẫn thoát khỏi trình dựng.
+  const [sectionId, setSectionId] = useState<string | null>(null);
+  const [sectionSort, setSectionSort] = useState(false);
+  const [itemSort, setItemSort] = useState(false);
   const view = storefrontStatusView(sf);
   const publishCopy = storefrontPublishCopy(sf);
-  // Hành trình gian hàng đứng đầu trang cho tới khi nhận đủ thưởng: ở cuối trang thì CTV mới không thấy.
+  // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
-  const questsOpen = !!questsQ.data && questsQ.data.level < questsQ.data.levelMax;
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -203,20 +187,22 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const itemCount = sf.collections.reduce((n, c) => n + c.items.length, 0);
   const menuItem = sf.collections.flatMap((c) => c.items).find((i) => i.id === itemMenuId) ?? null;
   const menuCol = sf.collections.find((c) => c.id === colMenuId) ?? null;
-  // Tạo bộ sưu tập phải có TÊN do CTV đặt: trước đây mọi bộ đều tên "Bộ sưu tập mới" và
-  // không sửa/xoá được (dù API đã có sẵn) — bấm nhầm 2-3 lần là gian hàng công khai có 3 mục
-  // trùng tên vĩnh viễn (P1-6 audit mạch lạc CTV).
-  const [newColTitle, setNewColTitle] = useState('');
+  const sectionCol = sf.collections.find((c) => c.id === sectionId) ?? null;
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
 
   const newColMut = useMutation({
-    mutationFn: (title: string) => createCollection({ title }),
-    onSuccess: () => {
-      setNewColTitle('');
+    mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(dto),
+    onSuccess: (created) => {
+      haptic('light');
+      // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
+      qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: [...old.collections, { ...created, items: created.items ?? [] }] } : old));
+      setNewOpen(false);
+      openSection(created.id);
+      setPickerCol(created.id);
       void refresh();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
   const renameColMut = useMutation({
     mutationFn: (v: { id: string; title: string }) => updateCollection(v.id, { title: v.title }),
@@ -228,12 +214,46 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   });
   const deleteColMut = useMutation({
     mutationFn: (id: string) => deleteCollection(id),
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
       setConfirmDeleteCol(null);
+      if (id === sectionId) closeSection();
       void refresh();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
+  const layoutMut = useMutation({
+    mutationFn: (v: { id: string; layout: 'GRID' | 'CAROUSEL' | 'STACK' }) => updateCollection(v.id, { layout: v.layout }),
+    onSuccess: (data, v) => {
+      haptic('light');
+      patchCollection(v.id, { layout: data?.layout ?? v.layout });
+      announce('status', BUILDER_COPY.layoutSaved);
+      void refresh();
+    },
+    onError: (e) => notify({ text: getErrorMessage(e), type: 'error' }),
+  });
+  const comboMut = useMutation({
+    mutationFn: (v: { id: string; pct: number }) => updateCollection(v.id, { comboDiscountPct: v.pct }),
+  });
+  const patchCollection = (id: string, patch: Partial<{ layout: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct: number | null }>) =>
+    qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: old.collections.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : old));
+  /** Máy chủ kẹp `%` theo trần `storefront.max_combo_pct`; màn đọc lại số đã lưu và nói rõ khi nó thấp hơn số vừa nhập. */
+  const saveComboPct = async (id: string, pct: number): Promise<number | null> => {
+    try {
+      const data = await comboMut.mutateAsync({ id, pct });
+      const saved = typeof data?.comboDiscountPct === 'number' ? data.comboDiscountPct : pct;
+      haptic('light');
+      patchCollection(id, { comboDiscountPct: saved });
+      notify(saved < pct
+        ? { text: builderCopy('comboPctClamped', { n: saved }), type: 'warning' }
+        : { text: builderCopy('comboPctSaved', { n: saved }), type: 'success' });
+      void refresh();
+      return saved;
+    } catch (e) {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      return null;
+    }
+  };
   const itemMut = useMutation({
     mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(v.id, v.dto),
     onSuccess: () => { haptic('light'); void refresh(); },
@@ -282,18 +302,43 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     ...optimisticOrder,
     onMutate: (v) => optimisticOrder.onMutate(v.update),
   });
+
+  // Hàng đổi chỗ làm React gỡ-gắn nút nên trình duyệt đánh rơi focus; nhớ nút vừa bấm rồi trả focus sau khi danh sách vẽ lại.
+  const pendingFocus = useRef<{ id: string; dir: MoveDirection } | null>(null);
+  useEffect(() => {
+    const want = pendingFocus.current;
+    if (!want) return;
+    const btn = Array.from(document.querySelectorAll<HTMLElement>('[data-move-id]')).find((b) => b.dataset.moveId === want.id && b.dataset.moveDir === want.dir);
+    if (btn) {
+      pendingFocus.current = null;
+      btn.focus();
+    }
+  }, [sf.collections]);
+
   const moveCollection = (id: string, dir: MoveDirection) => {
     const next = moveInList(sf.collections, id, dir);
     if (!next) return;
     const ids = next.map((c) => c.id);
+    pendingFocus.current = { id, dir };
+    announce('status', moveAnnouncement({ name: sf.collections.find((c) => c.id === id)?.title ?? '', dir, index: ids.indexOf(id), total: ids.length }));
     moveColMut.mutate({ ids, update: (old) => withReorderedCollections(old, ids) });
+  };
+  const nameOfItem = (collectionId: string, itemId: string) => {
+    const it = sf.collections.find((c) => c.id === collectionId)?.items.find((i) => i.id === itemId);
+    return (it && (it.product ?? productMap.get(it.productId))?.name) || 'Sản phẩm';
   };
   const moveItem = (collectionId: string, itemId: string, dir: MoveDirection) => {
     const col = sf.collections.find((c) => c.id === collectionId);
     const next = col && moveInList(col.items, itemId, dir, samePinGroup);
     if (!next) return;
     const ids = next.map((i) => i.id);
+    pendingFocus.current = { id: itemId, dir };
+    announce('status', moveAnnouncement({ name: nameOfItem(collectionId, itemId), dir, index: ids.indexOf(itemId), total: ids.length }));
     moveItemMut.mutate({ collectionId, ids, update: (old) => withReorderedItems(old, collectionId, ids) });
+  };
+  const blockedMove = <T extends { id: string }>(list: readonly T[], id: string, dir: MoveDirection, name: string, same?: (a: T, b: T) => boolean) => {
+    const reason = moveBlockReason(list, id, dir, same);
+    if (reason) announce('status', moveBlockedAnnouncement({ name, dir, reason }));
   };
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
   const delItemMut = useMutation({
@@ -302,182 +347,40 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  return (
-    <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
-      <div style={{ padding: '12px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-          <Heading variant="title-md" as="h2">{sf.title}</Heading>
-          {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
-          <Badge tone={view.tone} size="sm">{view.label}</Badge>
-        </div>
-        <Text variant="caption" tone="tertiary" as="div">
-          {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
-        </Text>
-        {view.code === 'LIVE' && (
-          <Text variant="caption" tone="tertiary" as="div">{vi.storefront.webRefreshNote}</Text>
-        )}
-        {(view.hint || sf.publicHiddenReason) && (
-          <div
-            data-testid="hidden-reason"
-            role="status"
-            style={{ marginTop: 8, padding: '8px 12px', background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}
-          >
-            <Text variant="caption" as="div" style={{ color: 'var(--color-status-warning-fg)' }}>
-              {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
-            </Text>
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <Button variant="secondary" icon={UserRoundCog} style={{ flex: 1 }} onPress={() => setProfileOpen(true)}>
-            {vi.storefront.editProfile}
-          </Button>
-          <Button variant="secondary" icon={Settings} style={{ flex: 1 }} onPress={() => setConfigOpen(true)}>
-            {vi.storefront.settings}
-          </Button>
-        </div>
-      </div>
+  // Mở/đóng trang chi tiết: lên đầu trang và vào h1 khi mở; khi lùi lại thì về đúng thẻ vừa mở, đúng chỗ đang cuộn.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const lastOpened = useRef<string | null>(null);
+  const savedScroll = useRef(0);
+  const pageEl = () => document.querySelector<HTMLElement>('.zaui-page');
+  const openSection = (id: string) => {
+    savedScroll.current = pageEl()?.scrollTop ?? 0;
+    lastOpened.current = id;
+    setItemSort(false);
+    setSectionId(id);
+  };
+  function closeSection() {
+    setItemSort(false);
+    setSectionId(null);
+  }
+  const inDetail = sectionCol !== null;
+  useEffect(() => {
+    if (inDetail) {
+      pageEl()?.scrollTo?.({ top: 0 });
+      headingRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    const id = lastOpened.current;
+    if (!id) return;
+    lastOpened.current = null;
+    Array.from(document.querySelectorAll<HTMLElement>('[data-section-id]'))
+      .find((el) => el.dataset.sectionId === id)
+      ?.querySelector('button')
+      ?.focus({ preventScroll: true });
+    pageEl()?.scrollTo?.({ top: savedScroll.current });
+  }, [inDetail]);
 
-      {questsOpen && questsQ.data && <QuestSection data={questsQ.data} />}
-
-      {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
-          "Hoàn thiện hồ sơ gian hàng". */}
-      <div
-        role="button"
-        aria-label={vi.storefront.editProfile}
-        className="tubu-press"
-        onClick={() => setProfileOpen(true)}
-        {...rowKeyboardProps()}
-        style={{ ...CARD_MARGIN, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)', overflow: 'hidden' }}
-      >
-        <div
-          style={{
-            height: 84,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            background: sf.coverUrl
-              ? `center/cover no-repeat url(${sf.coverUrl})`
-              : 'linear-gradient(135deg, var(--color-bg-subtle), var(--color-action-secondary-bg-pressed))',
-          }}
-        >
-          {!sf.coverUrl && (
-            <>
-              <Icon icon={ImagePlus} size="sm" tone="brand" />
-              <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
-            </>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12 }}>
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: '50%',
-              flexShrink: 0,
-              border: '2px solid var(--color-bg-surface)',
-              marginTop: -28,
-              background: sf.avatarUrl
-                ? `center/cover no-repeat url(${sf.avatarUrl})`
-                : 'var(--color-bg-media)',
-            }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="body-sm" tone={sf.headerNote ? 'primary' : 'tertiary'} as="div">
-              {sf.headerNote || vi.storefront.profileHint}
-            </Text>
-          </div>
-          <Icon icon={Pencil} size="sm" tone="muted" />
-        </div>
-      </div>
-
-      {sf.collections.map((col) => (
-        <Card key={col.id} style={CARD_MARGIN}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-            <Heading variant="title-sm" as="h2" style={{ flex: 1, minWidth: 0 }}>{col.title}</Heading>
-            <RowIconButton icon={ChevronUp} label={vi.storefront.moveUp} disabled={!moveInList(sf.collections, col.id, 'up')} onPress={() => moveCollection(col.id, 'up')} />
-            <RowIconButton icon={ChevronDown} label={vi.storefront.moveDown} disabled={!moveInList(sf.collections, col.id, 'down')} onPress={() => moveCollection(col.id, 'down')} />
-            <RowIconButton icon={Ellipsis} label={vi.storefront.moreCollectionActions} onPress={() => setColMenuId(col.id)} />
-          </div>
-          {col.items.map((it) => {
-            const prod = it.product ?? productMap.get(it.productId);
-            const name = prod?.name ?? 'Sản phẩm';
-            const price = prod?.salePrice ?? prod?.basePrice ?? 0;
-            const slug = prod?.slug;
-
-            return (
-              <div key={it.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="body-sm" as="div" tone={it.isHidden || it.hiddenReason ? 'tertiary' : 'primary'}>{name}</Text>
-                    <PriceTag value={price} size="sm" />
-                    {(it.isPinned || it.hiddenReason) && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
-                        {it.isPinned && <Badge tone="brand" size="sm" icon={Pin}>{vi.storefront.pinnedBadge}</Badge>}
-                        {it.hiddenReason && (
-                          <Badge tone="warning" size="sm" style={{ maxWidth: '100%', whiteSpace: 'normal' }}>
-                            Khách không thấy: {it.hiddenReason}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <RowIconButton icon={ChevronUp} label={vi.storefront.moveUp} disabled={!moveInList(col.items, it.id, 'up', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'up')} />
-                  <RowIconButton icon={ChevronDown} label={vi.storefront.moveDown} disabled={!moveInList(col.items, it.id, 'down', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'down')} />
-                  <RowIconButton icon={Ellipsis} label={vi.storefront.moreItemActions} onPress={() => setItemMenuId(it.id)} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <button
-                    type="button"
-                    className="tubu-press"
-                    onClick={() => setNotingItem({ id: it.id, note: it.note ?? '' })}
-                    style={{
-                      flex: 1, minWidth: 0, minHeight: 44, padding: 0, display: 'flex', alignItems: 'center', gap: 4,
-                      border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
-                    }}
-                  >
-                    <Icon icon={MessageSquarePlus} size="sm" tone={it.note ? 'muted' : 'brand'} style={{ flexShrink: 0 }} />
-                    <Text variant="caption" tone={it.note ? 'secondary' : 'brand'} style={{ fontStyle: it.note ? 'italic' : 'normal' }}>
-                      {it.note ? `“${it.note}”` : vi.storefront.itemNoteEmpty}
-                    </Text>
-                  </button>
-                  {slug && (
-                    <Button variant="ghost" onPress={() => setContentKitSlug(slug)}>
-                      {vi.contentKit.entryLabel}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <Button variant="secondary" icon={Plus} style={{ marginTop: 8 }} onPress={() => setPickerCol(col.id)}>
-            {vi.storefront.addProduct}
-          </Button>
-        </Card>
-      ))}
-
-      <div style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <Input
-          aria-label={vi.storefront.collectionNamePlaceholder}
-          value={newColTitle}
-          placeholder={vi.storefront.collectionNamePlaceholder}
-          onChange={(e) => setNewColTitle(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <Button
-          variant="secondary"
-          icon={Plus}
-          disabled={!newColTitle.trim()}
-          loading={newColMut.isPending}
-          onPress={() => newColMut.mutate(newColTitle.trim())}
-        >
-          {vi.storefront.addCollection}
-        </Button>
-      </div>
-
-      <StatsSection />
-      {!questsOpen && questsQ.data && <QuestSection data={questsQ.data} />}
-
+  const sheets = (
+    <>
       <ActionMenu
         open={!!menuItem}
         title={menuItem?.product?.name ?? 'Sản phẩm'}
@@ -506,41 +409,6 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         }
       />
 
-      <StickyActionBar
-        summary={!sf.isPublished && itemCount === 0 ? <Text variant="caption" tone="secondary" as="div">{vi.storefront.publishNeedsProduct}</Text> : undefined}
-        secondary={
-          <Button
-            variant="secondary"
-            style={{ flex: 1 }}
-            onPress={() => {
-              // Trang /s/:slug chỉ trả gian hàng khách đang thấy: chưa thì chủ xem bản xem trước ngay trong app.
-              if (!view.canShare) {
-                setPreviewOpen(true);
-                return;
-              }
-              navigate(`/s/${sf.slug}`);
-            }}
-          >
-            {vi.storefront.preview}
-          </Button>
-        }
-        primary={
-          view.canShare ? (
-            <Button fullWidth icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
-              {vi.storefront.shareShort}
-            </Button>
-          ) : sf.isPublished ? (
-            <Button fullWidth disabled aria-label={view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApproval : vi.storefront.shareStore}>
-              {view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApprovalShort : vi.storefront.shareShort}
-            </Button>
-          ) : (
-            <Button fullWidth disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
-              {publishCopy.button}
-            </Button>
-          )
-        }
-      />
-
       <ShareSheet
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
@@ -556,6 +424,12 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onPress={() => setPreviewOpen(false)}>{vi.common.close}</Button>
         </div>
       </BottomSheet>
+
+      <BottomSheet open={questOpen} onClose={() => setQuestOpen(false)} title={BUILDER_COPY.questOpen}>
+        {questsQ.data && <QuestList data={questsQ.data} />}
+      </BottomSheet>
+
+      <NewSectionSheet open={newOpen} onClose={() => setNewOpen(false)} pending={newColMut.isPending} onCreate={(dto) => newColMut.mutate(dto)} />
 
       <BottomSheet open={confirmUnpublish} onClose={() => setConfirmUnpublish(false)} title={vi.storefront.unpublishConfirm} description={vi.storefront.unpublishHint}>
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -681,394 +555,175 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           </Button>
         </div>
       </BottomSheet>
-    </BuilderShell>
+    </>
   );
-}
 
-function StatBox({ value, label, tone }: { value: string; label: string; tone?: 'brand' }) {
+  if (sectionCol) {
+    const layoutBusy: SectionStyle | null = layoutMut.isPending && layoutMut.variables?.id === sectionCol.id ? layoutMut.variables.layout : null;
+    return (
+      <BuilderShell bare style={{ paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
+        <SectionDetail
+          col={sectionCol}
+          productMap={productMap}
+          sortMode={itemSort}
+          headingRef={headingRef}
+          layoutBusy={layoutBusy}
+          onBack={closeSection}
+          onMenu={() => setColMenuId(sectionCol.id)}
+          onStyle={(style) => {
+            if (style === 'COMBO' || style === sectionStyleOf(sectionCol)) return;
+            layoutMut.mutate({ id: sectionCol.id, layout: style });
+          }}
+          onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
+          onAddItem={() => setPickerCol(sectionCol.id)}
+          onToggleSort={() => setItemSort((v) => !v)}
+          onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
+          onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
+          onItemMenu={setItemMenuId}
+          onNote={(itemId) => setNotingItem({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
+          onKit={setContentKitSlug}
+        />
+        {sheets}
+      </BuilderShell>
+    );
+  }
+
+  const overflow = overflowSectionsNotice(sf.collections);
   return (
-    <div style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: 10, textAlign: 'center' }}>
-      <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{value}</Text>
-      <Text variant="caption" tone="tertiary" as="div">{label}</Text>
-    </div>
-  );
-}
-
-/** Section "Thống kê" — sản phẩm nào trong gian hàng đang bán chạy, để CTV biết mà tối ưu. */
-function StatsSection() {
-  const statsQ = useQuery({ queryKey: ['storefront-stats'], queryFn: getStorefrontStats });
-  const data = statsQ.data;
-  if (!data) return null;
-  // Các dòng dưới cộng đúng ô Doanh thu: top 5 sản phẩm, phần còn lại gộp một dòng, phần cấp đơn (ship, giảm giá, chênh lệch
-  // giữa tiền hoàn thực tế và phần trừ theo tỷ lệ dòng) một dòng.
-  const lines = data.byProduct.filter((p) => p.qty > 0);
-  const rest = lines.slice(5);
-  const orderLevel = data.shippingAndOrderDiscount30d ?? 0;
-
-  return (
-    <Card style={CARD_MARGIN}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-        <Icon icon={TrendingUp} size="md" tone="brand" />
-        <Heading variant="title-sm" as="h2">Thống kê 30 ngày</Heading>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
-        <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
-        <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" tone="brand" />
-      </div>
-      {lines.length === 0 && !orderLevel ? (
-        <Text variant="caption" tone="tertiary" as="div">Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
-      ) : (
-        <>
-          {lines.slice(0, 5).map((p) => (
-            <StatLine key={p.productSlug || p.productName} name={p.productName} value={`${p.qty} món · ${formatVnd(p.revenue)}`} />
-          ))}
-          {rest.length > 0 && (
-            <StatLine
-              name={vi.storefront.statsOtherProducts(rest.length)}
-              value={`${rest.reduce((t, p) => t + p.qty, 0)} món · ${formatVnd(rest.reduce((t, p) => t + p.revenue, 0))}`}
+    <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
+      <div style={{ padding: '12px 16px 0' }}>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              aria-hidden="true"
+              style={{
+                width: 56, height: 56, flexShrink: 0, borderRadius: 'var(--radius-media)',
+                background: sf.coverUrl
+                  ? `center/cover no-repeat url(${sf.coverUrl})`
+                  : 'linear-gradient(135deg, var(--color-bg-subtle), var(--color-action-secondary-bg-pressed))',
+              }}
             />
-          )}
-          {orderLevel !== 0 && <StatLine name={vi.storefront.statsOrderLevel} value={formatVnd(orderLevel)} />}
-        </>
-      )}
-    </Card>
-  );
-}
-
-function StatLine({ name, value }: { name: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
-      <Text variant="body-sm" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</Text>
-      <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap', marginLeft: 8 }}>{value}</Text>
-    </div>
-  );
-}
-
-/** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng Điểm Xanh. */
-function QuestSection({ data }: { data: QuestList }) {
-  const qc = useQueryClient();
-  const { openSnackbar } = useSnackbar();
-  const claimMut = useMutation({
-    mutationFn: (code: string) => claimQuest(code),
-    onSuccess: (r) => {
-      haptic('medium');
-      openSnackbar({ text: `+${formatPoints(r.rewardPoints)} 🎉`, type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  return (
-    <Card style={CARD_MARGIN}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Icon icon={Target} size="md" tone="brand" />
-          <Heading variant="title-sm" as="h2">Hành trình gian hàng</Heading>
-        </div>
-        <Text variant="caption" tone="tertiary">{data.level}/{data.levelMax}</Text>
-      </div>
-      <Text variant="caption" tone="brand" as="div" style={{ marginBottom: 10 }}>
-        Đã nhận {formatPoints(data.totalEarnedPoints)}
-      </Text>
-      {data.quests.map((q) => {
-        // Guard chia-0: goal=0 (nhiệm vụ đã đạt sẵn) → 0/0=NaN hoặc x/0=Infinity → width lỗi. Đạt ngay = 100%.
-        const pct = q.goal > 0 ? Math.min(100, Math.round((q.progress / q.goal) * 100)) : 100;
-        return (
-          <div key={q.code} style={{ padding: '8px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="body-sm" as="div" style={{ opacity: q.claimed ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {q.claimed && <Icon icon={Check} size="sm" tone="brand" />}
-                  {q.title}
-                </Text>
-                <Text variant="caption" tone="tertiary" as="div">{q.hint}</Text>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                <Heading variant="title-md" as="h2" style={{ overflowWrap: 'anywhere' }}>{sf.title}</Heading>
+                {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
+                <Badge tone={view.tone} size="sm">{view.label}</Badge>
               </div>
-              {q.claimed ? (
-                <Badge tone="success" size="sm">Đã nhận</Badge>
-              ) : q.done ? (
-                <Button
-                  loading={claimMut.isPending && claimMut.variables === q.code}
-                  disabled={claimMut.isPending && claimMut.variables !== q.code}
-                  onPress={() => claimMut.mutate(q.code)}
-                >
-                  {vi.storefront.claimQuest(formatPoints(q.rewardPoints))}
-                </Button>
-              ) : (
-                <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>
-              )}
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <ProgressBar value={pct} max={100} ariaLabel={`${q.title}: tiến độ nhiệm vụ`} />
-            </div>
-          </div>
-        );
-      })}
-    </Card>
-  );
-}
-
-/**
- * Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Ba trường này quyết định nhiệm vụ
- * "Hoàn thiện hồ sơ gian hàng" nhưng trước đây không có màn nào nhập được.
- */
-function ProfileSheet({
-  sf,
-  onClose,
-  onSaved,
-}: {
-  sf: StorefrontEdit;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { openSnackbar } = useSnackbar();
-  const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
-  const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
-  const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
-
-  const saveMut = useMutation({
-    mutationFn: () =>
-      // Gửi chuỗi RỖNG (không phải undefined) khi CTV chủ động xoá: undefined bị PATCH bỏ qua,
-      // nên trước đây xoá ảnh bìa rồi bấm Lưu là snackbar báo thành công mà ảnh cũ vẫn còn trên
-      // gian hàng công khai, thử lại bao nhiêu lần cũng vậy.
-      updateStorefront({
-        avatarUrl: avatarUrl.trim(),
-        coverUrl: coverUrl.trim(),
-        headerNote: headerNote.trim(),
-      }),
-    onSuccess: () => {
-      haptic('medium');
-      openSnackbar({ text: vi.storefront.profileSaved, type: 'success' });
-      onSaved();
-      onClose();
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const complete = !!(avatarUrl.trim() && coverUrl.trim() && headerNote.trim());
-
-  return (
-    <div style={SCROLL_BODY}>
-      {/* Ảnh đại diện nhỏ nên nén mạnh hơn ảnh bìa — cả hai đi kèm mọi lượt xem gian hàng. */}
-      <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
-      <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
-
-      <Text variant="label" as="div" style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
-      <Input.TextArea
-        aria-label={vi.storefront.headerNote}
-        value={headerNote}
-        maxLength={200}
-        placeholder={vi.storefront.headerNotePlaceholder}
-        onChange={(e) => setHeaderNote(e.target.value)}
-      />
-      <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 4 }}>
-        {headerNote.length}/200
-      </Text>
-
-      {!complete && (
-        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 10 }}>
-          Đủ cả ba mục sẽ hoàn thành nhiệm vụ “{vi.storefront.profileTitle.toLowerCase()}”.
-        </Text>
-      )}
-
-      <Button fullWidth loading={saveMut.isPending} onPress={() => saveMut.mutate()} style={{ marginTop: 16 }}>
-        Lưu hồ sơ
-      </Button>
-      <Button fullWidth variant="secondary" style={{ marginTop: 8 }} onPress={onClose}>
-        Đóng
-      </Button>
-    </div>
-  );
-}
-
-/** Ô chọn màu: hình tròn 32px nhưng vùng chạm 44px, là nút thật có trạng thái chọn. */
-function ThemeSwatch({ code, label, selected, onPress }: { code: string; label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={selected}
-      className="tubu-press"
-      onClick={onPress}
-      style={{ minWidth: 44, minHeight: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-    >
-      <span
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          backgroundColor: code,
-          border: selected ? '3px solid var(--color-text-primary)' : '2px solid var(--color-bg-surface)',
-          boxShadow: 'var(--elevation-1)',
-        }}
-      />
-    </button>
-  );
-}
-
-function MerchantConfigSheet({
-  sf,
-  onClose,
-  onSaved,
-  unpublishLabel,
-  onUnpublish,
-}: {
-  sf: StorefrontEdit;
-  onClose: () => void;
-  onSaved: () => void;
-  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cài đặt. */
-  unpublishLabel: string | null;
-  onUnpublish: () => void;
-}) {
-  const { openSnackbar } = useSnackbar();
-  const [form, setForm] = useState({
-    title: sf.title ?? '',
-    subdomain: sf.subdomain ?? '',
-    themeColor: sf.themeColor ?? DEFAULT_STOREFRONT_THEME_COLOR,
-    warehouseAddress: sf.warehouseAddress ?? '',
-    warehouseCity: sf.warehouseCity ?? '',
-    warehousePhone: sf.warehousePhone ?? '',
-  });
-
-  // Kho/hotline chỉ có nghĩa với gian hàng tự giao (D4); chuỗi rỗng = xoá (BE đổi '' thành null).
-  const selfFulfils = isPartnerStore(sf);
-  // Chỉ gửi subdomain khi người dùng đã đổi: API kiểm từ khoá và trùng tên mỗi khi nhận subdomain.
-  const typedSubdomain = form.subdomain.trim().toLowerCase();
-  const subdomainChanged = typedSubdomain !== '' && typedSubdomain !== (sf.subdomain ?? '');
-  const saveMut = useMutation({
-    mutationFn: () =>
-      updateStorefront({
-        title: form.title.trim() || undefined,
-        subdomain: sf.subdomainEnabled && subdomainChanged ? form.subdomain.trim().toLowerCase() : undefined,
-        themeColor: form.themeColor,
-        ...(selfFulfils && {
-          warehouseAddress: form.warehouseAddress.trim(),
-          warehouseCity: form.warehouseCity.trim(),
-          warehousePhone: form.warehousePhone.trim(),
-        }),
-      }),
-    onSuccess: () => {
-      haptic('medium');
-      openSnackbar({ text: 'Đã lưu cấu hình gian hàng!', type: 'success' });
-      onSaved();
-      onClose();
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
-  const clearBankMut = useMutation({
-    mutationFn: () => updateStorefront({ bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' }),
-    onSuccess: () => {
-      openSnackbar({ text: 'Đã gỡ tài khoản ngân hàng khỏi gian hàng', type: 'success' });
-      onSaved();
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  return (
-    <div style={SCROLL_BODY}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="Tên gian hàng">
-          <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </Field>
-
-        {sf.subdomainEnabled && (
-          <div>
-            <Field label="Subdomain riêng">
-              <Input
-                placeholder="vd: brand1"
-                value={form.subdomain}
-                onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
-              />
-            </Field>
-            <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-              URL: {form.subdomain ? `${form.subdomain}.tubutree.com` : 'ten-ban.tubutree.com'}
-            </Text>
-          </div>
-        )}
-
-        <div>
-          <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 2 }}>Màu sắc thương hiệu</Text>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {STOREFRONT_THEME_COLORS.map((c) => (
-              <ThemeSwatch
-                key={c.code}
-                code={c.code}
-                label={c.label}
-                selected={form.themeColor === c.code}
-                onPress={() => setForm({ ...form, themeColor: c.code })}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
-          <Heading variant="title-sm" as="h3" style={{ marginBottom: 4 }}>Thanh toán</Heading>
-          <Text variant="caption" tone="secondary" as="p" style={{ margin: 0 }}>
-            Khách luôn thanh toán cho Tubu Tree.{' '}
-            {selfFulfils
-              ? 'Tiền hàng của bạn được đối soát và chuyển theo kỳ trên cổng người bán.'
-              : 'Hoa hồng của bạn chuyển vào Ví Tubu ngay trong mục Cộng tác viên.'}
-          </Text>
-          {sf.bankAccountNo && (
-            <div style={{ marginTop: 8 }}>
-              <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 6px' }}>
-                Gian hàng đang lưu tài khoản {sf.bankName ?? 'ngân hàng'} ****{sf.bankAccountNo.slice(-4)} nhưng tài khoản này
-                không được dùng để thu tiền.
+              <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
+                {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
               </Text>
-              <Button
-                variant="secondary"
-                loading={clearBankMut.isPending}
-                onPress={() => clearBankMut.mutate()}
-              >
-                Gỡ tài khoản đã lưu
-              </Button>
+              {!sf.coverUrl && <Text variant="caption" tone="brand" as="div">{vi.storefront.addCover}</Text>}
+            </div>
+          </div>
+          {view.code === 'LIVE' && (
+            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.storefront.webRefreshNote}</Text>
+          )}
+          {(view.hint || sf.publicHiddenReason) && (
+            <div
+              data-testid="hidden-reason"
+              role="status"
+              style={{ marginTop: 8, padding: '8px 12px', background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}
+            >
+              <Text variant="caption" as="div" style={{ color: 'var(--color-status-warning-fg)' }}>
+                {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
+              </Text>
             </div>
           )}
-        </div>
-
-        {selfFulfils && (
-          <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
-            <Heading variant="title-sm" as="h3" style={{ marginBottom: 4 }}>Kho gửi hàng & hotline</Heading>
-            <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>
-              Dùng cho đơn gian hàng tự giao: khách thấy hotline này trong chi tiết đơn để liên hệ.
-            </Text>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Input
-                aria-label="Địa chỉ kho xuất hàng"
-                placeholder="Địa chỉ kho xuất hàng"
-                value={form.warehouseAddress}
-                onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
-              />
-              <Input
-                aria-label="Tỉnh / Thành phố"
-                placeholder="Tỉnh / Thành phố"
-                value={form.warehouseCity}
-                onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
-              />
-              <Input
-                aria-label="Hotline kho liên hệ"
-                placeholder="Hotline kho liên hệ"
-                value={form.warehousePhone}
-                onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })}
-              />
-            </div>
-          </div>
-        )}
-
-        <Button fullWidth style={{ marginTop: 12 }} loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
-          Lưu cấu hình gian hàng
-        </Button>
-
-        {unpublishLabel && (
-          <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
-            <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>{vi.storefront.unpublishHint}</Text>
-            <Button fullWidth variant="secondary" icon={EyeOff} onPress={onUnpublish}>
-              {unpublishLabel}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <Button variant="secondary" icon={UserRoundCog} style={{ flex: 1 }} onPress={() => setProfileOpen(true)}>
+              {vi.storefront.editProfile}
+            </Button>
+            <Button variant="secondary" icon={Settings} style={{ flex: 1 }} onPress={() => setConfigOpen(true)}>
+              {vi.storefront.settings}
             </Button>
           </div>
+        </Card>
+      </div>
+
+      <div style={{ paddingTop: 12 }}>{view.code === 'LIVE' && <StatsSection />}</div>
+
+      {questsQ.data && (
+        <div style={CARD_MARGIN}>
+          <QuestStrip {...questStripView(questsQ.data, formatPoints)} onOpen={() => setQuestOpen(true)} />
+        </div>
+      )}
+
+      <div style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Heading variant="title-sm" as="h2">{BUILDER_COPY.sections}</Heading>
+        {sf.collections.length > 1 && (
+          <Button variant="ghost" onPress={() => setSectionSort((v) => !v)}>{sectionSort ? BUILDER_COPY.sortDone : BUILDER_COPY.sort}</Button>
         )}
       </div>
-    </div>
+
+      {sf.collections.length === 0 && (
+        <Text variant="body-sm" tone="secondary" as="div" style={{ ...CARD_MARGIN }}>{BUILDER_COPY.empty}</Text>
+      )}
+      {sf.collections.map((col) =>
+        sectionSort ? (
+          <div
+            key={col.id}
+            data-testid="section-sort-row"
+            style={{ ...CARD_MARGIN, minHeight: 56, display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 12, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)' }}
+          >
+            <Text variant="body-sm" as="div" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.title}</Text>
+            <MoveButtons
+              id={col.id}
+              name={col.title}
+              scope="section"
+              canUp={!!moveInList(sf.collections, col.id, 'up')}
+              canDown={!!moveInList(sf.collections, col.id, 'down')}
+              onMove={(dir) => moveCollection(col.id, dir)}
+              onBlocked={(dir) => blockedMove(sf.collections, col.id, dir, col.title)}
+            />
+          </div>
+        ) : (
+          <div key={col.id} style={CARD_MARGIN}>
+            <SectionCard view={sectionCardView(col, sf.collections)} onOpen={() => openSection(col.id)} />
+          </div>
+        ),
+      )}
+
+      {overflow && <Text variant="caption" tone="secondary" as="div" style={CARD_MARGIN}>{overflow}</Text>}
+
+      <div style={CARD_MARGIN}>
+        <Button fullWidth variant="secondary" icon={Plus} onPress={() => setNewOpen(true)}>{BUILDER_COPY.addSection}</Button>
+      </div>
+
+      <StickyActionBar
+        summary={!sf.isPublished && itemCount === 0 ? <Text variant="caption" tone="secondary" as="div">{vi.storefront.publishNeedsProduct}</Text> : undefined}
+        secondary={
+          <Button
+            variant="secondary"
+            style={{ flex: 1 }}
+            onPress={() => {
+              // Trang /s/:slug chỉ trả gian hàng khách đang thấy: chưa thì chủ xem bản xem trước ngay trong app.
+              if (!view.canShare) {
+                setPreviewOpen(true);
+                return;
+              }
+              navigate(`/s/${sf.slug}`);
+            }}
+          >
+            {vi.storefront.preview}
+          </Button>
+        }
+        primary={
+          view.canShare ? (
+            <Button fullWidth icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
+              {vi.storefront.shareShort}
+            </Button>
+          ) : sf.isPublished ? (
+            <Button fullWidth disabled aria-label={view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApproval : vi.storefront.shareStore}>
+              {view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApprovalShort : vi.storefront.shareShort}
+            </Button>
+          ) : (
+            <Button fullWidth disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
+              {publishCopy.button}
+            </Button>
+          )
+        }
+      />
+      {sheets}
+    </BuilderShell>
   );
 }
