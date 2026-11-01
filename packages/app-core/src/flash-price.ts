@@ -1,3 +1,4 @@
+import { strikePrice } from '@tubutree/shared-types';
 import { serverNow } from './server-clock';
 
 /**
@@ -137,7 +138,7 @@ export function variationPricing(
   const standing = v.salePrice ?? v.retailPrice;
   const isFlash = !!item && item.flashPrice < standing;
   const price = isFlash ? item!.flashPrice : standing;
-  const view = discountView(price, isFlash ? standing : v.retailPrice);
+  const view = discountView(price, strikePrice({ retailPrice: v.retailPrice, salePrice: v.salePrice, flashPrice: item?.flashPrice }));
   return { price, isFlash, salePct: view.salePct, compareAt: view.compareAt, ...(isFlash && item!.endAt ? { endAt: item!.endAt } : {}) };
 }
 

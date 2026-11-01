@@ -10,3 +10,4 @@ export * from './support-chat';
 export * from './cash-wording';
 export * from './cart';
 export * from './campaign';
+export * from './price';

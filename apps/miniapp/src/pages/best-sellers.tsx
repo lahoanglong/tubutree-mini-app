@@ -22,13 +22,12 @@ import { uniqueById } from '../utils/unique-by-id';
 const PAGE_STYLE: CSSProperties = { background: 'var(--color-bg-canvas)', paddingBottom: 32 };
 
 /**
- * Hàng tab dính ngay dưới thanh lùi đặc (cao 56px + vùng an toàn) mà `BackButton` vẽ khi cuộn: tab không chui dưới nó. Vị trí dính tính từ
- * chỗ nội dung của `.page` bắt đầu (đệm `--safe-top` + 48px khi có nút lùi), nên chỉ còn 56 - 48 = 8px; ghi 56px cộng vùng an toàn thì hở
- * một dải 48px để thẻ cuộn lộ ra giữa thanh lùi và hàng tab.
+ * Hàng tab dính ngay dưới thanh lùi đặc (cao 56px + vùng an toàn) mà `BackButton` vẽ khi cuộn: tab không chui dưới nó. Trang không dùng lớp `page`
+ * nên `top` đo từ mép trên vùng cuộn: ghi `--safe-top`, lớp `sticky-below-back` đẩy xuống dưới thanh lùi khi có nút lùi (cùng cách với Vườn Xanh).
  */
 const TABS_BAR: CSSProperties = {
   position: 'sticky',
-  top: 8,
+  top: 'var(--safe-top)',
   zIndex: 2,
   padding: '8px 16px',
   background: 'var(--color-bg-canvas)',
@@ -66,7 +65,7 @@ export default function BestSellersPage() {
   };
 
   return (
-    <Page className="page" style={PAGE_STYLE}>
+    <Page style={PAGE_STYLE}>
       <PullToRefresh onRefresh={() => products.refetch()} />
       <div
         ref={(el) => {
@@ -75,7 +74,7 @@ export default function BestSellersPage() {
         }}
       />
       <PageHeader title={fillCopy('rank.title')} subtitle={bestSellersBasisCopy(products.data?.pages)} />
-      <div style={TABS_BAR}>
+      <div className="sticky-below-back" style={TABS_BAR}>
         <SegmentedTabs scroll label={fillCopy('rank.tabsLabel')} items={tabItems} value={scope.tab} onChange={pickTab} />
       </div>
       <div role="tabpanel" aria-label={activeLabel} style={{ padding: '8px 16px 24px' }}>

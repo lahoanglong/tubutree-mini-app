@@ -152,6 +152,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.outOfQuota': 16,
   'coupon.expired': 16,
   'coupon.used': 16,
+  // 24 = "99 mã · giảm đến 999,9tr": couponHintShort luôn làm tròn xuống k/tr nên số tiền tối đa 7 ký tự (coupon-use.spec quét nhiều số lẻ).
+  'coupon.hintShort': 24,
+  'coupon.hintShortPlain': 15,
   'coupon.savedToast': null,
   'coupon.loginToSave': null,
   'coupon.detailTitle': null,

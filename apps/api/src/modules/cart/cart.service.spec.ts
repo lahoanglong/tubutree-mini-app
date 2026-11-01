@@ -661,10 +661,35 @@ describe('CartService guard tồn kho', () => {
       expect(l).toMatchObject({ unitPrice: 42000, listUnitPrice: 50000 });
     });
 
-    it('đang Giờ vàng → unitPrice là giá Giờ vàng, listUnitPrice vẫn là retailPrice (không phải salePrice)', async () => {
-      const flashMap = new Map([['c', { flashPrice: 33000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, allowance: 5, perUserLeft: 5, quotaLeft: 9 }]]);
-      const l = (await cartOf([line('c', 50000, 42000)], flashMap as never)).items[0]!;
+    const flashOf = (id: string, flashPrice: number, allowance = 5) =>
+      new Map([[id, { flashPrice, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, allowance, perUserLeft: allowance, quotaLeft: 9 }]]) as never;
+
+    it('đang Giờ vàng thắng giá sale → listUnitPrice là giá đang bán trước Giờ vàng (khớp thẻ và trang Giờ vàng), không phải giá niêm yết', async () => {
+      const l = (await cartOf([line('c', 59000, 50000)], flashOf('c', 33000))).items[0]!;
       expect(l).toMatchObject({ unitPrice: 33000, isFlash: true, listUnitPrice: 50000 });
+    });
+
+    it('đang Giờ vàng, không có giá sale → gạch giá niêm yết (cũng là giá đang bán)', async () => {
+      const l = (await cartOf([line('c2', 59000, null)], flashOf('c2', 33000))).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 33000, isFlash: true, listUnitPrice: 59000 });
+    });
+
+    it('Giờ vàng không rẻ hơn giá đang bán → không gạch ngược: listUnitPrice là giá niêm yết, giá khách trả vẫn là giá đang bán', async () => {
+      const l = (await cartOf([line('d', 59000, 50000)], flashOf('d', 55000))).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 50000, listUnitPrice: 59000 });
+    });
+
+    it('vượt suất Giờ vàng (giỏ tính giá thường cả dòng) → gạch giá niêm yết như dòng không Giờ vàng', async () => {
+      // SL 2 > allowance 1: dòng mua giá thường (50.000), nên gạch 59.000 chứ không gạch 50.000 vì Giờ vàng không áp.
+      const l = (await cartOf([line('e', 59000, 50000)], flashOf('e', 33000, 1))).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 50000, isFlash: false, listUnitPrice: 59000 });
+    });
+
+    it('chỉ đổi số hiển thị: tiền khách trả của dòng Giờ vàng có giá sale giữ nguyên (đơn giá, thành tiền, tạm tính, giảm)', async () => {
+      // Số vàng lấy từ hành vi trước khi đổi nguồn giá gạch: 2 × 33.000 = 66.000, không giảm gì.
+      const cart = await cartOf([line('c', 59000, 50000)], flashOf('c', 33000));
+      expect(cart.items[0]).toMatchObject({ unitPrice: 33000, total: 66000, quantity: 2 });
+      expect(cart).toMatchObject({ subtotal: 66000, discount: 0, comboDiscount: 0, itemCount: 2 });
     });
   });
 

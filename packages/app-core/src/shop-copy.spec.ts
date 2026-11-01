@@ -25,6 +25,11 @@ const WORST: Record<string, string> = {
   clock: '03:15',
 };
 
+// Khoá cần giá trị xấu nhất riêng (số tiền rút gọn có thể ghi "999,9tr", dài hơn "999k" dùng chung cho x).
+const WORST_BY_KEY: Record<string, Record<string, string>> = {
+  'coupon.hintShort': { x: '999,9tr' },
+};
+
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);
 
 describe('SHOP_COPY', () => {
@@ -36,7 +41,7 @@ describe('SHOP_COPY', () => {
   it('mọi khoá có ngân sách thì chữ điền giá trị xấu nhất vẫn trong ngân sách', () => {
     for (const [key, max] of Object.entries(SHOP_COPY_MAX)) {
       if (max === null) continue;
-      expect(fillCopy(key, WORST).length, key).toBeLessThanOrEqual(max);
+      expect(fillCopy(key, { ...WORST, ...WORST_BY_KEY[key] }).length, key).toBeLessThanOrEqual(max);
     }
   });
 

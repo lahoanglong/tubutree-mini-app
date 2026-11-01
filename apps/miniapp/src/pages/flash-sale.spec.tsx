@@ -163,9 +163,9 @@ describe('Trang Giờ vàng: khung giờ và danh sách', () => {
     renderPage();
     const sticky = await screen.findByTestId('flash-sticky');
     expect(sticky.style.position).toBe('sticky');
-    // Đo từ mép nội dung của `.page` (đệm đầu 48px khi có nút lùi): 56px của thanh nút lùi trừ 48px còn 8px.
-    expect(sticky.style.top).toBe('8px');
-    expect(sticky.className).not.toContain('sticky-below-back');
+    // Trang không dùng lớp `page`: `top` đo từ mép trên vùng cuộn là vùng an toàn, lớp `sticky-below-back` đẩy xuống dưới thanh nút lùi (56px) khi có nút lùi.
+    expect(sticky.style.top).toBe('var(--safe-top)');
+    expect(sticky.className).toContain('sticky-below-back');
     expect(within(sticky).getByRole('tablist')).toBeInTheDocument();
     expect(within(sticky).getByTestId('countdown-ends-clock')).toBeInTheDocument();
     const buy = await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });

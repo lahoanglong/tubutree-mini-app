@@ -458,6 +458,44 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     expect(r.numbers).toEqual({ cart: 31_000, quote: 31_000, order: 31_000 });
   });
 
+  it('Giờ vàng thắng giá sale: dòng giỏ gạch giá đang bán (như thẻ), không gạch giá niêm yết; tiền giỏ = báo giá = đơn không đổi', async () => {
+    const b = await buyer();
+    const tag = randCode(8);
+    const p = await prisma.product.create({
+      data: {
+        pancakeId: `itcp-p-${tag}`,
+        brand: 'IT',
+        slug: `itcp-${tag.toLowerCase()}`,
+        name: `SP ${tag}`,
+        description: 'IT',
+        basePrice: 59_000,
+        variations: { create: { pancakeId: `itcp-v-${tag}`, sku: `ITCP-${tag}`, name: 'Mặc định', attributes: {}, retailPrice: 59_000, salePrice: 50_000, stock: 50 } },
+      },
+      include: { variations: true },
+    });
+    const variationId = p.variations[0]!.id;
+    const now = Date.now();
+    const sale = await prisma.flashSale.create({
+      data: {
+        title: 'IT Giờ vàng giá gạch',
+        startAt: new Date(now - 3_600_000),
+        endAt: new Date(now + 3_600_000),
+        createdBy: 'it',
+        items: { create: [{ variationId, flashPrice: 33_000, quota: 10, perUserLimit: 5 }] },
+      },
+    });
+    try {
+      await cart.addItem(b.userId, { variationId, quantity: 2 });
+      const r = await cartQuoteOrder(b);
+      // 50.000 là giá đang bán trước Giờ vàng, đúng số thẻ và trang Giờ vàng gạch; 59.000 (niêm yết) không còn được gạch ở giỏ.
+      expect(r.c.items[0]).toMatchObject({ unitPrice: 33_000, isFlash: true, listUnitPrice: 50_000, total: 66_000 });
+      // Số tiền khách trả là số trước khi đổi nguồn giá gạch: 2 × 33.000.
+      expect(r.numbers).toEqual({ cart: 66_000, quote: 66_000, order: 66_000 });
+    } finally {
+      await prisma.flashSale.deleteMany({ where: { id: sale.id } });
+    }
+  });
+
   it('"chạm" giới thiệu còn hạn (phiên mất slug gian hàng): giỏ, báo giá và đơn cùng lấy gian hàng của chạm nên cùng combo', async () => {
     const b = await buyer();
     const a = await product(60_000);

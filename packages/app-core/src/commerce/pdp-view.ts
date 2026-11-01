@@ -1,6 +1,6 @@
 import { applyShelfDedupe } from '../merch/shelves';
 
-/** Dòng giỏ có giá niêm yết cao hơn giá bán mới gạch giá; API cũ chưa trả `listUnitPrice` thì không gạch. */
+/** Dòng giỏ có giá gạch (`listUnitPrice`, luật `strikePrice`) cao hơn giá bán mới gạch giá; API cũ chưa trả `listUnitPrice` thì không gạch. */
 export function lineCompareAt(l: { unitPrice: number; listUnitPrice?: number | null }): number | null {
   return typeof l.listUnitPrice === 'number' && l.listUnitPrice > l.unitPrice ? l.listUnitPrice : null;
 }

@@ -148,6 +148,8 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.outOfQuota': 'Đã hết lượt',
   'coupon.expired': 'Đã hết hạn',
   'coupon.used': 'Đã dùng',
+  'coupon.hintShort': '{n} mã · giảm đến {x}',
+  'coupon.hintShortPlain': '{n} mã dùng được',
   'coupon.savedToast': 'Đã lưu vào Mã của tôi',
   'coupon.loginToSave': 'Đăng nhập để lưu mã nhé',
   'coupon.detailTitle': 'Điều kiện dùng mã',
