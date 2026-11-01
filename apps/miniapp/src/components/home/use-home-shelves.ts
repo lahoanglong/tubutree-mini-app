@@ -38,8 +38,9 @@ export interface HomeShelves {
 /**
  * Đầu vào chung của các kệ hàng Trang chủ qua `SHELVES` (Giờ vàng > Mua lại > combos > Bán chạy nhất): đọc đúng các query mà khối dùng (cùng khoá,
  * không thêm request) rồi chống trùng theo slug sản phẩm. Kệ chỉ dành khách cũ (Mua lại) không chiếm món của khách mới; loại khách chưa rõ thì chưa tính Mua lại
- * vì khối đó chưa hiện. Combo xếp theo id bộ nên không chiếm món (cùng sản phẩm vẫn hiện ở Bán chạy nhất). Suất Giờ vàng đã quá `endAt` không vào chống trùng (khối Giờ vàng cũng không vẽ chúng): nếu để
- * lại, chúng chiếm món và tính vào mức tối thiểu của kệ, còn kệ thì ẩn, nên món đó không hiện ở đâu cả.
+ * vì khối đó chưa hiện. Combo chiếm slug các món của nó (`comboShelfEntry`) nên Bán chạy nhất và Gợi ý hôm nay bỏ chúng; vì combo và Bán chạy nhất cùng đến từ request
+ * gộp `/home`, Bán chạy nhất chờ combo (có hạn `COMBO_HOLD_MS`) rồi mới vẽ, để món không hiện rồi biến mất. Suất Giờ vàng đã quá `endAt` không vào chống trùng
+ * (khối Giờ vàng cũng không vẽ chúng): nếu để lại, chúng chiếm món và tính vào mức tối thiểu của kệ, còn kệ thì ẩn, nên món đó không hiện ở đâu cả.
  */
 export function useHomeShelves(kind: HomeKindState): HomeShelves {
   const flashQuery = useBlockQuery(useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }));
