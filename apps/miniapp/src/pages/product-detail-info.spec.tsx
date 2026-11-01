@@ -47,6 +47,7 @@ vi.mock('../components/storefront-context-bar', () => ({ StorefrontContextBar: (
 vi.mock('../components/ui/cart-badge', () => ({ CartBadge: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { PDP_BUNDLES_WAIT_MS } from '../components/product/use-product-bundles';
 import ProductDetailPage from './product-detail';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
@@ -167,6 +168,34 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     expect(await screen.findByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
     const addons = screen.getByRole('region', { name: 'Mua kèm deal sốc' });
     expect(within(addons).getByText('Chỉ khi mua cùng Xà phòng sả chanh')).toBeInTheDocument();
+  });
+
+  describe('khung chờ giữ tới khi bộ về (khối nằm giữa màn đầu, chèn sau sẽ đẩy các hàng bên dưới)', () => {
+    const item = (id: string) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true, product: { ...card(id), repVariationId: `v-${id}`, isFeatured: false } });
+    const combo = { id: 'c1', kind: 'BUNDLE_PCT', title: 'Bộ đôi', pct: 10, endAt: END, anchorProductId: null, items: [item('p1'), item('p2')] };
+
+    it('bộ về chậm hơn sản phẩm một chút: tiêu đề sản phẩm và khối Combo hiện CÙNG lúc, không có lần vẽ trang mà thiếu khối', async () => {
+      mocks.getProductBundles.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ combos: [combo], addons: [] }), 80)));
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+      expect(screen.getByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
+    });
+
+    it('bộ về rỗng hoặc lỗi: trang hiện ngay khi biết kết quả, không chờ hết hạn chờ', async () => {
+      mocks.getProductBundles.mockRejectedValue(new Error('mạng'));
+      const started = Date.now();
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+      expect(Date.now() - started).toBeLessThan(PDP_BUNDLES_WAIT_MS);
+      expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+    });
+
+    it('API bộ treo: hết hạn chờ thì trang vẫn hiện, không có khối', async () => {
+      mocks.getProductBundles.mockReturnValue(new Promise(() => {}));
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' }, { timeout: 2_000 });
+      expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+    });
   });
 
   it('dải gợi ý trả sai dạng (không phải mảng): trang vẫn dựng, chỉ ẩn dải đó', async () => {

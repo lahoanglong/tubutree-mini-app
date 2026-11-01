@@ -1,10 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { addonLines, addonRows, addonSummary, comboView, PDP_COMBO_MAX, type AddonRow } from '@tubutree/app-core/commerce/bundle-view';
 import { vnd } from '@tubutree/app-core/commerce/money';
-import { bundleKeys } from '@tubutree/app-core/queries/bundle';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { getProductBundles } from '../../services/bundle-api';
 import { haptic } from '../../utils/haptic';
 import { serverNow } from '../../utils/server-clock';
 import { Badge } from '../ui/badge';
@@ -18,6 +15,7 @@ import { SectionTitle } from '../ui/section-title';
 import { Text } from '../ui/text';
 import { PdpBundleSlots } from './pdp-bundle-slots';
 import { useBundleAdd } from './use-bundle-add';
+import { useProductBundles } from './use-product-bundles';
 
 const ADDED_FLASH_MS = 1_200;
 const SURFACE = { background: 'var(--color-bg-surface)', padding: 16 } as const;
@@ -61,7 +59,7 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
   const { add, busyId } = useBundleAdd();
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [justAdded, setJustAdded] = useState(false);
-  const query = useQuery({ queryKey: bundleKeys.product(slug), queryFn: () => getProductBundles(slug), staleTime: 30_000, retry: false });
+  const query = useProductBundles(slug);
 
   const addCombo = (id: string, lines: { variationId: string; quantity: number }[]) =>
     add({ id, lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') });
