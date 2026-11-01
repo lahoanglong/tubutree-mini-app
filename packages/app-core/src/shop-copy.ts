@@ -39,6 +39,8 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.limit': 'Mỗi khách tối đa {n}',
   // Dạng ngắn cho ghi chú một dòng nowrap của hàng thẻ trong danh sách Giờ vàng; thanh Giờ vàng ở PDP giữ 'flash.limit'.
   'flash.limitShort': 'Tối đa {n}/khách',
+  // Bản đọc của 'flash.limitShort': trình đọc màn hình đọc dấu "/" thành "gạch chéo".
+  'flash.limitSpoken': 'Tối đa {n} sản phẩm mỗi khách',
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',

@@ -31,6 +31,8 @@ export interface ProductTileProps {
   addLabel?: string;
   /** Một dòng ghi chú dưới giá (phân loại, "Đã mua 3 lần"). Chuỗi rỗng giữ chỗ dòng đó để thẻ có ghi chú và thẻ không có vẫn thẳng giá trong cùng kệ. */
   note?: string;
+  /** Câu đọc thay dòng `note` cho trình đọc màn hình (ghi chú nhìn thấy có ký hiệu như "/" đọc thành "gạch chéo"). Có thì dòng `note` bị ẩn khỏi cây trợ năng và câu này nằm cuối mô tả của thẻ; rỗng thì không đọc gì thêm. */
+  noteSpoken?: string;
   /** Ảnh LCP (thẻ đầu màn hình): tải ngay, ưu tiên cao. */
   priority?: boolean;
   /** Nút tim do nơi gọi dựng (cần đăng nhập + API riêng). */
@@ -90,6 +92,7 @@ export function ProductTile({
   onAdd,
   addLabel = 'Thêm',
   note,
+  noteSpoken,
   priority = false,
   wishlist,
   imageOverlay,
@@ -108,7 +111,7 @@ export function ProductTile({
   const caption = CAPTION_NAME.has(variant);
   const hasMetaRow = variant === 'grid' || variant === 'rail-md' || variant === 'rank';
   const rankSpoken = view.rank !== null && variant === 'rank' ? (rankPlain ? fillTileCopy('rank.plain') : fillTileCopy('rank.spoken', { n: view.rank })) : null;
-  const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price]
+  const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price, noteSpoken ?? null]
     .filter((x): x is string => Boolean(x))
     .join(', ');
   const hasNote = note !== undefined;
@@ -307,7 +310,7 @@ export function ProductTile({
             {price}
           </div>
           {hasNote && (
-            <Text data-ds-part="note" variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
+            <Text data-ds-part="note" aria-hidden={noteSpoken !== undefined || undefined} variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
               {note}
             </Text>
           )}

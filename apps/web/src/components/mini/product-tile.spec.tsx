@@ -309,6 +309,21 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     expect(body(c).style.minHeight).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
   });
 
+  it('noteSpoken: dòng ghi chú nhìn thấy ẩn khỏi trình đọc, câu đọc vào mô tả của thẻ sau giá (F10a)', () => {
+    const c = tile(viewOf({}, 'line'), 'line', { note: 'Tối đa 2/khách · 500g', noteSpoken: 'Tối đa 2 sản phẩm mỗi khách, 500g' });
+    expect(part(c, 'note')!.textContent).toBe('Tối đa 2/khách · 500g');
+    expect(part(c, 'note')!.getAttribute('aria-hidden')).toBe('true');
+    expect(described(c)).toMatch(/Giá 52\.000đ, Tối đa 2 sản phẩm mỗi khách, 500g$/);
+    expect(described(c)).not.toContain('/');
+  });
+
+  it('noteSpoken rỗng: không thêm gì vào mô tả; không truyền noteSpoken thì dòng ghi chú giữ nguyên cho trình đọc', () => {
+    const empty = tile(viewOf({}, 'line'), 'line', { note: '', noteSpoken: '' });
+    expect(described(empty)).toMatch(/Giá 52\.000đ$/);
+    const plain = tile(viewOf({}, 'line'), 'line', { note: 'Phân loại 500ml' });
+    expect(part(plain, 'note')!.hasAttribute('aria-hidden')).toBe(false);
+  });
+
   it('note rỗng giữ chỗ dòng ghi chú (thẻ cùng kệ không lệch giá); không truyền note thì không có dòng', () => {
     const reserved = tile(viewOf({}, 'rail-md'), 'rail-md', { note: '' });
     expect(body(reserved).style.minHeight).toBe(`${tileBodyHeight('rail-md', { note: true })}px`);
