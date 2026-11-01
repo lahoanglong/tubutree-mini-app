@@ -87,7 +87,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
                 setView(v.k);
               }}
             >
-              {communityViewLabel(v, 'web')}
+              {communityViewLabel(v, 'mini')}
               {v.k === 'reports' && reportCount !== undefined ? ` (${reportCount})` : ''}
             </button>
           ))}
