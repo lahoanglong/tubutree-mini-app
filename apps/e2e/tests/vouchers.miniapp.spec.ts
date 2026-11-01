@@ -29,7 +29,7 @@ test.describe('Mã giảm giá — khách đã đăng nhập', () => {
     const panel = page.getByRole('tabpanel', { name: 'Nhận mã' });
     await expect(panel.getByRole('group')).toHaveCount(3, { timeout: 15_000 });
     await expect(panel.getByRole('button', { name: 'Lưu mã' })).toHaveCount(2);
-    await expect(panel.getByRole('group', { name: 'Giảm 30.000đ' }).getByRole('button', { name: 'Dùng ngay' })).toBeVisible();
+    await expect(panel.getByRole('group', { name: 'Giảm 30k' }).getByRole('button', { name: 'Dùng ngay' })).toBeVisible();
     await expect(page.getByText('Mỗi đơn dùng 1 mã')).toBeVisible();
   });
 

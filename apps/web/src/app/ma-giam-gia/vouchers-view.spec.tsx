@@ -98,7 +98,7 @@ describe('VouchersView (web)', () => {
     mocks.phase = 'guest';
     mount();
     await flush();
-    expect(text()).toContain('Giảm 30.000đ');
+    expect(text()).toContain('Giảm 30k');
     expect(callsTo('/coupons/collectable')).toHaveLength(1);
     expect(callsTo('/me/coupons')).toHaveLength(0);
     expect(callsTo('/me/coupons/history')).toHaveLength(0);
@@ -214,12 +214,13 @@ describe('VouchersView (web)', () => {
     expect(buttons('Lưu mã')).toHaveLength(2);
   });
 
-  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt ở dòng meta; có chữ "Mỗi đơn dùng 1 mã"', async () => {
+  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt ở hàng riêng; có chữ "Mỗi đơn dùng 1 mã"', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 5, claimedCount: 2 })];
     mount();
     await flush();
     expect(text()).toContain('Còn 3 lượt');
-    expect(document.querySelector('[data-testid="voucher-meta"]')!.textContent).toContain('Chào bạn mới · Đơn từ 199k · NEW10');
+    expect(document.querySelector('[data-testid="voucher-name"]')!.textContent).toBe('Chào bạn mới');
+    expect(document.querySelector('[data-testid="voucher-meta"]')!.textContent).toBe('Đơn từ 199k · NEW10');
     expect(text()).toContain('Mỗi đơn dùng 1 mã');
   });
 
@@ -300,7 +301,7 @@ describe('VouchersView (web)', () => {
     responses['/coupons/collectable'] = [collectable('NEW10')];
     click(button('Thử lại'));
     await flush();
-    expect(text()).toContain('Giảm 30.000đ');
+    expect(text()).toContain('Giảm 30k');
     expect(callsTo('/coupons/collectable')).toHaveLength(2);
   });
 
