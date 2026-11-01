@@ -36,8 +36,11 @@ test.describe('Ưu đãi — khách chưa đăng nhập', () => {
     await expect(collect).toBeVisible();
     const save = collect.getByRole('button', { name: 'Lưu mã' });
     await expect(save).toHaveCount(3);
-    // Phần cần tài khoản không dựng cho khách.
+    // Phần cần tài khoản không dựng cho khách: mỗi khối một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện.
     await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Điểm Xanh và điểm danh', exact: true }).getByRole('button', { name: 'Đăng nhập', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByRole('button', { name: 'Đăng nhập', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Đổi quà', exact: true })).toBeVisible();
 
     const authCalls = () => api.callsTo('POST', '/auth/guest').length + api.callsTo('POST', '/auth/zalo-mini-app').length;
     await expect.poll(authCalls, { timeout: 10_000 }).toBeGreaterThan(0);

@@ -104,6 +104,14 @@
       ]
     },
     {
+      "name": "GuestLinkCard",
+      "miniapp": "apps/miniapp/src/components/home/guest-link-card.tsx",
+      "web": "apps/web/src/components/mini/guest-link-card.tsx",
+      "screens": [
+        "/offers"
+      ]
+    },
+    {
       "name": "IconButton",
       "miniapp": "apps/miniapp/src/components/ui/icon-button.tsx",
       "web": "apps/web/src/components/mini/icon-button.tsx",
@@ -704,12 +712,6 @@
       "package": "P10",
       "wave": "4b",
       "note": "trang chi tiết khối: 4 ô Lưới / Kệ ngang / Danh sách / Combo"
-    },
-    {
-      "name": "GuestLinkCard",
-      "package": "P14",
-      "wave": "4b",
-      "note": "khối cần tài khoản ở /offers cho khách chưa đăng nhập. Mini đã có thẻ cùng tên ở components/home/guest-link-card.tsx (mời tài khoản khách liên kết Zalo): P14 quyết dùng lại hay đặt tên khác rồi chuyển dòng này sang components"
     },
     {
       "name": "components/bundle/*",

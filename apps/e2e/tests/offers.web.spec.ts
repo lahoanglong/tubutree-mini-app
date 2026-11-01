@@ -33,6 +33,10 @@ test.describe('Web khách: Ưu đãi, chưa đăng nhập', () => {
     const collect = page.getByRole('region', { name: 'Nhận mã', exact: true });
     await expect(collect).toBeVisible();
     await expect(collect.getByRole('button', { name: 'Lưu mã' })).toHaveCount(COLLECTABLE.length);
+    // Mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện.
+    await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByRole('link', { name: 'Đăng nhập', exact: true })).toHaveAttribute('href', /\/dang-nhap\?returnTo=%2Fuu-dai/);
+    await expect(page.getByRole('region', { name: 'Điểm Xanh và điểm danh', exact: true }).getByRole('link', { name: 'Đăng nhập', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Đổi quà', exact: true })).toBeVisible();
     await collect.getByRole('button', { name: 'Lưu mã' }).first().click();
     await expect(page).toHaveURL(/\/dang-nhap\?returnTo=%2Fuu-dai/);
     expect(api.callsTo('POST', '/coupons/claim')).toHaveLength(0);

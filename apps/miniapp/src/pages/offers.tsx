@@ -18,7 +18,7 @@ import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
 import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
-import { AuthPhaseView, useBlockedMessage } from '../components/ui/auth-gate';
+import { AuthPhaseView } from '../components/ui/auth-gate';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
@@ -44,7 +44,8 @@ function IconTile({ icon }: { icon: LucideIcon }) {
 
 /**
  * Tab "Ưu đãi" (Q10): Banner, Giờ vàng hôm nay, Nhận mã, dải Điểm Xanh gọn và Điểm danh, Mã của tôi, Đổi quà và tiện ích. Ba khối đầu là
- * công khai (khách chưa đăng nhập xem được, "Lưu mã" mở đăng nhập); từ dải Điểm Xanh trở xuống cần tài khoản. `?section=coupons` cuộn tới Mã của tôi.
+ * công khai (khách chưa đăng nhập xem được, "Lưu mã" mở đăng nhập); dải Điểm Xanh, Điểm danh và Mã của tôi cần tài khoản: khách chưa đăng nhập thấy mỗi khối một
+ * `GuestLinkCard` (cùng một nhãn nút) và Đổi quà vẫn hiện. `?section=coupons` cuộn tới Mã của tôi.
  */
 export default function OffersPage() {
   const navigate = useNavigate();
@@ -52,7 +53,6 @@ export default function OffersPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const user = useAuthStore((s) => s.user);
-  const blocked = useBlockedMessage();
   const cfg = usePublicConfig();
   const { use } = useCouponUse();
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
@@ -108,12 +108,14 @@ export default function OffersPage() {
       <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : 'new'} />
       <OffersFlash />
       <OffersCollect walletCodes={walletCodes} walletLoading={phase === 'loading' || (authed && couponsQ.isLoading)} />
-      {!authed ? (
-        <AuthPhaseView
-          phase={phase}
-          loading={pageSkeleton}
-          guest={<EmptyState art="sprout" heading={homeCopy.offers.loginTitle} body={blocked ?? homeCopy.offers.loginBody} ctaLabel="Đăng nhập ngay" onCta={() => void useAuthStore.getState().login()} />}
-        />
+      {phase === 'guest' ? (
+        <>
+          {/* Mỗi khối cần tài khoản một thẻ mời, cùng một nhãn nút; Đổi quà và tiện ích vẫn hiện bên dưới. */}
+          <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />
+          <GuestLinkCard title={fillCopy('coupon.tabMine')} body={fillCopy('offers.guestMineBody')} cta={fillCopy('login.cta')} />
+        </>
+      ) : !authed ? (
+        <AuthPhaseView phase={phase} loading={pageSkeleton} />
       ) : (
         <>
           <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={homeCopy.profile.guestCta} />
@@ -157,34 +159,36 @@ export default function OffersPage() {
               <EmptyState variant="inline" art="leaf" heading={homeCopy.offers.couponsEmptyHeading} body={homeCopy.offers.couponsEmptyBody} />
             )}
           </section>
-
-          {/* Đổi quà và tiện ích */}
-          <section aria-label={homeCopy.offers.rewardsTitle} style={{ padding: '16px 16px 0' }}>
-            <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
-              {shortcuts
-                .filter((s) => s.show)
-                .map((s, i) => (
-                  <ListRow
-                    key={s.to}
-                    icon={<IconTile icon={s.icon} />}
-                    title={s.title}
-                    subtitle={s.subtitle}
-                    trailing="chevron"
-                    onPress={() => go(s.to)}
-                    style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
-                  />
-                ))}
-              <ListRow
-                icon={<IconTile icon={Sprout} />}
-                title="Vườn Xanh"
-                subtitle="Chăm cây nhận quà"
-                trailing="chevron"
-                onPress={() => go('/game')}
-                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
-              />
-            </Card>
-          </section>
         </>
+      )}
+
+      {/* Đổi quà và tiện ích */}
+      {(authed || phase === 'guest') && (
+        <section aria-label={homeCopy.offers.rewardsTitle} style={{ padding: '16px 16px 0' }}>
+          <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
+            {shortcuts
+              .filter((s) => s.show)
+              .map((s, i) => (
+                <ListRow
+                  key={s.to}
+                  icon={<IconTile icon={s.icon} />}
+                  title={s.title}
+                  subtitle={s.subtitle}
+                  trailing="chevron"
+                  onPress={() => go(s.to)}
+                  style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
+                />
+              ))}
+            <ListRow
+              icon={<IconTile icon={Sprout} />}
+              title="Vườn Xanh"
+              subtitle="Chăm cây nhận quà"
+              trailing="chevron"
+              onPress={() => go('/game')}
+              style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
+            />
+          </Card>
+        </section>
       )}
     </Page>
   );

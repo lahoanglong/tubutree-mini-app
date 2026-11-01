@@ -315,26 +315,24 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
-  it('khách chưa đăng nhập: vẫn thấy Giờ vàng và Nhận mã, rồi lời mời đăng nhập thay các khối cần tài khoản; không gọi API riêng của khách', async () => {
+  it('khách chưa đăng nhập: Giờ vàng, Nhận mã, rồi mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện; không gọi API riêng của khách', async () => {
     state.phase = 'guest';
     state.flash = [FLASH_ITEM];
     state.collectable = [OPEN_CODE];
     const c = await mount();
-    const flash = region(c, 'Giờ vàng hôm nay')!;
-    const collect = region(c, 'Nhận mã')!;
-    expect(flash).not.toBeNull();
-    expect(collect).not.toBeNull();
-    expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
-    const login = c.querySelector('a[href^="/dang-nhap"]')!;
-    expect(login).not.toBeNull();
-    expect(flash.compareDocumentPosition(collect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(collect.compareDocumentPosition(login) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Giống Mini App: các khối cần tài khoản không có, kể cả lối tắt.
-    expect(region(c, 'Điểm Xanh của bạn')).toBeNull();
-    expect(region(c, 'Mã của tôi')).toBeNull();
-    expect(c.textContent).not.toContain(homeCopy.offers.rewardsTitle);
-    expect(c.textContent).not.toContain('Vườn Xanh');
-    expect(c.textContent).not.toContain(homeCopy.offers.myRewards);
+    const blocks = [region(c, 'Giờ vàng hôm nay'), region(c, 'Nhận mã'), region(c, 'Điểm Xanh và điểm danh'), region(c, 'Mã của tôi'), region(c, 'Đổi quà')];
+    blocks.forEach((b, i) => expect(b, `khối ${i}`).not.toBeNull());
+    for (let i = 1; i < blocks.length; i++) {
+      expect(blocks[i - 1]!.compareDocumentPosition(blocks[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
+    }
+    const logins = Array.from(c.querySelectorAll<HTMLAnchorElement>('a[href^="/dang-nhap"]'));
+    expect(logins.map((a) => a.textContent)).toEqual(['Đăng nhập', 'Đăng nhập']);
+    expect(logins.map((a) => a.getAttribute('href'))).toEqual(['/dang-nhap?returnTo=%2Fuu-dai', '/dang-nhap?returnTo=%2Fuu-dai']);
+    expect(blocks[3]!.contains(logins[1]!)).toBe(true);
+    expect(c.textContent).not.toContain('Đăng nhập để xem ưu đãi');
+    expect(c.textContent).not.toContain('Đăng nhập với Zalo');
+    expect(blocks[4]!.textContent).toContain(homeCopy.offers.myRewards);
+    expect(blocks[4]!.textContent).toContain('Vườn Xanh');
     expect(state.calls.filter((p) => !['/config/public', '/campaigns', '/flash-sales/active', '/coupons/collectable'].includes(p))).toEqual([]);
   });
 
@@ -354,6 +352,15 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
     expect(c.querySelector('[data-testid="offers-page-loading"]')).not.toBeNull();
+    expect(region(c, 'Đổi quà')).toBeNull();
+  });
+
+  it('phiên mất mạng (unavailable): nói mất kết nối, không mời đăng nhập, không có khối Đổi quà', async () => {
+    state.phase = 'unavailable';
+    const c = await mount();
+    expect(c.textContent).toContain('Không kết nối được với Tubu Tree');
+    expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
+    expect(region(c, 'Mã của tôi')).toBeNull();
   });
 });
 
@@ -389,7 +396,8 @@ describe('/uu-dai — banner đầu trang (OFFERS_TOP)', () => {
     state.campaigns = [campaign('a')];
     const c = await mount();
     expect(links(c)).toEqual(['/chien-dich/chien-dich-a']);
-    expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
+    expect(region(c, 'Mã của tôi')).not.toBeNull();
+    expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
   });
 
   it('lần trước có banner Ưu đãi và đang tải: giữ chỗ bằng khung chờ, là khối đầu tiên', async () => {

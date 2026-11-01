@@ -58,6 +58,7 @@ export { BannerCarousel, type BannerSlide, type BannerCarouselProps } from './ba
 export { SlotTabs, slotTabId } from './slot-tabs';
 export type { SlotTabsProps } from './slot-tabs';
 export { SectionCard } from './section-card';
+export { GuestLinkCard } from './guest-link-card';
 export type { SectionCardProps } from './section-card';
 export { LayoutPicker } from './layout-picker';
 export type { LayoutPickerProps } from './layout-picker';
