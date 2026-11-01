@@ -1,4 +1,5 @@
 import path from 'path';
+import type { APIRequestContext } from '@playwright/test';
 import { DEMO_BRAND_CONTENT } from './demo-brand';
 import { parseEnvFile } from './env-file';
 import { writableTempDb } from './waste-db';
@@ -36,6 +37,18 @@ export function assertSeededOnCi(seeded: boolean, env: NodeJS.ProcessEnv = proce
   if (env.GITHUB_ACTIONS === 'true' && !seeded) {
     throw new Error('seedShopScreens không ghi được dữ liệu mẫu trên CI (DATABASE_URL không phải DB của job CI?): gian hàng và thương hiệu sẽ 404 và bị bỏ qua');
   }
+}
+
+/**
+ * Slug nhãn công khai đầu tiên của API thật, hoặc null khi chưa có. `/api/brands` có bộ nhớ đệm 60 giây trong tiến trình API (CatalogService.brandsCache), nên ngay sau seed
+ * nó có thể chưa thấy nhãn mẫu và ca dựa vào đó bị bỏ qua tuỳ thời điểm: khi danh sách không có slug thì hỏi thẳng trang công khai của nhãn đã seed (không qua bộ nhớ đệm).
+ */
+export async function firstPublicBrandSlug(request: APIRequestContext, apiOrigin: string): Promise<string | null> {
+  const list = await request.get(`${apiOrigin}/api/brands`).catch(() => null);
+  const listed = list?.ok() ? ((await list.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug : undefined;
+  if (listed) return listed;
+  const direct = await request.get(`${apiOrigin}/api/brand/public/${A11Y_BRAND_SLUG}`).catch(() => null);
+  return direct?.ok() ? A11Y_BRAND_SLUG : null;
 }
 
 /** `true` khi đã bảo đảm có thương hiệu và gian hàng công khai; `false` khi DB không phải DB tạm (không ghi gì, spec bỏ qua kèm lý do; trên CI thì `assertSeededOnCi` làm đỏ). */

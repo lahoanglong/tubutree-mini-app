@@ -1,11 +1,11 @@
 import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import type { APIRequestContext } from '@playwright/test';
+import { test as plain, type APIRequestContext } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
 import { blockingViolations, runAxe, staleBaseline } from './support/axe';
-import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, assertSeededOnCi, seedDatabaseUrl, seedShopScreens } from './support/a11y-db';
+import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, assertSeededOnCi, firstPublicBrandSlug, seedDatabaseUrl, seedShopScreens } from './support/a11y-db';
 import { mockFlashSlots } from './support/flash-slot-mocks';
 import { mockCollectable } from './support/voucher-mocks';
 
@@ -31,9 +31,9 @@ async function firstProductSlug(request: APIRequestContext): Promise<string | nu
   return ((await res.json()) as { data?: { slug: string }[] }).data?.[0]?.slug ?? null;
 }
 
+// Seed ở cả hai project web (idempotent): project "Web Customer" chạy trước "Web Customer Mobile" và shop.web.spec.ts ở đó cũng cần nhãn và gian hàng công khai.
 let seeded = false;
-test.beforeAll(async ({}, testInfo) => {
-  if (testInfo.project.name !== 'Web Customer Mobile') return;
+test.beforeAll(async () => {
   seeded = await seedShopScreens();
   assertSeededOnCi(seeded);
 });
@@ -117,8 +117,13 @@ test.describe('axe smoke web: bài tự kiểm', () => {
   });
 });
 
-test.describe('axe smoke web: rào seed', () => {
-  test('seedDatabaseUrl: process.env thắng, thiếu thì rơi về apps/api/.env như job CI', () => {
+// Hai bài thuần hàm: dùng `test` trơn của Playwright (không mở trang, không bật mock-api) và chỉ chạy ở một project, không lặp ở "Web Customer".
+plain.describe('axe smoke web: rào seed', () => {
+  plain.beforeEach(({}, testInfo) => {
+    plain.skip(testInfo.project.name !== 'Web Customer Mobile', 'hàm thuần: chạy một lần ở project Web Customer Mobile');
+  });
+
+  plain('seedDatabaseUrl: process.env thắng, thiếu thì rơi về apps/api/.env như job CI', () => {
     const file = path.join(mkdtempSync(path.join(tmpdir(), 'a11y-env-')), '.env');
     writeFileSync(file, 'NODE_ENV=test\n# ghi chú\nDATABASE_URL="postgresql://tubu:tubu@localhost:5434/tubutree"\n');
     expect(seedDatabaseUrl({}, file)).toBe('postgresql://tubu:tubu@localhost:5434/tubutree');
@@ -126,7 +131,23 @@ test.describe('axe smoke web: rào seed', () => {
     expect(seedDatabaseUrl({}, path.join(path.dirname(file), 'khong-co.env'))).toBe('');
   });
 
-  test('assertSeededOnCi: trên CI không seed được thì đỏ, ngoài CI thì để spec bỏ qua có lý do', () => {
+  plain('firstPublicBrandSlug: danh sách có slug thì dùng; danh sách cũ (đệm 60 giây) chưa thấy nhãn mẫu thì hỏi thẳng trang công khai của nó', async () => {
+    const reply = (ok: boolean, body: unknown = null) => ({ ok: () => ok, json: async () => body });
+    const fake = (routes: Record<string, ReturnType<typeof reply>>) =>
+      ({ get: async (url: string) => routes[new URL(url).pathname] ?? reply(false) }) as unknown as APIRequestContext;
+    const origin = 'http://localhost:1';
+
+    const listed = fake({ '/api/brands': reply(true, [{ slug: null }, { slug: 'mộc-an' }]) });
+    expect(await firstPublicBrandSlug(listed, origin)).toBe('mộc-an');
+
+    const stale = fake({ '/api/brands': reply(true, [{ slug: null }]), [`/api/brand/public/${A11Y_BRAND_SLUG}`]: reply(true, {}) });
+    expect(await firstPublicBrandSlug(stale, origin)).toBe(A11Y_BRAND_SLUG);
+
+    const none = fake({ '/api/brands': reply(true, [{ slug: null }]), [`/api/brand/public/${A11Y_BRAND_SLUG}`]: reply(false) });
+    expect(await firstPublicBrandSlug(none, origin)).toBeNull();
+  });
+
+  plain('assertSeededOnCi: trên CI không seed được thì đỏ, ngoài CI thì để spec bỏ qua có lý do', () => {
     expect(() => assertSeededOnCi(false, { GITHUB_ACTIONS: 'true' })).toThrow(/seedShopScreens/);
     expect(() => assertSeededOnCi(true, { GITHUB_ACTIONS: 'true' })).not.toThrow();
     expect(() => assertSeededOnCi(false, {})).not.toThrow();
