@@ -663,6 +663,9 @@ model BundleItem {
   variation   Variation? @relation(fields: [variationId], references: [id], onDelete: SetNull)
   /// ADDON: giá mua kèm mỗi đơn vị (≥ 0, CHECK ở migration).
   addonPrice  Int?
+  /// ADDON: giá đang bán của phân loại ghim LÚC TẠO/SỬA bộ. Trần của khoản giảm mỗi đơn vị (`refPrice − addonPrice`) khi phân loại đổi giá
+  /// về sau; NULL (dòng ghi tay) = không giảm. Chỉ ghi qua admin, BUNDLE_PCT luôn NULL.
+  refPrice    Int?
   /// Số đơn vị mỗi đơn được hưởng giá/giảm của bộ (chặn rủi ro vì bộ không có quota toàn cục).
   maxQty      Int        @default(1)
   sortOrder   Int        @default(0)

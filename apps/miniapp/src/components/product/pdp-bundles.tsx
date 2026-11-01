@@ -1,5 +1,16 @@
-import { useState } from 'react';
-import { addonLines, addonRows, addonSummary, comboView, PDP_COMBO_MAX, type AddonRow } from '@tubutree/app-core/commerce/bundle-view';
+import { useRef, useState, type ReactNode } from 'react';
+import {
+  addonLines,
+  addonRows,
+  addonSummary,
+  bundleHoldReason,
+  bundleHoldTitle,
+  comboView,
+  latchBundleSide,
+  PDP_COMBO_MAX,
+  type AddonRow,
+  type BundleHold,
+} from '@tubutree/app-core/commerce/bundle-view';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { haptic } from '../../utils/haptic';
@@ -51,9 +62,32 @@ function AddonRowView({ row, on, onToggle }: { row: AddonRow; on: boolean; onTog
 }
 
 /**
+ * Danh sách cuối cùng đã hiện: khi dữ liệu sau đó rỗng (bộ hết hạn/tắt, hay món vừa hết hàng) vẫn trả lại danh sách đó kèm lý do `held`, để khối
+ * không bị gỡ giữa trang. Quyết định nằm ở app-core (`latchBundleSide`, dùng chung với web); ở đây chỉ giữ `useRef`.
+ */
+function useLatched<T>(live: T[], why: (held: T[]) => BundleHold): { items: T[]; held: BundleHold | null } {
+  const last = useRef<T[] | null>(null);
+  const side = latchBundleSide(live, last.current, why);
+  last.current = side.last;
+  return side;
+}
+
+/** Khối đã kết thúc hay tạm hết hàng vẫn giữ nguyên chỗ (không đẩy phần dưới), mờ đi và không bấm được (`inert` viết dạng chuỗi vì React 18 chưa có kiểu boolean). */
+function HeldBody({ held, children }: { held: boolean; children: ReactNode }) {
+  if (!held) return <>{children}</>;
+  return (
+    <div {...({ inert: '' } as Record<string, string>)} aria-hidden="true" data-testid="bundle-ended" style={{ opacity: 0.6 }}>
+      {children}
+    </div>
+  );
+}
+
+/**
  * "Combo ưu đãi" (≤2 `ComboCard`) và "Mua kèm deal sốc" (≤3 dòng tích chọn) của trang sản phẩm. Ẩn hẳn, không giữ chỗ, khi chưa có bộ nào
  * hoặc API lỗi: khối nằm dưới màn đầu và chỉ hiện khi đã có dữ liệu nên không đẩy nội dung đang xem. Giá cuối luôn do giỏ tính lại; ở đây chỉ
  * là lời mời. Mua kèm chỉ thêm các món đã chọn (không gồm món chính, khách tự mua bằng nút của trang) và giá kèm chỉ áp khi món chính có trong giỏ.
+ * Khối đã hiện rồi mà bộ hết hạn/tắt hay món hết hàng (tải lại ra rỗng) thì KHÔNG gỡ: gỡ giữa trang đẩy mọi thứ bên dưới nhảy lên. Khối giữ
+ * nguyên chỗ, mờ đi, không bấm được, tiêu đề ghi "Đã kết thúc" hay "Tạm hết hàng", như web.
  */
 export function PdpBundles({ slug, productName }: { slug: string; productName?: string }) {
   const { add, busyId } = useBundleAdd();
@@ -76,9 +110,13 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
     });
 
   const now = serverNow();
-  const combos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
-  const rows = addonRows(query.data?.addons ?? [], now);
-  if (combos.length === 0 && rows.length === 0) return null;
+  const liveCombos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
+  const liveRows = addonRows(query.data?.addons ?? [], now);
+  const comboSide = useLatched(liveCombos, (held) => bundleHoldReason('combos', query.data, now, held.map((c) => c.id)));
+  const addonSide = useLatched(liveRows, (held) => bundleHoldReason('addons', query.data, now, held.map((r) => r.bundleId)));
+  if (comboSide.items.length === 0 && addonSide.items.length === 0) return null;
+  const { items: combos, held: combosHeld } = comboSide;
+  const { items: rows, held: addonsHeld } = addonSide;
 
   const summary = addonSummary(rows, picked);
   const toggle = (key: string) =>
@@ -92,55 +130,61 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
     <PdpBundleSlots
       combos={
         combos.length > 0 ? (
-          <section aria-label={fillCopy('combo.pdpTitle')} data-testid="pdp-combos" style={SURFACE}>
-            <SectionTitle>{fillCopy('combo.pdpTitle')}</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-              {combos.map((v) => (
-                <ComboCard
-                  key={v.id}
-                  title={v.title}
-                  items={v.items}
-                  pct={v.pct}
-                  total={v.total}
-                  comboTotal={v.comboTotal}
-                  busy={busyId === v.id}
-                  onAddAll={() => addCombo(v.id, v.lines)}
-                />
-              ))}
-            </div>
+          <section aria-label={bundleHoldTitle('combo.pdpTitle', combosHeld)} data-testid="pdp-combos" style={SURFACE}>
+            <SectionTitle>{bundleHoldTitle('combo.pdpTitle', combosHeld)}</SectionTitle>
+            <HeldBody held={combosHeld !== null}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+                {combos.map((v) => (
+                  <ComboCard
+                    key={v.id}
+                    title={v.title}
+                    items={v.items}
+                    pct={v.pct}
+                    total={v.total}
+                    comboTotal={v.comboTotal}
+                    busy={busyId === v.id}
+                    onAddAll={() => {
+                      if (combosHeld === null) addCombo(v.id, v.lines);
+                    }}
+                  />
+                ))}
+              </div>
+            </HeldBody>
           </section>
         ) : undefined
       }
       addons={
         rows.length > 0 ? (
-          <section aria-label={fillCopy('addon.title')} data-testid="pdp-addons" style={SURFACE}>
-            <SectionTitle>{fillCopy('addon.title')}</SectionTitle>
-            {productName && (
-              <Text variant="caption" tone="tertiary" as="p" style={{ margin: '2px 0 0' }}>
-                {fillCopy('addon.condition', { name: productName })}
-              </Text>
-            )}
-            <div role="group" aria-label={fillCopy('addon.title')} style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
-              {rows.map((r) => (
-                <AddonRowView key={r.key} row={r} on={picked.has(r.key)} onToggle={() => toggle(r.key)} />
-              ))}
-            </div>
-            {summary.count > 0 && (
-              <div data-testid="addon-save" style={{ margin: '4px 0 8px', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
-                {fillCopy('combo.save', { save: vnd(summary.save) })}
+          <section aria-label={bundleHoldTitle('addon.title', addonsHeld)} data-testid="pdp-addons" style={SURFACE}>
+            <SectionTitle>{bundleHoldTitle('addon.title', addonsHeld)}</SectionTitle>
+            <HeldBody held={addonsHeld !== null}>
+              {productName && (
+                <Text variant="caption" tone="tertiary" as="p" style={{ margin: '2px 0 0' }}>
+                  {fillCopy('addon.condition', { name: productName })}
+                </Text>
+              )}
+              <div role="group" aria-label={fillCopy('addon.title')} style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
+                {rows.map((r) => (
+                  <AddonRowView key={r.key} row={r} on={picked.has(r.key)} onToggle={() => toggle(r.key)} />
+                ))}
               </div>
-            )}
-            <div style={{ marginTop: summary.count > 0 ? 0 : 8 }}>
-              <Button
-                fullWidth
-                variant={justAdded ? 'secondary' : 'primary'}
-                loading={busyId === 'addons'}
-                disabled={summary.count === 0 && !justAdded}
-                onPress={() => addAddons(addonLines(rows, picked))}
-              >
-                {justAdded ? fillCopy('addon.added') : summary.count > 0 ? fillCopy('addon.add', { n: summary.count }) : fillCopy('addon.pickHint')}
-              </Button>
-            </div>
+              {summary.count > 0 && (
+                <div data-testid="addon-save" style={{ margin: '4px 0 8px', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fillCopy('combo.save', { save: vnd(summary.save) })}
+                </div>
+              )}
+              <div style={{ marginTop: summary.count > 0 ? 0 : 8 }}>
+                <Button
+                  fullWidth
+                  variant={justAdded ? 'secondary' : 'primary'}
+                  loading={busyId === 'addons'}
+                  disabled={addonsHeld !== null || (summary.count === 0 && !justAdded)}
+                  onPress={() => addAddons(addonLines(rows, picked))}
+                >
+                  {justAdded ? fillCopy('addon.added') : summary.count > 0 ? fillCopy('addon.add', { n: summary.count }) : fillCopy('addon.pickHint')}
+                </Button>
+              </div>
+            </HeldBody>
           </section>
         ) : undefined
       }

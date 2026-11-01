@@ -11,8 +11,10 @@ export interface AdminBundleItem {
   variationName: string | null;
   addonPrice: number | null;
   maxQty: number;
-  /** Giá đang bán của món (phân loại ghim hoặc đại diện), để form báo mức giảm. */
+  /** Giá đang bán của món (phân loại ghim hoặc đại diện). */
   price: number;
+  /** Mua kèm: giá tham chiếu giữ lại, trần của khoản giảm giỏ cho mỗi đơn vị (giá đang bán tăng sau đó cũng không giảm thêm); null với combo hay dòng cũ chưa có. */
+  refPrice: number | null;
 }
 
 export interface AdminBundle {

@@ -36,10 +36,11 @@ const LIVE_SELECT = {
   kind: true,
   pct: true,
   anchorProductId: true,
+  createdById: true,
   anchorProduct: { select: { storefrontId: true } },
   items: {
     orderBy: { sortOrder: 'asc' },
-    select: { productId: true, variationId: true, addonPrice: true, maxQty: true, product: { select: { storefrontId: true } } },
+    select: { productId: true, variationId: true, addonPrice: true, refPrice: true, maxQty: true, product: { select: { storefrontId: true } } },
   },
 } satisfies Prisma.BundleSelect;
 
@@ -60,7 +61,8 @@ export async function loadLiveBundles(prisma: Pick<PrismaService, 'bundle'>, now
       kind: b.kind,
       pct: b.pct,
       anchorProductId: b.anchorProductId,
-      items: b.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, maxQty: i.maxQty })),
+      createdById: b.createdById,
+      items: b.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, refPrice: i.refPrice, maxQty: i.maxQty })),
     }));
 }
 

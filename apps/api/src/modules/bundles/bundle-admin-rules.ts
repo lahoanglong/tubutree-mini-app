@@ -118,6 +118,8 @@ export interface ResolvedBundleItem {
    * loại ĐẮT NHẤT đang bán, vì giảm % áp cho mọi phân loại khách chọn chứ không riêng phân loại đại diện (rẻ nhất).
    */
   maxPrice: number;
+  /** Chỉ có sau `capAtRefPrices` khi giá tham chiếu giữ lại khác giá đang bán: `price` là giá tham chiếu đó, lời báo trần phải nói đúng cơ sở. */
+  cappedAt?: number;
 }
 
 const effective = (v: { retailPrice: number; salePrice: number | null }) => v.salePrice ?? v.retailPrice;
@@ -150,6 +152,42 @@ export function resolveBundleItems(content: BundleContent, products: ReadonlyMap
   });
 }
 
+/** Món ADDON đang lưu của bộ, đủ để nhận ra món nào không đổi khi sửa. */
+export interface StoredBundleItem {
+  productId: string;
+  variationId: string | null;
+  addonPrice: number | null;
+  refPrice?: number | null;
+}
+
+/**
+ * Giá tham chiếu cũ của từng món trong `content` (theo thứ tự `content.items`), chỉ với bộ ADDON: món có cùng sản phẩm, phân loại và giá kèm
+ * với món đang lưu thì giữ giá tham chiếu cũ. Form sửa luôn gửi lại cả danh sách món (kể cả khi chỉ đổi giờ hay tên), nên nếu không giữ thì
+ * mọi lần lưu đều đặt lại trần theo giá hiện tại và khoản giảm đã bị chặn bật lên lại. Món mới, đổi giá kèm, đổi phân loại, hay dòng cũ
+ * thiếu giá tham chiếu thì `null`: lấy giá đang bán lúc này (người sửa vừa tự đặt lại giá kèm, hay dòng chưa có trần nào để giữ).
+ */
+export function keptRefPrices(content: BundleContent, previous: readonly StoredBundleItem[]): (number | null)[] {
+  return content.items.map((it) => {
+    if (content.kind !== 'ADDON') return null;
+    const same = previous.find((p) => p.productId === it.productId && p.variationId === it.variationId && p.addonPrice === it.addonPrice);
+    return same?.refPrice ?? null;
+  });
+}
+
+/**
+ * Giá làm cơ sở cho trần nhân viên: món giữ giá tham chiếu cũ thì lấy đúng giá tham chiếu, vì `refPrice − addonPrice` là khoản giảm lớn nhất
+ * giỏ có thể cho món đó (`addonUnitDiscount`). Không lấy giá đang bán dù đang thấp hơn: hết sale giá trở lại và khoản giảm lên đủ, nên tính
+ * theo giá sale thì nhân viên nâng được maxQty vượt trần tiền. Món không có giá tham chiếu giữ lại thì giữ nguyên giá đang bán (lúc lưu, giá
+ * tham chiếu được đặt bằng giá này).
+ */
+export function capAtRefPrices(resolved: readonly ResolvedBundleItem[], kept: readonly (number | null)[]): ResolvedBundleItem[] {
+  return resolved.map((r, i) => {
+    const ref = kept[i];
+    if (ref == null) return r;
+    return { price: ref, maxPrice: ref, ...(ref !== r.price ? { cappedAt: ref } : {}) };
+  });
+}
+
 /**
  * Trần của nhân viên Marketing (cùng `coupon.staff_*` với mã giảm giá): % giảm mỗi món và số tiền tối đa một đơn được giảm nhờ bộ.
  * Bộ không có quota nên không có trần ngân sách ngày; `maxQty` là thứ giới hạn thiệt hại mỗi đơn. Số tiền tính trên `maxPrice`
@@ -163,7 +201,9 @@ export function assertStaffBundleCaps(content: BundleContent, resolved: readonly
     content.items.forEach((it, i) => {
       const price = resolved[i]?.price ?? 0;
       if (price > 0 && (price - (it.addonPrice ?? price)) * 100 > caps.maxPercent * price) {
-        throw deny(`Nhân viên đặt giá mua kèm giảm tối đa ${caps.maxPercent}% so với giá đang bán.`);
+        const cappedAt = resolved[i]?.cappedAt;
+        const base = cappedAt === undefined ? 'giá đang bán' : `giá lúc đặt giá kèm (${formatVnd(cappedAt)})`;
+        throw deny(`Nhân viên đặt giá mua kèm giảm tối đa ${caps.maxPercent}% so với ${base}.`);
       }
     });
   }

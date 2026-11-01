@@ -3,6 +3,8 @@ import {
   assertBundleWindow,
   assertStaffBundleCaps,
   bundleStatus,
+  capAtRefPrices,
+  keptRefPrices,
   normalizeBundleContent,
   resolveBundleItems,
   type BundleContent,
@@ -207,8 +209,49 @@ describe('assertStaffBundleCaps: trần nhân viên', () => {
     expect(() => assertStaffBundleCaps(mild, same(50_000), caps)).not.toThrow();
   });
 
+  it('ADDON đã kẹp theo giá tham chiếu (50k → 500k): lời từ chối nói giá lúc đặt giá kèm, không nói "giá đang bán" 500k; chưa kẹp thì vẫn nói giá đang bán', () => {
+    const c = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 30_000, variationId: 'p2-a' })] }), 50);
+    const capped = capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000]);
+    const cappedMsg = msg(() => assertStaffBundleCaps(c, capped, caps));
+    expect(cappedMsg).toContain('20%');
+    expect(cappedMsg).toContain('giá lúc đặt giá kèm');
+    expect(cappedMsg).toContain('50.000');
+    expect(cappedMsg).not.toContain('giá đang bán');
+    const live = msg(() => assertStaffBundleCaps(c, same(50_000), caps));
+    expect(live).toContain('so với giá đang bán');
+    expect(live).not.toContain('giá lúc đặt giá kèm');
+  });
+
   it('ADDON ghim phân loại đắt: % giảm tính trên giá phân loại ghim (500k → giá kèm 40k là giảm 92%) → 403', () => {
     const c = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 40_000, variationId: 'p2-l' })] }), 50);
     expect(() => assertStaffBundleCaps(c, same(500_000), { ...caps, maxAmount: 10_000_000 })).toThrow(ForbiddenException);
+  });
+});
+
+describe('keptRefPrices / capAtRefPrices: sửa bộ không làm giá tham chiếu bật lại theo giá hiện tại', () => {
+  const old = (o: Record<string, unknown> = {}) => ({ productId: 'p2', variationId: 'p2-a', addonPrice: 39_000, refPrice: 50_000, ...o });
+  const content = (items: ReturnType<typeof item>[]) => normalizeBundleContent(addonInput({ items }), 50);
+
+  it('món không đổi (cùng sản phẩm, phân loại, giá kèm) giữ giá tham chiếu cũ, kể cả khi form gửi lại nguyên danh sách', () => {
+    expect(keptRefPrices(content([item('p2', { addonPrice: 39_000, variationId: 'p2-a' })]), [old()])).toEqual([50_000]);
+  });
+
+  it('đổi giá kèm, đổi phân loại, món mới, hay dòng cũ thiếu giá tham chiếu → null (lấy giá đang bán lúc này)', () => {
+    expect(keptRefPrices(content([item('p2', { addonPrice: 40_000, variationId: 'p2-a' })]), [old()])).toEqual([null]);
+    expect(keptRefPrices(content([item('p2', { addonPrice: 39_000, variationId: 'p2-b' })]), [old()])).toEqual([null]);
+    expect(keptRefPrices(content([item('p3', { addonPrice: 39_000, variationId: 'p3-a' })]), [old()])).toEqual([null]);
+    expect(keptRefPrices(content([item('p2', { addonPrice: 39_000, variationId: 'p2-a' })]), [old({ refPrice: null })])).toEqual([null]);
+  });
+
+  it('BUNDLE_PCT không có giá tham chiếu để giữ', () => {
+    const pct = normalizeBundleContent(pctInput(), 50);
+    expect(keptRefPrices(pct, [old({ productId: 'p1', addonPrice: null, variationId: null, refPrice: 50_000 })])).toEqual([null, null]);
+  });
+
+  it('giá dùng cho trần nhân viên là giá tham chiếu giữ lại, khoản giảm lớn nhất giỏ có thể cho (50k → 500k vẫn tính 50k; tụt còn 30k cũng tính 50k vì hết sale giá trở lại)', () => {
+    expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000, cappedAt: 50_000 }]);
+    expect(capAtRefPrices([{ price: 30_000, maxPrice: 30_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000, cappedAt: 50_000 }]);
+    expect(capAtRefPrices([{ price: 50_000, maxPrice: 50_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000 }]);
+    expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [null])).toEqual([{ price: 500_000, maxPrice: 500_000 }]);
   });
 });

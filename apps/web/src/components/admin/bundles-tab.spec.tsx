@@ -48,8 +48,8 @@ const row = (id: string, over: Record<string, unknown> = {}) => ({
   id, kind: 'BUNDLE_PCT', title: `Bộ ${id}`, pct: 10, anchorProductId: null, anchorProductName: null,
   startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-10T16:59:00.000Z', isActive: true, sortOrder: 0, status: 'live', createdById: 'u1', createdByStaff: true,
   items: [
-    { productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: null, variationName: null, addonPrice: null, maxQty: 1, price: 50_000 },
-    { productId: 'p2', productName: 'Dầu gội', productSlug: 'dau-goi', variationId: 'v2', variationName: '250ml', addonPrice: null, maxQty: 2, price: 80_000 },
+    { productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: null, variationName: null, addonPrice: null, refPrice: null, maxQty: 1, price: 50_000 },
+    { productId: 'p2', productName: 'Dầu gội', productSlug: 'dau-goi', variationId: 'v2', variationName: '250ml', addonPrice: null, refPrice: null, maxQty: 2, price: 80_000 },
   ],
   ...over,
 });
@@ -109,7 +109,7 @@ describe('BundlesTab: danh sách', () => {
       row('b', { status: 'scheduled' }),
       row('c', { status: 'ended' }),
       row('d', { status: 'off', isActive: false }),
-      row('e', { kind: 'ADDON', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội', items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'x', variationId: null, variationName: null, addonPrice: 39_000, maxQty: 1, price: 50_000 }] }),
+      row('e', { kind: 'ADDON', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội', items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'x', variationId: null, variationName: null, addonPrice: 39_000, refPrice: 50_000, maxQty: 1, price: 50_000 }] }),
     ]);
     const c = await mount();
     expect(mocks.list).toHaveBeenCalledWith(undefined);
@@ -341,6 +341,56 @@ describe('BundlesTab: sửa bộ', () => {
     expect(c.textContent).toContain('Đã lưu bộ.');
   });
 
+  it('sửa bộ mua kèm khi phân loại đã tăng giá (500.000đ, tham chiếu 50.000đ): gợi ý ghi đúng khoản giỏ cho (Giảm 11.000đ), không phải 461.000đ; vẫn gửi lại đủ món', async () => {
+    mocks.get.mockResolvedValue(
+      row('a', {
+        kind: 'ADDON', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội',
+        items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: 'v1', variationName: '100g', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, price: 500_000 }],
+      }),
+    );
+    const c = await mount();
+    click(btn(c, 'Sửa bộ Bộ a'));
+    await flush(6);
+    const text = c.textContent ?? '';
+    expect(text).toContain('Giảm 11.000đ (22%)');
+    expect(text).not.toContain('461.000');
+    expect(text).toContain('giá bán 500.000đ');
+    expect(text).toContain('giảm tính theo giá 50.000đ');
+    await save(c);
+    expect(mocks.update.mock.calls[0]![1].items).toEqual([{ productId: 'p1', variationId: 'v1', addonPrice: 39_000, maxQty: 1 }]);
+  });
+
+  it('sửa giá kèm của bộ mua kèm đã tăng giá: máy chủ đặt lại giá tham chiếu = giá đang bán, nên gợi ý tính theo giá đang bán (không còn theo 50.000đ); trả lại giá kèm cũ thì gợi ý về lại như giỏ', async () => {
+    mocks.get.mockResolvedValue(
+      row('a', {
+        kind: 'ADDON', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội',
+        items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: 'v1', variationName: '100g', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, price: 500_000 }],
+      }),
+    );
+    const c = await mount();
+    click(btn(c, 'Sửa bộ Bộ a'));
+    await flush(6);
+    expect(c.textContent).toContain('Giảm 11.000đ (22%)');
+
+    typeInto(field(c, 'Giá mua kèm Xà phòng'), '45000');
+    await flush(2);
+    let text = c.textContent ?? '';
+    expect(text).toContain('Giảm 455.000đ (91%)');
+    expect(text).not.toContain('Giảm 5.000đ');
+    expect(text).not.toContain('giảm tính theo giá');
+
+    typeInto(field(c, 'Giá mua kèm Xà phòng'), '399000');
+    await flush(2);
+    text = c.textContent ?? '';
+    expect(text).toContain('Giảm 101.000đ (20%)');
+
+    typeInto(field(c, 'Giá mua kèm Xà phòng'), '39000');
+    await flush(2);
+    text = c.textContent ?? '';
+    expect(text).toContain('Giảm 11.000đ (22%)');
+    expect(text).toContain('giảm tính theo giá 50.000đ');
+  });
+
   it('tải chi tiết lỗi: báo lỗi kèm Thử lại và Đóng', async () => {
     mocks.get.mockRejectedValueOnce(new Error('x'));
     const c = await mount();
@@ -367,3 +417,21 @@ describe('BundlesTab: trợ năng', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 });
+
+describe('BundlesTab: chữ trong form không lộ khoá cấu hình thô', () => {
+  // Khoá cấu hình dạng `bundle.max_pct`, `coupon.staff_max_percent` hay `ten_khoa_snake` là chữ của kỹ thuật viên, không phải của người quản trị.
+  const RAW_KEY = /\b[a-z]+\.[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[a-z]+(?:_[a-z0-9]+)+\b/;
+
+  it('form tạo (cả hai loại), gồm gợi ý dưới ô: không có khoá thô, trần % được nói bằng chữ thường ngày', async () => {
+    const c = await mount();
+    await open(c);
+    await pick(c, 2);
+    expect(c.textContent).toContain('Không vượt trần % đang cấu hình');
+    expect(c.textContent ?? '').not.toMatch(RAW_KEY);
+    selectValue(field(c, 'Loại bộ'), 'ADDON');
+    await flush(1);
+    await pickAddon(c, 1);
+    expect(c.textContent ?? '').not.toMatch(RAW_KEY);
+  });
+});
+

@@ -212,6 +212,45 @@ describe('PdpBundles (web): khối đã hiện thì không gỡ giữa trang', (
     expect(buttonText(c, 'Chọn món muốn mua kèm')!.disabled).toBe(true);
   });
 
+  describe('hết hàng không phải kết thúc: "Tạm hết hàng", vẫn ở nguyên chỗ', () => {
+    const mountStale = async (refetched: ProductBundles) => {
+      mocks.get.mockResolvedValue(refetched);
+      const r = render(<PdpBundles slug="sp-anchor" productName="Xà phòng sả" initialBundles={{ combos: ONE_COMBO, addons: TWO_ADDONS }} initialFetchedAt={Date.now() - 5 * 60_000} />);
+      mounted.push(r);
+      await flush();
+      return r.container;
+    };
+
+    it('bộ Mua kèm còn hạn nhưng mọi món vừa hết hàng: tiêu đề "Tạm hết hàng", khối mờ, không bấm được, nút khoá', async () => {
+      const soldOut = [addon('a1', [item('x', { addonPrice: 60_000, inStock: false }), item('y', { addonPrice: 70_000, inStock: false })])];
+      const c = await mountStale({ combos: ONE_COMBO, addons: soldOut });
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Tạm hết hàng');
+      expect(c.querySelector('[data-testid="pdp-addons"] [data-testid="bundle-ended"]')!.hasAttribute('inert')).toBe(true);
+      expect(rows(c).length).toBe(2);
+      expect(buttonText(c, 'Chọn món muốn mua kèm')!.disabled).toBe(true);
+      expect(c.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi');
+    });
+
+    it('sản phẩm chính vừa hết hàng (API báo addonsSoldOut, addons rỗng): cũng "Tạm hết hàng"', async () => {
+      const c = await mountStale({ combos: ONE_COMBO, addons: [], addonsSoldOut: true });
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Tạm hết hàng');
+      expect(rows(c).length).toBe(2);
+    });
+
+    it('bộ đang hiện (a1) bị tắt trong khi bộ khác (b1) còn chạy nhưng mọi món hết hàng: vẫn "Đã kết thúc", không bị kéo thành "Tạm hết hàng"', async () => {
+      const otherSoldOut = [addon('b1', [item('z', { addonPrice: 60_000, inStock: false })])];
+      const c = await mountStale({ combos: ONE_COMBO, addons: otherSoldOut });
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+      expect(rows(c).length).toBe(2);
+    });
+
+    it('bộ quá hạn thì vẫn "Đã kết thúc" (không lẫn với hết hàng)', async () => {
+      const expired = [addon('a1', [item('x', { addonPrice: 60_000 })], { endAt: PAST })];
+      const c = await mountStale({ combos: ONE_COMBO, addons: expired });
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+    });
+  });
+
   it('bộ mới về sau khi một bộ đã hết: khối hiện lại bình thường', async () => {
     mocks.get.mockResolvedValue({ combos: [], addons: [] });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

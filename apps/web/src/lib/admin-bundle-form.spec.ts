@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminBundle } from './admin-bundles-client';
-import { buildBundleInput, draftFromBundle, emptyBundleDraft, type BundleDraft, type BundleDraftItem } from './admin-bundle-form';
+import { addonBasePrice, buildBundleInput, draftFromBundle, emptyBundleDraft, keptRefPrice, type BundleDraft, type BundleDraftItem } from './admin-bundle-form';
 
 const item = (productId: string, o: Partial<BundleDraftItem> = {}): BundleDraftItem => ({
-  productId, name: `SP ${productId}`, variationId: null, variationName: null, price: null, addonPrice: '', maxQty: '1', ...o,
+  productId, name: `SP ${productId}`, variationId: null, variationName: null, price: null, refPrice: null, savedAddonPrice: null, addonPrice: '', maxQty: '1', ...o,
 });
 const draft = (o: Partial<BundleDraft> = {}): BundleDraft => ({
   ...emptyBundleDraft('BUNDLE_PCT'), title: 'Combo gội xả', pct: '10', startAt: '2026-11-01T00:00', endAt: '2026-11-10T23:59', items: [item('p1'), item('p2')], ...o,
@@ -88,14 +88,39 @@ describe('draftFromBundle', () => {
   const bundle: AdminBundle = {
     id: 'b1', kind: 'ADDON', title: 'Kèm xà phòng', pct: null, anchorProductId: 'p0', anchorProductName: 'Dầu gội',
     startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-10T16:59:00.000Z', isActive: false, sortOrder: 3, status: 'off', createdById: 'u1', createdByStaff: true,
-    items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: 'v1', variationName: '100g', addonPrice: 39_000, maxQty: 2, price: 50_000 }],
+    items: [{ productId: 'p1', productName: 'Xà phòng', productSlug: 'xa-phong', variationId: 'v1', variationName: '100g', addonPrice: 39_000, refPrice: 45_000, maxQty: 2, price: 50_000 }],
   };
 
   it('đưa bộ có sẵn về bản nháp của form (giờ Việt Nam) và ngược lại cho đúng dữ liệu cũ', () => {
     const d = draftFromBundle(bundle);
     expect(d).toMatchObject({ kind: 'ADDON', title: 'Kèm xà phòng', pct: '', anchor: { id: 'p0', name: 'Dầu gội' }, startAt: '2026-11-01T00:00', endAt: '2026-11-10T23:59', sortOrder: '3', isActive: false });
-    expect(d.items).toEqual([{ productId: 'p1', name: 'Xà phòng', variationId: 'v1', variationName: '100g', price: 50_000, addonPrice: '39000', maxQty: '2' }]);
+    expect(d.items).toEqual([{ productId: 'p1', name: 'Xà phòng', variationId: 'v1', variationName: '100g', price: 50_000, refPrice: 45_000, savedAddonPrice: 39_000, addonPrice: '39000', maxQty: '2' }]);
     const r = buildBundleInput(d);
     expect(r).toMatchObject({ ok: true, input: { kind: 'ADDON', anchorProductId: 'p0', startAt: bundle.startAt, endAt: bundle.endAt, isActive: false, sortOrder: 3, items: [{ productId: 'p1', variationId: 'v1', addonPrice: 39_000, maxQty: 2 }] } });
+  });
+});
+
+describe('addonBasePrice: giá làm cơ sở khoản giảm của giỏ', () => {
+  const kept = (o: Partial<Pick<BundleDraftItem, 'price' | 'refPrice' | 'savedAddonPrice' | 'addonPrice'>>) => ({ price: 500_000, refPrice: 50_000, savedAddonPrice: 39_000, addonPrice: '39000', ...o });
+
+  it('giá kèm còn như đã lưu: giá đang bán nhưng không vượt giá tham chiếu giữ lại; chưa biết giá thì null; không có giá tham chiếu thì giá đang bán', () => {
+    expect(addonBasePrice(kept({}))).toBe(50_000);
+    expect(addonBasePrice(kept({ price: 45_000 }))).toBe(45_000);
+    expect(addonBasePrice(kept({ refPrice: null }))).toBe(500_000);
+    expect(addonBasePrice(kept({ price: null, refPrice: null, savedAddonPrice: null }))).toBeNull();
+  });
+
+  it('admin sửa giá kèm: máy chủ đặt lại giá tham chiếu = giá đang bán, nên cơ sở là giá đang bán (cùng luật keptRefPrices ở API)', () => {
+    expect(addonBasePrice(kept({ addonPrice: '45000' }))).toBe(500_000);
+    expect(addonBasePrice(kept({ addonPrice: '399000' }))).toBe(500_000);
+    expect(addonBasePrice(kept({ addonPrice: '' }))).toBe(500_000);
+    expect(addonBasePrice(kept({ addonPrice: ' 39000 ' }))).toBe(50_000);
+    expect(keptRefPrice(kept({ addonPrice: '45000' }))).toBeNull();
+    expect(keptRefPrice(kept({}))).toBe(50_000);
+  });
+
+  it('món vừa chọn (chưa lưu giá kèm nào) không có giá tham chiếu giữ lại', () => {
+    expect(keptRefPrice(kept({ refPrice: null, savedAddonPrice: null }))).toBeNull();
+    expect(keptRefPrice(kept({ savedAddonPrice: null }))).toBeNull();
   });
 });

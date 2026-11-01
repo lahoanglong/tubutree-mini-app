@@ -5,7 +5,7 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
 import { loadLiveBundles, readBundleMaxPct } from '../bundles/bundle-read';
-import { allocateBundleDiscounts, mergeMaxPerLine } from '../bundles/bundle-rules';
+import { allocateBundleDiscounts, isOwnStaffBundle, mergeMaxPerLine, type LiveBundle } from '../bundles/bundle-rules';
 
 export interface ComboLine {
   variationId: string;
@@ -99,7 +99,8 @@ export class ComboService {
   async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string, now: Date = new Date()): Promise<ComboResult> {
     if (lines.length === 0) return NO_COMBO;
     const store = await this.storefrontCombo(slug, lines, buyerId);
-    const bundles = await loadLiveBundles(this.prisma, now, [...new Set(lines.map((l) => l.productId))]);
+    const live = await loadLiveBundles(this.prisma, now, [...new Set(lines.map((l) => l.productId))]);
+    const bundles = await this.withoutOwnStaffBundles(live, buyerId);
     if (bundles.length === 0) return store;
     const maxPct = await readBundleMaxPct(this.config);
     const bundle = allocateBundleDiscounts(
@@ -108,6 +109,18 @@ export class ComboService {
       maxPct,
     );
     return mergeMaxPerLine(store, bundle);
+  }
+
+  /**
+   * Nhân viên (không phải ADMIN) không hưởng bộ do chính mình tạo: cùng luật mã giảm giá (`isOwnStaffCoupon`) và Giờ vàng
+   * (`ownSalesBlocked`), vì bộ không có quota toàn cục nên tự tạo rồi tự đặt nhiều đơn là tự cấp tiền. Chỉ tra vai trò khi người mua
+   * thật sự là người tạo một bộ đang xét. API công khai không biết người mua (cache chung) nên vẫn quảng cáo; giỏ chỉ giảm ít hơn.
+   */
+  private async withoutOwnStaffBundles(bundles: LiveBundle[], buyerId: string | undefined): Promise<LiveBundle[]> {
+    if (!buyerId || !bundles.some((b) => b.createdById === buyerId)) return bundles;
+    const buyer = await this.prisma.user.findUnique({ where: { id: buyerId }, select: { role: true } });
+    const user = { id: buyerId, role: buyer?.role };
+    return bundles.filter((b) => !isOwnStaffBundle(b, user));
   }
 
   private async storefrontCombo(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {

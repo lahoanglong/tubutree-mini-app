@@ -5,7 +5,7 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { CatalogService } from '../catalog/catalog.service';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { BUNDLE_MIN_PRODUCTS } from './bundle-rules';
+import { BUNDLE_MIN_PRODUCTS, addonPayPrice } from './bundle-rules';
 import { bundleLiveWhere, isTubuOnlyBundle, loadFlashFootprint, readBundleMaxPct, type FlashFootprint } from './bundle-read';
 
 export const PDP_COMBO_MAX = 2;
@@ -21,7 +21,7 @@ export interface BundleItemDTO {
   variationId: string | null;
   /** Số đơn vị mỗi đơn được hưởng ưu đãi (giá kèm hay giảm %). */
   maxQty: number;
-  /** Chỉ ADDON; BUNDLE_PCT là null. */
+  /** Chỉ ADDON; BUNDLE_PCT là null. Giá khách trả mỗi đơn vị, đã qua trần theo giá tham chiếu (`addonPayPrice`): bằng đúng số giỏ tính. */
   addonPrice: number | null;
   /** false: phân loại này hết hàng, thẻ báo "Combo tạm hết" thay vì cho thêm vào giỏ. */
   inStock: boolean;
@@ -50,7 +50,7 @@ const PUBLIC_SELECT = {
   anchorProduct: { select: { storefrontId: true } },
   items: {
     orderBy: { sortOrder: 'asc' },
-    select: { productId: true, variationId: true, addonPrice: true, maxQty: true, product: { select: { storefrontId: true } } },
+    select: { productId: true, variationId: true, addonPrice: true, refPrice: true, maxQty: true, product: { select: { storefrontId: true } } },
   },
 } satisfies Prisma.BundleSelect;
 
@@ -81,7 +81,7 @@ export class BundlesService {
    * hàng gian hàng đối tác → rỗng (hàng đó chỉ bán giá lẻ). Sản phẩm chính hết hàng thì không có bộ mua kèm: khách thêm được món kèm
    * mà không bỏ được món chính vào giỏ, giỏ sẽ tính món kèm giá thường. Combo vẫn hiện (thẻ báo "tạm hết" theo từng món).
    */
-  async forProduct(slug: string, now: Date = new Date()): Promise<{ combos: BundleDTO[]; addons: BundleDTO[] }> {
+  async forProduct(slug: string, now: Date = new Date()): Promise<{ combos: BundleDTO[]; addons: BundleDTO[]; addonsSoldOut?: true }> {
     const product = await this.prisma.product.findFirst({
       where: { slug, ...PUBLIC_PRODUCT_WHERE },
       select: { id: true, storefrontId: true, variations: { where: { isActive: true, stock: { gt: 0 } }, select: { id: true }, take: 1 } },
@@ -94,15 +94,16 @@ export class BundlesService {
       orderBy: BUNDLE_ORDER,
       take: FETCH_CAP,
     });
-    const anchorBuyable = product.variations.length > 0;
     const shown = await this.toPublic(
-      rows.filter((r) => (r.kind === 'ADDON' ? anchorBuyable && r.anchorProductId === product.id : true)),
+      rows.filter((r) => (r.kind === 'ADDON' ? r.anchorProductId === product.id : true)),
       now,
     );
-    return {
-      combos: shown.filter((b) => b.kind === 'BUNDLE_PCT').slice(0, PDP_COMBO_MAX),
-      addons: shown.filter((b) => b.kind === 'ADDON').slice(0, PDP_ADDON_MAX),
-    };
+    const combos = shown.filter((b) => b.kind === 'BUNDLE_PCT').slice(0, PDP_COMBO_MAX);
+    const addons = shown.filter((b) => b.kind === 'ADDON').slice(0, PDP_ADDON_MAX);
+    if (product.variations.length > 0) return { combos, addons };
+    // Sản phẩm chính hết hàng: không bán được món chính nên không mời Mua kèm. Báo riêng để khách đang xem trang thấy "Tạm hết hàng", không
+    // phải "Đã kết thúc" (danh sách rỗng thường nghĩa là bộ đã kết thúc).
+    return { combos, addons: [], ...(addons.length > 0 ? { addonsSoldOut: true as const } : {}) };
   }
 
   /** Combo đang chạy mà MỌI món còn hàng (Trang chủ không quảng cáo combo không mua được). */
@@ -180,11 +181,16 @@ export class BundlesService {
         if (b.kind === 'BUNDLE_PCT') return null;
         continue;
       }
+      let addonPrice: number | null = null;
       if (b.kind === 'ADDON') {
-        // Giá kèm không thấp hơn giá đang bán thì không giảm được đồng nào: không quảng cáo "deal sốc".
-        if (it.addonPrice === null || it.addonPrice >= (product.salePrice ?? product.basePrice)) continue;
+        // Cùng hàm với giỏ: giá khách trả sau trần theo giá tham chiếu lúc tạo. Không giảm được đồng nào (giá kèm không thấp hơn, hay thiếu
+        // giá tham chiếu) thì giỏ tính giá thường, nên không quảng cáo "deal sốc".
+        if (it.addonPrice === null) continue;
+        const unit = product.salePrice ?? product.basePrice;
+        addonPrice = addonPayPrice(unit, it.addonPrice, it.refPrice);
+        if (addonPrice >= unit) continue;
       }
-      items.push({ productId: it.productId, variationId, maxQty: it.maxQty, addonPrice: b.kind === 'ADDON' ? it.addonPrice : null, inStock, product });
+      items.push({ productId: it.productId, variationId, maxQty: it.maxQty, addonPrice, inStock, product });
     }
     if (b.kind === 'ADDON') {
       if (items.length === 0) return null;

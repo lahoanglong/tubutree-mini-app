@@ -4,7 +4,18 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductBundles } from '@tubutree/app-core/api/bundle';
-import { addonLines, addonRows, addonSummary, comboView, PDP_COMBO_MAX, type AddonRow } from '@tubutree/app-core/commerce/bundle-view';
+import {
+  addonLines,
+  addonRows,
+  addonSummary,
+  bundleHoldReason,
+  bundleHoldTitle,
+  comboView,
+  latchBundleSide,
+  PDP_COMBO_MAX,
+  type AddonRow,
+  type BundleHold,
+} from '@tubutree/app-core/commerce/bundle-view';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { productBundlesQuery } from '@tubutree/app-core/queries/bundle';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -64,17 +75,17 @@ function Status({ result, quiet }: { result: BundleAddResult | null; quiet?: boo
 }
 
 /**
- * Danh sách cuối cùng đã hiện: khi dữ liệu sau đó rỗng (bộ hết hạn hay tắt) vẫn trả lại danh sách đó với `ended`, để khối không bị gỡ giữa
- * trang. Chưa từng hiện (ẩn từ đầu) thì rỗng và không `ended`.
+ * Danh sách cuối cùng đã hiện: khi dữ liệu sau đó rỗng (bộ hết hạn/tắt, hay món vừa hết hàng) vẫn trả lại danh sách đó kèm lý do `held`, để khối
+ * không bị gỡ giữa trang. Quyết định nằm ở app-core (`latchBundleSide`, dùng chung với Mini App); ở đây chỉ giữ `useRef`.
  */
-function useLatched<T>(live: T[]): { items: T[]; ended: boolean } {
+function useLatched<T>(live: T[], why: (held: T[]) => BundleHold): { items: T[]; held: BundleHold | null } {
   const last = useRef<T[] | null>(null);
-  if (live.length > 0) last.current = live;
-  const ended = live.length === 0 && last.current !== null;
-  return { items: ended ? (last.current as T[]) : live, ended };
+  const side = latchBundleSide(live, last.current, why);
+  last.current = side.last;
+  return side;
 }
 
-/** Khối đã kết thúc vẫn giữ nguyên chỗ (không đẩy phần dưới), mờ đi và không bấm được. */
+/** Khối đã kết thúc hay tạm hết hàng vẫn giữ nguyên chỗ (không đẩy phần dưới), mờ đi và không bấm được. */
 function EndedBody({ ended, children }: { ended: boolean; children: ReactNode }) {
   if (!ended) return <>{children}</>;
   return (
@@ -89,7 +100,8 @@ function EndedBody({ ended, children }: { ended: boolean; children: ReactNode })
  * Danh sách đầu do server dựng sẵn (`initialBundles`) nên khối nằm trong HTML ngay lần vẽ đầu, không chèn thêm vào trang sau khi tải; server
  * lỗi thì trình duyệt tự tải. Ẩn hẳn, không giữ chỗ, khi chưa có bộ nào, đã hết hạn theo giờ máy chủ hay tải lỗi. Giá cuối luôn do giỏ tính lại.
  * Khối đã hiện rồi mà bộ hết hạn/tắt (trang ISR cũ, tải lại ra rỗng) thì KHÔNG gỡ: gỡ giữa trang đẩy mọi thứ bên dưới đang nằm trong màn hình
- * (CLS). Khối giữ nguyên chỗ, mờ đi, không bấm được, tiêu đề ghi "Đã kết thúc"; bộ khác về sau thì hiện lại bình thường.
+ * (CLS). Khối giữ nguyên chỗ, mờ đi, không bấm được, tiêu đề ghi "Đã kết thúc" (bộ hết hạn/tắt) hay "Tạm hết hàng" (bộ còn mà món, hay sản phẩm
+ * chính, hết hàng); bộ khác về sau thì hiện lại bình thường.
  */
 export function PdpBundles({
   slug,
@@ -116,14 +128,13 @@ export function PdpBundles({
   const now = hydrated ? serverNow() : (initialFetchedAt ?? serverNow());
   const liveCombos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
   const liveRows = addonRows(query.data?.addons ?? [], now);
-  const comboSide = useLatched(liveCombos);
-  const addonSide = useLatched(liveRows);
+  const comboSide = useLatched(liveCombos, (held) => bundleHoldReason('combos', query.data, now, held.map((c) => c.id)));
+  const addonSide = useLatched(liveRows, (held) => bundleHoldReason('addons', query.data, now, held.map((r) => r.bundleId)));
   if (comboSide.items.length === 0 && addonSide.items.length === 0) return null;
-  const { items: combos, ended: combosEnded } = comboSide;
-  const { items: rows, ended: addonsEnded } = addonSide;
+  const { items: combos, held: combosHeld } = comboSide;
+  const { items: rows, held: addonsHeld } = addonSide;
 
   const summary = addonSummary(rows, picked);
-  const title = (key: 'combo.pdpTitle' | 'addon.title', ended: boolean) => (ended ? `${fillCopy(key)} · ${fillCopy('bundle.ended')}` : fillCopy(key));
   const toggle = (key: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -148,9 +159,9 @@ export function PdpBundles({
     <PdpBundleSlots
       combos={
         combos.length > 0 ? (
-          <section aria-label={title('combo.pdpTitle', combosEnded)} data-testid="pdp-combos" className={SURFACE}>
-            <h2 className={pdpSectionTitle}>{title('combo.pdpTitle', combosEnded)}</h2>
-            <EndedBody ended={combosEnded}>
+          <section aria-label={bundleHoldTitle('combo.pdpTitle', combosHeld)} data-testid="pdp-combos" className={SURFACE}>
+            <h2 className={pdpSectionTitle}>{bundleHoldTitle('combo.pdpTitle', combosHeld)}</h2>
+            <EndedBody ended={combosHeld !== null}>
               <div className="mt-3 flex flex-col gap-3">
                 {combos.map((v) => (
                   <ComboCard
@@ -162,7 +173,7 @@ export function PdpBundles({
                     comboTotal={v.comboTotal}
                     busy={busyId === v.id}
                     onAddAll={() => {
-                      if (!combosEnded) add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') });
+                      if (combosHeld === null) add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') });
                     }}
                   />
                 ))}
@@ -174,9 +185,9 @@ export function PdpBundles({
       }
       addons={
         rows.length > 0 ? (
-          <section aria-label={title('addon.title', addonsEnded)} data-testid="pdp-addons" className={SURFACE}>
-            <h2 className={pdpSectionTitle}>{title('addon.title', addonsEnded)}</h2>
-            <EndedBody ended={addonsEnded}>
+          <section aria-label={bundleHoldTitle('addon.title', addonsHeld)} data-testid="pdp-addons" className={SURFACE}>
+            <h2 className={pdpSectionTitle}>{bundleHoldTitle('addon.title', addonsHeld)}</h2>
+            <EndedBody ended={addonsHeld !== null}>
               {productName && <p className="mt-0.5 text-xs text-stone-500">{fillCopy('addon.condition', { name: productName })}</p>}
               <div role="group" aria-label={fillCopy('addon.title')} className="mt-1 flex flex-col">
                 {rows.map((r) => (
@@ -193,7 +204,7 @@ export function PdpBundles({
                   fullWidth
                   variant={justAdded ? 'secondary' : 'primary'}
                   loading={busyId === 'addons'}
-                  disabled={addonsEnded || (summary.count === 0 && !justAdded)}
+                  disabled={addonsHeld !== null || (summary.count === 0 && !justAdded)}
                   onPress={addAddons}
                 >
                   {justAdded ? fillCopy('addon.added') : summary.count > 0 ? fillCopy('addon.add', { n: summary.count }) : fillCopy('addon.pickHint')}

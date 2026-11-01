@@ -189,6 +189,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'addon.title': 18,
   'addon.price': null,
   'addon.condition': null,
+  // Hai nút Mua kèm giữ trần 20/16 (không về 8): nút này rộng suốt hàng và mang số món đã chọn ("Thêm 3 món vào giỏ"), không phải "nút nhỏ" của ux-copy B7
+  // mà trần 8 dành cho; ux-copy mục C không có dòng cho nút rộng suốt hàng, và `combo.add` cùng loại cũng không đặt trần.
   'addon.add': 20,
   'addon.added': 16,
   'addon.pickHint': 24,
