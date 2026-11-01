@@ -68,11 +68,7 @@ export default function SettingsPage() {
         }
         if (alive) setNotify(server);
       } catch {
-        if (alive)
-          openSnackbarRef.current({
-            type: 'error',
-            text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.',
-          });
+        if (alive) openSnackbarRef.current({ type: 'error', text: 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.' });
       }
     })();
     return () => {
@@ -156,10 +152,7 @@ export default function SettingsPage() {
                 <Text
                   as="div"
                   tone={active ? 'brand' : 'secondary'}
-                  style={{
-                    fontWeight: active ? 700 : 400,
-                    fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15,
-                  }}
+                  style={{ fontWeight: active ? 700 : 400, fontSize: s === 'small' ? 13 : s === 'large' ? 18 : 15 }}
                 >
                   A
                 </Text>

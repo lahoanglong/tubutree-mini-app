@@ -24,9 +24,7 @@ const ALL_CATS = 'Tất cả';
 
 /** "Đơn vị vận hành: tên · MST mã · địa chỉ"; ẩn phần chưa nhập, null khi không còn gì. */
 function operatorLine(company: PublicConfig['company']): string | null {
-  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(
-    Boolean,
-  );
+  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(Boolean);
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
 }
 const FAQ_SKELETON_ROWS = 4;
@@ -60,20 +58,13 @@ export default function AboutPage() {
   const faqQ = useQuery({ queryKey: ['faqs'], queryFn: fetchFaqs, staleTime: 10 * 60_000 });
   const publicConfig = usePublicConfig();
   const navigate = useNavigate();
-  const supportQ = useQuery({
-    queryKey: ['support-contact'],
-    queryFn: fetchSupportContact,
-    staleTime: 10 * 60_000,
-  });
+  const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
   const faq = faqQ.data && faqQ.data.length > 0 ? faqQ.data : faqQ.isLoading ? [] : fallbackFaq(publicConfig);
   const faqCats = [ALL_CATS, ...new Set(faq.map((f) => f.cat))];
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.
   const supportRows = [
-    {
-      label: 'Hotline',
-      value: support?.hotline ? formatPhoneDisplay(support.hotline) : support?.hotline,
-    },
+    { label: 'Hotline', value: support?.hotline ? formatPhoneDisplay(support.hotline) : support?.hotline },
     { label: 'Zalo OA', value: support?.zaloOaName },
     { label: 'Email', value: support?.email },
   ].filter((r): r is { label: string; value: string } => Boolean(r.value));
@@ -91,8 +82,7 @@ export default function AboutPage() {
       <div style={{ margin: '12px 16px 0' }}>
         <div
           style={{
-            background:
-              'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
+            background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
             borderRadius: 'var(--radius-card)',
             padding: 20,
           }}
@@ -102,8 +92,9 @@ export default function AboutPage() {
             Sống Xanh An Lành
           </Heading>
           <Text variant="body-sm" tone="inverse" as="p" style={{ marginTop: 8 }}>
-            Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Chúng tôi kết nối bạn với
-            những thương hiệu Việt tử tế — minh bạch nguồn gốc, lành cho da, nhẹ với đất.
+            Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Chúng
+            tôi kết nối bạn với những thương hiệu Việt tử tế — minh bạch nguồn gốc, lành cho da, nhẹ
+            với đất.
           </Text>
         </div>
       </div>
@@ -139,9 +130,7 @@ export default function AboutPage() {
           return (
             <div
               key={item.q}
-              style={{
-                borderBottom: i < shownFaq.length - 1 ? '1px solid var(--color-border-subtle)' : 'none',
-              }}
+              style={{ borderBottom: i < shownFaq.length - 1 ? '1px solid var(--color-border-subtle)' : 'none' }}
             >
               <button
                 type="button"
@@ -196,9 +185,7 @@ export default function AboutPage() {
       {/* Hỗ trợ */}
       {(supportRows.length > 0 || publicConfig.chat?.enabled === true) && (
         <Section title="Hỗ trợ khách hàng">
-          {publicConfig.chat?.enabled === true && (
-            <LinkRow label="Chat với Tubu Tree" onClick={() => navigate('/chat')} last={supportRows.length === 0} />
-          )}
+          {publicConfig.chat?.enabled === true && <LinkRow label="Chat với Tubu Tree" onClick={() => navigate('/chat')} last={supportRows.length === 0} />}
           {supportRows.map((r, i) => (
             <KeyValueRow
               key={r.label}
