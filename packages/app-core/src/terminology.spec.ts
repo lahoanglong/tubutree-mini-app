@@ -443,7 +443,7 @@ describe('mã thật của apps/miniapp và apps/web', () => {
     expect(off).toEqual([]);
   });
 
-  // Khối "Sắp diễn ra" của Giờ vàng Trang chủ (Mini `components/flash-sale.tsx`, web `components/home/flash-sale.tsx`) ghép "Bắt đầu sau ${t}" trong chuỗi template, ngoài tầm
+  // Khối "Sắp diễn ra" của Giờ vàng Trang chủ (Mini `components/flash-sale.tsx`, web `components/home/flash-sale.tsx`) ghép "Sau {t}" (`flash.startsInTile`) qua `fillCopy`, ngoài tầm
   // quét chữ thô, nên `t` phải đến từ `countdownText` ("2 giờ 05 phút"). `formatCountdown` ("2h 05m") đã xoá; ca này giữ cho nó không quay lại qua một file giao diện.
   it('không file giao diện nào còn dùng formatCountdown, và chữ đếm ngược không dính dạng cấm "2h 05m" (D2 countdownText)', () => {
     const users = sources.filter((s) => !NOT_SCANNED.some((re) => re.test(s.file)) && /\bformatCountdown\b/.test(s.text)).map((s) => s.file);

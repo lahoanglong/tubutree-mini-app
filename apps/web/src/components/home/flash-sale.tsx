@@ -226,7 +226,7 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
       variant="flash"
       href={productHref(encodeURIComponent(item.productSlug))}
       // Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem.
-      note={startsIn ? flashSaleText.startsIn(startsIn) : flashSaleText.live}
+      note={startsIn ? fillCopy('flash.startsInTile', { t: startsIn }) : flashSaleText.live}
       footerHeight={startsIn ? REMIND_FOOTER_HEIGHT : undefined}
       footer={
         startsIn ? (

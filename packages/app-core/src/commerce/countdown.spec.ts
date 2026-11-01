@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { fillCopy } from '../shop-copy';
 import { countdownClock, countdownSpoken, countdownText } from './countdown';
 
 const H = 3_600_000;
@@ -57,5 +58,22 @@ describe('countdownSpoken', () => {
   it('hết giờ thì rỗng', () => {
     expect(countdownSpoken(0)).toBe('');
     expect(countdownSpoken(Number.NaN)).toBe('');
+  });
+});
+
+/**
+ * Thẻ Giờ vàng rộng 128px, trừ lề trong 8px mỗi bên còn 112px cho một dòng chữ 12px không xuống dòng (ProductTile cắt bằng dấu ba chấm; Inter 500 ≈ 5,9px/ký tự),
+ * nên dòng "Sắp diễn ra" trên thẻ không được dài quá 18 ký tự với mọi dạng `countdownText` (23 giờ 59 phút, 99 ngày 23 giờ). jsdom không đo bề rộng nên giữ
+ * trần ký tự ở đây; câu "Bắt đầu sau ..." dài 26 ký tự bị cắt thành "Bắt đầu sau 2 giờ 0…".
+ */
+describe('dòng "Sắp diễn ra" trên thẻ Giờ vàng vừa 112px', () => {
+  const worst = [(23 * H) + 59 * 60_000, (99 * D) + 23 * H, 12 * H + 5 * 60_000 + 30_000, 3 * D + 12 * H, 59 * 60_000, 30_000];
+  it.each(worst)('còn %s ms', (ms) => {
+    const note = fillCopy('flash.startsInTile', { t: countdownText(ms) });
+    expect(note.length).toBeLessThanOrEqual(18);
+    expect(note).toMatch(/^Sau /);
+  });
+  it('ghi theo luật chữ, không "2h 05m"', () => {
+    expect(fillCopy('flash.startsInTile', { t: countdownText(2 * H + 5 * 60_000 + 30_000) })).toBe('Sau 2 giờ 05 phút');
   });
 });

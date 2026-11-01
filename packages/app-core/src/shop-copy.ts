@@ -26,6 +26,7 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.endsIn': 'Kết thúc sau {t}',
   'flash.endsLabel': 'Kết thúc sau',
   'flash.startsIn': 'Bắt đầu sau {t}',
+  'flash.startsInTile': 'Sau {t}',
   'flash.startsAt': 'Mở lúc {time}',
   'flash.startsAtDay': 'Mở lúc {time} ngày {day}',
   'flash.justOpened': 'Vừa mở bán',

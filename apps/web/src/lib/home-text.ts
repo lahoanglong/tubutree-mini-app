@@ -72,7 +72,6 @@ export const flashSaleText = {
   endsIn: (t: string) => `Còn ${t}`,
   soldPct: (n: number) => `Đã bán ${n}%`,
   upcomingTitle: 'Sắp diễn ra',
-  startsIn: (t: string) => `Bắt đầu sau ${t}`,
   live: 'Đang diễn ra',
   remindMe: 'Nhắc tôi',
   reminded: 'Đã đặt nhắc',
