@@ -57,6 +57,7 @@ export function PosScreen() {
 
   const lookup = useMutation({
     mutationFn: (memberCode: string) => scanMember(memberCode),
+    meta: { skipAdminInvalidate: true },
     onSuccess: (r, memberCode) => {
       setMember(r.member);
       setMemberCodeUsed(memberCode);

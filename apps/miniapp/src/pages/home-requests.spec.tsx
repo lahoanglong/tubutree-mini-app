@@ -60,7 +60,6 @@ const ME_FEED = {
   flashUpcoming: [],
   purchasedItems: { items: [], nextCursor: null },
   activeOrderCount: { count: 0 },
-  shippingOrders: { data: [], meta: { page: 1, limit: 1, total: 0 } },
   subscriptions: [],
   notifications: [],
   newCustomerOffer: {

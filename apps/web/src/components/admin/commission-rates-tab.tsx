@@ -415,6 +415,7 @@ function RateCsvImport() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const previewMut = useMutation({
     mutationFn: () => previewRateImport(csv),
+    meta: { skipAdminInvalidate: true },
     onSuccess: (p) => setPreview(p),
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không xem trước được.') }),
   });
@@ -544,6 +545,7 @@ function DealerPriceImport() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const previewMut = useMutation({
     mutationFn: () => previewDealerPrices(tierId, csv),
+    meta: { skipAdminInvalidate: true },
     onSuccess: (p) => setPreview(p),
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không xem trước được.') }),
   });

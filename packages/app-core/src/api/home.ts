@@ -6,7 +6,7 @@ import type { NotificationDTO } from './account';
 import type { PublicConfig } from './config';
 import type { FlashSaleActiveItem, UpcomingFlashItem } from './flash-sale';
 import type { NewCustomerOffer } from './loyalty';
-import type { OrderView, PurchasedItemsPage } from './orders';
+import type { PurchasedItemsPage } from './orders';
 import type { SubscriptionDTO } from './subscriptions';
 
 /**
@@ -35,7 +35,8 @@ export interface HomeMeDTO {
   flashUpcoming: Block<UpcomingFlashItem[]>;
   purchasedItems: Block<PurchasedItemsPage>;
   activeOrderCount: Block<{ count?: unknown }>;
-  shippingOrders: Block<PageResponse<OrderView>>;
+  /** Khách có đơn nào (mọi trạng thái) chưa. API cũ không có trường này: hỏi GET /orders. */
+  hasOrders?: Block<boolean>;
   subscriptions: Block<SubscriptionDTO[]>;
   notifications: Block<NotificationDTO[]>;
   newCustomerOffer: Block<NewCustomerOffer>;

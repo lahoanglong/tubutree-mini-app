@@ -216,6 +216,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
   const find = useMutation({
     mutationFn: (c: string) => deskLookup(coreHttp, c),
+    meta: { skipAdminInvalidate: true },
     onMutate: () => setNotice(null),
     onSuccess: (res, c) => {
       setLookup(res.type === 'REQUEST' ? res.request : null);

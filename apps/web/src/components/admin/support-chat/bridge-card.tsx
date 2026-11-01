@@ -136,6 +136,7 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
   });
   const test = useMutation({
     mutationFn: testSupportBridge,
+    meta: { skipAdminInvalidate: true },
     onMutate: () => setTestResult(null),
     onSuccess: () => setTestResult({ ok: true, text: 'Đã gửi tin thử vào nhóm. Kiểm tra nhóm Zalo.' }),
     onError: (e) => setTestResult({ ok: false, text: errText(e, 'Không gửi được tin thử.') }),

@@ -1,10 +1,14 @@
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[], hydrated: false }));
+const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[], hydrated: false as boolean | 'real' }));
+const DEFAULTS = { auth: mocks.auth, cart: mocks.cart, notifications: mocks.notifications };
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-// Mặc định như máy chủ/hydrate đầu (useHydrated=false); chỉ ca cần pha phiên thật mới bật true để giả lập sau hydrate.
-vi.mock('@/lib/use-hydrated', () => ({ useHydrated: () => mocks.hydrated }));
+// Mặc định như máy chủ/hydrate đầu (useHydrated=false); ca cần pha phiên thật bật true để giả lập sau hydrate; 'real' chạy hook thật.
+vi.mock('@/lib/use-hydrated', async (orig) => {
+  const actual = await orig<typeof import('@/lib/use-hydrated')>();
+  return { useHydrated: () => (mocks.hydrated === 'real' ? actual.useHydrated() : mocks.hydrated) };
+});
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (o: { queryKey: unknown[] }) => ({
     data: o.queryKey.join('/') === 'notifications/unread' ? { count: mocks.notifications.filter((n) => n.status !== 'READ').length } : mocks.cart,
@@ -17,6 +21,13 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePat
 import SiteHeader from './site-header';
 
 const render = () => renderToStaticMarkup(<SiteHeader />);
+
+afterEach(() => {
+  mocks.auth = DEFAULTS.auth;
+  mocks.cart = DEFAULTS.cart;
+  mocks.notifications = DEFAULTS.notifications;
+  mocks.hydrated = false;
+});
 
 describe('SiteHeader', () => {
   it('header dính đầu trang chừa inset phía trên (thanh trạng thái, tai thỏ) để không chui xuống dưới', () => {
@@ -60,12 +71,12 @@ describe('SiteHeader', () => {
   // Máy chủ không được mang trạng thái đó, nếu không hydrate lệch.
   it('HTML máy chủ (lượt vẽ đầu) không mang trạng thái mất kết nối dù phiên tạm lỗi', () => {
     mocks.auth = { user: null, status: 'idle', initialized: true, sessionUnavailable: true };
+    mocks.hydrated = 'real';
     const out = renderToString(<SiteHeader />);
     expect(out).not.toContain('role="alert"');
     expect(out).not.toMatch(/mất kết nối/i);
     expect(out).toContain('href="/dang-nhap"');
     expect(out).not.toContain('href="/tai-khoan"');
-    mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
   });
 
   it('nút giỏ hàng có tên truy cập kèm số lượng và vùng chạm 44px', () => {

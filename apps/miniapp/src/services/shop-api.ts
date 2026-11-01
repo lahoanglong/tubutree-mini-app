@@ -671,11 +671,6 @@ export interface OrderListFilter {
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
 export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20) => {
-  // Dải "đang giao" ở Trang chủ (1 đơn SHIPPING mới nhất) đã có sẵn trong /home/me.
-  if (filter.status === 'SHIPPING' && page === 1 && limit === 1) {
-    const fromFeed = await takeMeBlock('shippingOrders');
-    if (fromFeed) return fromFeed;
-  }
   return api
     .get<PageResponse<OrderView>>('/orders', {
       params: {
@@ -685,6 +680,12 @@ export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit 
       },
     })
     .then((r) => r.data);
+};
+/** Khách đã có đơn nào chưa (mọi trạng thái): lấy từ /home/me khi Trang chủ đang mở, không thì một request /orders như trước. */
+export const fetchHasAnyOrder = async (): Promise<boolean> => {
+  const fromFeed = await takeMeBlock('hasOrders');
+  if (typeof fromFeed === 'boolean') return fromFeed;
+  return (await fetchOrders({}, 1, 1)).meta.total > 0;
 };
 /** Một phần của dải "Việc cần làm": đơn mới nhất của bộ lọc và tổng đơn khớp (meta.total của GET /orders). */
 export interface HomeTodoPart {

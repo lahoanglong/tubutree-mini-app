@@ -26,7 +26,7 @@ const PAGE = { data: [card('f1', 'Món nổi bật')], meta: { page: 1, limit: 6
 const routes: Record<string, unknown> = {
   '/home': { publicConfig: CONFIG, categories: CATEGORIES, brands: [], flashActive: [], featured: PAGE, newest: PAGE, bestSellers: PAGE },
   '/home/me': {
-    forYou: [card('f1', 'Món nổi bật')], flashUpcoming: [], activeOrderCount: { count: 0 }, shippingOrders: { data: [] }, wasteOpenRequestCount: 0,
+    forYou: [card('f1', 'Món nổi bật')], flashUpcoming: [], activeOrderCount: { count: 0 }, wasteOpenRequestCount: 0,
     purchasedItems: { items: [], nextCursor: null }, newCustomerOffer: { isNewCustomer: true, welcomeVoucher: null }, purchasedLimit: 10,
   },
   '/me/notifications/unread-count': { count: 0 },

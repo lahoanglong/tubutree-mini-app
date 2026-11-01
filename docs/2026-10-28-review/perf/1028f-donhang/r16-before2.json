@@ -1,0 +1,303 @@
+[
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "cold",
+  "total": 115,
+  "api": 30,
+  "orders": [],
+  "dup": [
+   "/img x27"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/flash-sales/upcoming",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "reopen",
+  "total": 115,
+  "api": 30,
+  "orders": [],
+  "dup": [
+   "/img x27"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/flash-sales/upcoming",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "cold",
+  "total": 136,
+  "api": 53,
+  "orders": [],
+  "dup": [
+   "/img x43"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "reopen",
+  "total": 138,
+  "api": 55,
+  "orders": [],
+  "dup": [
+   "/img x45"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "cold",
+  "total": 138,
+  "api": 55,
+  "orders": [
+   "/orders?status=PENDING_PAYMENT&page=1&limit=1 -> 200",
+   "/orders?group=processing&page=1&limit=1 -> 200"
+  ],
+  "dup": [
+   "/img x42",
+   "/orders x2"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/me/loyalty",
+   "/orders"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "reopen",
+  "total": 140,
+  "api": 55,
+  "orders": [
+   "/orders?status=PENDING_PAYMENT&page=1&limit=1 -> 200",
+   "/orders?group=processing&page=1&limit=1 -> 200"
+  ],
+  "dup": [
+   "/img x42",
+   "/orders x2"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/me/loyalty",
+   "/me/daily-check-in",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/coupons",
+   "/orders"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "cold",
+  "api": 33,
+  "orders": [
+   "/orders?page=1&limit=1 -> 200"
+  ],
+  "dup": [
+   "/img x22"
+  ],
+  "paths": [
+   "/home",
+   "/auth/guest",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/orders",
+   "/me/wishlist/ids",
+   "/feed",
+   "/products",
+   "/img"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "reopen",
+  "api": 34,
+  "orders": [
+   "/orders?page=1&limit=1 -> 200"
+  ],
+  "dup": [
+   "/img x22"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/me/notifications/unread-count",
+   "/me/wishlist/ids",
+   "/cart",
+   "/orders",
+   "/home/me",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/feed",
+   "/products"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "cold",
+  "api": 40,
+  "orders": [],
+  "dup": [
+   "/img x30"
+  ],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/home/me",
+   "/cart",
+   "/img",
+   "/me/wishlist/ids",
+   "/products",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "reopen",
+  "api": 33,
+  "orders": [],
+  "dup": [
+   "/img x22"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/me/coupons",
+   "/home/me",
+   "/products",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "cold",
+  "api": 39,
+  "orders": [
+   "/orders?group=processing&page=1&limit=1 -> 200",
+   "/orders?status=PENDING_PAYMENT&page=1&limit=1 -> 200"
+  ],
+  "dup": [
+   "/orders x2",
+   "/img x26"
+  ],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/orders",
+   "/me/loyalty",
+   "/me/wishlist/ids",
+   "/products",
+   "/img",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "reopen",
+  "api": 35,
+  "orders": [
+   "/orders?group=processing&page=1&limit=1 -> 200",
+   "/orders?status=PENDING_PAYMENT&page=1&limit=1 -> 200"
+  ],
+  "dup": [
+   "/img x21",
+   "/orders x2"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/cart",
+   "/me/notifications/unread-count",
+   "/me/wishlist/ids",
+   "/me/daily-check-in",
+   "/me/loyalty",
+   "/home/me",
+   "/me/coupons",
+   "/products",
+   "/feed",
+   "/orders"
+  ]
+ }
+]

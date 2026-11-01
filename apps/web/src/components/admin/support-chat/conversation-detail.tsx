@@ -51,6 +51,7 @@ export function ConversationDetail({ id }: { id: string }) {
   };
   const send = useMutation({
     mutationFn: (body: string) => replySupportConversation(id, body),
+    meta: { skipAdminInvalidate: true },
     onSuccess: () => {
       setReply('');
       refresh();

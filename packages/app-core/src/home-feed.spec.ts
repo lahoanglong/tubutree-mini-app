@@ -66,6 +66,24 @@ describe('createHomeFeed', () => {
   });
 });
 
+describe('khối shippingOrders đã bỏ khỏi /home/me', () => {
+  // Đúng cho Mini đã phát hành chừng nào take() còn giữ nguyên như bản 45d9dab6d: Mini cũ đóng gói chính hàm này.
+  it('Mini cũ đã phát hành vẫn gọi takeMe(shippingOrders): thân mới không có khoá thì null để tự gọi /orders', async () => {
+    fetchMe.mockResolvedValue({ forYou: [{ id: 'p' }], activeOrderCount: { count: 0 } });
+    feed.arm();
+    expect(await feed.takeMe('shippingOrders' as never)).toBeNull();
+    expect(await feed.takeMe('forYou')).toEqual([{ id: 'p' }]);
+    expect(fetchMe).toHaveBeenCalledTimes(1);
+  });
+
+  it('/orders?status=SHIPPING&page=1&limit=1 không còn lấy từ khối gộp (null, đi request lẻ)', () => {
+    fetchMe.mockResolvedValue({ forYou: [] });
+    feed.arm();
+    expect(takeHomeRequest(feed, '/orders', { status: 'SHIPPING', page: 1, limit: 1 })).toBeNull();
+    expect(fetchMe).not.toHaveBeenCalled();
+  });
+});
+
 describe('takeHomeRequest (web)', () => {
   beforeEach(() => {
     fetchPublic.mockResolvedValue({ publicConfig: { freeshipThreshold: 1 }, flashActive: [{ id: 'f' }], campaigns: [{ id: 'c' }], combos: [{ id: 'cb' }] });
@@ -74,7 +92,6 @@ describe('takeHomeRequest (web)', () => {
       forYou: [{ id: 'p' }],
       activeOrderCount: { count: 2 },
       purchasedItems: { items: [], nextCursor: null },
-      shippingOrders: { data: [], total: 0 },
       newCustomerOffer: { eligible: true },
       wasteOpenRequestCount: 3,
     });
@@ -88,7 +105,6 @@ describe('takeHomeRequest (web)', () => {
     expect(await takeHomeRequest(feed, '/products/for-you', undefined)).toEqual([{ id: 'p' }]);
     expect(await takeHomeRequest(feed, '/orders/active-count', undefined)).toEqual({ count: 2 });
     expect(await takeHomeRequest(feed, '/me/purchased-items', { limit: 10 })).toEqual({ items: [], nextCursor: null });
-    expect(await takeHomeRequest(feed, '/orders', { status: 'SHIPPING', page: 1, limit: 1 })).toEqual({ data: [], total: 0 });
     expect(await takeHomeRequest(feed, '/me/new-customer-offer', undefined)).toEqual({ eligible: true });
     expect(await takeHomeRequest(feed, '/waste/me/open-count', undefined)).toEqual({ count: 3 });
     expect(fetchPublic).toHaveBeenCalledTimes(1);

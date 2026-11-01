@@ -1,0 +1,36 @@
+{
+ "first": {
+  "status": 200,
+  "sql": 10,
+  "select": 9,
+  "write": 0,
+  "stmts": [
+   "SELECT \"public\".\"referral_touches\".\"id\", \"public\".\"referral_touches\".\"userId\", \"public\".\"referral_touches\".\"referrerUserId\", \"public\".\"refer",
+   "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"aban",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\", COALESCE(\"aggr_selection_0_Ord",
+   "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FRO",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"publi",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCo",
+   " SELECT i.\"id\", i.\"variationId\", i.\"flashPrice\", i.\"quota\", i.\"soldCount\", i.\"perUserLimit\", s.\"endAt\", s.\"createdBy\", COALESCE(p.\"quantity\"",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"role\"::text FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET",
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"discountPct\" FROM \"public\".\"membership_tiers\" WHERE (\"public\".\"members",
+   "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs"
+  ]
+ },
+ "second": {
+  "status": 200,
+  "sql": 8,
+  "select": 7,
+  "write": 0,
+  "stmts": [
+   "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"aban",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\", COALESCE(\"aggr_selection_0_Ord",
+   "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FRO",
+   "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"publi",
+   "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCo",
+   " SELECT i.\"id\", i.\"variationId\", i.\"flashPrice\", i.\"quota\", i.\"soldCount\", i.\"perUserLimit\", s.\"endAt\", s.\"createdBy\", COALESCE(p.\"quantity\"",
+   "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"role\"::text FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET",
+   "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"discountPct\" FROM \"public\".\"membership_tiers\" WHERE (\"public\".\"members"
+  ]
+ }
+}

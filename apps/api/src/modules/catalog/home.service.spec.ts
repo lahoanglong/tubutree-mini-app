@@ -289,8 +289,8 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
     expect(r.forYou).toEqual([{ id: 'fy' }]);
     expect(catalog.getForYou).toHaveBeenCalledWith('u1', { seed: expect.stringMatching(/^\d{8}$/) });
     expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
-    expect(orders.list).toHaveBeenCalledWith('u1', { status: 'SHIPPING' }, 1, 1);
-    expect(r.shippingOrders).toEqual(page(['o1']));
+    expect(orders.list).not.toHaveBeenCalled();
+    expect(r).not.toHaveProperty('shippingOrders');
     expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1', {});
     expect(r.notifications).toEqual([{ id: 'n1' }]);
   });
@@ -333,14 +333,23 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
 });
 
 describe('HomeService.getForUser', () => {
-  it('khách chưa có đơn: không gọi kệ Mua lại, danh sách đơn đang giao; đầu ra như trước (rỗng)', async () => {
+  it('hasOrders lấy từ cùng câu đếm (mọi trạng thái, kể cả đã huỷ), không thêm câu SQL; câu đếm lỗi thì null để client tự hỏi /orders', async () => {
+    const { svc, prisma, factRows } = setup();
+    expect((await svc.getForUser('u1')).hasOrders).toBe(false);
+    prisma.$queryRaw.mockResolvedValue(factRows({ CANCELLED: 1 }));
+    expect((await svc.getForUser('u1')).hasOrders).toBe(true);
+    prisma.$queryRaw.mockRejectedValue(new Error('boom'));
+    expect((await svc.getForUser('u1')).hasOrders).toBeNull();
+  });
+
+  it('khách chưa có đơn: không gọi kệ Mua lại, không đọc danh sách đơn; đầu ra như trước (rỗng)', async () => {
     const { svc, purchased, orders, catalog } = setup();
     const r = await svc.getForUser('u1', 10);
     expect(purchased.list).not.toHaveBeenCalled();
     expect(orders.list).not.toHaveBeenCalled();
     expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: false, seed: expect.stringMatching(/^\d{8}$/) });
     expect(r.purchasedItems).toEqual({ items: [], nextCursor: null });
-    expect(r.shippingOrders).toEqual({ data: [], meta: { page: 1, limit: 1, total: 0 } });
+    expect(r).not.toHaveProperty('shippingOrders');
     expect(r.activeOrderCount).toEqual({ count: 0 });
     expect(r.purchasedLimit).toBe(10);
   });
@@ -350,7 +359,8 @@ describe('HomeService.getForUser', () => {
     prisma.$queryRaw.mockResolvedValue(factRows({ DELIVERED: 3, SHIPPING: 1, PENDING_PAYMENT: 2, CANCELLED: 4, RETURNED: 1 }));
     const r = await svc.getForUser('u1', 10);
     expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
-    expect(orders.list).toHaveBeenCalledWith('u1', { status: 'SHIPPING' }, 1, 1);
+    expect(orders.list).not.toHaveBeenCalled();
+    expect(r).not.toHaveProperty('shippingOrders');
     expect(flashSale.listUpcoming).toHaveBeenCalledWith('u1');
     expect(r.activeOrderCount).toEqual({ count: 3 });
     expect(loyalty.getNewCustomerOffer).not.toHaveBeenCalled();

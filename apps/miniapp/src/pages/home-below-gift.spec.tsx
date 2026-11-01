@@ -27,7 +27,7 @@ vi.mock('../services/shop-api', () => ({
   fetchActiveFlashSales: mocks.fetchActiveFlashSales,
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getPublicConfig: mocks.getPublicConfig,
-  fetchOrders: vi.fn(),
+  fetchHasAnyOrder: vi.fn(),
   getCart: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications, getNewCustomerOffer: mocks.getNewCustomerOffer }));

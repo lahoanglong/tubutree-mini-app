@@ -57,34 +57,35 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
   const dead = row.deprecated === true;
   const { confirm, dialog } = useConfirm();
   const save = useMutation({
-    mutationFn: async () => {
-      let parsed: unknown;
-      if (isText) {
-        parsed = val;
-      } else {
-        try {
-          parsed = JSON.parse(val);
-        } catch {
-          throw new Error('JSON không hợp lệ');
-        }
-      }
-      if (isMoneyKey(row.key)) {
-        const ok = await confirm({
-          title: 'Xác nhận đổi cấu hình tiền/điểm',
-          message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\n${row.key === BONUS_TIERS_KEY ? APPLY_NOTE_BONUS_TIERS : APPLY_NOTE_DEFAULT}`,
-          confirmLabel: 'Lưu thay đổi',
-        });
-        if (!ok) return null;
-      }
-      return setConfig(row.key, parsed);
-    },
-    onSuccess: (res) => {
-      if (res === null) return;
+    mutationFn: (parsed: unknown) => setConfig(row.key, parsed),
+    onSuccess: () => {
       setErr(null);
       onSaved();
     },
     onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
   });
+  // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
+  const askSave = async () => {
+    let parsed: unknown;
+    if (isText) {
+      parsed = val;
+    } else {
+      try {
+        parsed = JSON.parse(val);
+      } catch {
+        return setErr('JSON không hợp lệ');
+      }
+    }
+    if (isMoneyKey(row.key)) {
+      const ok = await confirm({
+        title: 'Xác nhận đổi cấu hình tiền/điểm',
+        message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\n${row.key === BONUS_TIERS_KEY ? APPLY_NOTE_BONUS_TIERS : APPLY_NOTE_DEFAULT}`,
+        confirmLabel: 'Lưu thay đổi',
+      });
+      if (!ok) return;
+    }
+    save.mutate(parsed);
+  };
   return (
     <div className={`rounded-card border border-stone-200 p-3 ${dead ? 'border-dashed bg-stone-50' : 'bg-stone-0'}`}>
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -115,7 +116,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
           <button
             onClick={() => {
               setErr(null);
-              save.mutate();
+              void askSave();
             }}
             disabled={save.isPending}
             className="min-h-[44px] shrink-0 rounded-control bg-forest-600 px-3 py-1 text-sm text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500"
