@@ -19,8 +19,8 @@ export interface SectionHeaderProps {
   tone?: 'default' | 'promo';
   /** Đứng sau tiêu đề: `Countdown`, "12 mã". */
   trailing?: ReactNode;
-  /** Route của nền tảng đang chạy (web: đường dẫn web, không phải route Mini App). Nhãn mặc định "Xem tất cả". */
-  action?: { label?: string; to: string };
+  /** Route của nền tảng đang chạy (web: đường dẫn web, không phải route Mini App). Nhãn mặc định "Xem tất cả". `onPress` thay `to` ở chỗ đổi tab/mở sheet (không có route), kèm `spoken` làm tên đọc vì nhãn nhìn thấy ("Tất cả (14)") chưa đủ nghĩa. */
+  action?: { label?: string; to: string; onPress?: undefined; spoken?: undefined } | { label?: string; to?: undefined; onPress: () => void; spoken?: string };
   subtitle?: string;
   as?: 'h2' | 'h3';
 }
@@ -35,6 +35,25 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const promo = tone === 'promo';
   const actionLabel = action?.label ?? fillCopy('section.seeAll');
   const H = Heading as ElementType;
+  const actionStyle = {
+    flex: '0 0 auto',
+    minHeight: 44,
+    padding: 0,
+    textDecoration: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 2,
+    color: 'var(--color-text-brand)',
+    fontSize: 'var(--type-label-size)',
+    lineHeight: 'var(--type-label-lh)',
+    fontWeight: 600,
+  } as const;
+  const actionInner = (
+    <>
+      {actionLabel}
+      <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+    </>
+  );
   return (
     <div data-testid="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 'var(--section-header-h)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
@@ -74,27 +93,25 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
         </div>
         {trailing && <div style={{ flex: '0 0 auto' }}>{trailing}</div>}
       </div>
-      {action && (
+      {action && action.onPress && (
+        <button
+          type="button"
+          className="tubu-press"
+          aria-label={action.spoken ?? (action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title }))}
+          onClick={action.onPress}
+          style={{ ...actionStyle, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          {actionInner}
+        </button>
+      )}
+      {action && !action.onPress && (
         <Link
           href={action.to}
           className="tubu-press"
           aria-label={action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title })}
-          style={{
-            flex: '0 0 auto',
-            minHeight: 44,
-            padding: 0,
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 2,
-            color: 'var(--color-text-brand)',
-            fontSize: 'var(--type-label-size)',
-            lineHeight: 'var(--type-label-lh)',
-            fontWeight: 600,
-          }}
+          style={actionStyle}
         >
-          {actionLabel}
-          <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+          {actionInner}
         </Link>
       )}
     </div>

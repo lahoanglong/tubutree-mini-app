@@ -12,6 +12,7 @@ vi.mock('../../services/shop-api', () => ({
   fetchActiveFlashSales: mocks.fetchActiveFlashSales,
 }));
 
+import { shelf } from '@tubutree/app-core/merch/shelves';
 import { RECENTLY_VIEWED_MAX, recordRecentlyViewed } from '../../utils/recently-viewed';
 import { RecentlyViewedRail } from './recently-viewed-rail';
 
@@ -111,14 +112,17 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(tileOf('Sản phẩm A').querySelector('img')).toBeNull();
   });
 
-  it('hiện tối đa 20 thẻ (giới hạn của kho lưu)', () => {
-    for (let i = 0; i < RECENTLY_VIEWED_MAX + 5; i += 1) {
+  it('kho lưu giữ tối đa 20 món nhưng dải chỉ hiện 10 thẻ mới xem nhất (ngân sách kệ browse.recent)', () => {
+    expect(RECENTLY_VIEWED_MAX).toBeGreaterThan(shelf('browse.recent').maxItems);
+    for (let i = 0; i < 12; i += 1) {
       recordRecentlyViewed({ slug: `p${i}`, name: `SP ${i}`, thumbnail: null }, i);
     }
     renderRail();
     const region = screen.getByRole('region', { name: 'Đã xem gần đây' });
-    expect(region.querySelectorAll('button')).toHaveLength(RECENTLY_VIEWED_MAX);
-    expect(screen.getByRole('button', { name: `SP ${RECENTLY_VIEWED_MAX + 4}` })).toBeInTheDocument();
+    expect(region.querySelectorAll('button')).toHaveLength(10);
+    expect(screen.getByRole('button', { name: 'SP 11' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SP 2' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'SP 1' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'SP 0' })).toBeNull();
   });
 
@@ -127,6 +131,16 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     renderRail(<RecentlyViewedRail title="Xem lại" />);
     expect(screen.getByRole('region', { name: 'Xem lại' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Xem lại' })).toBeInTheDocument();
+  });
+
+  it('tiêu đề là h2 của SectionHeader (không có "Xem tất cả"), dải nằm trong Section browse-recent', () => {
+    recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null });
+    const { container } = renderRail();
+    const header = screen.getByTestId('section-header');
+    expect(header).toContainElement(screen.getByRole('heading', { level: 2, name: 'Đã xem gần đây' }));
+    expect(header.querySelector('button')).toBeNull();
+    expect(container.querySelector('section#browse-recent')).not.toBeNull();
+    expect(screen.getAllByRole('region')).toHaveLength(1);
   });
 });
 

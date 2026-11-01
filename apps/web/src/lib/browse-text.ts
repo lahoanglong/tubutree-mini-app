@@ -17,7 +17,7 @@ export function formatVndShort(amount: number): string {
 
 export const browseText = {
   title: 'Danh mục',
-  categoryChips: 'Đổi danh mục',
+  viewBrand: (brand: string) => `Xem trang thương hiệu ${brand}`,
   searchPlaceholder: 'Tìm sản phẩm...',
   searchLabel: 'Tìm sản phẩm',
   clearSearch: 'Xoá từ khoá',
@@ -32,7 +32,7 @@ export const browseText = {
   emptyBody: 'Tubu đang chuẩn bị thêm sản phẩm mới',
   loadMore: 'Xem thêm',
   categories: 'Danh mục',
-  sidebar: { all: 'Tất cả sản phẩm' },
+  sidebar: { all: 'Tất cả sản phẩm', moreBrands: 'Thêm', lessBrands: 'Thu gọn' },
   recentlyViewed: 'Đã xem gần đây',
   segments: {
     mom_baby: 'Cho mẹ & bé',
@@ -40,17 +40,7 @@ export const browseText = {
     skincare: 'Chăm sóc cá nhân',
     eco: 'Sống xanh',
   },
-  sortGroup: 'Sắp xếp',
-  sort: {
-    suggested: 'Gợi ý',
-    best_seller: 'Bán chạy',
-    newest: 'Mới nhất',
-    price_asc: 'Giá tăng',
-    price_desc: 'Giá giảm',
-  },
   resultCount: (n: number) => `${formatNumber(n)} sản phẩm`,
-  filterButton: 'Bộ lọc',
-  filterButtonCount: (n: number) => `Bộ lọc (${n})`,
   activeFilters: 'Đang lọc',
   removeFilter: (label: string) => `Bỏ lọc ${label}`,
   filtersIgnored: 'Bộ lọc nâng cao chưa dùng được lúc này — đang hiện mọi kết quả.',

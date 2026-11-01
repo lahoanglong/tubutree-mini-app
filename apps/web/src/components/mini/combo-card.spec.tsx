@@ -92,7 +92,7 @@ describe('ComboCard (web)', () => {
     const onAddAll = vi.fn();
     mount(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={onAddAll} />);
     expect(btn(/Thêm cả combo/)).toBeUndefined();
-    const b = btn('Combo tạm hết')!;
+    const b = btn('Combo tạm hết: Combo giặt sạch')!;
     expect(b.getAttribute('aria-disabled')).toBe('true');
     click(b);
     click(b);
@@ -100,11 +100,36 @@ describe('ComboCard (web)', () => {
     expect(text()).not.toContain('Tiết kiệm');
   });
 
+  it('giá cả bộ màu giá giảm khi có tiết kiệm, giá thường khi không có', () => {
+    const a = mount(<ComboCard {...base} items={items(3)} onAddAll={() => {}} />);
+    const priceOf = (t: string) => Array.from(document.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === t && e.children.length === 0)!;
+    expect(priceOf('337.300đ').style.color).toBe('var(--color-text-price-deal)');
+    a.unmount();
+    mount(<ComboCard {...base} comboTotal={374000} items={items(3)} onAddAll={() => {}} />);
+    expect(priceOf('374.000đ').style.color).toBe('var(--color-text-price)');
+  });
+
+  it('tạm hết: bỏ nhãn "Combo -n%" và giá gạch, giá không còn màu giảm; hai combo cùng hết hàng có tên nút khác nhau', () => {
+    const a = mount(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={() => {}} />);
+    expect(text()).not.toContain('Combo -');
+    expect(text()).not.toContain('374.000đ');
+    expect(Array.from(document.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === '337.300đ' && e.children.length === 0)!.style.color).toBe('var(--color-text-price)');
+    a.unmount();
+    mount(
+      <>
+        <ComboCard {...base} title="Combo A" items={[item(1, { stock: 'out' })]} onAddAll={() => {}} />
+        <ComboCard {...base} title="Combo B" items={[item(2, { stock: 'out' })]} onAddAll={() => {}} />
+      </>,
+    );
+    expect(btn('Combo tạm hết: Combo A')).toBeTruthy();
+    expect(btn('Combo tạm hết: Combo B')).toBeTruthy();
+  });
+
   it('hết hàng và đang busy: vẫn đọc "Combo tạm hết" (không spinner), vẫn không gọi; "Xem từng món" dùng được; đủ hàng thì nút thêm không aria-disabled', () => {
     const onAddAll = vi.fn();
     const onSeeItems = vi.fn();
     const a = mount(<ComboCard {...base} items={[item(1, { stock: 'out' })]} onAddAll={onAddAll} onSeeItems={onSeeItems} busy />);
-    const b = btn('Combo tạm hết')!;
+    const b = btn('Combo tạm hết: Combo giặt sạch')!;
     expect(b.getAttribute('aria-busy')).toBeNull();
     click(b);
     expect(onAddAll).not.toHaveBeenCalled();

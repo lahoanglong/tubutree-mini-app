@@ -7,13 +7,20 @@ import { syncServerClock } from '@tubutree/app-core/server-clock';
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), apiFetch: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest', useAuthRestoring: () => false }));
 vi.mock('./client-api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), apiFetch: mocks.apiFetch }));
 
-import { FlashSale } from '@/components/home/flash-sale';
+import { FlashSale as FlashSaleBlock } from '@/components/home/flash-sale';
+import { useHomeShelves } from '@/components/home/use-home-shelves';
 import { getActiveFlashSales, getBankQr } from './shop-client';
 import { useCountdown } from './use-countdown';
 import { useRemaining } from './use-remaining';
+
+/** Khối thật được nối như Trang chủ (dữ liệu và chống trùng đến từ `useHomeShelves`). */
+function FlashSale() {
+  const s = useHomeShelves('new');
+  return <FlashSaleBlock items={s.flash} loading={s.flashQuery.isLoading} error={s.flashQuery.error} onRetry={s.flashQuery.refetch} retrying={s.flashQuery.isFetching} />;
+}
 
 // Điện thoại nhanh 10 phút so với máy chủ: hết giờ vàng và hạn chuyển khoản phải tính theo giờ máy chủ.
 const PHONE_NOW = new Date('2026-10-18T10:00:00.000Z');
@@ -63,10 +70,11 @@ describe('Đồng hồ máy chủ cho giờ vàng và hạn chuyển khoản', (
   });
 
   it('thẻ giờ vàng ở trang chủ: suất còn 8 phút theo máy chủ vẫn có đồng hồ khi điện thoại nhanh 10 phút', async () => {
-    mocks.get.mockResolvedValue([item(endAtServerPlus(8))]);
+    // Khối Giờ vàng chỉ hiện từ 3 suất.
+    mocks.get.mockResolvedValue([item(endAtServerPlus(8)), { ...item(endAtServerPlus(8)), itemId: 'i2', productSlug: 'p2' }, { ...item(endAtServerPlus(8)), itemId: 'i3', productSlug: 'p3' }]);
     const r = render(<FlashSale />);
     for (let i = 0; i < 4; i += 1) await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(r.container.querySelector('[role="timer"]')?.getAttribute('aria-label')).toBe('Còn 0h 08m');
+    expect(r.container.querySelector('[role="timer"]')?.getAttribute('aria-label')).toMatch(/8 phút/);
     r.unmount();
   });
 });

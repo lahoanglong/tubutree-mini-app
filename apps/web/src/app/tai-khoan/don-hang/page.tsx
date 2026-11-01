@@ -29,7 +29,7 @@ import { loadErrorText } from '@/lib/error-text';
 const PAGE_LIMIT = 20;
 
 // Chỉ tab rỗng cần lưới món bán chạy: không kéo nó vào bundle đầu của trang.
-const BestSellerRail = dynamic(() => import('@/components/home/best-seller-rail').then((m) => m.BestSellerRail), { ssr: false });
+const BestSellerRail = dynamic(() => import('@/components/home/best-seller-rail').then((m) => m.BestSellerRailQuery), { ssr: false });
 
 /**
  * Tab gốc "Đơn hàng" như `orders.tsx` của Mini App: tab trạng thái (kèm Định kỳ) → thẻ đơn có ảnh, số món, "Mua lại" → kệ Mua lại

@@ -54,6 +54,22 @@ export const CATEGORIES: CategoryDTO[] = [
   { id: 'cat-coffee', parentId: null, name: 'Cà phê & Đồ uống', slug: 'ca-phe-do-uong', image: null, sortOrder: 6, productCount: 0 },
 ];
 
+/**
+ * Cây danh mục của API sau P3a (`GET /categories` trả cây + productCount): một gốc có hai con, một gốc lá. Tổng `productCount` của con
+ * khớp CATALOG (categoryIds của NRC, BINH_SUA, XA_PHONG, KEM) để số trên lưới khớp số danh mục.
+ */
+export const CATEGORY_TREE: CategoryDTO[] = [
+  {
+    id: 'cat-skin', parentId: null, name: 'Chăm sóc da', slug: 'cham-soc-da', image: null, sortOrder: 1, productCount: 2,
+    children: [
+      { id: 'cat-personal', parentId: 'cat-skin', name: 'Chăm sóc cá nhân', slug: 'cham-soc-ca-nhan', image: null, sortOrder: 1, productCount: 1, children: [] },
+      { id: 'cat-skincare', parentId: 'cat-skin', name: 'Chống nắng', slug: 'chong-nang', image: null, sortOrder: 2, productCount: 1, children: [] },
+    ],
+  },
+  { id: 'cat-cleaning', parentId: null, name: 'Tẩy rửa sinh học', slug: 'tay-rua-sinh-hoc', image: null, sortOrder: 2, productCount: 1, children: [] },
+  { id: 'cat-baby', parentId: null, name: 'Cho bé', slug: 'cho-be', image: null, sortOrder: 3, productCount: 1, children: [] },
+];
+
 export const SHIPPING_CODE = 'TUBU-SHIP-4B';
 export const EXTENDED_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating'] as const;
 
@@ -93,7 +109,9 @@ export function catalogHandler(opts: { legacy?: boolean } = {}) {
     const q = foldE2E(p.get('q') ?? '');
     const brands = (p.get('brand') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     const [min, max, rating] = [num('minPrice'), num('maxPrice'), num('minRating')];
-    const category = p.get('category');
+    const categoryId = p.get('category');
+    // Chọn danh mục cha thì lấy luôn sản phẩm của các con (API thật gộp con vào cha).
+    const family = categoryId ? [categoryId, ...(CATEGORY_TREE.find((c) => c.id === categoryId)?.children ?? []).map((c) => c.id)] : null;
     const segment = p.get('segment');
     const slugs = p.has('slugs') ? (p.get('slugs') ?? '').split(',').map((s) => s.trim()).filter(Boolean) : null;
     let rows = CATALOG.filter((x) => {
@@ -102,7 +120,7 @@ export function catalogHandler(opts: { legacy?: boolean } = {}) {
         (slugs === null || slugs.includes(x.slug)) &&
         (!q || foldE2E(x.name).includes(q)) &&
         (brands.length === 0 || brands.includes(x.brand)) &&
-        (!category || x.categoryIds.includes(category)) &&
+        (!family || x.categoryIds.some((id) => family.includes(id))) &&
         (!segment || x.forSegment.includes(segment)) &&
         (min == null || price >= min) &&
         (max == null || price <= max) &&
@@ -111,7 +129,11 @@ export function catalogHandler(opts: { legacy?: boolean } = {}) {
       );
     });
     const sort = p.get('sort');
-    if (sort === 'best_seller' && !opts.legacy) rows = [...rows].sort((a, b) => b.soldTotal - a.soldTotal || a.id.localeCompare(b.id));
+    // API trước P2 từ chối `best_seller_30d` (forbidNonWhitelisted): hub phải lùi về `best_seller`.
+    if (opts.legacy && sort === 'best_seller_30d') {
+      return reply(400, { statusCode: 400, message: ['sort must be one of the following values: best_seller, newest, price_asc, price_desc'], error: 'Bad Request' });
+    }
+    if ((sort === 'best_seller' || sort === 'best_seller_30d') && !opts.legacy) rows = [...rows].sort((a, b) => b.soldTotal - a.soldTotal || a.id.localeCompare(b.id));
     if (sort === 'price_asc') rows = [...rows].sort((a, b) => a.basePrice - b.basePrice || a.id.localeCompare(b.id));
     if (sort === 'price_desc') rows = [...rows].sort((a, b) => b.basePrice - a.basePrice || a.id.localeCompare(b.id));
     const page = Number(p.get('page') ?? 1);
@@ -141,7 +163,7 @@ function productDetail(slug: string): ProductDetail | undefined {
 
 export function mockDiscovery(
   api: MockApi,
-  opts: { legacy?: boolean; returning?: boolean; shipping?: boolean; subscription?: boolean; forYou?: ProductCard[] } = {},
+  opts: { legacy?: boolean; returning?: boolean; shipping?: boolean; subscription?: boolean; forYou?: ProductCard[]; tree?: boolean; emptyCategories?: boolean } = {},
 ): void {
   mockSession(api, makeUser({ id: 'user-4b', fullName: 'Khách Khám Phá' }));
   api.get('/products', catalogHandler(opts));
@@ -151,7 +173,7 @@ export function mockDiscovery(
   api.get('/products/:slug/bought-together', []);
   api.get('/products/:slug/reviews', { average: 0, count: 0, items: [] });
   api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
-  api.get('/categories', opts.legacy ? CATEGORIES.map(({ productCount: _p, ...c }) => c) : CATEGORIES);
+  api.get('/categories', opts.emptyCategories ? [] : opts.tree ? CATEGORY_TREE : opts.legacy ? CATEGORIES.map(({ productCount: _p, ...c }) => c) : CATEGORIES);
   api.get('/search/suggest', ({ call }) => suggestFor(call.query.get('q') ?? ''));
   api.get('/cart', EMPTY_CART);
   api.get('/flash-sales/active', []);

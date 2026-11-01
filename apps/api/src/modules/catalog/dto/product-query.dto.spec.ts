@@ -46,4 +46,16 @@ describe('ProductQuery (dự án 4b)', () => {
   it('field lạ vẫn bị từ chối — đây là lý do API trước 4b trả 400 cho tham số mới (miniapp phải tự lùi)', async () => {
     await expect(asQuery({ color: 'red' })).rejects.toThrow();
   });
+
+  describe('seed (Gợi ý hôm nay)', () => {
+    it('nhận ngày YYYYMMDD', async () => {
+      await expect(asQuery({ seed: '20261101' })).resolves.toMatchObject({ seed: '20261101' });
+    });
+    it.each(['2026-11-01', '1234567', 'abc', '20261399', ''])('từ chối seed rác %p', async (seed) => {
+      await expect(asQuery({ seed })).rejects.toBeDefined();
+    });
+    it('không truyền thì không có field seed', async () => {
+      expect(((await asQuery({})) as ProductQuery).seed).toBeUndefined();
+    });
+  });
 });

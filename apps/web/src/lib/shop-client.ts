@@ -18,6 +18,8 @@ export interface CartLine {
   slug: string;
   thumbnail: string | null;
   unitPrice: number;
+  /** Giá niêm yết trước sale và Giờ vàng: lớn hơn `unitPrice` thì dòng đang giảm (gạch giá, "Tiết kiệm"). API cũ chưa trả. */
+  listUnitPrice?: number | null;
   quantity: number;
   stock: number;
   total: number;
@@ -25,6 +27,8 @@ export interface CartLine {
   fulfiller?: LineFulfiller;
   /** Dòng đang tính giá Giờ vàng (`unitPrice` đã là giá Giờ vàng). API cũ chưa trả. */
   isFlash?: boolean;
+  /** Mốc hết Giờ vàng của dòng (ISO): có thì giỏ ghi "Kết thúc sau …" thay cho "Đã bán %". */
+  flashEndAt?: string | null;
   /** Phần trăm suất Giờ vàng đã bán (chỉ dòng Giờ vàng). */
   soldPct?: number | null;
   /** Số lượng vượt giới hạn mua Giờ vàng nên dòng tính giá thường: câu giải thích từ server. */

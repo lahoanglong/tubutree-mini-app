@@ -1,34 +1,31 @@
 'use client';
 
-import { Fragment, useLayoutEffect, useMemo, type ReactNode } from 'react';
-import Link from 'next/link';
+import { Fragment, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
-import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
-import { flashActiveQuery, flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
+import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { homeKeptOrder, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { categoryEntries } from '@/lib/browse-categories';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { armHomeFeed, disarmHomeFeed } from '@/lib/home-feed';
-import { homeText } from '@/lib/home-text';
 import { HomeRestoreHintContext } from '@/lib/home-restore-context';
 import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
+import { HubLayout } from '@/components/layouts/hub-layout';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { BestSellerRail } from './best-seller-rail';
 import { BrandJourney } from './brand-journey';
 import { CategoryRow } from './category-row';
 import { CommunityPreview } from './community-preview';
-import { FlashSale, UpcomingFlashSales } from './flash-sale';
+import { FlashSale } from './flash-sale';
 import { refreshHomeQueries } from './home-blocks';
 import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
@@ -40,15 +37,16 @@ import { SuggestFeed } from './suggest-feed';
 import { TodoStrip, useHomeTodoQueries } from './todo-strip';
 import { HomeSettlingSkeleton } from './home-settling';
 import { useHomeSettling, useStartedAsNew } from './use-home-settling';
-import { loadActiveFlashSales } from '@/lib/use-flash-sales';
-import { useBlockQuery } from './use-block-query';
 import { useHomeCustomerKind } from './use-home-customer-kind';
+import { useHomeShelves } from './use-home-shelves';
 
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
   bestSellers?: PageResponse<ProductCard>;
-  /** Trang 1 của lưới gợi ý (nguồn mặc định). */
+  /** Trang 1 của lưới gợi ý (chip "Tất cả"), xếp theo `suggestSeed`. */
   suggest?: PageResponse<ProductCard>;
+  /** Hạt giống ngày VN lúc dựng trang: client dùng lại đúng hạt giống này để dữ liệu dựng sẵn khớp khoá và lưới không đổi thứ tự sau hydrate. */
+  suggestSeed?: string;
   categories?: CategoryDTO[];
   brands?: { brand: string; count: number; slug?: string | null }[];
   /** Cấu hình công khai: khối "Quà khách mới" của khách vãng lai có ngay trong HTML server (không hiện sau hydrate làm Danh mục nhảy). */
@@ -104,32 +102,26 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Khung hình đầu là khách mới (HTML server): nội dung đã dựng đó ở lại khi sau đó mới biết còn phải chờ loại khách.
   const startedNew = useStartedAsNew(kind);
 
-  // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
-  const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
+  // Dữ liệu chung của các kệ hàng (Giờ vàng, Mua lại, Bán chạy nhất): cùng khoá query với khối nên không thêm request, chống trùng ở một chỗ.
+  const shelves = useHomeShelves(kind, { flash: initial.flash, bestSellers: initial.bestSellers });
   const categories = useQuery({ ...categoriesQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.categories ? { initialData: initial.categories } : {}) });
 
   // Lần mở đầu chưa biết loại khách: các khối dưới thẻ thành viên chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các
   // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
-  const flash = useQuery({
-    queryKey: flashActiveQuery(coreHttp).queryKey,
-    queryFn: loadActiveFlashSales,
-    staleTime: 30_000,
-    ...(initial.flash ? { initialData: initial.flash, initialDataUpdatedAt: 0 } : {}),
-  });
-  const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: authed, staleTime: 30_000 });
+  const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: phase !== 'loading', staleTime: 30_000 });
   const todo = useHomeTodoQueries();
   const settling = useHomeSettling(
     kind,
-    todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading,
     unavailable,
   );
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
-  // Chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới); khách cũ không nhận dải lỗi vì kệ họ không thấy.
-  const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
+  // API sập hẳn: kệ Bán chạy nhất (mọi loại khách đều thấy) lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi.
+  const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
-    settling: <HomeSettlingSkeleton />,
-    search: <SearchRow />,
+    settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} />,
+    search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && unavailable ? (
         <MemberCardUnavailable onRetry={() => void retrySession()} />
@@ -141,13 +133,20 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
+    // P11 (chiến dịch) và P15 (combo) nối dữ liệu; tới lúc đó hai khối rỗng và không giữ chỗ.
+    banner: null,
+    combos: null,
     shortcuts: <ShortcutGrid />,
-    purchased: <PurchasedRail restoring={restoring} />,
+    purchased: <PurchasedRail source="home_rail" restoring={restoring} exclude={shelves.flashSlugs} />,
     flash: (
-      <>
-        <FlashSale initial={initial.flash} />
-        <UpcomingFlashSales />
-      </>
+      <FlashSale
+        items={shelves.flash}
+        loading={shelves.flashQuery.isLoading}
+        error={shelves.flashQuery.error}
+        onRetry={shelves.flashQuery.refetch}
+        retrying={shelves.flashQuery.isFetching}
+        onExpire={shelves.onFlashEnd}
+      />
     ),
     categories: (
       <CategoryRow
@@ -156,71 +155,73 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         onSelect={(e) =>
           router.push(browseHref({ ...EMPTY_SEARCH_STATE, ...(e.kind === 'category' ? { category: e.key } : { segment: e.key }) }))
         }
+        onSeeAll={() => router.push(browseHref(EMPTY_SEARCH_STATE))}
       />
     ),
-    bestSellers: <BestSellerRail initial={initial.bestSellers} />,
+    bestSellers: (
+      <BestSellerRail
+        items={shelves.bestSellers}
+        ranks={shelves.bestSellerRanks}
+        loading={shelves.bestSellerQuery.isLoading}
+        error={shelves.bestSellerQuery.error}
+        onRetry={shelves.bestSellerQuery.refetch}
+        retrying={shelves.bestSellerQuery.isFetching}
+      />
+    ),
     journey: <BrandJourney initialBrands={initial.brands} />,
     community: <CommunityPreview />,
-    suggest: <SuggestFeed initial={initial.suggest} />,
+    suggest: <SuggestFeed initial={initial.suggest} seed={initial.suggestSeed} categories={categories.data ?? []} exclude={shelves.seen} />,
   };
 
-  // Giữ nội dung đã dựng cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết" (mạng chậm): bố cục "chưa biết" bỏ Bán chạy và dải quà,
-  // tới lúc biết là khách mới sẽ dựng lại, nội dung đã vẽ biến mất rồi hiện lại.
-  const order = startedNew && (settling || kind === 'unknown') ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
-  const nodes: ReactNode[] = [];
-  for (let i = 0; i < order.length; i++) {
-    const id = order[i]!;
-    // Từ md thẻ thành viên (hoặc dải quà) và Việc cần làm đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng.
-    if ((id === 'member' || id === 'welcome') && order[i + 1] === 'todo') {
-      nodes.push(
-        <div key={id} className="md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1">
-          <div data-home-block={id}>{blocks[id]}</div>
-          <div data-home-block="todo">{blocks.todo}</div>
-        </div>,
-      );
-      i++;
-      continue;
-    }
-    nodes.push(
-      <Fragment key={id}>
-        <div data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined}>
-          {blocks[id]}
-        </div>
-        {pageDown && id === 'search' && (
-          <div data-home-block="pageError">
-            <HomePageError error={bestSellers.error} retrying={bestSellers.isFetching} onRetry={() => refreshHomeQueries(qc)} />
-          </div>
-        )}
-      </Fragment>,
+  // HTML đầu đã là bố cục khách mới: giữ nguyên thứ tự đó suốt lượt xem này, cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết"
+  // (mạng chậm) lẫn khi đã biết là khách cũ (Mua lại chen dưới màn đầu, xem `homeKeptOrder`), để nội dung đã vẽ không biến mất hay bị đẩy xuống.
+  const order = startedNew ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
+  const wrap = (id: HomeRenderBlock) => (
+    <div key={id} data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined} style={id === 'search' || id === 'settling' ? undefined : BLOCK_GAP}>
+      {blocks[id]}
+    </div>
+  );
+  // Ô tìm (dính) đứng ngoài lưới: nó phải là con trực tiếp của trang thì `sticky` mới bám theo cuộn.
+  const head: readonly HomeRenderBlock[] = order.filter((id) => id === 'search');
+  // Máy tính (HubLayout): thẻ thành viên hoặc dải quà cùng Việc cần làm ở `aside`, banner bên trái nó, mọi khối còn lại bên dưới. Điện thoại giữ đúng thứ tự Mini.
+  const asideIds: readonly HomeRenderBlock[] = order.filter((id) => id === 'member' || id === 'welcome' || id === 'todo');
+  const hasBanner = order.includes('banner') && blocks.banner != null;
+  const rest = order.filter((id) => !head.includes(id) && !asideIds.includes(id) && !(hasBanner && id === 'banner'));
+  const body =
+    asideIds.length === 0 ? (
+      rest.map(wrap)
+    ) : (
+      <HubLayout
+        // Banner rỗng thì không vẽ khung (không chừa cột trống); khối vẫn đứng đầu `rest` đúng thứ tự.
+        banner={hasBanner ? wrap('banner') : undefined}
+        aside={
+          // Từ md hai khối đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng.
+          <div className="md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1">{asideIds.map(wrap)}</div>
+        }
+      >
+        {rest.map(wrap)}
+      </HubLayout>
     );
-  }
 
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
-      <HomeHeader unreadCount={unreadCount} />
-      {nodes}
+      {head.map((id) => (
+        <Fragment key={id}>
+          {wrap(id)}
+          {pageDown && id === 'search' && (
+            <div data-home-block="pageError">
+              <HomePageError error={shelves.bestSellerQuery.error} retrying={shelves.bestSellerQuery.isFetching} onRetry={() => refreshHomeQueries(qc)} />
+            </div>
+          )}
+        </Fragment>
+      ))}
+      {body}
     </HomeBlockErrorSuppressed.Provider>
   );
 }
 
-// Dính đầu trang khi cuộn ở điện thoại; từ md thanh đầu website đã có ô tìm nên trả về bình thường.
+// Header 56px dính đầu trang khi cuộn ở điện thoại; từ md thanh đầu website đã có ô tìm nên trả về bình thường.
 const STICKY_SEARCH = 'sticky top-0 z-20 -mx-4 bg-[var(--color-bg-canvas)] px-4 md:static md:mx-0 md:bg-transparent md:px-0';
 
-/**
- * Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chỉ ở điện thoại: từ md thanh đầu website
- * đã có ô tìm và chuông thông báo (HeaderBell), chuông điện thoại nằm ở HomeHeader.
- */
-function SearchRow() {
-  return (
-    <div className="flex items-center gap-2 pb-2 md:hidden">
-      <Link
-        href="/san-pham?focus=search"
-        aria-label={homeText.searchPlaceholder}
-        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition"
-      >
-        <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
-        <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>
-      </Link>
-    </div>
-  );
-}
+// Khoảng cách giữa các khối đặt ở vỏ khối (CS-05), khối con không tự đặt đệm trên/dưới. Khối rỗng (không dữ liệu) có lề sập qua nên không để lại khoảng trống.
+const BLOCK_GAP: CSSProperties = { marginTop: 'var(--space-block)' };

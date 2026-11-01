@@ -1,23 +1,27 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { ChevronRight } from 'lucide-react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { findCategory, chipScope } from '@tubutree/app-core/browse/category-tree';
+import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
+import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
 import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
 import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } from '../services/discovery-events';
 import { CartButton } from '../components/cart-button';
 import { PullToRefresh } from '../components/pull-to-refresh';
+import { ActiveFilters } from '../components/catalog/active-filters';
+import { BrowseHub } from '../components/catalog/browse-hub';
 import { CatalogGrid, CatalogGridSkeleton } from '../components/catalog/catalog-grid';
-import { CategoryChips } from '../components/catalog/category-chips';
-import { CategoryGrid } from '../components/catalog/category-grid';
+import { CategoryChipRow } from '../components/catalog/category-chip-row';
 import { FilterSheet } from '../components/catalog/filter-sheet';
+import { ListHeading } from '../components/catalog/list-heading';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
-import { ResultHeader } from '../components/catalog/result-header';
-import { SortChips } from '../components/catalog/sort-chips';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { Button } from '../components/ui/button';
+import { SortBar } from '../components/ui/sort-bar';
 import { SR_ONLY } from '../components/ui/sr-only';
-import { Heading, Text } from '../components/ui/text';
+import { Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { SearchField } from '../components/ui/search-field';
 import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
@@ -30,10 +34,12 @@ import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '../ut
 import { uniqueById } from '../utils/unique-by-id';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
-  CLEAR_SEARCH_PATCH, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseRoot, toCatalogQuery, type FilterDraft,
+  CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseHub, isBrowseRoot,
+  serializeSearchState, toCatalogQuery, withListMode, type FilterDraft, type SearchState, type TitleScope,
 } from '../utils/search-state';
 
-const PAGE_LIMIT = 30;
+/** Hàng ô tìm đo được 58px (ô 46px gồm viền + đệm dọc 6px mỗi phía): thanh sắp xếp dính ngay dưới nó (`--sort-bar-top`). */
+const SEARCH_ROW_HEIGHT = 58;
 
 // Ô tìm dính đầu trang khi cuộn (dưới vùng an toàn): khách đang xem lưới sâu vẫn tìm hoặc mở giỏ được mà không phải cuộn ngược lên.
 const STICKY_SEARCH: CSSProperties = {
@@ -43,26 +49,58 @@ const STICKY_SEARCH: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '12px 16px 8px',
+  padding: '6px 16px',
   background: 'var(--color-bg-canvas)',
 };
 
+const PAGE_STYLE = {
+  background: 'var(--color-bg-canvas)',
+  paddingBottom: 72,
+  '--sort-bar-top': `calc(var(--safe-top) + ${SEARCH_ROW_HEIGHT}px)`,
+} as CSSProperties;
+
+/** Đường dẫn của một trạng thái Danh mục, dùng khi MỞ MỚI từ hub (PUSH: Back về hub). */
+const browseHref = (patch: Partial<SearchState>) => `/browse?${serializeSearchState({ ...EMPTY_SEARCH_STATE, ...patch })}`;
+
 /**
- * Trang Danh mục / Tìm kiếm (spec 5b.2) — DS v2. Toàn bộ trạng thái (q, sắp xếp, lọc, danh mục,
- * phân khúc, thương hiệu) nằm trong URL (`useSearchState`, replace) → quay lại từ PDP giữ nguyên,
- * vị trí cuộn khôi phục theo khoá URL. Gõ chỉ hiện GỢI Ý; Enter / chạm gợi ý mới ghi `q`.
+ * Trang Danh mục / Tìm kiếm (spec 5b.2) — hai chế độ theo URL. Gốc `/browse` chưa tìm, chưa lọc, chưa `all=1` là HUB (ô danh mục,
+ * Đã xem, Bán chạy nhất, thương hiệu; KHÔNG tải danh sách). Có từ khoá, danh mục, bộ lọc, sắp xếp hoặc `all=1` là DANH SÁCH: thanh
+ * sắp xếp dính, một tiêu đề + số kết quả, chip danh mục con, lưới 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL
+ * (`useSearchState`, replace) → quay lại từ PDP giữ nguyên, vị trí cuộn khôi phục theo khoá URL. Từ hub chạm ô là PUSH (Back về hub).
+ * Gõ chỉ hiện GỢI Ý; Enter / chạm gợi ý mới ghi `q`.
  *
- * Khôi phục cuộn: `anchorRef` luôn được vẽ (không đặt sau điều kiện) và `ready` = trang 1 của danh sách
- * đã vẽ VÀ không đang ở chế độ gõ (gợi ý thay nội dung → trang ngắn, trình duyệt sẽ kẹp vị trí về gần 0
- * và lượt khôi phục duy nhất bị dùng mất). Vị trí đã lưu có thể sâu hơn trang 1 (khách đã bấm "Xem thêm"):
- * quay lại trong lúc cache React Query còn (gcTime mặc định 5 phút) thì MỌI trang đã tải vẫn hiện ngay
- * nên khôi phục đủ sâu; hết cache thì chỉ có trang 1 và trình duyệt kẹp vị trí về cuối trang 1 —
+ * Khôi phục cuộn: `anchorRef` luôn được vẽ (không đặt sau điều kiện) và `ready` = hub đã vẽ, hoặc trang 1 của danh sách đã vẽ, VÀ không
+ * đang ở chế độ gõ (gợi ý thay nội dung → trang ngắn, trình duyệt sẽ kẹp vị trí về gần 0 và lượt khôi phục duy nhất bị dùng mất).
+ * Vị trí đã lưu có thể sâu hơn trang 1 (khách đã bấm "Xem thêm"): quay lại trong lúc cache React Query còn (gcTime mặc định 5 phút)
+ * thì MỌI trang đã tải vẫn hiện ngay nên khôi phục đủ sâu; hết cache thì chỉ có trang 1 và trình duyệt kẹp vị trí về cuối trang 1 —
  * chấp nhận (không tải ngầm hàng loạt trang chỉ để cuộn).
  */
 export default function BrowsePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { state, urlKey, focusSearch, update, consumeFocus } = useSearchState();
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchRowRef = useRef<HTMLDivElement>(null);
+  const listTopRef = useRef<HTMLDivElement>(null);
+  const hubState = isBrowseHub(state);
+  /**
+   * Kéo về đầu danh sách (thanh sắp xếp vừa chạm thanh dính) nếu khách đang cuộn sâu hơn. Thanh sắp xếp dính nên khách đổi sắp xếp hay lọc
+   * ngay giữa lưới; lưới đổi sang khung chờ ngắn, trình duyệt kẹp vị trí về giữa trang và hai hàng đầu nằm khuất dưới hai thanh dính. Cuộn
+   * TRƯỚC khi ghi URL; đổi bằng replace nên hook khôi phục cuộn không tự đưa về đầu.
+   */
+  const scrollToListTop = () => {
+    const sentinel = listTopRef.current;
+    const stuck = searchRowRef.current;
+    const scroller = sentinel?.closest<HTMLElement>('.zaui-page');
+    if (!sentinel || !stuck || !scroller) return;
+    const delta = scrollDeltaToListTop(sentinel.getBoundingClientRect().top, stuck.getBoundingClientRect().bottom);
+    if (delta !== 0) scroller.scrollTop += delta;
+  };
+  /** Mọi thay đổi khi đã ở danh sách: ở lại danh sách (gỡ chip cuối, về "Phổ biến" không đẩy khách về hub) và về đầu danh sách. */
+  const updateList = (patch: Partial<SearchState>) => {
+    scrollToListTop();
+    update(withListMode(patch));
+  };
 
   // Ô nhập theo `q` của URL mỗi khi URL đổi từ ngoài (Back, chạm từ khoá) — đặt trong render, không qua effect.
   const [draft, setDraft] = useState(state.q);
@@ -90,11 +128,13 @@ export default function BrowsePage() {
   // Chỉ gợi ý khi khách đang gõ: vào thẳng /browse?q=… (link, Back) không được bắn request gợi ý.
   const suggest = useSuggest(editing ? draft : '');
 
+  // Hub không tải danh sách: `enabled` chặn cả lần tải đầu lẫn `refetch` tự động.
   const products = useInfiniteQuery({
     queryKey: ['products', 'browse', urlKey],
     queryFn: ({ pageParam }) => fetchCatalog(toCatalogQuery(state, pageParam, PAGE_LIMIT)),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    enabled: !hubState,
   });
   const firstPage = products.data?.pages[0];
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
@@ -118,11 +158,11 @@ export default function BrowsePage() {
   }, [state.q, urlKey, firstPage]);
 
   // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm);
-  // khách mới bấm vào ô trống vẫn thấy nguyên Danh mục/danh sách thay vì một trang trắng.
+  // khách mới bấm vào ô trống vẫn thấy nguyên hub/danh sách thay vì một trang trắng.
   const showSuggest = editing && (draft.trim() !== '' || recent.length > 0);
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: showSuggest });
 
-  const { anchorRef } = useScrollRestoration(urlKey, !showSuggest && list.length > 0);
+  const { anchorRef } = useScrollRestoration(urlKey, !showSuggest && (hubState || list.length > 0));
 
   const stopEditing = () => {
     setEditing(false);
@@ -138,9 +178,19 @@ export default function BrowsePage() {
     stopEditing();
     setDraft(t);
     if (t.length >= 2) setRecent(pushRecentSearch(t));
+    scrollToListTop();
     update({ q: t });
   };
+  const pickHubCategory = (e: CategoryEntry) => {
+    stopEditing();
+    navigate(browseHref(e.kind === 'category' ? { category: e.key } : { segment: e.key }));
+  };
+  // Từ hub (kể cả khi đang gõ gợi ý) là mở MỚI như chạm ô danh mục: PUSH, Back về hub. Trong danh sách thì đổi phạm vi bằng replace.
   const pickCategory = (e: CategoryEntry) => {
+    if (hubState) {
+      pickHubCategory(e);
+      return;
+    }
     stopEditing();
     update(e.kind === 'category' ? { category: e.key, segment: undefined, q: '' } : { segment: e.key, category: undefined, q: '' });
   };
@@ -155,25 +205,42 @@ export default function BrowsePage() {
   const applyFilters = (d: FilterDraft) => {
     for (const t of changedFilterTypes(state, d)) trackFilterApplied(t);
     setFiltersOpen(false);
-    update({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
+    updateList({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
   };
 
+  const hub = hubState;
   const root = isBrowseRoot(state);
-  const categoryName = state.category ? categories.categories.find((c) => c.id === state.category)?.name : undefined;
-  const chips = activeFilterChips(state, { categoryName, segmentName: state.segment ? segmentLabel(state.segment) : undefined });
+  const category = state.category ? findCategory(categories.categories, state.category) : null;
+  const categoryName = category?.name;
+  const segmentName = state.segment ? segmentLabel(state.segment) : undefined;
+  const scope = state.category ? chipScope(categories.categories, state.category) : null;
   const noResults = !products.isLoading && !products.isError && list.length === 0;
   // Đã chọn danh mục, phân khúc hoặc đúng một nhãn thì nói rõ đang xem gì; nhãn công khai có thêm lối sang trang nhãn.
   const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
   const brandSlug = singleBrand ? (brands.data?.find((b) => b.brand === singleBrand)?.slug ?? null) : null;
-  const filterHeading = state.q ? null : categoryName ?? (state.segment ? segmentLabel(state.segment) : null) ?? singleBrand;
-  const activeCategory = state.category ? { kind: 'category' as const, key: state.category } : state.segment ? { kind: 'segment' as const, key: state.segment } : null;
+  const listTitle = state.q ? null : categoryName ?? segmentName ?? singleBrand;
+  // Chỉ phạm vi đang làm tiêu đề (hiện đúng một lần) mới không lặp thành chip; có từ khoá thì tiêu đề nhường chỗ cho ô tìm. Danh mục không có
+  // trong cây (link cũ, đã xoá) không làm tiêu đề được: cây đã tải xong thì hiện chip "Danh mục" để khách thấy và gỡ được bộ lọc đó.
+  const titleScope: TitleScope | null = !listTitle ? null : categoryName ? 'category' : segmentName ? 'segment' : 'brand';
+  const chips = activeFilterChips(
+    state,
+    { categoryName: categoryName ?? (state.category && !categories.isLoading ? vi.browse.title : undefined), segmentName },
+    { titleScope },
+  );
 
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
-      <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
+    <Page className="page" style={PAGE_STYLE}>
+      <PullToRefresh
+        onRefresh={() =>
+          Promise.all([
+            hub ? queryClient.invalidateQueries({ queryKey: ['products', 'best-sellers'] }) : products.refetch(),
+            brands.refetch(),
+          ])
+        }
+      />
       <div ref={anchorRef} />
       <h1 style={SR_ONLY}>{vi.browse.title}</h1>
-      <div style={STICKY_SEARCH}>
+      <div ref={searchRowRef} data-testid="browse-search-row" style={STICKY_SEARCH}>
         <SearchField
           ref={inputRef}
           value={draft}
@@ -219,59 +286,71 @@ export default function BrowsePage() {
             setRecent([]);
           }}
         />
+      ) : hub ? (
+        <BrowseHub
+          entries={categories.entries}
+          categoriesLoading={categories.isLoading}
+          placeholderCount={categories.placeholderCount}
+          brands={brands.data}
+          onPickCategory={pickHubCategory}
+          onPickAll={() => navigate(browseHref({ all: true }))}
+          onPickBrand={(brand) => navigate(browseHref({ brands: [brand] }))}
+        />
       ) : (
         <>
-          {filterHeading && (
-            <div style={{ padding: '4px 16px 0' }}>
-              <Heading variant="title-lg" as="h2" style={{ overflowWrap: 'anywhere' }}>
-                {filterHeading}
-              </Heading>
-              {brandSlug && (
-                <button
-                  type="button"
-                  className="tubu-press"
-                  onClick={() => navigate(`/brand/${encodeURIComponent(brandSlug)}`)}
-                  style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                  <Text variant="label" tone="brand">
-                    {vi.browse.viewBrand(singleBrand!)}
-                  </Text>
-                  <ChevronRight size={16} aria-hidden style={{ color: 'var(--color-text-brand)' }} />
-                </button>
-              )}
+          <div ref={listTopRef} data-testid="browse-list-top" aria-hidden="true" />
+          <SortBar
+            sticky
+            value={sortTab(state.sort)}
+            options={browseSortOptions(state.sort, Boolean(state.q))}
+            onChange={(tab) => {
+              // Thanh sắp xếp chỉ hiện khi KHÔNG có gợi ý (ô trống, chưa có lịch sử): chạm là xong việc với ô tìm, không để "Hủy" kẹt thay giỏ.
+              leaveSearchField();
+              updateList({ sort: sortForTab(state.sort, tab as SortTab) });
+            }}
+            filterCount={activeFilterCount(state)}
+            onFilter={() => setFiltersOpen(true)}
+          />
+          <ListHeading
+            title={listTitle}
+            count={products.isError && list.length === 0 ? undefined : firstPage?.meta.total ?? 0}
+            isLoading={products.isLoading}
+          />
+          {brandSlug && !state.q && (
+            <div style={{ padding: '0 16px' }}>
+              <button
+                type="button"
+                className="tubu-press"
+                onClick={() => navigate(`/brand/${encodeURIComponent(brandSlug)}`)}
+                style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <Text variant="label" tone="brand">
+                  {vi.browse.viewBrand(singleBrand!)}
+                </Text>
+                <ChevronRight size={16} aria-hidden style={{ color: 'var(--color-text-brand)' }} />
+              </button>
             </div>
           )}
-          {activeCategory && <CategoryChips entries={categories.entries} active={activeCategory} onSelect={pickCategory} />}
-          {root && (
-            <CategoryGrid
-              entries={categories.entries}
-              isLoading={categories.isLoading}
-              placeholderCount={categories.placeholderCount}
-              onSelect={pickCategory}
+          {scope && state.category && (
+            <CategoryChipRow
+              parent={scope.parent}
+              chips={scope.chips}
+              activeId={state.category}
+              onSelect={(id) => {
+                leaveSearchField();
+                updateList({ category: id, segment: undefined });
+              }}
             />
           )}
-          {root && <RecentlyViewedRail />}
-          <SortChips
-            value={state.sort}
-            onChange={(sort) => {
-              // Chip chỉ hiện khi KHÔNG có gợi ý (ô trống, chưa có lịch sử): chạm chip là xong việc với ô tìm, không để "Hủy" kẹt thay giỏ.
-              leaveSearchField();
-              update({ sort });
-            }}
-          />
-          <ResultHeader
-            total={products.isError && list.length === 0 ? undefined : firstPage?.meta.total ?? 0}
-            isLoading={products.isLoading}
+          <ActiveFilters
             chips={chips}
-            filterCount={activeFilterCount(state)}
             filtersIgnored={firstPage?.filtersIgnored ?? false}
-            onOpenFilters={() => setFiltersOpen(true)}
             onPatch={(patch) => {
               leaveSearchField();
-              update(patch);
+              updateList(patch);
             }}
           />
-          <div style={{ padding: '0 16px 24px' }}>
+          <div style={{ padding: '8px 16px 24px' }}>
             {products.isLoading ? (
               <CatalogGridSkeleton count={6} />
             ) : products.isError && list.length === 0 ? (
@@ -282,7 +361,7 @@ export default function BrowsePage() {
                 heading={state.q ? vi.browse.noResultHeading(state.q) : root ? vi.browse.emptyHeading : vi.browse.noResultFiltered}
                 body={root ? vi.browse.emptyBody : vi.browse.noResultBody}
                 ctaLabel={root ? undefined : vi.browse.clearAll}
-                onCta={root ? undefined : () => update(CLEAR_SEARCH_PATCH)}
+                onCta={root ? undefined : () => updateList(CLEAR_SEARCH_PATCH)}
               />
             ) : (
               <>
@@ -322,9 +401,8 @@ export default function BrowsePage() {
               </>
             )}
           </div>
-          {/* Tìm/lọc không ra gì → vẫn cho khách lối đi tiếp ("Đã xem gần đây" tự ẩn khi chưa xem gì). Đặt NGOÀI
-              khối đệm 16px vì dải tự có đệm ngang; ở trang gốc dải đã hiện phía trên lưới. */}
-          {noResults && !root && <RecentlyViewedRail />}
+          {/* Tìm/lọc không ra gì → vẫn cho khách lối đi tiếp ("Đã xem gần đây" tự ẩn khi chưa xem gì). */}
+          {noResults && <RecentlyViewedRail />}
         </>
       )}
 

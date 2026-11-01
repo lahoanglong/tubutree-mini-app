@@ -39,6 +39,21 @@ describe('web home-feed', () => {
     expect(paths()).toContain('/flash-sales/active');
   });
 
+  it('gợi ý cá nhân kèm seed ngày VN vẫn lấy từ khối gộp, không thêm request lẻ', async () => {
+    armHomeFeed('u1');
+    expect(await coreHttp.get('/products/for-you', { query: { seed: '20261101' } })).toEqual([{ id: 'p' }]);
+    expect(paths()).toEqual(['/home/me?purchasedLimit=10']);
+  });
+
+  it('suất sắp mở của khách chưa đăng nhập đi request lẻ: không khởi động /home/me và không khoá định danh rỗng cho lần đăng nhập sau', async () => {
+    armHomeFeed(null);
+    expect(await coreHttp.get('/flash-sales/upcoming')).toBe('SINGLE');
+    expect(paths()).toEqual(['/flash-sales/upcoming']);
+    armHomeFeed('u1');
+    expect(await coreHttp.get('/products/for-you')).toEqual([{ id: 'p' }]);
+    expect(await coreHttp.get('/flash-sales/upcoming')).toEqual([]);
+  });
+
   it('khối gộp thiếu (null) hoặc /home lỗi: lùi về request lẻ', async () => {
     apiFetch.mockImplementation(async (path: string) => {
       if (path === '/home') throw new Error('404');

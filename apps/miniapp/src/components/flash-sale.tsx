@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
-import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
+import { useEffect, useId, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
+import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  fetchActiveFlashSales,
   fetchUpcomingFlashSales,
   setFlashReminder,
   cancelFlashReminder,
@@ -11,110 +11,169 @@ import {
 } from '../services/shop-api';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
+import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
+import { shelf } from '@tubutree/app-core/merch/shelves';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
-import { useFlashExpiry } from '../hooks/use-flash-expiry';
 import { useAuthStore } from '../store/auth';
 import { browserStorage } from '../utils/recently-viewed';
-import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { Skeleton } from './ui/skeleton';
 import { HomeBlockError } from './home/home-block-error';
-import { useBlockQuery } from './home/use-block-query';
-import { Badge } from './ui/badge';
+import { Countdown } from './ui/countdown';
+import { FlashSoldBar } from './ui/flash-sold-bar';
 import { Icon } from './ui/icon';
 import { ProductTile } from './ui/product-tile';
-import { ProgressBar } from './ui/progress-bar';
 import { RailCell, RailShell } from './ui/product-rail';
 import { rowKeyboardProps } from './ui/row-keyboard';
+import { SectionHeader } from './ui/section-header';
 import { Heading, Text } from './ui/text';
 
 const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
 
-/** Cuối thẻ Giờ vàng: 4 (cách giá) + 6 (thanh) + 2 + 16 (chữ đã bán). Luôn giữ chỗ để thẻ chưa bán được suất nào vẫn cao bằng thẻ khác. */
-const SOLD_FOOTER_HEIGHT = 28;
+/** Cuối thẻ Giờ vàng: 4 (cách giá) + 16 (thanh đã bán có chữ). Luôn giữ chỗ để mọi thẻ cùng kệ cao bằng nhau. */
+const SOLD_FOOTER_HEIGHT = 20;
 /** Cuối thẻ "Sắp diễn ra": 8 (cách giá) + 44 (nút nhắc). */
 const REMIND_FOOTER_HEIGHT = 52;
+const FLASH_SHELF = shelf('home.flash');
 
-function FlashSkeleton() {
+function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
   return (
-    <div data-testid="flash-sale-loading" aria-hidden="true" style={{ marginTop: 16, padding: '0 16px' }}>
-      <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
+    <div data-testid="flash-sale-loading" aria-hidden="true" style={{ padding: '0 16px' }}>
+      <Skeleton height={FLASH_SKELETON_HEIGHT + (withNextSlot ? FLASH_NEXT_SLOT_HEIGHT : 0)} radius="var(--radius-card)" />
     </div>
   );
 }
 
+export interface FlashSaleProps {
+  /** Suất đang chạy đã qua `composeHomeShelves` (chống trùng, tối đa 8); khối vẫn tự cắt theo `SHELVES` để dùng đúng cả khi gọi thẳng. */
+  items: FlashSaleActiveItem[];
+  /** Lần tải đầu của danh sách suất (không tính lúc tải lại sau lỗi). */
+  loading: boolean;
+  error?: unknown;
+  onRetry?: () => unknown;
+  retrying?: boolean;
+  /** Gọi khi đồng hồ về 0 (suất sớm nhất hết giờ): chỗ nối dữ liệu tính lại chống trùng để món hết giờ trở lại kệ khác. */
+  onExpire?: () => void;
+}
+
 /**
- * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
+ * Giờ vàng ở Trang chủ (Q3): tiêu đề promo + MỘT đồng hồ HH:MM:SS của suất sớm nhất còn giờ + "Xem tất cả", kệ ≤8 thẻ với thanh đã bán có chữ,
+ * dòng "suất kế" khi suất sau mở trong 6 giờ. Chỉ tính suất còn giờ: suất sớm nhất hết thì đồng hồ chuyển sang suất kế, hết mọi suất thì khối ẩn
+ * (không hiện 00:00:00). Dưới `minItems` thì ẩn cả khối (kệ mỏng không đáng một khối).
+ * Khối chờ suất sắp mở tải xong rồi mới hiện để dòng "suất kế" không đẩy khối bên dưới giữa chừng; lỗi tải suất sắp mở thì bỏ dòng, không báo lỗi.
  */
-export function FlashSale() {
-  const q = useBlockQuery(
-    useQuery({
-      queryKey: ['flash-sales', 'active'],
-      queryFn: fetchActiveFlashSales,
-      staleTime: 30_000,
-    }),
-  );
+export function FlashSale({ items, loading, error, onRetry, retrying, onExpire }: FlashSaleProps) {
+  const navigate = useNavigate();
+  const titleId = useId();
+  // Chờ khôi phục phiên xong rồi mới hỏi: hỏi sớm thì chưa có token nên đi request lẻ dù khách đã đăng nhập, trong khi khối gộp /home/me đã có sẵn.
+  const sessionReady = useAuthStore((s) => s.status !== 'loading');
+  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000, enabled: sessionReady });
 
-  const items = q.data ?? [];
-  // Một dòng phân loại dưới giá chỉ khi có thẻ cần; có thẻ cần thì mọi thẻ giữ chỗ để giá cùng kệ thẳng hàng.
-  const hasVariation = items.some((it) => Boolean(it.variationName));
-
-  // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
-  // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
+  // `expiredTick` tính lại ngay khi suất đang đếm về 0 (Countdown.onEnd): đồng hồ chuyển sang suất kế tiếp thay vì biến mất, thẻ hết giờ rời kệ.
   const [expiredTick, setExpiredTick] = useState(0);
-  const soonestEndAt = useMemo(() => {
+  const live = useMemo(() => {
     const now = serverNow();
-    const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
-    return live.length > 0 ? new Date(Math.min(...live)) : null;
+    return items.filter((it) => Date.parse(it.endAt) > now).slice(0, FLASH_SHELF.maxItems);
   }, [items, expiredTick]);
-
-  const timeLeft = useCountdown(soonestEndAt);
-  useEffect(() => {
-    if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
-  }, [soonestEndAt, timeLeft]);
+  const soonestEndAt = useMemo(() => live.reduce<string | null>((a, it) => (a === null || Date.parse(it.endAt) < Date.parse(a) ? it.endAt : a), null), [live]);
+  const visible = live.length >= FLASH_SHELF.minItems && soonestEndAt !== null;
+  const slot = useMemo(() => nextFlashSlot(upcoming.data ?? [], serverNow()), [upcoming.data, expiredTick]);
 
   // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
-  const [hadFlash] = useState(() => readFlashHint(browserStorage()));
-  const settledWithFlash = q.data !== undefined && !q.isLoading ? soonestEndAt !== null : null;
+  const [hint] = useState(() => ({ had: readFlashHint(browserStorage()), nextSlot: readFlashSlotHint(browserStorage()) }));
+  const settled = !loading && !error;
+  const hasSlot = slot !== null;
+  const slotKnown = !upcoming.isPending;
   useEffect(() => {
-    if (settledWithFlash !== null) writeFlashHint(browserStorage(), settledWithFlash);
-  }, [settledWithFlash]);
+    if (settled && (!visible || slotKnown)) writeFlashHint(browserStorage(), visible, hasSlot);
+  }, [settled, visible, slotKnown, hasSlot]);
 
-  if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
-  if (items.length === 0) {
-    return q.isError ? (
-      <HomeBlockError title={vi.flashSale.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />
-    ) : null;
+  if (loading || (visible && (!sessionReady || upcoming.isLoading))) return hint.had ? <FlashSkeleton withNextSlot={hint.nextSlot} /> : null;
+  if (items.length === 0 && error) {
+    return <HomeBlockError title={fillCopy('flash.title')} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
   }
+  if (!visible) return null;
 
+  const title = fillCopy('flash.title');
+  const seeAll = seeAllHref('home.flash');
   return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Heading variant="title-sm" as="h2" style={PROMO_TITLE_STYLE}>
-          <Icon icon={Zap} size="sm" tone="current" />
-          {vi.flashSale.sectionTitle}
-        </Heading>
-        {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
-        {timeLeft && (
-          <span role="timer" aria-label={vi.flashSale.endsIn(timeLeft)}>
-            <Badge tone="promo" icon={Clock}>
-              {vi.flashSale.endsIn(timeLeft)}
-            </Badge>
-          </span>
-        )}
+    <section aria-labelledby={titleId}>
+      <div style={{ padding: '0 16px' }}>
+        <SectionHeader
+          id={titleId}
+          title={title}
+          icon="zap"
+          tone="promo"
+          trailing={
+            <Countdown
+              endAt={soonestEndAt}
+              mode="clock"
+              onEnd={() => {
+                setExpiredTick((n) => n + 1);
+                onExpire?.();
+              }}
+            />
+          }
+          action={seeAll ? { to: seeAll } : undefined}
+        />
       </div>
-
-      <RailShell label={vi.flashSale.sectionName}>
-        {items.map((item) => (
+      <RailShell label={`${title}, vuốt ngang để xem thêm`}>
+        {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={hasVariation} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} />
           </RailCell>
         ))}
       </RailShell>
-    </div>
+      {slot && <NextSlotLine slot={slot} onOpen={seeAll ? () => navigate(seeAll) : undefined} />}
+    </section>
+  );
+}
+
+/**
+ * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. Chưa có trang đó (`onOpen` trống)
+ * thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới trang không có gì để nhắc là lạc.
+ */
+function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => void }) {
+  const label = (
+    <Text variant="body-sm" tone="secondary">
+      {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
+    </Text>
+  );
+  const frame: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    boxSizing: 'border-box',
+    width: 'calc(100% - 32px)',
+    minHeight: 44,
+    margin: '0 16px',
+    padding: 0,
+  };
+  if (!onOpen) return <div data-testid="flash-next-slot" style={frame}>{label}</div>;
+  return (
+    <button
+      type="button"
+      data-testid="flash-next-slot"
+      className="tubu-press"
+      onClick={() => {
+        haptic('light');
+        onOpen();
+      }}
+      style={{ ...frame, border: 'none', background: 'transparent', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer' }}
+    >
+      {label}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--color-text-brand)', fontSize: 'var(--type-label-size)', fontWeight: 600, flex: '0 0 auto' }}>
+        {fillCopy('flash.remind')}
+        <Icon icon={ChevronRight} size="sm" tone="current" />
+      </span>
+    </button>
   );
 }
 
@@ -143,9 +202,8 @@ function flashCardProduct(item: {
   };
 }
 
-/** Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" ở cuối. Về giá thường đúng mốc `endAt` dù danh sách chưa tải lại. */
+/** Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). */
 function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
-  useFlashExpiry(item.endAt);
   const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now: serverNow() });
   const soldPct = soldPercent(item.soldCount, item.quota);
   return (
@@ -160,14 +218,7 @@ function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
-          {soldPct > 0 && (
-            <>
-              <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel="Tỉ lệ đã bán" />
-              <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2, height: 16, lineHeight: '16px' }}>
-                {vi.flashSale.soldPct(soldPct)}
-              </Text>
-            </>
-          )}
+          <FlashSoldBar soldPct={soldPct} soldOut={item.quota > 0 && item.soldCount >= item.quota} />
         </div>
       }
     />

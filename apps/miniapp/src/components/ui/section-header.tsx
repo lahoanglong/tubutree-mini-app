@@ -17,8 +17,8 @@ export interface SectionHeaderProps {
   tone?: 'default' | 'promo';
   /** Đứng sau tiêu đề: `Countdown`, "12 mã". */
   trailing?: ReactNode;
-  /** Route của nền tảng đang chạy (Mini: route Mini App). Nhãn mặc định "Xem tất cả". */
-  action?: { label?: string; to: string };
+  /** Route của nền tảng đang chạy (Mini: route Mini App). Nhãn mặc định "Xem tất cả". `onPress` thay `to` ở chỗ đổi tab/mở sheet (không có route), kèm `spoken` làm tên đọc vì nhãn nhìn thấy ("Tất cả (14)") chưa đủ nghĩa. */
+  action?: { label?: string; to: string; onPress?: undefined; spoken?: undefined } | { label?: string; to?: undefined; onPress: () => void; spoken?: string };
   subtitle?: string;
   as?: 'h2' | 'h3';
 }
@@ -77,10 +77,11 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
         <button
           type="button"
           className="tubu-press"
-          aria-label={action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title })}
+          aria-label={action.spoken ?? (action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title }))}
           onClick={() => {
             haptic('light');
-            navigate(action.to);
+            if (action.onPress) action.onPress();
+            else navigate(action.to);
           }}
           style={{
             flex: '0 0 auto',

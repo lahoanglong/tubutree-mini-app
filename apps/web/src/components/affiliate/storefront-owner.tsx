@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Leaf, Plus, Share2, ShoppingBag } from 'lucide-react';
-import { OPEN_STOREFRONT_CTA, OPEN_STOREFRONT_PROMPT } from '@tubutree/app-core/storefront-signup';
+import { ChevronRight, Leaf, Plus, Share2, ShoppingBag } from 'lucide-react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuth } from '@/lib/auth-context';
 import { ui } from '@/lib/guest-ui';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -78,17 +78,20 @@ export function StorefrontEmpty({ referralCode }: { referralCode?: string | null
   );
 }
 
-/** Khách xem gian hàng CTV của người khác được mời mở gian hàng riêng; chủ gian hàng thì không cần. */
-export function OpenStorefrontCta({ referralCode }: { referralCode?: string | null }) {
+/** Khách xem gian hàng CTV của người khác thấy một dòng chữ phụ dẫn tới trang mở gian hàng, như Mini App; chủ gian hàng thì không cần. */
+export function LearnStorefrontLink({ referralCode }: { referralCode?: string | null }) {
   const owner = useIsStorefrontOwner(referralCode);
   if (owner) return null;
   return (
-    <section data-testid="open-storefront-cta" className="mt-8 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mx-4 max-md:mt-6">
-      <p className="text-sm font-semibold text-stone-900">{OPEN_STOREFRONT_PROMPT}</p>
-      <Link href="/ctv/gian-hang" className={`${ui.btnSecondary} mt-2.5 max-md:w-full`}>
-        {OPEN_STOREFRONT_CTA}
+    <p data-testid="learn-storefront" className="mt-6 text-center max-md:px-4">
+      <Link
+        href="/ctv/gian-hang"
+        className="tubu-press inline-flex min-h-11 items-center gap-0.5 text-[length:var(--type-caption-size)] leading-[var(--type-caption-lh)] text-[color:var(--color-text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
+      >
+        {fillCopy('shop.learnStore')}
+        <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
       </Link>
-    </section>
+    </p>
   );
 }
 

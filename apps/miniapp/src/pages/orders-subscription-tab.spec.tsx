@@ -31,7 +31,7 @@ vi.mock('../services/subscriptions-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('../components/home/best-seller-rail', () => ({ BestSellerRail: () => <div /> }));
+vi.mock('../components/home/best-seller-rail', () => ({ BestSellerRail: () => <div />, BestSellerRailQuery: () => <div /> }));
 
 import OrdersPage from './orders';
 

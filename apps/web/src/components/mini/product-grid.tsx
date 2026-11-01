@@ -25,6 +25,8 @@ export interface ProductGridProps {
   renderImageOverlay?: (product: ProductCardType, index: number) => ReactNode;
   /** Phần ngoài thẻ, ngay dưới thẻ trong cùng ô lưới (ghi chú của chủ gian hàng). */
   renderAfter?: (product: ProductCardType, index: number) => ReactNode;
+  /** Ghi chú trong thẻ (dưới giá). Có ít nhất một thẻ có ghi chú thì thẻ còn lại giữ chỗ dòng đó, cùng hàng vẫn thẳng giá. */
+  noteOf?: (product: ProductCardType, index: number) => string | undefined;
   onOpen?: (product: ProductCardType, index: number) => void;
 }
 
@@ -41,6 +43,7 @@ export function ProductGrid({
   priorityCount = 0,
   renderImageOverlay,
   renderAfter,
+  noteOf,
   onOpen,
 }: ProductGridProps) {
   if (loading) {
@@ -52,6 +55,8 @@ export function ProductGrid({
       </div>
     );
   }
+  const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
+  const reserveNote = notes?.some((n) => !!n) ?? false;
   return (
     <ul role="list" data-testid="catalog-grid" className={className} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
       {items.map((p, i) => (
@@ -64,6 +69,7 @@ export function ProductGrid({
               priority={i < priorityCount}
               showBrand={showBrand}
               showWishlist={showWishlist}
+              note={notes?.[i] || (reserveNote ? '' : undefined)}
               imageOverlay={renderImageOverlay?.(p, i)}
               onOpen={onOpen ? () => onOpen(p, i) : undefined}
             />

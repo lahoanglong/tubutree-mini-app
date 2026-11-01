@@ -24,7 +24,7 @@ export function BrandJourney() {
     navigate(to);
   };
   return (
-    <section aria-label={homeCopy.journey.title} style={{ padding: '8px 16px 8px' }}>
+    <section aria-label={homeCopy.journey.title} style={{ padding: '0 16px' }}>
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
         <button
           type="button"

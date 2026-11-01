@@ -10,6 +10,9 @@ export interface StorefrontItem {
     basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; sold?: number;
     inStock: boolean;
     createdAt?: string;
+    /** Phân loại đại diện / CTV ghim: "Thêm cả combo" cần một variationId cho mỗi món. */
+    repVariationId?: string;
+    pinnedVariationId?: string;
   };
 }
 export interface StorefrontItemEdit extends StorefrontItem {
@@ -30,7 +33,8 @@ export interface Storefront {
   title: string; headerNote: string | null;
   /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
   referralCode?: string | null;
-  ownerTier: { name: string; emoji: string } | null;
+  /** `publicBadge=false` ở bậc thấp nhất: trang công khai không khoe huy hiệu đó (API luôn gửi cờ này). */
+  ownerTier: { name: string; emoji: string; publicBadge: boolean } | null;
   avatarUrl: string | null; coverUrl: string | null; theme: string; themeColor?: string | null;
   bankName?: string | null; bankBin?: string | null; bankAccountNo?: string | null; bankAccountName?: string | null;
   warehouseAddress?: string | null; warehouseCity?: string | null; warehouseDistrict?: string | null; warehouseWard?: string | null; warehousePhone?: string | null;

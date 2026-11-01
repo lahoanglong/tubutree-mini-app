@@ -23,7 +23,13 @@ export function armHomeFeed(currentUserId: string | null | undefined): void {
   if (typeof window === 'undefined') return;
   userId = currentUserId ?? null;
   feed.arm();
-  setCoreGetInterceptor((path, query) => (feed.isArmed() ? takeHomeRequest(feed, path, query) : null));
+  setCoreGetInterceptor((path, query) => {
+    if (!feed.isArmed()) return null;
+    // Suất sắp mở là công khai: khách chưa có tài khoản đi request lẻ. Hỏi khối gộp sẽ khởi động `/home/me` (401) và khoá định danh rỗng,
+    // làm mọi khối cá nhân của lần đăng nhập ngay sau đó không còn khớp và phải gọi lẻ.
+    if (path === '/flash-sales/upcoming' && !userId) return null;
+    return takeHomeRequest(feed, path, query);
+  });
 }
 
 export function disarmHomeFeed(): void {

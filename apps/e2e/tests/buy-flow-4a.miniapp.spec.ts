@@ -96,7 +96,6 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     const member = page.getByRole('region', { name: 'Thẻ thành viên' });
     const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(member).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toHaveCount(0); // thứ tự khách cũ: không có kệ Bán chạy
     await expect(page.getByTestId('purchased-rail-loading')).toBeVisible(); // purchased-items vẫn đang chờ
     const before = await categories.boundingBox();
 

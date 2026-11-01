@@ -21,3 +21,17 @@ export function useFlashExpiry(endAt: string | undefined): void {
     return () => clearTimeout(id);
   }, [endAt]);
 }
+
+/** Như `useFlashExpiry` cho cả danh sách đợt đang chạy: vẽ lại đúng mốc kết thúc SỚM NHẤT; đợt đó hết thì danh sách còn lại hẹn mốc kế. */
+export function useFlashListExpiry(list: readonly { endAt?: string }[]): void {
+  let soonest: string | undefined;
+  let soonestMs = Infinity;
+  for (const f of list) {
+    const ms = f.endAt ? Date.parse(f.endAt) : NaN;
+    if (Number.isFinite(ms) && ms < soonestMs) {
+      soonestMs = ms;
+      soonest = f.endAt;
+    }
+  }
+  useFlashExpiry(soonest);
+}

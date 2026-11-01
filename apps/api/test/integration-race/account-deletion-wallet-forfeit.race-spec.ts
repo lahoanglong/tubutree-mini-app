@@ -128,6 +128,93 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     expect(events[0]).toMatchObject({ fromValue: '42000', toValue: '0', actorId: admin.id });
   });
 
+  describe('admin xoá dù khách chưa đồng ý bỏ số dư (overrideWalletBalance)', () => {
+    const reason = 'Khách đã thu hồi đồng ý trên Zalo, CSKH xác nhận';
+    const ov = (expectedWalletBalance: number) => ({ reason, expectedWalletBalance });
+
+    async function pendingRequest(balance: number) {
+      const u = await walletUser(balance);
+      const req = await prisma.accountDeletionRequest.create({ data: { userId: u.id } });
+      return { u, req };
+    }
+
+    it('không có ghi đè thì vẫn chặn; có ghi đè trừ đúng số dư, lưu dấu vết trên yêu cầu và sổ việc admin', async () => {
+      const { u, req } = await pendingRequest(42_000);
+      const blocked = await deletion.process(req.id, admin.id).catch((e: unknown) => e);
+      expect(blocked).toBeInstanceOf(BadRequestException);
+
+      await deletion.process(req.id, admin.id, undefined, ov(42_000));
+
+      const l = await ledger(u.id);
+      expect(l.user.walletBalance).toBe(0);
+      expect(l.sum).toBe(0);
+      const adjust = l.rows.filter((r) => r.type === 'ADJUST' && r.refType === 'ACCOUNT_DELETION');
+      expect(adjust).toHaveLength(1);
+      expect(adjust[0]).toMatchObject({ delta: -42_000, refId: req.id, balanceAfter: 0 });
+      const saved = await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: req.id } });
+      expect(saved).toMatchObject({
+        status: 'RESOLVED',
+        walletOverrideBy: admin.id,
+        walletOverrideReason: reason,
+        walletOverrideAmount: 42_000,
+      });
+      expect(saved.walletOverrideAt).toBeInstanceOf(Date);
+      const listed = (await deletion.list('RESOLVED')).find((r) => r.id === req.id);
+      expect(listed).toMatchObject({ walletOverrideBy: admin.id });
+      expect(listed && 'walletOverrideByName' in listed).toBe(true);
+      const events = await prisma.userAdminEvent.findMany({ where: { userId: u.id, kind: 'WALLET_FORFEIT' } });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ fromValue: '42000', toValue: '0', actorId: admin.id });
+    });
+
+    it('hai admin cùng bấm: chỉ một lần trừ Ví', async () => {
+      const { u, req } = await pendingRequest(30_000);
+      const results = await Promise.all([
+        deletion.process(req.id, admin.id, undefined, ov(30_000)),
+        deletion.process(req.id, admin.id, undefined, ov(30_000)),
+      ]);
+      expect(results.filter((r) => r.alreadyProcessed)).toHaveLength(1);
+      const l = await ledger(u.id);
+      expect(l.rows.filter((r) => r.refType === 'ACCOUNT_DELETION')).toHaveLength(1);
+      expect(l.user.walletBalance).toBe(0);
+      expect(l.sum).toBe(0);
+    });
+
+    it('Ví được cộng thêm đúng lúc xử lý: hoặc trừ đúng số admin đã xác nhận, hoặc 400 và không đổi gì', async () => {
+      const { u, req } = await pendingRequest(30_000);
+      const credit = prisma.$transaction((tx) =>
+        applyWalletDelta(tx, { userId: u.id, delta: 7_000, type: 'ADJUST', refType: 'IT', refId: `race-${randCode(8)}`, reason: 'cộng thử' }),
+      );
+      const [outcome] = await Promise.all([deletion.process(req.id, admin.id, undefined, ov(30_000)).catch((e: unknown) => e), credit]);
+      const l = await ledger(u.id);
+      const saved = await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: req.id } });
+      const forfeits = l.rows.filter((r) => r.refType === 'ACCOUNT_DELETION');
+      if (outcome instanceof BadRequestException) {
+        expect(outcome.getResponse()).toMatchObject({ code: 'ACCOUNT_DELETION_BLOCKED' });
+        expect(forfeits).toHaveLength(0);
+        expect(l.user.walletBalance).toBe(37_000);
+        expect(l.user.fullName).not.toBe(ANONYMIZED_NAME);
+        expect(saved.status).toBe('PENDING');
+        expect(saved.walletOverrideAmount).toBeNull();
+      } else {
+        expect(forfeits).toHaveLength(1);
+        expect(forfeits[0]!.delta).toBe(-30_000);
+        expect(saved.walletOverrideAmount).toBe(30_000);
+        expect(l.user.walletBalance).toBe(7_000);
+      }
+      expect(l.sum).toBe(l.user.walletBalance);
+    });
+
+    it('xác nhận số cũ khi Ví đã đổi từ trước: 400, không trừ', async () => {
+      const { u, req } = await pendingRequest(37_000);
+      const err = await deletion.process(req.id, admin.id, undefined, ov(30_000)).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      const l = await ledger(u.id);
+      expect(l.user.walletBalance).toBe(37_000);
+      expect(l.rows.filter((r) => r.refType === 'ACCOUNT_DELETION')).toHaveLength(0);
+    });
+  });
+
   it('số khách thấy khác số dư hiện tại hoặc chưa tick → lỗi, không tạo yêu cầu; bản cũ chỉ gửi lý do thì vẫn tạo yêu cầu nhưng không ghi đồng ý', async () => {
     const u = await walletUser(30_000);
     const stale = await users.requestAccountDeletion(u.id, undefined, consentFor(20_000)).catch((e: unknown) => e);

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -78,8 +78,9 @@ describe('ProductDetailPage — mã giảm giá trên trang sản phẩm (R2-BUY
       { code: 'GBUY-XP', type: 'AMOUNT', value: 11_250, minOrder: 63_750, maxDiscount: null, endAt: END, products: [{ id: 'p1', name: 'Xà phòng sả chanh' }] },
     ]);
     renderPdp();
-    expect(await screen.findByRole('button', { name: 'Sao chép mã XANH10' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sao chép mã GBUY-XP' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sao chép mã GBUY-CHIA' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /Ưu đãi/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mã giảm giá' });
+    const codes = within(dialog).getAllByTestId('voucher-code').map((el) => el.textContent);
+    expect(codes).toEqual(['XANH10', 'GBUY-XP']);
   });
 });

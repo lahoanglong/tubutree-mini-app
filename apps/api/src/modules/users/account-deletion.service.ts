@@ -47,6 +47,26 @@ export interface PartnerStoreBlockersPort {
   ownerPartnerBlockers(db: Db, ownerUserId: string, cfg: SettlementConfig): Promise<string[]>;
 }
 
+export const OVERRIDE_REASON_MIN = 10;
+export const OVERRIDE_REASON_MAX = 500;
+export interface WalletOverride {
+  reason: string;
+  /** Số dư Ví admin đã thấy và xác nhận trong hộp thoại; lệch với số dư dưới khoá thì không trừ. */
+  expectedWalletBalance: number;
+}
+
+/** Gạch mềm, ký tự độ rộng 0, BOM: bỏ khỏi lý do trước khi kiểm và lưu, để không chèn vào giữa số điện thoại mà lọt. */
+export const INVISIBLE_CHARS = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
+/**
+ * Số điện thoại Việt Nam: 0, 84, +84 hay (+84), đầu số 3/5/7/8/9, rồi 8 chữ số; giữa các nhóm cho phép khoảng trắng, chấm, gạch,
+ * gạch dưới, gạch chéo, ngoặc. Bắt cả số dính liền chữ ("sdt0912345678"). Lý do admin không được chứa vì nó không bị ẩn danh.
+ */
+export const PHONE_LIKE = /(?<!\d)(?:\(?\+?84\)?|0)[\s.\-_/()]*[35789](?:[\s.\-_/()]*\d){8}(?!\d)/u;
+/** Phần số ngẫu nhiên của mã đơn (TUBUSUB0912...) có thể trông như số điện thoại: bỏ mã đơn ra trước khi dò. */
+const ORDER_CODE = /TUBU[A-Z]*\d+/gi;
+export const containsPhone = (s: string) => PHONE_LIKE.test(s.replace(INVISIBLE_CHARS, '').replace(ORDER_CODE, ' '));
+export const codePoints = (s: string) => [...s].length;
+
 export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';
 
 type Db = Prisma.TransactionClient;
@@ -134,8 +154,14 @@ export class AccountDeletionService {
     const consents = new Map([...latestPending].map(([uid, r]) => [uid, r.walletForfeitAmount]));
     const windowDays = pendingUsers.length > 0 ? await this.returnWindowDays() : 7;
     const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, consents, windowDays, partnerCfg) : new Map();
+    const actorIds = [...new Set(requests.map((r) => r.walletOverrideBy).filter((x): x is string => !!x))];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true } })
+      : [];
+    const actorName = new Map(actors.map((a) => [a.id, a.fullName]));
     return requests.map((r) => ({
       ...r,
+      walletOverrideByName: r.walletOverrideBy ? (actorName.get(r.walletOverrideBy) ?? null) : null,
       user: byId.get(r.userId) ?? null,
       blockers: r.status === 'PENDING' ? (blockers.get(r.userId) ?? []) : [],
     }));
@@ -149,21 +175,36 @@ export class AccountDeletionService {
    * lúc tx này đã khoá đơn) cùng một lần cộng điểm đang giữ đơn mới đó thì lần ẩn danh đơn có thể chờ vòng (40P01). Lần
    * chạy lại khoá đủ đơn ngay từ đầu.
    */
-  async process(requestId: string, adminId: string, adminNote?: string) {
+  async process(requestId: string, adminId: string, adminNote?: string, override?: WalletOverride) {
+    let ov: WalletOverride | undefined;
+    if (override) {
+      const reason = typeof override.reason === 'string' ? override.reason.replace(INVISIBLE_CHARS, '').trim() : '';
+      const n = codePoints(reason);
+      if (n < OVERRIDE_REASON_MIN || n > OVERRIDE_REASON_MAX) {
+        throw new BadRequestException(`Lý do xoá dù còn tiền Ví phải từ ${OVERRIDE_REASON_MIN} đến ${OVERRIDE_REASON_MAX} ký tự.`);
+      }
+      if (containsPhone(reason)) {
+        throw new BadRequestException('Lý do không được chứa số điện thoại của khách (lý do không bị ẩn danh), hãy bỏ đi.');
+      }
+      if (!Number.isInteger(override.expectedWalletBalance) || override.expectedWalletBalance < 1) {
+        throw new BadRequestException('Thiếu số dư Ví đã xác nhận (expectedWalletBalance).');
+      }
+      ov = { reason, expectedWalletBalance: override.expectedWalletBalance };
+    }
     let result;
     try {
-      result = await this.processOnce(requestId, adminId, adminNote);
+      result = await this.processOnce(requestId, adminId, adminNote, ov);
     } catch (err) {
       if (!isRetryableTxError(err)) throw err;
       this.logger.warn(`Yêu cầu xoá ${requestId}: xung đột giao dịch (${(err as Error).message}), chạy lại một lần.`);
-      result = await this.processOnce(requestId, adminId, adminNote);
+      result = await this.processOnce(requestId, adminId, adminNote, ov);
     }
     // Bộ nhớ đệm phiên (SessionStateService, TTL 5 giây) còn coi chủ vừa bị ẩn danh là đang đăng nhập: cắt ngay như khoá tài khoản.
     this.sessions?.invalidate(result.userId);
     return result;
   }
 
-  private async processOnce(requestId: string, adminId: string, adminNote?: string) {
+  private async processOnce(requestId: string, adminId: string, adminNote?: string, override?: WalletOverride) {
     // Đọc cấu hình đối soát trước khi mở tx (SystemConfigService đọc qua pool, không đọc trong lúc giữ tx), như setUserRole.
     const partnerCfg = await this.partnerStores?.settlementConfig();
     const windowDays = await this.returnWindowDays();
@@ -192,7 +233,26 @@ export class AccountDeletionService {
       const now = new Date();
 
       if (user) {
-        const consents = new Map([[user.id, request.walletForfeitAmount]]);
+        // Ghi đè của admin chỉ bỏ blocker số dư DƯƠNG: coi như "đã đồng ý" đúng số dư vừa đọc dưới khoá FOR UPDATE; Ví âm và mọi blocker khác vẫn chặn.
+        const overrideReason = override?.reason;
+        const overriding = override !== undefined;
+        if (override) {
+          // Số dư đọc dưới khoá FOR UPDATE: cộng Ví chen vào giữa lúc admin xem hộp thoại và lúc bấm thì không được trừ số lớn hơn số đã xác nhận.
+          if (user.walletBalance !== override.expectedWalletBalance) {
+            const message = `Ví vừa đổi từ ${vnd(override.expectedWalletBalance)} thành ${vnd(user.walletBalance)}, tải lại và xác nhận lại`;
+            throw new BadRequestException({
+              statusCode: 400,
+              error: 'Bad Request',
+              code: ACCOUNT_DELETION_BLOCKED,
+              message,
+              blockers: [{ code: 'WALLET_BALANCE', message }],
+            });
+          }
+          if (request.walletForfeitAmount === user.walletBalance) {
+            throw new BadRequestException('Khách đã đồng ý bỏ số dư, dùng nút Xử lý.');
+          }
+        }
+        const consents = new Map([[user.id, overriding ? user.walletBalance : request.walletForfeitAmount]]);
         const blockers = (await this.collectBlockers(tx, [user], consents, windowDays, partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
           throw new BadRequestException({
@@ -203,7 +263,15 @@ export class AccountDeletionService {
             blockers,
           });
         }
-        if (user.walletBalance > 0) await this.forfeitWallet(tx, user.id, user.walletBalance, request, adminId);
+        if (user.walletBalance > 0) {
+          await this.forfeitWallet(tx, user.id, user.walletBalance, request, adminId, overriding ? overrideReason : undefined);
+          if (overriding) {
+            await tx.accountDeletionRequest.update({
+              where: { id: requestId },
+              data: { walletOverrideBy: adminId, walletOverrideAt: now, walletOverrideReason: overrideReason, walletOverrideAmount: user.walletBalance },
+            });
+          }
+        }
         await this.anonymize(tx, user.id, requestId, now);
       } else {
         this.logger.warn(`Yêu cầu xoá ${requestId}: không còn user ${request.userId}, chỉ đóng yêu cầu.`);
@@ -379,9 +447,12 @@ export class AccountDeletionService {
     balance: number,
     request: { id: string; walletForfeitConsentAt: Date | null },
     adminId: string,
+    overrideReason?: string,
   ) {
     const consentAt = request.walletForfeitConsentAt?.toISOString() ?? 'không rõ';
-    const reason = `Xoá tài khoản: khách đã đồng ý bỏ số dư Ví ${vnd(balance)} (đồng ý lúc ${consentAt}, yêu cầu ${request.id})`;
+    const reason = overrideReason
+      ? `Xoá tài khoản: admin xử lý dù khách chưa đồng ý bỏ số dư Ví ${vnd(balance)} (yêu cầu ${request.id}). Lý do admin: ${overrideReason}`
+      : `Xoá tài khoản: khách đã đồng ý bỏ số dư Ví ${vnd(balance)} (đồng ý lúc ${consentAt}, yêu cầu ${request.id})`;
     await applyWalletDelta(tx, {
       userId,
       delta: -balance,

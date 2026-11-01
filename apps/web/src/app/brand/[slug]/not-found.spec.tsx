@@ -17,11 +17,11 @@ afterEach(() => {
 
 // Cùng chữ và nút với màn 404 của `brand-view.tsx` ở Mini App.
 describe('/brand/[slug] — nhãn không có', () => {
-  it('báo "Không tìm thấy nhãn hàng", nói nhãn chưa công khai hoặc liên kết cũ, nút Xem Danh mục sang /san-pham', () => {
+  it('báo "Không tìm thấy thương hiệu", nói thương hiệu chưa công khai hoặc liên kết cũ, nút Xem Danh mục sang /san-pham', () => {
     const r = render(<BrandNotFound />);
     mounted.push(r);
-    expect(r.container.textContent).toContain('Không tìm thấy nhãn hàng');
-    expect(r.container.textContent).toContain('Nhãn này chưa được công khai hoặc liên kết đã cũ. Xem các nhãn khác trong Danh mục nhé.');
+    expect(r.container.textContent).toContain('Không tìm thấy thương hiệu');
+    expect(r.container.textContent).toContain('Thương hiệu này chưa được công khai hoặc liên kết đã cũ. Xem các thương hiệu khác trong Danh mục nhé.');
     expect(byText(r.container, 'button', 'Thử lại')).toBeNull();
     click(byText(r.container, 'button', 'Xem Danh mục'));
     expect(mocks.replace).toHaveBeenCalledWith('/san-pham');

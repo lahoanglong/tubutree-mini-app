@@ -50,6 +50,26 @@ describe('HomeHeader', () => {
   });
 });
 
+describe('HomeHeader — một hàng dính 56px (logo, ô tìm, chuông, giỏ)', () => {
+  it('cao đúng HOME_HEADER_HEIGHT, h1 là tên trang, ô tìm mở /browse?focus=search', () => {
+    wrap(<HomeHeader unreadCount={0} />);
+    expect(screen.getByTestId('home-header')).toHaveStyle({ height: '56px' });
+    expect(screen.getByRole('heading', { level: 1 })).toContainElement(screen.getByAltText('Tubu Tree'));
+    fireEvent.click(screen.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
+  });
+
+  it('ô tìm, chuông, giỏ cùng một hàng và đều có vùng chạm ≥44px', () => {
+    wrap(<HomeHeader unreadCount={0} />);
+    const row = screen.getByTestId('home-header');
+    for (const name of ['Bạn đang tìm gì hôm nay?', 'Thông báo', 'Giỏ hàng']) {
+      const btn = screen.getByRole('button', { name });
+      expect(row).toContainElement(btn);
+    }
+    expect(screen.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' })).toHaveStyle({ minHeight: '44px' });
+  });
+});
+
 describe('HomeBlockError', () => {
   it('trang đã có dải lỗi cấp trang (HomeBlockErrorSuppressed) → khối lỗi từng kệ ẩn, không xếp chồng', () => {
     const { container } = wrap(
