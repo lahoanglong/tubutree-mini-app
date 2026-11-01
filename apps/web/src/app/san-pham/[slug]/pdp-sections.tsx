@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Check, Star } from 'lucide-react';
+import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -21,13 +22,13 @@ export function PdpRating({ average, count }: { average: number | undefined; cou
   if (!count || count <= 0 || average == null) return null;
   return (
     <p data-testid="pdp-rating" className="flex items-center gap-1.5 text-sm text-stone-600">
-      <span role="img" aria-label={`${average.toFixed(1)} trên 5 sao`} className="flex">
+      <span role="img" aria-label={`${formatRating(average)} trên 5 sao`} className="flex">
         {[1, 2, 3, 4, 5].map((n) => (
           <Star key={n} aria-hidden="true" className={`h-3.5 w-3.5 ${n <= Math.round(average) ? 'fill-promo-solid text-promo-solid' : 'text-stone-300'}`} />
         ))}
       </span>
       <span>
-        {average.toFixed(1)} · {count} đánh giá
+        {formatRating(average)} · {count} đánh giá
       </span>
     </p>
   );

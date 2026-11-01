@@ -48,6 +48,7 @@ import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
@@ -615,7 +616,7 @@ export default function ProductDetailPage() {
               <>
                 <Stars value={ratingData.average} size={14} />
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                  {ratingData.average.toFixed(1)} · {ratingData.count} đánh giá
+                  {formatRating(ratingData.average)} · {ratingData.count} đánh giá
                 </Text>
               </>
             )}

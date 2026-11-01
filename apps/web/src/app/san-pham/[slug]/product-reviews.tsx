@@ -13,6 +13,7 @@ import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { Chip } from '@/components/mini/chip';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
@@ -233,7 +234,7 @@ export function ProductReviews({ slug }: { slug: string }) {
         <>
           <div className="mt-3 flex flex-wrap items-center gap-6">
             <div className="text-center">
-              <div className="font-display text-4xl font-semibold text-stone-900">{data.average.toFixed(1)}</div>
+              <div className="font-display text-4xl font-semibold text-stone-900">{formatRating(data.average)}</div>
               <Stars value={data.average} />
               <div className="text-xs text-stone-600">{data.count} đánh giá</div>
             </div>

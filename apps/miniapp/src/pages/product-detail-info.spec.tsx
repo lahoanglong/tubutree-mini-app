@@ -125,6 +125,8 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     });
     renderPdp();
     expect(await screen.findAllByTestId('quick-review')).toHaveLength(2);
+    // Điểm trung bình kiểu vi-VN ở hàng sao đầu trang (P2 #16): "4,4", không "4.4".
+    expect(screen.getByText('4,4 · 27 đánh giá')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả (27)' }));
     expect(scroll).toHaveBeenCalled();
   });

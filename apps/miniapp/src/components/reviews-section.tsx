@@ -14,6 +14,7 @@ import {
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
+import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
@@ -220,7 +221,7 @@ export function ReviewsSection({
           <div style={{ display: 'flex', gap: 16, marginTop: 12, alignItems: 'center' }}>
             <div style={{ textAlign: 'center', flex: '0 0 auto' }}>
               <Heading variant="display-lg" as="div">
-                {data.average.toFixed(1)}
+                {formatRating(data.average)}
               </Heading>
               <Stars value={data.average} size={13} />
               <Text variant="caption" tone="tertiary" as="div">

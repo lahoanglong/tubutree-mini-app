@@ -34,8 +34,8 @@ const card = (n: number) => ({ id: `p${n}`, slug: `sp-${n}`, brand: 'Xanh', name
 describe('PdpRating', () => {
   it('có đánh giá thì ghi điểm trung bình và số đánh giá, sao có tên truy cập', () => {
     const { container } = mount(<PdpRating average={4.5} count={8} />);
-    expect(container.textContent).toContain('4.5 · 8 đánh giá');
-    expect(container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('4.5 trên 5 sao');
+    expect(container.textContent).toContain('4,5 · 8 đánh giá');
+    expect(container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('4,5 trên 5 sao');
   });
   it('chưa có đánh giá thì không hiện', () => {
     expect(mount(<PdpRating average={0} count={0} />).container.innerHTML).toBe('');

@@ -128,7 +128,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('tiêu đề kèm số đánh giá, điểm trung bình, phân bổ sao và mọi đánh giá đang hiện; ảnh API ghép gốc API', async () => {
     const c = await mount();
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (3)');
-    expect(c.textContent).toContain('4.3');
+    expect(c.textContent).toContain('4,3');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.querySelector('[aria-label="Phân bổ số sao"]')?.textContent).toContain('5');
     expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);

@@ -249,7 +249,7 @@ describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
     const c = await mount();
     const section = c.querySelector('section#danh-gia')!;
     expect(section.querySelector('h2')?.textContent).toBe('Đánh giá (2)');
-    expect(section.textContent).toContain('4.5');
+    expect(section.textContent).toContain('4,5');
     expect(section.textContent).toContain('Gội êm');
     expect(section.textContent).toContain('Thơm nhẹ');
     const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Viết đánh giá')!;
@@ -448,7 +448,7 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     api.product = { ...PRODUCT, sold: 1250 };
     const c = await mount();
     expect(c.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
-    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4.5 · 8 đánh giá');
+    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4,5 · 8 đánh giá');
     expect(c.textContent).toContain('Đã bán 1,3k+');
   });
 
