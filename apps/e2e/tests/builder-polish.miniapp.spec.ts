@@ -69,3 +69,40 @@ test.describe('Nút Mini (G6 #25 #26 #27)', () => {
     expect(contrast(rgbOf(fg), rgbOf(bg)), `chữ ${fg} trên ${bg}`).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+test.describe('Màn dựng gian hàng Mini (G6 #28 #29 #30)', () => {
+  test.beforeEach(({ api }) => mockBuilder(api));
+
+  test('thanh dính đáy: "Xem trước" và nút chính bằng nhau, cao 44 như web', async ({ page }) => {
+    await openBuilder(page);
+    const bar = page.getByTestId('sticky-bar');
+    const [left, right] = await bar.locator('button').evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ w: r.width, h: r.height })));
+    expect(Math.abs(left!.w - right!.w), `rộng ${left!.w} và ${right!.w}`).toBeLessThanOrEqual(1);
+    expect(left!.h).toBeCloseTo(44, 0);
+    expect(right!.h).toBeCloseTo(44, 0);
+  });
+
+  test('thẻ hồ sơ: lề trong 16px (nút "Sửa hồ sơ" cách mép màn 16 + 16)', async ({ page }) => {
+    await openBuilder(page);
+    const box = (await page.getByRole('button', { name: 'Sửa hồ sơ', exact: true }).boundingBox())!;
+    expect(Math.abs(box.x - 32)).toBeLessThanOrEqual(1);
+  });
+
+  test('"Thêm ảnh bìa" là nút, mở sheet Hồ sơ gian hàng', async ({ page }) => {
+    await openBuilder(page);
+    await page.getByRole('button', { name: 'Thêm ảnh bìa' }).click();
+    await expect(page.getByText('Hồ sơ gian hàng').first()).toBeVisible();
+  });
+
+  test('chi tiết khối: một nút lùi duy nhất; "Bài đăng mẫu" nằm trong menu ⋯ của món', async ({ page }) => {
+    await openBuilder(page);
+    await page.locator('[data-testid="section-card"] button').filter({ hasText: 'Bếp xanh' }).first().click();
+    await expect(page.getByTestId('section-detail')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Gian hàng của tôi' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Quay lại', exact: true })).toHaveCount(1);
+    const row = page.getByTestId('item-row').first();
+    await expect(row.getByRole('button', { name: 'Bài đăng mẫu' })).toHaveCount(0);
+    await row.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }).click();
+    await expect(page.getByRole('button', { name: 'Bài đăng mẫu' })).toBeVisible();
+  });
+});
