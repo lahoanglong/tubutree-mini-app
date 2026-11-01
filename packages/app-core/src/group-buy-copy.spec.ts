@@ -32,8 +32,8 @@ describe('group-buy-copy', () => {
     expect(groupPriceLabels({ ...g, basePrice: 95000 }, fmt, undefined, NOW).solo).toBe('Giá hiện nay rẻ hơn: 95000đ');
   });
   it('dòng mã chỉ nói điều nhận được khi đủ nhóm: mức giảm và đơn tối thiểu (mặc định theo giá nhóm), không lẫn số người còn thiếu', () => {
-    expect(groupRewardLine({ discountPct: 15, unitPrice: 102000, minOrder: 90000 }, fmt)).toBe('Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ 90000đ');
-    expect(groupRewardLine({ discountPct: 15, unitPrice: 102000 }, fmt)).toBe('Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ 102000đ');
+    expect(groupRewardLine({ discountPct: 15, unitPrice: 102000, minOrder: 90000 }, fmt)).toBe('Đủ nhóm: mỗi người nhận mã giảm giá 15% cho đơn từ 90000đ');
+    expect(groupRewardLine({ discountPct: 15, unitPrice: 102000 }, fmt)).toBe('Đủ nhóm: mỗi người nhận mã giảm giá 15% cho đơn từ 102000đ');
   });
   it('dòng còn thiếu là ý riêng; đủ người rồi thì không có dòng', () => {
     expect(groupMissingLine({ targetSize: 5, currentSize: 2 })).toBe('Còn thiếu 3 người');

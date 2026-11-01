@@ -152,7 +152,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
               {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; chip phân loại và Số lượng nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
               <div data-section="pdp-offers" className={`mt-3 max-md:order-3 max-md:mt-2 ${phoneBandPad} max-md:empty:hidden`}>
-                <PdpCoupons productId={product.id} />
+                <PdpCoupons productId={product.id} divider={Boolean(fulfillerText || !fromStore)} />
                 {(fulfillerText || !fromStore) && (
                   <PdpShippingRow pressable={!fromStore}>
                     {fulfillerText && (

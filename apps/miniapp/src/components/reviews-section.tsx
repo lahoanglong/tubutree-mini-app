@@ -32,10 +32,16 @@ import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
 
 
+/**
+ * Tên đọc của dải sao. 'avg' (mặc định): điểm trung bình, đọc đúng số đang hiện ("4,4", "5,0") như PdpRating.
+ * 'score': điểm một khách chấm, số nguyên 1..5 nên đọc "5" chứ không "5,0".
+ */
+const starsSpoken = (value: number, spoken: 'avg' | 'score'): string => (spoken === 'score' ? String(value) : formatRating(value) || String(value));
+
 /** Dải sao tĩnh (hiển thị) — size tùy chỉnh. */
-export function Stars({ value, size = 14 }: { value: number; size?: number }) {
+export function Stars({ value, size = 14, spoken = 'avg' }: { value: number; size?: number; spoken?: 'avg' | 'score' }) {
   return (
-    <span role="img" aria-label={`${value} trên 5 sao`} style={{ display: 'inline-flex', whiteSpace: 'nowrap', lineHeight: 1 }}>
+    <span role="img" aria-label={`${starsSpoken(value, spoken)} trên 5 sao`} style={{ display: 'inline-flex', whiteSpace: 'nowrap', lineHeight: 1 }}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
@@ -292,7 +298,7 @@ export function ReviewsSection({
                         </Badge>
                       )}
                     </div>
-                    <Stars value={r.rating} size={11} />
+                    <Stars value={r.rating} size={11} spoken="score" />
                   </div>
                   <Text variant="caption" tone="tertiary">
                     {formatDate(r.createdAt)}

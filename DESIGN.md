@@ -37,7 +37,7 @@ Chỉ nêu token dùng cho mua sắm; danh sách đầy đủ ở `packages/desi
 | `--color-flash-fg` | chữ cam của khối Giờ vàng |
 | `--color-countdown-bg`, `--color-countdown-fg` | ô số đồng hồ Giờ vàng (nền tối, chữ sáng) |
 | `--color-voucher-bg`, `--color-voucher-fg`, `--color-voucher-edge`, `--color-voucher-stub-bg`, `--color-voucher-stub-fg` | phiếu mã giảm giá |
-| `--color-bg-media`, `--color-bg-cover`, `--color-bg-chip`, `--color-track` | nền ô ảnh, bìa shop chưa có ảnh, chip chưa chọn, rãnh thanh tiến độ |
+| `--color-bg-media`, `--color-bg-cover`, `--color-bg-chip`, `--color-track`, `--color-progress-fill-from` | nền ô ảnh, bìa shop chưa có ảnh, chip chưa chọn, rãnh thanh tiến độ, đầu dải màu của phần đã đầy (hai app cùng token) |
 | `--tile-w-sm` (128px), `--tile-w-md` (148px) | hai bề rộng thẻ kệ duy nhất |
 | `--type-price-tile-size`, `--type-price-tile-lh`, `--type-price-tile-weight` | giá trên thẻ: 16px, 1,25, 700 |
 | `--space-block` (16px), `--space-section` (24px) | khoảng giữa hai khối ở màn danh sách và ở màn nội dung |

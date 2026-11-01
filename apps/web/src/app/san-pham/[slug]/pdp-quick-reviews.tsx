@@ -43,7 +43,7 @@ export function PdpQuickReviews({ slug }: { slug: string }) {
         {picked.map((r) => (
           <li key={r.id} data-testid="quick-review" className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5">
-              <Stars value={r.rating} small />
+              <Stars value={r.rating} small spoken="score" />
               <span className="text-xs text-stone-500">{r.author}</span>
             </div>
             <p className="line-clamp-3 text-sm text-stone-800">{r.comment}</p>
