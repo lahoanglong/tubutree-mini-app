@@ -1265,6 +1265,20 @@ describe('Màn dựng theo khối (P10)', () => {
         expect(here()).toBe('/storefront');
       });
 
+      it('?khoi= cũ (khối đã xoá) rồi mở khối khác: "Gian hàng của tôi" về danh sách, không kẹt và không rời màn dựng', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        router.go('/storefront?khoi=khong-co', { replace: true });
+        renderPage();
+        await openSection(/^Bộ hai,/);
+        // Đang ở danh sách (dù địa chỉ còn ?khoi= cũ) nên mở khối là đẩy mục mới, không thay mục danh sách.
+        expect(router.stack).toHaveLength(2);
+        expect(here()).toBe('/storefront?khoi=c2');
+        fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(screen.queryByTestId('section-detail')).not.toBeInTheDocument();
+        expect(router.idx).toBe(0);
+      });
+
       it('?khoi= trỏ tới khối không còn: hiện danh sách khối', async () => {
         mocks.getMyStorefront.mockResolvedValue(three());
         router.go('/storefront?khoi=khong-co', { replace: true });

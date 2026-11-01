@@ -370,7 +370,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     lastOpened.current = id;
     setItemSort(false);
     // Mục lịch sử mới có đánh dấu để đóng lại bằng lùi một bước; không có `from` nên nút lùi nổi cũng chỉ lùi về đúng danh sách.
-    navigate(sectionHref(location.pathname, id), { replace: sectionId !== null, state: { builderSection: true } });
+    // Chỉ thay mục khi đang ở một trang chi tiết thật (giữ dấu của nó). Địa chỉ còn `?khoi=` của khối đã xoá vẫn đang hiện danh sách:
+    // thay mục đó rồi đánh dấu sẽ làm "Gian hàng của tôi" lùi ra ngoài màn dựng.
+    navigate(sectionHref(location.pathname, id), sectionCol !== null ? { replace: true, state: location.state } : { state: { builderSection: true } });
   };
   function closeSection() {
     setItemSort(false);
