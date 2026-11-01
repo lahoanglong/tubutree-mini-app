@@ -111,6 +111,21 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
     expect(region(c, 'Mua lại')).not.toBeNull();
   });
 
+  it('Mua lại bỏ phân loại đang Giờ vàng mà kệ không vẽ thẻ riêng (phân loại thứ hai của cùng sản phẩm), vẫn giữ món khác (H3 #2)', async () => {
+    const flashItem = (slug: string, variationId: string) => ({
+      itemId: `i-${variationId}`, variationId, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: null,
+      retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    const bought = (slug: string, variationId: string, productName: string) => ({ variationId, productId: `p-${slug}`, slug, productName, variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' });
+    routes['/flash-sales/active'] = () => [flashItem('a', 'v-a-1l'), flashItem('b', 'v-b'), flashItem('c', 'v-c'), flashItem('a', 'v-a-5l')];
+    routes['/me/purchased-items'] = () => ({ items: [bought('a', 'v-a-5l', 'Đã mua Can 5L'), bought('x', 'v-x', 'Đã mua món khác')], nextCursor: null });
+    const c = await mount();
+    const rail = region(c, 'Mua lại');
+    expect(rail).not.toBeNull();
+    expect(rail!.textContent).toContain('Đã mua món khác');
+    expect(rail!.textContent).not.toContain('Đã mua Can 5L');
+  });
+
   it('khách cũ đã được nhớ: ngay từ khung hình đầu đã theo thứ tự returning, dù purchased-items còn tải', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     routes['/me/purchased-items'] = () => new Promise(() => undefined);

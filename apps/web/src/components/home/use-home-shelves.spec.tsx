@@ -119,6 +119,23 @@ describe('useHomeShelves (web)', () => {
     expect(rail.map((p) => p.slug)).toEqual(['q']);
   });
 
+  it('9 sản phẩm Giờ vàng, kệ chỉ vẽ 8: sản phẩm bị cắt khỏi kệ không nằm trong tập loại trừ, khách đã mua nó vẫn thấy ở Mua lại (H3 #2)', async () => {
+    const slugs = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9'];
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [...slugs.map(flashItem), flashItem('f1', 90)];
+      if (path.startsWith('/products')) return { data: ['x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 3 } };
+      if (path.includes('purchased')) return { items: [{ ...purchased('f9'), variationId: 'v8' }, purchased('q')], meta: { page: 1, limit: 10, total: 2 } };
+      return [];
+    });
+    const s = await mount('returning');
+    expect(s.flash.map((f) => f.productSlug)).toEqual(slugs.slice(0, 8));
+    // flashItem(slug, i) dùng variationId `v${i}`: f9 là v8 (bị cắt), f1 thứ hai là v90 (cùng sản phẩm đang vẽ).
+    expect(s.flashVariationIds.has('v8')).toBe(false);
+    expect(s.flashVariationIds.has('v7')).toBe(true);
+    expect(s.flashVariationIds.has('v90')).toBe(true);
+    expect(s.flashVariationIds.size).toBe(9);
+  });
+
   it('suất của phân loại thứ hai đã quá giờ thì không nằm trong tập loại trừ dù sản phẩm vẫn ở Giờ vàng bằng phân loại còn hạn (H3 #2)', async () => {
     const gone = new Date(Date.now() - 1000).toISOString();
     mocks.get.mockImplementation(async (path: string) => {

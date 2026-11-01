@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(),
+  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchProducts: vi.fn(), fetchCombos: vi.fn(),
   status: 'authenticated', subs: true,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -14,8 +14,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
-  fetchActiveFlashSales: mocks.fetchActiveFlashSales,
+  fetchActiveFlashSales: mocks.fetchActiveFlashSales, fetchProducts: mocks.fetchProducts,
 }));
+vi.mock('../../services/bundle-api', () => ({ getHomeCombos: mocks.fetchCombos }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
@@ -25,6 +26,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 import { PURCHASED_HINT_KEY, purchasedSkeletonHeight } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { PurchasedRail } from './purchased-rail';
+import { useHomeShelves } from '../home/use-home-shelves';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
@@ -44,6 +46,8 @@ describe('PurchasedRail', () => {
     mocks.subs = true;
     mocks.status = 'authenticated';
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 12, total: 0 } });
+    mocks.fetchCombos.mockResolvedValue([]);
   });
 
   it('khách cũ: vùng "Mua lại" với thẻ SP + nhãn số lần đã mua', async () => {
@@ -386,5 +390,41 @@ describe('rebuyPricing / phân loại đã mua (B-146)', () => {
     await waitFor(() => expect(region).toHaveTextContent('50.000'));
     fireEvent.click(region.querySelector('.tubu-tile-link')!);
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
+  });
+});
+
+// Khách thấy gì ở Mua lại khi tập loại trừ do `useHomeShelves` dựng (đúng cách `pages/home.tsx` nối hai thứ), không chép lại phép lọc trong test (H3 #2).
+describe('PurchasedRail với tập loại trừ của useHomeShelves', () => {
+  const flashItem = (slug: string, variationId: string) => ({
+    itemId: `i-${variationId}`, variationId, productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5,
+    endAt: '2099-01-01T00:00:00.000Z',
+  });
+  const bought = (slug: string, variationId: string, productName: string) => ({ ...ITEM, variationId, slug, productName, variationName: null, timesBought: 1 });
+  function HomeRail() {
+    const shelves = useHomeShelves('returning');
+    return <PurchasedRail source="home_rail" excludeVariations={shelves.flashVariationIds} />;
+  }
+  const renderHomeRail = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    return render(<QueryClientProvider client={qc}><HomeRail /></QueryClientProvider>);
+  };
+
+  it('phân loại thứ hai của sản phẩm Giờ vàng (kệ chỉ vẽ một thẻ) không hiện ở Mua lại, món khác vẫn hiện', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([flashItem('a', 'v-a-1l'), flashItem('b', 'v-b'), flashItem('c', 'v-c'), flashItem('a', 'v-a-5l')]);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [bought('a', 'v-a-5l', 'Đã mua Can 5L'), bought('x', 'v-x', 'Đã mua món khác')], nextCursor: null });
+    renderHomeRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    expect(region).toHaveTextContent('Đã mua món khác');
+    expect(region).not.toHaveTextContent('Đã mua Can 5L');
+  });
+
+  it('sản phẩm thứ 9 của Giờ vàng bị kệ cắt (tối đa 8): khách đã mua nó vẫn thấy ở Mua lại, không biến khỏi cả trang', async () => {
+    const slugs = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9'];
+    mocks.fetchActiveFlashSales.mockResolvedValue(slugs.map((s) => flashItem(s, `v-${s}`)));
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [bought('f9', 'v-f9', 'Đã mua sản phẩm chín'), bought('f1', 'v-f1', 'Đã mua sản phẩm một')], nextCursor: null });
+    renderHomeRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    expect(region).toHaveTextContent('Đã mua sản phẩm chín');
+    expect(region).not.toHaveTextContent('Đã mua sản phẩm một');
   });
 });
