@@ -14,6 +14,8 @@ import { HomeBanner } from './home-banner';
 import { HomeCombos } from './home-combos';
 
 const DAY = 86_400_000;
+// Lượt vẽ băng chuyền đầu tiên của file chậm hẳn khi máy chạy nhiều bộ test cùng lúc (đã vượt 3s ở tải ~110): chờ lâu hơn mức chung.
+const SLOW = { timeout: 5000 };
 const camp = (id: string, over: Partial<CampaignBanner> = {}): CampaignBanner => ({
   id,
   slug: id,
@@ -52,7 +54,7 @@ describe('HomeBanner — banner chiến dịch của Trang chủ', () => {
   it('hai chiến dịch: vùng "Chương trình nổi bật", nút Dừng tự chuyển chưa bấm, mỗi slide đọc tên và vị trí', async () => {
     mocks.fetchHome.mockResolvedValue([camp('a'), camp('b')]);
     renderBanner();
-    expect(await screen.findByRole('region', { name: 'Chương trình nổi bật' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Chương trình nổi bật' }, SLOW)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dừng tự chuyển' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('group', { name: 'Chiến dịch a, 1 trên 2' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Chiến dịch b, 2 trên 2' })).toBeInTheDocument();
@@ -61,28 +63,28 @@ describe('HomeBanner — banner chiến dịch của Trang chủ', () => {
   it('một chiến dịch: không nút Dừng, không chấm chuyển slide', async () => {
     mocks.fetchHome.mockResolvedValue([camp('a')]);
     renderBanner();
-    expect(await screen.findByRole('region', { name: 'Chương trình nổi bật' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Chương trình nổi bật' }, SLOW)).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('slide là liên kết tới trang chiến dịch', async () => {
     mocks.fetchHome.mockResolvedValue([camp('giua-thu')]);
     renderBanner();
-    const link = await screen.findByRole('link', { name: 'Chiến dịch giua-thu' });
+    const link = await screen.findByRole('link', { name: 'Chiến dịch giua-thu' }, SLOW);
     expect(link).toHaveAttribute('href', '/campaign/giua-thu');
   });
 
   it('khách cũ không thấy chiến dịch dành cho khách mới', async () => {
     mocks.fetchHome.mockResolvedValue([camp('chung'), camp('moi', { audience: 'NEW' })]);
     renderBanner('returning');
-    await screen.findByRole('link', { name: 'Chiến dịch chung' });
+    await screen.findByRole('link', { name: 'Chiến dịch chung' }, SLOW);
     expect(screen.queryByRole('link', { name: 'Chiến dịch moi' })).toBeNull();
   });
 
   it('chưa biết loại khách: chỉ chiến dịch cho mọi người', async () => {
     mocks.fetchHome.mockResolvedValue([camp('chung'), camp('moi', { audience: 'NEW' }), camp('cu', { audience: 'RETURNING' })]);
     renderBanner('unknown');
-    await screen.findByRole('link', { name: 'Chiến dịch chung' });
+    await screen.findByRole('link', { name: 'Chiến dịch chung' }, SLOW);
     expect(screen.queryByRole('link', { name: 'Chiến dịch moi' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Chiến dịch cu' })).toBeNull();
   });
@@ -123,7 +125,7 @@ describe('HomeBanner — banner chiến dịch của Trang chủ', () => {
   it('có slide và đã biết loại khách: ghi gợi ý "1" cho lần mở sau', async () => {
     mocks.fetchHome.mockResolvedValue([camp('a')]);
     renderBanner('new');
-    await screen.findByRole('region', { name: 'Chương trình nổi bật' });
+    await screen.findByRole('region', { name: 'Chương trình nổi bật' }, SLOW);
     await waitFor(() => expect(localStorage.getItem(BANNER_HINT_KEY)).toBe('1'));
   });
 
