@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CategoryTreePanel } from './category-tree-panel';
@@ -35,11 +36,13 @@ function fixture(): AdminCategoryList {
   };
 }
 
-function Host() {
+function Host({ collapsible = false, startOpen = true }: { collapsible?: boolean; startOpen?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['tree'], queryFn: listAdminCategories });
+  const [open, setOpen] = useState(startOpen);
   return (
     <CategoryTreePanel
+      {...(collapsible ? { open, onToggle: () => setOpen((v) => !v) } : {})}
       data={q.data}
       loading={q.isLoading}
       error={q.isError ? (q.error as Error).message : null}
@@ -50,6 +53,8 @@ function Host() {
 }
 
 interface Opts {
+  collapsible?: boolean;
+  startOpen?: boolean;
   list?: AdminCategoryList;
   mutate?: { status?: number; body: unknown };
   listStatus?: number;
@@ -74,7 +79,7 @@ function setup(opts: Opts = {}) {
     },
   });
   vi.stubGlobal('fetch', vi.fn(m.fn));
-  const r = render(<Host />);
+  const r = render(<Host collapsible={opts.collapsible} startOpen={opts.startOpen} />);
   mounted.push(r);
   const calls = (method: string) => m.calls.filter((c) => (c.init?.method ?? 'GET') === method);
   return { m, container: r.container, calls };
@@ -280,5 +285,19 @@ describe('CategoryTreePanel', () => {
     const buttons = [...container.querySelectorAll<HTMLButtonElement>('[aria-label="Cây danh mục"] button')];
     expect(buttons.length).toBeGreaterThan(10);
     for (const b of buttons) expect(b.getAttribute('aria-label') ?? '').toMatch(/"[^"]+"/);
+  });
+
+  it('có onToggle: nút Thu gọn/Mở rộng điều khiển phần thân qua aria-expanded; thu gọn vẫn giữ tiêu đề và bộ đếm', async () => {
+    const { container } = setup({ collapsible: true, startOpen: false });
+    await flush();
+    const toggle = exact('Mở rộng')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('h3')!.textContent).toBe('Cây danh mục');
+    expect(container.textContent).toContain('Tầng 1: 3/8');
+    expect(container.querySelector('ul[aria-label="Cây danh mục"]')).toBeNull();
+    click(toggle);
+    await flush();
+    expect(exact('Thu gọn')!.getAttribute('aria-expanded')).toBe('true');
+    expect(names(container)).toContain('Giặt tẩy');
   });
 });

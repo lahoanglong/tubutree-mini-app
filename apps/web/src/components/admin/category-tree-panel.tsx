@@ -33,6 +33,9 @@ export interface CategoryTreePanelProps {
   onRetry: () => void;
   /** Gọi sau mỗi lần ghi thành công để tải lại cây (và các truy vấn dùng danh mục). */
   onChanged: () => unknown;
+  /** Có `onToggle` thì tiêu đề có nút Thu gọn/Mở rộng; `open` mặc định true. Thu gọn để nhường chỗ cho danh sách sản phẩm trên điện thoại. */
+  open?: boolean;
+  onToggle?: () => void;
 }
 
 /**
@@ -40,7 +43,7 @@ export interface CategoryTreePanelProps {
  * Sắp thứ tự bằng nút ↑↓ (đường bàn phím, tên nút kèm tên mục), thêm/đổi tên/chuyển cha/xoá từng mục. Mọi thay đổi
  * làm mới cache `/categories` công khai ở phía API.
  */
-export function CategoryTreePanel({ data, loading, error, onRetry, onChanged }: CategoryTreePanelProps) {
+export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, open = true, onToggle }: CategoryTreePanelProps) {
   const { confirm, dialog } = useConfirm();
   const rootRef = useRef<HTMLElement>(null);
   const [form, setForm] = useState<Form | null>(null);
@@ -51,6 +54,7 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged }: 
   const busy = useRef(false);
   const pendingFocus = useRef<string | null>(null);
   const hintId = useId();
+  const bodyId = useId();
 
   const tree = useMemo(() => buildCategoryTree(data?.items ?? []), [data]);
   const limits = data?.limits ?? { maxRoots: 8, maxChildren: 8 };
@@ -301,83 +305,92 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged }: 
   return (
     <section ref={rootRef} aria-label="Quản lý cây danh mục" aria-busy={saving} className="space-y-3 rounded-card border border-stone-200 bg-stone-0 p-3">
       {dialog}
-      <div>
-        <h3 className="font-display text-base font-semibold text-stone-900">Cây danh mục</h3>
-        <p className="mt-0.5 text-xs tabular-nums text-stone-700">
-          {data ? `Tầng 1: ${tree.length}/${limits.maxRoots} · tối đa ${limits.maxChildren} mục con mỗi mục` : 'Tối đa hai tầng danh mục.'}
-        </p>
-        <p className="mt-0.5 text-xs text-stone-600">
-          Sản phẩm chỉ gán vào mục không có mục con. Mini App cập nhật cây sau tối đa vài phút.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0 flex-1 basis-48">
+          <h3 className="font-display text-base font-semibold text-stone-900">Cây danh mục</h3>
+          <p className="mt-0.5 text-xs tabular-nums text-stone-700">
+            {data ? `Tầng 1: ${tree.length}/${limits.maxRoots} · tối đa ${limits.maxChildren} mục con mỗi mục` : 'Tối đa hai tầng danh mục.'}
+          </p>
+        </div>
+        {onToggle && (
+          <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle} className={BTN_XS_SECONDARY}>
+            {open ? 'Thu gọn' : 'Mở rộng'}
+          </button>
+        )}
       </div>
       <div role="status">{ok && <Notice tone="success">{ok}</Notice>}</div>
-      {loading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {error && !data && <LoadError onRetry={onRetry}>{error}</LoadError>}
-      {data && (
-        <>
-          {tree.length === 0 && <p className="text-sm text-stone-500">Chưa có danh mục nào. Thêm danh mục gốc đầu tiên bên dưới.</p>}
-          <ul aria-label="Cây danh mục" className="divide-y divide-stone-100">
-            {tree.map((root) => {
-              const childFull = !canAddChild(root.children.length, limits);
-              const childHint = `${hintId}-${root.id}`;
-              return (
-                <li key={root.id}>
-                  {itemRow(root, tree, null, root)}
-                  <div className="ml-3 space-y-1 border-l border-stone-200 pl-3 sm:ml-4 sm:pl-4">
-                    {root.children.length > 0 && (
-                      <ul className="divide-y divide-stone-100">
-                        {root.children.map((child) => (
-                          <li key={child.id}>{itemRow(child, root.children, root.id)}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {addForm(root.id, root.name)}
-                    {form?.kind === 'add' && form.parentId === root.id ? null : (
-                      <div className="flex flex-wrap items-center gap-2 pb-2">
-                        <button
-                          type="button"
-                          data-focus-key={`add:${root.id}`}
-                          aria-label={`Thêm mục con vào "${root.name}"`}
-                          aria-describedby={childFull ? childHint : undefined}
-                          disabled={childFull}
-                          onClick={() => openForm({ kind: 'add', parentId: root.id }, '')}
-                          className={BTN_XS_SECONDARY}
-                        >
-                          Thêm mục con
-                        </button>
-                        {childFull && (
-                          <span id={childHint} className="text-xs text-stone-600">
-                            Đã đủ {limits.maxChildren} mục con.
-                          </span>
+      {open && (
+        <div id={bodyId} className="space-y-3">
+          <p className="text-xs text-stone-600">Sản phẩm chỉ gán vào mục không có mục con. Mini App cập nhật cây sau tối đa vài phút.</p>
+          {loading && <p className="text-sm text-stone-500">Đang tải…</p>}
+          {error && !data && <LoadError onRetry={onRetry}>{error}</LoadError>}
+          {data && (
+            <>
+              {tree.length === 0 && <p className="text-sm text-stone-500">Chưa có danh mục nào. Thêm danh mục gốc đầu tiên bên dưới.</p>}
+              <ul aria-label="Cây danh mục" className="divide-y divide-stone-100">
+                {tree.map((root) => {
+                  const childFull = !canAddChild(root.children.length, limits);
+                  const childHint = `${hintId}-${root.id}`;
+                  return (
+                    <li key={root.id}>
+                      {itemRow(root, tree, null, root)}
+                      <div className="ml-3 space-y-1 border-l border-stone-200 pl-3 sm:ml-4 sm:pl-4">
+                        {root.children.length > 0 && (
+                          <ul className="divide-y divide-stone-100">
+                            {root.children.map((child) => (
+                              <li key={child.id}>{itemRow(child, root.children, root.id)}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {addForm(root.id, root.name)}
+                        {form?.kind === 'add' && form.parentId === root.id ? null : (
+                          <div className="flex flex-wrap items-center gap-2 pb-2">
+                            <button
+                              type="button"
+                              data-focus-key={`add:${root.id}`}
+                              aria-label={`Thêm mục con vào "${root.name}"`}
+                              aria-describedby={childFull ? childHint : undefined}
+                              disabled={childFull}
+                              onClick={() => openForm({ kind: 'add', parentId: root.id }, '')}
+                              className={BTN_XS_SECONDARY}
+                            >
+                              Thêm mục con
+                            </button>
+                            {childFull && (
+                              <span id={childHint} className="text-xs text-stone-600">
+                                Đã đủ {limits.maxChildren} mục con.
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          {addForm(null, null)}
-          {form?.kind === 'add' && form.parentId === null ? null : (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                data-focus-key="add:root"
-                aria-describedby={rootsFull ? `${hintId}-roots` : undefined}
-                disabled={rootsFull}
-                onClick={() => openForm({ kind: 'add', parentId: null }, '')}
-                className={BTN_XS_PRIMARY}
-              >
-                Thêm danh mục gốc
-              </button>
-              {rootsFull && (
-                <span id={`${hintId}-roots`} className="text-xs text-stone-600">
-                  Đã đủ {limits.maxRoots} danh mục gốc.
-                </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {addForm(null, null)}
+              {form?.kind === 'add' && form.parentId === null ? null : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    data-focus-key="add:root"
+                    aria-describedby={rootsFull ? `${hintId}-roots` : undefined}
+                    disabled={rootsFull}
+                    onClick={() => openForm({ kind: 'add', parentId: null }, '')}
+                    className={BTN_XS_PRIMARY}
+                  >
+                    Thêm danh mục gốc
+                  </button>
+                  {rootsFull && (
+                    <span id={`${hintId}-roots`} className="text-xs text-stone-600">
+                      Đã đủ {limits.maxRoots} danh mục gốc.
+                    </span>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
-        </>
+        </div>
       )}
     </section>
   );
