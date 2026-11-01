@@ -132,9 +132,9 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     return v.id;
   }
 
-  async function buyer() {
+  async function buyer(role?: 'STAFF' | 'ADMIN') {
     const phone = `09${String(randomInt(0, 100_000_000)).padStart(8, '0')}`;
-    const u = await createUser(prisma, { phone, zaloId: `z-${randCode(10)}` });
+    const u = await createUser(prisma, { phone, zaloId: `z-${randCode(10)}`, ...(role ? { role } : {}) });
     const addr = await prisma.address.create({
       data: {
         userId: u.id,
@@ -208,12 +208,20 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     if (bundleIds.length) await prisma.bundle.deleteMany({ where: { id: { in: bundleIds } } });
   });
 
-  type ItemSeed = { productId: string; variationId?: string; addonPrice?: number; maxQty?: number };
+  /** `refPrice` bỏ trống = giá đang bán của phân loại ghim lúc tạo bộ (đúng thứ admin ghi); `null` = dòng ghi tay không có giá tham chiếu. */
+  type ItemSeed = { productId: string; variationId?: string; addonPrice?: number; maxQty?: number; refPrice?: number | null };
+  async function refPriceOf(kind: 'BUNDLE_PCT' | 'ADDON', i: ItemSeed): Promise<number | null> {
+    if (i.refPrice !== undefined) return i.refPrice;
+    if (kind !== 'ADDON' || !i.variationId) return null;
+    const v = await prisma.variation.findUniqueOrThrow({ where: { id: i.variationId }, select: { retailPrice: true, salePrice: true } });
+    return v.salePrice ?? v.retailPrice;
+  }
   async function bundle(
     kind: 'BUNDLE_PCT' | 'ADDON',
     items: ItemSeed[],
-    o: { pct?: number; anchor?: string; startAt?: Date; endAt?: Date; isActive?: boolean } = {},
+    o: { pct?: number; anchor?: string; startAt?: Date; endAt?: Date; isActive?: boolean; createdById?: string } = {},
   ) {
+    const refPrices = await Promise.all(items.map((i) => refPriceOf(kind, i)));
     const b = await prisma.bundle.create({
       data: {
         kind,
@@ -221,9 +229,10 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
         pct: kind === 'BUNDLE_PCT' ? (o.pct ?? 10) : null,
         anchorProductId: o.anchor ?? null,
         isActive: o.isActive ?? true,
+        createdById: o.createdById ?? null,
         startAt: o.startAt ?? new Date(Date.now() - 2 * 3_600_000),
         endAt: o.endAt ?? new Date(Date.now() + 3_600_000),
-        items: { create: items.map((i, k) => ({ productId: i.productId, variationId: i.variationId ?? null, addonPrice: i.addonPrice ?? null, maxQty: i.maxQty ?? 1, sortOrder: k })) },
+        items: { create: items.map((i, k) => ({ productId: i.productId, variationId: i.variationId ?? null, addonPrice: i.addonPrice ?? null, refPrice: refPrices[k] ?? null, maxQty: i.maxQty ?? 1, sortOrder: k })) },
       },
     });
     bundleIds.push(b.id);
@@ -395,6 +404,48 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     expect(r2.c.comboDiscount).toBe(11_000); // đúng 50.000 − 39.000 trên phân loại ghim, phân loại lớn giữ 500.000đ
     expect(paidOf(r2.o, side.variationId)).toBe(39_000);
     expect(paidOf(r2.o, large)).toBe(500_000);
+  });
+
+  it('nhân viên tạo bộ rồi tự mua: không giảm (giỏ = báo giá = đơn); ADMIN tạo thì được; khách khác vẫn giảm; trang công khai vẫn quảng cáo', async () => {
+    const staff = await buyer('STAFF');
+    const admin = await buyer('ADMIN');
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const main = await product(80_000);
+    const side = await product(50_000);
+    const staffPct = await bundle('BUNDLE_PCT', [{ productId: a.productId }, { productId: c.productId }], { pct: 10, createdById: staff.userId });
+    const staffAddon = await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: main.productId, createdById: staff.userId });
+    const fill = async (userId: string, lines: { variationId: string }[]) => {
+      for (const l of lines) await cart.addItem(userId, { variationId: l.variationId, quantity: 1 });
+    };
+
+    await fill(staff.userId, [a, c]);
+    const own = await cartQuoteOrder(staff);
+    expect(own.c.comboDiscount).toBe(0);
+    expect(own.numbers).toEqual({ cart: 100_000, quote: 100_000, order: 100_000 });
+
+    const stranger = await buyer();
+    await fill(stranger.userId, [a, c]);
+    expect((await cartQuoteOrder(stranger)).c.comboDiscount).toBe(10_000);
+
+    const strangerAddon = await buyer();
+    await fill(strangerAddon.userId, [main, side]);
+    expect((await cartQuoteOrder(strangerAddon)).c.comboDiscount).toBe(11_000);
+    const ownAddon = await buyer('STAFF');
+    await prisma.bundle.update({ where: { id: staffAddon.id }, data: { createdById: ownAddon.userId } });
+    await fill(ownAddon.userId, [main, side]);
+    const addonOwn = await cartQuoteOrder(ownAddon);
+    expect(addonOwn.c.comboDiscount).toBe(0);
+    expect(addonOwn.numbers.order).toBe(130_000);
+
+    // Cùng bộ do ADMIN tạo thì ADMIN tự mua vẫn được giảm (miễn như mã giảm giá).
+    await prisma.bundle.update({ where: { id: staffPct.id }, data: { createdById: admin.userId } });
+    await fill(admin.userId, [a, c]);
+    expect((await cartQuoteOrder(admin)).c.comboDiscount).toBe(10_000);
+
+    // API công khai không biết người mua (cache chung) nên vẫn quảng cáo cả hai bộ.
+    expect((await publicBundles.forProduct(a.slug)).combos.some((x) => x.id === staffPct.id)).toBe(true);
+    expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(1);
   });
 
   it('ADDON ghi tay không ghim phân loại (qua mặt admin): giỏ không giảm đồng nào, công khai không quảng cáo', async () => {
