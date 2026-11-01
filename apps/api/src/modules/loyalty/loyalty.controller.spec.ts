@@ -33,6 +33,17 @@ describe('LoyaltyController — route nhân viên (POS)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
   });
 
+  it('GET me/coupons/history là route khách (cần đăng nhập, không công khai), đọc theo userId của token', () => {
+    const h = LoyaltyController.prototype.couponHistory;
+    expect(Reflect.getMetadata(PATH_METADATA, h)).toBe('me/coupons/history');
+    expect(Reflect.getMetadata(METHOD_METADATA, h)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, h)).toBeUndefined();
+    const getCouponHistory = jest.fn().mockResolvedValue([]);
+    new LoyaltyController({ getCouponHistory } as unknown as LoyaltyService).couponHistory('u1');
+    expect(getCouponHistory).toHaveBeenCalledWith('u1');
+  });
+
   it('route khách (đổi quà) KHÔNG giới hạn role', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.redeemReward)).toBeUndefined();
   });

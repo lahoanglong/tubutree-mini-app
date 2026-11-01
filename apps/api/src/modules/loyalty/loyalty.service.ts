@@ -41,6 +41,8 @@ import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } fro
 
 /** Số dòng tối đa mỗi lần đọc lịch sử điểm (cũng là số dòng khi client cũ không gửi limit). */
 const POINTS_HISTORY_MAX_PAGE = 100;
+const COUPON_HISTORY_DAYS = 90;
+const COUPON_HISTORY_LIMIT = 50;
 
 /** Lượt tính lại hạng 03:15 giờ VN đầu tiên không sớm hơn `t` (cùng giờ với `@Cron('0 15 3 * * *')` ở loyalty.cron.ts). */
 function firstTierRecalcAtOrAfter(t: Date): Date {
@@ -928,10 +930,60 @@ export class LoyaltyService {
         minOrder: c.minOrder,
         maxDiscount: c.maxDiscount,
         endAt: c.endAt,
+        title: c.title,
         products: couponProductIds(c.applyTo)?.map((id) => ({ id, name: productNames.get(id) ?? 'Sản phẩm của chương trình' })) ?? null,
       });
     }
     return result;
+  }
+
+  /**
+   * Mã khách không còn dùng được nữa, để tab "Đã dùng–hết hạn": mã đã dùng hết lượt của khách (kể cả còn hạn) và mã đã nhận (CLAIM) hoặc
+   * cấp riêng (USER_GROUP) mà hết hạn trong 90 ngày. Mã công khai hết hạn khách chưa dùng không vào đây (cả sàn mã cũ là nhiễu). Mã còn dùng được
+   * thì nằm ở `getAvailableCoupons`, không lặp. Chỉ đọc, không đụng luật áp mã.
+   */
+  async getCouponHistory(userId: string, now: Date = new Date()) {
+    const since = new Date(now.getTime() - COUPON_HISTORY_DAYS * 86_400_000);
+    const used = await this.prisma.couponRedemption.groupBy({
+      by: ['couponId'],
+      where: { userId },
+      _count: { _all: true },
+      _max: { redeemedAt: true },
+      orderBy: { _max: { redeemedAt: 'desc' } },
+      take: COUPON_HISTORY_LIMIT,
+    });
+    const usage = new Map(used.map((u) => [u.couponId, { n: u._count._all, at: u._max.redeemedAt }]));
+    const coupons = await this.prisma.coupon.findMany({
+      where: {
+        OR: [
+          ...(used.length > 0 ? [{ id: { in: used.map((u) => u.couponId) } }] : []),
+          { scope: 'CLAIM', claims: { some: { userId } }, endAt: { lt: now, gte: since } },
+          { scope: 'USER_GROUP', scopeMeta: { path: ['userId'], equals: userId }, endAt: { lt: now, gte: since } },
+        ],
+      },
+    });
+    const items = coupons.flatMap((c) => {
+      const u = usage.get(c.id);
+      // perUserLimit <= 0 = không giới hạn (như getAvailableCoupons): dùng bao nhiêu lần cũng không "hết lượt".
+      const exhausted = c.perUserLimit > 0 && (u?.n ?? 0) >= c.perUserLimit;
+      const state = exhausted ? ('used' as const) : c.endAt < now ? ('expired' as const) : null;
+      if (!state) return [];
+      return [
+        {
+          code: c.code,
+          title: c.title,
+          type: c.type,
+          value: c.value,
+          minOrder: c.minOrder,
+          maxDiscount: c.maxDiscount,
+          endAt: c.endAt,
+          state,
+          usedAt: exhausted ? (u?.at ?? null) : null,
+        },
+      ];
+    });
+    const at = (i: (typeof items)[number]) => (i.usedAt ?? i.endAt).getTime();
+    return items.sort((a, b) => at(b) - at(a)).slice(0, COUPON_HISTORY_LIMIT);
   }
 
   /** Danh mục quà đọc từ waste_gifts; route này không bị waste.enabled chặn (§8). */
