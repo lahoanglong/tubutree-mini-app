@@ -71,14 +71,14 @@ export function headingProblems(root: ParentNode): string[] {
 }
 
 /**
- * Nút/ô nhập chưa khai vùng chạm 44px (`min-h-11`/`h-11`). jsdom không dàn trang nên kiểm theo lớp Tailwind;
+ * Nút/ô nhập chưa khai vùng chạm 44px (`min-h-11`/`h-11`, hoặc `tubu-hit-44` vẽ vùng chạm 44px bằng ::after như Chip). jsdom không dàn trang nên kiểm theo lớp Tailwind;
  * radio/checkbox bỏ qua vì nhãn bao quanh mới là vùng chạm, liên kết trong đoạn văn bỏ qua (ngoại lệ inline của WCAG 2.5.8).
  */
 export function smallTouchTargets(root: ParentNode): string[] {
   return Array.from(
     root.querySelectorAll<HTMLElement>('button, input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]), select, textarea'),
   )
-    .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className) && !(/^\d+(?:\.\d+)?px$/.test(el.style.minHeight) && parseFloat(el.style.minHeight) >= 44))
+    .filter((el) => !/\b(?:min-h-11|h-11|tubu-hit-44)\b/.test(el.className) && !(/^\d+(?:\.\d+)?px$/.test(el.style.minHeight) && parseFloat(el.style.minHeight) >= 44))
     .map((el) => el.outerHTML.slice(0, 120));
 }
 
