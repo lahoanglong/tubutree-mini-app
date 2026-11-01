@@ -11,6 +11,9 @@ import { expectChipHitArea44 } from './support/hit-area';
  */
 
 const SORT_GROUP = 'Sắp xếp';
+/** Gốc `/browse` nay là hub (không có lưới); các ca cần danh sách đầy đủ vào thẳng `?all=1`. */
+const LIST = '/browse?all=1';
+const filterButton = (page: Page, n?: number) => page.getByRole('button', { name: n ? `Lọc, ${n} bộ lọc đang bật` : 'Lọc', exact: true });
 
 /**
  * Sheet Bộ lọc trượt lên bằng react-spring. Máy CI chậm làm hiệu ứng khựng vài khung hình: Playwright thấy chip "đứng yên" rồi bấm vào toạ độ cũ
@@ -78,7 +81,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(page.getByRole('region', { name: 'Gợi ý tìm kiếm' }).getByRole('button', { name: new RegExp(XA_PHONG.name) })).toBeVisible();
   });
 
-  test('Ô trống, chưa có lịch sử: bấm vào ô vẫn thấy Danh mục + sắp xếp; có chữ thì gợi ý thay nội dung', async ({ page, api }) => {
+  test('Ô trống, chưa có lịch sử: bấm vào ô vẫn thấy hub Danh mục; có chữ thì gợi ý thay nội dung', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse');
     await waitBrowseSettled(page, api);
@@ -91,13 +94,13 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(page.getByRole('button', { name: 'Huỷ' })).toBeVisible(); // đã vào chế độ gõ
     await expect(page.getByRole('region', { name: 'Gợi ý tìm kiếm' })).toHaveCount(0);
     await expect(cats).toBeVisible();
-    await expect(page.getByRole('group', { name: SORT_GROUP })).toBeVisible();
-    await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm');
+    await expect(page.getByRole('button', { name: 'Xem tất cả sản phẩm' })).toBeVisible();
+    await expect(page.getByTestId('catalog-grid')).toHaveCount(0); // hub không tải danh sách
 
     await box.fill('nuoc');
     await expect(page.getByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeVisible();
     await expect(cats).toHaveCount(0);
-    await expect(page.getByRole('group', { name: SORT_GROUP })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Xem tất cả sản phẩm' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Huỷ' }).click();
     await expect(box).toHaveValue('');
@@ -132,9 +135,9 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
 
   test('Bộ lọc: giá + còn hàng + từ 4★ + thương hiệu → nút báo đúng số → áp dụng → URL, request, chip, filter_applied ×4; gỡ 4★ → thêm đúng 1', async ({ page, api }) => {
     mockDiscovery(api);
-    await page.goto('/browse');
+    await page.goto(LIST);
     await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
-    await page.getByRole('button', { name: 'Bộ lọc' }).click();
+    await filterButton(page).click();
     await filterSheetOpen(page);
     for (const name of ['100k–200k', 'Chỉ hiện còn hàng', 'Từ 4★ trở lên', 'Tubu']) {
       await page.getByRole('button', { name, exact: true }).click();
@@ -146,19 +149,21 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     const listed = api.waitForCall('GET', '/products');
     await apply.click();
     expect(Object.fromEntries((await listed).query)).toMatchObject({
-      brand: 'Tubu', minPrice: '100000', maxPrice: '200000', inStock: 'true', minRating: '4', limit: '30',
+      brand: 'Tubu', minPrice: '100000', maxPrice: '200000', inStock: 'true', minRating: '4', limit: '20',
     });
     await expect(page).toHaveURL(/\/browse\?brand=Tubu&minPrice=100000&maxPrice=200000&inStock=1&rating=4$/, { timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('1 sản phẩm', { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Bộ lọc (4)' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Tubu' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toHaveCount(0); // tên thương hiệu đã là tiêu đề, không lặp thành chip
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Còn hàng' })).toBeVisible();
+    await expect(filterButton(page, 4)).toHaveText('Lọc (4)');
 
     await flushEvents(page);
     await expect.poll(() => eventsNamed(api, 'filter_applied').length, { timeout: 15_000 }).toBe(4);
     expect(eventsNamed(api, 'filter_applied').map((e) => e.props.type).sort()).toEqual(['brand', 'in_stock', 'price', 'rating']);
 
     // Chỉ đổi MỘT loại (bỏ 4★) → thêm đúng một sự kiện `rating`, không bắn lại 3 loại không đổi.
-    await page.getByRole('button', { name: 'Bộ lọc (4)' }).click();
+    await filterButton(page, 4).click();
     await filterSheetOpen(page);
     await page.getByRole('button', { name: 'Từ 4★ trở lên', exact: true }).click();
     const applyAgain = page.getByRole('button', { name: 'Xem 1 sản phẩm' });
@@ -170,9 +175,9 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     expect(eventsNamed(api, 'filter_applied').map((e) => e.props.type).slice(4)).toEqual(['rating']);
   });
 
-  test('Sắp xếp "Bán chạy" → URL sort=best_seller, request có sort, thứ tự theo số đã bán; "Gợi ý" bỏ sort', async ({ page, api }) => {
+  test('Sắp xếp "Bán chạy" → URL sort=best_seller, request có sort, thứ tự theo số đã bán; "Phổ biến" bỏ sort nhưng ở lại danh sách (?all=1)', async ({ page, api }) => {
     mockDiscovery(api);
-    await page.goto('/browse');
+    await page.goto(LIST);
     await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
     const sortGroup = page.getByRole('group', { name: SORT_GROUP });
     const sorted = api.waitForCall('GET', '/products');
@@ -184,8 +189,8 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(tilesOf(page).nth(1)).toHaveAttribute('aria-label', BINH_SUA.name);
     await expect(tilesOf(page).nth(2)).toHaveAttribute('aria-label', NRC.name);
 
-    await sortGroup.getByRole('button', { name: 'Gợi ý' }).click();
-    await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
+    await sortGroup.getByRole('button', { name: 'Phổ biến' }).click();
+    await expect(page).toHaveURL(/\/browse\?all=1$/, { timeout: 15_000 });
     await expect(tilesOf(page).nth(0)).toHaveAttribute('aria-label', NRC.name, { timeout: 15_000 }); // thứ tự mặc định = thứ tự danh mục
   });
 
@@ -196,7 +201,9 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     const historyBefore = await page.evaluate(() => history.length);
     const sortGroup = page.getByRole('group', { name: SORT_GROUP });
     await sortGroup.getByRole('button', { name: 'Bán chạy' }).click();
-    await sortGroup.getByRole('button', { name: 'Giá giảm' }).click();
+    // Tab "Giá" gộp hai chiều: chạm lần đầu xếp thấp → cao, lần hai đảo lại.
+    await sortGroup.getByRole('button', { name: /^Giá/ }).click();
+    await sortGroup.getByRole('button', { name: /^Giá/ }).click();
     await expect(page).toHaveURL(/\/browse\?segment=eco&sort=price_desc$/, { timeout: 15_000 });
     expect(await page.evaluate(() => history.length)).toBe(historyBefore);
 
@@ -215,12 +222,32 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await page.goBack();
 
     await expect(page).toHaveURL(/\/browse\?segment=eco&sort=price_desc$/, { timeout: 15_000 });
-    await expect(sortGroup.getByRole('button', { name: 'Giá giảm' })).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Sống xanh' })).toBeVisible();
+    await expect(sortGroup.getByRole('button', { name: /^Giá từ cao đến thấp/ })).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 2, name: 'Sống xanh' })).toBeVisible(); // tên phân khúc là tiêu đề, không còn chip
     await expect(page.getByTestId('result-count')).toHaveText('26 sản phẩm', { timeout: 15_000 });
     await expect(tile).toBeVisible();
     await expect.poll(async () => Math.abs((await scrollTopOf(scrollerOf(page))) - y), { timeout: 10_000 }).toBeLessThanOrEqual(4);
     await expect(tile).toBeInViewport(); // đúng chỗ cũ: thẻ vừa bấm đang nằm trong màn hình
+  });
+
+  test('Đổi sắp xếp khi đang cuộn sâu: về đầu danh sách, thẻ đầu nằm dưới thanh sắp xếp (không bị hai thanh dính che)', async ({ page, api }) => {
+    mockDiscovery(api);
+    await page.goto('/browse?segment=eco');
+    await expect(page.getByTestId('result-count')).toHaveText('26 sản phẩm', { timeout: 15_000 });
+    await page.getByRole('button', { name: 'Túi Vải Canvas Tubu số 12', exact: true }).scrollIntoViewIfNeeded();
+    expect(await scrollTopOf(scrollerOf(page))).toBeGreaterThan(300); // đã cuộn sâu thật
+
+    const sortGroup = page.getByRole('group', { name: SORT_GROUP });
+    await sortGroup.getByRole('button', { name: /^Giá/ }).click();
+    await expect(page).toHaveURL(/\/browse\?segment=eco&sort=price_asc$/, { timeout: 15_000 });
+    await waitBrowseSettled(page, api);
+    await expect(tilesOf(page).first()).toBeVisible();
+
+    const bar = await sortGroup.boundingBox();
+    const first = await tilesOf(page).first().boundingBox();
+    expect(bar && first).toBeTruthy();
+    expect(first!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height - 1); // thẻ đầu không nằm khuất sau thanh sắp xếp dính
+    expect(first!.y).toBeLessThan(page.viewportSize()!.height); // và đang trong màn hình
   });
 
   test('Mở mới /browse bằng điều hướng thường (không phải Back) luôn bắt đầu từ đầu trang dù đã lưu vị trí cuộn', async ({ page, api }) => {
@@ -239,35 +266,36 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
 
     await page.goBack(); // về Trang chủ (rời Browse → vị trí được lưu)
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+    expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:sort=best_seller')))).toBeGreaterThan(300); // vị trí cũ còn lưu
+    // Chạm ngay khi trang Danh mục cũ còn đang trượt ra: zmp-ui dùng lại chính phần tử đó (khoá trang theo pathname), vẫn phải về đầu.
     await seeAll.click({ timeout: 15_000 }); // PUSH tới CÙNG URL: không phải Back
     await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
     await expect(tilesOf(page).first()).toBeVisible();
-    expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:sort=best_seller')))).toBeGreaterThan(300); // vị trí cũ VẪN còn lưu
+    await page.waitForTimeout(600); // qua hết hiệu ứng chuyển trang: chỉ còn trang mới
     expect(await scrollTopOf(scrollerOf(page))).toBe(0);
   });
 
-  test('Link cũ từ Trang chủ: ?segment=mom_baby và ?brand=Tubu thành chip gỡ được; tham số lạ (utm) được giữ', async ({ page, api }) => {
+  test('Link cũ từ Trang chủ: ?segment=mom_baby lấy tên phân khúc làm tiêu đề (không chip); ?brand=Tubu lấy tên thương hiệu làm tiêu đề (không chip), ?inStock=1 thành chip gỡ được; tham số lạ (utm) được giữ', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse?segment=mom_baby');
-    const chip = page.getByRole('button', { name: 'Bỏ lọc Cho mẹ & bé' });
-    await expect(chip).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 2, name: 'Cho mẹ & bé' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('1 sản phẩm', { timeout: 15_000 });
-    await chip.click();
-    await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
-    await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Cho mẹ & bé' })).toHaveCount(0); // tên đã là tiêu đề, không lặp thành chip
 
     await page.goto('/browse?brand=Tubu');
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 2, name: 'Tubu' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('28 sản phẩm', { timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toHaveCount(0); // tên thương hiệu đã là tiêu đề, không lặp thành chip
 
     await page.goto('/browse?utm_source=zalo&inStock=1');
     await expect(page.getByRole('button', { name: 'Bỏ lọc Còn hàng' })).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Bỏ lọc Còn hàng' }).click();
-    await expect(page).toHaveURL(/\/browse\?utm_source=zalo$/, { timeout: 15_000 });
+    // Gỡ chip cuối ở lại danh sách (?all=1), tham số lạ đứng sau tham số chuẩn.
+    await expect(page).toHaveURL(/\/browse\?all=1&utm_source=zalo$/, { timeout: 15_000 });
   });
 
-  test('Chọn danh mục thật ở trang gốc: đổi URL bằng replace, chip gỡ được, lưới danh mục ẩn; danh mục rỗng không hiện', async ({ page, api }) => {
+  test('Chọn danh mục thật ở hub: PUSH (Back về hub), tên danh mục là tiêu đề không chip; danh mục rỗng không hiện', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse');
     const cats = page.getByRole('region', { name: 'Danh mục', exact: true });
@@ -277,10 +305,15 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     const historyBefore = await page.evaluate(() => history.length);
     await cats.getByRole('button', { name: 'Tẩy rửa sinh học' }).click();
     await expect(page).toHaveURL(/\/browse\?category=cat-cleaning$/, { timeout: 15_000 });
-    expect(await page.evaluate(() => history.length)).toBe(historyBefore);
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Tẩy rửa sinh học' })).toBeVisible({ timeout: 15_000 });
+    expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
+    await expect(page.getByRole('heading', { level: 2, name: 'Tẩy rửa sinh học' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Tẩy rửa sinh học' })).toHaveCount(0);
     await expect(page.getByTestId('result-count')).toHaveText('1 sản phẩm', { timeout: 15_000 });
     await expect(cats).toHaveCount(0);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
+    await expect(cats).toBeVisible();
   });
 
   test('API cũ: bộ lọc mới bị 400 → tải lại không lọc + câu báo, không ErrorState; danh mục về 4 phân khúc', async ({ page, api }) => {
@@ -291,7 +324,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await waitBrowseSettled(page, api);
     await expect(page.getByRole('button', { name: 'Thử lại' })).toHaveCount(0);
     await expect(page.getByRole('alert')).toHaveCount(0);
-    const lists = api.callsTo('GET', '/products').filter((c) => c.query.get('limit') === '30');
+    const lists = api.callsTo('GET', '/products').filter((c) => c.query.get('limit') === '20');
     expect(lists).toHaveLength(2);
     expect(lists[0]!.query.get('inStock')).toBe('true'); // lần đầu có tham số mới → 400
     expect(lists[1]!.query.get('inStock')).toBeNull(); // lần thử lại không có tham số mới
@@ -302,7 +335,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     const cats = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(cats.getByRole('button', { name: 'Cho mẹ & bé' })).toBeVisible({ timeout: 15_000 });
     await expect(cats.getByRole('button', { name: 'Tẩy rửa sinh học' })).toHaveCount(0);
-    await expect(cats.getByRole('button')).toHaveCount(4); // đúng 4 phân khúc
+    await expect(cats.getByRole('button')).toHaveCount(5); // đúng 4 phân khúc + ô "Tất cả"
   });
 
   test('Chạm kết quả khi đang tìm → search_result_clicked { q, position, source, slug }; search_performed có resultsCount', async ({ page, api }) => {
@@ -319,7 +352,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
 
   test('Chạm gợi ý sản phẩm → search_result_clicked source "suggest" + vị trí; chạm SP khi KHÔNG tìm thì không bắn', async ({ page, api }) => {
     mockDiscovery(api);
-    await page.goto('/browse');
+    await page.goto(LIST);
     await waitBrowseSettled(page, api);
     const box = page.getByRole('searchbox', { name: 'Tìm sản phẩm' });
     await box.click();
@@ -387,12 +420,18 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
   });
 
-  test('Vùng chạm Chip 44px không bị hàng cuộn ngang cắt (hàng sắp xếp và hàng chip đang lọc)', async ({ page, api }) => {
+  test('Vùng chạm 44px: tab sắp xếp và nút Lọc cao ≥ 44; Chip hàng "Đang lọc" không bị hàng cuộn ngang cắt', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse?inStock=1');
     await expect(page.getByTestId('result-count')).toHaveText('29 sản phẩm', { timeout: 15_000 });
     await waitBrowseSettled(page, api);
-    await expectChipHitArea44(page.getByRole('group', { name: SORT_GROUP }).getByRole('button', { name: 'Bán chạy' }), { control: true });
+    // Tab sắp xếp là nút cao 44px thật (SortBar), không phải Chip 36px + vùng chạm giãn.
+    for (const tab of await page.getByRole('group', { name: SORT_GROUP }).getByRole('button').all()) {
+      const box = (await tab.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBeGreaterThanOrEqual(44);
+    }
+    expect((await filterButton(page, 1).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await expectChipHitArea44(page.getByRole('group', { name: 'Đang lọc' }).getByRole('button', { name: 'Bỏ lọc Còn hàng' }), { control: true });
   });
 
@@ -494,14 +533,14 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
       });
       expect(overflow.doc).toBeLessThanOrEqual(0);
       expect(overflow.page).toBeLessThanOrEqual(0);
-      for (const target of [page.getByRole('searchbox', { name: 'Tìm sản phẩm' }), page.getByRole('button', { name: 'Bộ lọc (1)' }), page.getByRole('button', { name: /Giỏ hàng|giỏ/i }).first()]) {
+      for (const target of [page.getByRole('searchbox', { name: 'Tìm sản phẩm' }), filterButton(page, 1), page.getByRole('button', { name: /Giỏ hàng|giỏ/i }).first()]) {
         const b = (await target.boundingBox())!;
         expect(b.x).toBeGreaterThanOrEqual(0);
         expect(b.x + b.width).toBeLessThanOrEqual(width);
       }
       await testInfo.attach(`browse-${width}.png`, { body: await page.screenshot(), contentType: 'image/png' });
 
-      await page.getByRole('button', { name: 'Bộ lọc (1)' }).click();
+      await filterButton(page, 1).click();
       const apply = page.getByRole('button', { name: /^Xem [\d.]+ sản phẩm$/ });
       await expect(apply).toBeVisible({ timeout: 15_000 });
       await expect(apply).toBeInViewport();

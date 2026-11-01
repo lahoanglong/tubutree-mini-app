@@ -19,7 +19,7 @@ describe('browseNoindex', () => {
     expect(browseNoindex(new URLSearchParams(''))).toBe(false);
     expect(browseNoindex(new URLSearchParams('brand=Tubu&page=2'))).toBe(false);
     expect(browseNoindex(new URLSearchParams('utm_source=zalo'))).toBe(false);
-    for (const qs of ['q=gội', 'category=c1', 'segment=eco', 'minPrice=1000', 'maxPrice=9', 'inStock=1', 'rating=4', 'sort=newest']) {
+    for (const qs of ['q=gội', 'category=c1', 'segment=eco', 'minPrice=1000', 'maxPrice=9', 'inStock=1', 'rating=4', 'sort=newest', 'all=1']) {
       expect(browseNoindex(new URLSearchParams(qs))).toBe(true);
     }
   });

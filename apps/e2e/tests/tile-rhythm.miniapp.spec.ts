@@ -25,10 +25,14 @@ const FIXTURE: ProductCard[] = [
   card('8', 'Giấy gói quà tái chế khổ lớn dùng cho mọi dịp lễ trong năm', { sold: 12 }),
 ];
 
+/** Kệ Bán chạy nhất dùng bộ riêng (khác slug): Gợi ý hôm nay bỏ món đã có ở kệ trên nên hai nơi không dùng chung được một bộ. */
+const BEST: ProductCard[] = FIXTURE.map((p) => ({ ...p, id: `b${p.id}`, slug: `bs-${p.id}` }));
+
+/** Hai suất (dưới mức tối thiểu của khối Giờ vàng): khối ẩn nên không lấy món khỏi kệ khác, mà nhãn Giờ vàng vẫn hiện trên thẻ ở lưới và kệ hạng. */
 function mockFlash(api: MockApi): void {
   api.get('/flash-sales/active', () => {
     const now = Date.now();
-    return [FIXTURE[0]!, FIXTURE[2]!, FIXTURE[4]!].map((p, i) => ({
+    return [BEST[0]!, FIXTURE[2]!].map((p, i) => ({
       itemId: `fi-${p.id}`, variationId: `v-${p.id}`, productSlug: p.slug, productName: p.name, variationName: null, thumbnail: p.thumbnail,
       flashPrice: 59_000 + i * 1_000, retailPrice: p.basePrice, salePrice: p.salePrice, soldCount: 10, quota: 50,
       endAt: new Date(now + 3 * 3_600_000).toISOString(), serverNow: new Date(now).toISOString(),
@@ -39,7 +43,10 @@ function mockFlash(api: MockApi): void {
 function mockRhythm(api: MockApi): void {
   mockDiscovery(api);
   // Đăng ký SAU mockDiscovery để thắng mặc định.
-  api.get('/products', (): PageResponse<ProductCard> => ({ data: FIXTURE, meta: { page: 1, limit: 20, total: FIXTURE.length } }));
+  api.get('/products', ({ call }): PageResponse<ProductCard> => {
+    const rows = call.query.get('sort') === 'best_seller_30d' ? BEST : FIXTURE;
+    return { data: rows, meta: { page: 1, limit: 20, total: rows.length } };
+  });
 }
 
 interface RowMetrics {
@@ -91,16 +98,16 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
 
   test('Danh mục: mọi hàng hai thẻ chênh đáy giá và chiều cao ≤ 1px dù tên, ảnh, sao, giá lệch nhau', async ({ page, api }) => {
     mockRhythm(api);
-    await page.goto('/browse');
+    await page.goto('/browse?all=1'); // gốc /browse là hub, không có lưới thẻ
     const grid = page.getByTestId('catalog-grid');
     await settled(page, grid);
     expectRhythm(await rowsOf(grid));
   });
 
-  test('Trang chủ, khối Gợi ý cho bạn: cùng nhịp như Danh mục', async ({ page, api }) => {
+  test('Trang chủ, khối Gợi ý hôm nay: cùng nhịp như Danh mục', async ({ page, api }) => {
     mockRhythm(api);
     await page.goto('/');
-    const section = page.getByRole('region', { name: 'Gợi ý cho bạn' });
+    const section = page.getByRole('region', { name: 'Gợi ý hôm nay' });
     await section.scrollIntoViewIfNeeded();
     const grid = section.getByTestId('catalog-grid');
     await settled(page, grid);
@@ -109,7 +116,7 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
 
   test('thẻ cao đúng số đo chung: mỗi biến thể grid dùng chiều cao thân thẻ có nhãn hiệu, không nhảy khi dữ liệu về', async ({ page, api }) => {
     mockRhythm(api);
-    await page.goto('/browse');
+    await page.goto('/browse?all=1'); // gốc /browse là hub, không có lưới thẻ
     const grid = page.getByTestId('catalog-grid');
     await settled(page, grid);
     const bodies = await grid.locator('[data-ds-part="body"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
@@ -117,13 +124,13 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
   });
 });
 
-test.describe('Kệ Bán chạy 375px: số giá chính thẳng hàng', () => {
+test.describe('Kệ Bán chạy nhất 375px: số giá chính thẳng hàng', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
   test('thẻ giá thường đứng cạnh thẻ đang giảm vẫn có số giá cùng độ cao (khối giá giữ chỗ dòng giá gạch)', async ({ page, api }) => {
     mockRhythm(api);
     await page.goto('/');
-    const rail = page.getByRole('region', { name: 'Sản phẩm bán chạy' });
+    const rail = page.getByRole('region', { name: 'Bán chạy nhất, vuốt ngang để xem thêm', exact: true });
     await expect(rail.locator('[data-ds="product-tile"]')).toHaveCount(FIXTURE.length, { timeout: 15_000 });
     const tiles = await rail.evaluate((el) =>
       Array.from(el.querySelectorAll<HTMLElement>('[data-ds="product-tile"]')).map((t) => {
@@ -142,14 +149,14 @@ test.describe('Kệ Bán chạy 375px: số giá chính thẳng hàng', () => {
 
 test.describe('Nhãn Giờ vàng trên ảnh không chui dưới nút tim', () => {
   for (const width of [320, 360, 375, 390]) {
-    test(`${width}px: mép phải nhãn nằm trước nút tim ở lưới và kệ Bán chạy`, async ({ page, api }) => {
+    test(`${width}px: mép phải nhãn nằm trước nút tim ở lưới và kệ Bán chạy nhất`, async ({ page, api }) => {
       await page.setViewportSize({ width, height: 812 });
       mockRhythm(api);
       mockFlash(api);
       await page.goto('/');
-      await expect(page.getByRole('region', { name: 'Sản phẩm bán chạy' }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
-      await page.getByRole('region', { name: 'Gợi ý cho bạn' }).scrollIntoViewIfNeeded();
-      await settled(page, page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByTestId('catalog-grid'));
+      await expect(page.getByRole('region', { name: 'Bán chạy nhất, vuốt ngang để xem thêm', exact: true }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
+      await settled(page, page.getByRole('region', { name: 'Gợi ý hôm nay' }).getByTestId('catalog-grid'));
       const checks = await page.evaluate(() =>
         Array.from(document.querySelectorAll<HTMLElement>('[data-ds="product-tile"]'))
           .map((t) => {
@@ -162,7 +169,8 @@ test.describe('Nhãn Giờ vàng trên ảnh không chui dưới nút tim', () =
           .filter((c): c is { variant: string; shown: string; gap: number } => c !== null),
       );
       expect(checks.length).toBeGreaterThanOrEqual(2);
-      expect(checks.some((c) => c.variant === 'rail-md')).toBe(true);
+      expect(checks.some((c) => c.variant === 'rank')).toBe(true);
+      expect(checks.some((c) => c.variant === 'grid')).toBe(true);
       for (const c of checks) expect(c.gap, `${c.variant} "${c.shown}" ở ${width}px`).toBeGreaterThanOrEqual(0);
     });
   }

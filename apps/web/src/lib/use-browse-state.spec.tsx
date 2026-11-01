@@ -31,7 +31,7 @@ vi.mock('next/navigation', async () => {
 });
 
 import { useBrowseState, type UseBrowseState } from './use-browse-state';
-import { EMPTY_SEARCH_STATE } from './search-state';
+import { EMPTY_SEARCH_STATE, withListMode } from './search-state';
 
 let hook: UseBrowseState;
 function Probe() {
@@ -108,5 +108,19 @@ describe('useBrowseState', () => {
     });
     expect(nav.replaces.at(-1)).toBe('/san-pham?q=nuoc&inStock=1&sort=newest&utm=zalo');
     expect(hook.state).toMatchObject({ q: 'nuoc', sort: 'newest', inStock: true });
+  });
+
+  it('all=1 là tham số chuẩn (không bị coi là tham số lạ và nhân đôi), đứng trước tham số lạ', () => {
+    at('utm=zalo&all=1');
+    expect(hook.state.all).toBe(true);
+    expect(hook.urlKey).toBe('all=1');
+    act(() => hook.update({ inStock: true }));
+    expect(nav.replaces.at(-1)).toBe('/san-pham?inStock=1&utm=zalo');
+  });
+
+  it('gỡ chip cuối bằng withListMode ở lại danh sách (?all=1), không về hub; page bị bỏ', () => {
+    at('brand=Tubu&page=2');
+    act(() => hook.update(withListMode({ brands: [] })));
+    expect(nav.replaces.at(-1)).toBe('/san-pham?all=1');
   });
 });

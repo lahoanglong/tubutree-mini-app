@@ -25,7 +25,7 @@ test.describe('Web khách: Trang chủ — request gộp', () => {
     mockMergedHome(api);
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' }).getByText(MERGED_PURCHASED)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByText(MERGED_FOR_YOU)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).getByText(MERGED_FOR_YOU)).toBeVisible();
     const me = api.callsTo('GET', '/home/me');
     expect(me).toHaveLength(1);
     expect(me[0]!.query.get('purchasedLimit')).toBe(String(HOME_ME.purchasedLimit));

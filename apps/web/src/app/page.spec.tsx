@@ -19,11 +19,13 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
+import { vnDateSeed } from '@tubutree/app-core/home-suggest';
 import HomePage, { metadata } from './page';
 
 const card = (id: string, name: string) => ({
   id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 200000, salePrice: null, isFeatured: false, inStock: true,
 });
+const BEST_SELLERS = [card('bs1', 'Sữa rửa mặt bán chạy'), card('bs2', 'Kem dưỡng bán chạy'), card('bs3', 'Tinh dầu bán chạy')];
 const pageOf = (data: unknown[]) => ({ data, meta: { page: 1, limit: 6, total: data.length } });
 const CATEGORIES = [
   { id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4 },
@@ -31,6 +33,7 @@ const CATEGORIES = [
 ];
 
 let failing: string[] = [];
+let bestSellers = BEST_SELLERS;
 const render = async () =>
   renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{await HomePage()}</QueryClientProvider>,
@@ -38,10 +41,11 @@ const render = async () =>
 
 beforeEach(() => {
   failing = [];
+  bestSellers = BEST_SELLERS;
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
     if (failing.includes(path)) throw new Error('API sập');
     if (path === '/products') {
-      if (opts?.query?.sort === 'best_seller') return pageOf([card('bs', 'Bán chạy nhất')]);
+      if (opts?.query?.sort === 'best_seller_30d') return pageOf(bestSellers);
       if (opts?.query?.sort === 'newest') return pageOf([card('nw', 'Hàng mới nhất')]);
       return pageOf([card('f1', 'Dầu gội bồ kết')]);
     }
@@ -63,20 +67,42 @@ describe('HomePage — server render phần công khai', () => {
     expect(metadata.alternates?.canonical).toBe('/');
   });
 
-  it('hỏi API đúng như Mini App: bán chạy 6 theo best_seller và trang 1 của lưới gợi ý; không còn nổi bật/mới về riêng', async () => {
+  it('hỏi API đúng như Mini App: bán chạy 12 theo best_seller_30d và trang 1 của lưới gợi ý kèm hạt giống ngày VN; không còn nổi bật/mới về riêng', async () => {
+    const before = vnDateSeed(Date.now());
     await render();
-    const queries = mocks.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o?.query);
+    const after = vnDateSeed(Date.now());
+    const queries = mocks.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o?.query as Record<string, unknown>);
     expect(queries).toHaveLength(2);
-    expect(queries).toEqual(expect.arrayContaining([{ limit: 6, sort: 'best_seller' }, { limit: SUGGEST_PAGE_SIZE, page: 1 }]));
+    expect(queries).toContainEqual({ limit: 12, sort: 'best_seller_30d' });
+    const suggest = queries.find((q) => q.page === 1)!;
+    expect(suggest).toEqual({ limit: SUGGEST_PAGE_SIZE, page: 1, seed: expect.stringMatching(/^\d{8}$/) });
+    expect([before, after]).toContain(suggest.seed);
   });
 
   it('HTML đầu đã có sản phẩm của kệ Bán chạy và lưới gợi ý, hàng danh mục (ẩn danh mục rỗng) và dải thương hiệu', async () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
+    expect(out).toContain('Sữa rửa mặt bán chạy');
     expect(out).toContain('Dầu gội bồ kết');
     expect(out).toContain('Dầu gội');
     expect(out).not.toContain('Danh mục trống');
     expect(out).toContain(homeCopy.journey.title);
+  });
+
+  it('kệ Bán chạy nhất có hạng #1..#3 ngay trong HTML đầu (công cụ tìm kiếm thấy thứ hạng)', async () => {
+    const out = await render();
+    const shelf = out.slice(out.indexOf('aria-label="Bán chạy nhất"'));
+    expect(shelf).toContain('#1');
+    expect(shelf).toContain('#2');
+    expect(shelf).toContain('#3');
+    expect(shelf).not.toContain('#4');
+  });
+
+  it('bán chạy chỉ có 2 món (dưới tối thiểu 3 của kệ): ẩn cả kệ, không vẽ hạng lẻ', async () => {
+    bestSellers = BEST_SELLERS.slice(0, 2);
+    const out = await render();
+    expect(out).not.toContain('aria-label="Bán chạy nhất"');
+    expect(out).not.toContain('#1');
   });
 
   it('khối khách vãng lai: có ô tìm sang /san-pham?focus=search, chuông không huy hiệu như Mini App, không có Dành cho bạn', async () => {

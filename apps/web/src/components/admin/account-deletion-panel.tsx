@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { invalidateInbox } from '@/lib/admin-client';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
-import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
@@ -23,6 +23,11 @@ export interface AdminDeletionRequest {
   createdAt: string;
   walletForfeitAmount?: number | null;
   walletForfeitConsentAt?: string | null;
+  walletOverrideBy?: string | null;
+  walletOverrideByName?: string | null;
+  walletOverrideAt?: string | null;
+  walletOverrideReason?: string | null;
+  walletOverrideAmount?: number | null;
   user: {
     id: string;
     fullName: string | null;
@@ -39,10 +44,27 @@ export interface AdminDeletionRequest {
 export const listDeletionRequests = (status: DeletionStatusFilter) =>
   apiFetch<AdminDeletionRequest[]>(`/admin/account-deletion-requests?status=${status}`);
 
-export const processDeletionRequest = (id: string, note?: string) =>
+export const OVERRIDE_REASON_MIN = 10;
+export const OVERRIDE_REASON_MAX = 500;
+// Cùng quy tắc với PHONE_LIKE/containsPhone ở account-deletion.service.ts (API).
+const INVISIBLE_CHARS = /[\u00AD\u200B-\u200F\u2060\uFEFF]/g;
+const PHONE_LIKE = /(?<!\d)(?:\(?\+?84\)?|0)[\s.\-_/()]*[35789](?:[\s.\-_/()]*\d){8}(?!\d)/u;
+const ORDER_CODE = /TUBU[A-Z]*\d+/gi;
+const containsPhone = (t: string) => PHONE_LIKE.test(t.replace(INVISIBLE_CHARS, '').replace(ORDER_CODE, ' '));
+const codePoints = (t: string) => [...t].length;
+
+export interface WalletOverrideInput {
+  reason: string;
+  expectedWalletBalance: number;
+}
+
+export const processDeletionRequest = (id: string, note?: string, override?: WalletOverrideInput) =>
   apiFetch<{ alreadyProcessed: boolean }>(`/admin/account-deletion-requests/${encodeURIComponent(id)}/process`, {
     method: 'POST',
-    body: note?.trim() ? { note: note.trim() } : {},
+    body: {
+      ...(note?.trim() ? { note: note.trim() } : {}),
+      ...(override ? { overrideWalletBalance: { reason: override.reason.trim(), expectedWalletBalance: override.expectedWalletBalance } } : {}),
+    },
   });
 
 const FILTERS: { k: DeletionStatusFilter; label: string }[] = [
@@ -118,10 +140,16 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   const [err, setErr] = useState<string | null>(null);
   const pending = r.status === 'PENDING';
   const blocked = r.blockers.length > 0;
-  const { confirm, dialog } = useConfirm();
+  const { confirm, ask, dialog } = useConfirm();
+  // Chỉ bỏ qua được số dư Ví DƯƠNG; Ví âm hay vướng mắc khác vẫn phải giải quyết trước.
+  const walletBlocked = r.blockers.some((b) => b.code === 'WALLET_BALANCE');
+  const walletBalance = r.user?.walletBalance ?? 0;
+  const otherBlockers = r.blockers.filter((b) => b.code !== 'WALLET_BALANCE');
+  const onlyWalletBlocked = walletBlocked && otherBlockers.length === 0;
+  const canOverrideWallet = pending && walletBlocked && walletBalance > 0;
 
   const mut = useMutation({
-    mutationFn: () => processDeletionRequest(r.id, note),
+    mutationFn: (override?: WalletOverrideInput) => processDeletionRequest(r.id, note, override),
     onSuccess: () => {
       setErr(null);
       setNote('');
@@ -144,7 +172,33 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       confirmLabel: 'Ẩn danh tài khoản',
       tone: 'danger',
     });
-    if (ok) mut.mutate();
+    if (ok) mut.mutate(undefined);
+  };
+
+  const runOverride = async () => {
+    setErr(null);
+    const who = r.user?.fullName || r.user?.phone || r.userId;
+    const amount = formatVnd(walletBalance);
+    const reason = await ask({
+      title: 'Xoá dù còn tiền Ví?',
+      message: `Ví Tubu của "${who}" còn ${amount} và khách chưa đồng ý bỏ số dư. Xác nhận sẽ trừ ${amount} về 0, ẩn danh tài khoản và không hoàn tác được. Số tiền, lý do và người thao tác được ghi lại.`,
+      confirmLabel: `Trừ ${amount} và ẩn danh`,
+      tone: 'danger',
+      input: {
+        label: 'Lý do xoá dù còn tiền Ví (bắt buộc, không ghi tên hay số điện thoại khách)',
+        placeholder: 'vd khách đã thu hồi đồng ý trên Zalo, CSKH đã xác nhận',
+        maxLength: OVERRIDE_REASON_MAX,
+        required: true,
+        validate: (t) => {
+          const n = codePoints(t.replace(INVISIBLE_CHARS, '').trim());
+          if (n < OVERRIDE_REASON_MIN) return `Lý do cần ít nhất ${OVERRIDE_REASON_MIN} ký tự.`;
+          if (n > OVERRIDE_REASON_MAX) return `Lý do tối đa ${OVERRIDE_REASON_MAX} ký tự.`;
+          if (containsPhone(t)) return 'Lý do không được chứa số điện thoại của khách.';
+          return null;
+        },
+      },
+    });
+    if (reason) mut.mutate({ reason, expectedWalletBalance: walletBalance });
   };
 
   return (
@@ -178,6 +232,13 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       {!pending && (
         <div className="mt-2 space-y-0.5 text-xs text-stone-500">
           {r.reviewedAt && <div>Xử lý lúc: {formatDateTime(r.reviewedAt)}</div>}
+          {r.walletOverrideAmount != null && (
+            <div>
+              Xoá dù còn tiền Ví: đã trừ {formatVnd(r.walletOverrideAmount)}
+              {r.walletOverrideAt && ` lúc ${formatDateTime(r.walletOverrideAt)}`}
+              {r.walletOverrideBy && ` bởi ${r.walletOverrideByName || r.walletOverrideBy}`}. Lý do: <span className="text-stone-700">{r.walletOverrideReason}</span>
+            </div>
+          )}
           {r.adminNote && (
             <div>
               Ghi chú admin: <span className="text-stone-700">{r.adminNote}</span>
@@ -219,6 +280,21 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           >
             Xử lý (ẩn danh)
           </button>
+          {canOverrideWallet && (
+            <button
+              type="button"
+              onClick={() => void runOverride()}
+              disabled={mut.isPending || !onlyWalletBlocked}
+              className={BTN_DANGER_OUTLINE}
+            >
+              Xoá dù còn tiền Ví
+            </button>
+          )}
+          {canOverrideWallet && !onlyWalletBlocked && (
+            <p className="basis-full text-xs text-stone-600">
+              Chỉ xoá dù còn tiền Ví được khi không còn vướng mắc nào khác. Cần giải quyết trước: {otherBlockers.map((b) => b.message).join('; ')}.
+            </p>
+          )}
           {mut.isPending && <span className="text-xs text-stone-500">Đang xử lý…</span>}
         </div>
       )}

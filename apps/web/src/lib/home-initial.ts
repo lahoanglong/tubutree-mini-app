@@ -3,6 +3,7 @@ import { fetchBrands, fetchCategories, fetchProducts } from '@tubutree/app-core/
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
+import { vnDateSeed } from '@tubutree/app-core/home-suggest';
 import type { HomeInitial } from '@/components/home/home-view';
 import { createServerHttp } from '@/lib/core-http-server';
 
@@ -18,9 +19,11 @@ export const FLASH_REVALIDATE_S = 60;
 /** Dữ liệu công khai của Trang chủ cho trang ISR (bản thường và bản khôi phục phiên dùng chung). */
 export async function loadHomeInitial(): Promise<HomeInitial> {
   const http = createServerHttp();
+  // Cùng hạt giống ngày VN mà khách dùng ở client (HomeView lấy lại từ đây ở lần vẽ đầu): HTML đầu và lưới sau hydrate là một thứ tự.
+  const suggestSeed = vnDateSeed(Date.now());
   const grids = await Promise.allSettled([
     homeBestSellerQuery(http).queryFn(),
-    fetchProducts(http, { limit: SUGGEST_PAGE_SIZE, page: 1 }),
+    fetchProducts(http, { limit: SUGGEST_PAGE_SIZE, page: 1, seed: suggestSeed }),
   ]);
   // API sập hẳn lúc Next dựng lại trang: ném để Next giữ bản đã render thay vì lưu trang không có sản phẩm tới hết 5 phút
   // (cùng hành vi getListOrEmptyAtBuild). Riêng `next build` thường chạy khi API chưa lên: không ném, client tự tải lại.
@@ -39,5 +42,5 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   }
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, khối biến mất và trang nhảy.
   const liveFlash = flash?.filter((it) => new Date(it.endAt).getTime() > Date.now());
-  return { bestSellers, suggest, categories, brands, publicConfig, flash: liveFlash };
+  return { bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash };
 }

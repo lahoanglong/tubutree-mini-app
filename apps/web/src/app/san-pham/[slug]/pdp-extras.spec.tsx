@@ -45,7 +45,7 @@ vi.mock('./content-kit-sheet', () => ({
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
   { id: 'v1', stock: 0 },
@@ -107,39 +107,49 @@ describe('PdpFreeship', () => {
   });
 });
 
-describe('PdpCoupons', () => {
-  it('hiện mã dùng được cho sản phẩm này: mã chung và mã gắn đúng sản phẩm, bỏ mã của sản phẩm khác', async () => {
+describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
+  const rowButton = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.includes('Ưu đãi'))!;
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+
+  it('có mã dùng được cho sản phẩm này: dòng Ưu đãi ghi số mã; mã chung và mã gắn đúng sản phẩm tính, mã của sản phẩm khác thì không', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 100000 }), coupon('MINE', { products: [{ id: 'p1', name: 'a' }] }), coupon('OTHER', { products: [{ id: 'p2', name: 'b' }] })]);
     const { container } = mount(<PdpCoupons productId="p1" />);
     await flush();
     expect(mocks.http.get).toHaveBeenCalledWith('/me/coupons');
-    const labels = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
-    expect(labels).toEqual(['Sao chép mã ALL', 'Sao chép mã MINE']);
-    expect(container.textContent).toContain('ALL · Giảm 10% (tối đa 30.000đ)');
-    expect(container.textContent).toContain('Đơn từ 100.000đ');
+    const row = rowButton(container);
+    expect(row.textContent).toContain('2 mã giảm giá');
+    expect(row.tabIndex).toBe(0);
+    expect(container.querySelector('ul')).toBeNull();
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
   });
-  it('ở điện thoại mã xếp thành hàng cuộn ngang, chip ôm nội dung như Mini App', async () => {
-    mocks.http.get.mockResolvedValue([coupon('ALL')]);
+  it('bấm dòng mở hộp thoại "Mã giảm giá" có mỗi mã một nút "Sao chép" và đúng điều kiện đơn tối thiểu', async () => {
+    mocks.http.get.mockResolvedValue([coupon('ALL', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 100000 }), coupon('MINE', { products: [{ id: 'p1', name: 'a' }] })]);
     const { container } = mount(<PdpCoupons productId="p1" />);
     await flush();
-    expect(container.querySelector('ul')!.className).toContain('max-md:overflow-x-auto');
-    expect(container.querySelector('ul')!.className).not.toContain('max-md:flex-col');
-    expect(container.querySelector('button')!.className).not.toContain('max-md:w-full');
+    click(rowButton(container));
+    await flush();
+    const d = dialog()!;
+    expect(d.getAttribute('aria-label') ?? d.textContent).toContain('Mã giảm giá');
+    expect(Array.from(d.querySelectorAll('button')).filter((b) => b.textContent === 'Sao chép')).toHaveLength(2);
+    expect(d.textContent).toContain('ALL');
+    expect(d.textContent).toContain('Đơn từ 100k');
   });
-  it('chạm chép mã và báo mã đã có sẵn trong ví; không chép được thì cho khách tự ghi mã', async () => {
+  it('chép mã và báo mã đã có sẵn trong ví; không chép được thì cho khách tự ghi mã', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
     const { container } = mount(<PdpCoupons productId="p1" />);
     await flush();
-    click(container.querySelector('button'));
+    click(rowButton(container));
+    await flush();
+    const copy = () => Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null;
+    click(copy());
     await flush();
     expect(writeText).toHaveBeenCalledWith('ALL');
-    expect(container.querySelector('[role="status"]')!.textContent).toContain('Đã chép mã ALL');
+    expect(dialog()!.querySelector('[role="status"]')!.textContent).toContain('Đã chép mã ALL');
     writeText.mockRejectedValue(new Error('denied'));
-    click(container.querySelector('button'));
+    click(copy());
     await flush();
-    expect(container.querySelector('[role="status"]')!.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
+    expect(dialog()!.querySelector('[role="status"]')!.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
   });
   it('khách chưa đăng nhập không có ví mã: không gọi API, không hiện', async () => {
     mocks.phase = 'guest';
@@ -148,31 +158,49 @@ describe('PdpCoupons', () => {
     expect(mocks.http.get).not.toHaveBeenCalled();
     expect(container.innerHTML).toBe('');
   });
-  it('chỉ hiện tối đa 6 mã', async () => {
-    mocks.http.get.mockResolvedValue(Array.from({ length: 9 }, (_, i) => coupon(`C${i}`)));
+  it('không có mã nào dùng được: không có dòng Ưu đãi', async () => {
+    mocks.http.get.mockResolvedValue([coupon('OTHER', { products: [{ id: 'p2', name: 'b' }] })]);
     const { container } = mount(<PdpCoupons productId="p1" />);
     await flush();
-    expect(container.querySelectorAll('button')).toHaveLength(6);
+    expect(container.innerHTML).toBe('');
   });
 });
 
-describe('PdpFlashMeta', () => {
-  const item = (over: Record<string, unknown> = {}) => ({ itemId: 'i1', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 100000, retailPrice: 150000, soldCount: 30, quota: 40, endAt: new Date(Date.now() + 90 * 60_000).toISOString(), ...over });
-  it('đợt gắn đúng phân loại đang chọn: đếm ngược và đã bán %', async () => {
-    mocks.flash = [item()];
-    const { container } = mount(<PdpFlashMeta />);
+describe('PdpFlashBar', () => {
+  const item = (over: Record<string, unknown> = {}) => ({ itemId: 'i1', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 100000, retailPrice: 150000, soldCount: 30, quota: 40, endAt: new Date(Date.now() + 90 * 60_000 + 20_000).toISOString(), ...over });
+  const PRODUCT = { slug: 'dau-goi', basePrice: 150000, salePrice: null, variations: [{ id: 'v1', retailPrice: 150000, salePrice: null }, { id: 'v2', retailPrice: 150000, salePrice: null }] };
+  it('đợt gắn đúng phân loại đang chọn: giá deal, giá gạch, -%, "Kết thúc sau …" theo phút và đã bán %', async () => {
+    mocks.flash = [item({ perUserLimit: 2 })];
+    const { container } = mount(<PdpFlashBar product={PRODUCT} />);
     await flush();
-    const t = container.querySelector('[data-testid="pdp-flash-meta"]')!.textContent!;
-    expect(t).toMatch(/Còn 1h 3\dm|Còn 1h 30m/);
+    const bar = container.querySelector('[data-testid="flash-price-bar"]')!;
+    const t = bar.textContent!;
+    expect(t).toContain('100.000đ');
+    expect(t).toContain('150.000đ');
+    expect(t).toContain('-33%');
+    expect(bar.querySelector('[role="timer"]')!.textContent).toContain('Kết thúc sau 1 giờ 30 phút');
     expect(t).toContain('Đã bán 75%');
+    expect(t).toContain('Mỗi khách tối đa 2');
+    expect(t).not.toMatch(/Còn \d/);
   });
-  it('đợt của phân loại khác thì không hiện; đã bán quá suất kẹp ở 100%', async () => {
+  it('đợt của phân loại khác thì không hiện; bán quá suất thì thanh ghi "Đã bán hết", không bao giờ quá 100%', async () => {
     mocks.flash = [item({ variationId: 'v1' })];
-    expect(mount(<PdpFlashMeta />).container.innerHTML).toBe('');
+    expect(mount(<PdpFlashBar product={PRODUCT} />).container.innerHTML).toBe('');
     mocks.flash = [item({ soldCount: 90 })];
-    const { container } = mount(<PdpFlashMeta />);
+    const { container } = mount(<PdpFlashBar product={PRODUCT} />);
     await flush();
-    expect(container.textContent).toContain('Đã bán 100%');
+    expect(container.textContent).toContain('Đã bán hết');
+    expect(container.textContent).not.toMatch(/Đã bán 1\d\d%/);
+  });
+  it('hết giờ khi khách đang xem: thanh biến mất ngay, không cần tải lại', async () => {
+    mocks.flash = [item({ endAt: new Date(Date.now() + 600).toISOString() })];
+    const { container } = mount(<PdpFlashBar product={PRODUCT} />);
+    await flush();
+    expect(container.querySelector('[data-testid="flash-price-bar"]')).not.toBeNull();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 900));
+    });
+    expect(container.querySelector('[data-testid="flash-price-bar"]')).toBeNull();
   });
 });
 

@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchBrands, fetchCatalog, fetchCategories } from '@tubutree/app-core/api/catalog';
+import { fetchBestSellers } from '@tubutree/app-core/api/browse';
+import { shelf } from '@tubutree/app-core/merch/shelves';
 import BrowseView, { type BrowseInitial } from '@/components/catalog/browse-view';
 import { firstParam, normalizeSearchQuery, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
 import { browseMetadata, browseNoindex } from '@/lib/home-seo';
-import { BROWSE_PATH, PAGE_LIMIT, parseSearchState, serializeSearchState, toCatalogQuery } from '@/lib/search-state';
+import { BROWSE_PATH, PAGE_LIMIT, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery } from '@/lib/search-state';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
@@ -41,8 +43,11 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const state = parseSearchState(params);
   const startPage = parsePage(params.get('page'));
   const http = createServerHttp();
-  const [catalog, brands, categories] = await Promise.all([
-    orUndefined(fetchCatalog(http, toCatalogQuery(state, startPage, PAGE_LIMIT))),
+  // Gốc không tham số, trang 1 là hub: KHÔNG tải danh sách, chỉ kệ Bán chạy nhất (HTML đầu có sản phẩm cho crawler).
+  const hub = isBrowseHub(state, startPage);
+  const [catalog, bestSellers, brands, categories] = await Promise.all([
+    hub ? undefined : orUndefined(fetchCatalog(http, toCatalogQuery(state, startPage, PAGE_LIMIT))),
+    hub ? orUndefined(fetchBestSellers(http, shelf('browse.bestSellers').maxItems)) : undefined,
     orUndefined(fetchBrands(http)),
     orUndefined(fetchCategories(http)),
   ]);
@@ -60,7 +65,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
     : null;
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:pb-0 max-md:pt-0 md:py-8`}>
-      <BrowseView initial={initial} brands={brands} categories={categories} />
+      <BrowseView initial={initial} bestSellers={bestSellers} brands={brands} categories={categories} />
     </main>
   );
 }

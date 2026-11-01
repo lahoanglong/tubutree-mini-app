@@ -1,4 +1,5 @@
 import { HOME_PURCHASED_LIMIT, type HomeMeDTO, type HomePublicDTO } from '@tubutree/app-core/api/home';
+import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import { createHomeFeed, isHomePurchasedRequest } from '@tubutree/app-core/home-feed';
 import type { AuthUser } from '@tubutree/shared-types';
 import { isGuestUser } from '../utils/guest-user';
@@ -17,7 +18,7 @@ import type { PurchasedItemsPage } from './shop-api';
 
 export type { HomeMeDTO, HomePublicDTO };
 
-// Khớp HOME_PUBLIC phía API (apps/api/src/modules/catalog/home.service.ts) và SECTION_LIMIT của pages/home.tsx.
+// Khớp HOME_PUBLIC phía API (apps/api/src/modules/catalog/home.service.ts); riêng Bán chạy nhất dùng HOME_BEST_SELLER_LIMIT của app-core.
 const SECTION_LIMIT = 6;
 const FEATURED_LIMIT = SECTION_LIMIT * 2;
 export { HOME_PURCHASED_LIMIT };
@@ -55,7 +56,7 @@ export const takeMeBlock = feed.takeMe;
 export function homeProductSlot(params: Record<string, string | number>): 'bestSellers' | 'featured' | 'newest' | null {
   const keys = Object.keys(params);
   const { limit, sort } = params;
-  if (keys.length === 2 && limit === SECTION_LIMIT && sort === 'best_seller') return 'bestSellers';
+  if (keys.length === 2 && limit === HOME_BEST_SELLER_LIMIT && sort === 'best_seller_30d') return 'bestSellers';
   if (keys.length === 2 && limit === SECTION_LIMIT && sort === 'newest') return 'newest';
   if (keys.length === 1 && limit === FEATURED_LIMIT) return 'featured';
   return null;

@@ -22,6 +22,7 @@ vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(),
 vi.mock('../../utils/features', () => ({ get SUBSCRIPTIONS_IN_MINIAPP() { return mocks.subs; } }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { PURCHASED_HINT_KEY, purchasedSkeletonHeight } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { PurchasedRail } from './purchased-rail';
 
@@ -31,9 +32,9 @@ const ITEM = {
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 
-function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail') {
+function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail', exclude?: ReadonlySet<string>) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return { qc, ...render(<QueryClientProvider client={qc}><PurchasedRail source={source} /></QueryClientProvider>) };
+  return { qc, ...render(<QueryClientProvider client={qc}><PurchasedRail source={source} exclude={exclude} /></QueryClientProvider>) };
 }
 const RAIL_KEY = ['purchased-items', 10];
 
@@ -51,7 +52,7 @@ describe('PurchasedRail', () => {
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     expect(region).toHaveTextContent('Nước rửa chén');
     expect(region).toHaveTextContent('Chanh');
-    expect(region).toHaveTextContent('Định kỳ -10%');
+    expect(region).not.toHaveTextContent('Định kỳ');
     expect(mocks.fetchPurchasedItems).toHaveBeenCalledWith({ limit: 10 });
   });
 
@@ -172,10 +173,10 @@ describe('PurchasedRail', () => {
     });
   });
 
-  describe('thẻ gọn (1–2 món)', () => {
+  describe('thẻ gọn ở tab Đơn hàng (1–2 món)', () => {
     it('API báo hàng chỉ bán lẻ (retailOnly): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, retailOnly: true }], nextCursor: null });
-      renderRail();
+      renderRail('orders_tab');
       const region = await screen.findByRole('region', { name: 'Mua lại' });
       expect(region).not.toHaveTextContent('Định kỳ');
       expect(within(region).getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
@@ -183,7 +184,7 @@ describe('PurchasedRail', () => {
 
     it('hàng thường (retailOnly=false): có "Định kỳ" bấm được ngay, không cần tải chi tiết sản phẩm', async () => {
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
-      renderRail();
+      renderRail('orders_tab');
       const region = await screen.findByRole('region', { name: 'Mua lại' });
       expect(within(region).getByRole('button', { name: 'Định kỳ -10%' })).toBeEnabled();
     });
@@ -191,7 +192,7 @@ describe('PurchasedRail', () => {
     it('cờ SUBSCRIPTIONS_IN_MINIAPP tắt: không mời "Định kỳ" dù hàng thường, vẫn có "Mua lại"', async () => {
       mocks.subs = false;
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, retailOnly: false }], nextCursor: null });
-      renderRail();
+      renderRail('orders_tab');
       const region = await screen.findByRole('region', { name: 'Mua lại' });
       expect(region).not.toHaveTextContent('Định kỳ');
       expect(region).toHaveTextContent('Mua lại');
@@ -200,14 +201,14 @@ describe('PurchasedRail', () => {
     it('API cũ chưa trả retailOnly: không mời "Định kỳ" (máy chủ có thể từ chối)', async () => {
       const { retailOnly: _omit, ...old } = ITEM;
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [old], nextCursor: null });
-      renderRail();
+      renderRail('orders_tab');
       const region = await screen.findByRole('region', { name: 'Mua lại' });
       expect(region).not.toHaveTextContent('Định kỳ');
     });
 
     it('hết hàng: ghi "Tạm hết hàng", không có nút Mua lại / Định kỳ', async () => {
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, stock: 0, inStock: false }], nextCursor: null });
-      renderRail();
+      renderRail('orders_tab');
       const region = await screen.findByRole('region', { name: 'Mua lại' });
       expect(region).toHaveTextContent('Tạm hết hàng');
       expect(within(region).queryByRole('button', { name: 'Mua lại' })).toBeNull();
@@ -216,11 +217,11 @@ describe('PurchasedRail', () => {
 
     it('món đã mua nhiều lần có nhãn "Đã mua N lần"; mua một lần thì không', async () => {
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
-      const first = renderRail();
+      const first = renderRail('orders_tab');
       expect(await screen.findByText('Đã mua 2 lần')).toBeInTheDocument();
       first.unmount();
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, timesBought: 1 }], nextCursor: null });
-      renderRail();
+      renderRail('orders_tab');
       await screen.findByRole('region', { name: 'Mua lại' });
       expect(screen.queryByText(/Đã mua \d+ lần/)).toBeNull();
     });
@@ -249,6 +250,108 @@ describe('kệ cuộn (3 món trở lên)', () => {
     const plain = await screen.findByRole('region', { name: 'Mua lại' });
     await waitFor(() => expect(plain.querySelectorAll('[data-ds="product-tile"]').length).toBe(3));
     expect(plain.querySelectorAll('[data-ds-part="note"]').length).toBe(0);
+  });
+});
+
+describe('Mua lại ở Trang chủ (Q6)', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `SP ${i}`, timesBought: 1 }));
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.subs = true;
+    mocks.status = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+  });
+
+  it('1 món: MỘT dòng cao 88px (ảnh, tên, phân loại, giá, nút "Mua lại"), không mời "Định kỳ", không kệ cuộn', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    const line = within(region).getByTestId('rebuy-line');
+    expect(line).toHaveStyle({ height: '88px' });
+    expect(within(line).getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
+    expect(within(line).getByText('65.000đ')).toBeInTheDocument();
+    expect(region).toHaveTextContent('Chanh');
+    expect(region).not.toHaveTextContent('Định kỳ');
+    expect(region.querySelector('[data-ds="product-tile"]')).toBeNull();
+  });
+
+  it('tiêu đề h2 "Mua lại" có "Xem tất cả" tới các đơn đã giao; chạm dòng mở sản phẩm', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    expect(within(region).getByRole('heading', { level: 2, name: 'Mua lại' })).toBeInTheDocument();
+    fireEvent.click(within(region).getByRole('button', { name: 'Xem tất cả Mua lại' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=delivered');
+    fireEvent.click(within(region).getByRole('button', { name: 'Nước rửa chén' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
+  });
+
+  it('2 món trở lên: kệ thẻ rail-md như cũ, không có dòng 88px', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    await waitFor(() => expect(region.querySelectorAll('[data-ds="product-tile"]').length).toBe(2));
+    expect(within(region).queryByTestId('rebuy-line')).toBeNull();
+  });
+
+  it('hết hàng: dòng ghi "Tạm hết hàng", không có nút "Mua lại"', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, stock: 0, inStock: false }], nextCursor: null });
+    renderRail();
+    const line = await screen.findByTestId('rebuy-line');
+    expect(line).toHaveTextContent('Tạm hết hàng');
+    expect(within(line).queryByRole('button', { name: 'Mua lại' })).toBeNull();
+  });
+
+  it('nút "Mua lại" của dòng mở sheet rồi tự sang giỏ', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    mocks.addToCart.mockResolvedValue(CART);
+    renderRail();
+    fireEvent.click(within(await screen.findByTestId('rebuy-line')).getByRole('button', { name: 'Mua lại' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('nhớ số món cho lần mở sau: 1 món -> "one", 3 món -> "many"', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    const first = renderRail();
+    await screen.findByTestId('rebuy-line');
+    await waitFor(() => expect(localStorage.getItem(PURCHASED_HINT_KEY)).toBe('one'));
+    first.unmount();
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(3), nextCursor: null });
+    renderRail();
+    await waitFor(() => expect(localStorage.getItem(PURCHASED_HINT_KEY)).toBe('many'));
+  });
+
+  it.each([
+    ['one', 'one'],
+    ['many', 'many'],
+    [null, 'one'],
+  ] as const)('khung chờ khi đã nhớ %s cao đúng chiều cao khối thật (chưa nhớ: như một món)', (remembered, expected) => {
+    if (remembered) localStorage.setItem(PURCHASED_HINT_KEY, remembered);
+    mocks.fetchPurchasedItems.mockReturnValue(new Promise(() => {}));
+    renderRail();
+    expect(screen.getByTestId('purchased-rail-loading')).toHaveStyle({ height: `${purchasedSkeletonHeight(expected)}px` });
+  });
+
+  it('bỏ món Giờ vàng đang giữ (exclude): 2 món bỏ 1 thì còn dòng 88px; bỏ hết thì khối ẩn, hint ghi "none"', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
+    const first = renderRail('home_rail', new Set(['sp-0']));
+    const line = await screen.findByTestId('rebuy-line');
+    expect(line).toHaveTextContent('SP 1');
+    expect(screen.queryByText('SP 0')).toBeNull();
+    first.unmount();
+    const second = renderRail('home_rail', new Set(['sp-0', 'sp-1']));
+    await waitFor(() => expect(localStorage.getItem(PURCHASED_HINT_KEY)).toBe('none'));
+    expect(second.container).toBeEmptyDOMElement();
+  });
+
+  it('tab Đơn hàng với 1 món: vẫn thẻ gọn cũ có "Định kỳ", không dòng 88px', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    renderRail('orders_tab');
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    expect(within(region).getByRole('button', { name: 'Định kỳ -10%' })).toBeInTheDocument();
+    expect(within(region).queryByTestId('rebuy-line')).toBeNull();
   });
 });
 

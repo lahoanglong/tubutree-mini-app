@@ -110,4 +110,24 @@ describe('TodoStrip — Việc cần làm', () => {
     renderStrip();
     await waitFor(() => expect(JSON.parse(localStorage.getItem(TODO_ROWS_KEY)!)).toEqual({ userId: 'u1', rows: 0 }));
   });
+
+  it('mỗi việc là MỘT dòng cao 64px, thẻ có viền trái cảnh báo 3px và không đệm dọc (khoảng cách do vỏ khối giữ)', async () => {
+    renderStrip();
+    const region = await screen.findByRole('region', { name: 'Việc cần làm' });
+    const rows = region.querySelectorAll<HTMLElement>('[data-todo-row]');
+    expect(rows).toHaveLength(2);
+    for (const r of rows) expect(r.style.height).toBe('64px');
+    const card = region.firstElementChild as HTMLElement;
+    expect(card.style.borderLeft).toContain('3px');
+    expect(region.style.padding).toBe('0px 16px');
+  });
+
+  it('khung chờ cao đúng số dòng nhớ × 64px', async () => {
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+    mocks.fetchActive.mockReturnValue(new Promise(() => undefined));
+    renderStrip();
+    const sk = await screen.findByTestId('todo-strip-loading');
+    expect(sk.firstElementChild).toHaveStyle({ height: '128px' });
+  });
 });
+

@@ -1,4 +1,7 @@
+import { fetchBrandProducts as fetchBrandProductsCore, type BrandProductsQuery } from '@tubutree/app-core/api/brand';
+import type { PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import { api } from './api';
+import { coreHttp } from './core-http';
 
 export interface BrandCert {
   code: string;
@@ -48,6 +51,9 @@ export interface BrandView {
   followerCount: number;
   certifications: BrandCert[];
   promotions: BrandPromotionView[];
+  /** Tổng sản phẩm công khai của nhãn; API cũ hoặc bản cache cũ không trả: nơi đọc dùng `products.length`. */
+  productCount?: number;
+  /** Tối đa 30 món đầu; danh sách đầy đủ lấy bằng `fetchBrandProducts`. */
   products: BrandProductView[];
   dealerRewards: DealerRewardView[];
 }
@@ -57,6 +63,10 @@ export type ShareToEarn =
 
 export const getPublicBrand = (slug: string) =>
   api.get(`/brand/public/${slug}`).then((r) => r.data as BrandView);
+
+/** Sản phẩm của nhãn, phân trang thật, cùng dạng thẻ với `GET /products`. */
+export const fetchBrandProducts = (slug: string, q: BrandProductsQuery = {}): Promise<PageResponse<ProductCard>> =>
+  fetchBrandProductsCore(coreHttp, slug, q);
 
 export const getBrandShareToEarn = (slug: string) =>
   api.get(`/brand/${slug}/share-to-earn`).then((r) => r.data as ShareToEarn);

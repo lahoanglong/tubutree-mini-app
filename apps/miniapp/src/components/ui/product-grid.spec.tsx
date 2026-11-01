@@ -50,6 +50,22 @@ describe('ProductGrid', () => {
     expect(screen.getByText('#6')).toBeInTheDocument();
   });
 
+  it('noteOf đưa ghi chú vào trong thẻ; thẻ không ghi chú giữ chỗ dòng đó để cùng hàng thẳng giá', () => {
+    wrap(<ProductGrid items={items} variant="grid" noteOf={(p, i) => (i === 1 ? `Dùng hằng ngày (${p.id})` : undefined)} />);
+    const notes = Array.from(document.querySelectorAll('[data-ds-part="note"]'));
+    expect(notes.map((n) => n.textContent)).toEqual(['', 'Dùng hằng ngày (p2)', '']);
+  });
+
+  it('columns=1 xếp một cột (hàng dòng của khối STACK)', () => {
+    wrap(<ProductGrid items={items} variant="line" columns={1} />);
+    expect(screen.getByTestId('catalog-grid').style.gridTemplateColumns).toBe('1fr');
+  });
+
+  it('không ai có ghi chú thì không vẽ dòng ghi chú nào', () => {
+    wrap(<ProductGrid items={items} variant="grid" noteOf={() => undefined} />);
+    expect(document.querySelectorAll('[data-ds-part="note"]')).toHaveLength(0);
+  });
+
   it('onOpen nhận sản phẩm và chỉ số', () => {
     const onOpen = vi.fn();
     wrap(<ProductGrid items={items} variant="grid" onOpen={onOpen} />);
@@ -84,6 +100,11 @@ describe('ProductRail', () => {
     expect(row.style.display).toBe('flex');
     expect(row.style.alignItems).toBe('stretch');
     expect(cell('Bán chạy').style.display).toBe('flex');
+  });
+
+  it('noteOf đưa ghi chú vào thẻ của kệ', () => {
+    wrap(<ProductRail items={items} variant="rail-md" label="Nổi bật" noteOf={(_, i) => (i === 0 ? 'Mình dùng mỗi ngày' : undefined)} />);
+    expect(Array.from(document.querySelectorAll('[data-ds-part="note"]')).map((n) => n.textContent)).toEqual(['Mình dùng mỗi ngày', '', '']);
   });
 
   it('rail-sm không nhãn đầu tên và không tim dù sản phẩm nổi bật', () => {

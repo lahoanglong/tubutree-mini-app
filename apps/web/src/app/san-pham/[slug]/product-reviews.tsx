@@ -55,7 +55,7 @@ type FormTarget =
   | { kind: 'new'; orderId: string; orderCode: string | null }
   | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
-function Stars({ value, small = false }: { value: number; small?: boolean }) {
+export function Stars({ value, small = false }: { value: number; small?: boolean }) {
   return (
     <span role="img" aria-label={`${value} trên 5 sao`} className="inline-flex whitespace-nowrap">
       {[1, 2, 3, 4, 5].map((i) => (
@@ -141,7 +141,9 @@ export function ProductReviews({ slug }: { slug: string }) {
 
   const returnTo = `/san-pham/${encodeURIComponent(slug)}${openForOrderId ? `?${REVIEW_ORDER_PARAM}=${encodeURIComponent(openForOrderId)}` : ''}`;
 
-  const data = listQ.data;
+  // Cache có thể đã đầy (dải "Đánh giá nhanh" dùng chung khoá) trước khi khối Suspense này hydrate; vẽ ngay sẽ lệch HTML máy chủ.
+  const data = hydrated ? listQ.data : undefined;
+  const listLoading = listQ.isLoading || (!hydrated && !listQ.isError);
   const dist = data?.distribution ?? {};
   const items = data?.items ?? [];
 
@@ -210,7 +212,7 @@ export function ProductReviews({ slug }: { slug: string }) {
         />
       )}
 
-      {listQ.isLoading ? (
+      {listLoading ? (
         <p className="mt-3 text-sm text-stone-600">Đang tải đánh giá…</p>
       ) : listQ.isError ? (
         <div className="mt-3">

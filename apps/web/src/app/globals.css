@@ -13,7 +13,7 @@
     padding-right: env(safe-area-inset-right, 0px);
     background: var(--color-bg-canvas);
     color: var(--color-text-primary);
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    /* Không bật cv02–04/cv11 của Inter: Mini App không bật; chữ "a" một tầng làm nhãn web rộng hơn Mini (lối tắt 320px xuống 3 dòng trên Linux). */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

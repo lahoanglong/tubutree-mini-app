@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { ChevronRight, Leaf } from 'lucide-react';
@@ -14,7 +15,21 @@ import { Icon } from '../ui/icon';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 
-const SECTION_PAD = '0 16px 12px';
+const SECTION_PAD = '0 16px';
+
+// Nền sáng, viền nhẹ, chữ rừng: thẻ thành viên là thông tin tài khoản nên không nặng hơn các khối hàng; nút "Điểm danh" là điểm màu duy nhất (HM-05).
+const CARD_STYLE: CSSProperties = {
+  background: 'var(--color-bg-surface)',
+  border: '1px solid var(--color-border-subtle)',
+  color: 'var(--color-text-brand)',
+  borderRadius: 'var(--radius-card)',
+  padding: '0 12px 0 16px',
+  height: HOME_HERO_HEIGHT,
+  boxSizing: 'border-box',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+};
 
 export function MemberCardSkeleton() {
   return (
@@ -31,21 +46,8 @@ export function MemberCardSkeleton() {
 export function MemberCardUnavailable({ onRetry }: { onRetry: () => void }) {
   return (
     <section aria-label={homeCopy.member.cardLabel} style={{ padding: SECTION_PAD }}>
-      <div
-        style={{
-          background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
-          color: 'var(--color-text-inverse)',
-          borderRadius: 'var(--radius-card)',
-          boxShadow: 'var(--elevation-1)',
-          padding: '0 12px 0 16px',
-          height: HOME_HERO_HEIGHT,
-          boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <Text variant="body-sm" tone="inverse" as="div" style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={CARD_STYLE}>
+        <Text variant="body-sm" tone="brand" as="div" style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {homeCopy.member.offline}
         </Text>
         <button
@@ -55,7 +57,7 @@ export function MemberCardUnavailable({ onRetry }: { onRetry: () => void }) {
             haptic('light');
             onRetry();
           }}
-          style={{ flex: '0 0 auto', minWidth: 96, minHeight: 44, padding: '0 12px', border: 'none', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-surface)', color: 'var(--color-action-secondary-fg)', fontFamily: 'inherit', fontSize: 'var(--type-label-size)', fontWeight: 700, cursor: 'pointer' }}
+          style={{ flex: '0 0 auto', minWidth: 96, minHeight: 44, padding: '0 12px', border: 'none', borderRadius: 'var(--radius-control)', background: 'var(--color-action-secondary-bg)', color: 'var(--color-action-secondary-fg)', fontFamily: 'inherit', fontSize: 'var(--type-label-size)', fontWeight: 700, cursor: 'pointer' }}
         >
           {homeCopy.member.retry}
         </button>
@@ -88,20 +90,7 @@ export function MemberCard() {
 
   return (
     <section aria-label={homeCopy.member.cardLabel} style={{ padding: SECTION_PAD }}>
-      <div
-        style={{
-          background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
-          color: 'var(--color-text-inverse)',
-          borderRadius: 'var(--radius-card)',
-          boxShadow: 'var(--elevation-1)',
-          padding: '0 12px 0 16px',
-          height: HOME_HERO_HEIGHT,
-          boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
+      <div style={CARD_STYLE}>
         <button
           type="button"
           aria-label={memberCardAriaLabel(card, homeCopy.member.openLabel, greeting)}
@@ -113,27 +102,27 @@ export function MemberCard() {
           style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="body-sm" tone="inverse" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
+            <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
               {card.tierName && (
                 <span style={{ flex: '0 0 auto' }}>
                   {' · '}
-                  <Icon icon={Leaf} size="sm" tone="inverse" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
+                  <Icon icon={Leaf} size="sm" tone="brand" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
                 </span>
               )}
             </Text>
             {loyaltyFailed ? (
-              <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {homeCopy.member.tierFailed}
               </Text>
             ) : (
-              <Text variant="label" tone="inverse" as="div" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text variant="label" tone="primary" as="div" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {card.pointsLabel}
-                {card.valueLabel && <span style={{ fontWeight: 500, opacity: 0.9 }}>{` ${card.valueLabel}`}</span>}
+                {card.valueLabel && <span style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>{` ${card.valueLabel}`}</span>}
               </Text>
             )}
           </div>
-          <Icon icon={ChevronRight} size="sm" tone="inverse" />
+          <Icon icon={ChevronRight} size="sm" tone="muted" />
         </button>
         {loyaltyFailed && (
           <button
@@ -143,7 +132,7 @@ export function MemberCard() {
               haptic('light');
               void loyaltyQ.refetch();
             }}
-            style={{ flex: '0 0 auto', minHeight: 44, padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+            style={{ flex: '0 0 auto', minHeight: 44, padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-brand)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
           >
             {homeCopy.member.retry}
           </button>
@@ -161,8 +150,8 @@ export function MemberCard() {
             padding: '0 12px',
             border: 'none',
             borderRadius: 'var(--radius-control)',
-            background: 'var(--color-bg-surface)',
-            color: 'var(--color-action-secondary-fg)',
+            background: 'var(--color-action-primary-bg)',
+            color: 'var(--color-action-primary-fg)',
             fontFamily: 'inherit',
             fontSize: 'var(--type-label-size)',
             fontWeight: 700,

@@ -98,7 +98,8 @@ export function takeHomeRequest(feed: HomeFeed, path: string, query: Query | und
     case '/flash-sales/upcoming':
       return keys.length === 0 ? feed.takeMe('flashUpcoming') : null;
     case '/products/for-you':
-      return keys.length === 0 ? feed.takeMe('forYou') : null;
+      // `seed` (ngày VN) là tham số xoay thứ tự của khách khi gọi lẻ; khối gộp đã dựng sẵn nên lần đầu vẫn dùng nó, giống Mini App.
+      return keys.length === 0 || only('seed') ? feed.takeMe('forYou') : null;
     case '/orders/active-count':
       return keys.length === 0 ? feed.takeMe('activeOrderCount') : null;
     case '/me/new-customer-offer':
