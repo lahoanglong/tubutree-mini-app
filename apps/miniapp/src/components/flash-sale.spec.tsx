@@ -352,10 +352,10 @@ describe('UpcomingFlashSales — mốc bắt đầu', () => {
     mocks.status = 'authenticated';
   });
 
-  it('còn thời gian: "Bắt đầu sau Xh YYm" và nút nhắc', async () => {
+  it('còn thời gian: "Bắt đầu sau 1 giờ 59 phút" theo luật chữ (không "1h 59m") và nút nhắc', async () => {
     mocks.fetchUpcoming.mockResolvedValue([UPCOMING]);
     renderUpcoming();
-    expect(await screen.findByText(/^Bắt đầu sau \d+h \d{2}m$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Bắt đầu sau [12] giờ \d{2} phút$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Nhắc tôi/ })).toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countdownClock, countdownSpoken, countdownText, formatCountdown } from './countdown';
+import { countdownClock, countdownSpoken, countdownText } from './countdown';
 
 const H = 3_600_000;
 const D = 86_400_000;
@@ -57,14 +57,5 @@ describe('countdownSpoken', () => {
   it('hết giờ thì rỗng', () => {
     expect(countdownSpoken(0)).toBe('');
     expect(countdownSpoken(Number.NaN)).toBe('');
-  });
-});
-
-describe('formatCountdown (bản cũ chuyển về đây)', () => {
-  it('giữ nguyên hành vi: "Xh YYm", "N ngày H giờ", hết giờ rỗng', () => {
-    expect(formatCountdown(H)).toBe('1h 00m');
-    expect(formatCountdown(59_000)).toBe('0h 01m');
-    expect(formatCountdown(143 * H + 52 * 60_000)).toBe('5 ngày 23 giờ');
-    expect(formatCountdown(0)).toBe('');
   });
 });
