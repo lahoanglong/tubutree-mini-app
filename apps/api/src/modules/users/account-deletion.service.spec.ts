@@ -330,6 +330,10 @@ describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý b�
       ['ngắn', { reason: 'ngắn quá', expectedWalletBalance: 20_000 }],
       ['quá dài', { reason: 'a'.repeat(501), expectedWalletBalance: 20_000 }],
       ['chứa số điện thoại', { reason: 'gọi khách 0912 345 678 xác nhận', expectedWalletBalance: 20_000 }],
+      ['chứa số điện thoại dạng liền', { reason: 'khách 0912345678 đồng ý qua điện thoại', expectedWalletBalance: 20_000 }],
+      ['chứa số +84', { reason: 'khách +84 912 345 678 đồng ý', expectedWalletBalance: 20_000 }],
+      ['chứa số 84 liền', { reason: 'khách 84912345678 đồng ý', expectedWalletBalance: 20_000 }],
+      ['chứa số cách hai khoảng trắng', { reason: 'khách 0912  345 678 đồng ý', expectedWalletBalance: 20_000 }],
       ['chứa số điện thoại có dấu chấm', { reason: 'khách 0912.345.678 đồng ý qua điện thoại', expectedWalletBalance: 20_000 }],
       ['mười emoji (10 ký tự điểm mã, 20 đơn vị) đủ dài nhưng 9 emoji thì ngắn', { reason: '😀'.repeat(9), expectedWalletBalance: 20_000 }],
       ['thiếu số dư xác nhận', { reason, expectedWalletBalance: 0 }],
@@ -339,6 +343,14 @@ describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý b�
       await expect(svc.process('req-1', 'admin-1', undefined, o)).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
+
+    it.each(['đơn TUBU2610310012 đã huỷ', 'đơn TUBUSUB7659607093 chờ xử lý', 'Ví 500.000.000đ do lỗi nạp', 'thu hồi lúc 2026-11-01 07:43'])(
+      'lý do hợp lệ có mã đơn, số tiền hay mốc giờ vẫn nhận: %s',
+      async (reason) => {
+        const { svc } = withWallet(20_000, null);
+        await expect(svc.process('req-1', 'admin-1', undefined, { reason, expectedWalletBalance: 20_000 })).resolves.toMatchObject({ alreadyProcessed: false });
+      },
+    );
 
     it('đủ 10 emoji (đếm theo điểm mã) thì nhận', async () => {
       const { svc } = withWallet(20_000, null);

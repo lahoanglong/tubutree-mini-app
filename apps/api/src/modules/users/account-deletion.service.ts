@@ -55,8 +55,8 @@ export interface WalletOverride {
   expectedWalletBalance: number;
 }
 
-/** Dãy từ 9 chữ số (cho phép cách bằng khoảng trắng, dấu chấm, gạch): giống số điện thoại. Lý do admin không được chứa vì nó không bị ẩn danh. */
-export const PHONE_LIKE = /\d(?:[\s.\-]?\d){8,}/;
+/** Số điện thoại Việt Nam (0/84/+84 + đầu số 3,5,7,8,9 + 8 chữ số, cho phép cách bằng khoảng trắng, dấu chấm, gạch); không bắt mã đơn, số tiền, mốc giờ. Lý do admin không được chứa vì nó không bị ẩn danh. */
+export const PHONE_LIKE = /(?<![\p{L}\d])(?:\+?84|0)[\s.\-]*[35789](?:[\s.\-]*\d){8}(?!\d)/u;
 export const codePoints = (s: string) => [...s].length;
 
 export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';

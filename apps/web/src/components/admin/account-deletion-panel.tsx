@@ -46,7 +46,7 @@ export const listDeletionRequests = (status: DeletionStatusFilter) =>
 
 export const OVERRIDE_REASON_MIN = 10;
 export const OVERRIDE_REASON_MAX = 500;
-const PHONE_LIKE = /\d(?:[\s.\-]?\d){8,}/;
+const PHONE_LIKE = /(?<![\p{L}\d])(?:\+?84|0)[\s.\-]*[35789](?:[\s.\-]*\d){8}(?!\d)/u;
 const codePoints = (t: string) => [...t].length;
 
 export interface WalletOverrideInput {
