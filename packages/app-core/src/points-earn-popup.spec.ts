@@ -19,9 +19,16 @@ describe('popup Cách tính Điểm Xanh (PDP)', () => {
     expect(p.tier).not.toContain('Đăng nhập');
   });
 
-  it('chưa biết hạng: không đoán hệ số', () => {
+  it('chưa biết hạng: không đoán hệ số, không nói như thể người xem đã có hạng', () => {
     const p = pointsEarnPopup({ tier: null, guest: false, marketplace: null });
     expect(p.tier).not.toMatch(/×/);
+    expect(p.tier).not.toContain('của bạn');
+  });
+
+  it('có hệ số khác ×1 mà thiếu tên hạng: nói hệ số, không nói "chưa có hạng"', () => {
+    const p = pointsEarnPopup({ tier: { multiplier: 1.5, tierName: null }, guest: false, marketplace: null });
+    expect(p.tier).toContain('×1,5');
+    expect(p.tier).not.toContain('chưa có hạng');
   });
 
   it('giải thích dấu "~" và điểm vào khi giao thành công', () => {

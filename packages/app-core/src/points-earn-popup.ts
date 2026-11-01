@@ -27,8 +27,8 @@ export function pointsEarnPopup(input: { tier: TierEarn | null; guest: boolean; 
   const { tier, guest, generic = false } = input;
   let line: string;
   if (guest) line = `Chưa đăng nhập: hệ số ${multiplierLabel(1)}. Đăng nhập để được nhân theo hạng.`;
-  else if (!tier) line = 'Điểm được nhân theo hạng thành viên của bạn.';
-  else if (!tier.tierName) line = `Bạn chưa có hạng: hệ số ${multiplierLabel(tier.multiplier)}.`;
+  else if (!tier) line = 'Điểm được nhân theo hạng thành viên.';
+  else if (!tier.tierName) line = tier.multiplier === 1 ? `Bạn chưa có hạng: hệ số ${multiplierLabel(1)}.` : `Hệ số của bạn: ${multiplierLabel(tier.multiplier)}`;
   else line = `Hạng ${tier.tierName}: ${multiplierLabel(tier.multiplier)}`;
   return { title: POINTS_EARN_POPUP.title, tier: line, tilde: generic ? null : POINTS_EARN_POPUP.tilde, delivered: generic ? null : POINTS_EARN_POPUP.delivered, marketplace: input.marketplace };
 }
