@@ -1,4 +1,5 @@
 import type { CampaignBanner, CampaignCouponDTO } from '../api/campaign';
+import type { PageResponse, ProductCard } from '../api/catalog';
 import type { HomeKindState } from '../home-layout';
 import { liveRoute } from '../merch/route-fallback';
 import { fillCopy } from '../shop-copy';
@@ -96,4 +97,13 @@ export function campaignDateRange(c: Pick<CampaignBanner, 'startAt' | 'endAt'>):
 /** Mã của chiến dịch dạng thẻ voucher: sắp hết hạn trước. Là mã công khai nên trạng thái luôn "saved" (dùng được ngay), không có nút nhận. */
 export function campaignVoucherViews(coupons: readonly CampaignCouponDTO[], now: number): VoucherView[] {
   return sortVouchers([...coupons], now).map((c) => voucherView(c, now));
+}
+
+/** Gộp các trang sản phẩm đã tải của trang chiến dịch (xem thêm từng 20 món); trang chưa về bị bỏ qua. */
+export function campaignProductPages(pages: readonly (PageResponse<ProductCard> | undefined)[]): { items: ProductCard[]; hasMore: boolean } {
+  const loaded = pages.filter((p): p is PageResponse<ProductCard> => p !== undefined);
+  const seen = new Set<string>();
+  const items = loaded.flatMap((p) => p.data).filter((p) => !seen.has(p.id) && seen.add(p.id));
+  const last = loaded[loaded.length - 1];
+  return { items, hasMore: last ? last.meta.page * last.meta.limit < last.meta.total : false };
 }

@@ -8,6 +8,7 @@ import {
   CAMPAIGN_SLIDES_MAX,
   campaignDateRange,
   campaignHref,
+  campaignProductPages,
   campaignSlides,
   campaignVisible,
   campaignVoucherViews,
@@ -152,5 +153,24 @@ describe('campaignVoucherViews', () => {
   });
   it('trang sản phẩm 20 món mỗi lần', () => {
     expect(CAMPAIGN_PRODUCTS_PAGE).toBe(20);
+  });
+});
+
+describe('campaignProductPages', () => {
+  const card = (id: string) => ({ id, slug: id, brand: 'Tubu', name: id, thumbnail: null, basePrice: 1, salePrice: null, isFeatured: false, inStock: true });
+  const page = (ids: string[], p: number, total: number) => ({ data: ids.map(card), meta: { page: p, limit: 2, total } });
+  it('gộp các trang đã tải theo thứ tự, bỏ sản phẩm lặp giữa hai trang', () => {
+    const v = campaignProductPages([page(['a', 'b'], 1, 5), page(['b', 'c'], 2, 5)]);
+    expect(v.items.map((i) => i.id)).toEqual(['a', 'b', 'c']);
+  });
+  it('còn trang kế khi trang cuối đã tải chưa phủ hết tổng; hết thì không', () => {
+    expect(campaignProductPages([page(['a', 'b'], 1, 3)]).hasMore).toBe(true);
+    expect(campaignProductPages([page(['a', 'b'], 1, 3), page(['c'], 2, 3)]).hasMore).toBe(false);
+    expect(campaignProductPages([page(['a', 'b'], 1, 2)]).hasMore).toBe(false);
+  });
+  it('trang chưa về (undefined) bị bỏ qua; chưa có trang nào thì rỗng và không còn gì để xem thêm', () => {
+    expect(campaignProductPages([page(['a', 'b'], 1, 5), undefined]).items).toHaveLength(2);
+    expect(campaignProductPages([undefined])).toEqual({ items: [], hasMore: false });
+    expect(campaignProductPages([])).toEqual({ items: [], hasMore: false });
   });
 });
