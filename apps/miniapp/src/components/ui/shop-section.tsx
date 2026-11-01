@@ -131,12 +131,12 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
       {layout === 'rail' && (
         // Lề âm bù lề trang 16px của cột chứa (kệ có đệm 12px chừa bóng thẻ): thẻ đầu kệ thẳng với tiêu đề và với kệ Trang chủ, như BLEED của web.
         <div data-testid="shop-rail" className="tubu-bleed">
-          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} noteOf={noteOf} />
+          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'grid' && (
         <div data-testid="shop-grid">
-          <ProductGrid items={cards} variant="grid" showBrand={showBrand} noteOf={noteOf} />
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'line' && (

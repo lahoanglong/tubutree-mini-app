@@ -58,12 +58,14 @@ export interface ProductRailProps {
   skeletonCount?: number;
   /** Số thẻ đầu tải ảnh ngay (kệ ở màn hình đầu); mặc định 0. */
   priorityCount?: number;
+  /** Mặc định có tim yêu thích; màn dựng gian hàng truyền false cho khung xem trước (khung inert, chủ chưa phải khách). */
+  showWishlist?: boolean;
   /** Ghi chú trong thẻ (dưới giá); thẻ còn lại của kệ giữ chỗ dòng đó nên giá vẫn thẳng hàng. */
   noteOf?: (product: ProductCardType, index: number) => string | undefined;
   onOpen?: (product: ProductCardType, index: number) => void;
 }
 
-export function ProductRail({ items, variant, rankFrom, ranks, label, showBrand, loading = false, skeletonCount = 6, priorityCount = 0, noteOf, onOpen }: ProductRailProps) {
+export function ProductRail({ items, variant, rankFrom, ranks, label, showBrand, showWishlist, loading = false, skeletonCount = 6, priorityCount = 0, noteOf, onOpen }: ProductRailProps) {
   const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
   const reserveNote = notes?.some((n) => !!n) ?? false;
   return (
@@ -81,6 +83,7 @@ export function ProductRail({ items, variant, rankFrom, ranks, label, showBrand,
                 variant={variant}
                 rank={ranks?.[i] ?? (rankFrom === undefined ? undefined : rankFrom + i)}
                 showBrand={showBrand}
+                showWishlist={showWishlist}
                 priority={i < priorityCount}
                 note={notes?.[i] || (reserveNote ? '' : undefined)}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}

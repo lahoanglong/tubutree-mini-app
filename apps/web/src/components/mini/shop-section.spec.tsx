@@ -88,6 +88,18 @@ describe('ShopSection (web) vẽ theo layout', () => {
     expect(c.querySelector('[data-ds-part="brand"]')).toBeNull();
     expect(Array.from(c.querySelectorAll('[data-ds-part="note"]')).map((n) => n.textContent)).toEqual(['Mình dùng mỗi ngày', '', '']);
   });
+
+  it('xem trước (preview) không vẽ tim yêu thích ở lưới lẫn kệ ngang; khách thật thì có', async () => {
+    for (const layout of ['GRID', 'CAROUSEL'] as const) {
+      const c = col({ layout, items: many(3) });
+      const live = await mount(<ShopSection collection={c} />);
+      expect(live.querySelectorAll('button[aria-label^="Yêu thích"]').length).toBeGreaterThan(0);
+      mounted.pop()!.unmount();
+      const owner = await mount(<ShopSection collection={c} preview />);
+      expect(owner.querySelectorAll('button[aria-label^="Yêu thích"]')).toHaveLength(0);
+      mounted.pop()!.unmount();
+    }
+  });
 });
 
 describe('ShopSection (web) combo', () => {

@@ -100,7 +100,7 @@ export const publishStorefront = (isPublished: boolean) =>
 export const createCollection = (dto: { title: string; kind?: 'NORMAL' | 'COMBO'; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number }) =>
   api.post('/storefront/me/collections', dto).then((r) => r.data as StorefrontCollectionEdit);
 export const updateCollection = (id: string, dto: { title?: string; layout?: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct?: number }) =>
-  api.patch(`/storefront/me/collections/${id}`, dto).then((r) => r.data);
+  api.patch(`/storefront/me/collections/${id}`, dto).then((r) => r.data as StorefrontCollectionEdit);
 export const deleteCollection = (id: string) => api.delete(`/storefront/me/collections/${id}`).then((r) => r.data);
 
 /** `orderedIds` = toàn bộ id theo thứ tự mới; id thiếu được nối cuối, id lạ bị bỏ. */

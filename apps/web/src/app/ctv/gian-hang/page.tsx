@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
+import { Suspense, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { myStorefrontQuery } from '@tubutree/app-core/queries/storefront';
 import { shouldStartSignupWizard } from '@tubutree/app-core/storefront-signup';
@@ -86,9 +86,12 @@ export default function CtvStorefrontPage() {
       </Shell>
     );
   }
+  // Trang chi tiết khối đọc ?khoi= trên địa chỉ (useSearchParams), nên cần ranh giới Suspense khi dựng sẵn.
   return (
     <Shell>
-      <StorefrontBuilder sf={sf} />
+      <Suspense fallback={<Skeleton height={120} />}>
+        <StorefrontBuilder sf={sf} />
+      </Suspense>
     </Shell>
   );
 }
