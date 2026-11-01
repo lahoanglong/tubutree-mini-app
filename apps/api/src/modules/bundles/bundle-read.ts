@@ -63,3 +63,34 @@ export async function loadLiveBundles(prisma: Pick<PrismaService, 'bundle'>, now
       items: b.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, maxQty: i.maxQty })),
     }));
 }
+
+/** Phân loại (và sản phẩm của chúng) đang có suất Giờ vàng: nơi đọc công khai dùng để không quảng cáo bộ mà giỏ sẽ không giảm. */
+export interface FlashFootprint {
+  variationIds: ReadonlySet<string>;
+  productIds: ReadonlySet<string>;
+}
+
+/**
+ * Giỏ không đưa dòng Giờ vàng vào tính bundle (`computeForStorefront` nhận dòng không flash), nên trang sản phẩm và Trang chủ phải ẩn
+ * đúng những bộ mà dòng đó làm hụt. Cùng điều kiện với `FlashSaleService.resolveEffective`: đợt bật và đang trong giờ, còn suất,
+ * phân loại còn bán. Không tra theo người mua (API công khai, cache chung): người đã hết suất cá nhân vẫn thấy bộ ẩn, và giỏ chỉ
+ * giảm thêm chứ không bao giờ đắt hơn thứ đã quảng cáo.
+ */
+export async function loadFlashFootprint(prisma: Pick<PrismaService, 'flashSaleItem'>, now: Date, productIds: readonly string[]): Promise<FlashFootprint> {
+  const variationIds = new Set<string>();
+  const products = new Set<string>();
+  if (productIds.length === 0) return { variationIds, productIds: products };
+  const rows = await prisma.flashSaleItem.findMany({
+    where: {
+      variation: { productId: { in: [...productIds] }, isActive: true },
+      flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
+    },
+    select: { variationId: true, soldCount: true, quota: true, variation: { select: { productId: true } } },
+  });
+  for (const r of rows) {
+    if (r.soldCount >= r.quota) continue;
+    variationIds.add(r.variationId);
+    products.add(r.variation.productId);
+  }
+  return { variationIds, productIds: products };
+}

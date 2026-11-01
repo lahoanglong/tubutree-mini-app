@@ -106,10 +106,49 @@ describe('BundlesAdminService.create', () => {
 
   it('ADDON: lưu sản phẩm chính và giá kèm; giá kèm 0đ hợp lệ', async () => {
     const { svc, prisma } = setup();
-    await svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 0 })] }) as never, ADMIN, NOW);
+    await svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 0, variationId: 'p2-v' })] }) as never, ADMIN, NOW);
     const data = prisma.bundle.create.mock.calls[0][0].data;
     expect(data).toMatchObject({ kind: 'ADDON', pct: null, anchorProductId: 'p1' });
-    expect(data.items.create).toEqual([{ productId: 'p2', variationId: null, addonPrice: 0, maxQty: 1, sortOrder: 0 }]);
+    expect(data.items.create).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 0, maxQty: 1, sortOrder: 0 }]);
+  });
+
+  it('ADDON không ghim phân loại → 400, không ghi (giá kèm cố định không hợp với nhiều phân loại)', async () => {
+    const { svc, prisma } = setup();
+    const call = svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 39_000 })] }) as never, ADMIN, NOW);
+    await expect(call).rejects.toBeInstanceOf(BadRequestException);
+    await expect(call).rejects.toThrow('Chọn phân loại');
+    expect(prisma.bundle.create).not.toHaveBeenCalled();
+  });
+
+  it('ADDON ghim phân loại đắt: giá kèm so với giá phân loại ghim, không phải phân loại rẻ nhất', async () => {
+    const two = product('p2', {
+      variations: [
+        { id: 'p2-s', sku: 'p2s', retailPrice: 50_000, salePrice: null, stock: 3 },
+        { id: 'p2-l', sku: 'p2l', retailPrice: 500_000, salePrice: null, stock: 3 },
+      ],
+    });
+    const { svc, prisma } = setup({ products: [product('p1'), two] });
+    await svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 400_000, variationId: 'p2-l' })] }) as never, ADMIN, NOW);
+    expect(prisma.bundle.create).toHaveBeenCalled();
+    await expect(
+      svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 60_000, variationId: 'p2-s' })] }) as never, ADMIN, NOW),
+    ).rejects.toThrow('thấp hơn giá đang bán');
+  });
+
+  it('nhân viên: combo giảm % tính tiền tối đa trên phân loại ĐẮT NHẤT (50k và 500k) → 403, không ghi', async () => {
+    const two = (id: string) =>
+      product(id, {
+        variations: [
+          { id: `${id}-s`, sku: `${id}s`, retailPrice: 50_000, salePrice: null, stock: 3 },
+          { id: `${id}-l`, sku: `${id}l`, retailPrice: 500_000, salePrice: null, stock: 3 },
+        ],
+      });
+    const { svc, prisma } = setup({ products: [two('p1'), two('p2')], caps: { maxPercent: 50, maxAmount: 250_000 } });
+    const dto = createDto({ pct: 20, items: [dtoItem('p1', { maxQty: 10 }), dtoItem('p2', { maxQty: 10 })] });
+    await expect(svc.create(dto as never, STAFF, NOW)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.bundle.create).not.toHaveBeenCalled();
+    await svc.create(dto as never, ADMIN, NOW);
+    expect(prisma.bundle.create).toHaveBeenCalled();
   });
 
   it('nhân viên: pct 30 khi trần 20 → 403, không ghi', async () => {

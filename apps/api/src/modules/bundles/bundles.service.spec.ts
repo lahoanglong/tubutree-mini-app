@@ -37,11 +37,21 @@ const row = (o: Record<string, unknown> = {}) => ({
   ...o,
 });
 
-function setup(o: { rows?: unknown[]; cards?: ReturnType<typeof card>[]; product?: unknown; variations?: unknown[]; maxPct?: number } = {}) {
+type FlashRow = { variationId: string; productId: string; soldCount?: number; quota?: number };
+const pin = (id: string, productId: string, o: Record<string, unknown> = {}) => ({ id, productId, retailPrice: 50_000, salePrice: null, stock: 5, ...o });
+
+function setup(
+  o: { rows?: unknown[]; cards?: ReturnType<typeof card>[]; product?: unknown; variations?: unknown[]; maxPct?: number; flash?: FlashRow[] } = {},
+) {
   const prisma = {
     product: { findFirst: jest.fn().mockResolvedValue(o.product === undefined ? { id: 'p1', storefrontId: null } : o.product) },
     bundle: { findMany: jest.fn().mockResolvedValue(o.rows ?? [row()]) },
     variation: { findMany: jest.fn().mockResolvedValue(o.variations ?? []) },
+    flashSaleItem: {
+      findMany: jest
+        .fn()
+        .mockResolvedValue((o.flash ?? []).map((f) => ({ variationId: f.variationId, soldCount: f.soldCount ?? 0, quota: f.quota ?? 10, variation: { productId: f.productId } }))),
+    },
   };
   const catalog = { cardsByIds: jest.fn().mockResolvedValue(o.cards ?? [card('p1'), card('p2')]) };
   const config = { get: jest.fn().mockImplementation(async (_k: string, fb: unknown) => o.maxPct ?? fb) };
@@ -103,38 +113,44 @@ describe('BundlesService.forProduct', () => {
   });
 
   it('ADDON chỉ hiện ở sản phẩm chính; món kèm thiếu giá kèm thì bỏ bộ; ở trang của món kèm không hiện', async () => {
-    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 39_000, maxQty: 2 })] });
-    const onAnchor = await setup({ rows: [addon] }).svc.forProduct('sp-p1', NOW);
+    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 39_000, maxQty: 2, variationId: 'v2a' })] });
+    const onAnchor = await setup({ rows: [addon], variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW);
     expect(onAnchor.combos).toEqual([]);
     expect(onAnchor.addons).toHaveLength(1);
     expect(onAnchor.addons[0]!).toMatchObject({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1' });
-    expect(onAnchor.addons[0]!.items[0]).toMatchObject({ productId: 'p2', addonPrice: 39_000, maxQty: 2 });
+    expect(onAnchor.addons[0]!.items[0]).toMatchObject({ productId: 'p2', variationId: 'v2a', addonPrice: 39_000, maxQty: 2 });
 
-    const onSide = await setup({ rows: [addon], product: { id: 'p2', storefrontId: null }, cards: [card('p1'), card('p2')] }).svc.forProduct('sp-p2', NOW);
+    const onSide = await setup({ rows: [addon], product: { id: 'p2', storefrontId: null }, cards: [card('p1'), card('p2')], variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p2', NOW);
     expect(onSide.addons).toEqual([]);
 
-    const noPrice = row({ ...addon, items: [item('p2')] });
-    expect((await setup({ rows: [noPrice] }).svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
+    const noPrice = row({ ...addon, items: [item('p2', { variationId: 'v2a' })] });
+    expect((await setup({ rows: [noPrice], variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
+  });
+
+  it('ADDON ghi tay không ghim phân loại: không quảng cáo (giỏ không giảm vì giá kèm cố định không hợp nhiều phân loại)', async () => {
+    const unpinned = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 10_000 })] });
+    expect((await setup({ rows: [unpinned] }).svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
   });
 
   it('ADDON: món có giá kèm không thấp hơn giá đang bán bị bỏ (không quảng cáo deal không giảm được); hết món thì bỏ bộ', async () => {
     const mk = (extra: unknown[]) =>
       row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: extra });
-    const mixed = mk([item('p2', { addonPrice: 50_000 }), item('p3', { addonPrice: 10_000 })]);
+    const mixed = mk([item('p2', { addonPrice: 50_000, variationId: 'v2a' }), item('p3', { addonPrice: 10_000, variationId: 'v3a' })]);
     const cards = [card('p1'), card('p2'), card('p3')];
-    const out = await setup({ rows: [mixed], cards }).svc.forProduct('sp-p1', NOW);
+    const variations = [pin('v2a', 'p2'), pin('v3a', 'p3')];
+    const out = await setup({ rows: [mixed], cards, variations }).svc.forProduct('sp-p1', NOW);
     expect(out.addons[0]!.items.map((i) => i.productId)).toEqual(['p3']);
-    const none = mk([item('p2', { addonPrice: 60_000 })]);
-    expect((await setup({ rows: [none], cards }).svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
+    const none = mk([item('p2', { addonPrice: 60_000, variationId: 'v2a' })]);
+    expect((await setup({ rows: [none], cards, variations }).svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
   });
 
   it('tối đa 2 combo và 3 bộ mua kèm', async () => {
     const combos = ['c1', 'c2', 'c3'].map((id) => row({ id }));
     expect((await setup({ rows: combos }).svc.forProduct('sp-p1', NOW)).combos.map((c) => c.id)).toEqual(['c1', 'c2']);
     const addons = ['a1', 'a2', 'a3', 'a4'].map((id) =>
-      row({ id, kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 1000 })] }),
+      row({ id, kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 1000, variationId: 'v2a' })] }),
     );
-    expect((await setup({ rows: addons }).svc.forProduct('sp-p1', NOW)).addons.map((a) => a.id)).toEqual(['a1', 'a2', 'a3']);
+    expect((await setup({ rows: addons, variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW)).addons.map((a) => a.id)).toEqual(['a1', 'a2', 'a3']);
   });
 
   it('sản phẩm không có/không công khai → 404; sản phẩm của gian hàng đối tác → rỗng, không đọc bộ', async () => {
@@ -142,6 +158,60 @@ describe('BundlesService.forProduct', () => {
     const partner = setup({ product: { id: 'p1', storefrontId: 'sf1' } });
     expect(await partner.svc.forProduct('sp-p1', NOW)).toEqual({ combos: [], addons: [] });
     expect(partner.prisma.bundle.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('BundlesService: Giờ vàng (giỏ không đưa dòng Giờ vàng vào bundle, nên không quảng cáo bộ mà giỏ sẽ không giảm)', () => {
+  const addon = (items: unknown[]) =>
+    row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items });
+  const side = item('p2', { addonPrice: 39_000, variationId: 'v2a' });
+
+  it('sản phẩm chính đang Giờ vàng: không hiện Mua kèm (giỏ không thấy sản phẩm chính nên tính 180.000đ thay vì giá kèm)', async () => {
+    const base = { rows: [addon([side])], variations: [pin('v2a', 'p2')] };
+    expect((await setup(base).svc.forProduct('sp-p1', NOW)).addons).toHaveLength(1);
+    const inFlash = setup({ ...base, flash: [{ variationId: 'v1a', productId: 'p1' }] });
+    expect((await inFlash.svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
+  });
+
+  it('món kèm đang Giờ vàng: món đó bị bỏ khỏi bộ; hết món thì bỏ bộ', async () => {
+    const two = addon([side, item('p3', { addonPrice: 10_000, variationId: 'v3a' })]);
+    const cards = [card('p1'), card('p2'), card('p3')];
+    const variations = [pin('v2a', 'p2'), pin('v3a', 'p3')];
+    const one = await setup({ rows: [two], cards, variations, flash: [{ variationId: 'v2a', productId: 'p2' }] }).svc.forProduct('sp-p1', NOW);
+    expect(one.addons[0]!.items.map((i) => i.productId)).toEqual(['p3']);
+    const none = await setup({ rows: [addon([side])], variations, flash: [{ variationId: 'v2a', productId: 'p2' }] }).svc.forProduct('sp-p1', NOW);
+    expect(none.addons).toEqual([]);
+  });
+
+  it('combo có một món (phân loại sẽ vào giỏ) đang Giờ vàng: bỏ cả combo ở trang sản phẩm lẫn Trang chủ', async () => {
+    const ok = setup();
+    expect((await ok.svc.forProduct('sp-p1', NOW)).combos).toHaveLength(1);
+    expect(await ok.svc.homeCombos(4, NOW)).toHaveLength(1);
+    const flash = [{ variationId: 'v-p2', productId: 'p2' }];
+    expect((await setup({ flash }).svc.forProduct('sp-p1', NOW)).combos).toEqual([]);
+    expect(await setup({ flash }).svc.homeCombos(4, NOW)).toEqual([]);
+  });
+
+  it('combo món ghim phân loại: chỉ khi đúng phân loại ghim đang Giờ vàng mới bỏ', async () => {
+    const pinned = row({ items: [item('p1'), item('p2', { variationId: 'v2b' })] });
+    const variations = [pin('v2b', 'p2')];
+    expect((await setup({ rows: [pinned], variations, flash: [{ variationId: 'v-p2', productId: 'p2' }] }).svc.forProduct('sp-p1', NOW)).combos).toHaveLength(1);
+    expect((await setup({ rows: [pinned], variations, flash: [{ variationId: 'v2b', productId: 'p2' }] }).svc.forProduct('sp-p1', NOW)).combos).toEqual([]);
+  });
+
+  it('suất Giờ vàng đã hết (soldCount >= quota): giỏ tính giá thường nên bộ vẫn hiện', async () => {
+    const { svc } = setup({ flash: [{ variationId: 'v-p2', productId: 'p2', soldCount: 10, quota: 10 }] });
+    expect((await svc.forProduct('sp-p1', NOW)).combos).toHaveLength(1);
+  });
+
+  it('tra Giờ vàng theo đúng điều kiện của giỏ: đợt bật và đang trong giờ, phân loại còn bán; gồm cả sản phẩm chính', async () => {
+    const { svc, prisma } = setup({ rows: [addon([side])], variations: [pin('v2a', 'p2')] });
+    await svc.forProduct('sp-p1', NOW);
+    const where = prisma.flashSaleItem.findMany.mock.calls[0][0].where;
+    expect(where).toEqual({
+      variation: { productId: { in: expect.arrayContaining(['p1', 'p2']) }, isActive: true },
+      flashSale: { isActive: true, startAt: { lte: NOW }, endAt: { gt: NOW } },
+    });
   });
 });
 

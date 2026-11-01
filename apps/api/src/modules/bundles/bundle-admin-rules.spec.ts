@@ -15,7 +15,7 @@ const addonInput = (o: Record<string, unknown> = {}) => ({
   kind: 'ADDON' as const,
   pct: null,
   anchorProductId: 'p1',
-  items: [item('p2', { addonPrice: 39_000 })],
+  items: [item('p2', { addonPrice: 39_000, variationId: 'p2-a' })],
   ...o,
 });
 const msg = (fn: () => unknown) => {
@@ -58,7 +58,7 @@ describe('normalizeBundleContent: BUNDLE_PCT', () => {
 
 describe('normalizeBundleContent: ADDON', () => {
   it('hợp lệ; giá kèm 0đ hợp lệ', () => {
-    const out = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 0 })] }), 50);
+    const out = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 0, variationId: 'p2-a' })] }), 50);
     expect(out).toMatchObject({ kind: 'ADDON', pct: null, anchorProductId: 'p1' });
     expect(out.items[0]).toMatchObject({ productId: 'p2', addonPrice: 0 });
   });
@@ -67,8 +67,9 @@ describe('normalizeBundleContent: ADDON', () => {
     ['thiếu sản phẩm chính', { anchorProductId: null }, 'sản phẩm chính'],
     ['có pct', { pct: 10 }, 'không đặt %'],
     ['không có món', { items: [] }, 'từ 1 đến 3 món'],
-    ['bốn món', { items: ['a', 'b', 'c', 'd'].map((x) => item(x, { addonPrice: 1 })) }, 'từ 1 đến 3 món'],
-    ['món trùng sản phẩm chính', { items: [item('p1', { addonPrice: 1 })] }, 'khác sản phẩm chính'],
+    ['bốn món', { items: ['a', 'b', 'c', 'd'].map((x) => item(x, { addonPrice: 1, variationId: `${x}-a` })) }, 'từ 1 đến 3 món'],
+    ['món trùng sản phẩm chính', { items: [item('p1', { addonPrice: 1, variationId: 'p1-a' })] }, 'khác sản phẩm chính'],
+    ['món kèm không ghim phân loại', { items: [item('p2', { addonPrice: 39_000 })] }, 'Chọn phân loại'],
     ['thiếu giá kèm', { items: [item('p2')] }, 'giá mua kèm'],
     ['giá kèm âm', { items: [item('p2', { addonPrice: -1 })] }, 'giá mua kèm'],
     ['giá kèm lẻ', { items: [item('p2', { addonPrice: 10.5 })] }, 'giá mua kèm'],
@@ -118,7 +119,20 @@ describe('resolveBundleItems: sản phẩm và phân loại', () => {
 
   it('trả giá đang bán từng món: ghim thì giá phân loại ghim, không ghim thì phân loại đại diện', () => {
     const c = content({ items: normalizeBundleContent(pctInput({ items: [item('p1'), item('p2', { variationId: 'p2-b' })] }), 50).items });
-    expect(resolveBundleItems(c, catalog(prod('p1'), prod('p2')))).toEqual([50_000, 80_000]);
+    expect(resolveBundleItems(c, catalog(prod('p1'), prod('p2')))).toEqual([
+      { price: 50_000, maxPrice: 80_000 },
+      { price: 80_000, maxPrice: 80_000 },
+    ]);
+  });
+
+  it('món không ghim: price là phân loại đại diện (rẻ nhất), maxPrice là phân loại ĐẮT NHẤT khách có thể chọn', () => {
+    const big = prod('p1', {
+      variations: [
+        { id: 'p1-s', sku: 'p1-s', retailPrice: 50_000, salePrice: null, stock: 9 },
+        { id: 'p1-l', sku: 'p1-l', retailPrice: 600_000, salePrice: 500_000, stock: 9 },
+      ],
+    });
+    expect(resolveBundleItems(content(), catalog(big, prod('p2')))[0]).toEqual({ price: 50_000, maxPrice: 500_000 });
   });
 
   it('sản phẩm không có / ẩn / chưa duyệt → 400 nêu tên', () => {
@@ -144,35 +158,57 @@ describe('resolveBundleItems: sản phẩm và phân loại', () => {
 
   it('ADDON: sản phẩm chính cũng phải đang bán và không đối tác; giá kèm phải thấp hơn giá đang bán', () => {
     const c = normalizeBundleContent(addonInput(), 50);
-    expect(resolveBundleItems(c, catalog(prod('p1'), prod('p2')))).toEqual([50_000]);
+    expect(resolveBundleItems(c, catalog(prod('p1'), prod('p2')))).toEqual([{ price: 50_000, maxPrice: 50_000 }]);
     expect(msg(() => resolveBundleItems(c, catalog(prod('p2'))))).toContain('Không tìm thấy sản phẩm');
     expect(() => resolveBundleItems(c, catalog(prod('p1', { storefrontId: 'sf1' }), prod('p2')))).toThrow(BadRequestException);
-    const high = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 50_000 })] }), 50);
+    const high = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 50_000, variationId: 'p2-a' })] }), 50);
     expect(msg(() => resolveBundleItems(high, catalog(prod('p1'), prod('p2'))))).toContain('thấp hơn giá đang bán');
+  });
+
+  it('ADDON: giá kèm so với giá của PHÂN LOẠI GHIM, không phải phân loại rẻ nhất của sản phẩm', () => {
+    // p2-b giá 80.000: giá kèm 70.000 hợp lệ cho phân loại đó dù cao hơn giá phân loại đại diện (50.000).
+    const onB = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 70_000, variationId: 'p2-b' })] }), 50);
+    expect(resolveBundleItems(onB, catalog(prod('p1'), prod('p2')))).toEqual([{ price: 80_000, maxPrice: 80_000 }]);
   });
 });
 
 describe('assertStaffBundleCaps: trần nhân viên', () => {
   const caps = { maxPercent: 20, maxAmount: 30_000, maxUsage: 1000, dailyBudget: 1 };
+  const same = (...prices: number[]) => prices.map((p) => ({ price: p, maxPrice: p }));
 
   it('BUNDLE_PCT: pct vượt trần % → 403; trong trần → qua', () => {
     const c = normalizeBundleContent(pctInput({ pct: 30 }), 50);
-    expect(() => assertStaffBundleCaps(c, [10_000, 10_000], caps)).toThrow(ForbiddenException);
-    expect(msg(() => assertStaffBundleCaps(c, [10_000, 10_000], caps))).toContain('20%');
-    expect(() => assertStaffBundleCaps(normalizeBundleContent(pctInput({ pct: 20 }), 50), [10_000, 10_000], caps)).not.toThrow();
+    expect(() => assertStaffBundleCaps(c, same(10_000, 10_000), caps)).toThrow(ForbiddenException);
+    expect(msg(() => assertStaffBundleCaps(c, same(10_000, 10_000), caps))).toContain('20%');
+    expect(() => assertStaffBundleCaps(normalizeBundleContent(pctInput({ pct: 20 }), 50), same(10_000, 10_000), caps)).not.toThrow();
   });
 
   it('exposure (tiền tối đa mỗi đơn) vượt trần tiền → 403', () => {
     const c = normalizeBundleContent(pctInput({ pct: 20, items: [item('p1', { maxQty: 2 }), item('p2')] }), 50);
     // 20% × (100k×2 + 100k) = 60k > 30k
-    expect(() => assertStaffBundleCaps(c, [100_000, 100_000], caps)).toThrow(ForbiddenException);
-    expect(msg(() => assertStaffBundleCaps(c, [100_000, 100_000], caps))).toContain('30.000');
+    expect(() => assertStaffBundleCaps(c, same(100_000, 100_000), caps)).toThrow(ForbiddenException);
+    expect(msg(() => assertStaffBundleCaps(c, same(100_000, 100_000), caps))).toContain('30.000');
+  });
+
+  it('BUNDLE_PCT món không ghim: exposure tính trên phân loại ĐẮT NHẤT, không phải phân loại rẻ nhất (50k vs 500k → 403)', () => {
+    const c = normalizeBundleContent(pctInput({ pct: 20, items: [item('p1', { maxQty: 10 }), item('p2', { maxQty: 10 })] }), 50);
+    // Trần 250.000: đủ cho tính theo phân loại rẻ nhất (200.000) nhưng không đủ cho phân loại đắt nhất.
+    const wide = { ...caps, maxAmount: 250_000 };
+    const cheapest = [{ price: 50_000, maxPrice: 50_000 }, { price: 50_000, maxPrice: 50_000 }];
+    expect(() => assertStaffBundleCaps(c, cheapest, wide)).not.toThrow();
+    const real = [{ price: 50_000, maxPrice: 500_000 }, { price: 50_000, maxPrice: 500_000 }];
+    expect(() => assertStaffBundleCaps(c, real, wide)).toThrow(ForbiddenException); // 20% × 500k × 10 × 2 = 2.000.000
   });
 
   it('ADDON: % giảm của món kèm vượt trần % → 403; trong trần và tiền → qua', () => {
-    const deep = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 10_000 })] }), 50);
-    expect(() => assertStaffBundleCaps(deep, [50_000], caps)).toThrow(ForbiddenException);
-    const mild = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 45_000 })] }), 50);
-    expect(() => assertStaffBundleCaps(mild, [50_000], caps)).not.toThrow();
+    const deep = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 10_000, variationId: 'p2-a' })] }), 50);
+    expect(() => assertStaffBundleCaps(deep, same(50_000), caps)).toThrow(ForbiddenException);
+    const mild = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 45_000, variationId: 'p2-a' })] }), 50);
+    expect(() => assertStaffBundleCaps(mild, same(50_000), caps)).not.toThrow();
+  });
+
+  it('ADDON ghim phân loại đắt: % giảm tính trên giá phân loại ghim (500k → giá kèm 40k là giảm 92%) → 403', () => {
+    const c = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 40_000, variationId: 'p2-l' })] }), 50);
+    expect(() => assertStaffBundleCaps(c, same(500_000), { ...caps, maxAmount: 10_000_000 })).toThrow(ForbiddenException);
   });
 });

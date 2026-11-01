@@ -36,6 +36,7 @@ function setup() {
     campaign: { findMany: jest.fn().mockResolvedValue([]) },
     bundle: { findMany: jest.fn().mockResolvedValue([]) },
     variation: { findMany: jest.fn().mockResolvedValue([]) },
+    flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,

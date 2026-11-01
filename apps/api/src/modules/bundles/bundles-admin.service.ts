@@ -197,8 +197,8 @@ export class BundlesAdminService {
         variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
       },
     });
-    const prices = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])));
-    if (actor.staff) assertStaffBundleCaps(content, prices, await loadStaffCouponCaps(this.config));
+    const resolved = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])));
+    if (actor.staff) assertStaffBundleCaps(content, resolved, await loadStaffCouponCaps(this.config));
   }
 
   /** Nhân viên chỉ đụng bộ do nhân viên tạo (mẫu `assertStaffCreated` của Giờ vàng). */

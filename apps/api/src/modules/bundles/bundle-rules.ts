@@ -32,7 +32,7 @@ export function mergeMaxPerLine(a: BundleDiscount, b: BundleDiscount): BundleDis
   return { total: Object.values(perLine).reduce((s, d) => s + d, 0), perLine };
 }
 
-/** Các dòng của một món trong bộ: món ghim phân loại chỉ nhận đúng dòng đó, không ghim nhận mọi phân loại của sản phẩm. */
+/** Các dòng của một món trong bộ: món ghim phân loại chỉ nhận đúng dòng đó, không ghim nhận mọi phân loại của sản phẩm (chỉ BUNDLE_PCT được không ghim: giảm theo %, không theo giá cố định). */
 function matching(lines: readonly BundleLine[], it: LiveBundle['items'][number]): BundleLine[] {
   return lines.filter((l) => l.quantity >= 1 && l.productId === it.productId && (it.variationId == null || l.variationId === it.variationId));
 }
@@ -69,7 +69,8 @@ function addonBundle(b: LiveBundle, lines: readonly BundleLine[]): BundleDiscoun
   if (!anchor || !lines.some((l) => l.productId === anchor && l.quantity >= 1)) return EMPTY;
   const perLine: Record<string, number> = {};
   for (const it of b.items) {
-    if (it.productId === anchor || it.addonPrice == null || it.addonPrice < 0) continue;
+    // Giá kèm là giá cố định của MỘT phân loại: không ghim thì mọi phân loại của sản phẩm (kể cả loại đắt gấp chục lần) sẽ về giá đó.
+    if (it.productId === anchor || it.variationId == null || it.addonPrice == null || it.addonPrice < 0) continue;
     const price = it.addonPrice;
     addUnits(perLine, matching(lines, it), it.maxQty, (l, take) => Math.max(0, Math.floor(l.total / l.quantity) - price) * take);
   }
@@ -89,7 +90,8 @@ export function allocateBundleDiscounts(bundles: readonly LiveBundle[], lines: r
 
 /**
  * Số tiền tối đa MỘT đơn được giảm nhờ bộ này khi mỗi món mua đủ `maxQty` đơn vị: nền của trần nhân viên (mỗi đơn không vượt
- * `coupon.staff_max_amount_vnd`). `price` là giá đang bán của phân loại món.
+ * `coupon.staff_max_amount_vnd`). `price` là giá CAO NHẤT một dòng của món có thể mang (phân loại ghim, hoặc phân loại đắt nhất của món
+ * không ghim): giảm % áp cho mọi phân loại khách chọn.
  */
 export function bundleExposure(
   b: { kind: 'BUNDLE_PCT' | 'ADDON'; pct: number | null },

@@ -96,12 +96,21 @@ describe('Quản trị bundle (real Postgres)', () => {
 
   it('thay danh sách món: món cũ biến mất, món mới vào, sản phẩm chính ADDON đổi được', async () => {
     const [a, b, c] = [await product(), await product(), await product()];
-    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, addonPrice: 0 }] });
+    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 0 }] });
     expect(addon.items[0]).toMatchObject({ productId: b.id, addonPrice: 0 });
-    const next = await admin.update(addon.id, { anchorProductId: c.id, items: [{ productId: a.id, addonPrice: 50_000 }] } as never, ADMIN);
+    const next = await admin.update(addon.id, { anchorProductId: c.id, items: [{ productId: a.id, variationId: a.variationId, addonPrice: 50_000 }] } as never, ADMIN);
     expect(next.anchorProductId).toBe(c.id);
     expect(next.items.map((i) => [i.productId, i.addonPrice])).toEqual([[a.id, 50_000]]);
     expect(await prisma.bundleItem.count({ where: { bundleId: addon.id } })).toBe(1);
+  });
+
+  it('ADDON không ghim phân loại bị từ chối, không ghi gì (giá kèm cố định không hợp nhiều phân loại)', async () => {
+    const [a, b] = [await product(), await product()];
+    const before = await prisma.bundle.count();
+    await expect(
+      admin.create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, addonPrice: 10_000 }] } as never, ADMIN),
+    ).rejects.toThrow('Chọn phân loại');
+    expect(await prisma.bundle.count()).toBe(before);
   });
 
   it('hai người thay danh sách món cùng lúc: bộ giữ đúng danh sách của MỘT bên, không lẫn cả hai', async () => {
@@ -126,7 +135,7 @@ describe('Quản trị bundle (real Postgres)', () => {
 
   it('sản phẩm chính bị xoá: ADDON mất sản phẩm chính nên không vào đường tính tiền', async () => {
     const [a, b] = [await product(), await product()];
-    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, addonPrice: 10_000 }] });
+    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 10_000 }] });
     await prisma.bundle.update({ where: { id: addon.id }, data: { anchorProductId: null } });
     expect((await loadLiveBundles(prisma, NOW, [b.id])).some((x) => x.id === addon.id)).toBe(false);
   });

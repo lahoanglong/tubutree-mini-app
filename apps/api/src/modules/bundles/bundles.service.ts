@@ -6,7 +6,7 @@ import { CatalogService } from '../catalog/catalog.service';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { BUNDLE_MIN_PRODUCTS } from './bundle-rules';
-import { bundleLiveWhere, isTubuOnlyBundle, readBundleMaxPct } from './bundle-read';
+import { bundleLiveWhere, isTubuOnlyBundle, loadFlashFootprint, readBundleMaxPct, type FlashFootprint } from './bundle-read';
 
 export const PDP_COMBO_MAX = 2;
 export const PDP_ADDON_MAX = 3;
@@ -17,7 +17,7 @@ type CardOf = Awaited<ReturnType<CatalogService['cardsByIds']>>[number];
 
 export interface BundleItemDTO {
   productId: string;
-  /** Phân loại sẽ vào giỏ: món ghim thì đúng phân loại ghim, không ghim thì phân loại đại diện của thẻ. */
+  /** Phân loại sẽ vào giỏ: món ghim thì đúng phân loại ghim, không ghim (chỉ BUNDLE_PCT) thì phân loại đại diện của thẻ. */
   variationId: string | null;
   /** Số đơn vị mỗi đơn được hưởng ưu đãi (giá kèm hay giảm %). */
   maxQty: number;
@@ -90,7 +90,10 @@ export class BundlesService {
       orderBy: BUNDLE_ORDER,
       take: FETCH_CAP,
     });
-    const shown = await this.toPublic(rows.filter((r) => (r.kind === 'ADDON' ? r.anchorProductId === product.id : true)));
+    const shown = await this.toPublic(
+      rows.filter((r) => (r.kind === 'ADDON' ? r.anchorProductId === product.id : true)),
+      now,
+    );
     return {
       combos: shown.filter((b) => b.kind === 'BUNDLE_PCT').slice(0, PDP_COMBO_MAX),
       addons: shown.filter((b) => b.kind === 'ADDON').slice(0, PDP_ADDON_MAX),
@@ -106,17 +109,21 @@ export class BundlesService {
       orderBy: BUNDLE_ORDER,
       take: take * 3,
     });
-    const shown = await this.toPublic(rows);
+    const shown = await this.toPublic(rows, now);
     return shown.filter((b) => b.items.every((i) => i.inStock)).slice(0, take);
   }
 
-  /** Dựng DTO; bộ thiếu món công khai, có hàng đối tác, ghim phân loại đã tắt hay không còn đúng luật thì bỏ cả bộ (không quảng cáo bộ không đủ). */
-  private async toPublic(rows: readonly Row[]): Promise<BundleDTO[]> {
+  /**
+   * Dựng DTO; bộ thiếu món công khai, có hàng đối tác, ghim phân loại đã tắt, đang dính Giờ vàng hay không còn đúng luật thì bỏ cả bộ
+   * (không quảng cáo bộ không đủ, và giá hiện ra phải bằng giá giỏ tính).
+   */
+  private async toPublic(rows: readonly Row[], now: Date): Promise<BundleDTO[]> {
     const candidates = rows.filter(isTubuOnlyBundle);
     if (candidates.length === 0) return [];
     const productIds = [...new Set(candidates.flatMap((b) => b.items.map((i) => i.productId)))];
+    const flashProductIds = [...new Set([...productIds, ...candidates.flatMap((b) => (b.anchorProductId ? [b.anchorProductId] : []))])];
     const pinnedIds = [...new Set(candidates.flatMap((b) => b.items.map((i) => i.variationId).filter((v): v is string => v !== null)))];
-    const [cards, pinned, maxPct] = await Promise.all([
+    const [cards, pinned, maxPct, flash] = await Promise.all([
       this.catalog.cardsByIds(productIds),
       pinnedIds.length > 0
         ? (this.prisma.variation.findMany({
@@ -125,21 +132,32 @@ export class BundlesService {
           }) as Promise<PinnedVariation[]>)
         : Promise.resolve([] as PinnedVariation[]),
       readBundleMaxPct(this.config),
+      loadFlashFootprint(this.prisma, now, flashProductIds),
     ]);
     const cardById = new Map(cards.map((c) => [c.id, c]));
     const pinnedById = new Map(pinned.map((v) => [v.id, v]));
     const out: BundleDTO[] = [];
     for (const b of candidates) {
-      const dto = this.build(b, cardById, pinnedById, maxPct);
+      const dto = this.build(b, cardById, pinnedById, maxPct, flash);
       if (dto) out.push(dto);
     }
     return out;
   }
 
-  private build(b: Row, cardById: ReadonlyMap<string, CardOf>, pinnedById: ReadonlyMap<string, PinnedVariation>, maxPct: number): BundleDTO | null {
+  private build(
+    b: Row,
+    cardById: ReadonlyMap<string, CardOf>,
+    pinnedById: ReadonlyMap<string, PinnedVariation>,
+    maxPct: number,
+    flash: FlashFootprint,
+  ): BundleDTO | null {
+    // Dòng Giờ vàng không nhận bundle ở giỏ, nên sản phẩm chính đang Giờ vàng thì món kèm không về giá kèm (giỏ không thấy sản phẩm chính).
+    if (b.kind === 'ADDON' && b.anchorProductId !== null && flash.productIds.has(b.anchorProductId)) return null;
     const items: BundleItemDTO[] = [];
     for (const it of b.items) {
       if (b.kind === 'ADDON' && it.productId === b.anchorProductId) continue;
+      // Giá kèm áp cho một phân loại: bộ ghi tay không ghim thì giỏ không giảm (`addonBundle`), nên không quảng cáo.
+      if (b.kind === 'ADDON' && it.variationId === null) continue;
       const card = cardById.get(it.productId);
       if (!card) return null;
       let product: CardOf = card;
@@ -151,6 +169,11 @@ export class BundlesService {
         product = { ...card, basePrice: v.retailPrice, salePrice: v.salePrice, repVariationId: v.id };
         variationId = v.id;
         inStock = v.stock > 0;
+      }
+      // Phân loại sẽ vào giỏ đang Giờ vàng: dòng đó giỏ tính giá Giờ vàng và không nhận bundle. Combo thiếu một món thì không còn là bộ.
+      if (variationId !== null && flash.variationIds.has(variationId)) {
+        if (b.kind === 'BUNDLE_PCT') return null;
+        continue;
       }
       if (b.kind === 'ADDON') {
         // Giá kèm không thấp hơn giá đang bán thì không giảm được đồng nào: không quảng cáo "deal sốc".

@@ -54,7 +54,7 @@ describe('allocateBundleDiscounts: BUNDLE_PCT', () => {
 });
 
 describe('allocateBundleDiscounts: ADDON', () => {
-  const deal = addon('a1', 'p1', [item('p2', { addonPrice: 39_000 })]);
+  const deal = addon('a1', 'p1', [item('p2', { addonPrice: 39_000, variationId: 'v2' })]);
 
   it('có sản phẩm chính: món kèm về giá kèm', () => {
     const out = allocateBundleDiscounts([deal], [line('v1', 'p1', 80_000), line('v2', 'p2', 50_000)], 50);
@@ -63,7 +63,7 @@ describe('allocateBundleDiscounts: ADDON', () => {
 
   it('thiếu sản phẩm chính hoặc bộ mất sản phẩm chính → không giảm', () => {
     expect(allocateBundleDiscounts([deal], [line('v2', 'p2', 50_000)], 50)).toEqual(NONE);
-    expect(allocateBundleDiscounts([addon('a', null, [item('p2', { addonPrice: 1 })])], [line('v1', 'p1', 1), line('v2', 'p2', 50_000)], 50)).toEqual(NONE);
+    expect(allocateBundleDiscounts([addon('a', null, [item('p2', { addonPrice: 1, variationId: 'v2' })])], [line('v1', 'p1', 1), line('v2', 'p2', 50_000)], 50)).toEqual(NONE);
   });
 
   it('giá kèm không thấp hơn đơn giá hiện tại (sale tụt) → không giảm, không bao giờ làm giá tăng', () => {
@@ -72,7 +72,7 @@ describe('allocateBundleDiscounts: ADDON', () => {
   });
 
   it('giá kèm 0đ hợp lệ: giảm đủ đơn giá, không vượt total của dòng', () => {
-    const free = addon('a', 'p1', [item('p2', { addonPrice: 0 })]);
+    const free = addon('a', 'p1', [item('p2', { addonPrice: 0, variationId: 'v2' })]);
     const out = allocateBundleDiscounts([free], [line('v1', 'p1', 80_000), line('v2', 'p2', 50_000)], 50);
     expect(out.perLine).toEqual({ v2: 50_000 });
   });
@@ -80,8 +80,22 @@ describe('allocateBundleDiscounts: ADDON', () => {
   it('chỉ maxQty đơn vị được giá kèm', () => {
     const out = allocateBundleDiscounts([deal], [line('v1', 'p1', 80_000), line('v2', 'p2', 150_000, 3)], 50);
     expect(out.perLine).toEqual({ v2: 11_000 });
-    const two = addon('a', 'p1', [item('p2', { addonPrice: 39_000, maxQty: 2 })]);
+    const two = addon('a', 'p1', [item('p2', { addonPrice: 39_000, maxQty: 2, variationId: 'v2' })]);
     expect(allocateBundleDiscounts([two], [line('v1', 'p1', 80_000), line('v2', 'p2', 150_000, 3)], 50).perLine).toEqual({ v2: 22_000 });
+  });
+
+  it('giá kèm là giá của MỘT phân loại: khách chọn phân loại đắt hơn của cùng sản phẩm không được giá kèm', () => {
+    // Phân loại rẻ 50.000 (ghim, giá kèm 39.000), phân loại lớn 500.000 trong giỏ: dòng lớn không bị giảm 461.000 mỗi đơn vị.
+    const out = allocateBundleDiscounts([deal], [line('v1', 'p1', 80_000), line('v2-large', 'p2', 1_000_000, 2)], 50);
+    expect(out).toEqual(NONE);
+    const both = allocateBundleDiscounts([deal], [line('v1', 'p1', 80_000), line('v2', 'p2', 50_000), line('v2-large', 'p2', 1_000_000, 2)], 50);
+    expect(both).toEqual({ total: 11_000, perLine: { v2: 11_000 } });
+  });
+
+  it('món kèm không ghim phân loại (dữ liệu ghi tay) không nhận giá kèm: giá kèm cố định không có nghĩa trên nhiều phân loại', () => {
+    const unpinned = addon('a', 'p1', [item('p2', { addonPrice: 39_000 })]);
+    expect(allocateBundleDiscounts([unpinned], [line('v1', 'p1', 80_000), line('v2', 'p2', 50_000)], 50)).toEqual(NONE);
+    expect(allocateBundleDiscounts([unpinned], [line('v1', 'p1', 80_000), line('v2-large', 'p2', 1_000_000, 2)], 50)).toEqual(NONE);
   });
 
   it('món kèm trùng sản phẩm chính bị bỏ; món không có giá kèm bị bỏ', () => {

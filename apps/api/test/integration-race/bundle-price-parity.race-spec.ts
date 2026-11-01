@@ -17,6 +17,8 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { WalletService } from '../../src/modules/wallet/wallet.service';
 import { ComboService } from '../../src/modules/storefront/combo.service';
+import { BundlesService } from '../../src/modules/bundles/bundles.service';
+import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
 import { CashbackService } from '../../src/modules/cashback/cashback.service';
@@ -38,6 +40,7 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
   let checkout: CheckoutService;
   let cart: CartService;
   let cartApi: CartController;
+  let publicBundles: BundlesService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -73,6 +76,7 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     checkout = moduleRef.get(CheckoutService);
     cart = moduleRef.get(CartService);
     cartApi = new CartController(cart);
+    publicBundles = new BundlesService(prisma, new CatalogService(prisma), moduleRef.get(SystemConfigService));
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
     await setConfig(prisma, 'merchant.default_shipping_fee', 25_000);
@@ -116,7 +120,16 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
       },
       include: { variations: true },
     });
-    return { productId: p.id, variationId: p.variations[0]!.id };
+    return { productId: p.id, variationId: p.variations[0]!.id, slug: p.slug };
+  }
+
+  /** Phân loại thứ hai của một sản phẩm đã có (cùng sản phẩm, giá khác): thứ làm giá kèm cố định thành lỗ nếu không ghim phân loại. */
+  async function addVariation(productId: string, price: number) {
+    const tag = randCode(8);
+    const v = await prisma.variation.create({
+      data: { productId, pancakeId: `itcp-v-${tag}`, sku: `ITCP-${tag}`, name: `Lớn ${price}`, attributes: {}, retailPrice: price, stock: 50 },
+    });
+    return v.id;
   }
 
   async function buyer() {
@@ -340,7 +353,7 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     const b = await buyer();
     const main = await product(80_000);
     const side = await product(50_000);
-    await bundle('ADDON', [{ productId: side.productId, addonPrice: 39_000 }], { anchor: main.productId });
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: main.productId });
     await cart.addItem(b.userId, { variationId: main.variationId, quantity: 1 });
     await cart.addItem(b.userId, { variationId: side.variationId, quantity: 1 });
 
@@ -354,11 +367,89 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     const b = await buyer();
     const main = await product(80_000);
     const side = await product(50_000);
-    await bundle('ADDON', [{ productId: side.productId, addonPrice: 39_000 }], { anchor: main.productId });
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: main.productId });
     await cart.addItem(b.userId, { variationId: side.variationId, quantity: 1 });
     const r = await cartQuoteOrder(b);
     expect(r.c.comboDiscount).toBe(0);
     expect(r.numbers.order).toBe(50_000);
+  });
+
+  it('ADDON giá kèm là của MỘT phân loại: khách chọn phân loại đắt hơn của cùng sản phẩm không được giá kèm, giảm không vượt giá gốc − giá kèm', async () => {
+    const main = await product(80_000);
+    const side = await product(50_000);
+    const large = await addVariation(side.productId, 500_000);
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000, maxQty: 2 }], { anchor: main.productId });
+
+    const onlyLarge = await buyer();
+    await cart.addItem(onlyLarge.userId, { variationId: main.variationId, quantity: 1 });
+    await cart.addItem(onlyLarge.userId, { variationId: large, quantity: 2 }); // 1.000.000đ: không được về 78.000đ
+    const r1 = await cartQuoteOrder(onlyLarge);
+    expect(r1.c.comboDiscount).toBe(0);
+    expect(paidOf(r1.o, large)).toBe(1_000_000);
+
+    const both = await buyer();
+    await cart.addItem(both.userId, { variationId: main.variationId, quantity: 1 });
+    await cart.addItem(both.userId, { variationId: side.variationId, quantity: 1 });
+    await cart.addItem(both.userId, { variationId: large, quantity: 1 });
+    const r2 = await cartQuoteOrder(both);
+    expect(r2.c.comboDiscount).toBe(11_000); // đúng 50.000 − 39.000 trên phân loại ghim, phân loại lớn giữ 500.000đ
+    expect(paidOf(r2.o, side.variationId)).toBe(39_000);
+    expect(paidOf(r2.o, large)).toBe(500_000);
+  });
+
+  it('ADDON ghi tay không ghim phân loại (qua mặt admin): giỏ không giảm đồng nào, công khai không quảng cáo', async () => {
+    const b = await buyer();
+    const main = await product(80_000);
+    const side = await product(50_000);
+    const large = await addVariation(side.productId, 500_000);
+    await bundle('ADDON', [{ productId: side.productId, addonPrice: 39_000, maxQty: 2 }], { anchor: main.productId });
+    await cart.addItem(b.userId, { variationId: main.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: large, quantity: 2 });
+    const r = await cartQuoteOrder(b);
+    expect(r.c.comboDiscount).toBe(0);
+    expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
+  });
+
+  it('ADDON: sản phẩm chính đang Giờ vàng thì công khai không quảng cáo và giỏ không giảm; hết Giờ vàng thì cả hai cùng giảm 11.000đ', async () => {
+    const side = await product(50_000);
+    const anchor = await flashProduct(100_000, 50_000);
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: anchor.productId });
+    const slug = (await prisma.product.findUniqueOrThrow({ where: { id: anchor.productId }, select: { slug: true } })).slug;
+
+    const during = await buyer();
+    await cart.addItem(during.userId, { variationId: anchor.variationId, quantity: 1 });
+    await cart.addItem(during.userId, { variationId: side.variationId, quantity: 1 });
+    expect((await publicBundles.forProduct(slug)).addons).toEqual([]); // trang sản phẩm không hiện "Mua kèm 39.000đ"
+    const r1 = await cartQuoteOrder(during);
+    expect(r1.c.comboDiscount).toBe(0); // và giỏ tính đúng như trang đã nói: món kèm giá thường
+    expect(r1.numbers.order).toBe(100_000);
+
+    await prisma.flashSale.update({ where: { id: anchor.saleId }, data: { isActive: false } });
+    const after = await publicBundles.forProduct(slug);
+    expect(after.addons).toHaveLength(1);
+    expect(after.addons[0]!.items[0]).toMatchObject({ variationId: side.variationId, addonPrice: 39_000 });
+    const normal = await buyer();
+    await cart.addItem(normal.userId, { variationId: anchor.variationId, quantity: 1 });
+    await cart.addItem(normal.userId, { variationId: side.variationId, quantity: 1 });
+    expect((await cartQuoteOrder(normal)).c.comboDiscount).toBe(11_000);
+  });
+
+  it('combo có món đang Giờ vàng: Trang chủ và trang sản phẩm không quảng cáo, giỏ không giảm (cùng một câu trả lời)', async () => {
+    const a = await product(60_000);
+    const f = await flashProduct(100_000, 50_000);
+    const bun = await bundle('BUNDLE_PCT', [{ productId: a.productId }, { productId: f.productId }], { pct: 20 });
+    const slugA = (await prisma.product.findUniqueOrThrow({ where: { id: a.productId }, select: { slug: true } })).slug;
+    try {
+      expect((await publicBundles.forProduct(slugA)).combos.some((c) => c.id === bun.id)).toBe(false);
+      expect((await publicBundles.homeCombos(8)).some((c) => c.id === bun.id)).toBe(false);
+      const b = await buyer();
+      await cart.addItem(b.userId, { variationId: a.variationId, quantity: 1 });
+      await cart.addItem(b.userId, { variationId: f.variationId, quantity: 1 });
+      expect((await cartQuoteOrder(b)).c.comboDiscount).toBe(0);
+    } finally {
+      await prisma.flashSale.update({ where: { id: f.saleId }, data: { isActive: false } });
+    }
+    expect((await publicBundles.forProduct(slugA)).combos.some((c) => c.id === bun.id)).toBe(true);
   });
 
   it('bundle hết hạn giữa báo giá và đặt đơn: báo giá mới không giảm, đặt với tổng cũ bị TOTAL_CHANGED, không tạo đơn', async () => {
