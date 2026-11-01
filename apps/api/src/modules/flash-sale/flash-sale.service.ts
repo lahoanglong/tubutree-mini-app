@@ -11,7 +11,18 @@ import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '.
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
 import { ACTIVE_FLASH_ORDER_BY, activeFlashWhere, isStillDiscounted } from './flash-active';
-import { SLOT_ITEM_ORDER_BY, slotStatus, vnHorizonEnd, type FlashSlotStatus } from './flash-slots';
+import {
+  DEFAULT_SLOT_CLOCKS,
+  FLASH_SLOTS_KEY,
+  FLASH_SLOT_MINUTES,
+  SLOT_ITEM_ORDER_BY,
+  parseSlotClocks,
+  slotStartsFor,
+  slotStatus,
+  vnClock,
+  vnHorizonEnd,
+  type FlashSlotStatus,
+} from './flash-slots';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 /** Câu của API cũ; client cũ vẫn khớp nó. Lỗi mới mang mã FLASH_LIMIT (xem overLimitError). */
@@ -488,6 +499,31 @@ export class FlashSaleService {
       endAt = new Date(dto.endAt);
     assertSaleWindow(startAt, endAt, await this.maxSaleDays());
     return this.prisma.flashSale.create({ data: { title: dto.title, startAt, endAt, createdBy: adminId } });
+  }
+
+  /**
+   * Sinh đợt rỗng cho các khung mặc định (`flashsale.slots`, giờ VN) trong `days` ngày kể từ hôm nay (admin). Mốc đã kết thúc bị bỏ;
+   * mốc đã có đợt cùng giờ bắt đầu (kể cả đợt tắt) bị bỏ qua nên bấm hai lần không tạo trùng. Món thêm sau bằng addItem như đợt tạo tay.
+   */
+  async generateSlots(adminId: string, days: number, now: Date = new Date()): Promise<{ created: number; skipped: number }> {
+    if (!Number.isInteger(days) || days < 1 || days > 7) throw new BadRequestException('Số ngày tạo khung giờ phải từ 1 đến 7.');
+    const clocks = parseSlotClocks(await this.config.get<unknown>(FLASH_SLOTS_KEY, [...DEFAULT_SLOT_CLOCKS]));
+    const starts = slotStartsFor(now, clocks, days);
+    const maxDays = await this.maxSaleDays();
+    return this.prisma.$transaction(async (tx) => {
+      // Hai admin bấm cùng lúc: mỗi bên chỉ thấy bản chưa có đợt của bên kia nên cùng tạo; khoá để bên sau thấy đợt của bên trước.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'flash.generate_slots'}))`;
+      const existing = await tx.flashSale.findMany({ where: { startAt: { in: starts } }, select: { startAt: true } });
+      const taken = new Set(existing.map((e) => e.startAt.getTime()));
+      const fresh = starts.filter((s) => !taken.has(s.getTime()));
+      const rows = fresh.map((startAt) => {
+        const endAt = new Date(startAt.getTime() + FLASH_SLOT_MINUTES * 60e3);
+        assertSaleWindow(startAt, endAt, maxDays, false);
+        return { title: `Giờ vàng ${vnClock(startAt)}`, startAt, endAt, createdBy: adminId };
+      });
+      if (rows.length > 0) await tx.flashSale.createMany({ data: rows });
+      return { created: rows.length, skipped: starts.length - rows.length };
+    });
   }
 
   /**

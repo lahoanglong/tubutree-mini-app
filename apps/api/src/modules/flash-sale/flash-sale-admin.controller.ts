@@ -27,6 +27,9 @@ class AddItemDto {
   @IsOptional() @IsInt() @Min(1) perUserLimit?: number;
   @IsOptional() @IsInt() @Min(-1000) @Max(1000) sortOrder?: number;
 }
+class GenerateSlotsDto {
+  @IsInt() @Min(1) @Max(7) days!: number;
+}
 class UpdateItemDto {
   @IsInt() @Min(-1000) @Max(1000) sortOrder!: number;
 }
@@ -47,6 +50,12 @@ export class FlashSaleAdminController {
   @Post()
   create(@CurrentUser('sub') adminId: string, @Body() dto: CreateSaleDto) {
     return this.flashSale.createSale(adminId, dto);
+  }
+
+  // Đặt trước các route `:id/...` để chữ "generate-slots" không bị hiểu là id.
+  @Post('generate-slots')
+  generateSlots(@CurrentUser('sub') adminId: string, @Body() dto: GenerateSlotsDto) {
+    return this.flashSale.generateSlots(adminId, dto.days);
   }
 
   @Patch(':id')
