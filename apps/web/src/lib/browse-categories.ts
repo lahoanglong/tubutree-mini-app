@@ -1,5 +1,6 @@
 import { Baby, Coffee, Droplets, Flower2, HeartHandshake, LayoutGrid, Recycle, Smile, Sparkles, SprayCan, Wheat, type LucideIcon } from 'lucide-react';
 import type { CategoryDTO } from '@tubutree/app-core/api/catalog';
+import { categoryIconKey, type CategoryIconKey } from '@tubutree/app-core/browse/category-icons';
 import { browseText } from './browse-text';
 
 export interface CategoryEntry {
@@ -11,16 +12,21 @@ export interface CategoryEntry {
   image?: string | null;
 }
 
-/** Icon theo slug danh mục chuẩn; slug lạ lùi về LayoutGrid. */
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  'my-pham-thien-nhien': Flower2,
-  'tay-rua-sinh-hoc': Sparkles,
-  'cho-be': Baby,
-  'cho-me-bau': HeartHandshake,
-  'cham-soc-ca-nhan': Smile,
-  'ca-phe-do-uong': Coffee,
-  'nong-san-thuc-pham': Wheat,
+const ICON_BY_KEY: Record<CategoryIconKey, LucideIcon> = {
+  flower: Flower2,
+  sparkles: Sparkles,
+  baby: Baby,
+  'heart-handshake': HeartHandshake,
+  smile: Smile,
+  coffee: Coffee,
+  wheat: Wheat,
 };
+
+/** Icon theo slug danh mục chuẩn (bảng slug → khoá ở app-core, chung với web); slug lạ lùi về LayoutGrid. */
+function iconFor(slug: string): LucideIcon {
+  const key = categoryIconKey(slug);
+  return key ? ICON_BY_KEY[key] : LayoutGrid;
+}
 
 /** 4 phân khúc (forSegment) — luôn có hàng trên prod vì sync Pancake suy ra từ tên sản phẩm. */
 export const SEGMENT_ENTRIES: CategoryEntry[] = [
@@ -45,5 +51,5 @@ export function categoryEntries(categories: CategoryDTO[] | undefined): Category
   if (!all.some((c) => typeof c.productCount === 'number')) return SEGMENT_ENTRIES;
   const real = all.filter((c) => typeof c.productCount !== 'number' || c.productCount > 0);
   if (real.length === 0) return SEGMENT_ENTRIES;
-  return real.map((c) => ({ kind: 'category', key: c.id, label: c.name, icon: CATEGORY_ICONS[c.slug] ?? LayoutGrid, image: c.image }));
+  return real.map((c) => ({ kind: 'category', key: c.id, label: c.name, icon: iconFor(c.slug), image: c.image }));
 }
