@@ -26,7 +26,7 @@
 
 ## Quyết định lúc viết kế hoạch
 
-- **Khung giờ = `FlashSale`.** `GET /flash-sales/slots` trả mọi đợt `isActive`, chưa kết thúc, có `startAt` trước 00:00 giờ VN của ngày kia, có ≥1 món bán được (`itemCount > 0`). Không lọc theo `flashsale.slots`, vì đợt nhập tay giờ lạ (đang có trên PROD) sẽ biến mất khỏi trang trong khi Trang chủ vẫn hiện. `flashsale.slots` là lưới khung mặc định mà admin sinh đợt từ đó (`generateSlots`, Task 10). Đợt đã kết thúc không thành tab; `GET /slots/:id/items` của đợt đã kết thúc vẫn 200 với `slot.status='ENDED'` và `items: []` (mở từ thông báo cũ: "Khung giờ này đã kết thúc"), id lạ hoặc đợt tắt thì 404.
+- **Khung giờ = `FlashSale`.** `GET /flash-sales/slots` trả mọi đợt `isActive`, chưa kết thúc, có `startAt` trước 00:00 giờ VN của ngày kia, có ≥1 món bán được (`itemCount > 0`). Không lọc theo `flashsale.slots`, vì đợt nhập tay giờ lạ (đang có trên PROD) sẽ biến mất khỏi trang trong khi Trang chủ vẫn hiện. `flashsale.slots` là lưới khung mặc định mà admin sinh đợt từ đó (`generateSlots`, Task 10; đã cắt, xem "Điều chỉnh lúc làm"). Đợt đã kết thúc không thành tab; `GET /slots/:id/items` của đợt đã kết thúc vẫn 200 với `slot.status='ENDED'` và `items: []` (mở từ thông báo cũ: "Khung giờ này đã kết thúc"), id lạ hoặc đợt tắt thì 404.
 - **Phản hồi bọc:** `{ serverNow, slots }` và `{ serverNow, slot, items }` (không phải mảng có `serverNow` mỗi dòng như `listActive`) để danh sách rỗng vẫn đồng bộ được đồng hồ.
 - **Hết suất:** `soldOut = soldCount >= quota || variation.stock <= 0`; món hết suất vẫn trả (mờ, xuống cuối, nút khoá). Món hết hàng thật hoặc không còn rẻ hơn giá đang bán (`isStillDiscounted`) bị loại như `listActive`.
 - **`listActive`:** thêm `saleId`, `title`, `startAt`, `perUserLimit` (PDP đã đọc `perUserLimit` để ghi "Mỗi khách tối đa {n}") và tham số `limit` tuỳ chọn. Khối gộp `/home` KHÔNG truyền `limit`: cache `['flash-sales','active']` còn nuôi giá Giờ vàng trên mọi thẻ, cắt bớt thì thẻ món bị cắt hiện giá thường.
@@ -216,7 +216,7 @@
 - [ ] **Step 4: Bundle**: `node scripts/ci/bundle-budget.cjs apps/miniapp/www` sau `pnpm --filter miniapp build`; ghi entry trước/sau.
 - [ ] **Step 5: Commit** `test(e2e): trang Giờ vàng Mini (đăng nhập và khách), ô Giờ vàng ở Trang chủ`
 
-### Task 10: `flashsale.slots` + sinh khung giờ (admin)
+### Task 10: `flashsale.slots` + sinh khung giờ (admin) — CẮT (xem "Điều chỉnh lúc làm")
 
 **Files:**
 - Modify: `apps/api/src/modules/system-config/system-config.service.ts` (`JSON_RULES['flashsale.slots']`), `apps/api/prisma/seed.ts` (`createOnly`), `reference-config-selection.spec.ts` + `system-config.service.spec.ts` theo cách P3a đã thêm `catalog.loved_min_*`; `flash-sale.service.ts` (`generateSlots`), `flash-sale-admin.controller.ts` (`POST /admin/flash-sales/generate-slots`), spec
@@ -228,7 +228,7 @@
 - [ ] **Step 2–4: Chạy đỏ, cài, xanh** (`npx jest src/modules/flash-sale src/modules/system-config`).
 - [ ] **Step 5: Commit** `feat(api): cấu hình flashsale.slots và sinh khung giờ Giờ vàng cho admin`
 
-### Task 11: Admin, thứ tự món + nút sinh khung
+### Task 11: Admin, thứ tự món + nút sinh khung — CẮT (xem "Điều chỉnh lúc làm")
 
 **Files:**
 - Create: `apps/web/src/components/admin/flash-item-order.tsx` (+ spec), `apps/web/src/components/admin/flash-slot-generator.tsx` (+ spec)
@@ -257,8 +257,22 @@
 
 ## Điều chỉnh lúc làm
 
-(Ghi trong lúc làm: chỗ lệch kế hoạch và lý do.)
+- **Task 10 và 11 cắt** (đề ghi ưu tiên thấp nhất, cắt thì cắt cả khoá cấu hình): không có khoá `flashsale.slots`, không có `generateSlots`, không có nút sinh khung hay ô "Thứ tự" ở tab Giờ vàng của admin. Admin vẫn tạo đợt tay với giờ bất kỳ (đợt nào còn món bán được và bắt đầu trước 00:00 giờ VN của ngày kia đều thành tab). `PATCH /admin/flash-sales/items/:itemId` đặt `sortOrder` đã có ở API (Task 3), chưa có ô trên giao diện admin. Hai hàm `parseSlotClocks` và `slotStartsFor` chỉ phục vụ nút sinh khung nên đã bỏ khỏi `flash-slots.ts` (8e5761c98); mã gốc ở cbfab6873 nếu gói sau làm lại Task 10 và 11.
+- **Nhắc tôi sau đăng nhập không tự đặt lại**: khách phải bấm lần nữa (đã ghi ở phần Quyết định).
+- **Lỗi tìm ra khi viết e2e Mini**: chạm Mua ngay hoặc Nhắc tôi lúc phiên còn `loading` làm `login()` chạy song song với `restore()` của app. Trang `/flash-sale` giờ bỏ qua lần chạm đó (fdbf503d0); e2e đợi `GET /flash-sales/upcoming` (chỉ đi khi đã đăng nhập) trước khi bấm.
+- **Bảng quyền nhân viên**: gate bắt được `PATCH /admin/flash-sales/items/:itemId` chưa có trong `staff-permissions.matrix.spec.ts`; thêm với nhóm MARKETING (1fc6d1a2e).
+- **Web**: `ApiError` của web không mang `limit`, nên câu FLASH_LIMIT ở thanh toán web lấy nguyên câu máy chủ (đã có số). Tiêu đề trang web dùng "—" thay "|" như các trang khác. CTA của trạng thái rỗng đẩy `/san-pham`.
+- **File ngoài phạm vi gói phải sửa**: `merch/shelves.spec.ts` và `route-map.json` (hết cờ pending), `components/home/flash-sale.tsx` của web (chuyển `flashCardProduct` sang `lib/flash-display.ts`), `page-titles.spec.ts`, `components/mini/index.ts` (xuất `SlotTabs`), `ProductTile` ở cả hai app (thêm `action`).
+- **Có sẵn từ base, không phải của gói**: `visual-tour.*` ném "thiếu cấu hình cho route /offers" (route-map có `/offers`, `support/tour.ts` chưa có mục) khi chạy với `VISUAL_DIR`; CI thường bỏ qua file này. Gói chỉ thêm mục `/flash-sale` vào `TOUR`.
+- **Spec web `flash-slots.web.spec.ts` chưa chạy cục bộ** (cần Next + API thật cho SSR; để CI). Chỉ qua tsc-e2e.
 
 ## Kết quả đo
 
-(Race, CLS, entry Mini trước/sau, gate, e2e.)
+- **Race** (`flash-slot-last-unit.race-spec.ts`, Postgres native 25545, DB `tubutree_it`): hai khách mua món cuối đồng thời, 8 vòng, chạy 4 lần lúc làm và 1 lần cuối gói: đúng một đơn, người kia PRICE_CHANGED, `soldCount = 1`; FLASH_LIMIT kèm `limit`, đơn huỷ nguyên, suất không bị trừ; sau đơn thắng món cuối `GET /slots/:id/items` báo `soldOut`. 3 passed.
+- **CLS PDP web 375×812** (Next dev + API giả, sản phẩm có suất Giờ vàng đang chạy, `layout-shift` observer): không có Giờ vàng 0,0057; có Giờ vàng 0,0957 với `/flash-sales/active` trả sau 300 ms và sau 1200 ms (phần do thanh Giờ vàng chèn dưới ảnh: 0,0900, đẩy cột thông tin xuống 136 px). Không vượt 0,1 nên không đổi mã (không `initialData`). Còn cách ngưỡng 0,004: nếu thanh Giờ vàng cao thêm hoặc khung nhìn thấp hơn thì phải làm bước server `initialData`.
+- **Bundle Mini**: entry 625 KB (gate tích hợp đợt 3, base) thành 626 KB; tổng 2106 KB thành 2119 KB (chunk route `/flash-sale` riêng; tổng đã vượt mốc cảnh báo 2048 từ base). Mốc ≤ 700 KB còn dư.
+- **Ảnh 375px** (Mini Vite 3313, web Next 3314, gitignored): `docs/2026-10-31-shop-redesign/screens/P12/` có `{mini,web}-home.png`, `{mini,web}-flash.png`, `{mini,web}-flash-upcoming.png`. So hai app: Trang chủ giống nhau (ô Giờ vàng đầu hàng, "Xem tất cả" ở khối Giờ vàng); trang Giờ vàng giống nhau từ tab trở xuống. Khác duy nhất là tiêu đề: Mini để chỗ cho nút Quay lại trên dòng riêng (khung `PageHeader` của Mini), web để cùng dòng; web có chân trang.
+- **e2e Mini đủ bộ** (Vite 3313, 2 worker): 265 passed, 10 skipped, 0 failed. `flash-slots.miniapp.spec.ts` 8 ca; `home-p6`, `home-h`, `home-merged`, `tile-rhythm`, `mini-frame` không phải sửa.
+- **Gate** (`gate-P12.txt`, base 77433c0d0): PASS shared-types, tsc x5 (api, web, miniapp, app-core, e2e), eslint x3, vitest-app-core (134 file, 1674 test), lint-parity, vite-build, bundle-mini. Lần chạy đầu có 4 FAIL:
+  - `jest-api`: thật, bảng quyền thiếu route mới; sửa ở 1fc6d1a2e, `staff-permissions.matrix.spec.ts` 50 passed.
+  - `vitest-miniapp` (1 test), `vitest-miniapp-utc` (6 test), `vitest-web` (61 test): đều là "Test timed out in 5000ms" hoặc "không thấy phần tử" ở các file gói không đụng (suggest-feed, about, brand-view, browse, shop-products-tab, admin/page, brand-actions, s/[slug]/page, thanh-toan/coupon, user-detail-drawer, recycle-desk) khi máy thiếu RAM. Chạy lại riêng các file đó: 5 file Mini (TZ=UTC) 159 passed, suggest-feed 14 passed, 6 file web 425 passed. Gate tích hợp đợt 3 của base là 0 FAIL, nên đây là tải máy, không phải hồi quy.
