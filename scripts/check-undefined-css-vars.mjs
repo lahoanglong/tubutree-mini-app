@@ -30,6 +30,10 @@ const DEFINITION_FILES = [
 ];
 
 const RUNTIME_PREFIXES = ['zaui-safe-area-'];
+// Tên đúng (không phải họ) do mã app đặt lúc chạy trên <html>. Không định nghĩa ở :root vì chỗ dùng có giá trị dự phòng riêng
+// (vd cart.tsx `var(--sticky-bar-h, 150px)`), mặc định ở :root sẽ đè mất dự phòng đó.
+//  - `--sticky-bar-h`: StickyActionBar (components/ui/sticky-action-bar.tsx) đo chiều cao thanh đang gắn.
+const RUNTIME_NAMES = new Set(['sticky-bar-h']);
 const SKIP_FILE = /\.(spec|test)\.[cm]?[jt]sx?$/;
 
 function walk(dir, exts, out = []) {
@@ -61,7 +65,7 @@ for (const f of files) {
     for (const m of lines[i].matchAll(/var\(--([a-zA-Z0-9-]+)(\$\{)?/g)) {
       const name = m[1];
       if (m[2]) continue;
-      if (RUNTIME_PREFIXES.some((p) => name.startsWith(p))) continue;
+      if (RUNTIME_PREFIXES.some((p) => name.startsWith(p)) || RUNTIME_NAMES.has(name)) continue;
       if (!defined.has(name)) {
         console.error(`${f}:${i + 1}: var(--${name}) is not defined anywhere`);
         bad++;

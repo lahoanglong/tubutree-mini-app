@@ -61,6 +61,7 @@ step vitest-miniapp-utc "Test Files|Tests " bash -c 'cd apps/miniapp && TZ=UTC n
 step vitest-web "Test Files|Tests " bash -c 'cd apps/web && npx vitest run'
 [ $JEST = 1 ] && step jest-api "^Test Suites:|^Tests:" bash -c 'cd apps/api && npx jest --silent'
 step lint-parity "" pnpm lint:parity
+step lint-vars "" pnpm lint:vars
 step vite-build "built in" bash -c 'cd apps/miniapp && VITE_API_BASE_URL=https://api.tubutree.com/api npx vite build'
 step bundle-mini "entry" bash -c "node '$GATE_TOOLS/perf/bundle-report.mjs' --only=miniapp | jq -r '.miniapp | \"entry \\(.entry.rawKB)/\\(.entry.gzKB) KB total \\(.groups.total.rawKB)/\\(.groups.total.gzKB) KB\"'"
 
