@@ -45,7 +45,7 @@ vi.mock('./content-kit-sheet', () => ({
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PdpChatButton, PdpContentKitRow, PdpLowStock, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpLowStock, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpShippingRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
   { id: 'v1', stock: 0 },
@@ -163,6 +163,25 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     const { container } = mount(<PdpCoupons productId="p1" />);
     await flush();
     expect(container.innerHTML).toBe('');
+  });
+});
+
+describe('đường kẻ dưới hàng thông tin: chỉ giữa các hàng, hàng cuối không vẽ (như Mini App, G3 MINOR)', () => {
+  const row = (c: HTMLElement, label: string) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"], div')).find((b) => b.textContent?.startsWith(label) && b.style !== undefined && b.querySelector('svg'))!;
+  const hasLine = (el: HTMLElement) => el.style.boxShadow.includes('inset 0 -1px 0');
+
+  it('"Vận chuyển ›" luôn là hàng cuối của khối thông tin nên không có đường kẻ dưới (không còn đường xám trên chip phân loại)', () => {
+    const { container } = mount(<PdpShippingRow>Tubu Tree giao hàng</PdpShippingRow>);
+    expect(hasLine(row(container, 'Vận chuyển'))).toBe(false);
+  });
+  it('hàng "Ưu đãi ›" có đường kẻ khi sau nó còn hàng Vận chuyển (mặc định), không có khi nó là hàng cuối (divider=false)', async () => {
+    mocks.http.get.mockResolvedValue([coupon('ALL')]);
+    const withNext = mount(<PdpCoupons productId="p1" />);
+    await flush();
+    expect(hasLine(row(withNext.container, 'Ưu đãi'))).toBe(true);
+    const last = mount(<PdpCoupons productId="p1" divider={false} />);
+    await flush();
+    expect(hasLine(row(last.container, 'Ưu đãi'))).toBe(false);
   });
 });
 
