@@ -26,9 +26,9 @@ export const CHECK_IN_COMPACT_HEIGHT = 156;
  * Khối điểm danh DUY NHẤT của Mini App (trang Điểm Xanh và tab Ưu đãi): một nút cộng cả Điểm Xanh và giọt nước.
  * Ô ngày chỉ có số ngày và biểu tượng, lưới `minmax(0, 1fr)` để 7 ô luôn nằm gọn trong thẻ ở 320px; nút nằm dòng riêng.
  * `compact` (Ưu đãi, nơi điểm danh chỉ là một khối trong trang dài): nút lên hàng tiêu đề, nút "Luật" (tên đọc "Luật điểm danh", aria-expanded) đứng cạnh "Ngày n/7" và mở đoạn luật ngay dưới hàng đó.
- * Tài khoản khách (`pointsBlocked`) thêm khối mời đăng nhập Zalo nên cao hơn khung chờ; chỉ nhóm đó, không tính vào `CHECK_IN_COMPACT_HEIGHT`.
+ * Tài khoản khách (`pointsBlocked`) thêm khối mời liên kết Zalo nên cao hơn khung chờ; chỉ nhóm đó, không tính vào `CHECK_IN_COMPACT_HEIGHT`. Trang đã có thẻ mời ở trên (Ưu đãi) truyền `guestNote={false}` để khỏi mời hai lần.
  */
-export function DailyCheckInCard({ authed, margin, compact = false }: { authed: boolean; margin?: string; compact?: boolean }) {
+export function DailyCheckInCard({ authed, margin, compact = false, guestNote = true }: { authed: boolean; margin?: string; compact?: boolean; guestNote?: boolean }) {
   const { status, statusQ, view, pending, checkIn } = useCheckIn(authed);
   const [ruleOpen, setRuleOpen] = useState(false);
   const ruleId = useId();
@@ -139,7 +139,7 @@ export function DailyCheckInCard({ authed, margin, compact = false }: { authed: 
             </Text>
           )
         )}
-        {status.pointsBlocked && (
+        {status.pointsBlocked && guestNote && (
           <Suspense fallback={null}>
             <GuestPointsNote margin="10px 0 0" />
           </Suspense>

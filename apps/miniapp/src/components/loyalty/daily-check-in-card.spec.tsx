@@ -67,13 +67,27 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     expect(screen.getByRole('button', { name: 'Điểm danh' })).toBeEnabled();
   });
 
-  it('nút Đăng nhập Zalo gọi luồng liên kết sẵn có (ensurePhoneOrThrow)', async () => {
+  it('guestNote={false} (đã có thẻ mời liên kết Zalo ở trên): không vẽ ghi chú dù pointsBlocked; mặc định vẫn có', async () => {
+    mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
+    const { unmount } = render(<DailyCheckInCard authed guestNote={false} />);
+    expect(screen.getByText('Hôm nay nhận +10 giọt nước')).toBeInTheDocument();
+    // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
+    await import('./guest-points-note');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Liên kết Zalo' })).not.toBeInTheDocument();
+    unmount();
+    render(<DailyCheckInCard authed />);
+    expect(await screen.findByTestId('guest-points-note')).toBeInTheDocument();
+  });
+
+  it('nút Liên kết Zalo gọi luồng liên kết sẵn có (ensurePhoneOrThrow)', async () => {
     mocks.ensurePhone.mockResolvedValue('0901234567');
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập Zalo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Liên kết Zalo' }));
     await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Liên kết Zalo' })).toBeEnabled());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -81,7 +95,7 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     mocks.ensurePhone.mockResolvedValue(null);
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập Zalo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Liên kết Zalo' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Chưa đăng nhập được Zalo. Bạn thử lại nhé.');
   });
 

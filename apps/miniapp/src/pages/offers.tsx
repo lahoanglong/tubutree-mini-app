@@ -30,6 +30,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { GuestLinkCard } from '../components/home/guest-link-card';
+import { isGuestUser } from '../utils/guest-user';
 import { CampaignBanner } from '../components/campaign/campaign-banner';
 import { OffersCollect } from '../components/offers/offers-collect';
 import { OffersFlash } from '../components/offers/offers-flash';
@@ -123,13 +124,13 @@ export default function OffersPage() {
         <AuthPhaseView phase={phase} loading={pageSkeleton} />
       ) : (
         <>
-          <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={homeCopy.profile.guestCta} />
+          <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={fillCopy('zalo.link')} />
 
           <OffersPointsStrip loyalty={loyaltyQ} />
 
           {/* Điểm danh */}
           <section aria-label={checkInCopy.title} style={{ padding: '12px 16px 0' }}>
-            <DailyCheckInCard authed={authed} compact />
+            <DailyCheckInCard authed={authed} compact guestNote={!user || !isGuestUser(user)} />
           </section>
 
           {/* Mã của tôi */}

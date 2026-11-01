@@ -178,6 +178,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.walletLoadError': null,
 
   'login.cta': 12,
+  'zalo.link': 14,
   'offers.guestPointsTitle': 26,
   'offers.guestPointsBody': null,
   'offers.guestMineBody': null,

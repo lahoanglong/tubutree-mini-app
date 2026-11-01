@@ -59,6 +59,11 @@ describe('SHOP_COPY', () => {
     expect(fillCopy('coupon.titlePercentMax', { pct: 10, max: '50k' })).toBe('Giảm 10%, tối đa 50k');
   });
 
+  it('G1: một nhãn liên kết Zalo cho khách Mini ở Ưu đãi, ngắn hơn ngân sách 14', () => {
+    expect(SHOP_COPY['zalo.link']).toBe('Liên kết Zalo');
+    expect(SHOP_COPY_MAX['zalo.link']).toBe(14);
+  });
+
   it('chữ chốt ở thiết kế §4 Q5 và Giờ vàng theo kế hoạch', () => {
     expect(SHOP_COPY['rank.title']).toBe('Bán chạy nhất');
     expect(SHOP_COPY['badge.freeship']).toBe('Miễn phí giao hàng');

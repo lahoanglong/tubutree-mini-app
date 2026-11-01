@@ -221,6 +221,19 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(await screen.findByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
   });
 
+  it('tài khoản khách bị chặn Điểm Xanh: cả trang chỉ một nút "Liên kết Zalo" (ở thẻ mời), thẻ điểm danh không lặp ghi chú', async () => {
+    mocks.guest = true;
+    mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 0, todayWater: 10, pointsBlocked: 'GUEST', rewards: REWARDS });
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Điểm danh mỗi ngày' })).toBeInTheDocument();
+    // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
+    await import('../components/loyalty/guest-points-note');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getAllByRole('button', { name: 'Liên kết Zalo' })).toHaveLength(1);
+    expect(screen.queryByTestId('guest-points-note')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).toBeNull();
+  });
+
   it('chưa đăng nhập → thẻ mời đăng nhập ở khối cần tài khoản, không gọi API ưu đãi', async () => {
     mocks.phase = 'guest';
     renderPage();
