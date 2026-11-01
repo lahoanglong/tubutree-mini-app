@@ -28,12 +28,11 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/feed-api', () => ({ getFeed: mocks.getFeed, getCategories: mocks.getCategories, getFeedPublicPreview: mocks.getPreview }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, ...mocks.config }) }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.auth.status, login: mocks.login });
+  // getState: useLoginWithNotice đọc trạng thái sau login().
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
+});
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../services/zmp-bridge', () => ({
   openExternal: mocks.openExternal,

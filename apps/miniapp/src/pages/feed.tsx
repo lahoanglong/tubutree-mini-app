@@ -5,7 +5,7 @@ import { HelpCircle, Hash, MessageCircle, Search, X } from 'lucide-react';
 import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { SessionUnavailable, useBlockedMessage } from '../components/ui/auth-gate';
+import { SessionUnavailable, useBlockedMessage, useLoginWithNotice } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
@@ -33,6 +33,8 @@ const SORTS: { key: FeedSort; label: string }[] = [
 export default function FeedPage() {
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
+  // Danh sách xem trước không có chỗ nói lời khoá như cổng đăng nhập bên dưới (body={blocked}): báo bằng thanh thông báo.
+  const loginWithNotice = useLoginWithNotice();
   const blocked = useBlockedMessage();
   const authed = phase === 'authenticated';
   const navigate = useNavigate();
@@ -132,7 +134,7 @@ export default function FeedPage() {
       return (
         <Page style={{ background: 'var(--color-bg-canvas)' }}>
           <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
-          <PublicPreviewList posts={preview.data.posts} onLogin={() => void login()} />
+          <PublicPreviewList posts={preview.data.posts} onLogin={() => void loginWithNotice()} />
         </Page>
       );
     }

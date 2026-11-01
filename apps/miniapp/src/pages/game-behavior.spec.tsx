@@ -58,12 +58,11 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, user: { id: 'u1' }, login: mocks.login };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.auth.status, user: { id: 'u1' }, login: mocks.login });
+  // getState: useLoginWithNotice đọc trạng thái sau login().
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
+});
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../utils/features', () => ({
   get SEASON_PASS_ENABLED() {
