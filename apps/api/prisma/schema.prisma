@@ -2779,6 +2779,11 @@ model AccountDeletionRequest {
   /// Số dư Ví Tubu (VND) khách đã thấy và đồng ý bỏ khi xoá tài khoản; chỉ có khi lúc gửi Ví còn tiền.
   walletForfeitAmount    Int?
   walletForfeitConsentAt DateTime?
+  /// Admin xử lý dù khách chưa đồng ý bỏ số dư Ví: người làm, lúc làm, lý do bắt buộc và số tiền đã trừ (VND, đọc trong cùng khoá dòng users).
+  walletOverrideBy       String?
+  walletOverrideAt       DateTime?
+  walletOverrideReason   String?
+  walletOverrideAmount   Int?
 
   @@index([userId])
   @@index([status])
