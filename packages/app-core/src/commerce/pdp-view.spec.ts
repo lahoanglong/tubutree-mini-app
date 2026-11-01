@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartSaving, lineCompareAt, lineSaving, pdpShelves, pickQuickReviews } from './pdp-view';
+import { cartSaving, lineCompareAt, lineSaving, PDP_FEED_SOURCE_LIMIT, pdpShelves, pickQuickReviews } from './pdp-view';
 
 describe('lineSaving / lineCompareAt', () => {
   it('niêm yết cao hơn giá bán: tiết kiệm = chênh × số lượng, gạch giá niêm yết', () => {
@@ -94,5 +94,12 @@ describe('pdpShelves', () => {
     expect(out.boughtTogether).toEqual([]);
     expect(out.brand).toEqual([]);
     expect(out.feed).toHaveLength(5);
+  });
+});
+
+describe('PDP_FEED_SOURCE_LIMIT', () => {
+  // `/products/for-you` của API trả tối đa 10 món (Mini chỉ có thể nhận ngần ấy); khách web lấy cùng trần từ nguồn bán chạy để hai app dài bằng nhau.
+  it('bằng trần 10 món của /products/for-you', () => {
+    expect(PDP_FEED_SOURCE_LIMIT).toBe(10);
   });
 });

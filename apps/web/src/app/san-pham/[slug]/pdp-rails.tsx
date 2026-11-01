@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
 import { fetchProducts, type ProductCard as CoreProductCard } from '@tubutree/app-core/api/catalog';
-import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { PDP_FEED_SOURCE_LIMIT, pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { boughtTogetherQuery, forYouQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
 import { ProductRail } from '@/components/mini/product-rail';
@@ -14,7 +14,6 @@ import { PdpFeed } from './pdp-feed';
 import { pdpSectionTitle } from './pdp-sections';
 
 const FIVE_MIN = 5 * 60_000;
-const POPULAR_LIMIT = 24;
 
 /** `label` là tên đọc của dải khi khác tiêu đề nhìn thấy (dải thương hiệu: tiêu đề bỏ tên, nhãn đọc giữ tên). */
 function Rail({ title, label = title, icon, products, loading }: { title: string; label?: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean }) {
@@ -69,7 +68,7 @@ export function PdpRails({
   const personal = useQuery({ ...forYouQuery(coreHttp), enabled: phase === 'authenticated', staleTime: FIVE_MIN, retry: 0 });
   const popular = useQuery({
     queryKey: ['products', 'pdp-popular'],
-    queryFn: () => fetchProducts(coreHttp, { limit: POPULAR_LIMIT, sort: 'best_seller' }),
+    queryFn: () => fetchProducts(coreHttp, { limit: PDP_FEED_SOURCE_LIMIT, sort: 'best_seller' }),
     enabled: phase !== 'authenticated' && phase !== 'loading',
     staleTime: FIVE_MIN,
     retry: 0,
