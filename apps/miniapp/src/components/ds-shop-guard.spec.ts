@@ -37,10 +37,23 @@ function negativeHorizontalShorthand(text: string): boolean {
 }
 const hasHandBleed = (text: string) => NEG_TAILWIND.test(text) || NEG_LONGHAND.test(text) || negativeHorizontalShorthand(text);
 
-/** Chỗ dùng lề âm ngang có chủ đích có từ trước: nới vùng chạm của nút chữ (`'-12px -6px'`) và đẩy nhẹ một nút; không phải tràn mép trang. */
-const TOUCH_AREA = ['pages/offers.tsx', 'pages/profile.tsx', 'pages/bank-payment.tsx', 'pages/addresses.tsx'];
-export function bleedHits(files: readonly { rel: string; text: string }[], allow: readonly string[] = TOUCH_AREA): string[] {
-  return files.filter((f) => !allow.includes(f.rel) && hasHandBleed(f.text)).map((f) => f.rel);
+/**
+ * Chỗ dùng lề âm ngang có chủ đích có từ trước: nới vùng chạm của nút chữ (`'-12px -6px'`) và đẩy nhẹ một nút; không phải tràn mép trang.
+ * Miễn đúng đoạn mã, không miễn cả file: lề âm tràn mép mới thêm vào các file này vẫn bị bắt.
+ */
+const TOUCH_AREA: Readonly<Record<string, readonly string[]>> = {
+  'pages/offers.tsx': ["margin: '-14px -6px'"],
+  'pages/profile.tsx': ["margin: '-12px -6px'"],
+  'pages/bank-payment.tsx': ["margin: '-6px -10px -6px 0'"],
+  'pages/addresses.tsx': ['marginLeft: -8'],
+};
+export function bleedHits(
+  files: readonly { rel: string; text: string }[],
+  allow: Readonly<Record<string, readonly string[]>> = TOUCH_AREA,
+): string[] {
+  return files
+    .filter((f) => hasHandBleed((allow[f.rel] ?? []).reduce((text, snippet) => text.split(snippet).join(''), f.text)))
+    .map((f) => f.rel);
 }
 
 describe('ds-shop-guard (Mini App)', () => {
@@ -109,5 +122,6 @@ describe('ds-shop-guard (Mini App)', () => {
     for (const text of ok) expect(bleedHits([{ rel: 'pages/y.tsx', text }]), text).toEqual([]);
     expect(bleedHits([{ rel: 'pages/profile.tsx', text: "style={{ minHeight: 44, margin: '-12px -6px' }}" }])).toEqual([]);
     expect(bleedHits([{ rel: 'pages/new.tsx', text: "style={{ minHeight: 44, margin: '-12px -6px' }}" }])).toEqual(['pages/new.tsx']);
+    expect(bleedHits([{ rel: 'pages/profile.tsx', text: "margin: '-12px -6px' }} /><div style={{ margin: '0 -16px' }} />" }])).toEqual(['pages/profile.tsx']);
   });
 });
