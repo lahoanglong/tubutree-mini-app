@@ -28,7 +28,8 @@ describe('StorefrontPreview', () => {
     expect(frame.hasAttribute('inert')).toBe(true);
     const focusables = frame.querySelectorAll('a[href], button');
     expect(focusables.length).toBeGreaterThan(0);
-    // Thẻ dựng bằng chính ShopSection nên có cả tim như khách thấy; nó nằm trong khung inert nên không nhận Tab/Enter.
+    // Chủ chưa phải khách: thẻ xem trước không có tim.
+    expect(frame.querySelector('button[aria-label^="Yêu thích"]')).toBeNull();
     for (const el of Array.from(focusables)) expect(el.closest('[inert]')).toBe(frame);
   });
 });
