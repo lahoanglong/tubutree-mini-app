@@ -15,11 +15,10 @@ export interface Rendered {
   unmount: () => void;
 }
 
-export function render(ui: ReactElement): Rendered {
+export function render(ui: ReactElement, client: QueryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })): Rendered {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   act(() => {
     root.render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
   });

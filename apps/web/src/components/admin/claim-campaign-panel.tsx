@@ -142,6 +142,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
 
   const exportBatch = useMutation({
     mutationFn: (batch: string) => getCouponBatchCodes(batch),
+    meta: { skipAdminInvalidate: true },
     onSuccess: (res) => {
       downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`);
       if (!res.link) setMsg({ ok: true, text: `Lô ${res.batch} tạo trước khi lưu link: file CSV dùng link mở trang chủ (/?claim=), không có nguồn và đợt thẻ.` });
