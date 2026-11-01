@@ -70,6 +70,17 @@ describe('ProductTile: biến thể và khung', () => {
     expect(body(c).style.minHeight).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
   });
 
+  it('tên đã chứa thương hiệu: không in chữ nhưng giữ khe, thân cao bằng thẻ có thương hiệu (tên các thẻ cùng hàng thẳng hàng)', () => {
+    for (const variant of ['grid', 'rail-md'] as const) {
+      const c = tile(viewOf({ name: 'Serum Bã Trầu Tubu', brand: 'Tubu' }, variant), variant);
+      const brand = part(c, 'brand')!;
+      expect(brand).not.toBeNull();
+      expect(brand.textContent).toBe('');
+      expect(brand.style.height).toBe('16px');
+      expect(body(c).style.minHeight).toBe(`${tileBodyHeight(variant, { brand: true })}px`);
+    }
+  });
+
   it('tên cắt 2 dòng, cao tối thiểu TILE_NAME_MIN_HEIGHT, dòng 22px (không hạ: dấu hoa bị cắt)', () => {
     expect(TILE_NAME_MIN_HEIGHT).toBe(44);
     const long = 'Ẩm Ổn Định Dầu Gội Thảo Mộc Bồ Kết Hương Sả Chanh Nguyên Chất Dung Tích Lớn Cho Cả Gia Đình';
