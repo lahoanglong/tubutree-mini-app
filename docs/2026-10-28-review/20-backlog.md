@@ -318,9 +318,9 @@ Bảng dưới thay trạng thái của các mục cùng số trong bảng "Mụ
 | R-83 | để mở | PR #98 chỉ đo | Thẻ `<a>` 11,5–18 ms; `router.push` 73–88 ms (máy tải nặng có lượt 165 ms). Đo lại khi máy rảnh, thêm ca kệ Mua lại. |
 | R-82 | một phần | PR #98 chỉ đo | `GET /cart` giỏ 12 món: 7 câu SQL, có mã 8, không ghi. Đích độ trễ p97,5 ≤ 15 ms chưa kiểm được vì máy đo tải nặng. |
 | R-97 | xong | PR #104 (1028f-diem, `7682da5f0`) | Bấm dòng "Nhận ~X Điểm Xanh" mở popup "Cách tính Điểm Xanh". Không đổi luật điểm. |
-| R-16 | R16_STATUS | R16_WHERE | R16_NOTE |
+| R-16 | xong ở web; Mini chờ #106 | PR #107 (1028f-donhang) | `GET /orders/home-todo` thay ba lời `/orders` của dải Việc cần làm. Khách cũ: web 13 → 12, Mini 13/14 → 12/13 (mở lạnh/mở lại). Mini mở lại còn 13 vì lời `/products` trang 1 lưới Gợi ý hôm nay; phiên e1 bỏ lời này ở PR #106. Số đo `perf/1028f-donhang/`. |
 
-Cả #97, #98, #100, #104 đã merge vào main nhưng chưa deploy (PROD `01ede3876` lúc 01/11 13:00).
+Cả #97, #98, #100, #104 đã merge vào main nhưng chưa deploy (PROD `01ede3876` lúc 01/11 13:30).
 
 ### Mục mới
 
@@ -332,6 +332,7 @@ Cả #97, #98, #100, #104 đã merge vào main nhưng chưa deploy (PROD `01ede3
 | R-191 | P3 | test web | `site-header.spec.tsx` ca "HTML máy chủ" vẫn mock `useHydrated`, chưa chạy hook thật. Hai spec của R-24 chưa dọn mock và root trong `finally`, nên một ca đỏ có thể kéo ca sau đỏ theo. | PR #98 (review Opus) | Dọn trong `finally`; ca HTML máy chủ dùng `renderToString` thật. |
 | R-192 | P3 | home (Mini vãng lai) | Mini vãng lai gọi 10 API ở Trang chủ (có `/orders`, `/cart` của tài khoản khách tạm), web vãng lai gọi 2. | `perf/1028e-do/r16-result.json` | Xét bỏ lời gọi theo tài khoản khi khách tạm chưa có đơn và giỏ. |
 | R-193 | P3 | trang sản phẩm (web 375) | Popup "Cách tính Điểm Xanh" ở web không có thanh kéo trên đầu sheet và không có liên kết "Gửi đơn sàn để tích điểm" vì web chưa có trang gửi đơn sàn. | PR #104 | Thêm liên kết khi web có trang gửi đơn sàn. |
+| R-194 | P3 | Trang chủ (API `/home/me`) | `/home/me` vẫn tính khối `shippingOrders` dù Trang chủ không còn đọc (từ #107). Khách có đơn đang giao làm DB chạy truy vấn đơn đang giao hai lần mỗi lần mở Trang chủ. Nếu Trang chủ Mini còn mount khi mở chat CSKH, chat có thể lấy khối này (số liệu từ lúc mở Trang chủ, tối đa 30 s trước khi tải lại). | PR #107 (review Opus), `apps/api/src/modules/catalog/home.service.ts:197`, `apps/miniapp/src/services/shop-api.ts:674` | Bỏ khối `shippingOrders` khỏi `/home/me` cùng các nhánh lấy nó. |
 
 ### Điều chủ cần biết (không phải lỗi)
 

@@ -1,0 +1,271 @@
+[
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "cold",
+  "total": 115,
+  "api": 30,
+  "dup": [
+   "/img x27"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/flash-sales/upcoming",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "guest",
+  "phase": "reopen",
+  "total": 115,
+  "api": 30,
+  "dup": [
+   "/img x27"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/flash-sales/upcoming",
+   "/feed/public-preview"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "cold",
+  "total": 136,
+  "api": 53,
+  "dup": [
+   "/img x43"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "new",
+  "phase": "reopen",
+  "total": 136,
+  "api": 53,
+  "dup": [
+   "/img x43"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "cold",
+  "total": 137,
+  "api": 54,
+  "dup": [
+   "/img x42"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/me/loyalty",
+   "/orders/home-todo"
+  ]
+ },
+ {
+  "app": "web",
+  "persona": "returning",
+  "phase": "reopen",
+  "total": 139,
+  "api": 54,
+  "dup": [
+   "/img x42"
+  ],
+  "paths": [
+   "/img",
+   "/home",
+   "/auth/refresh",
+   "/feed/public-preview",
+   "/cart",
+   "/me/loyalty",
+   "/me/daily-check-in",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/feed",
+   "/me/notifications/unread-count",
+   "/me/coupons",
+   "/orders/home-todo"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "cold",
+  "api": 35,
+  "dup": [
+   "/img x24"
+  ],
+  "paths": [
+   "/home",
+   "/auth/guest",
+   "/me/daily-check-in",
+   "/me/notifications/unread-count",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/me/wishlist/ids",
+   "/orders",
+   "/img",
+   "/products",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "guest",
+  "phase": "reopen",
+  "api": 36,
+  "dup": [
+   "/img x24"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/orders",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/products",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "cold",
+  "api": 34,
+  "dup": [
+   "/img x24"
+  ],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/cart",
+   "/me/daily-check-in",
+   "/me/coupons",
+   "/home/me",
+   "/me/wishlist/ids",
+   "/products",
+   "/img",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "new",
+  "phase": "reopen",
+  "api": 33,
+  "dup": [
+   "/img x22"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/me/wishlist/ids",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/home/me",
+   "/cart",
+   "/me/coupons",
+   "/products",
+   "/feed"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "cold",
+  "api": 38,
+  "dup": [
+   "/img x26"
+  ],
+  "paths": [
+   "/home",
+   "/auth/zalo-mini-app",
+   "/me/notifications/unread-count",
+   "/me/daily-check-in",
+   "/cart",
+   "/home/me",
+   "/me/coupons",
+   "/orders/home-todo",
+   "/me/loyalty",
+   "/img",
+   "/me/wishlist/ids",
+   "/feed",
+   "/products"
+  ]
+ },
+ {
+  "app": "mini",
+  "persona": "returning",
+  "phase": "reopen",
+  "api": 36,
+  "dup": [
+   "/img x23"
+  ],
+  "paths": [
+   "/events",
+   "/home",
+   "/auth/refresh",
+   "/img",
+   "/me/daily-check-in",
+   "/me/notifications/unread-count",
+   "/me/wishlist/ids",
+   "/home/me",
+   "/cart",
+   "/me/coupons",
+   "/me/loyalty",
+   "/products",
+   "/feed",
+   "/orders/home-todo"
+  ]
+ }
+]
