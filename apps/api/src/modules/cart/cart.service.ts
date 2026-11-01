@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { strikePrice } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService, normalizeCouponCode } from '../coupons/coupons.service';
 import { CouponClaimService } from '../coupons/coupon-claim.service';
@@ -203,8 +204,9 @@ export class CartService {
         slug: it.variation.product.slug,
         thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         unitPrice,
-        // Giá niêm yết trước sale và Giờ vàng: FE gạch giá và tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì).
-        listUnitPrice: it.variation.retailPrice,
+        // Giá gạch theo đúng luật của thẻ, trang Giờ vàng và PDP (strikePrice): Giờ vàng thắng thì gạch giá đang bán, còn lại gạch giá niêm yết. FE gạch giá và
+        // tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì). Chỉ là số hiển thị: không số tiền nào của giỏ đọc trường này.
+        listUnitPrice: strikePrice({ retailPrice: it.variation.retailPrice, salePrice: it.variation.salePrice, flashPrice: flash?.flashPrice }),
         quantity: it.quantity,
         stock: it.variation.stock,
         weight: it.variation.weight ?? null,
