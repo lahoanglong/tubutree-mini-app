@@ -15,19 +15,28 @@ export async function fetchBestSellers(http: HttpClient, limit = 10): Promise<Pr
   }
 }
 
+/** Thước đo của một trang Bán chạy nhất: 30 ngày gần đây (`best_seller_30d`) hay tổng lượt bán (`best_seller`, khi API cũ từ chối thước đo mới). */
+export type BestSellersBasis = 'days30' | 'total';
+
+export interface BestSellersPage extends PageResponse<ProductCard> {
+  /** Thiếu ở dữ liệu cũ (cache, trang dựng sẵn từ trước) thì coi như `days30`. */
+  basis?: BestSellersBasis;
+}
+
 /**
  * Một trang của "Bán chạy nhất": 20 món xếp theo lượt bán 30 ngày, tuỳ chọn một danh mục gốc (API gồm cả con). Lùi về `best_seller` khi API
- * cũ từ chối `best_seller_30d` (400), như `fetchBestSellers`, để trang không trắng. Trả cả `meta` vì trang web phân trang số.
+ * cũ từ chối `best_seller_30d` (400), như `fetchBestSellers`, để trang không trắng; `basis` cho trang biết đang xếp theo thước đo nào để không ghi
+ * "30 ngày qua" trên bảng xếp theo tổng lượt bán. Trả cả `meta` vì trang web phân trang số.
  */
 export async function fetchBestSellersPage(
   http: HttpClient,
   { category, page, limit = 20 }: { category?: string; page: number; limit?: number },
-): Promise<PageResponse<ProductCard>> {
+): Promise<BestSellersPage> {
   const query = (sort: 'best_seller_30d' | 'best_seller') => ({ sort, limit, page, ...(category ? { category } : {}) });
   try {
-    return await http.get<PageResponse<ProductCard>>('/products', { query: query('best_seller_30d') });
+    return { ...(await http.get<PageResponse<ProductCard>>('/products', { query: query('best_seller_30d') })), basis: 'days30' };
   } catch (err) {
     if (errorStatus(err) !== 400) throw err;
-    return http.get<PageResponse<ProductCard>>('/products', { query: query('best_seller') });
+    return { ...(await http.get<PageResponse<ProductCard>>('/products', { query: query('best_seller') })), basis: 'total' };
   }
 }

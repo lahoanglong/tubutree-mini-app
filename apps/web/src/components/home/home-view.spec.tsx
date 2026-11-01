@@ -331,17 +331,45 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     expect(localStorage.getItem(BANNER_HINT_KEY)).toBe('1');
   });
 
-  it('giữ khung chờ chung khi lần mở trước có banner: khung banner đúng tỉ lệ đứng đầu khung chờ; không có gợi ý thì không giữ chỗ', async () => {
+  it('khung chờ chung không tự vẽ khung banner: không có gợi ý thì không giữ chỗ; có gợi ý thì khung giữ chỗ nằm ở cột banner của HubLayout, chỉ một khung', async () => {
     mocks.phase = 'loading';
     mocks.restoring = true;
     mocks.get.mockImplementation(() => new Promise(() => undefined));
     const none = await mount();
-    const noneKids = Array.from(none.querySelector('[data-testid="home-settling"]')!.children);
-    expect(noneKids).toHaveLength(4);
+    expect(none.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+    expect(none.querySelector('[data-hub-part="banner"]')).toBeNull();
+    expect(none.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
     mounted?.unmount();
     localStorage.setItem(BANNER_HINT_KEY, '1');
     const hinted = await mount();
-    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(5);
+    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+    const slot = hinted.querySelector<HTMLElement>('[data-hub-part="banner"]')!;
+    expect(slot.className).toContain('lg:col-span-8');
+    expect(slot.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+    expect(hinted.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+    // Thứ tự DOM của điện thoại: thẻ thành viên → banner → khung chờ chung.
+    const order = Array.from(hinted.querySelectorAll<HTMLElement>('[data-home-block]')).map((el) => el.dataset.homeBlock);
+    expect(order).toEqual(['search', 'member', 'banner', 'settling']);
+  });
+
+  it('khung chờ chung + server đã có chiến dịch: banner thật đứng ở cột banner ngay trong lúc chờ (không đợi hết chờ mới chen vào hàng đầu)', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    mocks.get.mockImplementation(() => new Promise(() => undefined));
+    const c = await mount(<HomeView initial={{ campaigns: [campaign('a')] }} />);
+    expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelector('a[href="/chien-dich/chien-dich-a"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+  });
+
+  it('khung chờ chung + có gợi ý banner + server đã hỏi và không có chiến dịch cho mọi người: vẫn giữ chỗ trong lúc chờ (chiến dịch riêng của loại khách có thể hiện khi biết loại)', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    mocks.get.mockImplementation(() => new Promise(() => undefined));
+    const c = await mount(<HomeView initial={{ campaigns: [] }} />);
+    expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
   });
 
   it('banner chưa về mà máy nhớ lần trước có: khung giữ chỗ cùng tỉ lệ ở đúng vị trí banner; không nhớ thì không có gì', async () => {

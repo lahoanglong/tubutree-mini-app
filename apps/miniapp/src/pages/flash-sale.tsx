@@ -1,8 +1,9 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { flashSlotItemsQuery, flashSlotsQuery } from '@tubutree/app-core/queries/flash-sale';
 import { initialSlotId, slotAfterEnd, slotCategoryChips, slotListView, slotTabs } from '@tubutree/app-core/commerce/flash-slots';
+import { remindIntentAction, type RemindIntent } from '@tubutree/app-core/commerce/flash-remind-intent';
 import { slotClock } from '@tubutree/app-core/merch/flash-next-slot';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { FlashSlotItem as FlashSlotItemData } from '@tubutree/app-core/api/flash-sale';
@@ -147,6 +148,29 @@ export default function FlashSalePage() {
 
   const reminded = useMemo(() => new Set((upcomingQ.data ?? []).filter((u) => u.reminded).map((u) => u.itemId)), [upcomingQ.data]);
 
+  // Khách bấm "Nhắc tôi" lúc chưa đăng nhập: nhớ suất ở bộ nhớ trang (Mini đăng nhập tại chỗ, không tải lại trang) rồi đặt nhắc khi phiên lên và
+  // đã biết suất đó có đang được nhắc không. `sawLogin` phân biệt "chưa kịp vào đăng nhập" với "đăng nhập xong mà không thành": lúc sau bỏ ý định.
+  const pendingRemind = useRef<{ intent: RemindIntent; sawLogin: boolean } | null>(null);
+  const upcomingList = upcomingQ.isSuccess ? upcomingQ.data : null;
+  useEffect(() => {
+    const pending = pendingRemind.current;
+    if (!pending) return;
+    if (authStatus === 'loading') {
+      pending.sawLogin = true;
+      return;
+    }
+    if (authStatus !== 'authenticated') {
+      if (pending.sawLogin) pendingRemind.current = null;
+      return;
+    }
+    if (!upcomingList) return;
+    pendingRemind.current = null;
+    if (remindIntentAction(pending.intent, upcomingList) === 'remind') {
+      remindMut.mutate({ itemId: pending.intent.itemId, reminded: false, startAt: pending.intent.startAt });
+    }
+    // `remindMut` đổi tham chiếu mỗi lần render nên không đưa vào phụ thuộc: chạy lại theo phiên và danh sách nhắc là đủ.
+  }, [authStatus, upcomingList]);
+
   const pick = (id: string) => {
     setPickedId(id);
     setCategoryId(null);
@@ -178,6 +202,7 @@ export default function FlashSalePage() {
 
   const onToggleRemind = (item: FlashSlotItemData) => {
     if (!authed) {
+      if (authStatus !== 'loading' && activeSlot) pendingRemind.current = { intent: { itemId: item.itemId, startAt: activeSlot.startAt }, sawLogin: false };
       login();
       return;
     }

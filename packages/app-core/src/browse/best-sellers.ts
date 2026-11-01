@@ -1,3 +1,4 @@
+import type { BestSellersPage } from '../api/browse';
 import { fillCopy } from '../shop-copy';
 import { HUB_CATEGORY_MAX } from './hub';
 import type { CategoryNode } from './category-tree';
@@ -34,6 +35,24 @@ export function bestSellerScope(tabs: BestSellerTab[] | null, category: string |
   if (!c) return { tab: BEST_SELLERS_ALL_KEY, category: undefined };
   if (tabs === null || tabs.some((t) => t.key === c)) return { tab: c, category: c };
   return { tab: BEST_SELLERS_ALL_KEY, category: undefined };
+}
+
+/**
+ * Tên của vùng danh sách theo tab đang chọn. Đang lọc một danh mục mà cây chưa về (`tabs = null`) thì chưa biết tên danh mục: dùng tên trang
+ * thay vì "Tất cả", vì vùng này đang chỉ chứa món của danh mục đó. Cây đã về thì tên tab (id không có trong cây đã được `bestSellerScope` đưa về "Tất cả").
+ */
+export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string): string {
+  if (tab === BEST_SELLERS_ALL_KEY) return fillCopy('rank.tabAll');
+  if (tabs === null) return fillCopy('rank.title');
+  return tabs.find((t) => t.key === tab)?.label ?? fillCopy('rank.tabAll');
+}
+
+/**
+ * Dòng thước đo dưới tiêu đề. Chỉ ghi "30 ngày qua" khi mọi trang đã tải đều xếp theo 30 ngày: có trang nào lùi về tổng lượt bán (API cũ trả 400 cho
+ * `best_seller_30d`) thì bảng đang trộn hoặc hoàn toàn theo tổng, và câu "30 ngày" sẽ sai. Thiếu dữ liệu hay thiếu `basis` (cache cũ) coi như 30 ngày.
+ */
+export function bestSellersBasisCopy(pages: readonly Partial<BestSellersPage>[] | undefined): string {
+  return pages?.some((p) => p.basis === 'total') ? fillCopy('rank.basisAll') : fillCopy('rank.basis');
 }
 
 /** Hạng của thẻ đầu khi danh sách bắt đầu từ `startPage` (web mở thẳng `?page=N`); số trang hỏng thì về hạng 1. */

@@ -48,6 +48,15 @@ test.describe('Zalo Mini App E2E - dòng giỏ ở 375px', () => {
     }
   });
 
+  test('giỏ hàng chỉ có đúng một nút "Quay lại" (nút nổi của vỏ app), không thêm một nút cùng tên trong trang', async ({ page, api }) => {
+    mockPilotCart(api);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/cart');
+    await expect(page.getByRole('button', { name: PILOT_CART.items[0]!.productName, exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Quay lại', exact: true })).toHaveCount(1);
+    await expect(page.locator('#main-content').getByRole('button', { name: 'Quay lại', exact: true })).toHaveCount(0);
+  });
+
   test('tấm "Chọn mã giảm giá" phủ cả nút Quay lại: bấm vào vị trí nút Quay lại lúc tấm mở không chạm nút, không rời giỏ', async ({ page, api }) => {
     mockPilotCart(api);
     api.allowUnmocked('POST /checkout/coupon-previews', 'GET /me/coupons');
@@ -55,8 +64,8 @@ test.describe('Zalo Mini App E2E - dòng giỏ ở 375px', () => {
     await page.goto('/cart');
     await expect(page.getByRole('button', { name: PILOT_CART.items[0]!.productName, exact: true })).toBeVisible({ timeout: 15_000 });
 
-    // Nút Quay lại toàn cục (fixed, z 200) của back-button.tsx; trong #main-content còn một nút cùng tên nằm ở cùng chỗ, nên thăm dò theo điểm.
-    const back = page.locator('button[aria-label="Quay lại"]').last();
+    // Nút Quay lại toàn cục (fixed, z 200) của back-button.tsx, nút duy nhất của trang; phép thăm dò theo điểm dưới đây là để biết nó có nằm trên lớp phủ hay không.
+    const back = page.getByRole('button', { name: 'Quay lại', exact: true });
     await expect(back).toBeVisible();
     const box = (await back.boundingBox())!;
     const probe = () =>

@@ -37,6 +37,7 @@ describe('fetchBestSellersPage', () => {
     expect(get).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 20, page: 2, category: 'c1' } });
     expect(out.meta).toEqual({ page: 2, limit: 20, total: 45 });
     expect(out.data.map((p) => p.id)).toEqual(['a', 'b']);
+    expect(out.basis).toBe('days30');
   });
 
   it('không gửi category khi thiếu; limit đổi được', async () => {
@@ -50,6 +51,8 @@ describe('fetchBestSellersPage', () => {
     const out = await fetchBestSellersPage(clientOf(get), { page: 1, category: 'c1' });
     expect(get).toHaveBeenNthCalledWith(2, '/products', { query: { sort: 'best_seller', limit: 20, page: 1, category: 'c1' } });
     expect(out.data.map((p) => p.id)).toEqual(['x']);
+    // Thước đo đổi thành tổng lượt bán: trang phải nói đúng thước đo, không còn "30 ngày qua".
+    expect(out.basis).toBe('total');
   });
 
   it('lỗi khác 400 ném tiếp, không gọi lại', async () => {
