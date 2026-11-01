@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminService } from './admin.service';
-import { AdminController, ExportOrdersQuery, ListOrdersQuery } from './admin.controller';
+import { AdminController, ExportOrdersQuery, ListOrdersQuery, OrderStatusCountsQuery } from './admin.controller';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 const VIEWER = { sub: 'admin-1', role: 'ADMIN' as const };
@@ -218,5 +218,72 @@ describe('Controller + DTO — bộ lọc mới của GET /admin/orders (D1-17)'
     const res = { setHeader: jest.fn(), write: jest.fn(), end: jest.fn(), on: jest.fn(), once: jest.fn(), writableEnded: false } as never;
     await ctl.exportOrders(Object.assign(new ExportOrdersQuery(), { kind: 'dealer', payment: 'PAID' }), 'ADMIN', res).catch(() => undefined);
     expect(orderCsv).toHaveBeenCalledWith(expect.objectContaining({ kind: 'dealer', payment: 'PAID' }), { maskPhones: false });
+  });
+});
+
+describe('AdminService.orderStatusCounts — số đơn theo trạng thái cho chip (R-70)', () => {
+  it('dùng cùng where như danh sách nhưng bỏ trạng thái; gom theo status, "Tất cả" = tổng', async () => {
+    const groupBy = jest.fn().mockResolvedValue([
+      { status: 'CONFIRMED', _count: { _all: 4 } },
+      { status: 'DELIVERED', _count: { _all: 7 } },
+    ]);
+    const prisma = { order: { groupBy }, storefront: { findFirst: jest.fn() } };
+    const r = await mkAdmin(prisma).orderStatusCounts({ kind: 'dealer', payment: 'UNPAID' }, VIEWER);
+    expect(groupBy).toHaveBeenCalledTimes(1);
+    expect(groupBy.mock.calls[0][0]).toEqual({
+      by: ['status'],
+      where: { AND: [{ type: 'DEALER' }, { paymentStatus: 'UNPAID' }] },
+      _count: { _all: true },
+    });
+    expect(r).toEqual({ all: 11, byStatus: { CONFIRMED: 4, DELIVERED: 7 } });
+  });
+
+  it('không có đơn nào thì trả 0 và byStatus rỗng', async () => {
+    const prisma = { order: { groupBy: jest.fn().mockResolvedValue([]) }, storefront: { findFirst: jest.fn() } };
+    expect(await mkAdmin(prisma).orderStatusCounts({}, VIEWER)).toEqual({ all: 0, byStatus: {} });
+  });
+
+  it('where trùng đúng where của listOrders khi cùng bộ lọc (trừ status)', async () => {
+    const { prisma, count } = listPrisma();
+    const groupBy = jest.fn().mockResolvedValue([]);
+    (prisma.order as Record<string, unknown>).groupBy = groupBy;
+    const svc = mkAdmin(prisma);
+    await svc.listOrders(1, 20, undefined, undefined, 'attention', undefined, undefined, '2026-10-01', '2026-10-07', VIEWER, { kind: 'retail' });
+    await svc.orderStatusCounts({ recycling: 'attention', from: '2026-10-01', to: '2026-10-07', kind: 'retail' }, VIEWER);
+    expect(groupBy.mock.calls[0][0].where).toEqual(count.mock.calls[0][0].where);
+  });
+
+  it('nhân viên không phải ADMIN: truyền exactPhoneOnly như danh sách để không lộ SĐT qua số đếm', async () => {
+    const prisma = { order: { groupBy: jest.fn().mockResolvedValue([]) }, storefront: { findFirst: jest.fn() } };
+    const svc = mkAdmin(prisma);
+    const spy = jest.spyOn(svc, 'adminOrderWhere').mockResolvedValue({});
+    await svc.orderStatusCounts({ search: '0901' }, { role: 'STAFF' as never });
+    expect(spy).toHaveBeenCalledWith({ search: '0901' }, { exactPhoneOnly: true });
+    await svc.orderStatusCounts({ search: '0901' }, VIEWER);
+    expect(spy).toHaveBeenLastCalledWith({ search: '0901' }, { exactPhoneOnly: false });
+  });
+});
+
+describe('AdminController GET orders/status-counts (R-70)', () => {
+  it('cùng quyền với danh sách đơn (ADMIN + nhân viên CSKH/KHO/KE_TOAN), không hạ thấp hơn', () => {
+    const path = Reflect.getMetadata('path', AdminController.prototype.orderStatusCounts);
+    expect(path).toBe('orders/status-counts');
+    expect(Reflect.getMetadata('staffPermissions', AdminController.prototype.orderStatusCounts)).toEqual(
+      Reflect.getMetadata('staffPermissions', AdminController.prototype.orders),
+    );
+    expect(Reflect.getMetadata('roles', AdminController)).toEqual(['ADMIN']);
+  });
+
+  it('chuyển bộ lọc (không có status/trang) và người xem xuống service', async () => {
+    const admin = { orderStatusCounts: jest.fn().mockResolvedValue({ all: 0, byStatus: {} }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.orderStatusCounts(Object.assign(new OrderStatusCountsQuery(), { search: '09', kind: 'dealer' as const }), VIEWER);
+    expect(admin.orderStatusCounts).toHaveBeenCalledWith(expect.objectContaining({ search: '09', kind: 'dealer' }), VIEWER);
+    expect(admin.orderStatusCounts.mock.calls[0][0]).not.toHaveProperty('status');
+  });
+
+  it('DTO từ chối status (số đếm luôn gom theo mọi trạng thái)', async () => {
+    const errs = await validate(plainToInstance(OrderStatusCountsQuery, { status: 'CONFIRMED' }), { whitelist: true, forbidNonWhitelisted: true });
+    expect(errs.length).toBeGreaterThan(0);
   });
 });
