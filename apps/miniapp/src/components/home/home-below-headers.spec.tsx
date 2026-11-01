@@ -61,6 +61,14 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
   });
 
+  it('Hành trình nguyên liệu: câu mô tả số nhãn vẫn đọc được đúng một lần dù thẻ bản đồ aria-hidden (H3 review)', async () => {
+    const { container } = wrap(<BrandJourney />);
+    await screen.findByRole('button', { name: 'Tubu' });
+    const spokenCopy = Array.from(container.querySelectorAll('span')).filter((e) => e.children.length === 0 && /nhãn Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
+    expect(spokenCopy).toHaveLength(1);
+    expect(spokenCopy[0]!.closest('button')).toBeNull();
+  });
+
   it('Cộng đồng hỏi đáp: một SectionHeader, tiêu đề h2 chữ Inter, nút "Xem tất cả" mở /feed', async () => {
     wrap(<CommunityPreview />);
     await screen.findByText('Lá cúc bị vàng');

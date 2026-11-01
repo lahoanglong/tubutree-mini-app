@@ -8,6 +8,7 @@ import { brandsQuery } from '@tubutree/app-core/queries/catalog';
 import { coreHttp } from '@/lib/core-http';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import { Chip, Icon, ScrollRow, SectionHeader, Text } from '@/components/mini';
+import { SR_ONLY } from '@/components/mini/sr-only';
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ (bản web của `brand-journey.tsx` ở Mini App): tiêu đề `SectionHeader` (Inter 16/700, nút
@@ -22,7 +23,9 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
     <section aria-label={homeCopy.journey.title}>
       <SectionHeader title={homeCopy.journey.title} action={{ label: homeCopy.journey.cta, to: '/cau-chuyen' }} />
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
-        {/* Cùng đích với nút "Xem bản đồ" ở tiêu đề: thẻ chỉ còn cho chạm/chuột; bàn phím và trình đọc đi qua đúng một điều khiển (như các kệ khác). */}
+        {/* Cùng đích với nút "Xem bản đồ" ở tiêu đề: thẻ chỉ còn cho chạm/chuột; bàn phím và trình đọc đi qua đúng một điều khiển (như các kệ khác).
+            aria-hidden cũng giấu câu mô tả trong thẻ ("12 nhãn Việt…"), nên trình đọc nghe câu đó một lần ở bản chỉ-đọc ngoài nút. */}
+        <span style={SR_ONLY}>{homeCopy.journey.body(list.length)}</span>
         <button
           type="button"
           aria-hidden="true"

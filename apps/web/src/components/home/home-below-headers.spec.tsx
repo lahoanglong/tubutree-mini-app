@@ -27,6 +27,7 @@ vi.mock('@tubutree/app-core/api/feed', () => ({
   }),
 }));
 
+import { homeCopy } from '@tubutree/app-core/home-copy';
 import { BrandJourney } from './brand-journey';
 import { CommunityPreview } from './community-preview';
 
@@ -74,6 +75,14 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     const readable = Array.from(c.querySelectorAll('a, button')).filter((e) => !e.closest('[aria-hidden="true"]') && /bản đồ/i.test(e.getAttribute('aria-label') ?? e.textContent ?? ''));
     expect(readable).toHaveLength(1);
     expect(readable[0]!.getAttribute('aria-label')).toBe('Xem bản đồ Hành trình nguyên liệu');
+  });
+
+  it('Hành trình nguyên liệu: câu mô tả số nhãn vẫn đọc được đúng một lần dù thẻ bản đồ aria-hidden (H3 review)', async () => {
+    const c = await mount(<BrandJourney initialBrands={[{ brand: 'Tubu', count: 4, slug: 'tubu' }, { brand: 'Lá Xanh', count: 2, slug: 'la-xanh' }]} />);
+    const spokenCopy = Array.from(c.querySelectorAll('span')).filter((e) => e.children.length === 0 && /nhãn Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
+    expect(spokenCopy).toHaveLength(1);
+    expect(spokenCopy[0]!.textContent).toBe(homeCopy.journey.body(2));
+    expect(spokenCopy[0]!.closest('button')).toBeNull();
   });
 
   it('Cộng đồng hỏi đáp: một SectionHeader, h2 chữ Inter 700, "Xem tất cả" mở /cong-dong', async () => {
