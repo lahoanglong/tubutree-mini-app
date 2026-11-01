@@ -5,7 +5,8 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import type { HomeService } from '../../src/modules/catalog/home.service';
 import { CategoryAdminService } from '../../src/modules/catalog/category-admin.service';
-import { CATEGORY_MAX_CHILDREN, CATEGORY_MAX_ROOTS } from '../../src/modules/catalog/category-tree';
+import { CATEGORY_MAX_CHILDREN, CATEGORY_MAX_ROOTS, CATEGORY_MSG, CATEGORY_TREE_LOCK } from '../../src/modules/catalog/category-tree';
+import { ProductCategoryAdminService } from '../../src/modules/catalog/product-category-admin.service';
 import { randCode, warmPool } from './helpers';
 
 /**
@@ -16,6 +17,7 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let svc: CategoryAdminService;
+  let products: ProductCategoryAdminService;
   let capParent: string;
   let orderParent: string;
   let listParent: string;
@@ -28,7 +30,10 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
-    svc = new CategoryAdminService(prisma, new CatalogService(prisma), { invalidateStatic: jest.fn() } as unknown as HomeService);
+    const catalog = new CatalogService(prisma);
+    const home = { invalidateStatic: jest.fn() } as unknown as HomeService;
+    svc = new CategoryAdminService(prisma, catalog, home);
+    products = new ProductCategoryAdminService(prisma, catalog, home);
     // Ba cha cho ba ca đầu: ưu tiên gốc sẵn có chưa có con (DB IT đã có danh mục seed, hết chỗ cho gốc mới), thiếu mới tự tạo.
     const hosts = (await prisma.category.findMany({ where: { parentId: null, children: { none: {} } }, orderBy: { id: 'asc' }, take: 3 })).map((r) => r.id);
     while (hosts.length < 3) hosts.push((await svc.create('it', { name: name(`cha-${hosts.length}`) })).id);
@@ -36,10 +41,16 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   });
 
   afterAll(async () => {
+    await prisma.product.deleteMany({ where: mine });
     await prisma.category.deleteMany({ where: { ...mine, parentId: { not: null } } });
     await prisma.category.deleteMany({ where: mine });
     await moduleRef?.close();
   });
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const product = (suffix: string) =>
+    prisma.product.create({ data: { pancakeId: `it-cat-p-${tag}-${suffix}`, brand: 'IT', slug: `it-cat-${tag}-p-${suffix}`, name: `IT cat ${tag} ${suffix}`, description: 'IT', basePrice: 100_000 } });
+  const categoriesOf = async (id: string) => (await prisma.product.findUniqueOrThrow({ where: { id }, select: { categoryIds: true } })).categoryIds;
 
   const rootCount = () => prisma.category.count({ where: { parentId: null } });
   const childrenOf = (parentId: string) => prisma.category.findMany({ where: { parentId }, orderBy: { sortOrder: 'asc' } });
@@ -76,6 +87,55 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
     const made = await svc.create('it', { name: name('thay-ngay'), parentId: listParent });
     const list = await svc.list();
     expect(list.items.find((i) => i.id === made.id)).toMatchObject({ parentId: listParent, productCount: 0 });
+  });
+
+  it('hai lệnh gán cùng 3 sản phẩm vào cùng danh mục lá song song: mỗi sản phẩm mang id đúng một lần', async () => {
+    const leaf = await svc.create('it', { name: name('la-gan'), parentId: orderParent });
+    const ps = [await product('g1'), await product('g2'), await product('g3')];
+    const ids = ps.map((p) => p.id);
+
+    const [a, b] = await Promise.all([products.assign('it', ids, leaf.id, 'ADD'), products.assign('it', ids, leaf.id, 'ADD')]);
+
+    expect(a.changed + b.changed).toBe(3);
+    for (const id of ids) expect((await categoriesOf(id)).filter((c) => c === leaf.id)).toHaveLength(1);
+  });
+
+  it('sản phẩm tạo không ghi categoryIds vẫn nằm trong lọc "chưa có danh mục, đang bán" (mặc định mảng rỗng, không NULL)', async () => {
+    const p = await product('mac-dinh');
+    const page = await products.listProducts({ uncategorized: true, onSale: true, q: `it cat ${tag} mac-dinh`, take: 10 });
+    expect(page.items.map((i) => i.id)).toEqual([p.id]);
+  });
+
+  it('hàng cũ mang categoryIds NULL vẫn gán được (câu gán không bỏ sót vì NULL)', async () => {
+    const leaf = await svc.create('it', { name: name('la-null'), parentId: orderParent });
+    const p = await product('null');
+    await prisma.$executeRaw`UPDATE "products" SET "categoryIds" = NULL WHERE "id" = ${p.id}`;
+
+    const r = await products.assign('it', [p.id], leaf.id, 'ADD');
+
+    expect(r.changed).toBe(1);
+    expect(await categoriesOf(p.id)).toEqual([leaf.id]);
+  });
+
+  it('gán ADD chờ khoá cây: mục con đang tạo dở thì lệnh gán thấy mục con, bị 400 và không ghi', async () => {
+    const root = (await prisma.category.findFirst({ where: { parentId: null, children: { none: {} } }, orderBy: { id: 'desc' } }))!;
+    expect(root).toBeTruthy();
+    const p = await product('khoa');
+    let assigning: Promise<unknown> = Promise.resolve();
+    let finishedWhileLocked = true;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${CATEGORY_TREE_LOCK}))`;
+      await tx.category.create({ data: { name: name('con-dang-tao'), slug: `it-cat-${tag}-con-dang-tao`, parentId: root.id, sortOrder: 0 } });
+      assigning = products.assign('it', [p.id], root.id, 'ADD').then(() => 'ok', (e: unknown) => e);
+      finishedWhileLocked = await Promise.race([assigning.then(() => true), sleep(400).then(() => false)]);
+    });
+
+    expect(finishedWhileLocked).toBe(false);
+    const outcome = await assigning;
+    expect(outcome).toBeInstanceOf(BadRequestException);
+    expect((outcome as BadRequestException).message).toBe(CATEGORY_MSG.notLeaf(root.name));
+    expect(await categoriesOf(p.id)).not.toContain(root.id);
   });
 
   it('3 lệnh thêm gốc song song khi chỉ còn 1 chỗ: đúng 1 thành công, tổng gốc không vượt 8', async () => {
