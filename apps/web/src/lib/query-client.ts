@@ -14,10 +14,17 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
  * được tạo sau đó kể cả khi khách đã rời trang. 'always' gửi request thật, lỗi mạng rơi vào onError (hiện câu "Mất kết nối…"),
  * không có hàng đợi nào chạy lại về sau. Query giữ mặc định cũ.
  */
+/** Khoá admin ('admin-...') và huy hiệu hoàn tiền: đổi tab qua lại trong 30 giây dùng lại dữ liệu cũ thay vì gọi lại mạng. */
+export const ADMIN_STALE_MS = 30_000;
+function defaultStaleTime(query: { queryKey: readonly unknown[] }): number {
+  const head = query.queryKey[0];
+  return typeof head === 'string' && head.startsWith('admin-') ? ADMIN_STALE_MS : 0;
+}
+
 export function createQueryClient(): QueryClient {
   const client = new QueryClient({
     defaultOptions: {
-      queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false },
+      queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false, staleTime: defaultStaleTime },
       mutations: { networkMode: 'always' },
     },
   });

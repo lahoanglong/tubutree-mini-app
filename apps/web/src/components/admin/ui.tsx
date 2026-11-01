@@ -61,6 +61,40 @@ export function LoadError({ children, onRetry, retrying = false }: { children: R
   );
 }
 
+/** Khung xương thay dòng "Đang tải…": giữ chỗ để trang không giật khi dữ liệu về. `label` đọc cho trình đọc màn hình. */
+export function ListSkeleton({ label, rows = 4, className = 'h-16' }: { label: string; rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-busy="true" aria-label={label} data-skeleton="list" className="space-y-2">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className={`animate-pulse rounded-card bg-stone-100 ${className}`} />
+      ))}
+    </div>
+  );
+}
+
+/** Khung xương hàng thẻ số (Tổng quan). */
+export function StatCardsSkeleton({ label, count = 6 }: { label: string; count?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label={label} data-skeleton="stats" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="h-20 animate-pulse rounded-card bg-stone-100" />
+      ))}
+    </div>
+  );
+}
+
+/** Khung xương bảng: một hàng tiêu đề mỏng rồi các hàng dữ liệu. */
+export function TableSkeleton({ label, rows = 6 }: { label: string; rows?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label={label} data-skeleton="table" className="space-y-1.5">
+      <div className="h-8 animate-pulse rounded bg-stone-200" />
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="h-11 animate-pulse rounded bg-stone-100" />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Khung cuộn ngang bọc bảng. Bảng không có nút/ô nhập trong hàng thì khung không có gì focus được, bàn phím không
  * cuộn tới cột bị che (axe `scrollable-region-focusable`): tự nhận tab, kèm tên vùng cho trình đọc màn hình.
