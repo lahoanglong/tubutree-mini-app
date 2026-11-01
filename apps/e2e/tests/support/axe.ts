@@ -23,6 +23,7 @@ let axeSource: string | undefined;
 /**
  * Nạp axe-core của `@tubutree/e2e` vào trang rồi chạy với `AXE_TAGS`. Gọi sau khi màn đã dựng xong phần cần kiểm.
  * Tắt transition/animation và đợi các animation đang chạy xong trước khi đo: color-contrast đọc màu tính lúc đó, nút đang mờ dần (khoá → mở) cho tỉ lệ sai.
+ * Lớp tắt chuyển động ở lại trên trang, nên runAxe phải là bước cuối: kiểm hành vi animation/transition sau đó sẽ sai.
  */
 export async function runAxe(page: Page): Promise<AxeViolation[]> {
   axeSource ??= readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
