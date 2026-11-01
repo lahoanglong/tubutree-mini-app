@@ -1,12 +1,13 @@
 import path from 'path';
 import { DEMO_BRAND_CONTENT } from './demo-brand';
+import { parseEnvFile } from './env-file';
 import { writableTempDb } from './waste-db';
 
 /**
  * Dữ liệu thật cho axe smoke web (a11y-shop.web.spec.ts): chi tiết sản phẩm, gian hàng CTV và thương hiệu do máy chủ web dựng từ API thật (SSR/ISR)
  * nên mock trình duyệt không chạm tới. Sản phẩm và nhãn có sẵn từ migration (cả DB của web-gate.sh lẫn DB của job CI, chỉ chạy `migrate deploy`), nhưng nhãn chưa công khai
  * và chưa có gian hàng nào: hàm này bật công khai nhãn Visante, gắn sản phẩm Visante vào nhãn và tạo gian hàng CTV mẫu. Chỉ ghi vào DB tạm (writableTempDb), không bao giờ vào
- * DB khác. Chạy lặp và chạy song song hai worker đều an toàn (bỏ qua lỗi trùng khoá).
+ * DB khác. Chạy lặp và chạy song song hai worker đều an toàn (bỏ qua lỗi trùng khoá). Cũng là nguồn dữ liệu của visual-tour.web.spec.ts (tour-db.ts gọi hàm này).
  */
 export const A11Y_BRAND_SLUG = 'visante';
 export const A11Y_STOREFRONT_SLUG = 'ctv-pilot';
@@ -20,9 +21,26 @@ async function ignoreDuplicate(write: () => Promise<unknown>): Promise<void> {
   }
 }
 
-/** `true` khi đã bảo đảm có thương hiệu và gian hàng công khai; `false` khi DB không phải DB tạm (không ghi gì, spec bỏ qua kèm lý do). */
+const API_ENV_FILE = path.resolve(__dirname, '../../../api/.env');
+
+/**
+ * Chuỗi kết nối của DB mà API e2e đang dùng: DATABASE_URL của process, rơi về apps/api/.env (cùng thứ tự với global-setup.ts). Job CI không export DATABASE_URL cho
+ * Playwright (nó nằm trong apps/api/.env do bước "Prepare API env"), nên chỉ đọc process.env thì seed lặng lẽ không ghi và ba màn dựng từ API thật bị bỏ qua.
+ */
+export function seedDatabaseUrl(env: NodeJS.ProcessEnv = process.env, apiEnvFile: string = API_ENV_FILE): string {
+  return env.DATABASE_URL ?? parseEnvFile(apiEnvFile)['DATABASE_URL'] ?? '';
+}
+
+/** Trên GitHub Actions DB luôn là DB tạm đã migrate: không seed được nghĩa là cấu hình hỏng, phải đỏ chứ không được bỏ qua màn nào. */
+export function assertSeededOnCi(seeded: boolean, env: NodeJS.ProcessEnv = process.env): void {
+  if (env.GITHUB_ACTIONS === 'true' && !seeded) {
+    throw new Error('seedShopScreens không ghi được dữ liệu mẫu trên CI (DATABASE_URL không phải DB của job CI?): gian hàng và thương hiệu sẽ 404 và bị bỏ qua');
+  }
+}
+
+/** `true` khi đã bảo đảm có thương hiệu và gian hàng công khai; `false` khi DB không phải DB tạm (không ghi gì, spec bỏ qua kèm lý do; trên CI thì `assertSeededOnCi` làm đỏ). */
 export async function seedShopScreens(): Promise<boolean> {
-  const url = process.env.DATABASE_URL ?? '';
+  const url = seedDatabaseUrl();
   if (!writableTempDb(url)) return false;
   // apps/e2e không phụ thuộc @prisma/client: nạp bản của apps/api (đã generate) và chỉ dùng vài lệnh, nên không cần kiểu đầy đủ.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

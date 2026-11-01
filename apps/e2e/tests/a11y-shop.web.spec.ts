@@ -1,8 +1,11 @@
+import { mkdtempSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import path from 'path';
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
 import { blockingViolations, runAxe, staleBaseline } from './support/axe';
-import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, seedShopScreens } from './support/a11y-db';
+import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, assertSeededOnCi, seedDatabaseUrl, seedShopScreens } from './support/a11y-db';
 import { mockFlashSlots } from './support/flash-slot-mocks';
 import { mockCollectable } from './support/voucher-mocks';
 
@@ -11,7 +14,7 @@ import { mockCollectable } from './support/voucher-mocks';
  * gian hàng CTV, thương hiệu, Ưu đãi, Giờ vàng. WCAG AA; chỉ `serious`/`critical` chặn; vi phạm có sẵn ở support/a11y-baseline.ts kèm lý do.
  * Ưu đãi và Giờ vàng chạy hoàn toàn bằng mock phía trình duyệt. Chi tiết sản phẩm, gian hàng và thương hiệu do máy chủ web dựng từ API thật: `seedShopScreens()`
  * bảo đảm DB tạm (web-gate.sh, job CI) có thương hiệu, sản phẩm và gian hàng công khai, nên ở đó trang 404 là LỖI chứ không được bỏ qua. Chỉ khi DB không phải
- * DB tạm (máy dev chạy vào DB dùng chung) mới bỏ qua, kèm lý do. Trang chủ và Danh mục (danh sách) đợi thẻ sản phẩm dựng xong rồi mới đo, hub Danh mục đợi nút "Xem tất cả sản phẩm": không đo khung rỗng.
+ * DB tạm (máy dev chạy vào DB dùng chung) mới bỏ qua, kèm lý do; trên GitHub Actions không seed được thì beforeAll ném lỗi (assertSeededOnCi). Trang chủ và Danh mục (danh sách) đợi thẻ sản phẩm dựng xong rồi mới đo, hub Danh mục đợi nút "Xem tất cả sản phẩm": không đo khung rỗng.
  * Host phải là localhost (baseURL) vì middleware coi nhãn đầu của Host là subdomain gian hàng.
  */
 test.use({ viewport: { width: 375, height: 812 } });
@@ -30,7 +33,9 @@ async function firstProductSlug(request: APIRequestContext): Promise<string | nu
 
 let seeded = false;
 test.beforeAll(async ({}, testInfo) => {
-  if (testInfo.project.name === 'Web Customer Mobile') seeded = await seedShopScreens();
+  if (testInfo.project.name !== 'Web Customer Mobile') return;
+  seeded = await seedShopScreens();
+  assertSeededOnCi(seeded);
 });
 
 const HOUR = 3_600_000;
@@ -109,5 +114,21 @@ test.describe('axe smoke web: bài tự kiểm', () => {
     const found = await runAxe(page);
     const lines = blockingViolations('web', screen.name, found);
     expect(lines.some((l) => l.includes('button-name') && l.includes('axe-probe'))).toBe(true);
+  });
+});
+
+test.describe('axe smoke web: rào seed', () => {
+  test('seedDatabaseUrl: process.env thắng, thiếu thì rơi về apps/api/.env như job CI', () => {
+    const file = path.join(mkdtempSync(path.join(tmpdir(), 'a11y-env-')), '.env');
+    writeFileSync(file, 'NODE_ENV=test\n# ghi chú\nDATABASE_URL="postgresql://tubu:tubu@localhost:5434/tubutree"\n');
+    expect(seedDatabaseUrl({}, file)).toBe('postgresql://tubu:tubu@localhost:5434/tubutree');
+    expect(seedDatabaseUrl({ DATABASE_URL: 'postgresql://x' }, file)).toBe('postgresql://x');
+    expect(seedDatabaseUrl({}, path.join(path.dirname(file), 'khong-co.env'))).toBe('');
+  });
+
+  test('assertSeededOnCi: trên CI không seed được thì đỏ, ngoài CI thì để spec bỏ qua có lý do', () => {
+    expect(() => assertSeededOnCi(false, { GITHUB_ACTIONS: 'true' })).toThrow(/seedShopScreens/);
+    expect(() => assertSeededOnCi(true, { GITHUB_ACTIONS: 'true' })).not.toThrow();
+    expect(() => assertSeededOnCi(false, {})).not.toThrow();
   });
 });
