@@ -75,6 +75,11 @@ describe('SHOP_COPY', () => {
     expect(SHOP_COPY['flash.almostGone']).toBe('Sắp hết');
     expect(SHOP_COPY['flash.soldOut']).toBe('Đã bán hết');
   });
+
+  it('dải thương hiệu ở PDP: tiêu đề không kèm tên (ux-copy UC-01), tên đi vào nhãn đọc', () => {
+    expect(SHOP_COPY['pdp.brandShelf']).toBe('Cùng thương hiệu');
+    expect(fillCopy('pdp.brandShelfLabel', { brand: 'Cô Lan' })).toBe('Cùng thương hiệu Cô Lan');
+  });
 });
 
 describe('FORBIDDEN_TERMS', () => {

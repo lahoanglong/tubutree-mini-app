@@ -48,7 +48,13 @@ export function pickQuickReviews<T extends QuickReviewInput>(items: readonly T[]
 const BRAND_RAIL_MAX = 8;
 
 /**
- * Ba dải cuối PDP không trùng nhau và không có món đang xem: "Khách thường mua cùng" (kệ `pdp.boughtTogether`) > "Cùng nhà" >
+ * Số món lấy làm nguồn cho dải "Có thể bạn cũng thích". `GET /products/for-you` của API trả tối đa 10 món nên Mini chỉ bao giờ có
+ * ngần ấy; khách web chưa đăng nhập (nguồn bán chạy) lấy cùng trần để hai app dài bằng nhau.
+ */
+export const PDP_FEED_SOURCE_LIMIT = 10;
+
+/**
+ * Ba dải cuối PDP không trùng nhau và không có món đang xem: "Khách thường mua cùng" (kệ `pdp.boughtTogether`) > "Cùng thương hiệu" >
  * "Có thể bạn cũng thích" (kệ `pdp.related`). Trần/sàn lấy từ `SHELVES`; dải dưới sàn thì ẩn và không chiếm món của dải dưới.
  */
 export function pdpShelves<T extends { id: string }>(i: { currentId: string; boughtTogether: T[]; brand: T[]; feed: T[] }): {

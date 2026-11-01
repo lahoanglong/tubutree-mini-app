@@ -49,7 +49,7 @@ describe('PdpRails: "Có thể bạn cũng thích"', () => {
     const c = await mount();
     expect(paths()).not.toContain('/products/for-you');
     expect(paths()).toContain('/products');
-    expect(mocks.get.mock.calls.find((x) => x[0] === '/products')?.[1]).toMatchObject({ query: { sort: 'best_seller' } });
+    expect(mocks.get.mock.calls.find((x) => x[0] === '/products')?.[1]).toMatchObject({ query: { sort: 'best_seller', limit: 10 } });
     const items = Array.from(c.querySelectorAll('[data-testid="feed-grid"] li')).map((li) => li.textContent);
     expect(items).toHaveLength(6);
     expect(items).not.toContain('Món cur');

@@ -245,14 +245,14 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
 
 // R8: trang sản phẩm web có khối đánh giá (danh sách công khai và lối viết đánh giá) như Mini App.
 describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
-  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập được mời đăng nhập để đánh giá', async () => {
+  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập thấy nút "Viết đánh giá" dẫn tới đăng nhập', async () => {
     const c = await mount();
     const section = c.querySelector('section#danh-gia')!;
     expect(section.querySelector('h2')?.textContent).toBe('Đánh giá (2)');
-    expect(section.textContent).toContain('4.5');
+    expect(section.textContent).toContain('4,5');
     expect(section.textContent).toContain('Gội êm');
     expect(section.textContent).toContain('Thơm nhẹ');
-    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Đăng nhập để đánh giá')!;
+    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Viết đánh giá')!;
     expect(login.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi-bo-ket');
   });
 });
@@ -367,6 +367,12 @@ describe('/san-pham/[slug] — dòng "Vận chuyển ›" ngắn, lưu ý dài n
     expect(asButton(note)).toBeNull();
     expect(Array.from(c.querySelectorAll('[role="button"]')).some((b) => b.textContent?.startsWith('Vận chuyển'))).toBe(false);
   });
+
+  it('điện thoại: ghi chú vận chuyển xếp order 4, trên chip phân loại (5) và Số lượng (6) để Số lượng sát phân loại', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-section="pdp-notes"]')!.className).toContain('max-md:order-4');
+  });
 });
 
 describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán (R3-MERCHANT-3)', () => {
@@ -448,7 +454,7 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     api.product = { ...PRODUCT, sold: 1250 };
     const c = await mount();
     expect(c.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
-    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4.5 · 8 đánh giá');
+    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4,5 · 8 đánh giá');
     expect(c.textContent).toContain('Đã bán 1,3k+');
   });
 
@@ -483,13 +489,15 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');
   });
 
-  it('dải Khách thường mua cùng và Cùng nhà thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
+  it('dải Khách thường mua cùng và Cùng thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
     api.related = [card(1)];
     api.together = [card(2), card(3), card(4)];
     const c = await mount();
     await flush();
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']));
+    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng thương hiệu']));
+    expect(h2).not.toContain('Cùng nhà Xanh Việt');
+    expect(c.querySelector('[aria-label="Cùng thương hiệu Xanh Việt"]')).not.toBeNull();
     expect(Array.from(c.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(expect.arrayContaining(['/san-pham/sp-1', '/san-pham/sp-2']));
   });
 
@@ -511,6 +519,21 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(card.querySelector('[data-testid="pdp-info"]')).not.toBeNull();
     expect(card.querySelector('[aria-roledescription="carousel"]')).not.toBeNull();
     expect(card.className).toContain('lg:grid-cols-[440px_minmax(0,1fr)]');
+    expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
+  });
+
+  it('từ lg nửa dưới hai cột: Thành phần + Cam kết + Mô tả bên trái, Đánh giá bên phải; dải gợi ý vẫn cả bề ngang bên dưới', async () => {
+    const c = await mount();
+    await flush();
+    const cols = c.querySelector('[data-testid="pdp-below-cols"]')!;
+    expect(cols.className).toContain('lg:grid-cols-2');
+    const [left, right] = Array.from(cols.children) as HTMLElement[];
+    expect(left!.textContent).toContain('Cam kết Tubu');
+    expect(left!.textContent).toContain('Mô tả sản phẩm');
+    expect(left!.querySelector('#danh-gia')).toBeNull();
+    expect(right!.querySelector('#danh-gia')).not.toBeNull();
+    // Dải gợi ý là anh em kế tiếp của hai cột, không nằm trong cột nào.
+    expect(cols.nextElementSibling!.className).toContain('max-md:pb-6');
     expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
   });
 

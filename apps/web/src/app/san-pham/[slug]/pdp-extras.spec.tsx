@@ -183,6 +183,15 @@ describe('PdpFlashBar', () => {
     expect(t).toContain('Mỗi khách tối đa 2');
     expect(t).not.toMatch(/Còn \d/);
   });
+  it('máy tính: dải bo góc như ảnh (md:rounded-sheet), cách ảnh một nhịp; dòng giá của dải ẩn từ lg vì giá deal đã nằm ở cột thông tin', async () => {
+    mocks.flash = [item()];
+    const { container } = mount(<PdpFlashBar product={PRODUCT} />);
+    await flush();
+    const bar = container.querySelector('[data-testid="flash-price-bar"]')!;
+    expect(bar.className).toContain('md:rounded-sheet');
+    expect(bar.className).toContain('md:mt-3');
+    expect(container.querySelector('[data-testid="flash-price-row"]')!.className).toContain('lg:hidden');
+  });
   it('đợt của phân loại khác thì không hiện; bán quá suất thì thanh ghi "Đã bán hết", không bao giờ quá 100%', async () => {
     mocks.flash = [item({ variationId: 'v1' })];
     expect(mount(<PdpFlashBar product={PRODUCT} />).container.innerHTML).toBe('');
@@ -290,6 +299,8 @@ describe('PdpGroupBuyRow', () => {
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
     expect(container.firstElementChild!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
     expect(byText(container, 'button', /Mở nhóm mua chung/)!.className).toContain('max-md:border-0');
+    // D2: luôn "mã giảm giá", không "mã giảm" thiếu chữ "giá".
+    expect(byText(container, 'button', /Mở nhóm mua chung/)!.textContent).toContain('nhận mã giảm giá khi đủ người');
   });
   it('đăng nhập: POST /group-buy {productId} rồi sang /mua-chung/<id>', async () => {
     mocks.http.post.mockResolvedValue({ id: 'g1' });
