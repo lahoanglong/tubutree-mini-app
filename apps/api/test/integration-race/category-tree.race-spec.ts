@@ -204,14 +204,26 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   });
 
   it('3 lệnh thêm gốc song song khi chỉ còn 1 chỗ: đúng 1 thành công, tổng gốc không vượt 8', async () => {
-    const existing = await rootCount();
-    expect(existing).toBeLessThanOrEqual(CATEGORY_MAX_ROOTS - 1);
-    for (let i = existing; i < CATEGORY_MAX_ROOTS - 1; i++) await svc.create('it', { name: name(`goc-${i}`) });
-    expect(await rootCount()).toBe(CATEGORY_MAX_ROOTS - 1);
+    // Trên CI các spec trước để lại gốc trong cùng DB (đã thấy 11 > trần 8): tạm dời gốc không phải của spec này vào một gốc giữ chỗ
+    // để có chỗ trống, xong trả lại nguyên chỗ cũ.
+    const others = (await prisma.category.findMany({ where: { parentId: null, NOT: mine }, select: { id: true } })).map((r) => r.id);
+    const holder = others.length > 0 ? await prisma.category.create({ data: { name: name('giu-cho'), slug: `it-cat-${tag}-giu-cho` } }) : null;
+    if (holder) await prisma.category.updateMany({ where: { id: { in: others } }, data: { parentId: holder.id } });
+    try {
+      const existing = await rootCount();
+      expect(existing).toBeLessThanOrEqual(CATEGORY_MAX_ROOTS - 1);
+      for (let i = existing; i < CATEGORY_MAX_ROOTS - 1; i++) await svc.create('it', { name: name(`goc-${i}`) });
+      expect(await rootCount()).toBe(CATEGORY_MAX_ROOTS - 1);
 
-    const results = await Promise.allSettled([1, 2, 3].map((i) => svc.create('it', { name: name(`goc-tranh-${i}`) })));
+      const results = await Promise.allSettled([1, 2, 3].map((i) => svc.create('it', { name: name(`goc-tranh-${i}`) })));
 
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(await rootCount()).toBe(CATEGORY_MAX_ROOTS);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(await rootCount()).toBe(CATEGORY_MAX_ROOTS);
+    } finally {
+      if (holder) {
+        await prisma.category.updateMany({ where: { id: { in: others } }, data: { parentId: null } });
+        await prisma.category.delete({ where: { id: holder.id } });
+      }
+    }
   });
 });

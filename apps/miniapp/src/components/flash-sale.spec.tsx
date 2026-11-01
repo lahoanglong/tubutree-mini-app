@@ -178,7 +178,8 @@ describe('FlashSale — dòng suất kế tiếp', () => {
   it('suất kế mở sau 3 giờ: dòng có "Nhắc tôi" cao 44, bấm tới trang Giờ vàng (khách chưa đăng nhập vẫn thấy)', async () => {
     mocks.fetchUpcoming.mockResolvedValue(upcomingAt(3, 2));
     renderFlash({ items: many(3) });
-    const line = await screen.findByRole('button', { name: /^\d{2}:\d{2} · 2 món sắp mở/ });
+    // Dòng chờ fetchUpcoming rồi mới vẽ; CI tải nặng đã vượt mức chờ 1s mặc định một lần (run 41282913325).
+    const line = await screen.findByRole('button', { name: /^\d{2}:\d{2} · 2 món sắp mở/ }, { timeout: 5000 });
     expect(line).toHaveTextContent('Nhắc tôi');
     expect(line).toHaveStyle({ minHeight: '44px' });
     fireEvent.click(line);

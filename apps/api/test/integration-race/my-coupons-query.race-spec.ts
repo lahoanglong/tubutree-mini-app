@@ -67,6 +67,7 @@ describe('LoyaltyService.getAvailableCoupons SQL filter vs legacy (real Postgres
       .filter((c) => !(c.perUserLimit > 0 && (used.get(c.id) ?? 0) >= c.perUserLimit))
       .map((c) => ({
         code: c.code,
+        title: c.title,
         type: c.type,
         value: c.value,
         minOrder: c.minOrder,
