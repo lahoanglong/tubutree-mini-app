@@ -60,6 +60,17 @@ describe('bundleLive', () => {
 });
 
 describe('comboView', () => {
+  it('liveAt tách mốc kiểm hết hạn khỏi `now`: -∞ là chưa kiểm hạn (hydrate khớp HTML dựng sẵn), mặc định là `now`', () => {
+    const ended = combo([item('a'), item('b')], { endAt: new Date(NOW - 1000).toISOString() });
+    expect(comboView(ended, NOW)).toBeNull();
+    expect(comboView(ended, NOW, NOW)).toBeNull();
+    const v = comboView(ended, NOW, Number.NEGATIVE_INFINITY)!;
+    expect(v.items.map((i) => i.id)).toEqual(['a', 'b']);
+    // `now` vẫn là giờ thật cho thẻ món: món mới ra mắt giữ nhãn "Mới" dù không kiểm hạn.
+    const fresh = combo([item('a', { product: { createdAt: new Date(NOW - 86_400_000).toISOString() } }), item('b')], { endAt: new Date(NOW - 1000).toISOString() });
+    expect(comboView(fresh, NOW, Number.NEGATIVE_INFINITY)!.items[0]!.label?.kind).toBe('new');
+  });
+
   it('tổng và tổng sau giảm theo floor từng món; lines đủ món, mỗi món một đơn vị', () => {
     const v = comboView(combo([item('a', { product: { basePrice: 99 } }), item('b', { product: { basePrice: 99, salePrice: 55 } })], { pct: 10 }), NOW)!;
     expect(v.total).toBe(99 + 55);

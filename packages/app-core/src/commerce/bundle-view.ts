@@ -31,9 +31,11 @@ export interface ComboView {
 /**
  * Dạng hiển thị của một combo (BUNDLE_PCT). null khi hết hạn, dưới hai sản phẩm khác nhau, `pct` không dương, hay có món chưa chọn được
  * phân loại: không quảng cáo "mua cả bộ" cho thứ giỏ không giảm hoặc không thêm được.
+ * `liveAt` là mốc so với `endAt` (mặc định `now`); `now` vẫn là giờ thật cho thẻ món. Lượt hydrate đầu của web truyền `-Infinity` để vẫn vẽ đúng các
+ * combo mà HTML dựng sẵn đã vẽ, rồi kiểm hạn thật sau hydrate.
  */
-export function comboView(b: BundleDTO, now: number): ComboView | null {
-  if (b.kind !== 'BUNDLE_PCT' || !bundleLive(b, now)) return null;
+export function comboView(b: BundleDTO, now: number, liveAt: number = now): ComboView | null {
+  if (b.kind !== 'BUNDLE_PCT' || !bundleLive(b, liveAt)) return null;
   if (typeof b.pct !== 'number' || !(b.pct > 0)) return null;
   if (new Set(b.items.map((i) => i.productId)).size < 2) return null;
   const lines: { variationId: string; quantity: number }[] = [];
