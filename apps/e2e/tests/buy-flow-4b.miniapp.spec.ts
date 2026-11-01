@@ -58,7 +58,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     expect(blocks).not.toContain('member');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Việc cần làm' })).toHaveCount(0);
-    expect(api.callsTo('GET', '/orders').filter((c) => c.query.get('status') === 'SHIPPING')).toEqual([]);
+    expect(api.callsTo('GET', '/orders/home-todo')).toEqual([]);
     // Kệ chứa SP đầu tiên = bán chạy nhất (XA_PHONG 120 > BINH_SUA 80 > NRC 50 > KEM 10), thẻ hạng #1.
     await expect(best.locator('button.tubu-tile-link').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name));
     await expect(best.getByText('#1', { exact: true })).toBeVisible();
@@ -98,8 +98,8 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await page.goto('/');
     const todo = page.getByRole('region', { name: 'Việc cần làm' });
     await expect
-      .poll(() => api.callsTo('GET', '/orders').some((c) => c.query.get('status') === 'SHIPPING' && c.query.get('limit') === '1'), { timeout: 15_000 })
-      .toBe(true);
+      .poll(() => api.callsTo('GET', '/orders/home-todo').length, { timeout: 15_000 })
+      .toBeGreaterThan(0);
     await todo.getByRole('button', { name: new RegExp(`Đơn ${SHIPPING_CODE} đang giao`) }).click({ timeout: 15_000 });
     await expect(page).toHaveURL(new RegExp(`/order/${SHIPPING_CODE}$`), { timeout: 15_000 });
   });
@@ -288,10 +288,9 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
     await page.setViewportSize({ width: 375, height: 800 });
     mockDiscovery(api, { returning: true, shipping: true });
     const gate = gateOf();
-    api.get('/orders', async ({ call }: MockContext) => {
-      if (call.query.get('status') !== 'SHIPPING') return { data: [], meta: { page: 1, limit: 1, total: 0 } };
+    api.get('/orders/home-todo', async (_ctx: MockContext) => {
       await gate.promise;
-      return { data: [makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' })], meta: { page: 1, limit: 1, total: 1 } };
+      return { pending: null, shipping: { order: makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' }), total: 1 }, processing: null };
     });
     // Khung chờ chỉ dựng khi lần mở trước của tài khoản này có việc (use-home-customer-kind / todo-strip nhớ số dòng).
     await page.addInitScript(() => {

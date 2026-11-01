@@ -83,7 +83,7 @@ test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển b�
         isNewCustomer: true,
         welcomeVoucher: { code: 'WELCOME-U1', type: 'AMOUNT', value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' },
       });
-      api.allowUnmocked('POST /events', 'GET /products/for-you', 'GET /me/wishlist/ids', 'GET /flash-sales/upcoming', 'GET /orders/active-count', 'GET /me/orders/active', 'GET /products', 'GET /categories', 'GET /brands', 'GET /me/subscriptions', 'GET /orders');
+      api.allowUnmocked('POST /events', 'GET /products/for-you', 'GET /me/wishlist/ids', 'GET /flash-sales/upcoming', 'GET /orders/active-count', 'GET /orders/home-todo', 'GET /me/orders/active', 'GET /products', 'GET /categories', 'GET /brands', 'GET /me/subscriptions', 'GET /orders');
       await page.addInitScript(() => {
         const w = window as unknown as { __cls: number; __shifts: string[] };
         w.__cls = 0;

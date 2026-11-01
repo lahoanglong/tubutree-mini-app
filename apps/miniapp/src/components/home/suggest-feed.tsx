@@ -48,18 +48,31 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
   const active = chips.find((c) => c.key === chipKey) ?? chips[0]!;
   const categoryId = active.categoryId;
 
-  const forYou = useQuery({ queryKey: ['for-you', seed], queryFn: () => fetchForYou({ seed }), enabled: authed && categoryId === null });
+  // Lưới nằm cuối Trang chủ: chỉ tải khi khối cách màn hình chưa tới một màn. Lần mở Trang chủ bớt một request so với khi tải ngay; web không có
+  // request này vì trang 1 đã dựng sẵn ở server.
+  const section = useRef<HTMLElement>(null);
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = section.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), { rootMargin: '100% 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+
+  const forYou = useQuery({ queryKey: ['for-you', seed], queryFn: () => fetchForYou({ seed }), enabled: near && authed && categoryId === null });
   const pages = useInfiniteQuery({
     queryKey: ['products', 'home-suggest', seed, categoryId ?? 'all'],
     queryFn: ({ pageParam }) => fetchCatalog({ page: pageParam, limit: SUGGEST_PAGE_SIZE, seed, ...(categoryId ? { category: categoryId } : {}) }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    enabled: near,
   });
   const personal = categoryId === null && authed ? (forYou.data ?? []) : [];
   const fresh = mergeSuggestions(personal, (pages.data?.pages ?? []).map((p) => p.data)).filter((p) => !exclude.has(p.slug));
   const capped = fresh.length >= SUGGEST_MAX;
   const items = capped ? fresh.slice(0, SUGGEST_MAX) : fresh;
-  const loadingFirst = pages.isLoading || (categoryId === null && authed && forYou.isPending && !pages.data);
+  const loadingFirst = !near || pages.isLoading || (categoryId === null && authed && forYou.isPending && !pages.data);
 
   const sentinel = useRef<HTMLDivElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = pages;
@@ -87,7 +100,7 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
   if (categoryId === null && !loadingFirst && !draining && !pages.isError && items.length === 0) return null;
 
   return (
-    <section aria-label={homeCopy.suggest.title}>
+    <section ref={section} aria-label={homeCopy.suggest.title}>
       <div style={{ padding: '0 16px' }}>
         <SectionHeader title={homeCopy.suggest.title} />
       </div>
@@ -106,7 +119,8 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
         ))}
       </ScrollRow>
       <div style={{ padding: '0 16px' }}>
-        {loadingFirst || draining ? (
+        {/* Chưa tới gần màn thì chưa phải "đang tải": không vẽ khung chờ (nó nằm dưới màn, khách không thấy). */}
+        {!near ? null : loadingFirst || draining ? (
           <CatalogGridSkeleton count={6} />
         ) : items.length === 0 ? (
           pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null

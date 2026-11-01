@@ -391,6 +391,32 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
     });
 
+    it('"Đã xem" ở dòng khác không xoá lời báo của dòng trước: cả hai dòng cùng giữ lời báo', async () => {
+      const other = (at: string) => row({ id: 's8', title: 'Shop khác', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: at });
+      const state = { s9: '2026-10-20T03:30:00.000Z', s8: '2026-10-20T02:00:00.000Z' };
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': () => {
+          state.s9 = '2026-10-20T05:00:00.000Z';
+          return { body: changed({ contentChangedAt: state.s9 }) };
+        },
+        '/admin/storefronts/s8/content-seen': () => {
+          state.s8 = '2026-10-20T06:00:00.000Z';
+          return { body: other(state.s8) };
+        },
+        '/admin/storefronts?': () => page([other(state.s8), changed({ contentChangedAt: state.s9 })], 2),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(article(container), 'button', 'Đã xem'));
+      await flush();
+      click(byText(container.querySelector('article[aria-label="Shop khác"]') as HTMLElement, 'button', 'Đã xem'));
+      await flush();
+      expect(article(container).querySelector('[role="status"]')).not.toBeNull();
+      expect(container.querySelector('article[aria-label="Shop khác"] [role="status"]')).not.toBeNull();
+      expect(container.querySelectorAll('[role="status"]')).toHaveLength(2);
+    });
+
     it('bấm "Đã xem" mà máy chủ xoá dấu: không có lời báo chủ đổi thêm, và lời báo cũ biến mất', async () => {
       let seenCalls = 0;
       statefulServer('2026-10-20T03:30:00.000Z', () => (++seenCalls === 1 ? '2026-10-20T05:00:00.000Z' : null));

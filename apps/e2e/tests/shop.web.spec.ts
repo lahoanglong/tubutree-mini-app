@@ -734,10 +734,11 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       }
     });
     api.get('/orders/active-count', { count: 1 });
-    api.get('/orders', ({ call }) => ({
-      data: call.query.get('status') === 'SHIPPING' ? [makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' })] : [],
-      meta: { page: 1, limit: 1, total: call.query.get('status') === 'SHIPPING' ? 1 : 0 },
-    }));
+    api.get('/orders/home-todo', {
+      pending: null,
+      shipping: { order: makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' }), total: 1 },
+      processing: null,
+    });
     const user = {
       id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
       pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
@@ -871,10 +872,11 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       }
     });
     api.get('/orders/active-count', { count: 1 });
-    api.get('/orders', ({ call }) => ({
-      data: call.query.get('status') === 'SHIPPING' ? [makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' })] : [],
-      meta: { page: 1, limit: 1, total: call.query.get('status') === 'SHIPPING' ? 1 : 0 },
-    }));
+    api.get('/orders/home-todo', {
+      pending: null,
+      shipping: { order: makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' }), total: 1 },
+      processing: null,
+    });
     const user = {
       id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
       pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
