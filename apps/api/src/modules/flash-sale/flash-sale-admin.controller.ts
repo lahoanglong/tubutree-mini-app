@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { Trim } from '../../common/decorators/trim.decorator';
@@ -25,6 +25,13 @@ class AddItemDto {
   @IsInt() @Min(1) flashPrice!: number;
   @IsInt() @Min(1) quota!: number;
   @IsOptional() @IsInt() @Min(1) perUserLimit?: number;
+  @IsOptional() @IsInt() @Min(-1000) @Max(1000) sortOrder?: number;
+}
+class GenerateSlotsDto {
+  @IsInt() @Min(1) @Max(7) days!: number;
+}
+class UpdateItemDto {
+  @IsInt() @Min(-1000) @Max(1000) sortOrder!: number;
 }
 
 const actorOf = (user: JwtPayload): CouponActor => ({ id: user.sub, staff: user.role !== 'ADMIN' });
@@ -45,6 +52,12 @@ export class FlashSaleAdminController {
     return this.flashSale.createSale(adminId, dto);
   }
 
+  // Đặt trước các route `:id/...` để chữ "generate-slots" không bị hiểu là id.
+  @Post('generate-slots')
+  generateSlots(@CurrentUser('sub') adminId: string, @Body() dto: GenerateSlotsDto) {
+    return this.flashSale.generateSlots(adminId, dto.days);
+  }
+
   @Patch(':id')
   update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateSaleDto) {
     return this.flashSale.updateSale(id, dto, actorOf(user));
@@ -58,6 +71,11 @@ export class FlashSaleAdminController {
   @Post(':id/items')
   addItem(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: AddItemDto) {
     return this.flashSale.addItem(id, dto, actorOf(user));
+  }
+
+  @Patch('items/:itemId')
+  updateItem(@CurrentUser() user: JwtPayload, @Param('itemId') itemId: string, @Body() dto: UpdateItemDto) {
+    return this.flashSale.setItemSortOrder(itemId, dto.sortOrder, actorOf(user));
   }
 
   @Delete('items/:itemId')

@@ -586,6 +586,17 @@ export class CatalogService {
     return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
   }
 
+  /** Thẻ công khai của đúng các id, giữ thứ tự `ids`; sản phẩm ẩn hay chưa duyệt (`PUBLIC_PRODUCT_WHERE`) bị bỏ. Trang chiến dịch xếp tay nên không dùng đường xếp của `/products`. */
+  async cardsByIds(ids: readonly string[]) {
+    if (ids.length === 0) return [];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: [...ids] }, ...PUBLIC_PRODUCT_WHERE },
+      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
+  }
+
   /**
    * Feed "Dành cho bạn" — gợi ý cá nhân hoá rule-based (không ML):
    * 1) Lấy danh mục từ lịch sử mua gần đây (20 order item cuối) + nhãn đang theo dõi.

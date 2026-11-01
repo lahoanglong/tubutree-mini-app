@@ -285,7 +285,7 @@ export default function BrandViewPage() {
                 />
                 {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi SP đều thuộc nhãn này): đặt tên nhãn của trang cho đủ kiểu, thẻ không in lại. */}
                 {/* Lề âm 16px bù khung `padding: 0 16px` của tab: thẻ đầu kệ thẳng với tiêu đề, như BLEED của kệ web. */}
-                <div data-testid="brand-featured-rail" style={{ margin: '0 -16px' }}>
+                <div data-testid="brand-featured-rail" className="tubu-bleed">
                   <ProductRail items={featured} variant="rail-md" label="Sản phẩm nổi bật" showBrand={false} />
                 </div>
               </div>

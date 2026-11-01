@@ -19,6 +19,7 @@ import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
+import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
@@ -373,6 +374,13 @@ export default function CheckoutPage() {
       if (getErrorCode(e) === 'TOTAL_CHANGED') {
         setTotalChanged(getErrorMessage(e));
         void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        void queryClient.invalidateQueries({ queryKey: ['cart'] });
+        return;
+      }
+      // Vượt giới hạn mua mỗi khách của một suất Giờ vàng: câu có sẵn con số giới hạn, sửa ở giỏ bằng cách giảm số lượng.
+      const flashLimit = flashLimitNotice(e);
+      if (flashLimit !== null) {
+        setCartIssue(flashLimit);
         void queryClient.invalidateQueries({ queryKey: ['cart'] });
         return;
       }

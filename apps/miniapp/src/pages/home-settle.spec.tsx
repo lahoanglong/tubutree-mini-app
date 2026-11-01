@@ -2,7 +2,7 @@ import { render, screen, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, type ReactNode } from 'react';
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOME_SETTLE_MAX_MS, homeBlockOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { BANNER_HINT_KEY, HOME_SETTLE_MAX_MS, homeBlockOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
 
 // Khung chờ chung của Trang chủ ở cấp trang: Giờ vàng thật (khối hiện lỗi + "Thử lại"), giờ giả, StrictMode. home.spec.tsx mock Giờ vàng nên không thấy được.
 const mocks = vi.hoisted(() => ({
@@ -123,6 +123,18 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
     await settle();
     expect(mocks.fetchActiveFlashSales.mock.calls.length).toBe(before + 1);
     expect(screen.queryByTestId('home-block-error')).toBeNull();
+  });
+
+  it('lần mở trước có banner: khung chờ chung có thêm ô banner đứng đầu; chưa nhớ thì chỉ bốn ô', async () => {
+    renderHome();
+    await settle();
+    expect(screen.getByTestId('home-settling').children).toHaveLength(4);
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    renderHome();
+    await settle();
+    const [withBanner] = screen.getAllByTestId('home-settling').slice(-1);
+    expect(withBanner?.children).toHaveLength(5);
+    expect(withBanner?.firstElementChild).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
   });
 
   it('hẹn giờ 4,5 giây (StrictMode, giờ giả): mạng chậm, chưa biết loại khách và dữ liệu chưa về thì nhả đúng lúc, không sớm hơn', async () => {

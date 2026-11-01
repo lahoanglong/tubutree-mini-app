@@ -36,7 +36,7 @@ describe('BestSellerRail — Bán chạy nhất có hạng (Q18)', () => {
   it('"Xem tất cả Bán chạy nhất" mở trang đang có theo route khai trong SHELVES', () => {
     render(<BestSellerRail items={cards(4)} loading={false} />);
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/browse?sort=best_seller');
+    expect(mocks.navigate).toHaveBeenCalledWith('/best-sellers');
   });
 
   it('đang tải: khung chờ trong vùng có tên; không có món và không lỗi: không vẽ gì', () => {

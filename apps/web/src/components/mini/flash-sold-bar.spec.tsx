@@ -24,6 +24,13 @@ describe('FlashSoldBar (web)', () => {
     expect(q('flash-sold-fill')!.style.transform).toBe('scaleX(0.68)');
   });
 
+  it('phần đã bán là lớp tubu-flash-fill, không ghi transition inline (để prefers-reduced-motion tắt được ở CSS)', () => {
+    mount(<FlashSoldBar soldPct={68} />);
+    expect(q('flash-sold-fill')!.className).toBe('tubu-flash-fill');
+    expect(q('flash-sold-fill')!.style.transitionDuration).toBe('');
+    expect(q('flash-sold-fill')!.style.transitionProperty).toBe('');
+  });
+
   it('hết suất: "Đã bán hết" thắng phần trăm, không phần cam', () => {
     mount(<FlashSoldBar soldPct={10} soldOut />);
     expect(textOf()).toBe('Đã bán hết');

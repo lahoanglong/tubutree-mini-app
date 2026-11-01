@@ -1,3 +1,4 @@
+import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
 import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatVnd } from './shop-client';
 
@@ -79,6 +80,16 @@ export function effectiveReferralCode(
 /** Lỗi đặt đơn mà khách chỉ sửa được bằng cách đổi/bỏ dòng ở giỏ hàng. */
 export function isCartFixableError(message: string): boolean {
   return /không đủ tồn kho/.test(message) || message === 'Vượt giới hạn mua ưu đãi.' || message === 'Hết suất ưu đãi.';
+}
+
+/**
+ * Câu báo cho lỗi đặt đơn mà khách chỉ sửa được ở giỏ, hoặc null nếu lỗi không thuộc loại đó. FLASH_LIMIT (vượt giới hạn mua mỗi khách của một
+ * suất Giờ vàng) dùng câu của app-core; các lỗi tồn kho và suất cũ giữ câu đã hiện cho khách (`message`).
+ */
+export function cartFixableNotice(err: unknown, message: string | null): string | null {
+  const flash = flashLimitNotice(err);
+  if (flash !== null) return flash;
+  return message !== null && isCartFixableError(message) ? message : null;
 }
 
 /** Dòng đầu tiên hết hàng hoặc vượt tồn kho (API sẽ từ chối đặt dòng này). */

@@ -174,6 +174,73 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(mocks.fetchCatalog).not.toHaveBeenCalled();
     });
 
+    describe('gửi từ khoá khi đang ở hub (F3)', () => {
+      const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+      const recentChip = async (name: string) => within(await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' })).getByRole('button', { name: new RegExp(name) });
+      beforeEach(() => {
+        // jsdom không có layout: scrollTop ghi/đọc được và KHÔNG bị kẹp (hub đủ dài để cuộn sâu).
+        const values = new WeakMap<Element, number>();
+        Object.defineProperty(Element.prototype, 'scrollTop', {
+          configurable: true,
+          get(this: Element) { return this.isConnected ? values.get(this) ?? 0 : 0; },
+          set(this: Element, v: number) { values.set(this, v); },
+        });
+      });
+      afterEach(() => {
+        if (original) Object.defineProperty(Element.prototype, 'scrollTop', original);
+      });
+
+      it('Enter ở ô tìm: mở /browse?q=… bằng PUSH (Back về hub), như chạm ô danh mục', async () => {
+        renderAt('/browse');
+        await screen.findByRole('button', { name: 'Cho mẹ & bé' });
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nuoc rua' } });
+        fireEvent.submit(screen.getByRole('search'));
+        await waitFor(() => expect(loc()).toBe('/browse?q=nuoc+rua'));
+        expect(navType()).toBe('PUSH');
+      });
+
+      it('chạm từ khoá gần đây ở bảng gợi ý khi đang ở hub cũng là PUSH', async () => {
+        localStorage.setItem('tubu_recent_searches', JSON.stringify(['nuoc rua']));
+        renderAt('/browse');
+        await screen.findByRole('button', { name: 'Cho mẹ & bé' });
+        fireEvent.focus(screen.getByRole('searchbox'));
+        fireEvent.click(await recentChip('nuoc rua'));
+        await waitFor(() => expect(loc()).toBe('/browse?q=nuoc+rua'));
+        expect(navType()).toBe('PUSH');
+      });
+
+      it('hub đã cuộn sâu: danh sách của từ khoá mới bắt đầu từ đầu trang', async () => {
+        renderAt('/browse');
+        await screen.findByRole('button', { name: 'Cho mẹ & bé' });
+        const scroller = document.querySelector('.zaui-page') as HTMLElement;
+        scroller.scrollTop = 900;
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nuoc rua' } });
+        fireEvent.submit(screen.getByRole('search'));
+        await listPainted();
+        expect(scroller.scrollTop).toBe(0);
+      });
+
+      it('từ khoá rỗng hoặc chỉ khoảng trắng: không đổi URL, không thêm mục lịch sử', async () => {
+        renderAt('/browse');
+        await screen.findByRole('button', { name: 'Cho mẹ & bé' });
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: '   ' } });
+        fireEvent.submit(screen.getByRole('search'));
+        await wait(50);
+        expect(loc()).toBe('/browse');
+        expect(navType()).toBe('POP');
+      });
+
+      it('đang ở danh sách thì chạm từ khoá gần đây vẫn là REPLACE (không chồng mục lịch sử)', async () => {
+        localStorage.setItem('tubu_recent_searches', JSON.stringify(['nuoc rua']));
+        renderAt('/browse?all=1');
+        await listPainted();
+        fireEvent.focus(screen.getByRole('searchbox'));
+        fireEvent.click(await recentChip('nuoc rua'));
+        await waitFor(() => expect(loc()).toBe('/browse?q=nuoc+rua'));
+        expect(navType()).toBe('REPLACE');
+      });
+    });
+
     it('quay lại hub từ danh sách bằng Back không tải lại danh sách ở hub và vẫn là hub (URL sạch)', async () => {
       renderAt('/browse?all=1');
       await listPainted();

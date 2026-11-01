@@ -25,7 +25,9 @@ describe('ActiveFilters', () => {
     const group = c.querySelector<HTMLElement>('[role="group"][aria-label="Đang lọc"]')!;
     expect(parseFloat(group.style.paddingTop)).toBeGreaterThanOrEqual(4);
     expect(parseFloat(group.style.paddingBottom)).toBeGreaterThanOrEqual(4);
-    expect(group.style.maxWidth).toBe('none');
+    expect(group.className).toContain('tubu-bleed');
+    expect(group.className).not.toMatch(/-mx-/);
+    expect(group.style.maxWidth).toBe('');
     click(byLabel(c, 'Bỏ lọc Tubu'));
     expect(onPatch).toHaveBeenCalledWith({ brands: [] });
     click(byLabel(c, 'Bỏ lọc Còn hàng'));

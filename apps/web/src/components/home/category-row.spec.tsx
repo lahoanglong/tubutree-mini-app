@@ -128,17 +128,17 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(CATEGORY_CELL_HEIGHT).toBe(56 + 4 + CATEGORY_LABEL_HEIGHT);
   });
 
-  it('không còn lề âm ở mọi khổ: không `margin: 0 -16px` inline, `-mx-4` chỉ đi kèm tiền tố max-md', () => {
+  it('không còn lề âm tay: không `margin: 0 -16px` inline, không `-mx-` (tràn mép do lớp .tubu-bleed)', () => {
     const src = readFileSync(join(__dirname, 'category-row.tsx'), 'utf8');
     expect(src).not.toMatch(/margin:\s*'0 -16px'/);
-    expect(src.match(/(?<!max-md:)-mx-4/g) ?? []).toEqual([]);
+    expect(src).not.toMatch(/-mx-/);
   });
 
-  it('hàng cuộn tràn mép chỉ dưới md (max-md:-mx-4) để cột thứ 6 thò ra mép như Mini; từ md nằm trong khung', () => {
+  it('hàng cuộn tràn mép chỉ dưới md (.tubu-bleed + max-md:px-4) để cột thứ 6 thò ra mép như Mini; từ md nằm trong khung', () => {
     const { grid } = mount(6);
-    expect(grid.className).toContain('max-md:-mx-4');
+    expect(grid.className).toContain('tubu-bleed');
     expect(grid.className).toContain('max-md:px-4');
-    expect(grid.className).toContain('max-md:max-w-none');
+    expect(grid.className).not.toMatch(/-mx-|max-w-none/);
     expect(grid.style.marginLeft).toBe('');
     expect(grid.style.paddingLeft).toBe('');
   });

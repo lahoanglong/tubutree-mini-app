@@ -68,7 +68,7 @@ describe('createHomeFeed', () => {
 
 describe('takeHomeRequest (web)', () => {
   beforeEach(() => {
-    fetchPublic.mockResolvedValue({ publicConfig: { freeshipThreshold: 1 }, flashActive: [{ id: 'f' }] });
+    fetchPublic.mockResolvedValue({ publicConfig: { freeshipThreshold: 1 }, flashActive: [{ id: 'f' }], campaigns: [{ id: 'c' }] });
     fetchMe.mockResolvedValue({
       flashUpcoming: [{ id: 'u' }],
       forYou: [{ id: 'p' }],
@@ -93,6 +93,18 @@ describe('takeHomeRequest (web)', () => {
     expect(await takeHomeRequest(feed, '/waste/me/open-count', undefined)).toEqual({ count: 3 });
     expect(fetchPublic).toHaveBeenCalledTimes(1);
     expect(fetchMe).toHaveBeenCalledTimes(1);
+  });
+
+  it('banner chiến dịch: chỉ request HOME_TOP không kèm tham số khác lấy từ khối gộp', async () => {
+    expect(await takeHomeRequest(feed, '/campaigns', { placement: 'HOME_TOP' })).toEqual([{ id: 'c' }]);
+    expect(fetchMe).not.toHaveBeenCalled();
+  });
+
+  it('banner OFFERS_TOP hoặc có lọc đối tượng không phải khối của Trang chủ (null, đi request lẻ)', () => {
+    expect(takeHomeRequest(feed, '/campaigns', { placement: 'OFFERS_TOP' })).toBeNull();
+    expect(takeHomeRequest(feed, '/campaigns', { placement: 'HOME_TOP', audience: 'NEW' })).toBeNull();
+    expect(takeHomeRequest(feed, '/campaigns', undefined)).toBeNull();
+    expect(fetchPublic).not.toHaveBeenCalled();
   });
 
   it('gợi ý cá nhân kèm seed ngày VN vẫn lấy từ khối gộp (lần đầu), không đẩy thêm request lẻ', async () => {

@@ -960,7 +960,13 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
   const flashCart = (...items: ReturnType<typeof flashLine>[]) => ({
     items, subtotal: items.reduce((t, l) => t + l.total, 0), discount: 0, freeship: false, couponCode: null,
   });
-  const flashWith = (consumeQuotas: jest.Mock) => ({ consumeQuotas, resolveEffective: jest.fn().mockResolvedValue(new Map()) });
+  const flashLimitError = (id: string) =>
+    new BadRequestException({ statusCode: 400, error: 'Bad Request', code: 'FLASH_LIMIT', limit: 5, message: `Giá Giờ vàng chỉ áp cho 5 sản phẩm mỗi khách (${id}).` });
+  const flashWith = (consumeQuotas: jest.Mock) => ({
+    consumeQuotas,
+    resolveEffective: jest.fn().mockResolvedValue(new Map()),
+    overLimitError: jest.fn().mockImplementation(async (_tx: unknown, id: string) => flashLimitError(id)),
+  });
 
   it('placeOrder gọi consumeQuotas(tx) MỘT lần cho mọi line flash + đóng dấu flashSaleItemId lên OrderItem', async () => {
     const { svc, orderCreate, flashSale, prisma } = build({ cartData: flashCart(flashLine('i1', 'fi1', 2)), stockCount: 1 });
@@ -979,10 +985,13 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
-  it('vượt giới hạn mua (OVER_LIMIT) → GIỮ NGUYÊN message, KHÔNG map PRICE_CHANGED', async () => {
+  it('vượt giới hạn mua (OVER_LIMIT) → lỗi FLASH_LIMIT kèm limit của suất đó (lấy trên tx đặt đơn), KHÔNG map PRICE_CHANGED', async () => {
     const flashSale = flashWith(jest.fn().mockResolvedValue(['OVER_LIMIT']));
-    const { svc, orderCreate } = build({ cartData: flashCart(flashLine('i1', 'fi1')), stockCount: 1, flashSale });
-    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+    const { svc, orderCreate, prisma } = build({ cartData: flashCart(flashLine('i1', 'fi1')), stockCount: 1, flashSale });
+    const err = await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'FLASH_LIMIT', limit: 5, message: expect.stringContaining('chỉ áp cho 5 sản phẩm') });
+    expect(flashSale.overLimitError).toHaveBeenCalledWith(prisma, 'fi1');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
@@ -1012,7 +1021,8 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     const soldFirst = build({ cartData: cart, stockCount: 1, flashSale: flashWith(jest.fn().mockResolvedValue(['SOLD_OUT', 'OVER_LIMIT'])) });
     await expect(soldFirst.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('PRICE_CHANGED');
     const overFirst = build({ cartData: cart, stockCount: 1, flashSale: flashWith(jest.fn().mockResolvedValue(['OK', 'OVER_LIMIT'])) });
-    await expect(overFirst.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('Vượt giới hạn mua ưu đãi.');
+    await expect(overFirst.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('chỉ áp cho 5 sản phẩm');
+    expect(overFirst.flashSale.overLimitError).toHaveBeenCalledWith(expect.anything(), 'fi1');
   });
 
   it('dòng 2 thiếu hàng nhưng dòng 1 hết suất → lỗi của dòng 1 (như làm từng dòng); chỉ trừ suất các dòng trước dòng thiếu', async () => {

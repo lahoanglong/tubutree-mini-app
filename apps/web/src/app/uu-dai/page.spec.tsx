@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
   fail: new Set<string>(),
   calls: [] as string[],
   posts: [] as string[],
+  campaigns: [] as Record<string, unknown>[],
+  campaignQueries: [] as unknown[],
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
@@ -33,11 +35,13 @@ vi.mock('@/lib/core-http', () => {
     '/me/coupons': () => state.coupons,
     '/me/daily-check-in': () => state.checkIn,
     '/config/public': () => state.config,
+    '/campaigns': () => state.campaigns,
   };
   return {
     coreHttp: {
-      get: async (path: string) => {
+      get: async (path: string, opts?: unknown) => {
         state.calls.push(path);
+        if (path === '/campaigns') state.campaignQueries.push(opts);
         if (state.fail.has(path)) throw new Error('Máy chủ đang bận');
         const h = table[path];
         if (!h) throw new Error(`đường dẫn lạ ${path}`);
@@ -85,6 +89,9 @@ beforeEach(() => {
   state.fail = new Set();
   state.calls = [];
   state.posts = [];
+  state.campaigns = [];
+  state.campaignQueries = [];
+  localStorage.clear();
   Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(() => {
@@ -224,6 +231,65 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(c.textContent).not.toContain(homeCopy.offers.rewardsTitle);
     expect(c.textContent).not.toContain('Vườn Xanh');
     expect(c.textContent).not.toContain(homeCopy.offers.myRewards);
-    expect(state.calls.filter((p) => p !== '/config/public')).toEqual([]);
+    expect(state.calls.filter((p) => p !== '/config/public' && p !== '/campaigns')).toEqual([]);
+  });
+});
+
+const campaign = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  slug: `chien-dich-${id}`,
+  title: `Chiến dịch ${id}`,
+  image: `https://img.test/${id}.jpg`,
+  linkType: 'CAMPAIGN_PAGE',
+  linkValue: null,
+  audience: 'ALL',
+  startAt: '2020-01-01T00:00:00Z',
+  endAt: '2099-01-01T00:00:00Z',
+  ...over,
+});
+
+describe('/uu-dai — banner đầu trang (OFFERS_TOP)', () => {
+  const links = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-offers-banner] a[href]')).map((a) => a.getAttribute('href'));
+
+  it('có chiến dịch: một khối banner ngay dưới tiêu đề trang, xin placement=OFFERS_TOP không đăng nhập, bấm sang /chien-dich/[slug]', async () => {
+    state.campaigns = [campaign('a')];
+    const c = await mount();
+    expect(state.campaignQueries).toEqual([{ query: { placement: 'OFFERS_TOP' }, anonymous: true }]);
+    expect(links(c)).toEqual(['/chien-dich/chien-dich-a']);
+    const h1 = c.querySelector('h1')!;
+    const banner = c.querySelector('[data-offers-banner]')!;
+    expect(h1.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(banner.compareDocumentPosition(region(c, 'Điểm Xanh của bạn')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('khách chưa đăng nhập cũng thấy banner (công khai), kèm lời mời đăng nhập bên dưới', async () => {
+    state.phase = 'guest';
+    state.campaigns = [campaign('a')];
+    const c = await mount();
+    expect(links(c)).toEqual(['/chien-dich/chien-dich-a']);
+    expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
+  });
+
+  it('không có chiến dịch: ẩn hẳn, không khối rỗng', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-offers-banner]')).toBeNull();
+  });
+
+  it('/campaigns lỗi: ẩn hẳn, không báo lỗi, phần còn lại của trang vẫn đủ', async () => {
+    state.fail = new Set(['/campaigns']);
+    const c = await mount();
+    expect(c.querySelector('[data-offers-banner]')).toBeNull();
+    expect(c.textContent).not.toContain('Máy chủ đang bận');
+    expect(region(c, 'Điểm Xanh của bạn')).not.toBeNull();
+  });
+
+  it('theo loại khách đã nhớ trên máy: khách cũ thấy chiến dịch RETURNING, không thấy NEW; khách chưa nhớ loại chỉ thấy chiến dịch cho mọi người', async () => {
+    state.campaigns = [campaign('all'), campaign('moi', { audience: 'NEW' }), campaign('cu', { audience: 'RETURNING' })];
+    localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    expect(links(await mount())).toEqual(['/chien-dich/chien-dich-all', '/chien-dich/chien-dich-cu']);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    localStorage.clear();
+    expect(links(await mount())).toEqual(['/chien-dich/chien-dich-all']);
   });
 });

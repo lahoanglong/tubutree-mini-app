@@ -15,6 +15,7 @@ import { metadata as myRewards } from './kho-qua/cua-toi/layout';
 import { metadata as game } from './vuon-xanh/layout';
 import { metadata as recycle } from './doi-rac/page';
 import { metadata as recycleRules } from './doi-rac/quy-dinh/page';
+import { metadata as flashSale } from './gio-vang/page';
 import { metadata as recycleRequests } from './doi-rac/yeu-cau/layout';
 import { metadata as recycleNew } from './doi-rac/tao/layout';
 import { metadata as recyclePoints } from './doi-rac/diem-nhan/layout';
@@ -109,6 +110,12 @@ describe('tiêu đề trang khách', () => {
   it('/doi-rac/quy-dinh là trang công khai: có tiêu đề riêng và cho lập chỉ mục', () => {
     expect(recycleRules.title).toBe('Thể lệ Đổi rác lấy quà — Tubu Tree');
     expect(recycleRules.robots).toBeUndefined();
+  });
+
+  it('/gio-vang là trang công khai: có tiêu đề riêng, đường dẫn chuẩn và cho lập chỉ mục', () => {
+    expect(flashSale.title).toBe('Giờ vàng — Tubu Tree');
+    expect(flashSale.alternates?.canonical).toBe('/gio-vang');
+    expect(flashSale.robots).toBeUndefined();
   });
 
   it('/tai-khoan/don-hang/[code] có tiêu đề theo mã đơn, không lập chỉ mục', async () => {

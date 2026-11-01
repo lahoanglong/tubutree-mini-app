@@ -32,7 +32,7 @@ import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabe
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
-  isCartFixableError,
+  cartFixableNotice,
   isInvoiceValid,
   outOfStockLine,
   overStockMessage,
@@ -326,7 +326,7 @@ export default function CheckoutPage() {
         // báo giá mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
         void qc.invalidateQueries({ queryKey: ['quote'] });
         void qc.invalidateQueries({ queryKey: ['cart'] });
-      } else if (e instanceof Error && isCartFixableError(e.message)) {
+      } else if (cartFixableNotice(e, e instanceof Error ? e.message : null) !== null) {
         void qc.invalidateQueries({ queryKey: ['cart'] });
       }
     },
@@ -450,11 +450,8 @@ export default function CheckoutPage() {
   const cart = cartQ.data;
   const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
   const placeErrorMessage = place.error instanceof Error && !priceChanged ? (place.error instanceof NetworkError ? place.error.message : actionErrorText(place.error)) : null;
-  const cartIssue = overStock
-    ? overStockMessage(overStock.productName, overStock.stock)
-    : placeErrorMessage && isCartFixableError(placeErrorMessage)
-      ? placeErrorMessage
-      : null;
+  const placeCartNotice = place.error ? cartFixableNotice(place.error, placeErrorMessage) : null;
+  const cartIssue = overStock ? overStockMessage(overStock.productName, overStock.stock) : placeCartNotice;
   const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
   const paymentMethods = [
     { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
@@ -836,7 +833,7 @@ export default function CheckoutPage() {
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
-          {place.isError && !priceChanged && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
+          {place.isError && !priceChanged && placeCartNotice === null && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
               {isOutcomeUnknown(place.error) && (

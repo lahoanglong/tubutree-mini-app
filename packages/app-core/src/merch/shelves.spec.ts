@@ -8,10 +8,6 @@ const routeMap = JSON.parse(readFileSync(fileURLToPath(new URL('../route-map.jso
 };
 const MINIAPP_ROUTES = new Set(routeMap.routes.flatMap((g) => g.items.map((i) => i.miniapp)));
 
-// Route do gói sau tạo (P12 `/flash-sale`, P13 `/best-sellers`); route-map.json chỉ nhận dòng khi app.tsx có <Route>, nên gói này chưa thêm được.
-// Gói tạo route xoá dòng tương ứng ở đây.
-const PLANNED_ROUTES = ['/flash-sale', '/best-sellers'];
-
 const LAYOUT_CAP = { rail: 10, line: 10, grid: 12, feed: 100 } as const;
 
 const items = (...ids: string[]) => ids.map((id) => ({ id }));
@@ -36,7 +32,7 @@ describe('SHELVES: luật của sổ kệ', () => {
 
   it('seeAllRoute có trong route-map.json (trừ route gói sau sẽ tạo)', () => {
     for (const s of SHELVES) {
-      if (s.seeAllRoute === null || PLANNED_ROUTES.includes(s.seeAllRoute)) continue;
+      if (s.seeAllRoute === null) continue;
       expect(MINIAPP_ROUTES.has(s.seeAllRoute), `${s.id} → ${s.seeAllRoute}`).toBe(true);
     }
   });

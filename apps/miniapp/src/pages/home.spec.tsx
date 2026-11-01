@@ -34,6 +34,7 @@ vi.mock('../services/core-http', () => ({
     get: (path: string) => {
       mocks.coreGet(path);
       if (path === '/me/notifications/unread-count') return mocks.unreadCount();
+      if (path === '/campaigns') return Promise.resolve([]);
       return Promise.reject(new Error(`không mock ${path}`));
     },
   },
@@ -137,14 +138,14 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
-  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở Browse đúng bộ sắp xếp', async () => {
+  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
     renderHome();
     const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });
     expect(await within(best).findByText('Bán chạy 1')).toBeInTheDocument();
     expect(mocks.fetchProducts).toHaveBeenCalledWith(BEST_QUERY);
     expect(best.querySelectorAll('[data-ds-part="rank"]')).toHaveLength(4);
     await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?sort=best_seller');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/best-sellers');
   });
 
   it('Danh mục dùng 4 phân khúc khi chưa có danh mục thật; không còn "Khám phá vườn"', async () => {
@@ -240,7 +241,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.auth.user = null;
     renderHome();
     await screen.findByRole('region', { name: 'Bán chạy nhất' });
-    expect(mocks.coreGet).not.toHaveBeenCalled();
+    // Chỉ banner (công khai) được gọi; không có gì của riêng người dùng.
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns')).toEqual([]);
     expect(mocks.fetchPurchasedItems).not.toHaveBeenCalled();
     expect(blockOrder()).toEqual(NEW);
   });
@@ -250,7 +252,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     renderHome();
     expect(await screen.findByRole('button', { name: 'Thông báo, 73 chưa đọc' })).toBeInTheDocument();
     // Một lời gọi đếm nhỏ, không tải trang tin nào: khách có hơn 50 tin chưa đọc thấy đúng số như ở Cá nhân.
-    expect(mocks.coreGet.mock.calls.map((c) => c[0])).toEqual(['/me/notifications/unread-count']);
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns')).toEqual(['/me/notifications/unread-count']);
   });
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ', async () => {

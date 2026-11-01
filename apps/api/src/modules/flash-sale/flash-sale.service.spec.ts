@@ -127,7 +127,7 @@ describe('FlashSaleService.listActive', () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
     await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: [{ flashPrice: 'asc' }, { variationId: 'asc' }, { id: 'asc' }] }));
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: [{ sortOrder: 'asc' }, { flashPrice: 'asc' }, { variationId: 'asc' }, { id: 'asc' }] }));
   });
 
   it('where CHỈ lấy hàng còn bán (biến thể và sản phẩm đang bán, sản phẩm đã duyệt)', async () => {

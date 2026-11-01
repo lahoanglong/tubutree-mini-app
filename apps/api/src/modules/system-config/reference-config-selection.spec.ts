@@ -90,6 +90,7 @@ const APPROVED_LOADED_KEYS = [
     'flashsale.max_discount_pct',
     'flashsale.max_duration_days',
     'flashsale.min_discount_pct',
+    'flashsale.slots',
     'game.comeback_gap_days',
     'game.comeback_seeds',
     'game.dew_seeds',

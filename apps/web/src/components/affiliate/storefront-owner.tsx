@@ -86,7 +86,7 @@ export function LearnStorefrontLink({ referralCode }: { referralCode?: string | 
     <p data-testid="learn-storefront" className="mt-6 text-center max-md:px-4">
       <Link
         href="/ctv/gian-hang"
-        className="tubu-press inline-flex min-h-11 items-center gap-0.5 text-[length:var(--type-caption-size)] leading-[var(--type-caption-lh)] text-[color:var(--color-text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
+        className="tubu-press tubu-hit-44 inline-flex items-center gap-0.5 text-[length:var(--type-caption-size)] leading-[var(--type-caption-lh)] text-[color:var(--color-text-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
       >
         {fillCopy('shop.learnStore')}
         <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
@@ -95,15 +95,25 @@ export function LearnStorefrontLink({ referralCode }: { referralCode?: string | 
   );
 }
 
-/** Link phụ cuối trang cho khách: lối sang sản phẩm chung của Tubu Tree, không nổi bằng nút chính. */
+/**
+ * Link phụ cuối trang cho khách: lối sang sản phẩm chung của Tubu Tree, không nổi bằng nút chính. Hình dạng như Mini App
+ * (`<Button variant="ghost">` trong Box mt=2): DOM của nút ghost (zaui-btn-tertiary, 44px, chữ xanh, không gạch chân) nhưng vẫn là
+ * thẻ <a> thật để crawler và mở tab mới hoạt động, nên bọc bằng <div>, không phải <p>.
+ */
 export function MoreAtTubuLink({ referralCode }: { referralCode?: string | null }) {
   const owner = useIsStorefrontOwner(referralCode);
   if (owner) return null;
   return (
-    <p className="mt-4 text-center max-md:mx-4">
-      <Link href={guestHref()} className={ui.btnText}>
-        Xem thêm ở Tubu Tree
+    <div data-testid="more-at-tubu" className="mt-2 text-center max-md:px-4">
+      <Link
+        href={guestHref()}
+        className="zaui-btn zaui-btn-tertiary tubu-btn"
+        style={{ minHeight: 44, borderRadius: 'var(--radius-control)', fontWeight: 600 }}
+      >
+        <span className="zaui-btn-container">
+          <span>Xem thêm ở Tubu Tree</span>
+        </span>
       </Link>
-    </p>
+    </div>
   );
 }
