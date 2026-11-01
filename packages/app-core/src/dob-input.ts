@@ -11,48 +11,72 @@ export const DOB_ERRORS = {
 
 const MIN_YEAR = 1900;
 
-/** Số ký tự khách chèn vào so với `prev` (bỏ phần đầu và đuôi giống nhau). */
-function insertedLength(raw: string, prev: string): number {
+/** Vị trí khác đầu tiên và số ký tự khách chèn vào so với `prev` (bỏ phần đầu và đuôi giống nhau). */
+function diffFrom(raw: string, prev: string): { start: number; inserted: number } {
   let p = 0;
   while (p < raw.length && p < prev.length && raw[p] === prev[p]) p++;
   let q = 0;
   while (q < raw.length - p && q < prev.length - p && raw[raw.length - 1 - q] === prev[prev.length - 1 - q]) q++;
-  return raw.length - p - q;
+  return { start: p, inserted: raw.length - p - q };
 }
 
-/**
- * Gõ số liền nhau ("05031990") thành "05/03/1990"; ".", "-", khoảng trắng như "/"; bỏ ký tự lạ.
- * `prev` là giá trị ô trước khi sửa. Dán cả chuỗi (chèn từ 2 ký tự) và gõ tiến mới tự thêm số 0, chia lại số liền
- * nhau và cắt năm còn 4 số; sửa giữa ô (xoá, chèn, bôi đen thay 1 ký tự) giữ nguyên chữ số như khách gõ.
- */
-export function maskDobInput(raw: string, prev?: string): string {
-  const s = raw.replace(/[^\d./\-\s]/g, '').replace(/[./\-\s]+/g, '/').replace(/^\//, '');
-  const pasted = prev === undefined || insertedLength(raw, prev) > 1;
-  if (!s.includes('/')) {
-    const d = s.slice(0, 8);
-    if (prev !== undefined && !pasted && prev.includes('/')) return d;
-    if (d.length <= 2) return d;
-    if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-    return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+const pad2 = (x: string) => (x.length === 1 ? `0${x}` : x);
+
+/** Tách phần chữ số liền nhau cuối cùng thành ngày/tháng 2 số, phần dư sang ô sau. */
+function splitOverflow(parts: string[]): string[] {
+  const out = [...parts];
+  while (out.length < 3 && out[out.length - 1]!.length > 2) {
+    const last = out.pop()!;
+    out.push(last.slice(0, 2), last.slice(2));
   }
-  const iso = pasted ? /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(s) : null;
-  if (iso) return `${iso[3]!.padStart(2, '0')}/${iso[2]!.padStart(2, '0')}/${iso[1]}`;
+  return out;
+}
+
+/** Thay cả ô (ô đang trống, dán, trình duyệt tự điền): chuẩn hoá toàn bộ về dd/mm/yyyy, tối đa 8 số. */
+function normalizeAll(t: string): string {
+  const s = t.replace(/\/+/g, '/').replace(/^\//, '');
+  if (!s.includes('/')) return splitOverflow([s.slice(0, 8)]).join('/');
+  const iso = /^(\d{4})\/(\d{1,2})\/(\d{1,2})\/?$/.exec(s);
+  if (iso) return `${pad2(iso[3]!)}/${pad2(iso[2]!)}/${iso[1]}`;
   const parts = s.split('/');
   const trailing = parts[parts.length - 1] === '';
   if (trailing) parts.pop();
-  if (parts.length > 3) parts.splice(2, parts.length - 2, parts.slice(2).join(''));
-  const appended = prev !== undefined && !pasted && raw.length > prev.length && raw.startsWith(prev);
-  for (let i = 0; i < Math.min(parts.length, 2); i++) {
-    if (parts[i]!.length !== 1) continue;
-    const last = i === parts.length - 1;
-    if (pasted ? !last || trailing : last && trailing && appended) parts[i] = `0${parts[i]}`;
+  if (parts.length > 3) return parts.join('/');
+  return parts.map((x, i) => (i === 2 ? x.slice(0, 4) : i < parts.length - 1 || trailing ? pad2(x) : x)).join('/');
+}
+
+/** Gõ thêm đúng một ký tự ở cuối ô. Dấu ngăn vừa gõ không hiện, chỉ đệm số 0 cho ngày/tháng 1 số; "/" hiện khi gõ số kế tiếp. */
+function appendOne(t: string, prev: string): string {
+  if (t.length === prev.length) return prev;
+  if (t.endsWith('/')) {
+    if (prev.endsWith('/')) return prev;
+    const parts = t.slice(0, -1).split('/');
+    const i = parts.length - 1;
+    if (i >= 2) return prev;
+    parts[i] = pad2(parts[i]!);
+    return parts.join('/');
   }
-  if (appended && parts.length === 2 && parts[0]!.length === 2 && parts[1]!.length > 2) {
-    parts.push(parts[1]!.slice(2));
-    parts[1] = parts[1]!.slice(0, 2);
-  }
-  if (parts.length === 3 && (pasted || appended)) parts[2] = parts[2]!.slice(0, 4);
-  return parts.join('/');
+  const parts = t.split('/');
+  if (parts.length > 3) return t;
+  const out = splitOverflow(parts);
+  if (out.length === 3 && out[2]!.length > 4) return prev;
+  return out.join('/');
+}
+
+/**
+ * Ô ngày sinh gõ tay. ".", "-", khoảng trắng như "/"; bỏ ký tự lạ. `prev` là giá trị ô trước khi sửa.
+ * - Ô đang trống, dán hoặc tự điền (chèn từ 2 ký tự ở đầu ô, hoặc từ 6 ký tự): chuẩn hoá cả ô, "5.3.1990" thành "05/03/1990".
+ * - Gõ thêm một ký tự ở cuối: tự thêm "/" và số 0.
+ * - Mọi kiểu sửa khác (xoá, chèn hay bôi đen thay giữa ô): giữ nguyên như khách gõ, không dồn hay cắt chữ số;
+ *   ô sai dạng thì lời lỗi `incomplete` chỉ cách sửa.
+ */
+export function maskDobInput(raw: string, prev?: string): string {
+  const t = raw.replace(/[^\d./\-\s]/g, '').replace(/[.\-\s]/g, '/');
+  if (prev === undefined || prev === '') return normalizeAll(t);
+  const { start, inserted } = diffFrom(raw, prev);
+  if (inserted >= 2 && (start === 0 || inserted >= 6)) return normalizeAll(t);
+  if (raw.length === prev.length + 1 && raw.startsWith(prev)) return appendOne(t, prev);
+  return t;
 }
 
 /** Trả `iso` khi ô có ngày hợp lệ; `error` nói rõ cần nhập lại gì. Ô trống không phải lỗi. `now` theo giờ máy khách. */
