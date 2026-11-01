@@ -141,3 +141,33 @@
 - [ ] **Step 1:** Tắt server chụp ảnh của mình; chạy `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 201046ff2 --out /Users/longla/coding/tubutree-mini-app/.claude/worktrees/gate-F10a.txt` (một lần). Bước FAIL: so với base trước khi kết luận; "có sẵn" thì ghi.
 - [ ] **Step 2:** `cd apps/e2e && E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3365 npx playwright test --workers=2 --reporter=line` (cả bộ Mini). Test cũ đỏ vì thiết kế mới thì sửa theo thiết kế và ghi vào notes.
 - [ ] **Step 3:** Thêm mục "Kết quả" cuối file này (số đo trước/sau, gate, e2e, lệch kế hoạch) và commit `docs(shop): F10a ghi kết quả`.
+
+---
+
+## Kết quả
+
+**Số đo trước/sau** (Chromium 375px, Inter 12px/500; ảnh ở `screens/F10a/{before,after}/{mini375,web375}`, bị gitignore):
+
+| Lỗi | Trước | Sau |
+| --- | --- | --- |
+| P1 #1 Trang chủ web tràn ngang | `scrollWidth` 399 | 375 (chữ đọc ẩn của `PriceTag` nằm trong vùng cuộn: `ScrollRow` đặt `position: relative`, cả hai app) |
+| P1 #3 tên món thẻ Giờ vàng | 2 dòng, thân thẻ 96px | 1 dòng (`TILE_METRICS.nameFlash` 20), thân thẻ 76px, `FLASH_SKELETON_HEIGHT` 296 → 276 (CLS test xanh) |
+| P1 #4 meta thẻ hạng 128px | "★ 4,7 · Đã bán 8,…" cắt giữa số | "Đã bán 8,2k+" (`cardMetaCompact`), chữ nhìn thấy kiểm bằng e2e |
+| P1 #9 ghi chú Giờ vàng 375px | "Mỗi khách tối đ…" | "Tối đa 2/khách · 500g" (`flash.limitShort`, con số đứng đầu) |
+
+**Sửa theo review (lượt 2):**
+
+- MAJOR ngưỡng container query. Ngưỡng 147.98px làm mất sao ở mọi thẻ rail-md (ô meta 132px) và lưới 360px (142px) dù chữ đầy đủ xấu nhất vừa. Đo thật: "★ 5,0 · Đã bán 99,9k+" (21 ký tự) 127,25px; "★ 5,0 · Đã bán 123,4k+" 132,5px; "999,9tr+" 137,1px; "999,9 tỷ+" 142,7px. Nay: ngưỡng chung 131.98px (chữ xấu nhất + 4,7px), chữ dài hơn `META_SHORT_MAX_CHARS` (21 ký tự, tức lượt bán từ 100k) gắn `data-long` và đổi bản gọn dưới 147.98px, để không có thẻ nào bị cắt giữa số. Hai app giống hệt. Kiểm đột biến: đặt lại 147.98px thì hai ca e2e 360px đỏ.
+- MAJOR e2e: thêm ca 360px lưới "Gợi ý hôm nay" (Mini và web, giữ "★ ... · Đã bán ..."), ca Mini PDP "Khách thường mua cùng" 360px (kệ rail-md: ba thẻ giữ sao, hai thẻ lượt bán ≥ 100k đổi sang bản gọn, không thẻ nào bị cắt), kệ Bán chạy nhất khẳng định chữ nhìn thấy đúng "Đã bán 8,2k+", "Đã bán 99,9k+", ...
+- MINOR e2e: `metaCells` đọc chữ nhìn thấy (kể cả `::after` khi bản đầy đủ bị ẩn), không lọc ô rộng 0 mà khẳng định bề rộng > 0.
+- MINOR hai cách nói giới hạn mua: ghi quyết định vào `01-thiet-ke.md` §5 (danh sách dùng "Tối đa {n}/khách" vì chỗ hẹp, thanh Giờ vàng PDP giữ "Mỗi khách tối đa {n}"), kèm comment ở `shop-copy.ts`. Không đổi PDP: nằm trong vùng của gói khác và chỗ đó đủ rộng.
+- Lỗi do chính gói tìm ra khi chạy `web-gate.sh`: `view.meta` có thể null (tsc của web build bắt); đã dùng `view.meta?.length ?? 0`.
+
+**Gate** (`gate.sh --base 201046ff2`, một lần, 10/11 bước nặng ở dưới):
+
+- PASS: shared-types, tsc-api/web/miniapp/app-core/e2e, eslint-api/miniapp/web, vitest-app-core 151 file / 2106 test, vitest-miniapp-utc 406 / 6214, vitest-web 547 / 9173, lint-parity, vite-build, bundle-mini entry 646/201 KB total 2184/851 KB (≤ 700 KB).
+- FAIL hai bước, đều là lỗi hết thời gian do máy quá tải, không dính gói này: `vitest-miniapp` (`product-detail-info.spec.tsx`, ngưỡng 300ms thực đo 319ms; bản `TZ=UTC` cùng số test xanh) và `jest-api` (`gomdon-webhook.controller.spec.ts` quá 5000ms; `apps/api` không có thay đổi nào trong nhánh). Chạy riêng từng file: 11/11 xanh cả hai.
+- Mini e2e cả bộ (`E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3365 --workers=2`): 340 passed, 10 skipped, 0 failed (8,2 phút).
+- Web e2e `tiles-scroll.web.spec.ts` qua `web-gate.sh`: 6 passed (project Web Customer Mobile), 6 skipped (Web Customer desktop, theo thiết kế).
+
+**Lệch kế hoạch:** ngưỡng container query và nhánh `data-long` như ở trên (kế hoạch gốc cho ngưỡng bằng chữ xấu nhất + 4px, bản đầu lấy 148px). Không chạy e2e web ngoài `tiles-scroll` (Playwright không nằm trong gate; các spec web khác không đụng file đã sửa ngoài `mini.css`, `product-tile.tsx`, `scroll-row.tsx`).
