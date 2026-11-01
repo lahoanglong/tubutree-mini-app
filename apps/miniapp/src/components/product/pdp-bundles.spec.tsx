@@ -231,6 +231,16 @@ describe('PdpBundles: khối đã hiện thì không gỡ giữa trang (giữ ch
     expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
   });
 
+  it('bộ đang hiện (a1) bị tắt trong khi bộ khác (b1) còn chạy nhưng mọi món hết hàng: vẫn "Đã kết thúc", không bị kéo thành "Tạm hết hàng"', async () => {
+    const { qc } = renderBlock({ combos: COMBOS, addons: ADDONS });
+    await screen.findByRole('region', { name: 'Mua kèm deal sốc' });
+    await act(async () => {
+      qc.setQueryData(KEY, { combos: COMBOS, addons: [addon('b1', [item('z', { addonPrice: 40_000, inStock: false })])] });
+    });
+    await label('pdp-addons', 'Mua kèm deal sốc · Đã kết thúc');
+    expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
+  });
+
   it('bộ mới về sau khi đã giữ: hiện lại bình thường, hết mờ', async () => {
     const { qc } = renderBlock({ combos: COMBOS, addons: [] });
     await shown(qc);

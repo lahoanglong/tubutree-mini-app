@@ -196,7 +196,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'addon.cartLine': null,
   'addon.lost': null,
   'bundle.ended': 12,
-  'bundle.soldOut': 12,
   'pdp.boughtTogether': null,
   'pdp.offers': 12,
   'pdp.shipping': 12,

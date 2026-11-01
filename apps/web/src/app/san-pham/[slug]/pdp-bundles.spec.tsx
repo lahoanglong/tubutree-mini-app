@@ -237,6 +237,13 @@ describe('PdpBundles (web): khối đã hiện thì không gỡ giữa trang', (
       expect(rows(c).length).toBe(2);
     });
 
+    it('bộ đang hiện (a1) bị tắt trong khi bộ khác (b1) còn chạy nhưng mọi món hết hàng: vẫn "Đã kết thúc", không bị kéo thành "Tạm hết hàng"', async () => {
+      const otherSoldOut = [addon('b1', [item('z', { addonPrice: 60_000, inStock: false })])];
+      const c = await mountStale({ combos: ONE_COMBO, addons: otherSoldOut });
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+      expect(rows(c).length).toBe(2);
+    });
+
     it('bộ quá hạn thì vẫn "Đã kết thúc" (không lẫn với hết hàng)', async () => {
       const expired = [addon('a1', [item('x', { addonPrice: 60_000 })], { endAt: PAST })];
       const c = await mountStale({ combos: ONE_COMBO, addons: expired });

@@ -120,28 +120,32 @@ export function addonLines(rows: readonly AddonRow[], picked: ReadonlySet<string
 export type BundleHold = 'ended' | 'soldOut';
 
 /**
- * Chỉ gọi khi phía đó vừa hết dòng sau khi đã từng hiện. Bộ còn hạn theo giờ máy chủ mà vẫn không ra dòng nào thì chỉ có thể vì món hết
- * hàng (hay chưa chọn được phân loại); với Mua kèm, API còn báo riêng khi sản phẩm chính hết hàng (`addonsSoldOut`, lúc đó `addons` rỗng).
+ * Chỉ gọi khi phía đó vừa hết dòng sau khi đã hiện. `heldBundleIds` là mã các bộ của dòng đang giữ: chỉ chính những bộ đó còn hạn mà vẫn không
+ * ra dòng nào mới là "hết hàng" (món hết hàng, hay chưa chọn được phân loại). Một bộ KHÁC còn chạy mà chưa từng có dòng (mọi món hết hàng)
+ * không được kéo bộ đã tắt thành "Tạm hết hàng". Không truyền `heldBundleIds` thì bộ nào còn hạn cũng tính. Với Mua kèm, API còn báo riêng
+ * khi sản phẩm chính hết hàng (`addonsSoldOut`, lúc đó `addons` rỗng nên không có mã để đối chiếu): coi mọi bộ đang giữ là hết hàng.
  * Bộ bị tắt thì API không trả nữa, nên danh sách rỗng đọc là "đã kết thúc".
  */
-export function bundleHoldReason(side: 'combos' | 'addons', data: ProductBundles | undefined, now: number): BundleHold {
+export function bundleHoldReason(side: 'combos' | 'addons', data: ProductBundles | undefined, now: number, heldBundleIds?: readonly string[]): BundleHold {
   if (!data) return 'ended';
   if (side === 'addons' && data.addonsSoldOut === true) return 'soldOut';
-  return data[side].some((b) => bundleLive(b, now)) ? 'soldOut' : 'ended';
+  const held = heldBundleIds ? new Set(heldBundleIds) : null;
+  return data[side].some((b) => bundleLive(b, now) && (held === null || held.has(b.id))) ? 'soldOut' : 'ended';
 }
 
 /**
  * Giữ danh sách cuối cùng đã hiện khi dữ liệu sau đó rỗng, để khối ở nguyên chỗ (mờ, không bấm được) thay vì bị gỡ giữa trang và đẩy phần
- * dưới nhảy. Hai app dùng chung: mỗi app chỉ giữ `last` trong một `useRef`. Chưa từng hiện mà rỗng thì rỗng, không giữ.
+ * dưới nhảy. Hai app dùng chung: mỗi app chỉ giữ `last` trong một `useRef`. Chưa từng hiện mà rỗng thì rỗng, không giữ. `why` nhận danh sách
+ * đang giữ để tính lý do theo đúng các dòng đó (`bundleHoldReason`).
  */
-export function latchBundleSide<T>(live: T[], last: T[] | null, why: () => BundleHold): { items: T[]; held: BundleHold | null; last: T[] | null } {
+export function latchBundleSide<T>(live: T[], last: T[] | null, why: (held: T[]) => BundleHold): { items: T[]; held: BundleHold | null; last: T[] | null } {
   if (live.length > 0) return { items: live, held: null, last: live };
   if (last === null) return { items: [], held: null, last: null };
-  return { items: last, held: why(), last };
+  return { items: last, held: why(last), last };
 }
 
-/** Tiêu đề khối, kèm lý do khi đang giữ ("Mua kèm deal sốc · Tạm hết hàng"). */
+/** Tiêu đề khối, kèm lý do khi đang giữ ("Mua kèm deal sốc · Tạm hết hàng"; chữ hết hàng dùng chung `stock.out` của thẻ sản phẩm). */
 export function bundleHoldTitle(titleKey: 'combo.pdpTitle' | 'addon.title', hold: BundleHold | null): string {
-  return hold ? `${fillCopy(titleKey)} · ${fillCopy(hold === 'soldOut' ? 'bundle.soldOut' : 'bundle.ended')}` : fillCopy(titleKey);
+  return hold ? `${fillCopy(titleKey)} · ${fillCopy(hold === 'soldOut' ? 'stock.out' : 'bundle.ended')}` : fillCopy(titleKey);
 }
 

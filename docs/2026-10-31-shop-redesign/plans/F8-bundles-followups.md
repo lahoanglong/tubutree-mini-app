@@ -35,8 +35,8 @@ Các đầu vào mà spec không nói nhưng dễ vỡ nhất, mỗi dòng có t
 ## Giao diện dùng chung (giữ đúng tên, gói khác import)
 
 - API: `ProductBundles.addonsSoldOut?: boolean` (app-core `api/bundle.ts` và `BundlesService.forProduct`): true khi có bộ Mua kèm đang chạy nhưng sản phẩm chính hết hàng.
-- app-core `commerce/bundle-view.ts`: `type BundleHold = 'ended' | 'soldOut'`, `bundleHoldReason(side: 'combos' | 'addons', data: ProductBundles | undefined, now: number): BundleHold`, `bundleHoldTitle(titleKey: 'combo.pdpTitle' | 'addon.title', hold: BundleHold | null): string`, `latchBundleSide<T>(live: T[], last: T[] | null, why: () => BundleHold): { items: T[]; held: BundleHold | null; last: T[] | null }`.
-- Chữ mới: `bundle.soldOut` = "Tạm hết hàng" (12 ký tự, trần 12 như `bundle.ended`).
+- app-core `commerce/bundle-view.ts`: `type BundleHold = 'ended' | 'soldOut'`, `bundleHoldReason(side: 'combos' | 'addons', data: ProductBundles | undefined, now: number, heldBundleIds?: readonly string[]): BundleHold`, `bundleHoldTitle(titleKey: 'combo.pdpTitle' | 'addon.title', hold: BundleHold | null): string`, `latchBundleSide<T>(live: T[], last: T[] | null, why: (held: T[]) => BundleHold): { items: T[]; held: BundleHold | null; last: T[] | null }`.
+- Chữ "Tạm hết hàng" dùng chung khoá `stock.out` của thẻ (`TILE_COPY`), không có khoá riêng `bundle.soldOut` (hai bản sẽ lệch nhau khi một bản được sửa).
 - `bundle-rules.ts`: `addonUnitDiscount(unitPrice, addonPrice, refPrice: number | null | undefined): number`, `addonPayPrice(...)` cùng đối số, `isOwnStaffBundle(b, user)`, `LiveBundle.createdById`, `LiveBundle.items[].refPrice`.
 
 ## Cấu trúc file
@@ -117,11 +117,11 @@ Phần luật thuần đã viết ở lần chạy trước (chưa commit trong 
 
 **Files:** Modify `packages/app-core/src/commerce/bundle-view.ts` (+`bundle-view.spec.ts`), `api/bundle.ts`, `shop-copy.ts`, `shop-copy-budget.ts`; Modify `apps/api/src/modules/bundles/bundles.service.ts` (+spec); race `bundle-price-parity`.
 
-**Interfaces — Produces:** `BundleHold`, `bundleHoldReason`, `bundleHoldTitle`, `latchBundleSide`, khoá `bundle.soldOut`, `ProductBundles.addonsSoldOut?`.
+**Interfaces — Produces:** `BundleHold`, `bundleHoldReason`, `bundleHoldTitle`, `latchBundleSide`, `ProductBundles.addonsSoldOut?` (chữ dùng khoá `stock.out`).
 
-- [ ] **Step 1: test đỏ.** `bundle-view.spec.ts`: `bundleHoldReason('addons', { combos: [], addons: [bộ còn hạn, mọi món inStock:false] }, now) === 'soldOut'`; `addonsSoldOut: true` → `'soldOut'`; bộ quá hạn hoặc `addons: []` → `'ended'`; `data` undefined → `'ended'`; phía `combos` có bộ còn hạn mà `comboView` null (thiếu `variationId`) → `'soldOut'`. `latchBundleSide`: `live` không rỗng → `held: null`, `last = live`; `live` rỗng và `last` có → `{ items: last, held: why() }`; `live` rỗng và `last` null → `{ items: [], held: null }`. `bundleHoldTitle('addon.title', 'soldOut') === 'Mua kèm deal sốc · Tạm hết hàng'`, `'ended'` → `· Đã kết thúc`, `null` → chỉ tiêu đề. `shop-copy.spec` (có sẵn) bắt `bundle.soldOut` thiếu ở một bên. `bundles.service.spec.ts`: `forProduct` khi sản phẩm chính hết hàng và có bộ Mua kèm đang chạy → `{ addons: [], addonsSoldOut: true }`; còn hàng → không có khoá (undefined); không có bộ Mua kèm nào → không có khoá.
+- [ ] **Step 1: test đỏ.** `bundle-view.spec.ts`: `bundleHoldReason('addons', { combos: [], addons: [bộ còn hạn, mọi món inStock:false] }, now) === 'soldOut'`; `addonsSoldOut: true` → `'soldOut'`; bộ quá hạn hoặc `addons: []` → `'ended'`; `data` undefined → `'ended'`; phía `combos` có bộ còn hạn mà `comboView` null (thiếu `variationId`) → `'soldOut'`. `latchBundleSide`: `live` không rỗng → `held: null`, `last = live`; `live` rỗng và `last` có → `{ items: last, held: why() }`; `live` rỗng và `last` null → `{ items: [], held: null }`. `bundleHoldTitle('addon.title', 'soldOut') === 'Mua kèm deal sốc · Tạm hết hàng'`, `'ended'` → `· Đã kết thúc`, `null` → chỉ tiêu đề. `bundles.service.spec.ts`: `forProduct` khi sản phẩm chính hết hàng và có bộ Mua kèm đang chạy → `{ addons: [], addonsSoldOut: true }`; còn hàng → không có khoá (undefined); không có bộ Mua kèm nào → không có khoá.
 - [ ] **Step 2:** `cd packages/app-core && npx vitest run src/commerce/bundle-view.spec.ts src/shop-copy.spec.ts` và `cd apps/api && npx jest src/modules/bundles/bundles.service.spec.ts` → FAIL.
-- [ ] **Step 3: implement** theo "Giao diện dùng chung". `bundle.soldOut`: "Tạm hết hàng", trần 12 trong `shop-copy-budget.ts`. `forProduct`: tính `shown` như khi còn hàng; nếu `!anchorBuyable` và có bộ ADDON hiện được thì trả `addons: []` kèm `addonsSoldOut: true`.
+- [ ] **Step 3: implement** theo "Giao diện dùng chung". Chữ "Tạm hết hàng" lấy từ `stock.out` (đã có, trần 12). `forProduct`: tính `shown` như khi còn hàng; nếu `!anchorBuyable` và có bộ ADDON hiện được thì trả `addons: []` kèm `addonsSoldOut: true`.
 - [ ] **Step 4:** các spec xanh; race `bundle-price-parity` (ca "sản phẩm chính hết hàng") thêm kiểm `addonsSoldOut`, xanh.
 - [ ] **Step 5: Commit** `feat(app-core,api): phân biệt "Tạm hết hàng" với "Đã kết thúc" cho khối Combo/Mua kèm; logic giữ khối dùng chung`.
 
@@ -168,3 +168,11 @@ Phần luật thuần đã viết ở lần chạy trước (chưa commit trong 
 - **Độ phủ:** (1) Task 1 + 4; (2) Task 2; (3) Task 5; (4) Task 1 (hàm) + 3 (service, race); (5) Task 8; (6) Task 6, 7, 8; (7) Task 9.
 - **Nhất quán tên:** `addonUnitDiscount`/`addonPayPrice`/`isOwnStaffBundle` (Task 1) là tên Task 2 và 4 dùng; `BundleHold`/`bundleHoldReason`/`bundleHoldTitle`/`latchBundleSide` (Task 6) là tên Task 7 và 8 dùng; `refPrice` thống nhất ở schema, loader, admin, API công khai.
 - **Rủi ro biết trước:** dữ liệu `refPrice` backfill lấy giá hiện tại (không có giá lúc tạo); chấp nhận vì bộ chưa lên PROD. API công khai vẫn quảng cáo bộ cho chính nhân viên tạo (cache chung, giỏ chỉ giảm ít hơn quảng cáo), giống Giờ vàng và mã.
+
+## Sửa theo review lần chạy lại (đợt 4e-2)
+
+| Mức | Phát hiện | Cách sửa |
+|---|---|---|
+| MAJOR | Form sửa luôn gửi lại cả `items`, nên `update()` ghi lại `refPrice` theo giá HIỆN TẠI và gỡ trần của Task 1/4 (gia hạn giờ cũng đủ để giảm vọt 11.000đ → 461.000đ); chi tiết admin báo sai khoản giảm; nhân viên gia hạn bộ của mình bị 403 oan | `keptRefPrices` (món không đổi sản phẩm/phân loại/giá kèm giữ `refPrice` cũ; món mới, đổi giá kèm hay dòng cũ thiếu `refPrice` lấy giá lúc sửa); `capAtRefPrices` cho trần nhân viên; `AdminBundleItem.refPrice` và form báo `min(giá bán, refPrice) − giá kèm`. Test: unit (`bundle-admin-rules`, `bundles-admin.service`), race hai ca (admin, nhân viên), web (`bundles-tab`, `admin-bundle-form`) |
+| MINOR | `bundleHoldReason` coi MỌI bộ còn hạn của phía đó là lý do giữ, nên bộ A bị tắt mà bộ B còn chạy (mọi món hết hàng) ra "Tạm hết hàng" thay vì "Đã kết thúc" | `bundleHoldReason(..., heldBundleIds)` chỉ tính các bộ của dòng đang giữ; `latchBundleSide` đưa danh sách đang giữ cho `why`. Giới hạn đã biết: khi API báo `addonsSoldOut` (sản phẩm chính hết hàng, `addons` rỗng) không có mã bộ để đối chiếu nên coi mọi bộ đang giữ là hết hàng |
+| MINOR | `bundle.soldOut` lặp lại chữ chuẩn `stock.out` | bỏ khoá `bundle.soldOut` (copy lẫn budget), tiêu đề giữ khối dùng `stock.out`; spec chốt chữ chỉ có một nơi định nghĩa |

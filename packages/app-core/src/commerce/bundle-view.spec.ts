@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SHOP_COPY } from '../shop-copy';
 import type { BundleDTO, BundleItemDTO } from '../api/bundle';
 import type { ProductCard } from '../api/catalog';
 import { PDP_ADDON_MAX, PDP_COMBO_MAX, addonLines, addonRows, addonSummary, bundleHoldReason, bundleHoldTitle, bundleLive, comboView, latchBundleSide } from './bundle-view';
@@ -167,6 +168,35 @@ describe('bundleHoldReason: vì sao một phía (Combo/Mua kèm) hết dòng sau
   });
 });
 
+describe('bundleHoldReason theo bộ đang giữ: bộ khác còn sống không đổi lý do của bộ đã tắt', () => {
+  // A đang hiện thì admin tắt A; B vẫn chạy nhưng mọi món của B hết hàng (nên chưa từng ra dòng nào).
+  const bOutOfStock = addon('b', [item('y', { addonPrice: 10_000, inStock: false })]);
+
+  it('Mua kèm: bộ đang giữ (A) không còn trong dữ liệu mà bộ khác (B) còn hạn → "ended", không phải "soldOut"', () => {
+    expect(bundleHoldReason('addons', { combos: [], addons: [bOutOfStock] }, NOW, ['a'])).toBe('ended');
+  });
+
+  it('Mua kèm: chính bộ đang giữ còn hạn mà món hết hàng → "soldOut"', () => {
+    const aOutOfStock = addon('a', [item('x', { addonPrice: 10_000, inStock: false })]);
+    expect(bundleHoldReason('addons', { combos: [], addons: [bOutOfStock, aOutOfStock] }, NOW, ['a'])).toBe('soldOut');
+  });
+
+  it('Mua kèm: bộ đang giữ đã quá hạn dù còn trong dữ liệu → "ended"', () => {
+    const expired = addon('a', [item('x', { addonPrice: 10_000 })], { endAt: '2026-11-01T00:00:00.000Z' });
+    expect(bundleHoldReason('addons', { combos: [], addons: [expired, bOutOfStock] }, NOW, ['a'])).toBe('ended');
+  });
+
+  it('Combo: so theo mã bộ của thẻ đang giữ', () => {
+    const noVariation = combo([item('a', { variationId: null }), item('b')], { id: 'c1' });
+    expect(bundleHoldReason('combos', { combos: [noVariation], addons: [] }, NOW, ['c1'])).toBe('soldOut');
+    expect(bundleHoldReason('combos', { combos: [noVariation], addons: [] }, NOW, ['c0'])).toBe('ended');
+  });
+
+  it('không truyền mã bộ đang giữ thì như cũ: bộ nào còn hạn cũng tính', () => {
+    expect(bundleHoldReason('addons', { combos: [], addons: [bOutOfStock] }, NOW)).toBe('soldOut');
+  });
+});
+
 describe('latchBundleSide: giữ danh sách cuối cùng đã hiện để khối không bị gỡ giữa trang', () => {
   it('có dòng → hiện đúng dòng đó, không giữ, và nhớ lại làm danh sách cuối', () => {
     expect(latchBundleSide(['a', 'b'], null, () => 'ended')).toEqual({ items: ['a', 'b'], held: null, last: ['a', 'b'] });
@@ -184,6 +214,15 @@ describe('latchBundleSide: giữ danh sách cuối cùng đã hiện để khố
     expect(asked).toBe(1);
   });
 
+  it('hỏi lý do kèm danh sách đang giữ, để lý do tính theo đúng các dòng đó', () => {
+    const seen: string[][] = [];
+    latchBundleSide([], ['a', 'b'], (held) => {
+      seen.push(held);
+      return 'ended';
+    });
+    expect(seen).toEqual([['a', 'b']]);
+  });
+
   it('chưa từng hiện mà rỗng → rỗng, không giữ', () => {
     expect(latchBundleSide([], null, () => 'ended')).toEqual({ items: [], held: null, last: null });
   });
@@ -199,6 +238,11 @@ describe('bundleHoldTitle', () => {
     expect(bundleHoldTitle('addon.title', 'ended')).toBe('Mua kèm deal sốc · Đã kết thúc');
     expect(bundleHoldTitle('addon.title', 'soldOut')).toBe('Mua kèm deal sốc · Tạm hết hàng');
     expect(bundleHoldTitle('combo.pdpTitle', 'soldOut')).toBe('Combo ưu đãi · Tạm hết hàng');
+  });
+
+  it('chữ "Tạm hết hàng" chỉ có một nơi định nghĩa (stock.out của thẻ), không có bản sao để lệch nhau', () => {
+    expect(Object.keys(SHOP_COPY).filter((k) => SHOP_COPY[k] === 'Tạm hết hàng')).toEqual(['stock.out']);
+    expect(bundleHoldTitle('addon.title', 'soldOut')).toBe(`Mua kèm deal sốc · ${SHOP_COPY['stock.out']}`);
   });
 });
 

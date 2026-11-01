@@ -65,7 +65,7 @@ function AddonRowView({ row, on, onToggle }: { row: AddonRow; on: boolean; onTog
  * Danh sách cuối cùng đã hiện: khi dữ liệu sau đó rỗng (bộ hết hạn/tắt, hay món vừa hết hàng) vẫn trả lại danh sách đó kèm lý do `held`, để khối
  * không bị gỡ giữa trang. Quyết định nằm ở app-core (`latchBundleSide`, dùng chung với web); ở đây chỉ giữ `useRef`.
  */
-function useLatched<T>(live: T[], why: () => BundleHold): { items: T[]; held: BundleHold | null } {
+function useLatched<T>(live: T[], why: (held: T[]) => BundleHold): { items: T[]; held: BundleHold | null } {
   const last = useRef<T[] | null>(null);
   const side = latchBundleSide(live, last.current, why);
   last.current = side.last;
@@ -112,8 +112,8 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
   const now = serverNow();
   const liveCombos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
   const liveRows = addonRows(query.data?.addons ?? [], now);
-  const comboSide = useLatched(liveCombos, () => bundleHoldReason('combos', query.data, now));
-  const addonSide = useLatched(liveRows, () => bundleHoldReason('addons', query.data, now));
+  const comboSide = useLatched(liveCombos, (held) => bundleHoldReason('combos', query.data, now, held.map((c) => c.id)));
+  const addonSide = useLatched(liveRows, (held) => bundleHoldReason('addons', query.data, now, held.map((r) => r.bundleId)));
   if (comboSide.items.length === 0 && addonSide.items.length === 0) return null;
   const { items: combos, held: combosHeld } = comboSide;
   const { items: rows, held: addonsHeld } = addonSide;
