@@ -4,11 +4,15 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
+import { BUNDLE_MAX_PCT_DEFAULT, BUNDLE_MAX_PCT_KEY, loadLiveBundles } from '../bundles/bundle-read';
+import { allocateBundleDiscounts, mergeMaxPerLine } from '../bundles/bundle-rules';
 
 export interface ComboLine {
   variationId: string;
   productId: string;
   total: number;
+  /** Số lượng của dòng, để bundle chia đơn vị được hưởng; thiếu coi như 1 (chỉ test thuần gọi thiếu). */
+  quantity?: number;
 }
 export interface ComboResult {
   /** Tổng giảm combo (VND). */
@@ -72,7 +76,14 @@ export function goodsAfterComboOf(
   };
 }
 
-/** Tính giảm giá combo cho giỏ theo gian hàng (slug). Combo = collection kind=COMBO + comboDiscountPct. */
+const NO_COMBO: ComboResult = { total: 0, perLine: {} };
+
+/**
+ * Giảm giá combo của giỏ: combo của gian hàng đang ghi công (collection kind=COMBO + comboDiscountPct) hợp với bundle toàn sàn
+ * (`Bundle`, Tubu tài trợ). Mỗi dòng lấy khoản LỚN NHẤT giữa hai nguồn, không cộng dồn. Giỏ, báo giá, xem trước mã và đặt đơn đều
+ * gọi đúng hàm này nên số luôn khớp, và kết quả đi thẳng vào `comboPerLine`/`Order.comboDiscount` (hoa hồng, hoàn tiền đọc `paidTotal`).
+ * Tên giữ `computeForStorefront` vì nhiều spec đang dựng giả theo tên này; `slug` rỗng vẫn tính bundle.
+ */
 @Injectable()
 export class ComboService {
   constructor(
@@ -81,11 +92,27 @@ export class ComboService {
   ) {}
 
   /**
-   * `buyerId`: chủ gian hàng mua qua chính gian hàng của mình thì không có giảm combo — combo là ưu đãi
-   * gian hàng dành cho khách, không phải cách CTV tự giảm giá cho bản thân (MONEY-5).
+   * `buyerId`: chủ gian hàng mua qua chính gian hàng của mình thì không có giảm combo gian hàng — combo là ưu đãi
+   * gian hàng dành cho khách, không phải cách CTV tự giảm giá cho bản thân (MONEY-5). Bundle toàn sàn không có ngoại lệ này.
+   * `lines` là các dòng KHÔNG giờ vàng (dòng giờ vàng không nhận combo, cũng không tính vào điều kiện đủ bộ).
    */
-  async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
-    if (!slug || lines.length === 0) return { total: 0, perLine: {} };
+  async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string, now: Date = new Date()): Promise<ComboResult> {
+    if (lines.length === 0) return NO_COMBO;
+    const store = await this.storefrontCombo(slug, lines, buyerId);
+    const bundles = await loadLiveBundles(this.prisma, now, [...new Set(lines.map((l) => l.productId))]);
+    if (bundles.length === 0) return store;
+    const configured = await this.config.get<number>(BUNDLE_MAX_PCT_KEY, BUNDLE_MAX_PCT_DEFAULT);
+    const maxPct = typeof configured === 'number' && Number.isFinite(configured) ? configured : BUNDLE_MAX_PCT_DEFAULT;
+    const bundle = allocateBundleDiscounts(
+      bundles,
+      lines.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity ?? 1 })),
+      maxPct,
+    );
+    return mergeMaxPerLine(store, bundle);
+  }
+
+  private async storefrontCombo(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
+    if (!slug) return NO_COMBO;
     const sf = await this.prisma.storefront.findFirst({
       where: { slug, ...publicStorefrontWhere(await loadPublicVisibility(this.config)) },
       select: {
@@ -99,8 +126,8 @@ export class ComboService {
         },
       },
     });
-    if (!sf) return { total: 0, perLine: {} };
-    if (buyerId && sf.ownerUserId === buyerId) return { total: 0, perLine: {} };
+    if (!sf) return NO_COMBO;
+    if (buyerId && sf.ownerUserId === buyerId) return NO_COMBO;
     // Clamp LẦN 2 tại nơi đọc — phòng dữ liệu ghi từ trước khi StorefrontService có trần
     // (hoặc ghi thẳng DB) vẫn không cho phép combo vượt trần hiện hành (P0,
     // docs/2026-09-08-review-progress.md). StorefrontService.clampComboPct là lớp chính (chặn

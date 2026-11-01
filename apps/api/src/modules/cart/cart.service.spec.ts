@@ -16,8 +16,8 @@ const flash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as un
 // trong nhóm này đi tới nhánh addItem() thành công (đều throw sớm), nên record()/recordBestEffort()
 // không bao giờ được gọi ở đây.
 const analytics = { record: jest.fn(), recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
-// Không gửi gian hàng thì giỏ không gọi combo; ca có gian hàng ở race spec cart-combo-equals-quote.
-const combo = { computeForStorefront: jest.fn() } as unknown as ComboService;
+// Giỏ luôn hỏi combo (bundle áp cả khi không có gian hàng); stub mặc định không giảm. Ca có combo thật ở race spec cart-combo-equals-quote và bundle-price-parity.
+const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } as unknown as ComboService;
 
 describe('CartService guard tồn kho', () => {
   it('addItem: chặn sản phẩm không khả dụng (inactive/không tồn tại)', async () => {
@@ -1441,5 +1441,33 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
     await svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined);
     const events = (analyticsSpy.recordMany as jest.Mock).mock.calls[0][1] as { props: { addSource: string } }[];
     expect(events[0]!.props.addSource).toBe('pdp');
+  });
+});
+
+describe('CartService.getCart: combo toàn sàn (bundle)', () => {
+  const row = {
+    id: 'c1',
+    couponCode: null,
+    user: { tierId: null, phone: '0900000001', zaloId: 'z1' },
+    items: [
+      { id: 'ci-a', variationId: 'a', quantity: 2, variation: { isActive: true, productId: 'p-a', salePrice: null, retailPrice: 10000, stock: 5, name: 'a', product: { isActive: true, approvalStatus: 'APPROVED', name: 'SP a', slug: 'a', thumbnail: null } } },
+    ],
+  };
+  const build = (result: { total: number; perLine: Record<string, number> }) => {
+    const computeForStorefront = jest.fn().mockResolvedValue(result);
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue(row) },
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+      membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, config, flash, analytics, { computeForStorefront } as unknown as ComboService);
+    return { svc, computeForStorefront };
+  };
+
+  it('không có gian hàng ghi công vẫn hỏi combo (bundle áp cho mọi giỏ), kèm số lượng từng dòng', async () => {
+    const { svc, computeForStorefront } = build({ total: 2000, perLine: { a: 2000 } });
+    const cart = await svc.getCart('u1');
+    expect(computeForStorefront).toHaveBeenCalledWith(null, [{ variationId: 'a', productId: 'p-a', total: 20000, quantity: 2 }], 'u1');
+    expect(cart.comboDiscount).toBe(2000);
   });
 });
