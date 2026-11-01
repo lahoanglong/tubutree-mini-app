@@ -12,7 +12,7 @@ import { FORBIDDEN_TERMS } from './shop-copy';
  * mà khách không đọc. Mã cũ đang vi phạm thì vào `EXEMPT` kèm lý do và trần `max`: file đã miễn không được thêm vi phạm mới.
  */
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
-const ROOTS = ['apps/miniapp/src', 'apps/web/src'];
+const ROOTS = ['apps/miniapp/src', 'apps/web/src', 'packages/app-core/src'];
 // Quản trị có bảng chữ riêng (Q16, admin/terminology.spec.ts), spec và dữ liệu giả không tới tay khách.
 const NOT_SCANNED = [/\.(spec|test)\.tsx?$/, /(^|\/)admin\//, /(^|\/)components\/admin\//, /(^|\/)test-utils\//, /(^|\/)lib\/admin-/];
 
@@ -127,6 +127,7 @@ const REASON = {
   FLASH: '"giờ vàng" viết thường hoặc "Ưu đãi giờ vàng" (D2: luôn hoa chữ G, bỏ "Ưu đãi giờ vàng"); đổi thuộc gói chữ riêng',
   EXPIRY: '"HSD" viết tắt (D2: "Hạn dùng" hoặc "Dùng đến"); đổi thuộc gói chữ riêng, `/uu-dai` còn do P14 dựng lại',
   COUPON: 'chữ Mua chung viết "mã giảm" thiếu chữ "giá" (D2: luôn "Mã giảm giá"); đổi thuộc gói chữ Mua chung riêng, hai app và `group-buy-copy.ts`/`pdp-logic.ts` cùng sửa một lượt',
+  LEGAL: 'văn bản pháp lý (điều khoản, bảo mật, đổi trả, vận chuyển): "chúng tôi" là chủ thể ký trong văn bản, đổi chữ cần chủ duyệt nội dung, không phải chữ giao diện',
 } as const;
 
 const EXEMPT: Exemption[] = [
@@ -234,6 +235,15 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/web/src/app/mua-chung/group-buy-view.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
   { file: 'apps/web/src/app/san-pham/[slug]/pdp-extras.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
   { file: 'apps/web/src/lib/pdp-logic.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
+  { file: 'packages/app-core/src/legal.ts', use: USE.voice, max: 6, reason: REASON.LEGAL },
+  { file: 'packages/app-core/src/game-newbie.ts', use: USE.ellipsis, max: 2, reason: REASON.ELLIPSIS },
+  { file: 'packages/app-core/src/dealer-apply-copy.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
+  { file: 'packages/app-core/src/loyalty-copy.ts', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },
+  { file: 'packages/app-core/src/notification-route.ts', use: USE.flash, max: 2, reason: REASON.FLASH },
+  { file: 'packages/app-core/src/variation-picker.ts', use: USE.stock, max: 1, reason: REASON.STOCK },
+  { file: 'packages/app-core/src/game-wheel.ts', use: USE.coupon, max: 2, reason: REASON.COUPON },
+  { file: 'packages/app-core/src/group-buy-copy.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
+  { file: 'packages/app-core/src/home-copy.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
 ];
 
 // Đối chứng trên nguồn giả: mẫu quét phải bắt đúng chữ hiển thị và bỏ qua mã (comment, tên biến, className, import, kiểu literal).
@@ -412,6 +422,15 @@ describe('mã thật của apps/miniapp và apps/web', () => {
     expect(sources.length).toBeGreaterThan(300);
     expect(sources.some((s) => s.file.startsWith('apps/miniapp/src/'))).toBe(true);
     expect(sources.some((s) => s.file.startsWith('apps/web/src/'))).toBe(true);
+  });
+
+  it('quét cả chữ dùng chung của app-core (shop-copy, voucher, countdown...), và chữ cấm mới ở đó bị bắt', () => {
+    for (const f of ['shop-copy.ts', 'home-copy.ts', 'commerce/countdown.ts', 'commerce/voucher.ts']) {
+      expect(sources.some((s) => s.file === `packages/app-core/src/${f}`), f).toBe(true);
+    }
+    const fresh = findHits([{ file: 'packages/app-core/src/fresh-copy.ts', text: "export const m = 'Vui lòng thử lại';" }]);
+    expect(fresh.map((h) => `${h.file} [${h.use}]`)).toEqual(['packages/app-core/src/fresh-copy.ts [Bạn hoặc Tubu]']);
+    expect(EXEMPT.some((e) => e.file === 'packages/app-core/src/fresh-copy.ts')).toBe(false);
   });
 
   it('không có chữ cấm ngoài danh sách miễn, và file đã miễn không vượt trần max', () => {

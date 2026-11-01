@@ -133,6 +133,15 @@
       ]
     },
     {
+      "name": "LayoutPicker",
+      "miniapp": "apps/miniapp/src/components/ui/layout-picker.tsx",
+      "web": "apps/web/src/components/mini/layout-picker.tsx",
+      "props": "LayoutPickerProps",
+      "screens": [
+        "/storefront"
+      ]
+    },
+    {
       "name": "ListRow",
       "miniapp": "apps/miniapp/src/components/ui/list-row.tsx",
       "web": "apps/web/src/components/mini/list-row.tsx",
@@ -393,6 +402,15 @@
         "/dealer",
         "/feed",
         "/recycle/points"
+      ]
+    },
+    {
+      "name": "SectionCard",
+      "miniapp": "apps/miniapp/src/components/ui/section-card.tsx",
+      "web": "apps/web/src/components/mini/section-card.tsx",
+      "props": "SectionCardProps",
+      "screens": [
+        "/storefront"
       ]
     },
     {
@@ -693,18 +711,6 @@
     }
   ],
   "upcoming": [
-    {
-      "name": "SectionCard",
-      "package": "P10",
-      "wave": "4b",
-      "note": "màn dựng /storefront: một khối của gian hàng (tên, kiểu, x/y món, dải ảnh, cảnh báo vượt ngân sách)"
-    },
-    {
-      "name": "LayoutPicker",
-      "package": "P10",
-      "wave": "4b",
-      "note": "trang chi tiết khối: 4 ô Lưới / Kệ ngang / Danh sách / Combo"
-    },
     {
       "name": "GuestLinkCard",
       "package": "P14",

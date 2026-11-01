@@ -93,6 +93,13 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 
 `ShopHeader`, `ShopStatsRow`, `ShopTopBar`, `ShopSection` (vẽ theo `layout` của bộ sưu tập: kệ ≤10, lưới ≤6, dòng ≤5, combo), `TierBadge` (ẩn bậc thấp nhất).
 
+### Màn dựng gian hàng (CTV)
+
+| Cần | Dùng |
+|---|---|
+| một khối của gian hàng ở `/storefront` (tên, kiểu, x/y món, dải ảnh, cảnh báo vượt ngân sách) | `SectionCard` |
+| chọn kiểu khối: Lưới / Kệ ngang / Danh sách / Combo | `LayoutPicker` |
+
 ### Thành phần nền
 
 `Badge`, `Button`, `Card`, `Chip`, `Icon`, `IconButton`, `ListRow`, `KeyValueRow`, `ProgressBar`, `QuantitySelector`, `SearchField`, `StickyActionBar`, `Text`, `Heading`, `Timeline`, `StatTile`, `BottomSheet`, `EmptyState`, `BackButton`.
@@ -103,12 +110,10 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 
 ## Sắp có (đợt 4b/4c)
 
-Thành phần các gói đang làm song song với gói này, tên đã chốt trong `docs/2026-10-31-shop-redesign/02-ke-hoach.md`. Chưa có ở base nên chưa nằm trong bảng trên; gói nào xong thì chuyển dòng từ `upcoming` sang `components` của `docs/design/ds-map.json` và sang mục Thành phần.
+Thành phần chưa có đủ ở cả hai app, tên theo `docs/2026-10-31-shop-redesign/02-ke-hoach.md`, nên chưa nằm ở mục Thành phần. Gói nào làm xong thì chuyển dòng từ `upcoming` sang `components` của `docs/design/ds-map.json` và sang mục Thành phần; `packages/app-core/src/design-docs.spec.ts` đỏ nếu một dòng `upcoming` đã có `export` ở cả hai app mà chưa chuyển.
 
 | Tên | Gói | Đợt | Là gì |
 |---|---|---|---|
-| `SectionCard` | P10 | 4b | một khối của gian hàng ở màn dựng `/storefront` |
-| `LayoutPicker` | P10 | 4b | chọn Lưới / Kệ ngang / Danh sách / Combo |
 | `GuestLinkCard` | P14 | 4b | khối cần tài khoản ở `/offers` cho khách chưa đăng nhập; Mini đã có thẻ cùng tên mời liên kết Zalo ở `apps/miniapp/src/components/home/guest-link-card.tsx`, P14 quyết dùng lại hay đặt tên khác |
 | `components/bundle/*` | P15 | 4c | khối combo và mua kèm ở chi tiết sản phẩm, giỏ, Trang chủ; kế hoạch chưa chốt tên thành phần |
 
@@ -209,21 +214,22 @@ Khung trang rộng: `PAGE_WIDE` ở `apps/web/src/lib/page-frame.ts`. Trang web 
 
 ## Kiểm tự động
 
-Đã có:
-
 | Bài kiểm | Chặn gì |
 |---|---|
-| `pnpm lint:parity` | route Mini ↔ web (`route-map.json`) và thành phần Mini ↔ web (`ds-map.json`: file, export, khoá props của mọi thành phần: đọc từ kiểu khai ở `props`, hoặc từ kiểu tham số đầu của hàm; lệch phải khai `propsDiff` kèm lý do, kiểu nằm ngoài file thì `propsUncompared` kèm lý do) |
+| `pnpm lint:parity` | route Mini ↔ web (`route-map.json`) và thành phần Mini ↔ web (`ds-map.json`: file, export, khoá props của mọi thành phần: đọc từ kiểu khai ở `props`, hoặc từ kiểu tham số đầu của hàm; lệch phải khai `propsDiff` kèm lý do, kiểu nằm ngoài file thì `propsUncompared` kèm lý do); nối thêm bánh cóc ở dòng kế |
+| `scripts/uiux/ds-ratchet.mjs` (chạy trong `pnpm lint:parity`) | bánh cóc số px viết tay (n > 1, trong chuỗi, mẫu chuỗi và thuộc tính style số) và lớp `max-md:` của mã giao diện hai app so với `scripts/uiux/ds-baseline.json`: số tăng thì đỏ, file mới phải bằng 0, số giảm thì nhắc hạ baseline (thêm cờ strict thì đỏ) |
 | `pnpm lint:vars` | biến CSS chưa định nghĩa |
-| `packages/app-core/src/terminology.spec.ts` | thuật ngữ cấm trong chữ hiển thị |
+| `packages/app-core/src/terminology.spec.ts` | thuật ngữ cấm trong chữ hiển thị của Mini, web và chữ dùng chung ở `packages/app-core/src` |
 | `packages/app-core/src/shop-copy.spec.ts` | chữ mua sắm dính thuật ngữ cấm hoặc vượt ngân sách độ dài |
 | `packages/app-core/src/merch/shelves.spec.ts` | luật sổ kệ |
-| `apps/miniapp/src/components/ds-shop-guard.spec.ts`, `apps/web/src/components/ds-shop-guard.spec.ts` | thẻ tự chế, giá gạch ngoài `PriceTag`, lề âm ngang tay |
+| `apps/miniapp/src/components/ds-shop-guard.spec.ts`, `apps/web/src/components/ds-shop-guard.spec.ts` | thẻ tự chế, giá gạch ngoài `PriceTag`, lề âm ngang tay, primitive màu (`--forest-*`, `bg-stone-*`...) ở trang mua sắm, `Text` của zmp-ui ở trang mua sắm Mini, `openSnackbar` gọi thẳng (đi qua `useNotify`), `shadow-[var(--x)]` ở web (Tailwind đọc là màu bóng, phần tử mất bóng; viết `[box-shadow:var(--x)]`). Luật ở `scripts/uiux/ds-shop-rules.mjs`, mã cũ vi phạm ở mục `guards` của baseline |
+| `apps/e2e/tests/ds-parity.shop.spec.ts` | số đo computed 375px của thẻ (flash, line, grid), tiêu đề khối và giá so với bảng chuẩn `apps/e2e/tests/support/ds-parity.ts`. Mỗi project (Mini, web) đo trang của mình rồi so với cùng bảng, không so hai server trực tiếp vì `playwright.config.ts` tách server theo scope và CI chạy hai project song song; web chỉ đo trang chạy hoàn toàn bằng mock phía trình duyệt (Ưu đãi, Giờ vàng, Yêu thích) |
+| `apps/e2e/tests/a11y-shop.miniapp.spec.ts`, `apps/e2e/tests/a11y-shop.web.spec.ts` | axe WCAG AA ở 375px bảy màn mua sắm (Trang chủ, Danh mục, chi tiết sản phẩm, gian hàng, thương hiệu, Ưu đãi, Giờ vàng); chỉ `serious`/`critical` chặn, không tắt luật. Vi phạm có sẵn ghi ở `apps/e2e/tests/support/a11y-baseline.ts` kèm lý do (hiện rỗng). Web: chi tiết sản phẩm, gian hàng, thương hiệu do máy chủ dựng từ API thật, DB e2e không có dữ liệu thì ca bỏ qua kèm lý do |
 | `apps/miniapp/src/css/contrast.spec.ts` | cặp màu đạt tương phản |
 | `apps/miniapp/src/components/ui/hit-target-guard.spec.tsx` | vùng chạm 44px |
 | `packages/app-core/src/design-docs.spec.ts` | file này khớp `ds-map.json`, `.gitignore`, skill, `AGENTS.md`, mẫu PR |
 
-Do gói P17b thêm sau khi đợt 4 vào xong (baseline lấy sau đợt 4): bánh cóc số px và lớp `max-md:`, e2e `ds-parity` so số đo 375px Mini ↔ web, axe smoke các màn mua sắm, mở rộng `ds-shop-guard`. Khi có, mục này và bảng Thành phần cập nhật theo.
+Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì sửa mã (dùng token, `Text`, `PriceTag`, `useNotify`), không nới baseline. Sửa bớt mã cũ xong chạy `node scripts/uiux/ds-ratchet.mjs --write` để hạ baseline. Gộp nhiều nhánh làm song song thì chạy lại lệnh đó trên nhánh gộp: số baseline là số đếm của cây hiện tại, không cộng tay.
 
 ## Nhật ký quyết định
 
@@ -232,3 +238,4 @@ Do gói P17b thêm sau khi đợt 4 vào xong (baseline lấy sau đợt 4): bá
 | 2026-10-31 | Q1–Q19 của `docs/2026-10-31-shop-redesign/01-thiet-ke.md` §4 (chữ tiêu đề khối, màu giá, đồng hồ, nhãn, tên nhãn, bán chạy, dung lượng Mini...) | thiết kế gian hàng kiểu Shopee; chủ giao quyền tự chốt |
 | 2026-11-01 | Lập `DESIGN.md`, `docs/design/ds-map.json`, `scripts/check-ds-parity.mjs`, skill `tubu-ui`, `terminology.spec.ts` (P17a) | cơ chế giữ khớp cho màn làm sau; mã cũ vi phạm thuật ngữ vào `EXEMPT` thay vì sửa hàng loạt |
 | 2026-11-01 | `.gitignore` bỏ qua `.claude/*` (thay vì cả thư mục) kèm `!.claude/skills/` | để skill `tubu-ui` vào git mà thư mục `worktrees` và cấu hình cục bộ trong `.claude` vẫn bị bỏ qua |
+| 2026-11-01 | Bánh cóc px và `max-md:` (`scripts/uiux/ds-baseline.json`), e2e `ds-parity` so số đo bằng bảng chuẩn, axe smoke bảy màn, mở rộng `ds-shop-guard`, `terminology.spec` quét thêm `packages/app-core/src` (P17b) | baseline lấy sau đợt 4 nên mã cũ không phải sửa hàng loạt mà chỉ được giảm; so số đo bằng bảng chuẩn vì CI tách server Mini và web; thẻ web mất bóng do `shadow-[var(--x)]` được sửa và có luật chặn |
