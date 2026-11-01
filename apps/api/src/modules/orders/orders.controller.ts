@@ -4,6 +4,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
 import { CancelOrderDto, ChooseRefundDestinationDto, ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { OrdersService } from './orders.service';
+import { loadHomeTodo } from './home-todo';
 import { OrderCountsService } from './order-counts.service';
 import { OrderReturnsService } from './order-returns.service';
 import { CustomerRefundsService } from './customer-refunds.service';
@@ -31,6 +32,12 @@ export class OrdersController {
   @Get('active-count')
   activeCount(@CurrentUser('sub') userId: string) {
     return this.orders.activeCount(userId);
+  }
+
+  /** Dải "Việc cần làm" ở Trang chủ: ba lời GET /orders (chờ thanh toán, đang giao, đang xử lý) gộp một. Cũng PHẢI đứng trước @Get(':code'). */
+  @Get('home-todo')
+  homeTodo(@CurrentUser('sub') userId: string) {
+    return loadHomeTodo((u, f, p, l) => this.orders.list(u, f, p, l), userId);
   }
 
   /** Số đơn theo từng tab trang Cá nhân/Đơn hàng. Cũng PHẢI đứng trước @Get(':code'), nếu không "status-counts" bị hiểu là mã đơn. */

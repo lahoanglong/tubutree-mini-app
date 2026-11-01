@@ -98,6 +98,18 @@ export const fetchOrders = (http: HttpClient, filter: OrderListFilter = {}, page
       limit,
     },
   });
+/** Một phần của dải "Việc cần làm": đơn mới nhất của bộ lọc và tổng đơn khớp (meta.total của GET /orders). */
+export interface HomeTodoPart {
+  order: OrderView;
+  total: number;
+}
+export interface HomeTodo {
+  pending: HomeTodoPart | null;
+  shipping: HomeTodoPart | null;
+  processing: HomeTodoPart | null;
+}
+/** Thay ba lời GET /orders?limit=1 (chờ thanh toán, đang giao, đang xử lý) ở Trang chủ bằng một. */
+export const fetchHomeTodo = (http: HttpClient) => http.get<HomeTodo>('/orders/home-todo');
 export const fetchOrder = (http: HttpClient, code: string) => http.get<OrderView>(`/orders/${code}`);
 /** Badge tab Đơn hàng. Dữ liệu lạ (vd mock/route khác trả nhầm) → 0 thay vì NaN. */
 export const fetchActiveOrderCount = async (http: HttpClient) => {

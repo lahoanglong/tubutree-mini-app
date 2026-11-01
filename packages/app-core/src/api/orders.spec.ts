@@ -9,6 +9,7 @@ import {
   fetchMyRefunds,
   fetchMyReturns,
   fetchOrder,
+  fetchHomeTodo,
   fetchOrders,
   fetchPurchasedItems,
   fetchRefundBank,
@@ -35,6 +36,13 @@ describe('orders — hợp đồng gọi API', () => {
       { query: { group: 'processing', page: 1, limit: 20 } },
     ]);
     expect(calls.every((c) => c.method === 'get' && c.path === '/orders')).toBe(true);
+  });
+
+  it('fetchHomeTodo: một lời GET /orders/home-todo không tham số', async () => {
+    const { http, calls } = fakeHttp();
+    await fetchHomeTodo(http);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ method: 'get', path: '/orders/home-todo' });
   });
 
   it('fetchOrder, fetchActiveOrderCount (dữ liệu lạ → 0), fetchPurchasedItems', async () => {

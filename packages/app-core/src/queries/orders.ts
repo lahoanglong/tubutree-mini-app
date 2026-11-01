@@ -2,6 +2,7 @@ import type { HttpClient } from '../http';
 import {
   estimateReturn,
   fetchActiveOrderCount,
+  fetchHomeTodo,
   fetchMyRefunds,
   fetchMyReturns,
   fetchOrder,
@@ -24,6 +25,10 @@ export const ordersListQuery = (http: HttpClient, tab: string, filter: OrderList
 export const ordersHomeStripQuery = (http: HttpClient) => ({
   queryKey: ['orders', 'home-strip'] as const,
   queryFn: () => fetchOrders(http, { status: 'SHIPPING' }, 1, 1),
+});
+export const ordersHomeTodoQuery = (http: HttpClient) => ({
+  queryKey: ['orders', 'home-todo'] as const,
+  queryFn: () => fetchHomeTodo(http),
 });
 export const activeOrderCountQuery = (http: HttpClient) => ({
   queryKey: ['orders', 'active-count'] as const,
