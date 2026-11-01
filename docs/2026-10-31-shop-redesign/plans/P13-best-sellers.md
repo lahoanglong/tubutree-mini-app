@@ -144,3 +144,12 @@ Lệnh kiểm một file: `cd packages/app-core && npx vitest run src/<đường
 - [ ] **Step 2: Đo bundle** `node scripts/ci/bundle-budget.cjs apps/miniapp/www` trước (base) và sau; entry không tăng đáng kể (trang mới là chunk lười).
 - [ ] **Step 3: Gate** `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 77433c0d0 --out .../gate-P13.txt`; sau đó cả bộ e2e Mini (`--workers=2`). Bước FAIL kiểm trên base để ghi "có sẵn".
 - [ ] **Step 4: Commit** (nếu có sửa sau chụp) và trả báo cáo theo schema.
+
+## Ghi chú thực hiện (khác kế hoạch)
+
+- `bestSellersHref` làm độc lập ở T3 (hằng `PAGE_PATH` riêng cho Mini/web), không đi qua `liveRoute`: view web cần nó trước T4. `seeAllHref` (T4) vẫn đi qua `liveRoute`, nên hai chỗ cùng trỏ một route nhưng không chung một bảng.
+- Ca hồi quy cuộn (T5c): từ Trang chủ chỉ có ô "Tất cả danh mục" PUSH tới `/browse` (hub, khoá cuộn rỗng `tubu_scroll:`), không có lối nào PUSH tới `/browse?all=1`. Ca dùng hub ở màn 375x520 và chạm bằng `dispatchEvent('click')`: `click()` chờ nút Trang chủ đứng yên, tức chờ hết hiệu ứng, và ca không còn bắt được lỗi 63dc4214b. Kiểm bằng đột biến: bỏ `navKey` khỏi deps của hook cuộn thì 16/16 lần đỏ; khôi phục thì 24/24 xanh.
+- `AxeBuilder` không có trong `apps/e2e`: thay bằng khẳng định theo vai trò (tablist có tên, tab `aria-selected`, tabpanel có tên), vùng chạm 44px (`expectChipHitArea44`) và thử chạm thật vào tab dính.
+- Thanh tab dính của Mini: `top: 8px` thay vì `calc(var(--safe-top) + 56px)`; vị trí dính tính từ chỗ nội dung của `.page` bắt đầu (đệm `safe-top + 48px`), nên ghi 56px thì hở dải 48px giữa thanh Back và hàng tab. Phát hiện ở bước chụp 375px, ca e2e "vùng chạm" nay đo mép trên thanh dính.
+- Web khổ điện thoại: "Xem thêm"/"Thử lại" dùng `Button` DS (nút phụ nền xanh nhạt như Mini) thay vì `ui.btnSecondary` viền; hàng tab cuộn ngang ẩn thanh cuộn (`.scroll-x[role='tablist']` trong `mini.css`, vì thanh 6px của `globals.css` hiện cả trên điện thoại).
+- Cổng chụp: web chạy ở 3326, API giả ở 3327 (3316 đang do gói F3 giữ).

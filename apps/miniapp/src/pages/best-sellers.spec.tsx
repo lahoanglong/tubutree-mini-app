@@ -33,7 +33,6 @@ const pageOf = (from: number, count: number, page: number, total: number) => ({
 const cat = (id: string, name: string, productCount = 5) => ({ id, parentId: null, name, slug: id, image: null, sortOrder: 1, productCount, children: [] });
 const TREE = [cat('c-skin', 'Chăm sóc da'), cat('c-baby', 'Cho bé'), cat('c-empty', 'Hết hàng', 0)];
 
-const queryOf = (i: number) => mocks.coreGet.mock.calls[i]![1].query as Record<string, unknown>;
 const productCalls = () => mocks.coreGet.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o.query as Record<string, unknown>);
 const rankLabels = () => Array.from(document.querySelectorAll('[data-ds-part="rank"]')).map((n) => n.textContent);
 
