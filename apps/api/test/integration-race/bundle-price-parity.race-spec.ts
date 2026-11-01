@@ -524,12 +524,16 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     const side = await product(50_000);
     await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: main.productId });
     expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(1);
+    expect('addonsSoldOut' in (await publicBundles.forProduct(main.slug))).toBe(false);
     await prisma.variation.update({ where: { id: main.variationId }, data: { stock: 0 } });
-    expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
+    // Báo riêng "hết hàng" để khách đang xem trang thấy "Tạm hết hàng" thay vì "Đã kết thúc".
+    expect(await publicBundles.forProduct(main.slug)).toMatchObject({ addons: [], addonsSoldOut: true });
     await prisma.variation.update({ where: { id: main.variationId }, data: { stock: 3, isActive: false } });
-    expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
+    expect(await publicBundles.forProduct(main.slug)).toMatchObject({ addons: [], addonsSoldOut: true });
     await prisma.variation.update({ where: { id: main.variationId }, data: { stock: 3, isActive: true } });
-    expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(1);
+    const back = await publicBundles.forProduct(main.slug);
+    expect(back.addons).toHaveLength(1);
+    expect('addonsSoldOut' in back).toBe(false);
   });
 
   it('ADDON: sản phẩm chính đang Giờ vàng thì công khai không quảng cáo và giỏ không giảm; hết Giờ vàng thì cả hai cùng giảm 11.000đ', async () => {

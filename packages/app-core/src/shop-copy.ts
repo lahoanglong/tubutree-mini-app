@@ -186,6 +186,7 @@ export const SHOP_COPY: Record<string, string> = {
   'addon.cartLine': 'Ưu đãi mua kèm',
   'addon.lost': 'Đã bỏ giá mua kèm vì {name} không còn trong giỏ',
   'bundle.ended': 'Đã kết thúc',
+  'bundle.soldOut': 'Tạm hết hàng',
   'pdp.boughtTogether': 'Khách thường mua cùng',
   // PDP và giỏ (P8)
   'pdp.offers': 'Ưu đãi',

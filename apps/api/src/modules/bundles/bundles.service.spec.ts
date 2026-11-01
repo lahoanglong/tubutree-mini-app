@@ -138,6 +138,27 @@ describe('BundlesService.forProduct', () => {
     expect(ok.addons).toHaveLength(1);
   });
 
+  describe('addonsSoldOut: khách đang xem phải phân biệt "sản phẩm chính vừa hết" với "bộ đã kết thúc"', () => {
+    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { refPrice: 50_000, addonPrice: 39_000, variationId: 'v2a' })] });
+    const soldOut = { id: 'p1', storefrontId: null, variations: [] };
+
+    it('sản phẩm chính hết hàng và có bộ Mua kèm đang chạy → addons rỗng kèm addonsSoldOut: true', async () => {
+      const out = await setup({ rows: [addon], product: soldOut, variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW);
+      expect(out).toEqual({ combos: [], addons: [], addonsSoldOut: true });
+    });
+
+    it('còn hàng → không có khoá addonsSoldOut', async () => {
+      const out = await setup({ rows: [addon], variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW);
+      expect('addonsSoldOut' in out).toBe(false);
+    });
+
+    it('hết hàng nhưng không có bộ Mua kèm nào hiện được (không bộ, hoặc món kèm không còn giảm) → không có khoá', async () => {
+      expect('addonsSoldOut' in (await setup({ rows: [row({ id: 'c1' })], product: soldOut }).svc.forProduct('sp-p1', NOW))).toBe(false);
+      const noDeal = row({ ...addon, items: [item('p2', { refPrice: null, addonPrice: 39_000, variationId: 'v2a' })] });
+      expect('addonsSoldOut' in (await setup({ rows: [noDeal], product: soldOut, variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW))).toBe(false);
+    });
+  });
+
   it('tồn của sản phẩm chính đọc theo phân loại đang bán còn tồn (cùng điều kiện với thẻ sản phẩm)', async () => {
     const t = setup();
     await t.svc.forProduct('sp-p1', NOW);

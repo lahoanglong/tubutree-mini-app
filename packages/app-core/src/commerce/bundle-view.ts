@@ -1,4 +1,5 @@
-import type { BundleDTO } from '../api/bundle';
+import type { BundleDTO, ProductBundles } from '../api/bundle';
+import { fillCopy } from '../shop-copy';
 import { productCardView, type ProductCardView } from './product-card-view';
 import { comboTotals } from './shop-page';
 
@@ -114,3 +115,33 @@ export function addonSummary(rows: readonly AddonRow[], picked: ReadonlySet<stri
 export function addonLines(rows: readonly AddonRow[], picked: ReadonlySet<string>): { variationId: string; quantity: number }[] {
   return rows.filter((r) => picked.has(r.key)).map((r) => ({ variationId: r.variationId, quantity: 1 }));
 }
+
+/** Vì sao một phía của khối Combo/Mua kèm không còn dòng nào sau khi đã hiện: bộ hết hạn/tắt (`ended`), hay bộ còn nhưng món hết hàng (`soldOut`). */
+export type BundleHold = 'ended' | 'soldOut';
+
+/**
+ * Chỉ gọi khi phía đó vừa hết dòng sau khi đã từng hiện. Bộ còn hạn theo giờ máy chủ mà vẫn không ra dòng nào thì chỉ có thể vì món hết
+ * hàng (hay chưa chọn được phân loại); với Mua kèm, API còn báo riêng khi sản phẩm chính hết hàng (`addonsSoldOut`, lúc đó `addons` rỗng).
+ * Bộ bị tắt thì API không trả nữa, nên danh sách rỗng đọc là "đã kết thúc".
+ */
+export function bundleHoldReason(side: 'combos' | 'addons', data: ProductBundles | undefined, now: number): BundleHold {
+  if (!data) return 'ended';
+  if (side === 'addons' && data.addonsSoldOut === true) return 'soldOut';
+  return data[side].some((b) => bundleLive(b, now)) ? 'soldOut' : 'ended';
+}
+
+/**
+ * Giữ danh sách cuối cùng đã hiện khi dữ liệu sau đó rỗng, để khối ở nguyên chỗ (mờ, không bấm được) thay vì bị gỡ giữa trang và đẩy phần
+ * dưới nhảy. Hai app dùng chung: mỗi app chỉ giữ `last` trong một `useRef`. Chưa từng hiện mà rỗng thì rỗng, không giữ.
+ */
+export function latchBundleSide<T>(live: T[], last: T[] | null, why: () => BundleHold): { items: T[]; held: BundleHold | null; last: T[] | null } {
+  if (live.length > 0) return { items: live, held: null, last: live };
+  if (last === null) return { items: [], held: null, last: null };
+  return { items: last, held: why(), last };
+}
+
+/** Tiêu đề khối, kèm lý do khi đang giữ ("Mua kèm deal sốc · Tạm hết hàng"). */
+export function bundleHoldTitle(titleKey: 'combo.pdpTitle' | 'addon.title', hold: BundleHold | null): string {
+  return hold ? `${fillCopy(titleKey)} · ${fillCopy(hold === 'soldOut' ? 'bundle.soldOut' : 'bundle.ended')}` : fillCopy(titleKey);
+}
+

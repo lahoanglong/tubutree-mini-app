@@ -81,7 +81,7 @@ export class BundlesService {
    * hàng gian hàng đối tác → rỗng (hàng đó chỉ bán giá lẻ). Sản phẩm chính hết hàng thì không có bộ mua kèm: khách thêm được món kèm
    * mà không bỏ được món chính vào giỏ, giỏ sẽ tính món kèm giá thường. Combo vẫn hiện (thẻ báo "tạm hết" theo từng món).
    */
-  async forProduct(slug: string, now: Date = new Date()): Promise<{ combos: BundleDTO[]; addons: BundleDTO[] }> {
+  async forProduct(slug: string, now: Date = new Date()): Promise<{ combos: BundleDTO[]; addons: BundleDTO[]; addonsSoldOut?: true }> {
     const product = await this.prisma.product.findFirst({
       where: { slug, ...PUBLIC_PRODUCT_WHERE },
       select: { id: true, storefrontId: true, variations: { where: { isActive: true, stock: { gt: 0 } }, select: { id: true }, take: 1 } },
@@ -94,15 +94,16 @@ export class BundlesService {
       orderBy: BUNDLE_ORDER,
       take: FETCH_CAP,
     });
-    const anchorBuyable = product.variations.length > 0;
     const shown = await this.toPublic(
-      rows.filter((r) => (r.kind === 'ADDON' ? anchorBuyable && r.anchorProductId === product.id : true)),
+      rows.filter((r) => (r.kind === 'ADDON' ? r.anchorProductId === product.id : true)),
       now,
     );
-    return {
-      combos: shown.filter((b) => b.kind === 'BUNDLE_PCT').slice(0, PDP_COMBO_MAX),
-      addons: shown.filter((b) => b.kind === 'ADDON').slice(0, PDP_ADDON_MAX),
-    };
+    const combos = shown.filter((b) => b.kind === 'BUNDLE_PCT').slice(0, PDP_COMBO_MAX);
+    const addons = shown.filter((b) => b.kind === 'ADDON').slice(0, PDP_ADDON_MAX);
+    if (product.variations.length > 0) return { combos, addons };
+    // Sản phẩm chính hết hàng: không bán được món chính nên không mời Mua kèm. Báo riêng để khách đang xem trang thấy "Tạm hết hàng", không
+    // phải "Đã kết thúc" (danh sách rỗng thường nghĩa là bộ đã kết thúc).
+    return { combos, addons: [], ...(addons.length > 0 ? { addonsSoldOut: true as const } : {}) };
   }
 
   /** Combo đang chạy mà MỌI món còn hàng (Trang chủ không quảng cáo combo không mua được). */

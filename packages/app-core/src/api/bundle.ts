@@ -33,6 +33,8 @@ export interface BundleDTO {
 export interface ProductBundles {
   combos: BundleDTO[];
   addons: BundleDTO[];
+  /** true khi có bộ Mua kèm đang chạy nhưng sản phẩm chính hết hàng (nên `addons` rỗng): khách đang xem thì khối ghi "Tạm hết hàng", không phải "Đã kết thúc". */
+  addonsSoldOut?: boolean;
 }
 
 /** Số combo của kệ Trang chủ (`maxItems` của `home.combos`); khối `combos` của `GET /home` cắt đúng số này nên chỉ request cùng `limit` mới dùng khối gộp. */
