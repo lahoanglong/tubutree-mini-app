@@ -141,6 +141,20 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
   it('tên nhắc lại nguyên chữ nhãn (không số) cũng bỏ', () => {
     expect(view('Miễn phí giao hàng', { type: 'FREESHIP', value: 0, minOrder: null }).name).toBeNull();
   });
+  it('tên còn phạm vi hay đối tượng ngoài số của mã thì giữ (phiếu không có chỗ nào khác nói điều đó)', () => {
+    expect(view('Giảm 20k cho đơn đầu tiên', { value: 20_000 }).name).toBe('Giảm 20k cho đơn đầu tiên');
+    expect(view('Giảm 10% riêng mỹ phẩm', { type: 'PERCENT', value: 10, maxDiscount: null }).name).toBe('Giảm 10% riêng mỹ phẩm');
+    expect(view('Giảm 10% tối đa 50.000đ cho khách mới', { type: 'PERCENT', value: 10, maxDiscount: 50_000, minOrder: null }).name).toBe('Giảm 10% tối đa 50k cho khách mới');
+  });
+  it('tên được giữ ghi số của mã theo cách của phiếu (một cách ghi số), số lạ để nguyên', () => {
+    const v = view('Giảm 20.000đ cho đơn đầu tiên, tặng 5 lần dùng', { value: 20_000, minOrder: 150_000 });
+    expect(v.title).toBe('Giảm 20k');
+    expect(v.name).toBe('Giảm 20k cho đơn đầu tiên, tặng 5 lần dùng');
+    expect(view('Đơn từ 150.000. Riêng khách mới', { value: 20_000, minOrder: 150_000 }).name).toBe('Đơn từ 150k. Riêng khách mới');
+    // "đồng" không phải đơn vị "đ" dính liền: không bị cắt chữ.
+    expect(view('Giảm 20000 đồng cho khách mới', { value: 20_000 }).name).toBe('Giảm 20k đồng cho khách mới');
+    expect(view('Mua 10 trở lên được giảm 20k', { value: 20_000 }).name).toBe('Mua 10 trở lên được giảm 20k');
+  });
   it('tên không nhắc số thì giữ, kể cả có số khác', () => {
     expect(view('Quà khách mới').name).toBe('Quà khách mới');
     expect(view('Tặng 5 lần dùng', { value: 30_000, minOrder: 199_000 }).name).toBe('Tặng 5 lần dùng');
