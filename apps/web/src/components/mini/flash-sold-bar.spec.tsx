@@ -31,6 +31,14 @@ describe('FlashSoldBar (web)', () => {
     expect(q('flash-sold-fill')!.style.transitionProperty).toBe('');
   });
 
+  it('mặc định rãnh là nền cam nhạt; track="neutral" đổi sang --color-track để thấy được trên nền cam của thanh Giờ vàng', () => {
+    mount(<FlashSoldBar soldPct={68} />);
+    expect(q('flash-sold-track')!.style.background).toBe('var(--color-flash-bg)');
+    mount(<FlashSoldBar soldPct={68} track="neutral" />);
+    const tracks = document.querySelectorAll<HTMLElement>('[data-testid="flash-sold-track"]');
+    expect(tracks[tracks.length - 1]!.style.background).toBe('var(--color-track)');
+  });
+
   it('hết suất: "Đã bán hết" thắng phần trăm, không phần cam', () => {
     mount(<FlashSoldBar soldPct={10} soldOut />);
     expect(textOf()).toBe('Đã bán hết');

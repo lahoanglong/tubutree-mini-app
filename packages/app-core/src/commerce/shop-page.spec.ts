@@ -191,7 +191,7 @@ describe('pageWindow', () => {
 describe('chữ trang shop', () => {
   it('đủ khoá, kích thước trang 20', () => {
     expect(SHOP_PAGE_SIZE).toBe(20);
-    for (const k of ['shop.tabShop', 'shop.tabProducts', 'shop.tabCategories', 'shop.tabStory', 'shop.follow', 'shop.following', 'shop.vouchers', 'shop.seeAllN', 'shop.sortPopular', 'shop.sortNew', 'shop.sortSold', 'shop.sortPrice', 'shop.loadMore', 'shop.emptyProducts', 'shop.categoryCount', 'shop.pagerLabel', 'shop.comboError', 'shop.comboAdded', 'shop.loginForCombo', 'stats.followers', 'stats.followersSpoken', 'combo.soldOutSpoken']) {
+    for (const k of ['shop.tabShop', 'shop.tabProducts', 'shop.tabCategories', 'shop.tabStory', 'shop.follow', 'shop.following', 'shop.vouchers', 'shop.sortPopular', 'shop.sortNew', 'shop.sortSold', 'shop.sortPrice', 'shop.loadMore', 'shop.emptyProducts', 'shop.categoryCount', 'shop.pagerLabel', 'shop.comboError', 'shop.comboAdded', 'shop.loginForCombo', 'stats.followers', 'stats.followersSpoken', 'combo.soldOutSpoken']) {
       expect(SHOP_COPY[k], k).toBeTruthy();
     }
   });

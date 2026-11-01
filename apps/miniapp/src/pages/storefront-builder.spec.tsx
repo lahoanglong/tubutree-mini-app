@@ -132,7 +132,8 @@ const stats = {
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><StorefrontBuilderPage /></QueryClientProvider>);
+  // Nút lùi nổi của app là lối lùi duy nhất của trang chi tiết khối (trang không vẽ thêm nút lùi riêng).
+  return render(<QueryClientProvider client={qc}><BackButton /><StorefrontBuilderPage /></QueryClientProvider>);
 }
 
 /** Bấm thẻ khối (mặc định thẻ đầu) rồi chờ trang chi tiết: món, bố cục và menu khối nằm ở đó, không ở màn chính. */
@@ -279,12 +280,12 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     expect(mocks.removeItem.mock.calls[0]![0]).toBe('i1');
   });
 
-  it('menu "⋯" của sản phẩm có đúng ba mục có chữ, mục xoá đứng cuối; ghim/ẩn/xoá không còn là nút riêng ngoài hàng', async () => {
+  it('menu "⋯" của sản phẩm có đúng bốn mục có chữ (Bài đăng mẫu vào đây từ G6), mục xoá đứng cuối; ghim/ẩn/xoá không còn là nút riêng ngoài hàng', async () => {
     renderPage();
     await openCard();
     fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
     const sheet = await screen.findByTestId('sheet');
-    expect(within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi khối']);
+    expect(within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Bài đăng mẫu', 'Xoá khỏi khối']);
     fireEvent.click(within(sheet).getByRole('button', { name: 'Ghim lên đầu' }));
     expect(screen.queryByRole('button', { name: 'Ghim lên đầu' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ẩn sản phẩm' })).toBeNull();
@@ -338,12 +339,32 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     }
   });
 
-  it('"Bài đăng mẫu" mở bộ nội dung bán hàng của đúng sản phẩm (không còn nút tên "Nội dung")', async () => {
+  it('"Bài đăng mẫu" nằm trong menu ⋯ của món (không còn nút chữ trong hàng) và mở bộ nội dung bán hàng của đúng sản phẩm (G6 #30)', async () => {
     renderPage();
     await openCard();
     expect(screen.queryByText('Nội dung')).toBeNull();
-    fireEvent.click(await screen.findByText('Bài đăng mẫu'));
+    expect(screen.queryByText('Bài đăng mẫu')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Tuỳ chọn sản phẩm' })[0]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Bài đăng mẫu' }));
     expect(await screen.findByTestId('content-kit')).toHaveTextContent('tra-xanh');
+  });
+
+  it('món chưa có slug sản phẩm thì menu ⋯ không có "Bài đăng mẫu" (G6 #30)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({
+      collections: [{ id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ product: { ...product, slug: undefined } })] }],
+    }));
+    renderPage();
+    await openCard();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Tuỳ chọn sản phẩm' })[0]!);
+    await screen.findByRole('button', { name: /Ghim lên đầu|Ghim/ });
+    expect(screen.queryByRole('button', { name: 'Bài đăng mẫu' })).toBeNull();
+  });
+
+  it('trang chi tiết khối chỉ có một lối lùi là nút lùi nổi của app, không vẽ thêm nút "Gian hàng của tôi" (G6 #30)', async () => {
+    renderPage();
+    await openCard();
+    expect(screen.queryByRole('button', { name: 'Gian hàng của tôi' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Quay lại' })).toHaveLength(1);
   });
 
   it('lý do giới thiệu: mở sheet, nhập, Lưu gửi ghi chú đã cắt khoảng trắng', async () => {
@@ -663,6 +684,13 @@ describe('Ảnh bìa trống (D7)', () => {
     renderPage();
     await screen.findByText('Bộ sưu tập A');
     expect(screen.queryByText('Thêm ảnh bìa')).not.toBeInTheDocument();
+  });
+
+  it('"Thêm ảnh bìa" là nút (không còn chữ xanh như link mà không bấm được) và mở sheet hồ sơ (G6 #29)', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm ảnh bìa' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getByText('Hồ sơ gian hàng')).toBeInTheDocument();
   });
 });
 
@@ -1189,7 +1217,7 @@ describe('Màn dựng theo khối (P10)', () => {
       const h1 = screen.getByRole('heading', { level: 1, name: 'Bộ hai' });
       expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
       expect(h1).toHaveFocus();
-      fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
       expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
       expect(card(/^Bộ hai,/)).toHaveFocus();
     });
@@ -1233,21 +1261,10 @@ describe('Màn dựng theo khối (P10)', () => {
         expect(await screen.findByRole('heading', { level: 1, name: 'Bộ hai' })).toBeInTheDocument();
       });
 
-      it('"Gian hàng của tôi" trong trang lùi đúng một mục lịch sử (cùng chỗ với nút lùi nổi)', async () => {
-        mocks.getMyStorefront.mockResolvedValue(three());
-        renderPage();
-        await openSection(/^Bộ một,/);
-        fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
-        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
-        expect(router.idx).toBe(0);
-      });
-
       const stackUrls = () => router.stack.map((l) => `${l.pathname}${l.search}`);
 
-      it.each([
-        ['nút "Quay lại" nổi', () => screen.getByRole('button', { name: 'Quay lại' })],
-        ['"Gian hàng của tôi" trong trang', () => screen.getByRole('button', { name: 'Gian hàng của tôi' })],
-      ])('mở thẳng bằng link ?khoi= (không có danh sách phía trước): dựng sẵn mục danh sách, %s cùng về danh sách', async (_name, target) => {
+      it('mở thẳng bằng link ?khoi= (không có danh sách phía trước): dựng sẵn mục danh sách, nút "Quay lại" nổi về danh sách', async () => {
+        const target = () => screen.getByRole('button', { name: 'Quay lại' });
         mocks.getMyStorefront.mockResolvedValue(three());
         router.go('/storefront?khoi=c2', { replace: true });
         renderWithBack();
@@ -1260,14 +1277,14 @@ describe('Màn dựng theo khối (P10)', () => {
         expect(router.idx).toBe(0);
       });
 
-      it('F5 ở trang chi tiết (mục lịch sử còn dấu của màn dựng): không dựng thêm mục, "Gian hàng của tôi" lùi một bước', async () => {
+      it('F5 ở trang chi tiết (mục lịch sử còn dấu của màn dựng): không dựng thêm mục, nút "Quay lại" lùi một bước', async () => {
         mocks.getMyStorefront.mockResolvedValue(three());
         router.go('/storefront', { replace: true });
         router.go('/storefront?khoi=c2', { state: { builderSection: true } });
         renderPage();
         expect(await screen.findByRole('heading', { level: 1, name: 'Bộ hai' })).toBeInTheDocument();
         expect(stackUrls()).toEqual(['/storefront', '/storefront?khoi=c2']);
-        fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
         expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
         expect(router.idx).toBe(0);
         expect(router.stack).toHaveLength(2);
@@ -1285,7 +1302,7 @@ describe('Màn dựng theo khối (P10)', () => {
         expect(here()).toBe('/storefront');
       });
 
-      it('?khoi= cũ (khối đã xoá) rồi mở khối khác: "Gian hàng của tôi" về danh sách, không kẹt và không rời màn dựng', async () => {
+      it('?khoi= cũ (khối đã xoá) rồi mở khối khác: nút "Quay lại" về danh sách, không kẹt và không rời màn dựng', async () => {
         mocks.getMyStorefront.mockResolvedValue(three());
         router.go('/storefront?khoi=khong-co', { replace: true });
         renderPage();
@@ -1293,7 +1310,7 @@ describe('Màn dựng theo khối (P10)', () => {
         // Đang ở danh sách (dù địa chỉ còn ?khoi= cũ) nên mở khối là đẩy mục mới, không thay mục danh sách.
         expect(router.stack).toHaveLength(2);
         expect(here()).toBe('/storefront?khoi=c2');
-        fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
         expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
         expect(screen.queryByTestId('section-detail')).not.toBeInTheDocument();
         expect(router.idx).toBe(0);
@@ -1357,7 +1374,7 @@ describe('Màn dựng theo khối (P10)', () => {
       expect(within(frame).getByText('Món hiện')).toBeInTheDocument();
       expect(within(frame).queryByText('Món ẩn')).not.toBeInTheDocument();
       expect(screen.getByText('Món ẩn')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
       await openSection(/^Bộ trống,/);
       expect(screen.queryByTestId('shop-section-preview')).not.toBeInTheDocument();
       expect(screen.getByText('Chưa có món nào khách thấy được.')).toBeInTheDocument();
@@ -1457,7 +1474,7 @@ describe('Màn dựng theo khối (P10)', () => {
       expect(within(group).getByRole('radio', { name: /Combo/ })).toHaveAttribute('aria-disabled', 'true');
       expect(screen.getByText('Kiểu Combo chọn lúc tạo khối.')).toBeInTheDocument();
       fireEvent.click(within(group).getByRole('radio', { name: /Combo/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
       await openSection(/^Bộ ba,/);
       group = screen.getByRole('radiogroup', { name: 'Kiểu hiển thị' });
       for (const n of [/Lưới/, /Kệ ngang/, /Danh sách/]) expect(within(group).getByRole('radio', { name: n })).toHaveAttribute('aria-disabled', 'true');
@@ -1479,7 +1496,7 @@ describe('Màn dựng theo khối (P10)', () => {
     it('khối Thường không có ô %; khối Combo có ô điền sẵn mức hiện tại', async () => {
       await open();
       expect(pctInput().value).toBe('10');
-      fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Quay lại' }));
       await openSection(/^Bộ một,/);
       expect(screen.queryByRole('textbox', { name: 'Giảm khi mua cả bộ' })).not.toBeInTheDocument();
     });

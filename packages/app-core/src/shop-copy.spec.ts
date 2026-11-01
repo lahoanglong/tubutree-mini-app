@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { homeCopy } from './home-copy';
 import { FORBIDDEN_TERMS, SHOP_COPY, fillCopy } from './shop-copy';
 import { SHOP_COPY_MAX } from './shop-copy-budget';
 
@@ -59,6 +60,13 @@ describe('SHOP_COPY', () => {
     expect(fillCopy('coupon.titlePercentMax', { pct: 10, max: '50k' })).toBe('Giảm 10%, tối đa 50k');
   });
 
+  it('H1: nhãn "Liên kết Zalo" chỉ có một nguồn (homeCopy.profile.guestCta), shop-copy không nhân đôi', () => {
+    expect(homeCopy.profile.guestCta).toBe('Liên kết Zalo');
+    expect(Object.keys(SHOP_COPY)).not.toContain('zalo.link');
+    expect(Object.keys(SHOP_COPY_MAX)).not.toContain('zalo.link');
+    expect(Object.values(SHOP_COPY)).not.toContain(homeCopy.profile.guestCta);
+  });
+
   it('chữ chốt ở thiết kế §4 Q5 và Giờ vàng theo kế hoạch', () => {
     expect(SHOP_COPY['rank.title']).toBe('Bán chạy nhất');
     expect(SHOP_COPY['badge.freeship']).toBe('Miễn phí giao hàng');
@@ -74,6 +82,11 @@ describe('SHOP_COPY', () => {
     expect(SHOP_COPY['flash.justOpened']).toBe('Vừa mở bán');
     expect(SHOP_COPY['flash.almostGone']).toBe('Sắp hết');
     expect(SHOP_COPY['flash.soldOut']).toBe('Đã bán hết');
+  });
+
+  it('dải thương hiệu ở PDP: tiêu đề không kèm tên (ux-copy UC-01), tên đi vào nhãn đọc', () => {
+    expect(SHOP_COPY['pdp.brandShelf']).toBe('Cùng thương hiệu');
+    expect(fillCopy('pdp.brandShelfLabel', { brand: 'Cô Lan' })).toBe('Cùng thương hiệu Cô Lan');
   });
 });
 

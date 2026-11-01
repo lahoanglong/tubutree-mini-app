@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { render } from '@/test-utils/dom';
-import { useMediaQuery } from './use-media-query';
+import { LG_UP, MD_UP, useMediaQuery } from './use-media-query';
 
 function Probe({ query }: { query: string }) {
   return <span data-testid="m">{String(useMediaQuery(query))}</span>;
@@ -10,6 +10,13 @@ function Probe({ query }: { query: string }) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('mốc khổ màn', () => {
+  it('trùng điểm gãy md và lg của Tailwind (768px, 1024px)', () => {
+    expect(MD_UP).toBe('(min-width: 768px)');
+    expect(LG_UP).toBe('(min-width: 1024px)');
+  });
 });
 
 describe('useMediaQuery', () => {

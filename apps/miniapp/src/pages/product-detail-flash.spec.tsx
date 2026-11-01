@@ -85,7 +85,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     renderPdp();
     await screen.findByTestId('flash-price-bar');
     const sold = screen.getByText(/^Đã bán 1,2k/);
-    const rating = screen.getByText(/4\.6 · 27 đánh giá/);
+    const rating = screen.getByText(/4,6 · 27 đánh giá/);
     expect(sold.parentElement).toBe(rating.parentElement);
     const h1 = screen.getByRole('heading', { level: 1 });
     // Ngay sau tên là dòng đánh giá (đã gồm "Đã bán"), không có dòng thứ hai trước dòng Điểm Xanh/mô tả.

@@ -70,6 +70,17 @@ describe('ProductTile: biến thể và khung', () => {
     expect(body(c).style.minHeight).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
   });
 
+  it('tên đã chứa thương hiệu: không in chữ nhưng giữ khe, thân cao bằng thẻ có thương hiệu (tên các thẻ cùng hàng thẳng hàng)', () => {
+    for (const variant of ['grid', 'rail-md'] as const) {
+      const c = tile(viewOf({ name: 'Serum Bã Trầu Tubu', brand: 'Tubu' }, variant), variant);
+      const brand = part(c, 'brand')!;
+      expect(brand).not.toBeNull();
+      expect(brand.textContent).toBe('');
+      expect(brand.style.height).toBe('16px');
+      expect(body(c).style.minHeight).toBe(`${tileBodyHeight(variant, { brand: true })}px`);
+    }
+  });
+
   it('tên cắt 2 dòng, cao tối thiểu TILE_NAME_MIN_HEIGHT, dòng 22px (không hạ: dấu hoa bị cắt)', () => {
     expect(TILE_NAME_MIN_HEIGHT).toBe(44);
     const long = 'Ẩm Ổn Định Dầu Gội Thảo Mộc Bồ Kết Hương Sả Chanh Nguyên Chất Dung Tích Lớn Cho Cả Gia Đình';
@@ -219,6 +230,14 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect(part(c, 'image-badge')!.style.bottom).toBe('8px');
   });
 
+  it('rankPlain (hạng hụt vì kệ trên chiếm): ruy-băng ghi "Bán chạy" không số, màu hạng thường kể cả hạng 1, chữ đọc không nói hạng (P2 #4)', () => {
+    const c = tile(viewOf({}, 'rank', { rank: 1 }), 'rank', { rankPlain: true });
+    expect(part(c, 'rank')!.textContent).toBe('Bán chạy');
+    expect(part(c, 'rank')!.style.background).toBe('var(--color-rank-n-bg)');
+    expect(described(c)).toMatch(/^Bán chạy/);
+    expect(described(c)).not.toContain('Hạng');
+  });
+
   it('hạng top 3 dùng màu hạng riêng, từ 4 dùng màu hạng thường, thiếu rank thì không ruy-băng', () => {
     expect(part(tile(viewOf({}, 'rank', { rank: 1 }), 'rank'), 'rank')!.style.background).toBe('var(--color-rank-1-bg)');
     expect(part(tile(viewOf({}, 'rank', { rank: 4 }), 'rank'), 'rank')!.style.background).toBe('var(--color-rank-n-bg)');
@@ -299,6 +318,21 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     expect(part(c, 'note')!.textContent).toBe('Phân loại 500ml');
     expect(c.querySelector('[data-testid="foot"]')).not.toBeNull();
     expect(body(c).style.minHeight).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
+  });
+
+  it('noteSpoken: dòng ghi chú nhìn thấy ẩn khỏi trình đọc, câu đọc vào mô tả của thẻ sau giá (F10a)', () => {
+    const c = tile(viewOf({}, 'line'), 'line', { note: 'Tối đa 2/khách · 500g', noteSpoken: 'Tối đa 2 sản phẩm mỗi khách, 500g' });
+    expect(part(c, 'note')!.textContent).toBe('Tối đa 2/khách · 500g');
+    expect(part(c, 'note')!.getAttribute('aria-hidden')).toBe('true');
+    expect(described(c)).toMatch(/Giá 52\.000đ, Tối đa 2 sản phẩm mỗi khách, 500g$/);
+    expect(described(c)).not.toContain('/');
+  });
+
+  it('noteSpoken rỗng: không thêm gì vào mô tả; không truyền noteSpoken thì dòng ghi chú giữ nguyên cho trình đọc', () => {
+    const empty = tile(viewOf({}, 'line'), 'line', { note: '', noteSpoken: '' });
+    expect(described(empty)).toMatch(/Giá 52\.000đ$/);
+    const plain = tile(viewOf({}, 'line'), 'line', { note: 'Phân loại 500ml' });
+    expect(part(plain, 'note')!.hasAttribute('aria-hidden')).toBe(false);
   });
 
   it('note rỗng giữ chỗ dòng ghi chú (thẻ cùng kệ không lệch giá); không truyền note thì không có dòng', () => {

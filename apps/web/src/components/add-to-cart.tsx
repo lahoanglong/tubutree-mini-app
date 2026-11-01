@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Layers, ShoppingCart, Zap } from 'lucide-react';
+import { ShoppingCart, Zap } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
@@ -11,13 +11,11 @@ import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
+import { phoneBand, phoneBandPad, phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
-import { Icon } from '@/components/mini/icon';
-import { ListRow } from '@/components/mini/list-row';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
@@ -295,7 +293,7 @@ export default function AddToCart({
 
   if (blockedReason) {
     return (
-      <div className="mt-4 max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
+      <div className={`mt-4 max-md:order-6 ${phoneBand}`}>
         <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
           Tạm thời chưa mua được
         </button>
@@ -323,35 +321,20 @@ export default function AddToCart({
     </div>
   );
 
-  // Điện thoại: gốc là `contents` để Phân loại, chip và Số lượng thành khối con của cột thông tin trang sản phẩm, xếp bằng `order`
-  // xen giữa Combo/Đánh giá nhanh như Mini App (Phân loại → Combo/Mua kèm → Đánh giá nhanh → Số lượng). Máy tính giữ một khối liền.
+  // Điện thoại: gốc là `contents` để chip và Số lượng thành khối con của cột thông tin trang sản phẩm, xếp bằng `order` như Mini App
+  // (Ưu đãi/Vận chuyển → ghi chú → chip → Số lượng → Combo/Mua kèm → Đánh giá nhanh). Không có dòng "Phân loại ›": chip đã đủ tên, giá,
+  // hết hàng, và Thêm vào giỏ/Mua ngay vẫn mở bảng chọn từ 2 phân loại. Máy tính giữ một khối liền.
   return (
     <div className="mt-4 max-md:contents">
-      {variations.length > 1 && selected && (
-        // Điện thoại: dòng "Phân loại ›" như Mini App mở bảng chọn đủ ảnh, giá, tồn; chip bên dưới là lối tắt cho phân loại hay chọn.
-        // Khối bọc mới ẩn được ở máy tính: ListRow đặt display:flex inline nên class trên chính nó không thắng.
-        <div data-section="pdp-variation" className="md:hidden max-md:order-4 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
-          <ListRow
-            icon={<Icon icon={Layers} size="md" tone="brand" />}
-            title={fillCopy('pdp.variation')}
-            subtitle={`${selected.name} · ${formatVnd(selectedPricing?.price ?? 0)}`}
-            trailing="chevron"
-            onPress={() => {
-              setSheetOpened(true);
-              setSheetMode('add');
-            }}
-          />
-        </div>
-      )}
       {variations.length > 1 && (
         <div
           role="group"
           aria-labelledby="variation-label"
           data-section="pdp-variation-chips"
-          className="max-md:order-5 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3"
+          className={`max-md:order-5 ${phoneBandPad} max-md:pb-3`}
         >
           <div id="variation-label" className="text-sm font-semibold text-stone-900 max-md:sr-only">
-            Phân loại
+            {fillCopy('pdp.variation')}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 max-md:mt-0">
             {variations.map((v) => {
@@ -418,7 +401,7 @@ export default function AddToCart({
         <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
-      <div data-section="pdp-quantity" className="mt-4 flex items-center gap-3 max-md:order-10 max-md:mt-2 max-md:justify-between max-md:bg-[var(--color-bg-surface)] max-md:p-4">
+      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 max-md:order-6 max-md:justify-between ${phoneBand}`}>
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}

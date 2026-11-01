@@ -15,6 +15,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
 import { BadgePercent, Check, ChevronRight, Leaf, MapPin, Plus, Share2, Store } from 'lucide-react';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { brandStatsInput, followerStat, promotionVoucher, shopTabs, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
 import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -136,6 +137,8 @@ export default function BrandViewPage() {
 
   const hasStory = Boolean(b.story || b.origin || b.storyImages.length > 0);
   const productCount = b.productCount ?? b.products.length;
+  // Chỉ có nút khi tab Sản phẩm có nhiều hơn số đang hiện; số trong nhãn là tổng của tab đó.
+  const featuredSeeAll = productCount > featured.length ? seeAllLabel(productCount) : null;
   const stats = [...shopStats(brandStatsInput(b)), ...[followerStat(b.followerCount)].filter((x) => x !== null)];
   const tabs = shopTabs({ productCount, hasStory, hasCategories: false }).map((t) => ({
     key: t.key,
@@ -277,9 +280,9 @@ export default function BrandViewPage() {
                 <SectionHeader
                   title="Sản phẩm nổi bật"
                   action={
-                    productCount > featured.length
+                    featuredSeeAll
                       ? {
-                          label: fillCopy('shop.seeAllN', { n: productCount }),
+                          label: featuredSeeAll,
                           onPress: () => openTab('products'),
                           spoken: fillCopy('shop.seeAllNSpoken', { n: productCount, title: 'Sản phẩm nổi bật' }),
                         }

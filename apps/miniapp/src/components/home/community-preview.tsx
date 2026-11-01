@@ -10,7 +10,8 @@ import { timeAgo } from '../../utils/time-ago';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
 import { ListRow } from '../ui/list-row';
-import { Heading, Text } from '../ui/text';
+import { SectionHeader } from '../ui/section-header';
+import { Text } from '../ui/text';
 
 const PREVIEW_COUNT = 2;
 
@@ -63,21 +64,7 @@ export function CommunityPreview() {
   };
   return (
     <section aria-label={homeCopy.community.title} style={{ padding: '0 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 44 }}>
-        <Heading variant="title-sm" as="h2">
-          {homeCopy.community.title}
-        </Heading>
-        <button
-          type="button"
-          className="tubu-press"
-          onClick={() => go('/feed')}
-          style={{ minHeight: 44, padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          <Text variant="label" tone="brand">
-            {homeCopy.community.seeAll}
-          </Text>
-        </button>
-      </div>
+      <SectionHeader title={homeCopy.community.title} action={{ label: homeCopy.community.seeAll, to: '/feed' }} />
       <Card variant="outline" padding={0}>
         {rows.map((r, i) => (
           <ListRow

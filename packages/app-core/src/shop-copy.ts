@@ -39,6 +39,8 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.limit': 'Mỗi khách tối đa {n}',
   // Dạng ngắn cho ghi chú một dòng nowrap của hàng thẻ trong danh sách Giờ vàng; thanh Giờ vàng ở PDP giữ 'flash.limit'.
   'flash.limitShort': 'Tối đa {n}/khách',
+  // Bản đọc của 'flash.limitShort': trình đọc màn hình đọc dấu "/" thành "gạch chéo".
+  'flash.limitSpoken': 'Tối đa {n} sản phẩm mỗi khách',
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',
@@ -162,7 +164,6 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.emptyHistoryTitle': 'Chưa có mã đã dùng hoặc hết hạn',
   'coupon.emptyFilterTitle': 'Không có mã nào ở mục này',
   'coupon.loadError': 'Chưa tải được mã giảm giá',
-  'coupon.allCount': 'Tất cả {n} mã',
   'coupon.filterAll': 'Tất cả',
   'coupon.filterDiscount': 'Giảm giá',
   'coupon.filterFreeship': 'Miễn phí giao hàng',
@@ -209,8 +210,13 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
+  // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
+  'pdp.brandShelf': 'Cùng thương hiệu',
+  'pdp.brandShelfLabel': 'Cùng thương hiệu {brand}',
   'pdp.offerCount': '{n} mã giảm giá',
   'cart.saving': 'Tiết kiệm {x}',
+  'cart.subtotal': 'Tạm tính',
+  'cart.subtotalNet': 'Tạm tính (đã giảm)',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',
@@ -264,7 +270,6 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.following': 'Đang theo dõi',
   'shop.share': 'Chia sẻ',
   'shop.vouchers': 'Mã giảm giá của shop',
-  'shop.seeAllN': 'Tất cả ({n})',
   'shop.seeAllNSpoken': 'Xem tất cả {n} sản phẩm trong {title}',
   'shop.sortPopular': 'Phổ biến',
   'shop.sortNew': 'Mới',

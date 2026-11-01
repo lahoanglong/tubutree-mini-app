@@ -33,11 +33,23 @@ describe('BestSellerRail — Bán chạy nhất có hạng (Q18)', () => {
     expect(within(region).queryByText('Theo lượt bán 30 ngày qua')).toBeNull();
   });
 
-  it('kệ đã bỏ món trùng kệ trên: thẻ ghi hạng thật được truyền vào (#2, #3, #5), không đánh lại từ #1', () => {
+  it('kệ đã bỏ món trùng kệ trên (hạng #2, #3, #5): không đánh lại từ #1 và không ghi số hụt, thẻ chỉ ghi "Bán chạy" (P2 #4)', () => {
     render(<BestSellerRail items={[card(2), card(3), card(5)]} ranks={[2, 3, 5]} loading={false} />);
     const region = screen.getByRole('region', { name: 'Bán chạy nhất' });
     const ranks = Array.from(region.querySelectorAll('[data-ds-part="rank"]')).map((el) => el.textContent);
-    expect(ranks).toEqual(['#2', '#3', '#5']);
+    expect(ranks).toEqual(['Bán chạy', 'Bán chạy', 'Bán chạy']);
+  });
+
+  it('hạng hụt vì kệ trên chiếm (#1, #2, #4): thẻ ghi "Bán chạy" không số để khách không tưởng lỗi; hạng liền 1..k giữ số (P2 #4)', () => {
+    const gap = render(<BestSellerRail items={[card(1), card(2), card(4)]} ranks={[1, 2, 4]} loading={false} />);
+    const badges = (el: HTMLElement) => Array.from(el.querySelectorAll('[data-ds-part="rank"]')).map((n) => n.textContent);
+    expect(badges(gap.container)).toEqual(['Bán chạy', 'Bán chạy', 'Bán chạy']);
+    gap.unmount();
+    const lead = render(<BestSellerRail items={[card(2), card(3)]} ranks={[2, 3]} loading={false} />);
+    expect(badges(lead.container)).toEqual(['Bán chạy', 'Bán chạy']);
+    lead.unmount();
+    const seq = render(<BestSellerRail items={[card(1), card(2), card(3)]} ranks={[1, 2, 3]} loading={false} />);
+    expect(badges(seq.container)).toEqual(['#1', '#2', '#3']);
   });
 
   it('"Xem tất cả Bán chạy nhất" mở trang đang có theo route khai trong SHELVES', () => {

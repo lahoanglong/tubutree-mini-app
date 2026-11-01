@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { mineRows, minePreview } from '@tubutree/app-core/commerce/voucher-center';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -29,6 +30,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { GuestLinkCard } from '../components/home/guest-link-card';
+import { isGuestUser } from '../utils/guest-user';
 import { CampaignBanner } from '../components/campaign/campaign-banner';
 import { OffersCollect } from '../components/offers/offers-collect';
 import { OffersFlash } from '../components/offers/offers-flash';
@@ -82,8 +84,11 @@ export default function OffersPage() {
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
-  const mine = minePreview(rows);
-  useMarkExpiringSeen(couponsQ.data);
+  const mine = useMemo(() => minePreview(rows), [rows]);
+  const seeAllMine = seeAllLabel(mine.total);
+  // Chỉ mã đang vẽ (ba phiếu đầu) mới tính là đã xem: mã thứ tư trở đi giữ chấm đỏ tới khi khách thấy chúng ở trang Mã giảm giá.
+  const drawn = useMemo(() => mine.shown.map((r) => r.coupon), [mine]);
+  useMarkExpiringSeen(drawn);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
 
@@ -125,7 +130,7 @@ export default function OffersPage() {
 
           {/* Điểm danh */}
           <section aria-label={checkInCopy.title} style={{ padding: '12px 16px 0' }}>
-            <DailyCheckInCard authed={authed} compact />
+            <DailyCheckInCard authed={authed} compact guestNote={!user || !isGuestUser(user)} />
           </section>
 
           {/* Mã của tôi */}
@@ -135,10 +140,7 @@ export default function OffersPage() {
               id="offers-mine-title"
               title={fillCopy('coupon.tabMine')}
               icon="ticket"
-              action={{
-                onPress: () => navigate('/vouchers?tab=mine'),
-                label: mine.hasMore ? fillCopy('section.seeAllCount', { n: mine.total }) : undefined,
-              }}
+              action={seeAllMine ? { onPress: () => navigate('/vouchers?tab=mine'), label: seeAllMine } : undefined}
             />
             {couponsQ.isLoading ? (
               <Skeleton height={88} radius="var(--radius-card)" />

@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Pin, Eye, EyeOff, Trash2, Settings, Pencil, UserRoundCog, Plus, Share2,
+  Pin, Eye, EyeOff, Trash2, Settings, Pencil, UserRoundCog, Plus, Share2, Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -419,6 +419,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             ? [
                 { key: 'pin', label: menuItem.isPinned ? vi.storefront.unpinItem : vi.storefront.pinItem, icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
                 { key: 'hide', label: menuItem.isHidden ? vi.storefront.showItem : vi.storefront.hideItem, icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
+                ...(menuItem.product?.slug ? [{ key: 'kit', label: vi.contentKit.entryLabel, icon: Sparkles, onPress: () => setContentKitSlug(menuItem.product!.slug) }] : []),
                 { key: 'remove', label: BUILDER_COPY.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItemId(menuItem.id) },
               ]
             : []
@@ -597,7 +598,6 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           sortMode={itemSort}
           headingRef={headingRef}
           pickedStyle={pickedStyle}
-          onBack={closeSection}
           onMenu={() => setColMenuId(sectionCol.id)}
           onStyle={(style) => {
             if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
@@ -609,7 +609,6 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
           onItemMenu={setItemMenuId}
           onNote={(itemId) => setNotingItem({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
-          onKit={setContentKitSlug}
         />
         {sheets}
       </BuilderShell>
@@ -620,7 +619,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   return (
     <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
       <div style={{ padding: '12px 16px 0' }}>
-        <Card>
+        <Card padding={16}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
               aria-hidden="true"
@@ -640,7 +639,16 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
               <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
                 {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
               </Text>
-              {!sf.coverUrl && <Text variant="caption" tone="brand" as="div">{vi.storefront.addCover}</Text>}
+              {!sf.coverUrl && (
+                <button
+                  type="button"
+                  className="tubu-press tubu-hit-44"
+                  onClick={() => setProfileOpen(true)}
+                  style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+                >
+                  <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
+                </button>
+              )}
             </div>
           </div>
           {view.code === 'LIVE' && (
@@ -720,32 +728,36 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       <StickyActionBar
         summary={!sf.isPublished && itemCount === 0 ? <Text variant="caption" tone="secondary" as="div">{vi.storefront.publishNeedsProduct}</Text> : undefined}
         secondary={
-          <Button
-            variant="secondary"
-            style={{ flex: 1 }}
-            onPress={() => {
-              // Trang /s/:slug chỉ trả gian hàng khách đang thấy: chưa thì chủ xem bản xem trước ngay trong app.
-              if (!view.canShare) {
-                setPreviewOpen(true);
-                return;
-              }
-              navigate(`/s/${sf.slug}`);
-            }}
-          >
-            {vi.storefront.preview}
-          </Button>
+          // Bọc như ô nút chính của StickyActionBar (flex 1 1 0): nút trần mang đệm 24px nên chia dư không đều, nút trái rộng hơn 24px.
+          <div style={{ flex: '1 1 0', minWidth: 0 }}>
+            <Button
+              fullWidth
+              variant="secondary"
+              className="tubu-btn-44"
+              onPress={() => {
+                // Trang /s/:slug chỉ trả gian hàng khách đang thấy: chưa thì chủ xem bản xem trước ngay trong app.
+                if (!view.canShare) {
+                  setPreviewOpen(true);
+                  return;
+                }
+                navigate(`/s/${sf.slug}`);
+              }}
+            >
+              {vi.storefront.preview}
+            </Button>
+          </div>
         }
         primary={
           view.canShare ? (
-            <Button fullWidth icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
+            <Button fullWidth className="tubu-btn-44" icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
               {vi.storefront.shareShort}
             </Button>
           ) : sf.isPublished ? (
-            <Button fullWidth disabled aria-label={view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApproval : vi.storefront.shareStore}>
+            <Button fullWidth className="tubu-btn-44" disabled aria-label={view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApproval : vi.storefront.shareStore}>
               {view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApprovalShort : vi.storefront.shareShort}
             </Button>
           ) : (
-            <Button fullWidth disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
+            <Button fullWidth className="tubu-btn-44" disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
               {publishCopy.button}
             </Button>
           )

@@ -28,6 +28,8 @@ export const TILE_METRICS = {
 /**
  * Dòng meta đầy đủ dài nhất mà hai CSS (`tokens.css`, `mini.css`) coi là "ngắn": "★ 5,0 · Đã bán 99,9k+" (21 ký tự) rộng 127,25px ở Inter 12px/500. Dài hơn
  * ("★ 5,0 · Đã bán 123,4k+": lượt bán từ 100k) rộng tới ~137px nên thẻ gắn `data-long` và chỉ giữ bản đầy đủ khi ô meta từ 148px.
+ * Số đo này đúng trên mọi máy vì Inter đi kèm app (`packages/design-tokens/src/fonts.css`), không phụ thuộc chữ hệ thống; rủi ro duy nhất là
+ * chữ dự phòng trong lúc `font-display: swap` chưa tải xong hoặc ký tự nằm ngoài bộ chữ của file woff2, chỉ kéo dài ô meta trong khoảnh khắc đó.
  */
 export const META_SHORT_MAX_CHARS = 21;
 

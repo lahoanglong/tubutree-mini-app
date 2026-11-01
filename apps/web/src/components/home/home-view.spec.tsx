@@ -26,7 +26,7 @@ import { homeBlockOrder } from './home-blocks';
 import { HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
-import { BANNER_HINT_KEY } from '@tubutree/app-core/home-layout';
+import { BANNER_HINT_KEY, HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 
 const CONFIG = {
@@ -148,13 +148,13 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
 });
 
 describe('HomeView — nội dung các khối', () => {
-  it('"Bán chạy nhất" xin sort=best_seller_30d, 12 món, có hạng #1..#3, cho cả khách cũ; lưới gợi ý xin trang đầu kèm seed và không gọi newest/nổi bật riêng', async () => {
+  it('"Bán chạy nhất" xin sort=best_seller_30d, HOME_BEST_SELLER_LIMIT món, có hạng #1..#3, cho cả khách cũ; lưới gợi ý xin trang đầu kèm seed và không gọi newest/nổi bật riêng', async () => {
     const c = await mount();
     const calledSorts = productCalls().map((q) => q.sort);
     expect(calledSorts).toEqual(expect.arrayContaining(['best_seller_30d', undefined]));
     expect(calledSorts).not.toContain('newest');
     const best = productCalls().find((q) => q.sort === 'best_seller_30d')!;
-    expect(best.limit).toBe(12);
+    expect(best.limit).toBe(HOME_BEST_SELLER_LIMIT);
     const shelf = region(c, 'Bán chạy nhất')!;
     expect(shelf.textContent).toContain('Hạng nhất A');
     for (const rank of ['#1', '#2', '#3']) expect(shelf.textContent).toContain(rank);

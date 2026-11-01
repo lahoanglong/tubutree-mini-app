@@ -33,7 +33,7 @@ Chỉ nêu token dùng cho mua sắm; danh sách đầy đủ ở `packages/desi
 |---|---|
 | `--color-text-price` | giá thường (đen) |
 | `--color-text-price-deal` | giá đang giảm (Giờ vàng, giá sale), `--orange-700` #9A5200; không dùng đỏ |
-| `--color-flash-solid-bg`, `--color-flash-solid-fg` | nền và chữ nhãn Giờ vàng đặc; chỉ `Badge` và thanh tiến độ được dùng |
+| `--color-flash-solid-bg`, `--color-flash-solid-fg` | nền và chữ nhãn Giờ vàng đặc; `Badge`, thanh tiến độ và biến thể `flash` của `Button` được dùng (nút "Mua ngay" ở Giờ vàng là chủ ý: cùng màu với nhãn Giờ vàng trên thẻ để khách nối nhãn với nút mua; định nghĩa ở `apps/miniapp/src/components/ui/button.tsx`) |
 | `--color-flash-fg` | chữ cam của khối Giờ vàng |
 | `--color-countdown-bg`, `--color-countdown-fg` | ô số đồng hồ Giờ vàng (nền tối, chữ sáng) |
 | `--color-voucher-bg`, `--color-voucher-fg`, `--color-voucher-edge`, `--color-voucher-stub-bg`, `--color-voucher-stub-fg` | phiếu mã giảm giá |
@@ -200,6 +200,8 @@ Mỗi trang mua sắm trên web dùng một khuôn trong `apps/web/src/component
 | `PdpLayout` | chi tiết sản phẩm | `gallery`, `info`, `below`, `aside?` (ảnh và thông tin trong một thẻ, nút mua trong màn 1280×800) |
 | `StoreLayout` | `/s/[slug]`, `/brand/[slug]` | `header`, `stats?`, `intro?`, `tabs?`, `children` |
 
+Chân trang web ở 375px khác Mini là chủ ý: Mini App không có chân trang, web giữ chân trang `apps/web/src/components/site-footer.tsx` với các liên kết pháp lý (`apps/web/src/lib/legal.ts`) và dòng đơn vị vận hành, nên màn web dài hơn Mini ở cuối trang. Khi so ảnh 375px Mini ↔ web, bỏ qua phần chân trang này; không gỡ để cho giống.
+
 Khung trang rộng: `PAGE_WIDE` ở `apps/web/src/lib/page-frame.ts`. Trang web mới không viết lớp `max-md:` để làm giống Mini: dựng từ thành phần Mini trong khuôn.
 
 ## Thêm màn mới
@@ -239,3 +241,7 @@ Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì
 | 2026-11-01 | Lập `DESIGN.md`, `docs/design/ds-map.json`, `scripts/check-ds-parity.mjs`, skill `tubu-ui`, `terminology.spec.ts` (P17a) | cơ chế giữ khớp cho màn làm sau; mã cũ vi phạm thuật ngữ vào `EXEMPT` thay vì sửa hàng loạt |
 | 2026-11-01 | `.gitignore` bỏ qua `.claude/*` (thay vì cả thư mục) kèm `!.claude/skills/` | để skill `tubu-ui` vào git mà thư mục `worktrees` và cấu hình cục bộ trong `.claude` vẫn bị bỏ qua |
 | 2026-11-01 | Bánh cóc px và `max-md:` (`scripts/uiux/ds-baseline.json`), e2e `ds-parity` so số đo bằng bảng chuẩn, axe smoke bảy màn, mở rộng `ds-shop-guard`, `terminology.spec` quét thêm `packages/app-core/src` (P17b) | baseline lấy sau đợt 4 nên mã cũ không phải sửa hàng loạt mà chỉ được giảm; so số đo bằng bảng chuẩn vì CI tách server Mini và web; thẻ web mất bóng do `shadow-[var(--x)]` được sửa và có luật chặn |
+| 2026-11-02 | PDP: bỏ dòng "Phân loại ›", giữ chip; Số lượng liền dưới chip, ghi chú vận chuyển dời lên trên chip (G3) | chip đã nêu tên, giá Giờ vàng, hết hàng ngay trên màn; Thêm vào giỏ/Mua ngay vẫn mở bảng chọn từ 2 phân loại nên dòng "›" chỉ lặp; Đánh giá nhanh không còn chen giữa phân loại và Số lượng |
+| 2026-11-02 | Dải "Có thể bạn cũng thích": khách web lấy 10 món bán chạy (`PDP_FEED_SOURCE_LIMIT`) | `/products/for-you` của API trả tối đa 10 món nên Mini chỉ có ngần ấy; nguồn khác nhau (bán chạy với gợi ý cá nhân) là chủ ý vì `for-you` cần đăng nhập, chỉ trần số món được cho bằng nhau |
+| 2026-11-02 | Nút "Mua ngay" ở Giờ vàng dùng `--color-flash-solid-bg` qua `Button` biến thể `flash`; bảng Token ghi rõ ngoại lệ này (G5 #22) | giữ màu đặc của nhãn Giờ vàng để nhãn và nút mua cùng một nhận diện; đổi màu nút sẽ làm Giờ vàng lệch khỏi thẻ ngay bên cạnh |
+| 2026-11-02 | Chân trang web ở 375px dài hơn Mini vì giữ liên kết pháp lý và đơn vị vận hành (G5 #38) | Mini không có chân trang; web là trang công khai nên cần các liên kết này; ghi ở mục Khuôn trang web để lần chụp so sau không coi là lỗi |

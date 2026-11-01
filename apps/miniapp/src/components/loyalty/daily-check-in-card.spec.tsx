@@ -48,6 +48,14 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     expect(screen.getByLabelText('Ngày 1: +1.000 Điểm Xanh')).toBeInTheDocument();
   });
 
+  it('tiêu đề "Điểm danh mỗi ngày" dưới 22px: Inter, không Fraunces (Q1)', () => {
+    mocks.status = base;
+    render(<DailyCheckInCard authed />);
+    const h = screen.getByRole('heading', { name: 'Điểm danh mỗi ngày' });
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
+  });
+
   it('khách vãng lai: giọt nước vẫn hiện, không chữ "+N Điểm Xanh", có câu và nút đăng nhập Zalo', async () => {
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
@@ -57,6 +65,20 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     expect(screen.queryByText(/\+[\d.]+ Điểm Xanh/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ngày 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+  });
+
+  it('guestNote={false} (đã có thẻ mời liên kết Zalo ở trên): không vẽ ghi chú dù pointsBlocked; mặc định vẫn có', async () => {
+    mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
+    const { unmount } = render(<DailyCheckInCard authed guestNote={false} />);
+    expect(screen.getByText('Hôm nay nhận +10 giọt nước')).toBeInTheDocument();
+    // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
+    await import('./guest-points-note');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).not.toBeInTheDocument();
+    unmount();
+    render(<DailyCheckInCard authed />);
+    expect(await screen.findByTestId('guest-points-note')).toBeInTheDocument();
   });
 
   it('nút Đăng nhập Zalo gọi luồng liên kết sẵn có (ensurePhoneOrThrow)', async () => {

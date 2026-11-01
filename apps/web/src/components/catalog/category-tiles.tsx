@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import { LayoutGrid } from 'lucide-react';
-import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubPlaceholderTiles } from '@tubutree/app-core/browse/hub';
+import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubHasMoreCategories, hubPlaceholderTiles } from '@tubutree/app-core/browse/hub';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { Icon, Section, SectionHeader, Skeleton, Text } from '@/components/mini';
@@ -58,14 +58,17 @@ function Tile({ label, onPress, children }: { label: string; onPress: () => void
 
 /**
  * Ô danh mục ở hub (nguồn: apps/miniapp/src/components/catalog/category-tiles.tsx): tối đa `HUB_CATEGORY_MAX` ô rồi ô "Tất cả" (mở
- * danh sách không lọc). Là `<button>` thật; tên truy cập là nhãn (ảnh/icon trang trí). Chưa có cây danh mục thì `entries` là 4 phân
+ * danh sách không lọc); quá trần thì tiêu đề thêm "Xem tất cả" cùng đích (ẩn từ lg). Là `<button>` thật; tên truy cập là nhãn (ảnh/icon trang trí). Chưa có cây danh mục thì `entries` là 4 phân
  * khúc dự phòng, hub vẫn đủ lối vào.
  */
 export function CategoryTiles({ entries, isLoading, placeholderCount, onSelect, onSelectAll }: CategoryTilesProps) {
   const title = fillCopy('browse.categories');
   return (
     <Section id="browse-categories" label={title}>
-      <SectionHeader title={title} />
+      {/* Từ lg trang đã có h1 "Danh mục" ngay trên: không lặp h2 cùng chữ; ô "Tất cả" cuối lưới (đủ 9 ô một hàng) đã là lối "xem tất cả". */}
+      <div className="lg:hidden">
+        <SectionHeader title={title} action={!isLoading && hubHasMoreCategories(entries.length) ? { onPress: onSelectAll } : undefined} />
+      </div>
       {isLoading ? (
         <div data-testid="category-grid-loading" aria-hidden="true" className={GRID}>
           {Array.from({ length: hubPlaceholderTiles(placeholderCount) }, (_, i) => (

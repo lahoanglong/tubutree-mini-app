@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import { Input } from 'zmp-ui';
-import { ChevronLeft, Ellipsis, MessageSquarePlus, Pin, Plus } from 'lucide-react';
+import { Ellipsis, MessageSquarePlus, Pin, Plus } from 'lucide-react';
 import {
   BUILDER_COPY, builderCopy, parseComboPct, sectionCardView, sectionStyleOf, styleLockNote, styleOptions, visibleCollection,
   type MoveDirection, type SectionStyle,
@@ -28,7 +28,6 @@ export interface SectionDetailProps {
   headingRef: Ref<HTMLHeadingElement>;
   /** Kiểu vừa chọn mà máy chủ chưa lưu xong: bộ chọn hiện ngay, không chờ gửi và tải lại. */
   pickedStyle: SectionStyle | null;
-  onBack: () => void;
   onMenu: () => void;
   onStyle: (style: SectionStyle) => void;
   /** Lưu mức giảm; trả mức máy chủ đã lưu (có thể thấp hơn mức gửi), null khi lỗi. */
@@ -39,7 +38,6 @@ export interface SectionDetailProps {
   onMoveBlocked: (itemId: string, dir: MoveDirection) => void;
   onItemMenu: (itemId: string) => void;
   onNote: (itemId: string) => void;
-  onKit: (slug: string) => void;
 }
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
@@ -100,20 +98,8 @@ export function SectionDetail(p: SectionDetailProps) {
   return (
     <div data-testid="section-detail">
       <div style={{ background: 'var(--color-bg-surface)', padding: 'calc(8px + var(--safe-top)) 8px 12px' }}>
-        {/* Nút lùi nổi của app (44px, cách mép trái 12px) đè lên góc trái; lối quay về danh sách khối đứng ngay sau nó. */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 52 }}>
-          <button
-            type="button"
-            className="tubu-press"
-            onClick={p.onBack}
-            style={{
-              minHeight: 44, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 2, border: 'none', background: 'transparent',
-              cursor: 'pointer', font: 'inherit', color: 'var(--color-text-brand)',
-            }}
-          >
-            <Icon icon={ChevronLeft} size="sm" tone="brand" />
-            <Text variant="body-sm" tone="brand">{BUILDER_COPY.back}</Text>
-          </button>
+        {/* Nút lùi nổi của app (44px, cách mép trái 12px) đè lên góc trái và là lối lùi duy nhất của trang; hàng đầu chỉ còn nút ⋯ ở phải. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
           <RowIconButton icon={Ellipsis} label={BUILDER_COPY.sectionOptions} onPress={p.onMenu} />
         </div>
         <div style={{ padding: '0 8px' }}>
@@ -185,7 +171,6 @@ function ItemRow({ it, list, productMap, p }: { it: StorefrontItemEdit; list: St
   const prod = it.product ?? productMap.get(it.productId);
   const name = prod?.name ?? 'Sản phẩm';
   const price = prod?.salePrice ?? prod?.basePrice ?? 0;
-  const slug = prod?.slug;
   const at = list.findIndex((x) => x.id === it.id);
   const canMove = (dir: MoveDirection) => {
     const to = dir === 'up' ? at - 1 : at + 1;
@@ -247,11 +232,6 @@ function ItemRow({ it, list, productMap, p }: { it: StorefrontItemEdit; list: St
               {it.note ? `“${it.note}”` : vi.storefront.itemNoteEmpty}
             </Text>
           </button>
-          {slug && (
-            <Button variant="ghost" onPress={() => p.onKit(slug)}>
-              {vi.contentKit.entryLabel}
-            </Button>
-          )}
         </div>
       )}
     </li>

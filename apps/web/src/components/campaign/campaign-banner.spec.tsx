@@ -52,6 +52,17 @@ describe('CampaignBanner (web) — banner đầu trang Ưu đãi', () => {
     expect(c.querySelector('[data-offers-banner]')).not.toBeNull();
   });
 
+  it('từ lg banner Ưu đãi thấp hơn: tỉ lệ 4:1 ghi đè --banner-ratio chỉ trong khung banner, khung chờ cùng lớp nên không nhảy', async () => {
+    mocks.get.mockResolvedValue([camp('chung')]);
+    const c = await mount('OFFERS_TOP', 'new');
+    expect(c.querySelector('[data-offers-banner]')!.className).toContain('lg:[--banner-ratio:4/1]');
+    mounted!.unmount();
+    localStorage.setItem(OFFERS_BANNER_HINT_KEY, '1');
+    mocks.get.mockReturnValue(new Promise(() => undefined));
+    const loading = await mount('OFFERS_TOP', 'new', false);
+    expect(loading.querySelector('[data-testid="offers-banner-loading"]')!.className).toContain('lg:[--banner-ratio:4/1]');
+  });
+
   it('API lỗi: rỗng và không ném', async () => {
     mocks.get.mockRejectedValue(new Error('boom'));
     expect((await mount('OFFERS_TOP', 'new')).innerHTML).toBe('');

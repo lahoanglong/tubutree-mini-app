@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { mineRows, minePreview } from '@tubutree/app-core/commerce/voucher-center';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -70,8 +71,11 @@ function OffersContent() {
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
-  const mine = minePreview(rows);
-  useMarkExpiringSeen(couponsQ.data);
+  const mine = useMemo(() => minePreview(rows), [rows]);
+  const seeAllMine = seeAllLabel(mine.total);
+  // Chỉ mã đang vẽ (ba phiếu đầu) mới tính là đã xem: mã thứ tư trở đi giữ chấm đỏ tới khi khách thấy chúng ở trang Mã giảm giá.
+  const drawn = useMemo(() => mine.shown.map((r) => r.coupon), [mine]);
+  useMarkExpiringSeen(drawn);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
 
@@ -149,10 +153,7 @@ function OffersContent() {
             id="offers-mine-title"
             title={fillCopy('coupon.tabMine')}
             icon="ticket"
-            action={{
-              onPress: () => router.push('/ma-giam-gia?tab=mine'),
-              label: mine.hasMore ? fillCopy('section.seeAllCount', { n: mine.total }) : undefined,
-            }}
+            action={seeAllMine ? { onPress: () => router.push('/ma-giam-gia?tab=mine'), label: seeAllMine } : undefined}
           />
           {couponNotice && (
             <p role={couponNotice.error ? 'alert' : 'status'} className={`mb-2 text-caption ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>

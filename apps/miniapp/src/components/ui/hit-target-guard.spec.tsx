@@ -50,6 +50,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['QuantitySelector sm', () => <QuantitySelector value={2} max={9} size="sm" onChange={() => {}} />],
     ['ListRow', () => <ListRow title="Địa chỉ" onPress={() => {}} />],
     ['Checkbox có nhãn', () => <Checkbox label="A" checked={false} onChange={() => {}} />],
+    ['Checkbox flush (ô chọn dòng giỏ)', () => <Checkbox flush aria-label="A" checked={false} onChange={() => {}} />],
     ['Radio có nhãn', () => <Radio label="A" checked={false} onChange={() => {}} />],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
   ];

@@ -13,6 +13,7 @@ import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { Chip } from '@/components/mini/chip';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
 import { MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
 import { loginHref } from '@/lib/return-to';
@@ -159,8 +160,9 @@ export function ProductReviews({ slug }: { slug: string }) {
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
         {hydrated && phase === 'guest' && (
-          <Link href={loginHref(returnTo)} className={`${ui.btnText} text-forest-700`}>
-            Đăng nhập để đánh giá
+          // Cùng nút ghost "Viết đánh giá" của Mini (chưa đăng nhập thì mở cổng đăng nhập), không phải link gạch chân.
+          <Link href={loginHref(returnTo)} className={`${ui.btnSecondary} ${mini.ghost}`}>
+            Viết đánh giá
           </Link>
         )}
         {elig && !target && (
@@ -232,7 +234,7 @@ export function ProductReviews({ slug }: { slug: string }) {
         <>
           <div className="mt-3 flex flex-wrap items-center gap-6">
             <div className="text-center">
-              <div className="font-display text-4xl font-semibold text-stone-900">{data.average.toFixed(1)}</div>
+              <div className="font-display text-4xl font-semibold text-stone-900">{formatRating(data.average)}</div>
               <Stars value={data.average} />
               <div className="text-xs text-stone-600">{data.count} đánh giá</div>
             </div>

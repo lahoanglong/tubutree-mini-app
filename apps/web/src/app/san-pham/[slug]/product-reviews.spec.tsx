@@ -128,7 +128,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('tiêu đề kèm số đánh giá, điểm trung bình, phân bổ sao và mọi đánh giá đang hiện; ảnh API ghép gốc API', async () => {
     const c = await mount();
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (3)');
-    expect(c.textContent).toContain('4.3');
+    expect(c.textContent).toContain('4,3');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.querySelector('[aria-label="Phân bổ số sao"]')?.textContent).toContain('5');
     expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
@@ -207,13 +207,17 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelector('h2')!.className).not.toContain('font-display');
   });
 
-  it('khách chưa đăng nhập: không hỏi can-review, mời đăng nhập và quay lại đúng đơn đang mở', async () => {
+  it('khách chưa đăng nhập: không hỏi can-review, nút ghost "Viết đánh giá" mở cổng đăng nhập và quay lại đúng đơn đang mở', async () => {
     mocks.auth = { status: 'idle', initialized: true, sessionUnavailable: false };
     mocks.search = 'danh-gia=o2';
     const c = await mount();
     expect(mocks.eligCalls).toBe(0);
-    const login = byText(c, 'a', 'Đăng nhập để đánh giá')!;
+    const login = byText(c, 'a', 'Viết đánh giá')!;
     expect(login.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/san-pham/nuoc-rua-chen?danh-gia=o2')}`);
+    // Như nút ghost của Mini (reviews-section.tsx): chữ thương hiệu, không nền, không viền, không gạch chân.
+    expect(login.className).toContain('max-md:bg-transparent');
+    expect(login.className).not.toContain('underline');
+    expect(byText(c, 'a', 'Đăng nhập để đánh giá')).toBeNull();
     expect(form(c)).toBeNull();
   });
 

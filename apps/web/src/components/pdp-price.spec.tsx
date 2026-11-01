@@ -95,10 +95,10 @@ describe('PdpPrice khi danh sách Giờ vàng ở máy đã cũ', () => {
 });
 
 describe('PdpPrice khi đang Giờ vàng', () => {
-  it('giá deal nằm ở thanh Giờ vàng dưới ảnh nên giá lớn đầu trang không hiện lần hai', async () => {
-    mocks.getActiveFlashSales.mockResolvedValue([
-      { itemId: 'f1', variationId: 'v2', productSlug: 'serum', flashPrice: 200000, retailPrice: 320000, salePrice: 289000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' },
-    ]);
+  const FLASH = { itemId: 'f1', variationId: 'v2', productSlug: 'serum', flashPrice: 200000, retailPrice: 320000, salePrice: 289000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' };
+
+  it('giá lớn thường (pdp-price) không hiện lần hai: giá deal nằm ở thanh Giờ vàng dưới ảnh', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH]);
     const { container } = mount(
       <PdpSelectionProvider initialId="v2">
         <PdpPrice product={PRODUCT} />
@@ -107,5 +107,36 @@ describe('PdpPrice khi đang Giờ vàng', () => {
     await flush();
     expect(container.querySelector('[data-testid="pdp-price"]')).toBeNull();
     expect(container.querySelector('[data-testid="pdp-flash-badge"]')).toBeNull();
+  });
+
+  // Máy tính 1280: thanh Giờ vàng ở cột ảnh cách xa nút mua, nên cột thông tin cũng nêu giá deal; điện thoại không lặp (giá đã ở thanh dưới ảnh).
+  it('từ lg: cột thông tin có giá deal, giá thường gạch và -%, ẩn ở điện thoại và md', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH]);
+    const { container } = mount(
+      <PdpSelectionProvider initialId="v2">
+        <PdpPrice product={PRODUCT} />
+      </PdpSelectionProvider>,
+    );
+    await flush();
+    const box = container.querySelector('[data-testid="pdp-flash-price"]')!;
+    expect(box).not.toBeNull();
+    expect(box.className).toContain('hidden');
+    expect(box.className).toContain('lg:flex');
+    expect(box.querySelector('[data-testid="pdp-flash-price-value"]')!.textContent).toBe('200.000đ');
+    expect(box.querySelector('[data-testid="pdp-flash-price-value"]')!.className).toContain('text-[color:var(--color-text-price-deal)]');
+    expect(box.querySelector('.line-through')!.textContent).toBe('289.000đ');
+    expect(box.textContent).toContain('-31%');
+  });
+
+  it('phân loại không Giờ vàng thì không có khối giá deal ở cột thông tin', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH]);
+    const { container } = mount(
+      <PdpSelectionProvider initialId="v1">
+        <PdpPrice product={PRODUCT} />
+      </PdpSelectionProvider>,
+    );
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-flash-price"]')).toBeNull();
+    expect(priceText(container)).toBe('460.000đ');
   });
 });

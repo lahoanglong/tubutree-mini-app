@@ -8,6 +8,8 @@ export interface FlashSoldBarProps {
   /** Phần trăm suất đã bán, 0–100; số rác coi như chưa bán. */
   soldPct: number;
   soldOut?: boolean;
+  /** Màu rãnh. 'flash' (mặc định) là cam nhạt cho thẻ trên nền trắng; 'neutral' cho thanh đặt trên nền cam nhạt (PDP), nơi rãnh cam sẽ chìm mất. */
+  track?: 'flash' | 'neutral';
 }
 
 /**
@@ -15,7 +17,7 @@ export interface FlashSoldBarProps {
  * chữ luôn hiện và mang thông tin ("Vừa mở bán", "Đã bán 68%", "Sắp hết", "Đã bán hết"), a11y B3. Chữ đè lên thanh dùng stone-900
  * (đạt trên cả cam lẫn rãnh). Phần đã bán dựng bằng scaleX để chạy một lần lúc vào màn mà không đo lại bố cục; transition nằm ở CSS (.tubu-flash-fill) để prefers-reduced-motion tắt được.
  */
-export function FlashSoldBar({ soldPct, soldOut = false }: FlashSoldBarProps) {
+export function FlashSoldBar({ soldPct, soldOut = false, track = 'flash' }: FlashSoldBarProps) {
   const ratio = Number.isFinite(soldPct) ? Math.min(1, Math.max(0, soldPct / 100)) : 0;
   // Vẽ 0 ở lần đầu rồi mới lên đúng mức để transition chạy lúc khối hiện ra.
   const [shown, setShown] = useState(false);
@@ -25,7 +27,7 @@ export function FlashSoldBar({ soldPct, soldOut = false }: FlashSoldBarProps) {
       <div
         data-testid="flash-sold-track"
         aria-hidden="true"
-        style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-pill)', background: soldOut ? 'var(--color-track)' : 'var(--color-flash-bg)' }}
+        style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-pill)', background: soldOut || track === 'neutral' ? 'var(--color-track)' : 'var(--color-flash-bg)' }}
       >
         {!soldOut && (
           <div

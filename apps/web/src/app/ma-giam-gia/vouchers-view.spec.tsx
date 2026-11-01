@@ -70,6 +70,7 @@ const tab = (name: string) => [...document.querySelectorAll<HTMLElement>('[role=
 const groups = () => [...document.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'));
 
 beforeEach(() => {
+  localStorage.clear();
   nav.search = '';
   nav.replaces = [];
   nav.push.mockReset();
@@ -214,13 +215,14 @@ describe('VouchersView (web)', () => {
     expect(buttons('Lưu mã')).toHaveLength(2);
   });
 
-  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt ở hàng riêng; có chữ "Mỗi đơn dùng 1 mã"', async () => {
+  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt cùng hàng điều kiện, mã ở hàng đáy; có chữ "Mỗi đơn dùng 1 mã"', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 5, claimedCount: 2 })];
     mount();
     await flush();
     expect(text()).toContain('Còn 3 lượt');
     expect(document.querySelector('[data-testid="voucher-name"]')!.textContent).toBe('Chào bạn mới');
-    expect(document.querySelector('[data-testid="voucher-meta"]')!.textContent).toBe('Đơn từ 199k · NEW10');
+    expect(document.querySelector('[data-testid="voucher-meta"]')!.textContent).toBe('Đơn từ 199k');
+    expect(document.querySelector('[data-testid="voucher-foot"]')!.textContent).toContain('NEW10');
     expect(text()).toContain('Mỗi đơn dùng 1 mã');
   });
 
@@ -276,6 +278,17 @@ describe('VouchersView (web)', () => {
     await flush();
     expect(buttons('Dùng ngay')).toHaveLength(1);
     expect(text()).toContain('Còn 2 ngày');
+  });
+
+  it('chấm đỏ Ưu đãi: tab Mã của tôi ghi các mã sắp hết hạn đang vẽ vào danh sách đã xem; tab Nhận mã thì không ghi gì', async () => {
+    responses['/me/coupons'] = [wallet('A', { endAt: iso(2 * DAY) }), wallet('B', { endAt: iso(DAY) }), wallet('C', { endAt: iso(2 * DAY) }), wallet('D', { endAt: iso(2 * DAY) }), wallet('LATE', { endAt: iso(20 * DAY) })];
+    mount();
+    await flush();
+    expect(localStorage.getItem('tubu_offers_seen_coupons')).toBeNull();
+    click(tab('Mã của tôi'));
+    await flush();
+    const items = (JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] }).items;
+    expect(items.map((k) => k.split('@')[0]).sort()).toEqual(['A', 'B', 'C', 'D']);
   });
 
   it('Đã dùng–hết hạn: gọi lịch sử, thẻ đã dùng và hết hạn không có nút', async () => {

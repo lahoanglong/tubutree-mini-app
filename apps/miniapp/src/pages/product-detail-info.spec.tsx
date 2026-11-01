@@ -108,12 +108,27 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     expect(screen.queryByRole('button', { name: /Ưu đãi/ })).toBeNull();
   });
 
-  it('nhiều phân loại: dòng "Phân loại ›" ghi phân loại đang chọn và mở bảng chọn', async () => {
+  it('nhiều phân loại: không có dòng "Phân loại ›" (chip đã đủ), Số lượng ngay sau chip và trước Đánh giá nhanh', async () => {
+    mocks.fetchReviews.mockResolvedValue({
+      count: 3, average: 4.4,
+      items: [1, 2].map((n) => ({ id: `r${n}`, rating: 5, comment: `Rất tốt ${n}`, images: [], videoUrl: null, createdAt: '2026-10-01T00:00:00.000Z', author: 'Lan' })),
+    });
     renderPdp();
-    const row = await screen.findByRole('button', { name: /^Phân loại/ });
-    expect(row).toHaveTextContent('1L');
-    fireEvent.click(row);
-    expect(await screen.findByRole('group', { name: 'Phân loại' })).toBeInTheDocument();
+    const chips = await screen.findByRole('group', { name: 'Phân loại nhanh' });
+    expect(screen.queryByRole('button', { name: /^Phân loại/ })).toBeNull();
+    const qty = screen.getByText('Số lượng');
+    const quick = (await screen.findAllByTestId('quick-review'))[0]!;
+    expect(chips.compareDocumentPosition(qty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(qty.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('ghi chú vận chuyển nằm trên chip để Số lượng sát phân loại', async () => {
+    mocks.fetchProduct.mockResolvedValue({ ...product, partnerOwned: true });
+    renderPdp();
+    const chips = await screen.findByRole('group', { name: 'Phân loại nhanh' });
+    const notes = screen.getByTestId('pdp-shipping-notes');
+    expect(notes.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chips.compareDocumentPosition(screen.getByText('Số lượng')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('đánh giá nhanh: 2 đánh giá có chữ, "Xem tất cả (27)" cuộn tới danh sách đầy đủ', async () => {
@@ -125,17 +140,21 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     });
     renderPdp();
     expect(await screen.findAllByTestId('quick-review')).toHaveLength(2);
+    // Điểm trung bình kiểu vi-VN ở hàng sao đầu trang (P2 #16): "4,4", không "4.4".
+    expect(screen.getByText('4,4 · 27 đánh giá')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả (27)' }));
     expect(scroll).toHaveBeenCalled();
   });
 
-  it('"Khách thường mua cùng" (≥3 món), "Cùng nhà" và "Có thể bạn cũng thích" không trùng nhau và không có món đang xem', async () => {
+  it('"Khách thường mua cùng" (≥3 món), "Cùng thương hiệu" và "Có thể bạn cũng thích" không trùng nhau và không có món đang xem', async () => {
     mocks.fetchBoughtTogether.mockResolvedValue(cards('b', 3));
     mocks.fetchRelated.mockResolvedValue([...cards('n', 2), card('b0'), card('p1')]);
     mocks.fetchForYou.mockResolvedValue([card('p1'), card('b1'), card('n0'), ...cards('f', 5)]);
     renderPdp();
     expect(await screen.findByRole('heading', { level: 2, name: 'Khách thường mua cùng' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Cùng nhà Cô Lan' })).toBeInTheDocument();
+    // Tiêu đề không kèm tên (tên dài xuống dòng, ux-copy UC-01); tên thương hiệu nằm ở nhãn đọc của dải.
+    expect(screen.getByRole('heading', { level: 2, name: 'Cùng thương hiệu' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cùng thương hiệu Cô Lan')).toBeInTheDocument();
     const alsoLike = await screen.findByRole('heading', { level: 2, name: 'Có thể bạn cũng thích' });
     const feed = alsoLike.closest('section')!;
     expect(within(feed).getAllByRole('button', { name: /Sản phẩm f\d/ })).toHaveLength(5);
@@ -204,6 +223,6 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Cùng nhà Cô Lan' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Cùng thương hiệu' })).toBeNull();
   });
 });

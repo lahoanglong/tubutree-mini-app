@@ -32,9 +32,9 @@ const ITEM = {
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 
-function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail', exclude?: ReadonlySet<string>) {
+function renderRail(source: 'home_rail' | 'orders_tab' = 'home_rail', excludeVariations?: ReadonlySet<string>) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return { qc, ...render(<QueryClientProvider client={qc}><PurchasedRail source={source} exclude={exclude} /></QueryClientProvider>) };
+  return { qc, ...render(<QueryClientProvider client={qc}><PurchasedRail source={source} excludeVariations={excludeVariations} /></QueryClientProvider>) };
 }
 const RAIL_KEY = ['purchased-items', 10];
 
@@ -334,16 +334,24 @@ describe('Mua lại ở Trang chủ (Q6)', () => {
     expect(screen.getByTestId('purchased-rail-loading')).toHaveStyle({ height: `${purchasedSkeletonHeight(expected)}px` });
   });
 
-  it('bỏ món Giờ vàng đang giữ (exclude): 2 món bỏ 1 thì còn dòng 88px; bỏ hết thì khối ẩn, hint ghi "none"', async () => {
+  it('bỏ phân loại Giờ vàng đang giữ (excludeVariations): 2 món bỏ 1 thì còn dòng 88px; bỏ hết thì khối ẩn, hint ghi "none"', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: many(2), nextCursor: null });
-    const first = renderRail('home_rail', new Set(['sp-0']));
+    const first = renderRail('home_rail', new Set(['v0']));
     const line = await screen.findByTestId('rebuy-line');
     expect(line).toHaveTextContent('SP 1');
     expect(screen.queryByText('SP 0')).toBeNull();
     first.unmount();
-    const second = renderRail('home_rail', new Set(['sp-0', 'sp-1']));
+    const second = renderRail('home_rail', new Set(['v0', 'v1']));
     await waitFor(() => expect(localStorage.getItem(PURCHASED_HINT_KEY)).toBe('none'));
     expect(second.container).toBeEmptyDOMElement();
+  });
+
+  it('Giờ vàng giữ phân loại khác của cùng sản phẩm (Can 1L) thì phân loại đã mua (Can 5L) vẫn hiện ở Mua lại (P2 #3)', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, variationId: 'v-5l', slug: 'can', productName: 'Can nước rửa', variationName: '5L' }, ...many(1)], nextCursor: null });
+    renderRail('home_rail', new Set(['v-1l']));
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    expect(region).toHaveTextContent('Can nước rửa');
+    expect(region).toHaveTextContent('5L');
   });
 
   it('tab Đơn hàng với 1 món: vẫn thẻ gọn cũ có "Định kỳ", không dòng 88px', async () => {

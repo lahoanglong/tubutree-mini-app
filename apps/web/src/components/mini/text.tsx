@@ -54,6 +54,8 @@ export interface HeadingProps {
   variant: HeadingVariant;
   as?: ElementType;
   tone?: Tone;
+  /** `display` (Fraunces) chỉ cho tiêu đề trang và số lớn từ 22px; tiêu đề khối dưới 22px dùng `ui` (Inter 700, Q1). */
+  font?: 'display' | 'ui';
   className?: string;
   style?: CSSProperties;
   id?: string;
@@ -61,12 +63,12 @@ export interface HeadingProps {
 }
 
 /** Render đúng h1-h3 thật (ZaUI Text.Title render <span> — 0 heading thật trong toàn app, audit A4-23). */
-export function Heading({ children, variant, as, tone = 'primary', className, style, ...rest }: HeadingProps) {
+export function Heading({ children, variant, as, tone = 'primary', font = 'display', className, style, ...rest }: HeadingProps) {
   const As = as ?? HEADING_TAG[variant];
   return (
     <As
       className={className}
-      style={{ fontFamily: 'var(--font-display)', color: TONE_VAR[tone], margin: 0, letterSpacing: '-0.01em', ...typeStyle(variant), ...style }}
+      style={{ fontFamily: font === 'ui' ? 'var(--font-ui)' : 'var(--font-display)', color: TONE_VAR[tone], margin: 0, letterSpacing: '-0.01em', ...typeStyle(variant), ...(font === 'ui' ? { fontWeight: 700 } : null), ...style }}
       {...rest}
     >
       {children}

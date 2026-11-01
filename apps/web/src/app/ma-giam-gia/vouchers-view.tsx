@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
+import { useMarkExpiringSeen } from '@/lib/use-offers-dot';
 import { useClaimCoupon } from '@/lib/use-claim-coupon';
 import { useCouponUse } from '@/lib/use-coupon-use';
 
@@ -57,6 +58,8 @@ export default function VouchersView() {
   const activeFilter = filters.some((f) => f.key === filter) ? filter : 'all';
   const shown = filterVouchers(rows, activeFilter, now);
   const activeLabel = VOUCHER_TABS.find((t) => t.key === tab)!.label;
+  // Ghi "đã xem" cho mã sắp hết hạn chỉ ở tab Mã của tôi và chỉ các thẻ đang vẽ (đã qua chip lọc), cùng quy tắc với trang Ưu đãi.
+  useMarkExpiringSeen(authed && tab === 'mine' ? shown.map((r) => r.coupon) : undefined);
 
   const pickTab = (key: string) => {
     if (key === tab) return;

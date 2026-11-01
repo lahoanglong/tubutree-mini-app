@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { comboShelfEntry, composeHomeShelves, seeAllHref, type ShelfEntry } from './home-shelves';
+import { HOME_BEST_SELLER_LIMIT } from '../home-layout';
+import { comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
 const ids = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => e(`${prefix}${i}`, `${prefix}${i}`));
@@ -116,6 +117,88 @@ describe('combo chiếm món theo slug', () => {
   it('hai combo chung một món không loại nhau', () => {
     const r = composeHomeShelves({ ...none, combos: [combo('c1', 'a', 'b'), combo('c2', 'b', 'c')] });
     expect(r.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+  });
+});
+
+describe('Mua lại chống trùng Giờ vàng theo phân loại (P2 #3)', () => {
+  const flashOf = (slug: string, variationId: string) => ({ productSlug: slug, variationId });
+  const boughtOf = (slug: string, variationId: string) => ({ slug, variationId });
+  const flash3 = (...first: ReturnType<typeof flashOf>[]) => [...first, flashOf('x1', 'vx1'), flashOf('x2', 'vx2')].map(flashShelfEntry);
+
+  it('khoá của hai hàm: Giờ vàng khoá bằng slug + chiếm phân loại, Mua lại khoá bằng phân loại + chiếm slug', () => {
+    expect(variationKey('v1')).toBe('variation:v1');
+    expect(flashShelfEntry(flashOf('can', 'v1l'))).toEqual({ id: 'can', also: ['variation:v1l'], item: flashOf('can', 'v1l') });
+    expect(purchasedShelfEntry(boughtOf('can', 'v5l'))).toEqual({ id: 'variation:v5l', also: ['can'], item: boughtOf('can', 'v5l') });
+  });
+
+  it('Can 1L đang Giờ vàng, khách mua Can 5L cùng sản phẩm: Mua lại vẫn hiện Can 5L', () => {
+    const r = composeHomeShelves({ ...none, flash: flash3(flashOf('can', 'v1l')), purchased: [purchasedShelfEntry(boughtOf('can', 'v5l'))] });
+    expect(r.purchased).toEqual([boughtOf('can', 'v5l')]);
+  });
+
+  it('đúng phân loại đang Giờ vàng thì Mua lại bỏ nó (khối ẩn vì sàn 1 món)', () => {
+    const r = composeHomeShelves({ ...none, flash: flash3(flashOf('can', 'v1l')), purchased: [purchasedShelfEntry(boughtOf('can', 'v1l'))] });
+    expect(r.purchased).toEqual([]);
+  });
+
+  it('khách mua cả Can 1L và Can 5L, Giờ vàng chỉ 1L: còn Can 5L; sản phẩm đó vẫn bị chiếm slug nên Bán chạy nhất bỏ nó', () => {
+    const r = composeHomeShelves({
+      ...none,
+      flash: flash3(flashOf('can', 'v1l')),
+      purchased: [purchasedShelfEntry(boughtOf('can', 'v1l')), purchasedShelfEntry(boughtOf('can', 'v5l'))],
+      bestSellers: [e('can', 'can'), ...ids(4, 'b')],
+    });
+    expect(r.purchased).toEqual([boughtOf('can', 'v5l')]);
+    expect(r.bestSellers).toEqual(['b0', 'b1', 'b2', 'b3']);
+    expect(r.seen.has('can')).toBe(true);
+  });
+
+  it('`seen` chỉ chứa slug (Gợi ý hôm nay loại theo slug), không lẫn khoá phân loại', () => {
+    const r = composeHomeShelves({ ...none, flash: flash3(flashOf('can', 'v1l')), purchased: [purchasedShelfEntry(boughtOf('mia', 'v-mia'))] });
+    expect([...r.seen].sort()).toEqual(['can', 'mia', 'x1', 'x2']);
+  });
+
+  it('hai phân loại của một sản phẩm đều hiện ở Mua lại (không gộp theo slug)', () => {
+    const r = composeHomeShelves({ ...none, purchased: [purchasedShelfEntry(boughtOf('can', 'v1l')), purchasedShelfEntry(boughtOf('can', 'v5l'))] });
+    expect(r.purchased.map((p) => p.variationId)).toEqual(['v1l', 'v5l']);
+  });
+});
+
+describe('Bán chạy nhất không tụt dưới 3 món khi có 3–4 combo (F9 MINOR)', () => {
+  const slugs = (n: number) => Array.from({ length: n }, (_, i) => `sp${i + 1}`);
+  const comboOf = (id: string, items: string[]) => comboShelfEntry({ id, items: items.map((slug) => ({ slug })) });
+
+  it('bốn combo mỗi combo 3 món đều là 12 món bán chạy nhất, Giờ vàng chiếm 3 món và Mua lại 2 món kế tiếp: bảng HOME_BEST_SELLER_LIMIT món còn 7 món, không ẩn kệ', () => {
+    const board = slugs(HOME_BEST_SELLER_LIMIT);
+    const r = composeHomeShelves({
+      flash: board.slice(12, 15).map((p) => e(p, p)),
+      purchased: board.slice(15, 17).map((p, i) => purchasedShelfEntry({ slug: p, variationId: `v-${i}` })),
+      combos: [0, 1, 2, 3].map((k) => comboOf(`c${k}`, board.slice(k * 3, k * 3 + 3))),
+      bestSellers: board.map((p) => e(p, p)),
+    });
+    expect(r.combos).toHaveLength(4);
+    expect(r.bestSellers).toEqual(board.slice(17));
+    expect(r.bestSellers.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('bảng 12 món (cũ) với cùng tình huống thì chỉ còn 0 món: kệ ẩn', () => {
+    const board = slugs(12);
+    const r = composeHomeShelves({ ...none, combos: [0, 1, 2, 3].map((k) => comboOf(`c${k}`, board.slice(k * 3, k * 3 + 3))), bestSellers: board.map((p) => e(p, p)) });
+    expect(r.bestSellers).toEqual([]);
+  });
+});
+
+describe('ranksAreSequential (P2 #4)', () => {
+  it('hạng liền từ 1 (1..k) giữ số; rỗng cũng tính là liền', () => {
+    expect(ranksAreSequential([1, 2, 3])).toBe(true);
+    expect(ranksAreSequential([1])).toBe(true);
+    expect(ranksAreSequential([])).toBe(true);
+  });
+
+  it('có hạng bị kệ trên chiếm (hụt giữa dãy hoặc mất hạng 1) thì không liền', () => {
+    expect(ranksAreSequential([1, 2, 4, 5])).toBe(false);
+    expect(ranksAreSequential([2, 3, 4])).toBe(false);
+    expect(ranksAreSequential([2])).toBe(false);
   });
 });
 

@@ -18,7 +18,7 @@ vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOr
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
+import { HOME_BEST_SELLER_LIMIT, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import { vnDateSeed } from '@tubutree/app-core/home-suggest';
 import HomePage, { metadata } from './page';
 
@@ -70,13 +70,13 @@ describe('HomePage — server render phần công khai', () => {
     expect(metadata.alternates?.canonical).toBe('/');
   });
 
-  it('hỏi API đúng như Mini App: bán chạy 12 theo best_seller_30d và trang 1 của lưới gợi ý kèm hạt giống ngày VN; không còn nổi bật/mới về riêng', async () => {
+  it('hỏi API đúng như Mini App: bán chạy HOME_BEST_SELLER_LIMIT món theo best_seller_30d và trang 1 của lưới gợi ý kèm hạt giống ngày VN; không còn nổi bật/mới về riêng', async () => {
     const before = vnDateSeed(Date.now());
     await render();
     const after = vnDateSeed(Date.now());
     const queries = mocks.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o?.query as Record<string, unknown>);
     expect(queries).toHaveLength(2);
-    expect(queries).toContainEqual({ limit: 12, sort: 'best_seller_30d' });
+    expect(queries).toContainEqual({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' });
     const suggest = queries.find((q) => q.page === 1)!;
     expect(suggest).toEqual({ limit: SUGGEST_PAGE_SIZE, page: 1, seed: expect.stringMatching(/^\d{8}$/) });
     expect([before, after]).toContain(suggest.seed);
@@ -101,7 +101,7 @@ describe('HomePage — server render phần công khai', () => {
     expect(shelf).not.toContain('#4');
   });
 
-  it('HTML đầu: hai combo trùng món với Bán chạy nhất thì kệ Combo có trong HTML và Bán chạy nhất đã bỏ các món đó, hạng bắt đầu từ #4 (không chờ client)', async () => {
+  it('HTML đầu: hai combo trùng món với Bán chạy nhất thì kệ Combo có trong HTML và Bán chạy nhất đã bỏ các món đó, hạng hụt nên thẻ ghi "Bán chạy" không số (không chờ client)', async () => {
     const six = ['bs1', 'bs2', 'bs3', 'bs4', 'bs5', 'bs6'].map((id) => card(id, `Món ${id}`));
     bestSellers = six;
     const item = (c: ReturnType<typeof card>) => ({ productId: c.id, variationId: `v-${c.id}`, maxQty: 1, addonPrice: null, inStock: true, product: { ...c, repVariationId: `v-${c.id}` } });
@@ -114,8 +114,8 @@ describe('HomePage — server render phần công khai', () => {
     expect(out).toContain('aria-label="Combo tiết kiệm"');
     const start = out.indexOf('aria-label="Bán chạy nhất"');
     const best = out.slice(start, out.indexOf('data-home-block="combos"', start));
-    for (const gone of ['Món bs1', 'Món bs2', 'Món bs3', '#1', '#2', '#3']) expect(best).not.toContain(gone);
-    for (const kept of ['Món bs4', 'Món bs5', 'Món bs6', '#4', '#5', '#6']) expect(best).toContain(kept);
+    for (const gone of ['Món bs1', 'Món bs2', 'Món bs3', '#1', '#2', '#3', '#4', '#5', '#6']) expect(best).not.toContain(gone);
+    for (const kept of ['Món bs4', 'Món bs5', 'Món bs6', 'Bán chạy</span>']) expect(best).toContain(kept);
   });
 
   it('bán chạy chỉ có 2 món (dưới tối thiểu 3 của kệ): ẩn cả kệ, không vẽ hạng lẻ', async () => {

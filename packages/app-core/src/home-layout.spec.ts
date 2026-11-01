@@ -1,12 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { shelf } from './merch/shelves';
 import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
-  HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, CATEGORY_CELL_HEIGHT,
+  HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, categoryGridScrolls, CATEGORY_CELL_HEIGHT, CATEGORY_SCROLL_COLUMNS,
   BANNER_HINT_KEY, OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint,
-  COLLECT_HINT_KEY, COLLECT_HINT_MAX, collectSkeletonHeight, readCollectHint, writeCollectHint,
+  COLLECT_HINT_KEY, COLLECT_HINT_MAX, collectSkeletonHeight, readCollectHint, writeCollectHint, HOME_BEST_SELLER_LIMIT,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -113,6 +116,12 @@ describe('chiều cao khối Danh mục theo số ô', () => {
     expect(categorySkeletonCells(3)).toBe(4);
     expect(categorySkeletonCells(9)).toBe(10);
     expect(categorySkeletonCells(40)).toBe(10);
+  });
+  it('lưới chỉ cuộn khi quá 10 ô (kể cả "Tất cả"); lúc cuộn mỗi cột rộng 1/5,5 để cột thứ 6 ló nửa cột, không chỉ ló đệm 16px dưới lớp mờ', () => {
+    expect(categoryGridScrolls(10)).toBe(false);
+    expect(categoryGridScrolls(11)).toBe(true);
+    expect(categoryGridScrolls(0)).toBe(false);
+    expect(CATEGORY_SCROLL_COLUMNS).toBe(5.5);
   });
 });
 
@@ -492,5 +501,18 @@ describe('gợi ý nhớ số mã ở khối Nhận mã của Ưu đãi', () => 
     expect(collectSkeletonHeight(1)).toBe(88);
     expect(collectSkeletonHeight(2)).toBe(2 * 88 + 12);
     expect(collectSkeletonHeight(3)).toBe(3 * 88 + 2 * 12);
+  });
+});
+
+describe('HOME_BEST_SELLER_LIMIT (F9 MINOR)', () => {
+  it('đủ cho trần kệ + 2 món dư + tối đa số combo × 3 món, để Bán chạy nhất không tụt dưới 3 món khi có 3–4 combo', () => {
+    expect(HOME_BEST_SELLER_LIMIT).toBeGreaterThanOrEqual(shelf('home.bestSellers').maxItems + 2 + shelf('home.combos').maxItems * 3);
+  });
+
+  it('bằng hằng cùng tên ở API (Mini chỉ dùng khối /home gộp khi `limit` trùng đúng; lệch thì mỗi lần mở thêm một request lẻ)', () => {
+    const api = readFileSync(fileURLToPath(new URL('../../../apps/api/src/modules/catalog/home.service.ts', import.meta.url)), 'utf8');
+    const serverLimit = /export const HOME_BEST_SELLER_LIMIT = (\d+)/.exec(api)?.[1];
+    expect(serverLimit).toBeTruthy();
+    expect(HOME_BEST_SELLER_LIMIT).toBe(Number(serverLimit));
   });
 });

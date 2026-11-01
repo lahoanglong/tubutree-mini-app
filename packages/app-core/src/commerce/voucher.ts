@@ -16,7 +16,7 @@ export interface VoucherView {
   /** "Đơn từ 199k"; rỗng khi không có đơn tối thiểu. */
   condition: string;
   expiry: string;
-  /** Tên admin đặt cho mã (đã trim); null khi chưa đặt: thẻ dùng nhãn theo loại giảm. */
+  /** Tên admin đặt cho mã (đã trim, bỏ phần đầu chép lại nhãn: "Giảm 20k cho 3 đơn" thành "cho 3 đơn"); null khi chưa đặt hoặc chỉ chép lại nhãn. */
   name: string | null;
   /** "Còn 3 lượt": chỉ mã chưa nhận còn 1 đến 10 lượt, để khách thấy gấp mà không lộ số lớn. */
   quota: string | null;
@@ -59,8 +59,17 @@ export function couponTitle(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>
 
 const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
 
-// Đơn vị chỉ tính khi không dính chữ cái liền sau ("50 đồng", "10 trở lên" không phải "50đ", "10tr").
-const FIGURE_RE = /(\d[\d.,]*)(\s*)(%|tr(?!\p{L})|k(?!\p{L})|đ(?!\p{L})|₫)?/giu;
+// Đơn vị chỉ tính khi không dính chữ cái liền sau ("10 trở lên" không phải "10tr"). Tiền viết bằng chữ ("đồng", "VND", "vnđ") cũng là đơn vị đồng:
+// nếu không, "20.000 đồng" bị đọc là số trần và "đồng" ở lại sau số đã rút gọn ("20k đồng"). Đơn vị đôi ("20k vnđ", "1,5tr đồng") là MỘT đơn vị:
+// chữ tiền tệ sau k/tr thuộc về con số, không ở lại làm đầu phần đuôi. "đồng" đứng đầu một từ ghép ("đồng hành", "đồng loạt", "đồng giá", "đồng ý"...)
+// là chữ thường, không phải tiền: danh sách dưới đây (có dấu và không dấu) thêm khi gặp từ ghép mới.
+const DONG_COMPOUNDS = ['hành', 'thời', 'loạt', 'giá', 'ý', 'đều', 'bộ', 'nghiệp', 'hồ', 'phục', 'đội', 'minh', 'bằng', 'cảm', 'lòng', 'tâm', 'thuận', 'nhất', 'dạng', 'chí', 'hương', 'bào', 'hạng', 'tình', 'góp', 'khởi', 'ca'];
+const DONG_COMPOUND_SRC = [...new Set([...DONG_COMPOUNDS, ...DONG_COMPOUNDS.map(fold)])].join('|');
+const CURRENCY = String.raw`(?:(?:đồng|dong)(?!\p{L})(?!\s+(?:${DONG_COMPOUND_SRC})(?!\p{L}))|(?:vn[đd]|đ)(?!\p{L})|₫)`;
+const FIGURE_SRC = String.raw`(\d[\d.,]*)(\s*)(%|(?:tr|k)(?!\p{L})(?:\s*${CURRENCY})?|${CURRENCY})?`;
+const FIGURE_RE = new RegExp(FIGURE_SRC, 'giu');
+// Mỗi mục là một con số (cả cụm đơn vị) hoặc một từ dính liền: cùng cách chia với FIGURE_RE nên cụm "20k vnđ" không bị tách ở khoảng trắng.
+const TOKEN_RE = new RegExp(`${FIGURE_SRC}|\\S+`, 'giu');
 
 /** Một số trong chữ tự do về cùng đơn vị (đồng, hoặc số âm cho phần trăm); số trần không đơn vị dưới 1.000 ("Tặng 5 lần") không phải tiền nên null. */
 function figureValue(rawText: string, unitText: string | undefined): number | null {
@@ -70,8 +79,8 @@ function figureValue(rawText: string, unitText: string | undefined): number | nu
   const whole = Number(raw.replace(/[.,]/g, ''));
   let n: number | null = null;
   if (unit === '%') n = -whole;
-  else if (unit === 'tr') n = Math.round(decimal * 1_000_000);
-  else if (unit === 'k') n = Math.round(decimal * 1_000);
+  else if (unit?.startsWith('tr')) n = Math.round(decimal * 1_000_000);
+  else if (unit?.startsWith('k')) n = Math.round(decimal * 1_000);
   else if (unit || whole >= 1_000) n = whole;
   return n !== null && Number.isFinite(n) && n !== 0 ? n : null;
 }
@@ -96,18 +105,29 @@ function knownFigures(c: CouponTerms): Set<number> {
 // Từ nối và từ đồng nghĩa với nhãn: tên chỉ gồm chúng (cùng từ của nhãn, điều kiện) và số của mã thì không thêm thông tin nào.
 const FILLER_WORDS = new Set(['va', 'cho', 'ban', 'tang', 'khi', 'mua', 'voi', 'ap', 'dung', 'freeship', 'ship']);
 
-const wordsOf = (s: string): string[] => fold(s).replace(/\d[\d.,]*\s*(?:%|tr\b|k\b|d\b)?/g, ' ').split(/[^a-z]+/).filter(Boolean);
+// Cùng luật đơn vị với FIGURE_RE nhưng trên chữ đã `fold` (đ thành d, bỏ dấu).
+const FOLDED_CURRENCY = String.raw`(?:dong\b(?!\s+(?:${DONG_COMPOUNDS.map(fold).join('|')})\b)|vnd\b|d\b)`;
+const FOLDED_FIGURE_RE = new RegExp(String.raw`\d[\d.,]*\s*(?:%|(?:tr|k)\b(?:\s*${FOLDED_CURRENCY})?|${FOLDED_CURRENCY})?`, 'g');
+
+const wordsOf = (s: string): string[] => fold(s).replace(FOLDED_FIGURE_RE, ' ').split(/[^a-z]+/).filter(Boolean);
+
+/** Số trần dưới 1.000 không đơn vị ("3 đơn", "khi mua 2", "100 bạn"): không phải tiền nên không có trong nhãn, là số lượng mà tên đang nói. */
+function hasPlainSmallNumber(text: string): boolean {
+  for (const m of text.matchAll(FIGURE_RE)) if (m[3] === undefined && figureValue(m[1]!, m[3]) === null) return true;
+  return false;
+}
 
 /**
  * Tên admin đặt là chữ tự do và hay chép lại nhãn và điều kiện ("Giảm 10% tối đa 50.000đ" cạnh "Giảm 10%, tối đa 50k · Đơn từ 300k"): dòng phụ lặp.
  * Chỉ bỏ tên khi nó không còn gì ngoài số của chính mã và từ của nhãn, điều kiện (hoặc giống hệt nhãn). Tên còn từ khác
- * ("Giảm 20k cho đơn đầu tiên", "Giảm 10% riêng mỹ phẩm") mang phạm vi hay đối tượng mà phiếu không có chỗ nào khác để nói, nên giữ.
+ * ("Giảm 20k cho đơn đầu tiên", "Giảm 10% riêng mỹ phẩm") hoặc còn số lượng ("Giảm 20k cho 3 đơn", "khi mua 2") mang phạm vi hay giới hạn
+ * mà phiếu không có chỗ nào khác để nói, nên giữ.
  */
 function restatesCoupon(name: string, c: CouponTerms, texts: readonly string[]): boolean {
   if (texts.some((t) => t !== '' && fold(t) === fold(name))) return true;
   const known = knownFigures(c);
   const mine = figuresIn(name);
-  if (mine.length === 0 || !mine.every((n) => known.has(n))) return false;
+  if (mine.length === 0 || !mine.every((n) => known.has(n)) || hasPlainSmallNumber(name)) return false;
   const covered = new Set([...FILLER_WORDS, ...texts.flatMap(wordsOf)]);
   return wordsOf(name).every((w) => covered.has(w));
 }
@@ -121,6 +141,32 @@ function unifyFigures(name: string, c: CouponTerms): string {
     const trailing = raw.slice(raw.replace(/[.,]+$/, '').length);
     return `${n < 0 ? `${-n}%` : vndShort(n)}${trailing}${unit ? '' : gap}`;
   });
+}
+
+// Từ đồng nghĩa với nhãn mà admin hay mở đầu tên bằng ("Tặng 20k", "Freeship"): cùng loại với từ của nhãn khi cắt phần đầu chép lại.
+const LEAD_SYNONYMS = ['tang', 'freeship', 'ship'];
+
+/**
+ * Dòng tên trên phiếu rất hẹp (~100px ở 375px, cạnh điều kiện) và đứng ngay dưới nhãn, nên phần đầu chép lại nhãn ("Giảm 20k" của "Giảm 20k cho 3 đơn")
+ * chiếm đúng chỗ của phần mới ("cho 3 đơn") và đẩy phần mới ra khỏi tầm nhìn bằng "…". Chỉ cắt khi phần đầu có ít nhất một số của NHÃN và mọi từ
+ * đứng trước số đó là từ của nhãn: "Giảm giá khách VIP" (từ "giá" không thuộc nhãn) giữ nguyên, vì cắt "Giảm" ra "giá khách VIP" mất nghĩa.
+ * Số của mã mà nhãn không in (trần giảm của freeship, đơn tối thiểu) không đủ: "Freeship 30k cho đơn đầu" cắt ra "cho đơn đầu" thì phiếu không còn "30k" ở đâu cả.
+ */
+function trimRepeatedLead(name: string, title: string): string {
+  const labelFigures = new Set(figuresIn(title));
+  const lead = new Set([...LEAD_SYNONYMS, ...wordsOf(title)]);
+  let cut = -1;
+  for (const m of name.matchAll(TOKEN_RE)) {
+    if (!wordsOf(m[0]).every((w) => lead.has(w))) break;
+    const figures = figuresIn(m[0]);
+    if (figures.length > 0) {
+      if (!figures.every((n) => labelFigures.has(n))) break;
+      cut = m.index! + m[0].length;
+    } else if (/\d/.test(m[0])) break;
+  }
+  if (cut < 0) return name;
+  const tail = name.slice(cut).replace(/^[\s,;:.\-–—·]+/, '');
+  return tail === '' ? name : tail;
 }
 
 /** Số ngày lịch (giờ Việt Nam) kể từ epoch: hiệu hai số này là số ngày lịch còn lại, không phải cửa sổ 24 giờ. */
@@ -172,7 +218,7 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
     kind: c.type === 'FREESHIP' ? 'freeship' : c.shop ? 'shop' : 'discount',
     condition,
     expiry: expiryText(endMs, now),
-    name: named && !restatesCoupon(named, c, [title, condition]) ? unifyFigures(named, c) : null,
+    name: named && !restatesCoupon(named, c, [title, condition]) ? trimRepeatedLead(unifyFigures(named, c), title) : null,
     quota:
       state === 'collectable' && typeof c.remaining === 'number' && c.remaining >= 1 && c.remaining <= QUOTA_SHOWN_MAX
         ? fillCopy('coupon.usesLeft', { n: c.remaining })

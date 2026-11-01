@@ -29,6 +29,8 @@ const LINK_LABELS: Record<CampaignLinkType, string> = {
 const MAX_PRODUCTS = 200;
 const MAX_COUPONS = 10;
 const IMAGE_LABEL = 'Ảnh banner (tỉ lệ 5:2, ví dụ 1500×600)';
+// Từ lg banner Ưu đãi trên web đổi sang khung 4:1 (ảnh phủ kín khung, cắt đều trên dưới): ảnh 5:2 mất khoảng 37% chiều cao, nên chữ và logo phải nằm ở dải giữa.
+const OFFERS_BANNER_SAFE_ZONE = 'Màn hình máy tính hiển thị banner Đầu Ưu đãi thấp hơn (khung 4:1) và cắt phần trên, dưới của ảnh. Đặt chữ và logo trong dải giữa, cao khoảng 60% ảnh.';
 
 interface PickedProduct {
   id: string;
@@ -188,6 +190,11 @@ export function CampaignForm({ initial, onDone, onCancel }: { initial?: AdminCam
         </Field>
         <div className="sm:col-span-2">
           <ImageUrlField label={IMAGE_LABEL} value={image} onChange={setImage} />
+          {placement === 'OFFERS_TOP' && (
+            <p data-testid="offers-banner-safe-zone" className="mt-1 text-xs text-stone-600">
+              {OFFERS_BANNER_SAFE_ZONE}
+            </p>
+          )}
         </div>
         <Field label="Đích khi bấm">
           <select

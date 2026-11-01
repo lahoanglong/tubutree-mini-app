@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Check, ChevronRight, Leaf, MapPin } from 'lucide-react';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { brandStatsInput, followerStat, promotionVoucher, shopTabs, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
 import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -52,6 +53,8 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
   const hasStory = Boolean(b.story || b.origin || b.storyImages.length > 0);
   const productCount = b.productCount ?? b.products.length;
   const featured = useMemo(() => b.products.slice(0, FEATURED_MAX).map((p) => ({ ...p, brand: b.name, isFeatured: false })) as unknown as ProductCardData[], [b]);
+  // Chỉ có nút khi tab Sản phẩm có nhiều hơn số đang hiện; số trong nhãn là tổng của tab đó.
+  const featuredSeeAll = productCount > featured.length ? seeAllLabel(productCount) : null;
   const tabs = shopTabs({ productCount, hasStory, hasCategories: false }).map((t) => ({
     key: t.key,
     label: t.count === undefined ? t.label : `${t.label} (${t.count})`,
@@ -154,7 +157,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                       <button
                         type="button"
                         onClick={() => openTab('story')}
-                        className="tubu-press inline-flex min-h-11 items-center gap-0.5 text-[length:var(--type-label-size)] font-semibold text-[color:var(--color-text-brand)]"
+                        className="tubu-press tubu-hit-44 inline-flex items-center gap-0.5 text-[length:var(--type-label-size)] font-semibold text-[color:var(--color-text-brand)]"
                       >
                         {fillCopy('shop.readStory')}
                         <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -167,9 +170,9 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                       <SectionHeader
                         title="Sản phẩm nổi bật"
                         action={
-                          productCount > featured.length
+                          featuredSeeAll
                             ? {
-                                label: fillCopy('shop.seeAllN', { n: productCount }),
+                                label: featuredSeeAll,
                                 onPress: () => openTab('products'),
                                 spoken: fillCopy('shop.seeAllNSpoken', { n: productCount, title: 'Sản phẩm nổi bật' }),
                               }

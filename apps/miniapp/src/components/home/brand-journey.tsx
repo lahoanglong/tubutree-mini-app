@@ -8,11 +8,13 @@ import { haptic } from '../../utils/haptic';
 import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
 import { ScrollRow } from '../ui/scroll-row';
-import { Heading, Text } from '../ui/text';
+import { SectionHeader } from '../ui/section-header';
+import { Text } from '../ui/text';
 
 /**
- * "Hành trình nguyên liệu" giữa Trang chủ: thẻ mở bản đồ xuất xứ, kèm dải nhãn Việt (chạm mở trang nhãn). Nội dung riêng và đẹp
- * nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách nhãn thì vẫn có thẻ bản đồ.
+ * "Hành trình nguyên liệu" giữa Trang chủ: tiêu đề `SectionHeader` (Inter 16/700, nút "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ kèm dải
+ * nhãn Việt (chạm mở trang nhãn). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách nhãn thì
+ * vẫn có thẻ bản đồ.
  */
 export function BrandJourney() {
   const navigate = useNavigate();
@@ -25,6 +27,7 @@ export function BrandJourney() {
   };
   return (
     <section aria-label={homeCopy.journey.title} style={{ padding: '0 16px' }}>
+      <SectionHeader title={homeCopy.journey.title} action={{ label: homeCopy.journey.cta, to: '/brand-story' }} />
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
         <button
           type="button"
@@ -35,20 +38,10 @@ export function BrandJourney() {
           <span aria-hidden style={{ width: 44, height: 44, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-surface)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
             <Icon icon={MapIcon} tone="brand" />
           </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <Heading variant="title-sm" as="h2">
-              {homeCopy.journey.title}
-            </Heading>
-            <Text variant="caption" tone="secondary" as="div">
-              {homeCopy.journey.body(list.length)}
-            </Text>
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, flex: '0 0 auto' }}>
-            <Text variant="label" tone="brand">
-              {homeCopy.journey.cta}
-            </Text>
-            <Icon icon={ChevronRight} size="sm" tone="brand" />
-          </span>
+          <Text variant="body-sm" tone="secondary" as="span" style={{ flex: 1, minWidth: 0 }}>
+            {homeCopy.journey.body(list.length)}
+          </Text>
+          <Icon icon={ChevronRight} size="sm" tone="brand" />
         </button>
         {list.length > 0 && (
           <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>

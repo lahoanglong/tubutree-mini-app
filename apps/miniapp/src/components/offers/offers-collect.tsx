@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { collectRows } from '@tubutree/app-core/commerce/voucher-center';
 import { collectSkeletonHeight, COLLECT_HINT_MAX, isCouponExpiring, readCollectHint, writeCollectHint } from '@tubutree/app-core/home-layout';
 import { collectableCouponsQuery, collectableMineQuery } from '@tubutree/app-core/queries/loyalty';
@@ -65,18 +66,14 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
 
   const now = Date.now();
   // Cùng cách ghi với "Mã của tôi" ("Tất cả (n)"); tên đọc mang đủ nhãn nhìn thấy cộng đích đến.
-  const seeAll = fillCopy('section.seeAllCount', { n: all.length });
+  const seeAll = seeAllLabel(all.length);
   return (
     <section aria-labelledby={titleId} style={{ padding: '12px 16px 0' }}>
       <SectionHeader
         id={titleId}
         title={title}
         icon="ticket"
-        action={{
-          label: seeAll,
-          onPress: () => navigate('/vouchers'),
-          spoken: `${seeAll} ${fillCopy('coupon.title')}`,
-        }}
+        action={seeAll ? { label: seeAll, onPress: () => navigate('/vouchers'), spoken: `${seeAll} ${fillCopy('coupon.title')}` } : undefined}
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {shown.map((row) => (

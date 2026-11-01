@@ -63,7 +63,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await expect(best.locator('button.tubu-tile-link').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name));
     await expect(best.getByText('#1', { exact: true })).toBeVisible();
     await expect
-      .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller_30d' && c.query.get('limit') === '12'), { timeout: 15_000 })
+      .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller_30d' && c.query.get('limit') === '24'), { timeout: 15_000 })
       .toBe(true);
   });
 

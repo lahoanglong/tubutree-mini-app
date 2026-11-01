@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Trash2, UserRoundCog } from 'lucide-react';
+import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Sparkles, Trash2, UserRoundCog } from 'lucide-react';
 import {
   createCollection,
   deleteCollection,
@@ -28,6 +29,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
+import { LG_UP, useMediaQuery } from '@/lib/use-media-query';
 import { cssUrl } from '@/lib/safe-color';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
@@ -117,6 +119,9 @@ function ConfirmSheet({
   );
 }
 
+/** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
+export const BUILDER_HEAD_SLOT = 'builder-head-actions';
+
 export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -126,6 +131,14 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const notify: Notify = (text, error = false) => setNotice({ text, error });
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [kitSlug, setKitSlug] = useState<string | null>(null);
+  // Một bộ nút ở hai chỗ theo khổ (thanh dính đáy ở điện thoại, hàng tiêu đề từ lg) mang trạng thái nên chỉ vẽ một chỗ, không nhân đôi bằng lớp `lg:hidden`.
+  const wide = useMediaQuery(LG_UP);
+  const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  // Chạy sau mỗi lần vẽ: trang dựng lại hàng tiêu đề khi vào/ra chi tiết khối (ô mới là nút DOM khác), nên không giữ nút DOM cũ theo `wide`.
+  useEffect(() => {
+    const el = wide ? document.getElementById(BUILDER_HEAD_SLOT) : null;
+    setHeadSlot((cur) => (cur === el ? cur : el));
+  });
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -419,6 +432,40 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const pickedStyle = sectionCol && sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
   const overflow = overflowSectionsNotice(sf.collections);
 
+  // "Xem trước" và nút chính (Chia sẻ / Đăng): một nguồn cho thanh dính đáy (`grow` = flex-1, hai nút bằng nhau) và hàng tiêu đề từ lg (bề rộng theo chữ).
+  const actions = (grow: string) => (
+    <>
+      {view.canShare ? (
+        <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} ${grow}`}>
+          Xem trước
+        </Link>
+      ) : (
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} ${grow}`} onClick={() => setPreviewOpen(true)}>
+          Xem trước
+        </button>
+      )}
+      {view.canShare ? (
+        <button type="button" className={`${ui.btnPrimary} min-w-0 ${grow} max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
+          <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Chia sẻ
+        </button>
+      ) : sf.isPublished ? (
+        <button
+          type="button"
+          className={`${ui.btnPrimary} min-w-0 ${grow}`}
+          disabled
+          aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
+        >
+          {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
+        </button>
+      ) : (
+        <button type="button" className={`${ui.btnPrimary} ${grow}`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
+          {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="pb-4">
       <div role="status" aria-live="polite">
@@ -429,28 +476,25 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       </div>
 
       {sectionCol ? (
-        <div className="lg:max-w-2xl">
-          <StorefrontSectionDetail
-            col={sectionCol}
-            productMap={productMap}
-            sortMode={itemSort}
-            headingRef={headingRef}
-            pickedStyle={pickedStyle}
-            onBack={closeSection}
-            onMenu={() => setColMenuId(sectionCol.id)}
-            onStyle={(style) => {
-              if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
-            }}
-            onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
-            onAddItem={() => setPickerCol(sectionCol.id)}
-            onToggleSort={() => setItemSort((v) => !v)}
-            onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
-            onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
-            onItemMenu={setItemMenuId}
-            onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
-            onKit={setKitSlug}
-          />
-        </div>
+        <StorefrontSectionDetail
+          col={sectionCol}
+          productMap={productMap}
+          sortMode={itemSort}
+          headingRef={headingRef}
+          pickedStyle={pickedStyle}
+          onBack={closeSection}
+          onMenu={() => setColMenuId(sectionCol.id)}
+          onStyle={(style) => {
+            if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
+          }}
+          onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
+          onAddItem={() => setPickerCol(sectionCol.id)}
+          onToggleSort={() => setItemSort((v) => !v)}
+          onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
+          onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
+          onItemMenu={setItemMenuId}
+          onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
+        />
       ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
           <div className="lg:col-start-1">
@@ -471,7 +515,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                     </Badge>
                   </div>
                   <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
-                  {!sf.coverUrl && <div className="text-xs text-forest-700 max-md:font-normal">Thêm ảnh bìa</div>}
+                  {!sf.coverUrl && (
+                    <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
+                      Thêm ảnh bìa
+                    </button>
+                  )}
                 </div>
               </div>
               {view.code === 'LIVE' && <div className={`mt-2 text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
@@ -535,40 +583,18 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         </div>
       )}
 
-      {!sectionCol && (
-        <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
+      {!sectionCol && !wide && (
+        <div data-testid="builder-bar" className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
           {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
-          <div className="mx-auto flex max-w-5xl gap-2">
-            {view.canShare ? (
-              <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} flex-1`}>
-                Xem trước
-              </Link>
-            ) : (
-              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setPreviewOpen(true)}>
-                Xem trước
-              </button>
-            )}
-            {view.canShare ? (
-              <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1 max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
-                <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Chia sẻ
-              </button>
-            ) : sf.isPublished ? (
-              <button
-                type="button"
-                className={`${ui.btnPrimary} min-w-0 flex-1`}
-                disabled
-                aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
-              >
-                {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
-              </button>
-            ) : (
-              <button type="button" className={`${ui.btnPrimary} flex-1`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
-                {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
-              </button>
-            )}
-          </div>
+          <div className="mx-auto flex max-w-5xl gap-2">{actions('flex-1')}</div>
         </div>
+      )}
+      {!sectionCol && wide && headSlot && createPortal(
+        <>
+          {!sf.isPublished && itemCount === 0 && <p className="text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
+          {actions('')}
+        </>,
+        headSlot,
       )}
 
       <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={sf.slug} title={sf.title} referralCode={sf.referralCode ?? null} />
@@ -592,6 +618,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             ? [
                 { key: 'pin', label: menuItem.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu', icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
                 { key: 'hide', label: menuItem.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm', icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
+                ...(menuItem.product?.slug ? [{ key: 'kit', label: 'Bài đăng mẫu', icon: Sparkles, onPress: () => setKitSlug(menuItem.product!.slug) }] : []),
                 { key: 'remove', label: BUILDER_COPY.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItem(menuItem.id) },
               ]
             : []
