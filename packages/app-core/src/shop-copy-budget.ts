@@ -151,6 +151,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.outOfQuota': 16,
   'coupon.expired': 16,
   'coupon.used': 16,
+  // 25 = "99 mã · giảm đến 123.456đ": số lẻ không tròn nghìn ghi đủ (vndShort), dài hơn "999k" của giá trị xấu nhất trong spec.
+  'coupon.hintShort': 25,
+  'coupon.hintShortPlain': 15,
   'coupon.savedToast': null,
   'coupon.loginToSave': null,
   'coupon.detailTitle': null,

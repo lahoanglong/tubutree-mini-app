@@ -92,6 +92,25 @@ test.describe('Web khách: chân dính giỏ ở 375px', () => {
     expect(await barHeight(page)).toBeLessThanOrEqual(215);
   });
 
+  for (const [usable, maxSaving, text] of [
+    [6, 60_000, '6 mã · giảm đến 60k'],
+    [9, 123_456, '9 mã · giảm đến 123.456đ'],
+  ] as const) {
+    test(`gợi ý ${usable} mã dùng được, mã tốt nhất giảm ${maxSaving}: hiện đủ "${text}" trên một dòng, không bị cắt "…" (P1 #8)`, async ({ page, api }) => {
+      await openCart(page, api, { lines: 3, reached: true, hint: { usable, maxSaving } });
+
+      const hint = bar(page).getByText(text, { exact: true });
+      await expect(hint).toBeVisible();
+      const fit = await hint.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+      expect(fit.scroll, `chữ gợi ý cần ${fit.scroll}px, chỗ có ${fit.client}px`).toBeLessThanOrEqual(fit.client);
+      // Số tròn nghìn (60k) vừa một dòng; số lẻ ghi đủ có thể xuống hai dòng nhưng hàng mã vẫn 44px và chân dính không cao thêm.
+      const lines = Math.round((await hint.evaluate((el) => el.getBoundingClientRect().height)) / 16);
+      expect(lines, `gợi ý chiếm ${lines} dòng`).toBeLessThanOrEqual(maxSaving % 1_000 === 0 ? 1 : 2);
+      expect(await barHeight(page), 'hàng mã vẫn 44px nên chân dính không cao thêm').toBeLessThanOrEqual(150);
+      await expect(bar(page).getByText('Chọn mã')).toBeVisible();
+    });
+  }
+
   test('máy hẹp 320px: tổng và nút không tràn ngang, cùng một hàng', async ({ page, api }) => {
     await openCart(page, api, { lines: 3, reached: true, combo: 6_000 }, { width: 320, height: 640 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoCouponMemory, couponAutoCopy, couponHint, pickBestCoupon, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
+import { autoCouponMemory, couponAutoCopy, couponHint, pickBestCoupon, couponHintShort, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
 
 describe('couponUseTarget', () => {
   it('giỏ có hàng → giỏ; giỏ trống hoặc chưa biết → sản phẩm', () => {
@@ -71,6 +71,23 @@ describe('couponHintText', () => {
   });
   it('chưa biết mức tiết kiệm → chỉ nói số mã, không hứa số 0đ', () => {
     expect(couponHintText({ count: 1, maxSaving: 0 }, fmt)).toBe('Bạn có 1 mã dùng được');
+  });
+});
+
+describe('couponHintShort', () => {
+  it('có mức tiết kiệm → "N mã · giảm đến X" với X rút gọn (60k), vừa một dòng ở 375px', () => {
+    expect(couponHintShort({ count: 6, maxSaving: 60_000 })).toBe('6 mã · giảm đến 60k');
+    expect(couponHintShort({ count: 12, maxSaving: 1_500_000 })).toBe('12 mã · giảm đến 1,5tr');
+  });
+  it('số tiền lẻ không tròn nghìn thì ghi đủ, không làm tròn nói sai con số', () => {
+    expect(couponHintShort({ count: 9, maxSaving: 123_456 })).toBe('9 mã · giảm đến 123.456đ');
+  });
+  it('chưa biết mức tiết kiệm → chỉ nói số mã, không hứa 0đ', () => {
+    expect(couponHintShort({ count: 1, maxSaving: 0 })).toBe('1 mã dùng được');
+  });
+  it('luôn ngắn hơn câu đầy đủ của couponHintText', () => {
+    const hint = { count: 6, maxSaving: 60_000 };
+    expect(couponHintShort(hint).length).toBeLessThan(couponHintText(hint, (n) => `${n}đ`).length);
   });
 });
 

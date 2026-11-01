@@ -665,7 +665,7 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(row.textContent!.endsWith('Chọn mã')).toBe(true);
   });
 
-  it('chưa có mã nhưng có mã dùng được: gợi ý "Bạn có N mã" cũng nằm trong dòng đó', async () => {
+  it('chưa có mã nhưng có mã dùng được: gợi ý bản ngắn "N mã · giảm đến X" cũng nằm trong dòng đó', async () => {
     state.coupons = [c('GIAM30')];
     state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
     const r = render(<CouponBox sheet currentCode={null} subtotal={300000} preview={{ itemIds: ['i1'] }} previewKey="k" />);
@@ -673,7 +673,7 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     await flush(8);
     const row = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
     oneLine(row);
-    expect(row.textContent).toContain('Bạn có 1 mã dùng được');
+    expect(row.textContent).toContain('1 mã · giảm đến 43.800đ');
   });
 
   it('đang có mã: chip mã, số đã giảm và "Thay đổi" cùng một dòng', async () => {

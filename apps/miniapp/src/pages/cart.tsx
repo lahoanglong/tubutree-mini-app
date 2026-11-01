@@ -31,7 +31,7 @@ import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCouponHint } from '../components/checkout/use-coupon-hint';
-import { couponHintText } from '@tubutree/app-core/coupon-use';
+import { couponHintShort } from '@tubutree/app-core/coupon-use';
 import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { PageHeader } from '../components/ui/page-header';
@@ -655,8 +655,9 @@ function CouponRow({
               )}
             </Box>
           ) : hint ? (
-            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {couponHintText(hint, formatVnd)}
+            // Không cắt "…": số tiền lẻ không tròn nghìn (123.456đ) ghi đủ nên có thể xuống dòng; hai dòng 16px vẫn nằm gọn trong hàng 44px.
+            <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: '16px' }}>
+              {couponHintShort(hint)}
             </Text>
           ) : (
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

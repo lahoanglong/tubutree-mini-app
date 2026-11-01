@@ -687,7 +687,7 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 
-  it('giỏ chưa có mã, có mã dùng được → "Bạn có N mã dùng được · giảm đến X", hỏi đúng tham số, không gọi áp mã', async () => {
+  it('giỏ chưa có mã, có mã dùng được → "N mã · giảm đến X" (bản ngắn, vừa một dòng), hỏi đúng tham số, không gọi áp mã', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     mocks.getCouponPreviews.mockResolvedValue([
       preview('WELCOME30', { discount: 30_000 }),
@@ -695,7 +695,7 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
       preview('BIG', { eligible: false, reason: 'Cần đơn tối thiểu 500.000đ', discount: 100_000 }),
     ]);
     renderPage();
-    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('2 mã · giảm đến 30k')).toBeInTheDocument();
     expect(screen.queryByText('Chọn hoặc nhập mã giảm giá')).toBeNull();
     expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1);
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ storefrontSlug: undefined, itemIds: undefined });

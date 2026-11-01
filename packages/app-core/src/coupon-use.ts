@@ -1,4 +1,6 @@
 import type { CouponPreviewDTO } from '@tubutree/shared-types';
+import { vndShort } from './commerce/money';
+import { fillCopy } from './shop-copy';
 
 /** Chữ và điểm đến của nút "Sao chép" / "Dùng ngay" trên thẻ mã giảm giá (Mini App và web dùng chung). */
 export const couponUseCopy = {
@@ -35,6 +37,16 @@ export function couponHint(previews: readonly CouponPreviewDTO[] | null | undefi
 export function couponHintText(hint: CouponHint, formatMoney: (n: number) => string): string {
   const base = `Bạn có ${hint.count} mã dùng được`;
   return hint.maxSaving > 0 ? `${base} · giảm đến ${formatMoney(hint.maxSaving)}` : base;
+}
+
+/**
+ * Bản ngắn của `couponHintText` cho dòng một hàng ở chân dính giỏ (Mini App và web), nơi "Bạn có 6 mã dùng được · giảm đến 60.000đ" bị
+ * cắt "…" ở 375px. Số tiền rút gọn (60k) cùng luật `vndShort` nên không bao giờ nói sai con số; câu đầy đủ vẫn dùng ở thanh toán và khung mở rộng.
+ */
+export function couponHintShort(hint: CouponHint): string {
+  return hint.maxSaving > 0
+    ? fillCopy('coupon.hintShort', { n: hint.count, x: vndShort(hint.maxSaving) })
+    : fillCopy('coupon.hintShortPlain', { n: hint.count });
 }
 
 /** Giỏ có hàng thì tới giỏ (chọn sẵn mã ở đó), chưa có thì tới danh sách sản phẩm để mua. */
