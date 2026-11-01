@@ -163,7 +163,7 @@
 - MINOR hai cách nói giới hạn mua: ghi quyết định vào `01-thiet-ke.md` §5 (danh sách dùng "Tối đa {n}/khách" vì chỗ hẹp, thanh Giờ vàng PDP giữ "Mỗi khách tối đa {n}"), kèm comment ở `shop-copy.ts`. Không đổi PDP: nằm trong vùng của gói khác và chỗ đó đủ rộng.
 - Lỗi do chính gói tìm ra khi chạy `web-gate.sh`: `view.meta` có thể null (tsc của web build bắt); đã dùng `view.meta?.length ?? 0`.
 
-**Gate** (`gate.sh --base 201046ff2`, một lần, 10/11 bước nặng ở dưới):
+**Gate** (`gate.sh --base 201046ff2`, một lần):
 
 - PASS: shared-types, tsc-api/web/miniapp/app-core/e2e, eslint-api/miniapp/web, vitest-app-core 151 file / 2106 test, vitest-miniapp-utc 406 / 6214, vitest-web 547 / 9173, lint-parity, vite-build, bundle-mini entry 646/201 KB total 2184/851 KB (≤ 700 KB).
 - FAIL hai bước, đều là lỗi hết thời gian do máy quá tải, không dính gói này: `vitest-miniapp` (`product-detail-info.spec.tsx`, ngưỡng 300ms thực đo 319ms; bản `TZ=UTC` cùng số test xanh) và `jest-api` (`gomdon-webhook.controller.spec.ts` quá 5000ms; `apps/api` không có thay đổi nào trong nhánh). Chạy riêng từng file: 11/11 xanh cả hai.
