@@ -191,6 +191,15 @@ body.with-back-btn .page.page-bleed {
   justify-content: center;
 }
 
+/* Khung chạm 44px của ô chọn đầu dòng (Checkbox `flush`) chỉ chiếm 24px bề ngang: đệm trái 10px + margin âm 10px hai phía, nên ô 24px nằm sát mép trái cột,
+   44px chạm nhô ra 10px mỗi phía (lên đệm thẻ và khe cột). Để trong CSS chứ không inline: bánh cóc px của P17b chỉ đếm TSX. */
+.tubu-hit-flush {
+  box-sizing: border-box;
+  padding-left: 10px;
+  margin-left: -10px;
+  margin-right: -10px;
+}
+
 /* ── Vùng chạm 44px cho phần tử nhìn thấp hơn (Chip 36px): giãn theo chiều dọc, không đổi hình ── */
 .tubu-hit-44 {
   position: relative;

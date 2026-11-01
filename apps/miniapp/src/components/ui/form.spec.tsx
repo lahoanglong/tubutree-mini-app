@@ -48,18 +48,19 @@ describe('Checkbox', () => {
   });
 
   // Dòng giỏ (PL-19): ô chọn chiếm cột 24px, vùng chạm 44px nhô ra 10px mỗi phía thay vì chiếm cả 44px bề ngang (cách ảnh ~30px).
-  it('`flush`: vùng chạm vẫn 44x44 nhưng chỉ chiếm 24px bề ngang trong dòng (margin âm 10px mỗi phía), ô nằm đúng cột 24px', () => {
+  // Số đo thật (24 rộng, ảnh cách 12, vùng chạm 44) do e2e cart-display.miniapp.spec.ts đo vì jsdom không nạp tokens.css.
+  it('`flush`: khung chạm vẫn 44x44 và mang lớp tubu-hit-flush (margin âm nằm ở tokens.css)', () => {
     render(<Checkbox flush aria-label="Chọn dòng" checked={false} onChange={() => {}} />);
     const hit = screen.getByRole('checkbox').closest('[data-testid="checkbox-hit-area"]') as HTMLElement;
-    expect(hit).toHaveStyle({ minHeight: '44px', minWidth: '44px', marginLeft: '-10px', marginRight: '-10px', paddingLeft: '10px', boxSizing: 'border-box' });
+    expect(hit).toHaveStyle({ minHeight: '44px', minWidth: '44px' });
+    expect(hit).toHaveClass('tubu-hit-flush');
   });
 
-  it('không `flush` (mặc định) thì không có margin âm: các chỗ khác giữ nguyên bố cục', () => {
+  it('không `flush` (mặc định) thì không có lớp tubu-hit-flush: các chỗ khác giữ nguyên bố cục', () => {
     render(<Checkbox aria-label="Chọn dòng" checked={false} onChange={() => {}} />);
     const hit = screen.getByRole('checkbox').closest('[data-testid="checkbox-hit-area"]') as HTMLElement;
+    expect(hit).not.toHaveClass('tubu-hit-flush');
     expect(hit.style.marginLeft).toBe('');
-    expect(hit.style.marginRight).toBe('');
-    expect(hit.style.paddingLeft).toBe('');
   });
 
   it('does not require a value prop for standalone use', () => {

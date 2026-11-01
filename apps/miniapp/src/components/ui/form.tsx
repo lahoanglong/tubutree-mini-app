@@ -85,10 +85,8 @@ function forwardPaddingTap(e: MouseEvent<HTMLDivElement>) {
   e.currentTarget.querySelector('input')?.click();
 }
 
-// `flush`: khung chạm vẫn 44x44 nhưng chỉ chiếm đúng 24px bề ngang của bố cục (margin âm 10px mỗi phía bù đệm trái 10px; ô nằm sát mép trái của cột 24px),
-// phần nhô ra là vùng chạm thêm trên đệm của thẻ và khe giữa các cột. Dùng cho ô chọn đầu dòng (giỏ: cột 24 + khoảng 12, PL-19) thay vì chiếm cả 44px.
-const FLUSH_HIT = { boxSizing: 'border-box', paddingLeft: 10, marginLeft: -10, marginRight: -10 } as const;
-
+// `flush`: khung chạm vẫn 44x44 nhưng chỉ chiếm đúng 24px bề ngang của bố cục (lớp `.tubu-hit-flush` trong tokens.css: margin âm bù đệm trái; ô nằm sát mép trái
+// của cột 24px), phần nhô ra là vùng chạm thêm trên đệm của thẻ và khe giữa các cột. Dùng cho ô chọn đầu dòng (giỏ: cột 24 + khoảng 12, PL-19) thay vì chiếm cả 44px.
 function hitArea(testId: string, children: ReactNode, decorative: boolean, flush = false) {
   return (
     <div
@@ -96,7 +94,8 @@ function hitArea(testId: string, children: ReactNode, decorative: boolean, flush
       aria-hidden={decorative || undefined}
       {...(decorative ? INERT : null)}
       onClick={decorative ? undefined : forwardPaddingTap}
-      style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', ...(flush ? FLUSH_HIT : null) }}
+      className={flush ? 'tubu-hit-flush' : undefined}
+      style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center' }}
     >
       {children}
     </div>
@@ -134,7 +133,7 @@ const DECORATIVE_INPUT = { tabIndex: -1 } as const;
 // default it, since a standalone Checkbox never reads it.
 export type CheckboxProps = Omit<ComponentProps<typeof ZCheckbox>, 'value'> & {
   value?: string | number;
-  /** Ô chọn đầu dòng: chiếm cột 24px, vùng chạm 44px nhô ra hai phía (xem `FLUSH_HIT`). Mặc định false: khung chiếm 44px như mọi chỗ khác. */
+  /** Ô chọn đầu dòng: chiếm cột 24px, vùng chạm 44px nhô ra hai phía (lớp `.tubu-hit-flush`). Mặc định false: khung chiếm 44px như mọi chỗ khác. */
   flush?: boolean;
 };
 
