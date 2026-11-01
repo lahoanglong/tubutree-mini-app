@@ -23,6 +23,33 @@ describe('maskDobInput', () => {
   });
 });
 
+describe('maskDobInput sửa giữa ô và dấu ngăn khác', () => {
+  const prev = '05/03/1990';
+  it('xoá chữ số đầu không bị đệm số 0 lại', () => {
+    expect(maskDobInput('0/03/1990', prev)).toBe('0/03/1990');
+    expect(maskDobInput('05/0/1990', prev)).toBe('05/0/1990');
+  });
+  it('chèn giữa hoặc bôi đen thay không đổi năm', () => {
+    expect(maskDobInput('05/103/1990', prev)).toBe('05/103/1990');
+    expect(maskDobInput('05/0/1990', prev)).toBe('05/0/1990');
+    expect(maskDobInput('05/03/11990', prev).slice(0, 6)).toBe('05/03/');
+  });
+  it('gõ tiến: dấu ngăn vừa gõ ở cuối ô thì thêm số 0', () => {
+    expect(maskDobInput('5/', '5')).toBe('05');
+    expect(maskDobInput('05/3/', '05/3')).toBe('05/03');
+    expect(maskDobInput('5.', '5')).toBe('05');
+  });
+  it('coi . - khoảng trắng như /', () => {
+    expect(maskDobInput('5.3.1990')).toBe('05/03/1990');
+    expect(maskDobInput('5-3-1990')).toBe('05/03/1990');
+    expect(maskDobInput('5 3 1990')).toBe('05/03/1990');
+    expect(maskDobInput('05.03.1990')).toBe('05/03/1990');
+  });
+  it('gõ liền 8 số vẫn ra dd/mm/yyyy', () => {
+    expect(maskDobInput('05031990')).toBe('05/03/1990');
+  });
+});
+
 describe('validateDobVn', () => {
   it('để trống thì không lỗi, không có ngày', () => {
     expect(validateDobVn('', NOW)).toEqual({ iso: null, error: null });

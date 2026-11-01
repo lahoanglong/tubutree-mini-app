@@ -11,15 +11,32 @@ export const DOB_ERRORS = {
 
 const MIN_YEAR = 1900;
 
-/** Gõ số liền nhau ("05031990") thành "05/03/1990"; "5/" tự thành "05/"; bỏ ký tự lạ, tối đa 8 số. */
-export function maskDobInput(raw: string): string {
-  const d = raw
-    .replace(/(^|\/)(\d)\//g, '$10$2/')
-    .replace(/(^|\/)(\d)\//g, '$10$2/')
-    .replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+/**
+ * Gõ số liền nhau ("05031990") thành "05/03/1990"; ".", "-", khoảng trắng như "/"; bỏ ký tự lạ.
+ * `prev` là giá trị ô trước khi sửa: chỉ gõ tiến (dấu ngăn vừa gõ ở cuối ô) hoặc dán cả chuỗi mới tự thêm số 0,
+ * sửa giữa ô (xoá, chèn, bôi đen thay) giữ nguyên chữ số của phần khác.
+ */
+export function maskDobInput(raw: string, prev?: string): string {
+  const s = raw.replace(/[^\d./\-\s]/g, '').replace(/[./\-\s]+/g, '/').replace(/^\//, '');
+  if (!s.includes('/')) {
+    const d = s.slice(0, 8);
+    if (d.length <= 2) return d;
+    if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+    return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+  }
+  const parts = s.split('/');
+  const trailing = parts[parts.length - 1] === '';
+  if (trailing) parts.pop();
+  if (parts.length > 3) parts.splice(2, parts.length - 2, parts.slice(2).join(''));
+  const pasted = prev === undefined || raw.length - prev.length > 1;
+  const typedForward = trailing && raw.length > (prev?.length ?? 0);
+  for (let i = 0; i < Math.min(parts.length, 2); i++) {
+    if (parts[i]!.length !== 1) continue;
+    const last = i === parts.length - 1;
+    if (pasted ? !last || trailing : last && typedForward) parts[i] = `0${parts[i]}`;
+  }
+  if (parts.length === 3) parts[2] = parts[2]!.slice(0, 4);
+  return parts.join('/');
 }
 
 /** Trả `iso` khi ô có ngày hợp lệ; `error` nói rõ cần nhập lại gì. Ô trống không phải lỗi. `now` theo giờ máy khách. */
