@@ -94,7 +94,8 @@ export default function BackButton() {
           position: 'fixed',
           top: 'calc(var(--safe-top) + 8px)',
           left: 12,
-          zIndex: 200,
+          // 201, cao hơn thanh tên shop (`ShopTopBar`, 200): nút lùi đứng trước nội dung trong DOM (thứ tự Tab) nên cùng 200 thì thanh đó vẽ đè lên nó.
+          zIndex: 201,
           width: 44,
           height: 44,
           borderRadius: '50%',
