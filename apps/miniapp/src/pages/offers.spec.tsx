@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   postCheckIn: vi.fn(),
   ensurePhone: vi.fn(),
   campaigns: vi.fn(),
+  collectable: vi.fn(),
+  flash: vi.fn(),
+  coreGet: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -32,7 +35,9 @@ vi.mock('../services/account-api', async (importOriginal) => ({
   getDailyCheckInStatus: mocks.getCheckIn,
   postDailyCheckIn: mocks.postCheckIn,
 }));
-vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.campaigns } }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
+vi.mock('../services/shop-api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), fetchActiveFlashSales: mocks.flash }));
+vi.mock('../services/coupon-claim', () => ({ claimCoupon: vi.fn() }));
 vi.mock('../services/campaign-api', () => ({ fetchHomeCampaigns: vi.fn() }));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('../hooks/use-recycle-open-requests', () => ({ useRecycleOpenRequests: () => mocks.recycleOpen }));
@@ -52,6 +57,14 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import OffersPage from './offers';
 
 const REWARDS = Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 5 + i, claimed: false, isToday: i === 0 }));
+const FLASH_ITEM = {
+  itemId: 'f1', variationId: 'v1', productSlug: 'nuoc-rua-chen', productName: 'Nước rửa chén', thumbnail: null,
+  retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 2, endAt: new Date(Date.now() + 3_600_000).toISOString(),
+};
+const OPEN_CODE = {
+  code: 'NHAN10', title: null, type: 'AMOUNT', value: 10000, minOrder: null, maxDiscount: null,
+  startAt: '2026-10-01T00:00:00.000Z', endAt: '2026-12-31T00:00:00.000Z', newCustomerOnly: false, claimedCount: 0, usageLimit: null,
+};
 const COUPON = { code: 'WELCOME-U1', type: 'AMOUNT', value: 25000, minOrder: 150000, maxDiscount: null, endAt: '2026-12-01T00:00:00.000Z' };
 
 function renderPage() {
@@ -62,6 +75,7 @@ function renderPage() {
 describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mocks.phase = 'authenticated';
     mocks.guest = false;
     mocks.recycleOpen = false;
@@ -70,6 +84,9 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100, pointsConvertedBalance: 20, tier: { name: 'Mầm Xanh' }, nextTier: null });
     mocks.getCoupons.mockResolvedValue([COUPON]);
     mocks.campaigns.mockResolvedValue([]);
+    mocks.collectable.mockResolvedValue([]);
+    mocks.flash.mockResolvedValue([]);
+    mocks.coreGet.mockImplementation((path: string, opts: unknown) => (path === '/coupons/collectable' ? mocks.collectable(path, opts) : mocks.campaigns(path, opts)));
     mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 3, currentCycleDay: 4, todayPoints: 8, rewards: REWARDS });
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
@@ -105,7 +122,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
       expect(screen.getByText(t)).toBeInTheDocument();
     }
     expect(await screen.findByText('Giảm 25.000đ')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Mã giảm giá của tôi' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Mã của tôi' })).toBeInTheDocument();
   });
 
   it('cờ Đổi rác và Tích điểm đơn sàn tắt → hai dòng đó bị ẩn, phần còn lại giữ nguyên', async () => {
@@ -207,12 +224,69 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(await screen.findByRole('progressbar', { name: 'Tiến độ lên hạng kế' })).toBeInTheDocument();
   });
 
-  it('mã sắp hết hạn có nhãn "Sắp hết hạn"; mã còn xa thì không', async () => {
+  it('mã sắp hết hạn có chữ "Còn n ngày" tông cảnh báo; mã còn xa thì chữ "Dùng đến"', async () => {
     const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
-    mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'SOON', endAt: soon }, COUPON]);
+    const far = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'SOON', endAt: soon }, { ...COUPON, endAt: far }]);
     renderPage();
-    await screen.findAllByText(/HSD/);
-    expect(screen.getAllByText('Sắp hết hạn')).toHaveLength(1);
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    const expiries = await within(mine).findAllByTestId('voucher-expiry');
+    expect(expiries.map((e) => e.textContent)).toEqual(['Còn 2 ngày', expect.stringMatching(/^Dùng đến \d{2}\/\d{2}$/)]);
+    expect(expiries[0]!.style.color).toBe('var(--color-status-warning-fg)');
+    expect(expiries[1]!.style.color).toBe('var(--color-text-tertiary)');
+  });
+
+  it('Mã của tôi: mỗi thẻ có nút "Dùng ngay"; "Xem tất cả" tới /vouchers?tab=mine', async () => {
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    expect(await within(mine).findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
+    fireEvent.click(within(mine).getByRole('button', { name: /Xem tất cả/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
+  });
+
+  it('thứ tự trang theo Q10: Banner, Giờ vàng, Nhận mã, Điểm Xanh, Mã của tôi, Đổi quà', async () => {
+    mocks.campaigns.mockResolvedValue([
+      { id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL', startAt: new Date(Date.now() - 86_400_000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString() },
+    ]);
+    mocks.flash.mockResolvedValue([FLASH_ITEM]);
+    mocks.collectable.mockResolvedValue([OPEN_CODE]);
+    renderPage();
+    const regions = [
+      await screen.findByRole('region', { name: 'Chương trình nổi bật' }),
+      await screen.findByRole('region', { name: 'Giờ vàng' }),
+      await screen.findByRole('region', { name: 'Nhận mã' }),
+      await screen.findByRole('region', { name: /Điểm Xanh/ }),
+      await screen.findByRole('region', { name: 'Mã của tôi' }),
+      await screen.findByRole('region', { name: /Đổi quà/ }),
+    ];
+    for (let i = 1; i < regions.length; i++) {
+      expect(regions[i - 1]!.compareDocumentPosition(regions[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
+    }
+  });
+
+  it('khách chưa đăng nhập: vẫn thấy Giờ vàng và Nhận mã, rồi lời mời đăng nhập thay các khối cần tài khoản; không gọi API riêng của khách', async () => {
+    mocks.phase = 'guest';
+    mocks.flash.mockResolvedValue([FLASH_ITEM]);
+    mocks.collectable.mockResolvedValue([OPEN_CODE]);
+    renderPage();
+    const flash = await screen.findByRole('region', { name: 'Giờ vàng' });
+    const collect = await screen.findByRole('region', { name: 'Nhận mã' });
+    const login = await screen.findByText('Đăng nhập để xem ưu đãi');
+    expect(flash.compareDocumentPosition(collect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(collect.compareDocumentPosition(login) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Đăng nhập ngay' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /Điểm Xanh/ })).toBeNull();
+    expect(mocks.getLoyalty).not.toHaveBeenCalled();
+    expect(mocks.getCoupons).not.toHaveBeenCalled();
+  });
+
+  it('Nhận mã tải lỗi: báo tại chỗ có "Thử lại", các khối khác vẫn vẽ', async () => {
+    mocks.collectable.mockRejectedValue({ isHttpError: true, response: { status: 500, data: { message: 'x' } } });
+    renderPage();
+    const collect = await screen.findByRole('region', { name: 'Nhận mã' });
+    expect(within(collect).getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.getByText('Quà của tôi')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Mã của tôi' })).toBeInTheDocument();
   });
 
   it('Đổi rác tạm dừng mà khách còn yêu cầu mở: dòng đổi thành "Yêu cầu của tôi"; hết yêu cầu thì ẩn', async () => {
