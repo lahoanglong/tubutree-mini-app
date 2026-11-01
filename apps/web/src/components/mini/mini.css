@@ -345,9 +345,17 @@
   }
   .tubu-press,
   .tubu-press-card,
-  .tubu-btn {
+  .tubu-btn,
+  .tubu-flash-fill {
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra. Mini có luật `*` toàn cục cho prefers-reduced-motion, web chỉ có luật từng lớp. */
+.tubu-flash-fill {
+  transition-property: transform;
+  transition-duration: 600ms;
+  transition-timing-function: var(--p-ease-out);
 }
 
 .scroll-x {

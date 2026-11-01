@@ -495,6 +495,13 @@ body.with-back-btn .page.page-bleed {
   }
 }
 
+/* Phần đã bán của Giờ vàng chạy lên đúng mức một lần lúc khối hiện ra; luật `*` của prefers-reduced-motion ở cuối file rút còn 0,01ms. */
+.tubu-flash-fill {
+  transition-property: transform;
+  transition-duration: 600ms;
+  transition-timing-function: var(--p-ease-out);
+}
+
 /* Container cuộn ngang an toàn trong flex cha (Rule 9b.2) */
 .scroll-x {
   display: flex;

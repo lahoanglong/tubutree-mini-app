@@ -46,6 +46,14 @@ describe('mini.css', () => {
   });
 });
 
+describe('mini.css: thanh Đã bán của Giờ vàng', () => {
+  it('.tubu-flash-fill mang transition transform 600ms và bị prefers-reduced-motion rút còn 0,01ms như Mini (luật * toàn cục của Mini)', () => {
+    expect(css).toMatch(/\.tubu-flash-fill\s*\{[^}]*transition-property:\s*transform[^}]*transition-duration:\s*600ms/);
+    const reduce = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(reduce).toMatch(/\.tubu-flash-fill[^{]*\{[^}]*transition-duration:\s*0\.01ms\s*!important/);
+  });
+});
+
 describe('mini.css không đổi giao diện máy tính', () => {
   it('ẩn nút xoá native của ô tìm chỉ trong SearchField, không phải mọi [role=search]', () => {
     expect(css).not.toMatch(/\[role=['"]search['"]\][^{]*cancel-button/);
