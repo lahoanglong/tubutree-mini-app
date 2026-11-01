@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[] }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+// renderToStaticMarkup chỉ vẽ lượt máy chủ; ca cần pha phiên thật giả lập trạng thái sau hydrate.
+vi.mock('@/lib/use-hydrated', () => ({ useHydrated: () => true }));
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (o: { queryKey: unknown[] }) => ({
     data: o.queryKey.join('/') === 'notifications/unread' ? { count: mocks.notifications.filter((n) => n.status !== 'READ').length } : mocks.cart,
