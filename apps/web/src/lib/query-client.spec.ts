@@ -32,6 +32,10 @@ describe('createQueryClient (R-80)', () => {
     for (const key of [['admin-orders', 1], ['admin-ops-inbox'], ['admin-customer-refunds', 'OPEN', 'count'], ['admin-dealers', 'PENDING']]) {
       expect(staleOf(client, key)).toBe(30_000);
     }
+    // Dữ liệu sống (chat, chấm công trực tiếp) luôn coi là cũ để quay lại cửa sổ là làm mới.
+    expect(staleOf(client, ['admin-support-conversations', '', false])).toBe(0);
+    expect(staleOf(client, ['admin-support-conversation', 'c1'])).toBe(0);
+    expect(staleOf(client, ['admin-attendance-live'])).toBe(0);
     expect(staleOf(client, ['orders-mine'])).toBe(0);
     expect(staleOf(client, ['products', 'x'])).toBe(60_000);
   });

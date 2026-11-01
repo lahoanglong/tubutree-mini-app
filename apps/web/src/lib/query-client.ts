@@ -16,9 +16,11 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
  */
 /** Khoá admin ('admin-...') và huy hiệu hoàn tiền: đổi tab qua lại trong 30 giây dùng lại dữ liệu cũ thay vì gọi lại mạng. */
 export const ADMIN_STALE_MS = 30_000;
+// Hội thoại chat và chấm công trực tiếp là dữ liệu sống (hỏi lại theo nhịp và khi quay lại cửa sổ): luôn coi là cũ.
+const LIVE_ADMIN_KEY = /^admin-(support-|attendance-live)/;
 function defaultStaleTime(query: { queryKey: readonly unknown[] }): number {
   const head = query.queryKey[0];
-  return typeof head === 'string' && head.startsWith('admin-') ? ADMIN_STALE_MS : 0;
+  return typeof head === 'string' && head.startsWith('admin-') && !LIVE_ADMIN_KEY.test(head) ? ADMIN_STALE_MS : 0;
 }
 
 export function createQueryClient(): QueryClient {
