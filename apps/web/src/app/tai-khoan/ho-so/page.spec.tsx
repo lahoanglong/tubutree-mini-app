@@ -207,7 +207,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     mocks.get.mockResolvedValue({ ...ME, dob: null });
     const { container } = await mount();
     expect(field(container, 'Ngày sinh').readOnly).toBe(false);
-    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    typeInto(field(container, 'Ngày sinh'), '03/02/1991');
     expect(container.textContent).toContain('Ngày đã chọn: 03/02/1991');
     click(saveBtn(container));
     await flush(2);
@@ -218,10 +218,65 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '1991-02-03' });
   });
 
+  it('ô ngày sinh là ô chữ dd/mm/yyyy, gõ liền số tự thêm dấu / (R-110)', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    const input = field(container, 'Ngày sinh');
+    expect(input.type).toBe('text');
+    expect(input.placeholder).toBe('dd/mm/yyyy');
+    typeInto(input, '29022000');
+    expect(input.value).toBe('29/02/2000');
+  });
+
+  it('gõ 5/3/1990 tự thành 05/03/1990 (thêm số 0)', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    const input = field(container, 'Ngày sinh');
+    typeInto(input, '5/3/1990');
+    expect(input.value).toBe('05/03/1990');
+  });
+
+  it('ngày không có thật hoặc tương lai: báo lỗi rõ và không gửi', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '29/02/2023');
+    expect(container.textContent).toContain('Ngày này không có thật. Kiểm tra lại ngày và tháng nhé.');
+    click(saveBtn(container));
+    await flush(2);
+    expect(mocks.patch).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('chỉ đặt được một lần. Xác nhận?');
+    typeInto(field(container, 'Ngày sinh'), '01/01/2999');
+    expect(container.textContent).toContain('Ngày sinh không thể ở tương lai. Kiểm tra lại năm nhé.');
+    click(saveBtn(container));
+    await flush(2);
+    expect(mocks.patch).not.toHaveBeenCalled();
+  });
+
+  it('gõ dở rồi bấm Lưu: báo nhập đủ ngày/tháng/năm, không gửi', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '0503');
+    click(saveBtn(container));
+    await flush(2);
+    expect(container.textContent).toContain('Nhập đủ ngày/tháng/năm, ngày và tháng gõ 2 số, ví dụ 05/03/1990.');
+    expect(mocks.patch).not.toHaveBeenCalled();
+  });
+
+  it('29/02/2000 hợp lệ: gửi dob ISO 2000-02-29', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '29/02/2000');
+    click(saveBtn(container));
+    await flush(2);
+    click(byText(container, 'button', 'Xác nhận'));
+    await flush(6);
+    expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '2000-02-29' });
+  });
+
   it('chọn ngày sinh mới rồi bấm Sửa lại: chưa gửi gì, nút Lưu thay đổi trở lại', async () => {
     mocks.get.mockResolvedValue({ ...ME, dob: null });
     const { container } = await mount();
-    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    typeInto(field(container, 'Ngày sinh'), '03/02/1991');
     click(saveBtn(container));
     await flush(2);
     click(byText(container, 'button', 'Sửa lại'));
@@ -234,7 +289,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
   it('đang hỏi xác nhận ngày sinh: các ô nhập bị khoá', async () => {
     mocks.get.mockResolvedValue({ ...ME, dob: null });
     const { container } = await mount();
-    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    typeInto(field(container, 'Ngày sinh'), '03/02/1991');
     click(saveBtn(container));
     await flush(2);
     expect(field(container, 'Ngày sinh').readOnly).toBe(true);
@@ -253,7 +308,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     mocks.get.mockImplementation(async () => (++meCalls === 1 ? { ...ME, dob: null } : { ...ME, dob: '1991-02-03' }));
     mocks.patch.mockRejectedValueOnce(new NetworkError(false)).mockResolvedValueOnce({ ...ME });
     const { container } = await mount();
-    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    typeInto(field(container, 'Ngày sinh'), '03/02/1991');
     click(saveBtn(container));
     await flush(2);
     click(byText(container, 'button', 'Xác nhận'));
