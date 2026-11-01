@@ -67,6 +67,7 @@ describe('createHomeFeed', () => {
 });
 
 describe('khối shippingOrders đã bỏ khỏi /home/me', () => {
+  // Đúng cho Mini đã phát hành chừng nào take() còn giữ nguyên như bản 45d9dab6d: Mini cũ đóng gói chính hàm này.
   it('Mini cũ đã phát hành vẫn gọi takeMe(shippingOrders): thân mới không có khoá thì null để tự gọi /orders', async () => {
     fetchMe.mockResolvedValue({ forYou: [{ id: 'p' }], activeOrderCount: { count: 0 } });
     feed.arm();

@@ -288,7 +288,7 @@ describe('HomeService.getForUser', () => {
     expect((await svc.getForUser('u1')).hasOrders).toBeNull();
   });
 
-  it('khách chưa có đơn: không gọi kệ Mua lại, danh sách đơn đang giao; đầu ra như trước (rỗng)', async () => {
+  it('khách chưa có đơn: không gọi kệ Mua lại, không đọc danh sách đơn; đầu ra như trước (rỗng)', async () => {
     const { svc, purchased, orders, catalog } = setup();
     const r = await svc.getForUser('u1', 10);
     expect(purchased.list).not.toHaveBeenCalled();

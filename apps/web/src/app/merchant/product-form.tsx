@@ -111,6 +111,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
 
   const checkMut = useMutation({
     mutationFn: (code: string) => checkPancakeVariation(code),
+    meta: { skipAdminInvalidate: true },
     onSuccess: (v) => {
       setLinked(v);
       setCheckError(null);
@@ -302,6 +303,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
 
   const checkMut = useMutation({
     mutationFn: (code: string) => checkPancakeVariation(code),
+    meta: { skipAdminInvalidate: true },
     onSuccess: (v) => {
       setLinked(v);
       setCheckError(null);

@@ -135,7 +135,7 @@ export class HomeService {
 
   /**
    * Số đơn theo trạng thái và số yêu cầu đổi rác đang mở của khách, MỘT câu SQL: các khối đếm đơn, kệ Mua lại, gợi ý và ưu đãi
-   * khách mới đều chỉ cần biết "có đơn không / có đơn giao không / đang chờ bao nhiêu".
+   * khách mới đều chỉ cần biết "có đơn không / đã giao bao nhiêu / đang chờ bao nhiêu".
    */
   private async userFacts(userId: string): Promise<UserFacts> {
     const rows = await this.prisma.$queryRaw<{ kind: string; key: string; n: number }[]>(Prisma.sql`
