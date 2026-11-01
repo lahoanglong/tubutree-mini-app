@@ -505,6 +505,16 @@ body.with-back-btn .page.page-bleed {
 }
 
 /*
+ * Tràn mép: khối lùi lề âm đúng --space-block của cột chứa (lề trang 16px) để chạm mép màn hình, như `.tubu-bleed` của web (mini.css, nơi chỉ
+ * áp dưới md; Mini luôn là khổ điện thoại nên không có mốc md). Một nguồn thay `margin: '0 -16px'` viết tay từng file; đứng sau `.scroll-x`
+ * để `max-width: none` thắng khi hai lớp đi cùng nhau.
+ */
+.tubu-bleed {
+  margin-inline: calc(var(--space-block) * -1);
+  max-width: none;
+}
+
+/*
  * Override vùng chạm tối thiểu cho Button size="small" của zmp-ui (nạp trước ở
  * app.tsx bằng 'zmp-ui/zaui.css'). CSS gốc: .zaui-btn-small{height:32px} và
  * .zaui-btn-icon-only.zaui-btn-small{width:32px;height:32px} — dưới ngưỡng 44px
