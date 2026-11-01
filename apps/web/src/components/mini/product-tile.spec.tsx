@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { productCardView, type CardVariant, type ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
 import { ProductTile, TILE_NAME_MIN_HEIGHT } from './product-tile';
@@ -108,11 +108,23 @@ describe('ProductTile: biến thể và khung', () => {
     }
   });
 
-  it('CSS: ô meta là container, dưới 148px chữ gọn thay chữ đầy đủ (rank 112px, rail-md 132px, lưới 320px; lưới 375px 149px còn đủ chỗ)', () => {
+  it('lượt bán từ 100k làm chữ đầy đủ dài hơn trần "ngắn" nên ô gắn data-long; chữ đầy đủ xấu nhất của ngưỡng thường thì không', () => {
+    const attr = (over: Partial<ProductCard>) => tile(viewOf({ ratingAvg: 5, ...over }, 'rank'), 'rank').querySelector('.tubu-meta-text')!.hasAttribute('data-long');
+    expect(viewOf({ ratingAvg: 5, sold: 99_900 }, 'rank').meta).toHaveLength(META_SHORT_MAX_CHARS);
+    expect(attr({ sold: 99_900 })).toBe(false);
+    expect(attr({ sold: 8_200 })).toBe(false);
+    expect(attr({ sold: 123_400 })).toBe(true);
+    expect(attr({ sold: 99_900_000 })).toBe(true);
+  });
+
+  it('CSS: ô meta là container; dưới 132px (rank 112px, lưới 320px 122px) chữ gọn thay chữ đầy đủ, rail-md 132px và lưới 360px/375px giữ sao; chữ dài (data-long) đổi dưới 148px', () => {
     const css = readFileSync(resolve(__dirname, './mini.css'), 'utf8');
     expect(css).toMatch(/\.tubu-tile-meta\s*\{[^}]*container-type:\s*inline-size/);
     expect(css).toMatch(/\.tubu-meta-text\[data-compact\]::after\s*\{[^}]*content:\s*attr\(data-compact\)/);
-    expect(css).toMatch(/@container \(max-width: 147\.98px\)[\s\S]*?\.tubu-meta-text\[data-compact\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/@container \(max-width: 131\.98px\)\s*\{\s*\.tubu-meta-text\[data-compact\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/@container \(max-width: 147\.98px\)\s*\{\s*\.tubu-meta-text\[data-compact\]\[data-long\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
+    // Ngưỡng cũ 147.98px làm mất sao ở mọi thẻ rail-md và lưới 360px dù chữ đầy đủ vẫn vừa.
+    expect(css).not.toMatch(/@container \(max-width: 147\.98px\)\s*\{\s*\.tubu-meta-text\[data-compact\] >/);
   });
 
   it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {

@@ -3,7 +3,7 @@ import { useNavigate } from 'zmp-ui';
 import { Zap } from 'lucide-react';
 import type { CardBadge, CardVariant, ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
-import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 import { haptic } from '../../utils/haptic';
 import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
@@ -322,7 +322,7 @@ export function ProductTile({
               style={{ height: TILE_METRICS.meta, marginTop: TILE_METRICS.metaGap, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.meta) }}
             >
               {view.metaCompact && view.metaCompact !== view.meta ? (
-                <span className="tubu-meta-text" data-compact={view.metaCompact}>
+                <span className="tubu-meta-text" data-compact={view.metaCompact} data-long={(view.meta?.length ?? 0) > META_SHORT_MAX_CHARS ? '' : undefined}>
                   <span className="tubu-meta-full">{view.meta}</span>
                 </span>
               ) : (

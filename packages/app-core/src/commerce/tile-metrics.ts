@@ -25,6 +25,12 @@ export const TILE_METRICS = {
   line: 80,
 } as const;
 
+/**
+ * Dòng meta đầy đủ dài nhất mà hai CSS (`tokens.css`, `mini.css`) coi là "ngắn": "★ 5,0 · Đã bán 99,9k+" (21 ký tự) rộng 127,25px ở Inter 12px/500. Dài hơn
+ * ("★ 5,0 · Đã bán 123,4k+": lượt bán từ 100k) rộng tới ~137px nên thẻ gắn `data-long` và chỉ giữ bản đầy đủ khi ô meta từ 148px.
+ */
+export const META_SHORT_MAX_CHARS = 21;
+
 export interface TileBodyOptions {
   /** Có dòng nhãn hiệu không; mặc định có ở grid và rail-md, không ở biến thể khác. */
   brand?: boolean;
