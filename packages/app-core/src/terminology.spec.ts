@@ -134,7 +134,7 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/miniapp/src/components/storefront-pickers.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/i18n/vi.ts', use: USE.voice, max: 5, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/about.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
-  { file: 'apps/miniapp/src/pages/bank-payment.tsx', use: USE.voice, max: 5, reason: REASON.VOICE },
+  { file: 'apps/miniapp/src/pages/bank-payment.tsx', use: USE.voice, max: 4, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/checkout.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/dealer.tsx', use: USE.voice, max: 2, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/edit-profile.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
