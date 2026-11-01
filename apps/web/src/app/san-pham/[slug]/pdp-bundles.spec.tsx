@@ -94,12 +94,19 @@ describe('PdpBundles (web): dữ liệu server của trang ISR có thể cũ t�
     return { first, c: r.container };
   };
 
-  it('dữ liệu server đã quá 30 giây: hiện ngay, rồi tải lại; bộ vừa tắt biến mất khỏi trang', async () => {
+  it('dữ liệu server đã quá 30 giây: hiện ngay, rồi tải lại; bộ vừa tắt KHÔNG bị gỡ giữa trang (đẩy phần dưới) mà ghi "Đã kết thúc", mờ và không bấm được', async () => {
     mocks.get.mockResolvedValue({ combos: [], addons: [] });
     const { first, c } = await mountAt(Date.now() - 5 * 60_000);
     expect(first).toBe(true);
     expect(mocks.get).toHaveBeenCalledWith('/products/sp-anchor/bundles', { anonymous: true });
-    expect(c.querySelector('[data-testid="pdp-combos"]')).toBeNull();
+    const section = c.querySelector('[data-testid="pdp-combos"]')!;
+    expect(section.querySelector('h2')!.textContent).toBe('Combo ưu đãi · Đã kết thúc');
+    const body = section.querySelector('[data-testid="bundle-ended"]')!;
+    expect(body.hasAttribute('inert')).toBe(true);
+    expect(body.getAttribute('aria-hidden')).toBe('true');
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush();
+    expect(mocks.addAll).not.toHaveBeenCalled();
   });
 
   it('dữ liệu server còn mới: không tải lại', async () => {
@@ -179,14 +186,57 @@ describe('PdpBundles (web): HTML dựng sẵn (ISR) và lần hydrate đầu ph�
     r.cleanup();
   });
 
-  it('sau khi hydrate xong mới lọc theo giờ: bộ đã hết hạn rời trang (không đứng mãi)', async () => {
+  it('sau khi hydrate xong mới lọc theo giờ: bộ đã hết hạn không bị gỡ (khối giữ chỗ, ghi "Đã kết thúc")', async () => {
     const r = await hydrateAt(NOW + 3 * 3_600_000);
     await act(async () => {
       await new Promise((res) => setTimeout(res, 0));
     });
-    expect(r.final.querySelector('[data-testid="pdp-combos"]')).toBeNull();
-    expect(r.final.querySelector('[data-testid="pdp-addons"]')).toBeNull();
+    expect(r.final.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi · Đã kết thúc');
+    expect(r.final.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+    expect(r.final.querySelectorAll('[data-testid="bundle-ended"]').length).toBe(2);
     r.cleanup();
+  });
+});
+
+describe('PdpBundles (web): khối đã hiện thì không gỡ giữa trang', () => {
+  it('chỉ phía Mua kèm hết bộ: Combo vẫn bình thường, Mua kèm giữ chỗ và khoá nút', async () => {
+    mocks.get.mockResolvedValue({ combos: ONE_COMBO, addons: [] });
+    const r = render(<PdpBundles slug="sp-anchor" productName="Xà phòng sả" initialBundles={{ combos: ONE_COMBO, addons: TWO_ADDONS }} initialFetchedAt={Date.now() - 5 * 60_000} />);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    expect(c.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi');
+    expect(c.querySelector('[data-testid="pdp-combos"] [data-testid="bundle-ended"]')).toBeNull();
+    expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+    expect(rows(c).length).toBe(2);
+    expect(buttonText(c, 'Chọn món muốn mua kèm')!.disabled).toBe(true);
+  });
+
+  it('bộ mới về sau khi một bộ đã hết: khối hiện lại bình thường', async () => {
+    mocks.get.mockResolvedValue({ combos: [], addons: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const { createRoot } = await import('react-dom/client');
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <PdpBundles slug="sp-anchor" initialBundles={{ combos: ONE_COMBO, addons: [] }} initialFetchedAt={Date.now() - 5 * 60_000} />
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi · Đã kết thúc');
+    await act(async () => {
+      client.setQueryData(['bundles', 'product', 'sp-anchor'], { combos: [combo('c2', [item('m'), item('n')])], addons: [] });
+    });
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi');
+    expect(container.querySelector('[data-testid="bundle-ended"]')).toBeNull();
+    expect(container.textContent).toContain('Combo c2');
+    act(() => root.unmount());
+    container.remove();
   });
 });
 

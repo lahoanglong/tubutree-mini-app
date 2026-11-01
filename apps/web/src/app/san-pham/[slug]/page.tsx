@@ -180,12 +180,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
                 "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại kéo chứng nhận và "Đặt định kỳ" lên trước khối mua như Mini App
-                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước). Combo/Mua kèm đứng SAU khối mua ở điện thoại: trang
-                ISR có thể cũ hàng giờ, bộ vừa hết hạn hay vừa tạo làm khối biến mất/hiện ra sau khi tải; đặt trên khối mua thì cú nhảy đẩy nút
-                "Thêm vào giỏ" ngay màn đầu (CLS), còn dưới khối mua chỉ đẩy phần đã nằm dưới màn đầu.
+                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước). Combo/Mua kèm cũng đứng trước khối mua ở điện thoại
+                (Mini App: Combo/Mua kèm, rồi Số lượng, rồi Mở nhóm mua chung).
+                Bộ hết hạn hay tắt khi trang ISR đã cũ thì khối KHÔNG bị gỡ (PdpBundles giữ chỗ, ghi "Đã kết thúc"), nên chỗ này không nhảy; chỉ bộ
+                mới hiện sau khi tải (máy chủ lỗi lúc dựng, hay bộ vừa tạo sau lần dựng trang) là chèn thêm, như Mini App.
               */}
               {product.variations.length > 0 && (
-                <div className="max-md:order-2">
+                <div className="max-md:order-3">
                   <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
                 </div>
               )}
@@ -208,7 +209,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
-              <div className="max-md:order-3">
+              <div className="max-md:order-2">
                 <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
               </div>
               <div className="max-md:order-4">
