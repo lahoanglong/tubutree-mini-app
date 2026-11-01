@@ -217,4 +217,21 @@ Luật: `audience ALL` luôn thấy; `NEW` chỉ khi `kind==='new'`; `RETURNING`
 
 ## Điều chỉnh lúc làm
 
-(điền khi làm)
+Lệch so với kế hoạch lúc viết, theo thứ tự làm:
+
+- **Lọc đối tượng ở DB.** Kế hoạch có hàm `audienceMatches` trên danh sách đã tải; làm thành `audienceWhere(wanted)` trong `campaign-public.ts` và đưa vào truy vấn, để `take: BANNER_FETCH_LIMIT` không cắt mất chiến dịch hợp lệ vì các dòng khác đối tượng chiếm chỗ.
+- **`HomePublicDTO.campaigns` là trường tuỳ chọn.** Khối `campaigns` nằm trong phần tĩnh của `GET /home` nhưng không bắt buộc, để bản API cũ chưa có khối này không làm vỡ app mới; thiếu hay rỗng đều ẩn banner.
+- **`useCampaignSlides` dùng chung Mini và web.** Mini `hooks/use-campaign-slides.ts` và web `components/campaign/use-campaign-slides.ts` cùng một hợp đồng (lọc `campaignVisible`, `now` chỉ tính sau khi hydrate ở web). `use-home-banners` thêm gợi ý `tubu_home_banner` ('1'/'0', chỉ ghi khi đã biết loại khách) để giữ chỗ đúng 137px lúc banner chưa về.
+- **Thêm `campaignProductPages`** ở app-core (`commerce/campaign.ts`): gộp các trang sản phẩm đã tải và báo còn trang sau hay không, dùng chung cho nút "Xem thêm" ở Mini và web.
+- **Banner ở Ưu đãi không giữ chỗ chống nhảy.** `/offers` chỉ nhận một khối banner OFFERS_TOP ở đầu trang (đúng phạm vi gói); chống nhảy bố cục cho trang này để P14 dựng lại, nên chưa có gợi ý riêng.
+- **Tiêu đề trang chiến dịch là tên chiến dịch.** h1 = `title`, dòng phụ = `subtitle`; màn 404 có thanh tiêu đề "Chương trình" như Mini (web đổi từ h1 ẩn sang `PageHeader` sau khi so ảnh 375px).
+- **`setCoupons` chỉ nhận mã PUBLIC/CLAIM không thuộc lô thẻ in.** Mã dành riêng cho người nhận hay mã lô in không hiện trên trang nên gắn vào chỉ gây hiểu nhầm; trả 400 nêu tên mã.
+- **Khoá dòng khi thay danh sách (phát hiện nhờ race spec).** `setProducts`/`setCoupons` mở giao dịch bằng `SELECT ... FOR UPDATE` trên dòng chiến dịch; trước đó hai người thay cùng lúc làm chiến dịch giữ lẫn sản phẩm của hai bên.
+- **Web: khung chờ banner ẩn từ `lg`.** `HomeSettlingSkeleton` vẽ khung banner với `lg:hidden` vì từ `lg` banner thật nằm cạnh cột aside; CLS desktop cho ca khách cũ có gợi ý nhưng chưa khôi phục xong để P14.
+- **CLS e2e tách file.** `campaigns-cls.miniapp.spec.ts` riêng vì spec đo CLS ép Chromium (project WebKit còn lại không đo được); đo trên nền `home-p6-cls`, ngưỡng 0,02; bỏ gợi ý banner thì CLS 0,1502 (bài kiểm tra nhạy).
+- **Mock mặc định cho `/campaigns`.** `tests/support/mock-api.ts` thêm `api.fallback('GET', '/campaigns', [])` để các spec e2e cũ (không biết gì về chiến dịch) không đỏ vì lệnh gọi chưa mock.
+- **Nhãn quản trị đặt cuối nhóm "Khuyến mãi và điểm".** Mục "Chiến dịch" thêm ở cuối nhóm (không chen giữa) để ít xung đột với P12 cũng sửa nhóm này; `app/admin/page.spec.tsx` sửa số mục 51→52 và danh sách nhóm. Gộp P12 vào thì hai bên sửa lại cùng dòng này.
+- **Admin dùng `vnLocalToIso` riêng (+07:00)** thay vì `new Date(local)`, để mốc bắt đầu/kết thúc không đổi theo múi giờ máy nhân viên.
+- **Dòng route-map** `/campaign/:slug` ↔ `/chien-dich/:slug` thêm ở Task 8 với `pending: true` (Mini có trang, web chưa) và bỏ cờ ở Task 9 khi web có trang.
+
+Dung lượng gói Mini (`bundle-budget.cjs`, build với `VITE_API_BASE_URL` giả): trước P11 chunk vào 625 KB, tổng 2106 KB; sau P11 chunk vào 630 KB (196 KB gzip), tổng 2114 KB raw / 825 KB gzip (+5 KB vào, +8 KB tổng). Tổng đã vượt ngưỡng cảnh báo 2048 KB từ trước P11.
