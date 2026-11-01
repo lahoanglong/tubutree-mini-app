@@ -1,6 +1,8 @@
 import { test, expect } from './support/mock-api';
 import { SHOP_SLUG, SHOP_TITLE, mockShopPage } from './support/shop-page-mocks';
 import { mockBuilder } from './support/builder-mocks';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 
 /**
@@ -62,6 +64,14 @@ test.describe('Dải tab của trang gian hàng dính ngay dưới thanh nút l�
     });
   }
 });
+
+/** `F7B_SCREENS_DIR=<thư mục>` thì chụp ảnh 375px để so với bản web. */
+const shot = async (page: Page, name: string) => {
+  const dir = process.env.F7B_SCREENS_DIR;
+  if (!dir) return;
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: resolve(dir, name), fullPage: false });
+};
 
 const openSection = async (page: Page, title: string) => {
   await page.locator('[data-testid="section-card"] button').filter({ hasText: title }).first().click();
@@ -139,6 +149,17 @@ test.describe('Mini App: màn dựng gian hàng 375px', () => {
     await expect(page.getByTestId('section-card')).toHaveCount(3);
     await expect(page.getByTestId('section-detail')).toHaveCount(0);
     expect(new URL(page.url()).pathname).toBe('/storefront');
+  });
+
+  test('mở thẳng bằng link ?khoi=: có sẵn danh sách phía trước, nút "Quay lại" nổi về danh sách khối trong màn dựng (không về trang chủ)', async ({ page }) => {
+    await page.goto('/storefront?khoi=c-grid');
+    await expect(page.getByTestId('section-detail')).toBeVisible({ timeout: 15_000 });
+    await shot(page, 'mini-builder-detail-375.png');
+    await page.getByRole('button', { name: 'Quay lại', exact: true }).click();
+    await expect(page.getByTestId('section-card')).toHaveCount(3);
+    await expect(page.getByTestId('section-detail')).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe('/storefront');
+    await shot(page, 'mini-builder-list-375.png');
   });
 
   test('khối Kệ ngang: xem trước thẳng hàng như tab Shop thật (thẻ đầu cách mép khung 12px, tiêu đề 16px)', async ({ page }) => {
