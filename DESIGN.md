@@ -63,7 +63,7 @@ Cần gì thì dùng đó. Mini ở `apps/miniapp/src/components/ui/`, web ở `
 | khung chờ thẻ | `ProductTileSkeleton`, `Skeleton` |
 | tim yêu thích | `WishlistHeart` |
 
-Kệ ngang chỉ dùng `rail-sm` và `flash` (`--tile-w-sm`, 128px) hoặc `rail-md` và `rank` (`--tile-w-md`, 148px); `grid` là hai cột. Số đo thân thẻ ở `TILE_METRICS` (`packages/app-core/src/commerce/tile-metrics.ts`), khung chờ đọc cùng chỗ. Hàng cùng kệ chênh đáy giá không quá 1px.
+Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) hoặc `rail-md` (`--tile-w-md`, 148px); `grid` là hai cột. Số đo thân thẻ ở `TILE_METRICS` (`packages/app-core/src/commerce/tile-metrics.ts`), khung chờ đọc cùng chỗ. Hàng cùng kệ chênh đáy giá không quá 1px.
 
 ### Khối, tiêu đề, điều hướng trong trang
 

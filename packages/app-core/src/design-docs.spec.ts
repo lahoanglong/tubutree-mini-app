@@ -64,6 +64,21 @@ describe('DESIGN.md', () => {
     expect(FORBIDDEN_TERMS.map((t) => t.use).filter((use) => !body.includes(use))).toEqual([]);
   });
 
+  it('bề rộng thẻ kệ ngang ghi ở mục Thành phần khớp bảng WIDTH của ProductRail ở cả hai app', () => {
+    const line = (section(md, 'Thành phần') ?? '').split('\n').find((l) => l.startsWith('Kệ ngang chỉ dùng')) ?? '';
+    const documented: Record<string, string> = {};
+    for (const part of line.split(';')[0]!.split(' hoặc ')) {
+      const spans = codeSpans(part);
+      const token = spans.find((x) => x.startsWith('--tile-w-'));
+      for (const v of spans.filter((x) => !x.startsWith('--'))) documented[v] = `var(${token})`;
+    }
+    expect(Object.keys(documented).sort()).toEqual(['flash', 'rail-md', 'rail-sm', 'rank']);
+    for (const file of ['apps/miniapp/src/components/ui/product-rail.tsx', 'apps/web/src/components/mini/product-rail.tsx']) {
+      const actual = Object.fromEntries([...read(file).matchAll(/^\s*'?(rail-sm|rail-md|rank|flash)'?:\s*'(var\(--tile-w-[a-z]+\))'/gm)].map((m) => [m[1]!, m[2]!]));
+      expect(actual, file).toEqual(documented);
+    }
+  });
+
   it('nhắc các nguồn sự thật và lệnh kiểm', () => {
     for (const s of ['docs/design/ds-map.json', 'packages/app-core/src/merch/shelves.ts', 'packages/app-core/src/shop-copy.ts', 'pnpm lint:parity']) {
       expect(md, s).toContain(`\`${s}\``);
