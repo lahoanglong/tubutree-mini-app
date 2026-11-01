@@ -10,6 +10,7 @@ import {
   campaignHref,
   campaignProductPages,
   campaignSlides,
+  campaignsRevealByKind,
   campaignVisible,
   campaignVoucherViews,
 } from './campaign';
@@ -99,6 +100,40 @@ describe('campaignHref', () => {
         expect(campaignHref(banner({ linkType: 'URL_INTERNAL', linkValue: t.value }), platform)).toMatch(/^\/[a-z]/);
       }
     }
+  });
+});
+
+describe('campaignsRevealByKind — biết loại khách rồi có thêm banner không', () => {
+  const o = { platform: 'web' as const, now: NOW };
+  it('danh sách rỗng hoặc thiếu: không loại khách nào thấy thêm gì', () => {
+    expect(campaignsRevealByKind([], o)).toBe(false);
+    expect(campaignsRevealByKind(undefined, o)).toBe(false);
+    expect(campaignsRevealByKind(null, o)).toBe(false);
+  });
+  it('chỉ chiến dịch ALL: khách chưa biết loại đã thấy đủ, biết loại không thêm gì', () => {
+    expect(campaignsRevealByKind([banner({ audience: 'ALL' })], o)).toBe(false);
+  });
+  it('có chiến dịch NEW hoặc RETURNING còn hạn: biết loại khách sẽ hiện thêm', () => {
+    expect(campaignsRevealByKind([banner({ audience: 'NEW' })], o)).toBe(true);
+    expect(campaignsRevealByKind([banner({ audience: 'RETURNING' })], o)).toBe(true);
+  });
+  it('chiến dịch riêng đã hết hạn hoặc chưa tới giờ: không hiện thêm, không giữ chỗ', () => {
+    expect(campaignsRevealByKind([banner({ audience: 'NEW', endAt: '2026-11-05T05:00:00.000Z' })], o)).toBe(false);
+    expect(campaignsRevealByKind([banner({ audience: 'RETURNING', startAt: '2026-11-06T00:00:00.000Z' })], o)).toBe(false);
+  });
+  it('chiến dịch riêng có đích hỏng (không thành slide): không hiện thêm', () => {
+    expect(campaignsRevealByKind([banner({ audience: 'NEW', linkType: 'PRODUCT', linkValue: null })], o)).toBe(false);
+  });
+  it('thiếu `now` (HTML server): bỏ qua lịch, như campaignSlides', () => {
+    expect(campaignsRevealByKind([banner({ audience: 'RETURNING', endAt: '2020-01-01T00:00:00.000Z' })], { platform: 'web' })).toBe(true);
+  });
+  it('đã đủ 5 chiến dịch ALL: chiến dịch riêng không chen thêm được slide nào', () => {
+    const all = Array.from({ length: 5 }, (_, i) => banner({ id: `a${i}`, slug: `a${i}`, audience: 'ALL' }));
+    expect(campaignsRevealByKind([...all, banner({ id: 'n', slug: 'n', audience: 'NEW' })], o)).toBe(false);
+  });
+  it('chiến dịch riêng đứng trước và chen vào 5 slide đầu: slide đổi khi biết loại, nên có hiện thêm', () => {
+    const all = Array.from({ length: 5 }, (_, i) => banner({ id: `a${i}`, slug: `a${i}`, audience: 'ALL' }));
+    expect(campaignsRevealByKind([banner({ id: 'n', slug: 'n', audience: 'NEW' }), ...all], o)).toBe(true);
   });
 });
 

@@ -142,8 +142,11 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
     // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi lần trước máy này có banner mà nó chưa về
-    // hoặc còn chờ biết loại khách (chiến dịch riêng của loại khách chỉ hiện sau đó).
-    banner: banners.slides.length > 0 || (banners.hinted && (banners.loading || settling)) ? <HomeBanner slides={banners.slides} /> : null,
+    // hoặc còn chờ biết loại khách MÀ có chiến dịch riêng của loại khách sẽ hiện sau đó (server đã trả danh sách mọi đối tượng: không có thì chờ cũng vô ích).
+    banner:
+      banners.slides.length > 0 || (banners.hinted && (banners.loading || (settling && banners.revealable))) ? (
+        <HomeBanner slides={banners.slides} />
+      ) : null,
     // P15 (combo) nối dữ liệu; tới lúc đó khối rỗng và không giữ chỗ.
     combos: null,
     shortcuts: <ShortcutGrid />,

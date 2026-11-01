@@ -13,13 +13,17 @@ const subscribeNothing = () => () => {};
  * Slide banner của Trang chủ và gợi ý "lần mở trước máy này có banner" (chỉ để giữ chỗ khi banner chưa về). Gợi ý chỉ ghi khi đã biết loại khách:
  * lúc `unknown` chỉ thấy chiến dịch cho mọi người, ghi "0" lúc đó làm lần mở sau của khách mới (thấy thêm chiến dịch dành riêng) nhảy trang.
  * Đọc gợi ý bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ".
+ * `revealable`: còn chiến dịch dành riêng cho một loại khách sẽ hiện khi biết loại (chỉ lúc chưa biết loại); false thì chờ loại khách cũng không ra banner.
  */
-export function useHomeBanners(kind: HomeKindState, initial?: CampaignBanner[]): { slides: BannerSlide[]; loading: boolean; hinted: boolean } {
-  const { slides, loading, loaded } = useCampaignSlides('HOME_TOP', kind, initial);
+export function useHomeBanners(
+  kind: HomeKindState,
+  initial?: CampaignBanner[],
+): { slides: BannerSlide[]; loading: boolean; hinted: boolean; revealable: boolean } {
+  const { slides, loading, loaded, revealable } = useCampaignSlides('HOME_TOP', kind, initial);
   const hinted = useSyncExternalStore(subscribeNothing, () => readBannerHint(browserStorage()), () => false);
   const has = slides.length > 0;
   useEffect(() => {
     if (loaded && kind !== 'unknown') writeBannerHint(browserStorage(), has);
   }, [loaded, kind, has]);
-  return { slides, loading, hinted };
+  return { slides, loading, hinted, revealable };
 }
