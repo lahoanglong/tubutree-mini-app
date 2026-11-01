@@ -143,3 +143,8 @@
 - [ ] `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base e3229fe39 --out .../gate-F7a.txt`; race spec liên quan (`coupon-collectable-last-slot`, `my-coupons-query`) với DB `tubutree_it` ở cổng 25549 rồi `pg-native.sh stop 25549`.
 - [ ] Bộ e2e Mini (`E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3341 npx playwright test --workers=2 --reporter=line`).
 - [ ] Chụp 375px `/vouchers` (Mini cổng 3341) và `/ma-giam-gia` (web cổng 3342) ở trạng thái ví lỗi và mã không còn áp dụng, lưu `docs/2026-10-31-shop-redesign/screens/F7a/`, tắt server.
+
+## Sửa sau review (vòng 2: reviewer không trả phát hiện nào)
+
+- Dòng "Sắp diễn ra" trên thẻ Giờ vàng (Task 4): sau khi đổi sang `countdownText`, "Bắt đầu sau 2 giờ 05 phút" dài 26 ký tự, `ProductTile` cắt ghi chú một dòng bằng dấu ba chấm ở 112px (thẻ 128px trừ lề 8px mỗi bên) nên thành "Bắt đầu sau 2 giờ 0…". Khoá chữ riêng `flash.startsInTile` = "Sau {t}" (trần 18 ký tự trong `shop-copy-budget.ts`), hai app dùng qua `fillCopy`; `flash.startsIn` giữ cho đồng hồ rộng. Ca `countdown.spec.ts` giữ trần 18 ký tự với mọi dạng `countdownText`.
+- `UpcomingFlashSales` (Mini và web) hiện chỉ có spec đơn vị, chưa gắn vào Trang chủ nào, nên không có e2e 375px đo bề rộng; số 112px lấy từ `TILE_METRICS.inset` và thẻ `flash` 128px.
