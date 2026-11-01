@@ -23,6 +23,14 @@ const mount = async () => {
   return mounted.container;
 };
 const orderCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/orders');
+const todoCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/orders/home-todo');
+const homeTodo = () => {
+  const part = (status: string | undefined) => {
+    const res = ordersFor(status) as { data: object[]; meta: { total: number } };
+    return res.data[0] ? { order: res.data[0], total: res.meta.total } : null;
+  };
+  return { pending: part('PENDING_PAYMENT'), shipping: part('SHIPPING'), processing: part(undefined) };
+};
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -32,7 +40,7 @@ beforeEach(() => {
   ordersFor = (status) => page(status === 'PENDING_PAYMENT' ? [pendingOrder] : status === 'SHIPPING' ? [shippingOrder] : []);
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: { status?: string } }) => {
     if (path === '/orders/active-count') return { count: mocks.active };
-    if (path === '/orders') return ordersFor(opts?.query?.status);
+    if (path === '/orders/home-todo') return homeTodo();
     throw new Error(`đường dẫn lạ ${path}`);
   });
 });
@@ -53,6 +61,13 @@ describe('TodoStrip web — Việc cần làm', () => {
     mocks.active = 0;
     const c = await mount();
     expect(c.textContent).toBe('');
+    expect(orderCalls()).toHaveLength(0);
+    expect(todoCalls()).toHaveLength(0);
+  });
+
+  it('một lời home-todo thay ba lời /orders lọc theo trạng thái', async () => {
+    await mount();
+    expect(todoCalls()).toHaveLength(1);
     expect(orderCalls()).toHaveLength(0);
   });
 
@@ -91,7 +106,7 @@ describe('TodoStrip web — Việc cần làm', () => {
       mocks.get.mockImplementation(async (path: string, opts?: { query?: { status?: string } }) => {
         if (path === '/orders/active-count') return { count: 2 };
         await new Promise((r) => { release = r; });
-        return ordersFor(opts?.query?.status);
+        return homeTodo();
       });
       return () => release(undefined);
     };

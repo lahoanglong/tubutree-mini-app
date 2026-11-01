@@ -6,8 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
-import { fetchOrders } from '@tubutree/app-core/api/orders';
-import { activeOrderCountQuery } from '@tubutree/app-core/queries/orders';
+import type { HomeTodoPart } from '@tubutree/app-core/api/orders';
+import { activeOrderCountQuery, ordersHomeTodoQuery } from '@tubutree/app-core/queries/orders';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { syncHomeHintCookie } from './use-home-customer-kind';
@@ -30,7 +30,7 @@ const rowStyle = (divider: boolean): CSSProperties => ({
 // Viền trái 3px màu cảnh báo là dấu hiệu "việc cần làm"; viền ngoài là bóng trong để thẻ không cao thêm 2px so với khung chờ.
 const CARD_STYLE: CSSProperties = { border: 'none', borderLeft: '3px solid var(--color-status-warning-fg)', boxShadow: 'inset 0 0 0 1px var(--color-border-subtle)', overflow: 'hidden' };
 
-type TodoOrder = Awaited<ReturnType<typeof fetchOrders>>['data'][number];
+type TodoOrder = HomeTodoPart['order'];
 
 /** Đơn chuyển khoản chờ tiền: giờ còn lại và nút "Thanh toán ngay" mở thẳng trang chuyển khoản. */
 function PendingPaymentRow({ order }: { order: TodoOrder }) {
@@ -71,29 +71,9 @@ export function useHomeTodoQueries() {
   const authed = useAuthPhase() === 'authenticated';
   const count = useQuery({ ...activeOrderCountQuery(coreHttp), enabled: authed, staleTime: 30_000, retry: false });
   const enabled = authed && (count.data ?? 0) > 0;
-  const pending = useQuery({
-    queryKey: ['orders', 'home-todo-pending'],
-    queryFn: () => fetchOrders(coreHttp, { status: 'PENDING_PAYMENT' }, 1, 1),
-    enabled,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const shipping = useQuery({
-    queryKey: ['orders', 'home-strip'],
-    queryFn: () => fetchOrders(coreHttp, { status: 'SHIPPING' }, 1, 1),
-    enabled,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const processing = useQuery({
-    queryKey: ['orders', 'home-processing'],
-    queryFn: () => fetchOrders(coreHttp, { group: 'processing' }, 1, 1),
-    enabled,
-    staleTime: 30_000,
-    retry: false,
-  });
-  const loading = authed && (count.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
-  return { authed, count, enabled, pending, shipping, processing, loading };
+  const todoQ = useQuery({ ...ordersHomeTodoQuery(coreHttp), enabled, staleTime: 30_000, retry: false });
+  const loading = authed && (count.isPending || (enabled && todoQ.isLoading));
+  return { authed, count, enabled, todoQ, loading };
 }
 
 /**
@@ -103,17 +83,17 @@ export function useHomeTodoQueries() {
  */
 export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const router = useRouter();
-  const { authed, count, enabled, pending, shipping, processing, loading } = useHomeTodoQueries();
+  const { authed, count, enabled, todoQ, loading } = useHomeTodoQueries();
   const userId = useAuth().user?.id;
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
   // Số dòng của lần mở trước (bất kể tài khoản) cho khung chờ lúc khôi phục phiên; lần hydrate đầu dùng gợi ý của bản server.
   const prebuilt = useContext(HomeRestoreHintContext);
   const lastRows = useSyncExternalStore(subscribeStorageEvent, () => readLastTodoRows(browserStorage()), () => prebuilt?.rows ?? 0);
-  const payOrder = pending.data?.data[0];
-  const shipOrder = shipping.data?.data[0];
-  const shipTotal = shipping.data?.meta.total ?? 0;
-  const prepOrder = processing.data?.data[0];
-  const prepTotal = processing.data?.meta.total ?? 0;
+  const payOrder = todoQ.data?.pending?.order;
+  const shipOrder = todoQ.data?.shipping?.order;
+  const shipTotal = todoQ.data?.shipping?.total ?? 0;
+  const prepOrder = todoQ.data?.processing?.order;
+  const prepTotal = todoQ.data?.processing?.total ?? 0;
   // Tối đa hai dòng để khối gọn: đơn chờ thanh toán, đơn đang giao, rồi đơn đang chuẩn bị theo thứ tự đó.
   const showShip = Boolean(shipOrder);
   const showPrep = Boolean(prepOrder) && (payOrder ? 1 : 0) + (shipOrder ? 1 : 0) < 2;
@@ -121,7 +101,7 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const settled =
     authed &&
     (enabled
-      ? !pending.isLoading && !shipping.isLoading && !processing.isLoading && !pending.isError && !shipping.isError && !processing.isError
+      ? !todoQ.isLoading && !todoQ.isError
       : count.isSuccess);
   useEffect(() => {
     if (settled && userId) {
