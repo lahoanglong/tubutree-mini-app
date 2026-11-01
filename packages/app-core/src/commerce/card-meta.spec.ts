@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardMetaLine, cardMetaSpoken, formatRating, formatSoldShort, soldCountText } from './card-meta';
+import { cardMetaCompact, cardMetaLine, cardMetaSpoken, formatRating, formatSoldShort, soldCountText } from './card-meta';
 
 describe('formatRating', () => {
   it('dấu phẩy thập phân, một chữ số lẻ', () => {
@@ -94,6 +94,34 @@ describe('cardMetaSpoken', () => {
   it('khớp dòng nhìn thấy: có dòng meta thì có bản đọc, và ngược lại', () => {
     for (const p of [{}, { sold: 1 }, { ratingAvg: 3 }, { ratingAvg: 4.2, sold: 999_999 }]) {
       expect(cardMetaSpoken(p) === null).toBe(cardMetaLine(p) === null);
+    }
+  });
+});
+
+describe('cardMetaCompact — bản gọn cho thẻ hẹp (kệ hạng 128px không đủ chỗ cho "★ 4,7 · Đã bán 8,2k+")', () => {
+  it('có lượt bán thì chỉ nói lượt bán (kệ hạng nói về doanh số), nguyên chữ "Đã bán" để không mất nghĩa', () => {
+    expect(cardMetaCompact({ ratingAvg: 4.7, sold: 8200 })).toBe('Đã bán 8,2k+');
+    expect(cardMetaCompact({ ratingAvg: 4.7, sold: 12 })).toBe('Đã bán 12');
+    expect(cardMetaCompact({ sold: 2_500_000 })).toBe('Đã bán 2,5tr+');
+  });
+  it('chưa có lượt bán thì còn sao; không có gì thì null (thẻ giữ chỗ chứ không in dòng rỗng)', () => {
+    expect(cardMetaCompact({ ratingAvg: 4.7 })).toBe('★ 4,7');
+    expect(cardMetaCompact({ ratingAvg: 4.7, sold: 0 })).toBe('★ 4,7');
+    expect(cardMetaCompact({})).toBeNull();
+    expect(cardMetaCompact({ ratingAvg: 0, sold: 0 })).toBeNull();
+    expect(cardMetaCompact({ ratingAvg: Number.NaN, sold: Number.NaN })).toBeNull();
+  });
+  it('có bản gọn khi và chỉ khi có bản đầy đủ (khớp cardMetaLine)', () => {
+    for (const p of [{}, { sold: 1 }, { ratingAvg: 3 }, { ratingAvg: 4.2, sold: 999_999 }, { ratingAvg: Number.NaN, sold: 5 }]) {
+      expect(cardMetaCompact(p) === null).toBe(cardMetaLine(p) === null);
+    }
+  });
+  it('luôn ngắn hơn bản đầy đủ khi có đủ cả hai nửa, và ≤ 14 ký tự với lượt bán dưới 1 triệu (vừa 112px)', () => {
+    for (const sold of [1, 9, 12, 999, 1000, 1234, 8200, 99_900, 999_949]) {
+      const compact = cardMetaCompact({ ratingAvg: 5, sold })!;
+      expect(compact.length, `sold ${sold}`).toBeLessThanOrEqual(14);
+      expect(compact.length).toBeLessThan(cardMetaLine({ ratingAvg: 5, sold })!.length);
+      expect(compact).toMatch(/^Đã bán \d[\d,]*(k\+|tr\+)?$/);
     }
   });
 });

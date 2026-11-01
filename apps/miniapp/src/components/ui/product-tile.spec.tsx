@@ -89,6 +89,30 @@ describe('ProductTile: biến thể và khung', () => {
     expect(railName.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
   });
 
+  it('dòng meta mang bản gọn (data-compact) khi có đủ sao và lượt bán: thẻ hẹp tự đổi sang bản gọn bằng container query, chữ đầy đủ vẫn là textContent của ô meta', () => {
+    const { container } = render(<ProductTile view={viewOf({ ratingAvg: 4.7, sold: 8200 }, 'rank')} variant="rank" href="/p" />);
+    const meta = container.querySelector('[data-ds-part="meta"]') as HTMLElement;
+    expect(meta.textContent).toBe('★ 4,7 · Đã bán 8,2k+');
+    expect(meta.className).toContain('tubu-tile-meta');
+    expect(meta.querySelector('.tubu-meta-text')!.getAttribute('data-compact')).toBe('Đã bán 8,2k+');
+    expect(meta.querySelector('.tubu-meta-full')!.textContent).toBe('★ 4,7 · Đã bán 8,2k+');
+  });
+
+  it('meta chỉ có một nửa (bản gọn trùng bản đầy đủ) hoặc không có gì thì không thêm bản gọn', () => {
+    for (const over of [{ ratingAvg: undefined, sold: 12 }, { ratingAvg: 4.5, sold: undefined }, { ratingAvg: undefined, sold: undefined }]) {
+      const { container, unmount } = render(<ProductTile view={viewOf(over, 'rank')} variant="rank" href="/p" />);
+      expect(container.querySelector('[data-compact]')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('CSS: ô meta là container, dưới 148px chữ gọn thay chữ đầy đủ (rank 112px, rail-md 132px, lưới 320px; lưới 375px 149px còn đủ chỗ)', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-tile-meta\s*\{[^}]*container-type:\s*inline-size/);
+    expect(css).toMatch(/\.tubu-meta-text\[data-compact\]::after\s*\{[^}]*content:\s*attr\(data-compact\)/);
+    expect(css).toMatch(/@container \(max-width: 147\.98px\)[\s\S]*?\.tubu-meta-text\[data-compact\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
+  });
+
   it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {
     const plain = render(<ProductTile view={viewOf()} variant="grid" href="/p" />);
     expect(within(plain.container).getByText('52.000đ').style.color).toBe('var(--color-text-price)');

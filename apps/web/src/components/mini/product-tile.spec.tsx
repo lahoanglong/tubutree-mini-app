@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
@@ -89,6 +91,28 @@ describe('ProductTile: biến thể và khung', () => {
     const railName = link(rail).firstElementChild as HTMLElement;
     expect(railName.style.webkitLineClamp).toBe('2');
     expect(railName.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+  });
+
+  it('dòng meta mang bản gọn (data-compact) khi có đủ sao và lượt bán: thẻ hẹp tự đổi sang bản gọn bằng container query, chữ đầy đủ vẫn là textContent của ô meta', () => {
+    const c = tile(viewOf({ ratingAvg: 4.7, sold: 8200 }, 'rank'), 'rank');
+    const meta = part(c, 'meta')!;
+    expect(meta.textContent).toBe('★ 4,7 · Đã bán 8,2k+');
+    expect(meta.className).toContain('tubu-tile-meta');
+    expect(meta.querySelector('.tubu-meta-text')!.getAttribute('data-compact')).toBe('Đã bán 8,2k+');
+    expect(meta.querySelector('.tubu-meta-full')!.textContent).toBe('★ 4,7 · Đã bán 8,2k+');
+  });
+
+  it('meta chỉ có một nửa (bản gọn trùng bản đầy đủ) hoặc không có gì thì không thêm bản gọn', () => {
+    for (const over of [{ ratingAvg: undefined, sold: 12 }, { ratingAvg: 4.5, sold: undefined }, { ratingAvg: undefined, sold: undefined }]) {
+      expect(tile(viewOf(over, 'rank'), 'rank').querySelector('[data-compact]')).toBeNull();
+    }
+  });
+
+  it('CSS: ô meta là container, dưới 148px chữ gọn thay chữ đầy đủ (rank 112px, rail-md 132px, lưới 320px; lưới 375px 149px còn đủ chỗ)', () => {
+    const css = readFileSync(resolve(__dirname, './mini.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-tile-meta\s*\{[^}]*container-type:\s*inline-size/);
+    expect(css).toMatch(/\.tubu-meta-text\[data-compact\]::after\s*\{[^}]*content:\s*attr\(data-compact\)/);
+    expect(css).toMatch(/@container \(max-width: 147\.98px\)[\s\S]*?\.tubu-meta-text\[data-compact\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
   });
 
   it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {

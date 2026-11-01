@@ -174,6 +174,25 @@
   }
 }
 
+/* Dòng meta của thẻ ("★ 4,7 · Đã bán 8,2k+"): ô meta là container; hẹp hơn 148px (chữ nhìn thấy: kệ hạng 112px, kệ 148px 132px, lưới 320px 122px) thì
+   chữ gọn ("Đã bán 8,2k+", thuộc tính data-compact) thay chữ đầy đủ, để không bao giờ cắt giữa số. Đo "★ 5,0 · Đã bán 99,9k+" ~127px, lưới 375px (149px) còn đủ chỗ.
+   Chữ gọn đi qua ::after nên không thêm chữ vào DOM (ô meta aria-hidden, textContent vẫn là chữ đầy đủ). Trình duyệt chưa có container query giữ bản đầy đủ. */
+.tubu-tile-meta {
+  container-type: inline-size;
+}
+.tubu-meta-text[data-compact]::after {
+  content: attr(data-compact);
+  display: none;
+}
+@container (max-width: 147.98px) {
+  .tubu-meta-text[data-compact] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact]::after {
+    display: inline;
+  }
+}
+
 /* Chỉ trong SearchField: ô tìm của thanh đầu và trang quản trị vẫn giữ nút xoá native. */
 .tubu-search-field input[type='search']::-webkit-search-cancel-button {
   display: none;

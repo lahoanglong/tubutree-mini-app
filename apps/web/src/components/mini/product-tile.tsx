@@ -311,13 +311,20 @@ export function ProductTile({
           {hasMetaRow && (
             <Text
               data-ds-part="meta"
+              className="tubu-tile-meta"
               variant="label"
               tone="tertiary"
               as="div"
               aria-hidden
               style={{ height: TILE_METRICS.meta, marginTop: TILE_METRICS.metaGap, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.meta) }}
             >
-              {view.meta}
+              {view.metaCompact && view.metaCompact !== view.meta ? (
+                <span className="tubu-meta-text" data-compact={view.metaCompact}>
+                  <span className="tubu-meta-full">{view.meta}</span>
+                </span>
+              ) : (
+                view.meta
+              )}
             </Text>
           )}
         </div>
