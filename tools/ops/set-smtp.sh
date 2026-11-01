@@ -31,10 +31,13 @@ CID=\$(\$DC ps -q api </dev/null)
 RUN_IMG=\$(docker inspect -f '{{.Image}}' "\$CID")
 LATEST_IMG=\$(docker image inspect -f '{{.Id}}' tubutree-api:latest)
 [ "\$RUN_IMG" = "\$LATEST_IMG" ] || { echo "DỪNG: tubutree-api:latest khác image API đang chạy (có deploy dở?). Không đổi gì; deploy cho xong rồi chạy lại."; exit 1; }
-RUN_HASH=\$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "\$CID")
-CUR_HASH=\$(\$DC config --hash=api </dev/null | awk '{print \$2}' || true)
-[ -n "\$CUR_HASH" ] || { echo "DỪNG: không tính được config hash của api (docker compose quá cũ?). Không đổi gì."; exit 1; }
-[ "\$RUN_HASH" = "\$CUR_HASH" ] || { echo "DỪNG: compose hoặc .env đã đổi so với lúc tạo container API (\$RUN_HASH khác \$CUR_HASH). Không đổi gì; kiểm git status, .env rồi deploy hoặc tạo lại API trước."; exit 1; }
+# Hỏi chính compose (--dry-run, không đổi gì) xem lệnh tạo lại API có làm gì khi .env chưa đổi: khớp thì mọi dòng là "Running".
+# Không so "config --hash" với nhãn container: compose v5.3.1 trên VPS cho hai hash khác nhau ngay sau deploy dù không có gì đổi.
+DRY=\$(\$DC --dry-run up -d --no-build --no-deps api </dev/null 2>&1) || { printf '%s\n' "\$DRY" | tail -3; echo "DỪNG: docker compose --dry-run lỗi. Không đổi gì."; exit 1; }
+if ! printf '%s\n' "\$DRY" | grep -q ' Running' || printf '%s\n' "\$DRY" | grep -v '^[[:space:]]*\$' | grep -qv ' Running[[:space:]]*\$'; then
+  printf '%s\n' "\$DRY" | tail -5
+  echo "DỪNG: compose sẽ tạo lại hoặc bật API dù .env chưa đổi (compose hoặc .env đã đổi sau lần tạo container?). Không đổi gì; kiểm git status, .env rồi deploy hoặc tạo lại API trước."; exit 1
+fi
 TS=\$(date +%Y%m%d-%H%M%S)-\$\$
 cp .env ".env.bak-smtp-\$TS"; chmod 600 ".env.bak-smtp-\$TS"
 KEYS='OPS_ALERT_EMAIL_TO|SMTP_HOST|SMTP_PORT|SMTP_SECURE|SMTP_USER|SMTP_PASS|SMTP_FROM'
