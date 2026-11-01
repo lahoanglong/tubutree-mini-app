@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
 import { mockHomeEngagement } from './support/discovery-mocks';
-import { firstPublicBrandSlug } from './support/a11y-db';
+import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './support/a11y-db';
 import { expectChipHitArea44 } from './support/hit-area';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
@@ -600,6 +600,8 @@ test.describe('Web: mua chung', () => {
 
 test.describe('Web: nhãn hàng', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  // Seed riêng (idempotent), không dựa vào a11y-shop.web.spec.ts chạy trước: chạy lẻ file này hay đổi thứ tự project vẫn có nhãn công khai.
+  test.beforeAll(async () => assertSeededOnCi(await seedShopScreens()));
 
   const firstBrandSlug = (request: import('@playwright/test').APIRequestContext) => firstPublicBrandSlug(request, API_ORIGIN);
 
@@ -933,6 +935,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
 
 test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  test.beforeAll(async () => assertSeededOnCi(await seedShopScreens()));
   const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
 
   /** Thương hiệu công khai đầu tiên và tổng sản phẩm của nó (phân trang thật, 20 mỗi trang). */

@@ -20,9 +20,17 @@ declare global {
 
 let axeSource: string | undefined;
 
-/** Nạp axe-core của `@tubutree/e2e` vào trang rồi chạy với `AXE_TAGS`. Gọi sau khi màn đã dựng xong phần cần kiểm. */
+/**
+ * Nạp axe-core của `@tubutree/e2e` vào trang rồi chạy với `AXE_TAGS`. Gọi sau khi màn đã dựng xong phần cần kiểm.
+ * Tắt transition/animation và đợi các animation đang chạy xong trước khi đo: color-contrast đọc màu tính lúc đó, nút đang mờ dần (khoá → mở) cho tỉ lệ sai.
+ */
 export async function runAxe(page: Page): Promise<AxeViolation[]> {
   axeSource ??= readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+  await page.addStyleTag({ content: '*,*::before,*::after{transition:none!important;animation:none!important}' });
+  // Animation tạo bằng JS lặp vô hạn thì `finished` không bao giờ xong: chờ tối đa 2 giây.
+  await page.evaluate(() =>
+    Promise.race([Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))), new Promise((r) => setTimeout(r, 2_000))]),
+  );
   await page.addScriptTag({ content: axeSource });
   return page.evaluate(async (tags) => {
     const result = await window.axe.run(document, { runOnly: { type: 'tag', values: tags }, resultTypes: ['violations'] });

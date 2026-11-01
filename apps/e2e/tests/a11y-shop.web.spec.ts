@@ -68,8 +68,9 @@ const SCREENS: Screen[] = [
   { name: 'Danh mục', path: fixed('/san-pham'), ready: '#browse-see-all button', setup: (api) => mockDiscovery(api, { tree: true }) },
   // Danh sách (`all=1`): máy chủ dựng thẻ từ sản phẩm thật nên luôn có thẻ để đo.
   { name: 'Danh mục (danh sách)', path: fixed('/san-pham?all=1'), ready: TILE, setup: (api) => mockDiscovery(api, { tree: true }) },
+  // Nút Mua ngay của thanh dưới bị khoá tới khi phiên khôi phục xong rồi mới mở: đợi `h1` thì axe có lúc đo nút đang mờ dần (color-contrast).
   {
-    name: 'Chi tiết sản phẩm', ready: 'h1', needsServerData: true, setup: (api) => mockDiscovery(api),
+    name: 'Chi tiết sản phẩm', ready: '[aria-label^="Mua ngay"]:enabled', needsServerData: true, setup: (api) => mockDiscovery(api),
     path: async (request) => { const slug = await firstProductSlug(request); return slug ? `/san-pham/${slug}` : null; },
   },
   { name: 'Gian hàng CTV', path: fixed(`/s/${A11Y_STOREFRONT_SLUG}`), ready: 'h1', needsServerData: true, setup: (api) => mockDiscovery(api) },
@@ -95,6 +96,8 @@ test.describe('axe smoke web 375px: serious/critical', () => {
       if (screen.needsServerData === true && !seeded && response?.status() === 404) test.skip(true, `${screen.name}: DB không phải DB tạm nên không seed, trang 404`);
       expect(response?.status(), `${screen.name}: ${path}`).toBe(200);
       await expect(page.locator(screen.ready).first()).toBeVisible({ timeout: 20_000 });
+      // Next 15 stream metadata của trang động sau thân trang: máy tải nặng thì axe chạy lúc `<title>` chưa tới (document-title).
+      await expect(page).toHaveTitle(/\S/, { timeout: 20_000 });
       await page.evaluate(() => document.fonts.ready);
       const found = await runAxe(page);
       expect(blockingViolations('web', screen.name, found)).toEqual([]);
