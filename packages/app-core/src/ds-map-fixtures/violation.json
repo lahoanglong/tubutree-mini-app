@@ -1,0 +1,11 @@
+{
+  "components": [
+    {
+      "name": "GhostTile",
+      "miniapp": "apps/miniapp/src/components/ui/khong-co-ghost-tile.tsx",
+      "web": "apps/web/src/components/mini/khong-co-ghost-tile.tsx"
+    }
+  ],
+  "webOnly": [],
+  "upcoming": [{ "name": "GhostTile", "package": "P99", "wave": "4b" }]
+}
