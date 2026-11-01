@@ -1,4 +1,16 @@
-import { addonPayPrice, addonUnitDiscount, allocateBundleDiscounts, bundleExposure, isOwnStaffBundle, mergeMaxPerLine, type BundleLine, type LiveBundle } from './bundle-rules';
+import {
+  addonPayPrice,
+  addonUnitDiscount,
+  allocateBundleDiscounts,
+  allocateBundleDiscountsCapped,
+  bundleExposure,
+  clampDiscountTotal,
+  isOwnStaffBundle,
+  mergeMaxPerLine,
+  type BundleLine,
+  type LiveBundle,
+  type StaffBundleCap,
+} from './bundle-rules';
 
 const line = (variationId: string, productId: string, total: number, quantity = 1): BundleLine => ({ variationId, productId, total, quantity });
 const pct = (id: string, p: number, items: LiveBundle['items']): LiveBundle => ({ id, kind: 'BUNDLE_PCT', pct: p, anchorProductId: null, createdById: null, items });
@@ -213,5 +225,150 @@ describe('bundleExposure: số tiền tối đa một đơn được giảm', ()
   it('ADDON cộng (giá − giá kèm) × maxQty, giá kèm cao hơn giá thì 0', () => {
     expect(bundleExposure({ kind: 'ADDON', pct: null }, [{ price: 50_000, addonPrice: 39_000, maxQty: 2 }])).toBe(22_000);
     expect(bundleExposure({ kind: 'ADDON', pct: null }, [{ price: 30_000, addonPrice: 39_000, maxQty: 2 }])).toBe(0);
+  });
+});
+
+describe('trần tổng của bộ do nhân viên tạo (clampDiscountTotal, allocateBundleDiscountsCapped)', () => {
+  const by = (b: LiveBundle, createdById: string | null): LiveBundle => ({ ...b, createdById });
+  /** `staffIds` rỗng nghĩa là chỉ createdById null là nhân viên; id nằm trong `adminIds` là ADMIN, còn lại (kể cả null) bị kẹp. */
+  const capOf = (adminIds: string[], maxAmount = 100_000): StaffBundleCap => ({ isStaff: (b) => b.createdById === null || !adminIds.includes(b.createdById), maxAmount });
+  /** Bộ mua kèm đúng ví dụ: chính `P`, món ghim giá tham chiếu 340.000đ, giá kèm 240.000đ → mỗi bộ giảm đúng 100.000đ (bằng trần). */
+  const addonOn = (id: string, productId: string, createdById: string | null) =>
+    by(addon(id, 'P', [item(productId, { variationId: `v${productId}`, addonPrice: 240_000, refPrice: 340_000 })]), createdById);
+  const cartPXY = [line('vP', 'P', 80_000), line('vX', 'X', 340_000), line('vY', 'Y', 340_000)];
+
+  describe('clampDiscountTotal', () => {
+    it('tổng không vượt trần thì trả nguyên', () => {
+      const d = { total: 90_000, perLine: { v1: 50_000, v2: 40_000 } };
+      expect(clampDiscountTotal(d, 100_000)).toEqual(d);
+    });
+
+    it('cắt theo variationId tăng dần, không theo thứ tự khoá được chèn vào', () => {
+      expect(clampDiscountTotal({ total: 200_000, perLine: { v2: 100_000, v1: 100_000 } }, 100_000)).toEqual({ total: 100_000, perLine: { v1: 100_000 } });
+      expect(clampDiscountTotal({ total: 140_000, perLine: { v2: 70_000, v1: 70_000 } }, 100_000)).toEqual({ total: 100_000, perLine: { v1: 70_000, v2: 30_000 } });
+    });
+
+    it('trần lẻ không tạo khoản giảm lẻ; trần 0 hoặc âm không giảm đồng nào', () => {
+      expect(clampDiscountTotal({ total: 200_000, perLine: { v1: 100_000, v2: 100_000 } }, 150_000.5).total).toBe(150_000);
+      expect(clampDiscountTotal({ total: 5, perLine: { v1: 5 } }, 0)).toEqual(NONE);
+      expect(clampDiscountTotal({ total: 5, perLine: { v1: 5 } }, -10)).toEqual(NONE);
+    });
+  });
+
+  describe('cộng dồn nhiều bộ của nhân viên', () => {
+    it('hai bộ, mỗi bộ đúng trần khi đứng một mình: thô cộng 200.000đ, kẹp ra đúng trần', () => {
+      const two = [addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's2')];
+      expect(allocateBundleDiscounts(two, cartPXY, 50).total).toBe(200_000);
+      const out = allocateBundleDiscountsCapped(two, cartPXY, 50, capOf([]));
+      expect(out.total).toBe(100_000);
+      expect(out.perLine).toEqual({ vX: 100_000 });
+    });
+
+    it('thứ tự bộ và thứ tự dòng giỏ không đổi kết quả sau khi kẹp', () => {
+      const two = [addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's2')];
+      const base = allocateBundleDiscountsCapped(two, cartPXY, 50, capOf([]));
+      expect(allocateBundleDiscountsCapped([...two].reverse(), cartPXY, 50, capOf([]))).toEqual(base);
+      expect(allocateBundleDiscountsCapped(two, [...cartPXY].reverse(), 50, capOf([]))).toEqual(base);
+      expect(allocateBundleDiscountsCapped(two, [cartPXY[1]!, cartPXY[2]!, cartPXY[0]!], 50, capOf([]))).toEqual(base);
+    });
+
+    it('BUNDLE_PCT 30% (hai món maxQty 1) sau khi giá tăng 150.000đ → 400.000đ: thô 240.000đ, kẹp 100.000đ', () => {
+      const b = by(pct('b', 30, [item('pA'), item('pB')]), 's1');
+      expect(allocateBundleDiscounts([b], [line('vA', 'pA', 150_000), line('vB', 'pB', 150_000)], 50).total).toBe(90_000);
+      const raised = [line('vA', 'pA', 400_000), line('vB', 'pB', 400_000)];
+      expect(allocateBundleDiscounts([b], raised, 50).total).toBe(240_000);
+      expect(allocateBundleDiscountsCapped([b], raised, 50, capOf([])).total).toBe(100_000);
+    });
+
+    it('thêm phân loại 2.000.000đ không ghim của món A: thô 720.000đ, kẹp 100.000đ', () => {
+      const b = by(pct('b', 30, [item('pA'), item('pB')]), 's1');
+      const lines = [line('vA-big', 'pA', 2_000_000), line('vB', 'pB', 400_000)];
+      expect(allocateBundleDiscounts([b], lines, 50).total).toBe(720_000);
+      expect(allocateBundleDiscountsCapped([b], lines, 50, capOf([])).total).toBe(100_000);
+    });
+
+    it('tổng dưới trần thì không đổi gì so với hàm thô', () => {
+      const b = by(pct('b', 10, [item('p1'), item('p2')]), 's1');
+      const lines = [line('v1', 'p1', 100_000), line('v2', 'p2', 100_000)];
+      expect(allocateBundleDiscountsCapped([b], lines, 50, capOf([]))).toEqual(allocateBundleDiscounts([b], lines, 50));
+    });
+
+    it('người tạo không rõ (createdById null) bị kẹp như nhân viên', () => {
+      const two = [addonOn('B1', 'X', null), addonOn('B2', 'Y', null)];
+      expect(allocateBundleDiscountsCapped(two, cartPXY, 50, capOf(['a1'])).total).toBe(100_000);
+    });
+  });
+
+  describe('bộ ADMIN không bị kẹp', () => {
+    it('hai bộ ADMIN cộng 200.000đ giữ nguyên', () => {
+      const two = [addonOn('B1', 'X', 'a1'), addonOn('B2', 'Y', 'a1')];
+      expect(allocateBundleDiscountsCapped(two, cartPXY, 50, capOf(['a1']))).toEqual(allocateBundleDiscounts(two, cartPXY, 50));
+      expect(allocateBundleDiscountsCapped(two, cartPXY, 50, capOf(['a1'])).total).toBe(200_000);
+    });
+
+    it('không có bộ nhân viên nào: kết quả đúng hàm thô', () => {
+      const only = [addonOn('B1', 'X', 'a1')];
+      expect(allocateBundleDiscountsCapped(only, cartPXY, 50, capOf(['a1']))).toEqual(allocateBundleDiscounts(only, cartPXY, 50));
+    });
+
+    it('trộn: ADMIN giảm 100.000đ trên X, hai bộ nhân viên giảm 100.000đ trên Y và Z: ADMIN nguyên vẹn, nhân viên kẹp riêng', () => {
+      const lines = [...cartPXY, line('vZ', 'Z', 340_000)];
+      const bundles = [addonOn('A1', 'X', 'a1'), addonOn('B1', 'Y', 's1'), addonOn('B2', 'Z', 's2')];
+      const adminAlone = allocateBundleDiscounts([bundles[0]!], lines, 50);
+      const out = allocateBundleDiscountsCapped(bundles, lines, 50, capOf(['a1']));
+      expect(out.total).toBe(200_000);
+      expect(out.perLine.vX).toBe(adminAlone.perLine.vX);
+      expect(out.perLine.vY! + (out.perLine.vZ ?? 0)).toBe(100_000);
+      expect(allocateBundleDiscountsCapped([...bundles].reverse(), [...lines].reverse(), 50, capOf(['a1']))).toEqual(out);
+    });
+
+    it('dòng trùng không giúp nhân viên lọt trần: ADMIN và nhân viên cùng giảm trên X, nhân viên còn giảm thêm trên Y', () => {
+      const lines = [...cartPXY];
+      const bundles = [addonOn('A1', 'X', 'a1'), addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's1')];
+      const out = allocateBundleDiscountsCapped(bundles, lines, 50, capOf(['a1']));
+      // Phần nhân viên kẹp theo variationId (vX trước): giữ vX 100.000đ, cắt vY; gộp với ADMIN (vX 100.000đ) ra tổng 100.000đ.
+      expect(out).toEqual({ total: 100_000, perLine: { vX: 100_000 } });
+      const adminAlone = allocateBundleDiscounts([bundles[0]!], lines, 50);
+      const marginal = Object.entries(out.perLine).reduce((s, [k, v]) => s + Math.max(0, v - (adminAlone.perLine[k] ?? 0)), 0);
+      expect(marginal).toBeLessThanOrEqual(100_000);
+    });
+  });
+
+  it('bất biến trên 200 giỏ sinh ngẫu nhiên (hạt giống cố định): phần nhân viên đóng góp ≤ trần, ADMIN không bị cắt, không dòng nào vượt khoản thô', () => {
+    let seed = 20_261_101;
+    const rnd = (n: number) => {
+      seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+      return seed % n;
+    };
+    const creators = ['s1', 's2', 'a1', null];
+    let clamped = 0;
+    for (let round = 0; round < 200; round++) {
+      const products = Array.from({ length: 2 + rnd(5) }, (_, i) => `p${i}`);
+      const lines = products.map((p) => line(`v${p}`, p, (1 + rnd(60)) * 10_000, 1 + rnd(2)));
+      const bundles: LiveBundle[] = Array.from({ length: 1 + rnd(5) }, (_, k) => {
+        const createdById = creators[rnd(creators.length)]!;
+        const picked = [...products].sort(() => rnd(3) - 1).slice(0, 2 + rnd(2));
+        if (rnd(2) === 0 || picked.length < 2) {
+          const anchor = products[rnd(products.length)]!;
+          const others = products.filter((p) => p !== anchor).slice(0, 1 + rnd(2));
+          return by(addon(`a${k}`, anchor, others.map((p) => item(p, { variationId: `v${p}`, addonPrice: rnd(30) * 1000, refPrice: 100_000 + rnd(400) * 1000, maxQty: 1 + rnd(3) }))), createdById);
+        }
+        return by(pct(`b${k}`, 1 + rnd(50), picked.map((p) => item(p, { maxQty: 1 + rnd(3) }))), createdById);
+      });
+      const cap = capOf(['a1'], 50_000 + rnd(150) * 1000);
+      const out = allocateBundleDiscountsCapped(bundles, lines, 50, cap);
+      const raw = allocateBundleDiscounts(bundles, lines, 50);
+      const admin = allocateBundleDiscounts(bundles.filter((b) => !cap.isStaff(b)), lines, 50);
+      const staffAlone = allocateBundleDiscounts(bundles.filter(cap.isStaff), lines, 50);
+      const marginal = Object.entries(out.perLine).reduce((s, [k, v]) => s + Math.max(0, v - (admin.perLine[k] ?? 0)), 0);
+      expect(marginal).toBeLessThanOrEqual(cap.maxAmount);
+      expect(out.total).toBe(Object.values(out.perLine).reduce((s, d) => s + d, 0));
+      for (const [k, v] of Object.entries(admin.perLine)) expect(out.perLine[k] ?? 0).toBeGreaterThanOrEqual(v);
+      for (const [k, v] of Object.entries(out.perLine)) expect(v).toBeLessThanOrEqual(raw.perLine[k] ?? 0);
+      if (staffAlone.total <= cap.maxAmount) expect(out).toEqual(raw);
+      else clamped++;
+    }
+    // Bộ sinh phải thật sự chạm trần ở một phần đáng kể các giỏ, nếu không bất biến ở trên chưa được thử.
+    expect(clamped).toBeGreaterThan(20);
   });
 });

@@ -115,11 +115,49 @@ function addonBundle(b: LiveBundle, lines: readonly BundleLine[]): BundleDiscoun
  * Khoản giảm của các bundle đang chạy trên các dòng giỏ KHÔNG giờ vàng (THUẦN, không I/O): BUNDLE_PCT khi giỏ có đủ mọi món của
  * bộ, ADDON khi giỏ có sản phẩm chính. Mỗi dòng lấy khoản lớn nhất giữa mọi bộ; không bao giờ vượt `total` của dòng.
  * `maxPct` là trần `bundle.max_pct` đọc lại ở nơi tính tiền, phòng dữ liệu ghi thẳng DB vượt trần.
+ *
+ * Hàm THÔ: không áp trần tiền của nhân viên. Chỉ `ComboService.computeForStorefront` gọi nó (và `allocateBundleDiscountsCapped`), nên
+ * mọi đường tính tiền vẫn đi qua trần; nơi khác cần số cuối cùng phải hỏi `computeForStorefront`, không gọi hàm này.
  */
 export function allocateBundleDiscounts(bundles: readonly LiveBundle[], lines: readonly BundleLine[], maxPct: number): BundleDiscount {
   let acc = EMPTY;
   for (const b of bundles) acc = mergeMaxPerLine(acc, b.kind === 'ADDON' ? addonBundle(b, lines) : percentBundle(b, lines, maxPct));
   return acc;
+}
+
+/** Trần tiền của nhóm bộ do nhân viên tạo: `isStaff` quyết định bộ nào bị kẹp, `maxAmount` là `coupon.staff_max_amount_vnd`. */
+export interface StaffBundleCap {
+  isStaff(b: LiveBundle): boolean;
+  maxAmount: number;
+}
+
+/**
+ * Kẹp TỔNG khoản giảm ở `maxAmount` (THUẦN). Phần cắt rút khỏi `perLine` theo `variationId` tăng dần: dòng đứng trước giữ nguyên tới khi
+ * hết trần, dòng đứng sau bị cắt, nên kết quả không phụ thuộc thứ tự dòng trong giỏ. Trần lẻ làm tròn xuống, không sinh khoản giảm lẻ.
+ */
+export function clampDiscountTotal(d: BundleDiscount, maxAmount: number): BundleDiscount {
+  if (d.total <= maxAmount) return d;
+  const perLine: Record<string, number> = {};
+  let left = Math.max(0, Math.floor(maxAmount));
+  for (const variationId of Object.keys(d.perLine).sort()) {
+    const keep = Math.min(d.perLine[variationId]!, left);
+    left -= keep;
+    if (keep > 0) perLine[variationId] = keep;
+  }
+  return fromPerLine(perLine);
+}
+
+/**
+ * `allocateBundleDiscounts` có trần nhân viên. Trần chỉ được kiểm từng bộ lúc ghi (`assertStaffBundleCaps`), nhưng khoản giảm thật phụ thuộc
+ * giỏ: nhiều bộ trên các dòng khác nhau cộng lại, và giá tăng (hay thêm phân loại đắt hơn) sau khi lưu làm BUNDLE_PCT giảm vọt. Nên nhân
+ * viên (người tạo không phải ADMIN, kể cả không rõ) bị kẹp TỔNG ở trần mỗi đơn: gộp bộ của họ (mỗi dòng lấy lớn nhất, đúng như giữa các bộ
+ * khác), kẹp, rồi mới gộp với phần của bộ ADMIN bằng max theo dòng. ADMIN không đi qua bước kẹp nên không bị cắt; phần nhân viên đóng góp
+ * thêm tối đa bằng phần đã kẹp, nên dòng trùng với bộ ADMIN không giúp họ lọt trần (đổi lại phần trần rơi vào dòng ADMIN đã phủ là "mất").
+ */
+export function allocateBundleDiscountsCapped(bundles: readonly LiveBundle[], lines: readonly BundleLine[], maxPct: number, cap: StaffBundleCap): BundleDiscount {
+  const staff = allocateBundleDiscounts(bundles.filter((b) => cap.isStaff(b)), lines, maxPct);
+  const admin = allocateBundleDiscounts(bundles.filter((b) => !cap.isStaff(b)), lines, maxPct);
+  return mergeMaxPerLine(admin, clampDiscountTotal(staff, cap.maxAmount));
 }
 
 /**
