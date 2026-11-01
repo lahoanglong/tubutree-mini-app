@@ -103,7 +103,9 @@ describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
     const c = await mount();
     expect(c.querySelector('main')!.className).toContain('max-md:px-0');
     expect(c.querySelector('[aria-roledescription="carousel"]')!.className).toContain('max-md:rounded-none');
-    expect(c.querySelector('[data-testid="pdp-info"]')!.className).toContain('max-md:bg-stone-0');
+    // Mỗi khối là một dải trắng riêng (nền canvas hở 8px giữa hai dải như Mini App), cột thông tin tự nó không tô nền.
+    expect(c.querySelector('[data-testid="pdp-info"]')!.className).not.toContain('max-md:bg-');
+    expect(c.querySelector('[data-section="pdp-main"]')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 
   it('chống tràn ngang ở điện thoại: lưới một cột minmax(0,1fr), cột thông tin min-w-0 (jsdom không đo layout, e2e 390px kiểm thật)', async () => {
@@ -570,10 +572,10 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(subscribe).toBeDefined();
     expect(after(add, certs)).toBe(true);
     expect(after(add, subscribe)).toBe(true);
-    // Điện thoại giữ thứ tự như Mini App: chứng nhận (order 0) → Đặt định kỳ (1) → Combo/Mua kèm (2) → khối mua (3) → Mở nhóm mua chung (4).
-    expect(certs.className).not.toMatch(/order-/);
-    expect(subscribe.closest('.max-md\\:order-1')).not.toBeNull();
-    expect(add.parentElement!.className).toContain('max-md:order-3');
+    // Điện thoại giữ thứ tự như Mini App: chứng nhận (order 1) → Đặt định kỳ (2); khối mua tách phần Phân loại và Số lượng ra bằng `contents` (xem add-to-cart.spec).
+    expect(certs.className).toContain('max-md:order-1');
+    expect(subscribe.closest('.max-md\\:order-2')).not.toBeNull();
+    expect(add.parentElement!.className).toContain('max-md:contents');
   });
 
   describe('Combo ưu đãi và Mua kèm deal sốc (P15)', () => {
@@ -603,17 +605,33 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
       expect(html).toContain('Chỉ khi mua cùng Dầu gội bồ kết');
     });
 
-    it('điện thoại: Combo/Mua kèm đứng trước khối mua (Số lượng) và Mở nhóm mua chung như Mini App; máy tính giữ khối mua trước trong HTML', async () => {
+    it('điện thoại: thứ tự khối như Mini App (Ưu đãi/Vận chuyển → Combo/Mua kèm → Đánh giá nhanh → Mở nhóm mua chung); máy tính giữ khối mua trước trong HTML', async () => {
       api.bundles = BUNDLES;
+      api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
       const c = await mount();
-      const order = (el: Element | null) => Number(/max-md:order-(\d)/.exec(el?.className ?? '')?.[1] ?? 0);
-      const slots = c.querySelector('[data-testid="pdp-bundle-slots"]')!;
+      await flush();
+      const info = c.querySelector('[data-testid="pdp-info"]')!;
+      const order = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.closest('[class*="max-md:order-"]')?.className ?? '')?.[1] ?? 0);
+      // sort ổn định: cùng order thì giữ thứ tự DOM, đúng như flex xếp.
+      const visual = Array.from(info.querySelectorAll('[data-section]'))
+        .map((el) => ({ id: el.getAttribute('data-section')!, order: order(el) }))
+        .sort((a, b) => a.order - b.order)
+        .map((x) => x.id);
+      expect(visual).toEqual(['pdp-main', 'pdp-certs', 'pdp-subscribe', 'pdp-offers', 'pdp-bundles', 'pdp-quick-reviews', 'pdp-groupbuy']);
       const add = c.querySelector('[data-testid="add-to-cart"]')!;
-      const wrapper = (el: Element) => el.closest('[class*="max-md:order-"]')!;
-      expect(order(wrapper(slots))).toBeLessThan(order(add.parentElement));
-      const group = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Mở nhóm mua chung'));
-      if (group) expect(order(wrapper(group))).toBeGreaterThan(order(add.parentElement));
-      expect(Boolean(add.compareDocumentPosition(slots) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+      const slots = c.querySelector('[data-testid="pdp-bundle-slots"]')!;
+      const quick = c.querySelector('[data-section="pdp-quick-reviews"]')!;
+      const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(after(add, slots)).toBe(true);
+      expect(after(slots, quick)).toBe(true);
+    });
+
+    it('không có đánh giá có chữ và không có bộ: không dựng Đánh giá nhanh, không khối bộ (không dải rỗng)', async () => {
+      api.reviews = { ...REVIEWS, items: REVIEWS.items.map((r) => ({ ...r, comment: null })) };
+      const c = await mount();
+      await flush();
+      expect(c.querySelector('[data-section="pdp-quick-reviews"]')).toBeNull();
+      expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
     });
 
     it('máy chủ lỗi: trang vẫn dựng, trình duyệt thử tải rồi ẩn khối khi cũng lỗi', async () => {

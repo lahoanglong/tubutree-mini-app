@@ -252,7 +252,24 @@ describe('PdpSubscribeRow', () => {
   });
 });
 
+describe('PdpFreeship / PdpShippingRow: cỡ chữ như Mini App ở điện thoại', () => {
+  it('dòng miễn phí giao: 12px đậm màu thương hiệu dưới md (cùng dòng "Tubu Tree giao hàng")', async () => {
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0, freeshipThreshold: 150000 });
+    const { container } = mount(<PdpFreeship />);
+    await flush();
+    const p = container.querySelector('[data-testid="pdp-freeship"]')!;
+    expect(p.className).toContain('max-md:text-xs');
+    expect(p.className).toContain('max-md:font-semibold');
+    expect(p.className).toContain('max-md:text-[var(--color-text-brand)]');
+  });
+});
+
 describe('PdpGroupBuyRow', () => {
+  it('điện thoại: là dải trắng riêng (không viền, không bo) như Mini App', () => {
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    expect(container.firstElementChild!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(byText(container, 'button', /Mở nhóm mua chung/)!.className).toContain('max-md:border-0');
+  });
   it('đăng nhập: POST /group-buy {productId} rồi sang /mua-chung/<id>', async () => {
     mocks.http.post.mockResolvedValue({ id: 'g1' });
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
@@ -322,6 +339,12 @@ describe('PdpChatButton', () => {
     const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
     click(byText(container, 'button', 'Chat với Tubu Tree'));
     expect(mocks.oa.openChat).toHaveBeenCalledWith('Mình muốn hỏi về sản phẩm: Dầu gội');
+  });
+  it('điện thoại: nút phụ nền xanh nhạt không viền như ZaUI secondary của Mini App', () => {
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    const btn = byText(container, 'button', 'Chat với Tubu Tree')!;
+    expect(btn.className).toContain('max-md:border-transparent');
+    expect(btn.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
   it('OA chưa cấu hình thì không hiện nút', () => {
     mocks.oa.available = false;

@@ -19,7 +19,7 @@ const POPULAR_LIMIT = 24;
 function Rail({ title, icon, products, loading }: { title: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean }) {
   if (loading) {
     return (
-      <section aria-busy="true" className="mt-8">
+      <section aria-busy="true" className="mt-8 max-md:mt-4">
         <Skeleton width={160} height={20} />
         <div className="mt-3">
           <ProductRail items={[]} variant="rail-md" label={title} loading skeletonCount={4} />
@@ -30,7 +30,7 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
   // Dải phụ: lỗi hoặc rỗng thì ẩn hẳn, như Mini App; trang vẫn đủ nội dung chính.
   if (!products || products.length === 0) return null;
   return (
-    <section className="mt-8">
+    <section className="mt-8 max-md:mt-4">
       <h2 className={`${pdpSectionTitle} flex items-center gap-1.5`}>
         {icon && <ShoppingCart className="h-5 w-5" aria-hidden="true" />}
         {title}

@@ -9,7 +9,7 @@ import { pdpSectionTitle } from './pdp-sections';
 export function PdpFeed({ items }: { items: readonly CoreProductCard[] }) {
   if (items.length === 0) return null;
   return (
-    <section aria-labelledby="pdp-feed-title" className="mt-8">
+    <section aria-labelledby="pdp-feed-title" className="mt-8 max-md:mt-4">
       <h2 id="pdp-feed-title" className={pdpSectionTitle}>
         {fillCopy('pdp.alsoLike')}
       </h2>

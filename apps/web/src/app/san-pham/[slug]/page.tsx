@@ -100,7 +100,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           }
           info={
-            <div data-testid="pdp-info" className="flex min-w-0 flex-col max-md:bg-stone-0 max-md:p-4">
+            // Điện thoại: mỗi khối là một dải trắng riêng cách nhau 8px trên nền canvas như Mini App; thứ tự các khối con do `max-md:order-N`
+            // (bảng thứ tự ở comment dưới). Cột thông tin tự nó không tô nền.
+            <div data-testid="pdp-info" className="flex min-w-0 flex-col">
+              <div
+                data-section="pdp-main"
+                className={`flex min-w-0 flex-col max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4 ${product.certifications.length > 0 ? '' : 'max-md:pb-4'}`}
+              >
               <div className="flex items-center justify-between gap-2">
                 {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
                 <Link
@@ -139,8 +145,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </p>
               )}
 
+              </div>
+
               {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; "Phân loại ›" nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
-              <div className="mt-3">
+              <div data-section="pdp-offers" className="mt-3 max-md:order-3 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:empty:hidden">
                 <PdpCoupons productId={product.id} />
                 {(fulfillerText || !fromStore) && (
                   <PdpShippingRow pressable={!fromStore}>
@@ -155,9 +163,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                     {!fromStore && <PdpFreeship />}
                   </PdpShippingRow>
                 )}
-                {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". */}
-                {(unavailableText || partnerNote) && (
-                  <div data-testid="pdp-shipping-notes" className="flex flex-col gap-1 py-2">
+              </div>
+              {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". Điện thoại: cuối dải Phân loại như Mini App. */}
+              {(unavailableText || partnerNote) && (
+                  <div
+                    data-testid="pdp-shipping-notes"
+                    data-section="pdp-notes"
+                    className="flex flex-col gap-1 py-2 max-md:order-6 max-md:bg-[var(--color-bg-surface)] max-md:px-4"
+                  >
                     {unavailableText && (
                       <p
                         data-testid="pdp-unavailable"
@@ -174,24 +187,28 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                       </p>
                     )}
                   </div>
-                )}
-              </div>
+              )}
 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
-                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại kéo chứng nhận và "Đặt định kỳ" lên trước khối mua như Mini App
-                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước). Combo/Mua kèm cũng đứng trước khối mua ở điện thoại
-                (Mini App: Combo/Mua kèm, rồi Số lượng, rồi Mở nhóm mua chung).
+                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng `max-md:order-N` theo thứ tự của Mini App (các hàng
+                hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước): thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích),
+                Ưu đãi + Vận chuyển 3, Phân loại 4, chip phân loại 5, ghi chú vận chuyển 6, "Chỉ còn N" 7, Combo/Mua kèm 8, Đánh giá nhanh 9,
+                Số lượng 10, Mở nhóm mua chung + Nội dung bán hàng 11. Phân loại, chip và Số lượng là ruột của AddToCart (gốc `contents`).
                 Bộ hết hạn hay tắt khi trang ISR đã cũ thì khối KHÔNG bị gỡ (PdpBundles giữ chỗ, ghi "Đã kết thúc"), nên chỗ này không nhảy; chỉ bộ
                 mới hiện sau khi tải (máy chủ lỗi lúc dựng, hay bộ vừa tạo sau lần dựng trang) là chèn thêm, như Mini App.
               */}
               {product.variations.length > 0 && (
-                <div className="max-md:order-3">
+                <div className="max-md:contents">
                   <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
                 </div>
               )}
               {product.certifications.length > 0 && (
-                <div data-testid="pdp-certs" className="mt-3 flex flex-wrap gap-2">
+                <div
+                  data-testid="pdp-certs"
+                  data-section="pdp-certs"
+                  className="mt-3 flex flex-wrap gap-2 max-md:order-1 max-md:mt-0 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 max-md:pt-2.5"
+                >
                   {product.certifications.map((c) => (
                     <span
                       key={c}
@@ -204,25 +221,30 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
               {!retailOnly && (
-                <div className="max-md:order-1">
+                <div data-section="pdp-subscribe" className="max-md:order-2 max-md:flex max-md:flex-col max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 max-md:empty:hidden">
                   <PdpSubscribeRow slug={product.slug} variations={product.variations} />
                 </div>
               )}
 
-              <div className="max-md:order-2">
+              {/* Điện thoại: Combo/Mua kèm là hai dải trắng riêng như Mini App. Lớp dải đặt ở đây vì khối combo (pdp-bundles) tự nó chỉ có đệm dọc. */}
+              <div
+                data-section="pdp-bundles"
+                className="max-md:order-8 max-md:[&>div]:mt-2 max-md:[&_section]:bg-[var(--color-bg-surface)] max-md:[&_section]:p-4"
+              >
                 <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
               </div>
-              <div className="max-md:order-4">
+              {/* Q8: Đánh giá nhanh ngay sau Combo/Mua kèm, như Mini App; danh sách đầy đủ giữ chỗ cũ ở `below`. */}
+              <div className="max-md:order-9">
+                <PdpQuickReviews slug={product.slug} />
+              </div>
+              <div data-section="pdp-groupbuy" className="max-md:order-11">
                 {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
                 <PdpContentKitRow slug={product.slug} />
               </div>
             </div>
           }
           below={
-            /* Điện thoại: trang không đệm (ảnh tràn mép), nên các khối dưới tự đệm lại 16px. */
-            <div className="min-w-0 max-md:px-4 max-md:py-6">
-              {/* Q8: Đánh giá nhanh ngay sau Combo/Mua kèm (cuối khối thông tin), như Mini App; danh sách đầy đủ giữ chỗ cũ. */}
-              <PdpQuickReviews slug={product.slug} />
+            <div className="min-w-0">
               <PdpIngredients ingredients={product.ingredients} />
               <PdpPromises>
                 <PdpChatButton productName={product.name} productSlug={product.slug} />
@@ -234,7 +256,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <ProductReviews slug={product.slug} />
               </Suspense>
 
-              <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
+              {/* Điện thoại: trang không đệm (ảnh tràn mép), nên dải gợi ý tự đệm 16px; các khối trên là dải trắng tự đệm. */}
+              <div className="max-md:px-4 max-md:pb-6">
+                <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
+              </div>
             </div>
           }
         />
