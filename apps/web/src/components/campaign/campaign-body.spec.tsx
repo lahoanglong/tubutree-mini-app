@@ -76,6 +76,13 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     expect(c.querySelector('img')!.style.aspectRatio).toBe('var(--banner-ratio)');
   });
 
+  it('từ md ảnh đầu trang giữ 5/2 bằng trần bề rộng (max-w-3xl), không dùng trần chiều cao cắt ảnh còn 3,6:1', async () => {
+    const c = await mount(<CampaignBody campaign={DETAIL} initialProducts={page([1], 1, 1)} />);
+    const img = c.querySelector('img')!;
+    expect(img.className).toContain('md:max-w-3xl');
+    expect(img.className).not.toContain('max-h');
+  });
+
   it('mỗi khối có đúng một h2: mã giảm giá và sản phẩm', async () => {
     const c = await mount(<CampaignBody campaign={DETAIL} initialProducts={page([1, 2, 3], 1, 3)} />);
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
