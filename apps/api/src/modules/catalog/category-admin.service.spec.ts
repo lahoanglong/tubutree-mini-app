@@ -19,6 +19,8 @@ function make(initial: Row[] = [], products: { categoryIds: string[] }[] = []) {
   const rows = initial.map((r) => ({ image: null, ...r }));
   let seq = 0;
   const order: string[] = [];
+  // Transaction giả đưa lại chính kho này; giữ qua biến để kiểu của `prisma` không tự tham chiếu.
+  const self: { current: unknown } = { current: null };
   const prisma = {
     $executeRaw: jest.fn(async () => {
       order.push('lock');
@@ -48,8 +50,9 @@ function make(initial: Row[] = [], products: { categoryIds: string[] }[] = []) {
       count: jest.fn(async ({ where }: { where: { categoryIds: { has: string } } }) => products.filter((p) => p.categoryIds.includes(where.categoryIds.has)).length),
       findMany: jest.fn(async () => products),
     },
-    $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
+    $transaction: jest.fn(async (fn: (tx: unknown) => unknown): Promise<unknown> => fn(self.current)),
   };
+  self.current = prisma;
   const catalog = { invalidateCategoryCache: jest.fn() };
   const home = { invalidateStatic: jest.fn() };
   const svc = new CategoryAdminService(prisma as unknown as PrismaService, catalog as unknown as CatalogService, home as unknown as HomeService);
