@@ -39,6 +39,7 @@ vi.mock('../components/back-button', () => ({ default: () => null }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { homeCopy } from '@tubutree/app-core/home-copy';
 import VouchersPage from './vouchers';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
@@ -326,6 +327,8 @@ describe('VouchersPage (Mini)', () => {
     renderAt('/vouchers?tab=mine');
     expect(await screen.findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
     expect(screen.getByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
+    // Cùng một nhãn nút với thẻ mời ở Ưu đãi (một khoá, sửa một chỗ đổi cả hai trang).
+    expect(screen.getByRole('button', { name: homeCopy.profile.guestCta })).toBeInTheDocument();
     expect(screen.getByText('Còn 2 ngày')).toBeInTheDocument();
   });
 

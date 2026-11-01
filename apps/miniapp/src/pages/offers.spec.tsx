@@ -55,6 +55,7 @@ vi.mock('../store/auth', () => {
 });
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { homeCopy } from '@tubutree/app-core/home-copy';
 import OffersPage from './offers';
 
 const REWARDS = Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 5 + i, claimed: false, isToday: i === 0 }));
@@ -229,7 +230,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
     await import('../components/loyalty/guest-points-note');
     await new Promise((r) => setTimeout(r, 50));
-    expect(screen.getAllByRole('button', { name: 'Liên kết Zalo' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: homeCopy.profile.guestCta })).toHaveLength(1);
     expect(screen.queryByTestId('guest-points-note')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).toBeNull();
   });
