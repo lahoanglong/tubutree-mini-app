@@ -120,6 +120,20 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeHidden();
   });
 
+  test('Điểm danh gọn ở 320px: nút Điểm danh và nút luật nằm trọn trong thẻ, không tràn ngang', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.goto('/offers');
+    const card = page.getByTestId('daily-check-in');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const box = (await card.boundingBox())!;
+    for (const name of ['Điểm danh', 'Luật điểm danh']) {
+      const b = (await card.getByRole('button', { name, exact: true }).boundingBox())!;
+      expect(b.x, name).toBeGreaterThanOrEqual(box.x);
+      expect(b.x + b.width, name).toBeLessThanOrEqual(box.x + box.width + 0.5);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
   test('mã đã có trong ví không chiếm chỗ ở Nhận mã; Lưu mã gọi POST /coupons/claim đúng mã', async ({ page, api }) => {
     api.post('/coupons/claim', ({ call }) => {
       const code = (call.body as { code: string }).code;
