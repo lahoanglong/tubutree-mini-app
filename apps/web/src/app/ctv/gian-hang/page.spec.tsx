@@ -1699,17 +1699,40 @@ describe('màn dựng theo khối (P10)', () => {
         expect(nav.idx).toBe(0);
       });
 
-      it('mở thẳng bằng link có ?khoi= (không có danh sách phía trước): vào trang chi tiết, "Gian hàng của tôi" thay mục hiện tại thay vì lùi ra ngoài', async () => {
+      const stackUrls = () => nav.stack.map((l) => `${l.path}${l.search}`);
+
+      it.each([
+        ['nút "Quay lại" nổi', () => floatingBack()],
+        ['"Gian hàng của tôi" trong trang', () => btn('Gian hàng của tôi', $('[data-testid="section-detail"]')!)],
+      ])('mở thẳng bằng link ?khoi= (không có danh sách phía trước): dựng sẵn mục danh sách, %s cùng về danh sách', async (_name, target) => {
         setThree();
         nav.to('/ctv/gian-hang?khoi=c2', true);
+        mountWithBack();
+        await flush();
+        expect($('[data-testid="section-detail"] h2')?.textContent).toBe('Bộ hai');
+        expect(stackUrls()).toEqual(['/ctv/gian-hang', '/ctv/gian-hang?khoi=c2']);
+        click(target());
+        await flush();
+        expect(cards()).toHaveLength(3);
+        expect($('[data-testid="section-detail"]')).toBeNull();
+        expect(here()).toBe('/ctv/gian-hang');
+        expect(nav.idx).toBe(0);
+        expect(nav.routerCalls).not.toContain('replace /ctv/gian-hang');
+      });
+
+      it('F5 ở trang chi tiết (mục lịch sử còn dấu của màn dựng): không dựng thêm mục, "Gian hàng của tôi" lùi một bước', async () => {
+        setThree();
+        nav.to('/ctv/gian-hang', true);
+        nav.to('/ctv/gian-hang?khoi=c2', false, { builderSection: true });
         mount();
         await flush();
         expect($('[data-testid="section-detail"] h2')?.textContent).toBe('Bộ hai');
+        expect(stackUrls()).toEqual(['/ctv/gian-hang', '/ctv/gian-hang?khoi=c2']);
         click(btn('Gian hàng của tôi', $('[data-testid="section-detail"]')!));
         await flush();
         expect(cards()).toHaveLength(3);
-        expect(nav.stack).toHaveLength(1);
-        expect(here()).toBe('/ctv/gian-hang');
+        expect(nav.idx).toBe(0);
+        expect(nav.stack).toHaveLength(2);
       });
 
       it('khối đang mở bị xoá: về danh sách khối, không kẹt ở trang chi tiết trống', async () => {
@@ -1733,6 +1756,8 @@ describe('màn dựng theo khối (P10)', () => {
         mount();
         await flush();
         expect(cards()).toHaveLength(3);
+        // Không có trang chi tiết để dựng mục danh sách phía trước.
+        expect(nav.stack).toHaveLength(1);
       });
     });
 

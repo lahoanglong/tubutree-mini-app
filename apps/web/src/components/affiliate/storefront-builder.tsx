@@ -364,27 +364,22 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   // Mở/đóng trang chi tiết: vào tiêu đề khối khi mở; khi lùi lại thì về đúng thẻ vừa mở.
   const headingRef = useRef<HTMLHeadingElement>(null);
   const lastOpened = useRef<string | null>(null);
-  // Mục lịch sử của trang chi tiết là do chính màn này thêm thì đóng bằng lùi một bước; mở thẳng bằng link có ?khoi= (hoặc F5) thì không có
-  // mục danh sách phía trước, lùi sẽ rời màn dựng nên thay mục hiện tại.
-  const pushedDetail = useRef(false);
+  // Mục lịch sử của trang chi tiết có dấu `builderSection` trong history.state khi phía trước nó là danh sách khối: đóng bằng lùi một bước.
+  // Dấu nằm ở state của mục (không ở biến trong bộ nhớ) nên F5 vẫn còn; Next giữ state tuỳ biến của mục qua F5 và lùi/tiến.
+  const hasListBehind = () => (window.history.state as { builderSection?: boolean } | null)?.builderSection === true;
   const openSection = (id: string) => {
     lastOpened.current = id;
     setItemSort(false);
     if (sectionId !== null) {
-      shallowReplace(sectionHref(pathname, id));
+      shallowReplace(sectionHref(pathname, id), hasListBehind() ? { builderSection: true } : {});
       return;
     }
-    pushedDetail.current = true;
-    shallowPush(sectionHref(pathname, id));
+    shallowPush(sectionHref(pathname, id), { builderSection: true });
   };
   function closeSection() {
     setItemSort(false);
-    if (sectionId !== null && pushedDetail.current) {
-      pushedDetail.current = false;
-      router.back();
-    } else {
-      shallowReplace(pathname);
-    }
+    if (sectionId !== null && hasListBehind()) router.back();
+    else shallowReplace(pathname);
   }
 
   // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
@@ -407,6 +402,19 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       ?.querySelector('button')
       ?.focus();
   }, [inDetail]);
+
+  // Mở thẳng bằng link `?khoi=` (chia sẻ, tab mới) thì phía trước chưa có mục danh sách: dựng sẵn để nút lùi nổi (`router.back()` khi có lịch sử
+  // trong web, không thì lên trang cha) và "Gian hàng của tôi" cùng về danh sách. F5 còn dấu của mục nên không dựng lại.
+  const seededList = useRef(false);
+  useEffect(() => {
+    if (seededList.current || !sectionCol) return;
+    seededList.current = true;
+    if (hasListBehind()) return;
+    shallowReplace(pathname);
+    shallowPush(sectionHref(pathname, sectionCol.id), { builderSection: true });
+    // Một lần khi trang chi tiết đầu tiên xuất hiện; `hasListBehind` và `pathname` đọc ngay lúc đó.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionCol?.id]);
 
   const pickedStyle = sectionCol && sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
   const overflow = overflowSectionsNotice(sf.collections);
