@@ -25,7 +25,9 @@ describe('AdminAccountDeletionController (C-016)', () => {
     await ctrl.list({ status: 'ALL' });
     expect(svc.list).toHaveBeenCalledWith('ALL');
     await ctrl.process('admin-1', 'req-1', { note: 'ok' });
-    expect(svc.process).toHaveBeenCalledWith('req-1', 'admin-1', 'ok');
+    expect(svc.process).toHaveBeenCalledWith('req-1', 'admin-1', 'ok', undefined);
+    await ctrl.process('admin-1', 'req-2', { overrideWalletBalance: { reason: 'khách mất liên lạc' } });
+    expect(svc.process).toHaveBeenCalledWith('req-2', 'admin-1', undefined, { reason: 'khách mất liên lạc' });
   });
 
   it('từ chối status lạ ở query', async () => {
@@ -34,5 +36,28 @@ describe('AdminAccountDeletionController (C-016)', () => {
     const meta: ArgumentMetadata = { type: 'query', metatype };
     await expect(pipe.transform({ status: 'DELETE_ALL' }, meta)).rejects.toBeDefined();
     await expect(pipe.transform({ status: 'RESOLVED' }, meta)).resolves.toMatchObject({ status: 'RESOLVED' });
+  });
+
+  describe('overrideWalletBalance (DTO)', () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+    const meta = (): ArgumentMetadata => ({
+      type: 'body',
+      metatype: Reflect.getMetadata('design:paramtypes', AdminAccountDeletionController.prototype, 'process')[2],
+    });
+
+    it('lý do được cắt khoảng trắng và nhận khi đủ 10 ký tự', async () => {
+      await expect(pipe.transform({ overrideWalletBalance: { reason: '   khách đã mất liên lạc   ' } }, meta())).resolves.toMatchObject({
+        overrideWalletBalance: { reason: 'khách đã mất liên lạc' },
+      });
+    });
+
+    it.each([
+      ['thiếu lý do', { overrideWalletBalance: {} }],
+      ['lý do ngắn (sau khi cắt)', { overrideWalletBalance: { reason: '  ngắn quá  ' } }],
+      ['lý do trống', { overrideWalletBalance: { reason: '          ' } }],
+      ['lý do quá 500 ký tự', { overrideWalletBalance: { reason: 'a'.repeat(501) } }],
+    ])('400: %s', async (_n, body) => {
+      await expect(pipe.transform(body, meta())).rejects.toBeDefined();
+    });
   });
 });

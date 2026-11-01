@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { invalidateInbox } from '@/lib/admin-client';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
-import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
@@ -23,6 +23,10 @@ export interface AdminDeletionRequest {
   createdAt: string;
   walletForfeitAmount?: number | null;
   walletForfeitConsentAt?: string | null;
+  walletOverrideBy?: string | null;
+  walletOverrideAt?: string | null;
+  walletOverrideReason?: string | null;
+  walletOverrideAmount?: number | null;
   user: {
     id: string;
     fullName: string | null;
@@ -39,10 +43,16 @@ export interface AdminDeletionRequest {
 export const listDeletionRequests = (status: DeletionStatusFilter) =>
   apiFetch<AdminDeletionRequest[]>(`/admin/account-deletion-requests?status=${status}`);
 
-export const processDeletionRequest = (id: string, note?: string) =>
+export const OVERRIDE_REASON_MIN = 10;
+export const OVERRIDE_REASON_MAX = 500;
+
+export const processDeletionRequest = (id: string, note?: string, overrideReason?: string) =>
   apiFetch<{ alreadyProcessed: boolean }>(`/admin/account-deletion-requests/${encodeURIComponent(id)}/process`, {
     method: 'POST',
-    body: note?.trim() ? { note: note.trim() } : {},
+    body: {
+      ...(note?.trim() ? { note: note.trim() } : {}),
+      ...(overrideReason ? { overrideWalletBalance: { reason: overrideReason.trim() } } : {}),
+    },
   });
 
 const FILTERS: { k: DeletionStatusFilter; label: string }[] = [
@@ -118,10 +128,15 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   const [err, setErr] = useState<string | null>(null);
   const pending = r.status === 'PENDING';
   const blocked = r.blockers.length > 0;
-  const { confirm, dialog } = useConfirm();
+  const { confirm, ask, dialog } = useConfirm();
+  // Chỉ bỏ qua được số dư Ví DƯƠNG; Ví âm hay vướng mắc khác vẫn phải giải quyết trước.
+  const walletBlocked = r.blockers.some((b) => b.code === 'WALLET_BALANCE');
+  const walletBalance = r.user?.walletBalance ?? 0;
+  const onlyWalletBlocked = walletBlocked && r.blockers.every((b) => b.code === 'WALLET_BALANCE');
+  const canOverrideWallet = pending && walletBlocked && walletBalance > 0;
 
   const mut = useMutation({
-    mutationFn: () => processDeletionRequest(r.id, note),
+    mutationFn: (overrideReason?: string) => processDeletionRequest(r.id, note, overrideReason),
     onSuccess: () => {
       setErr(null);
       setNote('');
@@ -144,7 +159,27 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       confirmLabel: 'Ẩn danh tài khoản',
       tone: 'danger',
     });
-    if (ok) mut.mutate();
+    if (ok) mut.mutate(undefined);
+  };
+
+  const runOverride = async () => {
+    setErr(null);
+    const who = r.user?.fullName || r.user?.phone || r.userId;
+    const amount = formatVnd(walletBalance);
+    const reason = await ask({
+      title: 'Xoá dù còn tiền Ví?',
+      message: `Ví Tubu của "${who}" còn ${amount} và khách chưa đồng ý bỏ số dư. Xác nhận sẽ trừ ${amount} về 0, ẩn danh tài khoản và không hoàn tác được. Số tiền, lý do và người thao tác được ghi lại.${onlyWalletBlocked ? '' : '\nLưu ý: các vướng mắc khác (nếu còn) vẫn chặn việc xoá.'}`,
+      confirmLabel: `Trừ ${amount} và ẩn danh`,
+      tone: 'danger',
+      input: {
+        label: 'Lý do xoá dù còn tiền Ví (bắt buộc)',
+        placeholder: 'vd khách đã thu hồi đồng ý trên Zalo, CSKH đã xác nhận',
+        maxLength: OVERRIDE_REASON_MAX,
+        required: true,
+        validate: (t) => (t.trim().length < OVERRIDE_REASON_MIN ? `Lý do cần ít nhất ${OVERRIDE_REASON_MIN} ký tự.` : null),
+      },
+    });
+    if (reason) mut.mutate(reason);
   };
 
   return (
@@ -178,6 +213,12 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       {!pending && (
         <div className="mt-2 space-y-0.5 text-xs text-stone-500">
           {r.reviewedAt && <div>Xử lý lúc: {formatDateTime(r.reviewedAt)}</div>}
+          {r.walletOverrideAmount != null && (
+            <div>
+              Xoá dù còn tiền Ví: đã trừ {formatVnd(r.walletOverrideAmount)}
+              {r.walletOverrideAt && ` lúc ${formatDateTime(r.walletOverrideAt)}`}. Lý do: <span className="text-stone-700">{r.walletOverrideReason}</span>
+            </div>
+          )}
           {r.adminNote && (
             <div>
               Ghi chú admin: <span className="text-stone-700">{r.adminNote}</span>
@@ -219,6 +260,16 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           >
             Xử lý (ẩn danh)
           </button>
+          {canOverrideWallet && (
+            <button
+              type="button"
+              onClick={() => void runOverride()}
+              disabled={mut.isPending}
+              className={BTN_DANGER_OUTLINE}
+            >
+              Xoá dù còn tiền Ví
+            </button>
+          )}
           {mut.isPending && <span className="text-xs text-stone-500">Đang xử lý…</span>}
         </div>
       )}

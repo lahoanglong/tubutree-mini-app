@@ -152,6 +152,76 @@ describe('AccountDeletionPanel (C-016)', () => {
     expect(call?.init?.body).toBe(JSON.stringify({ note: 'đã gọi xác nhận' }));
   });
 
+  describe('xoá dù còn tiền Ví', () => {
+    const wallet = (balance: number, code = 'WALLET_BALANCE') =>
+      req({
+        user: { ...req().user!, walletBalance: balance },
+        blockers: [{ code, message: 'Ví Tubu còn 50.000đ mà khách chưa đồng ý bỏ số dư' }],
+      });
+    const setup = async (r: AdminDeletionRequest) => {
+      const api = mockFetch({
+        '/process': { body: { alreadyProcessed: false } },
+        '/admin/account-deletion-requests': { body: [r] },
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const view = mount(<AccountDeletionPanel />);
+      await flush();
+      return { api, ...view };
+    };
+
+    it('Ví dương bị chặn: có nút, hộp thoại nêu số tiền, bắt buộc lý do >= 10 ký tự, rồi POST overrideWalletBalance', async () => {
+      const { api, container } = await setup(wallet(50_000));
+      click(byText(container, 'button', 'Xoá dù còn tiền Ví'));
+      await flush();
+      const d = confirmDialog()!;
+      expect(d.textContent).toContain('50.000đ');
+      const accept = d.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!;
+      expect(accept.disabled).toBe(true);
+      const ta = d.querySelector('textarea')!;
+      typeInto(ta, 'ngắn');
+      await flush();
+      expect(accept.disabled).toBe(true);
+      typeInto(ta, '  khách đã thu hồi đồng ý trên Zalo  ');
+      await flush();
+      expect(accept.disabled).toBe(false);
+      answerConfirm(true);
+      await flush();
+      const call = api.calls.find((c) => c.url.includes('/process'));
+      expect(call?.init?.body).toBe(JSON.stringify({ overrideWalletBalance: { reason: 'khách đã thu hồi đồng ý trên Zalo' } }));
+    });
+
+    it('huỷ hộp thoại thì không gọi API', async () => {
+      const { api, container } = await setup(wallet(50_000));
+      click(byText(container, 'button', 'Xoá dù còn tiền Ví'));
+      await flush();
+      answerConfirm(false);
+      await flush();
+      expect(api.calls.some((c) => c.url.includes('/process'))).toBe(false);
+    });
+
+    it('nút thường vẫn khoá khi còn blocker', async () => {
+      const { container } = await setup(wallet(50_000));
+      expect((byText(container, 'button', 'Xử lý (ẩn danh)') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('không có nút khi blocker không phải Ví, hoặc Ví âm', async () => {
+      const a = await setup(wallet(50_000, 'ORDER_IN_PROGRESS'));
+      expect(byText(a.container, 'button', 'Xoá dù còn tiền Ví')).toBeNull();
+      a.unmount();
+      mounted = [];
+      const b = await setup(wallet(-5_000));
+      expect(byText(b.container, 'button', 'Xoá dù còn tiền Ví')).toBeNull();
+    });
+
+    it('yêu cầu đã xử lý bằng ghi đè: hiện số tiền đã trừ và lý do', async () => {
+      const { container } = await setup(
+        req({ status: 'RESOLVED', reviewedAt: '2026-10-02T03:00:00.000Z', walletOverrideAmount: 50_000, walletOverrideReason: 'khách mất liên lạc' }),
+      );
+      expect(container.textContent).toContain('Xoá dù còn tiền Ví: đã trừ 50.000đ');
+      expect(container.textContent).toContain('khách mất liên lạc');
+    });
+  });
+
   it('server từ chối (vừa phát sinh số dư) → hiện thông báo lỗi tiếng Việt', async () => {
     const api = mockFetch({
       '/process': { status: 400, body: { code: 'ACCOUNT_DELETION_BLOCKED', message: 'Chưa thể xoá tài khoản: còn 1 đơn hàng chưa hoàn tất.' } },

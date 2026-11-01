@@ -13,6 +13,7 @@ function build(partnerBlockers: string[]) {
     accountDeletionRequest: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'req-1', userId: 'u1', status: 'PENDING' }),
       updateMany: jest.fn(),
+      update: jest.fn(),
     },
     user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER', walletBalance: 0, pointsConvertedBalance: 0, cashbackPending: 0 }), update: jest.fn() },
     order: empty,
@@ -244,6 +245,87 @@ describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý b�
       data: expect.objectContaining({ userId: 'u1', kind: 'WALLET_FORFEIT', fromValue: '20000', toValue: '0', actorId: 'admin-1' }),
     });
     expect(anonymize).toHaveBeenCalled();
+  });
+
+  describe('admin xoá dù còn tiền Ví (overrideWalletBalance)', () => {
+    const override = { reason: 'Khách đã thu hồi đồng ý trên Zalo, CSKH xác nhận' };
+
+    it('bỏ blocker Ví, trừ đúng số dư đọc dưới khoá, cùng kiểu dòng sổ ADJUST/ACCOUNT_DELETION, ghi dấu vết trên yêu cầu', async () => {
+      const { svc, tx, anonymize, extra } = withWallet(20_000, null);
+      await expect(svc.process('req-1', 'admin-1', undefined, override)).resolves.toMatchObject({ alreadyProcessed: false });
+      const create = (extra.walletTransaction as { create: jest.Mock }).create;
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0]![0].data).toMatchObject({
+        userId: 'u1',
+        delta: -20_000,
+        type: 'ADJUST',
+        refType: 'ACCOUNT_DELETION',
+        refId: 'req-1',
+        reason: expect.stringContaining(override.reason),
+      });
+      expect((tx.accountDeletionRequest as unknown as { update: jest.Mock }).update).toHaveBeenCalledWith({
+        where: { id: 'req-1' },
+        data: expect.objectContaining({
+          walletOverrideBy: 'admin-1',
+          walletOverrideAt: expect.any(Date),
+          walletOverrideReason: override.reason,
+          walletOverrideAmount: 20_000,
+        }),
+      });
+      expect((extra.userAdminEvent as { create: jest.Mock }).create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'WALLET_FORFEIT', fromValue: '20000', toValue: '0', actorId: 'admin-1', reason: expect.stringContaining(override.reason) }),
+      });
+      expect(anonymize).toHaveBeenCalled();
+    });
+
+    it('số tiền ghi lại là số dư lúc xử lý dù khác số khách từng đồng ý', async () => {
+      const { svc, tx, extra } = withWallet(30_000, 20_000);
+      await svc.process('req-1', 'admin-1', undefined, override);
+      expect((extra.walletTransaction as { create: jest.Mock }).create.mock.calls[0]![0].data.delta).toBe(-30_000);
+      expect((tx.accountDeletionRequest as unknown as { update: jest.Mock }).update.mock.calls[0]![0].data.walletOverrideAmount).toBe(30_000);
+    });
+
+    it('khách đã đồng ý đúng số dư thì không tính là ghi đè', async () => {
+      const { svc, tx } = withWallet(20_000, 20_000);
+      await svc.process('req-1', 'admin-1', undefined, override);
+      expect((tx.accountDeletionRequest as unknown as { update: jest.Mock }).update).not.toHaveBeenCalled();
+    });
+
+    it('chỉ bỏ blocker Ví: blocker khác vẫn chặn, không trừ Ví, không ẩn danh', async () => {
+      const { svc, tx, anonymize, extra } = withWallet(20_000, null);
+      (tx as unknown as { commission: unknown }).commission = { groupBy: jest.fn().mockResolvedValue([{ affiliateUserId: 'u1', _count: { _all: 1 } }]) };
+      const blockers = await blockersOf(svc.process('req-1', 'admin-1', undefined, override));
+      expect(blockers.map((b) => b.code)).toEqual(['COMMISSION_UNPAID']);
+      expect((extra.walletTransaction as { create: jest.Mock }).create).not.toHaveBeenCalled();
+      expect(anonymize).not.toHaveBeenCalled();
+    });
+
+    it('Ví âm không bỏ qua được', async () => {
+      const { svc } = withWallet(-5_000, null);
+      const blockers = await blockersOf(svc.process('req-1', 'admin-1', undefined, override));
+      expect(blockers[0]?.message).toContain('đang âm 5.000đ');
+    });
+
+    it('tài khoản ADMIN/STAFF vẫn vướng PRIVILEGED_ROLE', async () => {
+      const { svc, tx } = withWallet(20_000, null);
+      (tx.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'STAFF', walletBalance: 20_000, pointsConvertedBalance: 0, cashbackPending: 0 });
+      const blockers = await blockersOf(svc.process('req-1', 'admin-1', undefined, override));
+      expect(blockers.map((b) => b.code)).toEqual(['PRIVILEGED_ROLE']);
+    });
+
+    it.each([['thiếu', ''], ['toàn khoảng trắng', '          '], ['ngắn', 'ngắn quá'], ['quá dài', 'a'.repeat(501)]])('lý do %s → 400, không động tới giao dịch', async (_n, reason) => {
+      const { svc } = withWallet(20_000, null);
+      const prisma = (svc as unknown as { prisma: { $transaction: jest.Mock } }).prisma;
+      await expect(svc.process('req-1', 'admin-1', undefined, { reason })).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('yêu cầu đã RESOLVED (xử lý lặp/đồng thời) → alreadyProcessed, không trừ Ví lần hai', async () => {
+      const { svc, tx, extra } = withWallet(20_000, null);
+      (tx.accountDeletionRequest.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'req-1', userId: 'u1', status: 'RESOLVED', reviewedAt: new Date() });
+      await expect(svc.process('req-1', 'admin-1', undefined, override)).resolves.toMatchObject({ alreadyProcessed: true });
+      expect((extra.walletTransaction as { create: jest.Mock }).create).not.toHaveBeenCalled();
+    });
   });
 
   it('Ví bằng 0 → không ghi dòng sổ Ví', async () => {

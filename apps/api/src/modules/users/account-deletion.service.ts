@@ -47,6 +47,12 @@ export interface PartnerStoreBlockersPort {
   ownerPartnerBlockers(db: Db, ownerUserId: string, cfg: SettlementConfig): Promise<string[]>;
 }
 
+export const OVERRIDE_REASON_MIN = 10;
+export const OVERRIDE_REASON_MAX = 500;
+export interface WalletOverride {
+  reason: string;
+}
+
 export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';
 
 type Db = Prisma.TransactionClient;
@@ -149,21 +155,28 @@ export class AccountDeletionService {
    * lúc tx này đã khoá đơn) cùng một lần cộng điểm đang giữ đơn mới đó thì lần ẩn danh đơn có thể chờ vòng (40P01). Lần
    * chạy lại khoá đủ đơn ngay từ đầu.
    */
-  async process(requestId: string, adminId: string, adminNote?: string) {
+  async process(requestId: string, adminId: string, adminNote?: string, override?: WalletOverride) {
+    let overrideReason: string | undefined;
+    if (override) {
+      overrideReason = typeof override.reason === 'string' ? override.reason.trim() : '';
+      if (overrideReason.length < OVERRIDE_REASON_MIN || overrideReason.length > OVERRIDE_REASON_MAX) {
+        throw new BadRequestException(`Lý do xoá dù còn tiền Ví phải từ ${OVERRIDE_REASON_MIN} đến ${OVERRIDE_REASON_MAX} ký tự.`);
+      }
+    }
     let result;
     try {
-      result = await this.processOnce(requestId, adminId, adminNote);
+      result = await this.processOnce(requestId, adminId, adminNote, overrideReason);
     } catch (err) {
       if (!isRetryableTxError(err)) throw err;
       this.logger.warn(`Yêu cầu xoá ${requestId}: xung đột giao dịch (${(err as Error).message}), chạy lại một lần.`);
-      result = await this.processOnce(requestId, adminId, adminNote);
+      result = await this.processOnce(requestId, adminId, adminNote, overrideReason);
     }
     // Bộ nhớ đệm phiên (SessionStateService, TTL 5 giây) còn coi chủ vừa bị ẩn danh là đang đăng nhập: cắt ngay như khoá tài khoản.
     this.sessions?.invalidate(result.userId);
     return result;
   }
 
-  private async processOnce(requestId: string, adminId: string, adminNote?: string) {
+  private async processOnce(requestId: string, adminId: string, adminNote?: string, overrideReason?: string) {
     // Đọc cấu hình đối soát trước khi mở tx (SystemConfigService đọc qua pool, không đọc trong lúc giữ tx), như setUserRole.
     const partnerCfg = await this.partnerStores?.settlementConfig();
     const windowDays = await this.returnWindowDays();
@@ -192,7 +205,9 @@ export class AccountDeletionService {
       const now = new Date();
 
       if (user) {
-        const consents = new Map([[user.id, request.walletForfeitAmount]]);
+        // Ghi đè của admin chỉ bỏ blocker số dư DƯƠNG: coi như "đã đồng ý" đúng số dư vừa đọc dưới khoá FOR UPDATE; Ví âm và mọi blocker khác vẫn chặn.
+        const overriding = overrideReason !== undefined && user.walletBalance > 0 && request.walletForfeitAmount !== user.walletBalance;
+        const consents = new Map([[user.id, overriding ? user.walletBalance : request.walletForfeitAmount]]);
         const blockers = (await this.collectBlockers(tx, [user], consents, windowDays, partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
           throw new BadRequestException({
@@ -203,7 +218,15 @@ export class AccountDeletionService {
             blockers,
           });
         }
-        if (user.walletBalance > 0) await this.forfeitWallet(tx, user.id, user.walletBalance, request, adminId);
+        if (user.walletBalance > 0) {
+          await this.forfeitWallet(tx, user.id, user.walletBalance, request, adminId, overriding ? overrideReason : undefined);
+          if (overriding) {
+            await tx.accountDeletionRequest.update({
+              where: { id: requestId },
+              data: { walletOverrideBy: adminId, walletOverrideAt: now, walletOverrideReason: overrideReason, walletOverrideAmount: user.walletBalance },
+            });
+          }
+        }
         await this.anonymize(tx, user.id, requestId, now);
       } else {
         this.logger.warn(`Yêu cầu xoá ${requestId}: không còn user ${request.userId}, chỉ đóng yêu cầu.`);
@@ -379,9 +402,12 @@ export class AccountDeletionService {
     balance: number,
     request: { id: string; walletForfeitConsentAt: Date | null },
     adminId: string,
+    overrideReason?: string,
   ) {
     const consentAt = request.walletForfeitConsentAt?.toISOString() ?? 'không rõ';
-    const reason = `Xoá tài khoản: khách đã đồng ý bỏ số dư Ví ${vnd(balance)} (đồng ý lúc ${consentAt}, yêu cầu ${request.id})`;
+    const reason = overrideReason
+      ? `Xoá tài khoản: admin xử lý dù khách chưa đồng ý bỏ số dư Ví ${vnd(balance)} (yêu cầu ${request.id}). Lý do admin: ${overrideReason}`
+      : `Xoá tài khoản: khách đã đồng ý bỏ số dư Ví ${vnd(balance)} (đồng ý lúc ${consentAt}, yêu cầu ${request.id})`;
     await applyWalletDelta(tx, {
       userId,
       delta: -balance,
