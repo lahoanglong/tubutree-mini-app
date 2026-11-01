@@ -38,11 +38,11 @@ describe('MissionsCard: khách vãng lai không được hứa Điểm Xanh', ()
     expect(screen.getByText('1/3')).toBeInTheDocument();
   });
 
-  it('nút Liên kết Zalo gọi luồng liên kết sẵn có', async () => {
+  it('nút Đăng nhập Zalo gọi luồng liên kết sẵn có', async () => {
     mocks.ensurePhone.mockResolvedValue('0901234567');
     card([{ ...DONE, pointsBlocked: 'GUEST' }]);
-    fireEvent.click(screen.getByRole('button', { name: 'Liên kết Zalo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
     await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Liên kết Zalo' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeEnabled());
   });
 });

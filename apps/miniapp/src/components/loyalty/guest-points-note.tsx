@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { Button } from '../ui/button';
@@ -44,7 +44,7 @@ export function GuestPointsNote({ margin }: { margin?: string }) {
         </div>
       )}
       <Button fullWidth variant="secondary" loading={pending} disabled={pending} onPress={() => void login()}>
-        {fillCopy('zalo.link')}
+        {guestCheckInCopy.cta}
       </Button>
     </div>
   );

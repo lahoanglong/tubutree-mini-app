@@ -85,7 +85,7 @@ test.describe('Vườn Xanh', () => {
     await expect(missions.getByTestId('guest-points-note')).toContainText('Đăng nhập Zalo để nhận Điểm Xanh');
     await expect(missions.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
     await expect(missions.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
-    await expect(missions.getByRole('button', { name: 'Liên kết Zalo', exact: true })).toBeVisible();
+    await expect(missions.getByRole('button', { name: 'Đăng nhập Zalo', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(api.callsTo('POST', '/game/missions/REVIEW_3/claim')).toHaveLength(0);
   });

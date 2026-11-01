@@ -75,19 +75,19 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     await import('./guest-points-note');
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Liên kết Zalo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).not.toBeInTheDocument();
     unmount();
     render(<DailyCheckInCard authed />);
     expect(await screen.findByTestId('guest-points-note')).toBeInTheDocument();
   });
 
-  it('nút Liên kết Zalo gọi luồng liên kết sẵn có (ensurePhoneOrThrow)', async () => {
+  it('nút Đăng nhập Zalo gọi luồng liên kết sẵn có (ensurePhoneOrThrow)', async () => {
     mocks.ensurePhone.mockResolvedValue('0901234567');
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Liên kết Zalo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập Zalo' }));
     await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Liên kết Zalo' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeEnabled());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     mocks.ensurePhone.mockResolvedValue(null);
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Liên kết Zalo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập Zalo' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Chưa đăng nhập được Zalo. Bạn thử lại nhé.');
   });
 

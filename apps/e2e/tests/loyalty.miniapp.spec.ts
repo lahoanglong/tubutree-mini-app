@@ -247,7 +247,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     await expect(card.getByText('Điểm danh mỗi ngày')).toBeVisible({ timeout: 15_000 });
     await expect(card.getByText('Hôm nay nhận +10 giọt nước', { exact: true })).toBeVisible();
     await expect(card.getByText('Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible();
-    await expect(card.getByRole('button', { name: 'Liên kết Zalo', exact: true })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Đăng nhập Zalo', exact: true })).toBeVisible();
     await expect(card.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
     // Khổ điện thoại: thẻ không tràn ngang.
     expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
