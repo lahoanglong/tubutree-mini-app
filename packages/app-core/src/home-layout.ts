@@ -479,6 +479,27 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean,
   }
 }
 
+/** Khoá nhớ "lần mở trước có banner chiến dịch" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
+export const BANNER_HINT_KEY = 'tubu_home_banner';
+
+/** Chưa nhớ, giá trị lạ hay không có kho → false (chờ im lặng, không giữ chỗ). */
+export function readBannerHint(storage: MemoryStorage | null): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(BANNER_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeBannerHint(storage: MemoryStorage | null, hasBanner: boolean): void {
+  try {
+    storage?.setItem(BANNER_HINT_KEY, hasBanner ? '1' : '0');
+  } catch {
+    /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
+  }
+}
+
 /** Khoá nhớ số món Mua lại lần mở trước ('one' | 'many'), để khung chờ có đúng chiều cao dòng 88px hay kệ nhiều món. */
 export const PURCHASED_HINT_KEY = 'tubu_home_purchased';
 export type PurchasedHint = 'none' | 'one' | 'many';
@@ -542,6 +563,8 @@ export function categoriesBlockHeight(cells: number): number {
  * Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây (số đo Mini 375px).
  */
 export const HOME_SETTLING_HEIGHTS = {
+  // Banner tỉ lệ 5:2 (`--banner-ratio`) ở 375px trừ đệm 16 mỗi bên.
+  banner: Math.round((375 - 32) / 2.5),
   shortcuts: 84,
   flash: FLASH_SKELETON_HEIGHT,
   categories: categoriesBlockHeight(CATEGORY_GRID_MAX_CELLS),

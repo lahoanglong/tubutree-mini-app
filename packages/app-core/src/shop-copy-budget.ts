@@ -113,6 +113,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'campaign.endedBody': null,
   'campaign.notFound': null,
   'campaign.share': null,
+  'campaign.copyCode': 14,
+  'campaign.productsEmpty': null,
+  'campaign.backHome': 14,
 
   // Mã giảm giá
   'coupon.title': 14,
