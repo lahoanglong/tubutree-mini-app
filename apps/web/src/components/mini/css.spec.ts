@@ -60,10 +60,13 @@ describe('mini.css không đổi giao diện máy tính', () => {
     expect(css).toMatch(/\.tubu-search-field input\[type='search'\]::-webkit-search-cancel-button/);
   });
 
-  it('hàng tab cuộn ngang ẩn thanh cuộn (bản Mini không vẽ nó; thanh 6px của globals.css chồng lên chân tab)', () => {
+  it('hàng tab cuộn ngang ẩn thanh cuộn chỉ dưới md (bản Mini không vẽ nó; thanh 6px của globals.css chồng lên chân tab)', () => {
     const rules = strip(css);
-    expect(rules).toMatch(/\.scroll-x\[role='tablist'\]\s*\{[^}]*scrollbar-width:\s*none/);
-    expect(rules).toMatch(/\.scroll-x\[role='tablist'\]::-webkit-scrollbar\s*\{[^}]*display:\s*none/);
+    const phone = [...rules.matchAll(/@media not all and \(min-width: 768px\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(phone).toMatch(/\.scroll-x\[role='tablist'\]\s*\{[^}]*scrollbar-width:\s*none/);
+    expect(phone).toMatch(/\.scroll-x\[role='tablist'\]::-webkit-scrollbar\s*\{[^}]*display:\s*none/);
+    const outside = rules.replace(/@media[^{]*\{[\s\S]*?\n\}/g, '');
+    expect(outside).not.toMatch(/\[role='tablist'\]/);
   });
 
   it('điện thoại: body cắt tràn ngang vì dải PageHeader tràn bằng 100vw (gồm cả thanh cuộn của trình duyệt máy tính thu hẹp)', () => {
@@ -105,15 +108,15 @@ describe('mini.css: tràn mép dùng chung (.tubu-bleed, .tubu-bleed-rail)', () 
   const mediaBodies = (cond: string) => [...plain.matchAll(new RegExp(`@media ${cond.replace(/[().]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\n\\}`, 'g'))].map((m) => m[1]).join('\n');
   const outsideMedia = plain.replace(/@media[^{]*\{[\s\S]*?\n\}/g, '');
 
-  it('.tubu-bleed chỉ có luật dưới md: lề âm đúng --space-block và bỏ max-width để .scroll-x không cắt lại', () => {
+  it('.tubu-bleed chỉ có luật dưới md: lề âm -1rem (đúng px-4 của PAGE_WIDE) và bỏ max-width để .scroll-x không cắt lại', () => {
     const phone = mediaBodies('not all and (min-width: 768px)');
-    expect(phone).toMatch(/\.tubu-bleed\s*\{[^}]*margin-inline:\s*calc\(var\(--space-block\)\s*\*\s*-1\)[^}]*max-width:\s*none/);
+    expect(phone).toMatch(/\.tubu-bleed\s*\{[^}]*margin-inline:\s*-1rem[^}]*max-width:\s*none/);
     expect(outsideMedia).not.toMatch(/\.tubu-bleed(?![\w-])/);
     expect(mediaBodies('(min-width: 768px)')).not.toMatch(/\.tubu-bleed(?![\w-])/);
   });
 
-  it('.tubu-bleed-rail lùi --space-block ở mọi khổ và đúng đệm 12px của kệ (--p-space-4) từ md', () => {
-    expect(outsideMedia).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*calc\(var\(--space-block\)\s*\*\s*-1\)[^}]*max-width:\s*none/);
+  it('.tubu-bleed-rail lùi -1rem ở mọi khổ và đúng đệm 12px của kệ (--p-space-4) từ md', () => {
+    expect(outsideMedia).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*-1rem[^}]*max-width:\s*none/);
     expect(mediaBodies('(min-width: 768px)')).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*calc\(var\(--p-space-4\)\s*\*\s*-1\)/);
   });
 

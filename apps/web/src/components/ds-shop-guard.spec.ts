@@ -26,9 +26,20 @@ const hits = (re: RegExp, allow: readonly string[] = []) => FILES.filter((f) => 
  * nên không bị quét: chỉ quét .ts/.tsx). `-mx-N` của Tailwind hay `margin: '0 -16px'` viết tay từng file đã làm mỗi nơi một số đo và một mốc md.
  */
 const BLEED_SCOPE = /^components\/(home|catalog|shop-page|mini)\//;
-const HAND_BLEED = /(?<![\w-])-mx-[\w.[\]]+|margin:\s*['"]0 -|margin(?:Inline|Left|Right)\w*:\s*-/;
+const NEG_TAILWIND = /(?<![\w-])-m[xlrse]-(?:\d|px\b|\[)/;
+const NEG_LONGHAND = /margin(?:Inline(?:Start|End)?|Left|Right):\s*-(?!0\b)|margin-(?:inline(?:-start|-end)?|left|right):\s*-(?!0\b)/;
+const SHORTHAND = /margin:\s*(['"])([^'"]*)\1/g;
+/** Giá trị lề ngang của shorthand `margin`: 1 giá trị cho cả bốn phía; 2 và 3 giá trị thì ngang là giá trị thứ hai; 4 giá trị thì phải (2) và trái (4). */
+function negativeHorizontalShorthand(text: string): boolean {
+  return [...text.matchAll(SHORTHAND)].some((m) => {
+    const v = m[2].trim().split(/\s+/);
+    const horizontal = v.length === 1 ? [v[0]] : v.length === 4 ? [v[1], v[3]] : [v[1]];
+    return horizontal.some((x) => /^-(?!0(?:px|rem|em|%)?$)/.test(x ?? ''));
+  });
+}
+const hasHandBleed = (text: string) => NEG_TAILWIND.test(text) || NEG_LONGHAND.test(text) || negativeHorizontalShorthand(text);
 export function bleedViolations(files: readonly { rel: string; text: string }[]): string[] {
-  return files.filter((f) => BLEED_SCOPE.test(f.rel) && HAND_BLEED.test(f.text)).map((f) => f.rel);
+  return files.filter((f) => BLEED_SCOPE.test(f.rel) && hasHandBleed(f.text)).map((f) => f.rel);
 }
 
 describe('ds-shop-guard (web)', () => {
@@ -78,12 +89,26 @@ describe('ds-shop-guard (web)', () => {
       { rel: 'components/mini/y.tsx', text: "<div style={{ margin: '0 -16px' }} />" },
       { rel: 'components/catalog/z.tsx', text: "const C = '-mx-4 md:-mx-3';" },
       { rel: 'components/shop-page/w.tsx', text: '<div style={{ marginLeft: -8 }} />' },
+      { rel: 'components/home/ml.tsx', text: '<div className="-ml-4" />' },
+      { rel: 'components/home/mr.tsx', text: '<div className="max-md:-mr-4" />' },
+      { rel: 'components/home/ms.tsx', text: '<div className="-ms-4" />' },
+      { rel: 'components/home/me.tsx', text: '<div className="md:-me-[10px]" />' },
+      { rel: 'components/mini/sh.tsx', text: "<div style={{ margin: '8px -16px' }} />" },
+      { rel: 'components/mini/sh4.tsx', text: "<div style={{ margin: '0 0 0 -16px' }} />" },
+      { rel: 'components/mini/mi.tsx', text: '<div style={{ marginInline: -16 }} />' },
+      { rel: 'components/mini/mis.tsx', text: '<div style={{ marginInlineStart: -16 }} />' },
+      { rel: 'components/mini/mie.tsx', text: '<div style={{ marginInlineEnd: -16 }} />' },
+      { rel: 'components/mini/mr.tsx', text: '<div style={{ marginRight: -16 }} />' },
     ];
     expect(bleedViolations(bad)).toEqual(bad.map((f) => f.rel));
     const ok = [
       { rel: 'components/home/a.tsx', text: '<div className="tubu-bleed px-4" />' },
       { rel: 'components/loyalty/mini-surface.tsx', text: "export const miniBleed = 'max-md:-mx-4';" }, // ngoài phạm vi
       { rel: 'components/mini/b.tsx', text: '<div className="mx-auto -mt-2" />' }, // lề âm dọc không thuộc luật này
+      { rel: 'components/mini/c.tsx', text: '<div className="-my-2 -mt-1 -mb-1" />' },
+      { rel: 'components/mini/d.tsx', text: "<div style={{ margin: '-4px 0' }} />" },
+      { rel: 'components/mini/e.tsx', text: "<div style={{ margin: '-4px 0 -4px', marginTop: -2 }} />" },
+      { rel: 'components/mini/f.tsx', text: '<div className="-ms-overflow-style" />' }, // không phải lớp Tailwind
     ];
     expect(bleedViolations(ok)).toEqual([]);
   });
