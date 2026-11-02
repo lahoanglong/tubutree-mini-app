@@ -174,17 +174,23 @@ function vnDay(ms: number): number {
   return Math.floor((ms + VN_OFFSET_MS) / DAY_MS);
 }
 
-/** Chữ hạn dùng: "Dùng đến 30/11", "Còn 2 ngày", "Hết hạn hôm nay"; hạn không đọc được (null) thì rỗng. */
+/**
+ * Chữ hạn dùng: "Dùng đến 30/11", "Dùng đến 10/03/2027" (khác năm hiện tại), "Còn 2 ngày", "Hết hạn hôm nay"; hạn không đọc được (null) thì rỗng.
+ * Hạn đúng 00:00 giờ VN (mã hết hạn "đầu ngày 01/01") nghĩa là ngày dùng được cuối là hôm trước, nên ngày ghi và ngày đếm lùi một ngày: `endMs - 1`.
+ */
 export function expiryText(endMs: number | null, now: number): string {
   if (endMs === null) return '';
   if (endMs - now <= 0) return fillCopy('coupon.expired');
-  const days = vnDay(endMs) - vnDay(now);
+  const lastMs = endMs - 1;
+  const days = vnDay(lastMs) - vnDay(now);
   if (days <= 0) return fillCopy('coupon.expiresToday');
   if (days <= EXPIRING_DAYS) return fillCopy('coupon.expiresInDays', { n: days });
-  const d = new Date(endMs + VN_OFFSET_MS);
+  const d = new Date(lastMs + VN_OFFSET_MS);
   const dd = String(d.getUTCDate()).padStart(2, '0');
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return fillCopy('coupon.expires', { date: `${dd}/${mm}` });
+  const year = d.getUTCFullYear();
+  const sameYear = year === new Date(now + VN_OFFSET_MS).getUTCFullYear();
+  return fillCopy('coupon.expires', { date: sameYear ? `${dd}/${mm}` : `${dd}/${mm}/${year}` });
 }
 
 /**

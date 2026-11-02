@@ -12,6 +12,8 @@ import { cartStorefrontSlug } from './cart-key';
 
 export interface CartLine {
   id: string;
+  /** Sản phẩm của dòng: mã gắn riêng cho sản phẩm khác thì bảng chọn mã báo "Chỉ áp cho …" ngay cả khi chưa có xem trước. API cũ chưa trả. */
+  productId?: string;
   variationId: string;
   productName: string;
   variationName: string;

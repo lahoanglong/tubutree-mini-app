@@ -180,7 +180,7 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     expect(names).toContain('Tăng số lượng Dầu gội bồ kết');
     const coupon = container.querySelector('#coupon-code');
     expect(coupon).not.toBeNull();
-    expect(accessibleName(coupon!)).toBe('Mã giảm giá');
+    expect(accessibleName(coupon!)).toBe('Nhập mã giảm giá khác');
   });
 
   it('/gio-hang đã áp mã: nút bỏ mã có tên', async () => {

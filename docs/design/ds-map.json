@@ -621,6 +621,16 @@
       ]
     },
     {
+      "name": "VoucherPicker",
+      "miniapp": "apps/miniapp/src/components/ui/voucher-picker.tsx",
+      "web": "apps/web/src/components/mini/voucher-picker.tsx",
+      "props": "VoucherPickerProps",
+      "screens": [
+        "/cart",
+        "/checkout"
+      ]
+    },
+    {
       "name": "VoucherTicket",
       "miniapp": "apps/miniapp/src/components/ui/voucher-ticket.tsx",
       "web": "apps/web/src/components/mini/voucher-ticket.tsx",

@@ -66,6 +66,12 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-rank-n-fg', '--color-rank-n-bg'],
     ['--color-verified-fg', '--color-verified-bg'],
     ['--color-action-secondary-fg-disabled', '--color-action-secondary-bg-disabled'],
+    // Chữ phụ của VoucherTicket trên nền trắng của hàng chọn mã: lý do, điều kiện/hạn, mức giảm, "Đang dùng" (không còn làm mờ cả thẻ, K3).
+    ['--color-status-warning-fg', '--color-bg-surface'],
+    ['--color-text-tertiary', '--color-bg-surface'],
+    ['--color-status-success-fg', '--color-bg-surface'],
+    ['--color-text-brand', '--color-bg-surface'],
+    ['--color-text-secondary', '--color-action-primary-bg-disabled'],
   ];
 
   it.each(pairs)('%s trên %s', (fg, bg) => {

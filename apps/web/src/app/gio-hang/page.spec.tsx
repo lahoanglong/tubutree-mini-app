@@ -346,17 +346,17 @@ describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang ch
     const { container } = await mount();
     await settle();
     expect(container.textContent).toContain('Giảm 30.000đ cho đơn này');
-    expect(card(container).disabled).toBe(false);
+    expect(card(container).getAttribute('aria-disabled')).toBeNull();
 
     state.previews.mockReturnValueOnce(new Promise(() => {}));
     state.cart = cartOf([line({ quantity: 1, total: 150000 })]);
     click(button(container, 'Giảm số lượng Dầu gội bồ kết'));
     await flush(6);
     expect(container.textContent).not.toContain('Giảm 30.000đ cho đơn này');
-    expect(card(container).disabled).toBe(true);
+    expect(card(container).getAttribute('aria-disabled')).toBe('true');
     await settle();
     expect(state.previews).toHaveBeenCalledTimes(2);
-    expect(card(container).disabled).toBe(true);
+    expect(card(container).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('bỏ chọn hết: không gọi xem trước (itemIds rỗng bị máy chủ coi là cả giỏ)', async () => {

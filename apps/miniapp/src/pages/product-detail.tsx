@@ -49,6 +49,7 @@ import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation,
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
@@ -450,8 +451,8 @@ export default function ProductDetailPage() {
     void copyText(code).then((ok) =>
       notify(
         ok
-          ? { text: `Đã chép mã ${code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`, type: 'success', duration: 2600 }
-          : { text: `Mã của bạn: ${code} — chọn ở bước thanh toán`, type: 'info', duration: 4000 },
+          ? { text: fillCopy('coupon.copiedToast', { code }), type: 'success', duration: 2600 }
+          : { text: fillCopy('coupon.copyShowToast', { code }), type: 'info', duration: 4000 },
       ),
     );
   };
@@ -991,7 +992,7 @@ export default function ProductDetailPage() {
         />
       )}
 
-      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} onCopy={copyCoupon} />
+      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={offerAmount(price, quantity, priceView.isFlash)} onCopy={copyCoupon} />
 
       {slug && (
         <ContentKitSheet

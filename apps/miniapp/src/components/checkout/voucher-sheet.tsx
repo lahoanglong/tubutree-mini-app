@@ -1,21 +1,22 @@
 import { useState } from 'react';
-import { Input, useSnackbar } from 'zmp-ui';
+import { Input } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, TriangleAlert } from 'lucide-react';
+import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { getCoupons, type CouponDTO } from '../../services/account-api';
+import { getCoupons } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage } from '../../services/api';
-import { formatDate, formatVnd } from '../../utils/format';
+import { useNotify } from '../../hooks/use-notify';
 import { haptic } from '../../utils/haptic';
+import { serverNow } from '../../utils/server-clock';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
-import { Badge } from '../ui/badge';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
 import { EmptyState, ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
+import { VoucherPicker } from '../ui/voucher-picker';
 import { autoCouponName } from '../../utils/coupon-name';
 import { cartKey } from '../../services/cart-key';
 
@@ -56,7 +57,7 @@ export function VoucherSheet({
   busy = false,
 }: VoucherSheetProps) {
   const queryClient = useQueryClient();
-  const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const [customCode, setCustomCode] = useState('');
 
   const couponsQ = useQuery({
@@ -91,7 +92,7 @@ export function VoucherSheet({
       // Mã freeship giỏ coi là hợp lệ (freeship: true) nhưng xem trước của máy chủ nói không miễn được gì (đơn đầu đã miễn phí giao):
       // nói đúng câu thanh toán sẽ nói, không báo "đã áp dụng" rồi thanh toán báo ngược lại.
       const previewBlocked = preview && !preview.eligible && preview.reason && cart.discount === 0 ? preview.reason : null;
-      openSnackbar(
+      notify(
         heldOnly
           ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }
           : previewBlocked
@@ -101,7 +102,7 @@ export function VoucherSheet({
       onCouponApplied?.();
       onClose();
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const removeMut = useMutation({
@@ -110,26 +111,19 @@ export function VoucherSheet({
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('light');
-      openSnackbar({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });
+      notify({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });
       onCouponApplied?.();
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const isAnyMutating = applyMut.isPending || removeMut.isPending || busy;
   // Spinner của "Áp dụng" chỉ quay khi chính mã tay đang được áp; mã bấm từ danh sách thì khoá nút này.
   const applyingCustom = applyMut.isPending && applyMut.variables === customCode.trim().toUpperCase();
 
-  const formatCouponDesc = (coupon: CouponDTO) => {
-    if (coupon.type === 'PERCENT') {
-      const maxText = coupon.maxDiscount ? ` (tối đa ${formatVnd(coupon.maxDiscount)})` : '';
-      return `Giảm ${coupon.value}%${maxText}`;
-    }
-    if (coupon.type === 'FREESHIP') {
-      return 'Miễn phí giao hàng';
-    }
-    return `Giảm ${formatVnd(coupon.value)}`;
-  };
+  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, productIds, previews, now: serverNow(), displayCode: autoCouponName });
+  // Nút đang quay: mã đang áp (mã tay thì không có hàng nào khớp), hoặc mã đang gỡ là hàng đang dùng.
+  const pendingCode = applyMut.isPending ? (applyMut.variables ?? null) : removeMut.isPending ? (rows.find((r) => r.applied)?.coupon.code ?? null) : null;
 
   const handleApplyCustom = () => {
     const trimmed = customCode.trim().toUpperCase();
@@ -142,7 +136,7 @@ export function VoucherSheet({
     <BottomSheet
       open={visible}
       onClose={onClose}
-      title="Chọn mã giảm giá"
+      title={fillCopy('coupon.pickTitle')}
       description={fillCopy('coupon.oneCodeHint')}
     >
       <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
@@ -156,14 +150,14 @@ export function VoucherSheet({
             marginBottom: 16,
           }}
         >
-          <Text variant="label" tone="secondary" as="h3" style={{ marginBottom: 8 }}>
-            Nhập mã giảm giá khác
+          <Text variant="label" tone="secondary" as="p" style={{ marginBottom: 8 }}>
+            {fillCopy('coupon.pickManual')}
           </Text>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="tubu-field-44" style={{ flex: 1 }}>
               <Input
-                aria-label="Nhập mã giảm giá khác"
-                placeholder="Nhập mã"
+                aria-label={fillCopy('coupon.pickManual')}
+                placeholder={fillCopy('coupon.pickPlaceholder')}
                 value={customCode}
                 onChange={(e) => setCustomCode(e.target.value)}
                 onKeyDown={(e) => {
@@ -175,166 +169,41 @@ export function VoucherSheet({
               />
             </div>
             <Button
+              className="tubu-btn-44"
               disabled={!customCode.trim() || busy || removeMut.isPending || (applyMut.isPending && !applyingCustom)}
               loading={applyingCustom}
               onPress={handleApplyCustom}
             >
-              Áp dụng
+              {fillCopy('coupon.pickApply')}
             </Button>
           </div>
         </div>
 
         {/* Section 2: Mã giảm giá có sẵn (Phía dưới) */}
         <div>
-          <Text variant="label" tone="secondary" as="h3" style={{ marginBottom: 10 }}>
-            Mã giảm giá của bạn
+          <Text variant="label" tone="secondary" as="p" style={{ marginBottom: 10 }}>
+            {fillCopy('coupon.pickMine')}
           </Text>
 
           {couponsQ.isLoading ? (
-            <div role="status" aria-label="Đang tải danh sách mã" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div role="status" aria-label={fillCopy('coupon.pickLoading')} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Skeleton height={72} radius="var(--radius-card)" />
               <Skeleton height={72} radius="var(--radius-card)" />
             </div>
           ) : couponsQ.isError ? (
             <ErrorState
               variant="inline"
-              message={`Không thể tải danh sách mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`}
+              message={fillCopy('coupon.pickLoadError', { reason: getLoadErrorMessage(couponsQ.error) })}
               onRetry={() => void couponsQ.refetch()}
             />
           ) : couponsQ.data && couponsQ.data.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {couponsQ.data.map((coupon) => {
-                const isApplied = currentCode?.toUpperCase() === coupon.code.toUpperCase();
-                const scope = coupon.products?.length ? coupon.products : null;
-                const preview = previews.get(coupon.code.toUpperCase());
-                // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
-                const wrongProducts = !preview && !!scope && !!productIds && !scope.some((x) => productIds.includes(x.id));
-                const belowMin = !preview && coupon.minOrder != null && subtotal < coupon.minOrder;
-                const shipAlreadyFree = !preview && coupon.type === 'FREESHIP' && shippingFee === 0 && !isApplied;
-                const serverBlocked = !!preview && !preview.eligible && !isApplied;
-                const notEligible = wrongProducts || belowMin || shipAlreadyFree || serverBlocked;
-                const savingText = !preview
-                  ? null
-                  : preview.discount > 0
-                    ? `Giảm ${formatVnd(preview.discount)} cho đơn này`
-                    : (preview.freeshipSaving ?? 0) > 0
-                      ? `Miễn phí giao hàng ${formatVnd(preview.freeshipSaving)} cho đơn này`
-                      : null;
-                const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
-                const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
-                const applyingThis = applyMut.isPending && applyMut.variables === coupon.code;
-
-                return (
-                  <div
-                    key={coupon.code}
-                    style={{
-                      padding: 12,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      background: isApplied ? 'var(--color-promo-bg)' : 'var(--color-bg-surface)',
-                      border: `1px ${isApplied ? 'solid' : 'dashed'} ${isApplied ? 'var(--color-promo-solid-bg)' : 'var(--color-border-default)'}`,
-                      borderRadius: 'var(--radius-card)',
-                      opacity: notEligible ? 0.55 : 1,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 'var(--radius-control)',
-                        background: 'var(--color-promo-bg)',
-                        display: 'grid',
-                        placeItems: 'center',
-                        flex: '0 0 auto',
-                      }}
-                    >
-                      <Ticket size={22} color="var(--color-promo-fg)" aria-hidden />
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Text variant="body-sm" style={{ fontWeight: 600 }}>
-                          {autoCouponName(coupon.code) ?? coupon.code}
-                        </Text>
-                        {isApplied && (
-                          <Badge size="sm" style={{ background: 'var(--color-promo-solid-bg)', color: 'var(--color-promo-solid-fg)' }}>
-                            Đang dùng
-                          </Badge>
-                        )}
-                      </div>
-                      <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                        {formatCouponDesc(coupon)}
-                      </Text>
-                      {savingText && (
-                        <Text variant="caption" tone="success" as="div" style={{ marginTop: 2, fontWeight: 600 }}>
-                          {savingText}
-                        </Text>
-                      )}
-                      {serverBlocked && preview?.reason && (
-                        <Text variant="caption" tone="warning" as="div" style={{ marginTop: 2 }}>
-                          <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />
-                          {preview.reason}
-                        </Text>
-                      )}
-                      {shipAlreadyFree && (
-                        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                          Đơn này đã miễn phí giao hàng
-                        </Text>
-                      )}
-                      {scope && (
-                        <Text variant="caption" tone={wrongProducts ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
-                          {wrongProducts && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
-                          {`Chỉ áp cho ${scope.map((x) => x.name).join(', ')}`}
-                        </Text>
-                      )}
-                      {coupon.minOrder != null && (
-                        <Text variant="caption" tone={belowMin ? 'warning' : 'tertiary'} as="div" style={{ marginTop: 2 }}>
-                          {belowMin && <TriangleAlert size={12} aria-hidden style={{ verticalAlign: -2, marginRight: 4 }} />}
-                          {belowMin
-                            ? `Cần đơn tối thiểu ${formatVnd(coupon.minOrder)}`
-                            : `Đơn tối thiểu ${formatVnd(coupon.minOrder)}`}
-                        </Text>
-                      )}
-                      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                        HSD: {endAtText}
-                      </Text>
-                    </div>
-
-                    <div style={{ flex: '0 0 auto' }}>
-                      {isApplied ? (
-                        <Button
-                          variant="secondary"
-                          disabled={applyMut.isPending || busy}
-                          loading={removeMut.isPending}
-                          onPress={() => removeMut.mutate()}
-                          aria-label={`Bỏ dùng mã ${coupon.code}`}
-                          style={{ minWidth: 0 }}
-                        >
-                          Bỏ
-                        </Button>
-                      ) : (
-                        <Button
-                          disabled={notEligible || busy || removeMut.isPending || (applyMut.isPending && !applyingThis)}
-                          loading={applyingThis}
-                          onPress={() => applyMut.mutate(coupon.code)}
-                          aria-label={`${belowMin ? 'Chưa đủ điều kiện dùng' : 'Dùng'} mã ${coupon.code}`}
-                          style={{ minWidth: 0 }}
-                        >
-                          {belowMin ? 'Chưa đủ' : 'Dùng'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <VoucherPicker rows={rows} onUse={(code) => applyMut.mutate(code)} onRemove={() => removeMut.mutate()} busy={isAnyMutating} pendingCode={pendingCode} />
           ) : (
             <EmptyState
               variant="inline"
               art="leaf"
-              heading="Bạn chưa có mã giảm giá trong ví"
-              body="Nhập mã giảm giá thủ công ở phía trên để áp dụng."
+              heading={fillCopy('coupon.pickEmptyTitle')}
+              body={fillCopy('coupon.pickEmptyBody')}
             />
           )}
         </div>

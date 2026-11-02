@@ -3,8 +3,8 @@
 // Nguồn: apps/miniapp/src/pages/ds-gallery.tsx
 import { useState, type ReactNode } from 'react';
 import { Truck } from 'lucide-react';
-import { GALLERY_COMBO_ITEMS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
-import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, Section, SectionHeader, SortBar, Text, VoucherTicket } from '@/components/mini';
+import { GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
+import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, Section, SectionHeader, SortBar, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
 
 /**
  * Trang dev `/ds-gallery`: vẽ mọi biến thể và trạng thái của bộ section-kit bằng dữ liệu giả (app-core/commerce/ds-gallery-data),
@@ -193,6 +193,15 @@ export function DsGallery() {
               <VoucherTicket voucher={v.view} variant="row" primary={primaryOf(v)} reason={v.reason} expiring={v.expiring} />
             </Variant>
           ))}
+        </Group>
+
+        <Group name="voucher-picker">
+          <Variant label="đang dùng, chưa đủ (có lý do), không áp dụng; hạn có năm khi khác năm">
+            <VoucherPicker rows={GALLERY_PICKER_ROWS} onUse={noop} onRemove={noop} />
+          </Variant>
+          <Variant label="đang đổi mã (busy)">
+            <VoucherPicker rows={GALLERY_PICKER_ROWS} onUse={noop} onRemove={noop} busy />
+          </Variant>
         </Group>
 
         <Group name="combo-card">

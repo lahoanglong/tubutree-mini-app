@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), getCoupons: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), getCoupons: vi.fn(), fetchFlash: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -16,7 +16,7 @@ vi.mock('../services/shop-api', () => ({
   fetchRelated: vi.fn().mockResolvedValue([]),
   fetchBoughtTogether: vi.fn().mockResolvedValue([]),
   fetchReviews: vi.fn().mockResolvedValue({ data: [], count: 0, average: 0 }),
-  fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
+  fetchActiveFlashSales: mocks.fetchFlash,
   getCart: vi.fn(),
   addToCart: vi.fn(),
 }));
@@ -68,7 +68,10 @@ function renderPdp() {
 const END = '2027-01-01T00:00:00.000Z';
 
 describe('ProductDetailPage — mã giảm giá trên trang sản phẩm (R2-BUYERMINI-3)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchFlash.mockResolvedValue([]);
+  });
 
   it('mã chỉ áp cho sản phẩm khác (mã mua chung) không hiện; mã chung và mã của chính sản phẩm này vẫn hiện', async () => {
     mocks.fetchProduct.mockResolvedValue(product());
@@ -81,6 +84,17 @@ describe('ProductDetailPage — mã giảm giá trên trang sản phẩm (R2-BUY
     fireEvent.click(await screen.findByRole('button', { name: /Ưu đãi/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Mã giảm giá' });
     const codes = within(dialog).getAllByTestId('voucher-code').map((el) => el.textContent);
-    expect(codes).toEqual(['XANH10', 'GBUY-XP']);
+    // Mã đủ điều kiện cho món đang xem (GBUY-XP) xếp trước mã còn thiếu đơn tối thiểu (XANH10).
+    expect(codes).toEqual(['GBUY-XP', 'XANH10']);
+    expect(within(dialog).getByText(/^Mua thêm .* để dùng$/)).toBeInTheDocument();
+  });
+  it('món đang ở giá Giờ vàng góp 0 vào tiền hàng áp mã (máy chủ không tính dòng Giờ vàng): "Mua thêm" đủ số đơn tối thiểu', async () => {
+    mocks.fetchProduct.mockResolvedValue(product());
+    mocks.fetchFlash.mockResolvedValue([{ itemId: 'f1', variationId: 'v1', productSlug: 'xa-phong', flashPrice: 50_000, retailPrice: 75_000, soldCount: 1, quota: 20 }]);
+    mocks.getCoupons.mockResolvedValue([{ code: 'XANH10', type: 'PERCENT', value: 10, minOrder: 250_000, maxDiscount: null, endAt: END, products: null }]);
+    renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /Ưu đãi/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mã giảm giá' });
+    expect(within(dialog).getByText('Mua thêm 250k để dùng')).toBeInTheDocument();
   });
 });

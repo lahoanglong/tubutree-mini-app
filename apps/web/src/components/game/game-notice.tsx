@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 export interface GameNotice {
   id: number;
   text: string;
-  tone: 'success' | 'error';
+  tone: 'success' | 'info' | 'error';
 }
 
 const SHOW_MS = 4000;
@@ -35,23 +35,37 @@ export function useGameNotice() {
 }
 
 /**
- * Lỗi dùng role="alert" để đọc ngay; thành công dùng role="status". Đưa ra body với z-index trên Sheet (z-50): hộp xác
+ * Lỗi dùng role="alert" để đọc ngay; thành công và thông tin (`info`, như snackbar info của Mini App) dùng role="status". Đưa ra body với z-index trên Sheet (z-50): hộp xác
  * nhận được giữ mở khi lỗi (để gửi lại cùng Idempotency-Key) nên thông báo nằm trong trang sẽ bị nó che. Nằm trên thanh
  * điều hướng đáy của điện thoại kể cả khi có vùng an toàn của iPhone. `raised`: trang có thanh nhập dính đáy ở mọi cỡ
- * màn hình (/tu-van) thì giữ thông báo trên thanh đó, không hạ xuống md:bottom-6 vì sẽ đè vào ô nhập.
+ * màn hình (/tu-van) thì giữ thông báo trên thanh đó, không hạ xuống md:bottom-6 vì sẽ đè vào ô nhập. `overSheet`: báo từ trong
+ * BottomSheet của design system (z-index 1000, cao hơn Sheet cũ) nên phải nằm trên nó, như snackbar của Mini App nằm trên sheet.
+ * `visualOnly`: chỉ để nhìn, trình đọc màn hình không đọc (aria-hidden, không role): vùng live nằm ngoài hộp thoại aria-modal bị nhiều
+ * trình đọc bỏ qua và vùng chèn sẵn chữ thường không được đọc, nên nơi gọi giữ một vùng live trống cố định trong hộp thoại và đọc câu ở đó.
  */
-export function GameNoticeBar({ notice, raised = false }: { notice: GameNotice | null; raised?: boolean }) {
+export function GameNoticeBar({
+  notice,
+  raised = false,
+  overSheet = false,
+  visualOnly = false,
+}: {
+  notice: GameNotice | null;
+  raised?: boolean;
+  overSheet?: boolean;
+  visualOnly?: boolean;
+}) {
   if (!notice || typeof document === 'undefined') return null;
   const error = notice.tone === 'error';
   return createPortal(
     <div
-      className={`pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4${raised ? ' max-md:bottom-[calc(11.5rem+env(safe-area-inset-bottom))]' : ' md:bottom-6'}`}
+      className={`pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] ${overSheet ? 'z-[1100]' : 'z-[60]'} flex justify-center px-4${raised ? ' max-md:bottom-[calc(11.5rem+env(safe-area-inset-bottom))]' : ' md:bottom-6'}`}
     >
       <div
         key={notice.id}
-        role={error ? 'alert' : 'status'}
+        role={visualOnly ? undefined : error ? 'alert' : 'status'}
+        aria-hidden={visualOnly ? true : undefined}
         className={`pointer-events-auto max-w-md rounded-control px-4 py-3 text-sm font-semibold shadow-card ${
-          error ? 'bg-danger-bg text-danger-fg' : 'bg-forest-800 text-stone-0'
+          error ? 'bg-danger-bg text-danger-fg' : notice.tone === 'info' ? 'bg-info-bg text-info-fg' : 'bg-forest-800 text-stone-0'
         }`}
       >
         {notice.text}
