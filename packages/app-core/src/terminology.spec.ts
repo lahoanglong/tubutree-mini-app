@@ -31,9 +31,11 @@ const VI_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽ�
 const ASCII_PROSE = /^[A-Z][a-z]|^[A-Z]{2,}[ :]|\w \w|\.{3}/;
 // Mọi đoạn của template có biểu thức (đầu, giữa, cuối): `(HSD ${d})` cho đầu "(HSD ", `${code} · HSD ${d}` cho giữa " · HSD ", `${n} HOT!` cho cuối " HOT!". Đầu đoạn không phải đầu chuỗi
 // (đứng sau một biểu thức, hoặc bắt đầu bằng dấu câu) nên `ASCII_PROSE` neo ở đầu chuỗi bỏ sót. Từ ASCII đứng riêng: chữ hoa đầu từ ("Top", "Freeship") hoặc chữ hoa viết tắt từ hai chữ ("HSD", "HOT")
-// mà trước đó không phải ký tự mã (chữ/số, `_`, `-`, `/`, `.`) và, với chữ viết tắt, sau đó cũng không phải chữ/số, `_`, `-`, `/`; mọi ký tự khác (cách, dấu câu, ngoặc, `·`, hết đoạn) là ranh giới.
+// hoặc từ ASCII viết thường từ hai chữ (`${n} voucher`, `${n} flash sale`) mà trước đó không phải ký tự mã (chữ/số, `_`, `-`, `/`, `.`, `=`) và, với từ không viết hoa đầu, sau đó cũng không phải chữ/số, `_`, `-`, `/`, `=`; mọi ký tự khác (cách, dấu câu, ngoặc, `·`, hết đoạn) là ranh giới.
 // Nhờ vậy `FREESHIP-${id}`, `${a}-FREESHIP`, `${base}/HOT/${id}`, `HOT_${x}`, `${a}.HOT` vẫn là mã định danh, còn `${n} HOT!`, `(HSD ${d})`, `${n}, HSD.` là chữ khách đọc.
-const TEMPLATE_WORD_PROSE = /(?<![A-Za-z0-9_\-/.])(?:[A-Z][a-z]|[A-Z]{2,}(?![A-Za-z0-9_\-/]))/;
+const TEMPLATE_WORD_PROSE = /(?<![A-Za-z0-9_\-/.=])(?:[A-Z][a-z]|[A-Za-z]{2,}(?![A-Za-z0-9_\-/=]))/;
+// Địa chỉ đầy đủ (`https://api.tubu.vn/vouchers/`) và giá trị truy vấn (`?tab=HOT`, `&sort=hot`, `=HOT`) là mã gửi cho máy chủ, không phải chữ khách đọc: bỏ khỏi đoạn template trước khi xét.
+const QUERY_VALUE = /[A-Za-z][A-Za-z0-9+.-]*:\/\/\S*|[?&=][^\s&#]*/g;
 // Thuộc tính mang chữ cho người đọc màn hình, đọc cả khi chữ không có dấu ("Voucher", "Freeship").
 const TEXT_ATTRS = new Set(['aria-label', 'title', 'alt', 'placeholder', 'label']);
 const CODE_ATTRS = new Set(['className', 'id', 'key', 'href']);
@@ -71,7 +73,8 @@ function displayStrings(source: string, fileName: string): { line: number; text:
       const isTextAttr = attr !== null && attr.direct && TEXT_ATTRS.has(attr.name);
       const isChild = slot?.kind === 'child' && slot.direct;
       const isTemplatePart = ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n);
-      if (!isCode && (VI_LETTER.test(n.text) || ASCII_PROSE.test(n.text) || (isTemplatePart && TEMPLATE_WORD_PROSE.test(n.text)) || isTextAttr || isChild)) push(n, n.text);
+      const text = isTemplatePart ? n.text.replace(QUERY_VALUE, ' ') : n.text;
+      if (!isCode && (VI_LETTER.test(text) || ASCII_PROSE.test(text) || (isTemplatePart && TEMPLATE_WORD_PROSE.test(text)) || isTextAttr || isChild)) push(n, text);
     }
     ts.forEachChild(n, visit);
   };
@@ -86,12 +89,12 @@ interface TermHit {
   text: string;
 }
 
-function findHits(sources: { file: string; text: string }[]): TermHit[] {
+function findHits(sources: { file: string; text: string }[], terms: readonly { pattern: RegExp; use: string }[] = FORBIDDEN_TERMS, skip: readonly RegExp[] = NOT_SCANNED): TermHit[] {
   const hits: TermHit[] = [];
   for (const { file, text } of sources) {
-    if (NOT_SCANNED.some((re) => re.test(file))) continue;
+    if (skip.some((re) => re.test(file))) continue;
     for (const s of displayStrings(text, file)) {
-      for (const term of FORBIDDEN_TERMS) if (term.pattern.test(s.text)) hits.push({ file, line: s.line, use: term.use, text: s.text.trim() });
+      for (const term of terms) if (term.pattern.test(s.text)) hits.push({ file, line: s.line, use: term.use, text: s.text.trim() });
     }
   }
   return hits;
@@ -111,6 +114,22 @@ function loadSources(): { file: string; text: string }[] {
     .map((f) => ({ file: relative(REPO, f).split(sep).join('/'), text: readFileSync(f, 'utf8') }))
     .filter((s) => (s.file.startsWith('apps/api/') ? isApiCopyFile(s.file) : true) && !NOT_SCANNED.some((re) => re.test(s.file)));
 }
+
+// Luật riêng cho API: "Vui lòng"/"chúng tôi" không quay lại ở BẤT KỲ file API nào (lỗi nghiệp vụ, chữ quản trị, tin nhắn), không chỉ ở file chữ khách đọc của `isApiCopyFile`.
+// Chữ quản trị của API cũng đổi nên thư mục `admin/` không được miễn như `NOT_SCANNED`; chỉ bỏ spec. Các thuật ngữ cấm khác vẫn chỉ quét file chữ khách đọc.
+const API_SRC = 'apps/api/src';
+const API_SKIP = [/\.(spec|test)\.ts$/];
+const API_VOICE = FORBIDDEN_TERMS.filter((t) => t.use === 'Bạn hoặc Tubu');
+
+function loadApiSources(): { file: string; text: string }[] {
+  return walk(join(REPO, API_SRC))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => ({ file: relative(REPO, f).split(sep).join('/'), text: readFileSync(f, 'utf8') }))
+    .filter((s) => !API_SKIP.some((re) => re.test(s.file)));
+}
+
+/** Văn bản pháp lý nằm trong API (nếu có): "chúng tôi" là chủ thể ký trong văn bản. `max` bằng đúng số chỗ hiện có, như `EXEMPT`. Hiện không có. */
+const API_VOICE_EXEMPT: { file: string; max: number; reason: string }[] = [];
 
 interface Exemption {
   file: string;
@@ -473,6 +492,48 @@ describe('findHits: mọi đoạn template (đầu, giữa, cuối) có từ hoa
   });
 });
 
+describe('findHits: từ cấm viết thường và giá trị truy vấn trong template (M2)', () => {
+  const at = (src: string) => findHits([{ file: 'apps/web/src/a.ts', text: src }]).map((h) => h.use);
+
+  // Nhánh chữ hoa cũ bỏ sót từ cấm viết thường đứng riêng ở đoạn giữa và cuối: `${n} voucher` là chữ khách đọc.
+  it.each([
+    ['export const t = (n: number) => `${n} voucher`;', 'Mã giảm giá'],
+    ['export const t = (n: number) => `${n} freeship`;', 'Miễn phí giao hàng'],
+    ['export const t = (n: number) => `${n} flash sale`;', 'Giờ vàng'],
+    ['export const t = (a: string, b: string) => `${a} · voucher ${b}`;', 'Mã giảm giá'],
+    ['export const t = (n: number) => `${n} hot`;', 'bỏ chữ giục mua'],
+    ['export const t = (n: number) => `${n} voucher của bạn`;', 'Mã giảm giá'],
+  ])('từ cấm viết thường %s bị bắt', (src, use) => {
+    expect(at(src)).toEqual([use]);
+  });
+
+  // Giá trị truy vấn và đường dẫn không phải chữ khách đọc; mã dính ký tự mã vẫn là mã định danh.
+  it.each([
+    'export const a = () => `/san-pham?tab=HOT`;',
+    'export const b = (base: string, p: number) => `${base}?tab=HOT&page=${p}`;',
+    'export const c = (base: string) => `${base}&sort=hot`;',
+    'export const d = (p: number) => `/x?sort=hot&page=${p}`;',
+    'export const e = (base: string, id: string) => `${base}/voucher/${id}`;',
+    'export const f = (id: string) => `voucher-${id}`;',
+    'export const g = (a: string) => `${a}_voucher`;',
+    'export const h = (a: string) => `${a}-freeship`;',
+    'export const i = (id: string) => `FREESHIP-${id}`;',
+    'export const j = (x: string) => `HOT_${x}`;',
+    'export const k = (base: string, id: string) => `${base}/HOT/${id}`;',
+    'export const l = (a: string) => `${a}.voucher`;',
+    'export const m = (id: string) => `https://api.tubu.vn/vouchers/${id}`;',
+    'export const n = (a: string, t: string) => `${a}?tab=Top&q=${t}`;',
+  ])('giá trị truy vấn hoặc mã dính ký tự mã %s không bị bắt', (src) => {
+    expect(at(src)).toEqual([]);
+  });
+
+  it('displayStrings giữ từ viết thường ở đoạn template và bỏ giá trị truy vấn', () => {
+    const texts = (src: string) => displayStrings(src, 'apps/web/src/a.ts').map((s) => s.text.trim());
+    expect(texts('const t = `${n} voucher`;')).toContain('voucher');
+    expect(texts('const u = `/x?tab=HOT&p=${p}`;').join('|')).not.toMatch(/HOT/);
+  });
+});
+
 describe('findHits: file chữ khách đọc của API', () => {
   const at = (file: string, text: string) => findHits([{ file, text }]).map((h) => h.use);
 
@@ -491,6 +552,57 @@ describe('findHits: file chữ khách đọc của API', () => {
     expect(at(file, "export const r = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';")).toContain('Miễn phí giao hàng');
     expect(at(file, "export const r = 'Hàng giờ vàng không được giảm thêm theo mã.';")).toContain('Giờ vàng (hoa chữ G)');
     expect(at('apps/api/src/modules/flash-sale/x-price.ts', 'export const m = (n: number) => `Chỉ còn ${n} suất Giờ vàng.`;')).toContain('Còn {n} sản phẩm');
+  });
+});
+
+describe('chữ "Vui lòng" và "chúng tôi" trong toàn bộ API (M2)', () => {
+  const apiAt = (file: string, text: string) => findHits([{ file, text }], API_VOICE, API_SKIP).map((h) => h.use);
+
+  it.each([
+    ["export const m = 'Vui lòng thử lại';", 'apps/api/src/common/x.ts'],
+    ["export const m = 'Hệ thống đang bận, vui lòng thử lại.';", 'apps/api/src/common/x.ts'],
+    ["export const m = 'Chúng tôi sẽ gọi lại cho bạn.';", 'apps/api/src/modules/orders/x.service.ts'],
+    ['export const m = (n: number) => `${n} sản phẩm hết hàng, vui lòng chọn lại.`;', 'apps/api/src/modules/cart/x.ts'],
+    ["throw new BadRequestException('Vui lòng nhập lý do từ chối.');", 'apps/api/src/modules/admin/x.service.ts'],
+  ])('đối chứng: %s bị bắt (kể cả viết thường và thư mục admin)', (src, file) => {
+    expect(apiAt(file, src)).toEqual(['Bạn hoặc Tubu']);
+  });
+
+  it('đối chứng: câu đã đổi, comment và spec không bị bắt', () => {
+    expect(apiAt('apps/api/src/common/x.ts', "export const m = 'Bạn thử lại nhé.';")).toEqual([]);
+    expect(apiAt('apps/api/src/common/x.ts', '// Vui lòng thử lại (comment)\nexport const a = 1;')).toEqual([]);
+    expect(apiAt('apps/api/src/common/x.spec.ts', "export const m = 'Vui lòng thử lại';")).toEqual([]);
+  });
+
+  it('chỉ luật "Bạn hoặc Tubu": thuật ngữ cấm khác ở file API thường không bị luật này bắt', () => {
+    expect(apiAt('apps/api/src/modules/orders/x.service.ts', "export const m = 'Freeship cho đơn từ 299k';")).toEqual([]);
+  });
+
+  const sources = loadApiSources();
+  const hits = findHits(sources, API_VOICE, API_SKIP);
+
+  it('quét được cây API thật: đủ file, có cả admin/, không có spec', () => {
+    expect(sources.length).toBeGreaterThan(300);
+    expect(sources.some((s) => s.file === 'apps/api/src/modules/checkout/checkout.service.ts')).toBe(true);
+    expect(sources.some((s) => s.file === 'apps/api/src/modules/admin/admin.service.ts')).toBe(true);
+    expect(sources.some((s) => /\.spec\.ts$/.test(s.file))).toBe(false);
+  });
+
+  it('không file API nào còn "Vui lòng" hoặc "chúng tôi" ngoài danh sách miễn pháp lý', () => {
+    const over = hits.filter((h) => {
+      const e = API_VOICE_EXEMPT.find((x) => x.file === h.file);
+      return !e || hits.filter((x) => x.file === h.file).length > e.max;
+    });
+    expect(over.map((h) => `${h.file}:${h.line} ${h.text.slice(0, 70)}`)).toEqual([]);
+  });
+
+  it('mỗi dòng miễn pháp lý có lý do, trỏ file có thật và max bằng đúng số chỗ hiện có', () => {
+    const files = new Set(sources.map((s) => s.file));
+    for (const e of API_VOICE_EXEMPT) {
+      expect(e.reason.trim().length, `${e.file} thiếu lý do`).toBeGreaterThan(10);
+      expect(files.has(e.file), `${e.file} không nằm trong cây quét`).toBe(true);
+      expect(hits.filter((h) => h.file === e.file).length, `${e.file}: max phải bằng số chỗ hiện có`).toBe(e.max);
+    }
   });
 });
 

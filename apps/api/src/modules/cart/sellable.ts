@@ -28,8 +28,8 @@ export function isSellableVariation(v: SellableShape): boolean {
 
 export function productDiscontinuedError(productName?: string | null): BadRequestException {
   const message = productName
-    ? `Sản phẩm "${productName}" đã ngừng bán, vui lòng xoá khỏi đơn rồi đặt lại.`
-    : 'Sản phẩm đã ngừng bán, vui lòng xoá khỏi đơn rồi đặt lại.';
+    ? `Sản phẩm "${productName}" đã ngừng bán, bạn xoá khỏi đơn rồi đặt lại nhé.`
+    : 'Sản phẩm đã ngừng bán, bạn xoá khỏi đơn rồi đặt lại nhé.';
   return new BadRequestException({ statusCode: 400, error: 'Bad Request', code: PRODUCT_DISCONTINUED, message });
 }
 

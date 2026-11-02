@@ -35,7 +35,7 @@ export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; 
   DISABLED: { status: HttpStatus.NOT_FOUND, message: 'Tính năng tích điểm đơn mua ngoài app chưa mở.' },
   NOT_ELIGIBLE_USER: { status: HttpStatus.FORBIDDEN, message: 'Bạn cần đăng nhập Zalo và cung cấp số điện thoại để tích điểm đơn mua ngoài app.' },
   INVALID_CODE: { status: HttpStatus.BAD_REQUEST, message: 'Mã không hợp lệ. Hãy nhập mã vận đơn hoặc mã đơn trên sàn (8 đến 30 chữ và số).' },
-  LOCKED: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Bạn đã nhập mã chưa tìm thấy quá nhiều lần. Vui lòng thử lại sau 24 giờ hoặc liên hệ Tubu Tree.' },
+  LOCKED: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Bạn đã nhập mã chưa tìm thấy quá nhiều lần. Bạn thử lại sau 24 giờ hoặc liên hệ Tubu Tree nhé.' },
   DAILY_ATTEMPTS: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Hôm nay bạn đã nhập mã quá số lần cho phép. Hãy thử lại vào ngày mai.' },
   APP_ORDER: { status: HttpStatus.CONFLICT, message: 'Đây là đơn bạn mua trong Mini App, điểm đã được tích tự động khi đơn giao thành công.' },
   CHAT_ORDER: { status: HttpStatus.CONFLICT, message: 'Đơn đặt qua tư vấn viên được cộng điểm tự động theo số điện thoại, bạn không cần nhập mã.' },

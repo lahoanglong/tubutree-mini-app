@@ -82,6 +82,6 @@ export class AttendanceController {
     if (typeof dto.lat === 'number' && typeof dto.lng === 'number') {
       return { lat: dto.lat, lng: dto.lng };
     }
-    throw new BadRequestException('Không lấy được vị trí. Vui lòng bật GPS và thử lại.');
+    throw new BadRequestException('Không lấy được vị trí. Bạn bật GPS và thử lại nhé.');
   }
 }

@@ -392,7 +392,7 @@ describe('WasteConfirmService.confirm', () => {
 
   it('14. updateMany count 0 is a 409', async () => {
     const h = setup({ updateCount: 0 });
-    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Bạn thử lại nhé'));
   });
 
   describe('15. P2002', () => {
@@ -404,7 +404,7 @@ describe('WasteConfirmService.confirm', () => {
     });
     it.each(errors)('an OPEN row is a 409 (%#)', async (e) => {
       const h = setup({ txError: e, again: row() });
-      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+      await expect(h.svc.confirm(h.call, body())).rejects.toThrow(new ConflictException('Bạn thử lại nhé'));
     });
   });
 
@@ -728,7 +728,7 @@ describe('WasteConfirmService.reject', () => {
 
   it('a stale status (count 0) is a 409 retry', async () => {
     const h = setup({ updateCount: 0 });
-    await expect(h.svc.reject(h.call, rejectBody())).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    await expect(h.svc.reject(h.call, rejectBody())).rejects.toThrow(new ConflictException('Bạn thử lại nhé'));
     expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
@@ -816,7 +816,7 @@ describe('WasteConfirmService.closeLost', () => {
 
   it('a stale status (count 0) is a 409 retry', async () => {
     const h = warehouseCase({ row: row({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointId: 'wh' }), updateCount: 0 });
-    await expect(h.svc.closeLost('a1', 'r1', lost)).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    await expect(h.svc.closeLost('a1', 'r1', lost)).rejects.toThrow(new ConflictException('Bạn thử lại nhé'));
     expect(h.notifier.requestExpired).not.toHaveBeenCalled();
   });
 

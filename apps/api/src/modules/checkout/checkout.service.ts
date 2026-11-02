@@ -97,9 +97,9 @@ export { TOTAL_CHANGED, TOTAL_CHANGED_MESSAGE_PREFIX, totalChangedMessage } from
 /** Mã lỗi ổn định: giỏ đổi giữa lúc tính tiền và lúc ghi đơn (tab khác sửa giỏ, hoặc lần bấm trước vừa đặt xong). */
 export const CART_CHANGED = 'CART_CHANGED';
 const CART_CHANGED_MESSAGE =
-  'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
+  'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Bạn xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại nhé.';
 /** Gian hàng đối tác vừa thôi là đối tác giữa lúc tính tiền và lúc ghi đơn (admin tắt cờ): 409; tải lại giỏ thì thấy tình trạng mới. */
-export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, vui lòng đặt lại.';
+export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, bạn đặt lại nhé.';
 
 /**
  * Lần bấm "Đặt hàng" đến sau khi giỏ đã thành đơn (app báo lỗi mạng/quá thời gian rồi khách bấm lại, có khi với key mới) nhận
@@ -107,9 +107,9 @@ export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, vui lòng đ
  */
 const RECENT_ORDER_REPLAY_MS = 2 * 60_000;
 
-const PICKUP_GATE_CLOSED = 'Thu kèm rác hiện chưa mở, vui lòng tắt công tắc hoặc tải lại trang.';
+const PICKUP_GATE_CLOSED = 'Thu kèm rác hiện chưa mở, bạn tắt công tắc hoặc tải lại trang nhé.';
 const PICKUP_NEEDS_TUBU =
-  'Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Vui lòng tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn.';
+  'Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Bạn tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn nhé.';
 
 /** Giỏ đã bị đổi khi lần đặt này giành được khoá giỏ; `consumed` = dòng định mua đã biến mất (thường do lần đặt trước). */
 class CartChangedError extends Error {
@@ -359,7 +359,7 @@ export class CheckoutService {
     // PD-3 (Q-03): TubuXu đã gộp vào Điểm Xanh. DTO đã từ chối XU; chặn thêm ở đây cho mọi lối gọi
     // service trực tiếp, vì không còn đường trừ xu nào và đơn XU mới sẽ là đơn PAID không ai trả tiền.
     if ((dto.paymentMethod as string) === 'XU') {
-      throw new BadRequestException('Phương thức thanh toán này đã ngừng. Vui lòng chọn phương thức khác.');
+      throw new BadRequestException('Phương thức thanh toán này đã ngừng. Bạn chọn phương thức khác nhé.');
     }
 
     // Thu kèm rác chỉ nhận khi cổng đang mở (waste.enabled + lane_pickup + Gomdon đã cấu hình) — client gửi wasteRequestId
@@ -395,7 +395,7 @@ export class CheckoutService {
     // Ép COD (CONFIRMED, không thu tiền) cho mọi phương thức.
     if (dto.quotedZeroTotal === true && computed.total > 0) {
       throw new BadRequestException(
-        'Số Điểm Xanh hoặc mã giảm giá của bạn vừa thay đổi nên đơn không còn 0đ. Vui lòng tải lại trang thanh toán.',
+        'Số Điểm Xanh hoặc mã giảm giá của bạn vừa thay đổi nên đơn không còn 0đ. Bạn tải lại trang thanh toán nhé.',
       );
     }
     // Chỉ chặn khi ĐẮT HƠN số khách đã thấy; rẻ hơn (giảm giá vừa áp) thì có lợi cho khách, không hỏi lại.
@@ -587,7 +587,7 @@ export class CheckoutService {
             if (lock.locked > 0 && balance >= usedStandard) {
               const usable = Math.max(0, balance - lock.locked);
               throw new BadRequestException(
-                `Đơn này dùng ${formatPoints(usedStandard)} Điểm Xanh nhưng hiện bạn chỉ dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Vui lòng tải lại trang thanh toán.`,
+                `Đơn này dùng ${formatPoints(usedStandard)} Điểm Xanh nhưng hiện bạn chỉ dùng được ${formatPoints(usable)}/${formatPoints(balance)} điểm: ${this.loyalty.lockedPointsMessage(lock)}. Bạn tải lại trang thanh toán nhé.`,
               );
             }
             throw new BadRequestException(`Số điểm Xanh không đủ (hiện có ${formatPoints(balance)} điểm).`);
@@ -621,7 +621,7 @@ export class CheckoutService {
           });
           if (!conv.applied) {
             throw new BadRequestException(
-              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${formatPoints(computed.pointsUsedConverted)} điểm). Vui lòng tải lại trang thanh toán.`,
+              `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${formatPoints(computed.pointsUsedConverted)} điểm). Bạn tải lại trang thanh toán nhé.`,
             );
           }
         }
@@ -821,7 +821,7 @@ export class CheckoutService {
    * khoá). `JSON.stringify` thô so object JS mới dựng (giữ đúng thứ tự viết code) với giá trị
    * đọc lại từ cột (đã bị Postgres xáo thứ tự) sẽ LUÔN LUÔN lệch chuỗi dù địa chỉ giống hệt —
    * vô hiệu hoá hẳn tính năng "thử lại an toàn" cho MỌI lần gọi lại hợp lệ (network timeout,
-   * double-tap), không chỉ ca race hiếm gặp: khách luôn thấy "vui lòng tải lại trang" dù chưa
+   * double-tap), không chỉ ca race hiếm gặp: khách luôn thấy câu "tải lại trang" dù chưa
    * đổi gì. Test cũ (checkout.service.spec.ts) không bắt được lỗi này vì mock `prisma.order.findUnique`
    * trả thẳng object JS (giữ nguyên thứ tự đã viết), không đi qua Postgres thật.
    */
@@ -841,7 +841,7 @@ export class CheckoutService {
       throw new BadRequestException('Idempotency-Key không hợp lệ.');
     }
     if (!(await this.isSameRequest(existing, dto))) {
-      throw new BadRequestException('Yêu cầu trước đó với thông tin khác đã được xử lý, vui lòng tải lại trang.');
+      throw new BadRequestException('Yêu cầu trước đó với thông tin khác đã được xử lý, bạn tải lại trang nhé.');
     }
     return this.findOrderResponse(existing.id);
   }
@@ -1036,7 +1036,7 @@ export class CheckoutService {
     if (unpriced) {
       this.logger.error(`Chặn đặt đơn: biến thể ${unpriced.variationId} có đơn giá ${unpriced.unitPrice}.`);
       throw new BadRequestException(
-        `Sản phẩm "${unpriced.productName}" đang được cập nhật giá, tạm thời chưa đặt được. Vui lòng bỏ khỏi đơn hoặc thử lại sau.`,
+        `Sản phẩm "${unpriced.productName}" đang được cập nhật giá, tạm thời chưa đặt được. Bạn bỏ khỏi đơn hoặc thử lại sau nhé.`,
       );
     }
     const subtotal = subset ? items.reduce((s, l) => s + l.total, 0) : fullCart.subtotal;
@@ -1182,7 +1182,7 @@ export class CheckoutService {
       this.logger.error(
         `Chặn đặt đơn của ${userId}: phép chia tiền lỗi (${broken}) — ${JSON.stringify({ lines: cart.items.map((l) => [l.variationId, l.total, l.isFlash, l.fulfiller.kind, l.partnerOwned === true]), comboTotal: combo.total, discount, couponProductIds, tierDiscount, points: redemption.discount })}`,
       );
-      throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Vui lòng thử lại sau hoặc liên hệ Tubu Tree.');
+      throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Bạn thử lại sau hoặc liên hệ Tubu Tree nhé.');
     }
     const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
     const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship, firstOrderFrom);

@@ -320,7 +320,7 @@ describe('WasteConfirmService races (real Postgres)', () => {
     expect(s.errors.join()).not.toMatch(/40P01|P2034/);
     expect(results[0].status).toBe('fulfilled');
     expect(results[1].status).toBe('rejected');
-    expect(s.errors[0]).toContain('Khách vừa sửa yêu cầu, vui lòng tra lại mã');
+    expect(s.errors[0]).toContain('Khách vừa sửa yêu cầu, bạn tra lại mã');
     await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'OPEN' });
     await expect(prisma.pointsTransaction.count({ where: { refType: 'RECYCLE', refId: r.id } })).resolves.toBe(0);
     await expect(prisma.wasteEvent.count({ where: { requestId: r.id, kind: 'REQUEST_CONFIRMED' } })).resolves.toBe(0);

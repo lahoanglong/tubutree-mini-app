@@ -336,7 +336,7 @@ describe('WasteReceiveService.receive', () => {
     await expect(missing.svc.receive('s1', 'r1', body())).rejects.toThrow(NotFoundException);
 
     const raced = setup({ updateCount: 0 });
-    await expect(raced.svc.receive('s1', 'r1', body())).rejects.toThrow('Vui lòng thử lại');
+    await expect(raced.svc.receive('s1', 'r1', body())).rejects.toThrow('Bạn thử lại nhé');
     expect(raced.notifier.parcelReceived).not.toHaveBeenCalled();
   });
 
@@ -503,7 +503,7 @@ describe('WasteReceiveService unmatched parcels', () => {
 
   it('6b. a lost request update race is a retry 409 and the row stays open', async () => {
     const h = setup({ row: matchable(), updateCount: 0 });
-    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow('Vui lòng thử lại');
+    await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toThrow('Bạn thử lại nhé');
     await expect(h.svc.resolveUnmatched('s1', 'um1', match)).rejects.toBeInstanceOf(ConflictException);
     expect(h.tx.wasteUnmatchedParcel.updateMany).not.toHaveBeenCalled();
   });

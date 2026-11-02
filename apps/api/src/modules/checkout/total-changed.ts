@@ -17,7 +17,7 @@ export function totalChangedMessage(
   coupon: { removed: { code: string; reason: string } | null; notAppliedNotice: string | null } = NO_COUPON,
 ): string {
   const head = `${TOTAL_CHANGED_MESSAGE_PREFIX} từ ${expectedTotal.toLocaleString('vi-VN')}đ thành ${total.toLocaleString('vi-VN')}đ`;
-  const tail = 'Vui lòng xem lại trước khi đặt.';
+  const tail = 'Bạn xem lại trước khi đặt nhé.';
   if (coupon.removed) {
     return `${head} vì mã ${coupon.removed.code} không còn được áp dụng. Lý do: ${coupon.removed.reason} ${tail}`;
   }

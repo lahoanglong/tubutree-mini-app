@@ -37,7 +37,7 @@ const PRICE = 100_000;
 const STOCK = 10;
 const ROUNDS = 3;
 const DAY = 86_400_000;
-const STORE_CHANGED = 'Gian hàng vừa thay đổi, vui lòng đặt lại.';
+const STORE_CHANGED = 'Gian hàng vừa thay đổi, bạn đặt lại nhé.';
 
 /**
  * Thu hồi vai trò DEALER (AdminService.setUserRole) tắt cờ isPartner của gian hàng CTV của chủ trong cùng tx, hoặc bị từ chối 409

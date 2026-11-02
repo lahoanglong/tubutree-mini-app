@@ -27,7 +27,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         statusCode: 401,
         error: 'Unauthorized',
         code: 'SESSION_EXPIRED',
-        message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.',
+        message: 'Phiên đăng nhập đã hết hạn, bạn đăng nhập lại nhé.',
       });
     return user;
   }

@@ -313,7 +313,7 @@ describe('StorefrontService collections', () => {
     });
     const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.createCollection('u1', { title: 'Skincare' })).rejects.toThrow(
-      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+      'Hệ thống đang bận xử lý, bạn thử lại nhé.',
     );
   });
 
@@ -540,7 +540,7 @@ describe('StorefrontService items', () => {
     });
     const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.addItem('u1', 'c1', { productId: 'p1' })).rejects.toThrow(
-      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+      'Hệ thống đang bận xử lý, bạn thử lại nhé.',
     );
   });
 

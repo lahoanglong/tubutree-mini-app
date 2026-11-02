@@ -192,7 +192,7 @@ describe('ShiftsService.cancelShift', () => {
       $transaction: jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' }),
     });
     await expect(mk(prisma).cancelShift('u1', 's1', { reason: 'bận' })).rejects.toThrow(
-      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+      'Hệ thống đang bận xử lý, bạn thử lại nhé.',
     );
   });
 });

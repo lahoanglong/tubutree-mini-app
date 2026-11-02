@@ -186,10 +186,10 @@ describe('WasteRequestsService.create (spec 11.2, 15.2)', () => {
     await svc.create('u1', 'key-00000001', body);
     expect(tx.wasteRequest.findUnique.mock.calls.filter((c) => c[0].where.code !== undefined).length).toBe(3);
   });
-  it('five taken TR codes -> 409 Vui lòng thử lại, nothing created', async () => {
+  it('five taken TR codes -> 409 Conflict RETRY, nothing created', async () => {
     const { svc, tx } = makeCreate({ prior: null, hold: HOLD, codeTaken: 5 });
     const call = svc.create('u1', 'key-00000001', body);
-    await expect(call).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    await expect(call).rejects.toThrow(new ConflictException('Bạn thử lại nhé'));
     await expect(call).rejects.toBeInstanceOf(ConflictException);
     expect(tx.wasteRequest.create).not.toHaveBeenCalled();
   });

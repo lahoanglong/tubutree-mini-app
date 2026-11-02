@@ -6,7 +6,7 @@ import { verifyPresence, type AttnConfig, type VerifyReason } from './verify';
 import { vnDateKey } from '../../../common/vn-time';
 
 const REASON_MSG: Record<VerifyReason, string> = {
-  NOT_CONFIGURED: 'Chưa cấu hình chấm công, vui lòng liên hệ quản trị.',
+  NOT_CONFIGURED: 'Chưa cấu hình chấm công, bạn liên hệ quản trị nhé.',
   IP_NOT_ALLOWED: 'Bạn chưa kết nối mạng nội bộ công ty.',
   OUT_OF_RADIUS: 'Bạn đang ở ngoài vùng công ty.',
 };

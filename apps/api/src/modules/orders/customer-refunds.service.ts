@@ -244,7 +244,7 @@ export class CustomerRefundsService {
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     if (row.method !== 'MANUAL_TRANSFER' || row.status !== 'PROCESSING') {
-      throw new BadRequestException('Khoản hoàn không còn ở trạng thái đang chuyển khoản — vui lòng tải lại.');
+      throw new BadRequestException('Khoản hoàn không còn ở trạng thái đang chuyển khoản — bạn tải lại nhé.');
     }
     const guard = await this.claimGuard(adminId, row, 'release', { confirm: opts.takeOver, reason: opts.takeOverReason });
     const won = await this.prisma.$transaction(async (tx) => {
@@ -276,7 +276,7 @@ export class CustomerRefundsService {
     } = {},
   ) {
     const bankRef = opts.bankRef?.trim();
-    if (!bankRef) throw new BadRequestException('Vui lòng nhập mã giao dịch ngân hàng của lần chuyển khoản hoàn tiền.');
+    if (!bankRef) throw new BadRequestException('Nhập mã giao dịch ngân hàng của lần chuyển khoản hoàn tiền.');
     const row = await this.prisma.orderCustomerRefund.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     if (opts.byStaff) await this.assertStaffMayHandle(adminId, row, { typed: typedAnyBank(opts), bank: true });
@@ -358,7 +358,7 @@ export class CustomerRefundsService {
       const holder = now.claimedBy ? (await this.adminNames([now.claimedBy])).get(now.claimedBy) : undefined;
       return `Khoản này đang được ${holder ?? 'một quản trị viên khác'} chuyển khoản.`;
     }
-    return 'Khoản hoàn vừa thay đổi — vui lòng tải lại.';
+    return 'Khoản hoàn vừa thay đổi — bạn tải lại nhé.';
   }
 
   /**
@@ -372,7 +372,7 @@ export class CustomerRefundsService {
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     if (input.byStaff) await this.assertStaffMayHandle(adminId, row, { typed: false, bank: false });
     if (!isUnverifiedRefundRow(row)) {
-      throw new BadRequestException('Khoản này không còn chờ đối soát — vui lòng tải lại.');
+      throw new BadRequestException('Khoản này không còn chờ đối soát — bạn tải lại nhé.');
     }
     const codReturn = row.kind === 'RETURN';
     const amount = input.amount ?? row.amount;
@@ -427,7 +427,7 @@ export class CustomerRefundsService {
       if (codReturn) await removeAttentionReason(tx, row.orderId, ATTENTION_COD_RETURN_UNVERIFIED);
       return true;
     });
-    if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, vui lòng tải lại.');
+    if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, bạn tải lại nhé.');
     this.logger.log(`Admin ${adminId} xác nhận tiền trả dư ${amount}đ đơn ${row.orderCode} (khoản ${id}).`);
     // Khoản COD trả hàng chưa có mẫu tin riêng (mẫu "tiền dư" nói sai lý do): khách thấy khoản ở chi tiết đơn, Kế toán liên hệ khách.
     if (row.userId && !codReturn) {
@@ -443,7 +443,7 @@ export class CustomerRefundsService {
     if (!row) throw new NotFoundException('Không tìm thấy khoản hoàn tiền.');
     if (input.byStaff) await this.assertStaffMayHandle(adminId, row, { typed: false, bank: false });
     if (!isUnverifiedRefundRow(row)) {
-      throw new BadRequestException('Khoản này không còn chờ đối soát — vui lòng tải lại.');
+      throw new BadRequestException('Khoản này không còn chờ đối soát — bạn tải lại nhé.');
     }
     const codReturn = row.kind === 'RETURN';
     if (reason.length < DISMISS_REASON_MIN) {
@@ -468,7 +468,7 @@ export class CustomerRefundsService {
       if (codReturn) await removeAttentionReason(tx, row.orderId, ATTENTION_COD_RETURN_UNVERIFIED);
       return true;
     });
-    if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, vui lòng tải lại.');
+    if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, bạn tải lại nhé.');
     this.logger.log(`Admin ${adminId} bỏ qua khoản dư ${row.amount}đ đơn ${row.orderCode} (khoản ${id}): ${reason}`);
     return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
   }
@@ -584,6 +584,6 @@ export class CustomerRefundsService {
     if (now?.method === 'MANUAL_TRANSFER' && now.status === 'PROCESSING') {
       return `Tubu đang chuyển khoản khoản này về ${maskedBank(now)} nên không đổi được nơi nhận nữa.`;
     }
-    return 'Khoản hoàn này vừa được xử lý — vui lòng tải lại.';
+    return 'Khoản hoàn này vừa được xử lý — bạn tải lại nhé.';
   }
 }

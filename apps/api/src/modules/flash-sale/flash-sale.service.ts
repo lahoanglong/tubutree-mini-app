@@ -12,6 +12,15 @@ import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
 import { ACTIVE_FLASH_ORDER_BY, activeFlashWhere, isStillDiscounted } from './flash-active';
 import {
+  FLASH_ALREADY_STARTED_MSG,
+  FLASH_ITEM_NOT_FOUND_MSG,
+  FLASH_LIMIT,
+  FLASH_OVER_LIMIT_MSG,
+  FLASH_SLOT_NOT_FOUND_MSG,
+  FLASH_SOLD_OUT_MSG,
+  flashOverLimitMessage,
+} from './flash-sale-notice';
+import {
   DEFAULT_SLOT_CLOCKS,
   FLASH_SLOTS_KEY,
   FLASH_SLOT_MINUTES,
@@ -24,12 +33,8 @@ import {
   type FlashSlotStatus,
 } from './flash-slots';
 
-export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
-/** Câu của API cũ; client cũ vẫn khớp nó. Lỗi mới mang mã FLASH_LIMIT (xem overLimitError). */
-export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
-export const FLASH_LIMIT = 'FLASH_LIMIT';
-export const flashOverLimitMessage = (n: number) => `Giá Giờ vàng chỉ áp cho ${n} sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.`;
-export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
+// Câu khách đọc nằm ở flash-sale-notice.ts; xuất lại để mọi chỗ import từ service còn chạy.
+export { FLASH_SOLD_OUT_MSG, FLASH_OVER_LIMIT_MSG, FLASH_LIMIT, flashOverLimitMessage, FLASH_ALREADY_STARTED_MSG };
 export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
 export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
 export const FLASH_ADMIN_SALE_MSG = 'Đợt flash sale do quản trị viên hoặc hệ thống tạo — nhân viên không sửa được, nhờ quản trị viên.';
@@ -355,7 +360,7 @@ export class FlashSaleService {
       }));
       return { sale: { id: sale.id, title: sale.title, startAt: sale.startAt, endAt: sale.endAt }, items };
     });
-    if (!built) throw new NotFoundException('Không tìm thấy khung Giờ vàng.');
+    if (!built) throw new NotFoundException(FLASH_SLOT_NOT_FOUND_MSG);
     const slot = this.slotDTO(built.sale, now, built.items.length);
     return { serverNow: now.toISOString(), slot, items: slot.status === 'ENDED' ? [] : built.items };
   }
@@ -825,7 +830,7 @@ export class FlashSaleService {
         variation: { select: { isActive: true, product: { select: { isActive: true, approvalStatus: true } } } },
       },
     });
-    if (!item || !isSellableVariation(item.variation)) throw new BadRequestException('Không tìm thấy sản phẩm Giờ vàng.');
+    if (!item || !isSellableVariation(item.variation)) throw new BadRequestException(FLASH_ITEM_NOT_FOUND_MSG);
     if (item.flashSale.startAt <= now) throw new BadRequestException(FLASH_ALREADY_STARTED_MSG);
     return this.prisma.flashSaleReminder.upsert({
       where: { userId_flashSaleItemId: { userId, flashSaleItemId: itemId } },

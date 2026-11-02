@@ -343,7 +343,7 @@ function codBlockReason(groups: PaymentGroup[]): string | null {
     groups.length > 1
       ? `Thanh toán khi nhận hàng (COD) chỉ nhận mỗi đơn tối đa ${cap}, mà ${over.map((g) => `đơn do ${g.fulfiller.name} giao là ${vnd(g.total)}`).join(', ')}.`
       : `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${cap}, đơn này là ${vnd(over[0]!.total)}.`;
-  if (transferBlockReason(groups) === null) return `${head} Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.`;
+  if (transferBlockReason(groups) === null) return `${head} Bạn chuyển khoản hoặc trả bằng Ví Tubu nhé.`;
   const ways = ['trả bằng Ví Tubu nếu số dư đủ'];
   if (over.some((g) => g.fulfiller.kind === 'TUBU')) ways.push(`đặt riêng phần hàng ${TUBU_FULFILLER_NAME} giao để chuyển khoản`);
   for (const g of over) {
@@ -400,10 +400,10 @@ export function storeUnavailableOnAddMessage(productName: string, storeName: str
 /** Câu báo cho khách khi lần đặt có dòng không giao được. */
 export function unavailableLineMessage(productName: string, f: Extract<LineFulfiller, { kind: 'UNAVAILABLE' }>): string {
   if (f.reason === 'STORE_PAUSED') {
-    return `${f.name} đang tạm nghỉ, chưa nhận đơn "${productName}". Vui lòng bỏ sản phẩm này khỏi đơn hoặc đặt lại sau.`;
+    return `${f.name} đang tạm nghỉ, chưa nhận đơn "${productName}". Bạn bỏ sản phẩm này khỏi đơn hoặc đặt lại sau nhé.`;
   }
   if (f.reason === 'STORE_CLOSED') {
-    return `${f.name} đã ngừng bán trên Tubu Tree, "${productName}" không đặt được nữa. Vui lòng bỏ sản phẩm này khỏi đơn.`;
+    return `${f.name} đã ngừng bán trên Tubu Tree, "${productName}" không đặt được nữa. Bạn bỏ sản phẩm này khỏi đơn nhé.`;
   }
-  return `Sản phẩm "${productName}" đang được cập nhật thông tin giao hàng, tạm thời chưa đặt được. Vui lòng bỏ khỏi đơn hoặc thử lại sau.`;
+  return `Sản phẩm "${productName}" đang được cập nhật thông tin giao hàng, tạm thời chưa đặt được. Bạn bỏ khỏi đơn hoặc thử lại sau nhé.`;
 }

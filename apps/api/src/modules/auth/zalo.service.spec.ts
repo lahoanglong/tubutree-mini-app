@@ -35,7 +35,7 @@ describe('ZaloService — lỗi trả cho khách không lộ chuỗi thô của 
     (axios.post as jest.Mock).mockResolvedValue({ data: { error: -14003, error_description: 'invalid code' } });
     const err = await make().exchangeOAuthCode('bad', 'verifier').catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toBe('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
+    expect((err as Error).message).toBe('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Bạn đăng nhập lại nhé.');
     expect((err as Error).message).not.toContain('invalid code');
   });
 
@@ -66,21 +66,21 @@ describe('ZaloService — Zalo tạm lỗi khác với mã sai: khách biết b�
     (axios.post as jest.Mock).mockRejectedValue(error);
     const err = await make().exchangeOAuthCode('code', 'verifier').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ServiceUnavailableException);
-    expect((err as Error).message).toBe('Zalo đang bận, vui lòng thử lại sau ít phút.');
+    expect((err as Error).message).toBe('Zalo đang bận, bạn thử lại sau ít phút nhé.');
   });
 
   it('đổi mã khi Zalo trả 400: vẫn 401 và bảo khách đăng nhập lại', async () => {
     (axios.post as jest.Mock).mockRejectedValue(axiosError(400));
     const err = await make().exchangeOAuthCode('code', 'verifier').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(UnauthorizedException);
-    expect((err as Error).message).toBe('Không đổi được mã đăng nhập Zalo. Vui lòng đăng nhập lại.');
+    expect((err as Error).message).toBe('Không đổi được mã đăng nhập Zalo. Bạn đăng nhập lại nhé.');
   });
 
   it('verify token khi Zalo lỗi 500: 503 "Zalo đang bận"; khi Zalo từ chối token vẫn 401', async () => {
     (axios.get as jest.Mock).mockRejectedValue(axiosError(500));
     const busy = await make().getUserInfo('tok').catch((e: unknown) => e);
     expect(busy).toBeInstanceOf(ServiceUnavailableException);
-    expect((busy as Error).message).toBe('Zalo đang bận, vui lòng thử lại sau ít phút.');
+    expect((busy as Error).message).toBe('Zalo đang bận, bạn thử lại sau ít phút nhé.');
 
     (axios.get as jest.Mock).mockRejectedValue(axiosError(401));
     const rejected = await make().getUserInfo('tok').catch((e: unknown) => e);

@@ -767,7 +767,7 @@ export class OrderStatusService {
         order: await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
       };
     }
-    throw new ConflictException('Đơn đang thay đổi trạng thái liên tục — vui lòng tải lại rồi thử lại.');
+    throw new ConflictException('Đơn đang thay đổi trạng thái liên tục — bạn tải lại rồi thử lại nhé.');
   }
 
   /** Đơn thu gom vừa trả tiền: lúc này mới đặt bưu tá Gomdon. */

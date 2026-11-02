@@ -610,7 +610,7 @@ describe('paymentMethodBlockReason', () => {
 
     it('một đơn Tubu trên 5.000.000đ: nêu số tiền và chỉ sang chuyển khoản hoặc Ví (cả hai còn dùng được)', () => {
       expect(paymentMethodBlockReason([g(TUBU, 5_600_000)], 'COD')).toBe(
-        'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.600.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.',
+        'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.600.000đ. Bạn chuyển khoản hoặc trả bằng Ví Tubu nhé.',
       );
     });
 
@@ -646,7 +646,7 @@ describe('unavailableLineMessage / publicFulfiller', () => {
   it('nói rõ gian hàng tạm nghỉ hay đã ngừng bán, không nói chung chung "đang cập nhật"', () => {
     const base = { kind: 'UNAVAILABLE' as const, storefrontId: null, ownerUserId: null };
     expect(unavailableLineMessage('Nến thơm', { ...base, name: 'Shop B', reason: 'STORE_PAUSED' })).toBe(
-      'Shop B đang tạm nghỉ, chưa nhận đơn "Nến thơm". Vui lòng bỏ sản phẩm này khỏi đơn hoặc đặt lại sau.',
+      'Shop B đang tạm nghỉ, chưa nhận đơn "Nến thơm". Bạn bỏ sản phẩm này khỏi đơn hoặc đặt lại sau nhé.',
     );
     expect(unavailableLineMessage('Nến thơm', { ...base, name: 'Shop B', reason: 'STORE_CLOSED' })).toContain('đã ngừng bán');
     expect(unavailableLineMessage('Nến thơm', { ...base, name: '' })).toContain('đang được cập nhật thông tin giao hàng');

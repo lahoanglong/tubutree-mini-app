@@ -12,7 +12,7 @@ const L = (o: Partial<WasteStoredLine> = {}): WasteStoredLine => ({
   ...o,
 });
 
-const STALE = 'Khách vừa sửa yêu cầu, vui lòng tra lại mã';
+const STALE = 'Khách vừa sửa yêu cầu, bạn tra lại mã';
 const CLAMP = 'Số thực nhận phải là số nguyên từ 0 tới số khai';
 const NEED_REASON = 'Dòng nhận thiếu phải có lý do';
 

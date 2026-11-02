@@ -264,7 +264,7 @@ export class SubscriptionsService {
       if (err instanceof SubscriptionPartnerGoodsError) throw partnerGoodsError('SUBSCRIPTION', err.productName);
       if (err instanceof SubscriptionCodLimitError) {
         throw new BadRequestException(
-          `Đơn vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), vui lòng giảm số lượng hoặc chọn Ví Tubu/chuyển khoản.`,
+          `Đơn vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), bạn giảm số lượng hoặc chọn Ví Tubu/chuyển khoản nhé.`,
         );
       }
       throw err;
@@ -948,7 +948,7 @@ export class SubscriptionsService {
     const at = new Date(`${startDate}T00:00:00+07:00`);
     if (Number.isNaN(at.getTime()) || vnDateKey(at) !== startDate) throw invalid();
     const today = vnDateKey();
-    if (startDate < today) throw new BadRequestException('Ngày bắt đầu giao đã qua, vui lòng chọn lại.');
+    if (startDate < today) throw new BadRequestException('Ngày bắt đầu giao đã qua, bạn chọn lại nhé.');
     if (startDate === today) return null;
     const last = vnDateKey(new Date(Date.now() + MAX_START_DAYS_AHEAD * 864e5));
     if (startDate > last) {

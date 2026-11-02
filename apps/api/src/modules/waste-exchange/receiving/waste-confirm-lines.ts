@@ -22,7 +22,7 @@ export interface WasteValidatedLine {
   drops: number;
 }
 
-const STALE_REQUEST = 'Khách vừa sửa yêu cầu, vui lòng tra lại mã';
+const STALE_REQUEST = 'Khách vừa sửa yêu cầu, bạn tra lại mã';
 const RECEIVED_OUT_OF_RANGE = 'Số thực nhận phải là số nguyên từ 0 tới số khai';
 const SHORT_NEEDS_REASON = 'Dòng nhận thiếu phải có lý do';
 

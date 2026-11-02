@@ -20,7 +20,7 @@ import { WASTE_RECEIVE_REPLAY_MS } from '../waste.constants';
 import { evaluateMatch } from './waste-match';
 
 const NOT_FOUND = 'Không tìm thấy mã';
-const RETRY = 'Vui lòng thử lại';
+const RETRY = 'Bạn thử lại nhé';
 const DROP_OFF_NOT_VIA_WAREHOUSE = 'Yêu cầu mang tới điểm nhận không nhận qua kho';
 const ORDER_NOT_DELIVERED = 'Đơn gắn kèm chưa giao xong, chưa nhận kiện được';
 const UNMATCHED_NOT_OPEN = 'Dòng hàng không rõ chủ không còn mở';

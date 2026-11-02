@@ -1,7 +1,7 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-export const LOCK_BUSY_MESSAGE = 'Hệ thống đang bận, vui lòng thử lại sau ít giây.';
+export const LOCK_BUSY_MESSAGE = 'Hệ thống đang bận, bạn thử lại sau ít giây nhé.';
 
 /**
  * Thua tranh khoá, thử lại là qua: hạn chờ khoá/câu lệnh/tx (55P03 lock_timeout, 57014 statement_timeout, P2028 Prisma huỷ tx)

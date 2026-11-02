@@ -53,7 +53,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         code: 'INTERNAL_ERROR',
-        message: 'Đã có lỗi xảy ra, vui lòng thử lại sau.',
+        message: 'Đã có lỗi xảy ra, bạn thử lại sau nhé.',
       });
       return;
     }
@@ -62,7 +62,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       P2025: { status: HttpStatus.NOT_FOUND, message: 'Không tìm thấy bản ghi.' },
       P2002: { status: HttpStatus.CONFLICT, message: 'Dữ liệu trùng (vi phạm ràng buộc duy nhất).' },
       P2003: { status: HttpStatus.BAD_REQUEST, message: 'Tham chiếu không hợp lệ.' },
-      P2034: { status: HttpStatus.CONFLICT, message: 'Xung đột giao dịch, vui lòng thử lại.' },
+      P2034: { status: HttpStatus.CONFLICT, message: 'Xung đột giao dịch, bạn thử lại nhé.' },
     };
     const known = map[exception.code];
     // Log MỌI Prisma error mapped — trước đây P2025 nuốt im lặng → không debug được khi

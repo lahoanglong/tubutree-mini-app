@@ -95,7 +95,7 @@ type CommissionReversal =
  */
 function ctvCodBlockReason(total: number): string | null {
   if (total <= COD_MAX_PER_ORDER) return null;
-  return `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${vnd(COD_MAX_PER_ORDER)}, đơn này là ${vnd(total)}. Vui lòng chọn chuyển khoản.`;
+  return `Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa ${vnd(COD_MAX_PER_ORDER)}, đơn này là ${vnd(total)}. Bạn chọn chuyển khoản nhé.`;
 }
 
 /** Cùng dạng `blockedPaymentMethods` của báo giá checkout: phương thức → lý do, chỉ có các phương thức bị khoá. */
@@ -740,7 +740,7 @@ export class AffiliateService {
       // Sổ đã có dòng hoàn cho cặp này (applied=false) nghĩa là Ví không nhận thêm: tăng taxRefunded lúc này thì báo cáo thuế ghi
       // đã hoàn mà CTV không có tiền, nên dừng cả giao dịch từ chối để người vận hành xem lại.
       if (!credited.applied) {
-        throw new ConflictException('Sổ Ví đã có dòng hoàn thuế TNCN cho lệnh này, không ghi thêm được. Vui lòng báo kỹ thuật.');
+        throw new ConflictException('Sổ Ví đã có dòng hoàn thuế TNCN cho lệnh này, không ghi thêm được. Bạn báo kỹ thuật nhé.');
       }
       await tx.payout.update({ where: { id: r.id }, data: { taxRefunded: { increment: share } } });
       over -= share;
@@ -882,7 +882,7 @@ export class AffiliateService {
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
       if (existing && existing.userId === ctvId) return this.orderForCtv(existing.id);
-      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
     }
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Chưa chọn sản phẩm để lên đơn.');
@@ -1350,7 +1350,7 @@ export class AffiliateService {
       }
       // idempotencyKey unique toàn cục (không compound theo userId) — nếu key trùng nhưng thuộc
       // user khác thì KHÔNG trả payout của người khác ra ngoài; bắt buộc client thử lại key mới.
-      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
     }
 
     // "Khả dụng" = APPROVED và CHƯA thuộc batch payout nào (payoutBatchId null).
@@ -1411,7 +1411,7 @@ export class AffiliateService {
         // là thành công với total có thể SAI (thừa/thiếu tiền cộng vào ví) — throw rõ ràng để
         // client thử lại thay vì tiếp tục với số liệu không nhất quán.
         if (marked.count !== rows.length) {
-          throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
+          throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, bạn thử lại nhé.');
         }
         const credited = total - taxWithheld;
         const payout = await tx.payout.create({
@@ -2070,7 +2070,7 @@ export class AffiliateService {
     const now = await this.prisma.payout.findUnique({ where: { id }, select: { status: true, amount: true } });
     if (!now || now.status !== status || now.amount === expected) return null;
     return new ConflictException(
-      `Số thực nhận của lệnh đã đổi từ ${vnd(expected)} thành ${vnd(now.amount)} (thuế giữ dư vừa được hoàn), vui lòng tải lại trước khi ${verb}.`,
+      `Số thực nhận của lệnh đã đổi từ ${vnd(expected)} thành ${vnd(now.amount)} (thuế giữ dư vừa được hoàn), bạn tải lại trước khi ${verb} nhé.`,
     );
   }
 
@@ -2092,7 +2092,7 @@ export class AffiliateService {
       const stale = expectedAmount != null ? await this.staleAmountError(id, 'REQUESTED', expectedAmount, 'duyệt') : null;
       if (stale) throw stale;
       throw new BadRequestException(
-        'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
+        'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.',
       );
     }
     this.logger.log(`Admin ${adminId} duyệt lệnh rút ${id}.`);
@@ -2110,7 +2110,7 @@ export class AffiliateService {
    */
   async rejectPayout(adminId: string, id: string, reason: string) {
     const why = reason?.trim();
-    if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
+    if (!why) throw new BadRequestException('Nhập lý do từ chối.');
 
     let revoked: { id: string; affiliateUserId: string; amount: number }[] = [];
     const rejected = await this.prisma.$transaction(async (tx) => {
@@ -2125,7 +2125,7 @@ export class AffiliateService {
       });
       if (marked.count === 0) {
         throw new BadRequestException(
-          'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
+          'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.',
         );
       }
       const payout = await tx.payout.findUniqueOrThrow({ where: { id } });
@@ -2224,7 +2224,7 @@ export class AffiliateService {
       const stale = opts.expectedAmount != null ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
       if (stale) throw stale;
       throw new BadRequestException(
-        'Lệnh rút không ở trạng thái "Đã duyệt" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
+        'Lệnh rút không ở trạng thái "Đã duyệt" hoặc vừa được xử lý bởi người khác — bạn tải lại nhé.',
       );
     }
     this.logger.log(`Admin ${adminId} xác nhận đã chuyển khoản lệnh rút ${id}.`);

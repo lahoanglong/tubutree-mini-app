@@ -115,7 +115,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     t.requestPayout
       .mockRejectedValueOnce(new BadRequestException({ code: PIT_TAX_ID_REQUIRED, message: 'cần MST' }))
       .mockRejectedValueOnce(new BadRequestException('Hoa hồng đã được xử lý.'))
-      .mockRejectedValueOnce(new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.'))
+      .mockRejectedValueOnce(new ConflictException('Dữ liệu hoa hồng đã thay đổi, bạn thử lại nhé.'))
       .mockResolvedValueOnce({ ok: true, method: 'WALLET_BALANCE', credited: 4_000, note: '' });
     const credited = await t.svc.autoTransferApprovedToWallet();
     expect(t.requestPayout).toHaveBeenCalledTimes(4);
@@ -143,7 +143,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
 
   it('từ chối nghiệp vụ (HttpException) chỉ log warn, không log error (tránh báo admin giả)', async () => {
     const t = build({ rows: rows('a', 1_000) });
-    t.requestPayout.mockRejectedValue(new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.'));
+    t.requestPayout.mockRejectedValue(new ConflictException('Dữ liệu hoa hồng đã thay đổi, bạn thử lại nhé.'));
     const logger = (t.svc as unknown as { logger: { error: () => void; warn: () => void } }).logger;
     const err = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
     const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);

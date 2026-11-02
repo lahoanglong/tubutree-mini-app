@@ -10,7 +10,7 @@ export const WASTE_MESSAGES = {
   POINT_UNAVAILABLE: 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác',
   ITEM_NOT_ACTIVE: 'Món này hiện chưa nhận, hãy bỏ khỏi danh sách',
   NOT_MAIL_IN: 'Yêu cầu này không dùng mã vận đơn',
-  RETRY: 'Vui lòng thử lại',
+  RETRY: 'Bạn thử lại nhé',
 
   BELOW_MIN: (method: MinMethod, minPoints: number, missingPoints: number) =>
     `${method === 'MAIL_IN' ? 'Gói gửi về kho' : 'Thu kèm đơn'} cần tối thiểu ${formatPoints(minPoints)} điểm, bạn cần thêm ${formatPoints(missingPoints)} điểm nữa`,

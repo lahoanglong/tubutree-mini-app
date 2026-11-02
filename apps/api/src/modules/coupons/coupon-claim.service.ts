@@ -47,7 +47,7 @@ export class CouponClaimService {
   async claim(userId: string, rawCode: string): Promise<ClaimedCoupon> {
     const code = normalizeCouponCode(rawCode);
     const coupon = await this.prisma.coupon.findUnique({ where: { code } });
-    if (!coupon) throw new BadRequestException('Mã giảm giá không tồn tại. Vui lòng kiểm tra lại mã trên thẻ.');
+    if (!coupon) throw new BadRequestException('Mã giảm giá không tồn tại. Bạn kiểm tra lại mã trên thẻ nhé.');
     if (!coupon.isActive) throw new BadRequestException('Mã giảm giá đã ngừng áp dụng.');
     const now = new Date();
     if (now > coupon.endAt) throw new BadRequestException('Mã giảm giá đã hết hạn.');

@@ -16,8 +16,8 @@ export interface GeoOption {
 
 type CacheEntry = { at: number; data: GeoOption[] };
 
-const PROVINCES_UNAVAILABLE = 'Chưa tải được danh sách tỉnh/thành, vui lòng thử lại sau ít phút.';
-const COMMUNES_UNAVAILABLE = 'Chưa tải được danh sách phường/xã, vui lòng thử lại sau ít phút.';
+const PROVINCES_UNAVAILABLE = 'Chưa tải được danh sách tỉnh/thành, bạn thử lại sau ít phút nhé.';
+const COMMUNES_UNAVAILABLE = 'Chưa tải được danh sách phường/xã, bạn thử lại sau ít phút nhé.';
 
 /**
  * Tra cứu địa giới (Tỉnh → Phường/Xã) PROXY từ Pancake, cache in-memory.

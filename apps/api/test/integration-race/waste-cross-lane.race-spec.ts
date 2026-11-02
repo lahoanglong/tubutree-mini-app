@@ -58,7 +58,7 @@ const CONFIG_KEYS = [
 const ROUNDS = 3;
 const PRICE = 100_000;
 const POINTS_USED = 10_000;
-const STALE = 'Khách vừa sửa yêu cầu, vui lòng tra lại mã';
+const STALE = 'Khách vừa sửa yêu cầu, bạn tra lại mã';
 const NOT_CONFIRMABLE = 'Yêu cầu không ở trạng thái xác nhận được';
 
 function expectNoDeadlock(errors: string[]) {
