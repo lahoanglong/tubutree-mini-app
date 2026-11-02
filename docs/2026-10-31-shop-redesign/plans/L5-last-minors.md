@@ -35,8 +35,8 @@
 
 - `apps/web/src/app/thanh-toan/page.tsx` (Task 1).
 - `apps/web/src/components/variation-sheet.tsx`, `apps/miniapp/src/components/variation-sheet.tsx` (prop `cartMayArrive`), nơi gọi chế độ buy: `apps/web/src/components/add-to-cart.tsx`, `apps/miniapp/src/pages/product-detail.tsx` (Task 2).
-- `packages/app-core/src/commerce/stock-text.ts` (+ spec), `apps/web/src/app/gio-hang/page.tsx`, `apps/miniapp/src/pages/cart.tsx` (Task 3).
-- `packages/app-core/src/terminology.spec.ts` (Task 4).
+- `packages/app-core/src/commerce/stock-text.ts` (+ spec), `apps/web/src/app/gio-hang/page.tsx`, `apps/miniapp/src/pages/cart.tsx`, `apps/miniapp/src/i18n/vi.ts` (bỏ khoá `cart.stockLimited` không còn nơi dùng) (Task 3).
+- `packages/app-core/src/terminology.spec.ts`, `DESIGN.md` (một câu về phạm vi bộ quét template) (Task 4).
 - `apps/miniapp/src/pages/storefront-view.tsx` (Task 5).
 - `docs/2026-10-31-shop-redesign/PROGRESS.md`, `scripts/uiux/ds-baseline.json` nếu hạ được (Task 6).
 
