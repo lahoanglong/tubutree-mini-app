@@ -40,6 +40,7 @@
   - Mỗi câu `UPDATE` chỉ đổi khi lời trong DB vẫn đúng bản mặc định cũ, nên không đè bản admin đã sửa. Chạy lại thì không đổi gì.
   - Đã thử trên Postgres trống: chạy hết migration xong không còn mẫu nào có "Vui lòng" hay "chúng tôi".
   - `seed.ts` cùng lời từng chữ; `notification-templates-seed.spec` giữ hai bên khớp nhau và chặn "Vui lòng"/"chúng tôi" ở mọi mẫu.
+  - Kiểm sau deploy (đọc PROD, cần chủ cho phép): `SELECT code, "bodyTemplate" FROM notification_templates WHERE code IN ('ORDER_AWAITING_PAYMENT','ORDER_UNDERPAID','SUBSCRIPTION_PAUSED','SUBSCRIPTION_ORDER_AWAITING_PAYMENT') AND "bodyTemplate" ~* 'vui lòng'` phải ra 0 dòng. Có dòng nghĩa là admin đã sửa tay mẫu đó nên migration bỏ qua: sửa ở trang quản trị mẫu thông báo.
 - API đổi hai loại:
   - Chữ lỗi và chữ thông báo khách đọc. Câu nào Mini bản cũ còn so khớp thì giữ nguyên.
   - Thêm endpoint `GET /flash-sales/me/allowance`. Mini và web bản cũ không gọi endpoint này. Bản mới gặp API cũ thì coi như không có số theo khách, chạy như đợt 7.
