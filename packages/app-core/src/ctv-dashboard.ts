@@ -107,19 +107,34 @@ export function nextMilestoneRows<T extends { achieved: boolean; canClaim: boole
 export { AFFILIATE_PAGE_SIZE, affiliateNextCursor } from './affiliate-page';
 
 /**
- * Mốc (ms) lúc vừa chuyển hoa hồng vào Ví. Nút "Chuyển vào Ví" khoá tới khi dashboard có dữ liệu hoặc lỗi không cũ hơn mốc (cùng mili giây tính là mới: làm mới dashboard luôn bắt đầu sau khi đặt mốc),
- * để không mở form với số dư cũ. Mốc nằm ngoài component nên còn nguyên khi khách rời trang rồi quay lại; chỉ tăng,
- * và được nâng lên khi bắt đầu làm mới dashboard để một lần tải lại đã bay trước đó mà trả về muộn không mở nút.
+ * Nút "Chuyển vào Ví" khoá từ lúc chuyển xong tới khi lần làm mới dashboard BẮT ĐẦU sau lúc đó đã về, để không mở form với số dư cũ.
+ * Không so `dataUpdatedAt`: một lần tải cũ trả về muộn hay đồng hồ máy lùi đều không mở nhầm. Cờ nằm ngoài component nên còn
+ * nguyên khi khách rời trang rồi quay lại giữa chừng.
  */
-let transferMark: number | null = null;
-export const getTransferMark = (): number | null => transferMark;
-export function markTransferred(now: number = Date.now()): number {
-  transferMark = Math.max(transferMark ?? 0, now);
-  return transferMark;
+let transferRefreshing = false;
+const transferListeners = new Set<() => void>();
+const notifyTransfer = () => transferListeners.forEach((fn) => fn());
+
+export const isTransferRefreshing = (): boolean => transferRefreshing;
+export function subscribeTransferRefreshing(fn: () => void): () => void {
+  transferListeners.add(fn);
+  return () => transferListeners.delete(fn);
 }
-export function resetTransferMark(): void {
-  transferMark = null;
+/** `refresh` làm mới Ví rồi dashboard; lỗi hay thành công đều mở lại nút (lỗi không được giữ nút khoá mãi). */
+export async function lockTransferUntil(refresh: () => Promise<unknown>): Promise<void> {
+  transferRefreshing = true;
+  notifyTransfer();
+  try {
+    await refresh();
+  } catch {
+    /* mở nút ở finally; lỗi tải lại đã hiện ở chính màn dashboard */
+  } finally {
+    transferRefreshing = false;
+    notifyTransfer();
+  }
 }
-export function isTransferLocked(mark: number | null, dataUpdatedAt: number, errorUpdatedAt: number): boolean {
-  return mark !== null && dataUpdatedAt < mark && errorUpdatedAt <= mark;
+/** Chỉ cho test: đặt lại cờ giữa các ca. */
+export function resetTransferLock(): void {
+  transferRefreshing = false;
+  transferListeners.clear();
 }

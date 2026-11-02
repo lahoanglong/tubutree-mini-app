@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote, isTransferLocked, markTransferred, getTransferMark, resetTransferMark } from './ctv-dashboard';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote, isTransferRefreshing, subscribeTransferRefreshing, lockTransferUntil, resetTransferLock } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -125,34 +125,35 @@ describe('commissionPendingNote', () => {
   });
 });
 
-describe('khoá nút Chuyển vào Ví sau khi vừa chuyển', () => {
-  it('chưa chuyển lần nào: không khoá', () => {
-    expect(isTransferLocked(null, 100, 0)).toBe(false);
+describe('khoá nút Chuyển vào Ví trong lúc làm mới sau khi chuyển', () => {
+  beforeEach(() => resetTransferLock());
+
+  it('mặc định không khoá', () => {
+    expect(isTransferRefreshing()).toBe(false);
   });
-  it('dữ liệu chưa mới hơn mốc: khoá', () => {
-    expect(isTransferLocked(200, 100, 0)).toBe(true);
+
+  it('khoá trong lúc làm mới, mở khi làm mới xong; listener được báo hai lần', async () => {
+    const seen: boolean[] = [];
+    const off = subscribeTransferRefreshing(() => seen.push(isTransferRefreshing()));
+    let done!: () => void;
+    const p = lockTransferUntil(() => new Promise<void>((r) => (done = r)));
+    expect(isTransferRefreshing()).toBe(true);
+    done();
+    await p;
+    expect(isTransferRefreshing()).toBe(false);
+    expect(seen).toEqual([true, false]);
+    off();
   });
-  it('dữ liệu tải xong sau mốc: mở', () => {
-    expect(isTransferLocked(200, 200, 0)).toBe(false);
-    expect(isTransferLocked(200, 201, 0)).toBe(false);
+
+  it('làm mới lỗi vẫn mở nút', async () => {
+    await expect(lockTransferUntil(() => Promise.reject(new Error('x')))).resolves.toBeUndefined();
+    expect(isTransferRefreshing()).toBe(false);
   });
-  it('lỗi tải lại mới hơn mốc: mở; lỗi cũ hơn mốc: vẫn khoá', () => {
-    expect(isTransferLocked(200, 100, 250)).toBe(false);
-    expect(isTransferLocked(200, 100, 150)).toBe(true);
-  });
-  it('tải lại bắt đầu trước khi chuyển xong, trả về sau: mốc nâng lên lúc làm mới Ví nên vẫn khoá', () => {
-    resetTransferMark();
-    markTransferred(1000);
-    const staleReturnedAt = 1100;
-    expect(isTransferLocked(getTransferMark(), staleReturnedAt, 0)).toBe(false);
-    markTransferred(1200);
-    expect(isTransferLocked(getTransferMark(), staleReturnedAt, 0)).toBe(true);
-    expect(isTransferLocked(getTransferMark(), 1300, 0)).toBe(false);
-  });
-  it('mốc không bao giờ lùi và còn nguyên khi rời trang rồi quay lại', () => {
-    resetTransferMark();
-    markTransferred(500);
-    markTransferred(400);
-    expect(getTransferMark()).toBe(500);
+
+  it('bỏ đăng ký thì listener không được báo nữa', async () => {
+    const fn = vi.fn();
+    subscribeTransferRefreshing(fn)();
+    await lockTransferUntil(async () => undefined);
+    expect(fn).not.toHaveBeenCalled();
   });
 });

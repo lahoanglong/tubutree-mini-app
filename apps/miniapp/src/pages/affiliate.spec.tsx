@@ -66,7 +66,7 @@ vi.mock('../hooks/use-public-config', () => ({
 }));
 
 import AffiliatePage from './affiliate';
-import { resetTransferMark } from '@tubutree/app-core/ctv-dashboard';
+import { resetTransferLock } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import {
   claimCtvMilestone,
@@ -83,10 +83,9 @@ import {
 /** Dữ liệu từng tab chỉ tải khi mở tab đó. */
 const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
 
-beforeEach(() => resetTransferMark());
+beforeEach(() => resetTransferLock());
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function renderPage(qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return render(<QueryClientProvider client={qc}><AffiliatePage /></QueryClientProvider>);
 }
 
@@ -547,6 +546,50 @@ describe('Dashboard CTV — chuyển hoa hồng vào Ví', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nhận 200.000đ vào Ví' }));
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
     expect(requestPayout).toHaveBeenCalledWith(200000, expect.any(String));
+  });
+
+  describe('khoá nút Chuyển vào Ví trong lúc làm mới sau khi chuyển', () => {
+    const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const transferBtn = () => screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    /** Chuyển xong; lần làm mới dashboard sau đó treo tới khi gọi `release`. */
+    const transferAndHold = async (qc: QueryClient) => {
+      const view = renderPage(qc);
+      await openTransfer();
+      let release!: () => void;
+      vi.mocked(getAffiliateDashboard).mockReturnValueOnce(
+        new Promise((r) => (release = () => r({ withdrawableCommission: 0, tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 } } as Awaited<ReturnType<typeof getAffiliateDashboard>>))) as ReturnType<typeof getAffiliateDashboard>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Nhận 200.000đ vào Ví' }));
+      await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(transferBtn()).toBeDisabled());
+      return { view, release };
+    };
+
+    it('(a) lần tải dashboard cũ trả về trong lúc làm mới chưa xong: nút vẫn khoá', async () => {
+      const qc = newClient();
+      const { release } = await transferAndHold(qc);
+      qc.setQueryData(['affiliate-dashboard'], { withdrawableCommission: 200_000 });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(transferBtn()).toBeDisabled();
+      release();
+      await waitFor(() => expect(transferBtn()).toBeEnabled());
+    });
+
+    it('(b) gỡ trang rồi gắn lại trong lúc làm mới: nút vẫn khoá', async () => {
+      const qc = newClient();
+      const { view, release } = await transferAndHold(qc);
+      view.unmount();
+      renderPage(qc);
+      expect(await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' })).toBeDisabled();
+      release();
+      await waitFor(() => expect(transferBtn()).toBeEnabled());
+    });
+
+    it('(c) làm mới xong: nút mở', async () => {
+      const { release } = await transferAndHold(newClient());
+      release();
+      await waitFor(() => expect(transferBtn()).toBeEnabled());
+    });
   });
 
   it('gửi lại sau lỗi dùng cùng Idempotency-Key (không tạo lệnh thứ hai)', async () => {
