@@ -791,7 +791,7 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-return-ok-wallet-points', code: 'RETURN_APPROVED_WALLET_POINTS', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu và {{points}} Điểm Xanh đã hoàn vào tài khoản của bạn 🌿', createOnly: true },
   // P5 (D2/D3): đơn trả trước chờ tiền, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản. Cùng lời với migration
   // 20261014091000_p5_refunds_returns_notification_templates.
-  { id: 'nt-order-awaiting-payment', code: 'ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đang chờ thanh toán {{amount}}. Vui lòng thanh toán trước {{deadline}}, quá hạn đơn sẽ tự huỷ.', createOnly: true },
+  { id: 'nt-order-awaiting-payment', code: 'ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đang chờ thanh toán {{amount}}. Bạn thanh toán trước {{deadline}} nhé, quá hạn đơn sẽ tự huỷ.', createOnly: true },
   { id: 'nt-order-payment-expired', code: 'ORDER_PAYMENT_EXPIRED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã tự huỷ vì quá hạn thanh toán. Nếu bạn đã chuyển khoản, Tubu sẽ tạo yêu cầu hoàn tiền và báo bạn. Bạn có thể đặt lại trong mục Đơn hàng.', createOnly: true },
   { id: 'nt-return-ok-detail', code: 'RETURN_APPROVED_DETAIL', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt.{{refund_note}}', createOnly: true },
   { id: 'nt-return-rejected', code: 'RETURN_REJECTED', channel: 'INAPP', bodyTemplate: 'Yêu cầu đổi/trả đơn {{order_code}} chưa được chấp nhận. Lý do: "{{reason}}". Liên hệ Tubu qua Zalo OA nếu bạn cần hỗ trợ thêm.', createOnly: true },
@@ -804,16 +804,16 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-ops-refund', code: 'OPS_REFUND_ALERT', channel: 'INAPP', bodyTemplate: '💸 Hoàn tiền đơn {{order_code}}: {{message}}', createOnly: true },
   // Q1 (R2-MONEY-4, R2-LIFECYCLE-3): tiền khách trả không khớp đơn. Cùng lời với migration 20261014160100_q1_money_refunds_templates.
   { id: 'nt-ops-payment', code: 'OPS_PAYMENT_ALERT', channel: 'INAPP', bodyTemplate: '⚠️ Thanh toán đơn {{order_code}}: {{message}}', createOnly: true },
-  { id: 'nt-order-underpaid', code: 'ORDER_UNDERPAID', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{paid}} cho đơn {{order_code}}, còn thiếu {{missing}} (tổng {{total}}). Vui lòng chuyển thêm phần còn thiếu với nội dung {{order_code}}. Nếu đơn bị huỷ, Tubu sẽ hoàn lại số tiền đã nhận.', createOnly: true },
+  { id: 'nt-order-underpaid', code: 'ORDER_UNDERPAID', channel: 'INAPP', bodyTemplate: 'Tubu đã nhận {{paid}} cho đơn {{order_code}}, còn thiếu {{missing}} (tổng {{total}}). Bạn chuyển thêm phần còn thiếu với nội dung {{order_code}} nhé. Nếu đơn bị huỷ, Tubu sẽ hoàn lại số tiền đã nhận.', createOnly: true },
   { id: 'nt-cashback-paid', code: 'CASHBACK_PAID', channel: 'INAPP', bodyTemplate: 'Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿' },
   { id: 'nt-reorder', code: 'REORDER_REMINDER', channel: 'INAPP', bodyTemplate: '{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒' },
   { id: 'nt-pricedrop', code: 'PRICE_DROP_ALERT', channel: 'INAPP', bodyTemplate: '{{product}} bạn yêu thích đang giảm giá{{price_note}}! Xem ngay 💚' },
   { id: 'nt-sub-order', code: 'SUBSCRIPTION_ORDER', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿' },
   // Mọi nhánh tạm dừng (SP ngừng bán, địa chỉ hỏng, Ví Tubu không đủ — C-015) đều truyền {{reason}}. Prod nhận lời này
   // và mẫu chuyển khoản dưới qua migration 20261010191000_subscription_second_order_templates_fix.
-  { id: 'nt-sub-pause', code: 'SUBSCRIPTION_PAUSED', channel: 'INAPP', bodyTemplate: 'Lịch đặt định kỳ đã tạm dừng: {{reason}}. Vui lòng kiểm tra lại rồi bật lại lịch nhé 🌿' },
+  { id: 'nt-sub-pause', code: 'SUBSCRIPTION_PAUSED', channel: 'INAPP', bodyTemplate: 'Lịch đặt định kỳ đã tạm dừng: {{reason}}. Bạn kiểm tra lại rồi bật lại lịch nhé 🌿' },
   // Gói trả bằng chuyển khoản (C-015, Q-13): đơn kỳ chờ tiền, quá hạn thì cron huỷ đơn như đơn trả trước thường.
-  { id: 'nt-sub-order-awaiting-payment', code: 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo, vui lòng chuyển khoản {{amount}}đ trong {{hours}} giờ để Tubu giao hàng. Quá hạn đơn kỳ này sẽ tự huỷ, lịch vẫn giữ cho kỳ sau 🌿' },
+  { id: 'nt-sub-order-awaiting-payment', code: 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ {{order_code}} đã được tạo, bạn chuyển khoản {{amount}}đ trong {{hours}} giờ để Tubu giao hàng. Quá hạn đơn kỳ này sẽ tự huỷ, lịch vẫn giữ cho kỳ sau 🌿' },
   // Thiếu mẫu này thì notify() rơi về fallback = in NGUYÊN VĂN mã code cho khách
   // ("SUBSCRIPTION_ORDER_FAILED"), và biến {{reason}} không bao giờ hiển thị.
   { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. {{retry}} 🌿' },

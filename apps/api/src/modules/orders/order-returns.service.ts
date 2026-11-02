@@ -169,7 +169,7 @@ export function refundNote(refund: RefundOutcome | null, bank: { bankName?: stri
  */
 function assertNotOwnReturn(actorId: string, req: { userId: string }): void {
   if (req.userId === actorId) {
-    throw new ForbiddenException('Bạn không thể tự xử lý yêu cầu đổi/trả của chính mình. Bạn nhờ người khác trong đội ngũ duyệt nhé.');
+    throw new ForbiddenException('Bạn không thể tự xử lý yêu cầu đổi/trả của chính mình. Nhờ người khác trong đội ngũ duyệt giúp.');
   }
 }
 

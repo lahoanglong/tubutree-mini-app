@@ -472,7 +472,7 @@ describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và l�
     expect(container.querySelector('[role="alert"]')).toBeNull();
     click(byText(container, 'button', 'Xem thêm'));
     await flush(6);
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Không tải thêm được thông báo. Thử lại sau ít phút.');
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Không tải thêm được thông báo. Bạn thử lại nhé.');
     expect(container.textContent).toContain('Tin số 0');
     expect(byText(container, 'button', 'Xem thêm')).not.toBeNull();
   });

@@ -6,7 +6,7 @@
 export const ERROR_GENERIC = 'Đã có lỗi xảy ra. Bạn thử lại nhé.';
 export const ERROR_NETWORK = 'Mất kết nối. Kiểm tra mạng rồi thử lại.';
 export const AVATAR_READ_FAILED = 'Không tải được ảnh. Thử lại sau ít phút.';
-export const loadMoreFailed = (what: string): string => `Không tải thêm được ${what}. Thử lại sau ít phút.`;
+export const loadMoreFailed = (what: string): string => `Không tải thêm được ${what}. Bạn thử lại nhé.`;
 
 export const REQUIRED_FIELD = 'Bạn điền giúp Tubu mục này nhé';
 export const BANK_NAME_REQUIRED = 'Nhập tên ngân hàng.';

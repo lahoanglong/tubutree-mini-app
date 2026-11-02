@@ -47,10 +47,10 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.sheetOverQuota': 'Giờ vàng còn {n} suất. Mua {qty} thì cả dòng tính giá thường.',
   // Giỏ đã có sẵn phân loại này: thêm giỏ cộng dồn và máy chủ giá cả dòng (n + qty = total), nên nói theo giỏ, không nêu nguyên nhân chặn.
   'flash.sheetOverInCart': 'Giỏ đã có {n}. Thêm {qty} thì cả {total} sản phẩm tính giá thường.',
-  // Giỏ đã vượt suất từ trước (n > allowance): dòng giỏ đang tính giá thường rồi, phần thêm không phải nguyên nhân mất giá.
   // Khách đã mua bớt suất ở các đơn trước (perUserLeft nhỏ hơn giới hạn mỗi khách): hết hẳn thì 'flash.sheetSpent', còn một phần thì câu này. Chữ "không còn suất" đúng cả khi khách là người tạo đợt (máy chủ cũng trả 0).
   'flash.sheetSpent': 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.',
   'flash.sheetOverLeft': 'Bạn còn {n} suất Giờ vàng. Mua {qty} thì cả dòng tính giá thường.',
+  // Giỏ đã vượt suất từ trước (n > allowance): dòng giỏ đang tính giá thường rồi, phần thêm không phải nguyên nhân mất giá.
   'flash.sheetOverInCartAlready': 'Giỏ đã có {n}, quá {allowance} suất Giờ vàng nên cả dòng đang tính giá thường.',
   // "Mua ngay" thanh toán cả dòng giỏ của phân loại (số có sẵn + số thêm), nên nói trước khi bấm khi giỏ đã có sẵn mà chưa mất giá.
   'flash.sheetBuyMerge': 'Giỏ đã có {n}: Mua ngay thanh toán cả {total} sản phẩm.',

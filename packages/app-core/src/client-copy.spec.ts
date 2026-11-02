@@ -21,7 +21,7 @@ describe('client-copy: chữ dùng chung hai app', () => {
     expect(copy.ERROR_GENERIC).toBe('Đã có lỗi xảy ra. Bạn thử lại nhé.');
     expect(copy.ERROR_NETWORK).toBe('Mất kết nối. Kiểm tra mạng rồi thử lại.');
     expect(copy.AVATAR_READ_FAILED).toBe('Không tải được ảnh. Thử lại sau ít phút.');
-    expect(copy.loadMoreFailed('thông báo')).toBe('Không tải thêm được thông báo. Thử lại sau ít phút.');
+    expect(copy.loadMoreFailed('thông báo')).toBe('Không tải thêm được thông báo. Bạn thử lại nhé.');
   });
 
   it('nhập tài khoản nhận hoàn tiền và chuyển khoản', () => {
