@@ -13,6 +13,7 @@ import { GeoService } from './geo.service';
 import { QUEUE_PANCAKE_EVENTS, QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { LifecycleModule } from '../../lifecycle/lifecycle.module';
 import { OrdersModule } from '../../orders/orders.module';
+import { ImageRegistryModule } from '../../catalog/image-registry.module';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { PancakeSyncHooksModule } from './pancake-sync-hooks.module';
 import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module';
@@ -29,6 +30,7 @@ import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module
     OrdersModule,
     PancakeSyncHooksModule,
     CronLeaderModule,
+    ImageRegistryModule,
   ],
   controllers: [PancakeWebhookController, PancakeController, GeoController],
   providers: [

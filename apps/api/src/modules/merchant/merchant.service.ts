@@ -30,6 +30,7 @@ import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
 import { DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED, isStorefrontSubdomainEnabled, withSubdomainFlag } from '../storefront/storefront-config';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { contentChangedPatch } from '../storefront/storefront-content-change';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
@@ -252,6 +253,7 @@ export class MerchantService {
     private readonly orderStatus: OrderStatusService,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly config?: SystemConfigService,
+    @Optional() private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
@@ -620,6 +622,7 @@ export class MerchantService {
         },
       });
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+    if (product.images.length > 0 || product.thumbnail) this.imageStale?.markStale();
 
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
@@ -768,6 +771,8 @@ export class MerchantService {
         });
       }
     });
+    // Sản phẩm đang bán chỉ đổi ảnh trong bản chờ duyệt (không vào danh sách ảnh); các trường hợp còn lại ảnh mới đã ghi vào sản phẩm.
+    if (!liveEdit && imagesChanged) this.imageStale?.markStale();
     if (reReview || startsDraft) {
       await notifyAdmins(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },

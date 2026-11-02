@@ -46,6 +46,24 @@ function build(opts: { role?: string; store?: Record<string, unknown>; pancakeRo
 
 const BASE = { name: 'Mật ong', description: 'Mật ong rừng U Minh', basePrice: 200_000 };
 
+describe('MerchantService — ảnh mới vào danh sách ảnh được đổi cỡ (R-182)', () => {
+  it('đăng sản phẩm có ảnh → đánh dấu danh sách cũ', async () => {
+    const { prisma, notify } = build();
+    const stale = { markStale: jest.fn() };
+    const svc = new MerchantService(prisma as unknown as PrismaService, orderStatus, { notify } as never, undefined, stale as never);
+    await svc.createProduct('u1', { ...BASE, images: ['https://res.cloudinary.com/x/a.jpg'] });
+    expect(stale.markStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('đăng sản phẩm không ảnh → không đánh dấu', async () => {
+    const { prisma, notify } = build();
+    const stale = { markStale: jest.fn() };
+    const svc = new MerchantService(prisma as unknown as PrismaService, orderStatus, { notify } as never, undefined, stale as never);
+    await svc.createProduct('u1', BASE);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+});
+
 describe('MerchantService — đăng sản phẩm (SELLER-1, D4)', () => {
   it('CTV (gian hàng CTV) không được đăng sản phẩm riêng', async () => {
     const { svc, productCreate } = build({ role: 'AFFILIATE', store: { ...MERCHANT_STORE, type: 'CTV' } });
@@ -450,7 +468,7 @@ describe('SELLER-5: đơn của gian hàng lọc theo khoá ngoại, không so c
 });
 
 describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
-  function buildEdit(product: Record<string, unknown>, linkable: unknown = PANCAKE_ROW) {
+  function buildEdit(product: Record<string, unknown>, linkable: unknown = PANCAKE_ROW, stale?: { markStale: jest.Mock }) {
     const variationFindFirst = jest.fn().mockResolvedValue(linkable);
     const productUpdate = jest.fn().mockResolvedValue({});
     const productUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
@@ -477,7 +495,7 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     };
     p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
     return {
-      svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify } as never),
+      svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify } as never, undefined, stale as never),
       variationFindFirst,
       productUpdate,
       productUpdateMany,
@@ -502,6 +520,29 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     variations: [{ id: 'v-a' }],
   };
   const DRAFT = { id: 'd1', name: 'Mật ong rừng', description: 'x', shortDesc: null, images: [], thumbnail: null };
+
+  describe('R-182: ảnh ghi thẳng vào sản phẩm thì danh sách ảnh được đổi cỡ bị đánh dấu cũ', () => {
+    const NEW_IMG = ['https://res.cloudinary.com/x/new.jpg'];
+    it('sản phẩm bị từ chối, đối tác đổi ảnh (ghi thẳng vào sản phẩm) → đánh dấu', async () => {
+      const stale = { markStale: jest.fn() };
+      const { svc, productUpdate } = buildEdit({ ...OWN, approvalStatus: 'REJECTED', rejectReason: 'Ảnh mờ' }, PANCAKE_ROW, stale);
+      await svc.updateProduct('u1', 'prod-a', { images: NEW_IMG });
+      expect(productUpdate.mock.calls[0]![0].data.images).toEqual(NEW_IMG);
+      expect(stale.markStale).toHaveBeenCalledTimes(1);
+    });
+    it('sản phẩm bị từ chối, chỉ đổi tên (ảnh y nguyên) → không đánh dấu', async () => {
+      const stale = { markStale: jest.fn() };
+      const { svc } = buildEdit({ ...OWN, approvalStatus: 'REJECTED', rejectReason: 'x' }, PANCAKE_ROW, stale);
+      await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng' });
+      expect(stale.markStale).not.toHaveBeenCalled();
+    });
+    it('sản phẩm đang bán, ảnh mới vào bản chờ duyệt (chưa vào sản phẩm) → không đánh dấu', async () => {
+      const stale = { markStale: jest.fn() };
+      const { svc } = buildEdit(OWN, PANCAKE_ROW, stale);
+      await svc.updateProduct('u1', 'prod-a', { images: NEW_IMG });
+      expect(stale.markStale).not.toHaveBeenCalled();
+    });
+  });
 
   it('đổi giá/tồn có hiệu lực ngay, không phải duyệt lại', async () => {
     const { svc, productUpdate, variationUpdate, draftUpsert } = buildEdit(OWN);

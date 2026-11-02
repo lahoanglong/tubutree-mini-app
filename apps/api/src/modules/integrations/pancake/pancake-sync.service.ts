@@ -5,6 +5,7 @@ import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
+import { ImageRegistryStale } from '../../catalog/image-registry-stale';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
@@ -94,6 +95,7 @@ export class PancakeSyncService implements OnModuleInit {
     private readonly lifecycle: LifecycleService,
     @Optional() private readonly cronLeader?: CronLeaderService,
     @Optional() private readonly systemConfig?: SystemConfigService,
+    @Optional() private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
@@ -433,6 +435,11 @@ export class PancakeSyncService implements OnModuleInit {
     const inferred = this.inferSegments(p.name);
     // Danh mục: admin gán tay là của admin — đồng bộ chỉ điền khi sản phẩm CHƯA có danh mục nào.
     const mappedCats = (existing?.categoryIds?.length ?? 0) === 0 ? await this.mappedCategoryIds(p) : [];
+
+    // Chỉ đánh dấu khi ảnh thật sự đổi: lượt quét hàng trăm sản phẩm không đổi ảnh không làm /img nạp lại danh sách.
+    if (!existing || baseData.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(baseData.images) !== JSON.stringify(existing.images ?? [])) {
+      this.imageStale?.markStale();
+    }
 
     const product = existing
       ? await this.prisma.product.update({

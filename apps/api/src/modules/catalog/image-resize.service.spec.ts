@@ -11,6 +11,7 @@ const lookupMock = jest.fn();
 jest.mock('node:dns', () => ({ lookup: (...args: unknown[]) => lookupMock(...args) }));
 
 import { ImageResizeService } from './image-resize.service';
+import { ImageRegistryStale } from './image-registry-stale';
 import { MAX_SOURCE_BYTES } from './image-resize';
 
 let dir: string;
@@ -33,7 +34,7 @@ afterEach(() => {
 const ownImages = (data: Buffer | null) => ({ get: jest.fn(async () => (data ? { mime: 'image/png', data, versionOk: true } : Promise.reject(new NotFoundException()))) });
 const REGISTERED = ['a.jpg', 'a.png', 'big.jpg', 'big2.jpg', 'dns.png', 'bomb.png'].map((n) => `https://content.pancake.vn/${n}`);
 const prismaWith = (urls: string[] = REGISTERED) => ({ $queryRaw: jest.fn(async () => urls.map((u) => ({ u }))) });
-const make = (own = ownImages(png), prisma = prismaWith()) => ({ svc: new ImageResizeService(own as never, prisma as never), own, prisma });
+const make = (own = ownImages(png), prisma = prismaWith()) => ({ svc: new ImageResizeService(own as never, prisma as never, new ImageRegistryStale()), own, prisma });
 
 /** Phản hồi giả của https.request: gọi callback với res rồi phát dữ liệu. */
 function fakeHttps(res: { status: number; headers?: Record<string, string>; body?: Buffer }) {
@@ -298,5 +299,36 @@ describe('ImageResizeService', () => {
     const res = await svc.prune();
     expect(res.bytes).toBeLessThanOrEqual(0.8 * 1024 * 1024);
     expect(readdirSync(sub).sort()).toEqual(['f2', 'f3', 'f4', 'f5']);
+  });
+});
+
+describe('ImageResizeService — ảnh mới từ đồng bộ/đối tác (R-182)', () => {
+  it('bên ghi ảnh đánh dấu ImageRegistryStale (không qua ImageResizeService): lần /img kế tiếp không 404, không đợi 30 giây', async () => {
+    const rows: string[][] = [[], ['https://content.pancake.vn/a.jpg']];
+    let call = 0;
+    const prisma = { $queryRaw: jest.fn(async () => (rows[Math.min(call++, 1)] ?? []).map((u) => ({ u }))) };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    stale.markStale();
+    now.mockReturnValue(1_002_000);
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).resolves.toBeDefined();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
+  it('đánh dấu hàng trăm lần trong một lượt đồng bộ chỉ gây một lần nạp lại', async () => {
+    const prisma = prismaWith();
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    await svc.get('https://content.pancake.vn/a.jpg', 320, 'webp');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 300; i++) stale.markStale();
+    await svc.get('https://content.pancake.vn/a.png', 320, 'webp');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
   });
 });
