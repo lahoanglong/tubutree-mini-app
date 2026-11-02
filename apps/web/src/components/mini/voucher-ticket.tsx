@@ -13,8 +13,9 @@ export interface VoucherTicketProps {
   /**
    * Nút duy nhất của phiếu: Lưu mã / Dùng ngay. Bỏ qua ở mã đã dùng, hết hạn, hết lượt.
    * `ariaLabel`: tên đọc khi nhãn ngắn ("Dùng") không đủ phân biệt các phiếu cùng danh sách.
+   * `busy`: nút này đang chạy (aria-busy); `disabled`: nơi gọi đang khoá cả danh sách vì thao tác khác đang chạy (aria-disabled, không aria-busy).
    */
-  primary?: { label: string; onClick: () => void; busy?: boolean; ariaLabel?: string };
+  primary?: { label: string; onClick: () => void; busy?: boolean; disabled?: boolean; ariaLabel?: string };
   /** Có thì phần thân (tiêu đề, điều kiện, hạn) là nút mở chi tiết, đứng cạnh nút chính chứ không bao nó. */
   onDetail?: () => void;
   /**
@@ -109,7 +110,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).
   const reasonText = inactive ? '' : reason ?? '';
   const showPrimary = primary && !inactive;
-  const blocked = ineligible || Boolean(primary?.busy);
+  const blocked = ineligible || Boolean(primary?.busy) || Boolean(primary?.disabled);
   const describedBy = reasonText ? `${uid}-reason` : ineligible && v.condition ? `${uid}-meta` : undefined;
 
   const small = variant !== 'ticket';

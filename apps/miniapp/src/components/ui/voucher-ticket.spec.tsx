@@ -273,6 +273,16 @@ describe('VoucherTicket', () => {
       expect(q('voucher-saving')!.style.color).toBe('var(--color-status-success-fg)');
     });
 
+    it('primary.disabled: nút aria-disabled (không aria-busy), bấm không gọi onClick', () => {
+      const onClick = vi.fn();
+      render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', onClick, disabled: true }} />);
+      const btn = screen.getByRole('button', { name: 'Dùng' });
+      expect(btn).toHaveAttribute('aria-disabled', 'true');
+      expect(btn).not.toHaveAttribute('aria-busy');
+      fireEvent.click(btn);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
     it('primary.ariaLabel thành tên của nút', () => {
       render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', ariaLabel: 'Dùng mã FUWA3E', onClick: vi.fn() }} />);
       expect(screen.getByRole('button', { name: 'Dùng mã FUWA3E' })).toBeInTheDocument();

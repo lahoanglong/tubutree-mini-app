@@ -6,9 +6,9 @@ export interface VoucherPickerProps {
   rows: readonly PickerRow[];
   onUse: (code: string) => void;
   onRemove: () => void;
-  /** Có thao tác đang chạy hoặc trang chứa đang đổi mã: mọi nút `aria-busy`, không bấm được (hai lần đổi mã không chồng nhau). */
+  /** Có thao tác đang chạy hoặc trang chứa đang đổi mã: mọi nút `aria-disabled`, không bấm được (hai lần đổi mã không chồng nhau). */
   busy?: boolean;
-  /** Mã đang được áp: chỉ nút của mã đó `aria-busy` khi `busy` không bật. */
+  /** Mã đang được áp hoặc gỡ: nút của mã đó `aria-busy`. */
   pendingCode?: string | null;
 }
 
@@ -33,7 +33,8 @@ export function VoucherPicker({ rows, onUse, onRemove, busy = false, pendingCode
             primary={{
               label: r.label,
               ariaLabel: r.ariaLabel,
-              busy: busy || pendingCode === r.coupon.code,
+              busy: pendingCode === r.coupon.code,
+              disabled: busy,
               onClick: r.action === 'use' ? () => onUse(r.coupon.code) : r.action === 'remove' ? onRemove : NOOP,
             }}
           />

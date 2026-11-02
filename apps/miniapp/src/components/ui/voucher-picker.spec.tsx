@@ -60,10 +60,13 @@ describe('VoucherPicker (Mini)', () => {
     expect(screen.getByTestId('voucher-saving')).toHaveTextContent('Giảm 20.000đ cho đơn này');
   });
 
-  it('busy: mọi nút aria-busy và bấm không gọi gì; pendingCode cũng khoá', () => {
+  it('busy: mọi nút aria-disabled (không aria-busy) và bấm không gọi gì', () => {
     const p = props({ busy: true });
     render(<VoucherPicker {...p} />);
-    for (const b of screen.getAllByRole('button')) expect(b).toHaveAttribute('aria-busy', 'true');
+    for (const b of screen.getAllByRole('button')) {
+      expect(b).toHaveAttribute('aria-disabled', 'true');
+      expect(b).not.toHaveAttribute('aria-busy');
+    }
     fireEvent.click(screen.getByRole('button', { name: 'Dùng mã OK' }));
     fireEvent.click(screen.getByRole('button', { name: 'Bỏ chọn mã APPLIED' }));
     expect(p.onUse).not.toHaveBeenCalled();

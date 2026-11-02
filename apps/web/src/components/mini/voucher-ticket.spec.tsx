@@ -225,6 +225,16 @@ describe('VoucherTicket (web)', () => {
       expect(q('voucher-saving')!.style.color).toBe('var(--color-status-success-fg)');
     });
 
+    it('primary.disabled: nút aria-disabled (không aria-busy), bấm không gọi onClick', () => {
+      const onClick = vi.fn();
+      mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', onClick, disabled: true }} />);
+      const btn = buttons()[0]!;
+      expect(btn.getAttribute('aria-disabled')).toBe('true');
+      expect(btn.getAttribute('aria-busy')).toBeNull();
+      click(btn);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
     it('primary.ariaLabel thành aria-label của nút', () => {
       mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', ariaLabel: 'Dùng mã FUWA3E', onClick: vi.fn() }} />);
       expect(buttons()[0]!.getAttribute('aria-label')).toBe('Dùng mã FUWA3E');

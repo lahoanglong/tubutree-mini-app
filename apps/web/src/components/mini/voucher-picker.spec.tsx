@@ -62,10 +62,13 @@ describe('VoucherPicker (web)', () => {
     expect(q('voucher-saving')[0]!.textContent).toBe('Giảm 20.000đ cho đơn này');
   });
 
-  it('busy: mọi nút aria-busy và bấm không gọi gì; pendingCode chỉ khoá nút của mã đó', () => {
+  it('busy: mọi nút aria-disabled (không aria-busy) và bấm không gọi gì; pendingCode chỉ đặt aria-busy cho nút của mã đó', () => {
     const p = props({ busy: true });
     const a = mount(<VoucherPicker {...p} />);
-    for (const b of buttons()) expect(b.getAttribute('aria-busy')).toBe('true');
+    for (const b of buttons()) {
+      expect(b.getAttribute('aria-disabled')).toBe('true');
+      expect(b.getAttribute('aria-busy')).toBeNull();
+    }
     click(byName('Dùng mã OK'));
     click(byName('Bỏ chọn mã APPLIED'));
     expect(p.onUse).not.toHaveBeenCalled();
