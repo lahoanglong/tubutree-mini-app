@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
+import { ImageRegistryStale } from '../../catalog/image-registry-stale';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
@@ -94,6 +95,7 @@ export class PancakeSyncService implements OnModuleInit {
     private readonly lifecycle: LifecycleService,
     @Optional() private readonly cronLeader?: CronLeaderService,
     @Optional() private readonly systemConfig?: SystemConfigService,
+    @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
@@ -434,6 +436,10 @@ export class PancakeSyncService implements OnModuleInit {
     // Danh mục: admin gán tay là của admin — đồng bộ chỉ điền khi sản phẩm CHƯA có danh mục nào.
     const mappedCats = (existing?.categoryIds?.length ?? 0) === 0 ? await this.mappedCategoryIds(p) : [];
 
+    // Chỉ đánh dấu khi ảnh thật sự đổi, và đánh dấu SAU khi ghi xong: đánh dấu trước thì một /img xen giữa nạp lại, xoá cờ mà DB
+    // chưa thấy ảnh mới. Có /img xen giữa thì một lượt đồng bộ có thể gây vài lần nạp nối tiếp, mỗi lần một truy vấn rẻ.
+    const imagesChanged = !existing || baseData.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(baseData.images) !== JSON.stringify(existing.images ?? []);
+
     const product = existing
       ? await this.prisma.product.update({
           where: { id: existing.id },
@@ -454,6 +460,7 @@ export class PancakeSyncService implements OnModuleInit {
             categoryIds: mappedCats,
           },
         });
+    if (imagesChanged) this.imageStale?.markStale();
 
     // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
     // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.
