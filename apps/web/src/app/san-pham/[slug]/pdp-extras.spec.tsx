@@ -158,6 +158,18 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     click(copy());
     await flush();
     expect(toast()!.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
+    // Không chép được là thông tin, không phải thành công: kiểu "info" như snackbar của Mini App, không nền xanh thành công.
+    expect(toast()!.className).toContain('bg-info-bg');
+    expect(toast()!.className).not.toContain('bg-forest-800');
+  });
+  it('món đang ở giá Giờ vàng góp 0 vào tiền hàng áp mã (máy chủ không tính dòng Giờ vàng): "Mua thêm" đủ số đơn tối thiểu', async () => {
+    mocks.http.get.mockResolvedValue([coupon('BIG', { minOrder: 250000 })]);
+    mocks.flash = [{ itemId: 'i1', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 100000, retailPrice: 150000, soldCount: 1, quota: 40 }];
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    click(rowButton(container));
+    await flush();
+    expect(dialog()!.textContent).toContain('Mua thêm 250k để dùng');
   });
   it('xếp mã theo lợi cho món đang xem: mã đủ điều kiện trước, mã còn thiếu đơn tối thiểu sau và ghi "Mua thêm … để dùng"', async () => {
     mocks.http.get.mockResolvedValue([coupon('BIG', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 250000 }), coupon('K20')]);

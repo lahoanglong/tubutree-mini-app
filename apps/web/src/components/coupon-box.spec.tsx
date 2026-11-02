@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   applied: [] as string[],
   applyError: null as Error | null,
+  removeError: null as Error | null,
   applyGate: null as Promise<void> | null,
   applyCart: {} as Record<string, unknown>,
   removed: 0,
@@ -25,6 +26,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     return { items: [], couponCode: code, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0, ...state.applyCart };
   },
   removeCoupon: async () => {
+    if (state.removeError) throw state.removeError;
     state.removed += 1;
     return { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0 };
   },
@@ -51,6 +53,7 @@ const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonEle
 beforeEach(() => {
   state.applied = [];
   state.applyError = null;
+  state.removeError = null;
   state.applyGate = null;
   state.applyCart = {};
   state.removed = 0;
@@ -220,6 +223,17 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     expect(btn.textContent).toBe('Không áp dụng');
     click(btn);
     expect(state.applied).toEqual([]);
+  });
+
+  it('máy chủ chặn vì lý do khác dù giỏ dưới đơn tối thiểu: giữ lý do máy chủ, nhãn "Không áp dụng", không bảo mua thêm', async () => {
+    const reason = 'Mã chỉ dành cho khách đặt đơn đầu tiên.';
+    state.coupons = [c('WELCOME', { minOrder: 400000 })];
+    state.previews.mockResolvedValue([{ code: 'WELCOME', eligible: false, reason, discount: 0 }]);
+    const box = await mountWith({ addressId: 'a1' });
+    const li = card(box, 'WELCOME');
+    expect(li.textContent).toContain(reason);
+    expect(li.textContent).not.toContain('Mua thêm');
+    expect(li.querySelector('button')!.textContent).toBe('Không áp dụng');
   });
 
   it('API cũ / lỗi: giữ cách hiện cũ (không có số, phép đoán phía máy vẫn chạy)', async () => {
@@ -556,6 +570,17 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(label(box)).toBeNull();
     expect(box.textContent).toContain('Bạn có 2 mã dùng được · giảm đến 43.800đ');
     expect(state.applied).toEqual(['GIAM30']);
+  });
+
+  it('điện thoại: gỡ mã tự áp lỗi khi bảng đang đóng thì lỗi hiện dưới hàng mã, mã vẫn còn', async () => {
+    phone();
+    const box = await mountHarness();
+    state.removeError = new Error('Mất mạng, thử lại nhé');
+    click(remove(box));
+    await flush(10);
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain('Mất mạng');
+    expect(label(box)).not.toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('khách tự chọn mã khác → nhãn "Đã tự áp" biến mất', async () => {

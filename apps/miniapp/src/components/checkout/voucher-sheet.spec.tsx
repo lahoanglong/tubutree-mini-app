@@ -454,6 +454,16 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     expect(screen.getByText('Giảm 1.000đ cho đơn này')).toBeInTheDocument();
   });
 
+  it('máy chủ chặn vì lý do khác dù giỏ dưới đơn tối thiểu: giữ lý do máy chủ, nhãn "Không áp dụng", không bảo mua thêm', async () => {
+    const reason = 'Mã chỉ dành cho khách đặt đơn đầu tiên.';
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], code: 'WELCOME', minOrder: 200_000 }]);
+    mocks.getCouponPreviews.mockResolvedValue([{ code: 'WELCOME', eligible: false, reason, discount: 0 }]);
+    renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 120_000 });
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Không áp dụng mã WELCOME$/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByText(/Mua thêm/)).toBeNull();
+  });
+
   it('API cũ / lỗi: giữ cách hiện cũ (không có số, phép đoán phía máy vẫn chạy)', async () => {
     mocks.getCouponPreviews.mockRejectedValue(new Error('404'));
     renderSheet(undefined, { previewParams: { addressId: 'a1' }, shippingFee: 0 });

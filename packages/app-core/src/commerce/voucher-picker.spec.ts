@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CouponPreviewDTO } from '@tubutree/shared-types';
 import type { CouponDTO } from '../api/loyalty';
-import { offerRows, pickerRows, type PickerContext } from './voucher-picker';
+import { offerAmount, offerRows, pickerRows, type PickerContext } from './voucher-picker';
 
 const NOW = Date.parse('2026-11-01T05:00:00Z');
 const D = 86_400_000;
@@ -96,6 +96,27 @@ describe('pickerRows: nhãn nút, lý do, mức giảm', () => {
     const row = pickerRows([c('NEW', { minOrder: 100_000 })], ctx({ previews: previewMap(preview('NEW', { eligible: false, reason: 'Mã chỉ dành cho đơn đầu tiên.' })) }))[0]!;
     expect(row).toMatchObject({ group: 'blocked', reason: 'Mã chỉ dành cho đơn đầu tiên.' });
     expect(row.view.condition).toBe('Đơn từ 100k');
+  });
+
+  it('máy chủ chặn vì lý do khác dù giỏ dưới đơn tối thiểu: không bảo khách mua thêm, giữ câu máy chủ, nhãn "Không áp dụng"', () => {
+    const coupon = c('WELCOME', { minOrder: 200_000 });
+    for (const reason of ['Mã chỉ dành cho khách đặt đơn đầu tiên.', 'Mã không áp dụng cho sản phẩm trong giỏ.', 'Bạn đã dùng hết lượt cho mã này.']) {
+      const row = pickerRows([coupon], ctx({ subtotal: 120_000, previews: previewMap(preview('WELCOME', { eligible: false, reason })) }))[0]!;
+      expect(row).toMatchObject({ group: 'blocked', action: 'blocked', label: 'Không áp dụng', reason });
+      expect(row.reason).not.toContain('Mua thêm');
+    }
+  });
+
+  it('máy chủ không nêu lý do và giỏ dưới đơn tối thiểu: vẫn là "Mua thêm"', () => {
+    const row = pickerRows([c('SHORT', { minOrder: 200_000 })], ctx({ subtotal: 120_000, previews: previewMap(preview('SHORT', { eligible: false })) }))[0]!;
+    expect(row).toMatchObject({ group: 'short', label: 'Chưa đủ', reason: 'Mua thêm 80k để dùng' });
+  });
+
+  it('câu đơn tối thiểu của máy chủ chỉ bỏ dòng "Đơn từ …", mã gắn sản phẩm vẫn nói chỉ áp cho sản phẩm nào', () => {
+    const scoped = c('GCHIA', { minOrder: 200_000, products: [{ id: 'p1', name: 'Hạt chia' }] });
+    const row = pickerRows([scoped], ctx({ subtotal: 300_000, productIds: ['p1', 'p2'], previews: previewMap(preview('GCHIA', { eligible: false, reason: 'Đơn tối thiểu 200.000đ để dùng mã này.' })) }))[0]!;
+    expect(row).toMatchObject({ group: 'blocked', reason: 'Đơn tối thiểu 200.000đ để dùng mã này.' });
+    expect(row.view.condition).toBe('Chỉ áp cho Hạt chia');
   });
 
   it('đơn tối thiểu 0 hoặc null: không có dòng điều kiện', () => {
@@ -193,5 +214,17 @@ describe('offerRows: sheet Ưu đãi ở trang sản phẩm', () => {
       { amount: 100_000, now: NOW },
     );
     expect(rows.map((r) => r.coupon.code)).toEqual(['B', 'A', 'NEAR', 'FAR']);
+  });
+});
+
+describe('offerAmount: tiền hàng của món đang xem cho mã', () => {
+  it('giá thường nhân số lượng; món đang Giờ vàng góp 0 vì máy chủ không tính dòng Giờ vàng vào tiền hàng áp mã', () => {
+    expect(offerAmount(120_000, 2, false)).toBe(240_000);
+    expect(offerAmount(90_000, 2, true)).toBe(0);
+  });
+
+  it('món Giờ vàng: mã có đơn tối thiểu hiện "Mua thêm" đủ số, không bảo là đã đủ', () => {
+    const rows = offerRows([c('MIN', { minOrder: 199_000 })], { amount: offerAmount(250_000, 1, true), now: NOW });
+    expect(rows[0]!.reason).toBe('Mua thêm 199k để dùng');
   });
 });

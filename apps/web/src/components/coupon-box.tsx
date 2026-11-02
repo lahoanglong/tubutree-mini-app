@@ -467,7 +467,7 @@ export function CouponBox({
           {applyWarning}
         </p>
       )}
-      {err && !inSheet && (
+      {err && (!inSheet || !open) && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {err}
         </p>

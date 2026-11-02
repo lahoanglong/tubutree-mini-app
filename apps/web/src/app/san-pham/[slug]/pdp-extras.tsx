@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
-import { offerRows } from '@tubutree/app-core/commerce/voucher-picker';
+import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
@@ -55,14 +55,16 @@ type PointsEarnProduct = {
 };
 
 /** Tiền hàng của món đang xem: giá phân loại đang chọn (đã tính Giờ vàng) × số lượng; chưa chọn thì giá thẻ × 1. */
-function usePdpAmount(product: PointsEarnProduct): number {
+function usePdpPricing(product: PointsEarnProduct): { amount: number; isFlash: boolean; unit: number; quantity: number } {
   const flash = runningFlash(useActiveFlashSales());
   useFlashListExpiry(flash);
   const selection = usePdpSelection();
   const selected = product.variations.find((v) => v.id === selection?.selectedId);
-  const unit = selected ? variationPricing(selected, flash).price : cardPricing(product, flash).price;
-  return unit * (selection?.quantity ?? 1);
+  const { price: unit, isFlash } = selected ? variationPricing(selected, flash) : cardPricing(product, flash);
+  const quantity = selection?.quantity ?? 1;
+  return { amount: unit * quantity, isFlash, unit, quantity };
 }
+const usePdpAmount = (product: PointsEarnProduct): number => usePdpPricing(product).amount;
 
 /**
  * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập thì server tính hệ số 1; tài khoản có hạng lấy hệ số từ
@@ -164,7 +166,8 @@ export function PdpShippingRow({ children, pressable = true }: { children: React
 export function PdpCoupons({ productId, product, divider = true }: { productId: string; product: PointsEarnProduct; divider?: boolean }) {
   const phase = useAuthPhase();
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: phase === 'authenticated' });
-  const amount = usePdpAmount(product);
+  const pricing = usePdpPricing(product);
+  const amount = offerAmount(pricing.unit, pricing.quantity, pricing.isFlash);
   const [open, setOpen] = useState(false);
   const { notice, notify } = useGameNotice();
   const list = pdpCoupons(couponsQ.data, productId);
@@ -178,7 +181,7 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
       ok = false;
     }
     // Thông báo nổi như snackbar của Mini App: một dòng trong hộp thoại sẽ làm hộp cao thêm mỗi lần chép.
-    notify(fillCopy(ok ? 'coupon.copiedToast' : 'coupon.copyShowToast', { code }), 'success');
+    notify(fillCopy(ok ? 'coupon.copiedToast' : 'coupon.copyShowToast', { code }), ok ? 'success' : 'info');
   };
 
   const rows = offerRows(list, { amount, now: serverNow(), displayCode: autoCouponName });

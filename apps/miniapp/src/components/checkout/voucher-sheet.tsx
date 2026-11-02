@@ -149,7 +149,7 @@ export function VoucherSheet({
             marginBottom: 16,
           }}
         >
-          <Text variant="label" tone="secondary" as="h3" style={{ marginBottom: 8 }}>
+          <Text variant="label" tone="secondary" as="p" style={{ marginBottom: 8 }}>
             {fillCopy('coupon.pickManual')}
           </Text>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -179,7 +179,7 @@ export function VoucherSheet({
 
         {/* Section 2: Mã giảm giá có sẵn (Phía dưới) */}
         <div>
-          <Text variant="label" tone="secondary" as="h3" style={{ marginBottom: 10 }}>
+          <Text variant="label" tone="secondary" as="p" style={{ marginBottom: 10 }}>
             {fillCopy('coupon.pickMine')}
           </Text>
 

@@ -49,6 +49,7 @@ import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation,
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
@@ -969,7 +970,7 @@ export default function ProductDetailPage() {
         />
       )}
 
-      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={price * quantity} onCopy={copyCoupon} />
+      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={offerAmount(price, quantity, priceView.isFlash)} onCopy={copyCoupon} />
 
       {slug && (
         <ContentKitSheet

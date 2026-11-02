@@ -94,12 +94,14 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
     if (applied) group = 'applied';
     else if (preview?.eligible) group = 'usable';
     else if (preview) {
-      if (missing > 0) {
+      // Máy chủ kiểm khách mới, sản phẩm, lượt dùng, hạn trước đơn tối thiểu: chỉ khi nó nói đúng câu đơn tối thiểu (hoặc im lặng) thì "mua thêm" mới là lối ra.
+      const serverReason = preview.reason?.trim() || null;
+      if (missing > 0 && (serverReason === null || MIN_ORDER_SENTENCE.test(serverReason))) {
         group = 'short';
         reason = needMore(missing);
       } else {
         group = 'blocked';
-        reason = preview.reason?.trim() || null;
+        reason = serverReason;
       }
     } else if (scope && ctx.productIds && !scope.some((x) => ctx.productIds!.includes(x.id))) {
       group = 'blocked';
@@ -115,7 +117,7 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
 
     const view = voucherView({ ...coupon, claimed: true, ineligible: group === 'short' || group === 'blocked' }, ctx.now);
     const duplicatesMin = reason !== null && MIN_ORDER_SENTENCE.test(reason);
-    const condition = duplicatesMin ? '' : [view.condition, scopeText && !scopeAsReason ? scopeText : null].filter(Boolean).join(' · ');
+    const condition = [duplicatesMin ? null : view.condition, scopeText && !scopeAsReason ? scopeText : null].filter(Boolean).join(' · ');
     const display = ctx.displayCode?.(coupon.code) ?? null;
     const a = ACTION[group];
     const shown = display ?? coupon.code;
@@ -142,6 +144,12 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
   );
   return built.map((b) => b.row);
 }
+
+/**
+ * Tiền hàng của món đang xem để so với đơn tối thiểu của mã. Máy chủ không tính dòng Giờ vàng vào tiền hàng áp mã, nên món đang ở
+ * giá Giờ vàng góp 0: nói "đã đủ" ở đây mà ra thanh toán lại thiếu là nói sai.
+ */
+export const offerAmount = (unitPrice: number, quantity: number, isFlash: boolean): number => (isFlash ? 0 : unitPrice * quantity);
 
 export interface OfferRow<T extends CouponDTO = CouponDTO> {
   coupon: T;
