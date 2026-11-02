@@ -123,6 +123,7 @@ test.describe('Web 375px: CTV, gian hàng, nhãn hàng, đại lý không tràn 
   test('/ctv/gian-hang: trình dựng có món ghim, ẩn và lý do', async ({ page, api }, testInfo) => {
     mockSession(api);
     api.get('/affiliate/me', { isAffiliate: true, canRegister: true, canOpenStorefront: true, referralCode: 'AN123', walletBalance: 0 });
+    api.get('/affiliate/tiers', { revenue: 0, tier: { name: 'Hạt Giống', emoji: '🌱' }, allTiers: [{ name: 'Hạt Giống', emoji: '🌱', min: 0, milestoneRewardPoints: null }] });
     api.get('/storefront/me', {
       id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: null, avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null,
       subdomain: null, isPublished: true, status: 'LIVE', referralCode: 'AN123', subdomainEnabled: false, publicHiddenReason: null,

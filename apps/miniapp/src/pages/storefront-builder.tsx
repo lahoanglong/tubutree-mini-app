@@ -153,8 +153,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const publishCopy = storefrontPublishCopy(sf);
   // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
-  // Cùng khoá với trang CTV để dùng chung cache. Lỗi/chậm thì đầu xem trước vẫn vẽ, chỉ thiếu huy hiệu bậc.
-  const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false });
+  // Cùng khoá với trang CTV để dùng chung cache. Lỗi/chậm thì đầu xem trước vẫn vẽ, chỉ thiếu huy hiệu bậc. Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV).
+  const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false, enabled: sf.type === 'CTV' });
   const previewTier = publicTier(ownerTierPreview(tiersQ.data));
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).

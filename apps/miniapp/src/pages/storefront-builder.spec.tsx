@@ -708,6 +708,15 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
+  it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
+    mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    expect(mocks.getCtvTiers).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
   it('lời nhắn của shop hiện ở đầu xem trước, ảnh bìa thiếu là bìa phẳng', async () => {
     renderPage();
     expect(await screen.findByText('Mua giúp mình nhé')).toBeInTheDocument();

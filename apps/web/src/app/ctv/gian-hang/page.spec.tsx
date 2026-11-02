@@ -1312,6 +1312,16 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(btn('Thêm ảnh bìa').className).toContain('max-md:text-[length:var(--type-caption-size)]');
   });
 
+  it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
+    state.sf = storefront({ type: 'MERCHANT' });
+    state.tiers = tiersAt(1);
+    const { container } = mount();
+    await flush();
+    expect(heading2(container)).toHaveLength(1);
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
   it('lời nhắn của shop hiện ở đầu xem trước', async () => {
     mount();
     await flush();
