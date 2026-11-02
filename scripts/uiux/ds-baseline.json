@@ -520,7 +520,7 @@
   "apps/web/src/app/tai-khoan/page.tsx": 10,
   "apps/web/src/app/tai-khoan/yeu-thich/quick-add.tsx": 2,
   "apps/web/src/app/thanh-toan/bank-transfer-panel.tsx": 1,
-  "apps/web/src/app/thanh-toan/page.tsx": 5,
+  "apps/web/src/app/thanh-toan/page.tsx": 4,
   "apps/web/src/app/uu-dai/page.tsx": 3,
   "apps/web/src/components/account/account-shell.tsx": 4,
   "apps/web/src/components/account/avatar-crop-sheet.tsx": 4,
