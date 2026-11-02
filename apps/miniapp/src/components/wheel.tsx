@@ -101,7 +101,8 @@ export function WheelOfFortune({
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                width: 72,
+                // 64px: "Mã giảm giá" (D2) rộng quá 64 nên xuống 2 dòng; ở 72px nó là một dòng ngang và chạm viền bánh ở ô thứ 6.
+                width: 64,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
