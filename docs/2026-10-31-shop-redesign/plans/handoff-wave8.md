@@ -16,7 +16,7 @@
   - Bộ quét xét thêm từ cấm viết thường ở đoạn giữa và cuối của chuỗi template (`${n} voucher`). Giá trị truy vấn (`?tab=HOT`) và địa chỉ `scheme://…` không còn bị bắt nhầm.
 - **M3 (MINOR giao diện, `plans/M3-ui-minors.md`):**
   - Hàng danh mục: nhãn tối đa 2 dòng, chữ 12px/600, siết chữ -0,04em, hai nhãn kề nhau luôn cách tối thiểu 2px (e2e đo cả khi ép chữ rộng kiểu Linux).
-  - Tên mã do admin đặt xuống hàng riêng dưới điều kiện, tối đa 2 dòng, ngắt cả từ dài không dấu cách.
+  - Tên mã do admin đặt xuống hàng riêng ngay dưới tiêu đề, tối đa 2 dòng, ngắt cả từ dài không dấu cách.
   - `apps/web/src/components/sticky-action-bar.tsx` dùng token semantic và đã vào `WEB_SHOP` của lưới chặn.
   - Trình dựng gian hàng CTV vẽ ngay, không chờ `/affiliate/tiers`. Chỉ chỗ huy hiệu bậc có khung chờ cùng cỡ. Bậc lỗi hoặc hết hạn chờ thì ẩn huy hiệu, không có màn lỗi.
 - **M4 (suất Giờ vàng theo khách, đường tiền, `plans/M4-flash-allowance.md`):**
@@ -28,18 +28,21 @@
 - **Sửa sau review, làm ở nhánh tích hợp:**
   - Câu "tải thêm lỗi" thành "Bạn thử lại nhé".
   - Bỏ chữ "Bạn" lặp hai lần trong câu tự duyệt đổi/trả.
-  - 4 mẫu thông báo trong `seed.ts` bỏ "Vui lòng".
+  - 4 mẫu thông báo khách bỏ "Vui lòng", cả trong `seed.ts` lẫn bằng migration có điều kiện cho DB đã có (§2).
   - Chữ "nhãn" nghĩa thương hiệu còn sót ở Trang chủ và PDP hai app ("Xem sản phẩm thương hiệu X", "{n} thương hiệu Việt").
 
 Ảnh trước/sau của từng gói nằm ngoài git, ở `screens/<gói>/` của worktree gói (`.claude/worktrees/shop-M3`, `shop-M4`).
 
 ## 2. Deploy (việc chủ quyết)
 
-- Không có migration mới.
+- Có **1 migration dữ liệu**, không đổi schema: `20261102200000_customer_templates_voice`.
+  - Đổi lời 4 mẫu tin khách còn "Vui lòng": ORDER_AWAITING_PAYMENT, ORDER_UNDERPAID, SUBSCRIPTION_PAUSED, SUBSCRIPTION_ORDER_AWAITING_PAYMENT.
+  - Mỗi câu `UPDATE` chỉ đổi khi lời trong DB vẫn đúng bản mặc định cũ, nên không đè bản admin đã sửa. Chạy lại thì không đổi gì.
+  - Đã thử trên Postgres trống: chạy hết migration xong không còn mẫu nào có "Vui lòng" hay "chúng tôi".
+  - `seed.ts` cùng lời từng chữ; `notification-templates-seed.spec` giữ hai bên khớp nhau và chặn "Vui lòng"/"chúng tôi" ở mọi mẫu.
 - API đổi hai loại:
   - Chữ lỗi và chữ thông báo khách đọc. Câu nào Mini bản cũ còn so khớp thì giữ nguyên.
   - Thêm endpoint `GET /flash-sales/me/allowance`. Mini và web bản cũ không gọi endpoint này. Bản mới gặp API cũ thì coi như không có số theo khách, chạy như đợt 7.
-- `seed.ts` có 4 mẫu thông báo khách đổi chữ. Mẫu `createOnly` đã có trong DB PROD thì không đổi khi chạy seed (xem §5).
 - Khách Mini App chỉ thấy thay đổi sau khi build và tải bản Mini mới lên Zalo.
 
 ## 3. Quyết định thay chủ (chủ giao "tự chốt thiết kế"; muốn đổi thì báo)
@@ -51,7 +54,7 @@
   - Ô bắt buộc: "Bạn điền giúp Tubu mục này nhé".
 - **Thanh ngữ cảnh Gian hàng CTV:** "Đang xem gian hàng", không để "Gian hàng" trơn, vì đứng cạnh "Về Tubu Tree" thì chữ trơn mất nghĩa.
 - **Hàng danh mục:** giữ 5,5 cột ló mép, chữ siết -0,04em. Tên dài quá 2 dòng thì "…" ("Nông sản & Thực…" khi có từ 11 danh mục). Không cho chữ hai ô chạm nhau.
-- **Tên mã admin đặt:** hàng riêng dưới điều kiện. Phiếu cao thêm khi tên dài.
+- **Tên mã admin đặt:** hàng riêng ngay dưới tiêu đề, trước điều kiện, để phần tên còn lại sau khi bỏ chỗ trùng tiêu đề ("cho 3 đơn") đọc liền với tiêu đề ("Giảm 20k" / "cho 3 đơn"). Phiếu cao thêm khi tên dài.
 - **Khách đã hết suất Giờ vàng:** giá lớn ở đầu PDP, đầu sheet và chip vẫn là giá Giờ vàng (giá của đợt). Nút, tổng tiền và ghi chú theo số của khách.
 
 ## 4. Giới hạn còn lại
@@ -75,7 +78,6 @@
 
 - **Quyết deploy:** main sau khi PR đợt 8 merge.
 - **Tải bản Mini App mới lên Zalo (Testing),** nếu muốn khách Mini thấy thay đổi.
-- **Mẫu thông báo trên PROD:** 4 mẫu ORDER_AWAITING_PAYMENT, ORDER_UNDERPAID, SUBSCRIPTION_PAUSED, SUBSCRIPTION_ORDER_AWAITING_PAYMENT có thể còn "Vui lòng" trong DB. Sửa ở trang quản trị mẫu thông báo, hoặc cho phép đọc PROD để kiểm.
 - **Xem lại các quyết định ở §3.**
 - **Còn từ `handoff-wave7.md` §5 và `handoff-wave6.md` §5:**
   - Duyệt độ lệch §5 của F9.
