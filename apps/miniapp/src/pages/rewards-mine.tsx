@@ -60,7 +60,7 @@ function RedemptionStatus({ r }: { r: GiftRedemption }) {
 }
 
 function RedemptionEntry({ r, isNew }: { r: GiftRedemption; isNew?: boolean }) {
-  const { use } = useCouponUse();
+  const { apply } = useCouponUse();
   if (r.giftKind === 'VOUCHER') {
     const line = redemptionCouponLine(r);
     return (
@@ -72,7 +72,7 @@ function RedemptionEntry({ r, isNew }: { r: GiftRedemption; isNew?: boolean }) {
             subtitle={line.text}
             // Chỉ mã còn hạn và chưa dùng mới bấm được, giống nút "Dùng ngay" ở Kho quà; mã đã dùng hay hết hạn chỉ để xem.
             trailing={line.usable ? <Text variant="caption" tone="brand" as="span" style={{ fontWeight: 600 }}>{couponUseCopy.use}</Text> : undefined}
-            onPress={line.usable && r.couponCode ? () => void use(r.couponCode ?? '') : undefined}
+            onPress={line.usable && r.couponCode ? () => void apply(r.couponCode ?? '') : undefined}
             style={{ padding: '12px' }}
           />
         </Card>

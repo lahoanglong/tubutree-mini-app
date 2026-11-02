@@ -41,7 +41,7 @@ vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../services/account-api', () => ({ getMyRedemptions: mocks.getMyRedemptions }));
 vi.mock('../services/waste-api', async (orig) => ({ ...(await orig<object>()) }));
-vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), use: mocks.useCoupon }) }));
+vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), apply: mocks.useCoupon }) }));
 vi.mock('../components/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
 
 import RewardsMinePage from './rewards-mine';

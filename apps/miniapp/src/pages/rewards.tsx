@@ -189,7 +189,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
   const navigate = useNavigate();
-  const { use } = useCouponUse();
+  const { apply } = useCouponUse();
   const go = (path: string) => {
     onClose();
     navigate(path);
@@ -199,7 +199,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
       {outcome?.kind === 'VOUCHER' && (
         <div style={{ ...COLUMN, gap: 12 }}>
           <Text variant="body-md" as="div">{`Mã ${outcome.couponCode ?? ''} đã vào ví mã giảm giá`}</Text>
-          {outcome.couponCode && <Button onPress={() => use(outcome.couponCode ?? '', onClose)}>{couponUseCopy.use}</Button>}
+          {outcome.couponCode && <Button onPress={() => apply(outcome.couponCode ?? '', onClose)}>{couponUseCopy.use}</Button>}
           <Button variant="secondary" onPress={() => go(outcome.couponCode ? `/rewards/mine?${NEW_COUPON_PARAM}=${encodeURIComponent(outcome.couponCode)}` : '/rewards/mine')}>Xem ví mã</Button>
         </div>
       )}

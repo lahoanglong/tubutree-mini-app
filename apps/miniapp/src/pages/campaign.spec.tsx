@@ -12,7 +12,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/campaign/giua-thu', search: '', hash: '', state: null, key: 'k' }),
 }));
 vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.get } }));
-vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: mocks.copy, use: vi.fn() }) }));
+vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: mocks.copy, apply: vi.fn() }) }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
