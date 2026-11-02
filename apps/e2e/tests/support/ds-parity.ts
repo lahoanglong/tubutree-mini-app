@@ -54,9 +54,11 @@ export const PROBES: readonly Probe[] = [
   { id: 'builder-sections-title', root: '[data-testid="builder-sections-head"]', target: 'h2', props: TEXT },
   // Thưởng mốc doanh số tháng trên trang CTV (K6): web theo thang chữ và chiều cao dòng của Mini.
   // Không đo height: chữ "Bảng 5 bậc CTV & thưởng mốc Điểm Xanh" chỉ dư khoảng 3px nên xuống dòng hay không tuỳ cách vẽ chữ của máy
-  // (Pixel 7 trên Linux ở CI xuống dòng, máy Mac thì không). Đo khung và chữ: hai app có cùng hai thứ này thì xuống dòng như nhau.
-  { id: 'tier-toggle', root: '[data-testid="tier-toggle"]', target: '', props: ['minHeight', ...PAD] },
+  // (Pixel 7 trên Linux ở CI xuống dòng, máy Mac thì không). Đo những thứ quyết định chỗ cho nhãn: bề rộng nút, khoảng cách, cỡ mũi tên
+  // (height, vì width của svg co lại khi chữ dài) và thang chữ. Hai app cùng các số này thì xuống dòng như nhau trên cùng một máy.
+  { id: 'tier-toggle', root: '[data-testid="tier-toggle"]', target: '', props: ['width', 'columnGap', 'minHeight', ...PAD] },
   { id: 'tier-toggle-label', root: '[data-testid="tier-toggle"]', target: ':scope > :first-child', props: TEXT },
+  { id: 'tier-toggle-icon', root: '[data-testid="tier-toggle"]', target: ':scope > :last-child', props: ['height'] },
   { id: 'milestone-card', root: '[data-testid="milestone-rewards"]', target: '', props: ['height'] },
   { id: 'milestone-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-title"]', props: TEXT },
   { id: 'milestone-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-meta"]', props: TEXT },
@@ -163,8 +165,9 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
 
   // Thưởng mốc doanh số tháng (K6): số đo Mini 375px, nút Button 48px/15px là chuẩn; web dùng cùng Button và thang chữ caption/body-sm.
-  'tier-toggle': { minHeight: '44px', paddingTop: '12px', paddingRight: '0px', paddingBottom: '12px', paddingLeft: '0px' },
+  'tier-toggle': { width: '311px', columnGap: '10px', minHeight: '44px', paddingTop: '12px', paddingRight: '0px', paddingBottom: '12px', paddingLeft: '0px' },
   'tier-toggle-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'tier-toggle-icon': { height: '16px' },
   'milestone-card': { height: '416.06px' },
   'milestone-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
   'milestone-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },

@@ -63,11 +63,14 @@ export async function measureWheel(page: Page): Promise<WheelMetrics> {
   });
 }
 
-/** Chữ của ô không vượt viền bánh, tối đa 2 dòng, không nhỏ hơn 12px (cỡ chữ Mini App), và lệch góc không quá mức lớn nhất của nhãn có sẵn (26,8 độ ở "Giọt nước" web 13px). */
-export const WHEEL_MAX_HALF_ANGLE = 27;
+/**
+ * Chữ của ô không vượt viền bánh, tối đa 2 dòng, không nhỏ hơn 12px (cỡ chữ Mini App), và lệch góc không quá 26 độ.
+ * Hai app cùng số đo nhãn (64px, 12px, dòng 1.15); lệch lớn nhất đo được là 24,7 độ ở "Giọt nước" khi ép chữ rộng (Verdana).
+ */
+export const WHEEL_MAX_HALF_ANGLE = 26;
 export const WHEEL_MIN_FONT_PX = 12;
-/** "Chúc may mắn" 13px của web có sẵn chạm 0,7 đến 1,7px vào viền 6px (không do nhãn mã giảm): cho phép tới 2px, riêng nhãn mã giảm phải nằm trọn trong ruột (spec kiểm riêng). */
-export const WHEEL_RIM_TOLERANCE = 2;
+/** Không cho chữ chạm viền: nhãn xa tâm nhất đo được 110,2px (ép Verdana), ruột bánh 114px. */
+export const WHEEL_RIM_TOLERANCE = 0;
 
 export function wheelProblems(m: WheelMetrics): string[] {
   const problems: string[] = [];
