@@ -89,7 +89,7 @@ export default function BottomNav() {
           >
             {t.center ? (
               <>
-                <span aria-hidden style={{ height: 24 }} />
+                <span aria-hidden style={{ height: 24, flexShrink: 0 }} />
                 <span
                   aria-hidden
                   style={{

@@ -75,7 +75,7 @@ export default function BottomNav() {
             >
               {t.center ? (
                 <>
-                  <span aria-hidden="true" className="h-6" />
+                  <span aria-hidden="true" className="h-6 shrink-0" />
                   <span
                     aria-hidden="true"
                     className="absolute left-1/2 top-[-22px] grid h-[54px] w-[54px] -translate-x-1/2 place-items-center rounded-full border-[3px] border-stone-0 bg-forest-600 text-stone-0 shadow-card"

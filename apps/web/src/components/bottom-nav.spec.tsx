@@ -169,6 +169,8 @@ describe('BottomNav (điện thoại)', () => {
     expect(cls).not.toContain('justify-end');
     expect(cls).not.toContain('pb-1.5');
     expect(cls).toContain('gap-[3px]');
+    // Ô trống thay chỗ icon: thiếu nó thì nhãn nhảy lên khoảng 13,5px; co lại khi chữ phóng to thì nhãn lệch lên.
+    expect(out).toMatch(/data-center="true"[^>]*>\s*<span aria-hidden="true" class="h-6 shrink-0"/);
   });
 
   it('globals.css ẩn thanh khi có sticky-action-bar', () => {
