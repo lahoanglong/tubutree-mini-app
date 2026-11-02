@@ -273,7 +273,6 @@ export const vi = {
     paymentBank: 'Chuyển khoản ngân hàng',
     paymentWallet: (balance: string) => `Ví Tubu (${balance})`,
     points: 'Điểm Xanh',
-    pointsNone: 'Tích điểm từ đơn đầu tiên nhé',
     note: 'Ghi chú cho Tubu',
     notePlaceholder: 'Ví dụ: giao giờ hành chính...',
     summary: 'Tóm tắt đơn hàng',

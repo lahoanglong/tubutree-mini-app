@@ -842,7 +842,7 @@ export default function CheckoutPage() {
                   ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
                   : partnerPoints.disabled && points.usable > 0
                     ? lockedPointsLabel(points.balance)
-                    : (points.label ?? vi.checkout.pointsNone)}
+                    : (points.label ?? fillCopy('checkout.pointsNone'))}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
@@ -873,7 +873,7 @@ export default function CheckoutPage() {
       )}
 
       {/* ── Ghi chú ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+      <Box p={4} mt={2} data-ds="checkout-note" style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
@@ -1076,7 +1076,7 @@ export default function CheckoutPage() {
           </Box>
         ) : quote.data ? (
           <>
-            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
+            <KeyValueRow dataDs="checkout-summary-row" label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
             {quote.data.discount > 0 && (
               <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(quote.data.discount)}`} tone="success" />
             )}
@@ -1095,7 +1095,7 @@ export default function CheckoutPage() {
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
             {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
-            <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
+            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
@@ -1108,7 +1108,7 @@ export default function CheckoutPage() {
         ) : (
           /* Fallback preview summary when addressId is missing/unselected */
           <>
-            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
+            <KeyValueRow dataDs="checkout-summary-row" label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
             {previewCombo > 0 && (
               <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} tone="success" />
             )}
@@ -1127,7 +1127,7 @@ export default function CheckoutPage() {
               label={vi.checkout.shippingFee}
               value={addressId ? fillCopy('checkout.calculating') : fillCopy('checkout.shipNeedsAddress')}
             />
-            <KeyValueRow label={vi.checkout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
+            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
           </>
         )}
       </Box>

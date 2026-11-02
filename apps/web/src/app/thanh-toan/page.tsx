@@ -86,6 +86,8 @@ const addressOptionClass = (selected: boolean) =>
       ? 'max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-bg-subtle)]'
       : 'max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
   }`;
+// Ô ghi chú: dưới md cao một dòng và bo 8px như Input của Mini, từ md nhiều dòng với bo của ô nhập thường.
+const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:rounded-control');
 // Mỗi phần của trang thanh toán ở điện thoại là dải trắng phẳng tràn ngang cách nhau 8px (Box p=4 mt=2 của Mini App).
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
 
@@ -509,7 +511,7 @@ export default function CheckoutPage() {
       <div className="grid gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4 max-md:contents">
           <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
-            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
+            <h2 data-ds="checkout-block-title" className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
               <p className={`mt-2 ${ui.error}`}>
                 Không tải được danh sách địa chỉ.{' '}
@@ -558,7 +560,7 @@ export default function CheckoutPage() {
                         {p.label}
                       </label>
                       {reason && (
-                        <p id={`pay-blocked-${p.k}`} className="mt-1 text-caption text-[color:var(--color-text-secondary)]">
+                        <p id={`pay-blocked-${p.k}`} className="mt-1 pl-9 text-caption text-[color:var(--color-text-secondary)] md:pl-0">
                           {reason}
                         </p>
                       )}
@@ -574,7 +576,7 @@ export default function CheckoutPage() {
             )}
           </section>
 
-          <section data-mini-block="note" className={`${MINI_BAND} max-md:order-7`}>
+          <section data-mini-block="note" data-ds="checkout-note" className={`${MINI_BAND} max-md:order-7`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho Tubu</h2>
             <label className="mt-2 block">
               <span className="text-caption font-medium text-[color:var(--color-text-secondary)] max-md:sr-only">Lời nhắn cho người giao hàng (không bắt buộc)</span>
@@ -586,7 +588,7 @@ export default function CheckoutPage() {
                 placeholder="Ví dụ: giao giờ hành chính..."
                 disabled={place.isPending}
                 aria-describedby="order-note-count"
-                className={`${ui.field} mt-1 py-2`}
+                className={`${NOTE_FIELD} mt-1 h-12 resize-none py-2 md:h-auto md:resize-y`}
               />
             </label>
             <p id="order-note-count" className="mt-1 text-caption text-[color:var(--color-text-secondary)] max-md:sr-only">
@@ -683,7 +685,7 @@ export default function CheckoutPage() {
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
-          <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
+          <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
           )}
@@ -747,17 +749,32 @@ export default function CheckoutPage() {
               </span>
             </label>
           )}
+          {usablePoints === 0 && (
+            <div data-testid="points-none" className="flex min-h-11 items-center justify-between md:hidden">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
+                <span className="block text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('checkout.pointsNone')}</span>
+              </span>
+              <span className={miniCheckboxWrap}>
+                <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
+                <CheckMark />
+              </span>
+            </div>
+          )}
           {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.capNote}</p>}
           {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.partnerNote}</p>}
           {convertedLine && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{pointsOffer.lockNote}</p>}
           </div>
           <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
-          <div className="mt-3 flex justify-between border-t border-[var(--color-border-subtle)] pt-3 font-bold text-[color:var(--color-text-primary)] max-md:mt-0 max-md:border-t-0 max-md:pt-1 lg:hidden">
-            <span>Tổng cộng</span>
+          <div
+            data-ds="checkout-summary-total"
+            className="flex justify-between gap-2.5 py-1.5 text-[color:var(--color-text-primary)] md:mt-3 md:gap-0 md:border-t md:border-[var(--color-border-subtle)] md:pb-0 md:pt-3 md:font-bold lg:hidden"
+          >
+            <span className="text-sm font-normal leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-secondary)] md:text-base md:font-bold md:leading-[inherit] md:text-[color:var(--color-text-primary)]">Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span>{totalText}</span>
+            <span className="text-base font-bold leading-[var(--type-body-sm-lh)] md:leading-[inherit]">{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
@@ -825,6 +842,7 @@ export default function CheckoutPage() {
               )}
             </div>
           )}
+          <OrderConsent className="pt-3 lg:hidden" />
           </div>
         </div>
       </div>
@@ -834,7 +852,6 @@ export default function CheckoutPage() {
             {barHint}
           </p>
         )}
-        <OrderConsent className="mb-2" />
         <button
           type="button"
           onClick={() => place.mutate()}
@@ -848,11 +865,15 @@ export default function CheckoutPage() {
   );
 }
 
-function Row({ label, value, green }: { label: string; value: string; green?: boolean }) {
+// Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
+function Row({ label, value, green, ds }: { label: string; value: string; green?: boolean; ds?: string }) {
   return (
-    <div className={`mt-1 flex justify-between text-sm ${green ? 'text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}>
-      <span className={green ? '' : 'text-[color:var(--color-text-secondary)]'}>{label}</span>
-      <span>{value}</span>
+    <div
+      data-ds={ds}
+      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
+    >
+      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 ${green ? '' : 'text-[color:var(--color-text-secondary)]'}`}>{label}</span>
+      <span className="text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5">{value}</span>
     </div>
   );
 }
@@ -948,7 +969,7 @@ function AddressPicker({
         ) : (
           <div key={a.id}>
           <div className="flex items-start gap-1">
-            <label className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
+            <label data-ds="checkout-address-card" className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
               <input
                 type="radio"
                 name="addr"
@@ -957,15 +978,15 @@ function AddressPicker({
                 className={`${miniRadio} max-md:sr-only`}
               />
               <span className="min-w-0 break-words">
-                <span className="flex flex-wrap items-center gap-x-1.5">
-                  <span className="font-medium text-[color:var(--color-text-primary)] max-md:font-semibold">{a.recipient} · {a.phone}</span>
+                <span className="flex items-center gap-x-1.5 leading-[var(--type-body-sm-lh)] md:flex-wrap md:leading-5">
+                  <span className="min-w-0 truncate font-semibold text-[color:var(--color-text-primary)] md:overflow-visible md:whitespace-normal md:font-medium">{a.recipient} · {a.phone}</span>
                   {a.isDefault && (
-                    <span className="rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-caption font-semibold text-[color:var(--color-action-secondary-fg)]">
+                    <span className="shrink-0 rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-[length:var(--type-label-size)] font-semibold leading-[var(--type-label-lh)] text-[color:var(--color-action-secondary-fg)]">
                       Mặc định
                     </span>
                   )}
                 </span>
-                <span className="block text-[color:var(--color-text-secondary)]">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
+                <span className="mt-0.5 block text-caption text-[color:var(--color-text-secondary)] md:mt-0 md:text-sm">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
               </span>
             </label>
             <button

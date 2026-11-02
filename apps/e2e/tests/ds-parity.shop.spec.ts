@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expect, makeUser, mockSession, test, type MockApi } from './support/mock-api';
+import { mockCheckout, mockWebCheckoutExtras } from './support/checkout-mocks';
 import { CATALOG } from './support/discovery-mocks';
 import { diffMeasure, expectedFor, measure, probesFor, type Measure, type Side } from './support/ds-parity';
 import { mockFlashSlots, mockNoSession } from './support/flash-slot-mocks';
@@ -88,6 +89,29 @@ const SCENARIOS: Scenario[] = [
     },
   },
 ];
+
+SCENARIOS.push({
+  name: 'Thanh toán: thẻ địa chỉ, dòng tóm tắt, ghi chú',
+  route: { miniapp: '/checkout', web: '/thanh-toan' },
+  ready: '[data-ds="checkout-summary-total"]',
+  probeIds: [
+    'checkout-block-title', 'checkout-address-card', 'checkout-summary-row', 'checkout-summary-label', 'checkout-summary-value',
+    'checkout-summary-total-label', 'checkout-summary-total-value', 'checkout-note',
+  ],
+  async setup(api, side, page) {
+    mockCheckout(api);
+    if (side === 'web') {
+      await mockWebCheckoutExtras(api);
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem('tubu_web_session', '1');
+        } catch {
+          // không có localStorage: trang vẫn mở, chỉ không khôi phục phiên
+        }
+      });
+    }
+  },
+});
 
 const sideOf = (projectName: string): Side => (projectName === 'Zalo Mini App' ? 'miniapp' : 'web');
 

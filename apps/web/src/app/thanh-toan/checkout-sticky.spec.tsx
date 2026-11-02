@@ -169,9 +169,10 @@ describe('/thanh-toan — thanh dính đáy', () => {
         ['Điều khoản', '/chinh-sach/dieu-khoan'],
         ['Chính sách đổi trả', '/chinh-sach/doi-tra'],
       ]);
-      expect(line.nextElementSibling?.tagName).toBe('BUTTON');
     }
-    expect(bar(c)!.contains(lines[1]!)).toBe(true);
+    const desk = lines.find((l) => /\blg:block\b/.test(l.className))!;
+    expect(desk.nextElementSibling?.tagName).toBe('BUTTON');
+    expect(c.querySelector('[data-mini-part="place-order"]')!.contains(desk)).toBe(true);
     expect(bar(c)!.querySelector('input[type="checkbox"]')).toBeNull();
   });
 
@@ -190,5 +191,77 @@ describe('/thanh-toan — radio/checkbox đủ lớn (≥ 24px)', () => {
     expect(controls.length).toBeGreaterThanOrEqual(5);
     const small = controls.filter((el) => !/\bh-6\b/.test(el.className) || !/\bw-6\b/.test(el.className));
     expect(small.map((el) => el.outerHTML.slice(0, 100))).toEqual([]);
+  });
+});
+
+describe('/thanh-toan — 375px theo số đo Mini (K2)', () => {
+  it('dòng đồng ý điều khoản ở điện thoại nằm cuối nội dung, sau khối tóm tắt, không trong thanh dính', async () => {
+    const c = await mount();
+    const lines = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="order-consent"]'));
+    const phone = lines.find((l) => /\blg:hidden\b/.test(l.className))!;
+    expect(phone).toBeDefined();
+    expect(bar(c)!.contains(phone)).toBe(false);
+    expect(lines.filter((l) => bar(c)!.contains(l))).toHaveLength(0);
+    const total = c.querySelector('[data-ds="checkout-summary-total"]')!;
+    expect(total.compareDocumentPosition(phone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(phone.compareDocumentPosition(bar(c)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('khách chưa có điểm: khối Điểm Xanh ở điện thoại vẫn hiện như Mini với lời mời tích điểm, ô tick khoá', async () => {
+    state.points = 0;
+    const c = await mount();
+    const none = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
+    expect(none).not.toBeNull();
+    expect(none.className).toMatch(/\bmd:hidden\b/);
+    expect(none.closest('[data-mini-block="points"]')).not.toBeNull();
+    expect(none.textContent).toContain('Điểm Xanh');
+    expect(none.textContent).toContain('Tích điểm từ đơn đầu tiên nhé');
+    expect(none.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+  });
+
+  it('khách có điểm dùng được: không có khối lời mời tích điểm', async () => {
+    state.points = 50;
+    const c = await mount();
+    expect(c.querySelector('[data-testid="points-none"]')).toBeNull();
+  });
+
+  it('dòng tóm tắt: đệm 6px dưới md rồi trả về dòng cũ từ md, không thêm max-md', async () => {
+    const c = await mount();
+    const row = c.querySelector<HTMLElement>('[data-ds="checkout-summary-row"]')!;
+    expect(row.className).toMatch(/\bpy-1\.5\b/);
+    expect(row.className).toMatch(/\bmd:py-0\b/);
+    expect(row.className).toMatch(/\bmd:mt-1\b/);
+    expect(row.className).not.toMatch(/max-md:/);
+  });
+
+  it('"Tổng cộng" dưới md: nhãn 14/400 màu phụ, số 16/700; từ md vẫn đậm cả hai', async () => {
+    const c = await mount();
+    const total = c.querySelector<HTMLElement>('[data-ds="checkout-summary-total"]')!;
+    const label = total.firstElementChild as HTMLElement;
+    const value = total.lastElementChild as HTMLElement;
+    expect(label.textContent).toBe('Tổng cộng');
+    expect(label.className).toMatch(/\bfont-normal\b/);
+    expect(label.className).toMatch(/\bmd:font-bold\b/);
+    expect(value.className).toMatch(/\btext-base\b/);
+    expect(value.className).toMatch(/\bfont-bold\b/);
+    expect(total.className).not.toMatch(/max-md:/);
+  });
+
+  it('ghi chú: ô cao một dòng như Input của Mini dưới md, nhiều dòng từ md; khối có móc đo', async () => {
+    const c = await mount();
+    const note = c.querySelector<HTMLTextAreaElement>('[data-ds="checkout-note"] textarea')!;
+    expect(note.className).toMatch(/\bh-12\b/);
+    expect(note.className).toMatch(/\bmd:h-auto\b/);
+  });
+
+  it('thẻ địa chỉ: huy hiệu Mặc định không xuống dòng, tên dài cắt một dòng; có móc đo', async () => {
+    const c = await mount();
+    const card = c.querySelector<HTMLElement>('[data-ds="checkout-address-card"]')!;
+    expect(card).not.toBeNull();
+    const badge = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'Mặc định')!;
+    expect(badge.className).toMatch(/\bshrink-0\b/);
+    const name = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'An · 0912345678')!;
+    expect(name.className).toMatch(/\btruncate\b/);
+    expect(c.querySelector('[data-ds="checkout-block-title"]')!.textContent).toBe('Địa chỉ giao hàng');
   });
 });

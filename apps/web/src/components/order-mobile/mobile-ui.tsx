@@ -13,7 +13,7 @@ export const mini = {
   sectionTitle:
     'max-md:font-ui max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)] max-md:font-semibold',
   /** Tiêu đề phần của trang thanh toán: Text bold size small của Mini App (14px/600). */
-  sectionLabel: 'max-md:font-ui max-md:text-sm max-md:leading-5 max-md:font-semibold',
+  sectionLabel: 'max-md:font-ui max-md:text-sm max-md:leading-[var(--type-body-sm-lh)] max-md:font-semibold',
   /** Nút phụ nền xanh nhạt không viền (--color-action-secondary-*), thay nút trắng viền stone-450. */
   secondary:
     'max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]',
