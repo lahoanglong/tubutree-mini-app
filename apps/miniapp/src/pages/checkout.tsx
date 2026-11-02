@@ -20,6 +20,7 @@ import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
@@ -1010,7 +1011,7 @@ export default function CheckoutPage() {
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
-                  Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
+                  {fillCopy('checkout.invoiceIncomplete')}
                 </Text>
               </Box>
             )}
@@ -1121,7 +1122,7 @@ export default function CheckoutPage() {
             )}
             <KeyValueRow
               label={vi.checkout.shippingFee}
-              value={addressId ? 'Đang tính...' : 'Cần chọn địa chỉ giao hàng'}
+              value={addressId ? fillCopy('checkout.calculating') : fillCopy('checkout.shipNeedsAddress')}
             />
             <KeyValueRow label={vi.checkout.total} value={formatVnd(previewTotal)} emphasis />
           </>
@@ -1184,7 +1185,7 @@ export default function CheckoutPage() {
         open={priceChanged}
         onClose={() => setPriceChanged(false)}
         title={vi.flashSale.priceChangedTitle}
-        description={vi.flashSale.priceChangedBody}
+        description={fillCopy('flash.priceChangedBody')}
         footer={
           <Button
             fullWidth
@@ -1270,8 +1271,8 @@ export default function CheckoutPage() {
                   ? vi.common.freeShip
                   : formatVnd(quote.data.shippingFee)
                 : addressId
-                  ? 'Đang tính...'
-                  : 'Cần chọn địa chỉ giao hàng'
+                  ? fillCopy('checkout.calculating')
+                  : fillCopy('checkout.shipNeedsAddress')
             }
             tone={quote.data?.shippingFee === 0 ? 'success' : 'primary'}
           />

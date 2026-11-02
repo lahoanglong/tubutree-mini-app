@@ -60,7 +60,7 @@ describe('/thanh-toan — lỗi đặt đơn như Mini App', () => {
     await flush(8);
     const alert = r.container.querySelector('[data-testid="checkout-price-changed"]')!;
     expect(alert.textContent).toContain('Giá ưu đãi đã thay đổi');
-    expect(alert.textContent).toContain('Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.');
+    expect(alert.textContent).toContain('Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ. Bạn xem lại giỏ trước khi đặt nhé.');
     expect(alert.querySelector('a')!.getAttribute('href')).toBe('/gio-hang');
     expect(alert.querySelector('a')!.textContent).toBe('Xem lại giỏ hàng');
     expect(r.container.textContent).not.toContain('PRICE_CHANGED');

@@ -194,7 +194,7 @@ describe('/thanh-toan — hoá đơn VAT (R2-BUYERWEB-6)', () => {
     click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
     await flush(1);
     expect(placeButton(r).disabled).toBe(true);
-    expect(r.container.textContent).toContain('Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.');
+    expect(r.container.textContent).toContain('Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.');
     typeInto(field(r, 'Mã số thuế'), ' 0312345678 ');
     typeInto(field(r, 'Tên công ty'), 'Công ty A');
     typeInto(field(r, 'Địa chỉ xuất hoá đơn'), '1 Phố Huế, Hà Nội');

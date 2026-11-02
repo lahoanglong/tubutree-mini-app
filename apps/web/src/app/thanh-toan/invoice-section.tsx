@@ -1,6 +1,7 @@
 'use client';
 
 import { useId } from 'react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ui } from '@/lib/guest-ui';
 import { CheckMark, mini, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import type { InvoiceInfo } from '@/lib/checkout-rules';
@@ -57,7 +58,7 @@ export function InvoiceSection({
           ))}
           {!valid && (
             <p role="status" className="text-xs text-danger-fg sm:col-span-2">
-              Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
+              {fillCopy('checkout.invoiceIncomplete')}
             </p>
           )}
         </div>

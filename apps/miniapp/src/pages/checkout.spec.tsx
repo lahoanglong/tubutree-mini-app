@@ -648,7 +648,7 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     mocks.getCart.mockResolvedValue(TWO);
     renderPage();
     await screen.findAllByText('Xà bông thảo mộc');
-    expect(screen.getByText('Cần chọn địa chỉ giao hàng')).toBeInTheDocument();
+    expect(screen.getByText('Nhập địa chỉ để tính phí')).toBeInTheDocument();
     expect(screen.queryByText('Giảm giá combo')).toBeNull();
   });
 
@@ -665,7 +665,7 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     mocks.locState = { itemIds: ['ci1'] };
     mocks.getCart.mockResolvedValue({ ...TWO, discount: 9_000, tierDiscount: 4_000 });
     renderPage();
-    await screen.findByText('Cần chọn địa chỉ giao hàng');
+    await screen.findByText('Nhập địa chỉ để tính phí');
     expect(screen.queryByText('-9.000đ')).toBeNull();
     expect(screen.queryByText('Giảm giá')).toBeNull();
     expect(screen.queryByText('Ưu đãi hạng thành viên')).toBeNull();
@@ -677,7 +677,7 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
   it('không có combo (0 hoặc API cũ): tổng như cũ', async () => {
     mocks.getCart.mockResolvedValue({ ...TWO, comboDiscount: undefined });
     renderPage();
-    await screen.findByText('Cần chọn địa chỉ giao hàng');
+    await screen.findByText('Nhập địa chỉ để tính phí');
     expect(screen.queryByText('Giảm giá combo')).toBeNull();
     expect(screen.getByText('95.000đ')).toBeInTheDocument();
   });

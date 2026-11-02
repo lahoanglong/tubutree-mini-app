@@ -118,7 +118,6 @@ export const vi = {
     endsIn: (t: string) => `Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',
-    priceChangedBody: 'Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.',
     priceChangedCta: 'Xem lại giỏ hàng',
     upcomingTitle: 'Sắp diễn ra',
     live: 'Đang diễn ra',

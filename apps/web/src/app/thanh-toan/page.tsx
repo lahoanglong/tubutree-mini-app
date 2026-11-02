@@ -27,6 +27,8 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
+import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
@@ -464,19 +466,15 @@ export default function CheckoutPage() {
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   const placeDisabled =
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
-  const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
+  const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
   const barHint =
     cartIssue ??
     (priceChanged
-      ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.'
+      ? fillCopy('checkout.priceChangedHint')
       : place.isError
         ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
-        : !addressId
-          ? 'Chọn địa chỉ giao hàng để đặt hàng.'
-          : quoteQ.isError
-            ? 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.'
-            : null);
+        : checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError }));
 
   return (
     <Shell>
@@ -488,7 +486,7 @@ export default function CheckoutPage() {
         >
           <div className="min-w-0 flex-1">
             <p className="font-semibold">Giá ưu đãi đã thay đổi</p>
-            <p className="mt-0.5">Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.</p>
+            <p className="mt-0.5">{fillCopy('flash.priceChangedBody')}</p>
           </div>
           <Link href="/gio-hang" className={ui.btnSecondary}>
             Xem lại giỏ hàng
