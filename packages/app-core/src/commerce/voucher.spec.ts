@@ -97,6 +97,22 @@ describe('voucherView', () => {
     expect(voucherView(coupon({ endAt: '2026-10-31T17:01:00Z' }), now).expiry).toBe('Còn 1 ngày');
     expect(voucherView(coupon({ endAt: '2026-10-31T16:59:30Z' }), now).expiry).toBe('Hết hạn hôm nay');
   });
+  it('hạn đúng 00:00 giờ VN: ngày dùng được cuối là ngày hôm trước (hết hạn 00:00 01/01/2027 thì dùng đến 31/12)', () => {
+    const midnight = '2026-12-31T17:00:00Z'; // 00:00 01/01/2027 giờ VN
+    expect(voucherView(coupon({ endAt: midnight }), NOW).expiry).toBe('Dùng đến 31/12');
+    expect(voucherView(coupon({ endAt: midnight }), Date.parse('2026-12-31T16:00:00Z')).expiry).toBe('Hết hạn hôm nay');
+    expect(voucherView(coupon({ endAt: midnight }), Date.parse('2026-12-30T10:00:00Z')).expiry).toBe('Còn 1 ngày');
+    // Không tròn nửa đêm (00:00:00.500) thì vẫn là ngày của chính nó.
+    expect(voucherView(coupon({ endAt: '2026-12-31T17:00:00.500Z' }), Date.parse('2026-12-30T10:00:00Z')).expiry).toBe('Còn 2 ngày');
+  });
+  it('ghi năm khi ngày dùng cuối khác năm hiện tại (giờ VN), không ghi khi cùng năm', () => {
+    expect(voucherView(coupon({ endAt: '2027-03-10T10:00:00Z' }), NOW).expiry).toBe('Dùng đến 10/03/2027');
+    expect(voucherView(coupon({ endAt: '2026-11-20T10:00:00Z' }), NOW).expiry).toBe('Dùng đến 20/11');
+    // Máy đã sang 01/01/2027 giờ VN dù UTC còn 31/12: năm hiện tại là 2027.
+    const now = Date.parse('2026-12-31T18:00:00Z');
+    expect(voucherView(coupon({ endAt: '2027-02-10T10:00:00Z' }), now).expiry).toBe('Dùng đến 10/02');
+    expect(voucherView(coupon({ endAt: '2028-02-10T10:00:00Z' }), now).expiry).toBe('Dùng đến 10/02/2028');
+  });
   it('hạn không đọc được thì không đoán: còn dùng được, chữ hạn rỗng', () => {
     const v = voucherView(coupon({ endAt: 'không phải ngày' }), NOW);
     expect(v.state).toBe('saved');
