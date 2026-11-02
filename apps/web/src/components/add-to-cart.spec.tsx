@@ -992,6 +992,23 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
+  it('Mua ngay: khách chưa đăng nhập không có dải ghi chú trống trong bảng; đã đăng nhập thì giữ chỗ từ lúc mở (L5 2)', async () => {
+    mocks.auth = { status: 'idle', initialized: true, user: null };
+    const guest = mount();
+    await flush();
+    click(byText(guest.container, 'button', /^Mua ngay/));
+    await sheetReady();
+    expect(byText(sheet()!, 'button', /^Mua ngay · /)).toBeTruthy();
+    expect(sheet()!.querySelector('[role="status"]')).toBeNull();
+    guest.unmount();
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const member = mount();
+    await flush();
+    click(byText(member.container, 'button', /^Mua ngay/));
+    await sheetReady();
+    expect(sheet()!.querySelector('[role="status"]')).not.toBeNull();
+  });
+
   it('sản phẩm 1 phân loại thêm thẳng, không bảng chọn', async () => {
     const { container } = mount([VARIATIONS[0]!]);
     await flush();

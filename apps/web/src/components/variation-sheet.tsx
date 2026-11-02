@@ -42,6 +42,7 @@ export function VariationSheet({
   initialId,
   initialQty,
   cartLines,
+  cartMayArrive = true,
   onConfirm,
 }: {
   open: boolean;
@@ -58,6 +59,11 @@ export function VariationSheet({
    * quên truyền thì bảng âm thầm coi giỏ rỗng và nút ghi sai tiền); `undefined` chỉ khi giỏ chưa tải, lỗi hoặc khách chưa đăng nhập, khi đó coi là giỏ rỗng.
    */
   cartLines: readonly { variationId: string; quantity: number }[] | undefined;
+  /**
+   * `GET /cart` còn có thể về (đã đăng nhập, đang khôi phục phiên, mất mạng tạm thời) nên "Mua ngay" giữ sẵn chỗ cho câu về giỏ. Khách chắc chắn chưa đăng nhập truyền
+   * `false`: giỏ không bao giờ về, không có gì để nhảy nên không giữ dải trống. Chỉ đọc ở chế độ "Mua ngay"; mặc định `true` (giữ chỗ, như trước).
+   */
+  cartMayArrive?: boolean;
   onConfirm: (variation: VariationOption, qty: number) => void;
 }) {
   const [id, setId] = useState<string | null>(null);
@@ -81,9 +87,10 @@ export function VariationSheet({
   const view = line?.pricing ?? null;
   // Một vùng ghi chú một câu: mất giá Giờ vàng, hoặc ("Mua ngay") giỏ đã có sẵn nên thanh toán cả dòng.
   const note = line ? lineNote(line, shownQty, mode === 'buy') : null;
-  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng, hoặc "Mua ngay" (chế độ này luôn giữ). Giữ theo nội dung giỏ thì bảng mở trước khi GET /cart về sẽ cao thêm lúc giỏ về,
-  // và giỏ về rỗng lại co lại, cả hai dưới ngón tay đang bấm; đổi chip cũng không được làm bảng cao thêm. "Thêm vào giỏ" không có câu về giỏ nên không giữ.
-  const reserveNote = line?.allowance != null || mode === 'buy';
+  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng giới hạn (câu mất giá, không liên quan giỏ), hoặc "Mua ngay" khi giỏ còn có thể về hay đã có. Giữ theo nội dung giỏ thì bảng mở trước khi
+  // GET /cart về sẽ cao thêm lúc giỏ về, và giỏ về rỗng lại co lại, cả hai dưới ngón tay đang bấm; đổi chip cũng không được làm bảng cao thêm. Khách chưa đăng nhập (`cartMayArrive`
+  // = false) không bao giờ có giỏ nên không có gì để nhảy: không giữ dải trống 2 dòng. "Thêm vào giỏ" không có câu về giỏ nên không giữ.
+  const reserveNote = line?.allowance != null || (mode === 'buy' && (cartMayArrive || cartLines !== undefined));
 
   return (
     <BottomSheet

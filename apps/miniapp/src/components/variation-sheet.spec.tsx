@@ -14,7 +14,7 @@ const variations: VariationOption[] = [
 ];
 const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
 
-function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; variations?: VariationOption[] } = {}) {
+function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; cartMayArrive?: boolean; variations?: VariationOption[] } = {}) {
   const onConfirm = vi.fn();
   const view = render(
     <VariationSheet
@@ -29,6 +29,7 @@ function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: num
       initialQty={props.initialQty ?? 3}
       busy={false}
       cartLines={props.cartLines}
+      cartMayArrive={props.cartMayArrive}
       onConfirm={onConfirm}
     />,
   );
@@ -174,7 +175,7 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
     expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
   });
 
-  it('Mua ngay mở trước khi GET /cart về (hoặc khách chưa đăng nhập, giỏ rỗng): vùng ghi chú đã có chỗ từ lúc mở, giỏ về sau chỉ điền chữ, bảng không cao thêm', () => {
+  it('Mua ngay mở trước khi GET /cart về (khách đã đăng nhập, giỏ chưa tới): vùng ghi chú đã có chỗ từ lúc mở, giỏ về sau chỉ điền chữ, bảng không cao thêm', () => {
     const view = renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined });
     const region = screen.getByRole('status');
     expect(region.style.minHeight).not.toBe('');
@@ -194,6 +195,31 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
   it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {
     renderSheet({ mode: 'buy', initialQty: 1, cartLines: inCart2 });
     expect(screen.getByRole('status').style.minHeight).not.toBe('');
+  });
+
+  it('khách chưa đăng nhập (cartMayArrive=false, giỏ không bao giờ về): Mua ngay không có dải ghi chú trống (L5 2)', () => {
+    renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: false });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('khách chưa đăng nhập nhưng phân loại có giới hạn Giờ vàng: vẫn giữ chỗ vì câu mất giá có thể hiện không liên quan giỏ (L5 2)', () => {
+    renderSheet({ mode: 'buy', initialQty: 1, cartLines: undefined, cartMayArrive: false });
+    expect(screen.getByRole('status').style.minHeight).not.toBe('');
+  });
+
+  it('cartMayArrive=false mà giỏ đã có trong cache: vẫn giữ chỗ và ghi câu giỏ có sẵn (L5 2)', () => {
+    renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: inCart2, cartMayArrive: false });
+    const region = screen.getByRole('status');
+    expect(region.style.minHeight).not.toBe('');
+    expect(region).toHaveTextContent('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+  });
+
+  it('cartMayArrive=true (đã đăng nhập): vẫn giữ chỗ khi giỏ chưa về; chế độ add không có vùng dù cartMayArrive (L5 2)', () => {
+    const buy = renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: true });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    buy.unmount();
+    renderSheet({ mode: 'add', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: true });
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
 

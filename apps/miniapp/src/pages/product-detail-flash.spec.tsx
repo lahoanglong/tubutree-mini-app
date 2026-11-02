@@ -334,3 +334,35 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     });
   });
 });
+
+describe('ProductDetailPage — bảng Mua ngay theo trạng thái đăng nhập (L5 2)', () => {
+  const twoVariations = {
+    ...product,
+    variations: [product.variations[0]!, { id: 'v2', sku: 'S2', name: 'Chai lớn', attributes: {}, retailPrice: 150_000, salePrice: null, stock: 5 }],
+  };
+  const openBuySheet = async () => {
+    renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /^Mua ngay/ }));
+    return screen.findByRole('dialog');
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchProduct.mockResolvedValue(twoVariations);
+    mocks.fetchReviews.mockResolvedValue({ data: [], count: 0, average: 0, items: [] });
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+  });
+
+  it('khách chưa đăng nhập (idle): giỏ không bao giờ về nên bảng không giữ dải ghi chú trống', async () => {
+    mocks.authStatus = 'idle';
+    const dialog = await openBuySheet();
+    expect(within(dialog).queryByRole('status')).toBeNull();
+  });
+
+  it('đã đăng nhập: bảng giữ chỗ ghi chú từ lúc mở, giỏ về sau chỉ điền chữ', async () => {
+    mocks.authStatus = 'authenticated';
+    const dialog = await openBuySheet();
+    expect(within(dialog).getByRole('status').style.minHeight).not.toBe('');
+  });
+});

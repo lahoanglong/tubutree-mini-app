@@ -172,7 +172,7 @@ describe('VariationSheet web: giỏ đã có sẵn cùng phân loại (thêm gi�
     expect(buy().textContent).toBe('Mua ngay · 52.000đ');
   });
 
-  it('Mua ngay mở trước khi GET /cart về (hoặc khách chưa đăng nhập, giỏ rỗng): vùng ghi chú đã có chỗ từ lúc mở, giỏ về sau chỉ điền chữ, bảng không cao thêm', () => {
+  it('Mua ngay mở trước khi GET /cart về (khách đã đăng nhập, giỏ chưa tới): vùng ghi chú đã có chỗ từ lúc mở, giỏ về sau chỉ điền chữ, bảng không cao thêm', () => {
     let setLines: (lines: Props['cartLines']) => void = () => undefined;
     function Harness() {
       const [lines, set] = useState<Props['cartLines']>(undefined);
@@ -197,6 +197,31 @@ describe('VariationSheet web: giỏ đã có sẵn cùng phân loại (thêm gi�
   it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {
     mountSheet({ mode: 'buy', initialQty: 1, cartLines: inCart2 });
     expect((status() as HTMLElement).style.minHeight).not.toBe('');
+  });
+
+  it('khách chưa đăng nhập (cartMayArrive=false, giỏ không bao giờ về): Mua ngay không có dải ghi chú trống (L5 2)', () => {
+    mountSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: false });
+    expect(status()).toBeNull();
+  });
+
+  it('khách chưa đăng nhập nhưng phân loại có giới hạn Giờ vàng: vẫn giữ chỗ vì câu mất giá có thể hiện không liên quan giỏ (L5 2)', () => {
+    mountSheet({ mode: 'buy', initialQty: 1, cartLines: undefined, cartMayArrive: false });
+    expect((status() as HTMLElement).style.minHeight).not.toBe('');
+  });
+
+  it('cartMayArrive=false mà giỏ đã có trong cache: vẫn giữ chỗ và ghi câu giỏ có sẵn (L5 2)', () => {
+    mountSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: inCart2, cartMayArrive: false });
+    expect((status() as HTMLElement).style.minHeight).not.toBe('');
+    expect(status()!.textContent).toBe('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+  });
+
+  it('cartMayArrive=true (đã đăng nhập) hoặc không truyền: vẫn giữ chỗ khi giỏ chưa về; chế độ add không có vùng dù cartMayArrive (L5 2)', () => {
+    const r = mountSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: true });
+    expect(status()).not.toBeNull();
+    r.unmount();
+    mounted = [];
+    mountSheet({ mode: 'add', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: true });
+    expect(status()).toBeNull();
   });
 });
 
