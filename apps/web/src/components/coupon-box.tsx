@@ -264,7 +264,7 @@ export function CouponBox({
         </div>
       </div>
       {(rows.length > 0 || (inSheet && couponsQ.isSuccess)) && (
-        <h3 className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</h3>
+        <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
       )}
       {rows.length > 0 && (
         <>
