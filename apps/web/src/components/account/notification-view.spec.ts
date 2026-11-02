@@ -44,7 +44,7 @@ describe('notificationMeta', () => {
   it('giữ nguyên các nhóm cũ, REORDER_REMINDER là Nhắc mua lại, mã lạ là Thông báo', () => {
     expect(notificationMeta('ORDER_CONFIRMED').title).toBe('Đơn đã xác nhận');
     expect(notificationMeta('ORDER_CANCELLED').title).toBe('Cập nhật đơn hàng');
-    expect(notificationMeta('FLASH_REMINDER').title).toBe('Ưu đãi giờ vàng');
+    expect(notificationMeta('FLASH_REMINDER').title).toBe('Giờ vàng');
     expect(notificationMeta('REORDER_REMINDER').title).toBe('Nhắc mua lại');
     expect(notificationMeta('SOMETHING_NEW').title).toBe('Thông báo');
   });

@@ -148,25 +148,25 @@ export function customerCancelBlock(order: CustomerCancelFacts, actorId: string 
   // lý giữ mốc cũ: PACKED đã tính doanh số thưởng (DEALER_SETTLED_STATUSES).
   const cancellable = order.type === 'DEALER' ? CUSTOMER_CANCELLABLE_DEALER : CUSTOMER_CANCELLABLE;
   if (!cancellable.includes(order.status)) {
-    return 'Đơn đã vào quy trình giao, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.';
+    return 'Đơn đã vào quy trình giao, bạn liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ nhé.';
   }
   // Tiền của đơn lên hộ là của khách cuối: để CTV tự huỷ sau khi khách đã trả thì CTV quyết định
   // dòng tiền của người khác (C-001/Q-01). Chỉ admin huỷ, hoàn về khách qua OrderReversalService.
   if (order.placedForCustomer && order.paymentStatus === 'PAID' && !!actorId && order.referrerUserId === actorId) {
-    return 'Đơn lên hộ khách đã thanh toán, CTV không tự huỷ được. Vui lòng liên hệ Tubu để admin huỷ và hoàn tiền cho khách.';
+    return 'Đơn lên hộ khách đã thanh toán, CTV không tự huỷ được. Bạn liên hệ Tubu để admin huỷ và hoàn tiền cho khách nhé.';
   }
   // Pancake đã báo gửi hàng (mốc ghi khi hệ thống hoặc người bấm huỷ hỏi Pancake): từ chối ngay, không hỏi lại Pancake — mỗi lần
   // hỏi lại là đồng bộ lại trạng thái và đưa đơn về "Cần xử lý Pancake" dù admin đã xử lý (R5-SYNC-1).
   if (order.autoCancelBlockedAt) {
-    return 'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Vui lòng liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ.';
+    return 'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Bạn liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ nhé.';
   }
   // D1 cùng một luật với admin/nhà bán (cancelHandover): đã có mã vận đơn hãng, bưu tá Gomdon đã lấy hàng (webhook
   // chuyển SHIPPING có thể tới trễ)... thì khách không tự huỷ được nữa.
   const handover = cancelHandover(order);
   if (!handover) return null;
   return handover.kind === 'GOMDON_PICKED_UP'
-    ? 'Đơn đã được bưu tá lấy hàng, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.'
-    : 'Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.';
+    ? 'Đơn đã được bưu tá lấy hàng, bạn liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ nhé.'
+    : 'Đơn đã bàn giao cho đơn vị vận chuyển, bạn liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ nhé.';
 }
 
 @Injectable()

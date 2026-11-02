@@ -508,7 +508,7 @@ describe('CouponsService.redeem — perUserLimit race (advisory lock)', () => {
     const { svc, transaction } = makeRedeemService({ coupon: coupon({ usageLimit: null }) });
     transaction.mockRejectedValue({ code: 'P2034', message: 'serialization failure' });
     await expect(svc.redeem('SALE', 'u1', 'o1')).rejects.toThrow(
-      'Hệ thống đang bận xử lý, vui lòng thử lại.',
+      'Hệ thống đang bận xử lý, bạn thử lại nhé.',
     );
   });
 });

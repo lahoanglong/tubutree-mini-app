@@ -83,7 +83,7 @@ const PRO: TitleCase[] = [
   ['/dai-ly', dealer, 'Kênh đại lý — Tubu Tree'],
   ['/nhan-vien', staff, 'Ca làm của tôi — Tubu Tree'],
   ['/nhan-vien/bang-luong', payroll, 'Lương của tôi — Tubu Tree'],
-  ['/chu-thuong-hieu', brandOwner, 'Quản lý nhãn hàng — Tubu Tree'],
+  ['/chu-thuong-hieu', brandOwner, 'Quản lý thương hiệu — Tubu Tree'],
 ];
 const RECYCLE: TitleCase[] = [
   ['/doi-rac', recycle, 'Đổi rác lấy quà — Tubu Tree'],

@@ -82,4 +82,27 @@ test.describe('Mini App — Yêu thích: nút giỏ nhanh', () => {
     await expect(add).toHaveText('Thêm vào giỏ · 88.000đ');
     await expect(dialog.getByRole('status')).toHaveText('Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.');
   });
+  test('Giờ vàng, khách đã dùng hết suất ở đơn trước (perUserLeft 0): bảng Thêm nhanh ghi giá thường 35.000đ kèm ghi chú', async ({ page, api }) => {
+    const second = { ...PILOT_PRODUCT.variations[0]!, id: 'var-2', name: 'Hương Sả', sku: 'TUBU-NRC-500-SA' };
+    const first = { ...PILOT_PRODUCT.variations[0]!, id: 'var-1', name: 'Gói 80 tờ', retailPrice: 35_000, salePrice: null, stock: 245 };
+    mockWishlist(api, [first, second]);
+    api.get('/me/wishlist', [{ ...card('prod-1', PILOT_SLUG, PILOT_PRODUCT_NAME, true), repVariationId: 'var-1' }]);
+    api.get('/flash-sales/active', () => {
+      const now = Date.now();
+      return [
+        {
+          itemId: 'fi-1', variationId: 'var-1', productSlug: PILOT_SLUG, productName: PILOT_PRODUCT_NAME, variationName: 'Gói 80 tờ', thumbnail: null,
+          flashPrice: 26_000, retailPrice: 35_000, salePrice: null, soldCount: 10, quota: 100, perUserLimit: 3,
+          endAt: new Date(now + 3_600_000).toISOString(), serverNow: new Date(now).toISOString(),
+        },
+      ];
+    });
+    api.get('/flash-sales/me/allowance', { items: { 'fi-1': { perUserLeft: 0, allowance: 0 } } });
+    await page.goto('/wishlist');
+    await page.getByRole('button', { name: `Thêm ${PILOT_PRODUCT_NAME} vào giỏ` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByRole('button', { name: /^Thêm vào giỏ · / })).toHaveText('Thêm vào giỏ · 35.000đ');
+    await expect(dialog.getByRole('status')).toHaveText('Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.');
+  });
 });

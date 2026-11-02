@@ -41,9 +41,9 @@ describe('bankDetailsError', () => {
     expect(bankDetailsError({ ...BANK, accountNumber: '0071.000-123' })).toBeNull();
   });
   it('báo lỗi tiếng Việt cho từng ô', () => {
-    expect(bankDetailsError({ ...BANK, bankName: '' })).toBe('Vui lòng nhập tên ngân hàng.');
+    expect(bankDetailsError({ ...BANK, bankName: '' })).toBe('Nhập tên ngân hàng.');
     expect(bankDetailsError({ ...BANK, accountNumber: '12ab' })).toBe('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.');
-    expect(bankDetailsError({ ...BANK, accountName: ' ' })).toBe('Vui lòng nhập tên chủ tài khoản.');
+    expect(bankDetailsError({ ...BANK, accountName: ' ' })).toBe('Nhập tên chủ tài khoản.');
   });
 });
 

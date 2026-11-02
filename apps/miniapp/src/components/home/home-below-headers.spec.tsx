@@ -54,7 +54,7 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
   it('Hành trình nguyên liệu: thẻ bản đồ ẩn khỏi trình đọc và khỏi Tab (aria-hidden + tabIndex -1) nhưng chạm vẫn mở bản đồ (H3 #3)', async () => {
     const { container } = wrap(<BrandJourney />);
     await screen.findByRole('button', { name: 'Tubu' });
-    const card = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('nhãn Việt'))!;
+    const card = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('thương hiệu Việt'))!;
     expect(card.getAttribute('aria-hidden')).toBe('true');
     expect(card.tabIndex).toBe(-1);
     fireEvent.click(card);
@@ -64,7 +64,7 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
   it('Hành trình nguyên liệu: câu mô tả số nhãn vẫn đọc được đúng một lần dù thẻ bản đồ aria-hidden (H3 review)', async () => {
     const { container } = wrap(<BrandJourney />);
     await screen.findByRole('button', { name: 'Tubu' });
-    const spokenCopy = Array.from(container.querySelectorAll('span')).filter((e) => e.children.length === 0 && /nhãn Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
+    const spokenCopy = Array.from(container.querySelectorAll('span')).filter((e) => e.children.length === 0 && /thương hiệu Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
     expect(spokenCopy).toHaveLength(1);
     expect(spokenCopy[0]!.closest('button')).toBeNull();
   });

@@ -220,7 +220,7 @@ describe('OrderStatusService — D1: không huỷ sau khi bàn giao vận chuy�
     const { svc, tx, reversal } = make(makeOrder({ status: 'CONFIRMED', shippingCode: null, shippingPartner: null }), {
       precheckCancel: jest.fn().mockRejectedValue(new PancakeUnreachableError('timeout of 5000ms exceeded')),
     });
-    await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+    await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow('Kho chưa phản hồi, bạn thử lại sau ít phút');
     expect(tx.order.updateMany).not.toHaveBeenCalled();
     expect(reversal.reverseFinancials).not.toHaveBeenCalled();
   });

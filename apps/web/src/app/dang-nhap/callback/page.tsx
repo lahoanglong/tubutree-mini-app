@@ -38,7 +38,7 @@ function CallbackInner() {
     }
     const code = params.get('code');
     if (!code) {
-      fail('Zalo không gửi kèm mã đăng nhập. Vui lòng đăng nhập lại.');
+      fail('Zalo không gửi kèm mã đăng nhập. Đăng nhập lại để tiếp tục.');
       return;
     }
     handleCallback(code, params.get('state'))

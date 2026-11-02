@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ERROR_NETWORK } from '@tubutree/app-core/client-copy';
 import type { FeedItem } from '../services/feed-api';
 
 const mocks = vi.hoisted(() => ({
@@ -396,7 +397,7 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     mocks.config = { communityPublicPreview: true };
     mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1')] });
     mocks.login.mockImplementationOnce(async () => {
-      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+      mocks.auth = { status: 'error', error: ERROR_NETWORK };
     });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Tiếp tục với Zalo' }));

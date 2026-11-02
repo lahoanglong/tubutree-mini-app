@@ -54,7 +54,7 @@ export async function firstOrderFreeShipFrom(
 
 /** Lần đặt khác của khách vừa ghi đơn đầu giữa lúc báo giá và lúc ghi đơn này (kiểm trong tx đặt đơn). */
 export const FIRST_ORDER_FREESHIP_TAKEN_MSG =
-  'Ưu đãi miễn phí giao hàng đơn đầu đã dùng cho đơn khác của bạn. Vui lòng tải lại trang thanh toán để xem phí giao mới.';
+  'Ưu đãi miễn phí giao hàng đơn đầu đã dùng cho đơn khác của bạn. Bạn tải lại trang thanh toán để xem phí giao mới nhé.';
 
 /** Phí giao kiện Tubu sau freeship đơn đầu: 0 khi có ngưỡng và tiền hàng của kiện đạt ngưỡng. */
 export function firstOrderShippingFee(fee: number, subtotal: number, freeFrom: number | null): number {

@@ -15,6 +15,7 @@ const OVER_5 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 5 th
 const OVER_4 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 4 thì cả dòng tính giá thường.';
 const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
 const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
+const SPENT = 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.';
 
 const VARIATIONS = [
   { id: 'var-1', sku: 'KU-80', name: 'Gói 80 tờ', attributes: {}, retailPrice: 35_000, salePrice: null, stock: 245 },
@@ -26,8 +27,17 @@ function cartWith(quantity: number) {
   return { ...PILOT_CART, items: [{ ...PILOT_CART.items[0]!, variationId: 'var-1', variationName: 'Gói 80 tờ', unitPrice: 26_000, quantity, stock: 245, total: 26_000 * quantity }], subtotal: 26_000 * quantity, itemCount: quantity };
 }
 
-function mockPage(api: Parameters<typeof mockPilotProduct>[0], inCart = 0) {
+/** Số suất khách còn mua được ở đơn trước (`perUserLeft` của suất `fi-1`); `delayMs` cho số về muộn. Không truyền thì như API cũ (không có số). */
+type Allowance = { perUserLeft: number; delayMs?: number };
+
+function mockPage(api: Parameters<typeof mockPilotProduct>[0], inCart = 0, allowance?: Allowance) {
   mockPilotProduct(api);
+  if (allowance) {
+    api.get('/flash-sales/me/allowance', async () => {
+      if (allowance.delayMs) await new Promise((r) => setTimeout(r, allowance.delayMs));
+      return { items: { 'fi-1': { perUserLeft: allowance.perUserLeft, allowance: Math.min(allowance.perUserLeft, 90) } } };
+    });
+  }
   if (inCart > 0) api.get('/cart', cartWith(inCart));
   api.get('/products/:slug', { ...PILOT_PRODUCT, variations: VARIATIONS });
   api.get('/flash-sales/active', () => {
@@ -158,5 +168,57 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     await page.getByRole('button', { name: 'Tăng số lượng' }).click();
     await expect(buy).toHaveAccessibleName('Mua ngay · 140.000đ');
     await expect(page.getByText(IN_CART_2)).toBeVisible();
+  });
+  test('khách đã dùng hết suất Giờ vàng ở đơn trước (perUserLeft 0): bảng "Mua ngay" và "Thêm vào giỏ" ghi giá thường 35.000đ kèm ghi chú, chỉ một request cho cả lần đổi số lượng', async ({ page, api }) => {
+    mockPage(api, 0, { perUserLeft: 0 });
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /^Mua ngay/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await expect(dialog).toBeVisible();
+    const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
+    await expect(buy).toHaveText('Mua ngay · 35.000đ');
+    await expect(dialog.getByRole('status')).toHaveText(SPENT);
+    await dialog.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(buy).toHaveText('Mua ngay · 70.000đ');
+    expect(api.callsTo('GET', '/flash-sales/me/allowance')).toHaveLength(1);
+    await dialog.getByRole('button', { name: 'Đóng' }).click();
+    // Ngoài bảng: thanh dưới và ghi chú dưới ô Số lượng cùng số.
+    await expect(page.getByRole('button', { name: /^Mua ngay · / })).toHaveAccessibleName('Mua ngay · 35.000đ');
+    await expect(page.getByText(SPENT).first()).toBeVisible();
+  });
+
+  test('còn 1 suất (đã mua 2 trên giới hạn 3): chọn 1 vẫn 26.000đ, chọn 2 cả dòng giá thường 70.000đ kèm "Bạn còn 1 suất"', async ({ page, api }) => {
+    mockPage(api, 0, { perUserLeft: 1 });
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Thêm vào giỏ', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    const add = dialog.getByRole('button', { name: /^Thêm vào giỏ · / });
+    await expect(add).toHaveText('Thêm vào giỏ · 26.000đ');
+    await expect(dialog.getByRole('status')).toHaveText('');
+    await dialog.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(add).toHaveText('Thêm vào giỏ · 70.000đ');
+    await expect(dialog.getByRole('status')).toHaveText('Bạn còn 1 suất Giờ vàng. Mua 2 thì cả dòng tính giá thường.');
+  });
+
+  test('số về muộn (request chậm 2 giây): bảng đã mở, ô Số lượng không nhảy khi nút đổi sang giá thường và ghi chú hiện', async ({ page, api }) => {
+    mockPage(api, 0, { perUserLeft: 0, delayMs: 2_000 });
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /^Mua ngay/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
+    const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });
+    await expect(buy).toHaveText('Mua ngay · 26.000đ');
+    // Bảng còn đang trượt lên lúc vừa mở: hover chờ nó đứng yên rồi mới đo vị trí.
+    await plus.hover();
+    const before = (await plus.boundingBox())!;
+    const header = (await dialog.getByTestId('variation-sheet-price').boundingBox())!;
+    await expect(buy).toHaveText('Mua ngay · 35.000đ', { timeout: 10_000 });
+    await expect(dialog.getByRole('status')).toHaveText(SPENT);
+    const after = (await plus.boundingBox())!;
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs((await dialog.getByTestId('variation-sheet-price').boundingBox())!.y - header.y)).toBeLessThanOrEqual(1);
   });
 });

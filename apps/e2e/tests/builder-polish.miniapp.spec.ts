@@ -1,5 +1,6 @@
-import { test, expect } from './support/mock-api';
+import { test, expect, reply } from './support/mock-api';
 import { mockBuilder } from './support/builder-mocks';
+import { CTV_TIERS } from './support/affiliate-mocks';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -104,5 +105,43 @@ test.describe('Màn dựng gian hàng Mini (G6 #28 #29 #30)', () => {
     await expect(row.getByRole('button', { name: 'Bài đăng mẫu' })).toHaveCount(0);
     await row.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }).click();
     await expect(page.getByRole('button', { name: 'Bài đăng mẫu' })).toBeVisible();
+  });
+});
+
+test.describe('Bậc CTV chậm (M3)', () => {
+  const dong = CTV_TIERS.allTiers.find((t) => t.name === 'Đồng')!;
+
+  test('/affiliate/tiers chưa về: trình dựng vẽ và bấm được ngay, huy hiệu là khung chờ; bậc về thì thay vào mà khối bên dưới không nhích', async ({ page, api }) => {
+    let release!: () => void;
+    const hold = new Promise<void>((r) => { release = r; });
+    mockBuilder(api);
+    api.get('/affiliate/tiers', async () => {
+      await hold;
+      return { ...CTV_TIERS, tier: { name: dong.name, emoji: dong.emoji } };
+    });
+    await page.goto('/storefront');
+    await expect(page.getByTestId('section-card')).toHaveCount(3, { timeout: 5_000 });
+    await expect(page.getByRole('button', { name: 'Sửa hồ sơ', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cài đặt', exact: true })).toBeEnabled();
+    const skeleton = page.getByTestId('tier-badge-skeleton');
+    await expect(skeleton).toBeVisible();
+    const before = { card: (await page.getByTestId('section-card').first().boundingBox())!.y, skeleton: (await skeleton.boundingBox())! };
+    release();
+    const badge = page.getByText('CTV Đồng');
+    await expect(badge).toBeVisible();
+    await expect(skeleton).toHaveCount(0);
+    const after = { card: (await page.getByTestId('section-card').first().boundingBox())!.y, badge: (await badge.boundingBox())! };
+    expect(Math.abs(after.card - before.card), `khối đầu nhích ${after.card - before.card}px`).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.badge.height - before.skeleton.height), `khung chờ cao ${before.skeleton.height}px, huy hiệu ${after.badge.height}px`).toBeLessThanOrEqual(1);
+  });
+
+  test('/affiliate/tiers lỗi 500: không màn lỗi, không huy hiệu, trình dựng đủ', async ({ page, api }) => {
+    mockBuilder(api);
+    api.get('/affiliate/tiers', reply(500, { statusCode: 500, message: 'Máy chủ lỗi' }));
+    await page.goto('/storefront');
+    await expect(page.getByTestId('section-card')).toHaveCount(3, { timeout: 15_000 });
+    await expect(page.getByTestId('tier-badge-skeleton')).toHaveCount(0);
+    await expect(page.getByText(/^CTV (Tân binh|Đồng)/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Thử lại/ })).toHaveCount(0);
   });
 });

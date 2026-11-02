@@ -1228,7 +1228,7 @@ export class AdminService {
       where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
       data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
     });
-    if (res.count === 0) throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
+    if (res.count === 0) throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — bạn tải lại nhé.`);
     this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hoá đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
     await this.notifications
       .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })

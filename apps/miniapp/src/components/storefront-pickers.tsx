@@ -12,10 +12,10 @@ import { EmptyState, ErrorState } from './ui/empty-state';
 import { PriceTag } from './ui/price-tag';
 import { Skeleton } from './ui/skeleton';
 import { Text } from './ui/text';
+import { STOREFRONT_TEMPLATE_BUSY, STOREFRONT_TEMPLATE_HINT } from '@tubutree/app-core/client-copy';
 
 export const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
-export const TEMPLATE_HINT =
-  'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.';
+export const TEMPLATE_HINT = STOREFRONT_TEMPLATE_HINT;
 
 /**
  * Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới — mỗi mẫu tạo sẵn 1 collection + tối
@@ -61,7 +61,7 @@ export function TemplatePickerSheet({
               ) : (
                 <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)', margin: '0 auto 6px' }} />
               )}
-              <Text variant="body-sm">{applying && applyingCategoryId === c.id ? 'Đang dựng...' : c.name}</Text>
+              <Text variant="body-sm">{applying && applyingCategoryId === c.id ? STOREFRONT_TEMPLATE_BUSY : c.name}</Text>
             </button>
           ))}
         </div>

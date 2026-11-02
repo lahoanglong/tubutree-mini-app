@@ -585,6 +585,12 @@ export const CATEGORY_GRID_COLUMNS = 5;
 export const CATEGORY_GRID_MAX_CELLS = 10;
 /** Lưới cuộn ngang (quá 10 ô): mỗi cột rộng 1/5,5 bề rộng khung nên cột thứ 6 ló gần nửa cột. Cột 1/5 chỉ ló phần đệm 16px, bị lớp mờ mép che hết. */
 export const CATEGORY_SCROLL_COLUMNS = 5.5;
+/**
+ * Cột cuộn chỉ rộng ~62,4px (lưới 5 cột: 68,6px). Nhãn ở chế độ cuộn không lấn sang ô kề (lấn làm hai nhãn dài đứng cạnh nhau chạm hoặc đè chữ): mỗi bên chừa `CATEGORY_LABEL_GUTTER` px nên hai nhãn kề luôn cách nhau ít nhất 2 × giá trị này,
+ * và siết chữ `CATEGORY_LABEL_TRACKING` để "Mỹ phẩm thiên nhiên" (từ dài nhất 60,4px ở 12px/600) vẫn vừa hai dòng. Tên nào vẫn không vừa hai dòng thì "…" thay vì chạm ô kề.
+ */
+export const CATEGORY_LABEL_GUTTER = 1;
+export const CATEGORY_LABEL_TRACKING = '-0.04em';
 
 /** `cells` ô (kể cả "Tất cả") không vừa một màn 2 × 5: lưới xếp theo cột và cuộn ngang. */
 export function categoryGridScrolls(cells: number): boolean {

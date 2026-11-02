@@ -91,7 +91,7 @@ export class UsersService {
       const guarded = await this.prisma.user.updateMany({ where: { id: userId, dob: null }, data: { dob: parsed } });
       if (guarded.count === 0) {
         throw new BadRequestException(
-          'Ngày sinh chỉ có thể đặt một lần và không tự sửa lại được. Vui lòng liên hệ CSKH nếu cần đính chính.',
+          'Ngày sinh chỉ có thể đặt một lần và không tự sửa lại được. Bạn liên hệ CSKH nếu cần đính chính nhé.',
         );
       }
       // Đã ghi dob ở updateMany trên — KHÔNG gắn lại vào `data` (tránh update() ghi đè lần 2).

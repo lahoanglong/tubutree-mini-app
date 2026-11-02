@@ -1,4 +1,5 @@
 import type { OrderStatus, PaymentMethod, PaymentStatus } from '@tubutree/shared-types';
+import { ACCOUNT_NAME_REQUIRED, BANK_NAME_REQUIRED } from '@tubutree/app-core/client-copy';
 import { formatDateTime, formatVnd } from './format';
 
 /** Lý do đổi/trả chọn sẵn — cùng mã với API (return-reasons.ts). "Lý do khác" bắt buộc mô tả. */
@@ -46,9 +47,9 @@ export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidT
 /** Kiểm tài khoản nhận hoàn tiền giống API (refund-destination.ts), lỗi theo từng ô để hiện dưới đúng ô sai. */
 export function bankFieldErrors(b: RefundBankInput): Partial<Record<keyof RefundBankInput, string>> {
   const errors: Partial<Record<keyof RefundBankInput, string>> = {};
-  if (b.bankName.trim().length < 2) errors.bankName = 'Vui lòng nhập tên ngân hàng.';
+  if (b.bankName.trim().length < 2) errors.bankName = BANK_NAME_REQUIRED;
   if (!/^\d{6,24}$/.test(b.accountNumber.replace(/[\s.-]/g, ''))) errors.accountNumber = 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
-  if (b.accountName.trim().length < 2) errors.accountName = 'Vui lòng nhập tên chủ tài khoản.';
+  if (b.accountName.trim().length < 2) errors.accountName = ACCOUNT_NAME_REQUIRED;
   return errors;
 }
 

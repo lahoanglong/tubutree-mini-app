@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ERROR_NETWORK } from '@tubutree/app-core/client-copy';
 
 /**
  * Đặc tả hành vi trang Vườn Cây (C-082, PC-10a): nút điểm danh/hứng sương/tưới/thu hoạch/góp quỹ trồng cây,
@@ -219,7 +220,7 @@ describe('GamePage — trạng thái trang', () => {
   it('mất mạng khi bấm đăng nhập ở cổng: trang tự đổi sang màn lỗi phiên nên không báo thêm thanh thông báo', async () => {
     mocks.auth.status = 'idle';
     mocks.login.mockImplementationOnce(async () => {
-      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+      mocks.auth = { status: 'error', error: ERROR_NETWORK };
     });
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { CheckCircle2, Check, Clock, Copy, Download, Loader2, TriangleAlert } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -83,7 +84,7 @@ export function BankTransferPanel({
   // Cờ riêng cho lần khách bấm tay: `isFetching` còn bật theo nhịp dò nền 4s, gắn vào nút thì nút khoá/nhấp nháy đúng lúc khách chạm.
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<'unpaid' | 'failed' | 'error' | null>(null);
-  const [checkError, setCheckError] = useState(NETWORK_CHECK_MESSAGE);
+  const [checkError, setCheckError] = useState(BANK_CHECK_NETWORK);
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
   const [savingQr, setSavingQr] = useState(false);
   // Ref: hai lần chạm liền nhau chưa kịp vẽ lại thì state `savingQr` còn cũ.
@@ -113,7 +114,7 @@ export function BankTransferPanel({
       const status = res.data?.paymentStatus;
       setCheckResult(status === 'PAID' ? null : status === 'FAILED' || status === 'REFUNDED' ? 'failed' : 'unpaid');
     } catch (e) {
-      setCheckError(isFinalRejection(e) ? errorMessage(e) : isSessionExpired(e) ? sessionExpiredText(e as ApiError) : NETWORK_CHECK_MESSAGE);
+      setCheckError(isFinalRejection(e) ? errorMessage(e) : isSessionExpired(e) ? sessionExpiredText(e as ApiError) : BANK_CHECK_NETWORK);
       setCheckResult('error');
     } finally {
       setChecking(false);
@@ -124,8 +125,8 @@ export function BankTransferPanel({
     checkResult === 'error'
       ? checkError
       : checkResult === 'failed'
-        ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
-        : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.';
+        ? BANK_TX_FAILED
+        : BANK_NOT_RECEIVED;
 
   const handleSaveQr = async (url: string, orderCode: string) => {
     if (savingQrNow.current) return;
@@ -346,8 +347,6 @@ export function BankTransferPanel({
 
 const checkResultClass = (r: 'unpaid' | 'failed' | 'error') => (r === 'error' || r === 'failed' ? 'text-danger-fg' : 'text-stone-700');
 
-const NETWORK_CHECK_MESSAGE = 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
-
 // Dòng thông tin ngân hàng: từ md khoảng đệm trơn; ở điện thoại có đường kẻ phía trên như Row của bank-payment.tsx.
 const ROW = 'flex items-center justify-between py-1 max-md:border-t max-md:border-[var(--color-border-subtle)] max-md:py-1.5';
 const LABEL = 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]';
@@ -387,7 +386,7 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
       )}
       {failed && (
         <span role="alert" className="basis-full text-xs text-danger-fg md:hidden">
-          Không thể sao chép {name}. Vui lòng sao chép thủ công.
+          {bankCopyFailed(name)}
         </span>
       )}
     </>

@@ -62,14 +62,14 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     const chip = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tubu')!;
     click(chip);
     expect(mocks.push).toHaveBeenCalledWith('/brand/tubu');
-    const card = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('nhãn Việt'))!;
+    const card = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('thương hiệu Việt'))!;
     click(card);
     expect(mocks.push).toHaveBeenCalledWith('/cau-chuyen');
   });
 
   it('Hành trình nguyên liệu: thẻ bản đồ ẩn khỏi trình đọc và khỏi Tab (aria-hidden + tabIndex -1), "Xem bản đồ" ở tiêu đề là điều khiển đọc được duy nhất (H3 #3)', async () => {
     const c = await mount(<BrandJourney initialBrands={[{ brand: 'Tubu', count: 4, slug: 'tubu' }]} />);
-    const card = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('nhãn Việt'))!;
+    const card = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('thương hiệu Việt'))!;
     expect(card.getAttribute('aria-hidden')).toBe('true');
     expect(card.tabIndex).toBe(-1);
     const readable = Array.from(c.querySelectorAll('a, button')).filter((e) => !e.closest('[aria-hidden="true"]') && /bản đồ/i.test(e.getAttribute('aria-label') ?? e.textContent ?? ''));
@@ -79,7 +79,7 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
 
   it('Hành trình nguyên liệu: câu mô tả số nhãn vẫn đọc được đúng một lần dù thẻ bản đồ aria-hidden (H3 review)', async () => {
     const c = await mount(<BrandJourney initialBrands={[{ brand: 'Tubu', count: 4, slug: 'tubu' }, { brand: 'Lá Xanh', count: 2, slug: 'la-xanh' }]} />);
-    const spokenCopy = Array.from(c.querySelectorAll('span')).filter((e) => e.children.length === 0 && /nhãn Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
+    const spokenCopy = Array.from(c.querySelectorAll('span')).filter((e) => e.children.length === 0 && /thương hiệu Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
     expect(spokenCopy).toHaveLength(1);
     expect(spokenCopy[0]!.textContent).toBe(homeCopy.journey.body(2));
     expect(spokenCopy[0]!.closest('button')).toBeNull();

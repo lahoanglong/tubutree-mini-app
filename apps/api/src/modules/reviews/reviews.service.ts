@@ -186,7 +186,7 @@ export class ReviewsService {
         if (!lostRace) throw err;
       }
     }
-    throw new ConflictException('Không lưu được đánh giá do thao tác đồng thời, vui lòng thử lại.');
+    throw new ConflictException('Không lưu được đánh giá do thao tác đồng thời, bạn thử lại nhé.');
   }
 
   private async createFirst(

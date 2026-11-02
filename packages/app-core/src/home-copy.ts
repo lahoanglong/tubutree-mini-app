@@ -39,7 +39,7 @@ export const homeCopy = {
   categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả danh mục' },
   journey: {
     title: 'Hành trình nguyên liệu',
-    body: (brands: number) => (brands > 0 ? `${brands} nhãn Việt, từ nhiều vùng đất` : 'Sản phẩm Tubu từ nhiều vùng đất Việt Nam'),
+    body: (brands: number) => (brands > 0 ? `${brands} thương hiệu Việt, từ nhiều vùng đất` : 'Sản phẩm Tubu từ nhiều vùng đất Việt Nam'),
     cta: 'Xem bản đồ',
   },
   community: {

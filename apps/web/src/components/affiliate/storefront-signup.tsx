@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { STOREFRONT_TEMPLATE_BUSY } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
@@ -382,7 +383,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
                 onClick={() => !templateMut.isPending && templateMut.mutate(c.id)}
                 className="min-h-11 rounded-card border border-stone-200 bg-stone-0 p-3 text-center text-sm"
               >
-                {templateMut.isPending && templateMut.variables === c.id ? 'Đang dựng...' : c.name}
+                {templateMut.isPending && templateMut.variables === c.id ? STOREFRONT_TEMPLATE_BUSY : c.name}
               </button>
             ))}
           </div>

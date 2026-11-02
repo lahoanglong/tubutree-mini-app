@@ -538,7 +538,7 @@ describe('Đếm chưa đọc của cả hộp thư và lỗi "Xem thêm"', () =
     await screen.findByText('Tin số 0');
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Không tải thêm được thông báo. Vui lòng thử lại.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không tải thêm được thông báo. Bạn thử lại nhé.');
     expect(screen.getByText('Tin số 0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xem thêm' })).toBeInTheDocument();
   });

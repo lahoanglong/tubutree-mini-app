@@ -1,6 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED } from '@tubutree/app-core/client-copy';
 import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -75,7 +76,7 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
     fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.openSnackbar).toHaveBeenCalledWith({
-      text: 'Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Vui lòng kiểm tra lại sau ít phút nhé!',
+      text: BANK_NOT_RECEIVED,
       type: 'warning',
       position: 'top',
     });
@@ -87,7 +88,7 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
     fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.openSnackbar).toHaveBeenCalledWith({
-      text: 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
+      text: 'Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.',
       type: 'error',
       position: 'top',
     });
@@ -190,7 +191,7 @@ describe('Thanh toán chuyển khoản: lần dò nền lỗi không làm mất 
     fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+        text: BANK_CHECK_NETWORK,
         type: 'error',
         position: 'top',
       }),
@@ -256,7 +257,7 @@ describe('Thanh toán chuyển khoản: nút sao chép (D5-02)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Sao chép số tài khoản' }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: 'Không thể sao chép số tài khoản. Vui lòng sao chép thủ công.',
+        text: 'Không thể sao chép số tài khoản. Bạn chép thủ công nhé.',
         type: 'error',
         position: 'top',
       }),

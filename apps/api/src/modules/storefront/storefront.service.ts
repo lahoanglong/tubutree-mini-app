@@ -515,7 +515,7 @@ export class StorefrontService {
       );
     } catch (err) {
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+        throw new BadRequestException('Hệ thống đang bận xử lý, bạn thử lại nhé.');
       }
       throw err;
     }
@@ -564,7 +564,7 @@ export class StorefrontService {
       );
     } catch (err) {
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+        throw new BadRequestException('Hệ thống đang bận xử lý, bạn thử lại nhé.');
       }
       throw err;
     }
@@ -674,7 +674,7 @@ export class StorefrontService {
       );
     } catch (err) {
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+        throw new BadRequestException('Hệ thống đang bận xử lý, bạn thử lại nhé.');
       }
       throw err;
     }

@@ -5,7 +5,7 @@ describe('trustBadgeLabel: nhãn tin cậy chỉ cho gian hàng admin đã duy�
   it.each([
     ['CTV', 'CTV tuyển chọn'],
     ['MERCHANT', 'Đối tác của Tubu Tree'],
-    ['BRAND', 'Nhãn hàng trên Tubu Tree'],
+    ['BRAND', 'Thương hiệu trên Tubu Tree'],
   ] as const)('%s đã duyệt: "%s"', (type, label) => {
     expect(trustBadgeLabel({ type, approved: true })).toBe(label);
   });

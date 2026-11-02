@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { ownedBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { BRAND_OWNER_EDIT_HINT, BRAND_OWNER_NONE, BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -21,7 +22,7 @@ import { ProfileTab } from './profile-tab';
 import { SalesTab } from './sales-tab';
 import { ViewBrandLink } from './view-brand-link';
 
-const TITLE = 'Quản lý nhãn hàng';
+const TITLE = BRAND_OWNER_TITLE;
 const TABS = [
   { key: 'profile', label: 'Hồ sơ & khuyến mãi' },
   { key: 'sales', label: 'Doanh thu' },
@@ -43,9 +44,9 @@ function Editor() {
   if (!q.data) {
     if (q.isSuccess || errorStatus(q.error) === 404) {
       return (
-        <section aria-label="Chưa có nhãn" className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
-          <h2 className="font-display text-base font-semibold text-stone-900">Quản lý nhãn hàng</h2>
-          <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.</p>
+        <section aria-label="Chưa có thương hiệu" className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
+          <h2 className="font-display text-base font-semibold text-stone-900">{TITLE}</h2>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">{BRAND_OWNER_NONE}</p>
           <Link href="/ho-tro/chat" className={`${ui.btnPrimary} mt-4`}>
             {chatOn ? 'Nhắn Tubu' : 'Liên hệ Tubu'}
           </Link>
@@ -59,7 +60,7 @@ function Editor() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
-      <section aria-label="Thông tin nhãn đang quản lý" className="flex flex-col gap-2">
+      <section aria-label="Thông tin thương hiệu đang quản lý" className="flex flex-col gap-2">
         <h2 className="font-display text-xl font-semibold text-stone-900">{brand.name}</h2>
         <div className="flex flex-wrap items-center gap-1.5">
           {brand.isVerified ? (
@@ -72,12 +73,12 @@ function Editor() {
           <Badge tone={brand.isPublished ? 'success' : 'warning'}>{brand.isPublished ? 'Đang hiển thị' : 'Bản nháp, chờ Tubu duyệt'}</Badge>
           <span className="text-xs text-stone-600">{brand.followerCount} theo dõi</span>
         </div>
-        <p className="text-xs text-stone-600">Bạn sửa được thông tin & khuyến mãi. Tên nhãn, chứng nhận, đăng/ẩn do Tubu duyệt.</p>
+        <p className="text-xs text-stone-600">{BRAND_OWNER_EDIT_HINT}</p>
         <ViewBrandLink slug={brand.slug} published={brand.isPublished} />
       </section>
 
       <div className="min-w-0">
-        <SegmentedTabs items={[...TABS]} value={tab} onChange={setTab} label="Mục quản lý nhãn" />
+        <SegmentedTabs items={[...TABS]} value={tab} onChange={setTab} label="Mục quản lý thương hiệu" />
         <div className="mt-3">{tab === 'sales' ? <SalesTab /> : <ProfileTab key={brand.id} brand={brand} />}</div>
       </div>
     </div>
@@ -90,7 +91,7 @@ export function BrandOwnerHub() {
   let body: React.ReactNode;
   if (phase === 'loading') body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
-  else if (phase === 'guest') body = <LoginRequired message="Đăng nhập để quản lý nhãn hàng của bạn." returnTo="/chu-thuong-hieu" />;
+  else if (phase === 'guest') body = <LoginRequired message="Đăng nhập để quản lý thương hiệu của bạn." returnTo="/chu-thuong-hieu" />;
   else body = <Editor />;
   return (
     <StaffShell title={TITLE}>

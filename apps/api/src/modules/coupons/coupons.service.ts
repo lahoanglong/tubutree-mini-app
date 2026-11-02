@@ -293,7 +293,7 @@ export class CouponsService {
       // P2034: chỉ có thể xảy ra nếu Postgres tự nâng cấp deadlock-detection trên advisory lock
       // (hiếm) — vẫn map thân thiện thay vì 500, nhất quán với các nơi khác dùng $transaction.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý, vui lòng thử lại.');
+        throw new BadRequestException('Hệ thống đang bận xử lý, bạn thử lại nhé.');
       }
       throw err;
     }

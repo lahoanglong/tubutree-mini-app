@@ -29,11 +29,11 @@ describe('brandBrowsePath (C-079)', () => {
 
 describe('brandBrowseLabel (C-079)', () => {
   it('nói rõ nút mở danh sách sản phẩm của nhãn, không chỉ đọc tên nhãn', () => {
-    expect(brandBrowseLabel('Le Plateau Coffee')).toBe('Xem sản phẩm nhãn Le Plateau Coffee');
+    expect(brandBrowseLabel('Le Plateau Coffee')).toBe('Xem sản phẩm thương hiệu Le Plateau Coffee');
   });
 
   it('cắt khoảng trắng hai đầu như brandBrowsePath', () => {
-    expect(brandBrowseLabel('  Sokfram ')).toBe('Xem sản phẩm nhãn Sokfram');
+    expect(brandBrowseLabel('  Sokfram ')).toBe('Xem sản phẩm thương hiệu Sokfram');
   });
 });
 

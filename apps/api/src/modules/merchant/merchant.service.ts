@@ -415,7 +415,7 @@ export class MerchantService {
 
     // Không thể tới đây trong thực tế (vòng for luôn return hoặc throw) — chỉ để TypeScript
     // thấy hàm luôn có giá trị trả về.
-    throw new BadRequestException('Không thể tạo gian hàng, vui lòng thử lại.');
+    throw new BadRequestException('Không thể tạo gian hàng, bạn thử lại nhé.');
   }
 
   async updateStore(userId: string, dto: UpdateStoreDto) {

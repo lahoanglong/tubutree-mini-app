@@ -120,17 +120,17 @@ afterEach(() => {
 });
 
 describe('khung trang /chu-thuong-hieu', () => {
-  it('đúng một h1 "Quản lý nhãn hàng" khi đang tải và khi có dữ liệu; tên nhãn là h2', async () => {
+  it('đúng một h1 "Quản lý thương hiệu" khi đang tải và khi có dữ liệu; tên nhãn là h2', async () => {
     m.data = {};
     const r = render(<BrandOwnerPage />);
     mounted.push(r);
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(document.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
     mounted.pop()!.unmount();
 
     m.data = { '/brand/owner/me': BRAND };
     await mount();
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(Array.from(document.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Sachi');
     expect(headingProblems(document.body)).toEqual([]);
   });
@@ -138,7 +138,7 @@ describe('khung trang /chu-thuong-hieu', () => {
   it('khách chưa đăng nhập: mời đăng nhập mang returnTo, không gọi API', async () => {
     m.phase = 'guest';
     await mount();
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(document.querySelector('a[href="/dang-nhap?returnTo=%2Fchu-thuong-hieu"]')).not.toBeNull();
     expect(m.calls).toEqual([]);
   });
@@ -146,8 +146,8 @@ describe('khung trang /chu-thuong-hieu', () => {
   it('chưa được cấp nhãn (404): nói rõ, vẫn đúng một h1, không có nút thử lại', async () => {
     m.fail.set('GET /brand/owner/me', httpError(404, 'Not Found'));
     await mount();
-    expect(text()).toContain('Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.');
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(text()).toContain('Bạn chưa được cấp quyền quản lý thương hiệu nào. Liên hệ Tubu để trở thành đối tác thương hiệu.');
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(btn(/thử lại/i)).toBeNull();
   });
 
@@ -170,18 +170,18 @@ describe('khung trang /chu-thuong-hieu', () => {
   it('máy chủ từ chối (403): báo không có quyền bằng lời dễ hiểu, không lộ mã lỗi', async () => {
     m.fail.set('GET /brand/owner/me', httpError(403, 'Forbidden resource'));
     await mount();
-    expect(text()).toContain('Tài khoản này không có quyền quản lý nhãn hàng.');
+    expect(text()).toContain('Tài khoản này không có quyền quản lý thương hiệu.');
     expect(text()).not.toContain('Forbidden');
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
   });
 
   it('lỗi tải: có nút Thử lại, bấm thì tải lại được', async () => {
     m.failOnce.add('GET /brand/owner/me');
     await mount();
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(text()).toContain('Mất kết nối');
     await press('Thử lại');
-    expect(text()).toContain('Thông tin nhãn');
+    expect(text()).toContain('Thông tin thương hiệu');
   });
 
   it('trạng thái nhãn: chính hãng, đang hiển thị, số theo dõi; không dùng ký tự ✓', async () => {
@@ -199,16 +199,16 @@ describe('khung trang /chu-thuong-hieu', () => {
     expect(text()).toContain('Bản nháp, chờ Tubu duyệt');
   });
 
-  it('"Xem trang nhãn": đã đăng thì là liên kết /brand/:slug; nháp thì chỉ báo, không có liên kết', async () => {
+  it('"Xem trang thương hiệu": đã đăng thì là liên kết /brand/:slug; nháp thì chỉ báo, không có liên kết', async () => {
     await mount();
-    expect(document.querySelector('a[href="/brand/sachi"]')?.textContent).toContain('Xem trang nhãn');
+    expect(document.querySelector('a[href="/brand/sachi"]')?.textContent).toContain('Xem trang thương hiệu');
     mounted.pop()!.unmount();
 
     m.data['/brand/owner/me'] = { ...BRAND, isPublished: false };
     await mount();
     expect(document.querySelector('a[href="/brand/sachi"]')).toBeNull();
-    await press('Xem trang nhãn');
-    expect(document.querySelector('[role="status"]')?.textContent).toContain('Nhãn đang là nháp — Tubu duyệt xong khách mới xem được.');
+    await press('Xem trang thương hiệu');
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Thương hiệu đang là nháp — Tubu duyệt xong khách mới xem được.');
   });
 
   it('không có nút chưa đặt tên, ô chưa gắn nhãn hay vùng chạm nhỏ', async () => {
@@ -225,7 +225,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
     expect(tabs.map((t) => t.textContent)).toEqual(['Hồ sơ & khuyến mãi', 'Doanh thu']);
     expect(tabs[0]!.getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('Thông tin nhãn');
+    expect(text()).toContain('Thông tin thương hiệu');
     expect(calls('GET', '/brand/owner/me/sales')).toHaveLength(0);
   });
 
@@ -237,7 +237,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     const sent = calls('PATCH', '/brand/owner/me');
     expect(sent).toHaveLength(1);
     expect(sent[0]!.body).toEqual({ logoUrl: 'https://res.cloudinary.com/x/new.jpg', coverUrl: '', tagline: 'Sống xanh', origin: '', story: '' });
-    expect(document.querySelector('[role="status"]')?.textContent).toContain('Đã lưu thông tin nhãn');
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Đã lưu thông tin thương hiệu');
   });
 
   it('lưu lỗi 403: báo không có quyền, không báo đã lưu', async () => {
@@ -245,7 +245,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     await mount();
     await press('Lưu thông tin');
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Bạn không có quyền thực hiện thao tác này.');
-    expect(text()).not.toContain('Đã lưu thông tin nhãn');
+    expect(text()).not.toContain('Đã lưu thông tin thương hiệu');
   });
 
   it('thêm khuyến mãi không nhập mã: không gửi couponCode; ngày trống thì mặc định bắt đầu bây giờ, kéo dài 30 ngày', async () => {
@@ -357,7 +357,7 @@ describe('tab Doanh thu', () => {
     expect(rows[0]!.textContent).toContain('3.000.000đ');
     expect(rows[0]!.textContent).toContain('Đã bán 20');
     expect(text()).toMatch(/không hiện\s+thông tin khách/i);
-    expect(text()).not.toContain('Thông tin nhãn');
+    expect(text()).not.toContain('Thông tin thương hiệu');
   });
 
   it('đổi kỳ báo cáo gọi lại API với kỳ đó', async () => {
@@ -396,15 +396,15 @@ describe('tab Doanh thu', () => {
   it('403 khi tải doanh thu: báo không có quyền bằng lời dễ hiểu', async () => {
     m.fail.set('GET /brand/owner/me/sales', httpError(403, 'Forbidden resource'));
     await mount();
-    expect(text()).toContain('Tài khoản này không có quyền quản lý nhãn hàng.');
+    expect(text()).toContain('Tài khoản này không có quyền quản lý thương hiệu.');
   });
 });
 
 describe('/chu-thuong-hieu — diện mạo Mini App ở điện thoại', () => {
-  it('Xem trang nhãn là nút secondary; thẻ không viền; tiêu đề thẻ serif title-sm', async () => {
+  it('Xem trang thương hiệu là nút secondary; thẻ không viền; tiêu đề thẻ serif title-sm', async () => {
     await mount();
     expect(document.querySelector('a[href="/brand/sachi"]')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-    const info = document.querySelector('section[aria-label="Thông tin nhãn"]')!;
+    const info = document.querySelector('section[aria-label="Thông tin thương hiệu"]')!;
     expect(info.className).toContain('max-md:border-transparent');
     expect(info.querySelector('h2')!.className).toContain('font-display');
     expect(info.querySelector('h2')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
@@ -420,7 +420,7 @@ describe('/chu-thuong-hieu — diện mạo Mini App ở điện thoại', () =>
 describe('/chu-thuong-hieu — khối Khuyến mãi và tiêu đề thẻ', () => {
   it('tiêu đề thẻ giữ sans 16px ở máy tính, chỉ điện thoại đổi serif title-sm', async () => {
     await mount();
-    const h = document.querySelector('section[aria-label="Thông tin nhãn"] h2')!;
+    const h = document.querySelector('section[aria-label="Thông tin thương hiệu"] h2')!;
     expect(h.className).toContain('text-base');
     expect(h.className).not.toMatch(/(^|\s)font-display/);
     expect(h.className).toContain('max-md:font-display');

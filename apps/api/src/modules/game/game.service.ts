@@ -477,7 +477,7 @@ export class GameService {
       // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước
       // là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận, vui lòng thử tưới lại.');
+        throw new BadRequestException('Hệ thống đang bận, bạn thử tưới lại nhé.');
       }
       throw err;
     }

@@ -3,6 +3,7 @@
  * lỗi). Luật khớp DTO phía BE: apps/api/src/modules/loyalty/dto/loyalty-staff.dto.ts.
  */
 import { ApiError } from './client-api';
+import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
 import { formatVnd } from './format-vnd';
 
 export const RECEIPT_ID_RE = /^[A-Za-z0-9._\-/#]+$/;
@@ -58,7 +59,7 @@ export interface PosErrorView {
  * khoá tài khoản…) nên HIỆN NGUYÊN VĂN; chỉ phân loại để UI tô màu/gợi ý bước tiếp theo.
  */
 export function posErrorView(err: unknown): PosErrorView {
-  const message = err instanceof Error && err.message ? err.message : 'Có lỗi xảy ra. Vui lòng thử lại.';
+  const message = err instanceof Error && err.message ? err.message : ERROR_GENERIC;
   const status = err instanceof ApiError ? err.status : 0;
   if (status === 403 && /đang tắt/i.test(message)) {
     return {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
 import { AlertTriangle } from 'lucide-react';
 import { reportError } from '@/lib/error-report';
 import { ui } from '@/lib/guest-ui';
@@ -17,7 +18,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             <AlertTriangle className="h-8 w-8" aria-hidden="true" />
           </div>
           <h1 className="mt-5 font-display text-2xl font-semibold text-stone-900">Có chút trục trặc</h1>
-          <p className="mt-2 text-stone-700">Đã có lỗi xảy ra. Vui lòng thử lại.</p>
+          <p className="mt-2 text-stone-700">{ERROR_GENERIC}</p>
           <button type="button" onClick={() => reset()} className={`${ui.btnPrimary} mt-6`}>
             Thử lại
           </button>

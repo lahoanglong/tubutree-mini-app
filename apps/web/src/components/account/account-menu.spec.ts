@@ -120,10 +120,10 @@ describe('mục đại lý và chủ nhãn đổi theo dữ liệu', () => {
     expect(dealerItem({ status: 'PENDING', isDealer: false } as never)).toMatchObject({ label: 'Hồ sơ đại lý', hint: 'Đang chờ duyệt' });
   });
 
-  it('chủ nhãn thấy "Quản lý nhãn hàng" kèm tên nhãn ở cuối nhóm Hợp tác; người khác thì không', () => {
+  it('chủ nhãn thấy "Quản lý thương hiệu" kèm tên nhãn ở cuối nhóm Hợp tác; người khác thì không', () => {
     const last = buildAccountMenu(ctx({ ownedBrandName: 'Nhãn A' })).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.at(-1)!;
-    expect(last).toMatchObject({ label: 'Quản lý nhãn hàng', to: '/chu-thuong-hieu', hint: 'Nhãn A' });
-    expect(labels(buildAccountMenu(ctx()), 'Kiếm tiền cùng Tubu')).not.toContain('Quản lý nhãn hàng');
+    expect(last).toMatchObject({ label: 'Quản lý thương hiệu', to: '/chu-thuong-hieu', hint: 'Nhãn A' });
+    expect(labels(buildAccountMenu(ctx()), 'Kiếm tiền cùng Tubu')).not.toContain('Quản lý thương hiệu');
   });
 });
 

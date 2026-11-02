@@ -1,3 +1,5 @@
+import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
+
 const numberFormat = new Intl.NumberFormat('vi-VN');
 
 /** Chữ của Trang chủ, giữ y như `vi.home`, `vi.flashSale`, `vi.reorder` và dải tăng điểm của Mini App. */
@@ -31,7 +33,7 @@ export const homeText = {
   retry: 'Thử lại',
   retryLabel: (title: string) => `Thử lại ${title}`,
   loadErrorTitle: 'Chưa tải được Trang chủ',
-  loadErrorMessage: 'Đã có lỗi xảy ra — Vui lòng thử lại',
+  loadErrorMessage: ERROR_GENERIC,
   newGift: {
     title: 'Quà khách mới',
     voucherAmount: (amount: string) => `Mã giảm giá chào mừng ${amount}`,
@@ -67,8 +69,8 @@ export const pointsBoostText = {
 };
 
 export const flashSaleText = {
-  sectionTitle: 'Ưu đãi giờ vàng',
-  sectionName: 'Ưu đãi giờ vàng',
+  sectionTitle: 'Giờ vàng',
+  sectionName: 'Giờ vàng',
   endsIn: (t: string) => `Còn ${t}`,
   soldPct: (n: number) => `Đã bán ${n}%`,
   upcomingTitle: 'Sắp diễn ra',

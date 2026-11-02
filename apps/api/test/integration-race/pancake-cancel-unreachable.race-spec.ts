@@ -16,7 +16,7 @@ import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
-const UNREACHABLE = 'Kho chưa phản hồi, vui lòng thử lại sau ít phút';
+const UNREACHABLE = 'Kho chưa phản hồi, bạn thử lại sau ít phút';
 const timeout = () => new PancakeApiError('timeout of 5000ms exceeded', true);
 
 /**
@@ -138,7 +138,7 @@ describe('Huỷ đơn đã lên Pancake khi không hỏi được Pancake (real 
     client.getOrder.mockRejectedValue(timeout());
 
     await expect(status.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN', actorId: staff.id })).rejects.toThrow(
-      /^Kho chưa phản hồi, vui lòng thử lại sau ít phút — đơn /,
+      /^Kho chưa phản hồi, bạn thử lại sau ít phút — đơn /,
     );
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after).toMatchObject({ status: 'CONFIRMED', paymentStatus: 'PAID' });

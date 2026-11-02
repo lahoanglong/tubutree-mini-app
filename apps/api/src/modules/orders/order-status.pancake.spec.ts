@@ -92,7 +92,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
 
   it('khách tự huỷ đơn đã bàn giao → vẫn câu "liên hệ CSKH"', async () => {
     const { svc } = make(makeOrder({ status: 'PACKED' }), { precheckCancel: jest.fn().mockRejectedValue(new PancakeHandedOverError(2)) });
-    await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+    await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow('bạn liên hệ CSKH');
   });
 
   it('cron hết hạn thanh toán (SYSTEM + pancakeGate) gặp đơn đã bàn giao → không huỷ, đưa vào "Cần xử lý Pancake"', async () => {
@@ -146,7 +146,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
 
     it('khách bấm: chưa trả tiền nên không đồng bộ được → ghi mốc bàn giao (lần sau chặn sớm, cron thôi thử), nhắc "Cần xử lý" một lần', async () => {
       const { svc, prisma, notifications } = make(unpaid(), handedOver());
-      await expect(svc.precheckPancakeCancel(unpaid() as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+      await expect(svc.precheckPancakeCancel(unpaid() as never, 'CUSTOMER')).rejects.toThrow('bạn liên hệ CSKH');
       expect(prisma.order.updateMany).toHaveBeenCalledWith(marker);
       const [reason] = attention(prisma.order.updateMany);
       expect(reason).toContain('Khách bấm huỷ nhưng Pancake báo đã bàn giao vận chuyển (mã 2)');
@@ -163,7 +163,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
 
     it('đơn đã trả tiền: đồng bộ được về SHIPPING (trạng thái tự chặn huỷ) → không ghi mốc, không nhắc', async () => {
       const { svc, prisma, notifications } = make(makeOrder({ status: 'PACKED' }), handedOver());
-      await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+      await expect(svc.precheckPancakeCancel(makeOrder({ status: 'PACKED' }) as never, 'CUSTOMER')).rejects.toThrow('bạn liên hệ CSKH');
       expect(prisma.order.updateMany).not.toHaveBeenCalledWith(marker);
       expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), 'OPS_PANCAKE_ALERT', expect.anything());
     });
@@ -227,15 +227,15 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
       };
       expect(err.getStatus()).toBe(409);
       expect(err.getResponse().code).toBe('PANCAKE_UNREACHABLE');
-      expect(err.getResponse().message).toMatch(/^Kho chưa phản hồi, vui lòng thử lại sau ít phút — đơn TUBU1 .*CHƯA huỷ/);
+      expect(err.getResponse().message).toMatch(/^Kho chưa phản hồi, bạn thử lại sau ít phút — đơn TUBU1 .*CHƯA huỷ/);
       expect(pancakeHooks.precheckCancel).toHaveBeenCalledWith(expect.objectContaining({ id: 'o1' }), 'INTERACTIVE');
       expect(tx.order.updateMany).not.toHaveBeenCalled();
       expect(pancakeHooks.afterLocalCancel).not.toHaveBeenCalled();
     });
 
-    it('khách tự huỷ → đúng câu "Kho chưa phản hồi, vui lòng thử lại sau ít phút"', async () => {
+    it('khách tự huỷ → đúng câu "Kho chưa phản hồi, bạn thử lại sau ít phút"', async () => {
       const { svc, pancakeHooks } = make(makeOrder(), { precheckCancel: unreachable() });
-      await expect(svc.precheckPancakeCancel(makeOrder() as never, 'CUSTOMER')).rejects.toThrow(/^Kho chưa phản hồi, vui lòng thử lại sau ít phút$/);
+      await expect(svc.precheckPancakeCancel(makeOrder() as never, 'CUSTOMER')).rejects.toThrow(/^Kho chưa phản hồi, bạn thử lại sau ít phút$/);
       expect(pancakeHooks.precheckCancel).toHaveBeenCalledWith(expect.anything(), 'INTERACTIVE');
     });
 
@@ -393,7 +393,7 @@ describe('OrderStatusService — huỷ gặp "Đã bàn giao" của Pancake trê
 
   it('khách bấm huỷ → vẫn nhận câu "liên hệ CSKH", đơn không bị chốt DELIVERED', async () => {
     const { svc, tx } = make(recycling(), handedOver(3));
-    await expect(svc.precheckPancakeCancel(recycling() as never, 'CUSTOMER')).rejects.toThrow('vui lòng liên hệ CSKH');
+    await expect(svc.precheckPancakeCancel(recycling() as never, 'CUSTOMER')).rejects.toThrow('bạn liên hệ CSKH');
     expect(tx.order.updateMany).not.toHaveBeenCalled();
   });
 

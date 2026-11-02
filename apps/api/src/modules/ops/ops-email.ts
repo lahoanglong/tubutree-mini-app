@@ -83,7 +83,7 @@ const safeMessage = (s: string) => clip(redactSensitive(s));
 
 const subjectPrefix = (ctx: AlertEmailContext) => `[${ctx.appName} · ${ctx.envLabel}]`;
 const WHERE_TO_HANDLE = 'vào trang quản trị Tubu Tree → mục "Sức khoẻ hệ thống"';
-const FOOTER = 'Email tự động từ hệ thống vận hành, vui lòng không trả lời.';
+const FOOTER = 'Email tự động từ hệ thống vận hành, không cần trả lời.';
 
 type Block = { p: string; small?: boolean } | { ul: string[] };
 

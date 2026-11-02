@@ -766,7 +766,7 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as Error).message).toBe(
-      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1.000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Vui lòng tải lại trang thanh toán.',
+      'Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1.000 điểm: 800 điểm từ đơn đang chờ xử lý đổi/trả sẽ dùng được khi yêu cầu được xử lý xong. Bạn tải lại trang thanh toán nhé.',
     );
   });
 
@@ -1098,7 +1098,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
       gateMock.mockResolvedValue(false);
       const { svc, prisma, orderCreate } = build();
       await expect(svc.placeOrder('u1', PICKUP_DTO as never)).rejects.toThrow(
-        new BadRequestException('Thu kèm rác hiện chưa mở, vui lòng tắt công tắc hoặc tải lại trang.'),
+        new BadRequestException('Thu kèm rác hiện chưa mở, bạn tắt công tắc hoặc tải lại trang nhé.'),
       );
       expect(gateMock).toHaveBeenCalledWith(undefined, expect.any(Function));
       expect((prisma.$transaction as unknown as jest.Mock)).not.toHaveBeenCalled();
@@ -1505,7 +1505,7 @@ describe('CheckoutService — chặn đơn sai giá / sai tổng / sai địa gi
     it('mã giảm giá bị gỡ khỏi giỏ ngay lúc đặt (admin tắt mã) → nêu mã và lý do, không đổ cho giá/phí giao', async () => {
       const b = build({ cartData: { ...CART, couponRemoved: { code: 'GIAM50', reason: 'Mã giảm giá đã ngừng áp dụng.' } } });
       expect(await totalChanged(b, 60)).toBe(
-        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ vì mã GIAM50 không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Vui lòng xem lại trước khi đặt.',
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ vì mã GIAM50 không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Bạn xem lại trước khi đặt nhé.',
       );
     });
 
@@ -1515,13 +1515,13 @@ describe('CheckoutService — chặn đơn sai giá / sai tổng / sai địa gi
         validateAndCompute: jest.fn().mockRejectedValue(new BadRequestException('Đơn tối thiểu 150.000đ để dùng mã này.')),
       });
       expect(await totalChanged(b, 60)).toBe(
-        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ. Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 150.000đ để dùng mã này. Vui lòng xem lại trước khi đặt.',
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ. Mã chưa được áp dụng cho đơn này: Đơn tối thiểu 150.000đ để dùng mã này. Bạn xem lại trước khi đặt nhé.',
       );
     });
 
     it('không liên quan mã → câu trung tính nêu cả ưu đãi, không khẳng định riêng giá hoặc phí giao', async () => {
       expect(await totalChanged(build(), 60)).toBe(
-        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+        'Tổng tiền đơn vừa thay đổi từ 60đ thành 100đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Bạn xem lại trước khi đặt nhé.',
       );
     });
   });
@@ -1771,7 +1771,7 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
     );
     const err = await off.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConflictException);
-    expect((err as ConflictException).message).toBe('Gian hàng vừa thay đổi, vui lòng đặt lại.');
+    expect((err as ConflictException).message).toBe('Gian hàng vừa thay đổi, bạn đặt lại nhé.');
     expect(off.orderCreate).not.toHaveBeenCalled();
   });
 
@@ -1928,7 +1928,7 @@ describe('CheckoutService — tách đơn theo nơi giao (D4)', () => {
   it('thu kèm rác mà đơn không có hàng Tubu → 400, không khoá yêu cầu, không tạo đơn', async () => {
     const { svc, orderCreate } = buildSplit({ cartData: ONLY_SHOP });
     await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', wasteRequestId: 'r1' } as never)).rejects.toThrow(
-      new BadRequestException('Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Vui lòng tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn.'),
+      new BadRequestException('Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Bạn tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn nhé.'),
     );
     expect(lockPickupMock).not.toHaveBeenCalled();
     expect(orderCreate).not.toHaveBeenCalled();

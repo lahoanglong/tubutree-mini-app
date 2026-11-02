@@ -14,6 +14,7 @@ import { cartKey, cartStorefrontSlug, useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { useFlashAllowance } from '@/lib/use-flash-allowance';
 
 const VariationSheet = dynamic(() => import('@/components/variation-sheet').then((m) => m.VariationSheet), { ssr: false });
 
@@ -38,6 +39,8 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
   const [busyId, setBusyId] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[] } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
+  const flashWithAllowance = useFlashAllowance(flash, picker?.variations.map((v) => v.id) ?? []);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chống bấm đúp đồng bộ: state chưa kịp render lại giữa hai cú chạm liền nhau, còn ref thì có ngay.
   const inFlight = useRef(false);
@@ -136,7 +139,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
           productName={picker.product.name}
           thumbnail={picker.product.thumbnail}
           variations={picker.variations}
-          flash={flash}
+          flash={flashWithAllowance}
           initialId={picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
           cartLines={cartQ.data?.items}

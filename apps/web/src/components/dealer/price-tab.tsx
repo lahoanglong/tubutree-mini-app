@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { DEALER_PRICE_LOADING } from '@tubutree/app-core/client-copy';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, ClipboardList, Save, Search, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -224,7 +225,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
           Trả trước
         </button>
         <button type="button" disabled={overLimit || placing || belowMin} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
-          {placing ? 'Đang đặt...' : 'Ghi công nợ'}
+          {placing ? 'Đang đặt…' : 'Ghi công nợ'}
         </button>
       </div>
     </>
@@ -327,7 +328,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
         title="Lưu mẫu đơn"
         footer={
           <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
-            {saveTpl.isPending ? 'Đang lưu...' : 'Lưu mẫu'}
+            {saveTpl.isPending ? 'Đang lưu…' : 'Lưu mẫu'}
           </button>
         }
       >
@@ -362,7 +363,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
         />
-        {priceQ.isLoading && <p className="mt-2 text-xs text-stone-600">Đang tải bảng giá, vui lòng đợi trước khi dán đơn…</p>}
+        {priceQ.isLoading && <p className="mt-2 text-xs text-stone-600">{DEALER_PRICE_LOADING}</p>}
         {pasteResult && (
           <p role="status" className={`mt-2 flex items-center gap-1 text-xs ${pasteResult.unmatched.length ? 'text-promo-fg' : 'text-forest-700'}`}>
             <Check className="h-4 w-4 flex-none" aria-hidden="true" />

@@ -20,7 +20,7 @@ import { ATTENTION_CANCEL_PENDING, flagPancakeAttention } from './pancake-attent
 import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 
 /** Lời báo khách/admin khi Pancake đã bàn giao đơn cho đơn vị vận chuyển (D1). */
-export const PANCAKE_HANDED_OVER_MESSAGE = 'Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH';
+export const PANCAKE_HANDED_OVER_MESSAGE = 'Đơn đã bàn giao cho đơn vị vận chuyển, bạn liên hệ CSKH';
 
 /** Pancake báo đơn đã bàn giao vận chuyển — KHÔNG huỷ ở Tubu, đồng bộ lại trạng thái. */
 export class PancakeHandedOverError extends Error {
@@ -31,7 +31,7 @@ export class PancakeHandedOverError extends Error {
 }
 
 /** Lời báo người bấm huỷ khi không hỏi được kho Pancake (đơn đã lên Pancake). */
-export const PANCAKE_UNREACHABLE_MESSAGE = 'Kho chưa phản hồi, vui lòng thử lại sau ít phút';
+export const PANCAKE_UNREACHABLE_MESSAGE = 'Kho chưa phản hồi, bạn thử lại sau ít phút';
 
 /**
  * Người bấm huỷ đơn đã lên Pancake mà không hỏi được Pancake (timeout, lỗi mạng, chưa cấu hình): không huỷ — Pancake có

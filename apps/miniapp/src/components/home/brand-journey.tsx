@@ -14,7 +14,7 @@ import { Text } from '../ui/text';
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ: tiêu đề `SectionHeader` (Inter 16/700, nút "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ kèm dải
- * nhãn Việt (chạm mở trang nhãn). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách nhãn thì
+ * thương hiệu Việt (chạm mở trang thương hiệu). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách thương hiệu thì
  * vẫn có thẻ bản đồ.
  */
 export function BrandJourney() {
@@ -31,7 +31,7 @@ export function BrandJourney() {
       <SectionHeader title={homeCopy.journey.title} action={{ label: homeCopy.journey.cta, to: '/brand-story' }} />
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
         {/* Cùng đích với nút "Xem bản đồ" ở tiêu đề: thẻ chỉ còn cho chạm/chuột; bàn phím và trình đọc đi qua đúng một điều khiển (như các kệ khác).
-            aria-hidden cũng giấu câu mô tả trong thẻ ("12 nhãn Việt…"), nên trình đọc nghe câu đó một lần ở bản chỉ-đọc ngoài nút. */}
+            aria-hidden cũng giấu câu mô tả trong thẻ ("12 thương hiệu Việt…"), nên trình đọc nghe câu đó một lần ở bản chỉ-đọc ngoài nút. */}
         <span style={SR_ONLY}>{homeCopy.journey.body(list.length)}</span>
         <button
           type="button"

@@ -410,12 +410,12 @@ describe('OrdersService.cancel — Pancake (D1: PANCAKE-2, BUYERMINI-1, MONEY-2,
   });
 
   it('Pancake đã gửi hàng → từ chối "liên hệ CSKH", KHÔNG lật trạng thái, KHÔNG hoàn tiền', async () => {
-    const orderStatus = gate(jest.fn().mockRejectedValue(new BadRequestException('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH')));
+    const orderStatus = gate(jest.fn().mockRejectedValue(new BadRequestException('Đơn đã bàn giao cho đơn vị vận chuyển, bạn liên hệ CSKH')));
     const { svc, $transaction, row, userUpdate } = makeService(
       { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
       { orderStatus },
     );
-    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH');
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Đơn đã bàn giao cho đơn vị vận chuyển, bạn liên hệ CSKH');
     expect($transaction).not.toHaveBeenCalled();
     expect(userUpdate).not.toHaveBeenCalled();
     expect(row.status).toBe('CONFIRMED');
@@ -423,12 +423,12 @@ describe('OrdersService.cancel — Pancake (D1: PANCAKE-2, BUYERMINI-1, MONEY-2,
   });
 
   it('không hỏi được Pancake → từ chối "Kho chưa phản hồi…", KHÔNG lật trạng thái, KHÔNG hoàn tiền (R3-CANCEL-1)', async () => {
-    const orderStatus = gate(jest.fn().mockRejectedValue(new ConflictException('Kho chưa phản hồi, vui lòng thử lại sau ít phút')));
+    const orderStatus = gate(jest.fn().mockRejectedValue(new ConflictException('Kho chưa phản hồi, bạn thử lại sau ít phút')));
     const { svc, $transaction, row, userUpdate } = makeService(
       { ...baseOrder, pancakeOrderId: 'pk-1', paymentMethod: 'WALLET', paymentStatus: 'PAID' },
       { orderStatus },
     );
-    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('Kho chưa phản hồi, bạn thử lại sau ít phút');
     expect($transaction).not.toHaveBeenCalled();
     expect(userUpdate).not.toHaveBeenCalled();
     expect(row.status).toBe('CONFIRMED');
@@ -1133,7 +1133,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       const err = await svc.cancel('u1', 'TUBU1').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as Error).message).toBe(
-        'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Vui lòng liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ.',
+        'Đơn đã bàn giao cho đơn vị vận chuyển và Tubu đang xử lý, bạn không tự huỷ được nữa. Bạn liên hệ hotline hoặc Zalo OA của Tubu nếu cần hỗ trợ nhé.',
       );
       expect(orderStatus.precheckPancakeCancel).not.toHaveBeenCalled();
       expect($transaction).not.toHaveBeenCalled();

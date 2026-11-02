@@ -19,3 +19,17 @@ export function TierBadge({ name, emoji }: { name: string; emoji: string }) {
     </Badge>
   );
 }
+
+/**
+ * Chỗ giữ cho huy hiệu bậc khi `/affiliate/tiers` chưa về: cùng `Badge` (nên cao đúng bằng huy hiệu thật, bậc về thì thay vào mà hàng không nhảy) nhưng chữ tàng hình và không có chữ "CTV ..." nào trong cây
+ * (trình đọc màn hình và e2e không thấy một huy hiệu giả). Bậc lỗi, hết hạn chờ hoặc là bậc thấp nhất thì nơi gọi bỏ nó đi (không huy hiệu).
+ */
+export function TierBadgeSkeleton() {
+  return (
+    <span data-testid="tier-badge-skeleton" aria-hidden="true" className="tubu-skeleton" style={{ display: 'inline-flex', borderRadius: 'var(--radius-pill)' }}>
+      <Badge tone="brand" style={{ visibility: 'hidden' }}>
+        <span style={{ display: 'inline-block', width: '5.5rem' }}>{'\u00a0'}</span>
+      </Badge>
+    </span>
+  );
+}

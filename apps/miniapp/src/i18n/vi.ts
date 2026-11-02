@@ -3,6 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { BRAND_BADGE, ERROR_NETWORK, REQUIRED_FIELD, overStockMessage } from '@tubutree/app-core/client-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
@@ -14,7 +15,7 @@ export const vi = {
     cancel: 'Huỷ',
     save: 'Lưu',
     confirm: 'Xác nhận',
-    loading: 'Đang chuẩn bị cho bạn...',
+    loading: 'Đang chuẩn bị cho bạn…',
     freeShip: 'Miễn phí',
     undo: 'Hoàn tác',
     seeProducts: 'Xem sản phẩm',
@@ -32,7 +33,7 @@ export const vi = {
     generic: 'Có chút trục trặc, thử lại nhé',
     sessionExpired: 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.',
     loadFailed: 'Chưa tải được nội dung',
-    sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
+    sessionUnavailable: ERROR_NETWORK,
     sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau khoảng một phút nhé.',
     title: 'Chưa tải được trang này',
     notFoundTitle: 'Không tìm thấy',
@@ -247,10 +248,7 @@ export const vi = {
 
   checkout: {
     title: 'Thanh toán',
-    overStock: (name: string, stock: number) =>
-      stock > 0
-        ? `Sản phẩm "${name}" hiện còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
-        : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
+    overStock: overStockMessage,
     backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',
     addressEmpty: fillCopy('checkout.addressEmpty'),
@@ -266,7 +264,7 @@ export const vi = {
     district: 'Quận/Huyện',
     ward: 'Phường/Xã',
     street: 'Số nhà, tên đường',
-    requiredField: 'Bạn điền giúp Tubu mục này nhé',
+    requiredField: REQUIRED_FIELD,
     phoneInvalid: 'Số điện thoại chưa đúng định dạng',
     payment: 'Phương thức thanh toán',
     paymentCod: 'Thanh toán khi nhận hàng (COD)',
@@ -275,14 +273,14 @@ export const vi = {
     paymentWallet: (balance: string) => `Ví Tubu (${balance})`,
     points: 'Điểm Xanh',
     note: 'Ghi chú cho Tubu',
-    notePlaceholder: 'Ví dụ: giao giờ hành chính...',
+    notePlaceholder: 'Ví dụ: giao giờ hành chính…',
     summary: 'Tóm tắt đơn hàng',
     shippingFee: 'Phí vận chuyển',
     total: 'Tổng cộng',
     pointsEarn: (n: number) => `Nhận +${formatNumber(n)} Điểm Xanh khi giao thành công`,
     placeOrder: 'Đặt hàng',
     placeOrderWith: (total: string) => `Đặt hàng · ${total}`,
-    placing: 'Đang gửi đơn...',
+    placing: 'Đang gửi đơn…',
   },
 
   success: {
@@ -416,7 +414,7 @@ export const vi = {
     title: 'Danh mục',
     categoryChips: 'Đổi danh mục',
     viewBrand: (brand: string) => `Xem trang thương hiệu ${brand}`,
-    searchPlaceholder: 'Tìm sản phẩm...',
+    searchPlaceholder: 'Tìm sản phẩm…',
     searchLabel: 'Tìm sản phẩm',
     clearSearch: 'Xoá từ khoá',
     noResultHeading: (q: string) => `Không tìm thấy "${q}"`,
@@ -625,7 +623,7 @@ export const vi = {
     emptyBody: 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.',
     emptyOwnerBody: 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.',
     badgePartner: 'Đối tác của Tubu Tree',
-    badgeBrand: 'Nhãn hàng trên Tubu Tree',
+    badgeBrand: BRAND_BADGE,
     badgeSelectedCtv: 'CTV tuyển chọn',
     title: 'Gian hàng của tôi',
     empty: 'Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.',
@@ -640,7 +638,7 @@ export const vi = {
     show: 'Hiện',
     pickerSearch: 'Tìm sản phẩm…',
     commission: 'hoa hồng',
-    inStore: 'Đang xem cửa hàng',
+    inStore: 'Đang xem gian hàng',
     backToTubu: '⤺ Về Tubu Tree',
     shareTitle: 'Chia sẻ gian hàng',
     shareZalo: 'Chia sẻ qua Zalo',
@@ -686,13 +684,13 @@ export const vi = {
     shippingFee: 'Phí giao',
     customerTotal: 'Tổng khách trả',
     calculating: 'Đang tính…',
-    flashPrice: 'Giá giờ vàng',
+    flashPrice: 'Giá Giờ vàng',
     totalChangedHint: 'Báo lại khách tổng tiền mới bên dưới rồi bấm tạo đơn lần nữa.',
     submit: 'Tạo đơn hộ khách',
     emptyItems: 'Thêm ít nhất 1 sản phẩm',
     phoneInvalid: 'Số điện thoại chưa đúng',
     recipientTooShort: 'Tên người nhận cần ít nhất 2 ký tự',
-    requiredField: 'Vui lòng nhập',
+    requiredField: REQUIRED_FIELD,
     checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
     unconfirmed:
       'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',

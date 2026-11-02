@@ -184,5 +184,5 @@ export function markPaidFailure(e: unknown, action: RefundAction = 'paid'): Mark
       message: `Máy chủ đang gặp lỗi nên chưa rõ khoản này đã được ghi nhận chưa. Bấm "${button}" để thử lại; nếu đã ghi nhận, danh sách sẽ tự cập nhật.`,
     };
   }
-  return { stale: false, message: e.message || 'Không ghi nhận được. Vui lòng thử lại.' };
+  return { stale: false, message: e.message || 'Không ghi nhận được. Thử lại sau ít phút.' };
 }

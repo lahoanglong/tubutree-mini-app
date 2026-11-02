@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
 import { trackEvent } from '../services/analytics';
 
 interface ErrorBoundaryProps {
@@ -76,7 +77,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
           }}
         >
           <p style={{ fontSize: 16, color: 'var(--color-text-primary)', margin: 0 }}>
-            Đã có lỗi xảy ra — Vui lòng thử lại
+            {ERROR_GENERIC}
           </p>
           <button
             type="button"

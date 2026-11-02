@@ -6,8 +6,8 @@ import { isNewGeoCode } from './geo-code';
 export const ADDRESS_OUTDATED = 'ADDRESS_OUTDATED';
 
 export const ADDRESS_OUTDATED_MESSAGE =
-  'Địa chỉ giao hàng chưa theo địa giới mới (tỉnh/thành và phường/xã sau sắp xếp 2025). Vui lòng cập nhật lại địa chỉ.';
-const WARD_MISMATCH_MESSAGE = 'Phường/xã không thuộc tỉnh/thành đã chọn. Vui lòng chọn lại địa chỉ.';
+  'Địa chỉ giao hàng chưa theo địa giới mới (tỉnh/thành và phường/xã sau sắp xếp 2025). Bạn cập nhật lại địa chỉ nhé.';
+const WARD_MISMATCH_MESSAGE = 'Phường/xã không thuộc tỉnh/thành đã chọn. Bạn chọn lại địa chỉ nhé.';
 
 function outdated(message: string): BadRequestException {
   return new BadRequestException({ statusCode: 400, error: 'Bad Request', code: ADDRESS_OUTDATED, message });

@@ -4,7 +4,7 @@ import axios, { AxiosError } from 'axios';
 import type { Env } from '../../config/env.validation';
 import { normalizeZaloPhone } from '../../common/phone';
 
-const ZALO_BUSY_MESSAGE = 'Zalo đang bận, vui lòng thử lại sau ít phút.';
+const ZALO_BUSY_MESSAGE = 'Zalo đang bận, bạn thử lại sau ít phút nhé.';
 
 /** Zalo không trả lời được (mất kết nối, quá hạn chờ, 5xx, quá tải 429): lỗi tạm của Zalo, không phải lỗi của khách. */
 function isZaloUnavailable(err: AxiosError): boolean {
@@ -55,7 +55,7 @@ export class ZaloService {
       if (!data.access_token) {
         // Lời của Zalo ("invalid code") chỉ để chẩn đoán; khách nhận câu tiếng Việt và biết phải làm gì tiếp.
         this.logger.warn(`Zalo exchangeOAuthCode bị từ chối: ${data.error ?? '?'} ${data.error_description ?? 'unknown'}`);
-        throw new UnauthorizedException('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
+        throw new UnauthorizedException('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Bạn đăng nhập lại nhé.');
       }
       return data.access_token;
     } catch (err) {
@@ -63,7 +63,7 @@ export class ZaloService {
       const ax = err as AxiosError;
       this.logger.error(`Zalo exchangeOAuthCode error: ${ax.message}`);
       if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
-      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo. Vui lòng đăng nhập lại.');
+      throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo. Bạn đăng nhập lại nhé.');
     }
   }
 

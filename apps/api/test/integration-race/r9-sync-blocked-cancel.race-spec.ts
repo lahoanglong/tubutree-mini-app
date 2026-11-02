@@ -144,7 +144,7 @@ describe('Đơn chờ chuyển khoản đã bàn giao vận chuyển — khách 
 
     const first = await orders.cancel(user.id, order.code).catch((e: unknown) => e);
     expect(first).toBeInstanceOf(BadRequestException);
-    expect((first as Error).message).toContain('vui lòng liên hệ CSKH');
+    expect((first as Error).message).toContain('bạn liên hệ CSKH');
     const flagged = await read(order.id);
     expect(flagged.status).toBe('PENDING_PAYMENT');
     expect(flagged.autoCancelBlockedAt).not.toBeNull();

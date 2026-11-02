@@ -56,7 +56,7 @@ describe('ImageUrlField', () => {
     expect(root.querySelector('label[for="logo"]')?.textContent).toBe('URL Logo thương hiệu');
     expect(input.className).toContain('min-h-[44px]');
     expect(input.getAttribute('inputmode')).toBe('url');
-    expect(input.placeholder).toBe('https://...');
+    expect(input.placeholder).toBe('https://…');
   });
 
   it('chưa có liên kết: không có thẻ img, có dòng gợi ý và không có nút xoá', () => {

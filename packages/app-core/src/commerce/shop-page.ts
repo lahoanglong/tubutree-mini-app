@@ -130,8 +130,8 @@ export function ownerTierPreview(
 }
 
 /**
- * Trình dựng chờ bậc của chủ shop trước khi dựng (để huy hiệu không chèn vào làm cả trang nhảy), nhưng chỉ khi bậc còn hy vọng về. TanStack v5 giữ `status: 'pending'` khi mất mạng
- * (`fetchStatus: 'paused'`) nên chờ theo `isPending` thì khung chờ treo mãi dù gian hàng đã có trong cache: `paused` coi như xong, dựng không huy hiệu; có mạng lại thì bậc về và huy hiệu hiện.
+ * Chỗ huy hiệu bậc ở đầu xem trước của trình dựng còn chờ bậc không: còn thì vẽ khung chờ cao bằng huy hiệu (chỉ chỗ đó chờ, trình dựng vẽ ngay), hết hy vọng thì bỏ huy hiệu. TanStack v5 giữ `status: 'pending'`
+ * khi mất mạng (`fetchStatus: 'paused'`) nên chờ theo `isPending` thì khung chờ treo mãi: `paused` coi như xong, không huy hiệu; có mạng lại thì bậc về và huy hiệu hiện.
  */
 export function ownerTierPending(q: { isPending: boolean; fetchStatus: 'fetching' | 'paused' | 'idle' }): boolean {
   return q.isPending && q.fetchStatus !== 'paused';

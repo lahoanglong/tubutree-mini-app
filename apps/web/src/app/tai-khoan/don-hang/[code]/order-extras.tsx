@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { ChevronRight, Recycle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -28,7 +29,7 @@ export function OrderInvoice({ order: o }: { order: OrderDetailDTO }) {
     <section className={`mt-4 p-4 ${ui.card}`}>
       <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Hoá đơn VAT</h2>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span className="text-stone-700">{INVOICE_STATUS_TEXT[o.invoiceStatus] ?? 'Phát hành lỗi — vui lòng liên hệ hỗ trợ'}</span>
+        <span className="text-stone-700">{INVOICE_STATUS_TEXT[o.invoiceStatus] ?? INVOICE_ISSUE_FAILED}</span>
         {url && (
           <a href={url} target="_blank" rel="noopener noreferrer" className={ui.btnSecondary}>
             Tải PDF

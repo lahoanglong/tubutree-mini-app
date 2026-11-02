@@ -64,7 +64,7 @@ type WasteConfirmRow = Prisma.WasteRequestGetPayload<{ include: typeof CONFIRM_I
 type TxResult = { replay: boolean; result: WasteConfirmResultDTO; userId: string; code: string };
 
 const NOT_FOUND = 'Không tìm thấy mã';
-const RETRY = 'Vui lòng thử lại';
+const RETRY = 'Bạn thử lại nhé';
 const DIFFERENT_FIGURES = 'Yêu cầu đã được xác nhận với số liệu khác';
 const PARTNER_NOT_ACCEPTED = 'Điểm đại lý không xác nhận được món chỉ kho Tubu HCMC nhận. Từ chối yêu cầu hoặc chuyển khách tới kho.';
 const PROGRAMME_OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.';

@@ -41,5 +41,5 @@ export function brandBrowsePath(catalogBrand: string): string {
 
 /** Tên truy cập của nút/liên kết dẫn tới danh sách sản phẩm một nhãn: chỉ đọc tên nhãn thì trình đọc màn hình không nói nút này đi đâu. */
 export function brandBrowseLabel(catalogBrand: string): string {
-  return `Xem sản phẩm nhãn ${catalogBrand.trim()}`;
+  return `Xem sản phẩm thương hiệu ${catalogBrand.trim()}`;
 }

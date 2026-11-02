@@ -272,7 +272,7 @@ describe('r6-checkout (UAT vòng 4) — real Postgres', () => {
     expect(err).toEqual(
       expect.objectContaining({
         code: TOTAL_CHANGED,
-        message: `Tổng tiền đơn vừa thay đổi từ 210.000đ thành 260.000đ vì mã ${code} không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Vui lòng xem lại trước khi đặt.`,
+        message: `Tổng tiền đơn vừa thay đổi từ 210.000đ thành 260.000đ vì mã ${code} không còn được áp dụng. Lý do: Mã giảm giá đã ngừng áp dụng. Bạn xem lại trước khi đặt nhé.`,
       }),
     );
     expect(await prisma.order.count({ where: { userId: u.userId } })).toBe(0);

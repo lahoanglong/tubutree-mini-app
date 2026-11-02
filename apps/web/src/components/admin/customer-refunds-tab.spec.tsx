@@ -752,7 +752,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     click(accept(d));
     await flush();
     expect(api.claims()).toHaveLength(0);
-    expect(d.querySelector('[role="alert"]')?.textContent).toBe('Vui lòng nhập tên ngân hàng.');
+    expect(d.querySelector('[role="alert"]')?.textContent).toBe('Nhập tên ngân hàng.');
     typeInto(input('bankName'), 'ACB');
     typeInto(input('accountNumber'), '123456789');
     typeInto(input('accountName'), 'Nguyen Van A');

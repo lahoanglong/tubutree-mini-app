@@ -208,11 +208,11 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
     case 'NEED_PROVINCE':
       return 'Chọn tỉnh để ước tính phí ship';
     case 'ITEM_DAY_CAP':
-      return `${name}: mang tới điểm nhận hôm nay chỉ còn ${formatNumber(caps?.dayRemainingQty ?? 0)} ${unit}`;
+      return `${name}: mang tới điểm nhận hôm nay còn ${formatNumber(caps?.dayRemainingQty ?? 0)} ${unit}`;
     case 'ITEM_MONTH_CAP':
-      return `Tháng này ${name} chỉ còn ${formatNumber(caps?.monthRemainingQty ?? 0)} ${unit}`;
+      return `Tháng này ${name} còn ${formatNumber(caps?.monthRemainingQty ?? 0)} ${unit}`;
     case 'POINTS_MONTH_CAP':
-      return `Tháng này bạn chỉ còn ${formatPoints(block.pointsRemaining ?? 0)} trong trần tháng`;
+      return `Tháng này bạn còn ${formatPoints(block.pointsRemaining ?? 0)} trong trần tháng`;
     case 'POINT_QUOTA_FULL':
       return 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
     case 'POINT_UNAVAILABLE':

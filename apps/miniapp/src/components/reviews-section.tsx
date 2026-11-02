@@ -499,7 +499,7 @@ function WriteReview({
       </div>
       <Input.TextArea
         aria-label="Nội dung đánh giá"
-        placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)..."
+        placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)…"
         value={comment}
         onChange={(e) => onDraftChange({ comment: e.target.value })}
         rows={4}

@@ -60,8 +60,8 @@ export function notificationTitle(code: string): string {
   if (code.startsWith('STOREFRONT')) return 'Gian hàng của bạn';
   if (code.startsWith('REORDER_REMINDER')) return 'Nhắc mua lại';
   if (code === 'REVIEW_REQUEST') return 'Mời đánh giá';
-  // Trong app mục này tên là "Ưu đãi giờ vàng"; gọi "Flash Sale" khiến khách tìm mục không tồn tại.
-  if (code.startsWith('FLASH')) return 'Ưu đãi giờ vàng';
+  // Trong app mục này tên là "Giờ vàng"; gọi "Flash Sale" khiến khách tìm mục không tồn tại.
+  if (code.startsWith('FLASH')) return 'Giờ vàng';
   if (code === 'PRICE_DROP_ALERT') return 'Giảm giá';
   if (code === 'CART_ABANDONED') return 'Giỏ hàng của bạn';
   if (code.startsWith('GAME_')) return 'Vườn Xanh';
@@ -159,8 +159,8 @@ export function notificationAction(
   if (templateCode === 'SUPPORT_CHAT_REPLY') return { kind: 'link', label: 'Mở chat với Tubu Tree', to: '/chat' };
   if (route) return { kind: 'link', label: 'Xem chi tiết', to: route };
   if (templateCode.startsWith('FLASH')) {
-    // Không có slug thì về Trang chủ, nơi dải "Ưu đãi giờ vàng" đang hiển thị.
-    return { kind: 'link', label: 'Xem ưu đãi giờ vàng', to: productSlug ? `/product/${enc(productSlug)}` : '/' };
+    // Không có slug thì về Trang chủ, nơi dải "Giờ vàng" đang hiển thị.
+    return { kind: 'link', label: 'Xem Giờ vàng', to: productSlug ? `/product/${enc(productSlug)}` : '/' };
   }
   if (templateCode === 'PRICE_DROP_ALERT') {
     return { kind: 'link', label: 'Xem sản phẩm', to: productSlug ? `/product/${enc(productSlug)}` : '/wishlist' };

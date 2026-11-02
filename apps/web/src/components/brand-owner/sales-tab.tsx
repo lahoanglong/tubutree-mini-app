@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { BRAND_OWNER_NO_ORDERS, BRAND_OWNER_REVENUE_NOTE } from '@tubutree/app-core/client-copy';
 import { Package, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
 import { ownedBrandSalesQuery } from '@tubutree/app-core/queries/brand-owner';
 import type { BrandSalesPeriod } from '@tubutree/app-core/api/brand-owner';
@@ -48,7 +49,7 @@ export function SalesTab() {
       ) : d.orderCount === 0 ? (
         <section aria-label="Chưa có đơn" className={`p-8 text-center ${skin.card}`}>
           <h2 className="font-display text-base font-semibold text-stone-900">Chưa có đơn nào trong kỳ này</h2>
-          <p className="mt-1 text-sm text-stone-600">Khi khách đặt sản phẩm của nhãn, số liệu sẽ hiện ở đây.</p>
+          <p className="mt-1 text-sm text-stone-600">{BRAND_OWNER_NO_ORDERS}</p>
         </section>
       ) : (
         <>
@@ -78,10 +79,7 @@ export function SalesTab() {
         </>
       )}
 
-      <p className="text-xs text-stone-600">
-        Doanh thu là giá bán sản phẩm của nhãn trong các đơn đã xác nhận (chưa trừ mã giảm giá của đơn, chưa gồm phí vận chuyển; không tính đơn chờ
-        thanh toán, đã huỷ, đã trả hoặc đã hoàn tiền). Số liệu tổng hợp, không hiện thông tin khách.
-      </p>
+      <p className="text-xs text-stone-600">{BRAND_OWNER_REVENUE_NOTE}</p>
     </div>
   );
 }

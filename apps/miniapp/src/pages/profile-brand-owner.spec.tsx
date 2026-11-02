@@ -86,14 +86,14 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
     expect(qc.getQueryCache().getAll().filter((q) => q.state.status === 'error')).toEqual([]);
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
-    expect(screen.queryByText('Quản lý nhãn hàng')).toBeNull();
+    expect(screen.queryByText('Quản lý thương hiệu')).toBeNull();
     consoleError.mockRestore();
   });
 
-  it('chủ nhãn thật vẫn thấy mục "Quản lý nhãn hàng"', async () => {
+  it('chủ nhãn thật vẫn thấy mục "Quản lý thương hiệu"', async () => {
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
-    expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
   });
 
   it('lỗi khác 404 (mạng, 500) không bị nuốt thành "không phải chủ nhãn"', async () => {
@@ -108,32 +108,32 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
     await screen.findByText('Câu chuyện thương hiệu');
     await waitFor(() => expect(mocks.getAuthMeFlags).toHaveBeenCalledTimes(1));
     expect(mocks.getOwnedBrand).not.toHaveBeenCalled();
-    expect(screen.queryByText('Quản lý nhãn hàng')).toBeNull();
+    expect(screen.queryByText('Quản lý thương hiệu')).toBeNull();
   });
 
   it('/auth/me báo ownsBrand=true: gọi /brand/owner/me và hiện mục quản lý nhãn', async () => {
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: true, hasDeskPoint: false });
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
-    expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
   });
 
   it('/auth/me lỗi: giữ cách cũ (vẫn hỏi /brand/owner/me)', async () => {
     mocks.getAuthMeFlags.mockRejectedValue(new Error('mạng'));
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
-    expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
   });
 
   it('cờ ownsBrand đổi true → false thì mục quản lý nhãn biến mất dù ownedBrand còn data cũ', async () => {
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: true, hasDeskPoint: false });
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     const qc = renderPage();
-    expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: false });
     await act(async () => {
       await qc.invalidateQueries({ queryKey: ['auth-me'] });
     });
-    await waitFor(() => expect(screen.queryByText('Quản lý nhãn hàng')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Quản lý thương hiệu')).toBeNull());
   });
 });

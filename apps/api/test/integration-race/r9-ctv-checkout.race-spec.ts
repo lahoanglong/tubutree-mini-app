@@ -205,7 +205,7 @@ describe('r9-ctv-checkout — CTV lên đơn hộ (real Postgres)', () => {
     const q = await affiliate.quoteOrderForCustomer(ctv.id, { items });
     expect(q.total).toBe(5_400_002);
     expect(q.blockedPaymentMethods.COD).toBe(
-      'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.002đ. Vui lòng chọn chuyển khoản.',
+      'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.002đ. Bạn chọn chuyển khoản nhé.',
     );
     await expect(
       affiliate.placeOrderForCustomer(ctv.id, { items, customer: customer(), paymentMethod: 'COD', expectedTotal: q.total }),

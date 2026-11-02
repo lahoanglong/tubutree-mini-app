@@ -7,7 +7,7 @@ import { test, expect, makeUser, makeOrder, mockSession } from './support/mock-a
  * khi có mạng lại. Chạy ở khung 390px của project "Zalo Mini App" (iPhone 12).
  */
 
-const SESSION_LOST = 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.';
+const SESSION_LOST = 'Mất kết nối. Kiểm tra mạng rồi thử lại.';
 
 const PAGES: { name: string; path: string; forbidden: RegExp }[] = [
   { name: 'Đơn hàng', path: '/orders', forbidden: /Bạn chưa có đơn nào|Không có đơn nào ở mục này/ },
