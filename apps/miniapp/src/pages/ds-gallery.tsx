@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Page } from 'zmp-ui';
 import { Truck } from 'lucide-react';
-import { GALLERY_COMBO_ITEMS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
+import { GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { BannerCarousel } from '../components/ui/banner-carousel';
 import { ComboCard } from '../components/ui/combo-card';
 import { Countdown } from '../components/ui/countdown';
@@ -10,6 +10,7 @@ import { Section } from '../components/ui/section';
 import { SectionHeader } from '../components/ui/section-header';
 import { SortBar } from '../components/ui/sort-bar';
 import { Heading, Text } from '../components/ui/text';
+import { VoucherPicker } from '../components/ui/voucher-picker';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 
 /**
@@ -199,6 +200,15 @@ export default function DsGalleryPage() {
               <VoucherTicket voucher={v.view} variant="row" primary={primaryOf(v)} reason={v.reason} expiring={v.expiring} />
             </Variant>
           ))}
+        </Group>
+
+        <Group name="voucher-picker">
+          <Variant label="đang dùng, chưa đủ (có lý do), không áp dụng; hạn có năm khi khác năm">
+            <VoucherPicker rows={GALLERY_PICKER_ROWS} onUse={noop} onRemove={noop} />
+          </Variant>
+          <Variant label="đang đổi mã (busy)">
+            <VoucherPicker rows={GALLERY_PICKER_ROWS} onUse={noop} onRemove={noop} busy />
+          </Variant>
         </Group>
 
         <Group name="combo-card">

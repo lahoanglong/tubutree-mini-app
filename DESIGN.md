@@ -86,6 +86,7 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 | Cần | Dùng |
 |---|---|
 | phiếu mã giảm giá (`ticket`, `chip`, `row`) | `VoucherTicket` |
+| bảng chọn mã ở giỏ và thanh toán (Mini và web dưới `md`: sheet; web từ `md`: panel tại chỗ) | `VoucherPicker` (mỗi mã một `VoucherTicket` hàng; thứ tự, nhãn nút Dùng / Bỏ chọn / Chưa đủ / Không áp dụng và lý do do `pickerRows` ở app-core; phiếu không dùng được không làm mờ cả thẻ) |
 | combo "Mua cả bộ" | `ComboCard` |
 | banner chiến dịch | `BannerCarousel` (nút dừng, tôn trọng giảm chuyển động, từ 5 giây mỗi ảnh) |
 | khối cần tài khoản khi chưa đăng nhập (Ưu đãi: Điểm Xanh và điểm danh, Mã của tôi) | `GuestLinkCard` (mỗi khối một thẻ, một nhãn nút "Đăng nhập" từ `login.cta`; Mini dùng lại thẻ mời liên kết Zalo cho tài khoản khách) |

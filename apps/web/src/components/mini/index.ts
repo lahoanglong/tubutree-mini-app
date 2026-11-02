@@ -45,6 +45,8 @@ export { SortBar } from './sort-bar';
 export type { SortBarProps, SortOption } from './sort-bar';
 export { VoucherTicket } from './voucher-ticket';
 export type { VoucherTicketProps } from './voucher-ticket';
+export { VoucherPicker } from './voucher-picker';
+export type { VoucherPickerProps } from './voucher-picker';
 export { ShopSection } from './shop-section';
 export type { ShopSectionProps, ShopSectionItem } from './shop-section';
 export { ShopHeader, SHOP_COVER_HEIGHT } from './shop-header';
