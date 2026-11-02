@@ -665,8 +665,8 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* 9rem: khung chưa dính ở đầu trang nằm thấp hơn vị trí dính khoảng 6.5rem (tiêu đề + đường dẫn); trừ thêm để đáy khung, nơi có nút Đặt hàng, đã trong màn ngay khi chưa cuộn. */}
-        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
+        {/* Khung cuộn cùng trang, không cột dính và không vùng cuộn riêng (DESIGN.md, Khuôn trang web máy tính): chỉ dải tổng + nút Đặt hàng bên dưới dính đáy màn nên nút luôn trong tầm nhìn dù khung dài. */}
+        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:self-start`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Từ md danh sách chữ hiện đủ dòng, không vùng cuộn lồng: dòng thứ 6 trở đi gập sau nút kèm tiền; giỏ tách kiện hiện hết
               để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
