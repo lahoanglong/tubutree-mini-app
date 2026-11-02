@@ -3,7 +3,7 @@ import { mockNewbieGame, newbieProfile } from './support/game-newbie-states';
 import { installVisualMode, settle } from './support/visual';
 import { measureWheel, wheelProblems } from './support/wheel-metrics';
 
-/** Cặp web của wheel-labels.miniapp.spec.ts: cùng phép đo nhãn ô Vòng quay ở 375px (web dùng chữ caption 13px, rộng hơn Mini 12px). */
+/** Cặp web của wheel-labels.miniapp.spec.ts: cùng phép đo nhãn ô Vòng quay ở 375px, web dùng cùng số đo nhãn với Mini (64px, chữ 12px, dòng 1.15). */
 const USER = {
   id: 'u-newbie', fullName: 'Khách mới', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
   pointsBalance: 20000, pointsConvertedBalance: 0, walletBalance: 0,
