@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
+import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
@@ -301,10 +301,11 @@ export default function CartPage() {
           {/* Chạm trần tồn: giải thích nút + khoá. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật `cartStockNote` với Mini). */}
           {stockNote && (
             <p
-              className={`mt-1 basis-full text-caption max-md:order-2 ${
-                stockNote.tone === 'warning' ? 'font-medium text-warning-fg' : 'text-[color:var(--color-text-secondary)]'
+              className={`mt-1 flex basis-full items-center gap-1 text-caption max-md:order-2 ${
+                stockNote.tone === 'warning' ? 'text-warning-fg' : 'text-[color:var(--color-text-secondary)]'
               }`}
             >
+              {stockNote.tone === 'warning' && <AlertTriangle size={13} aria-hidden className="shrink-0" />}
               {stockNote.text}
             </p>
           )}

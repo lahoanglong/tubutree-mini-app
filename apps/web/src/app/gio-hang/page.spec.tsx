@@ -106,6 +106,7 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(note).toBeTruthy();
     expect(note.className).not.toContain('text-warning-fg');
     expect(note.className).toContain('--color-text-secondary');
+    expect(note.querySelector('svg')).toBeNull();
     expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
   });
 
@@ -114,6 +115,9 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     state.cart = cartOf([line({ stock: 3, quantity: 3 })]);
     const low = await mount();
     expect(noteOf(low.container)!.className).toContain('text-warning-fg');
+    // Như Mini (cart.tsx): icon cảnh báo cạnh chữ, chữ không đậm thêm.
+    expect(noteOf(low.container)!.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(noteOf(low.container)!.className).not.toContain('font-medium');
     low.unmount();
     mounted = [];
     state.cart = cartOf([line({ stock: 3, quantity: 5 })]);
