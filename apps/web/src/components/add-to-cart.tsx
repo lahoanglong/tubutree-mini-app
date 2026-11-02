@@ -62,6 +62,8 @@ function forgetCouponParam() {
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
+type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
+
 export default function AddToCart({
   slug,
   variations: isrVariations,
@@ -95,6 +97,9 @@ export default function AddToCart({
   const [busy, setBusy] = useState(false);
   // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
   const [buying, setBuying] = useState(false);
+  // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (có món vừa thêm) được ghi vào cache trước khi `router.push` xong, và PDP còn đứng đó: nếu số nút
+  // và câu ghi chú tính lại theo giỏ mới thì `inCart` đã gồm số vừa thêm, nên giá nút nhảy sai chốc lát (trình đọc màn hình đọc câu sai). Giữ giỏ cũ tới khi lỗi hoặc rời trang.
+  const [buyFreeze, setBuyFreeze] = useState<{ lines: CartLines } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   // Câu về mã nhóm chưa áp được: màu cảnh báo, tách khỏi câu "Đã thêm vào giỏ!" (đã thành công) kẻo hai ý trái nhau chung một màu.
@@ -106,13 +111,14 @@ export default function AddToCart({
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartData = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data;
   const cartCount = cartData?.itemCount ?? 0;
+  const cartLines = buyFreeze ? buyFreeze.lines : cartData?.items;
   const flash = runningFlash(useActiveFlashSales());
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
   // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; "Thêm vào giỏ" ghi phần giỏ tăng (`total`). Giỏ chưa tải hay lỗi thì coi là rỗng.
-  const line = selected ? variationLinePreview(selected, flash, qty, inCartQuantity(cartData?.items, selected.id)) : null;
+  const line = selected ? variationLinePreview(selected, flash, qty, inCartQuantity(cartLines, selected.id)) : null;
   // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
   const overLimitText = line ? lineNote(line, qty, true) : null;
   const available = (selected?.stock ?? 0) > 0;
@@ -199,6 +205,7 @@ export default function AddToCart({
   const add = async (variationId: string, quantity: number, buyNow = false) => {
     setBusy(true);
     setBuying(buyNow);
+    setBuyFreeze(buyNow ? { lines: cartData?.items } : null);
     setMsg(null);
     setWarn(null);
     let leaving = false;
@@ -234,7 +241,10 @@ export default function AddToCart({
       // Thường là "Chỉ còn N sản phẩm": tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
-      if (!leaving) setBusy(false);
+      if (!leaving) {
+        setBusy(false);
+        setBuyFreeze(null);
+      }
     }
   };
 
@@ -397,7 +407,7 @@ export default function AddToCart({
           flash={flash}
           initialId={selectedId}
           initialQty={qty}
-          cartLines={cartData?.items}
+          cartLines={cartLines}
           onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
         />
       )}
