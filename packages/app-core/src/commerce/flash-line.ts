@@ -21,6 +21,20 @@ function normalizeInCart(n: number | null | undefined): number {
   return typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
 }
 
+/**
+ * Số suất khách còn mua được giá Giờ vàng sau các đơn trước (`perUserLeft` của máy chủ, `GET /flash-sales/me/allowance`); chưa biết thì null.
+ * Khác `limit`: ở đây 0 là HẾT suất (máy chủ `allowance 0` tính giá thường cho mọi số lượng), còn `limit` 0 hay không gửi là chưa biết giới hạn.
+ */
+function normalizeLeft(n: number | null | undefined): number | null {
+  return typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+}
+
+/** Số nhỏ nhất trong các số đã biết (null = chưa biết); không số nào biết thì null. */
+function tightest(...caps: (number | null)[]): number | null {
+  const known = caps.filter((n): n is number => n !== null);
+  return known.length > 0 ? Math.min(...known) : null;
+}
+
 /** Số của đúng phân loại trong giỏ (`GET /cart`); giỏ chưa tải, lỗi hoặc không có dòng khớp `variationId` thì 0. */
 export function inCartQuantity(lines: readonly { variationId: string; quantity: number }[] | null | undefined, variationId: string): number {
   let sum = 0;
@@ -50,8 +64,9 @@ export function flashQuotaLeftFor(item: { quota?: number | null; soldCount?: num
  * số lượng ≤ suất thì đơn giá = min(giá Giờ vàng, giá đang bán); vượt thì CẢ DÒNG giá đang bán, không chia đôi.
  * Thêm giỏ là `increment` (cart.service `addItem`) và giỏ giá trên cả dòng, nên số lượng đem so với suất là `inCart + quantity`, không riêng `quantity`:
  * giỏ đã có 2 mà thêm 2 với suất 3 thì cả 4 sản phẩm tính giá thường, giỏ tăng `4 × giá thường − 2 × giá Giờ vàng`. Giá dòng không giảm khi thêm nên `total` không âm.
- * `limit` là số suất client biết (`allowance` của máy chủ là min(suất còn lại của đợt, giới hạn mỗi khách trừ số khách đã mua); phần khách đã mua
- * chỉ máy chủ biết), nên chưa biết giới hạn thì coi là đủ suất.
+ * `limit` là số suất client biết từ danh sách Giờ vàng (`allowance` của máy chủ là min(suất còn lại của đợt, giới hạn mỗi khách trừ số khách đã mua)),
+ * nên chưa biết giới hạn thì coi là đủ suất. `perUserLeft` là phần khách đã mua ở các đơn trước, chỉ máy chủ biết và chỉ có khi khách đã đăng nhập: có thì
+ * suất hiệu lực là số nhỏ hơn trong hai, `perUserLeft` 0 là hết suất.
  * `overLimit` chỉ bật khi khách thật sự mất giá rẻ hơn: giá Giờ vàng không thấp hơn giá đang bán thì vượt suất cũng ra cùng một số.
  */
 export function flashLinePreview(i: {
@@ -60,8 +75,9 @@ export function flashLinePreview(i: {
   quantity: number;
   limit: number | null | undefined;
   inCart?: number | null;
+  perUserLeft?: number | null;
 }): FlashLinePreview {
-  const limit = flashLimitFor({ perUserLimit: i.limit });
+  const limit = tightest(flashLimitFor({ perUserLimit: i.limit }), normalizeLeft(i.perUserLeft));
   const inCart = normalizeInCart(i.inCart);
   const lineQuantity = inCart + i.quantity;
   const hasDeal = i.flashPrice != null && i.flashPrice < i.standing;
@@ -78,8 +94,8 @@ export interface VariationLinePreview extends FlashLinePreview {
   limit: number | null;
   /** Số suất client biết là còn mua được giá Giờ vàng: min(giới hạn mỗi khách, suất còn lại của đợt); null khi không đang Giờ vàng hoặc không biết số nào. */
   allowance: number | null;
-  /** Số nào đang chặn: giới hạn của riêng khách, hay đợt sắp hết suất (ít hơn giới hạn của khách). */
-  allowanceBy: 'perUser' | 'quota' | null;
+  /** Số nào đang chặn: giới hạn mỗi khách, đợt sắp hết suất (ít hơn giới hạn của khách), hay số khách đã mua ở các đơn trước (`perUserLeft` nhỏ hơn giới hạn). */
+  allowanceBy: 'perUser' | 'quota' | 'bought' | null;
 }
 
 /** Một phân loại ở trang chi tiết và bảng chọn: ghép giá hiển thị (`variationPricing`) với tiền dòng theo luật máy chủ; `inCart` là số đã có trong giỏ của phân loại này (`inCartQuantity`). */
@@ -93,10 +109,14 @@ export function variationLinePreview(
   const item = pricing.isFlash ? flash.find((f) => f.variationId === v.id) : undefined;
   const limit = flashLimitFor(item);
   const quotaLeft = flashQuotaLeftFor(item);
-  const byQuota = quotaLeft !== null && (limit === null || quotaLeft < limit);
-  const allowance = byQuota ? quotaLeft : limit;
-  const line = flashLinePreview({ standing: v.salePrice ?? v.retailPrice, flashPrice: item?.flashPrice, quantity, limit: allowance, inCart });
-  return { ...line, pricing, limit, allowance, allowanceBy: allowance === null ? null : byQuota ? 'quota' : 'perUser' };
+  const left = normalizeLeft(item?.perUserLeft);
+  const userCap = tightest(limit, left);
+  const byQuota = quotaLeft !== null && (userCap === null || quotaLeft < userCap);
+  const allowance = byQuota ? quotaLeft : userCap;
+  // `limit` truyền xuống là phần danh sách Giờ vàng cho biết; `perUserLeft` đi riêng vì 0 của nó là hết suất, không phải chưa biết.
+  const line = flashLinePreview({ standing: v.salePrice ?? v.retailPrice, flashPrice: item?.flashPrice, quantity, limit: tightest(limit, quotaLeft), inCart, perUserLeft: left });
+  const allowanceBy = allowance === null ? null : byQuota ? 'quota' : left !== null && (limit === null || left < limit) ? 'bought' : 'perUser';
+  return { ...line, pricing, limit, allowance, allowanceBy };
 }
 
 /**
@@ -109,9 +129,11 @@ export function overLimitNote(
   quantity: number,
 ): string | null {
   if (!line.overLimit || line.allowance === null) return null;
+  if (line.allowance === 0) return fillCopy('flash.sheetSpent');
   if (line.inCart > line.allowance) return fillCopy('flash.sheetOverInCartAlready', { n: line.inCart, allowance: line.allowance });
   if (line.inCart > 0) return fillCopy('flash.sheetOverInCart', { n: line.inCart, qty: quantity, total: line.lineQuantity });
-  return fillCopy(line.allowanceBy === 'quota' ? 'flash.sheetOverQuota' : 'flash.sheetOverLimit', { n: line.allowance, qty: quantity });
+  const key = line.allowanceBy === 'quota' ? 'flash.sheetOverQuota' : line.allowanceBy === 'bought' ? 'flash.sheetOverLeft' : 'flash.sheetOverLimit';
+  return fillCopy(key, { n: line.allowance, qty: quantity });
 }
 
 /**
