@@ -27,7 +27,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
-import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
+import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
@@ -665,41 +665,11 @@ export default function CheckoutPage() {
         {/* 9rem: khung chưa dính ở đầu trang nằm thấp hơn vị trí dính khoảng 6.5rem (tiêu đề + đường dẫn); trừ thêm để đáy khung, nơi có nút Đặt hàng, đã trong màn ngay khi chưa cuộn. */}
         <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
-          {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
-              hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
+          {/* Từ md danh sách chữ hiện đủ dòng, không vùng cuộn lồng: dòng thứ 6 trở đi gập sau nút kèm tiền; giỏ tách kiện hiện hết
+              để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
           <div data-mini-block="items" className="max-md:order-2 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
           <MobileItems items={checkoutItems} shipments={split ? shipments : null} splitNote={splitNote} />
-          <div
-            role="region"
-            aria-label="Sản phẩm trong đơn"
-            tabIndex={split ? undefined : 0}
-            className={`mt-2 space-y-1 text-sm max-md:hidden ${split ? '' : 'max-h-40 overflow-auto'}`}
-          >
-            {split
-              ? shipments.map((sh) => (
-                  <div key={sh.key} className="space-y-1 border-b border-stone-200 pb-2 last:border-b-0">
-                    <p className="text-caption font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
-                    {checkoutItems
-                      .filter((it) => sh.itemIds.includes(it.id))
-                      .map((it) => (
-                        <div key={it.id} className="flex justify-between gap-2">
-                          <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
-                          <span className="text-stone-900">{formatVnd(it.total)}</span>
-                        </div>
-                      ))}
-                    <div className="flex justify-between gap-2 text-caption text-stone-600">
-                      <span>Phí giao</span>
-                      <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
-                    </div>
-                  </div>
-                ))
-              : checkoutItems.map((it) => (
-                  <div key={it.id} className="flex justify-between gap-2">
-                    <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
-                    <span className="text-stone-900">{formatVnd(it.total)}</span>
-                  </div>
-                ))}
-          </div>
+          <DesktopLines items={checkoutItems} shipments={split ? shipments : null} />
           {itemIds && cart && (
             <p className="mt-2 text-caption text-stone-600">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
@@ -886,6 +856,60 @@ function Row({ label, value, green }: { label: string; value: string; green?: bo
   );
 }
 
+type ShipmentView = { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number };
+
+// Danh sách chữ trong khung "Đơn hàng" từ md (điện thoại dùng MobileItems). Các dòng thấy được cộng với tiền dòng gập ra đúng "Tạm tính".
+function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: ShipmentView[] | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const { shown, hiddenCount, hiddenTotal } = collapseCheckoutLines(items, expanded);
+  return (
+    <div role="region" aria-label="Sản phẩm trong đơn" className="mt-2 space-y-1 text-sm max-md:hidden">
+      {shipments
+        ? shipments.map((sh) => (
+            <div key={sh.key} className="space-y-1 border-b border-[var(--color-border-subtle)] pb-2 last:border-b-0">
+              <p className="text-caption font-semibold text-[color:var(--color-text-primary)]">{fulfillerLabel(sh.fulfiller)}</p>
+              {items
+                .filter((it) => sh.itemIds.includes(it.id))
+                .map((it) => (
+                  <LineRow key={it.id} item={it} />
+                ))}
+              <div className="flex justify-between gap-2 text-caption text-[color:var(--color-text-secondary)]">
+                <span>Phí giao</span>
+                <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+              </div>
+            </div>
+          ))
+        : shown.map((it) => <LineRow key={it.id} item={it} />)}
+      {!shipments && (hiddenCount > 0 || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-h-11 w-full items-center justify-between gap-2 text-left font-semibold text-[color:var(--color-text-brand)]"
+        >
+          <span>{expanded ? fillCopy('checkout.fewerLines') : fillCopy('checkout.moreLines', { n: hiddenCount })}</span>
+          {!expanded && <span className="text-[color:var(--color-text-primary)]">{formatVnd(hiddenTotal)}</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function LineRow({ item }: { item: CartLine }) {
+  return (
+    <div data-testid="checkout-line" className="flex justify-between gap-2">
+      <span className="min-w-0 text-[color:var(--color-text-secondary)]">
+        <span className="line-clamp-2">{item.productName}</span>
+        <span className="block text-caption text-[color:var(--color-text-tertiary)]">
+          {item.variationName && <span>{item.variationName}</span>}
+          {item.variationName ? ' · ' : ''}×{item.quantity}
+        </span>
+      </span>
+      <span className="shrink-0 text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
+    </div>
+  );
+}
+
 function AddressPicker({
   addresses,
   selectedId,
@@ -1037,7 +1061,7 @@ function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }
   );
 }
 
-// Khối "Sản phẩm (n)" của Mini App (checkout.tsx): ảnh 48px, tên một dòng, phân loại, đơn giá × số lượng, thành tiền. Chỉ hiện ở điện thoại;
+// Khối "Sản phẩm (n)" của Mini App (checkout.tsx): ảnh 48px, tên tối đa hai dòng, phân loại, đơn giá × số lượng, thành tiền. Chỉ hiện ở điện thoại;
 // từ md danh sách chữ trong khung "Đơn hàng" giữ nguyên.
 function MobileItems({
   items,
@@ -1066,7 +1090,7 @@ function MobileItems({
                 <div key={it.id} className="flex items-center gap-2.5">
                   <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{it.productName}</div>
+                    <div className="line-clamp-2 text-sm">{it.productName}</div>
                     {it.variationName && <div className="text-caption text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
                     <div className="text-caption text-[color:var(--color-text-tertiary)]">
                       {formatVnd(it.unitPrice)} × {it.quantity}
