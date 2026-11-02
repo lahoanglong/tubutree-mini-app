@@ -13,7 +13,8 @@ import { FORBIDDEN_TERMS } from './shop-copy';
  */
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const ROOTS = ['apps/miniapp/src', 'apps/web/src', 'packages/app-core/src'];
-// API: chỉ file nào chắc chắn chỉ chứa chữ trả cho khách (`*-notice.ts`, `*-price.ts`) và danh sách tên file ghi sẵn; service lớn lẫn log, quản trị và lỗi nội bộ nên không quét cả cây.
+// API: chỉ file nào chắc chắn chỉ chứa chữ trả cho khách (`*-notice.ts`, `*-notice.service.ts`, `*-price.ts`, `*-price.service.ts`) và danh sách tên file ghi sẵn (`cart/cart.batch-error.ts`);
+// service lớn lẫn log, quản trị và lỗi nội bộ nên không quét cả cây (vd `flash-sale.service.ts` có cả lỗi của Giờ vàng cho khách lẫn chữ quản trị "đợt flash sale").
 const API_ROOT = 'apps/api/src/modules';
 const API_COPY_FILE = /-(notice|price)(\.service)?\.ts$/;
 const API_COPY_EXTRA = new Set([`${API_ROOT}/cart/cart.batch-error.ts`]);
@@ -434,6 +435,16 @@ describe('findHits: chuỗi template bắt đầu bằng chữ hoa ASCII', () =>
 
 describe('findHits: file chữ khách đọc của API', () => {
   const at = (file: string, text: string) => findHits([{ file, text }]).map((h) => h.use);
+
+  it('phạm vi quét đúng như DESIGN.md ghi: *-notice(.service).ts, *-price(.service).ts và cart/cart.batch-error.ts, không quét service lớn', () => {
+    const m = 'apps/api/src/modules';
+    for (const f of ['coupons/coupon-notice.ts', 'loyalty/tier-drop-notice.service.ts', 'flash-sale/flash-line-price.ts', 'pricing/x-price.service.ts', 'cart/cart.batch-error.ts']) {
+      expect(isApiCopyFile(`${m}/${f}`), f).toBe(true);
+    }
+    for (const f of ['flash-sale/flash-sale.service.ts', 'cart/cart.service.ts', 'admin/dealer-price-import.ts', 'wallet/referral-notice-ledger.ts']) {
+      expect(isApiCopyFile(`${m}/${f}`), f).toBe(false);
+    }
+  });
 
   it('câu lý do cũ của coupon-notice ("mã FREESHIP", "giờ vàng", "Chỉ còn") bị bắt', () => {
     const file = 'apps/api/src/modules/coupons/x-notice.ts';
