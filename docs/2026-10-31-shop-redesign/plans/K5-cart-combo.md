@@ -264,3 +264,12 @@
 - **Spec coverage:** (1) API danh sách combo + tổng bằng `comboDiscount` + shared-types + client hai app: T1–T3, T6; ca một món hai combo, số lượng lẻ, khớp một phần: T2. (2) Nhóm Mini + web: T5, T7, T8. (3) Báo trước khi bỏ món: T5 `comboRemovalNotice`, T7, T8; không chặn (có "Vẫn bỏ"). (4) Dòng "Giảm giá combo" ở chân giữ: T7/T8 khẳng định. Checkout giữ nguyên (không sửa file K2). Kiểm: jest cart/combo, race, vitest hai app, e2e: T4, T9, T10. Ảnh: T10.
 - **Type consistency:** `OwnedDiscount`, `ComboGroup` (`variationIds`, `keyVariationIds`) ở API; `CartComboGroup` (`lineIds`, `keyLineIds`) ở shared-types và app-core, ánh xạ ở T3; `comboHeadingText`/`cartComboBlocks`/`comboRemovalNotice` cùng tên ở T5, T7, T8.
 - **Giới hạn đã biết (ghi vào notes):** (a) số "mất giảm" khi bỏ món là `discount` của nhóm; với hai combo chồng một sản phẩm, bỏ món có thể chỉ mất ít hơn vì dòng còn lại rơi về combo kia, nên số là cận trên. (b) Bỏ chọn một phân loại không-khóa của bộ vẫn ghi "Tiết kiệm" đầy đủ trong khi phần chọn giảm ít hơn; dòng "Giảm giá combo" ở chân (máy chủ tính theo phần chọn) là số đúng.
+
+---
+
+## Ghi chú thực hiện (sau khi làm)
+
+- **Thành phần mới**: `CartComboBlock` (Mini `components/cart-combo-block.tsx`, web `components/cart-combo-block.tsx`, cùng `CartComboBlockProps`) và `ConfirmSheet` bản web (`components/ui/confirm-sheet.tsx`, cùng props với Mini, dựng từ `Sheet`). Cả hai vào `docs/design/ds-map.json`, `DESIGN.md` mục Thành phần và `/ds-gallery` hai app. Khối dùng `Card variant="flat"` nên không dựng thẻ mới; cặp màu `--color-text-price-deal`/`--color-text-secondary`/`--color-text-primary` trên `--color-bg-subtle` thêm vào `contrast.spec.ts`.
+- **Web**: lớp khối là mặc định cho điện thoại, từ md bỏ nền khối; không thêm `max-md:` (ratchet `px` 3812, `max-md` 1023 giữ nguyên). `renderLine` rút ra khỏi `groups.map` để dòng của bộ và dòng lẻ cùng một hàm; thẻ giỏ từ md thêm `md:overflow-hidden` để dải đầu nhóm cắt theo góc bo.
+- **Giảm số lượng không làm bộ mất khớp**: bộ chỉ cần có mặt sản phẩm (số lượng ≥ 1), `QuantitySelector` có `min = 1`, nên chỉ nút thùng rác (số lượng về 0) mới ra hộp báo; `comboRemovalNotice(groups, lineId, nextQuantity)` vẫn trả `null` cho `nextQuantity >= 1`.
+- **e2e dùng API mock** (`support/cart-combo-mocks.ts`, mock có trạng thái cho `GET /cart`, `GET /cart?itemIds=`, `DELETE /cart/items/:id`) thay cho seed DB theo `seedShopScreens`: dữ liệu thật đã được race spec `bundle-price-parity` khẳng định (nhóm = `comboDiscount` = báo giá = đơn); e2e chỉ kiểm hiển thị và luồng hộp báo.
