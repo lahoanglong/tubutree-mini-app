@@ -1,5 +1,5 @@
 import type { HttpClient } from '../http';
-import { getMe, getNotifications, getNotificationsPage, getUnreadNotificationCount, type NotificationCursor, type NotificationDTO } from '../api/account';
+import { getMe, getNotifications, getNotificationsPage, type NotificationCursor, type NotificationDTO } from '../api/account';
 
 export const meQuery = (http: HttpClient) => ({ queryKey: ['me'] as const, queryFn: () => getMe(http) });
 export const notificationsQuery = (http: HttpClient) => ({ queryKey: ['notifications'] as const, queryFn: () => getNotifications(http) });
@@ -21,10 +21,4 @@ export const notificationsInfiniteQuery = (http: HttpClient) => ({
   queryKey: ['notifications', 'list'] as const,
   queryFn: ({ pageParam }: { pageParam: NotificationCursor | undefined }) =>
     getNotificationsPage(http, { ...pageParam, limit: NOTIFICATIONS_PAGE_SIZE }),
-});
-
-/** Số tin chưa đọc (huy hiệu chuông, Trang chủ, Cá nhân). Khoá con của ['notifications'] nên mọi lần đánh dấu đã đọc làm mới nó. */
-export const unreadNotificationCountQuery = (http: HttpClient) => ({
-  queryKey: ['notifications', 'unread'] as const,
-  queryFn: () => getUnreadNotificationCount(http),
 });

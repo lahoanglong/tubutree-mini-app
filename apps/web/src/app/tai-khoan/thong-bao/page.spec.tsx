@@ -19,6 +19,7 @@ vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 
 import NotificationsPage from './page';
+import { TubuQueryClient } from '@/lib/query-client';
 
 const SENT_AT = new Date(Date.now() - 5 * 60_000).toISOString();
 const ORDER_UNREAD = {
@@ -40,12 +41,17 @@ const OPS = { id: 'n4', templateCode: 'OPS_GOMDON_ALERT', payload: { body: 'Gomd
 
 let mounted: Rendered[] = [];
 const mount = async () => {
-  const r = render(<NotificationsPage />);
+  const r = render(<NotificationsPage />, new TubuQueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }));
   mounted.push(r);
   await flush(6);
   return r;
 };
-// Trang còn gọi `/me/notifications/unread-count`; các ca đếm lần nạp danh sách chỉ tính đường dẫn danh sách.
+// Số chưa đọc lấy từ `/me/summary` (cùng nguồn với chuông và thanh đáy); các ca đếm lần nạp danh sách chỉ tính đường dẫn danh sách.
+const summaryOf = (unreadNotifications: number) => ({
+  orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 },
+  unreadNotifications,
+  activeSubscriptions: 0,
+});
 const listCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/me/notifications');
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 const rowOf = (c: HTMLElement, text: string) => byText(c, 'button', text) as HTMLElement;
@@ -167,7 +173,8 @@ describe('/tai-khoan/thong-bao: chi tiết', () => {
     const { container } = await mount();
     await openRow(container, 'Đơn TT001 đã được xác nhận');
     expect(listCalls()).toHaveLength(2);
-    expect(mocks.get.mock.calls.filter(([p]) => p === '/me/notifications/unread-count')).toHaveLength(2);
+    expect(mocks.get.mock.calls.filter(([p]) => p === '/me/summary')).toHaveLength(2);
+    expect(mocks.get.mock.calls.filter(([p]) => p === '/me/notifications/unread-count')).toHaveLength(0);
   });
 
   it('chạm tin đã đọc: không gọi đánh dấu đã đọc', async () => {
@@ -359,7 +366,7 @@ describe('/tai-khoan/thong-bao: E-84 tải thêm tin', () => {
   it('trang đầu xin 20 tin; đủ 20 thì có "Xem thêm", bấm nạp trang 2 theo con trỏ của tin cuối, hết thì ẩn nút', async () => {
     const first = rows(0, 20);
     mocks.get.mockImplementation(async (path: string) => {
-      if (path === '/me/notifications/unread-count') return { count: 0 };
+      if (path === '/me/summary') return summaryOf(0);
       return listCalls().length === 1 ? first : rows(20, 5);
     });
     const { container } = await mount();
@@ -438,9 +445,9 @@ describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và l�
     }));
   const route = (count: number | null, extra?: (path: string) => unknown) =>
     mocks.get.mockImplementation(async (path: string) => {
-      if (path === '/me/notifications/unread-count') {
+      if (path === '/me/summary') {
         if (count === null) throw new Error('chưa có');
-        return { count };
+        return summaryOf(count);
       }
       return extra?.(path) ?? rows(20);
     });
@@ -453,6 +460,34 @@ describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và l�
     expect(mocks.post).toHaveBeenCalledWith('/me/notifications/read-all');
   });
 
+  it('đọc một tin: summary được làm mới và số về 0 ngay (nút "Đọc tất cả" biến mất)', async () => {
+    let unread = 1;
+    mocks.get.mockImplementation(async (path: string) => (path === '/me/summary' ? summaryOf(unread) : [ORDER_UNREAD, POINTS_READ]));
+    mocks.post.mockImplementation(async () => {
+      unread = 0;
+      return { ok: true };
+    });
+    const { container } = await mount();
+    expect(byText(container, 'button', 'Đọc tất cả')).not.toBeNull();
+    click(rowOf(container, 'Đơn TT001 đã được xác nhận'));
+    await flush(8);
+    expect(mocks.post).toHaveBeenCalledWith('/me/notifications/n1/read');
+    expect(byText(container, 'button', 'Đọc tất cả')).toBeNull();
+  });
+
+  it('summary lỗi: không hiện số sai, lùi về đếm trong danh sách đã tải', async () => {
+    route(null);
+    const allRead = await mount();
+    expect(allRead.container.textContent).toContain('Tin số 0');
+    expect(byText(allRead.container, 'button', 'Đọc tất cả')).toBeNull();
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/summary') throw new Error('chưa có');
+      return [ORDER_UNREAD, POINTS_READ];
+    });
+    const withUnread = await mount();
+    expect(byText(withUnread.container, 'button', 'Đọc tất cả')).not.toBeNull();
+  });
+
   it('máy chủ báo 0 chưa đọc: ẩn nút', async () => {
     route(0);
     const { container } = await mount();
@@ -463,7 +498,7 @@ describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và l�
   it('"Xem thêm" lỗi: báo bằng role=alert, giữ danh sách và nút để thử lại', async () => {
     let listCalls = 0;
     mocks.get.mockImplementation(async (path: string) => {
-      if (path === '/me/notifications/unread-count') return { count: 0 };
+      if (path === '/me/summary') return summaryOf(0);
       listCalls += 1;
       if (listCalls === 1) return rows(20);
       throw new Error('mạng');

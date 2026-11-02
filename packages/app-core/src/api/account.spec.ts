@@ -7,7 +7,6 @@ import {
   getMe,
   getNotifications,
   getNotificationsPage,
-  getUnreadNotificationCount,
   markAllNotificationsRead,
   markNotificationRead,
   requestAccountDeletion,
@@ -51,15 +50,13 @@ describe('account — hợp đồng gọi API', () => {
     ]);
   });
 
-  it('trang thông báo kèm con trỏ; đếm chưa đọc có đường riêng', async () => {
+  it('trang thông báo kèm con trỏ', async () => {
     const { http, calls } = fakeHttp();
     await getNotificationsPage(http);
     await getNotificationsPage(http, { before: '2026-10-28T03:00:00.000Z', beforeId: 'n9', limit: 20 });
-    await getUnreadNotificationCount(http);
     expect(calls).toEqual([
       { method: 'get', path: '/me/notifications', opts: { query: {} } },
       { method: 'get', path: '/me/notifications', opts: { query: { before: '2026-10-28T03:00:00.000Z', beforeId: 'n9', limit: 20 } } },
-      { method: 'get', path: '/me/notifications/unread-count' },
     ]);
   });
 

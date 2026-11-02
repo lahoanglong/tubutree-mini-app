@@ -71,7 +71,6 @@ const cases: Case[] = [
   ['geoCommunes', (h) => geo.communesQuery(h, 'p'), ['geo-communes', 'p'], '/geo/communes'],
   ['me', (h) => account.meQuery(h), ['me'], '/me'],
   ['notifications', (h) => account.notificationsQuery(h), ['notifications'], '/me/notifications'],
-  ['unreadNotifications', (h) => account.unreadNotificationCountQuery(h), ['notifications', 'unread'], '/me/notifications/unread-count'],
   ['faqs', (h) => config.faqsQuery(h), ['faqs'], '/faqs'],
   ['supportContact', (h) => config.supportContactQuery(h), ['support-contact'], '/config/public'],
   ['loyalty', (h) => loyalty.loyaltyQuery(h), ['loyalty'], '/me/loyalty'],
