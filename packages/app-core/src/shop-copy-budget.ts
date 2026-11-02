@@ -205,7 +205,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.saveShip': 42,
   'coupon.shipAlreadyFree': 30,
   'coupon.minOrderBase': 70,
-  'coupon.zeroDiscount': null,
+  'coupon.zeroDiscountPdp': 40,
   'coupon.scopeOnly': null,
   'coupon.copiedToast': null,
   'coupon.copyShowToast': null,

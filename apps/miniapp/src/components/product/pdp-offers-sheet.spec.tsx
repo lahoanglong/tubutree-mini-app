@@ -51,6 +51,19 @@ describe('PdpOffersSheet', () => {
     expect(onCopy).toHaveBeenCalledWith('XANH10');
   });
 
+  it('món đang Giờ vàng (amount 0), mã không đơn tối thiểu: xếp sau mã dùng được, nói lý do theo PDP và nút Sao chép vẫn bật, bấm chép đúng mã', () => {
+    const onCopy = vi.fn();
+    render(<PdpOffersSheet open onClose={() => undefined} coupons={[coupons[2]!, coupons[0]!]} amount={0} onCopy={onCopy} />);
+    const dialog = screen.getByRole('dialog');
+    order(dialog, ['Miễn phí giao hàng', 'Giảm 20k']);
+    expect(within(dialog).getByText('Không giảm cho sản phẩm Giờ vàng này')).toBeInTheDocument();
+    const copy = within(dialog).getAllByRole('button', { name: 'Sao chép' });
+    expect(copy).toHaveLength(2);
+    for (const b of copy) expect(b).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(copy[1]!);
+    expect(onCopy).toHaveBeenCalledWith('GIAM20K');
+  });
+
   it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; vẫn chép đúng mã thô', () => {
     const raw = 'WELCOME-CMV9MLSLB009KFKRUMVZQLRA7';
     const onCopy = vi.fn();
