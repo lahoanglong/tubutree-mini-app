@@ -3,9 +3,13 @@ import {
   addonUnitDiscount,
   allocateBundleDiscounts,
   allocateBundleDiscountsCapped,
+  allocateBundleDiscountsCappedOwned,
+  allocateBundleDiscountsOwned,
   bundleExposure,
+  bundleKeyVariationIds,
   clampDiscountTotal,
   isOwnStaffBundle,
+  mergeMaxOwned,
   mergeMaxPerLine,
   type BundleLine,
   type LiveBundle,
@@ -370,5 +374,102 @@ describe('trần tổng của bộ do nhân viên tạo (clampDiscountTotal, all
     }
     // Bộ sinh phải thật sự chạm trần ở một phần đáng kể các giỏ, nếu không bất biến ở trên chưa được thử.
     expect(clamped).toBeGreaterThan(20);
+  });
+});
+
+describe('khớp có chủ: nhóm combo của giỏ (K5)', () => {
+  const owned = (perLine: Record<string, number>, owner: string) => ({
+    total: Object.values(perLine).reduce((a, b) => a + b, 0),
+    perLine,
+    owner: Object.fromEntries(Object.keys(perLine).map((v) => [v, owner])),
+  });
+
+  describe('mergeMaxOwned', () => {
+    it('mỗi dòng lấy khoản lớn hơn và chủ là nguồn lớn hơn; total tính lại từ perLine', () => {
+      const out = mergeMaxOwned(owned({ v1: 10, v2: 40 }, 'A'), owned({ v2: 30, v3: 5 }, 'B'));
+      expect(out.perLine).toEqual({ v1: 10, v2: 40, v3: 5 });
+      expect(out.owner).toEqual({ v1: 'A', v2: 'A', v3: 'B' });
+      expect(out.total).toBe(55);
+      const flipped = mergeMaxOwned(owned({ v2: 30 }, 'B'), owned({ v2: 40 }, 'A'));
+      expect(flipped.owner).toEqual({ v2: 'A' });
+    });
+
+    it('bằng nhau thì nguồn đứng trước (a) giữ dòng', () => {
+      expect(mergeMaxOwned(owned({ v1: 20 }, 'A'), owned({ v1: 20 }, 'B')).owner).toEqual({ v1: 'A' });
+    });
+
+    it('cùng perLine với mergeMaxPerLine', () => {
+      const a = owned({ v1: 10, v2: 40 }, 'A');
+      const b = owned({ v2: 30, v3: 5 }, 'B');
+      const { owner: _o, ...plain } = mergeMaxOwned(a, b);
+      expect(plain).toEqual(mergeMaxPerLine({ total: a.total, perLine: a.perLine }, { total: b.total, perLine: b.perLine }));
+    });
+  });
+
+  describe('allocateBundleDiscountsOwned giống allocateBundleDiscounts, thêm chủ', () => {
+    const kemDeal = addon('a1', 'p1', [kem('p2', 'v2', 39_000)]);
+    const cases: [string, LiveBundle[], BundleLine[]][] = [
+      ['BUNDLE_PCT đủ bộ', [pct('b1', 10, [item('p1'), item('p2')])], [line('v1', 'p1', 60_000), line('v2', 'p2', 80_000, 2)]],
+      ['một món thuộc hai bộ với % khác nhau', [pct('b1', 10, [item('p1'), item('p2')]), pct('b2', 20, [item('p2'), item('p3')])], [line('v1', 'p1', 100_000), line('v2', 'p2', 100_000), line('v3', 'p3', 100_000)]],
+      ['ADDON có sản phẩm chính', [kemDeal], [line('v1', 'p1', 80_000), line('v2', 'p2', 50_000)]],
+      ['số lượng 3 với maxQty 1', [pct('b1', 10, [item('p1'), item('p2')])], [line('v1', 'p1', 99_999, 3), line('v2', 'p2', 50_000)]],
+      ['hai phân loại cùng sản phẩm', [pct('b1', 10, [item('p1', { maxQty: 2 }), item('p2')])], [line('v1a', 'p1', 200_000, 2), line('v1b', 'p1', 200_000, 2), line('v2', 'p2', 100_000)]],
+      ['bộ khớp một phần', [pct('b1', 10, [item('p1'), item('p2')])], [line('v1', 'p1', 60_000)]],
+    ];
+    it.each(cases)('%s', (_name, bundles, lines) => {
+      const out = allocateBundleDiscountsOwned(bundles, lines, 50);
+      expect({ total: out.total, perLine: out.perLine }).toEqual(allocateBundleDiscounts(bundles, lines, 50));
+      expect(Object.keys(out.owner).sort()).toEqual(Object.keys(out.perLine).sort());
+    });
+
+    it('chủ là bộ có khoản lớn nhất của dòng; bằng nhau thì bộ đứng trước', () => {
+      const lines = [line('v1', 'p1', 100_000), line('v2', 'p2', 100_000), line('v3', 'p3', 100_000)];
+      const out = allocateBundleDiscountsOwned([pct('b1', 10, [item('p1'), item('p2')]), pct('b2', 20, [item('p2'), item('p3')])], lines, 50);
+      expect(out.owner).toEqual({ v1: 'bundle:b1', v2: 'bundle:b2', v3: 'bundle:b2' });
+      const tie = allocateBundleDiscountsOwned([pct('b1', 10, [item('p1'), item('p2')]), pct('b2', 10, [item('p1'), item('p2')])], lines, 50);
+      expect(tie.owner).toEqual({ v1: 'bundle:b1', v2: 'bundle:b1' });
+    });
+  });
+
+  describe('allocateBundleDiscountsCappedOwned', () => {
+    const by = (b: LiveBundle, createdById: string | null): LiveBundle => ({ ...b, createdById });
+    const capOf = (adminIds: string[], maxAmount = 100_000): StaffBundleCap => ({ isStaff: (b) => b.createdById === null || !adminIds.includes(b.createdById), maxAmount });
+    const addonOn = (id: string, productId: string, createdById: string | null) =>
+      by(addon(id, 'P', [item(productId, { variationId: `v${productId}`, addonPrice: 240_000, refPrice: 340_000 })]), createdById);
+    const lines = [line('vP', 'P', 80_000), line('vX', 'X', 340_000), line('vY', 'Y', 340_000)];
+
+    it('bộ nhân viên vượt trần: perLine và total như bản cũ, dòng bị cắt về 0 không còn chủ', () => {
+      const two = [addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's2')];
+      const out = allocateBundleDiscountsCappedOwned(two, lines, 50, capOf([]));
+      expect({ total: out.total, perLine: out.perLine }).toEqual(allocateBundleDiscountsCapped(two, lines, 50, capOf([])));
+      expect(out.owner).toEqual({ vX: 'bundle:B1' });
+    });
+
+    it('trộn ADMIN và nhân viên: tổng chủ bằng perLine, chủ ADMIN giữ dòng của mình', () => {
+      const bundles = [addonOn('A1', 'X', 'a1'), addonOn('B1', 'Y', 's1')];
+      const out = allocateBundleDiscountsCappedOwned(bundles, lines, 50, capOf(['a1']));
+      expect(out.owner).toEqual({ vX: 'bundle:A1', vY: 'bundle:B1' });
+      expect({ total: out.total, perLine: out.perLine }).toEqual(allocateBundleDiscountsCapped(bundles, lines, 50, capOf(['a1'])));
+    });
+  });
+
+  describe('bundleKeyVariationIds', () => {
+    it('BUNDLE_PCT: dòng duy nhất của một mục là khoá, mục có hai phân loại thì không', () => {
+      const b = pct('b', 10, [item('p1'), item('p2')]);
+      const lines = [line('v1', 'p1', 100_000), line('v2a', 'p2', 100_000), line('v2b', 'p2', 100_000)];
+      expect(bundleKeyVariationIds(b, lines)).toEqual(['v1']);
+    });
+
+    it('ADDON: khoá là dòng sản phẩm chính (không nằm trong perLine của bộ)', () => {
+      const deal = addon('a1', 'p1', [kem('p2', 'v2', 39_000)]);
+      const lines = [line('v1', 'p1', 80_000), line('v2', 'p2', 50_000)];
+      expect(bundleKeyVariationIds(deal, lines)).toEqual(['v1']);
+      expect(allocateBundleDiscounts([deal], lines, 50).perLine).toEqual({ v2: 11_000 });
+    });
+
+    it('bộ không khớp giỏ thì không có khoá', () => {
+      expect(bundleKeyVariationIds(pct('b', 10, [item('p1'), item('p2')]), [line('v1', 'p1', 100_000)])).toEqual([]);
+      expect(bundleKeyVariationIds(addon('a1', 'p1', [kem('p2', 'v2', 39_000)]), [line('v2', 'p2', 50_000)])).toEqual([]);
+    });
   });
 });
