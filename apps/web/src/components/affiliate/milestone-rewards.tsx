@@ -158,7 +158,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       )}
 
       {targets.length >= 2 && (
-        <Button fullWidth icon={Check} disabled={busy} loading={claimAll.isPending} onPress={() => claimAll.mutate(targets)} className="mb-2">
+        <Button fullWidth icon={Check} disabled={claimOne.isPending} loading={claimAll.isPending} onPress={() => claimAll.mutate(targets)} className="mb-2">
           {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
         </Button>
       )}

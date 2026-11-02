@@ -174,7 +174,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
             </Text>
           </div>
         </div>
-  
+
         <Text variant="caption" tone="tertiary" as="div" style={{ marginBottom: 4 }} data-testid="milestone-note">
           {revenueRuleText(data.holdDays)}
         </Text>
@@ -183,7 +183,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
             Đang chờ chốt: <b>{formatVnd(data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
           </Text>
         )}
-  
+
         {targets.length >= 2 && (
           <Button
             fullWidth
@@ -196,7 +196,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
             {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
           </Button>
         )}
-  
+
         {failures.length > 0 && (
           <div role="alert" style={{ marginBottom: 8 }}>
             {failures.map((f) => (
@@ -206,7 +206,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
             ))}
           </div>
         )}
-  
+
         {prev && (
           <div>
             <Text variant="caption" tone="brand" as="div" style={{ ...BOLD, marginTop: 8 }}>

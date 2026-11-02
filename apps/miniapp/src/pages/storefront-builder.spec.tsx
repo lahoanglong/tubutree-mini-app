@@ -708,6 +708,38 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
+  it('bậc về muộn hơn gian hàng: chờ cả hai rồi mới dựng, huy hiệu hiện cùng lúc với đầu xem trước (trang không nhảy xuống)', async () => {
+    let release!: (v: unknown) => void;
+    mocks.getCtvTiers.mockReturnValue(new Promise((r) => { release = r; }));
+    const view = renderPage();
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByTestId('shop-cover')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sửa hồ sơ' })).not.toBeInTheDocument();
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => {
+      if (view.container.querySelector('[data-testid="shop-cover"]')) seen.push(/CTV Đồng/.test(view.container.textContent ?? ''));
+    });
+    watch.observe(view.container, { childList: true, subtree: true });
+    await act(async () => { release(tiersAt(1)); });
+    expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
+    watch.disconnect();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+  });
+
+  it('đang chờ bậc: khung chờ, chưa vẽ trình dựng; bậc về lỗi thì dựng đủ, không huy hiệu', async () => {
+    let fail!: (e: unknown) => void;
+    mocks.getCtvTiers.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    renderPage();
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByTestId('shop-cover')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    await act(async () => { fail({ response: { status: 500 }, message: 'x' }); });
+    expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
   it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
     mocks.getCtvTiers.mockResolvedValue(tiersAt(1));

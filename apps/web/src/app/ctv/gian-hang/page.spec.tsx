@@ -1303,6 +1303,44 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
   });
 
+  it('bậc về muộn hơn gian hàng: chờ cả hai rồi mới dựng, huy hiệu hiện cùng lúc với đầu xem trước (trang không nhảy xuống)', async () => {
+    state.tiers = tiersAt(1);
+    let release!: () => void;
+    state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
+    const { container } = mount();
+    await flush();
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
+    expect(container.querySelector('[data-testid="shop-cover"]')).toBeNull();
+    expect(hasBtn('Sửa hồ sơ')).toBe(false);
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => {
+      if (container.querySelector('[data-testid="shop-cover"]')) seen.push(/CTV Đồng/.test(container.textContent ?? ''));
+    });
+    watch.observe(container, { childList: true, subtree: true });
+    release();
+    await flush();
+    watch.disconnect();
+    expect(heading2(container)).toHaveLength(1);
+    expect(text()).toContain('CTV Đồng');
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+  });
+
+  it('đang chờ bậc: khung chờ, chưa vẽ trình dựng; bậc về lỗi thì dựng đủ, không huy hiệu', async () => {
+    state.fail.add('get /affiliate/tiers');
+    let release!: () => void;
+    state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[data-testid="shop-cover"]')).toBeNull();
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    release();
+    await flush();
+    expect(heading2(container)).toHaveLength(1);
+    expect(hasBtn('Sửa hồ sơ')).toBe(true);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
   it('điện thoại: bìa liền ngay dưới thanh tiêu đề như Mini (khung nội dung bỏ mt-4), chữ "Thêm ảnh bìa" thang caption', async () => {
     const { container } = mount();
     await flush();

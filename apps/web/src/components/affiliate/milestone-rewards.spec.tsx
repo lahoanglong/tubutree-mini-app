@@ -109,6 +109,8 @@ describe('MilestoneRewards — danh sách gọn', () => {
     click(all);
     await flush();
     expect(btn(/Nhận tất cả/).getAttribute('aria-busy')).toBe('true');
+    // Như Mini: nút đang chạy vẽ vòng xoay chứ không xám đi (Button chỉ vẽ vòng xoay khi loading mà không disabled).
+    expect(btn(/Nhận tất cả/).className).toContain('zaui-btn-loading');
   });
 
   it('không có mốc nào: không vẽ gì', () => {

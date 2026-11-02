@@ -56,7 +56,7 @@
    "open-snackbar": {},
    "primitive-color": {
     "app/brand/[slug]/brand-actions.tsx": 14,
-    "app/gio-hang/page.tsx": 34,
+    "app/gio-hang/page.tsx": 36,
     "app/ma-giam-gia/vouchers-view.tsx": 1,
     "app/mua-chung/group-buy-view.tsx": 12,
     "app/s/[slug]/page.tsx": 27,

@@ -66,19 +66,24 @@ function BuilderShell({ children, style, bare }: { children: ReactNode; style?: 
   );
 }
 
+function BuilderLoading() {
+  return (
+    <BuilderShell>
+      <div style={{ padding: 16 }}><Skeleton height={120} radius="var(--radius-card)" /></div>
+    </BuilderShell>
+  );
+}
+
 export default function StorefrontBuilderPage() {
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
+  // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
   const wizardRef = useRef<boolean | null>(null);
 
-  if (sfQ.isLoading) {
-    return (
-      <BuilderShell>
-        <div style={{ padding: 16 }}><Skeleton height={120} radius="var(--radius-card)" /></div>
-      </BuilderShell>
-    );
-  }
+  if (sfQ.isLoading) return <BuilderLoading />;
   // Chỉ 404 = chưa có gian hàng. Lỗi network/500/401 → ErrorState có retry (không nuốt lỗi thành màn tạo gian hàng
   // vì bấm tạo cũng sẽ fail). retry:false để 404 không retry.
   const status = (sfQ.error as { response?: { status?: number } } | null)?.response?.status;
@@ -92,7 +97,10 @@ export default function StorefrontBuilderPage() {
   const sf = sfQ.data ?? null;
   // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
   wizardRef.current ??= shouldStartSignupWizard(sf);
-  if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) return <Builder sf={sf} />;
+  if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) {
+    if (sf.type === 'CTV' && tiersQ.isPending) return <BuilderLoading />;
+    return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} />;
+  }
   return (
     <BuilderShell>
       <StorefrontSignupFlow sf={sf} onOpenEditor={() => setFullEditor(true)} />
@@ -128,7 +136,7 @@ function ActionMenu({ open, title, actions, onClose }: { open: boolean; title: s
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
 
-function Builder({ sf }: { sf: StorefrontEdit }) {
+function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -153,9 +161,6 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const publishCopy = storefrontPublishCopy(sf);
   // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
-  // Cùng khoá với trang CTV để dùng chung cache. Lỗi/chậm thì đầu xem trước vẫn vẽ, chỉ thiếu huy hiệu bậc. Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV).
-  const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false, enabled: sf.type === 'CTV' });
-  const previewTier = publicTier(ownerTierPreview(tiersQ.data));
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -631,7 +636,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null}
         avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null}
         note={sf.headerNote}
-        badges={previewTier ? <TierBadge name={previewTier.name} emoji={previewTier.emoji} /> : undefined}
+        badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
       />
       <div style={{ padding: '12px 16px 0' }}>
         <Card padding={16}>

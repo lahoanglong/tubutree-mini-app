@@ -24,8 +24,6 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
-import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
-import { affiliateCtvTiersQuery } from '@tubutree/app-core/queries/affiliate';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
@@ -127,7 +125,7 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
 /** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
 export const BUILDER_HEAD_SLOT = 'builder-head-actions';
 
-export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
+export function StorefrontBuilder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null }) {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -162,9 +160,6 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const publishCopy = storefrontPublishCopy(sf);
   // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery(storefrontQuestsQuery(coreHttp));
-  // Cùng khoá với trang CTV để dùng chung cache. Lỗi/chậm thì đầu xem trước vẫn vẽ, chỉ thiếu huy hiệu bậc. Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV).
-  const tiersQ = useQuery({ ...affiliateCtvTiersQuery(coreHttp), staleTime: 5 * 60_000, retry: false, enabled: sf.type === 'CTV' });
-  const previewTier = publicTier(ownerTierPreview(tiersQ.data));
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<string | null>(null);
@@ -514,7 +509,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                 coverUrl={sf.coverUrl}
                 avatarUrl={sf.avatarUrl}
                 note={sf.headerNote}
-                badges={previewTier ? <TierBadge name={previewTier.name} emoji={previewTier.emoji} /> : undefined}
+                badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
               />
             </div>
             <div className={`${ui.card} ${phoneFlatCard} mt-3 p-4`}>
