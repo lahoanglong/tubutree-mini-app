@@ -212,8 +212,13 @@ Chạm file thuộc gói khác, chỉ ở chỗ gọi bảng mã, không đụng
 - `apps/miniapp/src/pages/product-detail.tsx` (K1 sở hữu phần nút/sheet): truyền `amount` cho `PdpOffersSheet` bằng `offerAmount(price, quantity, priceView.isFlash)`, dùng khoá `coupon.copiedToast`/`coupon.copyShowToast` ở `copyCoupon`, thêm một import.
 - `packages/app-core/src/terminology.spec.ts` (K2 sở hữu dòng EXEMPT thanh toán): gỡ dòng miễn `voucher-sheet.tsx` USE.expiry vì phiếu không còn chữ "HSD".
 - `apps/web/src/components/game/game-notice.tsx`: thêm tone `info` (nền `bg-info-bg`) để báo "không chép được mã" giống snackbar info của Mini; thay đổi cộng thêm, không đổi hai tone cũ.
+- `apps/web/src/components/game/game-notice.tsx`: thêm prop `visualOnly` (aria-hidden, không role) cho thông báo nổi ngoài hộp thoại aria-modal; sheet Ưu đãi giữ vùng live `sr-only` cố định để đọc câu chép mã.
+- `apps/web/src/app/gio-hang/page.tsx` (một dòng truyền `productIds`) và `apps/web/src/lib/shop-client.ts` (thêm `productId?` vào `CartLine`, API đã trả sẵn): chỉ cộng thêm.
+- `apps/miniapp/src/css/tokens.css`: lớp `.tubu-field-44 .zaui-input` (cao 44, bỏ lề 4px) cho ô nhập mã, để ô và nút Áp dụng cùng 44 như web.
 
 Hành vi cần biết khi gộp:
 
-- `pickerRows`: mã bị máy chủ chặn vì lý do khác đơn tối thiểu (khách mới, sản phẩm, hết lượt, hạn) luôn là `blocked` kèm câu của máy chủ và nhãn "Không áp dụng", kể cả khi giỏ dưới đơn tối thiểu. Chỉ khi máy chủ im lặng hoặc nói đúng câu "Đơn tối thiểu … để dùng mã này." thì mới là `short` / "Mua thêm … để dùng".
+- `pickerRows`: mã bị máy chủ chặn vì lý do khác đơn tối thiểu (khách mới, sản phẩm, hết lượt, hạn) luôn là `blocked` kèm câu của máy chủ và nhãn "Không áp dụng", kể cả khi giỏ dưới đơn tối thiểu. Máy chủ nói đúng câu "Đơn tối thiểu … để dùng mã này." (hoặc im lặng khi giỏ dưới đơn tối thiểu) thì là `short` / "Chưa đủ" kèm CHÍNH câu của máy chủ, KHÔNG tự đếm "Mua thêm": tiền hàng máy chủ tính không có dòng Giờ vàng và đã trừ combo, còn `subtotal` của giỏ/thanh toán gồm cả dòng Giờ vàng nên số tự đếm thấp hơn số khách phải mua thêm thật. Chỉ phép đoán (chưa có xem trước) còn ghi "Mua thêm … để dùng", con số là ước.
+- `pickerRows`: mã đang áp không bao giờ có `view.state` hết hạn/đã dùng (VoucherTicket ẩn nút chính ở các trạng thái đó nên khách mất "Bỏ chọn"); hạn đọc bằng `serverNow()` ở cả hai bảng chọn mã.
+- Web `CouponBox` nhận thêm `productIds` (xuất `couponProductIds`); chỉ `gio-hang/page.tsx` truyền. `thanh-toan/page.tsx` (K2) chưa truyền: một dòng `productIds={couponProductIds(...)}` ở chỗ gọi `CouponBox` là đủ, người gộp thêm nếu muốn thanh toán web cũng báo "Chỉ áp cho …" trước khi xem trước về.
 - `offerAmount`: món đang ở giá Giờ vàng góp 0 vào tiền hàng của sheet Ưu đãi (máy chủ loại dòng Giờ vàng khỏi tiền hàng áp mã).
