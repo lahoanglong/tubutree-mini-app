@@ -17,8 +17,7 @@
     "pages/wishlist.tsx": 7
    },
    "primitive-color": {
-    "pages/cart.tsx": 5,
-    "pages/checkout.tsx": 5
+    "pages/cart.tsx": 5
    },
    "strike-element": {
     "components/waste-point-picker.tsx": 1
@@ -56,7 +55,7 @@
    "open-snackbar": {},
    "primitive-color": {
     "app/brand/[slug]/brand-actions.tsx": 14,
-    "app/gio-hang/page.tsx": 36,
+    "app/gio-hang/page.tsx": 34,
     "app/ma-giam-gia/vouchers-view.tsx": 1,
     "app/mua-chung/group-buy-view.tsx": 12,
     "app/s/[slug]/page.tsx": 27,
@@ -72,7 +71,6 @@
     "app/tai-khoan/yeu-thich/quick-add.tsx": 4,
     "app/thanh-toan/bank-transfer-panel.tsx": 21,
     "app/thanh-toan/invoice-section.tsx": 2,
-    "app/thanh-toan/page.tsx": 58,
     "app/uu-dai/page.tsx": 1,
     "components/add-to-cart.tsx": 9,
     "components/campaign/campaign-body.tsx": 1,
@@ -187,7 +185,7 @@
   "apps/web/src/app/thanh-toan/checkout-skeleton.tsx": 2,
   "apps/web/src/app/thanh-toan/chuyen-khoan/[code]/page.tsx": 7,
   "apps/web/src/app/thanh-toan/invoice-section.tsx": 2,
-  "apps/web/src/app/thanh-toan/page.tsx": 73,
+  "apps/web/src/app/thanh-toan/page.tsx": 69,
   "apps/web/src/app/tu-van/page.tsx": 10,
   "apps/web/src/app/uu-dai/page.tsx": 1,
   "apps/web/src/app/vuon-xanh/page.tsx": 1,
@@ -444,7 +442,7 @@
   "apps/miniapp/src/pages/campaign.tsx": 10,
   "apps/miniapp/src/pages/cart.tsx": 48,
   "apps/miniapp/src/pages/cashback.tsx": 31,
-  "apps/miniapp/src/pages/checkout.tsx": 69,
+  "apps/miniapp/src/pages/checkout.tsx": 68,
   "apps/miniapp/src/pages/community-events.tsx": 22,
   "apps/miniapp/src/pages/community-moderation.tsx": 40,
   "apps/miniapp/src/pages/dealer.tsx": 115,
