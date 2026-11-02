@@ -110,7 +110,7 @@ const SCENARIOS: Scenario[] = [
     name: 'Trang CTV: thưởng mốc doanh số tháng',
     route: { miniapp: '/affiliate', web: '/ctv' },
     ready: '[data-testid="milestone-rewards"]',
-    probeIds: ['milestone-card', 'milestone-title', 'milestone-meta', 'milestone-note', 'milestone-row', 'milestone-row-title', 'milestone-row-meta', 'milestone-claim'],
+    probeIds: ['tier-toggle', 'milestone-card', 'milestone-title', 'milestone-meta', 'milestone-note', 'milestone-row', 'milestone-row-title', 'milestone-row-meta', 'milestone-claim'],
     async setup(api, side, page) {
       if (side === 'miniapp') {
         mockSession(api, makeUser({ id: 'aff-1', role: 'AFFILIATE', fullName: 'Affiliate 1', referralCode: 'AFF1' }));

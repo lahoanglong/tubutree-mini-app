@@ -585,6 +585,7 @@ function Dashboard() {
             type="button"
             className="tubu-press"
             aria-expanded={showAllTiers}
+            data-testid="tier-toggle"
             onClick={() => {
               haptic('light');
               setShowAllTiers(!showAllTiers);

@@ -53,6 +53,7 @@ export const PROBES: readonly Probe[] = [
   { id: 'builder-stat-box', root: '[data-testid="builder-stat"]', target: '', props: ['height', 'borderRadius', 'backgroundColor', ...PAD] },
   { id: 'builder-sections-title', root: '[data-testid="builder-sections-head"]', target: 'h2', props: TEXT },
   // Thưởng mốc doanh số tháng trên trang CTV (K6): web theo thang chữ và chiều cao dòng của Mini.
+  { id: 'tier-toggle', root: '[data-testid="tier-toggle"]', target: '', props: ['height'] },
   { id: 'milestone-card', root: '[data-testid="milestone-rewards"]', target: '', props: ['height'] },
   { id: 'milestone-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-title"]', props: TEXT },
   { id: 'milestone-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-meta"]', props: TEXT },
@@ -144,6 +145,7 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
 
   // Thưởng mốc doanh số tháng (K6): số đo Mini 375px, nút Button 48px/15px là chuẩn; web dùng cùng Button và thang chữ caption/body-sm.
+  'tier-toggle': { height: '46.97px' },
   'milestone-card': { height: '416.06px' },
   'milestone-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
   'milestone-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
