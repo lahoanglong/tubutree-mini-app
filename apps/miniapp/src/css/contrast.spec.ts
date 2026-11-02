@@ -51,6 +51,10 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-text-price-deal', '--color-bg-surface'],
     ['--color-text-price-deal', '--color-promo-bg'],
     ['--color-text-price-deal', '--color-bg-canvas'],
+    // Khối combo ở giỏ (K5): số Tiết kiệm và câu nhắc nằm trên nền dịu của khối.
+    ['--color-text-price-deal', '--color-bg-subtle'],
+    ['--color-text-secondary', '--color-bg-subtle'],
+    ['--color-text-primary', '--color-bg-subtle'],
     ['--color-flash-fg', '--color-flash-bg'],
     ['--color-flash-solid-fg', '--color-flash-solid-bg'],
     ['--color-countdown-fg', '--color-countdown-bg'],
