@@ -77,7 +77,7 @@ export function couponUseOutcome(
 
 /** Chữ của dòng mã giảm giá khi thanh toán tự áp mã cho khách (Mini App và web dùng chung). */
 export const couponAutoCopy = {
-  applied: 'Đã tự áp',
+  applied: fillCopy('coupon.autoApplied'),
   remove: 'Gỡ',
   removeAria: (code: string) => `Gỡ mã ${code} đã tự áp`,
 } as const;

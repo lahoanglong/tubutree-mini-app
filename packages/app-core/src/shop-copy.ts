@@ -217,6 +217,19 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.saving': 'Tiết kiệm {x}',
   'cart.subtotal': 'Tạm tính',
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
+  // Thanh toán (K2): Mini App và web cùng một nguồn chữ
+  'checkout.addressNeeded': 'Chọn địa chỉ giao hàng để đặt hàng.',
+  'checkout.quoteFailed': 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.',
+  'checkout.totalPending': 'Chưa tính',
+  'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
+  'checkout.calculating': 'Đang tính…',
+  'checkout.priceChangedHint': 'Giá ưu đãi đã thay đổi. Bạn xem lại giỏ hàng trước khi đặt nhé.',
+  'checkout.priceChangedBody': 'Một số sản phẩm Giờ vàng đã hết suất hoặc hết giờ. Bạn xem lại giỏ hàng trước khi đặt nhé.',
+  'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',
+  'checkout.moreLines': 'Xem thêm {n} sản phẩm',
+  'checkout.fewerLines': 'Thu gọn',
+  'checkout.placeWith': 'Đặt hàng · {price}',
+  'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',

@@ -492,7 +492,7 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
   it('giỏ chưa có mã → áp mã tiết kiệm nhiều nhất, hiện "Đã tự áp" và nút Gỡ', async () => {
     const box = await mountHarness();
     expect(state.applied).toEqual(['GIAM30']);
-    expect(label(box)!.textContent).toBe('Đã tự áp');
+    expect(label(box)!.textContent).toBe('Tubu đã tự áp mã tốt nhất');
     expect(remove(box)!.textContent).toBe('Gỡ');
     expect(box.textContent).toContain('GIAM30');
   });
@@ -557,7 +557,7 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     mounted.pop()!.unmount();
     state.applied = [];
     const box = await mountHarness({ initial: 'GIAM30' });
-    expect(label(box)!.textContent).toBe('Đã tự áp');
+    expect(label(box)!.textContent).toBe('Tubu đã tự áp mã tốt nhất');
     expect(state.applied).toEqual([]);
   });
 

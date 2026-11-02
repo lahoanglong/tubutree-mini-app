@@ -347,7 +347,7 @@ describe('/thanh-toan — tự áp mã giảm nhiều nhất', () => {
     await settle();
     await flush(6);
     expect(state.applied).toEqual(['WELCOME30']);
-    expect(container.querySelector('[data-testid="coupon-auto-label"]')?.textContent).toBe('Đã tự áp');
+    expect(container.querySelector('[data-testid="coupon-auto-label"]')?.textContent).toBe('Tubu đã tự áp mã tốt nhất');
     expect(sessionStorage.getItem('tubu.autocoupon.applied:u')).toBe('WELCOME30');
     click(container.querySelector('[data-testid="coupon-auto-remove"]'));
     await flush(8);

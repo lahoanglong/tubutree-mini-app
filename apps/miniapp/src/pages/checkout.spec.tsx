@@ -1707,7 +1707,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
 
   it('giỏ chưa có mã, có mã dùng được → áp mã giảm nhiều nhất (hỏi kèm địa chỉ), hiện "Đã tự áp" và nút Gỡ', async () => {
     renderPage();
-    expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Đã tự áp');
+    expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Tubu đã tự áp mã tốt nhất');
     expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
     expect(mocks.applyCoupon).toHaveBeenCalledWith('WELCOME30');
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ addressId: 'a1', storefrontSlug: undefined, itemIds: undefined });
@@ -1801,7 +1801,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     mocks.applyCoupon.mockClear();
     mocks.getCart.mockResolvedValue(APPLIED);
     renderPage();
-    expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Đã tự áp');
+    expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Tubu đã tự áp mã tốt nhất');
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
   });
 
@@ -1899,7 +1899,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
       await act(async () => {
         (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
       });
-      expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Đã tự áp');
+      expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Tubu đã tự áp mã tốt nhất');
       expect(mocks.applyCoupon).not.toHaveBeenCalled();
     } finally {
       mocks.user.id = id;

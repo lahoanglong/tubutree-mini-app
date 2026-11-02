@@ -224,6 +224,18 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'cart.saving': 20,
   'cart.subtotal': 10,
   'cart.subtotalNet': 20,
+  'checkout.addressNeeded': null,
+  'checkout.quoteFailed': null,
+  'checkout.totalPending': 10,
+  'checkout.shipNeedsAddress': 28,
+  'checkout.calculating': 12,
+  'checkout.priceChangedHint': null,
+  'checkout.priceChangedBody': null,
+  'checkout.invoiceIncomplete': null,
+  'checkout.moreLines': 24,
+  'checkout.fewerLines': 10,
+  'checkout.placeWith': 24,
+  'coupon.autoApplied': 28,
 
   // Bộ thành phần section-kit
   'section.seeAll': 10,
