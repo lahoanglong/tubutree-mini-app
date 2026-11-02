@@ -25,6 +25,7 @@ import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { trustBadgeLabel } from '../utils/storefront-badge';
 import { announce, useNotify } from '../hooks/use-notify';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -628,6 +629,8 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
   }
 
   const overflow = overflowSectionsNotice(sf.collections);
+  // Đầu xem trước là đúng cái khách thấy: dấu tích và nhãn tin cậy chỉ khi admin đã duyệt (`approved`), như storefront-view.tsx.
+  const trustLabel = trustBadgeLabel(sf);
   return (
     <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
       <ShopHeader
@@ -635,8 +638,21 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
         titleAs="h2"
         coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null}
         avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null}
+        verified={Boolean(trustLabel)}
         note={sf.headerNote}
-        badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
+        badges={
+          trustLabel || tier ? (
+            <>
+              {trustLabel && (
+                <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Sparkles size={12} />
+                  {trustLabel}
+                </Badge>
+              )}
+              {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
+            </>
+          ) : undefined
+        }
       />
       <div style={{ padding: '12px 16px 0' }}>
         <Card padding={16}>
@@ -654,7 +670,7 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
               onClick={() => setProfileOpen(true)}
               style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
             >
-              <Text variant="caption" tone="brand" as="div">{vi.storefront.addCover}</Text>
+              <Text variant="caption" tone="brand" as="span" style={{ display: 'block' }}>{vi.storefront.addCover}</Text>
             </button>
           )}
           {view.code === 'LIVE' && (

@@ -1350,6 +1350,33 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(btn('Thêm ảnh bìa').className).toContain('max-md:text-[length:var(--type-caption-size)]');
   });
 
+  // Đầu xem trước phải là đúng cái khách thấy (storefront-body.tsx): dấu tích ở avatar và huy hiệu "CTV tuyển chọn" chỉ khi admin đã duyệt, đứng trước huy hiệu bậc.
+  it('gian hàng đã duyệt: dấu tích ở avatar và huy hiệu "CTV tuyển chọn" như trang khách; chưa duyệt thì không có cả hai', async () => {
+    const tick = (root: ParentNode) => root.querySelector('[role="img"][aria-label="Đã được Tubu Tree duyệt"]');
+    state.sf = storefront({ approved: true });
+    const first = mount();
+    await flush();
+    expect(text()).toContain('CTV tuyển chọn');
+    expect(tick(first.container)).not.toBeNull();
+    first.unmount();
+    state.sf = storefront({ approved: false });
+    const second = mount();
+    await flush();
+    expect(heading2(second.container)).toHaveLength(1);
+    expect(text()).not.toContain('CTV tuyển chọn');
+    expect(tick(second.container)).toBeNull();
+  });
+
+  it('đã duyệt và bậc 2: "CTV tuyển chọn" đứng trước "CTV Đồng"', async () => {
+    state.sf = storefront({ approved: true });
+    state.tiers = tiersAt(1);
+    mount();
+    await flush();
+    const body = text();
+    expect(body.indexOf('CTV tuyển chọn')).toBeGreaterThanOrEqual(0);
+    expect(body.indexOf('CTV tuyển chọn')).toBeLessThan(body.indexOf('CTV Đồng'));
+  });
+
   it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
     state.sf = storefront({ type: 'MERCHANT' });
     state.tiers = tiersAt(1);

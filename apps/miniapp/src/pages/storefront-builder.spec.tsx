@@ -740,6 +740,29 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
+  // Đầu xem trước phải là đúng cái khách thấy (storefront-view.tsx): dấu tích ở avatar và huy hiệu "CTV tuyển chọn" chỉ khi admin đã duyệt, đứng trước huy hiệu bậc.
+  it('gian hàng đã duyệt: dấu tích ở avatar và huy hiệu "CTV tuyển chọn" như trang khách; chưa duyệt thì không có cả hai', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ approved: true }));
+    const view = renderPage();
+    expect(await screen.findByText('CTV tuyển chọn')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Đã được Tubu Tree duyệt' })).toBeInTheDocument();
+    view.unmount();
+    mocks.getMyStorefront.mockResolvedValue(storefront({ approved: false }));
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    expect(screen.queryByText('CTV tuyển chọn')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Đã được Tubu Tree duyệt' })).not.toBeInTheDocument();
+  });
+
+  it('đã duyệt và bậc 2: "CTV tuyển chọn" đứng trước "CTV Đồng", cùng một hàng huy hiệu', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ approved: true }));
+    mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+    renderPage();
+    const selected = await screen.findByText('CTV tuyển chọn');
+    const tier = await screen.findByText('CTV Đồng');
+    expect(selected.compareDocumentPosition(tier) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
     mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
@@ -772,6 +795,16 @@ describe('Ảnh bìa trống (D7)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm ảnh bìa' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Hồ sơ gian hàng')).toBeInTheDocument();
+  });
+
+  // div trong button là HTML sai (nội dung của button chỉ được là phrasing): chữ nằm trong span nhưng vẫn chiếm cả hàng như trước.
+  it('nút "Thêm ảnh bìa" không chứa phần tử khối: chữ là span, vẫn display:block để hình không đổi', async () => {
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Thêm ảnh bìa' });
+    expect(button.querySelector('div, p, h1, h2, h3')).toBeNull();
+    const label = within(button).getByText('Thêm ảnh bìa');
+    expect(label.tagName).toBe('SPAN');
+    expect(label.style.display).toBe('block');
   });
 });
 

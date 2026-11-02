@@ -31,6 +31,8 @@ import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
+import { Badge as TrustBadge } from '@/components/mini/badge';
+import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
 import { ShopHeader } from '@/components/mini/shop-header';
@@ -434,6 +436,8 @@ export function StorefrontBuilder({ sf, tier }: { sf: StorefrontEdit; tier: { na
 
   const pickedStyle = sectionCol && sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
   const overflow = overflowSectionsNotice(sf.collections);
+  // Đầu xem trước là đúng cái khách thấy: dấu tích và nhãn tin cậy chỉ khi admin đã duyệt (`approved`), như storefront-body.tsx.
+  const trustLabel = storefrontBadgeLabel(sf);
 
   // "Xem trước" và nút chính (Chia sẻ / Đăng): một nguồn cho thanh dính đáy (`grow` = flex-1, hai nút bằng nhau) và hàng tiêu đề từ lg (bề rộng theo chữ).
   const actions = (grow: string) => (
@@ -508,8 +512,20 @@ export function StorefrontBuilder({ sf, tier }: { sf: StorefrontEdit; tier: { na
                 titleAs="h2"
                 coverUrl={sf.coverUrl}
                 avatarUrl={sf.avatarUrl}
+                verified={Boolean(trustLabel)}
                 note={sf.headerNote}
-                badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
+                badges={
+                  trustLabel || tier ? (
+                    <>
+                      {trustLabel && (
+                        <TrustBadge tone="verified" icon={Sparkles}>
+                          {trustLabel}
+                        </TrustBadge>
+                      )}
+                      {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
+                    </>
+                  ) : undefined
+                }
               />
             </div>
             <div className={`${ui.card} ${phoneFlatCard} mt-3 p-4`}>
