@@ -90,6 +90,15 @@ describe('BottomSheet', () => {
     expect(a).not.toHaveBeenCalled();
   });
 
+  it('tiêu đề là tiêu đề khối Inter 16/700, không phải Fraunces 18 (final-critique P2 #2)', () => {
+    mount(<BottomSheet open onClose={() => {}} title="Chọn mã">a</BottomSheet>);
+    const h2 = document.querySelector<HTMLElement>('[role="dialog"] h2')!;
+    expect(h2.style.fontFamily).toBe('var(--font-ui)');
+    expect(h2.style.fontSize).toBe('var(--type-title-sm-size)');
+    expect(h2.style.fontWeight).toBe('700');
+    expect(h2.style.letterSpacing).toBe('-0.01em');
+  });
+
   it('Dialog là bí danh của BottomSheet', () => {
     expect(Dialog).toBe(BottomSheet);
   });

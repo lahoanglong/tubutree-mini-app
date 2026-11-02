@@ -111,7 +111,7 @@ export function BottomSheet({ open, onClose, title, description, footer, size = 
         <div className="mini-sheet-handler" aria-hidden />
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            {title && <Heading variant="title-md" as="h2" id={titleId}>{title}</Heading>}
+            {title && <Heading variant="title-sm" font="ui" as="h2" id={titleId}>{title}</Heading>}
             {dismissible && <IconButton icon={X} label="Đóng" onPress={onClose} style={{ marginLeft: 'auto' }} />}
           </div>
           {description && <Text variant="body-sm" tone="secondary">{description}</Text>}
