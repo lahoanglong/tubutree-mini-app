@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
@@ -95,7 +95,7 @@ export class PancakeSyncService implements OnModuleInit {
     private readonly lifecycle: LifecycleService,
     @Optional() private readonly cronLeader?: CronLeaderService,
     @Optional() private readonly systemConfig?: SystemConfigService,
-    @Optional() private readonly imageStale?: ImageRegistryStale,
+    @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
@@ -436,10 +436,9 @@ export class PancakeSyncService implements OnModuleInit {
     // Danh mục: admin gán tay là của admin — đồng bộ chỉ điền khi sản phẩm CHƯA có danh mục nào.
     const mappedCats = (existing?.categoryIds?.length ?? 0) === 0 ? await this.mappedCategoryIds(p) : [];
 
-    // Chỉ đánh dấu khi ảnh thật sự đổi: lượt quét hàng trăm sản phẩm không đổi ảnh không làm /img nạp lại danh sách.
-    if (!existing || baseData.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(baseData.images) !== JSON.stringify(existing.images ?? [])) {
-      this.imageStale?.markStale();
-    }
+    // Chỉ đánh dấu khi ảnh thật sự đổi, và đánh dấu SAU khi ghi xong: đánh dấu trước thì một /img xen giữa nạp lại, xoá cờ mà DB
+    // chưa thấy ảnh mới. Có /img xen giữa thì một lượt đồng bộ có thể gây vài lần nạp nối tiếp, mỗi lần một truy vấn rẻ.
+    const imagesChanged = !existing || baseData.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(baseData.images) !== JSON.stringify(existing.images ?? []);
 
     const product = existing
       ? await this.prisma.product.update({
@@ -461,6 +460,7 @@ export class PancakeSyncService implements OnModuleInit {
             categoryIds: mappedCats,
           },
         });
+    if (imagesChanged) this.imageStale?.markStale();
 
     // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
     // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.

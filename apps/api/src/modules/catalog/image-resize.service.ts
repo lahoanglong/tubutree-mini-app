@@ -136,6 +136,13 @@ export class ImageResizeService {
       });
       try {
         await this.registryLoad;
+        // Yêu cầu nhập vào lần nạp đã bắt đầu trước khi cờ bật thì chưa thấy ảnh mới: nạp thêm đúng một lần.
+        if (this.stale.isStale()) {
+          this.registryLoad ??= this.loadRegistry().finally(() => {
+            this.registryLoad = null;
+          });
+          await this.registryLoad;
+        }
       } catch (e) {
         if (this.registryUntil === 0) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
         this.log.warn(`Không làm mới được danh sách ảnh: ${(e as Error).message}`);

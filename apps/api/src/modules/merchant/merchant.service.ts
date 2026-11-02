@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -253,7 +253,7 @@ export class MerchantService {
     private readonly orderStatus: OrderStatusService,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly config?: SystemConfigService,
-    @Optional() private readonly imageStale?: ImageRegistryStale,
+    @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**

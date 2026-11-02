@@ -879,4 +879,43 @@ describe('PancakeSyncService + ImageResizeService — tích hợp (R-182)', () =
     expect(await (resize as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(url)).toBe(true);
     now.mockRestore();
   });
+
+  it('/img xen vào lúc UPDATE chưa commit không làm mất đánh dấu: sau lượt đồng bộ ảnh mới được đăng ký', async () => {
+    const { ImageResizeService } = await import('../../catalog/image-resize.service');
+    const { ImageRegistryStale } = await import('../../catalog/image-registry-stale');
+    const url = 'https://content.pancake.vn/new.jpg';
+    let written = false;
+    let releaseUpdate!: () => void;
+    const updateGate = new Promise<void>((r) => (releaseUpdate = r));
+    let updateStarted!: () => void;
+    const started = new Promise<void>((r) => (updateStarted = r));
+    const prisma = makePrisma({
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'e', slug: 's', brand: 'b', images: ['https://content.pancake.vn/old.jpg'], thumbnail: 'https://content.pancake.vn/old.jpg', categoryIds: ['c'], forSegment: ['x'], basePrice: 1000, pancakeHold: null, isActive: true, description: 'd' }),
+        update: jest.fn().mockImplementation(async ({ data }) => {
+          updateStarted();
+          await updateGate;
+          written = true;
+          return { id: 'e', ...data };
+        }),
+      },
+    });
+    const registryDb = { $queryRaw: jest.fn(async () => (written ? [{ u: url }] : [])) };
+    const stale = new ImageRegistryStale();
+    const resize = new ImageResizeService({ get: jest.fn() } as never, registryDb as never, stale);
+    const isReg = (u: string) => (resize as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(u);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(5_000_000);
+    expect(await isReg(url)).toBe(false);
+    now.mockReturnValue(5_001_000);
+    const sync = new PancakeSyncService(prisma, makeClient([[{ id: 'n', name: 'Mới', images: [url], variations: [] }]]), lifecycle, undefined, undefined, stale).syncProducts();
+    await started;
+    expect(await isReg('https://content.pancake.vn/other.jpg')).toBe(false);
+    releaseUpdate();
+    await sync;
+    now.mockReturnValue(5_002_000);
+    expect(await isReg(url)).toBe(true);
+    now.mockRestore();
+  });
 });
+
