@@ -25,7 +25,7 @@ export function CartComboBlock({ block, headingAs = 'h3', children }: CartComboB
       data-testid="cart-combo-group"
       className="rounded-[calc(var(--radius-card)+var(--space-inline-sm))] bg-[var(--color-bg-subtle)] p-2 md:relative md:isolate md:rounded-none md:bg-transparent md:p-0 md:before:pointer-events-none md:before:absolute md:before:inset-y-0 md:before:left-0 md:before:z-[1] md:before:w-1 md:before:bg-[color:var(--color-border-strong)]"
     >
-      <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-stone-200">
+      <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-[color:var(--color-border-subtle)]">
         <div className="bg-[var(--color-bg-subtle)] px-1 md:px-3 md:py-2">
           <Heading
             variant="title-sm"
