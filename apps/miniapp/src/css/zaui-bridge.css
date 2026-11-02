@@ -99,4 +99,7 @@
   --zaui-light-bottom-navigation-color: var(--color-text-tertiary);
   --zaui-light-bottom-navigation-active-color: var(--color-text-brand);
   --zaui-light-bottom-navigation-divider-color: var(--color-border-subtle);
+
+  /* Nền mờ sau sheet: cùng token với `mini/bottom-sheet` và `ui/sheet` của web (K7). */
+  --zaui-mask-overlay-color: var(--color-bg-sheet-scrim);
 }

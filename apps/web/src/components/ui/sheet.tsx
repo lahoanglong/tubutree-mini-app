@@ -100,7 +100,7 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
   const titleId = `${uid}-title`;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-      <div data-sheet-backdrop className="absolute inset-0 bg-stone-900/50 md:motion-safe:animate-dialog-fade" onClick={dismissible ? onClose : undefined} />
+      <div data-sheet-backdrop className="absolute inset-0 bg-sheet-scrim md:motion-safe:animate-dialog-fade" onClick={dismissible ? onClose : undefined} />
       <div
         ref={panelRef}
         role="dialog"

@@ -151,6 +151,13 @@ describe('mini.css: sheet từ md là hộp thoại giữa màn (K7)', () => {
     expect(panel).not.toMatch(/translateX/);
   });
 
+  it('nền mờ của sheet lấy token chung --color-bg-sheet-scrim (cùng token với ui/sheet), không hex riêng, ở mọi khổ', () => {
+    expect(plain).toMatch(/--zaui-mask-overlay-color:\s*var\(--color-bg-sheet-scrim\)\s*;/);
+    expect(plain).not.toMatch(/--zaui-mask-overlay-color:\s*#/);
+    expect(/\.mini-sheet-mask\s*\{([^}]*)\}/.exec(outsideMedia)?.[1]).toMatch(/background:\s*var\(--zaui-mask-overlay-color\)/);
+    expect(md).not.toMatch(/\.mini-sheet-mask\s*\{[^}]*background/);
+  });
+
   it('từ md mở bằng fade/scale (không trượt), giảm chuyển động thì tắt cả hộp lẫn nền', () => {
     expect(md).toMatch(/\.mini-sheet-panel\s*\{[^}]*animation:\s*tubu-dialog-pop/);
     expect(plain).toMatch(/@keyframes tubu-dialog-pop\s*\{[^}]*0%\s*\{[^}]*opacity:\s*0[^}]*scale\(0\.97\)[^}]*\}[^}]*100%\s*\{[^}]*opacity:\s*1/);

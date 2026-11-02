@@ -62,6 +62,7 @@ describe('design-tokens/tailwind-preset: khớp tokens.css (DS-12)', () => {
   it('có orange-700 #9A5200 và lớp ngữ nghĩa commerce trỏ biến CSS', () => {
     expect((colors.orange as Record<string, string>)[700]).toBe('#9A5200');
     expect(colors.media).toBe('var(--color-bg-media)');
+    expect(colors['sheet-scrim']).toBe('var(--color-bg-sheet-scrim)');
     expect(colors.chip).toBe('var(--color-bg-chip)');
     expect(colors.track).toBe('var(--color-track)');
     expect(colors['shop-cover']).toBe('var(--color-bg-cover)');
