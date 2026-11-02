@@ -273,6 +273,7 @@
   --rail-pad-block: var(--p-space-2) var(--p-space-4); /* chừa chỗ cho bóng và vòng focus của thẻ trong kệ */
   --section-header-h: 44px;
   --sort-bar-top: 0px; /* SortBar sticky dính dưới header của trang; trang có header cố định đặt lại giá trị */
+  --dialog-w: 480px; /* sheet web từ md là hộp thoại giữa màn; mini/bottom-sheet và ui/sheet cùng bề rộng */
   --banner-ratio: 5 / 2;
   --badge-h-sm: 20px;
   --badge-h-md: 24px;

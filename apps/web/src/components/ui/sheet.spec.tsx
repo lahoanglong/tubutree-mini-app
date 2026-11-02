@@ -181,3 +181,45 @@ describe('Sheet thanh kéo', () => {
     expect(handle.className).toContain('md:hidden');
   });
 });
+
+describe('Sheet từ md là hộp thoại giữa màn (K7)', () => {
+  const classOf = () => dialog()!.className;
+
+  it('rộng tối đa --dialog-w, cao tối đa 85vh, bo đủ góc, bóng dialog, mở fade/scale chỉ khi không giảm chuyển động', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    for (const c of ['md:max-w-[var(--dialog-w)]', 'md:max-h-[85vh]', 'md:rounded-sheet', 'md:shadow-dialog', 'md:motion-safe:animate-dialog-pop']) {
+      expect(classOf().split(' '), c).toContain(c);
+    }
+    expect(classOf()).not.toContain('md:max-w-lg');
+    // `md:animate-*` kèm `motion-reduce:animate-none` thua về thứ tự CSS (luật md sinh sau): chỉ `md:motion-safe:` tắt được khi giảm chuyển động.
+    expect(classOf().split(' ')).not.toContain('md:animate-dialog-pop');
+  });
+
+  it('nền mờ hiện dần từ md như nền của mini/bottom-sheet, chỉ khi không giảm chuyển động', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    const backdrop = document.querySelector('[data-sheet-backdrop]')!;
+    expect(backdrop.className.split(' ')).toContain('md:motion-safe:animate-dialog-fade');
+  });
+
+  it('dưới md không đổi: bo hai góc trên, cao tối đa 92vh', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    expect(classOf().split(' ')).toEqual(expect.arrayContaining(['rounded-t-sheet', 'max-h-[92vh]', 'w-full']));
+  });
+
+  it('size="full" kẹp 85vh từ md, size="half" giữ 50vh', () => {
+    const full = mount(<Sheet open onClose={() => {}} size="full">x</Sheet>);
+    expect(classOf().split(' ')).toEqual(expect.arrayContaining(['h-[92vh]', 'md:h-[85vh]']));
+    full.unmount();
+    mounted = [];
+    mount(<Sheet open onClose={() => {}} size="half">x</Sheet>);
+    expect(classOf().split(' ')).toContain('h-[50vh]');
+  });
+
+  it('tiêu đề là tiêu đề khối Inter 16/700, không phải Fraunces 18 (final-critique P2 #2)', () => {
+    mount(<Sheet open onClose={() => {}} title="Chọn mã">x</Sheet>);
+    const classes = document.querySelector('[role="dialog"] h2')!.className.split(' ');
+    // mt-1.5: tâm dòng tiêu đề (24px) trùng tâm nút Đóng 44px (nút lùi -mt-1), giống Mini nơi hàng tiêu đề căn giữa.
+    expect(classes).toEqual(expect.arrayContaining(['mt-1.5', 'font-ui', 'text-base', 'font-bold']));
+    expect(classes).not.toContain('font-display');
+  });
+});

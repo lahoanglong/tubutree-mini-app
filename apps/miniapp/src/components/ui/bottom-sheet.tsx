@@ -171,7 +171,7 @@ export function BottomSheet({
       >
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            {title && <Heading variant="title-md" as="h2" id={titleId}>{title}</Heading>}
+            {title && <Heading variant="title-sm" font="ui" as="h2" id={titleId}>{title}</Heading>}
             {/* dismissible=false phải chặn CẢ nút X, không chỉ mask-tap/swipe — nút X vẫn hiện mà
                 vẫn gọi được onClose thì "dismissible" chỉ là nửa vời, phá vỡ đúng mục đích của prop. */}
             {dismissible && <IconButton icon={X} label="Đóng" onPress={onClose} />}

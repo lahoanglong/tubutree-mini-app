@@ -43,6 +43,7 @@ Chỉ nêu token dùng cho mua sắm; danh sách đầy đủ ở `packages/desi
 | `--space-block` (16px), `--space-section` (24px) | khoảng giữa hai khối ở màn danh sách và ở màn nội dung |
 | `--elevation-nav` | thanh dưới |
 | `--sort-bar-top` | chỗ `SortBar` dính; trang có header cố định đặt lại |
+| `--dialog-w` (480px) | bề rộng tối đa của sheet web từ md (hộp thoại giữa màn); hai sheet web dùng chung |
 | `--color-border-focus` | viền focus của nút |
 
 Tiêu đề khối trong luồng mua: Inter 16/700, -0.01em (Fraunces chỉ cho tiêu đề trang và số lớn từ 22px). Vùng chạm tối thiểu 44px, tương phản chữ tối thiểu 4,5:1.
@@ -245,6 +246,7 @@ Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì
 | 2026-11-01 | `.gitignore` bỏ qua `.claude/*` (thay vì cả thư mục) kèm `!.claude/skills/` | để skill `tubu-ui` vào git mà thư mục `worktrees` và cấu hình cục bộ trong `.claude` vẫn bị bỏ qua |
 | 2026-11-01 | Bánh cóc px và `max-md:` (`scripts/uiux/ds-baseline.json`), e2e `ds-parity` so số đo bằng bảng chuẩn, axe smoke bảy màn, mở rộng `ds-shop-guard`, `terminology.spec` quét thêm `packages/app-core/src` (P17b) | baseline lấy sau đợt 4 nên mã cũ không phải sửa hàng loạt mà chỉ được giảm; so số đo bằng bảng chuẩn vì CI tách server Mini và web; thẻ web mất bóng do `shadow-[var(--x)]` được sửa và có luật chặn |
 | 2026-11-02 | PDP: bỏ dòng "Phân loại ›", giữ chip; Số lượng liền dưới chip, ghi chú vận chuyển dời lên trên chip (G3) | chip đã nêu tên, giá Giờ vàng, hết hàng ngay trên màn; Thêm vào giỏ/Mua ngay vẫn mở bảng chọn từ 2 phân loại nên dòng "›" chỉ lặp; Đánh giá nhanh không còn chen giữa phân loại và Số lượng |
+| 2026-11-02 | Sheet: từ md (768px) mọi sheet web là hộp thoại giữa màn rộng tối đa `--dialog-w` (480px), cao tối đa 85vh, bo đủ góc, bóng `--elevation-4`, mở fade/scale (tắt khi giảm chuyển động), không tay nắm; dưới md giữ bottom sheet. Tiêu đề mọi sheet (Mini + web) là tiêu đề khối Inter 16/700 (K7) | sheet trải ngang 560px cao gần hết màn trên máy tính trông như điện thoại phóng to; tiêu đề Fraunces 18px trái Q1 (final-critique P2 #2, #3); hai sheet web (`mini/bottom-sheet`, `ui/sheet`) cùng một dạng |
 | 2026-11-02 | Dải "Có thể bạn cũng thích": khách web lấy 10 món bán chạy (`PDP_FEED_SOURCE_LIMIT`) | `/products/for-you` của API trả tối đa 10 món nên Mini chỉ có ngần ấy; nguồn khác nhau (bán chạy với gợi ý cá nhân) là chủ ý vì `for-you` cần đăng nhập, chỉ trần số món được cho bằng nhau |
 | 2026-11-02 | Nút "Mua ngay" ở Giờ vàng dùng `--color-flash-solid-bg` qua `Button` biến thể `flash`; bảng Token ghi rõ ngoại lệ này (G5 #22) | giữ màu đặc của nhãn Giờ vàng để nhãn và nút mua cùng một nhận diện; đổi màu nút sẽ làm Giờ vàng lệch khỏi thẻ ngay bên cạnh |
 | 2026-11-02 | Chân trang web ở 375px dài hơn Mini vì giữ liên kết pháp lý và đơn vị vận hành (G5 #38) | Mini không có chân trang; web là trang công khai nên cần các liên kết này; ghi ở mục Khuôn trang web để lần chụp so sau không coi là lỗi |
