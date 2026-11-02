@@ -53,6 +53,17 @@ describe('BottomNav', () => {
     expect(label(idle, 'Cá nhân').style.fontWeight).toBe('500');
   });
 
+  it('tab giữa cùng đường chân chữ với các tab khác: căn giữa như các tab khác, ô trống 24px không co thay chỗ icon', () => {
+    render(<BottomNav />);
+    const center = screen.getByRole('button', { name: 'Vườn Xanh' });
+    expect(center.style.justifyContent).toBe('center');
+    expect(center.style.paddingBottom).toBe('0px');
+    const spacer = center.firstElementChild as HTMLElement;
+    expect(spacer.textContent).toBe('');
+    expect(spacer.style.height).toBe('24px');
+    expect(spacer.style.flexShrink).toBe('0');
+  });
+
   it('mép trên là --elevation-nav, không còn borderTop chồng bóng cũ', () => {
     render(<BottomNav />);
     const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
