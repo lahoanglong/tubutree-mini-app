@@ -81,4 +81,34 @@ describe('recompute', () => {
     expect(result.couponCode).toBe('FREESHIP');
     expect(result.freeship).toBe(true);
   });
+
+  describe('nhóm combo (K5): giữ nhóm khi sửa số lượng hay xoá món lẻ, bỏ nhóm khi mất món khoá', () => {
+    const group = { id: 'bundle:b1', kind: 'BUNDLE_PCT' as const, title: 'Bộ Fuwa', discount: 65_250, lineIds: ['i1', 'i2'], keyLineIds: ['i1', 'i2'] };
+    const lines = [line({ id: 'i1' }), line({ id: 'i2' }), line({ id: 'i3' })];
+    const cart = summary({ items: lines, comboDiscount: 65_250, comboGroups: [group] });
+
+    it('đổi số lượng của dòng trong bộ: nhóm ở nguyên chỗ (khối không nhảy mỗi lần bấm +/−), tiền combo chờ máy chủ', () => {
+      const result = recompute(cart, lines.map((l) => (l.id === 'i2' ? { ...l, quantity: 3 } : l)), 'i2');
+      expect(result.comboGroups).toEqual([group]);
+      expect(result.comboDiscount).toBe(0);
+    });
+
+    it('xoá một món lẻ: nhóm giữ nguyên', () => {
+      expect(recompute(cart, lines.filter((l) => l.id !== 'i3')).comboGroups).toEqual([group]);
+    });
+
+    it('xoá món khoá của bộ: bộ không còn khớp nên nhóm biến mất', () => {
+      expect(recompute(cart, lines.filter((l) => l.id !== 'i1')).comboGroups).toEqual([]);
+    });
+
+    it('xoá món mang giảm nhưng không khoá (mục có hai phân loại): nhóm còn, bỏ id đã xoá khỏi lineIds', () => {
+      const g = { ...group, lineIds: ['i1', 'i2', 'i3'], keyLineIds: ['i1'] };
+      const out = recompute({ ...cart, comboGroups: [g] }, lines.filter((l) => l.id !== 'i3'));
+      expect(out.comboGroups).toEqual([{ ...g, lineIds: ['i1', 'i2'] }]);
+    });
+
+    it('giỏ từ API cũ không có comboGroups: không lỗi, không tự thêm', () => {
+      expect(recompute(summary({ items: lines }), lines).comboGroups).toBeUndefined();
+    });
+  });
 });

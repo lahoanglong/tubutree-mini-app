@@ -8,9 +8,16 @@ import type { CartLine, CartSummary } from '../services/shop-api';
  */
 export function recompute(cart: CartSummary, items: CartLine[], editedId?: string): CartSummary {
   const lines = items.map((l) => (l.id === editedId ? { ...l, total: l.unitPrice * l.quantity } : l));
+  const present = new Set(lines.map((l) => l.id));
+  // Nhóm combo: đổi số lượng không làm bộ mất khớp (luật khớp chỉ cần số lượng ≥ 1) nên giữ nhóm, kẻo khối nhảy mỗi lần bấm +/−. Xoá món khoá thì bộ không
+  // còn khớp: bỏ nhóm. Xoá món mang giảm nhưng không khoá: nhóm còn, chỉ bỏ id đã xoá. Số tiền của nhóm chờ máy chủ như `comboDiscount`.
+  const comboGroups = cart.comboGroups
+    ?.filter((g) => g.keyLineIds.every((id) => present.has(id)) && g.lineIds.some((id) => present.has(id)))
+    .map((g) => ({ ...g, lineIds: g.lineIds.filter((id) => present.has(id)) }));
   return {
     ...cart,
     items: lines,
+    ...(comboGroups ? { comboGroups } : {}),
     subtotal: lines.reduce((s, l) => s + l.total, 0),
     comboDiscount: 0,
     discount: 0,
