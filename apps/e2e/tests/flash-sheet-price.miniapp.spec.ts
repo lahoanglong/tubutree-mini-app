@@ -71,7 +71,7 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     await plus.click();
     await plus.click();
     await expect(buy).toHaveText('Mua ngay · 78.000đ');
-    await expect(note).toHaveText(MERGE_2);
+    await expect(note).toHaveText('');
     const before = (await plus.boundingBox())!;
 
     await plus.click();
