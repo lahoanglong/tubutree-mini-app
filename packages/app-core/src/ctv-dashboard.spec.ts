@@ -145,6 +145,19 @@ describe('khoá nút Chuyển vào Ví trong lúc làm mới sau khi chuyển', 
     off();
   });
 
+  it('hai lần làm mới chồng nhau: lần xong trước không mở nút khi lần sau chưa xong', async () => {
+    let first!: () => void;
+    let second!: () => void;
+    const p1 = lockTransferUntil(() => new Promise<void>((r) => (first = r)));
+    const p2 = lockTransferUntil(() => new Promise<void>((r) => (second = r)));
+    first();
+    await p1;
+    expect(isTransferRefreshing()).toBe(true);
+    second();
+    await p2;
+    expect(isTransferRefreshing()).toBe(false);
+  });
+
   it('làm mới lỗi vẫn mở nút', async () => {
     await expect(lockTransferUntil(() => Promise.reject(new Error('x')))).resolves.toBeUndefined();
     expect(isTransferRefreshing()).toBe(false);
