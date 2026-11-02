@@ -39,9 +39,14 @@ export function vnMonthKey(d: Date = new Date()): string {
   return new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 7);
 }
 
-/** Ngày hiển thị cho khách ('10/10/2026') theo giờ VN; `toLocaleDateString('vi-VN')` trần dùng TZ host. */
+/**
+ * Ngày hiển thị cho khách ('01/12/2026') theo giờ VN, luôn đủ hai chữ số như `formatVnDateTime`:
+ * `toLocaleDateString('vi-VN')` bỏ số 0 đầu ('1/12/2026') và trần thì dùng TZ host.
+ */
 export function formatVnDate(d: Date): string {
-  return d.toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  const vn = new Date(d.getTime() + VN_OFFSET_MS);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${p2(vn.getUTCDate())}/${p2(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`;
 }
 
 /** Mốc giờ hiển thị cho khách ('00:05 14/10/2026') theo giờ VN — dùng cho hạn thanh toán. */
