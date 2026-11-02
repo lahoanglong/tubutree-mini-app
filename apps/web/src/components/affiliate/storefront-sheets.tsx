@@ -93,7 +93,7 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
               ) : (
                 <div className="mx-auto mb-1.5 h-9 w-9 rounded-control bg-stone-100" />
               )}
-              {withTemplate.isPending && withTemplate.variables === c.id ? 'Đang dựng...' : c.name}
+              {withTemplate.isPending && withTemplate.variables === c.id ? 'Đang dựng…' : c.name}
             </button>
           ))}
         </div>

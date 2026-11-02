@@ -130,7 +130,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
             </p>
           )}
           <button type="submit" disabled={!valid || mut.isPending} className={`${ui.btnPrimary} ${skin.dealerInkBtn} mt-2 w-full`}>
-            {mut.isPending ? 'Đang gửi...' : 'Gửi hồ sơ đăng ký'}
+            {mut.isPending ? 'Đang gửi…' : 'Gửi hồ sơ đăng ký'}
           </button>
         </form>
       </div>

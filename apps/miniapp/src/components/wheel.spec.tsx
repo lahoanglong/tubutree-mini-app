@@ -71,13 +71,13 @@ describe('WheelOfFortune — nút quay', () => {
     expect(spinButton()).toHaveTextContent('Quay ngay (1.250.000 Điểm Xanh)');
   });
 
-  it('bấm quay: gọi onSpin đúng 1 lần, nhãn đổi "Đang quay..." và nút khoá', async () => {
+  it('bấm quay: gọi onSpin đúng 1 lần, nhãn đổi "Đang quay…" và nút khoá', async () => {
     const onSpin = vi.fn().mockResolvedValue(POINTS_PRIZE);
     render(<WheelOfFortune cost={20} onSpin={onSpin} />);
     fireEvent.click(spinButton());
     await advance(0);
     expect(onSpin).toHaveBeenCalledTimes(1);
-    expect(spinButton()).toHaveTextContent('Đang quay...');
+    expect(spinButton()).toHaveTextContent('Đang quay…');
     expect(spinButton()).toBeDisabled();
     await advance(SPIN_MS);
   });

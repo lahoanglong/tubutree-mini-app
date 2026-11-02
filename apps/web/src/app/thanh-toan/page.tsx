@@ -610,7 +610,7 @@ export default function CheckoutPage() {
                 onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
                 maxLength={ORDER_NOTE_MAX}
                 rows={2}
-                placeholder="Ví dụ: giao giờ hành chính..."
+                placeholder="Ví dụ: giao giờ hành chính…"
                 disabled={place.isPending}
                 aria-describedby="order-note-count"
                 className={`${NOTE_FIELD} mt-1 h-12 resize-none py-2 md:h-auto md:resize-y`}

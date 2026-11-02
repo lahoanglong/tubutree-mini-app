@@ -92,7 +92,7 @@ export default function CashbackPage() {
       win.opener = null;
       win.location.replace(r.deeplink);
       setSelected(null);
-      setNotice('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...');
+      setNotice('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…');
     },
     onError: (e) => {
       partnerTab.current?.close();

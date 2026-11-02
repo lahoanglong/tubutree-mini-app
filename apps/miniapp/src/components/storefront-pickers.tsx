@@ -61,7 +61,7 @@ export function TemplatePickerSheet({
               ) : (
                 <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)', margin: '0 auto 6px' }} />
               )}
-              <Text variant="body-sm">{applying && applyingCategoryId === c.id ? 'Đang dựng...' : c.name}</Text>
+              <Text variant="body-sm">{applying && applyingCategoryId === c.id ? 'Đang dựng…' : c.name}</Text>
             </button>
           ))}
         </div>

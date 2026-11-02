@@ -97,7 +97,7 @@ export function RewardsCard() {
                     }}
                     className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}
                   >
-                    {pendingKey === rowKey ? 'Đang gửi...' : 'Yêu cầu nhận thưởng'}
+                    {pendingKey === rowKey ? 'Đang gửi…' : 'Yêu cầu nhận thưởng'}
                   </button>
                 )}
               </div>

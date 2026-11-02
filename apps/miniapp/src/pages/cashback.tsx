@@ -53,7 +53,7 @@ export default function CashbackPage() {
     onSuccess: (r) => {
       haptic('medium');
       setSelected(null);
-      openSnackbar({ text: 'Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...', type: 'success' });
+      openSnackbar({ text: 'Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…', type: 'success' });
       void openAffiliateLink(r.deeplink);
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),

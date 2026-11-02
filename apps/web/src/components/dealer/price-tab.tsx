@@ -224,7 +224,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
           Trả trước
         </button>
         <button type="button" disabled={overLimit || placing || belowMin} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
-          {placing ? 'Đang đặt...' : 'Ghi công nợ'}
+          {placing ? 'Đang đặt…' : 'Ghi công nợ'}
         </button>
       </div>
     </>
@@ -327,7 +327,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
         title="Lưu mẫu đơn"
         footer={
           <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
-            {saveTpl.isPending ? 'Đang lưu...' : 'Lưu mẫu'}
+            {saveTpl.isPending ? 'Đang lưu…' : 'Lưu mẫu'}
           </button>
         }
       >

@@ -108,7 +108,7 @@ export function WheelOfFortune({
         </>
       ) : (
         <button type="button" disabled={spinning} onClick={() => void handleSpin()} className={`${ui.btnPrimary} min-h-12 min-w-[200px]`}>
-          {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
+          {spinning ? 'Đang quay…' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
         </button>
       )}
     </div>

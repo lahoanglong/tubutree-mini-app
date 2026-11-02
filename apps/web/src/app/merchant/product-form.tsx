@@ -162,7 +162,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
         <div>
           <label htmlFor="merchant-product-name" className="block text-xs font-medium text-stone-700">Tên sản phẩm *</label>
-          <input id="merchant-product-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} placeholder="Nước rửa chén bồ hòn sinh học 500ml..." className={INPUT} />
+          <input id="merchant-product-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} placeholder="Nước rửa chén bồ hòn sinh học 500ml…" className={INPUT} />
         </div>
 
         <fieldset className="space-y-2 rounded-control border border-stone-200 p-3">
@@ -242,12 +242,12 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
 
         <div>
           <label htmlFor="merchant-product-short-desc" className="block text-xs font-medium text-stone-700">Mô tả ngắn</label>
-          <input id="merchant-product-short-desc" value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} maxLength={300} placeholder="Chiết xuất bồ hòn tự nhiên, an toàn cho da nhạy cảm..." className={INPUT} />
+          <input id="merchant-product-short-desc" value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} maxLength={300} placeholder="Chiết xuất bồ hòn tự nhiên, an toàn cho da nhạy cảm…" className={INPUT} />
         </div>
 
         <div>
           <label htmlFor="merchant-product-description" className="block text-xs font-medium text-stone-700">Nội dung mô tả chi tiết *</label>
-          <textarea id="merchant-product-description" value={description} onChange={(e) => setDescription(e.target.value)} required rows={3} placeholder="Công dụng, thành phần, hướng dẫn sử dụng, hạn sử dụng..." className={INPUT} />
+          <textarea id="merchant-product-description" value={description} onChange={(e) => setDescription(e.target.value)} required rows={3} placeholder="Công dụng, thành phần, hướng dẫn sử dụng, hạn sử dụng…" className={INPUT} />
         </div>
 
         <div>
@@ -257,7 +257,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
 
         <div>
           <label htmlFor="merchant-product-image-url" className="block text-xs font-medium text-stone-700">URL hình ảnh sản phẩm</label>
-          <input id="merchant-product-image-url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." className={INPUT} />
+          <input id="merchant-product-image-url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…" className={INPUT} />
         </div>
 
         {msg && (
@@ -475,7 +475,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
         </div>
         <div>
           <label htmlFor="merchant-edit-image-url" className="block text-xs font-medium text-stone-700">URL hình ảnh sản phẩm</label>
-          <input id="merchant-edit-image-url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." className={INPUT} />
+          <input id="merchant-edit-image-url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…" className={INPUT} />
         </div>
         {msg && (
           <p role="alert" className="text-xs text-danger-fg">

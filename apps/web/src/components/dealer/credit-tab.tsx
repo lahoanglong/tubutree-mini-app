@@ -70,7 +70,7 @@ export function CreditTab() {
             onChange={(e) => setAmount(e.target.value)}
           />
           <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}>
-            {pay.isPending ? 'Đang gửi...' : 'Báo đã chuyển khoản'}
+            {pay.isPending ? 'Đang gửi…' : 'Báo đã chuyển khoản'}
           </button>
         </div>
         {Number(amount) > balance && (

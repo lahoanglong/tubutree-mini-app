@@ -840,7 +840,7 @@ describe('/dai-ly — báo trước phí giao và mức tối thiểu của đơ
   const meWith = (over: Record<string, unknown> = {}) => ({ ...APPROVED, currentDebt: 0, orderRules: RULES, ...over });
   const priced = (dealerPrice: number, me = meWith()) =>
     setup({ '/dealer/me': me, '/dealer/pricelist': [row({ dealerPrice, retailPrice: dealerPrice * 2, stock: 9 })] });
-  const buttons = (name: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === name || b.textContent === 'Đang đặt...');
+  const buttons = (name: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === name || b.textContent === 'Đang đặt…');
 
   it('giỏ 4.000.000đ: hiện phí giao 19.000đ, tổng 4.019.000đ và nút đặt bật', async () => {
     priced(4_000_000);

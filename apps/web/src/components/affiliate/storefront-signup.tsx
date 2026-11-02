@@ -382,7 +382,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
                 onClick={() => !templateMut.isPending && templateMut.mutate(c.id)}
                 className="min-h-11 rounded-card border border-stone-200 bg-stone-0 p-3 text-center text-sm"
               >
-                {templateMut.isPending && templateMut.variables === c.id ? 'Đang dựng...' : c.name}
+                {templateMut.isPending && templateMut.variables === c.id ? 'Đang dựng…' : c.name}
               </button>
             ))}
           </div>
