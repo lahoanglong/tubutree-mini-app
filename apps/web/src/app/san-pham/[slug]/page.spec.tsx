@@ -96,7 +96,7 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
     for (const brandSlug of ['xanh-viet', undefined]) {
       api.product = { ...PRODUCT, brandSlug };
       const c = await mount();
-      const a = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm nhãn Xanh Việt"]')!;
+      const a = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm thương hiệu Xanh Việt"]')!;
       expect(a.getAttribute('href')).toBe('/san-pham?brand=Xanh%20Vi%E1%BB%87t');
     }
   });
@@ -137,7 +137,7 @@ describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
   it('hàng nhãn: chấm màu + tên + mũi tên, không gạch chân ở điện thoại; chia sẻ chỉ là biểu tượng', async () => {
     api.product = PRODUCT_TUBU;
     const c = await mount();
-    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm nhãn Xanh Việt"]')!;
+    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm thương hiệu Xanh Việt"]')!;
     expect(link.className).toContain('max-md:no-underline');
     expect(link.querySelector('[data-testid="brand-dot"]')).not.toBeNull();
     expect(link.querySelector('svg')).not.toBeNull();

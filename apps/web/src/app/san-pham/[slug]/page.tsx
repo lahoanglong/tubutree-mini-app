@@ -112,7 +112,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
                 <Link
                   href={`/san-pham?brand=${encodeURIComponent(product.brand)}`}
-                  aria-label={`Xem sản phẩm nhãn ${product.brand}`}
+                  aria-label={`Xem sản phẩm thương hiệu ${product.brand}`}
                   className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[var(--color-text-secondary)] max-md:no-underline"
                 >
                   <span
