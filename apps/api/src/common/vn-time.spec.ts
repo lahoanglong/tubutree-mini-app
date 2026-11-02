@@ -40,6 +40,11 @@ describe('vn-time (lịch giờ VN, độc lập TZ host)', () => {
     expect(formatVnDate(new Date('2026-10-09T17:00:00Z'))).toBe('10/10/2026');
   });
 
+  it('formatVnDate: ngày/tháng một chữ số vẫn đủ hai chữ số (01/12/2026), cùng dạng formatVnDateTime', () => {
+    expect(formatVnDate(new Date('2026-11-30T17:00:00Z'))).toBe('01/12/2026');
+    expect(formatVnDate(new Date('2026-01-04T16:59:59Z'))).toBe('04/01/2026');
+  });
+
   it('formatVnDateTime: hạn thanh toán "HH:mm dd/MM/yyyy" theo giờ VN', () => {
     expect(formatVnDateTime(new Date('2026-10-13T17:05:00Z'))).toBe('00:05 14/10/2026');
     expect(formatVnDateTime(new Date('2026-01-02T03:04:00Z'))).toBe('10:04 02/01/2026');
