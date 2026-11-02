@@ -277,6 +277,29 @@ describe('useAuthStore — restore() và login() chồng nhau', () => {
     expect(useAuthStore.getState().status).toBe('authenticated');
   });
 
+  it('restore() gọi lúc login() đang chạy mà login() ra khoá: không đăng nhập lại', async () => {
+    useAuthStore.setState({ user: null, status: 'idle', error: undefined });
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    let fail!: (e: unknown) => void;
+    mockedLoginGuest.mockReturnValue(
+      new Promise<LoginResponse>((_, reject) => {
+        fail = reject;
+      }),
+    );
+
+    const loggingIn = useAuthStore.getState().login();
+    await flush();
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    fail(blocked());
+    await Promise.all([loggingIn, restoring]);
+
+    expect(mockedLoginGuest).toHaveBeenCalledTimes(1);
+    expect(mockedRefresh).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBe('Tài khoản đã bị khoá.');
+  });
+
   it('restore() gọi lúc login() đang chạy: chờ login() xong, ra phiên rồi thì không đăng nhập lại', async () => {
     useAuthStore.setState({ user: null, status: 'idle', error: undefined });
     mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
@@ -987,5 +1010,20 @@ describe('useAuthStore — storage ZMP không trả lời', () => {
     await useAuthStore.getState().login();
     expect(mockedLoginGuest).toHaveBeenCalledTimes(1);
     expect(useAuthStore.getState().status).toBe('authenticated');
+    // Lần ghi đầu có thể vẫn đang chạy và ghi xong sau: lần sau phải đăng nhập bằng đúng id đó, không sinh id khác.
+    const firstWrite = mockedSetStorage.mock.calls[0]?.[0] as { data: Record<string, string> };
+    expect(mockedLoginGuest.mock.calls[0]?.[0]).toBe(firstWrite.data.tubu_device_id);
+  });
+
+  it('đọc token treo lúc đăng xuất: không báo đã đăng xuất, không xoá phiên (token còn trên máy cho người sau)', async () => {
+    useAuthStore.setState({ user: loginResponse('u1').user, status: 'authenticated', error: undefined });
+    mockedGetStorage.mockReturnValue(hang() as never);
+
+    void useAuthStore.getState().logout();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('u1');
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
   });
 });

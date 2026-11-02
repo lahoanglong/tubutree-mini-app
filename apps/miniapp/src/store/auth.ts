@@ -52,6 +52,9 @@ function withStorageTimeout<T>(p: Promise<T>): Promise<T> {
   });
 }
 
+/** Id vừa sinh mà lần ghi hết trần (có thể vẫn đang ghi): lần sau dùng lại đúng id này, id khác là một tài khoản Khách khác. */
+let unsavedDeviceId: string | null = null;
+
 /** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
 export async function getDeviceId(): Promise<string> {
   // Không đọc được thì ném, không sinh id mới: id mới là một tài khoản Khách khác.
@@ -59,8 +62,9 @@ export async function getDeviceId(): Promise<string> {
   const existing = (res as Record<string, unknown>)[DEVICE_KEY];
   if (typeof existing === 'string' && existing.length > 0) return existing;
   // deviceId là thứ DUY NHẤT xác thực tài khoản khách — phải sinh bằng crypto (xem newDeviceId).
-  const id = newDeviceId();
+  const id = (unsavedDeviceId ??= newDeviceId());
   await withStorageTimeout(setStorage({ data: { [DEVICE_KEY]: id } }));
+  unsavedDeviceId = null;
   return id;
 }
 
@@ -86,13 +90,15 @@ interface AuthState {
 async function persistRefresh(token: string): Promise<void> {
   await withStorageTimeout(setStorage({ data: { [REFRESH_KEY]: token } }));
 }
-async function readRefresh(): Promise<string | null> {
-  const res = await withStorageTimeout(getStorage({ keys: [REFRESH_KEY] }));
+async function readRefresh({ limit = true }: { limit?: boolean } = {}): Promise<string | null> {
+  const read = getStorage({ keys: [REFRESH_KEY] });
+  const res = await (limit ? withStorageTimeout(read) : read);
   const val = (res as Record<string, unknown>)[REFRESH_KEY];
   return typeof val === 'string' && val.length > 0 ? val : null;
 }
 async function clearRefresh(): Promise<void> {
-  // Xoá treo thì bỏ qua: token còn lại sẽ bị máy chủ từ chối ở lần refresh sau, còn chờ thì treo cả đăng xuất lẫn báo khoá.
+  // Xoá treo thì bỏ qua: chỉ gọi khi máy chủ đã từ chối token này (khoá, hết hạn, đã xoay) nên token còn lại cũng bị từ chối
+  // ở lần refresh sau, còn chờ thì treo cả báo khoá. Đăng xuất không dùng hàm này (xem logout).
   await withStorageTimeout(removeStorage({ keys: [REFRESH_KEY] })).catch((e: unknown) => {
     if (!(e instanceof StorageTimeoutError)) throw e;
   });
@@ -282,10 +288,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const keepSession = get().status === 'authenticated' && get().user !== null;
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
-      // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó; ra phiên rồi thì thôi.
+      // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó. Chỉ chạy tiếp khi nó gặp lỗi
+      // tạm; ra phiên hay bị khoá ('idle' kèm lời máy chủ) là đã có kết luận, đăng nhập lại chỉ có thể làm sai kết luận đó.
       if (loginInFlight) {
         await loginInFlight.catch(() => undefined);
-        if (get().status === 'authenticated') return;
+        if (get().status !== 'error') return;
       }
       try {
         const res = await refreshSession();
@@ -361,10 +368,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // Không đặt trần ở đây: trên máy dùng chung, đăng xuất phải chắc đã đọc được token để thu hồi và đã xoá nó. Storage treo thì
+    // đăng xuất treo theo (khách thấy chưa xong), còn hơn báo đã đăng xuất mà token vẫn nằm trên máy cho người sau mở lại.
     // Đọc trước khi xoá: sau đó không còn token để thu hồi trên máy chủ.
-    const refreshToken = await readRefresh().catch(() => null);
+    const refreshToken = await readRefresh({ limit: false }).catch(() => null);
     setAccessToken(null);
-    await clearRefresh();
+    await removeStorage({ keys: [REFRESH_KEY] });
     set({ user: null, status: 'idle', error: undefined });
     clearHomeHints(browserStorage());
     clearCtvTouched();
