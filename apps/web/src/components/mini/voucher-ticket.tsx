@@ -59,7 +59,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   // trong phần bị cắt: phụ đề dài đến đâu mã vẫn thấy nguyên. Ticket/row thêm mã vào meta/hàng đáy: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const chipCode = variant === 'chip' && Boolean(v.code);
   const showCode = variant !== 'chip' && Boolean(v.code);
-  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng ở hàng riêng dưới điều kiện, tối đa hai dòng, "…" khi quá; hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
+  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng ở hàng riêng NGAY DƯỚI nhãn, trước điều kiện (mảnh "cho 3 đơn" chỉ đọc được liền sau nhãn; đặt sau điều kiện thì khách đọc thành "Đơn từ 100k cho 3 đơn"), tối đa hai dòng, "…" khi quá; hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
   // ngay dưới nhãn hoặc sau điều kiện, đứng đầu dòng thì thành mảnh lơ lửng.
   const name = variant !== 'chip' ? v.name : null;
   const ticket = variant === 'ticket';
@@ -98,7 +98,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
     <span
       id={`${uid}-meta`}
       data-testid="voucher-meta"
-      style={{ display: 'block', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_CLAMP : null), ...(ticket ? { flex: '0 0 auto', maxWidth: '100%' } : null) }}
+      style={{ display: 'block', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_CLAMP : null) }}
     >
       {metaParts.map((part, i) => (
         <Fragment key={i}>
@@ -121,13 +121,13 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       <span style={{ ...(small ? TITLE_ONE_LINE : TITLE_CLAMP), fontSize: small ? 'var(--type-label-size)' : 'var(--type-body-sm-size)', lineHeight: small ? 'var(--type-label-lh)' : 'var(--type-body-sm-lh)', fontWeight: 700, color: text }}>
         {v.title}
       </span>
-      {metaNode}
       {ticket && name && (
-        // Ticket: tên admin ở hàng riêng ngay dưới điều kiện, rộng hết cột nội dung, cùng kiểu chữ với điều kiện; tối đa hai dòng ("…" khi quá), từ dài không dấu cách vẫn xuống dòng.
+        // Ticket: tên admin ở hàng riêng ngay dưới nhãn, trước điều kiện, rộng hết cột nội dung, cùng kiểu chữ với điều kiện; tối đa hai dòng ("…" khi quá), từ dài không dấu cách vẫn xuống dòng.
         <span data-testid="voucher-name" style={{ ...TITLE_CLAMP, minWidth: 0, overflowWrap: 'anywhere', ...captionStyle, color: 'var(--color-text-tertiary)' }}>
           {name}
         </span>
       )}
+      {metaNode}
       {chipCode && <span style={{ display: 'block', ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span>}
       {footItems.length > 0 && (
         <span data-testid="voucher-foot" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--p-space-2)', ...captionStyle }}>
