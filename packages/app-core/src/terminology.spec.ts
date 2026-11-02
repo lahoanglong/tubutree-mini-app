@@ -223,7 +223,6 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/web/src/app/thanh-toan/page.tsx', use: USE.flash, max: 1, reason: REASON.FLASH },
   { file: 'apps/web/src/components/affiliate/ctv-order-copy.ts', use: USE.flash, max: 1, reason: REASON.FLASH },
   { file: 'apps/web/src/lib/home-text.ts', use: USE.flash, max: 2, reason: REASON.FLASH },
-  { file: 'apps/miniapp/src/components/checkout/voucher-sheet.tsx', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/miniapp/src/components/loyalty/coupon-card.tsx', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/miniapp/src/pages/about-data.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/web/src/lib/faq-fallback.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
