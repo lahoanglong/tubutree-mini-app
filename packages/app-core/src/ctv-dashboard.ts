@@ -105,3 +105,21 @@ export function nextMilestoneRows<T extends { achieved: boolean; canClaim: boole
 }
 
 export { AFFILIATE_PAGE_SIZE, affiliateNextCursor } from './affiliate-page';
+
+/**
+ * Mốc (ms) lúc vừa chuyển hoa hồng vào Ví. Nút "Chuyển vào Ví" khoá tới khi dashboard có dữ liệu hoặc lỗi không cũ hơn mốc (cùng mili giây tính là mới: làm mới dashboard luôn bắt đầu sau khi đặt mốc),
+ * để không mở form với số dư cũ. Mốc nằm ngoài component nên còn nguyên khi khách rời trang rồi quay lại; chỉ tăng,
+ * và được nâng lên khi bắt đầu làm mới dashboard để một lần tải lại đã bay trước đó mà trả về muộn không mở nút.
+ */
+let transferMark: number | null = null;
+export const getTransferMark = (): number | null => transferMark;
+export function markTransferred(now: number = Date.now()): number {
+  transferMark = Math.max(transferMark ?? 0, now);
+  return transferMark;
+}
+export function resetTransferMark(): void {
+  transferMark = null;
+}
+export function isTransferLocked(mark: number | null, dataUpdatedAt: number, errorUpdatedAt: number): boolean {
+  return mark !== null && dataUpdatedAt < mark && errorUpdatedAt <= mark;
+}

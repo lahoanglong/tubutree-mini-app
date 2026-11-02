@@ -20,7 +20,7 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, needsTaxIdForAutoTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
+import { affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, getTransferMark, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, isTransferLocked, markTransferred, needsTaxIdForAutoTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { coreHttp } from '@/lib/core-http';
@@ -356,8 +356,8 @@ function Dashboard() {
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
   const [transferring, setTransferring] = useState(false);
-  // Mốc dữ liệu dashboard lúc vừa chuyển xong: nút khoá tới khi dashboard tải lại (hoặc lỗi) để không mở form với số dư đã cũ.
-  const [transferredStamp, setTransferredStamp] = useState<number | null>(null);
+  // Mốc lúc vừa chuyển xong (app-core): nút khoá tới khi dashboard có dữ liệu hoặc lỗi mới hơn mốc, để không mở form với số dư đã cũ.
+  const [transferMark, setTransferMark] = useState<number | null>(getTransferMark);
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -418,21 +418,24 @@ function Dashboard() {
       ariaLabel: 'Chuyển vào Ví Tubu',
       icon: Wallet,
       // Bấm được cả khi chưa có số dư: ô mờ không nói lý do làm CTV tưởng bị chặn, sheet giải thích khi nào tiền vào Ví. Chỉ mờ ngay sau khi vừa chuyển.
-      disabled: transferredStamp !== null && transferredStamp === dashQ.dataUpdatedAt && !dashQ.isError,
+      disabled: isTransferLocked(transferMark, dashQ.dataUpdatedAt, dashQ.errorUpdatedAt),
       onPress: () => setTransferring(true),
     },
   ];
 
   const transferDone = (message: string) => {
     setTransferring(false);
-    setTransferredStamp(dashQ.dataUpdatedAt);
+    setTransferMark(markTransferred());
     setNotice({ text: message, error: false });
     for (const q of [affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
       void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
     }
     // Chuyển vào Ví Tubu cộng thẳng vào ví: số dư đang cache ở trang Ví đã cũ. Dashboard làm mới SAU Ví: về trước thì
     // số to đã đổi sang số dư Ví cũ rồi mới nhảy lần nữa.
-    void invalidateBalances(qc).then(() => qc.invalidateQueries({ queryKey: affiliateDashboardQuery(coreHttp).queryKey }));
+    void invalidateBalances(qc).then(() => {
+      setTransferMark(markTransferred());
+      return qc.invalidateQueries({ queryKey: affiliateDashboardQuery(coreHttp).queryKey });
+    });
   };
 
   const captions = [

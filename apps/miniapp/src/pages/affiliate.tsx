@@ -25,7 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, needsTaxIdForAutoTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, getTransferMark, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, isTransferLocked, markTransferred, needsTaxIdForAutoTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -342,8 +342,8 @@ function Dashboard() {
   const hasCourses = (academyQ.data?.length ?? 0) > 0;
   const [showAllTiers, setShowAllTiers] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  // Mốc dữ liệu dashboard lúc vừa chuyển xong: nút khoá tới khi dashboard tải lại (hoặc lỗi) để không mở form với số dư đã cũ.
-  const [transferredStamp, setTransferredStamp] = useState<number | null>(null);
+  // Mốc lúc vừa chuyển xong (app-core): nút khoá tới khi dashboard có dữ liệu hoặc lỗi mới hơn mốc, để không mở form với số dư đã cũ.
+  const [transferMark, setTransferMark] = useState<number | null>(getTransferMark);
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -464,7 +464,7 @@ function Dashboard() {
               ariaLabel: 'Chuyển vào Ví Tubu',
               icon: Wallet,
               // Bấm được cả khi chưa có số dư: ô mờ không nói lý do làm CTV tưởng bị chặn, sheet giải thích khi nào tiền vào Ví. Chỉ mờ ngay sau khi vừa chuyển.
-              disabled: transferredStamp !== null && transferredStamp === dashQ.dataUpdatedAt && !dashQ.isError,
+              disabled: isTransferLocked(transferMark, dashQ.dataUpdatedAt, dashQ.errorUpdatedAt),
               onPress: () => setTransferring(true),
             },
           ]}
@@ -998,7 +998,7 @@ function Dashboard() {
             knownMax={!dashQ.isError}
             onDone={() => {
               setTransferring(false);
-              setTransferredStamp(dashQ.dataUpdatedAt);
+              setTransferMark(markTransferred());
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-payouts'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-tax-statement'] });
@@ -1006,7 +1006,10 @@ function Dashboard() {
               // Chuyển vào Ví cộng thẳng vào Ví Tubu — invalidate để trang Ví không
               // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi chuyển.
               // Dashboard làm mới SAU Ví: nếu về trước, số to đã đổi sang số dư Ví cũ rồi mới nhảy lần nữa.
-              void qc.invalidateQueries({ queryKey: ['wallet'] }).then(() => qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] }));
+              void qc.invalidateQueries({ queryKey: ['wallet'] }).then(() => {
+                setTransferMark(markTransferred());
+                return qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
+              });
             }}
           />
         )}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
+import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote, isTransferLocked, markTransferred, getTransferMark, resetTransferMark } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -122,5 +122,37 @@ describe('commissionPendingNote', () => {
     expect(commissionPendingNote(true)).toContain('vào Ví lúc 8:00');
     expect(commissionPendingNote(false)).toBe(COMMISSION_PENDING_NOTE);
     expect(COMMISSION_PENDING_NOTE).not.toContain('8:00');
+  });
+});
+
+describe('khoá nút Chuyển vào Ví sau khi vừa chuyển', () => {
+  it('chưa chuyển lần nào: không khoá', () => {
+    expect(isTransferLocked(null, 100, 0)).toBe(false);
+  });
+  it('dữ liệu chưa mới hơn mốc: khoá', () => {
+    expect(isTransferLocked(200, 100, 0)).toBe(true);
+  });
+  it('dữ liệu tải xong sau mốc: mở', () => {
+    expect(isTransferLocked(200, 200, 0)).toBe(false);
+    expect(isTransferLocked(200, 201, 0)).toBe(false);
+  });
+  it('lỗi tải lại mới hơn mốc: mở; lỗi cũ hơn mốc: vẫn khoá', () => {
+    expect(isTransferLocked(200, 100, 250)).toBe(false);
+    expect(isTransferLocked(200, 100, 150)).toBe(true);
+  });
+  it('tải lại bắt đầu trước khi chuyển xong, trả về sau: mốc nâng lên lúc làm mới Ví nên vẫn khoá', () => {
+    resetTransferMark();
+    markTransferred(1000);
+    const staleReturnedAt = 1100;
+    expect(isTransferLocked(getTransferMark(), staleReturnedAt, 0)).toBe(false);
+    markTransferred(1200);
+    expect(isTransferLocked(getTransferMark(), staleReturnedAt, 0)).toBe(true);
+    expect(isTransferLocked(getTransferMark(), 1300, 0)).toBe(false);
+  });
+  it('mốc không bao giờ lùi và còn nguyên khi rời trang rồi quay lại', () => {
+    resetTransferMark();
+    markTransferred(500);
+    markTransferred(400);
+    expect(getTransferMark()).toBe(500);
   });
 });
