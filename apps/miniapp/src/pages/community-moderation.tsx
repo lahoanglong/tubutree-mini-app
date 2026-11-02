@@ -36,7 +36,7 @@ import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
-import { communityViewLabel, communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
+import { communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
 import { getCommunityReportsCount } from '../services/staff-api';
 import { KIND_LABEL } from '../components/community/post-card';
 import { ImageUpload } from '../components/image-upload';
@@ -93,7 +93,7 @@ function ModerationHub() {
         <SegmentedTabs
           items={communityViewsFor({ platform: 'mini', isAdmin: true }).map((v) => ({
             key: v.k,
-            label: communityViewLabel(v, 'mini'),
+            label: v.label,
             ...(v.k === 'reports' && reportCount !== undefined ? { count: reportCount } : {}),
           }))}
           value={tab}

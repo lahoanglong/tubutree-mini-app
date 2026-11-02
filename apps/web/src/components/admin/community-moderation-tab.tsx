@@ -3,7 +3,7 @@
 import { createContext, useContext, useState } from 'react';
 import Link from 'next/link';
 import { addComment } from '@tubutree/app-core/api/feed';
-import { communityViewLabel, communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
+import { communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   approveCommunityPost,
@@ -87,7 +87,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
                 setView(v.k);
               }}
             >
-              {communityViewLabel(v, 'mini')}
+              {v.label}
               {v.k === 'reports' && reportCount !== undefined ? ` (${reportCount})` : ''}
             </button>
           ))}

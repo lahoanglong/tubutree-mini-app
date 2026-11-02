@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMUNITY_VIEWS, communityViewLabel, communityViewsFor, reportsTabCount } from './community-moderation-views';
+import { COMMUNITY_VIEWS, communityViewsFor, reportsTabCount } from './community-moderation-views';
 
 describe('community-moderation-views (R-75)', () => {
   it('web admin thấy đủ 5 mục theo thứ tự; nhân viên không thấy "Sự kiện"', () => {
@@ -10,8 +10,8 @@ describe('community-moderation-views (R-75)', () => {
   it('Mini chỉ có ba mục xử lý nhanh, dùng nhãn ngắn; bộ ba nằm trong bộ năm của web', () => {
     const mini = communityViewsFor({ platform: 'mini', isAdmin: true });
     expect(mini.map((v) => v.k)).toEqual(['pending', 'reports', 'events']);
-    expect(mini.map((v) => communityViewLabel(v, 'mini'))).toEqual(['Chờ duyệt', 'Báo cáo', 'Sự kiện']);
-    expect(communityViewLabel(COMMUNITY_VIEWS[1]!, 'web')).toBe('Báo cáo vi phạm');
+    expect(mini.map((v) => v.label)).toEqual(['Chờ duyệt', 'Báo cáo', 'Sự kiện']);
+    expect(COMMUNITY_VIEWS.map((v) => v.label)).toEqual(['Chờ duyệt', 'Báo cáo', 'Đã đăng', 'Chưa trả lời', 'Sự kiện']);
   });
 
   it('Mini không có mục dành cho nhân viên (chỉ ADMIN vào được trang)', () => {
