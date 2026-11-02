@@ -112,6 +112,27 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     expect(document.body.innerHTML).not.toMatch(/evil\.example|position:\s*fixed;\s*inset/);
   });
 
+  it('chip khuyến mãi: phụ đề dài hơn 2 dòng bị cắt nhưng mã vẫn ở hàng riêng, nguyên vẹn; khuyến mãi không mã không có hàng mã', async () => {
+    const long = 'Tri ân khách hàng thân thiết của thương hiệu nhân dịp khai trương gian hàng mới, áp dụng cho mọi sản phẩm trong kho và mọi đơn từ 250.000đ trở lên với mã NHANLOCXANH2026';
+    mocks.getPublicBrand.mockResolvedValue({
+      ...BRAND,
+      promotions: [
+        { ...BRAND.promotions[0]!, id: 'long', title: 'Khai trương', subtitle: long, couponCode: 'NHANLOCXANH2026' },
+        { ...BRAND.promotions[0]!, id: 'plain', title: 'Quà tặng', subtitle: long, couponCode: null },
+      ],
+    });
+    renderPage();
+    const chip = within(await screen.findByRole('group', { name: 'Khai trương' }));
+    const meta = chip.getByTestId('voucher-meta');
+    expect(meta.textContent).toBe(long);
+    expect(meta.style.overflow).toBe('hidden');
+    expect(meta.style.getPropertyValue('-webkit-line-clamp') || (meta.style as unknown as Record<string, string>).WebkitLineClamp).toBe('2');
+    const code = chip.getByTestId('voucher-code');
+    expect(code.textContent).toBe('NHANLOCXANH2026');
+    expect(meta.contains(code)).toBe(false);
+    expect(within(screen.getByRole('group', { name: 'Quà tặng' })).queryByTestId('voucher-code')).toBeNull();
+  });
+
   it('Theo dõi gọi followBrand theo slug', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Theo dõi/ }));

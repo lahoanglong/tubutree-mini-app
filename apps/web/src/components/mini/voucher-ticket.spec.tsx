@@ -89,15 +89,23 @@ describe('VoucherTicket (web)', () => {
     expect(q('voucher-code')!.style.whiteSpace).toBe('nowrap');
   });
 
-  it('chip chỉ có tiêu đề và điều kiện: không mã; ticket và row vẫn có mã', () => {
+  it('chip: mã (nếu có) ở hàng riêng ngay sau điều kiện, không nằm trong dòng meta; không có mã thì không vẽ hàng mã; ticket và row giữ mã trong meta/hàng đáy', () => {
     const a = mount(<VoucherTicket voucher={view()} variant="chip" />);
-    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
-    expect(q('voucher-code')).toBeNull();
+    const meta = q('voucher-meta')!;
+    expect(meta.textContent).toBe('Đơn từ 250k');
+    const code = q('voucher-code')!;
+    expect(code.textContent).toBe('FUWA3E');
+    expect(meta.contains(code)).toBe(false);
+    expect(meta.compareDocumentPosition(code) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(q('voucher-foot')).toBeNull();
     a.unmount();
-    const b = mount(<VoucherTicket voucher={view({ condition: '' })} variant="chip" />);
-    expect(q('voucher-meta')).toBeNull();
+    const b = mount(<VoucherTicket voucher={view({ code: '' })} variant="chip" />);
+    expect(q('voucher-code')).toBeNull();
     b.unmount();
+    const c = mount(<VoucherTicket voucher={view({ condition: '' })} variant="chip" />);
+    expect(q('voucher-meta')).toBeNull();
+    expect(q('voucher-code')!.textContent).toBe('FUWA3E');
+    c.unmount();
     mount(<VoucherTicket voucher={view()} variant="row" />);
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
   });
@@ -162,6 +170,24 @@ describe('VoucherTicket (web)', () => {
     expect(meta.style.whiteSpace).toBe('');
     expect(meta.style.getPropertyValue('-webkit-line-clamp') || (meta.style as unknown as Record<string, string>).WebkitLineClamp).toBe('2');
     expect(q('voucher-body')!.firstElementChild!.getAttribute('style')).toContain('nowrap');
+  });
+
+  it('chip: phụ đề dài hơn 2 dòng bị cắt ở dòng thứ hai nhưng mã ở hàng riêng vẫn nguyên vẹn (không "…", không nằm trong phần bị cắt)', () => {
+    const sub = 'Tri ân khách hàng thân thiết của thương hiệu nhân dịp khai trương gian hàng mới, áp dụng cho mọi sản phẩm trong kho và mọi đơn từ 250.000đ trở lên với mã NHANLOCXANH2026';
+    const { container } = mount(<VoucherTicket voucher={view({ condition: sub, code: 'NHANLOCXANH2026' })} variant="chip" primary={{ label: 'Sao chép', onClick: vi.fn() }} />);
+    const meta = q('voucher-meta')!;
+    expect(meta.textContent).toBe(sub);
+    expect(meta.style.overflow).toBe('hidden');
+    expect(meta.style.getPropertyValue('-webkit-line-clamp') || (meta.style as unknown as Record<string, string>).WebkitLineClamp).toBe('2');
+    const code = q('voucher-code')!;
+    expect(code.textContent).toBe('NHANLOCXANH2026');
+    expect(code.style.whiteSpace).toBe('nowrap');
+    expect(code.style.textOverflow).toBe('');
+    expect(meta.contains(code)).toBe(false);
+    // Không tổ tiên nào của mã (tới vỏ chip) cắt nội dung: mã không thể bị che bởi line-clamp hay overflow của dòng phụ đề.
+    for (let el: HTMLElement | null = code.parentElement; el && el !== container; el = el.parentElement) {
+      expect(el.style.overflow, `tổ tiên ${el.tagName} cắt nội dung`).not.toBe('hidden');
+    }
   });
 
   it('quota "Còn 3 lượt" nằm sau dòng hạn, tông cảnh báo; không vẽ ở chip hay mã không còn nhận được', () => {

@@ -44,8 +44,9 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const inactive = v.state === 'used' || v.state === 'expired' || v.state === 'soldout';
   const ineligible = v.state === 'ineligible';
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
-  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), tối đa hai dòng (chữ phụ của khuyến mãi thương hiệu hay kết bằng "với mã X": một dòng sẽ cắt mất mã). Ticket/row thêm mã: không cắt gì,
-  // hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
+  // Chip: tiêu đề + điều kiện cắt hai dòng (chữ phụ của khuyến mãi thương hiệu hay kết bằng "với mã X" và có thể dài hơn hai dòng), nên mã đứng ở hàng riêng dưới điều kiện, không nằm
+  // trong phần bị cắt: phụ đề dài đến đâu mã vẫn thấy nguyên. Ticket/row thêm mã vào meta/hàng đáy: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
+  const chipCode = variant === 'chip' && Boolean(v.code);
   const showCode = variant !== 'chip' && Boolean(v.code);
   // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng hàng riêng, co bằng "…" (không đẩy điều kiện và mã xuống dòng,
   // phiếu giữ ~88px); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
@@ -69,7 +70,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       {v.quota}
     </span>
   );
-  const codeNode = showCode && (
+  const codeNode = (showCode || chipCode) && (
     <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>
       {v.code}
     </span>
@@ -123,6 +124,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       ) : (
         metaNode
       )}
+      {chipCode && <span style={{ display: 'block', ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span>}
       {footItems.length > 0 && (
         <span data-testid="voucher-foot" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--p-space-2)', ...captionStyle }}>
           {footItems.map((item, i) => (
