@@ -127,3 +127,46 @@ describe('mini.css: tràn mép dùng chung (.tubu-bleed, .tubu-bleed-rail)', () 
     expect(plain.indexOf('.tubu-bleed-rail {')).toBeGreaterThan(scrollX);
   });
 });
+
+describe('mini.css: sheet từ md là hộp thoại giữa màn (K7)', () => {
+  const plain = strip(css);
+  const mediaBodies = (cond: string) => [...plain.matchAll(new RegExp(`@media ${cond.replace(/[().]/g, '\\$&')}\\s*\\{([\\s\\S]*?)\\n\\}`, 'g'))].map((m) => m[1]).join('\n');
+  const md = mediaBodies('(min-width: 768px)');
+  const outsideMedia = plain.replace(/@media[^{]*\{[\s\S]*?\n\}/g, '');
+  const reduced = mediaBodies('(prefers-reduced-motion: reduce)');
+
+  it('từ md ẩn tay nắm kéo (hộp thoại không kéo xuống để đóng)', () => {
+    expect(md).toMatch(/\.mini-sheet-handler\s*\{[^}]*display:\s*none/);
+  });
+
+  it('từ md hộp nằm giữa màn: gốc căn flex, rộng tối đa --dialog-w và còn lề 16px mỗi bên, bo đủ góc, cao tối đa 85vh, ôm nội dung', () => {
+    expect(md).toMatch(/\.mini-sheet-root\s*\{[^}]*display:\s*flex[^}]*align-items:\s*center[^}]*justify-content:\s*center/);
+    const panel = /\.mini-sheet-panel\s*\{([^}]*)\}/.exec(md)?.[1] ?? '';
+    expect(panel).toMatch(/position:\s*relative/);
+    expect(panel).toMatch(/width:\s*min\(calc\(100% - 32px\),\s*var\(--dialog-w\)\)/);
+    expect(panel).toMatch(/min-height:\s*0/);
+    expect(panel).toMatch(/max-height:\s*85vh/);
+    expect(panel).toMatch(/border-radius:\s*var\(--radius-sheet\)/);
+    expect(panel).toMatch(/box-shadow:\s*var\(--elevation-4\)/);
+    expect(panel).not.toMatch(/translateX/);
+  });
+
+  it('từ md mở bằng fade/scale (không trượt), giảm chuyển động thì tắt cả hộp lẫn nền', () => {
+    expect(md).toMatch(/\.mini-sheet-panel\s*\{[^}]*animation:\s*tubu-dialog-pop/);
+    expect(plain).toMatch(/@keyframes tubu-dialog-pop\s*\{[^}]*0%\s*\{[^}]*opacity:\s*0[^}]*scale\(0\.97\)[^}]*\}[^}]*100%\s*\{[^}]*opacity:\s*1/);
+    expect(reduced).toMatch(/\.mini-sheet-panel[^{]*\{[^}]*animation:\s*none/);
+    expect(reduced).toMatch(/\.mini-sheet-mask[^{]*\{[^}]*animation:\s*none/);
+  });
+
+  it('dưới md không đổi: bottom sheet bo 16px hai góc trên, trượt lên từ đáy, rộng hết khung', () => {
+    const panel = /\.mini-sheet-panel\s*\{([^}]*)\}/.exec(outsideMedia)?.[1] ?? '';
+    expect(panel).toMatch(/border-radius:\s*16px 16px 0 0/);
+    expect(panel).toMatch(/animation:\s*slideUp/);
+    expect(panel).toMatch(/bottom:\s*0/);
+    expect(panel).toMatch(/width:\s*100%/);
+  });
+
+  it('--dialog-w là 480px trong tokens.css', () => {
+    expect(tokens).toMatch(/--dialog-w:\s*480px/);
+  });
+});
