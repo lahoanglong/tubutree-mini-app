@@ -14,7 +14,7 @@ import { Text } from '../ui/text';
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ: tiêu đề `SectionHeader` (Inter 16/700, nút "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ kèm dải
- * nhãn Việt (chạm mở trang nhãn). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách nhãn thì
+ * thương hiệu Việt (chạm mở trang thương hiệu). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách thương hiệu thì
  * vẫn có thẻ bản đồ.
  */
 export function BrandJourney() {

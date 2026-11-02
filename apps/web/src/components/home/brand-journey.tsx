@@ -12,7 +12,7 @@ import { SR_ONLY } from '@/components/mini/sr-only';
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ (bản web của `brand-journey.tsx` ở Mini App): tiêu đề `SectionHeader` (Inter 16/700, nút
- * "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ, kèm dải nhãn Việt (chạm mở trang nhãn). `initialBrands` là danh sách server đã tải cho trang ISR. Chưa có danh sách nhãn thì vẫn có thẻ bản đồ.
+ * "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ, kèm dải thương hiệu Việt (chạm mở trang thương hiệu). `initialBrands` là danh sách server đã tải cho trang ISR. Chưa có danh sách thương hiệu thì vẫn có thẻ bản đồ.
  */
 export function BrandJourney({ initialBrands }: { initialBrands?: { brand: string; count: number; slug?: string | null }[] }) {
   const router = useRouter();

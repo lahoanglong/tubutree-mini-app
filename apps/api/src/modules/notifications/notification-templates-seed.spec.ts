@@ -194,6 +194,8 @@ describe('seed mẫu thông báo', () => {
       'COMMUNITY_EVENT_WINNER',
       // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.
       'ORDER_AWAITING_PAYMENT',
+      // Q1: tin chuyển thiếu tiền (đổi lời bỏ "Vui lòng" ở đợt 8, migration 20261102200000_customer_templates_voice).
+      'ORDER_UNDERPAID',
       'ORDER_PAYMENT_EXPIRED',
       'ORDER_CANCELLED',
       'RETURN_APPROVED_DETAIL',
@@ -226,6 +228,12 @@ describe('seed mẫu thông báo', () => {
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {
       expect(bodiesAfterMigrations().get(code)).toBe(byCode.get(code)!.bodyTemplate);
+    });
+
+    it('không mẫu tin nào (seed và prod sau migration) còn "Vui lòng" hay "chúng tôi" (DESIGN.md: chữ khách đọc)', () => {
+      const banned = /vui lòng|chúng tôi/iu;
+      expect(templates.filter((t) => banned.test(t.bodyTemplate)).map((t) => t.code)).toEqual([]);
+      expect([...bodiesAfterMigrations()].filter(([, body]) => banned.test(body)).map(([code]) => code)).toEqual([]);
     });
 
     it('SECOND_ORDER_VOUCHER không lặp "cho đơn" khi có đơn tối thiểu', () => {
