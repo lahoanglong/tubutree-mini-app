@@ -208,8 +208,12 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
           ))}
         </div>
         <p className="mt-3 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
+        {/* Vùng đọc cố định, luôn có mặt và trống lúc mở sheet: thông báo nổi nằm ngoài hộp thoại aria-modal nên trình đọc màn hình không nghe được; sr-only không làm sheet cao thêm. */}
+        <p role="status" aria-live="polite" data-testid="pdp-coupon-live" className="sr-only">
+          {notice?.text ?? ''}
+        </p>
       </BottomSheet>
-      <GameNoticeBar notice={notice} overSheet />
+      <GameNoticeBar notice={notice} overSheet visualOnly />
     </>
   );
 }

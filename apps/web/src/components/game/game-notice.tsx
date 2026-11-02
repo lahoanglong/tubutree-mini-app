@@ -40,8 +40,20 @@ export function useGameNotice() {
  * điều hướng đáy của điện thoại kể cả khi có vùng an toàn của iPhone. `raised`: trang có thanh nhập dính đáy ở mọi cỡ
  * màn hình (/tu-van) thì giữ thông báo trên thanh đó, không hạ xuống md:bottom-6 vì sẽ đè vào ô nhập. `overSheet`: báo từ trong
  * BottomSheet của design system (z-index 1000, cao hơn Sheet cũ) nên phải nằm trên nó, như snackbar của Mini App nằm trên sheet.
+ * `visualOnly`: chỉ để nhìn, trình đọc màn hình không đọc (aria-hidden, không role): vùng live nằm ngoài hộp thoại aria-modal bị nhiều
+ * trình đọc bỏ qua và vùng chèn sẵn chữ thường không được đọc, nên nơi gọi giữ một vùng live trống cố định trong hộp thoại và đọc câu ở đó.
  */
-export function GameNoticeBar({ notice, raised = false, overSheet = false }: { notice: GameNotice | null; raised?: boolean; overSheet?: boolean }) {
+export function GameNoticeBar({
+  notice,
+  raised = false,
+  overSheet = false,
+  visualOnly = false,
+}: {
+  notice: GameNotice | null;
+  raised?: boolean;
+  overSheet?: boolean;
+  visualOnly?: boolean;
+}) {
   if (!notice || typeof document === 'undefined') return null;
   const error = notice.tone === 'error';
   return createPortal(
@@ -50,7 +62,8 @@ export function GameNoticeBar({ notice, raised = false, overSheet = false }: { n
     >
       <div
         key={notice.id}
-        role={error ? 'alert' : 'status'}
+        role={visualOnly ? undefined : error ? 'alert' : 'status'}
+        aria-hidden={visualOnly ? true : undefined}
         className={`pointer-events-auto max-w-md rounded-control px-4 py-3 text-sm font-semibold shadow-card ${
           error ? 'bg-danger-bg text-danger-fg' : notice.tone === 'info' ? 'bg-info-bg text-info-fg' : 'bg-forest-800 text-stone-0'
         }`}

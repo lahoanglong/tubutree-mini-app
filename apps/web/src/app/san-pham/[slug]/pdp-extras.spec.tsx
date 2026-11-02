@@ -136,24 +136,23 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     expect(d.textContent).toContain('ALL');
     expect(d.textContent).toContain('Đơn từ 100k');
   });
-  it('chép mã và báo bằng thông báo nổi (như snackbar của Mini App), không viết thêm dòng trong hộp thoại làm hộp cao lên; không chép được thì cho khách tự ghi mã', async () => {
+  it('chép mã và báo bằng thông báo nổi (như snackbar của Mini App), không viết thêm dòng nhìn thấy trong hộp thoại làm hộp cao lên; không chép được thì cho khách tự ghi mã', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
     const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     click(rowButton(container));
     await flush();
     const copy = () => Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null;
-    const heightBefore = dialog()!.innerHTML.length;
+    const childrenBefore = dialog()!.querySelectorAll('*').length;
     click(copy());
     await flush();
     expect(writeText).toHaveBeenCalledWith('ALL');
-    const toast = () => document.body.querySelector('[role="status"]');
+    const toast = () => document.body.querySelector<HTMLElement>('[aria-hidden="true"][class*="bg-"]:not([data-sheet-backdrop])');
     expect(toast()!.textContent).toBe('Đã chép mã ALL — mã đã có sẵn trong ví, chọn ở bước thanh toán');
     expect(dialog()!.contains(toast())).toBe(false);
     // BottomSheet của design system có z-index 1000: thông báo phải nằm trên nó, không thì bị lớp nền che mất.
     expect(toast()!.parentElement!.className).toContain('z-[1100]');
-    expect(dialog()!.querySelector('[role="status"]')).toBeNull();
-    expect(dialog()!.innerHTML.length).toBe(heightBefore);
+    expect(dialog()!.querySelectorAll('*').length).toBe(childrenBefore);
     writeText.mockRejectedValue(new Error('denied'));
     click(copy());
     await flush();
@@ -161,6 +160,30 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     // Không chép được là thông tin, không phải thành công: kiểu "info" như snackbar của Mini App, không nền xanh thành công.
     expect(toast()!.className).toContain('bg-info-bg');
     expect(toast()!.className).not.toContain('bg-forest-800');
+  });
+  it('trình đọc màn hình: thông báo nổi ngoài hộp thoại không có role (không đọc hai lần), câu chép mã được đọc ở vùng live cố định, trống, nằm trong hộp thoại', async () => {
+    mocks.http.get.mockResolvedValue([coupon('ALL')]);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    click(rowButton(container));
+    await flush();
+    const live = dialog()!.querySelector<HTMLElement>('[data-testid="pdp-coupon-live"]')!;
+    // Có mặt và trống từ lúc mở: vùng live chèn sẵn chữ thì nhiều trình đọc không đọc.
+    expect(live).not.toBeNull();
+    expect(live.getAttribute('role')).toBe('status');
+    expect(live.getAttribute('aria-live')).toBe('polite');
+    expect(live.textContent).toBe('');
+    expect(live.className).toContain('sr-only');
+    click(Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
+    await flush();
+    expect(dialog()!.querySelector('[data-testid="pdp-coupon-live"]')).toBe(live);
+    expect(live.textContent).toBe('Đã chép mã ALL — mã đã có sẵn trong ví, chọn ở bước thanh toán');
+    // Chỉ một vùng role=status trong cả trang: thông báo nổi bên ngoài hộp thoại chỉ để nhìn.
+    expect(document.body.querySelectorAll('[role="status"], [role="alert"]')).toHaveLength(1);
+    writeText.mockRejectedValue(new Error('denied'));
+    click(Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
+    await flush();
+    expect(live.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
   });
   it('món đang ở giá Giờ vàng góp 0 vào tiền hàng áp mã (máy chủ không tính dòng Giờ vàng): "Mua thêm" đủ số đơn tối thiểu', async () => {
     mocks.http.get.mockResolvedValue([coupon('BIG', { minOrder: 250000 })]);
