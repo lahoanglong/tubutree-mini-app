@@ -199,6 +199,8 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.saveOrder': 'Giảm {amount} cho đơn này',
   'coupon.saveShip': 'Miễn phí giao hàng {amount} cho đơn này',
   'coupon.shipAlreadyFree': 'Đơn này đã miễn phí giao hàng',
+  'coupon.minOrderBase': 'Đơn tối thiểu {min} không tính hàng Giờ vàng và phần giảm combo',
+  'coupon.zeroDiscount': 'Không có sản phẩm nào trong đơn được giảm theo mã này',
   'coupon.scopeOnly': 'Chỉ áp cho {names}',
   'coupon.copiedToast': 'Đã chép mã {code} — mã đã có sẵn trong ví, chọn ở bước thanh toán',
   'coupon.copyShowToast': 'Mã của bạn: {code} — chọn ở bước thanh toán',
