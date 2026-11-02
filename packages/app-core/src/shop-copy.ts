@@ -191,7 +191,7 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.cartLine': 'Giảm giá combo',
   'combo.pdpTitle': 'Combo ưu đãi',
   'combo.homeTitle': 'Combo tiết kiệm',
-  'addon.title': 'Mua kèm deal sốc',
+  'addon.title': 'Mua kèm giá tốt',
   'addon.price': 'Giá mua kèm {price}',
   'addon.condition': 'Chỉ khi mua cùng {name}',
   'addon.add': 'Thêm {n} món vào giỏ',

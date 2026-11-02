@@ -85,7 +85,7 @@ test.describe('Trang sản phẩm Mini: bộ tắt khi khách đang ở trang', 
     await page.goBack();
     await expect(page.getByRole('heading', { level: 1, name: NRC.name })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('pdp-combos')).toHaveAttribute('aria-label', 'Combo ưu đãi · Đã kết thúc');
-    await expect(page.getByTestId('pdp-addons')).toHaveAttribute('aria-label', 'Mua kèm deal sốc · Đã kết thúc');
+    await expect(page.getByTestId('pdp-addons')).toHaveAttribute('aria-label', 'Mua kèm giá tốt · Đã kết thúc');
     expect(api.callsTo('GET', '/products/:slug/bundles').length).toBeGreaterThanOrEqual(2);
     await expect(page.getByTestId('bundle-ended')).toHaveCount(2);
 

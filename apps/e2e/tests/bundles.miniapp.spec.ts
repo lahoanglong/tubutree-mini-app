@@ -5,7 +5,7 @@ import { COMBO_TITLE, HOME_COMBO_TITLES, PDP_SLUG, homeCombos, mockHomeCombos, m
 import { EMPTY_CART } from './support/shop-page-mocks';
 
 /**
- * Zalo Mini App E2E — Combo ưu đãi, Mua kèm deal sốc (trang sản phẩm) và Combo tiết kiệm (Trang chủ), gói P15, 375px.
+ * Zalo Mini App E2E — Combo ưu đãi, Mua kèm giá tốt (trang sản phẩm) và Combo tiết kiệm (Trang chủ), gói P15, 375px.
  * API mock toàn bộ. Giá cuối luôn do giỏ tính: spec này kiểm khối hiện đúng, gửi đúng lệnh thêm giỏ và không làm trang xê dịch.
  */
 test.use({ viewport: { width: 375, height: 812 } });
@@ -22,7 +22,7 @@ test.describe('Trang sản phẩm: Combo ưu đãi và Mua kèm', () => {
     await page.goto(`/product/${PDP_SLUG}`);
     await expect(combos(page).getByRole('heading', { level: 2, name: 'Combo ưu đãi' })).toBeVisible({ timeout: 15_000 });
     await expect(combos(page).getByText(COMBO_TITLE)).toBeVisible();
-    await expect(addons(page).getByRole('heading', { level: 2, name: 'Mua kèm deal sốc' })).toBeVisible();
+    await expect(addons(page).getByRole('heading', { level: 2, name: 'Mua kèm giá tốt' })).toBeVisible();
     await expect(addons(page).getByText(`Chỉ khi mua cùng ${NRC.name}`)).toBeVisible();
     await expect(addons(page).getByRole('checkbox')).toHaveCount(2);
     await expect(addons(page).getByText('-25%')).toBeVisible();

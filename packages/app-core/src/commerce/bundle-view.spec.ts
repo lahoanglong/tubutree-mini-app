@@ -242,15 +242,15 @@ describe('latchBundleSide: giữ danh sách cuối cùng đã hiện để khố
 
 describe('bundleHoldTitle', () => {
   it('thêm chữ lý do sau tiêu đề; không giữ thì chỉ tiêu đề', () => {
-    expect(bundleHoldTitle('addon.title', null)).toBe('Mua kèm deal sốc');
-    expect(bundleHoldTitle('addon.title', 'ended')).toBe('Mua kèm deal sốc · Đã kết thúc');
-    expect(bundleHoldTitle('addon.title', 'soldOut')).toBe('Mua kèm deal sốc · Tạm hết hàng');
+    expect(bundleHoldTitle('addon.title', null)).toBe('Mua kèm giá tốt');
+    expect(bundleHoldTitle('addon.title', 'ended')).toBe('Mua kèm giá tốt · Đã kết thúc');
+    expect(bundleHoldTitle('addon.title', 'soldOut')).toBe('Mua kèm giá tốt · Tạm hết hàng');
     expect(bundleHoldTitle('combo.pdpTitle', 'soldOut')).toBe('Combo ưu đãi · Tạm hết hàng');
   });
 
   it('chữ "Tạm hết hàng" chỉ có một nơi định nghĩa (stock.out của thẻ), không có bản sao để lệch nhau', () => {
     expect(Object.keys(SHOP_COPY).filter((k) => SHOP_COPY[k] === 'Tạm hết hàng')).toEqual(['stock.out']);
-    expect(bundleHoldTitle('addon.title', 'soldOut')).toBe(`Mua kèm deal sốc · ${SHOP_COPY['stock.out']}`);
+    expect(bundleHoldTitle('addon.title', 'soldOut')).toBe(`Mua kèm giá tốt · ${SHOP_COPY['stock.out']}`);
   });
 });
 
