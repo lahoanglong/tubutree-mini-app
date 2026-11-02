@@ -127,7 +127,7 @@ describe('VoucherTicket', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
   });
 
-  it('ticket: tên admin đặt ở hàng riêng dưới điều kiện (tối đa hai dòng), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện', () => {
+  it('ticket: tên admin đặt ở hàng riêng dưới nhãn, trước điều kiện (tối đa hai dòng), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện', () => {
     const { rerender } = render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
     expect(q('voucher-name')!.textContent).toBe('Chào bạn mới');
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
@@ -173,15 +173,16 @@ describe('VoucherTicket', () => {
     expect(button.closest('[style*="overflow: hidden"]')).toBe(button.closest('[role="group"]'));
   });
 
-  it('ticket: tên admin ở phần tử riêng ngay sau hàng điều kiện (không chung hàng, không dấu "·" giữa), trước hàng đáy; mã nằm ở hàng đáy', () => {
+  it('ticket: tên admin ở phần tử riêng ngay dưới nhãn, trước hàng điều kiện (không chung hàng, không dấu "·" giữa), điều kiện rồi hàng đáy; mã nằm ở hàng đáy', () => {
     render(<VoucherTicket voucher={view({ name: 'Quà tri ân khách hàng thân thiết' })} variant="ticket" />);
     const meta = q('voucher-meta')!;
     const name = q('voucher-name')!;
     expect(meta.contains(name)).toBe(false);
     expect(name.contains(meta)).toBe(false);
     expect(name.parentElement).toBe(meta.parentElement);
-    expect(meta.nextElementSibling).toBe(name);
-    expect(name.nextElementSibling).toBe(q('voucher-foot'));
+    expect(name.previousElementSibling!.textContent).toBe('Giảm 15%, tối đa 45k');
+    expect(name.nextElementSibling).toBe(meta);
+    expect(meta.nextElementSibling).toBe(q('voucher-foot'));
     expect(name.style.display).toBe('-webkit-box');
     expect(name.style.color).toBe(meta.style.color);
     expect(name.style.fontSize).toBe(meta.style.fontSize);
