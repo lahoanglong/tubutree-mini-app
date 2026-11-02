@@ -357,7 +357,7 @@ describe('StorefrontViewPage: khung shop (tab, khối theo layout, thống kê)'
     view.unmount();
     mocks.getPublicStorefront.mockResolvedValue(storefront({ ownerTier: { name: 'Bạc', emoji: '🥈', publicBadge: true }, ...withItems }));
     renderPage('abcd1234');
-    expect(await screen.findByText(/Bạc/)).toBeInTheDocument();
+    expect(await screen.findByText('CTV Bạc')).toBeInTheDocument();
   });
 
   it('chủ gian hàng: nút Chia sẻ nằm ở đầu shop, không còn thanh dính đáy', async () => {

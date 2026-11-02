@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { AffiliateDashboard, CtvTiersResponse } from '@tubutree/app-core/api/affiliate';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneCaption, phoneFlatCard } from '@/lib/phone-ui';
@@ -21,7 +22,7 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
             {tier.emoji}
           </span>
           <div>
-            <div className="text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">CTV {tier.name}</div>
+            <div className="text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">{fillCopy('shop.tierBadge', { name: tier.name })}</div>
             <div className={`text-xs text-forest-700 ${phoneCaption}`}>Bậc theo doanh số đã chốt tháng này</div>
           </div>
         </div>

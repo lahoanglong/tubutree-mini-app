@@ -25,6 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, isTransferRefreshing, lockTransferUntil, needsTaxIdForAutoTransfer, subscribeTransferRefreshing, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -559,7 +560,7 @@ function Dashboard() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Text style={{ fontSize: 'var(--type-display-md-size)', lineHeight: 1 }}>{d.tier.emoji}</Text>
               <div>
-                <Text variant="body-md" as="div" style={BOLD}>CTV {d.tier.name}</Text>
+                <Text variant="body-md" as="div" style={BOLD}>{fillCopy('shop.tierBadge', { name: d.tier.name })}</Text>
                 <Text variant="caption" tone="brand" as="div">
                   Bậc theo doanh số đã chốt tháng này
                 </Text>
