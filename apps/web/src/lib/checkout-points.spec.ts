@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPointsOffer, convertedPointsLine, lockedPointsLabel, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, idlePointsLabel, lockedPointsLabel, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
 
 // Backend kẹp Điểm Xanh ở checkout theo số DÙNG ĐƯỢC (số dư − điểm đơn còn trong hạn đổi/trả hoặc đang
 // chờ xử lý đổi/trả) — ô "Dùng … Điểm Xanh" trên web phải đề nghị đúng số đó, không phải số dư.
@@ -214,5 +214,25 @@ describe('R-163: luật dời sang app-core không đổi đầu ra của web', 
     const note = legacyPointsSummary(c).convertedNote;
     expect(convertedPointsLine(offer, { capNote: 'x', partnerNote: null })).toBe(offer.converted > 0 ? note : null);
     expect(convertedPointsLine(offer, none)).toBe(offer.converted > 0 ? `${note}, trả tới 100% giá trị hàng` : null);
+  });
+});
+
+describe('idlePointsLabel (chưa có điểm dùng được)', () => {
+  it('số dư 0 hoặc chưa biết khách: lời mời tích điểm', () => {
+    expect(idlePointsLabel({ pointsBalance: 0 })).toBe('Tích điểm từ đơn đầu tiên nhé');
+    expect(idlePointsLabel({ pointsBalance: 0, pointsConvertedBalance: 0 })).toBe('Tích điểm từ đơn đầu tiên nhé');
+    expect(idlePointsLabel(null)).toBe('Tích điểm từ đơn đầu tiên nhé');
+    expect(idlePointsLabel(undefined)).toBe('Tích điểm từ đơn đầu tiên nhé');
+  });
+
+  it('có số dư (dù chưa có báo giá hay toàn bộ đang giữ): ghi số dư như Mini, không mời tích điểm', () => {
+    expect(idlePointsLabel({ pointsBalance: 50 })).toBe('Bạn đang có 50 điểm');
+    expect(idlePointsLabel({ pointsBalance: 1200, pointsConvertedBalance: 300 })).toBe('Bạn đang có 1.500 điểm');
+    expect(idlePointsLabel({ pointsBalance: 0, pointsConvertedBalance: 40 })).toBe('Bạn đang có 40 điểm');
+  });
+
+  it('số rác hay âm không thành "NaN điểm"', () => {
+    expect(idlePointsLabel({ pointsBalance: Number.NaN })).toBe('Tích điểm từ đơn đầu tiên nhé');
+    expect(idlePointsLabel({ pointsBalance: -5 })).toBe('Tích điểm từ đơn đầu tiên nhé');
   });
 });

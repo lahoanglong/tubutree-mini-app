@@ -51,6 +51,15 @@ export const PROBES: readonly Probe[] = [
     { id: 'tile-grid-brand', root: tile('grid'), target: '[data-ds-part="brand"]', props: TEXT },
     { id: 'tile-grid-meta', root: tile('grid'), target: '[data-ds-part="meta"]', props: TEXT },
   ]),
+  // Thanh toán (K2): móc `data-ds="checkout-*"` có ở cả Mini (pages/checkout.tsx, components/checkout/address-section.tsx) và web (app/thanh-toan/page.tsx).
+  { id: 'checkout-block-title', root: '[data-ds="checkout-block-title"]', target: '', props: TEXT },
+  { id: 'checkout-address-card', root: '[data-ds="checkout-address-card"]', target: '', props: ['heightNoBorder', 'borderRadius'] },
+  { id: 'checkout-summary-row', root: '[data-ds="checkout-summary-row"]', target: '', props: ['height', 'paddingTop', 'paddingBottom', 'marginTop', 'marginBottom'] },
+  { id: 'checkout-summary-label', root: '[data-ds="checkout-summary-row"]', target: ':scope > :first-child', props: [...TEXT, 'height'] },
+  { id: 'checkout-summary-value', root: '[data-ds="checkout-summary-row"]', target: ':scope > :last-child', props: ['fontSize', 'lineHeight', 'fontWeight', 'color', 'height'] },
+  { id: 'checkout-summary-total-label', root: '[data-ds="checkout-summary-total"]', target: ':scope > :first-child', props: TEXT },
+  { id: 'checkout-summary-total-value', root: '[data-ds="checkout-summary-total"]', target: ':scope > :last-child', props: ['fontSize', 'lineHeight', 'fontWeight', 'color'] },
+  { id: 'checkout-note', root: '[data-ds="checkout-note"]', target: 'input, textarea', props: ['height', 'borderRadius'] },
 ];
 
 /** Dung sai 0,5px cho số đo px (làm tròn khác nhau của hai bộ dựng hình); mọi giá trị khác so đúng chuỗi. */
@@ -91,7 +100,13 @@ export function measure(page: Page, probes: readonly Probe[]): Promise<Measure> 
         continue;
       }
       const cs = getComputedStyle(el);
-      out[p.id] = Object.fromEntries(p.props.map((k) => [k, k === 'fontFamilyKind' ? kind(cs.fontFamily) : cs.getPropertyValue(kebab(k))]));
+      // `heightNoBorder`: viền bị làm tròn theo mật độ điểm ảnh (Mini đo ở DPR 3, web ở DPR 2,625) nên chiều cao thẻ có viền lệch nhau dù CSS giống hệt.
+      const value = (k: string): string => {
+        if (k === 'fontFamilyKind') return kind(cs.fontFamily);
+        if (k === 'heightNoBorder') return `${(el.getBoundingClientRect().height - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth)).toFixed(2)}px`;
+        return cs.getPropertyValue(kebab(k));
+      };
+      out[p.id] = Object.fromEntries(p.props.map((k) => [k, value(k)]));
     }
     return out;
   }, probes);
@@ -138,4 +153,15 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'tile-grid-price': PRICE,
   'tile-grid-compare': { ...STRIKE, fontSize: '13px', lineHeight: px(M.compare) },
   'tile-grid-meta': SMALL,
+
+  // Thanh toán: số đo Mini 375px (thẻ địa chỉ một dòng + huy hiệu Mặc định, dòng KeyValueRow đệm 6px, ô Input 48px).
+  'checkout-block-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'checkout-address-card': { heightNoBorder: '67.97px', borderRadius: '12px' },
+  'checkout-summary-row': { height: '35.55px', paddingTop: '6px', paddingBottom: '6px', marginTop: '0px', marginBottom: '0px' },
+  'checkout-summary-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '400', letterSpacing: 'normal', color: 'rgb(90, 84, 74)', fontFamilyKind: 'inter', height: '23.55px' },
+  // Giá trị 15px/600: KeyValueRow của Mini ghi đè fontSize bằng undefined nên thừa kế cỡ 15px của khối cha; web theo số đo đó.
+  'checkout-summary-value': { fontSize: '15px', lineHeight: '23.55px', fontWeight: '600', color: INK, height: '23.55px' },
+  'checkout-summary-total-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '400', letterSpacing: 'normal', color: 'rgb(90, 84, 74)', fontFamilyKind: 'inter' },
+  'checkout-summary-total-value': { fontSize: '16px', lineHeight: '25.12px', fontWeight: '700', color: INK },
+  'checkout-note': { height: '48px', borderRadius: '8px' },
 };

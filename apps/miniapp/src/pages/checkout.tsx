@@ -20,6 +20,8 @@ import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
+import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
@@ -62,6 +64,7 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
+import { Text as DsText } from '../components/ui/text';
 import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
 
@@ -519,7 +522,8 @@ export default function CheckoutPage() {
   const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
-  const previewTotal = Math.max(0, previewSubtotal - previewCombo - previewDiscount - previewTier);
+  // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
+  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError });
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
@@ -596,7 +600,7 @@ export default function CheckoutPage() {
               <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
                 <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productName}</Text>
+                  <Text size="small" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{it.productName}</Text>
                   {it.variationName && (
                     <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                       {typeof it.variationName === 'object' && it.variationName !== null
@@ -646,13 +650,13 @@ export default function CheckoutPage() {
                 width: 36,
                 height: 36,
                 borderRadius: 'var(--radius-control)',
-                background: 'var(--clay-50)',
+                background: 'var(--color-promo-bg)',
                 display: 'grid',
                 placeItems: 'center',
                 flex: '0 0 auto',
               }}
             >
-              <Ticket size={20} color="var(--clay-700)" />
+              <Ticket size={20} color="var(--color-promo-fg)" />
             </Box>
             <Box style={{ minWidth: 0 }}>
               <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
@@ -662,12 +666,12 @@ export default function CheckoutPage() {
                 <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
                   <span
                     style={{
-                      background: 'var(--clay-50)',
-                      border: '1px dashed var(--clay-500)',
+                      background: 'var(--color-promo-bg)',
+                      border: '1px dashed var(--color-promo-solid-bg)',
                       borderRadius: 'var(--radius-control)',
                       padding: '2px 6px',
-                      color: 'var(--clay-700)',
-                      fontSize: 11,
+                      color: 'var(--color-promo-fg)',
+                      fontSize: 'var(--type-label-size)',
                       fontWeight: 700,
                       minWidth: 0,
                       overflow: 'hidden',
@@ -838,7 +842,7 @@ export default function CheckoutPage() {
                   ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
                   : partnerPoints.disabled && points.usable > 0
                     ? lockedPointsLabel(points.balance)
-                    : (points.label ?? vi.checkout.pointsNone)}
+                    : (points.label ?? fillCopy('checkout.pointsNone'))}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
@@ -869,7 +873,7 @@ export default function CheckoutPage() {
       )}
 
       {/* ── Ghi chú ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+      <Box p={4} mt={2} data-ds="checkout-note" style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
@@ -1010,7 +1014,7 @@ export default function CheckoutPage() {
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
                 <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
-                  Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.
+                  {fillCopy('checkout.invoiceIncomplete')}
                 </Text>
               </Box>
             )}
@@ -1072,7 +1076,7 @@ export default function CheckoutPage() {
           </Box>
         ) : quote.data ? (
           <>
-            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
+            <KeyValueRow dataDs="checkout-summary-row" label={vi.cart.subtotal} value={formatVnd(quote.data.subtotal)} />
             {quote.data.discount > 0 && (
               <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(quote.data.discount)}`} tone="success" />
             )}
@@ -1091,7 +1095,7 @@ export default function CheckoutPage() {
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
             {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
-            <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
+            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
@@ -1104,7 +1108,7 @@ export default function CheckoutPage() {
         ) : (
           /* Fallback preview summary when addressId is missing/unselected */
           <>
-            <KeyValueRow label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
+            <KeyValueRow dataDs="checkout-summary-row" label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
             {previewCombo > 0 && (
               <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} tone="success" />
             )}
@@ -1121,9 +1125,9 @@ export default function CheckoutPage() {
             )}
             <KeyValueRow
               label={vi.checkout.shippingFee}
-              value={addressId ? 'Đang tính...' : 'Cần chọn địa chỉ giao hàng'}
+              value={addressId ? fillCopy('checkout.calculating') : fillCopy('checkout.shipNeedsAddress')}
             />
-            <KeyValueRow label={vi.checkout.total} value={formatVnd(previewTotal)} emphasis />
+            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
           </>
         )}
       </Box>
@@ -1154,6 +1158,17 @@ export default function CheckoutPage() {
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar
+        summary={
+          // Vùng báo luôn có mặt, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver trong Zalo) thường không đọc.
+          // Lúc rỗng đặt absolute để không chiếm khoảng cách (gap) của thanh.
+          <div role="status" style={placeHint ? undefined : { position: 'absolute' }}>
+            {placeHint && (
+              <DsText variant="caption" tone="secondary">
+                {placeHint}
+              </DsText>
+            )}
+          </div>
+        }
         primary={
           <Button
             fullWidth
@@ -1184,7 +1199,7 @@ export default function CheckoutPage() {
         open={priceChanged}
         onClose={() => setPriceChanged(false)}
         title={vi.flashSale.priceChangedTitle}
-        description={vi.flashSale.priceChangedBody}
+        description={fillCopy('flash.priceChangedBody')}
         footer={
           <Button
             fullWidth
@@ -1270,8 +1285,8 @@ export default function CheckoutPage() {
                   ? vi.common.freeShip
                   : formatVnd(quote.data.shippingFee)
                 : addressId
-                  ? 'Đang tính...'
-                  : 'Cần chọn địa chỉ giao hàng'
+                  ? fillCopy('checkout.calculating')
+                  : fillCopy('checkout.shipNeedsAddress')
             }
             tone={quote.data?.shippingFee === 0 ? 'success' : 'primary'}
           />
@@ -1280,7 +1295,7 @@ export default function CheckoutPage() {
 
           <KeyValueRow
             label="Tổng thanh toán"
-            value={formatVnd(quote.data?.total ?? previewTotal)}
+            value={checkoutTotalText({ total: quote.data?.total ?? null, hasAddress: !!addressId }, formatVnd)}
             emphasis
           />
 

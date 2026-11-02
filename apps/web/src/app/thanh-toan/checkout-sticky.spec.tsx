@@ -11,10 +11,18 @@ const state = vi.hoisted(() => ({
   placeError: null as Error | null,
   quoteError: null as Error | null,
   noAddress: false,
+  addrError: false,
+  /** Số dư Điểm Xanh trong báo giá. */
   points: 0,
+  /** Phần dùng được trong báo giá; null = bằng `points`. */
+  redeemable: null as number | null,
+  /** Số dư trong hồ sơ đăng nhập (có ngay từ lúc vào trang, trước cả báo giá). */
+  userPoints: 0,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated', initialized: true }) }));
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => ({ user: { id: 'u', walletBalance: 0, pointsBalance: state.userPoints }, status: 'authenticated', initialized: true }),
+}));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
@@ -27,17 +35,19 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMe: async () => ({ pointsBalance: 0, walletBalance: 0 }),
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
-  getAddresses: async () =>
-    state.noAddress
+  getAddresses: async () => {
+    if (state.addrError) throw new Error('boom');
+    return state.noAddress
       ? []
       : [
           { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: 'p', districtCode: '', wardCode: 'w', isDefault: true },
-        ],
+        ];
+  },
   checkoutQuote: async () => {
     if (state.quoteError) throw state.quoteError;
     return {
       subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0,
-      pointsBalance: state.points, redeemablePoints: state.points,
+      pointsBalance: state.points, redeemablePoints: state.redeemable ?? state.points,
     };
   },
   placeOrder: async (body: Record<string, unknown>) => {
@@ -67,11 +77,88 @@ beforeEach(() => {
   state.placeError = null;
   state.quoteError = null;
   state.noAddress = false;
+  state.addrError = false;
   state.points = 0;
+  state.redeemable = null;
+  state.userPoints = 0;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+});
+
+describe('/thanh-toan — nút Đặt hàng ở khung tóm tắt (từ lg) ghi số tiền như Mini (K2)', () => {
+  const lgButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-mini-part="place-order"] button')!;
+
+  it('có báo giá: "Đặt hàng · 330.000đ", cùng chữ với nút trên thanh dính', async () => {
+    const c = await mount();
+    expect(lgButton(c).textContent).toBe('Đặt hàng · 330.000đ');
+    expect(lgButton(c).textContent).toBe(barButton(c).textContent);
+  });
+
+  it('chưa có địa chỉ: chỉ "Đặt hàng", khoá, không có số tiền nào', async () => {
+    state.noAddress = true;
+    const c = await mount();
+    expect(lgButton(c).textContent).toBe('Đặt hàng');
+    expect(lgButton(c).disabled).toBe(true);
+  });
+
+  it('báo giá lỗi: chỉ "Đặt hàng", không giữ số tiền cũ', async () => {
+    state.quoteError = new Error('boom');
+    const c = await mount();
+    expect(lgButton(c).textContent).toBe('Đặt hàng');
+  });
+});
+
+describe('/thanh-toan — lý do khoá nút theo Mini (K2)', () => {
+  const region = (c: HTMLElement) => bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
+
+  it('thiếu địa chỉ: lý do là chữ phụ (không đỏ) trong vùng báo, nút khoá', async () => {
+    state.noAddress = true;
+    const c = await mount();
+    expect(region(c).textContent).toBe('Chọn địa chỉ giao hàng để đặt hàng.');
+    expect(region(c).className).toContain('--color-text-secondary');
+    expect(region(c).className).not.toContain('danger');
+    expect(bar(c)!.querySelector('[aria-hidden="true"].text-danger-fg')).toBeNull();
+    expect(barButton(c).disabled).toBe(true);
+  });
+
+  it('báo giá lỗi: cũng chữ phụ, khác câu thiếu địa chỉ', async () => {
+    state.quoteError = new Error('boom');
+    const c = await mount();
+    expect(region(c).textContent).toContain('Chưa tính được tổng tiền.');
+    expect(region(c).className).not.toContain('danger');
+  });
+
+  it('vùng báo có mặt từ đầu (rỗng, ẩn thị giác) và giữ nguyên phần tử khi lỗi đặt hàng hiện ra; lỗi thật mới đỏ', async () => {
+    state.placeError = new Error('Địa chỉ giao không hợp lệ.');
+    const c = await mount();
+    const before = region(c);
+    expect(before.textContent).toBe('');
+    expect(before.className).toContain('sr-only');
+    click(barButton(c));
+    await flush(6);
+    expect(region(c)).toBe(before);
+    expect(region(c).textContent).toBe('');
+    const red = bar(c)!.querySelector('.text-danger-fg');
+    expect(red?.textContent).toBe('Địa chỉ giao không hợp lệ.');
+  });
+
+  it('khối địa chỉ trống ghi "Bạn chưa thêm địa chỉ" như Mini; có địa chỉ hoặc tải lỗi thì không', async () => {
+    state.noAddress = true;
+    const empty = await mount();
+    expect(empty.querySelector('[data-testid="address-empty"]')!.textContent).toBe('Bạn chưa thêm địa chỉ');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.noAddress = false;
+    const filled = await mount();
+    expect(filled.querySelector('[data-testid="address-empty"]')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.addrError = true;
+    const failed = await mount();
+    expect(failed.querySelector('[data-testid="address-empty"]')).toBeNull();
+  });
 });
 
 describe('/thanh-toan — thanh dính đáy', () => {
@@ -130,7 +217,7 @@ describe('/thanh-toan — thanh dính đáy', () => {
 
   it('trang vẫn còn nút "Đặt hàng" trong khung tóm tắt cho màn rộng', async () => {
     const c = await mount();
-    const inCard = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng');
+    const inCard = Array.from(c.querySelectorAll('button')).find((b) => /^Đặt hàng/.test(b.textContent ?? ''));
     expect(inCard).toBeDefined();
     expect(inCard!.className).toMatch(/\bhidden\b/);
     expect(inCard!.className).toMatch(/\blg:inline-flex\b/);
@@ -146,9 +233,10 @@ describe('/thanh-toan — thanh dính đáy', () => {
         ['Điều khoản', '/chinh-sach/dieu-khoan'],
         ['Chính sách đổi trả', '/chinh-sach/doi-tra'],
       ]);
-      expect(line.nextElementSibling?.tagName).toBe('BUTTON');
     }
-    expect(bar(c)!.contains(lines[1]!)).toBe(true);
+    const desk = lines.find((l) => /\blg:block\b/.test(l.className))!;
+    expect(desk.nextElementSibling?.tagName).toBe('BUTTON');
+    expect(c.querySelector('[data-mini-part="place-order"]')!.contains(desk)).toBe(true);
     expect(bar(c)!.querySelector('input[type="checkbox"]')).toBeNull();
   });
 
@@ -167,5 +255,99 @@ describe('/thanh-toan — radio/checkbox đủ lớn (≥ 24px)', () => {
     expect(controls.length).toBeGreaterThanOrEqual(5);
     const small = controls.filter((el) => !/\bh-6\b/.test(el.className) || !/\bw-6\b/.test(el.className));
     expect(small.map((el) => el.outerHTML.slice(0, 100))).toEqual([]);
+  });
+});
+
+describe('/thanh-toan — 375px theo số đo Mini (K2)', () => {
+  it('dòng đồng ý điều khoản ở điện thoại nằm cuối nội dung, sau khối tóm tắt, không trong thanh dính', async () => {
+    const c = await mount();
+    const lines = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="order-consent"]'));
+    const phone = lines.find((l) => /\blg:hidden\b/.test(l.className))!;
+    expect(phone).toBeDefined();
+    expect(bar(c)!.contains(phone)).toBe(false);
+    expect(lines.filter((l) => bar(c)!.contains(l))).toHaveLength(0);
+    const total = c.querySelector('[data-ds="checkout-summary-total"]')!;
+    expect(total.compareDocumentPosition(phone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(phone.compareDocumentPosition(bar(c)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('khách chưa có điểm: khối Điểm Xanh ở điện thoại vẫn hiện như Mini với lời mời tích điểm, ô tick khoá', async () => {
+    state.points = 0;
+    const c = await mount();
+    const none = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
+    expect(none).not.toBeNull();
+    expect(none.className).toMatch(/\bmd:hidden\b/);
+    expect(none.closest('[data-mini-block="points"]')).not.toBeNull();
+    expect(none.textContent).toContain('Điểm Xanh');
+    expect(none.textContent).toContain('Tích điểm từ đơn đầu tiên nhé');
+    expect(none.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+  });
+
+  it('khách có điểm dùng được: không có khối lời mời tích điểm', async () => {
+    state.points = 50;
+    state.userPoints = 50;
+    const c = await mount();
+    expect(c.querySelector('[data-testid="points-none"]')).toBeNull();
+  });
+
+  it('khách có điểm nhưng chưa chọn địa chỉ (chưa có báo giá): ghi số dư như Mini, không mời tích điểm', async () => {
+    state.noAddress = true;
+    state.userPoints = 50;
+    const c = await mount();
+    const idle = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
+    expect(idle.textContent).toContain('Bạn đang có 50 điểm');
+    expect(c.textContent).not.toContain('Tích điểm từ đơn đầu tiên');
+    expect(idle.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+  });
+
+  it('toàn bộ điểm đang giữ (dùng được 0): ghi số dư, không mời tích điểm cạnh dòng "chưa dùng được"', async () => {
+    state.points = 50;
+    state.redeemable = 0;
+    state.userPoints = 50;
+    const c = await mount();
+    const idle = c.querySelector<HTMLElement>('[data-testid="points-none"]')!;
+    expect(idle.textContent).toContain('Bạn đang có 50 điểm');
+    expect(c.textContent).toContain('chưa dùng được');
+    expect(c.textContent).not.toContain('Tích điểm từ đơn đầu tiên');
+  });
+
+  it('dòng tóm tắt: đệm 6px dưới md rồi trả về dòng cũ từ md, không thêm max-md', async () => {
+    const c = await mount();
+    const row = c.querySelector<HTMLElement>('[data-ds="checkout-summary-row"]')!;
+    expect(row.className).toMatch(/\bpy-1\.5\b/);
+    expect(row.className).toMatch(/\bmd:py-0\b/);
+    expect(row.className).toMatch(/\bmd:mt-1\b/);
+    expect(row.className).not.toMatch(/max-md:/);
+  });
+
+  it('"Tổng cộng" dưới md: nhãn 14/400 màu phụ, số 16/700; từ md vẫn đậm cả hai', async () => {
+    const c = await mount();
+    const total = c.querySelector<HTMLElement>('[data-ds="checkout-summary-total"]')!;
+    const label = total.firstElementChild as HTMLElement;
+    const value = total.lastElementChild as HTMLElement;
+    expect(label.textContent).toBe('Tổng cộng');
+    expect(label.className).toMatch(/\bfont-normal\b/);
+    expect(label.className).toMatch(/\bmd:font-bold\b/);
+    expect(value.className).toMatch(/\btext-base\b/);
+    expect(value.className).toMatch(/\bfont-bold\b/);
+    expect(total.className).not.toMatch(/max-md:/);
+  });
+
+  it('ghi chú: ô cao một dòng như Input của Mini dưới md, nhiều dòng từ md; khối có móc đo', async () => {
+    const c = await mount();
+    const note = c.querySelector<HTMLTextAreaElement>('[data-ds="checkout-note"] textarea')!;
+    expect(note.className).toMatch(/\bh-12\b/);
+    expect(note.className).toMatch(/\bmd:h-auto\b/);
+  });
+
+  it('thẻ địa chỉ: huy hiệu Mặc định không xuống dòng, tên dài cắt một dòng; có móc đo', async () => {
+    const c = await mount();
+    const card = c.querySelector<HTMLElement>('[data-ds="checkout-address-card"]')!;
+    expect(card).not.toBeNull();
+    const badge = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'Mặc định')!;
+    expect(badge.className).toMatch(/\bshrink-0\b/);
+    const name = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'An · 0912345678')!;
+    expect(name.className).toMatch(/\btruncate\b/);
+    expect(c.querySelector('[data-ds="checkout-block-title"]')!.textContent).toBe('Địa chỉ giao hàng');
   });
 });

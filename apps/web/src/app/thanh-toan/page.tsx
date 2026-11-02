@@ -27,8 +27,10 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
+import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
-import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -73,7 +75,7 @@ const PRICE_CHANGED = 'PRICE_CHANGED';
 
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
-  `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
+  `${OPTION_BASE} ${selected ? 'border-[var(--color-border-selected)] bg-[var(--color-bg-subtle)]' : 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)]'}`;
 // Mini App: dòng phương thức thanh toán không viền/nền, cách nhau bằng khoảng đệm (checkout.tsx: padding 12px 0).
 const payOptionClass = (selected: boolean) =>
   `${optionClass(selected)} max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:py-3`;
@@ -84,6 +86,8 @@ const addressOptionClass = (selected: boolean) =>
       ? 'max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-bg-subtle)]'
       : 'max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
   }`;
+// Ô ghi chú: dưới md cao một dòng và bo 8px như Input của Mini, từ md nhiều dòng với bo của ô nhập thường.
+const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:rounded-control');
 // Mỗi phần của trang thanh toán ở điện thoại là dải trắng phẳng tràn ngang cách nhau 8px (Box p=4 mt=2 của Mini App).
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
 
@@ -360,7 +364,7 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-16 text-center">
-          <p role="status" className="text-stone-700">
+          <p role="status" className="text-[color:var(--color-text-secondary)]">
             Đang chuyển tới trang thanh toán…
           </p>
           <Link href={bankPaymentHref(redirectingCode)} className={`mt-4 inline-block ${ui.btnPrimary}`}>
@@ -387,8 +391,8 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-16 text-center">
-          <h2 className="font-display text-lg font-semibold text-stone-900">Đơn của bạn có thể đã được tạo</h2>
-          <p className="mt-1 text-sm text-stone-600">
+          <h2 className="font-display text-lg font-semibold text-[color:var(--color-text-primary)]">Đơn của bạn có thể đã được tạo</h2>
+          <p className="mt-1 text-sm text-[color:var(--color-text-secondary)]">
             Lần đặt trước chưa nhận được phản hồi và giỏ đã trống. Bấm Kiểm tra lại để hệ thống trả đúng đơn đó, không tạo thêm đơn.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
@@ -408,11 +412,11 @@ export default function CheckoutPage() {
     return (
       <Shell>
         <div className="py-16 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-[var(--color-bg-subtle)] text-[color:var(--color-text-brand)] shadow-card">
             <ShoppingBag className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
           </div>
-          <h2 className="mt-4 font-display text-lg font-semibold text-stone-900">Giỏ hàng đang trống</h2>
-          <p className="mt-1 text-sm text-stone-600">Chưa có sản phẩm nào để thanh toán. Chọn vài món xanh rồi quay lại nhé.</p>
+          <h2 className="mt-4 font-display text-lg font-semibold text-[color:var(--color-text-primary)]">Giỏ hàng đang trống</h2>
+          <p className="mt-1 text-sm text-[color:var(--color-text-secondary)]">Chưa có sản phẩm nào để thanh toán. Chọn vài món xanh rồi quay lại nhé.</p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <Link href="/" className={ui.btnPrimary}>
               Khám phá sản phẩm
@@ -464,19 +468,14 @@ export default function CheckoutPage() {
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   const placeDisabled =
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
-  const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
+  const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
+  const placeLabel = place.isPending ? 'Đang đặt hàng…' : quote ? fillCopy('checkout.placeWith', { price: formatVnd(quote.total) }) : 'Đặt hàng';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
-  const barHint =
+  // Đỏ chỉ cho lỗi thật (đặt lỗi, giá đổi, giỏ cần sửa); lý do khoá nút do thiếu địa chỉ/chưa tính được là chữ phụ như Mini.
+  const barError =
     cartIssue ??
-    (priceChanged
-      ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.'
-      : place.isError
-        ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
-        : !addressId
-          ? 'Chọn địa chỉ giao hàng để đặt hàng.'
-          : quoteQ.isError
-            ? 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.'
-            : null);
+    (priceChanged ? fillCopy('checkout.priceChangedHint') : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+  const barNote = barError ? null : checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError });
 
   return (
     <Shell>
@@ -488,7 +487,7 @@ export default function CheckoutPage() {
         >
           <div className="min-w-0 flex-1">
             <p className="font-semibold">Giá ưu đãi đã thay đổi</p>
-            <p className="mt-0.5">Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.</p>
+            <p className="mt-0.5">{fillCopy('flash.priceChangedBody')}</p>
           </div>
           <Link href="/gio-hang" className={ui.btnSecondary}>
             Xem lại giỏ hàng
@@ -510,7 +509,7 @@ export default function CheckoutPage() {
       <div className="grid gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4 max-md:contents">
           <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
-            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
+            <h2 data-ds="checkout-block-title" className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
               <p className={`mt-2 ${ui.error}`}>
                 Không tải được danh sách địa chỉ.{' '}
@@ -523,6 +522,7 @@ export default function CheckoutPage() {
               addresses={addrQ.data ?? []}
               selectedId={addressId}
               quoteOutdated={quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'}
+              loadFailed={addrQ.isError}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
@@ -539,7 +539,7 @@ export default function CheckoutPage() {
           <section data-mini-block="payment" className={`${MINI_BAND} max-md:order-5`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Phương thức thanh toán</h2>
             {zeroNote ? (
-              <p className="mt-2 text-sm text-forest-800">{zeroNote}</p>
+              <p className="mt-2 text-sm text-[color:var(--color-text-brand)]">{zeroNote}</p>
             ) : (
               <div className="mt-2 space-y-2">
                 {paymentMethods.map((p) => {
@@ -559,7 +559,7 @@ export default function CheckoutPage() {
                         {p.label}
                       </label>
                       {reason && (
-                        <p id={`pay-blocked-${p.k}`} className="mt-1 text-caption text-stone-600">
+                        <p id={`pay-blocked-${p.k}`} className="mt-1 pl-9 text-caption text-[color:var(--color-text-secondary)] md:pl-0">
                           {reason}
                         </p>
                       )}
@@ -575,10 +575,10 @@ export default function CheckoutPage() {
             )}
           </section>
 
-          <section data-mini-block="note" className={`${MINI_BAND} max-md:order-7`}>
+          <section data-mini-block="note" data-ds="checkout-note" className={`${MINI_BAND} max-md:order-7`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho Tubu</h2>
             <label className="mt-2 block">
-              <span className="text-caption font-medium text-stone-700 max-md:sr-only">Lời nhắn cho người giao hàng (không bắt buộc)</span>
+              <span className="text-caption font-medium text-[color:var(--color-text-secondary)] max-md:sr-only">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
                 value={note}
                 onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
@@ -587,10 +587,10 @@ export default function CheckoutPage() {
                 placeholder="Ví dụ: giao giờ hành chính..."
                 disabled={place.isPending}
                 aria-describedby="order-note-count"
-                className={`${ui.field} mt-1 py-2`}
+                className={`${NOTE_FIELD} mt-1 h-12 resize-none py-2 md:h-auto md:resize-y`}
               />
             </label>
-            <p id="order-note-count" className="mt-1 text-caption text-stone-600 max-md:sr-only">
+            <p id="order-note-count" className="mt-1 text-caption text-[color:var(--color-text-secondary)] max-md:sr-only">
               {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>
@@ -600,21 +600,21 @@ export default function CheckoutPage() {
               {pickupReq === null ? (
                 <Link href="/doi-rac/tao" onClick={clearSubmitted} className="flex min-h-11 items-center justify-between gap-3 text-sm">
                   <span className="flex items-center gap-3">
-                    <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                    <Recycle className="h-5 w-5 text-[color:var(--color-text-brand)]" aria-hidden="true" />
                     <span>
-                      <span className="block font-semibold text-stone-900">Thu kèm rác</span>
-                      <span className="block text-caption text-stone-600">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
+                      <span className="block font-semibold text-[color:var(--color-text-primary)]">Thu kèm rác</span>
+                      <span className="block text-caption text-[color:var(--color-text-secondary)]">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
                     </span>
                   </span>
-                  <span aria-hidden="true" className="text-stone-600">
+                  <span aria-hidden="true" className="text-[color:var(--color-text-secondary)]">
                     ›
                   </span>
                 </Link>
               ) : (
                 <>
-                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-stone-900">
+                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-[color:var(--color-text-primary)]">
                     <span className="flex items-center gap-3">
-                      <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                      <Recycle className="h-5 w-5 text-[color:var(--color-text-brand)]" aria-hidden="true" />
                       Thu kèm rác
                     </span>
                     <input
@@ -625,8 +625,8 @@ export default function CheckoutPage() {
                       className="h-6 w-6 shrink-0 accent-forest-600"
                     />
                   </label>
-                  <div className="mt-2 rounded-control bg-stone-100 p-3 text-caption text-stone-700">
-                    <p className="text-sm font-semibold text-stone-900">{pickupReq.code}</p>
+                  <div className="mt-2 rounded-control bg-[var(--color-bg-subtle)] p-3 text-caption text-[color:var(--color-text-secondary)]">
+                    <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">{pickupReq.code}</p>
                     {pickupReq.lines.map((l) => (
                       <p key={`${l.itemName}-${l.unitLabel}`} className="mt-0.5">
                         {l.itemName}: {l.declaredQty} {l.unitLabel}
@@ -664,57 +664,27 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* 9rem: khung chưa dính ở đầu trang nằm thấp hơn vị trí dính khoảng 6.5rem (tiêu đề + đường dẫn); trừ thêm để đáy khung, nơi có nút Đặt hàng, đã trong màn ngay khi chưa cuộn. */}
-        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
+        {/* Khung cuộn cùng trang, không cột dính và không vùng cuộn riêng (DESIGN.md, Khuôn trang web máy tính): chỉ dải tổng + nút Đặt hàng bên dưới dính đáy màn nên nút luôn trong tầm nhìn dù khung dài. */}
+        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:self-start`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
-          {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
-              hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
+          {/* Từ md danh sách chữ hiện đủ dòng, không vùng cuộn lồng: dòng thứ 6 trở đi gập sau nút kèm tiền; giỏ tách kiện hiện hết
+              để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
           <div data-mini-block="items" className="max-md:order-2 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
           <MobileItems items={checkoutItems} shipments={split ? shipments : null} splitNote={splitNote} />
-          <div
-            role="region"
-            aria-label="Sản phẩm trong đơn"
-            tabIndex={split ? undefined : 0}
-            className={`mt-2 space-y-1 text-sm max-md:hidden ${split ? '' : 'max-h-40 overflow-auto'}`}
-          >
-            {split
-              ? shipments.map((sh) => (
-                  <div key={sh.key} className="space-y-1 border-b border-stone-200 pb-2 last:border-b-0">
-                    <p className="text-caption font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
-                    {checkoutItems
-                      .filter((it) => sh.itemIds.includes(it.id))
-                      .map((it) => (
-                        <div key={it.id} className="flex justify-between gap-2">
-                          <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
-                          <span className="text-stone-900">{formatVnd(it.total)}</span>
-                        </div>
-                      ))}
-                    <div className="flex justify-between gap-2 text-caption text-stone-600">
-                      <span>Phí giao</span>
-                      <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
-                    </div>
-                  </div>
-                ))
-              : checkoutItems.map((it) => (
-                  <div key={it.id} className="flex justify-between gap-2">
-                    <span className="text-stone-600">{it.productName} ×{it.quantity}</span>
-                    <span className="text-stone-900">{formatVnd(it.total)}</span>
-                  </div>
-                ))}
-          </div>
+          <DesktopLines items={checkoutItems} shipments={split ? shipments : null} />
           {itemIds && cart && (
-            <p className="mt-2 text-caption text-stone-600">
+            <p className="mt-2 text-caption text-[color:var(--color-text-secondary)]">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
-              <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+              <Link href="/gio-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
                 Đổi lựa chọn
               </Link>
             </p>
           )}
-          {splitNote && <p className="mt-2 text-caption text-stone-600 max-md:hidden">{splitNote}</p>}
+          {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] max-md:hidden">{splitNote}</p>}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
-          <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
+          <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
           )}
@@ -753,7 +723,7 @@ export default function CheckoutPage() {
           <div data-mini-block="points" className="max-md:order-6 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4 max-md:empty:hidden">
           {usablePoints > 0 && (
             <label
-              className={`relative mt-3 flex min-h-11 items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm max-md:mt-0 max-md:flex-row-reverse max-md:justify-between max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 ${
+              className={`relative mt-3 flex min-h-11 items-center gap-2 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3 text-sm max-md:mt-0 max-md:flex-row-reverse max-md:justify-between max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 ${
                 partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               }`}
             >
@@ -768,9 +738,9 @@ export default function CheckoutPage() {
                 <CheckMark />
               </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
-              <span className="min-w-0 text-forest-800">
-                <span className="block font-semibold max-md:text-stone-900">Điểm Xanh</span>
-                <span className="block text-caption max-md:text-stone-600">
+              <span className="min-w-0 text-[color:var(--color-text-brand)]">
+                <span className="block font-semibold max-md:text-[color:var(--color-text-primary)]">Điểm Xanh</span>
+                <span className="block text-caption max-md:text-[color:var(--color-text-secondary)]">
                   {partnerPoints.disabled
                     ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
@@ -778,17 +748,32 @@ export default function CheckoutPage() {
               </span>
             </label>
           )}
-          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-caption text-stone-600">{partnerPoints.capNote}</p>}
-          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-caption text-stone-600">{partnerPoints.partnerNote}</p>}
-          {convertedLine && <p className="mt-1 text-caption text-stone-600">{convertedLine}</p>}
-          {pointsOffer.lockNote && <p className="mt-1 text-caption text-stone-600">{pointsOffer.lockNote}</p>}
+          {usablePoints === 0 && (
+            <div data-testid="points-none" className="flex min-h-11 items-center justify-between md:hidden">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
+                <span className="block text-caption text-[color:var(--color-text-tertiary)]">{idlePointsLabel(quote ?? user)}</span>
+              </span>
+              <span className={miniCheckboxWrap}>
+                <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
+                <CheckMark />
+              </span>
+            </div>
+          )}
+          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.capNote}</p>}
+          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.partnerNote}</p>}
+          {convertedLine && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{convertedLine}</p>}
+          {pointsOffer.lockNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{pointsOffer.lockNote}</p>}
           </div>
           <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
-          <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:mt-0 max-md:border-t-0 max-md:pt-1 lg:hidden">
-            <span>Tổng cộng</span>
+          <div
+            data-ds="checkout-summary-total"
+            className="flex justify-between gap-2.5 py-1.5 text-[color:var(--color-text-primary)] md:mt-3 md:gap-0 md:border-t md:border-[var(--color-border-subtle)] md:pb-0 md:pt-3 md:font-bold lg:hidden"
+          >
+            <span className="text-sm font-normal leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-secondary)] md:text-base md:font-bold md:leading-[inherit] md:text-[color:var(--color-text-primary)]">Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span>{totalText}</span>
+            <span className="text-base font-bold leading-[var(--type-body-sm-lh)] md:leading-[inherit]">{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
@@ -818,9 +803,9 @@ export default function CheckoutPage() {
           {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải, dính đáy khung để màn thấp (1366×768) vẫn thấy nút và lỗi đặt hàng. */}
           </div>
           {/* Con trực tiếp của khung cuộn (không nằm trong khối tổng): sticky chỉ trượt trong khối cha của nó. Điện thoại giữ thứ tự và đệm cũ. */}
-          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-stone-0 lg:py-4">
+          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-[var(--color-bg-surface)] lg:py-4">
           {/* Bản sao hiển thị của dòng Tổng cộng: khung tóm tắt cuộn được nên dòng gốc có thể trượt khỏi màn, tổng tiền phải luôn nằm cạnh nút Đặt hàng. */}
-          <div className="mb-3 hidden justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 lg:flex">
+          <div className="mb-3 hidden justify-between border-t border-[var(--color-border-subtle)] pt-3 font-bold text-[color:var(--color-text-primary)] lg:flex">
             <span>Tổng cộng</span>
             <span>{totalText}</span>
           </div>
@@ -831,24 +816,24 @@ export default function CheckoutPage() {
             disabled={placeDisabled}
             className={`${ui.btnPrimary} mt-2 hidden w-full lg:inline-flex`}
           >
-            {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
+            {placeLabel}
           </button>
           {place.isError && !priceChanged && placeCartNotice === null && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
               {isOutcomeUnknown(place.error) && (
-                <p className="mt-1 text-stone-700">
+                <p className="mt-1 text-[color:var(--color-text-secondary)]">
                   Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem{' '}
-                  <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
                     Đơn của tôi
                   </Link>
                   .
                 </p>
               )}
               {place.error?.message === PREVIOUS_MAYBE_PLACED && (
-                <p className="mt-1 text-stone-700">
+                <p className="mt-1 text-[color:var(--color-text-secondary)]">
                   Nếu đơn trước chưa có trong{' '}
-                  <Link href="/tai-khoan/don-hang" className="font-semibold text-forest-700 underline">
+                  <Link href="/tai-khoan/don-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
                     Đơn của tôi
                   </Link>
                   , bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
@@ -856,34 +841,96 @@ export default function CheckoutPage() {
               )}
             </div>
           )}
+          <OrderConsent className="pt-3 lg:hidden" />
           </div>
         </div>
       </div>
       <StickyActionBar label="Đặt hàng" hideFrom="lg">
-        {barHint && (
+        {barError && (
           <p aria-hidden="true" className="mb-2 text-caption text-danger-fg">
-            {barHint}
+            {barError}
           </p>
         )}
-        <OrderConsent className="mb-2" />
+        {/* Vùng báo luôn có mặt trong cây, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver) thường không đọc. */}
+        <p role="status" className={barNote ? 'mb-2 text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
+          {barNote}
+        </p>
         <button
           type="button"
           onClick={() => place.mutate()}
           disabled={placeDisabled}
           className={`${uiBar.primary} w-full`}
         >
-          {place.isPending ? 'Đang đặt hàng…' : quote ? `Đặt hàng · ${formatVnd(quote.total)}` : 'Đặt hàng'}
+          {placeLabel}
         </button>
       </StickyActionBar>
     </Shell>
   );
 }
 
-function Row({ label, value, green }: { label: string; value: string; green?: boolean }) {
+// Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
+function Row({ label, value, green, ds }: { label: string; value: string; green?: boolean; ds?: string }) {
   return (
-    <div className={`mt-1 flex justify-between text-sm ${green ? 'text-success-fg' : 'text-stone-900'}`}>
-      <span className={green ? '' : 'text-stone-600'}>{label}</span>
-      <span>{value}</span>
+    <div
+      data-ds={ds}
+      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
+    >
+      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 ${green ? '' : 'text-[color:var(--color-text-secondary)]'}`}>{label}</span>
+      <span className="text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5">{value}</span>
+    </div>
+  );
+}
+
+type ShipmentView = { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number };
+
+// Danh sách chữ trong khung "Đơn hàng" từ md (điện thoại dùng MobileItems). Các dòng thấy được cộng với tiền dòng gập ra đúng "Tạm tính".
+function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: ShipmentView[] | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const { shown, hiddenCount, hiddenTotal } = collapseCheckoutLines(items, expanded);
+  return (
+    <div role="region" aria-label="Sản phẩm trong đơn" className="mt-2 space-y-1 text-sm max-md:hidden">
+      {shipments
+        ? shipments.map((sh) => (
+            <div key={sh.key} className="space-y-1 border-b border-[var(--color-border-subtle)] pb-2 last:border-b-0">
+              <p className="text-caption font-semibold text-[color:var(--color-text-primary)]">{fulfillerLabel(sh.fulfiller)}</p>
+              {items
+                .filter((it) => sh.itemIds.includes(it.id))
+                .map((it) => (
+                  <LineRow key={it.id} item={it} />
+                ))}
+              <div className="flex justify-between gap-2 text-caption text-[color:var(--color-text-secondary)]">
+                <span>Phí giao</span>
+                <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+              </div>
+            </div>
+          ))
+        : shown.map((it) => <LineRow key={it.id} item={it} />)}
+      {!shipments && (hiddenCount > 0 || expanded) && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-h-11 w-full items-center justify-between gap-2 text-left font-semibold text-[color:var(--color-text-brand)]"
+        >
+          <span>{expanded ? fillCopy('checkout.fewerLines') : fillCopy('checkout.moreLines', { n: hiddenCount })}</span>
+          {!expanded && <span className="tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(hiddenTotal)}</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function LineRow({ item }: { item: CartLine }) {
+  return (
+    <div data-testid="checkout-line" className="flex justify-between gap-2">
+      <span className="min-w-0 text-[color:var(--color-text-secondary)]">
+        <span className="line-clamp-2">{item.productName}</span>
+        <span className="block text-caption text-[color:var(--color-text-tertiary)]">
+          {item.variationName && <span>{item.variationName}</span>}
+          {item.variationName ? ' · ' : ''}×{item.quantity}
+        </span>
+      </span>
+      <span className="shrink-0 tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
     </div>
   );
 }
@@ -892,6 +939,7 @@ function AddressPicker({
   addresses,
   selectedId,
   quoteOutdated,
+  loadFailed,
   onSelect,
   onCreated,
   onUpdated,
@@ -899,6 +947,8 @@ function AddressPicker({
   addresses: AddressDTO[];
   selectedId: string | null;
   quoteOutdated: boolean;
+  /** Danh sách không tải được: đã có dòng lỗi riêng, không được nói "chưa thêm địa chỉ". */
+  loadFailed: boolean;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
   onUpdated: (a: AddressDTO) => void;
@@ -908,6 +958,11 @@ function AddressPicker({
 
   return (
     <div className="mt-2 space-y-2">
+      {addresses.length === 0 && !adding && !loadFailed && (
+        <p data-testid="address-empty" className="text-sm leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-tertiary)]">
+          {fillCopy('checkout.addressEmpty')}
+        </p>
+      )}
       {addresses.map((a) =>
         editingId === a.id ? (
           <AddressForm
@@ -925,7 +980,7 @@ function AddressPicker({
         ) : (
           <div key={a.id}>
           <div className="flex items-start gap-1">
-            <label className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
+            <label data-ds="checkout-address-card" className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
               <input
                 type="radio"
                 name="addr"
@@ -934,15 +989,15 @@ function AddressPicker({
                 className={`${miniRadio} max-md:sr-only`}
               />
               <span className="min-w-0 break-words">
-                <span className="flex flex-wrap items-center gap-x-1.5">
-                  <span className="font-medium text-stone-900 max-md:font-semibold">{a.recipient} · {a.phone}</span>
+                <span className="flex items-center gap-x-1.5 leading-[var(--type-body-sm-lh)] md:flex-wrap md:leading-5">
+                  <span className="min-w-0 truncate font-semibold text-[color:var(--color-text-primary)] md:overflow-visible md:whitespace-normal md:font-medium">{a.recipient} · {a.phone}</span>
                   {a.isDefault && (
-                    <span className="rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-caption font-semibold text-[color:var(--color-action-secondary-fg)]">
+                    <span className="shrink-0 rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-[length:var(--type-label-size)] font-semibold leading-[var(--type-label-lh)] text-[color:var(--color-action-secondary-fg)]">
                       Mặc định
                     </span>
                   )}
                 </span>
-                <span className="block text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
+                <span className="mt-0.5 block text-caption text-[color:var(--color-text-secondary)] md:mt-0 md:text-sm">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
               </span>
             </label>
             <button
@@ -998,7 +1053,7 @@ function AddressPicker({
               setEditingId(null);
               setAdding(true);
             }}
-            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[color:var(--color-text-brand)] hover:underline"
           >
             <span
               aria-hidden="true"
@@ -1009,7 +1064,7 @@ function AddressPicker({
             Thêm địa chỉ mới
           </button>
           {addresses.length > 0 && (
-            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-stone-700 hover:underline max-md:hidden">
+            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-[color:var(--color-text-secondary)] hover:underline max-md:hidden">
               Quản lý sổ địa chỉ
             </Link>
           )}
@@ -1039,7 +1094,7 @@ function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }
   );
 }
 
-// Khối "Sản phẩm (n)" của Mini App (checkout.tsx): ảnh 48px, tên một dòng, phân loại, đơn giá × số lượng, thành tiền. Chỉ hiện ở điện thoại;
+// Khối "Sản phẩm (n)" của Mini App (checkout.tsx): ảnh 48px, tên tối đa hai dòng, phân loại, đơn giá × số lượng, thành tiền. Chỉ hiện ở điện thoại;
 // từ md danh sách chữ trong khung "Đơn hàng" giữ nguyên.
 function MobileItems({
   items,
@@ -1068,7 +1123,7 @@ function MobileItems({
                 <div key={it.id} className="flex items-center gap-2.5">
                   <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{it.productName}</div>
+                    <div className="line-clamp-2 text-sm">{it.productName}</div>
                     {it.variationName && <div className="text-caption text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
                     <div className="text-caption text-[color:var(--color-text-tertiary)]">
                       {formatVnd(it.unitPrice)} × {it.quantity}

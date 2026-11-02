@@ -320,13 +320,39 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(box.querySelector('[role="alert"]')!.textContent).toBe('Mã giảm giá đã hết lượt dùng.');
   });
 
-  it('đã áp mã: chỉ hiện thẻ mã đang dùng, không có dòng mở rộng', async () => {
+  it('đã áp mã: chỉ hiện thẻ mã đang dùng, chưa mở ô nhập khi khách chưa bấm', async () => {
     const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
     mounted.push(r);
     await flush(4);
     expect(r.container.textContent).toContain('WELCOME30');
-    // Thẻ "Thay đổi" chỉ dành cho điện thoại (md:hidden): ở máy tính vẫn không có dòng mở rộng.
-    expect(r.container.querySelector('button[aria-expanded]:not([data-testid="coupon-change"])')).toBeNull();
+    expect(r.container.querySelector('#coupon-panel')).toBeNull();
+  });
+
+  it('máy tính (từ md), đã áp mã: thẻ mã có nút "Đổi mã" riêng, bấm mở đúng ô nhập và danh sách, bấm lại thu gọn (K2)', async () => {
+    state.coupons = [c('A1')];
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    const btn = byText(r.container, 'button', 'Đổi mã')!;
+    expect(btn.closest('div')!.className).toMatch(/\bmax-md:hidden\b/);
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(btn.getAttribute('aria-controls')).toBe('coupon-panel');
+    click(btn);
+    await flush(2);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    expect(panel.hidden).toBe(false);
+    expect(panel.className).not.toMatch(/\bmd:hidden\b/);
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    expect(byText(panel, 'button', 'Bỏ mã đang áp dụng')).not.toBeNull();
+    click(btn);
+    await flush(2);
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(r.container.querySelector('#coupon-panel')).toBeNull();
+  });
+
+  it('chưa áp mã: không có nút "Đổi mã" (đã có dòng "Chọn mã")', async () => {
+    const box = await mount();
+    expect(byText(box, 'button', 'Đổi mã')).toBeNull();
   });
 
   it('điện thoại, đã áp mã: thẻ như Mini App có chip mã, số đã giảm và chữ "Thay đổi"; bấm mở ô nhập, có nút bỏ mã', async () => {
@@ -344,7 +370,6 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     click(card);
     const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
     expect(panel.hidden).toBe(false);
-    expect(panel.className).toMatch(/\bmd:hidden\b/);
     expect(byText(panel, 'button', 'Bỏ mã đang áp dụng')).not.toBeNull();
   });
 
@@ -492,7 +517,7 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
   it('giỏ chưa có mã → áp mã tiết kiệm nhiều nhất, hiện "Đã tự áp" và nút Gỡ', async () => {
     const box = await mountHarness();
     expect(state.applied).toEqual(['GIAM30']);
-    expect(label(box)!.textContent).toBe('Đã tự áp');
+    expect(label(box)!.textContent).toBe('Tubu đã tự áp mã tốt nhất');
     expect(remove(box)!.textContent).toBe('Gỡ');
     expect(box.textContent).toContain('GIAM30');
   });
@@ -557,7 +582,7 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     mounted.pop()!.unmount();
     state.applied = [];
     const box = await mountHarness({ initial: 'GIAM30' });
-    expect(label(box)!.textContent).toBe('Đã tự áp');
+    expect(label(box)!.textContent).toBe('Tubu đã tự áp mã tốt nhất');
     expect(state.applied).toEqual([]);
   });
 

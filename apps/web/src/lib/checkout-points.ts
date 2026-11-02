@@ -1,5 +1,6 @@
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { convertedPointsNote, lockedPointsLabel as coreLockedPointsLabel, pointsSummary as coreSummary } from '@tubutree/app-core/points-lots';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 
 const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 /** Nhóm nghìn kiểu Việt: 1800 → "1.800". Dùng cho mọi số điểm/số lượng hiển thị. */
@@ -64,6 +65,17 @@ export function checkoutPointsOffer(
  */
 export function lockedPointsLabel(quote: { pointsBalance: number; pointsConvertedBalance?: number } | undefined, offer: Pick<CheckoutPointsOffer, 'usable'>): string {
   return coreLockedPointsLabel(quote ? coreSummary(quote).total : offer.usable);
+}
+
+/**
+ * Dòng dưới "Điểm Xanh" khi chưa có điểm dùng được (chưa có báo giá vì chưa chọn địa chỉ, đang tính, hoặc toàn bộ điểm đang giữ).
+ * Quyết định theo SỐ DƯ của khách như Mini (checkoutPoints): lời mời tích điểm chỉ khi số dư bằng 0; còn số dư thì ghi
+ * "Bạn đang có n điểm" (phần bị giữ do `lockNote` nói), không bao giờ mời tích điểm cho người đã có điểm.
+ * Nguồn số dư: báo giá khi đã có, không thì hồ sơ đăng nhập.
+ */
+export function idlePointsLabel(source: { pointsBalance?: number; pointsConvertedBalance?: number } | null | undefined): string {
+  const total = coreSummary({ pointsBalance: source?.pointsBalance ?? 0, pointsConvertedBalance: source?.pointsConvertedBalance }).total;
+  return total > 0 ? coreLockedPointsLabel(total) : fillCopy('checkout.pointsNone');
 }
 
 /**

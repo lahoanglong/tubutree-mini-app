@@ -95,7 +95,7 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
     expect(radio(r, 'Chuyển khoản ngân hàng').checked).toBe(true);
 
     changed = true;
-    click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
+    click([...r.container.querySelectorAll('button')].find((b) => /^Đặt hàng/.test(b.textContent ?? ''))!);
     await flush(10);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
     const region = r.container.querySelector('[aria-label="Sản phẩm trong đơn"]')!;
@@ -118,7 +118,7 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
     const bank = radio(r, 'Chuyển khoản ngân hàng');
     expect(bank.disabled).toBe(true);
     expect(r.container.querySelector(`#${bank.getAttribute('aria-describedby')}`)!.textContent).toBe(BLOCK_REASON);
-    click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
+    click([...r.container.querySelectorAll('button')].find((b) => /^Đặt hàng/.test(b.textContent ?? ''))!);
     await flush(4);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'COD' });
   });
@@ -132,7 +132,7 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
       ],
     });
     const r = await mount();
-    click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
+    click([...r.container.querySelectorAll('button')].find((b) => /^Đặt hàng/.test(b.textContent ?? ''))!);
     await flush(8);
     const items = [...r.container.querySelectorAll('[data-testid="order-success-desktop"] li')].map((li) => li.textContent);
     expect(items).toEqual([expect.stringContaining('TB1 · Tubu Tree giao'), expect.stringContaining('TB2 · Mật ong Linh giao')]);
