@@ -109,6 +109,26 @@ test.describe('Web khách: thanh toán', () => {
     expect(cart.match(/Tạm tính/g)).toHaveLength(1);
   });
 
+  test('1280: khách chưa có địa chỉ, nút Đặt hàng khoá và lý do nằm ngay cạnh nút, trong màn (K2 c)', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'Khung tóm tắt có nút Đặt hàng riêng chỉ từ lg');
+    mockBuyer(api, { wallet: 0, points: 0 });
+    api.get('/me/addresses', []);
+    api.post('/checkout/coupon-previews', { previews: [] });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/thanh-toan');
+    const part = page.locator('[data-mini-part="place-order"]');
+    const place = part.getByRole('button', { name: /^Đặt hàng/ });
+    await expect(place).toBeVisible();
+    await expect(place).toBeDisabled();
+    const reason = part.getByRole('status').filter({ hasText: 'Chọn địa chỉ giao hàng để đặt hàng.' });
+    await expect(reason).toBeVisible();
+    await expect(reason).toBeInViewport({ ratio: 1 });
+    // Khung không dính ở khổ này; lý do nằm sát dưới nút (không cách xa vài trăm px).
+    const [b, r] = await Promise.all([place.boundingBox(), reason.boundingBox()]);
+    expect(r!.y - (b!.y + b!.height)).toBeLessThan(24);
+    expect(r!.y).toBeGreaterThanOrEqual(b!.y + b!.height - 1);
+  });
+
   test('375: thanh toán, giỏ hàng, tài khoản, Kho quà không tràn ngang', async ({ page, api }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer', 'đặt khổ 375 trong một project');
     mockBuyer(api, { wallet: 0, points: 1681 });
