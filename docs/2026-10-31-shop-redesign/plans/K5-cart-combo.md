@@ -41,7 +41,7 @@
 | `apps/api/src/modules/bundles/bundle-read.ts` | `LIVE_SELECT` thêm `title`, `LiveBundle.title` (T1) |
 | `apps/api/src/modules/storefront/combo.service.ts` + spec | `allocateComboDiscountsOwned`, `ComboGroup`, `buildComboGroups`, `computeWithGroups` (T2) |
 | `apps/api/src/modules/cart/cart.service.ts` + spec | `comboGroups` trong `priceCart` (T3) |
-| `apps/api/test/integration-race/cart-combo-equals-quote.race-spec.ts` | khẳng định nhóm = `comboDiscount` = báo giá, DB thật (T4) |
+| `apps/api/test/integration-race/bundle-price-parity.race-spec.ts` (+ 11 race spec khác chỉ thêm `computeWithGroups` vào stub `ComboService`) | khẳng định nhóm = `comboDiscount` = báo giá = đơn, DB thật (T4) |
 | `packages/app-core/src/api/cart.ts`, `commerce/cart-combo.ts` (mới) + spec, `shop-copy.ts`, `shop-copy-budget.ts` | kiểu, chia khối, câu báo bỏ món, chữ (T5) |
 | `apps/miniapp/src/services/shop-api.ts`, `apps/web/src/lib/shop-client.ts`, `apps/miniapp/src/utils/cart-rules.ts` + spec | kiểu client, `recompute` giữ nhóm (T6) |
 | `apps/miniapp/src/pages/cart.tsx` + `cart.spec.tsx` | khối combo + `ConfirmSheet` (T7) |
@@ -131,10 +131,10 @@
 
 ---
 
-### Task 4: Race spec: nhóm = comboDiscount = báo giá (Postgres thật)
+### Task 4: Race spec: nhóm = comboDiscount = báo giá = đơn (Postgres thật)
 
 **Files:**
-- Modify: `apps/api/test/integration-race/cart-combo-equals-quote.race-spec.ts`
+- Modify: `apps/api/test/integration-race/bundle-price-parity.race-spec.ts` (helper `cartQuoteOrder` có sẵn đọc giỏ, báo giá, đơn); stub `ComboService` của 11 race spec khác thêm `computeWithGroups`
 
 **Interfaces:** Consumes Task 3; không tạo gì mới.
 

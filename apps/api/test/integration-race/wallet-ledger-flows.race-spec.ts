@@ -83,7 +83,7 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
           provide: GomdonOrderService,
           useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() },
         },
-        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },
+        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }), computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }) } },
         {
           provide: FlashSaleService,
           useValue: {

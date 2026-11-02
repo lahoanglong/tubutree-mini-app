@@ -79,7 +79,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
           provide: GomdonOrderService,
           useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() },
         },
-        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },
+        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }), computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }) } },
         {
           provide: FlashSaleService,
           useValue: { resolveEffective: jest.fn().mockResolvedValue(new Map()), consumeQuota: jest.fn() },

@@ -71,6 +71,7 @@ describe('Checkout tách đơn theo nơi giao dưới tải song song (real Post
           provide: ComboService,
           useValue: {
             computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }),
+            computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }),
           },
         },
         {

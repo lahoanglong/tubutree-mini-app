@@ -75,7 +75,7 @@ describe('Mã giảm giá gắn sản phẩm Tubu không trừ vào hàng đối
         { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: GomdonOrderService, useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() } },
-        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },
+        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }), computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }) } },
         {
           provide: FlashSaleService,
           useValue: {
