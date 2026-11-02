@@ -376,6 +376,23 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     expect(mocks.setReminder).toHaveBeenCalledTimes(1);
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
+
+  it('phiên đang khôi phục: khôi phục lỗi rồi lần đăng nhập sau cũng không thành thì bỏ Nhắc tôi đã bấm', async () => {
+    mocks.status = 'loading';
+    mocks.fetchUpcoming.mockResolvedValue([{ itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt, reminded: false }]);
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+    renderPage();
+    await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
+    await act(async () => mocks.setStatus('error'));
+    await act(async () => mocks.setStatus('loading'));
+    await act(async () => mocks.setStatus('error'));
+    await act(async () => mocks.setStatus('authenticated'));
+    await waitFor(() => expect(mocks.fetchUpcoming).toHaveBeenCalled());
+    await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' });
+    expect(mocks.setReminder).not.toHaveBeenCalled();
+  });
 });
 
 describe('Trang Giờ vàng: Nhắc tôi khi đã đăng nhập', () => {

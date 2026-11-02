@@ -220,6 +220,26 @@ describe('useAuthStore.login — bấm đăng nhập lúc đang khôi phục phi
     expect(useAuthStore.getState().user?.id).toBe('guest-1');
   });
 
+  it('khôi phục ra khoá (về idle kèm lời máy chủ): login() chờ xong rồi mới thử lại, lời khoá vẫn còn để báo', async () => {
+    const settle = pendingRefresh();
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'z' } as never);
+    mockedLoginZalo.mockRejectedValue(blocked());
+
+    const restoring = useAuthStore.getState().restore();
+    const loggingIn = useAuthStore.getState().login();
+    await flush();
+    const zaloBeforeRestoreDone = mockedLoginZalo.mock.calls.length;
+    settle().fail(blocked());
+    await Promise.all([restoring, loggingIn]);
+
+    expect(zaloBeforeRestoreDone).toBe(0);
+    // Một lần của restore() sau khi refresh bị từ chối, một lần của login() sau khi restore() xong; không có lần nào chạy song song.
+    expect(mockedLoginZalo).toHaveBeenCalledTimes(2);
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBe('Tài khoản đã bị khoá.');
+  });
+
   it('bấm đăng nhập hai lần liền: chỉ một lần đăng nhập', async () => {
     useAuthStore.setState({ user: null, status: 'idle', error: undefined });
     mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
