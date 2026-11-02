@@ -369,6 +369,16 @@ describe('PdpBundles (web): Mua kèm deal sốc', () => {
     expect(c.querySelector('[data-testid="addon-save"]')).toBe(save);
   });
 
+  it('dòng giữ chỗ "Tiết kiệm" theo thang Mini ở điện thoại (chữ 13/20px như Text caption, chỗ giữ 20px), từ md giữ 12/16px', async () => {
+    const c = await mount({ combos: [], addons: TWO_ADDONS });
+    const classes = (c.querySelector('[data-testid="addon-save"]') as HTMLElement).className.split(/\s+/);
+    expect(classes).toContain('max-md:text-[length:var(--type-caption-size)]');
+    expect(classes).toContain('max-md:leading-[var(--type-caption-lh)]');
+    expect(classes).toContain('min-h-5');
+    expect(classes).toContain('md:min-h-4');
+    expect(classes).not.toContain('min-h-4');
+  });
+
   it('thêm: chỉ các món đã chọn (không kèm món chính), rồi bỏ chọn và nhãn nút báo đã thêm', async () => {
     const c = await mount({ combos: [], addons: TWO_ADDONS });
     click(rows(c)[1]!);
