@@ -137,8 +137,9 @@ export class ImageResizeService {
       try {
         await this.registryLoad;
         // Yêu cầu nhập vào lần nạp đã bắt đầu trước khi cờ bật thì chưa thấy ảnh mới: nạp thêm.
-        // Vòng lặp: nhiều yêu cầu cùng nhập lần nạp cũ đều phải đợi lần nạp mới hơn (do yêu cầu khác mở) rồi mới tra.
-        while (this.stale.isStale() || this.registryLoad) {
+        // Nhiều yêu cầu cùng nhập lần nạp cũ: yêu cầu chạy tiếp trước mở lần nạp mới, các yêu cầu sau thấy `registryLoad` và nhập
+        // vào đó. Chỉ chờ thêm MỘT lần nạp (`if`, không lặp): đồng bộ đánh dấu liên tục không giữ được /img lâu hơn hai lần nạp.
+        if (this.stale.isStale() || this.registryLoad) {
           this.registryLoad ??= this.loadRegistry().finally(() => {
             this.registryLoad = null;
           });

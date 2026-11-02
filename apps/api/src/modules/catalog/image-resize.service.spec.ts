@@ -387,5 +387,30 @@ describe('ImageResizeService — ảnh mới từ đồng bộ/đối tác (R-18
     expect([await first, await b, await c]).toEqual([true, true, true]);
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
   });
+
+  it('đồng bộ đánh dấu liên tục trong lúc nạp: một /img chờ tối đa hai lần nạp, không bị giữ tới khi đồng bộ ngừng', async () => {
+    const url = 'https://content.pancake.vn/a.jpg';
+    const prisma = {
+      $queryRaw: jest.fn(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return [{ u: url }];
+      }),
+    };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    const isReg = (u: string) => (svc as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(u);
+    await isReg(url);
+    prisma.$queryRaw.mockClear();
+    const marker = setInterval(() => stale.markStale(), 2);
+    const stop = setTimeout(() => clearInterval(marker), 1000);
+    try {
+      stale.markStale();
+      expect(await isReg(url)).toBe(true);
+      expect(prisma.$queryRaw.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      clearInterval(marker);
+      clearTimeout(stop);
+    }
+  });
 });
 
