@@ -92,6 +92,7 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
     let group: PickerGroup = 'usable';
     let reason: string | null = null;
     let scopeAsReason = false;
+    let minInReason = false;
     if (applied) group = 'applied';
     else if (preview?.eligible) group = 'usable';
     else if (preview) {
@@ -99,7 +100,14 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
       // nên số "mua thêm" tự trừ từ `subtotal` sẽ thấp hơn số thật: giữ nguyên câu của máy chủ, không tự đếm.
       const serverReason = preview.reason?.trim() || null;
       reason = serverReason;
-      group = (serverReason !== null && MIN_ORDER_SENTENCE.test(serverReason)) || (serverReason === null && missing > 0) ? 'short' : 'blocked';
+      const serverMin = serverReason !== null && MIN_ORDER_SENTENCE.test(serverReason);
+      group = serverMin || (serverReason === null && missing > 0) ? 'short' : 'blocked';
+      // Tạm tính trên màn đã đạt ngưỡng mà máy chủ vẫn đòi: máy chủ loại dòng Giờ vàng và trừ phần giảm combo trước khi so đơn tối thiểu, nên
+      // nhắc lại câu "Đơn tối thiểu …" chỉ khiến khách thấy đã đủ mà bị chặn; nói đúng phần không được tính.
+      if (serverMin && coupon.minOrder != null && coupon.minOrder > 0 && ctx.subtotal >= coupon.minOrder) {
+        reason = fillCopy('coupon.minOrderBase', { min: vndShort(coupon.minOrder) });
+        minInReason = true;
+      }
     } else if (scope && ctx.productIds && !scope.some((x) => ctx.productIds!.includes(x.id))) {
       group = 'blocked';
       reason = scopeText;
@@ -115,7 +123,7 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
     const live = voucherView({ ...coupon, claimed: true, ineligible: group === 'short' || group === 'blocked' }, ctx.now);
     // VoucherTicket ẩn nút chính của phiếu hết hạn/đã dùng: đồng hồ máy lệch hay ví lấy từ cache cũ không được lấy mất nút "Bỏ chọn" của mã đang áp.
     const view: VoucherView = applied && (live.state === 'expired' || live.state === 'used' || live.state === 'soldout') ? { ...live, state: 'saved' } : live;
-    const duplicatesMin = reason !== null && MIN_ORDER_SENTENCE.test(reason);
+    const duplicatesMin = minInReason || (reason !== null && MIN_ORDER_SENTENCE.test(reason));
     const condition = [duplicatesMin ? null : view.condition, scopeText && !scopeAsReason ? scopeText : null].filter(Boolean).join(' · ');
     const display = ctx.displayCode?.(coupon.code) ?? null;
     const a = ACTION[group];
@@ -153,14 +161,18 @@ export const offerAmount = (unitPrice: number, quantity: number, isFlash: boolea
 export interface OfferRow<T extends CouponDTO = CouponDTO> {
   coupon: T;
   view: VoucherView;
-  /** "Mua thêm 130k để dùng" khi món đang xem chưa đạt đơn tối thiểu của mã; null khi đủ. */
+  /** usable: dùng được cho món · short: thiếu đơn tối thiểu (mua thêm là dùng) · blocked: món này không được giảm theo mã (số giảm 0). */
+  group: Exclude<PickerGroup, 'applied'>;
+  /** "Mua thêm 130k để dùng" khi món đang xem chưa đạt đơn tối thiểu của mã; lý do máy chủ khi món không được giảm; null khi đủ. */
   reason: string | null;
 }
 
 /**
  * Ví mã trong sheet Ưu đãi của trang sản phẩm, xếp theo mức có lợi cho món đang xem (`amount` = giá × số lượng): mã đủ điều kiện trước
- * (giảm tiền nhiều trước, freeship sau vì số tiền phụ thuộc phí giao), mã chưa đủ sau (thiếu ít trước, kèm "Mua thêm … để dùng").
- * Mã vẫn là `saved` và chép được: khách còn có thể mua thêm món khác trong cùng đơn.
+ * (giảm tiền nhiều trước, freeship sau vì số tiền phụ thuộc phí giao), mã chưa đủ sau (thiếu ít trước, kèm "Mua thêm … để dùng"), mã món này
+ * không được giảm cuối. Mã chưa đủ vẫn là `saved` và chép được: khách còn có thể mua thêm món khác trong cùng đơn. Mã không có đơn tối thiểu mà
+ * `amount` là 0 (món đang Giờ vàng, máy chủ không giảm thêm theo mã) bị máy chủ chặn bằng COUPON_ZERO_DISCOUNT_REASON, nên là `ineligible`
+ * kèm lý do; FREESHIP không tính theo tiền hàng nên vẫn dùng được.
  */
 export function offerRows<T extends CouponDTO>(
   coupons: readonly T[],
@@ -168,11 +180,14 @@ export function offerRows<T extends CouponDTO>(
 ): OfferRow<T>[] {
   const built = coupons.map((coupon, index) => {
     const missing = shortfall(coupon, o.amount);
+    const nothing = missing === 0 && o.amount <= 0 && coupon.type !== 'FREESHIP';
+    const group: OfferRow['group'] = nothing ? 'blocked' : missing > 0 ? 'short' : 'usable';
     return {
       row: {
         coupon,
-        view: { ...voucherView({ ...coupon, claimed: true }, o.now), code: o.displayCode?.(coupon.code) ?? coupon.code },
-        reason: missing > 0 ? needMore(missing) : null,
+        view: { ...voucherView({ ...coupon, claimed: true, ineligible: nothing }, o.now), code: o.displayCode?.(coupon.code) ?? coupon.code },
+        group,
+        reason: nothing ? fillCopy('coupon.zeroDiscount') : missing > 0 ? needMore(missing) : null,
       } as OfferRow<T>,
       index,
       missing,
@@ -180,6 +195,11 @@ export function offerRows<T extends CouponDTO>(
       end: endTime(coupon),
     };
   });
-  built.sort((a, b) => Number(a.missing > 0) - Number(b.missing > 0) || (a.missing > 0 ? a.missing - b.missing : b.gain - a.gain || a.end - b.end) || a.index - b.index);
+  built.sort(
+    (a, b) =>
+      GROUP_RANK[a.row.group] - GROUP_RANK[b.row.group] ||
+      (a.row.group === 'short' ? a.missing - b.missing : a.row.group === 'usable' ? b.gain - a.gain || a.end - b.end : 0) ||
+      a.index - b.index,
+  );
   return built.map((b) => b.row);
 }

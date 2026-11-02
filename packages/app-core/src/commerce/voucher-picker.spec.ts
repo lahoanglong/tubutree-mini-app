@@ -96,10 +96,18 @@ describe('pickerRows: nhãn nút, lý do, mức giảm', () => {
     expect(row.reason).not.toContain('Mua thêm');
   });
 
-  it('máy chủ chặn câu đơn tối thiểu dù tiền hàng đủ (hàng Giờ vàng không tính): vẫn "Chưa đủ" kèm câu máy chủ, bỏ dòng điều kiện trùng', () => {
+  it('máy chủ chặn câu đơn tối thiểu dù tạm tính đã đủ (máy chủ không tính hàng Giờ vàng, trừ combo): vẫn "Chưa đủ" nhưng nói đúng vì sao, bỏ dòng điều kiện trùng', () => {
     const row = pickerRows([c('GV', { minOrder: 199_000 })], ctx({ subtotal: 250_000, previews: previewMap(preview('GV', { eligible: false, reason: MIN_SENTENCE })) }))[0]!;
-    expect(row).toMatchObject({ group: 'short', label: 'Chưa đủ', reason: MIN_SENTENCE });
+    expect(row).toMatchObject({ group: 'short', action: 'short', label: 'Chưa đủ', reason: 'Đơn tối thiểu 199k không tính hàng Giờ vàng và phần giảm combo' });
+    expect(row.reason).not.toContain('để dùng mã này');
     expect(row.view.condition).toBe('');
+  });
+
+  it('biên của đơn tối thiểu: tạm tính đúng bằng ngưỡng đã "đủ" nên nói lý do Giờ vàng, thiếu một đồng thì giữ nguyên câu máy chủ', () => {
+    const coupon = c('EDGE', { minOrder: 199_000 });
+    const server = previewMap(preview('EDGE', { eligible: false, reason: MIN_SENTENCE }));
+    expect(pickerRows([coupon], ctx({ subtotal: 199_000, previews: server }))[0]!.reason).toBe('Đơn tối thiểu 199k không tính hàng Giờ vàng và phần giảm combo');
+    expect(pickerRows([coupon], ctx({ subtotal: 198_999, previews: server }))[0]!.reason).toBe(MIN_SENTENCE);
   });
 
   it('máy chủ chặn vì lý do khác: giữ nguyên câu, điều kiện vẫn hiện một lần', () => {
@@ -126,7 +134,7 @@ describe('pickerRows: nhãn nút, lý do, mức giảm', () => {
   it('câu đơn tối thiểu của máy chủ chỉ bỏ dòng "Đơn từ …", mã gắn sản phẩm vẫn nói chỉ áp cho sản phẩm nào', () => {
     const scoped = c('GCHIA', { minOrder: 200_000, products: [{ id: 'p1', name: 'Hạt chia' }] });
     const row = pickerRows([scoped], ctx({ subtotal: 300_000, productIds: ['p1', 'p2'], previews: previewMap(preview('GCHIA', { eligible: false, reason: 'Đơn tối thiểu 200.000đ để dùng mã này.' })) }))[0]!;
-    expect(row).toMatchObject({ group: 'short', reason: 'Đơn tối thiểu 200.000đ để dùng mã này.' });
+    expect(row).toMatchObject({ group: 'short', reason: 'Đơn tối thiểu 200k không tính hàng Giờ vàng và phần giảm combo' });
     expect(row.view.condition).toBe('Chỉ áp cho Hạt chia');
   });
 
@@ -234,6 +242,29 @@ describe('offerRows: sheet Ưu đãi ở trang sản phẩm', () => {
       { amount: 100_000, now: NOW },
     );
     expect(rows.map((r) => r.coupon.code)).toEqual(['B', 'A', 'NEAR', 'FAR']);
+  });
+});
+
+describe('offerRows: món đang Giờ vàng (số giảm = 0)', () => {
+  const NOTHING = 'Không có sản phẩm nào trong đơn được giảm theo mã này';
+  const wallet = [c('A20'), c('FREE', { type: 'FREESHIP', value: 0 }), c('MIN', { minOrder: 199_000 })];
+
+  it('mã không đơn tối thiểu mà món không được giảm: không dùng được, kèm lý do máy chủ; freeship vẫn dùng được; mã có đơn tối thiểu vẫn "Mua thêm"', () => {
+    const rows = offerRows(wallet, { amount: offerAmount(250_000, 1, true), now: NOW });
+    expect(rows.map((r) => r.coupon.code)).toEqual(['FREE', 'MIN', 'A20']);
+    expect(rows.map((r) => r.group)).toEqual(['usable', 'short', 'blocked']);
+    const a20 = rows[2]!;
+    expect(a20.reason).toBe(NOTHING);
+    expect(a20.view.state).toBe('ineligible');
+    expect(rows[0]).toMatchObject({ reason: null });
+    expect(rows[0]!.view.state).toBe('saved');
+    expect(rows[1]).toMatchObject({ reason: 'Mua thêm 199k để dùng' });
+    expect(rows[1]!.view.state).toBe('saved');
+  });
+
+  it('món giá thường: mã không đơn tối thiểu vẫn dùng được, không lý do', () => {
+    const rows = offerRows(wallet, { amount: 120_000, now: NOW });
+    expect(rows.find((r) => r.coupon.code === 'A20')).toMatchObject({ group: 'usable', reason: null });
   });
 });
 

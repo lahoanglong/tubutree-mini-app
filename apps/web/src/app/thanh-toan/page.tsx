@@ -336,6 +336,16 @@ export default function CheckoutPage() {
     },
   });
 
+  // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
+  // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
+  const placePartRef = useRef<HTMLDivElement>(null);
+  const placeButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!place.isError || !window.matchMedia?.('(min-width: 64rem)').matches) return;
+    placePartRef.current?.scrollIntoView({ block: 'nearest' });
+    placeButtonRef.current?.focus({ preventScroll: true });
+  }, [place.isError, place.error]);
+
   if (phase === 'loading') {
     return (
       <Shell>
@@ -622,7 +632,7 @@ export default function CheckoutPage() {
                       checked={attachWaste}
                       onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setAttachWaste(e.target.checked))}
                       disabled={place.isPending}
-                      className="h-6 w-6 shrink-0 accent-forest-600"
+                      className="h-6 w-6 shrink-0 accent-[color:var(--color-action-primary-bg)]"
                     />
                   </label>
                   <div className="mt-2 rounded-control bg-[var(--color-bg-subtle)] p-3 text-caption text-[color:var(--color-text-secondary)]">
@@ -800,17 +810,17 @@ export default function CheckoutPage() {
             </p>
           )}
 
-          {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải, dính đáy khung để màn thấp (1366×768) vẫn thấy nút và lỗi đặt hàng. */}
+          {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang). Từ lg khung "Đơn hàng" không dính và không cuộn riêng (DESIGN.md); chỉ khối dưới đây (dải tổng + nút) dính đáy màn trong khung, để nút và lý do khoá/lỗi đặt hàng nằm sát nhau. */}
           </div>
-          {/* Con trực tiếp của khung cuộn (không nằm trong khối tổng): sticky chỉ trượt trong khối cha của nó. Điện thoại giữ thứ tự và đệm cũ. */}
-          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-[var(--color-bg-surface)] lg:py-4">
-          {/* Bản sao hiển thị của dòng Tổng cộng: khung tóm tắt cuộn được nên dòng gốc có thể trượt khỏi màn, tổng tiền phải luôn nằm cạnh nút Đặt hàng. */}
+          <div ref={placePartRef} data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-[var(--color-bg-surface)] lg:py-4">
+          {/* Bản sao hiển thị của dòng Tổng cộng ở khối tổng phía trên (ẩn từ lg): tổng tiền đi cùng khối dính, luôn nằm cạnh nút Đặt hàng. */}
           <div className="mb-3 hidden justify-between border-t border-[var(--color-border-subtle)] pt-3 font-bold text-[color:var(--color-text-primary)] lg:flex">
             <span>Tổng cộng</span>
             <span>{totalText}</span>
           </div>
           <OrderConsent className="hidden lg:block" />
           <button
+            ref={placeButtonRef}
             type="button"
             onClick={() => place.mutate()}
             disabled={placeDisabled}
@@ -818,6 +828,20 @@ export default function CheckoutPage() {
           >
             {placeLabel}
           </button>
+          {/* Lý do khoá nút từ lg, ngay dưới nút như lời báo lỗi (thanh dính đáy ở điện thoại có vùng riêng, ẩn từ lg; dòng đồng ý điều khoản giữ sát trên nút). Luôn có mặt trong cây, chỉ đổi chữ: vùng gắn cùng lúc với chữ thì đọc màn hình thường không đọc. */}
+          <p
+            role="status"
+            data-testid="place-note-lg"
+            className={barNote ? 'mt-2 hidden text-caption text-[color:var(--color-text-secondary)] lg:block' : 'sr-only'}
+          >
+            {barNote}
+          </p>
+          {/* Giá đổi và giỏ cần sửa đã có banner role="alert" ở đầu trang (xa nút khi cuộn): lời nhắc cạnh nút chỉ để nhìn, không thêm vùng alert thứ hai. */}
+          {(priceChanged || cartIssue !== null) && barError && (
+            <p data-testid="place-error-lg" aria-hidden="true" className="mt-2 hidden text-caption text-danger-fg lg:block">
+              {barError}
+            </p>
+          )}
           {place.isError && !priceChanged && placeCartNotice === null && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>

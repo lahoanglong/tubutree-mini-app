@@ -143,7 +143,9 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     click(rowButton(container));
     await flush();
     const copy = () => Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null;
-    const childrenBefore = dialog()!.querySelectorAll('*').length;
+    // Phần tử con của vùng đọc sr-only (không chiếm chỗ trên màn) không tính: câu chép mã nằm ở đó.
+    const shownCount = () => dialog()!.querySelectorAll('*').length - dialog()!.querySelectorAll('[data-testid="pdp-coupon-live"] *').length;
+    const childrenBefore = shownCount();
     click(copy());
     await flush();
     expect(writeText).toHaveBeenCalledWith('ALL');
@@ -152,7 +154,7 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     expect(dialog()!.contains(toast())).toBe(false);
     // BottomSheet của design system có z-index 1000: thông báo phải nằm trên nó, không thì bị lớp nền che mất.
     expect(toast()!.parentElement!.className).toContain('z-[1100]');
-    expect(dialog()!.querySelectorAll('*').length).toBe(childrenBefore);
+    expect(shownCount()).toBe(childrenBefore);
     writeText.mockRejectedValue(new Error('denied'));
     click(copy());
     await flush();
@@ -184,6 +186,34 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     click(Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
     await flush();
     expect(live.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
+  });
+  it('chép cùng một mã hai lần liền (trong 4 giây): vùng đọc nhận nút chữ mới mỗi lần, trình đọc màn hình nghe lại', async () => {
+    mocks.http.get.mockResolvedValue([coupon('ALL')]);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    click(rowButton(container));
+    await flush();
+    const live = dialog()!.querySelector<HTMLElement>('[data-testid="pdp-coupon-live"]')!;
+    const added: number[] = [];
+    const observer = new MutationObserver((records) => added.push(records.reduce((n, r) => n + r.addedNodes.length, 0)));
+    observer.observe(live, { childList: true, subtree: true, characterData: true });
+    const copy = () => click(Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
+    const text = 'Đã chép mã ALL — mã đã có sẵn trong ví, chọn ở bước thanh toán';
+    copy();
+    await flush();
+    expect(live.textContent).toBe(text);
+    await Promise.resolve();
+    const afterFirst = added.splice(0).reduce((a, b) => a + b, 0);
+    expect(afterFirst).toBeGreaterThan(0);
+    copy();
+    await flush();
+    await Promise.resolve();
+    // Chữ y hệt lần một: nếu DOM không đổi thì trình đọc im; mỗi lần bấm phải có nút mới được gắn vào vùng.
+    expect(live.textContent).toBe(text);
+    expect(added.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+    expect(dialog()!.querySelector('[data-testid="pdp-coupon-live"]')).toBe(live);
+    expect(document.body.querySelectorAll('[role="status"], [role="alert"]')).toHaveLength(1);
+    observer.disconnect();
   });
   it('món đang ở giá Giờ vàng góp 0 vào tiền hàng áp mã (máy chủ không tính dòng Giờ vàng): "Mua thêm" đủ số đơn tối thiểu', async () => {
     mocks.http.get.mockResolvedValue([coupon('BIG', { minOrder: 250000 })]);
