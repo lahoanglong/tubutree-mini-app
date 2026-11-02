@@ -244,7 +244,7 @@ export function CouponBox({
         </button>
       )}
       <div className="rounded-card border border-[color:var(--color-border-subtle)] bg-[color:var(--color-bg-canvas)] p-3">
-        <label htmlFor="coupon-code" className="mb-2 block text-sm font-medium text-[color:var(--color-text-secondary)]">
+        <label htmlFor="coupon-code" className="mb-2 block text-label font-semibold text-[color:var(--color-text-secondary)]">
           {fillCopy('coupon.pickManual')}
         </label>
         <div className="flex gap-2">
@@ -263,9 +263,11 @@ export function CouponBox({
           </button>
         </div>
       </div>
+      {(rows.length > 0 || (inSheet && couponsQ.isSuccess)) && (
+        <h3 className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</h3>
+      )}
       {rows.length > 0 && (
         <>
-          <h3 className="mb-2.5 mt-4 text-sm font-medium text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</h3>
           <VoucherPicker rows={shownRows} onUse={(c) => apply.mutate(c)} onRemove={() => drop.mutate()} busy={busy} pendingCode={pendingCode} />
           {!inSheet && rows.length > VISIBLE_COUPONS && (
             <button type="button" onClick={() => setShowAll((v) => !v)} className={`${ui.btnText} mt-1 text-[color:var(--color-text-brand)]`}>
