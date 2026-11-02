@@ -51,6 +51,7 @@ const VARIATIONS = [
   { id: 'v1', stock: 0 },
   { id: 'v2', stock: 4 },
 ];
+const COUPON_PRODUCT = { slug: 'dau-goi', basePrice: 150000, salePrice: null, variations: [{ id: 'v1', retailPrice: 150000, salePrice: null }, { id: 'v2', retailPrice: 150000, salePrice: null }] };
 const coupon = (code: string, over: Record<string, unknown> = {}) => ({ code, type: 'AMOUNT', value: 20000, minOrder: null, maxDiscount: null, endAt: '2026-12-01', ...over });
 
 let mounted: Rendered[] = [];
@@ -113,7 +114,7 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
 
   it('có mã dùng được cho sản phẩm này: dòng Ưu đãi ghi số mã; mã chung và mã gắn đúng sản phẩm tính, mã của sản phẩm khác thì không', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 100000 }), coupon('MINE', { products: [{ id: 'p1', name: 'a' }] }), coupon('OTHER', { products: [{ id: 'p2', name: 'b' }] })]);
-    const { container } = mount(<PdpCoupons productId="p1" />);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     expect(mocks.http.get).toHaveBeenCalledWith('/me/coupons');
     const row = rowButton(container);
@@ -125,7 +126,7 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
   });
   it('bấm dòng mở hộp thoại "Mã giảm giá" có mỗi mã một nút "Sao chép" và đúng điều kiện đơn tối thiểu', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 100000 }), coupon('MINE', { products: [{ id: 'p1', name: 'a' }] })]);
-    const { container } = mount(<PdpCoupons productId="p1" />);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     click(rowButton(container));
     await flush();
@@ -135,32 +136,70 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     expect(d.textContent).toContain('ALL');
     expect(d.textContent).toContain('Đơn từ 100k');
   });
-  it('chép mã và báo mã đã có sẵn trong ví; không chép được thì cho khách tự ghi mã', async () => {
+  it('chép mã và báo bằng thông báo nổi (như snackbar của Mini App), không viết thêm dòng trong hộp thoại làm hộp cao lên; không chép được thì cho khách tự ghi mã', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
-    const { container } = mount(<PdpCoupons productId="p1" />);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     click(rowButton(container));
     await flush();
     const copy = () => Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null;
+    const heightBefore = dialog()!.innerHTML.length;
     click(copy());
     await flush();
     expect(writeText).toHaveBeenCalledWith('ALL');
-    expect(dialog()!.querySelector('[role="status"]')!.textContent).toContain('Đã chép mã ALL');
+    const toast = () => document.body.querySelector('[role="status"]');
+    expect(toast()!.textContent).toBe('Đã chép mã ALL — mã đã có sẵn trong ví, chọn ở bước thanh toán');
+    expect(dialog()!.contains(toast())).toBe(false);
+    // BottomSheet của design system có z-index 1000: thông báo phải nằm trên nó, không thì bị lớp nền che mất.
+    expect(toast()!.parentElement!.className).toContain('z-[1100]');
+    expect(dialog()!.querySelector('[role="status"]')).toBeNull();
+    expect(dialog()!.innerHTML.length).toBe(heightBefore);
     writeText.mockRejectedValue(new Error('denied'));
     click(copy());
     await flush();
-    expect(dialog()!.querySelector('[role="status"]')!.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
+    expect(toast()!.textContent).toBe('Mã của bạn: ALL — chọn ở bước thanh toán');
+  });
+  it('xếp mã theo lợi cho món đang xem: mã đủ điều kiện trước, mã còn thiếu đơn tối thiểu sau và ghi "Mua thêm … để dùng"', async () => {
+    mocks.http.get.mockResolvedValue([coupon('BIG', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 250000 }), coupon('K20')]);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    click(rowButton(container));
+    await flush();
+    const codes = Array.from(dialog()!.querySelectorAll('[data-testid="voucher-code"]')).map((el) => el.textContent);
+    expect(codes).toEqual(['K20', 'BIG']);
+    expect(dialog()!.textContent).toContain('Mua thêm 100k để dùng');
+    expect(dialog()!.textContent).not.toContain('Đơn tối thiểu');
+  });
+  it('đổi số lượng thì tiền hàng đổi: đủ đơn tối thiểu rồi thì hết dòng "Mua thêm"', async () => {
+    mocks.http.get.mockResolvedValue([coupon('BIG', { minOrder: 250000 })]);
+    function Qty() {
+      const sel = usePdpSelection();
+      return <button type="button" data-testid="qty2" onClick={() => sel?.setQuantity(2)} />;
+    }
+    const { container } = mount(
+      <>
+        <Qty />
+        <PdpCoupons productId="p1" product={COUPON_PRODUCT} />
+      </>,
+    );
+    await flush();
+    click(rowButton(container));
+    await flush();
+    expect(dialog()!.textContent).toContain('Mua thêm 100k để dùng');
+    click(container.querySelector('[data-testid="qty2"]'));
+    await flush();
+    expect(dialog()!.textContent).not.toContain('Mua thêm');
   });
   it('khách chưa đăng nhập không có ví mã: không gọi API, không hiện', async () => {
     mocks.phase = 'guest';
-    const { container } = mount(<PdpCoupons productId="p1" />);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     expect(mocks.http.get).not.toHaveBeenCalled();
     expect(container.innerHTML).toBe('');
   });
   it('không có mã nào dùng được: không có dòng Ưu đãi', async () => {
     mocks.http.get.mockResolvedValue([coupon('OTHER', { products: [{ id: 'p2', name: 'b' }] })]);
-    const { container } = mount(<PdpCoupons productId="p1" />);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     expect(container.innerHTML).toBe('');
   });
@@ -176,10 +215,10 @@ describe('đường kẻ dưới hàng thông tin: chỉ giữa các hàng, hàn
   });
   it('hàng "Ưu đãi ›" có đường kẻ khi sau nó còn hàng Vận chuyển (mặc định), không có khi nó là hàng cuối (divider=false)', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
-    const withNext = mount(<PdpCoupons productId="p1" />);
+    const withNext = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
     await flush();
     expect(hasLine(row(withNext.container, 'Ưu đãi'))).toBe(true);
-    const last = mount(<PdpCoupons productId="p1" divider={false} />);
+    const last = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} divider={false} />);
     await flush();
     expect(hasLine(row(last.container, 'Ưu đãi'))).toBe(false);
   });
