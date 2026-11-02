@@ -71,7 +71,7 @@
 
 ### Task 2: BRAND — "Nhãn hàng" thành "Thương hiệu"
 
-**Files:** mini `i18n/vi.ts` (`badgeBrand`), `pages/brand-owner.tsx`, `pages/profile.tsx`; web `chu-thuong-hieu/layout.tsx`, `account/account-menu.ts`, `brand-owner/brand-owner-hub.tsx`, `lib/brand-owner-view.ts`, `lib/storefront-badge.ts`; test: `storefront-badge.spec.ts`, `storefront-view.spec.tsx`, `profile-brand-owner.spec.tsx`, `brand-owner.spec.tsx` (mini), `hub.spec.tsx`, `chu-thuong-hieu/page.spec.tsx`, `page-titles.spec.ts`, `account-menu.spec.ts` (web), `apps/e2e/tests/features.miniapp.spec.ts`, `apps/e2e/tests/pro.web.spec.ts`. Mới: `packages/app-core/src/client-copy.ts` (Task 4 tạo; Task 2 dùng chuỗi trực tiếp rồi gom ở Task 4).
+**Files:** mini `i18n/vi.ts` (`badgeBrand`), `pages/brand-owner.tsx`, `pages/profile.tsx`; web `chu-thuong-hieu/layout.tsx`, `account/account-menu.ts`, `brand-owner/brand-owner-hub.tsx`, `lib/brand-owner-view.ts`, `lib/storefront-badge.ts`; test: `storefront-badge.spec.ts`, `storefront-view.spec.tsx`, `profile-brand-owner.spec.tsx`, `brand-owner.spec.tsx` (mini), `hub.spec.tsx`, `chu-thuong-hieu/page.spec.tsx`, `page-titles.spec.ts`, `account-menu.spec.ts` (web), `apps/e2e/tests/features.miniapp.spec.ts`, `apps/e2e/tests/pro.web.spec.ts`. Mới: `packages/app-core/src/client-copy.ts` và `client-copy.spec.ts` (Task 2 tạo với `BRAND_OWNER_TITLE`, `BRAND_BADGE`; Task 4 thêm phần còn lại).
 
 - [ ] **Step 1:** xoá dòng `USE.brand` khỏi EXEMPT, chạy spec: FAIL 11 chỗ.
 - [ ] **Step 2:** đổi "Quản lý nhãn hàng" thành "Quản lý thương hiệu", "Nhãn hàng trên Tubu Tree" thành "Thương hiệu trên Tubu Tree", "Đăng nhập để quản lý nhãn hàng của bạn." thành "Đăng nhập để quản lý thương hiệu của bạn.", "Tài khoản này không có quyền quản lý nhãn hàng." thành "Tài khoản này không có quyền quản lý thương hiệu."; sửa test/e2e khớp. Mô tả test (`it('...')`) nói "nhãn hàng" giữ nguyên nếu không khớp chữ hiển thị.
@@ -88,7 +88,7 @@
 ### Task 4: Chữ dùng chung `client-copy.ts` và VOICE
 
 **Files:**
-- Create: `packages/app-core/src/client-copy.ts`, `packages/app-core/src/client-copy.spec.ts`.
+- Create (đã có từ Task 2, Task 4 mở rộng): `packages/app-core/src/client-copy.ts`, `packages/app-core/src/client-copy.spec.ts`.
 - Modify (dùng hằng): mini `error-boundary.tsx`, `i18n/vi.ts`, `pages/{about,bank-payment,dealer,edit-profile,notifications,order-detail,cashback}.tsx`, `components/storefront-pickers.tsx`, `utils/refund-rules.ts`, `pages/profile.tsx`, `pages/brand-owner.tsx`; web `app/{error,global-error}.tsx`, `app/gioi-thieu/about-view.tsx`, `app/dang-nhap/callback/page.tsx`, `app/hoan-tien/page.tsx`, `app/merchant/page.tsx`, `app/tai-khoan/{don-hang/[code]/order-actions,don-hang/[code]/order-extras,don-hang/page,ho-so/page,orders-section,thong-bao/page,vi-tubu/page}.tsx`, `app/thanh-toan/bank-transfer-panel.tsx`, `components/ui/error-state.tsx`, `components/affiliate/{ctv-order-copy.ts,storefront-sheets.tsx}`, `components/dealer/{dealer-apply,price-tab}.tsx`, `lib/{auth-context.tsx,checkout-rules.ts,client-api.ts,customer-refunds-admin.ts,error-text.ts,home-text.ts,login-errors.ts,loyalty-pos.ts,refund-rules.ts}`; test khớp chữ cũ (xem lệnh grep ở bước 2).
 
 **Interfaces:** Produces (`@tubutree/app-core/client-copy`):
