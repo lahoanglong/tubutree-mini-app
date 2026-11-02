@@ -644,10 +644,7 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
           trustLabel || tier ? (
             <>
               {trustLabel && (
-                <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Sparkles size={12} />
-                  {trustLabel}
-                </Badge>
+                <Badge tone="verified" icon={Sparkles}>{trustLabel}</Badge>
               )}
               {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
             </>
