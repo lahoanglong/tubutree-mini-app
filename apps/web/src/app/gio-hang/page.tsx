@@ -444,7 +444,7 @@ export default function CartPage() {
                   <section
                     key={g.key}
                     aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}
-                    className={`divide-y divide-stone-200 ${ui.card} max-md:space-y-2.5 max-md:divide-y-0 max-md:border-0 max-md:bg-transparent max-md:shadow-none`}
+                    className={`divide-y divide-stone-200 ${ui.card} md:overflow-hidden max-md:space-y-2.5 max-md:divide-y-0 max-md:border-0 max-md:bg-transparent max-md:shadow-none`}
                   >
                     {withHeaders && (
                       <h2 className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-stone-900 max-md:px-0">
