@@ -1,4 +1,7 @@
+import type { CartComboGroup } from '@tubutree/shared-types';
 import type { HttpClient, RequestOptions } from '../http';
+
+export type { CartComboGroup };
 
 export interface CartLine {
   id: string;
@@ -56,6 +59,8 @@ export interface CartSummary {
   subtotal: number;
   /** Giảm giá combo của gian hàng đang ghi công (đã trừ trước khi tính mã); API cũ chưa trả → coi như 0. */
   comboDiscount?: number;
+  /** Các combo đã khớp của giỏ (id, tên, dòng, số giảm); tổng `discount` bằng `comboDiscount`. API cũ chưa trả → coi như rỗng, mọi dòng là dòng lẻ. */
+  comboGroups?: CartComboGroup[];
   /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
   /** Ưu đãi hạng thành viên, tính sau combo và mã (cùng số báo giá checkout trừ); API cũ chưa trả → coi như 0. */
