@@ -86,7 +86,7 @@ describe('VariationSheet: giá Giờ vàng và tiền dòng theo luật máy ch�
   it('API cũ không gửi giới hạn: giá Giờ vàng mọi số lượng, không có ghi chú lẫn dòng giới hạn', () => {
     renderSheet({ flash: flash({ perUserLimit: undefined }), initialQty: 5 });
     expect(buyButton()).toHaveTextContent('Mua ngay · 130.000đ');
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(screen.queryByText(/Tối đa/)).toBeNull();
   });
 
@@ -108,7 +108,7 @@ describe('VariationSheet: giá Giờ vàng và tiền dòng theo luật máy ch�
     );
     expect(buyButton()).toHaveTextContent('Mua ngay · 175.000đ');
     expect(screen.queryByTestId('variation-sheet-flash')).toBeNull();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('chọn phân loại không phải Giờ vàng thì nhãn và ghi chú biến mất', () => {
@@ -172,6 +172,23 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
     other.unmount();
     renderSheet({ mode: 'buy', initialQty: 2 });
     expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
+  });
+
+  it('Mua ngay mở trước khi GET /cart về (hoặc khách chưa đăng nhập, giỏ rỗng): vùng ghi chú đã có chỗ từ lúc mở, giỏ về sau chỉ điền chữ, bảng không cao thêm', () => {
+    const view = renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined });
+    const region = screen.getByRole('status');
+    expect(region.style.minHeight).not.toBe('');
+    expect(region).toBeEmptyDOMElement();
+    view.rerender(
+      <VariationSheet open onClose={() => undefined} mode="buy" productName="Khăn ướt" thumbnail={null} variations={variations} flash={[]} initialId="v1" initialQty={1} busy={false} cartLines={inCart2} onConfirm={vi.fn()} />,
+    );
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region).toHaveTextContent('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+  });
+
+  it('Mua ngay giỏ về rỗng: vùng giữ chỗ vẫn còn (không co lại dưới ngón tay)', () => {
+    renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: [] });
+    expect(screen.getByRole('status').style.minHeight).not.toBe('');
   });
 
   it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {

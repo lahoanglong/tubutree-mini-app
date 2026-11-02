@@ -83,8 +83,9 @@ export function VariationSheet({
   const view = line?.pricing ?? null;
   // Một vùng ghi chú một câu: mất giá Giờ vàng, hoặc ("Mua ngay") giỏ đã có sẵn nên thanh toán cả dòng.
   const note = line ? lineNote(line, shownQty, mode === 'buy') : null;
-  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng, hoặc "Mua ngay" mà giỏ đã có một phân loại nào đó của sản phẩm (đổi chip không làm bảng cao thêm).
-  const reserveNote = line?.allowance != null || (mode === 'buy' && variations.some((v) => inCartQuantity(cartLines, v.id) > 0));
+  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng, hoặc "Mua ngay" (chế độ này luôn giữ). Giữ theo nội dung giỏ thì bảng mở trước khi GET /cart về sẽ cao thêm lúc giỏ về,
+  // và giỏ về rỗng lại co lại, cả hai dưới ngón tay đang bấm; đổi chip cũng không được làm bảng cao thêm. "Thêm vào giỏ" không có câu về giỏ nên không giữ.
+  const reserveNote = line?.allowance != null || mode === 'buy';
 
   return (
     <BottomSheet
