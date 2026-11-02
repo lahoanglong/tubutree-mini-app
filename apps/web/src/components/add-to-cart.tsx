@@ -22,6 +22,7 @@ import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
+import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { usePdpSelection } from './pdp-selection';
 import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
@@ -117,9 +118,11 @@ export default function AddToCart({
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
+  // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước): một request cho các suất của sản phẩm này, chỉ khi đã đăng nhập; chỉ nút, tổng và ghi chú đọc nó.
+  const flashWithAllowance = useFlashAllowance(flash, variations.map((v) => v.id));
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
   // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; "Thêm vào giỏ" ghi phần giỏ tăng (`total`). Giỏ chưa tải hay lỗi thì coi là rỗng.
-  const line = selected ? variationLinePreview(selected, flash, qty, inCartQuantity(cartLines, selected.id)) : null;
+  const line = selected ? variationLinePreview(selected, flashWithAllowance, qty, inCartQuantity(cartLines, selected.id)) : null;
   // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
   const overLimitText = line ? lineNote(line, qty, true) : null;
   const available = (selected?.stock ?? 0) > 0;
@@ -405,7 +408,7 @@ export default function AddToCart({
           productName={productName}
           thumbnail={thumbnail}
           variations={variations}
-          flash={flash}
+          flash={flashWithAllowance}
           initialId={selectedId}
           initialQty={qty}
           cartLines={cartLines}

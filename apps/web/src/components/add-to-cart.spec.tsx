@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   applyCoupon: vi.fn(),
   getProductStock: vi.fn(),
   getActiveFlashSales: vi.fn(),
+  getFlashAllowance: vi.fn(),
   getCart: vi.fn(),
   sheetProps: null as null | { onConfirm: (v: never, qty: number) => void },
 }));
@@ -36,6 +37,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   applyCoupon: mocks.applyCoupon,
   getProductStock: mocks.getProductStock,
   getActiveFlashSales: mocks.getActiveFlashSales,
+  getFlashAllowance: mocks.getFlashAllowance,
   getCart: mocks.getCart,
 }));
 
@@ -67,6 +69,7 @@ beforeEach(() => {
   resetFlashSales();
   mocks.getActiveFlashSales.mockReset().mockResolvedValue([]);
   mocks.getCart.mockReset().mockResolvedValue({ items: [], itemCount: 3 });
+  mocks.getFlashAllowance.mockReset().mockRejectedValue(new Error('404'));
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -1199,5 +1202,68 @@ describe('AddToCart — giỏ đã có sẵn cùng phân loại: thêm giỏ c�
     click(plus(container));
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 480.000đ');
     expect(container.textContent).not.toContain('Giỏ đã có');
+  });
+});
+
+describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn trước (perUserLeft)', () => {
+  const LIMITED = {
+    itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 240000, retailPrice: 300000,
+    salePrice: null, soldCount: 1, quota: 10, perUserLimit: 3, endAt: '2099-10-14T16:00:00.000Z',
+  };
+  const SPENT = 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.';
+  const plus = (c: HTMLElement) => c.querySelector('[data-section="pdp-quantity"] button[aria-label="Tăng số lượng"]');
+  const stickyBuy = (c: HTMLElement) => c.querySelector('button[aria-label^="Mua ngay"]') as HTMLButtonElement;
+  const note = (c: HTMLElement) => c.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent;
+
+  async function open(status = 'authenticated') {
+    mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
+    mocks.auth = { status, initialized: true, user: status === 'authenticated' ? { id: 'u1' } : null };
+    const r = mount();
+    await flush();
+    click(byText(r.container, 'button', /^500ml/));
+    await flush();
+    return r;
+  }
+
+  it('đã dùng hết suất (perUserLeft 0): Thêm vào giỏ và Mua ngay ghi giá thường 300.000đ, ghi chú hết suất; một request cho suất của sản phẩm', async () => {
+    mocks.getFlashAllowance.mockResolvedValue({ items: { f2: { perUserLeft: 0, allowance: 0 } } });
+    const { container } = await open();
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 300.000đ');
+    expect(note(container)).toBe(SPENT);
+    expect(mocks.getFlashAllowance).toHaveBeenCalledTimes(1);
+    expect(mocks.getFlashAllowance).toHaveBeenCalledWith(['f2']);
+  });
+
+  it('đổi số lượng không gọi lại endpoint', async () => {
+    mocks.getFlashAllowance.mockResolvedValue({ items: { f2: { perUserLeft: 0, allowance: 0 } } });
+    const { container } = await open();
+    click(plus(container));
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 900.000đ');
+    expect(mocks.getFlashAllowance).toHaveBeenCalledTimes(1);
+  });
+
+  it('còn 1 suất: chọn 1 giá Giờ vàng; chọn 2 cả dòng giá thường kèm "Bạn còn 1 suất"', async () => {
+    mocks.getFlashAllowance.mockResolvedValue({ items: { f2: { perUserLeft: 1, allowance: 1 } } });
+    const { container } = await open();
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 600.000đ');
+    expect(note(container)).toBe('Bạn còn 1 suất Giờ vàng. Mua 2 thì cả dòng tính giá thường.');
+  });
+
+  it('endpoint lỗi (API cũ): số như trước, nút vẫn bấm được', async () => {
+    const { container } = await open();
+    expect(mocks.getFlashAllowance).toHaveBeenCalled();
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+    expect(addButton(container).disabled).toBe(false);
+    expect(container.textContent).not.toContain(SPENT);
+  });
+
+  it('khách chưa đăng nhập: không gọi endpoint, số như trước', async () => {
+    const { container } = await open('idle');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+    expect(mocks.getFlashAllowance).not.toHaveBeenCalled();
   });
 });
