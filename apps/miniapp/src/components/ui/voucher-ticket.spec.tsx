@@ -193,7 +193,8 @@ describe('VoucherTicket', () => {
     expect(meta.style.getPropertyValue('-webkit-line-clamp') || (meta.style as unknown as Record<string, string>).WebkitLineClamp).toBe('2');
     const code = q('voucher-code')!;
     expect(code.textContent).toBe('NHANLOCXANH2026');
-    expect(code.style.whiteSpace).toBe('nowrap');
+    expect(code.style.whiteSpace).toBe('');
+    expect(code.style.overflowWrap).toBe('anywhere');
     expect(code.style.textOverflow).toBe('');
     expect(meta.contains(code)).toBe(false);
     // Không tổ tiên nào của mã (tới vỏ chip) cắt nội dung: mã không thể bị che bởi line-clamp hay overflow của dòng phụ đề.

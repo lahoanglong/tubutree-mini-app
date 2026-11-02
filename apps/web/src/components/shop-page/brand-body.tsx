@@ -129,7 +129,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                   {b.promotions.length > 0 && (
                     <div className="mt-4" data-testid="brand-vouchers">
                       <SectionHeader title={fillCopy('shop.vouchers')} icon="ticket" />
-                      {/* Phiếu chip chỉ có tiêu đề và điều kiện; mã nằm sau nút Sao chép (dán ở bước thanh toán). */}
+                      {/* Mã in ở hàng riêng của chip để khách đọc và dán được ở bước thanh toán mà không phải mở chi tiết; nút Sao chép nằm cạnh thân chip. */}
                       <ScrollRow label={fillCopy('shop.vouchers')} style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
                         {b.promotions.map((p) => (
                           <VoucherTicket

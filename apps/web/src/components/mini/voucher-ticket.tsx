@@ -70,8 +70,9 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       {v.quota}
     </span>
   );
+  // Chip: mã ở hàng riêng trong thân hẹp (cạnh nút Sao chép), mã admin tới 40 ký tự không có chỗ ngắt nên phải được phép xuống dòng; không cắt "…" vì khách cần đọc đủ mã. Ticket giữ nguyên khối ở hàng đáy.
   const codeNode = (showCode || chipCode) && (
-    <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>
+    <span data-testid="voucher-code" style={chipCode ? { overflowWrap: 'anywhere' } : { whiteSpace: 'nowrap' }}>
       {v.code}
     </span>
   );

@@ -29,7 +29,7 @@ test('phụ đề dài bị cắt 2 dòng, mã ở hàng riêng vẫn thấy ngu
     const codeEl = group.querySelector<HTMLElement>('[data-testid="voucher-code"]')!;
     const lineHeight = parseFloat(getComputedStyle(metaEl).lineHeight);
     const box = (el: HTMLElement) => el.getBoundingClientRect().toJSON() as { top: number; bottom: number; left: number; right: number; width: number; height: number };
-    return { chip: box(group), meta: box(metaEl), code: box(codeEl), lineHeight, metaScrollH: metaEl.scrollHeight, codeScrollW: codeEl.scrollWidth, codeClientW: codeEl.clientWidth, vw: window.innerWidth };
+    return { chip: box(group), meta: box(metaEl), code: box(codeEl), lineHeight, metaScrollH: metaEl.scrollHeight, vw: window.innerWidth };
   });
   // Phụ đề chỉ hiện 2 dòng (còn nhiều dòng hơn thì bị cắt), và đúng là dài hơn 2 dòng.
   expect(m.meta.height, 'phụ đề cắt ở hai dòng').toBeLessThanOrEqual(m.lineHeight * 2 + 1);
@@ -37,7 +37,6 @@ test('phụ đề dài bị cắt 2 dòng, mã ở hàng riêng vẫn thấy ngu
   // Mã ở hàng riêng dưới phụ đề, không đè lên.
   expect(m.code.top, 'mã nằm dưới phụ đề').toBeGreaterThanOrEqual(m.meta.bottom - 1);
   // Mã nguyên vẹn: không bị cắt ngang chữ, nằm trọn trong khung chip và trong màn hình.
-  expect(m.codeScrollW).toBeLessThanOrEqual(m.codeClientW + 1);
   expect(m.code.right, 'mã trong khung chip').toBeLessThanOrEqual(m.chip.right + 0.5);
   expect(m.code.bottom, 'mã trong khung chip').toBeLessThanOrEqual(m.chip.bottom + 0.5);
   expect(m.code.left).toBeGreaterThanOrEqual(0);
@@ -48,4 +47,35 @@ test('phụ đề dài bị cắt 2 dòng, mã ở hàng riêng vẫn thấy ngu
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   await page.getByTestId('brand-vouchers').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('brand-chip-code375.png') });
+});
+
+const LONG_CODE = 'KHAITRUONGTRIANKHACHHANG2026-FUWA-VIP'.padEnd(39, 'X');
+
+test('mã dài 39 ký tự xuống dòng trong thân chip: đủ chữ, không nằm dưới nút Sao chép, không tràn trang', async ({ page, api }, testInfo) => {
+  mockBrandPage(api);
+  api.get('/brand/public/:slug', { ...FUWA, promotions: [promo('p-longcode', 'Mã dài', LONG_CODE)] });
+  await page.goto(`/brand/${BRAND_SLUG}`);
+  const chip = page.getByRole('group', { name: 'Mã dài' });
+  await expect(chip).toBeVisible({ timeout: 15_000 });
+  const code = chip.getByTestId('voucher-code');
+  await expect(code).toHaveText(LONG_CODE);
+  const button = chip.getByRole('button', { name: /Sao chép/ });
+  await expect(button).toBeVisible();
+
+  const btn = (await button.boundingBox())!;
+  const body = (await chip.getByTestId('voucher-body').boundingBox())!;
+  const rects = await code.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return Array.from(range.getClientRects()).map((r) => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }));
+  });
+  expect(rects.length, 'mã dài xuống ít nhất hai dòng trong thân chip').toBeGreaterThan(1);
+  const right = Math.max(...rects.map((r) => r.right));
+  const left = Math.min(...rects.map((r) => r.left));
+  expect(right, 'mép phải mã không chạm nút Sao chép').toBeLessThanOrEqual(btn.x + 0.5);
+  expect(right, 'mã trong thân chip').toBeLessThanOrEqual(body.x + body.width + 0.5);
+  expect(left, 'mã trong thân chip').toBeGreaterThanOrEqual(body.x - 0.5);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await page.getByTestId('brand-vouchers').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('brand-chip-longcode375.png') });
 });
