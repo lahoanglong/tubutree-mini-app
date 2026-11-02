@@ -160,14 +160,17 @@ describe('BottomNav (điện thoại)', () => {
     expect(out).not.toContain('border-t');
   });
 
-  it('tab giữa cùng đường chân chữ với các tab khác: cùng cỡ chữ và cùng khoảng cách, chỉ đẩy lên bằng đệm đáy 6px', () => {
+  it('tab giữa cùng đường chân chữ với các tab khác: xếp dọc giống các tab khác (căn giữa, cùng khoảng cách, chừa chỗ 24px cho nút nổi)', () => {
     mocks.ready = () => true;
     const out = render('/');
     const center = /<a[^>]*data-center="true"[^>]*class="([^"]*)"|<a[^>]*class="([^"]*)"[^>]*data-center="true"/.exec(out);
     const cls = (center?.[1] ?? center?.[2])!;
-    expect(cls).toContain('justify-end');
-    expect(cls).toContain('pb-1.5');
+    expect(cls).toContain('justify-center');
+    expect(cls).not.toContain('justify-end');
+    expect(cls).not.toContain('pb-1.5');
     expect(cls).toContain('gap-[3px]');
+    // Ô trống thay chỗ icon: thiếu nó thì nhãn nhảy lên khoảng 13,5px; co lại khi chữ phóng to thì nhãn lệch lên.
+    expect(out).toMatch(/data-center="true"[^>]*>\s*<span aria-hidden="true" class="h-6 shrink-0"/);
   });
 
   it('globals.css ẩn thanh khi có sticky-action-bar', () => {
