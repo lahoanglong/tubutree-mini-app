@@ -107,10 +107,7 @@ export default function FlashSalePage() {
   });
 
   const loginWithNotice = useLoginWithNotice();
-  // Phiên đang khôi phục thì chờ: mở thêm một lần đăng nhập song song chỉ làm hai lời gọi dẫm lên nhau.
-  const login = () => {
-    if (authStatus !== 'loading') void loginWithNotice();
-  };
+  const login = () => void loginWithNotice();
 
   const buyMut = useMutation({
     mutationFn: async (item: FlashSlotItemData) => ({ cart: await addToCart(item.variationId, 1, 'buy_now'), variationId: item.variationId }),
@@ -199,7 +196,7 @@ export default function FlashSalePage() {
 
   const onToggleRemind = (item: FlashSlotItemData) => {
     if (!authed) {
-      if (authStatus !== 'loading' && activeSlot) pendingRemind.current = { intent: { itemId: item.itemId, startAt: activeSlot.startAt }, sawLogin: false };
+      if (activeSlot) pendingRemind.current = { intent: { itemId: item.itemId, startAt: activeSlot.startAt }, sawLogin: false };
       login();
       return;
     }

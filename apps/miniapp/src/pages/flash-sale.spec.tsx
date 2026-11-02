@@ -362,16 +362,19 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
-  it('phiên đang khôi phục (loading): bấm Mua ngay hay Nhắc tôi không mở thêm một lần đăng nhập song song', async () => {
+  it('phiên đang khôi phục (loading): bấm vẫn gọi đăng nhập (cửa hàng tự chờ khôi phục), khôi phục ra phiên thì Nhắc tôi đã bấm được đặt', async () => {
     mocks.status = 'loading';
+    mocks.fetchUpcoming.mockResolvedValue([{ itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt, reminded: false }]);
     serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
     fireEvent.click(screen.getAllByRole('tab')[1]!);
     fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
-    expect(mocks.login).not.toHaveBeenCalled();
+    expect(mocks.login).toHaveBeenCalledTimes(2);
+    await act(async () => mocks.setStatus('authenticated'));
+    await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledWith('c'));
+    expect(mocks.setReminder).toHaveBeenCalledTimes(1);
     expect(mocks.addToCart).not.toHaveBeenCalled();
-    expect(mocks.setReminder).not.toHaveBeenCalled();
   });
 });
 

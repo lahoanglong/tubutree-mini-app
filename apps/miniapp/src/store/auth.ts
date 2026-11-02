@@ -189,6 +189,10 @@ function refreshSession(): Promise<LoginResponse | null> {
   return refreshInFlight;
 }
 
+/** restore() đang chạy: login() chờ nó xong thay vì đăng nhập song song. login() cũng gộp các lần bấm chồng nhau làm một. */
+let restoreInFlight: Promise<void> | null = null;
+let loginInFlight: Promise<void> | null = null;
+
 /**
  * Nâng cấp NGẦM một phiên khách sang Zalo thật khi Zalo giờ đã khả dụng (A7-01) — chạy NỀN sau
  * khi app đã vào được với phiên khách, KHÔNG chặn UI, KHÔNG xin SĐT (không gọi requestZaloPhoneToken()).
@@ -216,9 +220,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // 'loading' ngay từ đầu: app luôn restore() khi mở → tránh nháy màn đăng nhập trước khi restore xong.
   status: 'loading',
 
-  login: async () => {
-    set({ status: 'loading', error: undefined });
-    await silentLogin(false);
+  login: () => {
+    loginInFlight ??= (async () => {
+      // Bấm đăng nhập lúc app còn đang khôi phục phiên: chờ khôi phục xong. Khôi phục ra phiên rồi thì thôi, vì đăng nhập
+      // lại từ đầu song song sẽ ghi đè phiên vừa khôi phục (có khi bằng phiên Khách) và hai bên xoay refresh token dẫm lên nhau.
+      if (restoreInFlight) {
+        await restoreInFlight.catch(() => undefined);
+        if (get().status === 'authenticated') return;
+      }
+      set({ status: 'loading', error: undefined });
+      await silentLogin(false);
+    })().finally(() => {
+      loginInFlight = null;
+    });
+    return loginInFlight;
   },
 
   /**
@@ -262,11 +277,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo, không có thì Khách (im lặng, không sheet SĐT).
       await silentLogin(keepSession);
     })();
+    restoreInFlight = done;
     setAuthReady(done);
     try {
       await done;
     } finally {
       setAuthReady(null);
+      if (restoreInFlight === done) restoreInFlight = null;
     }
   },
 
