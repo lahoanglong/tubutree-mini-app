@@ -210,7 +210,8 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
         <p className="mt-3 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
         {/* Vùng đọc cố định, luôn có mặt và trống lúc mở sheet: thông báo nổi nằm ngoài hộp thoại aria-modal nên trình đọc màn hình không nghe được; sr-only không làm sheet cao thêm. */}
         <p role="status" aria-live="polite" data-testid="pdp-coupon-live" className="sr-only">
-          {notice?.text ?? ''}
+          {/* Khoá theo lần bấm: chép cùng mã hai lần trong 4 giây thì chữ y hệt, React không đổi DOM và trình đọc im lần hai; nút con gắn lại thì lần nào cũng nghe. */}
+          {notice && <span key={notice.id}>{notice.text}</span>}
         </p>
       </BottomSheet>
       <GameNoticeBar notice={notice} overSheet visualOnly />
