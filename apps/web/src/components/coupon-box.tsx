@@ -420,15 +420,26 @@ export function CouponBox({
             <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">
               <Ticket className="h-4 w-4" aria-hidden="true" /> {currentCode}
             </span>
-            <button
-              type="button"
-              onClick={() => drop.mutate()}
-              disabled={busy}
-              aria-label={`Bỏ mã giảm giá ${currentCode}`}
-              className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <span className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                {...panelAria}
+                className="inline-flex min-h-11 items-center gap-0.5 px-2 text-caption font-medium text-[color:var(--color-text-brand)]"
+              >
+                {fillCopy('checkout.changeCode')}
+                <ChevronRight className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => drop.mutate()}
+                disabled={busy}
+                aria-label={`Bỏ mã giảm giá ${currentCode}`}
+                className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </span>
           </div>
           <button
             type="button"
@@ -513,7 +524,7 @@ export function CouponBox({
         </BottomSheet>
       ) : (
         (!currentCode || open) && (
-          <div id="coupon-panel" hidden={!open} className={currentCode ? 'md:hidden' : undefined}>
+          <div id="coupon-panel" hidden={!open}>
             {panelBody}
           </div>
         )

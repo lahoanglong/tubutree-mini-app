@@ -74,6 +74,29 @@ afterEach(() => {
   mounted = [];
 });
 
+describe('/thanh-toan — nút Đặt hàng ở khung tóm tắt (từ lg) ghi số tiền như Mini (K2)', () => {
+  const lgButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-mini-part="place-order"] button')!;
+
+  it('có báo giá: "Đặt hàng · 330.000đ", cùng chữ với nút trên thanh dính', async () => {
+    const c = await mount();
+    expect(lgButton(c).textContent).toBe('Đặt hàng · 330.000đ');
+    expect(lgButton(c).textContent).toBe(barButton(c).textContent);
+  });
+
+  it('chưa có địa chỉ: chỉ "Đặt hàng", khoá, không có số tiền nào', async () => {
+    state.noAddress = true;
+    const c = await mount();
+    expect(lgButton(c).textContent).toBe('Đặt hàng');
+    expect(lgButton(c).disabled).toBe(true);
+  });
+
+  it('báo giá lỗi: chỉ "Đặt hàng", không giữ số tiền cũ', async () => {
+    state.quoteError = new Error('boom');
+    const c = await mount();
+    expect(lgButton(c).textContent).toBe('Đặt hàng');
+  });
+});
+
 describe('/thanh-toan — thanh dính đáy', () => {
   it('chỉ có nút "Đặt hàng · số tiền" đúng báo giá, không có khối Tổng cộng', async () => {
     const c = await mount();
@@ -130,7 +153,7 @@ describe('/thanh-toan — thanh dính đáy', () => {
 
   it('trang vẫn còn nút "Đặt hàng" trong khung tóm tắt cho màn rộng', async () => {
     const c = await mount();
-    const inCard = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng');
+    const inCard = Array.from(c.querySelectorAll('button')).find((b) => /^Đặt hàng/.test(b.textContent ?? ''));
     expect(inCard).toBeDefined();
     expect(inCard!.className).toMatch(/\bhidden\b/);
     expect(inCard!.className).toMatch(/\blg:inline-flex\b/);

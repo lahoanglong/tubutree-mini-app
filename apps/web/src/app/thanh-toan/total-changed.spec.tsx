@@ -39,7 +39,7 @@ const mount = async () => {
   await flush(8);
   return r;
 };
-const placeButton = (r: Rendered) => [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!;
+const placeButton = (r: Rendered) => [...r.container.querySelectorAll('button')].find((b) => /^Đặt hàng/.test(b.textContent ?? ''))!;
 
 beforeEach(() => {
   m.addresses = [NEW_ADDR];

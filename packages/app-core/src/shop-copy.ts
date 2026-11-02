@@ -228,6 +228,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.moreLines': 'Xem thêm {n} sản phẩm',
   'checkout.fewerLines': 'Thu gọn',
   'checkout.placeWith': 'Đặt hàng · {price}',
+  'checkout.changeCode': 'Đổi mã',
   'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)

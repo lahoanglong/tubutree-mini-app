@@ -111,7 +111,10 @@ const mount = async () => {
   return r;
 };
 const btn = (c: HTMLElement, text: string) =>
-  Array.from(c.querySelectorAll('button')).find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined;
+  Array.from(c.querySelectorAll('button')).find((b) => {
+    const label = (b.textContent ?? '').trim();
+    return label === text || (text === 'Đặt hàng' && label.startsWith('Đặt hàng · '));
+  }) as HTMLButtonElement | undefined;
 const voucher = (c: HTMLElement, code: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="Dùng mã ${code}"]`);
 const input = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[name="coupon-code"]');
 const COUPON = { code: 'WELCOME30', type: 'PERCENT', value: 30, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
