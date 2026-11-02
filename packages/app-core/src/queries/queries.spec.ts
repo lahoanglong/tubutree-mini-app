@@ -48,7 +48,6 @@ const cases: Case[] = [
   ['order', (h) => orders.orderQuery(h, 'T1'), ['order', 'T1'], '/orders/T1'],
   ['ordersHomeStrip', (h) => orders.ordersHomeStripQuery(h), ['orders', 'home-strip'], '/orders'],
   ['ordersHomeTodo', (h) => orders.ordersHomeTodoQuery(h), ['orders', 'home-todo'], '/orders/home-todo'],
-  ['activeOrderCount', (h) => orders.activeOrderCountQuery(h), ['orders', 'active-count'], '/orders/active-count'],
   ['purchasedItems', (h) => orders.purchasedItemsQuery(h, 10), ['purchased-items', 10], '/me/purchased-items'],
   ['myReturns', (h) => orders.myReturnsQuery(h), ['my-returns'], '/orders/me/returns'],
   ['myRefunds', (h) => orders.myRefundsQuery(h, 'o1'), ['my-refunds', 'o1'], '/orders/me/refunds'],

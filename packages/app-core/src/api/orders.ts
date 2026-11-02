@@ -113,11 +113,6 @@ export interface HomeTodo {
 /** Thay ba lời GET /orders?limit=1 (chờ thanh toán, đang giao, đang xử lý) ở Trang chủ bằng một. */
 export const fetchHomeTodo = (http: HttpClient) => http.get<HomeTodo>('/orders/home-todo');
 export const fetchOrder = (http: HttpClient, code: string) => http.get<OrderView>(`/orders/${code}`);
-/** Badge tab Đơn hàng. Dữ liệu lạ (vd mock/route khác trả nhầm) → 0 thay vì NaN. */
-export const fetchActiveOrderCount = async (http: HttpClient) => {
-  const body = await http.get<{ count?: unknown }>('/orders/active-count');
-  return typeof body?.count === 'number' ? body.count : 0;
-};
 
 export interface PurchasedItem {
   variationId: string;

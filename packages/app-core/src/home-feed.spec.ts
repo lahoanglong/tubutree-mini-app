@@ -69,7 +69,7 @@ describe('createHomeFeed', () => {
 describe('khối shippingOrders đã bỏ khỏi /home/me', () => {
   // Đúng cho Mini đã phát hành chừng nào take() còn giữ nguyên như bản 45d9dab6d: Mini cũ đóng gói chính hàm này.
   it('Mini cũ đã phát hành vẫn gọi takeMe(shippingOrders): thân mới không có khoá thì null để tự gọi /orders', async () => {
-    fetchMe.mockResolvedValue({ forYou: [{ id: 'p' }], activeOrderCount: { count: 0 } });
+    fetchMe.mockResolvedValue({ forYou: [{ id: 'p' }] });
     feed.arm();
     expect(await feed.takeMe('shippingOrders' as never)).toBeNull();
     expect(await feed.takeMe('forYou')).toEqual([{ id: 'p' }]);
@@ -84,13 +84,30 @@ describe('khối shippingOrders đã bỏ khỏi /home/me', () => {
   });
 });
 
+describe('khối activeOrderCount đã bỏ khỏi /home/me', () => {
+  // Mini đã phát hành (Testing V29 từ 173de56b3) đọc takeMe('activeOrderCount') ?? GET /orders/active-count; API mới không có khoá nên take() trả null và Mini tự gọi /orders/active-count.
+  it('Mini cũ vẫn gọi takeMe(activeOrderCount): thân mới không có khoá thì null để tự gọi /orders/active-count', async () => {
+    fetchMe.mockResolvedValue({ forYou: [{ id: 'p' }], hasOrders: true });
+    feed.arm();
+    expect(await feed.takeMe('activeOrderCount' as never)).toBeNull();
+    expect(await feed.takeMe('forYou')).toEqual([{ id: 'p' }]);
+    expect(fetchMe).toHaveBeenCalledTimes(1);
+  });
+
+  it('/orders/active-count không còn lấy từ khối gộp (null, đi request lẻ)', () => {
+    fetchMe.mockResolvedValue({ forYou: [] });
+    feed.arm();
+    expect(takeHomeRequest(feed, '/orders/active-count', undefined)).toBeNull();
+    expect(fetchMe).not.toHaveBeenCalled();
+  });
+});
+
 describe('takeHomeRequest (web)', () => {
   beforeEach(() => {
     fetchPublic.mockResolvedValue({ publicConfig: { freeshipThreshold: 1 }, flashActive: [{ id: 'f' }], campaigns: [{ id: 'c' }], combos: [{ id: 'cb' }] });
     fetchMe.mockResolvedValue({
       flashUpcoming: [{ id: 'u' }],
       forYou: [{ id: 'p' }],
-      activeOrderCount: { count: 2 },
       purchasedItems: { items: [], nextCursor: null },
       newCustomerOffer: { eligible: true },
       wasteOpenRequestCount: 3,
@@ -103,7 +120,6 @@ describe('takeHomeRequest (web)', () => {
     expect(await takeHomeRequest(feed, '/flash-sales/active', undefined)).toEqual([{ id: 'f' }]);
     expect(await takeHomeRequest(feed, '/flash-sales/upcoming', undefined)).toEqual([{ id: 'u' }]);
     expect(await takeHomeRequest(feed, '/products/for-you', undefined)).toEqual([{ id: 'p' }]);
-    expect(await takeHomeRequest(feed, '/orders/active-count', undefined)).toEqual({ count: 2 });
     expect(await takeHomeRequest(feed, '/me/purchased-items', { limit: 10 })).toEqual({ items: [], nextCursor: null });
     expect(await takeHomeRequest(feed, '/me/new-customer-offer', undefined)).toEqual({ eligible: true });
     expect(await takeHomeRequest(feed, '/waste/me/open-count', undefined)).toEqual({ count: 3 });
