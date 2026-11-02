@@ -15,3 +15,19 @@ export function isLowStock(stock: number): boolean {
 export function stockText(stock: number): string {
   return stock > 0 ? fillTileCopy('stock.left', { n: stock }) : fillTileCopy('stock.out');
 }
+
+export interface CartStockNote {
+  text: string;
+  /** `warning`: sắp hết (`isLowStock`) hoặc đang vượt tồn (chặn thanh toán). `neutral`: chỉ báo vì sao nút + khoá, tồn còn nhiều nên không nhấn màu. */
+  tone: 'warning' | 'neutral';
+}
+
+/**
+ * Dòng tồn kho dưới tên sản phẩm ở giỏ, một luật cho cả hai app (web khổ điện thoại phải giống Mini). Chỉ hiện khi khách đã chạm trần tồn (`quantity === stock`, giải thích
+ * vì sao nút + khoá) hoặc vượt tồn (`quantity > stock`, đang chặn thanh toán); chưa chạm trần thì không có dòng nên hàng giỏ không đổi cao lúc tải. Hết hàng (`stock <= 0`) trả `null`:
+ * chỗ gọi đã có câu hết hàng riêng.
+ */
+export function cartStockNote(quantity: number, stock: number): CartStockNote | null {
+  if (stock <= 0 || quantity < stock) return null;
+  return { text: stockText(stock), tone: quantity > stock || isLowStock(stock) ? 'warning' : 'neutral' };
+}

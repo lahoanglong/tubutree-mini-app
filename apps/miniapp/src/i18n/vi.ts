@@ -233,7 +233,6 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí giao hàng 🌿',
     freeshipReachedTubuOnly: 'Miễn phí giao hàng cho phần hàng Tubu Tree giao',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí giao hàng`,
-    stockLimited: (n: number) => stockText(n),
     outOfStock: 'Sản phẩm đã hết hàng',
     overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
     outOfStockBlocked: (names: string[]) =>

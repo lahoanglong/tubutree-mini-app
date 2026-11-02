@@ -99,6 +99,33 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([]);
   });
 
+  it('chạm trần mà tồn cao (40/40): dòng "Còn 40 sản phẩm" vẫn giải thích nút + khoá nhưng chữ thường, không màu cảnh báo (L5 3)', async () => {
+    state.cart = cartOf([line({ stock: 40, quantity: 40 })]);
+    const { container } = await mount();
+    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Còn 40 sản phẩm')!;
+    expect(note).toBeTruthy();
+    expect(note.className).not.toContain('text-warning-fg');
+    expect(note.className).toContain('--color-text-secondary');
+    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
+  });
+
+  it('chạm trần mà tồn thấp (3/3) và vượt tồn (5 trên tồn 3): cảnh báo; chưa chạm trần (2/5) không có dòng (L5 3)', async () => {
+    const noteOf = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => /^Còn \d+ sản phẩm$/.test(p.textContent ?? ''));
+    state.cart = cartOf([line({ stock: 3, quantity: 3 })]);
+    const low = await mount();
+    expect(noteOf(low.container)!.className).toContain('text-warning-fg');
+    low.unmount();
+    mounted = [];
+    state.cart = cartOf([line({ stock: 3, quantity: 5 })]);
+    const over = await mount();
+    expect(noteOf(over.container)!.className).toContain('text-warning-fg');
+    over.unmount();
+    mounted = [];
+    state.cart = cartOf([line({ stock: 5, quantity: 2 })]);
+    const free = await mount();
+    expect(noteOf(free.container)).toBeUndefined();
+  });
+
   it('còn dư tồn kho: + tăng đúng 1, không bao giờ gửi số lượng 0', async () => {
     const { container } = await mount();
     click(button(container, 'Tăng số lượng Dầu gội bồ kết'));

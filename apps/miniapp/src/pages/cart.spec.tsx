@@ -195,6 +195,37 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(mocks.navigate).not.toHaveBeenCalledWith('/checkout', expect.anything());
   });
 
+  it('chạm trần mà tồn cao (40/40): dòng "Còn 40 sản phẩm" chữ thường, không icon cảnh báo (L5 3)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 40, stock: 40, total: 2_000_000 }] }));
+    renderPage();
+    const note = await screen.findByText('Còn 40 sản phẩm');
+    expect(note.getAttribute('style')).toContain('--color-text-secondary');
+    expect(note.getAttribute('style')).not.toContain('--color-text-warning');
+    expect(note.parentElement!.querySelector('svg')).toBeNull();
+  });
+
+  it('chạm trần mà tồn thấp (3/3): cảnh báo kèm icon; chưa chạm trần (2/40) không có dòng (L5 3)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 3, total: 150_000 }] }));
+    const low = renderPage();
+    const note = await screen.findByText('Còn 3 sản phẩm');
+    expect(note.getAttribute('style')).toContain('--color-text-warning');
+    expect(note.parentElement!.querySelector('svg')).not.toBeNull();
+    low.unmount();
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 2, stock: 40, total: 100_000 }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByText(/^Còn \d+ sản phẩm$/)).toBeNull();
+  });
+
+  it('bấm + tới trần: dòng tồn kho hiện cùng lúc nút + khoá, không đợi máy chủ (L5 3)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 39, stock: 40, total: 1_950_000 }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByText('Còn 40 sản phẩm')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    expect(screen.getByText('Còn 40 sản phẩm')).toBeInTheDocument();
+  });
+
   it('hết hàng hẳn → báo hết hàng thay vì "Còn 0 sản phẩm"', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 1, stock: 0 }] }));
     renderPage();
