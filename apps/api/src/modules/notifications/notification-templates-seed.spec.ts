@@ -119,6 +119,11 @@ describe('seed mẫu thông báo', () => {
     expect(byCode.size).toBe(templates.length);
   });
 
+  it('R-112: thân mẫu tin COMMUNITY_* không có emoji', () => {
+    const withEmoji = templates.filter((t) => t.code.startsWith('COMMUNITY_') && /\p{Extended_Pictographic}/u.test(t.bodyTemplate));
+    expect(withEmoji.map((t) => t.code)).toEqual([]);
+  });
+
   it('Refill đã gỡ: seed không còn mẫu REFILL_*', () => {
     expect(seededTemplates().map((t) => t.code).filter((c) => c.startsWith('REFILL_'))).toEqual([]);
   });
@@ -169,6 +174,7 @@ describe('seed mẫu thông báo', () => {
       'COMMUNITY_POST_LIKED',
       'COMMUNITY_POST_COMMENTED',
       'COMMUNITY_POST_HIDDEN',
+      'COMMUNITY_EVENT_WINNER',
       // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.
       'ORDER_AWAITING_PAYMENT',
       'ORDER_PAYMENT_EXPIRED',
@@ -268,7 +274,7 @@ describe('seed mẫu thông báo', () => {
     it('COMMUNITY_BEST_ANSWER: không nhắc Điểm Xanh khi reward_note rỗng (chạm trần ngày / thưởng 0 / lỗi cấp)', async () => {
       const { svc, bodyOf } = makeSvc('COMMUNITY_BEST_ANSWER');
       await svc.notify('u1', 'COMMUNITY_BEST_ANSWER', { post_id: 'p1', reward_note: '' });
-      expect(bodyOf()).toBe('Câu trả lời của bạn được chọn là hay nhất! 🌿');
+      expect(bodyOf()).toBe('Câu trả lời của bạn được chọn là hay nhất!');
       expect(bodyOf()).not.toContain('Điểm Xanh');
       expect(bodyOf()).not.toContain('{{');
     });
@@ -276,7 +282,7 @@ describe('seed mẫu thông báo', () => {
     it('COMMUNITY_BEST_ANSWER: đã cộng điểm → nêu đúng số điểm do reward_note mang vào', async () => {
       const { svc, bodyOf } = makeSvc('COMMUNITY_BEST_ANSWER');
       await svc.notify('u1', 'COMMUNITY_BEST_ANSWER', { post_id: 'p1', reward_note: ' Bạn nhận thêm 1.000 Điểm Xanh thưởng.' });
-      expect(bodyOf()).toBe('Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm 1.000 Điểm Xanh thưởng.');
+      expect(bodyOf()).toBe('Câu trả lời của bạn được chọn là hay nhất! Bạn nhận thêm 1.000 Điểm Xanh thưởng.');
     });
 
     it('WELCOME_VOUCHER: nói rõ đơn tối thiểu và dùng thuật ngữ "mã giảm giá" (Q-26)', async () => {
