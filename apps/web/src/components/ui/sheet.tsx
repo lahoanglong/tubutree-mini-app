@@ -115,7 +115,7 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
         <div className="flex items-start justify-between gap-2 px-4 pt-1 md:pt-4">
           <div className="min-w-0">
             {title && (
-              <h2 id={titleId} className="font-ui text-base font-bold leading-6 tracking-[-0.01em] text-stone-900">
+              <h2 id={titleId} className="mt-1.5 font-ui text-base font-bold leading-6 tracking-[-0.01em] text-stone-900">
                 {title}
               </h2>
             )}

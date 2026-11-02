@@ -210,7 +210,8 @@ describe('Sheet từ md là hộp thoại giữa màn (K7)', () => {
   it('tiêu đề là tiêu đề khối Inter 16/700, không phải Fraunces 18 (final-critique P2 #2)', () => {
     mount(<Sheet open onClose={() => {}} title="Chọn mã">x</Sheet>);
     const classes = document.querySelector('[role="dialog"] h2')!.className.split(' ');
-    expect(classes).toEqual(expect.arrayContaining(['font-ui', 'text-base', 'font-bold']));
+    // mt-1.5: tâm dòng tiêu đề (24px) trùng tâm nút Đóng 44px (nút lùi -mt-1), giống Mini nơi hàng tiêu đề căn giữa.
+    expect(classes).toEqual(expect.arrayContaining(['mt-1.5', 'font-ui', 'text-base', 'font-bold']));
     expect(classes).not.toContain('font-display');
   });
 });
