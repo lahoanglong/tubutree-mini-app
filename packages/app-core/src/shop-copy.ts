@@ -179,6 +179,8 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.pickManual': 'Nhập mã giảm giá khác',
   'coupon.pickPlaceholder': 'Nhập mã',
   'coupon.pickApply': 'Áp dụng',
+  'coupon.pickLoading': 'Đang tải danh sách mã',
+  'coupon.pickLoadError': 'Không thể tải danh sách mã giảm giá: {reason}',
   'coupon.pickEmptyTitle': 'Bạn chưa có mã giảm giá trong ví',
   'coupon.pickEmptyBody': 'Nhập mã giảm giá ở trên để áp dụng.',
   'coupon.pickUse': 'Dùng',

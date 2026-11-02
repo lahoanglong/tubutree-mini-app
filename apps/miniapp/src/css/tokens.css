@@ -645,6 +645,11 @@ body.with-back-btn .page.page-bleed {
 .tubu-btn.tubu-btn-44 {
   height: 44px;
 }
+/* Ô nhập mã của bảng chọn mã: cao đúng 44 như ô nhập web (min-h-11), bỏ lề 4px của ZaUI để ô và nút "Áp dụng" (tubu-btn-44) thẳng hàng và cùng chiều cao ở hai app. */
+.tubu-field-44 .zaui-input {
+  height: 44px;
+  margin: 0;
+}
 /* Trong StickyActionBar: bỏ min-width 120px của ZaUI (để 2 nút + nút giỏ vừa 320px) và thu đệm
  * ngang 24 → 12px (nhãn có thêm 24px mỗi nút trước khi phải rút gọn). */
 .tubu-sticky-bar .tubu-btn {

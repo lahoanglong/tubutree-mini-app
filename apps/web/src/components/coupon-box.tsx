@@ -16,13 +16,15 @@ import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { EmptyState } from '@/components/mini/empty-state';
+import { Skeleton } from '@/components/mini/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
 import { VoucherPicker } from '@/components/mini/voucher-picker';
 import { ui } from '@/lib/guest-ui';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 /** Số voucher hiện sẵn trong panel tại chỗ (từ md); trong bảng trượt của điện thoại hiện đủ như Mini App. */
 const VISIBLE_COUPONS = 3;
@@ -45,6 +47,11 @@ export function useSettled<T>(value: T, delayMs: number): T {
  */
 export function couponPreviewKey(lines: { id: string; quantity: number; total: number }[]): string {
   return lines.map((l) => `${l.id}:${l.quantity}:${l.total}`).join(',');
+}
+
+/** Sản phẩm của các dòng đang tính cho CouponBox; undefined khi API cũ chưa trả `productId` (không khoá mã theo sản phẩm), như `cartProductIds` của Mini. */
+export function couponProductIds(lines: { productId?: string }[]): string[] | undefined {
+  return lines.every((l) => l.productId) ? lines.map((l) => l.productId!) : undefined;
 }
 
 /** Lời báo mã chưa được áp dụng tự tắt sau ngần này, như snackbar cảnh báo của Mini App. */
@@ -75,6 +82,7 @@ export function CouponBox({
   autoApply = false,
   memoryUserId,
   sheet = false,
+  productIds,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -112,6 +120,8 @@ export function CouponBox({
    * mở trong bảng trượt lên thay vì bung ngay tại chỗ (bung trong thanh dính thì thanh cao quá nửa màn). Chỉ dùng dưới md.
    */
   sheet?: boolean;
+  /** Sản phẩm của các dòng đang tính (`couponProductIds`): mã gắn riêng cho sản phẩm khác thì ghi "Chỉ áp cho …" và khoá nút khi chưa có xem trước. Thiếu thì không kiểm. */
+  productIds?: string[];
 }) {
   const qc = useQueryClient();
   // Điện thoại: danh sách mã nằm trong bảng trượt (đúng VoucherSheet của Mini), không bung tại chỗ làm thanh/khối chứa cao thêm.
@@ -231,7 +241,7 @@ export function CouponBox({
   const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
   const panelAria = inSheet ? ({ 'aria-haspopup': 'dialog' } as const) : ({ 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const);
 
-  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, previews, now: serverNow(), displayCode: autoCouponName });
+  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, productIds, previews, now: serverNow(), displayCode: autoCouponName });
   const appliedRow = rows.find((r) => r.applied);
   const shownRows = inSheet || showAll ? rows : rows.slice(0, VISIBLE_COUPONS);
   // Nút đang quay: mã đang áp, hoặc hàng đang dùng khi đang gỡ; mã nhập tay không có hàng nào khớp.
@@ -259,13 +269,23 @@ export function CouponBox({
             autoComplete="off"
             className={`${ui.field} min-w-0 flex-1`}
           />
-          <button type="button" onClick={() => apply.mutate(code)} disabled={!code.trim() || busy} className={`${ui.btnPrimary} px-4`}>
+          <button type="button" onClick={() => apply.mutate(code)} disabled={!code.trim() || busy} className={`${ui.btnPrimary} min-w-[7.5rem] px-4`}>
             {fillCopy('coupon.pickApply')}
           </button>
         </div>
       </div>
-      {(rows.length > 0 || (inSheet && couponsQ.isSuccess)) && (
+      {(rows.length > 0 || inSheet) && (
         <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
+      )}
+      {/* Bảng trượt như VoucherSheet của Mini: ví đang tải có khung chờ, ví lỗi có "Thử lại"; panel tại chỗ (từ md) không có cả hai như trước. */}
+      {inSheet && couponsQ.isLoading && (
+        <div role="status" aria-label={fillCopy('coupon.pickLoading')} className="flex flex-col gap-2.5">
+          <Skeleton height={72} radius="var(--radius-card)" />
+          <Skeleton height={72} radius="var(--radius-card)" />
+        </div>
+      )}
+      {inSheet && couponsQ.isError && (
+        <ErrorState variant="inline" message={fillCopy('coupon.pickLoadError', { reason: loadErrorText(couponsQ.error) })} onRetry={() => void couponsQ.refetch()} />
       )}
       {rows.length > 0 && (
         <>

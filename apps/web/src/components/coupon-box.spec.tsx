@@ -11,13 +11,19 @@ const state = vi.hoisted(() => ({
   applyError: null as Error | null,
   removeError: null as Error | null,
   applyGate: null as Promise<void> | null,
+  couponsGate: null as Promise<void> | null,
+  couponsError: null as Error | null,
   applyCart: {} as Record<string, unknown>,
   removed: 0,
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getMyCoupons: async () => state.coupons,
+  getMyCoupons: async () => {
+    await state.couponsGate;
+    if (state.couponsError) throw state.couponsError;
+    return state.coupons;
+  },
   getCouponPreviews: (p: unknown) => state.previews(p),
   applyCoupon: async (code: string) => {
     await state.applyGate;
@@ -36,7 +42,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
 import { MD_DOWN } from '@/lib/use-media-query';
 import { syncServerClock } from '@tubutree/app-core/server-clock';
-import { CouponBox, forgetAutoCoupon } from './coupon-box';
+import { CouponBox, couponProductIds, forgetAutoCoupon } from './coupon-box';
 
 const c = (code: string, over: Record<string, unknown> = {}) => ({
   code, type: 'PERCENT', value: 30, minOrder: null, maxDiscount: 50000, endAt: '2030-01-01T00:00:00Z', ...over,
@@ -56,6 +62,8 @@ beforeEach(() => {
   state.applyError = null;
   state.removeError = null;
   state.applyGate = null;
+  state.couponsGate = null;
+  state.couponsError = null;
   state.applyCart = {};
   state.removed = 0;
   state.coupons = [];
@@ -840,6 +848,61 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     } finally {
       syncServerClock(new Date().toISOString());
     }
+  });
+
+  it('ví đang tải: bảng có tiêu đề mục và khung chờ như Mini App, chưa hiện "chưa có mã"', async () => {
+    let release!: () => void;
+    state.couponsGate = new Promise<void>((r) => (release = r));
+    state.coupons = [c('WELCOME30')];
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(dialog().textContent).toContain('Mã giảm giá của bạn');
+    const wait = dialog().querySelector('[role="status"]')!;
+    expect(wait.getAttribute('aria-label')).toBe('Đang tải danh sách mã');
+    expect(wait.querySelectorAll('.tubu-skeleton')).toHaveLength(2);
+    expect(dialog().textContent).not.toContain('Bạn chưa có mã giảm giá trong ví');
+    release();
+    await flush(6);
+    expect(dialog().querySelector('[role="status"]')).toBeNull();
+    expect(card(document.body, 'WELCOME30')).not.toBeNull();
+  });
+
+  it('ví lỗi: bảng có tiêu đề mục, lý do và "Thử lại" tải lại được, không hiện "chưa có mã"', async () => {
+    state.couponsError = new Error('Mạng lỗi');
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(6);
+    expect(dialog().textContent).toContain('Mã giảm giá của bạn');
+    expect(dialog().querySelector('[data-testid="error-message"]')!.textContent).toMatch(/^Không thể tải danh sách mã giảm giá: /);
+    expect(dialog().textContent).not.toContain('Bạn chưa có mã giảm giá trong ví');
+    state.couponsError = null;
+    state.coupons = [c('WELCOME30')];
+    click(byText(dialog(), 'button', 'Thử lại'));
+    await flush(8);
+    expect(card(document.body, 'WELCOME30')).not.toBeNull();
+    expect(dialog().querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('chưa có xem trước, có productIds: mã gắn sản phẩm khác giỏ ghi "Chỉ áp cho …" và khoá nút như Mini App', async () => {
+    state.coupons = [c('MUACHUNG', { type: 'AMOUNT', value: 20000, maxDiscount: null, products: [{ id: 'p-x', name: 'Chậu gốm' }] })];
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} productIds={['p-1', 'p-2']} />);
+    mounted.push(r);
+    await flush(6);
+    click(r.container.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    const li = card(document.body, 'MUACHUNG');
+    expect(li.textContent).toContain('Chỉ áp cho Chậu gốm');
+    const btn = li.querySelector('button')!;
+    expect(btn.textContent).toBe('Không áp dụng');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    click(btn);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('couponProductIds: đủ productId thì trả danh sách, thiếu một dòng (API cũ) thì undefined', () => {
+    expect(couponProductIds([{ productId: 'a' }, { productId: 'b' }])).toEqual(['a', 'b']);
+    expect(couponProductIds([{ productId: 'a' }, {}])).toBeUndefined();
   });
 
   it('ví chưa có mã: bảng nói chưa có mã và mời nhập mã ở trên (cùng chữ với Mini App)', async () => {

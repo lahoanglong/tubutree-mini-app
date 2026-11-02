@@ -153,8 +153,8 @@ export function VoucherSheet({
           <Text variant="label" tone="secondary" as="p" style={{ marginBottom: 8 }}>
             {fillCopy('coupon.pickManual')}
           </Text>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="tubu-field-44" style={{ flex: 1 }}>
               <Input
                 aria-label={fillCopy('coupon.pickManual')}
                 placeholder={fillCopy('coupon.pickPlaceholder')}
@@ -169,6 +169,7 @@ export function VoucherSheet({
               />
             </div>
             <Button
+              className="tubu-btn-44"
               disabled={!customCode.trim() || busy || removeMut.isPending || (applyMut.isPending && !applyingCustom)}
               loading={applyingCustom}
               onPress={handleApplyCustom}
@@ -185,14 +186,14 @@ export function VoucherSheet({
           </Text>
 
           {couponsQ.isLoading ? (
-            <div role="status" aria-label="Đang tải danh sách mã" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div role="status" aria-label={fillCopy('coupon.pickLoading')} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Skeleton height={72} radius="var(--radius-card)" />
               <Skeleton height={72} radius="var(--radius-card)" />
             </div>
           ) : couponsQ.isError ? (
             <ErrorState
               variant="inline"
-              message={`Không thể tải danh sách mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`}
+              message={fillCopy('coupon.pickLoadError', { reason: getLoadErrorMessage(couponsQ.error) })}
               onRetry={() => void couponsQ.refetch()}
             />
           ) : couponsQ.data && couponsQ.data.length > 0 ? (

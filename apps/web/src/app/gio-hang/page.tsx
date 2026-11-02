@@ -11,7 +11,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
-import { CouponBox, couponPreviewKey, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
+import { CouponBox, couponPreviewKey, couponProductIds, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ui, uiBar } from '@/lib/guest-ui';
@@ -210,6 +210,7 @@ export default function CartPage() {
           : { storefrontSlug: ctvSlug, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) }
       }
       previewKey={couponPreviewKey(selectedItems)}
+      productIds={couponProductIds(selectedItems)}
     />
   );
 

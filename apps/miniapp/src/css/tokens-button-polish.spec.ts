@@ -29,4 +29,9 @@ describe('tokens.css: nút Mini', () => {
   it('có lớp chiều cao 44', () => {
     expect(rule('.tubu-btn.tubu-btn-44')).toMatch(/height:\s*44px/);
   });
+  it('ô nhập mã của bảng chọn mã cao 44, không lề, cùng chiều cao nút "Áp dụng" và ô nhập web (K3)', () => {
+    const r = rule('.tubu-field-44 .zaui-input');
+    expect(r).toMatch(/height:\s*44px/);
+    expect(r).toMatch(/margin:\s*0/);
+  });
 });

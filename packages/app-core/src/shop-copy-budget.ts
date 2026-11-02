@@ -183,6 +183,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.pickManual': 22,
   'coupon.pickPlaceholder': 10,
   'coupon.pickApply': 10,
+  'coupon.pickLoading': null,
+  'coupon.pickLoadError': null,
   'coupon.pickEmptyTitle': null,
   'coupon.pickEmptyBody': null,
   'coupon.pickUse': 8,
