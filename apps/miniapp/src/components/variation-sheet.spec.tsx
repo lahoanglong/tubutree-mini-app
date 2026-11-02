@@ -219,7 +219,7 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
   });
 
   it('cartMayArrive đổi khi bảng còn mở (đăng nhập bấm từ chính bảng này, rồi huỷ): chốt theo lúc mở, dải trống không hiện rồi ẩn dưới ngón tay (L5 2)', () => {
-    const base = { mode: 'buy', initialQty: 1, flash: [], cartLines: undefined } as const;
+    const base: SheetProps = { mode: 'buy', initialQty: 1, flash: [], cartLines: undefined };
     const guest = render(sheetElement({ ...base, cartMayArrive: false }));
     expect(screen.queryByRole('status')).toBeNull();
     guest.rerender(sheetElement({ ...base, cartMayArrive: true }));
@@ -234,7 +234,7 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
   });
 
   it('đóng rồi mở lại: cartMayArrive lấy lại theo giá trị lúc mở lần mới (L5 2)', () => {
-    const base = { mode: 'buy', initialQty: 1, flash: [], cartLines: undefined } as const;
+    const base: SheetProps = { mode: 'buy', initialQty: 1, flash: [], cartLines: undefined };
     const view = render(sheetElement({ ...base, cartMayArrive: true }));
     expect(screen.getByRole('status')).toBeInTheDocument();
     view.rerender(sheetElement({ ...base, cartMayArrive: false, open: false }));
