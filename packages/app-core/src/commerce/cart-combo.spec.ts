@@ -115,18 +115,66 @@ describe('cartComboBlocks: chia dòng giỏ thành khối combo + dòng lẻ', (
     });
   });
 
-  describe('nhóm số 0 (giỏ vừa sửa ở máy khách, chờ máy chủ tính lại)', () => {
-    const pending: CartComboGroup = { ...fuwa, discount: 0 };
-
-    it('không ghi "Tiết kiệm 0đ" và không nhắc "được giảm 0đ"; khối giữ nguyên chỗ', () => {
-      const out = cartComboBlocks(lines, [pending]).blocks[0]!;
-      expect(out.lines.map((l) => l.id)).toEqual(['i1', 'i2']);
-      expect(out).toMatchObject({ applied: true, saving: null, hint: null });
-      expect(cartComboBlocks(lines, [pending], new Set(['i1'])).blocks[0]).toMatchObject({ applied: false, saving: null, hint: null });
+  describe('giỏ vừa sửa ở máy khách, chờ máy chủ tính lại (pending): số của nhóm là số lần trước', () => {
+    it('giữ chỗ của số (saving vẫn có chữ, savingPending) nhưng chữ đọc của đầu nhóm không ghi số cũ: đầu nhóm không đổi số dòng khi chờ', () => {
+      const idle = cartComboBlocks(lines, [fuwa]).blocks[0]!;
+      const waiting = cartComboBlocks(lines, [fuwa], new Set(), null, true).blocks[0]!;
+      expect(idle).toMatchObject({ saving: 'Tiết kiệm 65.250đ', savingPending: false });
+      expect(waiting).toMatchObject({ saving: 'Tiết kiệm 65.250đ', savingPending: true, applied: true });
+      expect(comboHeadingText(waiting)).toBe('Combo: Bộ giặt sạch Fuwa3e');
+      expect(comboHeadingText(idle)).toBe('Combo: Bộ giặt sạch Fuwa3e · Tiết kiệm 65.250đ');
     });
 
-    it('chưa biết số nên không báo "mất giảm 0đ" khi xoá món khoá', () => {
-      expect(comboRemovalNotice([pending], 'i1')).toBeNull();
+    it('khối không ghi số (bộ không áp) thì không có gì chờ: savingPending false', () => {
+      expect(cartComboBlocks(lines, [fuwa], new Set(['i1']), null, true).blocks[0]).toMatchObject({ saving: null, savingPending: false });
+    });
+
+    it('nhóm số 0 (dữ liệu lạ): không ghi "Tiết kiệm 0đ", không nhắc "được giảm 0đ"', () => {
+      const zero: CartComboGroup = { ...fuwa, discount: 0 };
+      expect(cartComboBlocks(lines, [zero]).blocks[0]).toMatchObject({ saving: null, savingPending: false, hint: null });
+      expect(cartComboBlocks(lines, [zero], new Set(['i1'])).blocks[0]).toMatchObject({ applied: false, saving: null, hint: null });
+      expect(comboRemovalNotice([zero], 'i1')).toBeNull();
+    });
+
+    it('vẫn báo "mất giảm" bằng số lần trước khi khách bỏ món khoá trong lúc lần sửa trước còn bay', () => {
+      expect(comboRemovalNotice([fuwa], 'i1')).toMatchObject({ discount: 65_250 });
+    });
+  });
+
+  describe('hai bộ chung món, chọn một phần giỏ: đầu nhóm cộng đúng dòng "Giảm giá combo" ở chân', () => {
+    // Bộ A 20% gồm P1, P2, P3; bộ B 10% gồm P1, P2. Giỏ đầy đủ: A lấy cả ba dòng. Bỏ chọn P3 (dòng khoá của A): A hết khớp, máy chủ trả bộ B cho P1 + P2.
+    const A: CartComboGroup = { id: 'collection:a', kind: 'STOREFRONT', title: 'Bộ A', discount: 30_000, lineIds: ['p1', 'p2', 'p3'], keyLineIds: ['p1', 'p2', 'p3'] };
+    const B: CartComboGroup = { id: 'collection:b', kind: 'STOREFRONT', title: 'Bộ B', discount: 10_000, lineIds: ['p1', 'p2'], keyLineIds: ['p1', 'p2'] };
+    const rows = [L('p1'), L('p2'), L('p3')];
+    const deselected = new Set(['p3']);
+    const sum = (blocks: { saving: string | null }[]) =>
+      blocks.reduce((s, b) => s + (b.saving ? Number(b.saving.replace(/\D/g, '')) : 0), 0);
+
+    for (const [name, groups] of [
+      ['giỏ đầy đủ chỉ trả bộ A', [A]],
+      ['giỏ đầy đủ trả cả hai bộ (bộ B không có dòng nào để giữ)', [A, B]],
+    ] as const) {
+      it(`${name}: bộ B có khối riêng với số của phần chọn, bộ A giữ dòng bỏ chọn và nhắc chọn đủ; tổng đầu nhóm = số ở chân`, () => {
+        const { blocks, loose } = cartComboBlocks(rows, groups, deselected, [B]);
+        expect(blocks.map((b) => [b.group.id, b.lines.map((l) => l.id), b.saving, b.hint])).toEqual([
+          ['collection:b', ['p1', 'p2'], 'Tiết kiệm 10.000đ', null],
+          ['collection:a', ['p3'], null, 'Chọn đủ các món để được giảm 30.000đ'],
+        ]);
+        expect(loose).toEqual([]);
+        expect(sum(blocks)).toBe(B.discount);
+        const placed = [...blocks.flatMap((b) => b.lines.map((l) => l.id)), ...loose.map((l) => l.id)].sort();
+        expect(placed).toEqual(['p1', 'p2', 'p3']);
+      });
+    }
+
+    it('chọn cả giỏ (máy chủ trả bộ A): vẫn bộ A giữ cả ba dòng, không có khối B', () => {
+      const { blocks } = cartComboBlocks(rows, [A], new Set(), [A]);
+      expect(blocks.map((b) => [b.group.id, b.lines.map((l) => l.id), b.saving])).toEqual([['collection:a', ['p1', 'p2', 'p3'], 'Tiết kiệm 30.000đ']]);
+    });
+
+    it('máy chủ không trả nhóm nào cho phần chọn: không dựng khối thêm, bộ A nhắc chọn đủ', () => {
+      const { blocks } = cartComboBlocks(rows, [A], deselected, []);
+      expect(blocks.map((b) => [b.group.id, b.lines.map((l) => l.id), b.saving])).toEqual([['collection:a', ['p1', 'p2', 'p3'], null]]);
     });
   });
 });

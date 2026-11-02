@@ -1,12 +1,12 @@
 'use client';
 
-// Nguồn: apps/miniapp/src/components/cart-combo-block.tsx (điện thoại là mặc định; từ md bỏ nền khối, các dòng ngăn bằng đường kẻ như dòng lẻ trong thẻ giỏ, vạch dọc bên trái ghi chỗ bộ bắt đầu và kết thúc)
+// Nguồn: apps/miniapp/src/components/cart-combo-block.tsx (điện thoại là mặc định; từ md bỏ nền khối, các dòng ngăn bằng đường kẻ như dòng lẻ trong thẻ giỏ, vạch dọc bên trái ghi chỗ bộ bắt đầu và kết thúc; vạch là phần tử giả vẽ đè lên lề trái, không chiếm chỗ, để cột ô chọn thẳng hàng với dòng lẻ)
 import type { ReactNode } from 'react';
 import { comboHeadingText, type ComboBlock } from '@tubutree/app-core/commerce/cart-combo';
 import { Heading, Text } from '@/components/mini';
 
 export interface CartComboBlockProps {
-  block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving' | 'hint'>;
+  block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving' | 'savingPending' | 'hint'>;
   /** Cấp tiêu đề tiếp ngay sau tiêu đề trước đó của trang: h3 khi giỏ có tiêu đề nơi giao (h2), nếu không thì h2. */
   headingAs?: 'h2' | 'h3';
   /** Các dòng của bộ. */
@@ -23,7 +23,7 @@ export function CartComboBlock({ block, headingAs = 'h3', children }: CartComboB
     <section
       aria-label={comboHeadingText(block)}
       data-testid="cart-combo-group"
-      className="rounded-[calc(var(--radius-card)+var(--space-inline-sm))] bg-[var(--color-bg-subtle)] p-2 md:rounded-none md:border-l-4 md:border-[color:var(--color-border-strong)] md:bg-transparent md:p-0"
+      className="rounded-[calc(var(--radius-card)+var(--space-inline-sm))] bg-[var(--color-bg-subtle)] p-2 md:relative md:isolate md:rounded-none md:bg-transparent md:p-0 md:before:pointer-events-none md:before:absolute md:before:inset-y-0 md:before:left-0 md:before:z-[1] md:before:w-1 md:before:bg-[color:var(--color-border-strong)]"
     >
       <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-stone-200">
         <div className="bg-[var(--color-bg-subtle)] px-1 md:px-3 md:py-2">
@@ -36,10 +36,10 @@ export function CartComboBlock({ block, headingAs = 'h3', children }: CartComboB
           >
             {block.title}
             {block.saving && (
-              <>
+              <span data-testid="cart-combo-saving" aria-hidden={block.savingPending || undefined} className={block.savingPending ? 'invisible' : undefined}>
                 {' · '}
                 <span className="text-[color:var(--color-text-price-deal)]">{block.saving}</span>
-              </>
+              </span>
             )}
           </Heading>
           {block.hint && (

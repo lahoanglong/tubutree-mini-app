@@ -58,7 +58,7 @@ test.describe('Giỏ web: khối combo', () => {
       const summary = size.width < 768 ? page.getByTestId('sticky-bar') : page.getByTestId('cart-summary-rows');
       await expect(summary.getByText('Giảm giá combo')).toBeVisible();
       await expect(summary.getByText('-65.250đ')).toBeVisible();
-      const color = await page.getByTestId('cart-combo-heading').locator('span').evaluate((el) => getComputedStyle(el).color);
+      const color = await page.getByTestId('cart-combo-saving').locator('span').evaluate((el) => getComputedStyle(el).color);
       expect(color).toBe('rgb(154, 82, 0)');
     });
   }
@@ -107,7 +107,7 @@ test.describe('Giỏ web: khối combo', () => {
   test('1280px: khối không có nền riêng, đầu nhóm là dải nền dịu, các dòng ngăn bằng đường kẻ trong thẻ giỏ, vạch dọc bên trái chạy hết khối', async ({ page, api }) => {
     await openCart(page, api, {}, DESKTOP);
     const m = await group(page).evaluate((g) => {
-      const css = (el: Element) => getComputedStyle(el);
+      const css = (el: Element, pseudo?: string) => getComputedStyle(el, pseudo);
       const head = g.querySelector('[data-testid="cart-combo-heading"]')!.parentElement!;
       const lines = [...g.querySelectorAll('[data-testid="cart-line"]')];
       return {
@@ -115,12 +115,29 @@ test.describe('Giỏ web: khối combo', () => {
         radius: css(g).borderTopLeftRadius,
         headBackground: css(head).backgroundColor,
         lineBorder: css(lines[1]!).borderTopWidth,
-        rail: css(g).borderLeftWidth,
-        railVisible: css(g).borderLeftColor !== 'rgba(0, 0, 0, 0)',
-        railSpansBlock: g.getBoundingClientRect().height >= head.getBoundingClientRect().height + lines.length * lines[0]!.getBoundingClientRect().height,
+        border: css(g).borderLeftWidth,
+        rail: { position: css(g, '::before').position, width: css(g, '::before').width, visible: css(g, '::before').backgroundColor !== 'rgba(0, 0, 0, 0)' },
+        // Vạch cao đúng khối (làm tròn của getComputedStyle: sai số dưới 1px), và khối đủ chỗ cho đầu nhóm + mọi dòng.
+        railSpansBlock:
+          Math.abs(parseFloat(css(g, '::before').height) - g.getBoundingClientRect().height) < 1 &&
+          g.getBoundingClientRect().height >= head.getBoundingClientRect().height + lines.length * lines[0]!.getBoundingClientRect().height - 1,
       };
     });
-    expect(m).toEqual({ background: 'rgba(0, 0, 0, 0)', radius: '0px', headBackground: 'rgb(242, 245, 236)', lineBorder: '1px', rail: '4px', railVisible: true, railSpansBlock: true });
+    expect(m).toEqual({
+      background: 'rgba(0, 0, 0, 0)',
+      radius: '0px',
+      headBackground: 'rgb(242, 245, 236)',
+      lineBorder: '1px',
+      border: '0px',
+      rail: { position: 'absolute', width: '4px', visible: true },
+      railSpansBlock: true,
+    });
+    // Vạch không chiếm chỗ: cột ô chọn của dòng trong bộ thẳng hàng với dòng lẻ cùng thẻ giỏ.
+    const [inBlock, alone] = await Promise.all([
+      page.getByRole('checkbox', { name: 'Chọn Món combo 1 để thanh toán' }).boundingBox(),
+      page.getByRole('checkbox', { name: 'Chọn Món lẻ 1 để thanh toán' }).boundingBox(),
+    ]);
+    expect(inBlock!.x, 'ô chọn dòng trong bộ thẳng cột với dòng lẻ').toBeCloseTo(alone!.x, 0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(DESKTOP.width);
   });
 });

@@ -35,7 +35,7 @@ test.describe('Giỏ Mini App: khối combo', () => {
     await expect(bar.getByText('Giảm giá combo')).toBeVisible();
     await expect(bar.getByText('-65.250đ')).toBeVisible();
     // Số trong đầu nhóm cùng màu deal với giá đang giảm.
-    const color = await page.getByTestId('cart-combo-heading').locator('span').evaluate((el) => getComputedStyle(el).color);
+    const color = await page.getByTestId('cart-combo-saving').locator('span').evaluate((el) => getComputedStyle(el).color);
     expect(color).toBe('rgb(154, 82, 0)');
   });
 
@@ -57,6 +57,31 @@ test.describe('Giỏ Mini App: khối combo', () => {
       await expect(heading).toContainText('Tiết kiệm 123.450.000đ');
     });
   }
+
+  test('375px: bấm + trên món của bộ khi PATCH còn bay: đầu nhóm giữ chiều cao (số ẩn, không bỏ dòng) nên các dòng và nút + bên dưới không nhảy; máy chủ trả thì số hiện lại', async ({ page, api }) => {
+    const routes = await openCart(page, api);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    api.patch('/cart/items/:id', async () => {
+      await gate;
+      return routes.current();
+    });
+    const heading = page.getByTestId('cart-combo-heading');
+    const plus = group(page).getByRole('button', { name: 'Tăng số lượng' }).nth(1);
+    const [h0, p0] = await Promise.all([heading.boundingBox(), plus.boundingBox()]);
+    await group(page).getByRole('button', { name: 'Tăng số lượng' }).first().click();
+    // Giỏ đã sửa tại máy khách (qua debounce) thì dòng "Giảm giá combo" ở chân tắt chờ máy chủ.
+    await expect(page.getByTestId('sticky-bar').getByText('Giảm giá combo')).toHaveCount(0, { timeout: 5_000 });
+    await expect(heading).toHaveAccessibleName('Combo: ' + COMBO_TITLE);
+    const [h1, p1] = await Promise.all([heading.boundingBox(), plus.boundingBox()]);
+    expect(h0!.height, 'đầu nhóm có hai dòng ở 375px, nên số không được bỏ khi chờ').toBeGreaterThan(30);
+    expect(h1!.height, 'đầu nhóm không đổi chiều cao khi chờ máy chủ').toBe(h0!.height);
+    expect(p1!.y, 'nút + của dòng bên dưới không nhảy').toBe(p0!.y);
+    release();
+    await expect(page.getByTestId('sticky-bar').getByText('Giảm giá combo')).toBeVisible();
+    await expect(heading).toHaveText(`Combo: ${COMBO_TITLE} · Tiết kiệm 65.250đ`);
+    expect((await heading.boundingBox())!.height).toBe(h0!.height);
+  });
 
   test('375px: số đo khối (bảng web phải khớp): lề 12, rộng 351, đầu nhóm 16px, khe 8, thẻ dòng cách mép khối 8', async ({ page, api }) => {
     await openCart(page, api);

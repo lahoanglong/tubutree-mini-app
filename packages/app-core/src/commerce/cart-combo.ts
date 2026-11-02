@@ -15,10 +15,14 @@ export interface ComboBlock<L extends { id: string }> {
   title: string;
   /**
    * "Tiết kiệm {số}" chỉ khi bộ áp, khối có đủ mọi dòng mang giảm của nhóm (nhóm tách ở nhiều nơi giao thì mỗi khối không ghi số của cả nhóm) và nhóm
-   * đang có số (giỏ vừa sửa ở máy khách chờ máy chủ tính lại thì số nhóm là 0, không ghi "Tiết kiệm 0đ"). Có giá phần chọn của máy chủ thì số là của phần chọn,
-   * khớp dòng "Giảm giá combo" ở chân.
+   * có số lớn hơn 0 (không ghi "Tiết kiệm 0đ"). Có giá phần chọn của máy chủ thì số là của phần chọn, khớp dòng "Giảm giá combo" ở chân.
    */
   saving: string | null;
+  /**
+   * Giỏ vừa sửa ở máy khách, chờ máy chủ tính lại: `saving` là số máy chủ trả lần trước (có thể đã cũ). Nơi vẽ giữ chỗ của số (ẩn, không đọc) để đầu nhóm
+   * không đổi số dòng mỗi lần bấm +/−, và không đưa số cũ vào chữ đọc của khối (`comboHeadingText`).
+   */
+  savingPending: boolean;
   /** Lời nhắc khi bộ không còn áp vì bỏ chọn món: số khách sẽ được nếu chọn đủ. */
   hint: string | null;
 }
@@ -31,25 +35,38 @@ export interface ComboBlock<L extends { id: string }> {
  * Khối theo thứ tự dòng đầu tiên của nhóm trong `lines`, dòng trong khối theo thứ tự `lines`; nhóm không còn dòng nào trong `lines` bị bỏ. API cũ
  * chưa trả nhóm thì mọi dòng là dòng lẻ, giỏ vẽ như trước.
  * `selection`: nhóm trong giá phần chọn của máy chủ khi khách chỉ chọn một phần giỏ và máy chủ đã trả giá đó; không truyền thì dùng luật khoá với `deselected`.
+ * Nhóm có trong phần chọn mà giỏ đầy đủ không có (hai bộ chung món: bộ đứng trước lấy hết dòng ở giỏ đầy đủ, bỏ chọn một món khoá của nó thì bộ sau mới khớp)
+ * có khối riêng, và dòng của nó chuyển từ nhóm máy chủ không áp cho phần chọn sang khối này: đầu nhóm luôn cộng đúng dòng "Giảm giá combo" ở chân.
+ * `pending`: giỏ vừa sửa ở máy khách, số của nhóm còn là số lần trước (xem `ComboBlock.savingPending`).
  */
 export function cartComboBlocks<L extends { id: string }>(
   lines: readonly L[],
   groups: readonly CartComboGroup[] | undefined,
   deselected: ReadonlySet<string> = new Set(),
   selection?: readonly CartComboGroup[] | null,
+  pending = false,
 ): { blocks: ComboBlock<L>[]; loose: L[] } {
-  const all = groups ?? [];
+  const selected = selection ? new Map(selection.map((g) => [g.id, g])) : null;
+  const known = new Set((groups ?? []).map((g) => g.id));
+  const all = [...(groups ?? []), ...(selection ?? []).filter((g) => !known.has(g.id))];
   const present = new Set(lines.map((l) => l.id));
   const owner = new Map<string, number>();
   all.forEach((g, gi) => {
     for (const id of g.lineIds) if (present.has(id) && !owner.has(id)) owner.set(id, gi);
   });
+  if (selected) {
+    all.forEach((g, gi) => {
+      for (const id of selected.get(g.id)?.lineIds ?? []) {
+        const cur = owner.get(id);
+        if (present.has(id) && cur !== gi && (cur === undefined || !selected.has(all[cur]!.id))) owner.set(id, gi);
+      }
+    });
+  }
   const withLines = new Set(owner.values());
   all.forEach((g, gi) => {
     if (!withLines.has(gi)) return;
     for (const id of g.keyLineIds) if (present.has(id) && !owner.has(id)) owner.set(id, gi);
   });
-  const selected = selection ? new Map(selection.map((g) => [g.id, g])) : null;
   const blocks: ComboBlock<L>[] = [];
   for (const [gi, group] of all.entries()) {
     const own = lines.filter((l) => owner.get(l.id) === gi);
@@ -58,12 +75,14 @@ export function cartComboBlocks<L extends { id: string }>(
     const applied = selected ? !!live : !group.keyLineIds.some((id) => deselected.has(id));
     const complete = group.lineIds.every((id) => owner.get(id) === gi);
     const amount = live?.discount ?? group.discount;
+    const saving = applied && complete && amount > 0 ? fillCopy('cart.comboSaving', { x: vnd(amount) }) : null;
     blocks.push({
       group,
       lines: own,
       applied,
       title: fillCopy('cart.comboTitle', { name: group.title }),
-      saving: applied && complete && amount > 0 ? fillCopy('cart.comboSaving', { x: vnd(amount) }) : null,
+      saving,
+      savingPending: pending && saving !== null,
       hint: !applied && group.discount > 0 ? fillCopy('cart.comboNeedAll', { x: vnd(group.discount) }) : null,
     });
   }
@@ -72,9 +91,9 @@ export function cartComboBlocks<L extends { id: string }>(
   return { blocks, loose: lines.filter((l) => !owner.has(l.id)) };
 }
 
-/** Chữ đầu nhóm cho trình đọc màn hình và kiểm thử: "Combo: {tên} · Tiết kiệm {số}" (không ghi số khi bộ không áp). */
-export function comboHeadingText(block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving'>): string {
-  return block.saving ? `${block.title} · ${block.saving}` : block.title;
+/** Chữ đầu nhóm cho trình đọc màn hình và kiểm thử: "Combo: {tên} · Tiết kiệm {số}" (không ghi số khi bộ không áp hoặc số đang chờ máy chủ tính lại). */
+export function comboHeadingText(block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving' | 'savingPending'>): string {
+  return block.saving && !block.savingPending ? `${block.title} · ${block.saving}` : block.title;
 }
 
 export interface ComboRemovalNotice {
@@ -92,7 +111,7 @@ export interface ComboRemovalNotice {
  */
 export function comboRemovalNotice(groups: readonly CartComboGroup[] | undefined, lineId: string, nextQuantity = 0): ComboRemovalNotice | null {
   if (nextQuantity >= 1) return null;
-  // Nhóm số 0 là nhóm giỏ vừa sửa ở máy khách chờ máy chủ tính lại: chưa biết số nên không báo "mất giảm 0đ" (xoá còn có Hoàn tác).
+  // Số của nhóm là số máy chủ trả lần cuối, giỏ vừa sửa ở máy khách vẫn giữ nó: bỏ món thứ hai khi món đầu còn đang chờ máy chủ vẫn được báo.
   const broken = (groups ?? []).filter((g) => g.discount > 0 && g.keyLineIds.includes(lineId));
   if (broken.length === 0) return null;
   const discount = broken.reduce((sum, g) => sum + g.discount, 0);

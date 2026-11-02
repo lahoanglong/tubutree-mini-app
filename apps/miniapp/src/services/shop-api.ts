@@ -153,6 +153,8 @@ export interface CartSummary {
   comboDiscount?: number;
   /** Các combo đã khớp của giỏ (id, tên, dòng, số giảm); tổng `discount` bằng `comboDiscount`. API cũ chưa trả → coi như rỗng, mọi dòng là dòng lẻ. */
   comboGroups?: CartComboGroup[];
+  /** CHỈ ở máy khách (`recompute`): giỏ vừa sửa, chờ máy chủ tính lại; `comboDiscount` đã về 0 nhưng `comboGroups[].discount` còn số lần trước. Máy chủ không trả trường này. */
+  comboPending?: boolean;
   /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
   /** Ưu đãi hạng thành viên, tính sau combo và mã (cùng số báo giá checkout trừ); API cũ chưa trả → coi như 0. */

@@ -82,41 +82,42 @@ describe('recompute', () => {
     expect(result.freeship).toBe(true);
   });
 
-  describe('nhóm combo (K5): giữ nhóm khi sửa số lượng hay xoá món lẻ, bỏ nhóm khi mất món khoá, số tiền các nhóm luôn bằng comboDiscount', () => {
+  describe('nhóm combo (K5): giữ nhóm khi sửa số lượng hay xoá món lẻ, bỏ nhóm khi mất món khoá, số của nhóm giữ lần trước và giỏ ghi cờ chờ máy chủ', () => {
     const group = { id: 'bundle:b1', kind: 'BUNDLE_PCT' as const, title: 'Bộ Fuwa', discount: 65_250, lineIds: ['i1', 'i2'], keyLineIds: ['i1', 'i2'] };
-    const pending = { ...group, discount: 0 };
     const lines = [line({ id: 'i1' }), line({ id: 'i2' }), line({ id: 'i3' })];
     const cart = summary({ items: lines, comboDiscount: 65_250, comboGroups: [group] });
-    const sum = (c: { comboGroups?: { discount: number }[] }) => (c.comboGroups ?? []).reduce((s, g) => s + g.discount, 0);
 
-    it('đổi số lượng của dòng trong bộ: nhóm ở nguyên chỗ (khối không nhảy mỗi lần bấm +/−), tiền combo và số của nhóm cùng chờ máy chủ', () => {
+    it('đổi số lượng của dòng trong bộ: nhóm ở nguyên chỗ và giữ số lần trước (đầu nhóm không đổi chiều cao mỗi lần bấm +/−), chỉ tiền ở chân chờ máy chủ', () => {
       const result = recompute(cart, lines.map((l) => (l.id === 'i2' ? { ...l, quantity: 3 } : l)), 'i2');
-      expect(result.comboGroups).toEqual([pending]);
+      expect(result.comboGroups).toEqual([group]);
+      expect(result.comboPending).toBe(true);
       expect(result.comboDiscount).toBe(0);
-      expect(sum(result)).toBe(result.comboDiscount);
     });
 
-    it('xoá một món lẻ: nhóm giữ chỗ, số tiền về 0 cùng comboDiscount (đầu nhóm không ghi số cũ khi chân đã tắt dòng giảm)', () => {
+    it('xoá một món lẻ: nhóm giữ chỗ và giữ số (hộp báo bỏ món thứ hai còn biết số sẽ mất), cờ chờ máy chủ bật', () => {
       const result = recompute(cart, lines.filter((l) => l.id !== 'i3'));
-      expect(result.comboGroups).toEqual([pending]);
-      expect(sum(result)).toBe(result.comboDiscount);
+      expect(result.comboGroups).toEqual([group]);
+      expect(result.comboPending).toBe(true);
+      expect(result.comboDiscount).toBe(0);
     });
 
-    it('xoá món khoá của bộ: bộ không còn khớp nên nhóm biến mất', () => {
+    it('xoá món khoá của bộ: bộ không còn khớp nên nhóm biến mất, không còn gì chờ', () => {
       const result = recompute(cart, lines.filter((l) => l.id !== 'i1'));
       expect(result.comboGroups).toEqual([]);
-      expect(sum(result)).toBe(result.comboDiscount);
+      expect(result.comboPending).toBeUndefined();
     });
 
-    it('xoá món mang giảm nhưng không khoá (mục có hai phân loại): nhóm còn, bỏ id đã xoá khỏi lineIds', () => {
+    it('xoá món mang giảm nhưng không khoá (mục có hai phân loại): nhóm còn, bỏ id đã xoá khỏi lineIds, giữ số', () => {
       const g = { ...group, lineIds: ['i1', 'i2', 'i3'], keyLineIds: ['i1'] };
       const out = recompute({ ...cart, comboGroups: [g] }, lines.filter((l) => l.id !== 'i3'));
-      expect(out.comboGroups).toEqual([{ ...g, discount: 0, lineIds: ['i1', 'i2'] }]);
-      expect(sum(out)).toBe(out.comboDiscount);
+      expect(out.comboGroups).toEqual([{ ...g, lineIds: ['i1', 'i2'] }]);
+      expect(out.comboPending).toBe(true);
     });
 
-    it('giỏ từ API cũ không có comboGroups: không lỗi, không tự thêm', () => {
-      expect(recompute(summary({ items: lines }), lines).comboGroups).toBeUndefined();
+    it('giỏ từ API cũ không có comboGroups: không lỗi, không tự thêm nhóm hay cờ', () => {
+      const out = recompute(summary({ items: lines }), lines);
+      expect(out.comboGroups).toBeUndefined();
+      expect(out.comboPending).toBeUndefined();
     });
   });
 });

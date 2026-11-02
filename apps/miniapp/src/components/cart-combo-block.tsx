@@ -4,7 +4,7 @@ import { Card } from './ui/card';
 import { Heading, Text } from './ui/text';
 
 export interface CartComboBlockProps {
-  block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving' | 'hint'>;
+  block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving' | 'savingPending' | 'hint'>;
   /** Cấp tiêu đề tiếp ngay sau tiêu đề trước đó của trang: h3 khi giỏ có tiêu đề nơi giao (h2), nếu không thì h2. */
   headingAs?: 'h2' | 'h3';
   /** Các dòng của bộ (CartLineRow). */
@@ -30,10 +30,15 @@ export function CartComboBlock({ block, headingAs = 'h3', children }: CartComboB
             >
               {block.title}
               {block.saving && (
-                <>
+                // Chờ máy chủ tính lại: giữ chỗ của số (ẩn, không đọc) để đầu nhóm không đổi số dòng và khối không nhảy mỗi lần bấm +/−.
+                <span
+                  data-testid="cart-combo-saving"
+                  aria-hidden={block.savingPending || undefined}
+                  style={block.savingPending ? { visibility: 'hidden' } : undefined}
+                >
                   {' · '}
                   <span style={{ color: 'var(--color-text-price-deal)' }}>{block.saving}</span>
-                </>
+                </span>
               )}
             </Heading>
             {block.hint && (

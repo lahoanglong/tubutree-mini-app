@@ -291,7 +291,7 @@ export default function CartPage() {
           )}
           {groups.map((g) => {
             // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
-            const { blocks, loose } = cartComboBlocks(g.items, summary.comboGroups, deselected, priced?.comboGroups);
+            const { blocks, loose } = cartComboBlocks(g.items, summary.comboGroups, deselected, priced?.comboGroups, summary.comboPending);
             const renderLine = (line: CartLine) => (
               <CartLineRow
                 key={line.id}
