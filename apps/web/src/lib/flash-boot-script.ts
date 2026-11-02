@@ -1,5 +1,5 @@
-// Đoạn chạy ngay khi trình duyệt đọc tới chúng, trước lần vẽ đầu: sau lần vẽ đầu mà hydrate mới sửa thì cả trang nhảy. Nó tác động lên phần tử
-// đứng ngay trước (anh em liền trước) rồi thôi; React hydrate xong sẽ gỡ nó.
+// Đoạn chạy ngay khi trình duyệt đọc tới chúng, trước lần vẽ đầu: sau lần vẽ đầu mà hydrate mới sửa thì cả trang nhảy. Nó nằm cuối khối
+// và chỉ tác động lên khối chứa nó; React hydrate xong sẽ gỡ nó.
 
 const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
 
@@ -8,5 +8,5 @@ const json = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c');
  * Cùng phép tính với `FlashSale` lúc hydrate (đồng hồ máy, chưa có độ lệch giờ máy chủ), nên kệ không hiện rồi biến mất.
  */
 export function flashShelfGuardScript(endAts: readonly string[], minItems: number): string {
-  return `(function(){var s=document.currentScript,e=s&&s.previousElementSibling,a=${json(endAts)},n=0,t=Date.now(),i;if(!e)return;for(i=0;i<a.length;i++)if(Date.parse(a[i])>t)n++;if(n<${Number(minItems)})e.style.display="none"})()`;
+  return `(function(){var s=document.currentScript,e=s&&s.parentElement,a=${json(endAts)},n=0,t=Date.now(),i;if(!e)return;for(i=0;i<a.length;i++)if(Date.parse(a[i])>t)n++;if(n<${Number(minItems)})e.style.display="none"})()`;
 }

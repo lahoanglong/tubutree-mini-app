@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { flashShelfGuardScript } from './flash-boot-script';
 
-/** Chạy đoạn script như trình duyệt: `document.currentScript` là thẻ script, phần tử liền trước là `target`. */
+/** Chạy đoạn script như trình duyệt: `document.currentScript` là thẻ script, phần tử cha là `target`. */
 function run(code: string, opts: { now: number }) {
   const target = { style: { display: 'initial' } as Record<string, string> };
-  const script = { previousElementSibling: target };
+  const script = { parentElement: target };
   const RealDate = Date;
   class FakeDate extends RealDate {
     static override now() {

@@ -119,7 +119,6 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
   const title = fillCopy('flash.title');
   const seeAll = seeAllHref('home.flash', 'web');
   return (
-    <>
     <section ref={sectionRef} aria-labelledby={titleId} suppressHydrationWarning>
       <SectionHeader
         id={titleId}
@@ -150,9 +149,8 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
       ) : !slotKnown && hadNextSlot ? (
         <div aria-hidden="true" style={{ height: FLASH_NEXT_SLOT_HEIGHT }} />
       ) : null}
+      {!hydrated && <script dangerouslySetInnerHTML={{ __html: flashShelfGuardScript(live.map((it) => it.endAt), FLASH_SHELF.minItems) }} />}
     </section>
-    {!hydrated && <script dangerouslySetInnerHTML={{ __html: flashShelfGuardScript(live.map((it) => it.endAt), FLASH_SHELF.minItems) }} />}
-    </>
   );
 }
 
