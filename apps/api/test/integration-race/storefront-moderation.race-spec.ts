@@ -366,8 +366,8 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       const brand = await prisma.brand.create({ data: { slug: brandSlug, name: `IT Brand ${randCode(6)}` } });
       created.brandIds.push(brand.id);
       const other = await store(await user('AFFILIATE'));
-      await expect(assertIdentifierAvailable(prisma, brandSlug, other.id)).rejects.toThrow('nhãn hàng');
-      await expect(assertIdentifierAvailable(prisma, brand.name.toUpperCase(), other.id)).rejects.toThrow('nhãn hàng');
+      await expect(assertIdentifierAvailable(prisma, brandSlug, other.id)).rejects.toThrow('thương hiệu');
+      await expect(assertIdentifierAvailable(prisma, brand.name.toUpperCase(), other.id)).rejects.toThrow('thương hiệu');
       const brandStore = await store(null, { type: 'BRAND', brandId: brand.id });
       await expect(assertIdentifierAvailable(prisma, brandSlug, brandStore.id)).resolves.toBeUndefined();
     });
