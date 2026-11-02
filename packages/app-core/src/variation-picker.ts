@@ -1,10 +1,7 @@
-import { fillTileCopy } from './commerce/tile-copy';
+import { stockText } from './commerce/stock-text';
 import { pickDefaultVariation } from './flash-price';
 
 type PickerVariation = { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number };
-
-/** Còn từng này trở xuống thì bảng chọn nêu cả đơn vị ("Còn N sản phẩm") để khách thấy hàng sắp hết, không dùng chữ giục "Chỉ còn". */
-const LOW_STOCK_NOTICE = 5;
 
 /** Sản phẩm từ 2 phân loại: Thêm vào giỏ và Mua ngay hỏi khách chọn phân loại; 1 phân loại thì thêm thẳng. */
 export function needsVariationPicker(variations: readonly unknown[]): boolean {
@@ -22,7 +19,7 @@ export function clampPickerQty(variation: { stock: number } | undefined, qty: nu
   return Math.min(Math.max(1, Math.floor(qty) || 1), max);
 }
 
+/** Dòng tồn kho của phân loại đang chọn trong bảng: cùng chữ với PDP và giỏ (`stockText`); màu cảnh báo cho tồn thấp do nơi vẽ lo (`isLowStock`). */
 export function pickerStockText(stock: number): string {
-  if (stock <= 0) return fillTileCopy('stock.out');
-  return stock <= LOW_STOCK_NOTICE ? `Còn ${stock} sản phẩm` : `Còn ${stock}`;
+  return stockText(stock);
 }

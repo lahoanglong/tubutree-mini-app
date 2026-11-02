@@ -338,13 +338,24 @@ export default function CheckoutPage() {
 
   // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
   // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
+  // Query-core chạy `onError` (tải lại báo giá/giỏ) TRƯỚC khi ghi trạng thái lỗi, nên lúc `isError` hiện ra nút thường còn khoá vì báo giá đang tải và `focus()` vào nút khoá không có tác dụng:
+  // lỗi chỉ ghi một "yêu cầu focus", làm khi báo giá và giỏ tải xong. Xong mà nút vẫn khoá vì lý do khác thì bỏ yêu cầu, kẻo lúc khách sửa xong ô hoá đơn focus bị giật về nút.
   const placePartRef = useRef<HTMLDivElement>(null);
   const placeButtonRef = useRef<HTMLButtonElement>(null);
+  const placeFocusDue = useRef(false);
   useEffect(() => {
     if (!place.isError || !window.matchMedia?.('(min-width: 64rem)').matches) return;
     placePartRef.current?.scrollIntoView({ block: 'nearest' });
-    placeButtonRef.current?.focus({ preventScroll: true });
-  }, [place.isError, place.error]);
+    placeFocusDue.current = true;
+  }, [place.isError, place.error, place.submittedAt]);
+  const placeSettled = !quoteQ.isFetching && !cartQ.isFetching && !couponChanging;
+  useEffect(() => {
+    if (!placeFocusDue.current || !placeSettled) return;
+    placeFocusDue.current = false;
+    // Đọc trạng thái khoá từ chính nút đã vẽ (hook phải đứng trước các `return` sớm, lúc đó `placeDisabled` chưa tính).
+    const button = placeButtonRef.current;
+    if (button && !button.disabled) button.focus({ preventScroll: true });
+  }, [placeSettled, place.error, place.submittedAt]);
 
   if (phase === 'loading') {
     return (

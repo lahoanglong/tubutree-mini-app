@@ -161,7 +161,7 @@ export const offerAmount = (unitPrice: number, quantity: number, isFlash: boolea
 export interface OfferRow<T extends CouponDTO = CouponDTO> {
   coupon: T;
   view: VoucherView;
-  /** usable: dùng được cho món · short: thiếu đơn tối thiểu (mua thêm là dùng) · blocked: món này không được giảm theo mã (số giảm 0). */
+  /** usable: dùng được cho món · short: thiếu đơn tối thiểu (mua thêm là dùng) · blocked: món này không được giảm theo mã (số giảm 0): xếp cuối và có lý do, nút chép vẫn bật. */
   group: Exclude<PickerGroup, 'applied'>;
   /** "Mua thêm 130k để dùng" khi món đang xem chưa đạt đơn tối thiểu của mã; lý do máy chủ khi món không được giảm; null khi đủ. */
   reason: string | null;
@@ -171,8 +171,9 @@ export interface OfferRow<T extends CouponDTO = CouponDTO> {
  * Ví mã trong sheet Ưu đãi của trang sản phẩm, xếp theo mức có lợi cho món đang xem (`amount` = giá × số lượng): mã đủ điều kiện trước
  * (giảm tiền nhiều trước, freeship sau vì số tiền phụ thuộc phí giao), mã chưa đủ sau (thiếu ít trước, kèm "Mua thêm … để dùng"), mã món này
  * không được giảm cuối. Mã chưa đủ vẫn là `saved` và chép được: khách còn có thể mua thêm món khác trong cùng đơn. Mã không có đơn tối thiểu mà
- * `amount` là 0 (món đang Giờ vàng, máy chủ không giảm thêm theo mã) bị máy chủ chặn bằng COUPON_ZERO_DISCOUNT_REASON, nên là `ineligible`
- * kèm lý do; FREESHIP không tính theo tiền hàng nên vẫn dùng được.
+ * `amount` là 0 (món đang Giờ vàng, máy chủ không giảm thêm theo mã) xếp cuối kèm lý do, nhưng cũng `saved`: đây chỉ là ví mã (nút chỉ chép, không áp
+ * thẳng như bảng chọn mã thanh toán), và khách mua thêm món không Giờ vàng thì mã có tác dụng, nên khoá nút chép là chặn nhầm. FREESHIP không tính theo
+ * tiền hàng nên vẫn dùng được.
  */
 export function offerRows<T extends CouponDTO>(
   coupons: readonly T[],
@@ -185,9 +186,9 @@ export function offerRows<T extends CouponDTO>(
     return {
       row: {
         coupon,
-        view: { ...voucherView({ ...coupon, claimed: true, ineligible: nothing }, o.now), code: o.displayCode?.(coupon.code) ?? coupon.code },
+        view: { ...voucherView({ ...coupon, claimed: true, ineligible: false }, o.now), code: o.displayCode?.(coupon.code) ?? coupon.code },
         group,
-        reason: nothing ? fillCopy('coupon.zeroDiscount') : missing > 0 ? needMore(missing) : null,
+        reason: nothing ? fillCopy('coupon.zeroDiscountPdp') : missing > 0 ? needMore(missing) : null,
       } as OfferRow<T>,
       index,
       missing,

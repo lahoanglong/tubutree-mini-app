@@ -224,6 +224,20 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     await flush();
     expect(dialog()!.textContent).toContain('Mua thêm 250k để dùng');
   });
+  it('món đang Giờ vàng, mã không đơn tối thiểu: lý do theo PDP, xếp sau mã dùng được, nút Sao chép vẫn bật và chép đúng mã', async () => {
+    mocks.http.get.mockResolvedValue([coupon('K20'), coupon('FREE', { type: 'FREESHIP', value: 0, minOrder: null })]);
+    mocks.flash = [{ itemId: 'i1', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 100000, retailPrice: 150000, soldCount: 1, quota: 40 }];
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    click(rowButton(container));
+    await flush();
+    const codes = Array.from(dialog()!.querySelectorAll('[data-testid="voucher-code"]')).map((el) => el.textContent);
+    expect(codes).toEqual(['FREE', 'K20']);
+    expect(dialog()!.textContent).toContain('Không giảm cho sản phẩm Giờ vàng này');
+    const copies = Array.from(dialog()!.querySelectorAll('button')).filter((b) => b.textContent === 'Sao chép');
+    expect(copies).toHaveLength(2);
+    for (const b of copies) expect(b.getAttribute('aria-disabled')).toBeNull();
+  });
   it('xếp mã theo lợi cho món đang xem: mã đủ điều kiện trước, mã còn thiếu đơn tối thiểu sau và ghi "Mua thêm … để dùng"', async () => {
     mocks.http.get.mockResolvedValue([coupon('BIG', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 250000 }), coupon('K20')]);
     const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);

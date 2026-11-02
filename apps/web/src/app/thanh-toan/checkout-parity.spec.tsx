@@ -336,7 +336,7 @@ describe('/thanh-toan — hết hàng (R2-BUYERWEB-11)', () => {
   it('vượt tồn kho: nói còn bao nhiêu', async () => {
     m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 2 })];
     const r = await mount();
-    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('chỉ còn 2');
+    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('hiện còn 2');
     expect(placeButton(r).disabled).toBe(true);
   });
 

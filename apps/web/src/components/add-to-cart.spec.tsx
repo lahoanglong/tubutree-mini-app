@@ -388,7 +388,7 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }]);
     await flush();
     expect(addButton(container).disabled).toBe(false);
-    expect(container.textContent).toContain('Chỉ còn 4 sản phẩm');
+    expect(container.textContent).toContain('Còn 4 sản phẩm');
   });
 
   it('phân loại mặc định hết thật mà phân loại khác còn: tự chọn phân loại còn hàng', async () => {
@@ -547,12 +547,13 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
   });
 
-  it('"Chỉ còn N" trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
+  it('"Còn N sản phẩm" (màu cảnh báo) trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
     mocks.getProductStock.mockResolvedValue({ v1: 3, v2: 9 });
     const { container } = mount();
     await flush();
-    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Chỉ còn 3 sản phẩm')!;
+    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Còn 3 sản phẩm')!;
     expect(note.className).toContain('max-md:hidden');
+    expect(note.className).toContain('text-warning-fg');
   });
 });
 
@@ -1139,6 +1140,33 @@ describe('AddToCart — giỏ đã có sẵn cùng phân loại: thêm giỏ c�
     expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
     expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
     expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe('Giỏ đã có 3. Thêm 1 thì cả 4 sản phẩm tính giá thường.');
+  });
+
+  it('Mua ngay: giỏ mới có món vừa thêm được ghi vào cache nhưng trang chưa chuyển, số trên nút và câu ghi chú giữ như lúc bấm (không nhảy sang 1.200.000đ)', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    mocks.addToCart.mockResolvedValue(cartOf(3));
+    // Trang thanh toán chưa tới (router.push thật còn chờ): PDP vẫn vẽ lại theo giỏ mới.
+    mocks.push.mockImplementation(() => undefined);
+    click(stickyBuy(container));
+    await flush(3);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(container.querySelector('button[aria-label^="Đang xử lý…"]')!.getAttribute('aria-label')).toBe('Đang xử lý… · 720.000đ');
+    expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe(MERGE_2);
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+  });
+
+  it('Mua ngay lỗi: ở lại trang thì không kẹt số cũ, thêm giỏ lần sau lại vẽ theo giỏ mới', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    mocks.addToCart.mockRejectedValueOnce(new Error('Hết hàng'));
+    click(stickyBuy(container));
+    await flush(3);
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    mocks.addToCart.mockResolvedValue(cartOf(3));
+    click(addButton(container));
+    await flush(3);
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
   });
 
   it('giỏ chưa tải được (lỗi): coi như giỏ rỗng, nút vẫn bấm được và ghi số như khi không có giỏ', async () => {

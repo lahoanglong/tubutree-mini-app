@@ -54,6 +54,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -84,7 +85,8 @@ import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
 import { ListRow } from '../components/ui/list-row';
 
-const LOW_STOCK_THRESHOLD = 5;
+type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
+
 const ADDED_FLASH_MS = 1_200;
 const DESC_COLLAPSED_LINES = 4;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
@@ -194,6 +196,10 @@ export default function ProductDetailPage() {
     queryFn: getCart,
     enabled: status === 'authenticated',
   });
+  // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (đã có món vừa thêm) vào cache trong lúc trang này còn mount ở hiệu ứng thoát: tính lại theo giỏ mới thì
+  // `inCart` đã gồm số vừa thêm, nên số nút và câu ghi chú nhảy sai chốc lát (trình đọc màn hình đọc câu sai). Giữ giỏ cũ tới khi lỗi hoặc trang gỡ.
+  const [buyFreeze, setBuyFreeze] = useState<{ lines: CartLines } | null>(null);
+  const cartLines = buyFreeze ? buyFreeze.lines : cart.data?.items;
   // Cùng queryKey với ReviewsSection → React Query dedupe, chỉ 1 request.
   const reviews = useQuery({
     queryKey: ['reviews', slug],
@@ -311,6 +317,7 @@ export default function ProductDetailPage() {
       const { cart: updatedCart, note } = await applyGroupCoupon(await addToCart(input.variation.id, input.qty));
       return { updatedCart, note, variationId: input.variation.id };
     },
+    onMutate: () => setBuyFreeze({ lines: cart.data?.items }),
     onSuccess: ({ updatedCart, note, variationId }, variables) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
@@ -338,7 +345,10 @@ export default function ProductDetailPage() {
       rememberCheckoutSelection(itemIds);
       navigate('/checkout', { state: { itemIds } });
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => {
+      setBuyFreeze(null);
+      notify({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   const groupBuyMutation = useMutation({
@@ -376,7 +386,7 @@ export default function ProductDetailPage() {
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
   // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; điểm tích giữ `total` (phần đang chọn thêm). Giỏ chưa tải hay lỗi thì coi là rỗng.
   const line = selected
-    ? variationLinePreview(selected, flashList, quantity, inCartQuantity(cart.data?.items, selected.id))
+    ? variationLinePreview(selected, flashList, quantity, inCartQuantity(cartLines, selected.id))
     : { total: price * quantity, lineTotal: price * quantity, lineQuantity: quantity, inCart: 0, overLimit: false, allowance: null, allowanceBy: null };
   // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
   const overLimitText = lineNote(line, quantity, true);
@@ -385,7 +395,7 @@ export default function ProductDetailPage() {
   const soldText = formatSold(p.sold);
   const ratingData = reviews.data && reviews.data.count > 0 ? reviews.data : null;
   const inStock = (selected?.stock ?? 0) > 0;
-  const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
+  const lowStock = isLowStock(selected?.stock ?? 0);
   const cartCount = cart.data?.itemCount ?? 0;
   // Ngưỡng freeship theo hạng của khách (cùng nguồn với giỏ hàng); khách chưa đăng nhập mới dùng ngưỡng chung. Đang đăng nhập
   // hoặc giỏ chưa về thì chưa hứa số nào để khỏi hiện ngưỡng chung rồi đổi.
@@ -992,7 +1002,7 @@ export default function ProductDetailPage() {
           initialId={selected?.id ?? null}
           initialQty={quantity}
           busy={addMutation.isPending || buyNowMutation.isPending}
-          cartLines={cart.data?.items}
+          cartLines={cartLines}
           onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}

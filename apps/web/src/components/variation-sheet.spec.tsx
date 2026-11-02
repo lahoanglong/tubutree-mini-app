@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, render, type Rendered } from '@/test-utils/dom';
 import { VariationSheet, type VariationOption } from './variation-sheet';
@@ -82,7 +82,7 @@ describe('VariationSheet web: giá Giờ vàng và tiền dòng theo luật máy
   it('API cũ không gửi giới hạn: giá Giờ vàng mọi số lượng, không ghi chú lẫn dòng giới hạn', () => {
     mountSheet({ flash: flash({ perUserLimit: undefined }), initialQty: 5 });
     expect(buy().textContent).toBe('Mua ngay · 130.000đ');
-    expect(status()).toBeNull();
+    expect(status()!.textContent).toBe('');
     expect(dialog().textContent).not.toContain('Tối đa');
   });
 
@@ -102,7 +102,7 @@ describe('VariationSheet web: giá Giờ vàng và tiền dòng theo luật máy
     act(() => r.root.render(<VariationSheet {...baseProps({ flash: [], initialQty: 5 })} />));
     expect(buy().textContent).toBe('Mua ngay · 175.000đ');
     expect(dialog().querySelector('[data-testid="variation-sheet-flash"]')).toBeNull();
-    expect(status()).toBeNull();
+    expect(status()!.textContent).toBe('');
   });
 
   it('chọn phân loại không phải Giờ vàng thì nhãn và ghi chú biến mất', () => {
@@ -172,9 +172,55 @@ describe('VariationSheet web: giỏ đã có sẵn cùng phân loại (thêm gi�
     expect(buy().textContent).toBe('Mua ngay · 52.000đ');
   });
 
+  it('Mua ngay mở trước khi GET /cart về (hoặc khách chưa đăng nhập, giỏ rỗng): vùng ghi chú đã có chỗ từ lúc mở, giỏ về sau chỉ điền chữ, bảng không cao thêm', () => {
+    let setLines: (lines: Props['cartLines']) => void = () => undefined;
+    function Harness() {
+      const [lines, set] = useState<Props['cartLines']>(undefined);
+      setLines = set;
+      return <VariationSheet {...baseProps({ mode: 'buy', initialQty: 1, flash: [], cartLines: lines })} />;
+    }
+    mounted.push(render(<Harness />));
+    const region = status() as HTMLElement;
+    expect(region).not.toBeNull();
+    expect(region.style.minHeight).not.toBe('');
+    expect(region.textContent).toBe('');
+    act(() => setLines(inCart2));
+    expect(status()).toBe(region);
+    expect(region.textContent).toBe('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+  });
+
+  it('Mua ngay giỏ về rỗng: vùng giữ chỗ vẫn còn (không co lại dưới ngón tay)', () => {
+    mountSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: [] });
+    expect((status() as HTMLElement).style.minHeight).not.toBe('');
+  });
+
   it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {
     mountSheet({ mode: 'buy', initialQty: 1, cartLines: inCart2 });
     expect((status() as HTMLElement).style.minHeight).not.toBe('');
+  });
+});
+
+describe('VariationSheet web: chữ tồn kho "Còn n sản phẩm" cho mọi n, tồn thấp chỉ nhấn bằng màu cảnh báo (L4 5)', () => {
+  const withStock = (stock: number): VariationOption[] => [{ ...variations[0]!, stock }, ...variations.slice(1)];
+  const stockNode = () => dialog().querySelector<HTMLElement>('[data-testid="variation-sheet-stock"]')!;
+
+  it('tồn 3 (thấp): "Gói 80 tờ · Còn 3 sản phẩm", phần tồn có màu cảnh báo', () => {
+    mountSheet({ variations: withStock(3), flash: [] });
+    expect(stockNode().textContent).toBe('Còn 3 sản phẩm');
+    expect(stockNode().parentElement!.textContent).toBe('Gói 80 tờ · Còn 3 sản phẩm');
+    expect(stockNode().style.color).toBe('var(--color-status-warning-fg)');
+  });
+
+  it('tồn 6 và 245: cùng chữ "Còn n sản phẩm" nhưng không màu cảnh báo; tồn 5 vẫn là mức thấp', () => {
+    mountSheet({ variations: withStock(6), flash: [] });
+    expect(stockNode().textContent).toBe('Còn 6 sản phẩm');
+    expect(stockNode().style.color).toBe('');
+    mounted.pop()!.unmount();
+    mountSheet({ variations: withStock(245), flash: [] });
+    expect(stockNode().textContent).toBe('Còn 245 sản phẩm');
+    mounted.pop()!.unmount();
+    mountSheet({ variations: withStock(5), flash: [] });
+    expect(stockNode().style.color).toBe('var(--color-status-warning-fg)');
   });
 });
 

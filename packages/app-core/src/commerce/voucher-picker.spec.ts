@@ -246,16 +246,16 @@ describe('offerRows: sheet Ưu đãi ở trang sản phẩm', () => {
 });
 
 describe('offerRows: món đang Giờ vàng (số giảm = 0)', () => {
-  const NOTHING = 'Không có sản phẩm nào trong đơn được giảm theo mã này';
+  const NOTHING = 'Không giảm cho sản phẩm Giờ vàng này';
   const wallet = [c('A20'), c('FREE', { type: 'FREESHIP', value: 0 }), c('MIN', { minOrder: 199_000 })];
 
-  it('mã không đơn tối thiểu mà món không được giảm: không dùng được, kèm lý do máy chủ; freeship vẫn dùng được; mã có đơn tối thiểu vẫn "Mua thêm"', () => {
+  it('mã không đơn tối thiểu mà món không được giảm: xếp sau cùng kèm lý do hợp PDP nhưng vẫn chép được (state saved, khách còn mua thêm món khác); freeship dùng được; mã có đơn tối thiểu vẫn "Mua thêm"', () => {
     const rows = offerRows(wallet, { amount: offerAmount(250_000, 1, true), now: NOW });
     expect(rows.map((r) => r.coupon.code)).toEqual(['FREE', 'MIN', 'A20']);
     expect(rows.map((r) => r.group)).toEqual(['usable', 'short', 'blocked']);
     const a20 = rows[2]!;
     expect(a20.reason).toBe(NOTHING);
-    expect(a20.view.state).toBe('ineligible');
+    expect(a20.view.state).toBe('saved');
     expect(rows[0]).toMatchObject({ reason: null });
     expect(rows[0]!.view.state).toBe('saved');
     expect(rows[1]).toMatchObject({ reason: 'Mua thêm 199k để dùng' });
@@ -265,6 +265,17 @@ describe('offerRows: món đang Giờ vàng (số giảm = 0)', () => {
   it('món giá thường: mã không đơn tối thiểu vẫn dùng được, không lý do', () => {
     const rows = offerRows(wallet, { amount: 120_000, now: NOW });
     expect(rows.find((r) => r.coupon.code === 'A20')).toMatchObject({ group: 'usable', reason: null });
+  });
+});
+
+describe('bảng chọn mã thanh toán giữ nguyên khi mã không giảm gì (L4 4: chỉ sheet Ưu đãi PDP đổi)', () => {
+  it('máy chủ nói mã không giảm sản phẩm nào của đơn: nhóm không áp dụng, phiếu ineligible (áp thẳng nên không áp được thì khoá)', () => {
+    const row = pickerRows(
+      [c('A20')],
+      ctx({ subtotal: 250_000, previews: previewMap(preview('A20', { eligible: false, reason: 'Không có sản phẩm nào trong đơn được giảm theo mã này.' })) }),
+    )[0]!;
+    expect(row).toMatchObject({ group: 'blocked', action: 'blocked', reason: 'Không có sản phẩm nào trong đơn được giảm theo mã này.' });
+    expect(row.view.state).toBe('ineligible');
   });
 });
 

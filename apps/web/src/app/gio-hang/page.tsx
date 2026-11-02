@@ -28,6 +28,7 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Badge, Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 
@@ -297,7 +298,7 @@ export default function CartPage() {
             </p>
           )}
           {!soldOut && atMax && (
-            <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">Chỉ còn {it.stock} sản phẩm</p>
+            <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{stockText(it.stock)}</p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
             {!soldOut && (

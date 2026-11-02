@@ -6,6 +6,7 @@ import { Zap } from 'lucide-react';
 import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
+import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '@/lib/shop-client';
@@ -80,8 +81,9 @@ export function VariationSheet({
   const view = line?.pricing ?? null;
   // Một vùng ghi chú một câu: mất giá Giờ vàng, hoặc ("Mua ngay") giỏ đã có sẵn nên thanh toán cả dòng.
   const note = line ? lineNote(line, shownQty, mode === 'buy') : null;
-  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng, hoặc "Mua ngay" mà giỏ đã có một phân loại nào đó của sản phẩm (đổi chip không làm bảng cao thêm).
-  const reserveNote = line?.allowance != null || (mode === 'buy' && variations.some((v) => inCartQuantity(cartLines, v.id) > 0));
+  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng, hoặc "Mua ngay" (chế độ này luôn giữ). Giữ theo nội dung giỏ thì bảng mở trước khi GET /cart về sẽ cao thêm lúc giỏ về,
+  // và giỏ về rỗng lại co lại, cả hai dưới ngón tay đang bấm; đổi chip cũng không được làm bảng cao thêm. "Thêm vào giỏ" không có câu về giỏ nên không giữ.
+  const reserveNote = line?.allowance != null || mode === 'buy';
 
   return (
     <BottomSheet
@@ -126,7 +128,17 @@ export function VariationSheet({
             </div>
           )}
           <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
-            {selected ? `${selected.name} · ${pickerStockText(selected.stock)}` : productName}
+            {selected ? (
+              <>
+                {selected.name} ·{' '}
+                {/* Tồn thấp chỉ đổi màu (token cảnh báo), chữ vẫn "Còn n sản phẩm" như mọi mức tồn. */}
+                <span data-testid="variation-sheet-stock" style={isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : undefined}>
+                  {pickerStockText(selected.stock)}
+                </span>
+              </>
+            ) : (
+              productName
+            )}
           </Text>
         </div>
       </div>

@@ -42,8 +42,8 @@ describe('pickerStockText', () => {
     expect(pickerStockText(0)).toBe('Tạm hết hàng');
     expect(pickerStockText(3)).toBe('Còn 3 sản phẩm');
     expect(pickerStockText(5)).toBe('Còn 5 sản phẩm');
-    expect(pickerStockText(6)).toBe('Còn 6');
-    expect(pickerStockText(40)).toBe('Còn 40');
+    expect(pickerStockText(6)).toBe('Còn 6 sản phẩm');
+    expect(pickerStockText(40)).toBe('Còn 40 sản phẩm');
   });
 
   it('không có chữ "Chỉ còn" (thuật ngữ cấm, DESIGN.md: Còn {n} sản phẩm)', () => {
