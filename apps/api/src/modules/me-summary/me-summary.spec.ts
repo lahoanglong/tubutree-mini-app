@@ -1,11 +1,16 @@
 import 'reflect-metadata';
-import { RequestMethod } from '@nestjs/common';
+import { RequestMethod, type INestApplication } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
-import { Reflector } from '@nestjs/core';
-import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { Test } from '@nestjs/testing';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { SessionStateService } from '../auth/session-state.service';
+import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { NotificationFeedService } from '../notifications/notification-feed.service';
 import { OrderCountsService } from '../orders/order-counts.service';
@@ -81,12 +86,6 @@ describe('GET /me/summary (controller)', () => {
     expect(Reflect.getMetadata('__headers__', handler)).toEqual([{ name: 'Cache-Control', value: 'private, no-store' }]);
   });
 
-  it('guard JWT toàn app áp lên route này: không mở công khai, khách chưa đăng nhập bị 401', () => {
-    const reflector = new Reflector();
-    expect(reflector.getAllAndOverride(IS_PUBLIC_KEY, [handler, MeSummaryController])).toBeUndefined();
-    expect(() => new JwtAuthGuard(reflector).handleRequest(null, false)).toThrow(UnauthorizedException);
-  });
-
   it('đọc theo userId của token, không có tham số nào để hỏi khách khác', async () => {
     const get = jest.fn().mockResolvedValue({ ok: true });
     const out = await new MeSummaryController({ get } as unknown as MeSummaryService).get('u1');
@@ -141,5 +140,50 @@ describe('MeSummaryService.get', () => {
     expect(tabs).toEqual(counts);
     expect(summaryActive).toBe(active);
     expect(summary.unreadNotifications).toBe(unread);
+  });
+});
+
+describe('GET /me/summary qua HTTP thật với JwtAuthGuard toàn app', () => {
+  const SECRET = 'me-summary-test-secret';
+  const get = jest.fn(async (userId: string) => ({ orders: { active: 0 }, who: userId }));
+  let app: INestApplication;
+  let base: string;
+  let jwt: JwtService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [PassportModule, JwtModule.register({ secret: SECRET })],
+      controllers: [MeSummaryController],
+      providers: [
+        JwtStrategy,
+        { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: MeSummaryService, useValue: { get } },
+        { provide: ConfigService, useValue: { get: () => SECRET } },
+        { provide: SessionStateService, useValue: { get: async () => ({ role: 'CUSTOMER', isBlocked: false }) } },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication({ logger: false });
+    await app.listen(0, '127.0.0.1');
+    base = `http://127.0.0.1:${(app.getHttpServer().address() as { port: number }).port}`;
+    jwt = moduleRef.get(JwtService);
+  });
+  afterAll(async () => {
+    await app?.close();
+  });
+  beforeEach(() => get.mockClear());
+
+  it('không token thì 401 và service không được gọi', async () => {
+    const res = await fetch(`${base}/me/summary`);
+    expect(res.status).toBe(401);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('token khách A thì service nhận đúng sub của A, khách B nhận của B', async () => {
+    const a = await fetch(`${base}/me/summary`, { headers: { authorization: `Bearer ${jwt.sign({ sub: 'user-a' })}` } });
+    expect(a.status).toBe(200);
+    expect(a.headers.get('cache-control')).toBe('private, no-store');
+    expect(await a.json()).toMatchObject({ who: 'user-a' });
+    await fetch(`${base}/me/summary?userId=user-a`, { headers: { authorization: `Bearer ${jwt.sign({ sub: 'user-b' })}` } });
+    expect(get.mock.calls.map(([u]) => u)).toEqual(['user-a', 'user-b']);
   });
 });
