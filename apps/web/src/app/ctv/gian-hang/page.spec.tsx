@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { QueryClient, onlineManager } from '@tanstack/react-query';
 import { click, flush, render, typeInto, selectValue, type Rendered } from '@/test-utils/dom';
 
 type Call = { method: string; path: string; body?: unknown; query?: unknown };
@@ -1375,6 +1376,40 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     const body = text();
     expect(body.indexOf('CTV tuyển chọn')).toBeGreaterThanOrEqual(0);
     expect(body.indexOf('CTV tuyển chọn')).toBeLessThan(body.indexOf('CTV Đồng'));
+  });
+
+  // TanStack v5: mất mạng thì truy vấn bậc đứng ở `fetchStatus: 'paused'` nhưng `status` vẫn 'pending', nên chờ theo `isPending` treo khung chờ mãi dù gian hàng đã có trong cache.
+  describe('mất mạng khi gian hàng đã có trong cache', () => {
+    afterEach(() => onlineManager.setOnline(true));
+    const mountOffline = () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      qc.setQueryData(['my-storefront'], state.sf);
+      onlineManager.setOnline(false);
+      const r = render(<StorefrontBuilderPage />, qc);
+      mounted.push(r);
+      return r;
+    };
+
+    it('bậc đang paused: dựng đủ đầu xem trước và "Sửa hồ sơ", không huy hiệu bậc, không treo khung chờ', async () => {
+      const { container } = mountOffline();
+      await flush();
+      expect(container.querySelector('[data-testid="shop-cover"]')).not.toBeNull();
+      expect(heading2(container)).toHaveLength(1);
+      expect(hasBtn('Sửa hồ sơ')).toBe(true);
+      expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
+      expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+    });
+
+    it('có mạng lại: bậc về thì huy hiệu hiện, không cần tải lại trang', async () => {
+      state.tiers = tiersAt(1);
+      mountOffline();
+      await flush();
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+      await flush();
+      expect(text()).toContain('CTV Đồng');
+    });
   });
 
   it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
