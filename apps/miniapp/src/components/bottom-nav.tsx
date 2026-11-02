@@ -78,36 +78,38 @@ export default function BottomNav() {
               position: 'relative',
               border: 'none',
               padding: 0,
-              paddingBottom: t.center ? 6 : 0,
               background: 'transparent',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: t.center ? 'flex-end' : 'center',
+              justifyContent: 'center',
               gap: 3,
             }}
           >
             {t.center ? (
-              <span
-                aria-hidden
-                style={{
-                  position: 'absolute',
-                  top: -22,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: 54,
-                  height: 54,
-                  borderRadius: 'var(--radius-pill)',
-                  background: 'var(--color-action-primary-bg)',
-                  border: '3px solid var(--color-bg-surface)',
-                  boxShadow: 'var(--elevation-2)',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Icon icon={t.Icon} size="lg" tone="inverse" />
-              </span>
+              <>
+                <span aria-hidden style={{ height: 24 }} />
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: -22,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 54,
+                    height: 54,
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'var(--color-action-primary-bg)',
+                    border: '3px solid var(--color-bg-surface)',
+                    boxShadow: 'var(--elevation-2)',
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  <Icon icon={t.Icon} size="lg" tone="inverse" />
+                </span>
+              </>
             ) : (
               <span aria-hidden className={active ? 'tubu-tab-pop' : undefined} style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
                 <Icon icon={t.Icon} size="lg" tone={active ? 'brand' : 'muted'} filled={active} />

@@ -71,15 +71,18 @@ export default function BottomNav() {
                 e.preventDefault();
                 scrollToTop();
               }}
-              className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center gap-[3px] ${t.center ? 'justify-end pb-1.5' : 'justify-center'} ${active ? 'font-semibold text-forest-700' : 'font-medium text-stone-500'}`}
+              className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center gap-[3px] justify-center ${active ? 'font-semibold text-forest-700' : 'font-medium text-stone-500'}`}
             >
               {t.center ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute left-1/2 top-[-22px] grid h-[54px] w-[54px] -translate-x-1/2 place-items-center rounded-full border-[3px] border-stone-0 bg-forest-600 text-stone-0 shadow-card"
-                >
-                  <t.Icon className="h-6 w-6" />
-                </span>
+                <>
+                  <span aria-hidden="true" className="h-6" />
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-1/2 top-[-22px] grid h-[54px] w-[54px] -translate-x-1/2 place-items-center rounded-full border-[3px] border-stone-0 bg-forest-600 text-stone-0 shadow-card"
+                  >
+                    <t.Icon className="h-6 w-6" />
+                  </span>
+                </>
               ) : (
                 <span aria-hidden="true" className={`relative grid place-items-center${active ? ' tubu-tab-pop' : ''}`}>
                   <t.Icon className="h-6 w-6" {...(active ? { fill: 'currentColor', fillOpacity: 0.16, strokeWidth: 2 } : null)} />
