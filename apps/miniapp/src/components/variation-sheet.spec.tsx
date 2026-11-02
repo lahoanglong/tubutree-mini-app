@@ -14,7 +14,7 @@ const variations: VariationOption[] = [
 ];
 const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
 
-function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy' } = {}) {
+function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[] } = {}) {
   const onConfirm = vi.fn();
   const view = render(
     <VariationSheet
@@ -28,6 +28,7 @@ function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: num
       initialId="v1"
       initialQty={props.initialQty ?? 3}
       busy={false}
+      cartLines={props.cartLines}
       onConfirm={onConfirm}
     />,
   );
@@ -115,6 +116,41 @@ describe('VariationSheet: giá Giờ vàng và tiền dòng theo luật máy ch�
     fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
     expect(screen.queryByTestId('variation-sheet-flash')).toBeNull();
     expect(buyButton()).toHaveTextContent('Mua ngay · 100.000đ');
+  });
+});
+
+describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ cộng dồn, máy chủ giá cả dòng)', () => {
+  const inCart2 = [{ variationId: 'v1', quantity: 2 }];
+  const IN_CART_NOTE = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+
+  it('ví dụ reviewer (giới hạn 3, giỏ có 2, chọn 2): Mua ngay ghi cả dòng 140.000đ, Thêm vào giỏ ghi phần giỏ tăng 88.000đ, ghi chú nói theo giỏ', () => {
+    const buy = renderSheet({ mode: 'buy', initialQty: 2, cartLines: inCart2 });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 140.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent(IN_CART_NOTE);
+    buy.unmount();
+    renderSheet({ mode: 'add', initialQty: 2, cartLines: inCart2 });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 88.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent(IN_CART_NOTE);
+  });
+
+  it('giảm về qty 1 (tổng 3 = limit): Mua ngay 3 × giá Giờ vàng, ghi chú biến mất', () => {
+    renderSheet({ mode: 'buy', initialQty: 2, cartLines: inCart2 });
+    fireEvent.click(minus());
+    expect(buyButton()).toHaveTextContent('Mua ngay · 78.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('giỏ chỉ có phân loại khác (hoặc không truyền cartLines): số như khi giỏ rỗng', () => {
+    const other = renderSheet({ mode: 'buy', initialQty: 2, cartLines: [{ variationId: 'v3', quantity: 9 }] });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
+    other.unmount();
+    renderSheet({ mode: 'buy', initialQty: 2 });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
+  });
+
+  it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {
+    renderSheet({ mode: 'buy', initialQty: 1, cartLines: inCart2 });
+    expect(screen.getByRole('status').style.minHeight).not.toBe('');
   });
 });
 

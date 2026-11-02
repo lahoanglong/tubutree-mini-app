@@ -53,7 +53,7 @@ import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { inCartQuantity, overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -373,8 +373,11 @@ export default function ProductDetailPage() {
   const flashList = runningFlash(flashQ.data);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
-  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường (nút và điểm tích dùng số này, không phải qty × giá Giờ vàng).
-  const line = selected ? variationLinePreview(selected, flashList, quantity) : { total: price * quantity, overLimit: false, allowance: null, allowanceBy: null };
+  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
+  // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; điểm tích giữ `total` (phần đang chọn thêm). Giỏ chưa tải hay lỗi thì coi là rỗng.
+  const line = selected
+    ? variationLinePreview(selected, flashList, quantity, inCartQuantity(cart.data?.items, selected.id))
+    : { total: price * quantity, lineTotal: price * quantity, lineQuantity: quantity, inCart: 0, overLimit: false, allowance: null, allowanceBy: null };
   const overLimitText = overLimitNote(line, quantity);
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
@@ -988,6 +991,7 @@ export default function ProductDetailPage() {
           initialId={selected?.id ?? null}
           initialQty={quantity}
           busy={addMutation.isPending || buyNowMutation.isPending}
+          cartLines={cart.data?.items}
           onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}
@@ -1085,12 +1089,12 @@ export default function ProductDetailPage() {
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
                 onPress={handleBuyNow}
-                aria-label={`Mua ngay · ${formatVnd(line.total)}`}
+                aria-label={`Mua ngay · ${formatVnd(line.lineTotal)}`}
                 style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
               >
                 <span style={BUY_NOW_LINE}>Mua ngay</span>
                 <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>
-                  {formatVnd(line.total)}
+                  {formatVnd(line.lineTotal)}
                 </span>
               </Button>
             </Box>
