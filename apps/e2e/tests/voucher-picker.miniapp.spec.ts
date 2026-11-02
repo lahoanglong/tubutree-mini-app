@@ -54,7 +54,11 @@ test.describe('Giỏ Mini App: tấm chọn mã giảm giá', () => {
     await expect(buttons.nth(0)).toHaveText('Dùng');
     await expect(buttons.nth(1)).toHaveText('Chưa đủ');
     await expect(buttons.nth(2)).toHaveText('Không áp dụng');
-    expect(await dialog(page).innerText()).not.toMatch(/HSD|Đơn tối thiểu|0đ\b/);
+    const text = await dialog(page).innerText();
+    expect(text).not.toMatch(/HSD|(^|[^\d.])0đ/);
+    // Có xem trước: câu đơn tối thiểu của máy chủ hiện đúng một lần (dòng điều kiện "Đơn từ 900k" bị bỏ), không tự đếm "Mua thêm".
+    expect(text.match(/Đơn tối thiểu 900\.000đ để dùng mã này\./g)).toHaveLength(1);
+    expect(text).not.toMatch(/Đơn từ 900k|Mua thêm/);
     await expect(dialog(page).getByText('Giảm 30.000đ cho đơn này')).toBeVisible();
   });
 
