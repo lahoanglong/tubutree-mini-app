@@ -340,6 +340,9 @@ export default function CheckoutPage() {
   // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
   // Query-core chạy `onError` (tải lại báo giá/giỏ) TRƯỚC khi ghi trạng thái lỗi, nên lúc `isError` hiện ra nút thường còn khoá vì báo giá đang tải và `focus()` vào nút khoá không có tác dụng:
   // lỗi chỉ ghi một "yêu cầu focus", làm khi báo giá và giỏ tải xong. Xong mà nút vẫn khoá vì lý do khác thì bỏ yêu cầu, kẻo lúc khách sửa xong ô hoá đơn focus bị giật về nút.
+  // Báo giá có thể về sau vài giây, lúc đó khách đã tab sang ô ngoài khung "Đơn hàng" (ghi chú, hoá đơn) và đang gõ: giật focus về nút thì Space/Enter kế tiếp bấm nhầm Đặt hàng.
+  // Nên chỉ trả focus khi nó còn ở body (nút khoá làm mất focus), ở chính nút hoặc trong khung "Đơn hàng"; khách đã đi chỗ khác thì yêu cầu bị bỏ, không giật.
+  const summaryRef = useRef<HTMLDivElement>(null);
   const placePartRef = useRef<HTMLDivElement>(null);
   const placeButtonRef = useRef<HTMLButtonElement>(null);
   const placeFocusDue = useRef(false);
@@ -354,7 +357,9 @@ export default function CheckoutPage() {
     placeFocusDue.current = false;
     // Đọc trạng thái khoá từ chính nút đã vẽ (hook phải đứng trước các `return` sớm, lúc đó `placeDisabled` chưa tính).
     const button = placeButtonRef.current;
-    if (button && !button.disabled) button.focus({ preventScroll: true });
+    const active = document.activeElement;
+    const focusIsFree = !active || active === document.body || active === button || !!summaryRef.current?.contains(active);
+    if (button && !button.disabled && focusIsFree) button.focus({ preventScroll: true });
   }, [placeSettled, place.error, place.submittedAt]);
 
   if (phase === 'loading') {
@@ -686,7 +691,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* Khung cuộn cùng trang, không cột dính và không vùng cuộn riêng (DESIGN.md, Khuôn trang web máy tính): chỉ dải tổng + nút Đặt hàng bên dưới dính đáy màn nên nút luôn trong tầm nhìn dù khung dài. */}
-        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:self-start`}>
+        <div ref={summaryRef} className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:self-start`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Từ md danh sách chữ hiện đủ dòng, không vùng cuộn lồng: dòng thứ 6 trở đi gập sau nút kèm tiền; giỏ tách kiện hiện hết
               để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}

@@ -180,6 +180,44 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
+  it('khách đã focus ô ghi chú (ngoài khung Đơn hàng) lúc báo giá tải lại: báo giá về thì focus ở lại ô, nút không giật focus (L5 1)', async () => {
+    state.placeError = new Error('PRICE_CHANGED');
+    const c = await mount();
+    state.quoteDelay = 40;
+    click(lgButton(c));
+    await flush(4);
+    expect(lgButton(c).disabled).toBe(true);
+    const textarea = c.querySelector<HTMLTextAreaElement>('[data-mini-block="note"] textarea')!;
+    textarea.focus();
+    expect(document.activeElement).toBe(textarea);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    await flush(4);
+    expect(lgButton(c).disabled).toBe(false);
+    expect(document.activeElement).toBe(textarea);
+    // Cờ đã hạ: các lần vẽ lại sau đó cũng không kéo focus về nút (Space/Enter kế tiếp không được bấm nhầm Đặt hàng).
+    await flush(4);
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it('focus đang ở một chỗ khác trong khung Đơn hàng khi báo giá về: vẫn trả focus về nút Đặt hàng (L5 1)', async () => {
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
+    state.placeError = new Error('PRICE_CHANGED');
+    const c = await mount();
+    state.quoteDelay = 40;
+    click(lgButton(c));
+    await flush(4);
+    const link = part(c).closest('.h-fit')!.querySelector<HTMLAnchorElement>('a[href="/gio-hang"]')!;
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    await flush(4);
+    expect(document.activeElement).toBe(lgButton(c));
+  });
+
   it('focus đã trả về nút một lần thì yêu cầu hết: các lần vẽ lại sau đó (lỗi cũ còn hiện) không kéo focus về nút nữa', async () => {
     state.placeError = new Error('Địa chỉ giao không hợp lệ.');
     const c = await mount();
