@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   authStatus: 'authenticated' as string,
   fetchProduct: vi.fn(),
   addToCart: vi.fn(),
+  getCart: vi.fn(),
   snackbar: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -21,6 +22,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchProduct: mocks.fetchProduct,
   addToCart: mocks.addToCart,
+  getCart: mocks.getCart,
   fetchActiveFlashSales: async () => [],
 }));
 vi.mock('../components/variation-sheet', () => ({
@@ -63,6 +65,7 @@ describe('Trang Yêu thích', () => {
     vi.clearAllMocks();
     mocks.authStatus = 'authenticated';
     mocks.getWishlist.mockResolvedValue([]);
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
   });
 
   it('chưa đăng nhập xong thì chưa gọi API (tránh 401 thành màn lỗi) và hiện khung chờ', () => {
@@ -112,6 +115,7 @@ describe('Trang Yêu thích: nút giỏ nhanh', () => {
     vi.clearAllMocks();
     mocks.authStatus = 'authenticated';
     mocks.addToCart.mockResolvedValue({ items: [] });
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
     mocks.getWishlist.mockResolvedValue([
       { id: 'p1', slug: 'xa-bong', name: 'Xà bông', inStock: true },
       { id: 'p2', slug: 'het-hang', name: 'Dầu gội', inStock: false },

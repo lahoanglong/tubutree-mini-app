@@ -17,7 +17,7 @@ import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { inCartQuantity, overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
@@ -113,7 +113,8 @@ export default function AddToCart({
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
   // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; "Thêm vào giỏ" ghi phần giỏ tăng (`total`). Giỏ chưa tải hay lỗi thì coi là rỗng.
   const line = selected ? variationLinePreview(selected, flash, qty, inCartQuantity(cartData?.items, selected.id)) : null;
-  const overLimitText = line ? overLimitNote(line, qty) : null;
+  // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
+  const overLimitText = line ? lineNote(line, qty, true) : null;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
@@ -373,7 +374,7 @@ export default function AddToCart({
           {addLabel}
         </button>
       </div>
-      {/* Mua quá giới hạn Giờ vàng mỗi khách: máy chủ tính cả dòng giá thường, nên nói trước ở đây (các nút đã ghi đúng số đó). Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
+      {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, các nút đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
       <div role="status" data-section="pdp-flash-limit" className="max-md:order-6">
         {overLimitText && (
           <p className={`mt-2 text-sm text-[var(--color-text-secondary)] ${phoneCaption} ${phoneBandPad} max-md:mt-0 max-md:pb-3`}>{overLimitText}</p>

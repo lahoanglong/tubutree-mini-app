@@ -102,12 +102,34 @@ export function variationLinePreview(
 /**
  * Câu ghi chú "mua quá số suất thì cả dòng tính giá thường" cho số lượng đang chọn; null khi không vượt (không đổi giá nên không nói).
  * Giỏ đã có sẵn phân loại thì nói theo giỏ ("Giỏ đã có n"): khách chọn qty nhưng dòng giỏ thành `inCart + qty` nên con số của họ không phải số bị so với suất.
+ * Giỏ đã vượt suất từ trước (`inCart > allowance`) thì dòng giỏ tính giá thường rồi: câu riêng, không nói như thể phần thêm làm mất giá.
  */
 export function overLimitNote(
   line: Pick<VariationLinePreview, 'overLimit' | 'allowance' | 'allowanceBy' | 'inCart' | 'lineQuantity'>,
   quantity: number,
 ): string | null {
   if (!line.overLimit || line.allowance === null) return null;
+  if (line.inCart > line.allowance) return fillCopy('flash.sheetOverInCartAlready', { n: line.inCart, allowance: line.allowance });
   if (line.inCart > 0) return fillCopy('flash.sheetOverInCart', { n: line.inCart, qty: quantity, total: line.lineQuantity });
   return fillCopy(line.allowanceBy === 'quota' ? 'flash.sheetOverQuota' : 'flash.sheetOverLimit', { n: line.allowance, qty: quantity });
+}
+
+/**
+ * Câu báo trước khi bấm "Mua ngay" khi giỏ đã có sẵn phân loại: nút ghi tiền CẢ dòng giỏ (`lineTotal`, số có sẵn + số thêm), không riêng phần
+ * khách vừa chọn, nên khách thấy số lớn hơn `qty × đơn giá` cần một câu giải thích. Giỏ chưa có phân loại này thì null.
+ */
+export function buyNowMergeNote(line: Pick<FlashLinePreview, 'inCart' | 'lineQuantity'>): string | null {
+  return line.inCart > 0 ? fillCopy('flash.sheetBuyMerge', { n: line.inCart, total: line.lineQuantity }) : null;
+}
+
+/**
+ * Chữ duy nhất của vùng ghi chú dưới ô Số lượng: mất giá Giờ vàng thì nói điều đó (nút đã ghi đúng số), không thì nếu `buyNow` (nơi có nút
+ * "Mua ngay") và giỏ đã có sẵn thì nói "Mua ngay" thanh toán cả dòng. Hai câu không cùng hiện để vùng giữ chỗ không phải cao hơn.
+ */
+export function lineNote(
+  line: Pick<VariationLinePreview, 'overLimit' | 'allowance' | 'allowanceBy' | 'inCart' | 'lineQuantity'>,
+  quantity: number,
+  buyNow: boolean,
+): string | null {
+  return overLimitNote(line, quantity) ?? (buyNow ? buyNowMergeNote(line) : null);
 }

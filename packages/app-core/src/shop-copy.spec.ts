@@ -12,6 +12,7 @@ const WORST: Record<string, string> = {
   n: '99',
   qty: '99',
   total: '99',
+  allowance: '99',
   pct: '99',
   d: '99',
   h: '23',

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { flashLimitFor, flashLinePreview, flashQuotaLeftFor, inCartQuantity, overLimitNote, variationLinePreview } from './flash-line';
+import { buyNowMergeNote, flashLimitFor, flashLinePreview, flashQuotaLeftFor, inCartQuantity, lineNote, overLimitNote, variationLinePreview } from './flash-line';
 
 /**
  * Đối chiếu với luật máy chủ `priceFlashLine` (apps/api/src/modules/flash-sale/flash-line-price.ts): file API được chuyển sang CommonJS rồi chạy
@@ -278,5 +278,61 @@ describe('overLimitNote với giỏ có sẵn', () => {
   it('trong giới hạn (giỏ 1 + 2 = limit) hoặc không đổi giá thì không có ghi chú', () => {
     expect(overLimitNote(variationLinePreview(variation, item({ perUserLimit: 3 }), 2, 1), 2)).toBeNull();
     expect(overLimitNote(variationLinePreview(variation, [], 2, 3), 2)).toBeNull();
+  });
+
+  it('giỏ đúng bằng suất rồi thêm 1: chính phần thêm làm mất giá, vẫn câu "Thêm … thì cả …"', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 1, 3);
+    expect(overLimitNote(line, 1)).toBe('Giỏ đã có 3. Thêm 1 thì cả 4 sản phẩm tính giá thường.');
+  });
+
+  it('giỏ đã vượt suất từ trước (5 > 3): nói dòng giỏ đang tính giá thường, không đổ cho phần thêm', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 1, 5);
+    const note = overLimitNote(line, 1);
+    expect(note).toBe('Giỏ đã có 5, quá 3 suất Giờ vàng nên cả dòng đang tính giá thường.');
+    expect(note).not.toMatch(/Thêm 1/);
+    // Chip và ô giá vẫn là giá Giờ vàng (giá một đơn vị), chỉ dòng giỏ mất giá.
+    expect(line.pricing.isFlash).toBe(true);
+    expect(line.pricing.price).toBe(FLASH);
+    expect(line.unitPrice).toBe(STANDING);
+  });
+
+  it('giỏ đã vượt suất còn lại của đợt: cùng câu, nêu số suất đang áp', () => {
+    const line = variationLinePreview(variation, item({ quota: 10, soldCount: 8, perUserLimit: 5 }), 1, 4);
+    expect(overLimitNote(line, 1)).toBe('Giỏ đã có 4, quá 2 suất Giờ vàng nên cả dòng đang tính giá thường.');
+  });
+});
+
+describe('buyNowMergeNote / lineNote: "Mua ngay" thanh toán cả dòng giỏ', () => {
+  const variation = { id: 'v1', retailPrice: STANDING, salePrice: null };
+  const item = (extra: object) => [{ productSlug: 'p', variationId: 'v1', flashPrice: FLASH, ...extra }];
+
+  it('giỏ có 2, chọn 1, chưa vượt suất: báo "Mua ngay" thanh toán cả 3 (nút ghi 78.000đ)', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 1, 2);
+    expect(line.lineTotal).toBe(78_000);
+    expect(buyNowMergeNote(line)).toBe('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+    expect(lineNote(line, 1, true)).toBe('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+  });
+
+  it('giỏ chưa có phân loại: không có câu nào', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 1, 0);
+    expect(buyNowMergeNote(line)).toBeNull();
+    expect(lineNote(line, 1, true)).toBeNull();
+  });
+
+  it('không phải nơi có nút "Mua ngay" (bảng "Thêm vào giỏ") thì không nói', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 1, 2);
+    expect(lineNote(line, 1, false)).toBeNull();
+  });
+
+  it('mất giá Giờ vàng thì chỉ câu mất giá (một vùng ghi chú, một câu)', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 2, 2);
+    expect(lineNote(line, 2, true)).toBe('Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.');
+    expect(lineNote(line, 2, false)).toBe('Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.');
+  });
+
+  it('sản phẩm không Giờ vàng cũng thế: giỏ có 2 chọn 1 thì cả 3 × giá thường', () => {
+    const line = variationLinePreview(variation, [], 1, 2);
+    expect(line.lineTotal).toBe(105_000);
+    expect(lineNote(line, 1, true)).toBe('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
   });
 });

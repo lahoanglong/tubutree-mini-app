@@ -1103,6 +1103,7 @@ describe('AddToCart — giỏ đã có sẵn cùng phân loại: thêm giỏ c�
   };
   const cartOf = (quantity: number) => ({ items: [{ id: 'ci1', variationId: 'v2', quantity }], itemCount: quantity });
   const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+  const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
   const plus = (c: HTMLElement) => c.querySelector('[data-section="pdp-quantity"] button[aria-label="Tăng số lượng"]');
   const stickyBuy = (c: HTMLElement) => c.querySelector('button[aria-label^="Mua ngay"]') as HTMLButtonElement;
 
@@ -1121,11 +1122,13 @@ describe('AddToCart — giỏ đã có sẵn cùng phân loại: thêm giỏ c�
     const { container } = await openWithCart(cartOf(2));
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
     expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
-    expect(container.textContent).not.toContain('Giỏ đã có');
+    // Chưa mất giá nhưng nút ghi cả dòng (3 × 240.000đ) cạnh ô Số lượng đang là 1: nói trước khi bấm.
+    const note = () => container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent;
+    expect(note()).toBe(MERGE_2);
     click(plus(container));
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 720.000đ');
     expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
-    expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe(IN_CART_2);
+    expect(note()).toBe(IN_CART_2);
   });
 
   it('thêm giỏ thành công rồi nút vẽ lại theo giỏ mới, không đếm số cũ hai lần', async () => {

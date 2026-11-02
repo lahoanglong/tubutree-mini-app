@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
-import { inCartQuantity, overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
@@ -56,8 +56,11 @@ export function VariationSheet({
   initialId: string | null;
   initialQty: number;
   busy: boolean;
-  /** Giỏ hiện tại (`GET /cart`): thêm giỏ cộng dồn và máy chủ giá cả dòng, nên số đã có của phân loại đang chọn đổi tiền hai nút. Chưa có thì coi là giỏ rỗng. */
-  cartLines?: readonly { variationId: string; quantity: number }[];
+  /**
+   * Giỏ hiện tại (`GET /cart`): thêm giỏ cộng dồn và máy chủ giá cả dòng, nên số đã có của phân loại đang chọn đổi tiền hai nút. Bắt buộc ghi ra (chỗ gọi
+   * quên truyền thì bảng âm thầm coi giỏ rỗng và nút ghi sai tiền); `undefined` chỉ khi giỏ chưa tải, lỗi hoặc khách chưa đăng nhập, khi đó coi là giỏ rỗng.
+   */
+  cartLines: readonly { variationId: string; quantity: number }[] | undefined;
   onConfirm: (variation: VariationOption, qty: number) => void | Promise<void>;
 }) {
   const [id, setId] = useState<string | null>(null);
@@ -78,7 +81,10 @@ export function VariationSheet({
   // giỏ của phân loại này (`lineTotal`); "Thêm vào giỏ" ghi phần giỏ tăng thật (`total`). Giỏ rỗng thì hai số bằng nhau.
   const line = selected ? variationLinePreview(selected, flash, shownQty, inCartQuantity(cartLines, selected.id)) : null;
   const view = line?.pricing ?? null;
-  const overNote = line ? overLimitNote(line, shownQty) : null;
+  // Một vùng ghi chú một câu: mất giá Giờ vàng, hoặc ("Mua ngay") giỏ đã có sẵn nên thanh toán cả dòng.
+  const note = line ? lineNote(line, shownQty, mode === 'buy') : null;
+  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng, hoặc "Mua ngay" mà giỏ đã có một phân loại nào đó của sản phẩm (đổi chip không làm bảng cao thêm).
+  const reserveNote = line?.allowance != null || (mode === 'buy' && variations.some((v) => inCartQuantity(cartLines, v.id) > 0));
 
   return (
     <BottomSheet
@@ -156,12 +162,12 @@ export function VariationSheet({
           }}
         />
       </div>
-      {line?.allowance != null && (
-        // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
+      {reserveNote && (
+        // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption, đủ cho cả câu mất giá lẫn câu giỏ có sẵn; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
         <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
-          {overNote && (
+          {note && (
             <Text variant="caption" tone="secondary" as="p">
-              {overNote}
+              {note}
             </Text>
           )}
         </div>

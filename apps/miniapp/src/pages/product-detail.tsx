@@ -53,7 +53,7 @@ import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { inCartQuantity, overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -378,7 +378,8 @@ export default function ProductDetailPage() {
   const line = selected
     ? variationLinePreview(selected, flashList, quantity, inCartQuantity(cart.data?.items, selected.id))
     : { total: price * quantity, lineTotal: price * quantity, lineQuantity: quantity, inCart: 0, overLimit: false, allowance: null, allowanceBy: null };
-  const overLimitText = overLimitNote(line, quantity);
+  // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
+  const overLimitText = lineNote(line, quantity, true);
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
   const soldText = formatSold(p.sold);
@@ -779,7 +780,7 @@ export default function ProductDetailPage() {
           }}
         />
       </Box>
-      {/* Mua quá giới hạn Giờ vàng mỗi khách: máy chủ tính cả dòng giá thường, nên nói trước ở đây (nút Mua ngay đã ghi đúng số đó). Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
+      {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, nút Mua ngay đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
       <div role="status" style={{ background: 'var(--color-bg-surface)' }}>
         {overLimitText && (
           <p

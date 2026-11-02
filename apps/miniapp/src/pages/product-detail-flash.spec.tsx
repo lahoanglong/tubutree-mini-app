@@ -255,6 +255,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       itemCount: quantity,
     });
     const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+    const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
 
     it('giới hạn 3, giỏ có 2: qty 1 (tổng 3) 3 × 80.000đ; qty 2 (tổng 4) cả dòng giá thường 400.000đ kèm ghi chú theo giỏ', async () => {
       mocks.authStatus = 'authenticated';
@@ -263,10 +264,13 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       renderPdp();
       await screen.findByTestId('flash-price-bar');
       await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
-      expect(screen.queryByText(/Giỏ đã có/)).toBeNull();
+      // Chưa mất giá nhưng nút ghi cả dòng (3 × 80.000đ) cạnh ô Số lượng đang là 1: nói trước khi bấm, không đợi tới thông báo sau khi bấm.
+      expect(screen.getByText(MERGE_2)).toBeInTheDocument();
+      expect(screen.queryByText(/tính giá thường/)).toBeNull();
       fireEvent.click(plus());
       expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
       expect(screen.getByText(IN_CART_2)).toBeInTheDocument();
+      expect(screen.queryByText(MERGE_2)).toBeNull();
     });
 
     it('thêm giỏ thành công rồi nút vẽ lại theo giỏ mới, không đếm số cũ hai lần', async () => {
