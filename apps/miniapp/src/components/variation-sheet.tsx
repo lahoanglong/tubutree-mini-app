@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
-import {
-  clampPickerQty,
-  pickerStartId,
-  pickerStockText,
-  pickerView,
-} from '@tubutree/app-core/variation-picker';
-import type { FlashPriceItem } from '@tubutree/app-core/flash-price';
+import { Zap } from 'lucide-react';
+import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
+import { variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { PriceTag } from './ui/price-tag';
 import { ProductThumb } from './ui/product-thumb';
 import { QuantitySelector } from './ui/quantity-selector';
+import { SR_ONLY } from './ui/sr-only';
 import { Text } from './ui/text';
-import { rowKeyboardProps } from './ui/row-keyboard';
+import { VariationChip } from './product/variation-chip';
 
 export interface VariationOption {
   id: string;
@@ -67,9 +68,12 @@ export function VariationSheet({
   }, [open]);
 
   const selected = variations.find((v) => v.id === id);
-  const view = selected ? pickerView(selected, flash) : null;
   const available = (selected?.stock ?? 0) > 0;
   const label = mode === 'buy' ? 'Mua ngay' : 'Thêm vào giỏ';
+  const shownQty = clampPickerQty(selected, qty);
+  // Tiền dòng theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường, nên nút ghi số đó chứ không phải qty × giá Giờ vàng.
+  const line = selected ? variationLinePreview(selected, flash, shownQty) : null;
+  const view = line?.pricing ?? null;
 
   return (
     <BottomSheet
@@ -85,14 +89,33 @@ export function VariationSheet({
           disabled={!selected || !available}
           onPress={() => selected && onConfirm(selected, clampPickerQty(selected, qty))}
         >
-          {available && view ? `${label} · ${formatVnd(view.price * clampPickerQty(selected, qty))}` : 'Hết hàng'}
+          {available && line ? `${label} · ${formatVnd(line.total)}` : fillTileCopy('stock.out')}
         </Button>
       }
     >
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <ProductThumb src={thumbnail} alt={productName} size={80} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          {view && <PriceTag value={view.price} compareAt={view.compareAt} size="lg" />}
+          {view && (
+            <span data-testid="variation-sheet-price">
+              <PriceTag value={view.price} compareAt={view.compareAt} size="lg" tone={view.isFlash ? 'deal' : 'default'} />
+            </span>
+          )}
+          {view?.isFlash && (
+            <div data-testid="variation-sheet-flash" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-inline-xs) var(--space-inline-sm)', marginTop: 'var(--space-stack-xs)' }}>
+              <Badge tone="flash" size="sm" icon={Zap}>
+                {fillCopy('flash.title')}
+              </Badge>
+              {line?.limit != null && (
+                <>
+                  <Text variant="caption" tone="secondary" aria-hidden="true">
+                    {fillCopy('flash.limitShort', { n: line.limit })}
+                  </Text>
+                  <span style={SR_ONLY}>{fillCopy('flash.limitSpoken', { n: line.limit })}</span>
+                </>
+              )}
+            </div>
+          )}
           <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
             {selected ? `${selected.name} · ${pickerStockText(selected.stock)}` : productName}
           </Text>
@@ -100,49 +123,19 @@ export function VariationSheet({
       </div>
 
       <div role="group" aria-label="Phân loại" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
-        {variations.map((v) => {
-          const out = v.stock <= 0;
-          const active = v.id === id;
-          return (
-            <div
-              key={v.id}
-              role="button"
-              aria-pressed={active}
-              aria-disabled={out}
-              {...(out ? null : rowKeyboardProps())}
-              className={out ? undefined : 'tubu-press'}
-              onClick={
-                out
-                  ? undefined
-                  : () => {
-                      haptic('light');
-                      setId(v.id);
-                      setQty((q) => clampPickerQty(v, q));
-                    }
-              }
-              style={{
-                padding: '8px 14px',
-                minHeight: 44,
-                boxSizing: 'border-box',
-                borderRadius: 'var(--radius-control)',
-                border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
-                background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-                opacity: out ? 0.55 : 1,
-              }}
-            >
-              <Text
-                variant="body-sm"
-                style={{
-                  color: active ? 'var(--color-text-brand)' : 'var(--color-text-primary)',
-                  textDecoration: out ? 'line-through' : 'none',
-                  fontWeight: active ? 600 : 400,
-                }}
-              >
-                {v.name}
-              </Text>
-            </div>
-          );
-        })}
+        {variations.map((v) => (
+          <VariationChip
+            key={v.id}
+            variation={v}
+            pricing={variationPricing(v, flash)}
+            active={v.id === id}
+            onClick={() => {
+              haptic('light');
+              setId(v.id);
+              setQty((q) => clampPickerQty(v, q));
+            }}
+          />
+        ))}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
@@ -158,6 +151,16 @@ export function VariationSheet({
           }}
         />
       </div>
+      {line?.limit != null && (
+        // Vùng thông báo có chỗ giữ cố định (2 dòng chữ nhỏ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
+        <div role="status" style={{ minHeight: 'calc(var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
+          {line.overLimit && (
+            <Text variant="caption" tone="secondary" as="p">
+              {fillCopy('flash.sheetOverLimit', { n: line.limit, qty: shownQty })}
+            </Text>
+          )}
+        </div>
+      )}
     </BottomSheet>
   );
 }

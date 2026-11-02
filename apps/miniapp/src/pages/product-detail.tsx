@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, Zap } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -52,6 +52,7 @@ import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
+import { variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -75,6 +76,7 @@ import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
 import { PdpBundles } from '../components/product/pdp-bundles';
+import { VariationChip } from '../components/product/variation-chip';
 import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
@@ -370,6 +372,8 @@ export default function ProductDetailPage() {
   const flashList = runningFlash(flashQ.data);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
+  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường (nút và điểm tích dùng số này, không phải qty × giá Giờ vàng).
+  const line = selected ? variationLinePreview(selected, flashList, quantity) : { total: price * quantity, overLimit: false, limit: null };
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
   const soldText = formatSold(p.sold);
@@ -634,7 +638,7 @@ export default function ProductDetailPage() {
           </Box>
         )}
 
-        <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
+        <PointsEarnLine goods={line.total} authStatus={status} tierId={user?.tierId} />
 
         {lowStock && (
           <Text size="xSmall" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
@@ -770,6 +774,22 @@ export default function ProductDetailPage() {
           }}
         />
       </Box>
+      {/* Mua quá giới hạn Giờ vàng mỗi khách: máy chủ tính cả dòng giá thường, nên nói trước ở đây (nút Mua ngay đã ghi đúng số đó). Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
+      <div role="status" style={{ background: 'var(--color-bg-surface)' }}>
+        {line.overLimit && line.limit != null && (
+          <p
+            style={{
+              margin: 0,
+              padding: '0 var(--space-inline-md) var(--space-stack-sm)',
+              fontSize: 'var(--type-caption-size)',
+              lineHeight: 'var(--type-caption-lh)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            {fillCopy('flash.sheetOverLimit', { n: line.limit, qty: quantity })}
+          </p>
+        )}
+      </div>
 
       {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 
@@ -1062,12 +1082,12 @@ export default function ProductDetailPage() {
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
                 onPress={handleBuyNow}
-                aria-label={`Mua ngay · ${formatVnd(price * quantity)}`}
+                aria-label={`Mua ngay · ${formatVnd(line.total)}`}
                 style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
               >
                 <span style={BUY_NOW_LINE}>Mua ngay</span>
                 <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>
-                  {formatVnd(price * quantity)}
+                  {formatVnd(line.total)}
                 </span>
               </Button>
             </Box>
@@ -1196,71 +1216,6 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
           ))}
         </Box>
       )}
-    </Box>
-  );
-}
-
-/** Chip phân loại 2 dòng: tên + giá khách thật sự trả (đã áp Giờ vàng, như `variationPricing`). Hết hàng = mờ + gạch nhưng vẫn xem được. */
-function VariationChip({
-  variation,
-  pricing,
-  active,
-  onClick,
-}: {
-  variation: VariationDetail;
-  pricing: ReturnType<typeof variationPricing>;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const out = variation.stock <= 0;
-  return (
-    <Box
-      role="button"
-      aria-pressed={active}
-      aria-disabled={out}
-      {...(out ? null : rowKeyboardProps())}
-      // Hết hàng → KHÔNG cho chọn (trước đây vẫn select được → CTA disable, gây khó hiểu).
-      className={out ? undefined : 'tubu-press'}
-      onClick={out ? undefined : onClick}
-      style={{
-        padding: '8px 14px',
-        borderRadius: 'var(--radius-control)',
-        border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
-        background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-        opacity: out ? 0.55 : 1,
-        minHeight: 44,
-        boxSizing: 'border-box',
-      }}
-    >
-      <Text
-        size="small"
-        bold={active}
-        style={{
-          color: active ? 'var(--color-text-brand)' : 'var(--color-text-primary)',
-          textDecoration: out ? 'line-through' : 'none',
-        }}
-      >
-        {variation.name}
-      </Text>
-      <Text
-        size="xSmall"
-        style={{
-          color: out ? 'var(--color-text-disabled)' : pricing.isFlash ? 'var(--color-text-price-deal)' : active ? 'var(--color-text-brand)' : 'var(--color-text-secondary)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 2,
-        }}
-      >
-        {out ? (
-          vi.product.outOfStock
-        ) : (
-          <>
-            {pricing.isFlash && <Zap size={12} strokeWidth={2} aria-hidden="true" />}
-            {formatVnd(pricing.price)}
-            {pricing.isFlash && <span style={SR_ONLY}>, {fillCopy('flash.title')}</span>}
-          </>
-        )}
-      </Text>
     </Box>
   );
 }

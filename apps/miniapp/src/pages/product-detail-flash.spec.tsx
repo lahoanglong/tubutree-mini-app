@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -193,5 +193,44 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     expect(await screen.findByText('-25%')).toBeInTheDocument();
     expect(screen.getByText('159.000đ')).toHaveStyle({ textDecoration: 'line-through' });
     expect(screen.queryByText('180.000đ')).toBeNull();
+  });
+
+  describe('tiền nút mua theo luật máy chủ khi vượt giới hạn Giờ vàng mỗi khách', () => {
+    const buyNow = () => screen.getByRole('button', { name: /^Mua ngay/ });
+    const plus = () => screen.getByRole('button', { name: 'Tăng số lượng' });
+    const OVER_4 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 4 thì cả dòng tính giá thường.';
+
+    it('qty = giới hạn: 3 × 80.000đ; qty 4: cả dòng giá thường 4 × 100.000đ kèm ghi chú dưới ô Số lượng', async () => {
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      fireEvent.click(plus());
+      fireEvent.click(plus());
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ');
+      expect(screen.queryByText(OVER_4)).toBeNull();
+      fireEvent.click(plus());
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+      expect(screen.getByText(OVER_4)).toBeInTheDocument();
+    });
+
+    it('API cũ không gửi giới hạn: vẫn qty × giá Giờ vàng, không ghi chú', async () => {
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash()]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      for (let i = 0; i < 3; i += 1) fireEvent.click(plus());
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 320.000đ');
+      expect(screen.queryByText(/cả dòng tính giá thường/)).toBeNull();
+    });
+
+    it('hết giờ: nút về qty × giá thường và ghi chú biến mất', async () => {
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3, endAt: new Date(Date.now() + 1_500).toISOString() })]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      for (let i = 0; i < 3; i += 1) fireEvent.click(plus());
+      expect(screen.getByText(OVER_4)).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByTestId('flash-price-bar')).toBeNull(), { timeout: 4_000 });
+      expect(screen.queryByText(OVER_4)).toBeNull();
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+    });
   });
 });
