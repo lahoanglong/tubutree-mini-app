@@ -22,7 +22,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../services/coupon-claim', () => ({ claimCoupon: mocks.claimCoupon }));
 vi.mock('../hooks/use-notify', () => ({ useNotify: () => ({ notify: mocks.notify }) }));
-vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), use: mocks.use }) }));
+vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), apply: mocks.use }) }));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('../store/auth', () => {
   const state = () => ({
