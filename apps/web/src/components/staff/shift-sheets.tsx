@@ -78,7 +78,7 @@ export function ShiftFormSheet({
       title={`${editId ? 'Sửa ca' : 'Thêm ca'} · ${dowLabel(day)} ${shortDayLabel(day)}`}
       footer={
         <button type="button" disabled={pending || invalid} onClick={onSubmit} className={`${ui.btnPrimary} w-full`}>
-          {pending ? 'Đang gửi...' : editId ? 'Lưu' : 'Gửi duyệt'}
+          {pending ? 'Đang gửi…' : editId ? 'Lưu' : 'Gửi duyệt'}
         </button>
       }
     >
@@ -204,7 +204,7 @@ export function CancelSheet({
       title="Huỷ ca đã duyệt"
       footer={
         <button type="button" disabled={pending || reason.trim().length === 0 || (emergency && !evidence)} onClick={onSubmit} className={`${ui.btnPrimary} w-full`}>
-          {pending ? 'Đang huỷ...' : 'Xác nhận huỷ'}
+          {pending ? 'Đang huỷ…' : 'Xác nhận huỷ'}
         </button>
       }
     >

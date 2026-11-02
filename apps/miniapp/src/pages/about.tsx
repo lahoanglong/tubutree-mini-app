@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ABOUT_MISSION } from '@tubutree/app-core/client-copy';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, TreePine } from 'lucide-react';
@@ -92,9 +93,7 @@ export default function AboutPage() {
             Sống Xanh An Lành
           </Heading>
           <Text variant="body-sm" tone="inverse" as="p" style={{ marginTop: 8 }}>
-            Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Chúng
-            tôi kết nối bạn với những thương hiệu Việt tử tế — minh bạch nguồn gốc, lành cho da, nhẹ
-            với đất.
+            {ABOUT_MISSION}
           </Text>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { Page, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -329,7 +330,7 @@ export default function NotificationsPage() {
             {notifQ.isFetchNextPageError && (
               <div role="alert" style={{ textAlign: 'center' }}>
                 <Text variant="body-sm" tone="danger">
-                  Không tải thêm được thông báo. Vui lòng thử lại.
+                  {loadMoreFailed('thông báo')}
                 </Text>
               </div>
             )}

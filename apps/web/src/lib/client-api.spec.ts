@@ -227,7 +227,7 @@ describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
     const err = await apiFetch('/cart').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(NetworkError);
     expect(err).not.toBeInstanceOf(ApiError);
-    expect((err as Error).message).toBe('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.');
+    expect((err as Error).message).toBe('Mất kết nối. Kiểm tra mạng rồi thử lại.');
     expect((err as NetworkError).timedOut).toBe(false);
   });
 
@@ -244,7 +244,7 @@ describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
     const err = await pending;
     expect(err).toBeInstanceOf(NetworkError);
     expect((err as NetworkError).timedOut).toBe(true);
-    expect((err as Error).message).toBe('Máy chủ phản hồi quá lâu. Vui lòng thử lại.');
+    expect((err as Error).message).toBe('Máy chủ phản hồi quá lâu. Thử lại sau ít phút.');
   });
 
   it('thân phản hồi treo sau khi đã có header cũng bị ngắt (không kẹt ở "Đang đặt hàng…")', async () => {
@@ -276,7 +276,7 @@ describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
     const err = await apiFetch('/cart').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(502);
-    expect((err as Error).message).toBe('Có lỗi xảy ra. Vui lòng thử lại.');
+    expect((err as Error).message).toBe('Đã có lỗi xảy ra. Bạn thử lại nhé.');
   });
 
   it('refresh gặp lỗi mạng KHÔNG xoá cờ phiên (cookie vẫn sống)', async () => {

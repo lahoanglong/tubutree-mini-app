@@ -26,7 +26,7 @@ export function SettlementTab() {
     <div className="space-y-5">
       <Notice>
         Mỗi đơn bạn tự giao: thực nhận = tiền khách thực trả cho hàng + phí giao − phí sàn Tubu − tiền COD bạn đã tự thu của
-        khách. Hàng của bạn bán theo giá lẻ niêm yết (hoặc giá giờ vàng khi Tubu Tree đưa món vào giờ vàng). Phần mã giảm giá
+        khách. Hàng của bạn bán theo giá lẻ niêm yết (hoặc giá Giờ vàng khi Tubu Tree đưa món vào Giờ vàng). Phần mã giảm giá
         của khách và giảm giá hạng thành viên áp cho món của bạn được trừ vào số tiền của bạn (mã chỉ áp cho món khác không trừ
         vào món của bạn). Khách không trả hàng của bạn bằng Điểm Xanh; hàng của bạn không bán giá đại lý, không đặt định kỳ,
         không vào combo hay mua chung. Khách trả bằng Ví Tubu vẫn tính đủ giá trị món; phí sàn theo mức chốt lúc khách đặt
@@ -40,7 +40,7 @@ export function SettlementTab() {
       {terms && (
         <Notice>
           Hàng Tubu giao hộ: kho Tubu Tree giao và thu tiền của khách, mỗi món là một khoản trên cùng phiếu đối soát. Thực nhận =
-          số tiền khách thực trả cho món (giá bán của món, kể cả giá giờ vàng, đã trừ phần mã giảm giá của khách và giảm giá
+          số tiền khách thực trả cho món (giá bán của món, kể cả giá Giờ vàng, đã trừ phần mã giảm giá của khách và giảm giá
           hạng thành viên áp cho chính món đó; mã chỉ áp cho món khác không trừ vào món của bạn; Điểm Xanh không dùng cho hàng
           của bạn) − {consignmentFeesText(terms)} (mức hiện tại; mỗi đơn tính theo mức áp dụng lúc khách đặt). Khách trả bằng Ví
           Tubu vẫn tính đủ giá trị món. Phí giao hàng do Tubu Tree thu và chịu, không tính

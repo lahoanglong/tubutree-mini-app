@@ -1,4 +1,5 @@
 import { formatVnd } from './shop-client';
+import { ACCOUNT_NAME_REQUIRED, BANK_NAME_REQUIRED } from '@tubutree/app-core/client-copy';
 import { formatDateTime } from './format-date';
 
 /** Web không dùng shared-types: trạng thái/phương thức là chuỗi API trả về. */
@@ -54,10 +55,10 @@ export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidT
 
 /** Kiểm tài khoản nhận hoàn tiền giống API (refund-destination.ts) để báo lỗi ngay trên form. */
 export function bankDetailsError(b: RefundBankInput): string | null {
-  if (b.bankName.trim().length < 2) return 'Vui lòng nhập tên ngân hàng.';
+  if (b.bankName.trim().length < 2) return BANK_NAME_REQUIRED;
   const digits = b.accountNumber.replace(/[\s.-]/g, '');
   if (!/^\d{6,24}$/.test(digits)) return 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
-  if (b.accountName.trim().length < 2) return 'Vui lòng nhập tên chủ tài khoản.';
+  if (b.accountName.trim().length < 2) return ACCOUNT_NAME_REQUIRED;
   return null;
 }
 

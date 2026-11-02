@@ -221,7 +221,7 @@ export function PayrollHub() {
         title="Thông tin nhận lương"
         footer={
           <button type="button" disabled={bankM.isPending} onClick={() => bankM.mutate()} className={`${ui.btnPrimary} w-full`}>
-            {bankM.isPending ? 'Đang lưu...' : 'Lưu'}
+            {bankM.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
         }
       >

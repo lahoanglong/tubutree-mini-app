@@ -5,7 +5,7 @@ const SERVER_BUSY = 'Máy chủ đang bận, thử lại nhé.';
 const NO_RESPONSE = 'Chưa kết nối được tới Tubu Tree. Kiểm tra mạng rồi thử lại nhé.';
 const OFFLINE = 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.';
 const GENERIC = 'Có chút trục trặc, thử lại nhé';
-export const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+export const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục.';
 const LOAD_TIMEOUT = 'Tải chậm quá, thử lại nhé.';
 const ACTION_TIMEOUT = 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.';
 

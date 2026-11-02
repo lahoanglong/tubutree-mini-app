@@ -89,9 +89,9 @@ describe('nhãn Đổi rác', () => {
     const ctx = { items: [ITEM_CARTON], maxOpenRequests: 3, itemCaps: [{ itemId: 'item-carton', monthRemainingQty: 1, dayRemainingQty: 2 }] };
     expect(blockMessage({ code: 'MAX_OPEN' }, ctx)).toBe('Bạn đang có 3 yêu cầu chưa xong');
     expect(blockMessage({ code: 'BELOW_MIN', missingPoints: 6000 }, ctx)).toBe('Cần thêm 6.000 điểm');
-    expect(blockMessage({ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }, ctx)).toBe('Tháng này Thùng carton chỉ còn 1 thùng');
-    expect(blockMessage({ code: 'ITEM_DAY_CAP', itemId: 'item-carton' }, ctx)).toBe('Thùng carton: mang tới điểm nhận hôm nay chỉ còn 2 thùng');
-    expect(blockMessage({ code: 'POINTS_MONTH_CAP', pointsRemaining: 60_000 }, ctx)).toBe('Tháng này bạn chỉ còn 60.000 điểm trong trần tháng');
+    expect(blockMessage({ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }, ctx)).toBe('Tháng này Thùng carton còn 1 thùng');
+    expect(blockMessage({ code: 'ITEM_DAY_CAP', itemId: 'item-carton' }, ctx)).toBe('Thùng carton: mang tới điểm nhận hôm nay còn 2 thùng');
+    expect(blockMessage({ code: 'POINTS_MONTH_CAP', pointsRemaining: 60_000 }, ctx)).toBe('Tháng này bạn còn 60.000 điểm trong trần tháng');
     expect(blockMessage({ code: 'MONTH_CAP_FOR_MIN' }, { ...ctx, method: 'PICKUP' })).toBe('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
     expect(blockMessage({ code: 'MONTH_CAP_FOR_MIN' }, { ...ctx, method: 'MAIL_IN' })).toBe('Tháng này bạn không còn đủ trần cho một gói gửi kho');
     expect(blockMessage({ code: 'NEED_PROVINCE' }, ctx)).toBe('Chọn tỉnh để ước tính phí ship');

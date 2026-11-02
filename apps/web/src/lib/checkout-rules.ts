@@ -97,9 +97,4 @@ export function outOfStockLine<T extends { quantity: number; stock: number }>(it
   return items.find((it) => it.quantity > it.stock);
 }
 
-/** Câu báo dòng hết hàng/vượt tồn ở màn thanh toán, cùng lời với Mini App (vi.checkout.overStock). */
-export function overStockMessage(productName: string, stock: number): string {
-  return stock > 0
-    ? `Sản phẩm "${productName}" hiện còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
-    : `Sản phẩm "${productName}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`;
-}
+export { overStockMessage } from '@tubutree/app-core/client-copy';

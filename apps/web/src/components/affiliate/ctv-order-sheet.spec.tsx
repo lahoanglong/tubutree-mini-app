@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { REQUIRED_FIELD } from '@tubutree/app-core/client-copy';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -234,7 +235,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm', () => {
   it('nhập thiếu: báo lỗi từng trường, không gửi', async () => {
     mount();
     click(submit());
-    expect(text().match(/Vui lòng nhập/g)).toHaveLength(3);
+    expect(text().split(REQUIRED_FIELD).length - 1).toBe(3);
     expect(text()).toContain('Thêm ít nhất 1 sản phẩm');
     expect(orderPosts()).toHaveLength(0);
   });
@@ -321,7 +322,7 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng'
     state.quote = async () => FLASH;
     await readyWithAn();
     await until(() => text().includes('Chanh · 52.000đ'));
-    expect(text()).toContain('Giá giờ vàng');
+    expect(text()).toContain('Giá Giờ vàng');
     expect(body().querySelector('[data-testid="ctv-order-goods"]')?.textContent).toBe('52.000đ');
     expect(body().querySelector('[data-testid="ctv-order-shipping"]')?.textContent).toBe('19.000đ');
     expect(body().querySelector('[data-testid="ctv-order-total"]')?.textContent).toBe('71.000đ');

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DEALER_PRICE_LOADING, DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import {
@@ -198,7 +199,7 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
             style={{ marginTop: 12, padding: 12, background: 'var(--color-status-danger-bg)', borderRadius: 'var(--radius-control)' }}
           >
             <Text variant="body-sm" tone="danger" as="p">
-              Hồ sơ trước bị từ chối. Vui lòng kiểm tra lại thông tin và nộp lại.
+              {DEALER_REJECTED_RESUBMIT}
             </Text>
             {rejectionReason && (
               <Text variant="body-sm" tone="danger" as="p" style={{ marginTop: 4, fontWeight: 600 }}>
@@ -578,7 +579,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
         />
         {priceQ.isLoading && (
           <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
-            Đang tải bảng giá, vui lòng đợi trước khi dán đơn…
+            {DEALER_PRICE_LOADING}
           </Text>
         )}
         {pasteResult && (

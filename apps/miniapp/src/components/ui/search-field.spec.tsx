@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SearchField } from './search-field';
 
 function renderField(over: Partial<Parameters<typeof SearchField>[0]> = {}) {
-  const props = { value: '', onChange: vi.fn(), onSubmit: vi.fn(), label: 'Tìm sản phẩm', clearLabel: 'Xoá từ khoá', placeholder: 'Tìm sản phẩm...', ...over };
+  const props = { value: '', onChange: vi.fn(), onSubmit: vi.fn(), label: 'Tìm sản phẩm', clearLabel: 'Xoá từ khoá', placeholder: 'Tìm sản phẩm…', ...over };
   render(<SearchField {...props} />);
   return props;
 }
@@ -16,7 +16,7 @@ describe('SearchField', () => {
     expect(screen.getByRole('search')).toBeInTheDocument();
     const input = screen.getByRole('searchbox', { name: 'Tìm sản phẩm' });
     expect(input).toHaveAttribute('enterkeyhint', 'search');
-    expect(input).toHaveAttribute('placeholder', 'Tìm sản phẩm...');
+    expect(input).toHaveAttribute('placeholder', 'Tìm sản phẩm…');
   });
 
   it('gõ → onChange; Enter → onSubmit với giá trị hiện tại (không reload trang)', () => {

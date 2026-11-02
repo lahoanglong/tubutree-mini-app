@@ -166,7 +166,7 @@ export function WheelOfFortune({
         onPress={() => void handleSpin()}
         style={{ minWidth: 200 }}
       >
-        {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
+        {spinning ? 'Đang quay…' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
       </Button>
       )}
     </div>

@@ -176,12 +176,12 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(await screen.findByText('Ước tính 6.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled();
     fireEvent.click(plus);
-    expect(await screen.findByText('Tháng này Thùng carton chỉ còn 1 thùng')).toBeInTheDocument();
+    expect(await screen.findByText('Tháng này Thùng carton còn 1 thùng')).toBeInTheDocument();
     expect(screen.queryByText(/Ước tính/)).toBeNull();
     expect(screen.queryByText(/Còn .* tới/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
     fireEvent.click(plus);
-    expect(await screen.findByText('Tháng này bạn chỉ còn 60.000 điểm trong trần tháng')).toBeInTheDocument();
+    expect(await screen.findByText('Tháng này bạn còn 60.000 điểm trong trần tháng')).toBeInTheDocument();
     expect(screen.queryByText(/Ước tính/)).toBeNull();
     expect(screen.queryByText(/Dùng như/)).toBeNull();
     expect(screen.queryByText(/Còn .* tới/)).toBeNull();
@@ -203,7 +203,7 @@ describe('bước 1: chọn món (§4.2)', () => {
     await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith({ lines: [{ itemId: 'item-carton', declaredQty: 2 }] }));
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
     release(preview({ blocks: [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }], itemCaps: [{ itemId: 'item-carton', monthRemainingQty: 1, dayRemainingQty: null }] }));
-    expect(await screen.findByText('Tháng này Thùng carton chỉ còn 1 thùng')).toBeInTheDocument();
+    expect(await screen.findByText('Tháng này Thùng carton còn 1 thùng')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
     fireEvent.click(within(carton).getByRole('button', { name: 'Giảm số lượng' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled());

@@ -195,7 +195,7 @@ describe('/hoan-tien — chọn sàn và nhận hoàn tiền', () => {
     expect(state.opened).toEqual(['https://aff.example/abc']);
     expect(state.win!.opener).toBeNull();
     expect(dialog()).toBeNull();
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…');
   });
 
   it('bấm đúp chỉ tạo một lượt click', async () => {

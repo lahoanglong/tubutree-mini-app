@@ -1,4 +1,5 @@
 import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
+import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -162,7 +163,7 @@ export default function ProfilePage() {
       : s,
   ).map((s) =>
     ownedBrand && s.group === homeCopy.profile.groupEarn
-      ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrand.name }] }
+      ? { ...s, items: [...s.items, { Icon: Store, label: BRAND_OWNER_TITLE, to: '/brand-owner', hint: ownedBrand.name }] }
       : s,
   );
   const workItems: MenuItem[] = [];

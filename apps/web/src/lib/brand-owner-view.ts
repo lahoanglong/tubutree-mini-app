@@ -2,7 +2,7 @@ import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { loadErrorText } from './error-text';
 import type { BrandSalesPeriod, OwnedPromotion } from '@tubutree/app-core/api/brand-owner';
 
-export const OWNER_FORBIDDEN = 'Tài khoản này không có quyền quản lý nhãn hàng.';
+export const OWNER_FORBIDDEN = 'Tài khoản này không có quyền quản lý thương hiệu.';
 const ACTION_FORBIDDEN = 'Bạn không có quyền thực hiện thao tác này.';
 
 /** 403 đổi sang lời dễ hiểu (không lộ "Forbidden resource" của máy chủ); lỗi khác theo loadErrorText. */

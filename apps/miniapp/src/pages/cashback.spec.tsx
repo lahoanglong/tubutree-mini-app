@@ -147,7 +147,7 @@ describe('CashbackPage — chọn sàn và nhận hoàn tiền', () => {
     await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledWith('m1'));
     await waitFor(() => expect(mocks.openAffiliateLink).toHaveBeenCalledWith('https://aff.example/abc'));
     expect(mocks.openSnackbar).toHaveBeenCalledWith({
-      text: 'Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn...',
+      text: 'Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…',
       type: 'success',
     });
   });

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { useInfiniteQuery, useQuery, type InfiniteData, type UseInfiniteQueryResult } from '@tanstack/react-query';
 import type { WalletTxnPage } from '@tubutree/app-core/api/wallet';
 import { walletCopy } from '@tubutree/app-core/account-copy';
@@ -262,7 +263,7 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
               </button>
               {q.isFetchNextPageError && (
                 <p role="alert" className={`mt-2 ${ui.error}`}>
-                  Không tải thêm được lịch sử. Vui lòng thử lại.
+                  {loadMoreFailed('lịch sử')}
                 </p>
               )}
             </div>

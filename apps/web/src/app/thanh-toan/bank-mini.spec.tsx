@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BANK_NOT_RECEIVED, BANK_CHECK_NETWORK } from '@tubutree/app-core/client-copy';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 
 // Màn VietQR ở điện thoại phải là Mini App (apps/miniapp/src/pages/bank-payment.tsx): tiêu đề trang, thẻ QR, các dòng kẻ,
@@ -137,7 +138,7 @@ describe('/thanh-toan/chuyen-khoan — sao chép ở điện thoại', () => {
     const c = await mount();
     c.querySelector<HTMLElement>('button[aria-label="Sao chép số tài khoản"]')!.click();
     await flush(4);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không thể sao chép số tài khoản. Vui lòng sao chép thủ công.');
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không thể sao chép số tài khoản. Bạn chép thủ công nhé.');
     expect(c.querySelector('[role="alert"]')!.classList.contains('sr-only')).toBe(false);
     expect(c.textContent).not.toContain('Đã sao chép');
   });
@@ -203,7 +204,7 @@ describe('/thanh-toan/chuyen-khoan — bố cục điện thoại như Mini App 
     const bar = c.querySelector('[data-testid="sticky-bar"]')!;
     bar.querySelector('button')!.click();
     await flush(6);
-    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toContain('Chưa thấy tiền về');
+    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toBe(BANK_NOT_RECEIVED);
   });
 
   it('bấm Kiểm tra gặp lỗi mạng: lỗi hiện trong thanh dính đáy', async () => {
@@ -212,7 +213,7 @@ describe('/thanh-toan/chuyen-khoan — bố cục điện thoại như Mini App 
     const bar = c.querySelector('[data-testid="sticky-bar"]')!;
     bar.querySelector('button')!.click();
     await flush(6);
-    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toMatch(/không kết nối|kiểm tra mạng/i);
+    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toBe(BANK_CHECK_NETWORK);
   });
 
   it('bấm Kiểm tra khi giao dịch thất bại: lời báo hiện trong thanh dính đáy', async () => {

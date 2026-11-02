@@ -1,5 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import { Page, Input, useSnackbar, useNavigate } from 'zmp-ui';
+import {
+  BRAND_OWNER_COUPON_HINT,
+  BRAND_OWNER_DRAFT,
+  BRAND_OWNER_EDIT_HINT,
+  BRAND_OWNER_INFO,
+  BRAND_OWNER_NONE,
+  BRAND_OWNER_SAVED,
+  BRAND_OWNER_TITLE,
+  BRAND_OWNER_VIEW_PAGE,
+} from '@tubutree/app-core/client-copy';
 import { Check, Gift, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,7 +39,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BrandSalesTab } from './brand-owner-sales';
 
-const PAGE_TITLE = 'Quản lý nhãn hàng';
+const PAGE_TITLE = BRAND_OWNER_TITLE;
 
 function OwnerShell({ children, paddingBottom = 0 }: { children: ReactNode; paddingBottom?: number }) {
   return (
@@ -67,8 +77,8 @@ export default function BrandOwnerPage() {
           <div style={{ padding: 24 }}>
             <EmptyState
               art="sprout"
-              heading="Quản lý nhãn hàng"
-              body="Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn."
+              heading={BRAND_OWNER_TITLE}
+              body={BRAND_OWNER_NONE}
               ctaLabel={canMessage ? (chatOn ? 'Nhắn Tubu' : 'Liên hệ Tubu') : undefined}
               onCta={canMessage ? messageTubu : undefined}
             />
@@ -104,7 +114,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   });
   const saveMut = useMutation({
     mutationFn: () => updateOwnedBrand(f),
-    onSuccess: () => { haptic('medium'); openSnackbar({ text: 'Đã lưu thông tin nhãn', type: 'success' }); void refresh(); },
+    onSuccess: () => { haptic('medium'); openSnackbar({ text: BRAND_OWNER_SAVED, type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
@@ -188,7 +198,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
           <Text variant="caption" tone="tertiary">{brand.followerCount} theo dõi</Text>
         </div>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-          Bạn sửa được thông tin & khuyến mãi. Tên nhãn, chứng nhận, đăng/ẩn do Tubu duyệt.
+          {BRAND_OWNER_EDIT_HINT}
         </Text>
         {/* Sửa logo/ảnh bìa/câu chuyện mà không xem được kết quả thì chỉ đoán — trang nhãn
             công khai đã có sẵn ở /brand/:slug, chỉ thiếu lối sang. */}
@@ -197,13 +207,13 @@ function Editor({ brand }: { brand: OwnedBrand }) {
           style={{ marginTop: 10 }}
           onPress={() => {
             if (!brand.isPublished) {
-              openSnackbar({ text: 'Nhãn đang là nháp — Tubu duyệt xong khách mới xem được.', type: 'warning' });
+              openSnackbar({ text: BRAND_OWNER_DRAFT, type: 'warning' });
               return;
             }
             navigate(`/brand/${brand.slug}`);
           }}
         >
-          Xem trang nhãn
+          {BRAND_OWNER_VIEW_PAGE}
         </Button>
       </div>
 
@@ -215,9 +225,9 @@ function Editor({ brand }: { brand: OwnedBrand }) {
 
       {tab === 'profile' && (
         <>
-          {/* Thông tin nhãn */}
+          {/* Thông tin thương hiệu */}
           <Card style={{ margin: '0 16px 12px' }}>
-            <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Thông tin nhãn</Heading>
+            <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>{BRAND_OWNER_INFO}</Heading>
             <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} /></div>
             <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} /></div>
             <div style={{ marginBottom: 8 }}>
@@ -263,8 +273,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
                 onChange={(e) => setPromo({ ...promo, couponCode: e.target.value.toUpperCase() })}
               />
               <Text variant="caption" tone="tertiary" as="div">
-                Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã giảm giá phải do Tubu tạo sẵn, công khai
-                và còn hạn — mã không có trong hệ thống sẽ bị từ chối khi lưu. Để trống ô này khi sửa để gỡ mã.
+                {BRAND_OWNER_COUPON_HINT}
               </Text>
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { INVOICE_ISSUE_FAILED, returnWindowExpired } from '@tubutree/app-core/client-copy';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
@@ -597,7 +598,7 @@ export default function OrderDetailPage() {
                 ? 'Đã phát hành'
                 : o.invoiceStatus === 'REQUESTED'
                   ? 'Đang xử lý'
-                  : 'Phát hành lỗi — vui lòng liên hệ hỗ trợ'}
+                  : INVOICE_ISSUE_FAILED}
             </Text>
             {o.invoiceUrl && (
               <Button
@@ -728,7 +729,7 @@ export default function OrderDetailPage() {
       {canRequestMore && !returnWindow.open && (
         <Box mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
           <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-            {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
+            {returnWindowExpired(returnDays)}
           </Text>
         </Box>
       )}

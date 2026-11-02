@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { returnWindowExpired } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { CheckCircle2, Clock, RotateCcw, XCircle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -237,7 +238,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
 
       {canRequestMore && !returnWindow.open && (
         <p className="mt-3 rounded-control bg-stone-50 p-3 text-xs text-stone-700">
-          {`Đã quá hạn đổi/trả (${returnDays} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.`}
+          {returnWindowExpired(returnDays)}
         </p>
       )}
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
+import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED } from '@tubutree/app-core/client-copy';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { OrderDTO } from '@/lib/shop-client';
@@ -189,7 +190,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     release();
     await flush();
     expect(btn().disabled).toBe(false);
-    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toContain('Chưa thấy tiền về');
+    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(BANK_NOT_RECEIVED);
   });
 
   it('kiểm tra tay gặp lỗi mạng: giữ nguyên khung QR, báo lỗi ngay dưới nút và cho bấm lại', async () => {
@@ -207,7 +208,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     click(byText(container, 'button', 'Tôi đã chuyển khoản'));
     await flush(6);
     expect(container.querySelector('img[alt="VietQR"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toMatch(/không kết nối|kiểm tra mạng/i);
+    expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(BANK_CHECK_NETWORK);
     expect((byText(container, 'button', 'Tôi đã chuyển khoản') as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -404,7 +405,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     click(byText(container, 'button', 'Tôi đã chuyển khoản'));
     await flush();
     expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(
-      'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
+      'Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.',
     );
   });
 

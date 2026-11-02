@@ -62,7 +62,7 @@ export function ImageUrlField({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="https://..."
+        placeholder="https://…"
         inputMode="url"
         autoComplete="off"
         aria-describedby={hintId}

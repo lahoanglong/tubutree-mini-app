@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AVATAR_READ_FAILED } from '@tubutree/app-core/client-copy';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -84,7 +85,7 @@ export default function EditProfilePage() {
       setRawImageForCrop(dataUrl);
       setCropModalVisible(true);
     } catch {
-      openSnackbar({ text: 'Không tải được ảnh, vui lòng thử lại.', type: 'error', position: 'top' });
+      openSnackbar({ text: AVATAR_READ_FAILED, type: 'error', position: 'top' });
     } finally {
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
