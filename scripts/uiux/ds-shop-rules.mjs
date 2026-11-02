@@ -28,7 +28,7 @@ const STRIKE_TAG = /<(?:del|s)(?=[\s>/])/;
 
 const MINI_PRIMITIVE = /var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|red|amber|blue|navy|tubu-orange)(?:-\d+)?\)/;
 const WEB_PRIMITIVE =
-  /\b(?:bg|text|border|ring|from|to|via|fill|stroke|divide|outline|decoration|placeholder)-(?:stone|forest|sage|clay|honey|terracotta|orange)-\d+\b|var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|tubu-orange)(?:-\d+)?\)/;
+  /\b(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|from|to|via|fill|stroke|divide|outline|decoration|placeholder|accent|caret|shadow)-(?:stone|forest|sage|clay|honey|terracotta|orange)-\d+\b|var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|tubu-orange)(?:-\d+)?\)/;
 
 export const GUARD_RULES = [
   {

@@ -62,7 +62,7 @@ const errorNote = (c: HTMLElement) => part(c).querySelector<HTMLElement>('[data-
 const scrollIntoView = vi.fn();
 const setDesktop = (desktop: boolean) => {
   window.matchMedia = ((query: string) => ({
-    matches: desktop && query.includes('1024'),
+    matches: desktop && query.includes('64rem'),
     media: query,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,

@@ -69,7 +69,6 @@
     "app/san-pham/[slug]/subscribe-sheet.tsx": 11,
     "app/tai-khoan/yeu-thich/quick-add.tsx": 4,
     "app/thanh-toan/bank-transfer-panel.tsx": 21,
-    "app/thanh-toan/invoice-section.tsx": 2,
     "app/uu-dai/page.tsx": 1,
     "components/add-to-cart.tsx": 2,
     "components/campaign/campaign-body.tsx": 1,

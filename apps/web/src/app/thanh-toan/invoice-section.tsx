@@ -33,7 +33,7 @@ export function InvoiceSection({
 
   return (
     <section aria-label="Hoá đơn VAT" className={`p-4 ${ui.card} ${mini.band}`}>
-      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-stone-900 max-md:flex-row-reverse max-md:justify-between">
+      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-[color:var(--color-text-primary)] max-md:flex-row-reverse max-md:justify-between">
         <span className={miniCheckboxWrap}>
           <input type="checkbox" checked={want} onChange={(e) => onWant(e.target.checked)} disabled={disabled} className={miniCheckbox} />
           <CheckMark />
@@ -44,7 +44,7 @@ export function InvoiceSection({
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           {fields.map((f) => (
             <label key={f.key} htmlFor={`${id}-${f.key}`} className={f.key === 'address' ? 'block sm:col-span-2' : 'block'}>
-              <span className="text-xs font-medium text-stone-700">{f.label}</span>
+              <span className="text-xs font-medium text-[color:var(--color-text-secondary)]">{f.label}</span>
               <input
                 id={`${id}-${f.key}`}
                 type={f.type ?? 'text'}

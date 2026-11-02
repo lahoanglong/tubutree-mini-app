@@ -337,11 +337,11 @@ export default function CheckoutPage() {
   });
 
   // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
-  // (nearest: không giật trang nếu đã thấy) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
+  // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
   const placePartRef = useRef<HTMLDivElement>(null);
   const placeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (!place.isError || !window.matchMedia?.('(min-width: 1024px)').matches) return;
+    if (!place.isError || !window.matchMedia?.('(min-width: 64rem)').matches) return;
     placePartRef.current?.scrollIntoView({ block: 'nearest' });
     placeButtonRef.current?.focus({ preventScroll: true });
   }, [place.isError, place.error]);
