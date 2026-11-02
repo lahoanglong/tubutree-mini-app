@@ -450,12 +450,15 @@ export const todoSkeletonHeight = (rows: number): number => rows * 64;
  */
 export const HOME_BEST_SELLER_LIMIT = 24;
 
-/** Khoá nhớ "lần mở trước có Giờ vàng" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
+/** Khoá nhớ "lần mở trước có Giờ vàng" để dựng khung chờ đúng chỗ; ghi '0', '1', '2' hoặc `0@<ms>` (không có suất, nhưng biết suất kế mở lúc `<ms>`). */
 export const FLASH_HINT_KEY = 'tubu_home_flash';
 /** Dòng "suất kế" dưới kệ Giờ vàng. */
 export const FLASH_NEXT_SLOT_HEIGHT = 44;
+/** Sau giờ mở dự kiến, máy còn "chờ có Giờ vàng" trong ngần này: khớp đợt 2 giờ mà nút "Tạo khung giờ" sinh ra; quá thì suất đã hết, giữ chỗ nữa là chừa lỗ trống. */
+export const FLASH_EXPECT_WINDOW_MS = 2 * 3_600_000;
 
-// '0' không có, '1' có Giờ vàng, '2' có Giờ vàng và dòng suất kế (khung chờ phải cao thêm `FLASH_NEXT_SLOT_HEIGHT`).
+// '0' không có, '1' có Giờ vàng, '2' có Giờ vàng và dòng suất kế (khung chờ phải cao thêm `FLASH_NEXT_SLOT_HEIGHT`),
+// `0@<ms>` không có nhưng suất kế mở lúc <ms>: lần mở sau giờ đó mà vẫn chưa nhớ gì khác thì nhiều khả năng đã có suất mới, giữ chỗ để nó về không đẩy trang.
 function readFlashHintValue(storage: MemoryStorage | null): string | null {
   if (!storage) return null;
   try {
@@ -465,10 +468,22 @@ function readFlashHintValue(storage: MemoryStorage | null): string | null {
   }
 }
 
-/** Lần mở trước có suất Giờ vàng đang chạy không. Chưa nhớ hay không có kho → false (chờ im lặng, không giữ chỗ). */
-export function readFlashHint(storage: MemoryStorage | null): boolean {
+/** Mốc mở dự kiến (ms) trong giá trị `0@<ms>`; giá trị khác hay hỏng → null. */
+export function parseFlashExpectedAt(value: string | null): number | null {
+  const m = value === null ? null : /^0@(\d{1,15})$/.exec(value);
+  return m ? Number(m[1]) : null;
+}
+
+/** Đang trong cửa sổ "dự kiến có suất": lần mở trước chưa có suất nhưng đã biết suất kế mở lúc nào và giờ đó đã tới (chưa quá `FLASH_EXPECT_WINDOW_MS`). */
+export function readFlashExpected(storage: MemoryStorage | null, now = Date.now()): boolean {
+  const at = parseFlashExpectedAt(readFlashHintValue(storage));
+  return at !== null && now >= at && now < at + FLASH_EXPECT_WINDOW_MS;
+}
+
+/** Nên giữ chỗ cho Giờ vàng lúc tải không: lần mở trước có suất đang chạy, hoặc đang trong cửa sổ dự kiến mở. Chưa nhớ hay không có kho → false (chờ im lặng, không giữ chỗ). */
+export function readFlashHint(storage: MemoryStorage | null, now = Date.now()): boolean {
   const v = readFlashHintValue(storage);
-  return v === '1' || v === '2';
+  return v === '1' || v === '2' || readFlashExpected(storage, now);
 }
 
 /** Lần mở trước Giờ vàng có kèm dòng suất kế không (chỉ có nghĩa khi `readFlashHint` đúng). */
@@ -476,9 +491,11 @@ export function readFlashSlotHint(storage: MemoryStorage | null): boolean {
   return readFlashHintValue(storage) === '2';
 }
 
-export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean, hasNextSlot = false): void {
+/** `opensAt` (ms) là giờ mở của suất kế: chỉ ghi khi hiện chưa có suất nào. */
+export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean, hasNextSlot = false, opensAt?: number): void {
   try {
-    storage?.setItem(FLASH_HINT_KEY, hasFlash ? (hasNextSlot ? '2' : '1') : '0');
+    const value = hasFlash ? (hasNextSlot ? '2' : '1') : Number.isFinite(opensAt) && (opensAt as number) > 0 ? `0@${Math.round(opensAt as number)}` : '0';
+    storage?.setItem(FLASH_HINT_KEY, value);
   } catch {
     /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
   }
