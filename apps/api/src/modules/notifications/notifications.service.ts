@@ -290,8 +290,8 @@ export class NotificationsService {
         },
       });
       // Chỉ nơi gọi dùng retryZns (đã tự nhận phần việc) mới cần biết để nhả phần việc của nó; tin thường thì lỗi này không ném ra ngoài.
-      // Không đóng được log nào (count 0) nghĩa là worker đã nhận hoặc đã gửi: tin vẫn tới khách nên không ném, nếu không nơi gọi
-      // trả phần việc và đếm hụt một khách đã được báo.
+      // Không đóng được log nào (count 0) nghĩa là worker đã nhận log: kết cục (SENT/FAILED) do worker ghi, như khi xếp hàng thành
+      // công, nên không ném; nếu ném, nơi gọi trả phần việc và đêm sau tính lại một khách đã được báo.
       if (dedupeKey && closed.count > 0) throw err;
     }
   }
@@ -347,7 +347,8 @@ export class NotificationsService {
     const where = { id: job.notificationLogId };
     // Nhận log trước khi gọi Zalo, cùng một câu lệnh với việc kiểm trạng thái: catch của dispatchZns (queue.add quá hạn dù Redis đã
     // nhận job) chỉ đóng log còn PENDING, nên sau bước này nó không còn nhả khoá của một tin đang đi được. RETRYING ở đây là "đang
-    // gửi hoặc chờ thử lại"; kết quả cuối ghi đè ở dưới.
+    // gửi hoặc chờ thử lại"; kết quả cuối ghi đè ở dưới. Đây không phải khoá loại trừ giữa các worker: RETRYING vẫn nhận lại được, nên
+    // job BullMQ bị coi là treo khi Zalo trả chậm có thể được worker khác gửi lần nữa (giống trước đây).
     const claimed = await this.prisma.notificationLog.updateMany({
       where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
       data: { status: 'RETRYING' },
