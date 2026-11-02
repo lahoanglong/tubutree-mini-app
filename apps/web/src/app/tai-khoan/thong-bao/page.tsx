@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { markAllNotificationsRead, markNotificationRead, type NotificationCursor, type NotificationDTO } from '@tubutree/app-core/api/account';
 import { fetchPurchasedItems } from '@tubutree/app-core/api/orders';
-import { nextNotificationCursor, notificationsInfiniteQuery, unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
+import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -27,6 +27,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
+import { useMeSummary } from '@/lib/use-me-summary';
 
 const NOTICE_MS = 4000;
 
@@ -66,8 +67,8 @@ export default function NotificationsPage() {
     enabled: phase === 'authenticated',
   });
   const list = notifQ.data?.pages.flat();
-  // Đếm chưa đọc của cả hộp thư: tin chưa đọc có thể nằm ngoài các trang đã nạp.
-  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: phase === 'authenticated' });
+  // Đếm chưa đọc của cả hộp thư (tin chưa đọc có thể nằm ngoài các trang đã nạp), cùng nguồn /me/summary với chuông, Cá nhân và thanh đáy.
+  const summaryUnread = useMeSummary({ enabled: phase === 'authenticated', select: (s) => s.unreadNotifications }).data;
 
   // onSettled: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào; nạp lại cả hai trường hợp, không báo lỗi vì là thao tác nền.
   const readMut = useMutation({
@@ -78,7 +79,7 @@ export default function NotificationsPage() {
     mutationFn: () => markAllNotificationsRead(coreHttp),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
-  const unreadCount = unreadQ.data?.count ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 
   const onTap = (n: NotificationDTO) => {
     if (n.status !== 'READ') readMut.mutate(n.id);

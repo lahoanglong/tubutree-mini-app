@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { OrdersService } from '../orders/orders.service';
 import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
@@ -11,7 +10,6 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { BundlesService, type BundleDTO } from '../bundles/bundles.service';
 import { listLiveBanners, type CampaignBannerDTO } from '../campaigns/campaign-public';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ACTIVE_ORDER_STATUSES } from '../orders/order-status-groups';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
 import { CatalogService } from './catalog.service';
 import { vnDateSeed } from './catalog-seed';
@@ -65,7 +63,6 @@ export class HomeService {
   constructor(
     private readonly catalog: CatalogService,
     private readonly flashSale: FlashSaleService,
-    private readonly orders: OrdersService,
     private readonly purchased: PurchasedItemsService,
     private readonly subscriptions: SubscriptionsService,
     private readonly notifications: NotificationsService,
@@ -172,7 +169,6 @@ export class HomeService {
       hasOrders: count([...byStatus.keys()]) > 0,
       hasPriorOrder: count([...byStatus.keys()].filter((k) => k !== 'CANCELLED')) > 0,
       delivered: count(['DELIVERED']),
-      active: count(ACTIVE_ORDER_STATUSES),
       wasteOpen,
     };
   }
@@ -206,12 +202,11 @@ export class HomeService {
     const facts = this.userFactsOrNull(userId);
     const own = <T>(name: string, run: () => Promise<T>) => this.block(name, run, deadline);
     const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f), deadline));
-    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
+    const [forYou, flashUpcoming, purchasedItems, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
       withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders, seed }) : this.catalog.getForYou(userId, { seed }))),
       own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
-      withFacts('activeOrderCount', async (f) => (f ? { count: f.active } : this.orders.activeCount(userId))),
-      // Cùng câu đếm với số đơn đang xử lý: tài khoản khách của Mini App hỏi "đã có đơn nào chưa" ở Trang chủ mà khỏi gọi /orders. Câu đếm hỏng thì null để client tự hỏi.
+      // Từ cùng câu đếm số đơn: tài khoản khách của Mini App hỏi "đã có đơn nào chưa" ở Trang chủ mà khỏi gọi /orders. Câu đếm hỏng thì null để client tự hỏi.
       withFacts('hasOrders', async (f) => (f ? f.hasOrders : null)),
       own('subscriptions', () => this.subscriptions.list(userId)),
       own('notifications', () => this.notifications.listForUser(userId)),
@@ -220,7 +215,7 @@ export class HomeService {
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
       withFacts('wasteOpenRequestCount', async (f) => f?.wasteOpen ?? this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
     ]);
-    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
+    return { forYou, flashUpcoming, purchasedItems, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
   }
 }
 
@@ -228,7 +223,6 @@ interface UserFacts {
   hasOrders: boolean;
   hasPriorOrder: boolean;
   delivered: number;
-  active: number;
   wasteOpen: number;
 }
 
@@ -252,7 +246,6 @@ export interface HomeMe {
   forYou: Block<Awaited2<CatalogService['getForYou']>>;
   flashUpcoming: Block<Awaited2<FlashSaleService['listUpcoming']>>;
   purchasedItems: Block<Awaited2<PurchasedItemsService['list']>>;
-  activeOrderCount: Block<Awaited2<OrdersService['activeCount']>>;
   /** Khách có đơn nào (mọi trạng thái) chưa; null khi câu đếm hỏng. API cũ không có trường này. */
   hasOrders: Block<boolean>;
   subscriptions: Block<Awaited2<SubscriptionsService['list']>>;

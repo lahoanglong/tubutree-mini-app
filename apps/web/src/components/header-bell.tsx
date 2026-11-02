@@ -10,8 +10,8 @@ import { homeText } from '@/lib/home-text';
 import { isWebRouteReady } from '@/lib/route-map';
 
 /**
- * Chuông thông báo ở thanh đầu máy tính, mọi trang. Dùng chung queryKey ['notifications', 'unread'] với trang Thông báo và HomeHeader
- * của điện thoại nên không thêm request, và chỉ đếm chứ không tải danh sách tin. Khách chưa đăng nhập không có chuông.
+ * Chuông thông báo ở thanh đầu máy tính, mọi trang. Dùng chung /me/summary (khoá ['me-summary']) với trang Thông báo, HomeHeader
+ * của điện thoại, Cá nhân và thanh đáy nên không thêm request, và chỉ đếm chứ không tải danh sách tin. Khách chưa đăng nhập không có chuông.
  */
 export function HeaderBell({ authed }: { authed: boolean }) {
   // Thanh đầu chỉ hiện từ md; điện thoại có chuông riêng ở Trang chủ, nên không gọi thêm request ở đó (giữ như trước khi có chuông này).

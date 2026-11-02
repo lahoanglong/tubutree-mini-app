@@ -5,7 +5,6 @@ import {
   chooseRefundDestination,
   customerOrderNote,
   estimateReturn,
-  fetchActiveOrderCount,
   fetchMyRefunds,
   fetchMyReturns,
   fetchOrder,
@@ -45,12 +44,7 @@ describe('orders — hợp đồng gọi API', () => {
     expect(calls[0]).toMatchObject({ method: 'get', path: '/orders/home-todo' });
   });
 
-  it('fetchOrder, fetchActiveOrderCount (dữ liệu lạ → 0), fetchPurchasedItems', async () => {
-    const a = fakeHttp(() => ({ count: 3 }));
-    expect(await fetchActiveOrderCount(a.http)).toBe(3);
-    expect(a.calls).toEqual([{ method: 'get', path: '/orders/active-count' }]);
-    expect(await fetchActiveOrderCount(fakeHttp(() => ({ count: 'x' })).http)).toBe(0);
-    expect(await fetchActiveOrderCount(fakeHttp(() => null).http)).toBe(0);
+  it('fetchOrder, fetchPurchasedItems', async () => {
     const { http, calls } = fakeHttp();
     await fetchOrder(http, 'TUBU1');
     await fetchPurchasedItems(http, { cursor: 'c', limit: 10 });

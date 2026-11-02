@@ -48,14 +48,20 @@ describe('home-feed', () => {
   });
 
   it('/home/me gửi purchasedLimit; kệ Mua lại chỉ dùng khối gộp khi tham số khớp', async () => {
-    get.mockResolvedValue({ data: { purchasedItems: { items: [], nextCursor: null }, activeOrderCount: { count: 2 } } });
+    get.mockResolvedValue({ data: { purchasedItems: { items: [], nextCursor: null } } });
     armHomeFeed(() => authState.user?.id);
     expect(await takePurchasedItems({ limit: 20 })).toBeNull();
     expect(await takePurchasedItems({ limit: 10, cursor: 'x' })).toBeNull();
     expect(get).not.toHaveBeenCalled();
     expect(await takePurchasedItems({ limit: 10 })).toEqual({ items: [], nextCursor: null });
     expect(get).toHaveBeenCalledWith('/home/me', expect.objectContaining({ params: { purchasedLimit: 10 } }));
-    expect(await takeMeBlock('activeOrderCount')).toEqual({ count: 2 });
+  });
+
+  it('Mini Testing V28 (a3842b551) đọc takeMeBlock(activeOrderCount) ?? /orders/active-count: /home/me không có khoá thì null, bản đó tự gọi /orders/active-count', async () => {
+    get.mockResolvedValue({ data: { purchasedItems: { items: [], nextCursor: null }, hasOrders: true } });
+    armHomeFeed(() => authState.user?.id);
+    expect(await takeMeBlock('activeOrderCount' as never)).toBeNull();
+    expect(get).toHaveBeenCalledTimes(1);
   });
 
   it('đổi tài khoản khi Trang chủ còn mở: khối cá nhân của user cũ không trao cho user mới', async () => {

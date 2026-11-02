@@ -7,7 +7,7 @@ import { coreHttp } from './core-http';
 import { armHomeFeed, disarmHomeFeed, resetHomeFeed } from './home-feed';
 
 const pub = { publicConfig: { freeshipThreshold: 5 }, flashActive: [{ id: 'f' }] };
-const me = { flashUpcoming: [], forYou: [{ id: 'p' }], activeOrderCount: { count: 1 }, purchasedItems: { items: [], nextCursor: null } };
+const me = { flashUpcoming: [], forYou: [{ id: 'p' }], purchasedItems: { items: [], nextCursor: null } };
 const paths = () => apiFetch.mock.calls.map(([p]) => p as string);
 
 beforeEach(() => {
@@ -30,7 +30,6 @@ describe('web home-feed', () => {
     expect(await coreHttp.get('/config/public')).toEqual({ freeshipThreshold: 5 });
     expect(await coreHttp.get('/flash-sales/active')).toEqual([{ id: 'f' }]);
     expect(await coreHttp.get('/products/for-you')).toEqual([{ id: 'p' }]);
-    expect(await coreHttp.get('/orders/active-count')).toEqual({ count: 1 });
     expect(await coreHttp.get('/me/purchased-items', { query: { limit: 10 } })).toEqual({ items: [], nextCursor: null });
     expect(paths()).toEqual(['/home', '/home/me?purchasedLimit=10']);
     // Lần hỏi lại (làm mới nền) đi request lẻ để lấy dữ liệu mới.
@@ -86,7 +85,7 @@ describe('web home-feed', () => {
 
   it('đổi tài khoản khi trang còn mở: không trao khối cá nhân của người trước', async () => {
     armHomeFeed('u1');
-    await coreHttp.get('/orders/active-count');
+    await coreHttp.get('/flash-sales/upcoming');
     armHomeFeed('u2');
     expect(await coreHttp.get('/products/for-you')).toBe('SINGLE');
   });

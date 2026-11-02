@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
   ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle, Star, Tag, Users, type LucideIcon,
@@ -16,7 +16,7 @@ import {
   notificationOrderLink,
   notificationTitle,
 } from '@tubutree/app-core/notification-route';
-import { nextNotificationCursor, notificationsInfiniteQuery, unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
+import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
 import { coreHttp } from '../services/core-http';
 import type { NotificationCursor } from '@tubutree/app-core/api/account';
 import { getLoadErrorMessage } from '../services/api';
@@ -26,6 +26,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { useHasSubscription } from '../hooks/use-has-subscription';
+import { useMeSummary } from '../hooks/use-me-summary';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
@@ -148,8 +149,9 @@ export default function NotificationsPage() {
     enabled: phase === 'authenticated',
   });
   const list = notifQ.data?.pages.flat();
-  // Đếm chưa đọc của cả hộp thư: tin chưa đọc có thể nằm ngoài các trang đã nạp.
-  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: phase === 'authenticated' });
+  // Đếm chưa đọc của cả hộp thư (tin chưa đọc có thể nằm ngoài các trang đã nạp), cùng nguồn /me/summary với chuông, Cá nhân và thanh đáy.
+  // staleTime 0: summary Trang chủ vừa tải (mặc định tươi 10 giây) có thể chưa có tin mới mà danh sách ở đây đã có.
+  const summaryUnread = useMeSummary({ enabled: phase === 'authenticated', select: (s) => s.unreadNotifications, staleTime: 0 }).data;
   selectedIdRef.current = selectedNotif?.id ?? null;
   // Tin gói định kỳ chỉ có nút "Xem gói" khi khách đã có gói (đặt trên web): tra khi mở đúng loại tin đó.
   const { hasSubscription } = useHasSubscription(phase === 'authenticated' && !!selectedNotif?.templateCode.startsWith('SUBSCRIPTION'));
@@ -166,7 +168,7 @@ export default function NotificationsPage() {
     mutationFn: () => markAllNotificationsRead(),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
-  const unreadCount = unreadQ.data?.count ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 
   // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
   useEffect(() => {

@@ -34,7 +34,6 @@ export interface HomeMeDTO {
   forYou: Block<ProductCard[]>;
   flashUpcoming: Block<UpcomingFlashItem[]>;
   purchasedItems: Block<PurchasedItemsPage>;
-  activeOrderCount: Block<{ count?: unknown }>;
   /** Khách có đơn nào (mọi trạng thái) chưa. API cũ không có trường này: hỏi GET /orders. */
   hasOrders?: Block<boolean>;
   subscriptions: Block<SubscriptionDTO[]>;

@@ -14,7 +14,6 @@ import {
   getCart,
   catalogParams,
   createReview,
-  fetchActiveOrderCount,
   fetchCatalog,
   fetchCategories,
   fetchForYou,
@@ -111,13 +110,6 @@ describe('shop-api — buy-flow 4a', () => {
     expect(get).toHaveBeenLastCalledWith('/orders', { params: { status: 'SHIPPING', page: 2, limit: 10 } });
     await fetchOrders();
     expect(get).toHaveBeenLastCalledWith('/orders', { params: { page: 1, limit: 20 } });
-  });
-
-  it('fetchActiveOrderCount ép về 0 khi dữ liệu lạ', async () => {
-    get.mockResolvedValueOnce({ data: { count: 3 } });
-    await expect(fetchActiveOrderCount()).resolves.toBe(3);
-    get.mockResolvedValueOnce({ data: { code: 'active-count' } });
-    await expect(fetchActiveOrderCount()).resolves.toBe(0);
   });
 
   it('fetchPurchasedItems chuyển params', async () => {
