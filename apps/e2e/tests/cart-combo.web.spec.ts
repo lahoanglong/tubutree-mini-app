@@ -98,12 +98,13 @@ test.describe('Giỏ web: khối combo', () => {
         lineInset: Math.round(r(lines[0]!).x - gr.x),
         lineGap: Math.round(r(lines[1]!).top - r(lines[0]!).bottom),
         background: getComputedStyle(g).backgroundColor,
+        rail: getComputedStyle(g).borderLeftWidth,
       };
     });
-    expect(m).toEqual({ x: 12, width: 351, headingSize: '16px', headingWeight: '700', lineInset: 8, lineGap: 8, background: 'rgb(242, 245, 236)' });
+    expect(m).toEqual({ x: 12, width: 351, headingSize: '16px', headingWeight: '700', lineInset: 8, lineGap: 8, background: 'rgb(242, 245, 236)', rail: '0px' });
   });
 
-  test('1280px: khối không có nền riêng, đầu nhóm là dải nền dịu, các dòng ngăn bằng đường kẻ trong thẻ giỏ', async ({ page, api }) => {
+  test('1280px: khối không có nền riêng, đầu nhóm là dải nền dịu, các dòng ngăn bằng đường kẻ trong thẻ giỏ, vạch dọc bên trái chạy hết khối', async ({ page, api }) => {
     await openCart(page, api, {}, DESKTOP);
     const m = await group(page).evaluate((g) => {
       const css = (el: Element) => getComputedStyle(el);
@@ -114,9 +115,12 @@ test.describe('Giỏ web: khối combo', () => {
         radius: css(g).borderTopLeftRadius,
         headBackground: css(head).backgroundColor,
         lineBorder: css(lines[1]!).borderTopWidth,
+        rail: css(g).borderLeftWidth,
+        railVisible: css(g).borderLeftColor !== 'rgba(0, 0, 0, 0)',
+        railSpansBlock: g.getBoundingClientRect().height >= head.getBoundingClientRect().height + lines.length * lines[0]!.getBoundingClientRect().height,
       };
     });
-    expect(m).toEqual({ background: 'rgba(0, 0, 0, 0)', radius: '0px', headBackground: 'rgb(242, 245, 236)', lineBorder: '1px' });
+    expect(m).toEqual({ background: 'rgba(0, 0, 0, 0)', radius: '0px', headBackground: 'rgb(242, 245, 236)', lineBorder: '1px', rail: '4px', railVisible: true, railSpansBlock: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(DESKTOP.width);
   });
 });

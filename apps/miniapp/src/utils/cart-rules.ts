@@ -10,10 +10,11 @@ export function recompute(cart: CartSummary, items: CartLine[], editedId?: strin
   const lines = items.map((l) => (l.id === editedId ? { ...l, total: l.unitPrice * l.quantity } : l));
   const present = new Set(lines.map((l) => l.id));
   // Nhóm combo: đổi số lượng không làm bộ mất khớp (luật khớp chỉ cần số lượng ≥ 1) nên giữ nhóm, kẻo khối nhảy mỗi lần bấm +/−. Xoá món khoá thì bộ không
-  // còn khớp: bỏ nhóm. Xoá món mang giảm nhưng không khoá: nhóm còn, chỉ bỏ id đã xoá. Số tiền của nhóm chờ máy chủ như `comboDiscount`.
+  // còn khớp: bỏ nhóm. Xoá món mang giảm nhưng không khoá: nhóm còn, chỉ bỏ id đã xoá. Số tiền của nhóm về 0 cùng `comboDiscount` (tổng các nhóm luôn bằng
+  // `comboDiscount`): đầu nhóm không ghi số cũ trong lúc dòng "Giảm giá combo" ở chân đã tắt, máy chủ trả số mới thì khối ghi lại.
   const comboGroups = cart.comboGroups
     ?.filter((g) => g.keyLineIds.every((id) => present.has(id)) && g.lineIds.some((id) => present.has(id)))
-    .map((g) => ({ ...g, lineIds: g.lineIds.filter((id) => present.has(id)) }));
+    .map((g) => ({ ...g, discount: 0, lineIds: g.lineIds.filter((id) => present.has(id)) }));
   return {
     ...cart,
     items: lines,

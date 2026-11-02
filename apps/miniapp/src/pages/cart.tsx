@@ -116,11 +116,13 @@ export default function CartPage() {
   // Giỏ về trống (làm mới giỏ khi tấm đang mở): tấm gỡ theo, không để nó bật lại khi giỏ có hàng lần sau.
   const noItems = (cart.data?.items.length ?? 0) === 0;
   useEffect(() => {
-    if (noItems) {
-      setVoucherOpen(false);
-      setConfirmOpen(false);
-    }
+    if (noItems) setVoucherOpen(false);
   }, [noItems]);
+  // Hộp báo bỏ món gỡ khi dòng chờ xoá không còn trong giỏ (làm mới giỏ vì máy khác đã xoá, kể cả giỏ về trống): "Vẫn bỏ" không được xoá dòng đã mất.
+  const pendingGone = !!pendingRemove && !(cart.data?.items ?? []).some((l) => l.id === pendingRemove.line.id);
+  useEffect(() => {
+    if (pendingGone) setConfirmOpen(false);
+  }, [pendingGone]);
 
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã của VoucherSheet.
   // Chọn cả giỏ dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá này.
@@ -289,7 +291,7 @@ export default function CartPage() {
           )}
           {groups.map((g) => {
             // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
-            const { blocks, loose } = cartComboBlocks(g.items, summary.comboGroups, deselected);
+            const { blocks, loose } = cartComboBlocks(g.items, summary.comboGroups, deselected, priced?.comboGroups);
             const renderLine = (line: CartLine) => (
               <CartLineRow
                 key={line.id}

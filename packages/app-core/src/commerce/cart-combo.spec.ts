@@ -59,6 +59,76 @@ describe('cartComboBlocks: chia dòng giỏ thành khối combo + dòng lẻ', (
     expect(part).toMatchObject({ saving: null, applied: true });
     expect(part.lines.map((l) => l.id)).toEqual(['i1']);
   });
+
+  describe('mua kèm (ADDON): sản phẩm chính là dòng khoá không mang giảm, vẫn nằm trong khối của bộ', () => {
+    const addon: CartComboGroup = { id: 'bundle:a1', kind: 'ADDON', title: 'Mua kèm nước giặt', discount: 11_000, lineIds: ['i2'], keyLineIds: ['i1'] };
+
+    it('sản phẩm chính vào khối cùng món kèm (không vẽ lẻ bên dưới), đầu nhóm ghi số tiết kiệm, thứ tự theo giỏ', () => {
+      const { blocks, loose } = cartComboBlocks(lines, [addon]);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]!.lines.map((l) => l.id)).toEqual(['i1', 'i2']);
+      expect(loose.map((l) => l.id)).toEqual(['i3']);
+      expect(comboHeadingText(blocks[0]!)).toBe('Combo: Mua kèm nước giặt · Tiết kiệm 11.000đ');
+    });
+
+    it('dòng khoá không mang giảm mà khách bấm xoá là dòng nằm trong khối (hộp báo không hỏi về một món "lẻ")', () => {
+      const { blocks } = cartComboBlocks(lines, [addon]);
+      const inBlock = new Set(blocks.flatMap((b) => b.lines.map((l) => l.id)));
+      expect(comboRemovalNotice([addon], 'i1')).not.toBeNull();
+      expect(inBlock.has('i1')).toBe(true);
+    });
+
+    it('nơi giao không có món kèm (chỉ có sản phẩm chính): không dựng khối rỗng đầu nhóm, sản phẩm chính là dòng lẻ', () => {
+      expect(cartComboBlocks([L('i1'), L('i3')], [addon])).toEqual({ blocks: [], loose: [L('i1'), L('i3')] });
+    });
+
+    it('dòng khoá đã thuộc nhóm khác vì mang giảm ở nhóm đó: ở lại nhóm kia, mỗi dòng đúng một chỗ', () => {
+      const bundle: CartComboGroup = { ...fuwa, lineIds: ['i1', 'i3'], keyLineIds: ['i1', 'i3'], discount: 5_000 };
+      const { blocks, loose } = cartComboBlocks(lines, [addon, bundle]);
+      const placed = [...blocks.flatMap((b) => b.lines.map((l) => l.id)), ...loose.map((l) => l.id)].sort();
+      expect(placed).toEqual(['i1', 'i2', 'i3']);
+      expect(blocks.find((b) => b.group.id === 'bundle:b1')!.lines.map((l) => l.id)).toEqual(['i1', 'i3']);
+      expect(blocks.find((b) => b.group.id === 'bundle:a1')!.lines.map((l) => l.id)).toEqual(['i2']);
+    });
+  });
+
+  describe('giá phần chọn của máy chủ (selection) là nguồn của applied và số Tiết kiệm khi chỉ chọn một phần giỏ', () => {
+    it('máy chủ không còn nhóm này trong phần chọn (bỏ chọn hết các phân loại của một sản phẩm không phải dòng khoá): không ghi Tiết kiệm, nhắc chọn đủ', () => {
+      const g: CartComboGroup = { id: 'collection:c1', kind: 'STOREFRONT', title: 'Bộ hai', discount: 20_000, lineIds: ['i1', 'i2a', 'i2b'], keyLineIds: ['i1'] };
+      const rows = [L('i1'), L('i2a'), L('i2b')];
+      const deselected = new Set(['i2a', 'i2b']);
+      expect(cartComboBlocks(rows, [g], deselected).blocks[0]).toMatchObject({ applied: true, saving: 'Tiết kiệm 20.000đ' });
+      const out = cartComboBlocks(rows, [g], deselected, []).blocks[0]!;
+      expect(out).toMatchObject({ applied: false, saving: null, hint: 'Chọn đủ các món để được giảm 20.000đ' });
+      expect(comboHeadingText(out)).toBe('Combo: Bộ hai');
+    });
+
+    it('máy chủ còn nhóm nhưng giảm ít hơn (bỏ chọn một phân loại không phải dòng khoá): đầu nhóm ghi số của phần chọn, khớp dòng ở chân', () => {
+      const g: CartComboGroup = { ...fuwa, lineIds: ['i1', 'i2', 'i3'], keyLineIds: ['i1'], discount: 30_000 };
+      const out = cartComboBlocks(lines, [g], new Set(['i3']), [{ ...g, discount: 20_000, lineIds: ['i1', 'i2'] }]).blocks[0]!;
+      expect(out).toMatchObject({ applied: true, saving: 'Tiết kiệm 20.000đ', hint: null });
+    });
+
+    it('chưa có giá phần chọn (selection null/undefined): dùng luật khoá như trước', () => {
+      expect(cartComboBlocks(lines, [fuwa], new Set(['i1']), null).blocks[0]).toMatchObject({ applied: false, saving: null });
+      expect(cartComboBlocks(lines, [fuwa], new Set(), undefined).blocks[0]).toMatchObject({ applied: true, saving: 'Tiết kiệm 65.250đ' });
+    });
+  });
+
+  describe('nhóm số 0 (giỏ vừa sửa ở máy khách, chờ máy chủ tính lại)', () => {
+    const pending: CartComboGroup = { ...fuwa, discount: 0 };
+
+    it('không ghi "Tiết kiệm 0đ" và không nhắc "được giảm 0đ"; khối giữ nguyên chỗ', () => {
+      const out = cartComboBlocks(lines, [pending]).blocks[0]!;
+      expect(out.lines.map((l) => l.id)).toEqual(['i1', 'i2']);
+      expect(out).toMatchObject({ applied: true, saving: null, hint: null });
+      expect(cartComboBlocks(lines, [pending], new Set(['i1'])).blocks[0]).toMatchObject({ applied: false, saving: null, hint: null });
+    });
+
+    it('chưa biết số nên không báo "mất giảm 0đ" khi xoá món khoá', () => {
+      expect(comboRemovalNotice([pending], 'i1')).toBeNull();
+    });
+  });
 });
 
 describe('comboRemovalNotice: báo trước khi bỏ món làm bộ mất giảm', () => {

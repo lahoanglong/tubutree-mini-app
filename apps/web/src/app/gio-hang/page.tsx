@@ -92,6 +92,11 @@ export default function CartPage() {
   // Hộp báo "bộ sẽ mất giảm" trước khi xoá món khoá của combo. Dữ liệu giữ lại sau khi đóng để chữ không trống khi hộp tắt.
   const [pendingRemove, setPendingRemove] = useState<{ line: CartLine; notice: ComboRemovalNotice } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Hộp gỡ khi dòng chờ xoá không còn trong giỏ (làm mới giỏ vì tab khác đã xoá, kể cả giỏ về trống): "Vẫn bỏ" không được xoá dòng đã mất, và hộp không được bật lại khi giỏ có hàng lần sau.
+  const pendingGone = !!pendingRemove && !(cartQ.data?.items ?? []).some((it) => it.id === pendingRemove.line.id);
+  useEffect(() => {
+    if (pendingGone) setConfirmOpen(false);
+  }, [pendingGone]);
   const [undoError, setUndoError] = useState<string | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -439,7 +444,7 @@ export default function CartPage() {
             <div className="space-y-3">
               {groups.map((g) => {
                 // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
-                const { blocks, loose } = cartComboBlocks(g.items, cart.comboGroups, deselected);
+                const { blocks, loose } = cartComboBlocks(g.items, cart.comboGroups, deselected, priced?.comboGroups);
                 return (
                   <section
                     key={g.key}

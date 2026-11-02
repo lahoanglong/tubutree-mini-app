@@ -6,11 +6,18 @@ import { vnd } from './money';
 export interface ComboBlock<L extends { id: string }> {
   group: CartComboGroup;
   lines: L[];
-  /** Không dòng khoá nào của bộ bị bỏ chọn: thanh toán phần chọn vẫn được giảm combo này. */
+  /**
+   * Thanh toán phần đang chọn vẫn được giảm combo này. Có giá phần chọn của máy chủ (`selection`) thì theo nó (bỏ chọn hết một sản phẩm của bộ không phải
+   * dòng khoá vẫn làm bộ hết khớp); chưa có thì theo luật khoá: không dòng khoá nào bị bỏ chọn.
+   */
   applied: boolean;
   /** "Combo: {tên}". */
   title: string;
-  /** "Tiết kiệm {số}" chỉ khi bộ áp và khối có đủ mọi dòng của nhóm (nhóm tách ở nhiều nơi giao thì mỗi khối không ghi số của cả nhóm). */
+  /**
+   * "Tiết kiệm {số}" chỉ khi bộ áp, khối có đủ mọi dòng mang giảm của nhóm (nhóm tách ở nhiều nơi giao thì mỗi khối không ghi số của cả nhóm) và nhóm
+   * đang có số (giỏ vừa sửa ở máy khách chờ máy chủ tính lại thì số nhóm là 0, không ghi "Tiết kiệm 0đ"). Có giá phần chọn của máy chủ thì số là của phần chọn,
+   * khớp dòng "Giảm giá combo" ở chân.
+   */
   saving: string | null;
   /** Lời nhắc khi bộ không còn áp vì bỏ chọn món: số khách sẽ được nếu chọn đủ. */
   hint: string | null;
@@ -18,32 +25,46 @@ export interface ComboBlock<L extends { id: string }> {
 
 /**
  * Chia dòng giỏ thành khối combo + dòng lẻ (THUẦN, chỉ để hiển thị). Mỗi dòng đúng MỘT chỗ: dòng nằm trong nhiều nhóm thì thuộc nhóm đứng trước.
+ * Thành viên của khối là dòng mang giảm (`lineIds`) và dòng khoá (`keyLineIds`): sản phẩm chính của "mua kèm" là dòng khoá không mang giảm, vẫn phải nằm
+ * trong khối của bộ (nếu để lẻ thì khách bấm thùng rác ở món "lẻ" mà gặp hộp báo của một bộ họ không thấy). Dòng mang giảm được xếp trước cho mọi nhóm;
+ * dòng khoá chỉ vào khối nhóm đã có dòng mang giảm ở nơi giao này, và chỉ khi chưa thuộc nhóm nào.
  * Khối theo thứ tự dòng đầu tiên của nhóm trong `lines`, dòng trong khối theo thứ tự `lines`; nhóm không còn dòng nào trong `lines` bị bỏ. API cũ
  * chưa trả nhóm thì mọi dòng là dòng lẻ, giỏ vẽ như trước.
+ * `selection`: nhóm trong giá phần chọn của máy chủ khi khách chỉ chọn một phần giỏ và máy chủ đã trả giá đó; không truyền thì dùng luật khoá với `deselected`.
  */
 export function cartComboBlocks<L extends { id: string }>(
   lines: readonly L[],
   groups: readonly CartComboGroup[] | undefined,
   deselected: ReadonlySet<string> = new Set(),
+  selection?: readonly CartComboGroup[] | null,
 ): { blocks: ComboBlock<L>[]; loose: L[] } {
+  const all = groups ?? [];
   const present = new Set(lines.map((l) => l.id));
   const owner = new Map<string, number>();
-  (groups ?? []).forEach((g, gi) => {
+  all.forEach((g, gi) => {
     for (const id of g.lineIds) if (present.has(id) && !owner.has(id)) owner.set(id, gi);
   });
+  const withLines = new Set(owner.values());
+  all.forEach((g, gi) => {
+    if (!withLines.has(gi)) return;
+    for (const id of g.keyLineIds) if (present.has(id) && !owner.has(id)) owner.set(id, gi);
+  });
+  const selected = selection ? new Map(selection.map((g) => [g.id, g])) : null;
   const blocks: ComboBlock<L>[] = [];
-  for (const [gi, group] of (groups ?? []).entries()) {
+  for (const [gi, group] of all.entries()) {
     const own = lines.filter((l) => owner.get(l.id) === gi);
     if (own.length === 0) continue;
-    const applied = !group.keyLineIds.some((id) => deselected.has(id));
+    const live = selected?.get(group.id);
+    const applied = selected ? !!live : !group.keyLineIds.some((id) => deselected.has(id));
     const complete = group.lineIds.every((id) => owner.get(id) === gi);
+    const amount = live?.discount ?? group.discount;
     blocks.push({
       group,
       lines: own,
       applied,
       title: fillCopy('cart.comboTitle', { name: group.title }),
-      saving: applied && complete ? fillCopy('cart.comboSaving', { x: vnd(group.discount) }) : null,
-      hint: applied ? null : fillCopy('cart.comboNeedAll', { x: vnd(group.discount) }),
+      saving: applied && complete && amount > 0 ? fillCopy('cart.comboSaving', { x: vnd(amount) }) : null,
+      hint: !applied && group.discount > 0 ? fillCopy('cart.comboNeedAll', { x: vnd(group.discount) }) : null,
     });
   }
   const position = (b: ComboBlock<L>) => lines.findIndex((l) => l.id === b.lines[0]!.id);
@@ -71,7 +92,8 @@ export interface ComboRemovalNotice {
  */
 export function comboRemovalNotice(groups: readonly CartComboGroup[] | undefined, lineId: string, nextQuantity = 0): ComboRemovalNotice | null {
   if (nextQuantity >= 1) return null;
-  const broken = (groups ?? []).filter((g) => g.keyLineIds.includes(lineId));
+  // Nhóm số 0 là nhóm giỏ vừa sửa ở máy khách chờ máy chủ tính lại: chưa biết số nên không báo "mất giảm 0đ" (xoá còn có Hoàn tác).
+  const broken = (groups ?? []).filter((g) => g.discount > 0 && g.keyLineIds.includes(lineId));
   if (broken.length === 0) return null;
   const discount = broken.reduce((sum, g) => sum + g.discount, 0);
   return {

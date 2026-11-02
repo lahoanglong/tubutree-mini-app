@@ -1,6 +1,6 @@
 'use client';
 
-// Nguồn: apps/miniapp/src/components/cart-combo-block.tsx (điện thoại là mặc định; từ md bỏ nền khối, các dòng ngăn bằng đường kẻ như dòng lẻ trong thẻ giỏ)
+// Nguồn: apps/miniapp/src/components/cart-combo-block.tsx (điện thoại là mặc định; từ md bỏ nền khối, các dòng ngăn bằng đường kẻ như dòng lẻ trong thẻ giỏ, vạch dọc bên trái ghi chỗ bộ bắt đầu và kết thúc)
 import type { ReactNode } from 'react';
 import { comboHeadingText, type ComboBlock } from '@tubutree/app-core/commerce/cart-combo';
 import { Heading, Text } from '@/components/mini';
@@ -15,14 +15,15 @@ export interface CartComboBlockProps {
 
 /**
  * Khối combo ở giỏ: đầu nhóm "Combo: {tên} · Tiết kiệm {số}" rồi các dòng của bộ. Điện thoại: khối nền dịu bo đồng tâm (bo ngoài = bo dòng + đệm), khe
- * giữa dòng 8px, cùng số đo với Mini App. Từ md: không nền khối, đầu nhóm là dải nền dịu trên đầu các dòng.
+ * giữa dòng 8px, cùng số đo với Mini App. Từ md: không nền khối, đầu nhóm là dải nền dịu trên đầu các dòng; các dòng trong thẻ giỏ ngăn nhau bằng cùng một đường
+ * kẻ nên bộ cần vạch dọc bên trái chạy hết chiều cao khối để khách thấy bộ kết thúc ở đâu.
  */
 export function CartComboBlock({ block, headingAs = 'h3', children }: CartComboBlockProps) {
   return (
     <section
       aria-label={comboHeadingText(block)}
       data-testid="cart-combo-group"
-      className="rounded-[calc(var(--radius-card)+var(--space-inline-sm))] bg-[var(--color-bg-subtle)] p-2 md:rounded-none md:bg-transparent md:p-0"
+      className="rounded-[calc(var(--radius-card)+var(--space-inline-sm))] bg-[var(--color-bg-subtle)] p-2 md:rounded-none md:border-l-4 md:border-[color:var(--color-border-strong)] md:bg-transparent md:p-0"
     >
       <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-stone-200">
         <div className="bg-[var(--color-bg-subtle)] px-1 md:px-3 md:py-2">
