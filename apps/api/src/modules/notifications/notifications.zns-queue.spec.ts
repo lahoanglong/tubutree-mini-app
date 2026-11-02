@@ -10,7 +10,11 @@ function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: 
   let seq = 0;
   const create = jest.fn().mockImplementation(async () => ({ id: `log-${++seq}` }));
   const update = jest.fn().mockResolvedValue({});
-  const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+  // Câu nhận log của deliverZns (status in [...]) chỉ thắng khi log còn PENDING/RETRYING; câu đóng log của dispatchZns (status: 'PENDING') luôn khớp.
+  const claimable = ['PENDING', 'RETRYING'].includes(opts.status ?? 'PENDING');
+  const updateMany = jest.fn().mockImplementation(async ({ where }: { where: { status: string | { in: string[] } } }) => ({
+    count: typeof where.status === 'string' || claimable ? 1 : 0,
+  }));
   const findUnique = jest.fn().mockResolvedValue({ status: opts.status ?? 'PENDING', payload: opts.payload ?? { data: {} } });
   const prisma = {
     notificationTemplate: { findUnique: jest.fn().mockResolvedValue(ZNS_TEMPLATE) },
@@ -53,6 +57,16 @@ describe('NotificationsService.deliverZns', () => {
     const { svc, sendTemplate } = setup();
     await svc.deliverZns(JOB, false);
     expect(sendTemplate).toHaveBeenCalledWith('0900000000', 'zt-1', {}, 'log-2');
+  });
+
+  it('R-181: nhận log (PENDING/RETRYING) bằng một câu có điều kiện TRƯỚC khi gọi Zalo', async () => {
+    const { svc, updateMany, sendTemplate } = setup();
+    const order: string[] = [];
+    updateMany.mockImplementation(async () => (order.push('claim'), { count: 1 }));
+    sendTemplate.mockImplementation(async () => (order.push('send'), { ok: true }));
+    await svc.deliverZns(JOB, false);
+    expect(order).toEqual(['claim', 'send']);
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } }, data: { status: 'RETRYING' } });
   });
 
   it('thành công → SENT, xoá lỗi của lượt trước', async () => {
@@ -168,6 +182,18 @@ describe('NotificationsService: tin báo trước hạ hạng gửi lại ZNS sa
     expect(znsRows()).toHaveLength(1);
     expect(znsRows()[0]).toMatchObject({ status: 'FAILED' });
     expect(znsRows()[0]!.payload.dedupeKey).not.toBe(KEY.dedupeKey);
+  });
+
+  it('R-181: worker đã nhận log trước khi catch chạy (count 0) → không nhả khoá, không ném, log giữ nguyên khoá gốc', async () => {
+    const m = memorySetup();
+    (m.add as jest.Mock).mockImplementationOnce(async () => {
+      m.rows.find((r) => r.channel === 'ZNS')!.status = 'RETRYING';
+      throw new Error('quá hạn');
+    });
+    await expect(m.svc.notify('u1', 'ORDER_CONFIRMED', {}, KEY)).resolves.toBeUndefined();
+    expect(m.znsRows()).toHaveLength(1);
+    expect(m.znsRows()[0]).toMatchObject({ status: 'RETRYING' });
+    expect(m.znsRows()[0]!.payload.dedupeKey).toBe(KEY.dedupeKey);
   });
 
   it('gọi lại notify với retryZns sau lần xếp hàng lỗi → chỉ tạo log ZNS mới và xếp job, không lưu thêm tin trong app', async () => {
