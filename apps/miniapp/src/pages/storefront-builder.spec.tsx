@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   getQuests: vi.fn(),
   claimQuest: vi.fn(),
   getStorefrontStats: vi.fn(),
+  getCtvTiers: vi.fn(),
   getStorefrontCategories: vi.fn(),
   applyStorefrontTemplate: vi.fn(),
   shareSheet: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('zmp-ui', async (importOriginal) => {
   };
 });
 vi.mock('../services/storefront-api', () => ({ ...mocks }));
+vi.mock('../services/affiliate-api', () => ({ getCtvTiers: mocks.getCtvTiers }));
 vi.mock('../components/share-sheet', () => ({
   ShareSheet: (props: { visible: boolean }) => {
     mocks.shareSheet(props);
@@ -125,6 +127,11 @@ const quests = {
     { code: 'Q3', title: 'Viết hồ sơ', hint: '', goal: 1, progress: 1, done: true, claimed: true, rewardPoints: 2 },
   ],
 };
+const TIERS = [
+  { name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null },
+  { name: 'Đồng', emoji: '🌿', min: 5_000_000, milestoneRewardPoints: 10 },
+];
+const tiersAt = (i: number) => ({ revenue: 0, tier: { name: TIERS[i]!.name, emoji: TIERS[i]!.emoji }, allTiers: TIERS });
 const stats = {
   orders7d: 2, orders30d: 9, revenue30d: 1_250_000, commission30d: 125_000,
   byProduct: [{ productSlug: 'tra-xanh', productName: 'Trà xanh', qty: 4, revenue: 320_000 }],
@@ -157,6 +164,7 @@ beforeEach(() => {
   mocks.getMyStorefront.mockResolvedValue(storefront());
   mocks.getQuests.mockResolvedValue(quests);
   mocks.getStorefrontStats.mockResolvedValue(stats);
+  mocks.getCtvTiers.mockResolvedValue(tiersAt(0));
   mocks.pickerProducts.mockResolvedValue([
     { ...product, id: 'p2', name: 'Xà phòng', slug: 'xa-phong', maxAffiliateRate: 12 },
   ]);
@@ -672,6 +680,38 @@ describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
     await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
     expect(mocks.updateStorefront.mock.calls[0]![0].subdomain).toBe('lan-do');
+  });
+});
+
+describe('Đầu xem trước như khách thấy (K6)', () => {
+  it('bậc 2: huy hiệu "CTV Đồng" ngay dưới tên shop, tên vẫn là h2 duy nhất của đầu trang', async () => {
+    mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+    renderPage();
+    expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toHaveLength(1);
+  });
+
+  it('bậc 1 (Tân binh): không huy hiệu, như trang khách', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
+  it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
+    mocks.getCtvTiers.mockRejectedValue({ response: { status: 401 }, message: 'x' });
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
+  it('lời nhắn của shop hiện ở đầu xem trước, ảnh bìa thiếu là bìa phẳng', async () => {
+    renderPage();
+    expect(await screen.findByText('Mua giúp mình nhé')).toBeInTheDocument();
+    expect(screen.getByTestId('shop-cover').getAttribute('style')).toContain('var(--color-bg-cover)');
   });
 });
 

@@ -12,6 +12,7 @@ import {
   reorderCollections, reorderItems, getQuests,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
+import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
@@ -19,7 +20,8 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
@@ -28,7 +30,9 @@ import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { ShopHeader } from '../components/ui/shop-header';
 import { Skeleton } from '../components/ui/skeleton';
+import { TierBadge } from '../components/ui/tier-badge';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { MoveButtons } from '../components/ui/move-buttons';
@@ -149,6 +153,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const publishCopy = storefrontPublishCopy(sf);
   // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
+  // Cùng khoá với trang CTV để dùng chung cache. Lỗi/chậm thì đầu xem trước vẫn vẽ, chỉ thiếu huy hiệu bậc.
+  const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false });
+  const previewTier = publicTier(ownerTierPreview(tiersQ.data));
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -618,39 +625,33 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const overflow = overflowSectionsNotice(sf.collections);
   return (
     <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
+      <ShopHeader
+        title={sf.title}
+        titleAs="h2"
+        coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null}
+        avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null}
+        note={sf.headerNote}
+        badges={previewTier ? <TierBadge name={previewTier.name} emoji={previewTier.emoji} /> : undefined}
+      />
       <div style={{ padding: '12px 16px 0' }}>
         <Card padding={16}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              aria-hidden="true"
-              style={{
-                width: 56, height: 56, flexShrink: 0, borderRadius: 'var(--radius-media)',
-                background: sf.coverUrl
-                  ? `center/cover no-repeat url(${sf.coverUrl})`
-                  : 'linear-gradient(135deg, var(--color-bg-subtle), var(--color-action-secondary-bg-pressed))',
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                <Heading variant="title-md" as="h2" style={{ overflowWrap: 'anywhere' }}>{sf.title}</Heading>
-                {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
-                <Badge tone={view.tone} size="sm">{view.label}</Badge>
-              </div>
-              <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
-                {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
-              </Text>
-              {!sf.coverUrl && (
-                <button
-                  type="button"
-                  className="tubu-press tubu-hit-44"
-                  onClick={() => setProfileOpen(true)}
-                  style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
-                >
-                  <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
-                </button>
-              )}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+            {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
+            <Badge tone={view.tone} size="sm">{view.label}</Badge>
+            <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
+              {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
+            </Text>
           </div>
+          {!sf.coverUrl && (
+            <button
+              type="button"
+              className="tubu-press tubu-hit-44"
+              onClick={() => setProfileOpen(true)}
+              style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+            >
+              <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
+            </button>
+          )}
           {view.code === 'LIVE' && (
             <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.storefront.webRefreshNote}</Text>
           )}

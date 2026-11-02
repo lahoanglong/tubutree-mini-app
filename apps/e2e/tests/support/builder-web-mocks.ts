@@ -16,6 +16,11 @@ export function mockBuilder(api: MockApi, { combo = false }: BuilderMockOptions 
   api.get('/me', () => USER);
   api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
   api.get('/affiliate/me', { isAffiliate: true, canRegister: true, canOpenStorefront: true, referralCode: 'AN123', walletBalance: 0 });
+  api.get('/affiliate/tiers', {
+    revenue: 0,
+    tier: { name: 'Tân binh', emoji: '🌱' },
+    allTiers: [{ name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null }, { name: 'Đồng', emoji: '🌿', min: 3_000_000, milestoneRewardPoints: 50 }],
+  });
   api.get('/storefront/me', {
     id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: null, avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null,
     subdomain: null, isPublished: true, status: 'LIVE', referralCode: 'AN123', subdomainEnabled: false, publicHiddenReason: null,

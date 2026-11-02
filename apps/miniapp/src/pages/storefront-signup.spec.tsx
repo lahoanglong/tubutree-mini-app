@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getMyStorefront: vi.fn(),
+  getCtvTiers: vi.fn(),
   createStorefront: vi.fn(),
   publishStorefront: vi.fn(),
   updateStorefront: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/storefront-api', () => ({ ...mocks }));
-vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: mocks.getAffiliateMe }));
+vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: mocks.getAffiliateMe, getCtvTiers: mocks.getCtvTiers }));
 vi.mock('../components/image-upload', () => ({
   ImageUpload: ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
     <input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
@@ -66,6 +67,7 @@ beforeEach(() => {
   mocks.getStorefrontStats.mockResolvedValue({ orders7d: 0, orders30d: 0, revenue30d: 0, commission30d: 0, byProduct: [] });
   mocks.pickerProducts.mockResolvedValue([{ ...product, id: 'p2', name: 'Xà phòng', slug: 'xa-phong', maxAffiliateRate: 12 }]);
   mocks.getStorefrontCategories.mockResolvedValue([{ id: 'cat1', name: 'Chăm sóc da', slug: 'cham-soc-da', image: null }]);
+  mocks.getCtvTiers.mockResolvedValue({ revenue: 0, tier: { name: 'Tân binh', emoji: '🌱' }, allTiers: [{ name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null }] });
   mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, canRegister: false, canOpenStorefront: true, referralCode: 'AN', walletBalance: 0 });
   mocks.createStorefront.mockResolvedValue(draft());
   mocks.applyStorefrontTemplate.mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });

@@ -1,6 +1,6 @@
 import { test, expect } from './support/mock-api';
 import { SHOP_SLUG, SHOP_TITLE, mockShopPage } from './support/shop-page-mocks';
-import { mockBuilder } from './support/builder-mocks';
+import { BUILDER_TITLE, mockBuilder } from './support/builder-mocks';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -77,6 +77,37 @@ const openSection = async (page: Page, title: string) => {
   await page.locator('[data-testid="section-card"] button').filter({ hasText: title }).first().click();
   await expect(page.getByTestId('section-detail')).toBeVisible();
 };
+
+test.describe('Mini App: đầu xem trước của màn dựng (K6)', () => {
+  test('gian hàng bậc 2: đầu xem trước có "CTV Đồng" dưới tên shop, không tràn ngang', async ({ page, api }) => {
+    mockBuilder(api, { tier: 'Đồng' });
+    await page.goto('/storefront');
+    await expect(page.getByRole('heading', { level: 2, name: BUILDER_TITLE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('CTV Đồng')).toBeVisible();
+    await expect(page.getByText('CTV Đồng')).toHaveCount(1);
+    const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.querySelector('.zaui-page')?.scrollWidth ?? 0]);
+    for (const x of w) expect(x).toBeLessThanOrEqual(375);
+  });
+
+  test('bậc 1 (Tân binh): đầu xem trước không có huy hiệu bậc', async ({ page, api }) => {
+    mockBuilder(api);
+    await page.goto('/storefront');
+    await expect(page.getByRole('heading', { level: 2, name: BUILDER_TITLE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/^CTV /)).toHaveCount(0);
+  });
+
+  test('tên shop 80 ký tự + bậc "Kim Cương": huy hiệu một dòng, không tràn ngang', async ({ page, api }) => {
+    const longTitle = `Cửa hàng ${'xanh '.repeat(14)}`.trim().slice(0, 80);
+    mockBuilder(api, { tier: 'Kim Cương', storefront: { title: longTitle } });
+    await page.goto('/storefront');
+    const badge = page.getByText('CTV Kim Cương');
+    await expect(badge).toBeVisible({ timeout: 15_000 });
+    const box = (await badge.boundingBox())!;
+    expect(box.height, 'huy hiệu không xuống dòng').toBeLessThanOrEqual(28);
+    const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.querySelector('.zaui-page')?.scrollWidth ?? 0]);
+    for (const x of w) expect(x).toBeLessThanOrEqual(375);
+  });
+});
 
 test.describe('Mini App: màn dựng gian hàng 375px', () => {
   test.beforeEach(({ api }) => mockBuilder(api));

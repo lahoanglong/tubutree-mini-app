@@ -61,6 +61,7 @@ const state = vi.hoisted(() => ({
   sfStatus: 200,
   quests: null as unknown,
   stats: null as unknown,
+  tiers: null as unknown,
   picker: [] as unknown[],
   categories: [] as unknown[],
   kit: null as unknown,
@@ -130,6 +131,7 @@ vi.mock('@/lib/core-http', () => {
       if (path === '/affiliate/me') return state.me;
       if (path === '/storefront/me/quests') return state.quests;
       if (path === '/storefront/me/stats') return state.stats;
+      if (path === '/affiliate/tiers') return state.tiers;
       if (path === '/storefront/me/products') return state.picker;
       if (path === '/categories') return state.categories;
       if (path.startsWith('/affiliate/content-kit/')) return state.kit;
@@ -169,6 +171,11 @@ const QUESTS = {
     { code: 'Q3', title: 'Viết hồ sơ', hint: '', goal: 1, progress: 1, done: true, claimed: true, rewardPoints: 2 },
   ],
 };
+const TIERS = [
+  { name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null },
+  { name: 'Đồng', emoji: '🌿', min: 5_000_000, milestoneRewardPoints: 10 },
+];
+const tiersAt = (i: number) => ({ revenue: 0, tier: { name: TIERS[i]!.name, emoji: TIERS[i]!.emoji }, allTiers: TIERS });
 const STATS = { orders7d: 2, orders30d: 9, revenue30d: 1_250_000, commission30d: 125_000, byProduct: [{ productSlug: 'tra-xanh', productName: 'Trà xanh', qty: 4, revenue: 320_000 }] };
 
 let mounted: Rendered[] = [];
@@ -222,6 +229,7 @@ beforeEach(() => {
   state.sfStatus = 200;
   state.quests = QUESTS;
   state.stats = STATS;
+  state.tiers = tiersAt(0);
   state.picker = [{ ...PRODUCT, id: 'p2', name: 'Xà phòng', slug: 'xa-phong', maxAffiliateRate: 12 }];
   state.categories = [
     { id: 'cat1', name: 'Chăm sóc da', slug: 'cham-soc-da', image: null },
@@ -1225,11 +1233,12 @@ describe('kiểu Mini App ở điện thoại', () => {
     }
   });
 
-  it('ảnh bìa thiếu: gradient xanh nhạt, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
+  it('ảnh bìa thiếu: bìa phẳng như khách thấy, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
     const a = mount();
     await flush();
-    const cover = a.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!;
-    expect(cover.className).toContain('max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]');
+    const cover = a.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!;
+    expect(cover.getAttribute('style')).toContain('var(--color-bg-cover)');
+    expect(a.container.querySelector('[data-testid="profile-cover"]')).toBeNull();
     const addCover = btn('Thêm ảnh bìa');
     expect(addCover.className).toContain('tubu-hit-44');
     expect(addCover.className).not.toMatch(/font-(medium|semibold|bold)/);
@@ -1237,7 +1246,7 @@ describe('kiểu Mini App ở điện thoại', () => {
     state.sf = storefront({ coverUrl: 'https://cdn.example/c.jpg");background:red;("' });
     const b = mount();
     await flush();
-    const style = b.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!.getAttribute('style')!;
+    const style = b.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!.getAttribute('style')!;
     expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
   });
 
@@ -1250,6 +1259,42 @@ describe('kiểu Mini App ở điện thoại', () => {
     const preview = document.querySelector<HTMLElement>('a[href^="/s/"]')!;
     expect(preview.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(btn('Chia sẻ gian hàng').className).toContain('max-md:whitespace-nowrap');
+  });
+});
+
+describe('đầu xem trước như khách thấy (K6)', () => {
+  const heading2 = (root: ParentNode) => Array.from(root.querySelectorAll('h2')).filter((h) => h.textContent === 'Cửa hàng Xanh');
+
+  it('bậc 2: huy hiệu "CTV Đồng" dưới tên shop; tên là h2, trang vẫn một h1', async () => {
+    state.tiers = tiersAt(1);
+    const { container } = mount();
+    await flush();
+    expect(text()).toContain('CTV Đồng');
+    expect(heading2(container)).toHaveLength(1);
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+  });
+
+  it('bậc 1 (Tân binh): không huy hiệu, như trang khách', async () => {
+    const { container } = mount();
+    await flush();
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
+    expect(heading2(container)).toHaveLength(1);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
+    state.fail.add('get /affiliate/tiers');
+    const { container } = mount();
+    await flush();
+    expect(heading2(container)).toHaveLength(1);
+    expect(hasBtn('Sửa hồ sơ')).toBe(true);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('lời nhắn của shop hiện ở đầu xem trước', async () => {
+    mount();
+    await flush();
+    expect(document.querySelector('[data-testid="shop-note"]')?.textContent).toBe('Mua giúp mình nhé');
   });
 });
 

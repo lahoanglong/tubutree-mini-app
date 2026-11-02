@@ -24,16 +24,19 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
+import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
+import { affiliateCtvTiersQuery } from '@tubutree/app-core/queries/affiliate';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
-import { cssUrl } from '@/lib/safe-color';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
+import { ShopHeader } from '@/components/mini/shop-header';
+import { TierBadge } from '@/components/mini/tier-badge';
 import { QuestStrip } from '@/components/mini/quest-strip';
 import { SectionCard } from '@/components/mini/section-card';
 import { StorefrontNewSection } from './storefront-new-section';
@@ -159,6 +162,9 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const publishCopy = storefrontPublishCopy(sf);
   // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery(storefrontQuestsQuery(coreHttp));
+  // Cùng khoá với trang CTV để dùng chung cache. Lỗi/chậm thì đầu xem trước vẫn vẽ, chỉ thiếu huy hiệu bậc.
+  const tiersQ = useQuery({ ...affiliateCtvTiersQuery(coreHttp), staleTime: 5 * 60_000, retry: false });
+  const previewTier = publicTier(ownerTierPreview(tiersQ.data));
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<string | null>(null);
@@ -500,30 +506,30 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
           <div className="lg:col-start-1">
-            <div className={`${ui.card} ${phoneFlatCard} p-4`}>
-              <div className="flex items-center gap-3">
-                <div
-                  aria-hidden="true"
-                  data-testid="profile-cover"
-                  className="h-14 w-14 shrink-0 rounded-control bg-forest-50 bg-cover bg-center max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]"
-                  style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <h2 className="break-words font-display text-lg font-semibold text-stone-900">{sf.title}</h2>
-                    {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
-                    <Badge tone={view.tone} size="sm">
-                      {view.label}
-                    </Badge>
-                  </div>
-                  <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
-                  {!sf.coverUrl && (
-                    <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
-                      Thêm ảnh bìa
-                    </button>
-                  )}
-                </div>
+            {/* Đầu xem trước dùng đúng ShopHeader của trang khách; `.tubu-bleed` kéo bìa ra mép màn điện thoại như Mini (từ md nằm trong khung trang). */}
+            <div className="tubu-bleed md:overflow-hidden md:rounded-card">
+              <ShopHeader
+                title={sf.title}
+                titleAs="h2"
+                coverUrl={sf.coverUrl}
+                avatarUrl={sf.avatarUrl}
+                note={sf.headerNote}
+                badges={previewTier ? <TierBadge name={previewTier.name} emoji={previewTier.emoji} /> : undefined}
+              />
+            </div>
+            <div className={`${ui.card} ${phoneFlatCard} mt-3 p-4`}>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
+                <Badge tone={view.tone} size="sm">
+                  {view.label}
+                </Badge>
+                <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
               </div>
+              {!sf.coverUrl && (
+                <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
+                  Thêm ảnh bìa
+                </button>
+              )}
               {view.code === 'LIVE' && <div className={`mt-2 text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
               {(view.hint || sf.publicHiddenReason) && (
                 <div data-testid="hidden-reason" role="status" className={`mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg ${phoneCaption}`}>
