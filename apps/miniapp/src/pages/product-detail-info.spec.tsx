@@ -202,11 +202,18 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
 
     it('bộ về rỗng hoặc lỗi: trang hiện ngay khi biết kết quả, không chờ hết hạn chờ', async () => {
       mocks.getProductBundles.mockRejectedValue(new Error('mạng'));
-      const started = Date.now();
-      renderPdp();
-      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
-      expect(Date.now() - started).toBeLessThan(PDP_BUNDLES_WAIT_MS);
-      expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+      // Hẹn giờ hết hạn chờ không bao giờ chạy: trang hiện được thì chỉ có thể nhờ kết quả lỗi. Không đo đồng hồ thật (máy/CI tải nặng vượt 300 ms dù đúng).
+      const realSetTimeout = globalThis.setTimeout;
+      const timers = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...rest: unknown[]) =>
+        ms === PDP_BUNDLES_WAIT_MS ? (0 as unknown as ReturnType<typeof setTimeout>) : realSetTimeout(fn, ms, ...rest)) as typeof setTimeout);
+      try {
+        renderPdp();
+        await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+        expect(timers.mock.calls.some(([, ms]) => ms === PDP_BUNDLES_WAIT_MS)).toBe(true);
+        expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+      } finally {
+        timers.mockRestore();
+      }
     });
 
     it('API bộ treo: hết hạn chờ thì trang vẫn hiện, không có khối', async () => {
