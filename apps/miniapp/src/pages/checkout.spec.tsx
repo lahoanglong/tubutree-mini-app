@@ -746,7 +746,25 @@ describe('CheckoutPage — thiếu địa chỉ: nút Đặt hàng khoá có lý
     renderPage();
     const bar = await screen.findByTestId('sticky-bar');
     await waitFor(() => expect(within(bar).getByRole('button')).toHaveTextContent('Đặt hàng · 70.000đ'));
-    expect(within(bar).queryByRole('status')).toBeNull();
+    expect(within(bar).getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('vùng báo là một phần tử có mặt từ đầu và chỉ đổi chữ khi báo giá lỗi (đọc màn hình mới đọc được)', async () => {
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    let reject!: (e: Error) => void;
+    const pending = new Promise<never>((_, r) => (reject = r));
+    pending.catch(() => undefined);
+    mocks.checkoutQuote.mockReturnValue(pending);
+    renderPage();
+    const bar = await screen.findByTestId('sticky-bar');
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalled());
+    const region = within(bar).getByRole('status');
+    expect(region).toBeEmptyDOMElement();
+    expect(region.style.position).toBe('absolute');
+    reject(new Error('Mạng lỗi'));
+    await waitFor(() => expect(region).toHaveTextContent('Chưa tính được tổng tiền.'));
+    expect(within(bar).getByRole('status')).toBe(region);
+    expect(region.style.position).toBe('');
   });
 });
 

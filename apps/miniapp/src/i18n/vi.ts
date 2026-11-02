@@ -3,6 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
@@ -252,7 +253,7 @@ export const vi = {
         : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
     backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',
-    addressEmpty: 'Bạn chưa thêm địa chỉ',
+    addressEmpty: fillCopy('checkout.addressEmpty'),
     addAddress: 'Thêm địa chỉ mới',
     addressDefault: 'Mặc định',
     addressLegacy: 'Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.',

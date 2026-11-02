@@ -30,7 +30,7 @@ import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
-import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -471,13 +471,11 @@ export default function CheckoutPage() {
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   const placeLabel = place.isPending ? 'Đang đặt hàng…' : quote ? fillCopy('checkout.placeWith', { price: formatVnd(quote.total) }) : 'Đặt hàng';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
-  const barHint =
+  // Đỏ chỉ cho lỗi thật (đặt lỗi, giá đổi, giỏ cần sửa); lý do khoá nút do thiếu địa chỉ/chưa tính được là chữ phụ như Mini.
+  const barError =
     cartIssue ??
-    (priceChanged
-      ? fillCopy('checkout.priceChangedHint')
-      : place.isError
-        ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
-        : checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError }));
+    (priceChanged ? fillCopy('checkout.priceChangedHint') : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+  const barNote = barError ? null : checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quoteQ.isError });
 
   return (
     <Shell>
@@ -524,6 +522,7 @@ export default function CheckoutPage() {
               addresses={addrQ.data ?? []}
               selectedId={addressId}
               quoteOutdated={quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'}
+              loadFailed={addrQ.isError}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
@@ -753,7 +752,7 @@ export default function CheckoutPage() {
             <div data-testid="points-none" className="flex min-h-11 items-center justify-between md:hidden">
               <span className="min-w-0">
                 <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
-                <span className="block text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('checkout.pointsNone')}</span>
+                <span className="block text-caption text-[color:var(--color-text-tertiary)]">{idlePointsLabel(quote ?? user)}</span>
               </span>
               <span className={miniCheckboxWrap}>
                 <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
@@ -847,11 +846,15 @@ export default function CheckoutPage() {
         </div>
       </div>
       <StickyActionBar label="Đặt hàng" hideFrom="lg">
-        {barHint && (
+        {barError && (
           <p aria-hidden="true" className="mb-2 text-caption text-danger-fg">
-            {barHint}
+            {barError}
           </p>
         )}
+        {/* Vùng báo luôn có mặt trong cây, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver) thường không đọc. */}
+        <p role="status" className={barNote ? 'mb-2 text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
+          {barNote}
+        </p>
         <button
           type="button"
           onClick={() => place.mutate()}
@@ -936,6 +939,7 @@ function AddressPicker({
   addresses,
   selectedId,
   quoteOutdated,
+  loadFailed,
   onSelect,
   onCreated,
   onUpdated,
@@ -943,6 +947,8 @@ function AddressPicker({
   addresses: AddressDTO[];
   selectedId: string | null;
   quoteOutdated: boolean;
+  /** Danh sách không tải được: đã có dòng lỗi riêng, không được nói "chưa thêm địa chỉ". */
+  loadFailed: boolean;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
   onUpdated: (a: AddressDTO) => void;
@@ -952,6 +958,11 @@ function AddressPicker({
 
   return (
     <div className="mt-2 space-y-2">
+      {addresses.length === 0 && !adding && !loadFailed && (
+        <p data-testid="address-empty" className="text-sm leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-tertiary)]">
+          {fillCopy('checkout.addressEmpty')}
+        </p>
+      )}
       {addresses.map((a) =>
         editingId === a.id ? (
           <AddressForm

@@ -236,6 +236,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.placeWith': 24,
   'checkout.changeCode': 10,
   'checkout.pointsNone': 32,
+  'checkout.addressEmpty': 24,
   'coupon.autoApplied': 28,
 
   // Bộ thành phần section-kit

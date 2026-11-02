@@ -230,6 +230,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.placeWith': 'Đặt hàng · {price}',
   'checkout.changeCode': 'Đổi mã',
   'checkout.pointsNone': 'Tích điểm từ đơn đầu tiên nhé',
+  'checkout.addressEmpty': 'Bạn chưa thêm địa chỉ',
   'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)

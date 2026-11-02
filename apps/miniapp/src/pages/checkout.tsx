@@ -1158,13 +1158,17 @@ export default function CheckoutPage() {
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar
-        summary={placeHint ? (
-          <div role="status">
-            <DsText variant="caption" tone="secondary">
-              {placeHint}
-            </DsText>
+        summary={
+          // Vùng báo luôn có mặt, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver trong Zalo) thường không đọc.
+          // Lúc rỗng đặt absolute để không chiếm khoảng cách (gap) của thanh.
+          <div role="status" style={placeHint ? undefined : { position: 'absolute' }}>
+            {placeHint && (
+              <DsText variant="caption" tone="secondary">
+                {placeHint}
+              </DsText>
+            )}
           </div>
-        ) : undefined}
+        }
         primary={
           <Button
             fullWidth
