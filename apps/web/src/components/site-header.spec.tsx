@@ -12,7 +12,7 @@ vi.mock('@/lib/use-hydrated', async (orig) => {
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (o: { queryKey: unknown[]; select?: (s: unknown) => unknown }) => ({
     data:
-      o.queryKey.join('/') === 'me/summary'
+      o.queryKey.join('/') === 'me-summary'
         ? o.select?.({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: mocks.notifications.filter((n) => n.status !== 'READ').length, activeSubscriptions: 0 })
         : mocks.cart,
   }),

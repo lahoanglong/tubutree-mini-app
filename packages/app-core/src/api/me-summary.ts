@@ -4,12 +4,13 @@ import type { HttpClient } from '../http';
 export type { MeSummaryDTO };
 
 /**
- * MỘT khoá cho mọi số đếm của Cá nhân và thanh đáy. Nằm dưới ['me'] nên mọi `invalidateQueries({ queryKey: ['me'] })` làm mới nó;
- * đặt đơn/huỷ đơn (['orders']), đọc tin (['notifications']) và gói định kỳ (['subscriptions']) làm mới qua `summaryKeyAffectedBy`.
+ * MỘT khoá cho mọi số đếm của Cá nhân và thanh đáy. Cố ý KHÔNG nằm dưới ['me']: Vườn Xanh làm mới ['me'] sau mỗi lần tưới, thu hoạch,
+ * làm nhiệm vụ, mà các số này không đổi theo đó. Đặt đơn/huỷ đơn (['orders']), đọc tin (['notifications']) và gói định kỳ
+ * (['subscriptions']) làm mới nó qua `summaryKeyAffectedBy`; đổi tài khoản hay làm mới mọi truy vấn (predicate không theo khoá) vẫn phủ nó.
  */
-export const ME_SUMMARY_KEY = ['me', 'summary'] as const;
+export const ME_SUMMARY_KEY = ['me-summary'] as const;
 
-/** Gốc khoá mà khi bị làm mới thì các số trong summary cũng cũ (['me'] đã phủ sẵn bằng tiền tố). */
+/** Gốc khoá mà khi bị làm mới thì các số trong summary cũng cũ. */
 const SUMMARY_ROOTS: ReadonlySet<unknown> = new Set(['orders', 'notifications', 'subscriptions']);
 
 export const summaryKeyAffectedBy = (queryKey: readonly unknown[] | undefined): boolean => queryKey !== undefined && SUMMARY_ROOTS.has(queryKey[0]);

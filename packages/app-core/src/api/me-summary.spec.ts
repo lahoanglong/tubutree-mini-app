@@ -13,8 +13,9 @@ describe('me-summary', () => {
     const { http, calls } = fakeHttp(() => body);
     await expect(getMeSummary(http)).resolves.toEqual(body);
     expect(calls).toEqual([{ method: 'get', path: '/me/summary' }]);
-    expect(meSummaryQuery(fakeHttp().http).queryKey).toEqual(['me', 'summary']);
-    expect(ME_SUMMARY_KEY[0]).toBe('me');
+    expect(meSummaryQuery(fakeHttp().http).queryKey).toEqual(['me-summary']);
+    expect(ME_SUMMARY_KEY[0]).toBe('me-summary');
+    expect(summaryKeyAffectedBy(['me'])).toBe(false);
   });
 
   it.each([

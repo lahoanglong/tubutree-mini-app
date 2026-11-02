@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), status: 'authenticated' }));
 vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 
-import { TubuQueryClient } from '../services/query-client';
+import { TubuQueryClient, createQueryClient } from '../services/query-client';
 import { useActiveOrderCount } from './use-active-order-count';
 import { useMeSummary } from './use-me-summary';
 
@@ -115,12 +115,13 @@ describe('/me/summary: một nguồn, làm mới theo hành động của khách
     await waitFor(() => expect(hook.result.current.subs).toBe(1));
   });
 
-  it('làm mới ["me"] (đổi hồ sơ, game, checkout) cũng làm mới summary vì khoá nằm dưới tiền tố đó', async () => {
+  it('làm mới ["me"] (Vườn Xanh tưới, thu hoạch; đổi hồ sơ) KHÔNG gọi lại summary', async () => {
     const { hook } = setup();
     await waitFor(() => expect(hook.result.current.badge).toBe(1));
-    server.active = 4;
-    await act(async () => void hook.result.current.qc.invalidateQueries({ queryKey: ['me'] }));
-    await waitFor(() => expect(hook.result.current.badge).toBe(4));
+    await act(async () => {
+      await hook.result.current.qc.invalidateQueries({ queryKey: ['me'] });
+    });
+    expect(summaryCalls()).toBe(1);
   });
 
   it('khoá không liên quan (ví, sản phẩm) không gọi lại summary', async () => {
@@ -144,12 +145,27 @@ describe('/me/summary: một nguồn, làm mới theo hành động của khách
     expect(summaryCalls()).toBe(2);
   });
 
+  it('race: summary đang tải lại dở với số cũ, rồi đọc tin (làm mới ["notifications"]): kết quả cuối là số mới', async () => {
+    const { hook } = setup();
+    await waitFor(() => expect(hook.result.current.unread).toBe(3));
+    let releaseOld: () => void = () => {};
+    const oldBody = body();
+    mocks.get.mockImplementationOnce(() => new Promise((resolve) => { releaseOld = () => resolve(oldBody); }));
+    await act(async () => {
+      void hook.result.current.qc.refetchQueries({ queryKey: ['me-summary'] });
+    });
+    await act(async () => hook.result.current.markRead.mutate());
+    await act(async () => releaseOld());
+    await waitFor(() => expect(hook.result.current.unread).toBe(2));
+    expect(hook.result.current.qc.getQueryState(['me-summary'])?.isInvalidated).toBe(false);
+  });
+
   it('summary lỗi sau khi đã có số: không đổi thành số sai, query ở trạng thái lỗi', async () => {
     const { client, hook } = setup();
     await waitFor(() => expect(hook.result.current.badge).toBe(1));
     mocks.get.mockRejectedValue(new Error('500'));
     await act(async () => hook.result.current.cancel.mutate());
-    await waitFor(() => expect(client.getQueryState(['me', 'summary'])?.status).toBe('error'));
+    await waitFor(() => expect(client.getQueryState(['me-summary'])?.status).toBe('error'));
     expect(hook.result.current.badge).toBe(1);
   });
 
@@ -158,5 +174,24 @@ describe('/me/summary: một nguồn, làm mới theo hành động của khách
     const { hook } = setup();
     expect(hook.result.current).toMatchObject({ badge: 0, pending: undefined, unread: undefined });
     expect(summaryCalls()).toBe(0);
+  });
+});
+
+describe('useMeSummary giữ staleTime mặc định của app', () => {
+  it('3 lần mount trong 10 giây (không truyền staleTime) chỉ tốn 1 lời gọi', async () => {
+    vi.clearAllMocks();
+    mocks.status = 'authenticated';
+    mocks.get.mockImplementation(async () => body());
+    const client = createQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const first = renderHook(() => useMeSummary().data?.unreadNotifications, { wrapper });
+    await waitFor(() => expect(first.result.current).toBe(server.unread));
+    first.unmount();
+    for (let i = 0; i < 2; i++) {
+      const again = renderHook(() => useMeSummary({ select: (s) => s.orders.active }).data, { wrapper });
+      await waitFor(() => expect(again.result.current).toBe(server.active));
+      again.unmount();
+    }
+    expect(summaryCalls()).toBe(1);
   });
 });

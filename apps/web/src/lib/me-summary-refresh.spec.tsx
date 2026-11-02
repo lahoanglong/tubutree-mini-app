@@ -114,12 +114,13 @@ describe('/me/summary (web): một nguồn, làm mới theo hành động của 
     await waitFor(() => expect(hook.result.current.subs).toBe(1));
   });
 
-  it('làm mới ["me"] cũng làm mới summary vì khoá nằm dưới tiền tố đó', async () => {
+  it('làm mới ["me"] (Vườn Xanh tưới, thu hoạch; đổi hồ sơ) KHÔNG gọi lại summary', async () => {
     const { hook } = setup();
     await waitFor(() => expect(hook.result.current.badge).toBe(1));
-    server.active = 4;
-    await act(async () => void hook.result.current.qc.invalidateQueries({ queryKey: ['me'] }));
-    await waitFor(() => expect(hook.result.current.badge).toBe(4));
+    await act(async () => {
+      await hook.result.current.qc.invalidateQueries({ queryKey: ['me'] });
+    });
+    expect(summaryCalls()).toBe(1);
   });
 
   it('khoá không liên quan không gọi lại summary; kéo để làm mới nhiều gốc khoá liền nhau chỉ tốn MỘT lời gọi thêm', async () => {
@@ -137,10 +138,25 @@ describe('/me/summary (web): một nguồn, làm mới theo hành động của 
     expect(summaryCalls()).toBe(2);
   });
 
+  it('race: summary đang tải lại dở với số cũ, rồi đọc tin (làm mới ["notifications"]): kết quả cuối là số mới', async () => {
+    const { hook } = setup();
+    await waitFor(() => expect(hook.result.current.unread).toBe(3));
+    let releaseOld: () => void = () => {};
+    const oldBody = body();
+    mocks.get.mockImplementationOnce(() => new Promise((resolve) => { releaseOld = () => resolve(oldBody); }));
+    await act(async () => {
+      void hook.result.current.qc.refetchQueries({ queryKey: ['me-summary'] });
+    });
+    await act(async () => hook.result.current.markRead.mutate());
+    await act(async () => releaseOld());
+    await waitFor(() => expect(hook.result.current.unread).toBe(2));
+    expect(hook.result.current.qc.getQueryState(['me-summary'])?.isInvalidated).toBe(false);
+  });
+
   it('summary lỗi: không có số (chưa từng tải) thay vì số sai', async () => {
     mocks.get.mockRejectedValue(new Error('500'));
     const { client, hook } = setup();
-    await waitFor(() => expect(client.getQueryState(['me', 'summary'])?.status).toBe('error'));
+    await waitFor(() => expect(client.getQueryState(['me-summary'])?.status).toBe('error'));
     expect(hook.result.current).toMatchObject({ badge: undefined, pending: undefined, unread: undefined, subs: undefined });
   });
 

@@ -193,20 +193,20 @@ describe('getQueryClient — client đang chạy cho store/auth.ts', () => {
 });
 
 describe('createQueryClient — làm mới số đếm /me/summary', () => {
-  const stale = (client: ReturnType<typeof createQueryClient>) => client.getQueryState(['me', 'summary'])?.isInvalidated === true;
+  const stale = (client: ReturnType<typeof createQueryClient>) => client.getQueryState(['me-summary'])?.isInvalidated === true;
   const seed = () => {
     const client = createQueryClient();
-    client.setQueryData(['me', 'summary'], { orders: { active: 1 } });
+    client.setQueryData(['me-summary'], { orders: { active: 1 } });
     return client;
   };
 
-  it.each([['orders'], ['orders', 'list', 'all'], ['notifications'], ['subscriptions'], ['me']])('làm mới %j đánh dấu summary cũ', async (...key) => {
+  it.each([['orders'], ['orders', 'list', 'all'], ['notifications'], ['subscriptions']])('làm mới %j đánh dấu summary cũ', async (...key) => {
     const client = seed();
     await client.invalidateQueries({ queryKey: key });
     expect(stale(client)).toBe(true);
   });
 
-  it.each([['wallet'], ['products'], ['coupons']])('làm mới %j không đụng summary', async (...key) => {
+  it.each([['wallet'], ['products'], ['coupons'], ['me']])('làm mới %j không đụng summary (Vườn Xanh làm mới ["me"] sau mỗi lần tưới)', async (...key) => {
     const client = seed();
     await client.invalidateQueries({ queryKey: key });
     expect(stale(client)).toBe(false);

@@ -106,7 +106,7 @@ describe('BottomNav (điện thoại)', () => {
     mocks.ready = () => true;
     render('/');
     const opts = mocks.query.mock.calls[0]![0] as { queryKey: string[]; enabled: boolean; retry: boolean };
-    expect(opts.queryKey).toEqual(['me', 'summary']);
+    expect(opts.queryKey).toEqual(['me-summary']);
     expect(opts.enabled).toBe(true);
     expect(opts.retry).toBe(false);
     mocks.status = 'anonymous';

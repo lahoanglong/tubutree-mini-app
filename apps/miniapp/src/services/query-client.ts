@@ -19,10 +19,18 @@ export const CATALOG_KEYS = [['products'], ['for-you'], ['categories'], ['brands
  * kể cả trang chưa viết, không phải nhớ khoá summary; query không có người xem chỉ bị đánh dấu cũ, không gọi mạng.
  */
 export class TubuQueryClient extends QueryClient {
+  private summaryRefresh: Promise<void> | null = null;
+
   override invalidateQueries(filters?: InvalidateQueryFilters, options?: InvalidateOptions): Promise<void> {
-    // cancelRefetch: false vì kéo-để-làm-mới làm mới ba gốc khoá liền nhau, mà chỉ cần MỘT lời gọi summary.
-    if (summaryKeyAffectedBy(filters?.queryKey)) void super.invalidateQueries({ queryKey: ME_SUMMARY_KEY }, { cancelRefetch: false });
-    return super.invalidateQueries(filters, options);
+    const own = super.invalidateQueries(filters, options);
+    if (!summaryKeyAffectedBy(filters?.queryKey)) return own;
+    // Kéo-để-làm-mới làm mới ba gốc khoá liền nhau: gộp theo microtask để chỉ MỘT lời gọi summary, vẫn giữ cancelRefetch mặc định
+    // (lần tải cũ đang bay bị huỷ nên không ghi đè số cũ lên số mới). Promise trả về chờ cả summary.
+    this.summaryRefresh ??= Promise.resolve().then(() => {
+      this.summaryRefresh = null;
+      return super.invalidateQueries({ queryKey: ME_SUMMARY_KEY });
+    });
+    return Promise.all([own, this.summaryRefresh]).then(() => undefined);
   }
 }
 
