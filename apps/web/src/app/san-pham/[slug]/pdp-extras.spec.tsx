@@ -563,7 +563,7 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
       await mountEarn();
       openPopup();
       expect(dialog()?.parentElement?.className).toContain('md:items-center');
-      expect(dialog()?.className).toContain('md:max-w-lg');
+      expect(dialog()?.className).toContain('md:max-w-[var(--dialog-w)]');
     });
 
     it('web chưa có trang gửi đơn sàn: có câu đơn sàn nhưng không có liên kết /points/scan', async () => {

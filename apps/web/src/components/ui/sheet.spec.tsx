@@ -181,3 +181,36 @@ describe('Sheet thanh kéo', () => {
     expect(handle.className).toContain('md:hidden');
   });
 });
+
+describe('Sheet từ md là hộp thoại giữa màn (K7)', () => {
+  const classOf = () => dialog()!.className;
+
+  it('rộng tối đa --dialog-w, cao tối đa 85vh, bo đủ góc, bóng dialog, mở fade/scale và tắt khi giảm chuyển động', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    for (const c of ['md:max-w-[var(--dialog-w)]', 'md:max-h-[85vh]', 'md:rounded-sheet', 'md:shadow-dialog', 'md:animate-dialog-pop', 'motion-reduce:animate-none']) {
+      expect(classOf().split(' '), c).toContain(c);
+    }
+    expect(classOf()).not.toContain('md:max-w-lg');
+  });
+
+  it('dưới md không đổi: bo hai góc trên, cao tối đa 92vh', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    expect(classOf().split(' ')).toEqual(expect.arrayContaining(['rounded-t-sheet', 'max-h-[92vh]', 'w-full']));
+  });
+
+  it('size="full" kẹp 85vh từ md, size="half" giữ 50vh', () => {
+    const full = mount(<Sheet open onClose={() => {}} size="full">x</Sheet>);
+    expect(classOf().split(' ')).toEqual(expect.arrayContaining(['h-[92vh]', 'md:h-[85vh]']));
+    full.unmount();
+    mounted = [];
+    mount(<Sheet open onClose={() => {}} size="half">x</Sheet>);
+    expect(classOf().split(' ')).toContain('h-[50vh]');
+  });
+
+  it('tiêu đề là tiêu đề khối Inter 16/700, không phải Fraunces 18 (final-critique P2 #2)', () => {
+    mount(<Sheet open onClose={() => {}} title="Chọn mã">x</Sheet>);
+    const classes = document.querySelector('[role="dialog"] h2')!.className.split(' ');
+    expect(classes).toEqual(expect.arrayContaining(['font-ui', 'text-base', 'font-bold']));
+    expect(classes).not.toContain('font-display');
+  });
+});

@@ -137,6 +137,11 @@ describe('web tailwind.config', () => {
     });
   });
 
+  it('hộp thoại từ md: có bóng shadow-dialog (elevation-4) và animate-dialog-pop dùng keyframes tubu-dialog-pop của mini.css', () => {
+    expect(ext?.boxShadow).toMatchObject({ dialog: 'var(--elevation-4)' });
+    expect((ext?.animation as Record<string, string>)['dialog-pop']).toMatch(/^tubu-dialog-pop /);
+  });
+
   it('có bóng thanh dưới (shadow-nav) và cỡ chữ nhãn 12px (text-label) theo token', () => {
     expect(ext?.boxShadow).toMatchObject({ nav: 'var(--elevation-nav)' });
     expect(ext?.fontSize).toMatchObject({ label: ['var(--type-label-size)', { lineHeight: 'var(--type-label-lh)' }] });
