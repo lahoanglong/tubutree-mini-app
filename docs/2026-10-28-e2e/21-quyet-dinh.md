@@ -24,7 +24,7 @@ Muốn đổi lại thì nói em; mọi thứ dưới đây đổi lại đượ
 | E-74 (DODANG-14) endpoint cũ | Xoá hai endpoint điểm danh cũ chỉ khi cả bản Mini đang chạy (9d0e95bd5) không gọi. `by-host`/`customDomain` giữ, chỉ ghi chú. | Tránh vỡ bản Mini đã phát hành. |
 | E-76 (DODANG-16) quản trị câu đố | Chỉ xem, thêm, sửa câu. Không xoá, không bật/tắt. Thưởng điểm 0; giọt nước theo độ khó như câu sẵn có (8/10/12). | Không đổi kinh tế game. |
 | E-77 (DODANG-17) cấu hình bố cục khách mới | Không nối, không xoá khoá `home.new_customer_layout`. Chỉ sửa câu mô tả cho đúng ("chưa client nào đọc") và comment cờ Chặng Mùa. | Nối hay xoá là quyết định bố cục trang chủ (mục B). |
-| E-87 (CSKH-13, R-112) tiêu đề tin | Đổi tiêu đề trong app theo loại tin. GIỮ emoji trong nội dung mẫu tin. | Sửa nội dung mẫu tin gửi khách thật là việc của anh. |
+| E-87 (CSKH-13, R-112) tiêu đề tin | Đổi tiêu đề trong app theo loại tin. Ngày 02/11 chủ duyệt bỏ emoji trong thân mẫu tin `COMMUNITY_*` (migration `20261102120000_community_templates_no_emoji`, chỉ sửa mẫu còn đúng bản mặc định). Mẫu ngoài nhóm cộng đồng giữ emoji. | Sửa nội dung mẫu tin gửi khách thật là việc của anh; anh đã chốt phần cộng đồng. |
 | E-89 (CSKH-15, R-133) sự kiện cộng đồng trong Mini | Ghi "Tham gia trên web Tubu Tree" ngay trên thẻ, số điểm thành dòng phụ. Không link ra ngoài, không cho dự thi trong Mini. | Giữ quyết định Mini chỉ đọc, không link ngoài. |
 | E-101 (R-106) Mini trên màn rộng | Khung tối đa 480px, căn giữa. | Mini chủ yếu mở ở khổ điện thoại. |
 | E-103 (R-122) trang Hạng | Bỏ khối mã, thay bằng một dòng "Ví mã (n) ›" tới Ưu đãi; không có mã thì "Đổi quà ›". | Trang Hạng đang dài gần 4 màn, mã hiện ở 3 chỗ. |

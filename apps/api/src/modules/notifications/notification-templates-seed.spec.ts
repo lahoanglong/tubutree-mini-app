@@ -73,10 +73,11 @@ describe('seed mẫu thông báo', () => {
   const byCode = new Map(templates.map((t) => [t.code, t]));
   const MIGRATIONS_DIR = join(__dirname, '../../../prisma/migrations');
 
-  /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục). */
-  function bodiesAfterMigrations(): Map<string, string> {
+  /** Lời tin của từng mã sau khi áp lần lượt mọi migration (INSERT rồi UPDATE theo thứ tự thư mục), dừng trước thư mục `before` nếu có. */
+  function bodiesAfterMigrations(before?: string): Map<string, string> {
     const out = new Map<string, string>();
     for (const dir of readdirSync(MIGRATIONS_DIR).filter((d) => statSync(join(MIGRATIONS_DIR, d)).isDirectory()).sort()) {
+      if (before && dir >= before) break;
       const sql = readFileSync(join(MIGRATIONS_DIR, dir, 'migration.sql'), 'utf-8');
       for (const m of sql.matchAll(/\('[^']+', '([A-Z_]+)', '[A-Z]+', '([^']*)'\)/g)) {
         if (!out.has(m[1]!)) out.set(m[1]!, m[2]!);
@@ -122,6 +123,22 @@ describe('seed mẫu thông báo', () => {
   it('R-112: thân mẫu tin COMMUNITY_* không có emoji', () => {
     const withEmoji = templates.filter((t) => t.code.startsWith('COMMUNITY_') && /\p{Extended_Pictographic}/u.test(t.bodyTemplate));
     expect(withEmoji.map((t) => t.code)).toEqual([]);
+  });
+
+  it('R-112: migration bỏ emoji chỉ khớp đúng bản cũ (gõ lệch một ký tự thì PROD giữ emoji mà không báo)', () => {
+    const DIR = '20261102120000_community_templates_no_emoji';
+    const sql = readFileSync(join(MIGRATIONS_DIR, DIR, 'migration.sql'), 'utf-8');
+    const rows = [...sql.matchAll(/SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'\s+AND "bodyTemplate" = '([^']*)';/g)];
+    const community = templates.filter((t) => t.code.startsWith('COMMUNITY_')).map((t) => t.code);
+    expect(rows.map((m) => m[2]).sort()).toEqual([...community].sort());
+    const prior = bodiesAfterMigrations(DIR);
+    for (const [, next, code, old] of rows) {
+      expect(next).toBe(byCode.get(code!)!.bodyTemplate);
+      expect(old).toMatch(/\p{Extended_Pictographic}/u);
+      // Bản cũ = bản mới cộng đúng một emoji và một khoảng trắng đi kèm (đầu câu, hoặc trước biến cuối câu).
+      expect(old!.replace(/^\p{Extended_Pictographic}\uFE0F? | \p{Extended_Pictographic}\uFE0F?/u, '')).toBe(next);
+      if (prior.has(code!)) expect(old).toBe(prior.get(code!));
+    }
   });
 
   it('Refill đã gỡ: seed không còn mẫu REFILL_*', () => {
