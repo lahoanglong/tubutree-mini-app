@@ -89,12 +89,12 @@ interface TermHit {
   text: string;
 }
 
-function findHits(sources: { file: string; text: string }[]): TermHit[] {
+function findHits(sources: { file: string; text: string }[], terms: readonly { pattern: RegExp; use: string }[] = FORBIDDEN_TERMS, skip: readonly RegExp[] = NOT_SCANNED): TermHit[] {
   const hits: TermHit[] = [];
   for (const { file, text } of sources) {
-    if (NOT_SCANNED.some((re) => re.test(file))) continue;
+    if (skip.some((re) => re.test(file))) continue;
     for (const s of displayStrings(text, file)) {
-      for (const term of FORBIDDEN_TERMS) if (term.pattern.test(s.text)) hits.push({ file, line: s.line, use: term.use, text: s.text.trim() });
+      for (const term of terms) if (term.pattern.test(s.text)) hits.push({ file, line: s.line, use: term.use, text: s.text.trim() });
     }
   }
   return hits;
@@ -114,6 +114,22 @@ function loadSources(): { file: string; text: string }[] {
     .map((f) => ({ file: relative(REPO, f).split(sep).join('/'), text: readFileSync(f, 'utf8') }))
     .filter((s) => (s.file.startsWith('apps/api/') ? isApiCopyFile(s.file) : true) && !NOT_SCANNED.some((re) => re.test(s.file)));
 }
+
+// Luật riêng cho API: "Vui lòng"/"chúng tôi" không quay lại ở BẤT KỲ file API nào (lỗi nghiệp vụ, chữ quản trị, tin nhắn), không chỉ ở file chữ khách đọc của `isApiCopyFile`.
+// Chữ quản trị của API cũng đổi nên thư mục `admin/` không được miễn như `NOT_SCANNED`; chỉ bỏ spec. Các thuật ngữ cấm khác vẫn chỉ quét file chữ khách đọc.
+const API_SRC = 'apps/api/src';
+const API_SKIP = [/\.(spec|test)\.ts$/];
+const API_VOICE = FORBIDDEN_TERMS.filter((t) => t.use === 'Bạn hoặc Tubu');
+
+function loadApiSources(): { file: string; text: string }[] {
+  return walk(join(REPO, API_SRC))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => ({ file: relative(REPO, f).split(sep).join('/'), text: readFileSync(f, 'utf8') }))
+    .filter((s) => !API_SKIP.some((re) => re.test(s.file)));
+}
+
+/** Văn bản pháp lý nằm trong API (nếu có): "chúng tôi" là chủ thể ký trong văn bản. `max` bằng đúng số chỗ hiện có, như `EXEMPT`. Hiện không có. */
+const API_VOICE_EXEMPT: { file: string; max: number; reason: string }[] = [];
 
 interface Exemption {
   file: string;
@@ -536,6 +552,57 @@ describe('findHits: file chữ khách đọc của API', () => {
     expect(at(file, "export const r = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';")).toContain('Miễn phí giao hàng');
     expect(at(file, "export const r = 'Hàng giờ vàng không được giảm thêm theo mã.';")).toContain('Giờ vàng (hoa chữ G)');
     expect(at('apps/api/src/modules/flash-sale/x-price.ts', 'export const m = (n: number) => `Chỉ còn ${n} suất Giờ vàng.`;')).toContain('Còn {n} sản phẩm');
+  });
+});
+
+describe('chữ "Vui lòng" và "chúng tôi" trong toàn bộ API (M2)', () => {
+  const apiAt = (file: string, text: string) => findHits([{ file, text }], API_VOICE, API_SKIP).map((h) => h.use);
+
+  it.each([
+    ["export const m = 'Vui lòng thử lại';", 'apps/api/src/common/x.ts'],
+    ["export const m = 'Hệ thống đang bận, vui lòng thử lại.';", 'apps/api/src/common/x.ts'],
+    ["export const m = 'Chúng tôi sẽ gọi lại cho bạn.';", 'apps/api/src/modules/orders/x.service.ts'],
+    ['export const m = (n: number) => `${n} sản phẩm hết hàng, vui lòng chọn lại.`;', 'apps/api/src/modules/cart/x.ts'],
+    ["throw new BadRequestException('Vui lòng nhập lý do từ chối.');", 'apps/api/src/modules/admin/x.service.ts'],
+  ])('đối chứng: %s bị bắt (kể cả viết thường và thư mục admin)', (src, file) => {
+    expect(apiAt(file, src)).toEqual(['Bạn hoặc Tubu']);
+  });
+
+  it('đối chứng: câu đã đổi, comment và spec không bị bắt', () => {
+    expect(apiAt('apps/api/src/common/x.ts', "export const m = 'Bạn thử lại nhé.';")).toEqual([]);
+    expect(apiAt('apps/api/src/common/x.ts', '// Vui lòng thử lại (comment)\nexport const a = 1;')).toEqual([]);
+    expect(apiAt('apps/api/src/common/x.spec.ts', "export const m = 'Vui lòng thử lại';")).toEqual([]);
+  });
+
+  it('chỉ luật "Bạn hoặc Tubu": thuật ngữ cấm khác ở file API thường không bị luật này bắt', () => {
+    expect(apiAt('apps/api/src/modules/orders/x.service.ts', "export const m = 'Freeship cho đơn từ 299k';")).toEqual([]);
+  });
+
+  const sources = loadApiSources();
+  const hits = findHits(sources, API_VOICE, API_SKIP);
+
+  it('quét được cây API thật: đủ file, có cả admin/, không có spec', () => {
+    expect(sources.length).toBeGreaterThan(300);
+    expect(sources.some((s) => s.file === 'apps/api/src/modules/checkout/checkout.service.ts')).toBe(true);
+    expect(sources.some((s) => s.file === 'apps/api/src/modules/admin/admin.service.ts')).toBe(true);
+    expect(sources.some((s) => /\.spec\.ts$/.test(s.file))).toBe(false);
+  });
+
+  it('không file API nào còn "Vui lòng" hoặc "chúng tôi" ngoài danh sách miễn pháp lý', () => {
+    const over = hits.filter((h) => {
+      const e = API_VOICE_EXEMPT.find((x) => x.file === h.file);
+      return !e || hits.filter((x) => x.file === h.file).length > e.max;
+    });
+    expect(over.map((h) => `${h.file}:${h.line} ${h.text.slice(0, 70)}`)).toEqual([]);
+  });
+
+  it('mỗi dòng miễn pháp lý có lý do, trỏ file có thật và max bằng đúng số chỗ hiện có', () => {
+    const files = new Set(sources.map((s) => s.file));
+    for (const e of API_VOICE_EXEMPT) {
+      expect(e.reason.trim().length, `${e.file} thiếu lý do`).toBeGreaterThan(10);
+      expect(files.has(e.file), `${e.file} không nằm trong cây quét`).toBe(true);
+      expect(hits.filter((h) => h.file === e.file).length, `${e.file}: max phải bằng số chỗ hiện có`).toBe(e.max);
+    }
   });
 });
 
