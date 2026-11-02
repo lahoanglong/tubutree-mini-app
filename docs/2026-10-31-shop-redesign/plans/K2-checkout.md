@@ -160,3 +160,9 @@
 
 - P1 #2 → Task 5; P1 #3 → Task 2, 3; P1 #9 → Task 7 (+ Task 9 đo); P2 #8 → Task 1, 6; P2 #9 → Task 4, 6; P2 #16 → Task 4, 5; P2 #17 → Task 2. `pickerStockText` không thuộc gói.
 - Tên dùng chung: `checkoutPlaceHint`, `checkoutTotalText`, `collapseCheckoutLines`, `CHECKOUT_LINES_COLLAPSED`, khoá `checkout.*` khớp giữa Task 1 và các task sau.
+
+## Ghi chú sau review (vòng 2)
+
+- Sửa theo reviewer: khối Điểm Xanh web 375 quyết theo số dư (`idlePointsLabel`, báo giá nếu có không thì hồ sơ đăng nhập) như `checkoutPoints()` của Mini, không mời tích điểm cho khách đã có điểm; lý do khoá nút do thiếu địa chỉ/báo giá lỗi là chữ phụ trên web (đỏ chỉ cho lỗi thật) và dòng "Bạn chưa thêm địa chỉ" ở khối địa chỉ trống (`checkout.addressEmpty`, một nguồn chữ với Mini); vùng `role="status"` ở thanh dính hai app luôn mount, chỉ đổi chữ.
+- Lệch kế hoạch cần chủ chốt: Task 5 ghi "giữ khung dính ngoài (lg)". Đã bỏ cột dính theo DESIGN.md ("Không cột dính, không vùng cuộn riêng"); chỉ dải tổng + nút Đặt hàng dính đáy khung "Đơn hàng". Khung này `self-start` nên nút không rời khỏi khung: ở 1366×768, giỏ ít dòng, form hoá đơn VAT mở ở cuối cột trái, nút Đặt hàng và lời báo lỗi đặt hàng có thể nằm ngoài màn khi khách đang điền form. Nếu chủ muốn nút luôn trong màn từ lg: thêm e2e cuộn tới đáy cột trái kiểm nút Đặt hàng thấy được, hoặc giữ thanh dính đáy từ lg (bỏ `hideFrom="lg"`).
+- Gộp K2 với K3: `coupon-box.tsx` K2 chỉ thêm nút "Đổi mã" (kèm `panelAria`) và bỏ `md:hidden` của `#coupon-panel`; giữ cả hai phía khi gộp (nút Đổi mã + token của K3 ở thẻ điện thoại, còn `--clay-*`/`stone-900` ở khoảng dòng 450-460), rồi chạy lại `coupon-box.spec`.
