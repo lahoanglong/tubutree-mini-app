@@ -322,7 +322,6 @@
   "apps/miniapp/src/components/home/todo-strip.tsx": 4,
   "apps/miniapp/src/components/image-upload.tsx": 39,
   "apps/miniapp/src/components/legal-markdown.tsx": 3,
-  "apps/miniapp/src/components/loyalty/coupon-card.tsx": 5,
   "apps/miniapp/src/components/loyalty/daily-check-in-card.tsx": 19,
   "apps/miniapp/src/components/loyalty/guest-points-note.tsx": 2,
   "apps/miniapp/src/components/loyalty/guest-tiers.tsx": 5,

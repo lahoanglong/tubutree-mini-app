@@ -47,7 +47,7 @@ export function couponLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>
 /**
  * Nhãn trên thẻ phiếu: cùng ý với `couponLabel` nhưng số rút gọn một kiểu ("50k", "1,5tr") để phiếu không trộn "99.000đ" với "99k", và đủ ngắn để nằm một dòng ở 375px.
  * Số đầy đủ chỉ ở tấm chi tiết (ux-copy `coupon.detailLines`). Mọi nơi vẽ phiếu qua `voucherView` (Ưu đãi, trang Mã giảm giá, chiến dịch, tấm ưu đãi ở trang chi tiết sản phẩm)
- * ghi dạng rút gọn này; chỉ thẻ mã cũ `coupon-card` (ví) và giỏ còn dùng `couponLabel` đầy đủ.
+ * ghi dạng rút gọn này; chỉ giỏ còn dùng `couponLabel` đầy đủ.
  */
 export function couponTitle(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
   if (c.type === 'FREESHIP') return fillCopy('coupon.freeship');

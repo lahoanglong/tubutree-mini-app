@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 /**
  * DS-08: bậc primitive của tokens.css (lớp 1) chỉ dùng trong tokens.css; thành phần dùng token ngữ nghĩa.
  * Danh sách dưới là các file mua sắm đã chuyển (gói P1); file khác còn primitive thì thêm vào đây khi chuyển.
- * `components/loyalty/coupon-card.tsx` chưa nằm trong danh sách: gói commerce-core sở hữu và sẽ chuyển.
  */
 const MIGRATED = [
   'components/ui/chip.tsx',
