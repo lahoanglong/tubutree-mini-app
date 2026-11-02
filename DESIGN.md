@@ -87,6 +87,8 @@ Kệ ngang chỉ dùng `rail-sm`, `flash` và `rank` (`--tile-w-sm`, 128px) ho�
 |---|---|
 | phiếu mã giảm giá (`ticket`, `chip`, `row`) | `VoucherTicket` |
 | combo "Mua cả bộ" | `ComboCard` |
+| các món cùng một combo ở giỏ, dưới đầu nhóm "Combo: {tên} · Tiết kiệm {số}" | `CartComboBlock` (chia khối ở `packages/app-core/src/commerce/cart-combo.ts`, chữ ở `cart.combo*` của shop-copy; điện thoại là khối nền `--color-bg-subtle` bo đồng tâm, từ md bỏ nền và đầu nhóm là dải nền dịu; số Tiết kiệm màu `--color-text-price-deal`) |
+| hộp hỏi một bước thay `window.confirm` (xoá món làm combo mất giảm) | `ConfirmSheet` (Mini `components/ui`, web dựng từ `Sheet`; nút xác nhận không ghi "Xoá" để khỏi lặp nhãn thùng rác) |
 | banner chiến dịch | `BannerCarousel` (nút dừng, tôn trọng giảm chuyển động, từ 5 giây mỗi ảnh) |
 | khối cần tài khoản khi chưa đăng nhập (Ưu đãi: Điểm Xanh và điểm danh, Mã của tôi) | `GuestLinkCard` (mỗi khối một thẻ, một nhãn nút "Đăng nhập" từ `login.cta`; Mini dùng lại thẻ mời liên kết Zalo cho tài khoản khách) |
 
@@ -247,3 +249,4 @@ Baseline chỉ được giảm. Đỏ vì bánh cóc hoặc `ds-shop-guard` thì
 | 2026-11-02 | Chân trang web ở 375px dài hơn Mini vì giữ liên kết pháp lý và đơn vị vận hành (G5 #38) | Mini không có chân trang; web là trang công khai nên cần các liên kết này; ghi ở mục Khuôn trang web để lần chụp so sau không coi là lỗi |
 | 2026-11-02 | Pager số ẩn ở điện thoại (sr-only, giữ liên kết cho SEO), "Xem thêm" là điều khiển chính; nav không đệm trên khi ẩn (H3 #4) | điện thoại giống Mini App chỉ có "Xem thêm"; liên kết trang vẫn có trong HTML cho crawler vì canonical của ?page=N trỏ về chính nó |
 | 2026-11-02 | Kệ ngang <= 6 món ở lg vẽ lưới cùng số cột lưới Sản phẩm (5 cột lg, 6 cột xl), hàng chưa đầy dồn trái; hai bản kệ + lưới chỉ khác nhau bằng CSS (H3 #6, #8) | thẻ phải bằng bề rộng thẻ của lưới Sản phẩm, giãn cột theo số món làm thẻ to hơn mọi lưới khác của web; chọn bản bằng JS làm trang công khai nháy khi hydrate nên giữ hai bản, bản ẩn `display:none` (không vào cây trợ năng, ảnh lazy không tải) |
+| 2026-11-02 | Giỏ gom món của combo dưới đầu nhóm "Combo: {tên} · Tiết kiệm {số}"; bỏ món khoá của bộ thì hỏi trước bằng `ConfirmSheet` (không chặn), số Tiết kiệm của đầu nhóm lấy từ `comboGroups` của API (K5) | `comboGroups` cộng bằng `comboDiscount` vì cùng một lần khớp ở máy chủ nên khách thấy bộ nào giảm bao nhiêu mà tiền trả không đổi; số trong hộp báo là cận trên khi hai bộ chung một món; bỏ chọn món khoá chỉ bỏ chữ Tiết kiệm của đầu nhóm, số thật ở chân dính vẫn là giá phần chọn của máy chủ |

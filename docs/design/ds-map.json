@@ -24,6 +24,15 @@
       "props": "BottomSheetProps"
     },
     {
+      "name": "ConfirmSheet",
+      "miniapp": "apps/miniapp/src/components/ui/confirm-sheet.tsx",
+      "web": "apps/web/src/components/ui/confirm-sheet.tsx",
+      "props": "ConfirmSheetProps",
+      "screens": [
+        "/cart"
+      ]
+    },
+    {
       "name": "Button",
       "miniapp": "apps/miniapp/src/components/ui/button.tsx",
       "web": "apps/web/src/components/mini/button.tsx",
@@ -72,6 +81,15 @@
       "props": "ComboCardProps",
       "screens": [
         "/s/:slug"
+      ]
+    },
+    {
+      "name": "CartComboBlock",
+      "miniapp": "apps/miniapp/src/components/cart-combo-block.tsx",
+      "web": "apps/web/src/components/cart-combo-block.tsx",
+      "props": "CartComboBlockProps",
+      "screens": [
+        "/cart"
       ]
     },
     {
