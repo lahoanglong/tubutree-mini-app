@@ -56,8 +56,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   // trong phần bị cắt: phụ đề dài đến đâu mã vẫn thấy nguyên. Ticket/row thêm mã vào meta/hàng đáy: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const chipCode = variant === 'chip' && Boolean(v.code);
   const showCode = variant !== 'chip' && Boolean(v.code);
-  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng cạnh điều kiện, tối đa hai dòng, "…" khi quá (không đẩy điều kiện và mã xuống dòng,
-  // phiếu giữ ~88px khi tên ngắn); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
+  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng ở hàng riêng dưới điều kiện, tối đa hai dòng, "…" khi quá; hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
   // ngay dưới nhãn hoặc sau điều kiện, đứng đầu dòng thì thành mảnh lơ lửng.
   const name = variant !== 'chip' ? v.name : null;
   const ticket = variant === 'ticket';
@@ -119,20 +118,12 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       <span style={{ ...(small ? TITLE_ONE_LINE : TITLE_CLAMP), fontSize: small ? 'var(--type-label-size)' : 'var(--type-body-sm-size)', lineHeight: small ? 'var(--type-label-lh)' : 'var(--type-body-sm-lh)', fontWeight: 700, color: text }}>
         {v.title}
       </span>
-      {ticket && (showMeta || name) ? (
-        // Ticket: điều kiện (nguyên khối) và tên admin chung một hàng để phiếu có tên không cao hơn phiếu trơn; tên chỉ có ~100px nên được xuống tối đa hai dòng ("…" khi quá),
-        // `flex-start` để dòng đầu của tên thẳng với điều kiện. Tên hai dòng cao thêm tối đa một dòng caption; nút chính giữ cỡ (flex 0 0 auto) và căn giữa theo chiều cao phiếu.
-        <span style={{ display: 'flex', alignItems: 'flex-start', columnGap: 'var(--p-space-2)', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)' }}>
-          {metaNode}
-          {showMeta && name && <span aria-hidden="true" style={{ flex: '0 0 auto' }}>·</span>}
-          {name && (
-            <span data-testid="voucher-name" style={{ ...TITLE_CLAMP, flex: '1 1 0', minWidth: 0 }}>
-              {name}
-            </span>
-          )}
+      {metaNode}
+      {ticket && name && (
+        // Ticket: tên admin ở hàng riêng ngay dưới điều kiện, rộng hết cột nội dung, cùng kiểu chữ với điều kiện; tối đa hai dòng ("…" khi quá), từ dài không dấu cách vẫn xuống dòng.
+        <span data-testid="voucher-name" style={{ ...TITLE_CLAMP, minWidth: 0, overflowWrap: 'anywhere', ...captionStyle, color: 'var(--color-text-tertiary)' }}>
+          {name}
         </span>
-      ) : (
-        metaNode
       )}
       {chipCode && <span style={{ display: 'block', ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span>}
       {footItems.length > 0 && (

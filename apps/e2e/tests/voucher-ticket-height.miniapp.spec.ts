@@ -4,9 +4,9 @@ import { mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
 import { mockCollectable, mockCouponHistory, mockWallet } from './support/voucher-mocks';
 
 /**
- * Zalo Mini App E2E — chiều cao phiếu mã giảm giá ở 375px (F10d, lỗi P1 #18; G1; M3): thiết kế ~88px, nhãn một dòng, điều kiện và tên admin một hàng,
+ * Zalo Mini App E2E — chiều cao phiếu mã giảm giá ở 375px (F10d, lỗi P1 #18; G1; M3): thiết kế ~88px, nhãn một dòng, điều kiện một hàng, tên admin hàng riêng dưới điều kiện,
  * hạn · số lượt · mã một hàng đáy, một phiếu không trộn "99.000đ" với "99k". Dữ liệu giả cố tình có tên 40 ký tự, tên lặp số và mã dài 15 ký tự cùng "Còn 3 lượt".
- * Tên admin đặt xuống tối đa hai dòng (M3), nên phiếu có tên dài cao thêm tối đa một dòng caption (20px); nút chính giữ cỡ và nằm trọn trong phiếu.
+ * Tên admin ở hàng riêng rộng hết cột, tối đa hai dòng (M3): phiếu có tên cao thêm đúng chiều cao hàng tên (20px một dòng, 40px hai dòng). Đo ở 375px: phiếu tên 40 ký tự + hàng đáy gãy 138px (trước khi tên xuống hàng riêng: 118px), phiếu tên ngắn 98px, phiếu trơn 88px. Nút chính giữ cỡ và nằm trọn trong phiếu.
  * Ở 320px (máy nhỏ nhất của Zalo) chỉ giữ hai điều: mã không bị cắt, tên không quá hai dòng và không đẩy nút. API mock toàn bộ.
  */
 const DAY = 86_400_000;
@@ -27,8 +27,6 @@ const WALLET = [
 const NORMAL_MAX = 96;
 const FOOT_WRAP_MAX = 104;
 const FOOT_LINE = 24; // hàng đáy một dòng cao 20px, hai dòng 40px
-const NAME_LINE = 24; // tên admin một dòng cao 20px, hai dòng 40px (trần clamp)
-const NAME_EXTRA = 20; // dòng thứ hai của tên cộng thêm đúng một dòng caption
 
 async function expectCompactTickets(groups: Locator, expected: number) {
   await expect(groups).toHaveCount(expected, { timeout: 15_000 });
@@ -48,8 +46,7 @@ async function expectCompactTickets(groups: Locator, expected: number) {
     }),
   );
   for (const r of rows) {
-    const twoLineName = r.nameH > NAME_LINE;
-    const max = (r.footH > FOOT_LINE ? FOOT_WRAP_MAX : NORMAL_MAX) + (twoLineName ? NAME_EXTRA : 0);
+    const max = (r.footH > FOOT_LINE ? FOOT_WRAP_MAX : NORMAL_MAX) + r.nameH; // hàng tên riêng cộng thêm đúng chiều cao của nó
     expect(r.h, `${r.code}: phiếu cao ${r.h}px`).toBeGreaterThanOrEqual(88);
     expect(r.h, `${r.code}: phiếu cao ${r.h}px (hàng đáy ${r.footH}px, tên ${r.nameH}px)`).toBeLessThanOrEqual(max);
     expect(r.nameH, `${r.code}: tên quá hai dòng (${r.nameH}px)`).toBeLessThanOrEqual(2 * 20 + 1);
@@ -57,8 +54,8 @@ async function expectCompactTickets(groups: Locator, expected: number) {
     // Một cách ghi số: phiếu rút gọn "99k", không còn "99.000đ" trên cùng phiếu.
     expect(/\d\.\d{3}đ/.test(r.text), `${r.code}: còn số đầy đủ "${r.text}"`).toBe(false);
   }
-  // Phiếu có tên một dòng (hoặc không tên) vẫn đều nhau; phiếu tên hai dòng cao hơn phiếu trơn đúng phần dòng thêm (và hàng đáy gãy nếu có).
-  const plain = rows.filter((r) => r.nameH <= NAME_LINE).map((r) => r.h);
+  // Phiếu không tên vẫn đều nhau; phiếu có tên cao hơn đúng chiều cao hàng tên (kiểm ở trên).
+  const plain = rows.filter((r) => r.nameH === 0).map((r) => r.h);
   expect(Math.max(...plain) - Math.min(...plain), `chênh cao phiếu tên một dòng: ${plain.join(', ')}`).toBeLessThanOrEqual(16);
 }
 
@@ -89,7 +86,7 @@ const COLLECT = [
   { code: 'GIAM20', title: 'Giảm 20k cho 3 đơn', type: 'AMOUNT', value: 20_000, minOrder: 100_000, maxDiscount: null, startAt: inDays(-1), endAt: inDays(14), newCustomerOnly: false, claimedCount: 0, usageLimit: null },
 ];
 
-// "3 đơn" là thông tin mà phiếu không có chỗ nào khác để nói: dòng tên ~100px (cạnh điều kiện, cạnh nút "Lưu mã"/"Dùng ngay") phải hiện trọn phần mới, không "…".
+// "3 đơn" là thông tin mà phiếu không có chỗ nào khác để nói: hàng tên (riêng, dưới điều kiện) phải hiện trọn phần mới, không "…".
 async function expectNameVisibleWhole(groups: Locator) {
   const name = groups.getByTestId('voucher-name').filter({ hasText: 'cho 3 đơn' });
   await expect(name).toBeVisible({ timeout: 15_000 });
@@ -134,6 +131,9 @@ test.describe('Phiếu mã giảm giá ở 375px', () => {
     const h = (await name.boundingBox())!.height;
     expect(h, `tên cao ${h}px`).toBeGreaterThan(24);
     expect(h, `tên cao ${h}px`).toBeLessThanOrEqual(41);
+    const nameW = (await name.boundingBox())!.width;
+    const metaW = (await name.locator('xpath=preceding-sibling::*[@data-testid="voucher-meta"]').boundingBox())!.width;
+    expect(nameW, `tên rộng ${nameW}px, điều kiện ${metaW}px`).toBeGreaterThan(140);
     await expectButtonsStable(groups);
   });
 });

@@ -127,7 +127,7 @@ describe('VoucherTicket', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
   });
 
-  it('ticket: tên admin đặt đứng cạnh điều kiện (tối đa hai dòng), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện', () => {
+  it('ticket: tên admin đặt ở hàng riêng dưới điều kiện (tối đa hai dòng), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện', () => {
     const { rerender } = render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
     expect(q('voucher-name')!.textContent).toBe('Chào bạn mới');
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
@@ -155,7 +155,7 @@ describe('VoucherTicket', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 100k');
   });
 
-  it('ticket: tên admin 40 ký tự xuống tối đa hai dòng (clamp 2, không nowrap một dòng), không đẩy nút chính, điều kiện cùng đường trên với dòng đầu của tên', () => {
+  it('ticket: tên admin 40 ký tự ở hàng riêng (clamp 2, ngắt cả từ dài), không đẩy nút chính', () => {
     const NAME = 'Quà tri ân khách hàng thân thiết mùa thu';
     expect(NAME).toHaveLength(40);
     render(<VoucherTicket voucher={view({ name: NAME, quota: 'Còn 3 lượt', code: 'NHANLOCXANH2026' })} variant="ticket" primary={{ label: 'Lưu mã', onClick: vi.fn() }} />);
@@ -166,22 +166,27 @@ describe('VoucherTicket', () => {
     expect(name.style.textOverflow).toBe('');
     expect(name.style.overflow).toBe('hidden');
     expect(name.style.minWidth).toBe('0px');
-    expect(name.parentElement!.style.alignItems).toBe('flex-start');
+    expect(name.style.overflowWrap).toBe('anywhere');
     const button = screen.getByRole('button', { name: 'Lưu mã' });
     expect(button.style.flex).toBe('0 0 auto');
     expect(button.style.whiteSpace).toBe('nowrap');
     expect(button.closest('[style*="overflow: hidden"]')).toBe(button.closest('[role="group"]'));
   });
 
-  it('ticket: điều kiện và tên admin cùng một hàng (điều kiện trước, nguyên khối; tên sau, tối đa hai dòng), mã nằm ở hàng đáy', () => {
+  it('ticket: tên admin ở phần tử riêng ngay sau hàng điều kiện (không chung hàng, không dấu "·" giữa), trước hàng đáy; mã nằm ở hàng đáy', () => {
     render(<VoucherTicket voucher={view({ name: 'Quà tri ân khách hàng thân thiết' })} variant="ticket" />);
     const meta = q('voucher-meta')!;
     const name = q('voucher-name')!;
-    expect(meta.parentElement).toBe(name.parentElement);
-    expect(meta.parentElement!.style.display).toBe('flex');
-    expect(meta.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(meta.style.flex).toBe('0 0 auto');
-    expect(name.style.minWidth).toBe('0px');
+    expect(meta.contains(name)).toBe(false);
+    expect(name.contains(meta)).toBe(false);
+    expect(name.parentElement).toBe(meta.parentElement);
+    expect(meta.nextElementSibling).toBe(name);
+    expect(name.nextElementSibling).toBe(q('voucher-foot'));
+    expect(name.style.display).toBe('-webkit-box');
+    expect(name.style.color).toBe(meta.style.color);
+    expect(name.style.fontSize).toBe(meta.style.fontSize);
+    expect(meta.textContent).toBe('Đơn từ 250k');
+    expect(name.parentElement!.textContent).not.toContain('·Quà');
     expect(q('voucher-foot')!.contains(q('voucher-code'))).toBe(true);
   });
 
