@@ -864,3 +864,236 @@ describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dí
     expect(mocks.voucherProps.length).toBeGreaterThan(before);
   });
 });
+
+describe('CartPage: gom món của combo dưới đầu nhóm (K5)', () => {
+  const LINE_B = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', slug: 'dg', unitPrice: 100_000, total: 100_000 };
+  const LINE_C = { ...OK_LINE, id: 'ci-c', variationId: 'v-c', productName: 'Nước xả vải', slug: 'nxv', unitPrice: 80_000, total: 80_000 };
+  const GROUP = {
+    id: 'collection:c1',
+    kind: 'STOREFRONT' as const,
+    title: 'Bộ giặt sạch',
+    discount: 15_000,
+    lineIds: ['ci-ok', 'ci-b'],
+    keyLineIds: ['ci-ok', 'ci-b'],
+  };
+  const comboCart = (over: object = {}) =>
+    summary({
+      items: [OK_LINE, LINE_C, LINE_B],
+      subtotal: 230_000,
+      itemCount: 3,
+      comboDiscount: 15_000,
+      comboGroups: [GROUP],
+      ...over,
+    });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCartSelection.mockRejectedValue(new Error('chưa mock'));
+  });
+
+  it('các dòng của bộ nằm chung một khối có đầu nhóm "Combo: tên · Tiết kiệm số", dòng lẻ nằm ngoài; chân dính vẫn ghi số combo', async () => {
+    mocks.getCart.mockResolvedValue(comboCart());
+    renderPage();
+    const group = await screen.findByTestId('cart-combo-group');
+    expect(within(group).getByTestId('cart-combo-heading')).toHaveTextContent('Combo: Bộ giặt sạch · Tiết kiệm 15.000đ');
+    expect(group).toHaveAccessibleName('Combo: Bộ giặt sạch · Tiết kiệm 15.000đ');
+    expect(within(group).getAllByTestId('cart-line')).toHaveLength(2);
+    expect(within(group).getByText('Xà bông thảo mộc')).toBeInTheDocument();
+    expect(within(group).getByText('Dầu gội')).toBeInTheDocument();
+    expect(within(group).queryByText('Nước xả vải')).toBeNull();
+    expect(screen.getAllByTestId('cart-line')).toHaveLength(3);
+    const bar = screen.getByTestId('sticky-bar');
+    expect(within(bar).getByText('Giảm giá combo')).toBeInTheDocument();
+    expect(within(bar).getByText('-15.000đ')).toBeInTheDocument();
+  });
+
+  it('máy chủ chưa trả nhóm combo: mọi dòng vẽ như trước, không có đầu nhóm', async () => {
+    mocks.getCart.mockResolvedValue(comboCart({ comboGroups: undefined }));
+    renderPage();
+    await screen.findByText('Dầu gội');
+    expect(screen.queryByTestId('cart-combo-group')).toBeNull();
+    expect(screen.getAllByTestId('cart-line')).toHaveLength(3);
+  });
+
+  it('bỏ chọn một món khoá của bộ: đầu nhóm bỏ số Tiết kiệm và nhắc chọn đủ món để được giảm', async () => {
+    mocks.getCart.mockResolvedValue(comboCart());
+    renderPage();
+    const group = await screen.findByTestId('cart-combo-group');
+    fireEvent.click(within(group).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+    expect(within(group).getByTestId('cart-combo-heading')).toHaveTextContent(/^Combo: Bộ giặt sạch$/);
+    expect(within(group).getByTestId('cart-combo-hint')).toHaveTextContent('Chọn đủ các món để được giảm 15.000đ');
+    fireEvent.click(within(group).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+    expect(within(group).queryByTestId('cart-combo-hint')).toBeNull();
+    expect(within(group).getByTestId('cart-combo-heading')).toHaveTextContent('Tiết kiệm 15.000đ');
+  });
+
+  it('bấm thùng rác món khoá: hỏi trước "sẽ mất giảm", chưa xoá; "Giữ lại" thì thôi', async () => {
+    mocks.getCart.mockResolvedValue(comboCart());
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+    expect(await screen.findByText('Bỏ món khỏi combo?')).toBeInTheDocument();
+    expect(screen.getByText('Combo Bộ giặt sạch sẽ mất giảm 15.000đ nếu bạn bỏ món này.')).toBeInTheDocument();
+    expect(mocks.removeCartItem).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Giữ lại' }));
+    expect(mocks.removeCartItem).not.toHaveBeenCalled();
+    expect(screen.getByText('Dầu gội')).toBeInTheDocument();
+  });
+
+  it('"Vẫn bỏ" xoá đúng dòng; không chặn khách', async () => {
+    const after = comboCart({ items: [OK_LINE, LINE_C], subtotal: 130_000, itemCount: 2, comboDiscount: 0, comboGroups: [] });
+    mocks.getCart.mockResolvedValueOnce(comboCart()).mockResolvedValue(after);
+    mocks.removeCartItem.mockResolvedValue(after);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Vẫn bỏ' }));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('ci-b'));
+    await waitFor(() => expect(screen.queryByTestId('cart-combo-group')).toBeNull());
+    expect(screen.queryByText('Giảm giá combo')).toBeNull();
+  });
+
+  it('dòng lẻ xoá ngay, không hỏi', async () => {
+    mocks.getCart.mockResolvedValue(comboCart());
+    mocks.removeCartItem.mockResolvedValue(comboCart({ items: [OK_LINE, LINE_B], subtotal: 150_000, itemCount: 2 }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Nước xả vải' }));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('ci-c'));
+    expect(screen.queryByText('Bỏ món khỏi combo?')).toBeNull();
+  });
+
+  describe('giỏ vừa sửa, chờ máy chủ tính lại: khối không nhảy và hộp báo vẫn đúng', () => {
+    const never = () => new Promise<never>(() => undefined);
+
+    it('bấm + trên dòng của bộ khi PATCH còn bay: đầu nhóm giữ chỗ của số (ẩn, không đọc) nên không đổi số dòng; dòng "Giảm giá combo" ở chân tắt chờ máy chủ', async () => {
+      mocks.getCart.mockResolvedValue(comboCart());
+      mocks.updateCartItem.mockImplementation(never);
+      renderPage();
+      const group = await screen.findByTestId('cart-combo-group');
+      const heading = within(group).getByTestId('cart-combo-heading');
+      const before = heading.innerHTML;
+      expect(heading.querySelector('[data-testid="cart-combo-saving"]')).not.toHaveAttribute('aria-hidden');
+      fireEvent.click(within(group).getAllByRole('button', { name: 'Tăng số lượng' })[0]!);
+      await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith('ci-ok', 2), { timeout: 2_000 });
+      await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
+      const saving = heading.querySelector<HTMLElement>('[data-testid="cart-combo-saving"]');
+      expect(saving, 'chỗ của số còn trong đầu nhóm').not.toBeNull();
+      expect(saving).toHaveAttribute('aria-hidden', 'true');
+      expect(saving!.style.visibility).toBe('hidden');
+      expect(saving!.textContent).toBe(' · Tiết kiệm 15.000đ');
+      expect(heading.textContent).toBe('Combo: Bộ giặt sạch · Tiết kiệm 15.000đ');
+      expect(heading.innerHTML.replace(' aria-hidden="true"', '').replace(' style="visibility: hidden;"', '')).toBe(before);
+      expect(within(group).getByRole('heading', { name: 'Combo: Bộ giặt sạch' })).toBe(heading);
+      expect(group).toHaveAccessibleName('Combo: Bộ giặt sạch');
+    });
+
+    it('xoá một món lẻ rồi, trong lúc còn chờ máy chủ, bỏ món khoá của bộ: vẫn được báo "sẽ mất giảm" bằng số lần trước', async () => {
+      mocks.getCart.mockResolvedValue(comboCart());
+      mocks.removeCartItem.mockImplementation(never);
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá Nước xả vải' }));
+      await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('ci-c'));
+      await waitFor(() => expect(screen.queryByText('Giảm giá combo')).toBeNull());
+      fireEvent.click(screen.getByRole('button', { name: 'Xoá Dầu gội' }));
+      expect(await screen.findByText('Combo Bộ giặt sạch sẽ mất giảm 15.000đ nếu bạn bỏ món này.')).toBeInTheDocument();
+      expect(mocks.removeCartItem).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('món trong bộ nhưng không phải món khoá (bộ vẫn khớp khi bỏ nó) xoá ngay, không hỏi', async () => {
+    mocks.getCart.mockResolvedValue(comboCart({ comboGroups: [{ ...GROUP, keyLineIds: ['ci-ok'] }] }));
+    mocks.removeCartItem.mockResolvedValue(comboCart({ items: [OK_LINE, LINE_C], subtotal: 130_000, itemCount: 2 }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+    await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('ci-b'));
+    expect(screen.queryByText('Bỏ món khỏi combo?')).toBeNull();
+  });
+
+  describe('mua kèm: sản phẩm chính (dòng khoá không mang giảm) nằm trong khối của bộ', () => {
+    // ci-ok là sản phẩm chính, ci-b là món kèm duy nhất được giảm; ci-c không thuộc bộ.
+    const ADDON = {
+      id: 'bundle:a1',
+      kind: 'ADDON' as const,
+      title: 'Mua kèm dầu gội',
+      discount: 11_000,
+      lineIds: ['ci-b'],
+      keyLineIds: ['ci-ok'],
+    };
+    const addonCart = (over: object = {}) => comboCart({ comboDiscount: 11_000, comboGroups: [ADDON], ...over });
+
+    it('khối ghi cả sản phẩm chính lẫn món kèm dưới đầu nhóm; món không thuộc bộ nằm ngoài', async () => {
+      mocks.getCart.mockResolvedValue(addonCart());
+      renderPage();
+      const group = await screen.findByTestId('cart-combo-group');
+      expect(within(group).getByTestId('cart-combo-heading')).toHaveTextContent('Combo: Mua kèm dầu gội · Tiết kiệm 11.000đ');
+      expect(within(group).getAllByTestId('cart-line')).toHaveLength(2);
+      expect(within(group).getByText('Xà bông thảo mộc')).toBeInTheDocument();
+      expect(within(group).getByText('Dầu gội')).toBeInTheDocument();
+      expect(within(group).queryByText('Nước xả vải')).toBeNull();
+    });
+
+    it('bấm thùng rác sản phẩm chính (món nằm trong khối) hỏi trước "sẽ mất giảm"; "Vẫn bỏ" mới xoá', async () => {
+      const after = addonCart({ items: [LINE_C, LINE_B], subtotal: 180_000, itemCount: 2, comboDiscount: 0, comboGroups: [] });
+      mocks.getCart.mockResolvedValueOnce(addonCart()).mockResolvedValue(after);
+      mocks.removeCartItem.mockResolvedValue(after);
+      renderPage();
+      const group = await screen.findByTestId('cart-combo-group');
+      expect(within(group).getByRole('button', { name: 'Xoá Xà bông thảo mộc' })).toBeInTheDocument();
+      fireEvent.click(within(group).getByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+      expect(await screen.findByText('Combo Mua kèm dầu gội sẽ mất giảm 11.000đ nếu bạn bỏ món này.')).toBeInTheDocument();
+      expect(mocks.removeCartItem).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Vẫn bỏ' }));
+      await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledWith('ci-ok'));
+    });
+  });
+
+  describe('chọn một phần giỏ: đầu nhóm theo giá phần chọn của máy chủ', () => {
+    // Bộ cần ci-ok (khoá) và ci-b; nước xả ci-c không thuộc bộ.
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    it('máy chủ không còn nhóm trong phần chọn: đầu nhóm bỏ số Tiết kiệm và nhắc chọn đủ món; chưa có giá thì giữ luật khoá', async () => {
+      const group = { ...GROUP, keyLineIds: ['ci-ok'] };
+      mocks.getCart.mockResolvedValue(comboCart({ comboGroups: [group] }));
+      mocks.getCartSelection.mockResolvedValue(summary({ items: [OK_LINE, LINE_C], subtotal: 130_000, itemCount: 2, comboDiscount: 0, comboGroups: [] }));
+      renderPage();
+      const block = await screen.findByTestId('cart-combo-group');
+      fireEvent.click(within(block).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+      expect(within(block).getByTestId('cart-combo-heading')).toHaveTextContent('Tiết kiệm 15.000đ');
+      await waitFor(() => expect(within(block).getByTestId('cart-combo-heading')).toHaveTextContent(/^Combo: Bộ giặt sạch$/), { timeout: 2_000 });
+      expect(within(block).getByTestId('cart-combo-hint')).toHaveTextContent('Chọn đủ các món để được giảm 15.000đ');
+    });
+
+    it('máy chủ còn nhóm nhưng giảm ít hơn: đầu nhóm ghi số của phần chọn, khớp dòng "Giảm giá combo" ở chân', async () => {
+      const group = { ...GROUP, keyLineIds: ['ci-ok'] };
+      mocks.getCart.mockResolvedValue(comboCart({ comboGroups: [group] }));
+      mocks.getCartSelection.mockResolvedValue(
+        summary({
+          items: [OK_LINE, LINE_C],
+          subtotal: 130_000,
+          itemCount: 2,
+          comboDiscount: 6_000,
+          comboGroups: [{ ...group, discount: 6_000, lineIds: ['ci-ok'] }],
+        }),
+      );
+      renderPage();
+      const block = await screen.findByTestId('cart-combo-group');
+      fireEvent.click(within(block).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+      await waitFor(() => expect(within(block).getByTestId('cart-combo-heading')).toHaveTextContent('Combo: Bộ giặt sạch · Tiết kiệm 6.000đ'), { timeout: 2_000 });
+      expect(within(screen.getByTestId('sticky-bar')).getByText('-6.000đ')).toBeInTheDocument();
+    });
+
+    it('hộp báo bỏ món gỡ khi dòng chờ xoá không còn trong giỏ (máy khác đã xoá), không bật lại và "Vẫn bỏ" không xoá dòng đã mất', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      mocks.getCart.mockResolvedValue(comboCart());
+      render(
+        <QueryClientProvider client={qc}>
+          <CartPage />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá Dầu gội' }));
+      expect(await screen.findByText('Bỏ món khỏi combo?')).toBeInTheDocument();
+      mocks.getCart.mockResolvedValue(comboCart({ items: [OK_LINE, LINE_C], subtotal: 130_000, itemCount: 2, comboDiscount: 0, comboGroups: [] }));
+      await qc.invalidateQueries({ queryKey: ['cart'] });
+      await waitFor(() => expect(screen.queryByText('Bỏ món khỏi combo?')).toBeNull());
+      await wait(50);
+      expect(mocks.removeCartItem).not.toHaveBeenCalled();
+    });
+  });
+});

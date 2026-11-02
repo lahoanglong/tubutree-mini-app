@@ -261,6 +261,14 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.pointsNone': 'Tích điểm từ đơn đầu tiên nhé',
   'checkout.addressEmpty': 'Bạn chưa thêm địa chỉ',
   'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
+  // Giỏ gom món của combo (K5): đầu nhóm, nhắc chọn đủ món, hộp báo trước khi bỏ món làm bộ mất giảm. Nút xác nhận không ghi "Xoá" để khỏi lặp nhãn thùng rác.
+  'cart.comboTitle': 'Combo: {name}',
+  'cart.comboSaving': 'Tiết kiệm {x}',
+  'cart.comboNeedAll': 'Chọn đủ các món để được giảm {x}',
+  'cart.comboRemoveTitle': 'Bỏ món khỏi combo?',
+  'cart.comboRemoveBody': 'Combo {name} sẽ mất giảm {x} nếu bạn bỏ món này.',
+  'cart.comboRemoveConfirm': 'Vẫn bỏ',
+  'cart.comboRemoveKeep': 'Giữ lại',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',

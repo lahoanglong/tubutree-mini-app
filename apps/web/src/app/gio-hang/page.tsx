@@ -7,6 +7,7 @@ import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
+import { cartComboBlocks, comboRemovalNotice, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -27,6 +28,8 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Badge, Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { CartComboBlock } from '@/components/cart-combo-block';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -86,6 +89,14 @@ export default function CartPage() {
     onSuccess: (data) => qc.setQueryData(cartKey(), data),
   });
   const [removedLine, setRemovedLine] = useState<CartLine | null>(null);
+  // Hộp báo "bộ sẽ mất giảm" trước khi xoá món khoá của combo. Dữ liệu giữ lại sau khi đóng để chữ không trống khi hộp tắt.
+  const [pendingRemove, setPendingRemove] = useState<{ line: CartLine; notice: ComboRemovalNotice } | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Hộp gỡ khi dòng chờ xoá không còn trong giỏ (làm mới giỏ vì tab khác đã xoá, kể cả giỏ về trống): "Vẫn bỏ" không được xoá dòng đã mất, và hộp không được bật lại khi giỏ có hàng lần sau.
+  const pendingGone = !!pendingRemove && !(cartQ.data?.items ?? []).some((it) => it.id === pendingRemove.line.id);
+  useEffect(() => {
+    if (pendingGone) setConfirmOpen(false);
+  }, [pendingGone]);
   const [undoError, setUndoError] = useState<string | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -147,6 +158,17 @@ export default function CartPage() {
   }
 
   const cart = cartQ.data;
+  // Món khoá của combo (bỏ riêng nó thì bộ hết khớp) phải hỏi trước khi xoá; không chặn: "Vẫn bỏ" xoá như thường, "Giữ lại" thôi.
+  const requestRemove = (line: CartLine) => {
+    const notice = comboRemovalNotice(cart?.comboGroups, line.id);
+    if (!notice) return removeWithUndo(line);
+    setPendingRemove({ line, notice });
+    setConfirmOpen(true);
+  };
+  const confirmRemove = () => {
+    setConfirmOpen(false);
+    if (pendingRemove) removeWithUndo(pendingRemove.line);
+  };
   // Checkout sẽ từ chối dòng hết hàng/vượt tồn: chặn từ giỏ để khách biết phải sửa gì thay vì gặp lỗi ở bước sau.
   const allItems = cart?.items ?? [];
   const selectedItems = allItems.filter((it) => !deselected.has(it.id));
@@ -194,6 +216,141 @@ export default function CartPage() {
   const showFreeship = !!cart && (!hasMerchant || freeshipBase > 0);
   const freeshipPct = cart && cart.freeshipThreshold > 0 ? Math.min(100, Math.round((freeshipBase / cart.freeshipThreshold) * 100)) : 100;
   const showBar = !cartQ.isLoading && !cartQ.isError && !!cart && cart.items.length > 0;
+
+  // Một dòng giỏ; dòng của bộ combo và dòng lẻ vẽ cùng một hàm.
+  const renderLine = (it: CartLine) => {
+    // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
+    const soldOut = it.stock <= 0;
+    const atMax = !soldOut && it.quantity >= it.stock;
+    const busy = busyItemId === it.id;
+    const compareAt = lineCompareAt(it);
+    return (
+      <div key={it.id} data-testid="cart-line" className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
+        <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
+          <span className={miniCheckboxWrap}>
+            <input
+              type="checkbox"
+              checked={!deselected.has(it.id)}
+              onChange={() => toggleSelect(it.id)}
+              aria-label={`Chọn ${it.productName} để thanh toán`}
+              className={miniCheckbox}
+            />
+            <CheckMark />
+          </span>
+        </label>
+        <Link
+          href={`/san-pham/${it.slug}`}
+          tabIndex={-1}
+          aria-hidden="true"
+          data-testid="cart-line-thumb"
+          className="flex-none max-md:self-start"
+        >
+          <ProductThumb src={it.thumbnail} alt="" size={64} />
+        </Link>
+        {/*
+          Cột chữ là hàng tự xuống dòng để điện thoại xếp lại đúng thứ tự của Mini App chỉ bằng `order`: tên, phân loại, nhãn Giờ vàng +
+          "Kết thúc sau …", lưu ý, [giá + bộ đếm cùng một hàng], Thành tiền; thùng rác ở góc trên phải. Từ md giá và nhãn Giờ vàng nằm
+          chung một hàng như cũ.
+        */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+          <div className="basis-full break-words text-sm font-medium text-stone-900 max-md:pr-9">
+            <Link href={`/san-pham/${it.slug}`} className="tubu-inline-link hover:underline">
+              {it.productName}
+            </Link>
+          </div>
+          <div className="basis-full break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
+          <div className="mt-1 flex items-baseline gap-x-2 max-md:order-3 max-md:mt-1.5 max-md:flex-col max-md:items-start max-md:gap-0">
+            {/* Điện thoại: giá 14/20 và giá gạch 12/16 như PriceTag sm + stack của Mini App, khối giá cao 36 bằng bộ đếm nên dòng giảm giá không cao hơn dòng thường. */}
+            <span className={`font-semibold max-md:text-[length:var(--type-price-sm-size)] max-md:leading-5 max-md:tabular-nums ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
+            {compareAt && (
+              <span className="text-caption text-[color:var(--color-text-price-compare)] line-through max-md:text-[length:var(--type-label-size)] max-md:leading-4 max-md:tabular-nums">
+                {formatVnd(compareAt)}
+              </span>
+            )}
+          </div>
+          {it.isFlash && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 max-md:order-1 max-md:basis-full max-md:gap-x-1.5">
+              <span data-testid="cart-flash-badge">
+                <Badge tone="promo" size="sm" icon={Zap}>
+                  Giờ vàng
+                </Badge>
+              </span>
+              {it.flashEndAt ? (
+                <span className="text-caption text-stone-600">
+                  <Countdown endAt={it.flashEndAt} mode="text" onEnd={refreshCart} />
+                </span>
+              ) : (
+                it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
+                  <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
+                )
+              )}
+            </div>
+          )}
+          {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
+          {it.quantity > 1 && !(update.isPending && update.variables?.id === it.id) && (
+            <div className="basis-full text-caption tabular-nums text-stone-600 max-md:order-4 max-md:mt-0.5 md:hidden">Thành tiền {formatVnd(it.total)}</div>
+          )}
+          {it.flashLimitNotice && <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{it.flashLimitNotice}</p>}
+          {soldOut && (
+            <p className="mt-1 basis-full text-caption font-semibold text-danger-fg max-md:order-2">
+              Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
+            </p>
+          )}
+          {!soldOut && atMax && (
+            <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">Chỉ còn {it.stock} sản phẩm</p>
+          )}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
+            {!soldOut && (
+              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
+                <button
+                  type="button"
+                  onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                  disabled={busy || it.quantity <= 1}
+                  aria-label={`Giảm số lượng ${it.productName}`}
+                  className={qtyButton}
+                >
+                  <Minus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
+                  <span className="max-md:hidden">−</span>
+                </button>
+                <span className="w-7 text-center text-stone-900 max-md:min-w-[22px] max-md:font-semibold" aria-live="polite">
+                  {it.quantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
+                  disabled={busy || atMax}
+                  aria-label={`Tăng số lượng ${it.productName}`}
+                  className={qtyButton}
+                >
+                  <Plus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
+                  <span className="max-md:hidden">+</span>
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => requestRemove(it)}
+              disabled={busy}
+              aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
+              aria-haspopup={comboRemovalNotice(cart?.comboGroups, it.id) ? 'dialog' : undefined}
+              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0 ${
+                soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
+              }`}
+            >
+              <Trash2 className="h-5 w-5 text-[color:var(--color-text-primary)] md:hidden" strokeWidth={1.75} aria-hidden="true" />
+              <span className="max-md:hidden">Xoá</span>
+            </button>
+          </div>
+          {failedItemId === it.id && (
+            <p role="alert" className="mt-1 basis-full text-caption text-danger-fg max-md:order-5">
+              {actionErrorText(update.error ?? remove.error)}
+            </p>
+          )}
+        </div>
+        <div className="flex-none font-semibold text-stone-900 max-md:hidden">{formatVnd(it.total)}</div>
+      </div>
+    );
+  };
 
   const couponBox = (sheet: boolean) => (
     <CouponBox
@@ -286,152 +443,30 @@ export default function CartPage() {
               </p>
             )}
             <div className="space-y-3">
-              {groups.map((g) => (
-                <section
-                  key={g.key}
-                  aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}
-                  className={`divide-y divide-stone-200 ${ui.card} max-md:space-y-2.5 max-md:divide-y-0 max-md:border-0 max-md:bg-transparent max-md:shadow-none`}
-                >
-                  {withHeaders && (
-                    <h2 className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-stone-900 max-md:px-0">
-                      <Truck className="h-4 w-4 text-forest-600" aria-hidden="true" />
-                      {fulfillerLabel(g.fulfiller)}
-                    </h2>
-                  )}
-                  {g.items.map((it) => {
-                    // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
-                    const soldOut = it.stock <= 0;
-                    const atMax = !soldOut && it.quantity >= it.stock;
-                    const busy = busyItemId === it.id;
-                    const compareAt = lineCompareAt(it);
-                    return (
-                      <div key={it.id} data-testid="cart-line" className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
-                        <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
-                          <span className={miniCheckboxWrap}>
-                            <input
-                              type="checkbox"
-                              checked={!deselected.has(it.id)}
-                              onChange={() => toggleSelect(it.id)}
-                              aria-label={`Chọn ${it.productName} để thanh toán`}
-                              className={miniCheckbox}
-                            />
-                            <CheckMark />
-                          </span>
-                        </label>
-                        <Link
-                          href={`/san-pham/${it.slug}`}
-                          tabIndex={-1}
-                          aria-hidden="true"
-                          data-testid="cart-line-thumb"
-                          className="flex-none max-md:self-start"
-                        >
-                          <ProductThumb src={it.thumbnail} alt="" size={64} />
-                        </Link>
-                        {/*
-                          Cột chữ là hàng tự xuống dòng để điện thoại xếp lại đúng thứ tự của Mini App chỉ bằng `order`: tên, phân loại, nhãn Giờ vàng +
-                          "Kết thúc sau …", lưu ý, [giá + bộ đếm cùng một hàng], Thành tiền; thùng rác ở góc trên phải. Từ md giá và nhãn Giờ vàng nằm
-                          chung một hàng như cũ.
-                        */}
-                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
-                          <div className="basis-full break-words text-sm font-medium text-stone-900 max-md:pr-9">
-                            <Link href={`/san-pham/${it.slug}`} className="tubu-inline-link hover:underline">
-                              {it.productName}
-                            </Link>
-                          </div>
-                          <div className="basis-full break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
-                          <div className="mt-1 flex items-baseline gap-x-2 max-md:order-3 max-md:mt-1.5 max-md:flex-col max-md:items-start max-md:gap-0">
-                            {/* Điện thoại: giá 14/20 và giá gạch 12/16 như PriceTag sm + stack của Mini App, khối giá cao 36 bằng bộ đếm nên dòng giảm giá không cao hơn dòng thường. */}
-                            <span className={`font-semibold max-md:text-[length:var(--type-price-sm-size)] max-md:leading-5 max-md:tabular-nums ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
-                            {compareAt && (
-                              <span className="text-caption text-[color:var(--color-text-price-compare)] line-through max-md:text-[length:var(--type-label-size)] max-md:leading-4 max-md:tabular-nums">
-                                {formatVnd(compareAt)}
-                              </span>
-                            )}
-                          </div>
-                          {it.isFlash && (
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 max-md:order-1 max-md:basis-full max-md:gap-x-1.5">
-                              <span data-testid="cart-flash-badge">
-                                <Badge tone="promo" size="sm" icon={Zap}>
-                                  Giờ vàng
-                                </Badge>
-                              </span>
-                              {it.flashEndAt ? (
-                                <span className="text-caption text-stone-600">
-                                  <Countdown endAt={it.flashEndAt} mode="text" onEnd={refreshCart} />
-                                </span>
-                              ) : (
-                                it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
-                                  <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
-                                )
-                              )}
-                            </div>
-                          )}
-                          {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
-                          {it.quantity > 1 && !(update.isPending && update.variables?.id === it.id) && (
-                            <div className="basis-full text-caption tabular-nums text-stone-600 max-md:order-4 max-md:mt-0.5 md:hidden">Thành tiền {formatVnd(it.total)}</div>
-                          )}
-                          {it.flashLimitNotice && <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{it.flashLimitNotice}</p>}
-                          {soldOut && (
-                            <p className="mt-1 basis-full text-caption font-semibold text-danger-fg max-md:order-2">
-                              Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
-                            </p>
-                          )}
-                          {!soldOut && atMax && (
-                            <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">Chỉ còn {it.stock} sản phẩm</p>
-                          )}
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
-                            {!soldOut && (
-                              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
-                                <button
-                                  type="button"
-                                  onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
-                                  disabled={busy || it.quantity <= 1}
-                                  aria-label={`Giảm số lượng ${it.productName}`}
-                                  className={qtyButton}
-                                >
-                                  <Minus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
-                                  <span className="max-md:hidden">−</span>
-                                </button>
-                                <span className="w-7 text-center text-stone-900 max-md:min-w-[22px] max-md:font-semibold" aria-live="polite">
-                                  {it.quantity}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
-                                  disabled={busy || atMax}
-                                  aria-label={`Tăng số lượng ${it.productName}`}
-                                  className={qtyButton}
-                                >
-                                  <Plus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
-                                  <span className="max-md:hidden">+</span>
-                                </button>
-                              </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => removeWithUndo(it)}
-                              disabled={busy}
-                              aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
-                              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0 ${
-                                soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
-                              }`}
-                            >
-                              <Trash2 className="h-5 w-5 text-[color:var(--color-text-primary)] md:hidden" strokeWidth={1.75} aria-hidden="true" />
-                              <span className="max-md:hidden">Xoá</span>
-                            </button>
-                          </div>
-                          {failedItemId === it.id && (
-                            <p role="alert" className="mt-1 basis-full text-caption text-danger-fg max-md:order-5">
-                              {actionErrorText(update.error ?? remove.error)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex-none font-semibold text-stone-900 max-md:hidden">{formatVnd(it.total)}</div>
-                      </div>
-                    );
-                  })}
-                </section>
-              ))}
+              {groups.map((g) => {
+                // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
+                const { blocks, loose } = cartComboBlocks(g.items, cart.comboGroups, deselected, priced?.comboGroups);
+                return (
+                  <section
+                    key={g.key}
+                    aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}
+                    className={`divide-y divide-stone-200 ${ui.card} md:overflow-hidden max-md:space-y-2.5 max-md:divide-y-0 max-md:border-0 max-md:bg-transparent max-md:shadow-none`}
+                  >
+                    {withHeaders && (
+                      <h2 className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-stone-900 max-md:px-0">
+                        <Truck className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                        {fulfillerLabel(g.fulfiller)}
+                      </h2>
+                    )}
+                    {blocks.map((block) => (
+                      <CartComboBlock key={block.group.id} block={block} headingAs={withHeaders ? 'h3' : 'h2'}>
+                        {block.lines.map(renderLine)}
+                      </CartComboBlock>
+                    ))}
+                    {loose.map(renderLine)}
+                  </section>
+                );
+              })}
             </div>
           </div>
 
@@ -513,6 +548,17 @@ export default function CartPage() {
         <p role="alert" className="mt-3 text-sm text-danger-fg">
           {undoError}
         </p>
+      )}
+      {cart && cart.items.length > 0 && pendingRemove && (
+        <ConfirmSheet
+          open={confirmOpen}
+          title={pendingRemove.notice.title}
+          message={pendingRemove.notice.message}
+          confirmLabel={pendingRemove.notice.confirmLabel}
+          cancelLabel={pendingRemove.notice.keepLabel}
+          onConfirm={confirmRemove}
+          onCancel={() => setConfirmOpen(false)}
+        />
       )}
       {removedLine && (
         <div

@@ -264,6 +264,13 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.pointsNone': 32,
   'checkout.addressEmpty': 24,
   'coupon.autoApplied': 28,
+  'cart.comboTitle': null,
+  'cart.comboSaving': 20,
+  'cart.comboNeedAll': null,
+  'cart.comboRemoveTitle': 22,
+  'cart.comboRemoveBody': null,
+  'cart.comboRemoveConfirm': 10,
+  'cart.comboRemoveKeep': 10,
 
   // Bộ thành phần section-kit
   'section.seeAll': 10,

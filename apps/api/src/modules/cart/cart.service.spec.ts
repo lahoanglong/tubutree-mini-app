@@ -17,7 +17,10 @@ const flash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as un
 // không bao giờ được gọi ở đây.
 const analytics = { record: jest.fn(), recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
 // Giỏ luôn hỏi combo (bundle áp cả khi không có gian hàng); stub mặc định không giảm. Ca có combo thật ở race spec cart-combo-equals-quote và bundle-price-parity.
-const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } as unknown as ComboService;
+const combo = {
+  computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }),
+  computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }),
+} as unknown as ComboService;
 
 describe('CartService guard tồn kho', () => {
   it('addItem: chặn sản phẩm không khả dụng (inactive/không tồn tại)', async () => {
@@ -336,6 +339,7 @@ describe('CartService guard tồn kho', () => {
       couponRemoved: null,
       subtotal: 0,
       comboDiscount: 0,
+      comboGroups: [],
       discount: 0,
       tierDiscount: 0,
       freeship: false,
@@ -1479,20 +1483,75 @@ describe('CartService.getCart: combo toàn sàn (bundle)', () => {
     ],
   };
   const build = (result: { total: number; perLine: Record<string, number> }) => {
-    const computeForStorefront = jest.fn().mockResolvedValue(result);
+    const computeWithGroups = jest.fn().mockResolvedValue({ groups: [], ...result });
     const prisma = {
       cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue(row) },
       order: { findFirst: jest.fn().mockResolvedValue(null) },
       membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
-    const svc = new CartService(prisma, coupons, config, flash, analytics, { computeForStorefront } as unknown as ComboService);
-    return { svc, computeForStorefront };
+    const svc = new CartService(prisma, coupons, config, flash, analytics, { computeWithGroups } as unknown as ComboService);
+    return { svc, computeWithGroups };
   };
 
   it('không có gian hàng ghi công vẫn hỏi combo (bundle áp cho mọi giỏ), kèm số lượng từng dòng', async () => {
-    const { svc, computeForStorefront } = build({ total: 2000, perLine: { a: 2000 } });
+    const { svc, computeWithGroups } = build({ total: 2000, perLine: { a: 2000 } });
     const cart = await svc.getCart('u1');
-    expect(computeForStorefront).toHaveBeenCalledWith(null, [{ variationId: 'a', productId: 'p-a', total: 20000, quantity: 2 }], 'u1');
+    expect(computeWithGroups).toHaveBeenCalledWith(null, [{ variationId: 'a', productId: 'p-a', total: 20000, quantity: 2 }], 'u1');
     expect(cart.comboDiscount).toBe(2000);
+  });
+});
+
+describe('CartService: comboGroups, các combo đã khớp của giỏ (K5)', () => {
+  const dbLine = (n: number) => ({
+    id: `i${n}`,
+    variationId: `v${n}`,
+    quantity: 1,
+    variation: { isActive: true, productId: `p${n}`, salePrice: null, retailPrice: 100_000, stock: 50, name: `PL ${n}`, product: { name: `SP ${n}`, slug: `sp-${n}`, thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+  });
+  const comboWith = (match: unknown) => ({ computeWithGroups: jest.fn().mockResolvedValue(match), computeForStorefront: jest.fn() }) as unknown as ComboService;
+  const cartOf = (comboSvc: ComboService, ids = [1, 2, 3], selection?: string[]) => {
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: ids.map(dbLine) }) },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, config, flash, analytics, comboSvc);
+    return selection ? svc.getCartSelection('u1', undefined, selection) : svc.getCart('u1');
+  };
+  const fuwa = { id: 'bundle:b1', kind: 'BUNDLE_PCT', title: 'Bộ giặt sạch Fuwa3e', discount: 65_250, variationIds: ['v1', 'v2'], keyVariationIds: ['v1', 'v2'] };
+
+  it('trả nhóm với id dòng giỏ theo thứ tự giỏ; tổng nhóm bằng comboDiscount; dòng lẻ không thuộc nhóm nào', async () => {
+    const cart = await cartOf(comboWith({ total: 65_250, perLine: { v1: 30_000, v2: 35_250 }, groups: [fuwa] }));
+    expect(cart.comboDiscount).toBe(65_250);
+    expect(cart.comboGroups).toEqual([{ id: 'bundle:b1', kind: 'BUNDLE_PCT', title: 'Bộ giặt sạch Fuwa3e', discount: 65_250, lineIds: ['i1', 'i2'], keyLineIds: ['i1', 'i2'] }]);
+    expect(cart.comboGroups.reduce((s, g) => s + g.discount, 0)).toBe(cart.comboDiscount);
+    expect(cart.comboGroups.flatMap((g) => g.lineIds)).not.toContain('i3');
+  });
+
+  it('dòng khoá không nằm trong lineIds (sản phẩm chính của mua kèm) vẫn có trong keyLineIds', async () => {
+    const addon = { id: 'bundle:a1', kind: 'ADDON', title: 'Mua kèm', discount: 11_000, variationIds: ['v2'], keyVariationIds: ['v1'] };
+    const cart = await cartOf(comboWith({ total: 11_000, perLine: { v2: 11_000 }, groups: [addon] }));
+    expect(cart.comboGroups[0]).toMatchObject({ lineIds: ['i2'], keyLineIds: ['i1'] });
+  });
+
+  it('chọn một phần giỏ: máy chủ hỏi combo trên đúng các dòng đã chọn, nhóm chỉ nói về phần đó', async () => {
+    const svc = comboWith({ total: 0, perLine: {}, groups: [] });
+    const cart = await cartOf(svc, [1, 2, 3], ['i1', 'i3']);
+    expect(cart).toMatchObject({ comboDiscount: 0, comboGroups: [] });
+    const asked = (svc.computeWithGroups as jest.Mock).mock.calls[0]![1] as { variationId: string }[];
+    expect(asked.map((l) => l.variationId).sort()).toEqual(['v1', 'v3']);
+  });
+
+  it('nhóm tham chiếu dòng không còn trong giỏ bị bỏ, không làm giỏ lỗi', async () => {
+    const stale = { ...fuwa, variationIds: ['vX'], keyVariationIds: ['vX'] };
+    expect((await cartOf(comboWith({ total: 0, perLine: {}, groups: [stale] }))).comboGroups).toEqual([]);
+  });
+
+  it('ComboService cũ không trả groups: giỏ vẫn chạy với comboGroups rỗng', async () => {
+    const cart = await cartOf(comboWith({ total: 5_000, perLine: { v1: 5_000 } }));
+    expect(cart).toMatchObject({ comboDiscount: 5_000, comboGroups: [] });
+  });
+
+  it('chỉ thêm số hiển thị: tạm tính và giảm không đổi so với trước khi có comboGroups', async () => {
+    const cart = await cartOf(comboWith({ total: 65_250, perLine: { v1: 30_000, v2: 35_250 }, groups: [fuwa] }));
+    expect(cart).toMatchObject({ subtotal: 300_000, comboDiscount: 65_250, discount: 0, itemCount: 3 });
   });
 });

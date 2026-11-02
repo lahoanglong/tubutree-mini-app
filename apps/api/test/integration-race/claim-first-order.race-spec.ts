@@ -74,7 +74,7 @@ describe('claim-first-order: mã thẻ hộp hàng + freeship đơn đầu (real
           provide: GomdonOrderService,
           useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() },
         },
-        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },
+        { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }), computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }) } },
         { provide: CashbackProviderRegistry, useValue: { all: () => [] } },
         { provide: LifecycleService, useValue: { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) } },
       ],
