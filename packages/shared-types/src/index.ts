@@ -12,3 +12,4 @@ export * from './cart';
 export * from './campaign';
 export * from './price';
 export * from './me-summary';
+export * from './flash-allowance';

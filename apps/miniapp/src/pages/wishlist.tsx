@@ -10,6 +10,7 @@ import { cartKey, useCartKey } from '../services/cart-key';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { VariationSheet } from '../components/variation-sheet';
+import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { ProductGrid } from '../components/ui/product-grid';
@@ -48,6 +49,9 @@ export default function WishlistPage() {
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: picker !== null });
   // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở trang chi tiết, thêm xong `setQueryData` cập nhật).
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
+
+  // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
+  const flashWithAllowance = useFlashAllowance(flashQ.data, picker?.variations.map((v) => v.id) ?? []);
 
   const addLine = async (variationId: string, qty: number) => {
     const cart = await addToCart(variationId, qty, 'wishlist');
@@ -129,7 +133,7 @@ export default function WishlistPage() {
           productName={picker.product.name}
           thumbnail={picker.product.thumbnail}
           variations={picker.variations}
-          flash={flashQ.data ?? []}
+          flash={flashWithAllowance}
           initialId={picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
           busy={busyId === picker.product.id}

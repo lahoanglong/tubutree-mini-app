@@ -54,6 +54,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
@@ -229,6 +230,8 @@ export default function ProductDetailPage() {
     [selectedId, autoId, variations],
   );
 
+  // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước): một request cho các suất của sản phẩm này, chỉ khi đã đăng nhập; chỉ nút, tổng và ghi chú đọc nó.
+  const flashWithAllowance = useFlashAllowance(flashQ.data, variations.map((v) => v.id));
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
   const flashItem = selected ? runningFlash(flashQ.data).find((f) => f.variationId === selected.id) : undefined;
 
@@ -380,7 +383,7 @@ export default function ProductDetailPage() {
 
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
-  const flashList = runningFlash(flashQ.data);
+  const flashList = runningFlash(flashWithAllowance);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.

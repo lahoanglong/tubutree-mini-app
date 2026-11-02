@@ -5,6 +5,7 @@ import type { CartComboGroup } from '@tubutree/shared-types';
 
 import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
+import { fetchFlashAllowance } from '@tubutree/app-core/api/flash-allowance';
 import { apiFetch } from './client-api';
 import { coreHttp } from './core-http';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
@@ -200,6 +201,9 @@ export async function getProductStock(slug: string): Promise<Record<string, numb
 export async function getActiveFlashSales(): Promise<FlashItem[]> {
   return fetchActiveFlashSales(coreHttp);
 }
+
+/** Số suất Giờ vàng khách đang đăng nhập còn mua được cho các suất đang vẽ (cần phiên; khách chưa đăng nhập không gọi, xem `useFlashAllowance`). */
+export const getFlashAllowance = (itemIds: readonly string[]) => fetchFlashAllowance(coreHttp, itemIds);
 
 // Cart
 /**

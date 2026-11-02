@@ -20,6 +20,8 @@ export interface FlashPriceItem {
   /** Hạn mức và số đã bán của suất (danh sách Giờ vàng ở trình duyệt, có thể cũ vài chục giây): suất còn lại = quota − soldCount cũng giới hạn số mua giá Giờ vàng của khách, như `allowance` của máy chủ. */
   quota?: number;
   soldCount?: number;
+  /** Số suất khách đã đăng nhập còn mua được giá Giờ vàng của suất này, đã trừ các đơn trước (`GET /flash-sales/me/allowance`, trộn vào bằng `withFlashAllowance`); thiếu = chưa biết. 0 là hết suất. */
+  perUserLeft?: number | null;
 }
 
 /** Suất còn chạy theo giờ máy chủ; không có hạn hoặc hạn không đọc được thì coi như còn chạy (máy chủ vẫn tính lại giá lúc thêm giỏ). */

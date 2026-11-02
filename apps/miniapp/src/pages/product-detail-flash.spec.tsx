@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchReviews: vi.fn(), getCart: vi.fn(), addToCart: vi.fn(), navigate: vi.fn(), authStatus: 'guest' }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchFlashAllowance: vi.fn(), fetchReviews: vi.fn(), getCart: vi.fn(), addToCart: vi.fn(), navigate: vi.fn(), authStatus: 'guest' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -17,6 +17,7 @@ vi.mock('../services/shop-api', () => ({
   fetchBoughtTogether: vi.fn().mockResolvedValue([]),
   fetchReviews: mocks.fetchReviews,
   fetchActiveFlashSales: mocks.fetchActiveFlashSales,
+  fetchFlashAllowance: mocks.fetchFlashAllowance,
   getCart: mocks.getCart,
   addToCart: mocks.addToCart,
 }));
@@ -25,7 +26,13 @@ vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.authStatus, login: vi.fn() }) }));
+// Có selector thì áp selector (useAuthPhase đọc `s.status`), không thì trả cả store (trang chi tiết destructure).
+vi.mock('../store/auth', () => ({
+  useAuthStore: (sel?: (s: { status: string; login: () => void }) => unknown) => {
+    const store = { status: mocks.authStatus, login: vi.fn() };
+    return sel ? sel(store) : store;
+  },
+}));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -71,6 +78,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     mocks.fetchProduct.mockResolvedValue(product);
     mocks.fetchReviews.mockResolvedValue({ data: [], count: 0, average: 0, items: [] });
     mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.fetchFlashAllowance.mockRejectedValue(new Error('404'));
     mocks.authStatus = 'guest';
   });
 
@@ -392,5 +400,72 @@ describe('ProductDetailPage — bảng Mua ngay theo trạng thái đăng nhập
     mocks.authStatus = 'idle';
     view.rerenderPdp();
     expect(within(screen.getByRole('dialog')).getByRole('status').style.minHeight).not.toBe('');
+  });
+});
+
+describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở các đơn trước (perUserLeft)', () => {
+  const buyNow = () => screen.getByRole('button', { name: /^Mua ngay/ });
+  const plus = () => screen.getByRole('button', { name: 'Tăng số lượng' });
+  const SPENT = 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchProduct.mockResolvedValue(product);
+    mocks.fetchReviews.mockResolvedValue({ data: [], count: 0, average: 0, items: [] });
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
+    mocks.authStatus = 'authenticated';
+  });
+
+  it('đã dùng hết suất (perUserLeft 0): nút ghi giá thường 100.000đ và ghi chú hết suất; một request cho đúng suất của sản phẩm', async () => {
+    mocks.fetchFlashAllowance.mockResolvedValue({ items: { f1: { perUserLeft: 0, allowance: 0 } } });
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 100.000đ'));
+    expect(screen.getByText(SPENT)).toBeInTheDocument();
+    expect(mocks.fetchFlashAllowance).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchFlashAllowance).toHaveBeenCalledWith(['f1']);
+  });
+
+  it('đổi số lượng nhiều lần không gọi lại endpoint', async () => {
+    mocks.fetchFlashAllowance.mockResolvedValue({ items: { f1: { perUserLeft: 0, allowance: 0 } } });
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    await waitFor(() => expect(screen.getByText(SPENT)).toBeInTheDocument());
+    fireEvent.click(plus());
+    fireEvent.click(plus());
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 300.000đ'));
+    expect(mocks.fetchFlashAllowance).toHaveBeenCalledTimes(1);
+  });
+
+  it('còn 1 suất (đã mua 2 trên giới hạn 3): chọn 1 vẫn giá Giờ vàng, chọn 2 cả dòng giá thường kèm câu "Bạn còn 1 suất"', async () => {
+    mocks.fetchFlashAllowance.mockResolvedValue({ items: { f1: { perUserLeft: 1, allowance: 1 } } });
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    await waitFor(() => expect(mocks.fetchFlashAllowance).toHaveBeenCalled());
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ'));
+    expect(screen.queryByText(/Bạn còn 1 suất/)).toBeNull();
+    fireEvent.click(plus());
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 200.000đ'));
+    expect(screen.getByText('Bạn còn 1 suất Giờ vàng. Mua 2 thì cả dòng tính giá thường.')).toBeInTheDocument();
+  });
+
+  it('endpoint lỗi (API cũ, mất mạng): số như trước, nút vẫn bấm được', async () => {
+    mocks.fetchFlashAllowance.mockRejectedValue(new Error('404'));
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    await waitFor(() => expect(mocks.fetchFlashAllowance).toHaveBeenCalled());
+    expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ');
+    expect(buyNow()).not.toBeDisabled();
+    expect(screen.queryByText(SPENT)).toBeNull();
+  });
+
+  it('khách chưa đăng nhập: không gọi endpoint, số như trước', async () => {
+    mocks.authStatus = 'guest';
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.fetchFlashAllowance).not.toHaveBeenCalled();
   });
 });

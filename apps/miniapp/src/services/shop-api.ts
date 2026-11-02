@@ -1,9 +1,10 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
+import { flashAllowancePath } from '@tubutree/app-core/api/flash-allowance';
 import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
-import type { CartComboGroup, CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
+import type { CartComboGroup, CouponPreviewRequest, FlashAllowanceResponse, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
 import { cartStorefrontSlug } from './cart-key';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from '../utils/refund-rules';
 
@@ -457,6 +458,9 @@ export const fetchActiveFlashSales = async () => {
   syncServerClock(items[0]?.serverNow);
   return items;
 };
+
+/** Số suất Giờ vàng khách đang đăng nhập còn mua được cho các suất đang vẽ (cần phiên; khách chưa đăng nhập không gọi, xem `useFlashAllowance`). */
+export const fetchFlashAllowance = (itemIds: readonly string[]) => api.get<FlashAllowanceResponse>(flashAllowancePath(itemIds)).then((r) => r.data);
 
 export interface UpcomingFlashItem {
   itemId: string;

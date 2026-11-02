@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
   getCart: vi.fn(),
   flash: vi.fn(),
+  allowance: vi.fn(),
   snackbar: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -25,6 +26,7 @@ vi.mock('../services/shop-api', () => ({
   addToCart: mocks.addToCart,
   getCart: mocks.getCart,
   fetchActiveFlashSales: mocks.flash,
+  fetchFlashAllowance: mocks.allowance,
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/wishlist-api', () => ({ getWishlist: mocks.getWishlist }));
@@ -66,7 +68,8 @@ describe('Trang Yêu thích: bảng Thêm nhanh đọc giỏ để ghi đúng ti
     vi.clearAllMocks();
     mocks.getWishlist.mockResolvedValue([{ id: 'p1', slug: 'khan-uot', name: 'Khăn ướt', inStock: true, repVariationId: 'var-1' }]);
     mocks.fetchProduct.mockResolvedValue(detail);
-    mocks.flash.mockResolvedValue(FLASH);
+    mocks.flash.mockResolvedValue(FLASH.map((f) => ({ ...f, itemId: 'fi-var-1' })));
+    mocks.allowance.mockRejectedValue(new Error('404'));
     mocks.addToCart.mockResolvedValue({ items: [], itemCount: 0 });
     mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
   });
@@ -102,5 +105,24 @@ describe('Trang Yêu thích: bảng Thêm nhanh đọc giỏ để ghi đúng ti
     await openSheet();
     await waitFor(() => expect(confirmButton()).toHaveTextContent('Thêm vào giỏ · 26.000đ'));
     expect(confirmButton()).not.toBeDisabled();
+  });
+  it('đã dùng hết suất Giờ vàng ở đơn trước (perUserLeft 0): nút ghi giá thường 35.000đ, ghi chú hết suất; chỉ gọi endpoint khi mở bảng', async () => {
+    mocks.allowance.mockResolvedValue({ items: { 'fi-var-1': { perUserLeft: 0, allowance: 0 } } });
+    renderPage();
+    await screen.findByRole('button', { name: 'Thêm Khăn ướt vào giỏ' });
+    expect(mocks.allowance).not.toHaveBeenCalled();
+    await openSheet();
+    await waitFor(() => expect(confirmButton()).toHaveTextContent('Thêm vào giỏ · 35.000đ'));
+    expect(screen.getByRole('status')).toHaveTextContent('Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.');
+    expect(mocks.allowance).toHaveBeenCalledTimes(1);
+    expect(mocks.allowance).toHaveBeenCalledWith(['fi-var-1']);
+  });
+
+  it('endpoint lỗi: bảng ghi số như trước (1 × giá Giờ vàng)', async () => {
+    renderPage();
+    await openSheet();
+    await waitFor(() => expect(mocks.allowance).toHaveBeenCalled());
+    expect(confirmButton()).toHaveTextContent('Thêm vào giỏ · 26.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('');
   });
 });

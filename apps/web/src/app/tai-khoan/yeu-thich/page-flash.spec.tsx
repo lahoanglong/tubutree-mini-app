@@ -13,8 +13,10 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => ({ push: () => undefined }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+// Cùng một mảng ở mọi lần vẽ (như kho thật), có itemId để hỏi số suất theo khách.
+const FLASH = vi.hoisted(() => [{ itemId: 'fi-var-1', productSlug: 'khan-uot', variationId: 'var-1', flashPrice: 26_000, perUserLimit: 3 }]);
 vi.mock('@/lib/use-flash-sales', () => ({
-  useActiveFlashSales: () => [{ productSlug: 'khan-uot', variationId: 'var-1', flashPrice: 26_000, perUserLimit: 3 }],
+  useActiveFlashSales: () => FLASH,
 }));
 
 import WishlistPage from './page';
@@ -25,15 +27,21 @@ const card = { id: 'p1', slug: 'khan-uot', brand: 'Tubu', name: 'Khăn ướt', 
 
 let cartItems: { id: string; variationId: string; quantity: number }[] = [];
 let cartFails = false;
+let allowance: Record<string, { perUserLeft: number; allowance: number }> | Error = new Error('404');
 let mounted: Rendered[] = [];
 
 beforeEach(() => {
   cartItems = [];
   cartFails = false;
+  allowance = new Error('404');
   mocks.post.mockReset().mockResolvedValue({ items: [] });
   mocks.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/me/wishlist') return [card];
     if (path.startsWith('/products/')) return detail;
+    if (path.startsWith('/flash-sales/me/allowance')) {
+      if (allowance instanceof Error) throw allowance;
+      return { items: allowance };
+    }
     if (path === '/cart') {
       if (cartFails) throw new Error('boom');
       return { items: cartItems, itemCount: cartItems.reduce((n, l) => n + l.quantity, 0) };
@@ -90,5 +98,26 @@ describe('/tai-khoan/yeu-thich: bảng Thêm nhanh đọc giỏ để ghi đúng
     await openSheet();
     expect(confirmButton().textContent).toBe('Thêm vào giỏ · 26.000đ');
     expect(confirmButton().disabled).toBe(false);
+  });
+  it('đã dùng hết suất Giờ vàng ở đơn trước (perUserLeft 0): nút ghi giá thường 35.000đ, ghi chú hết suất; chỉ gọi endpoint khi mở bảng', async () => {
+    allowance = { 'fi-var-1': { perUserLeft: 0, allowance: 0 } };
+    const r = render(<WishlistPage />);
+    mounted.push(r);
+    await flush(4);
+    expect(mocks.get.mock.calls.some(([p]) => String(p).startsWith('/flash-sales/me/allowance'))).toBe(false);
+    click(r.container.querySelector('button[aria-label="Thêm Khăn ướt vào giỏ"]'));
+    for (let i = 0; i < 40 && !dialog(); i++) await flush(2);
+    await flush(3);
+    expect(confirmButton().textContent).toBe('Thêm vào giỏ · 35.000đ');
+    expect(status()!.textContent).toBe('Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.');
+    const asked = mocks.get.mock.calls.map(([p]) => String(p)).filter((p) => p.startsWith('/flash-sales/me/allowance'));
+    expect(asked).toEqual(['/flash-sales/me/allowance?items=fi-var-1']);
+  });
+
+  it('endpoint lỗi: bảng ghi số như trước (1 × giá Giờ vàng)', async () => {
+    await openSheet();
+    await flush(3);
+    expect(confirmButton().textContent).toBe('Thêm vào giỏ · 26.000đ');
+    expect(status()!.textContent).toBe('');
   });
 });
