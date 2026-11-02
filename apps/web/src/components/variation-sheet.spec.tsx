@@ -113,6 +113,43 @@ describe('VariationSheet web: giá Giờ vàng và tiền dòng theo luật máy
   });
 });
 
+describe('VariationSheet web: giỏ đã có sẵn cùng phân loại (thêm giỏ cộng dồn, máy chủ giá cả dòng)', () => {
+  const inCart2 = [{ variationId: 'v1', quantity: 2 }];
+  const IN_CART_NOTE = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+
+  it('ví dụ reviewer (giới hạn 3, giỏ có 2, chọn 2): Mua ngay ghi cả dòng 140.000đ, Thêm vào giỏ ghi phần giỏ tăng 88.000đ, ghi chú nói theo giỏ', () => {
+    const r = mountSheet({ mode: 'buy', initialQty: 2, cartLines: inCart2 });
+    expect(buy().textContent).toBe('Mua ngay · 140.000đ');
+    expect(status()!.textContent).toBe(IN_CART_NOTE);
+    r.unmount();
+    mounted = [];
+    mountSheet({ mode: 'add', initialQty: 2, cartLines: inCart2 });
+    expect(buy().textContent).toBe('Thêm vào giỏ · 88.000đ');
+    expect(status()!.textContent).toBe(IN_CART_NOTE);
+  });
+
+  it('giảm về qty 1 (tổng 3 = limit): Mua ngay 3 × giá Giờ vàng, ghi chú biến mất', () => {
+    mountSheet({ mode: 'buy', initialQty: 2, cartLines: inCart2 });
+    click(minus());
+    expect(buy().textContent).toBe('Mua ngay · 78.000đ');
+    expect(status()!.textContent).toBe('');
+  });
+
+  it('giỏ chỉ có phân loại khác (hoặc không truyền cartLines): số như khi giỏ rỗng', () => {
+    const r = mountSheet({ mode: 'buy', initialQty: 2, cartLines: [{ variationId: 'v3', quantity: 9 }] });
+    expect(buy().textContent).toBe('Mua ngay · 52.000đ');
+    r.unmount();
+    mounted = [];
+    mountSheet({ mode: 'buy', initialQty: 2 });
+    expect(buy().textContent).toBe('Mua ngay · 52.000đ');
+  });
+
+  it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {
+    mountSheet({ mode: 'buy', initialQty: 1, cartLines: inCart2 });
+    expect((status() as HTMLElement).style.minHeight).not.toBe('');
+  });
+});
+
 describe('VariationSheet web: hết hàng ghi "Tạm hết hàng" nhất quán', () => {
   it('chip hết hàng có chữ "Tạm hết hàng", chip còn hàng có giá và dấu Giờ vàng', () => {
     mountSheet();

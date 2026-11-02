@@ -17,7 +17,7 @@ import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { inCartQuantity, overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
@@ -104,13 +104,15 @@ export default function AddToCart({
   const [sheetOpened, setSheetOpened] = useState(false);
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
-  const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
+  const cartData = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data;
+  const cartCount = cartData?.itemCount ?? 0;
   const flash = runningFlash(useActiveFlashSales());
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
-  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường (nút ghi số đó, không phải qty × giá Giờ vàng).
-  const line = selected ? variationLinePreview(selected, flash, qty) : null;
+  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
+  // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; "Thêm vào giỏ" ghi phần giỏ tăng (`total`). Giỏ chưa tải hay lỗi thì coi là rỗng.
+  const line = selected ? variationLinePreview(selected, flash, qty, inCartQuantity(cartData?.items, selected.id)) : null;
   const overLimitText = line ? overLimitNote(line, qty) : null;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
@@ -305,8 +307,9 @@ export default function AddToCart({
     );
   }
 
-  const total = formatVnd(line?.total ?? 0);
-  const addLabel = !available ? fillTileCopy('stock.out') : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${total}`;
+  const addTotal = formatVnd(line?.total ?? 0);
+  const buyTotal = formatVnd(line?.lineTotal ?? 0);
+  const addLabel = !available ? fillTileCopy('stock.out') : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${addTotal}`;
   const buyLabel = busy && buying ? 'Đang xử lý…' : 'Mua ngay';
   const cannotBuy = busy || !available || phase === 'loading';
   const status = (msg || warn) && (
@@ -393,6 +396,7 @@ export default function AddToCart({
           flash={flash}
           initialId={selectedId}
           initialQty={qty}
+          cartLines={cartData?.items}
           onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
         />
       )}
@@ -418,11 +422,11 @@ export default function AddToCart({
                 type="button"
                 onClick={onBuyNow}
                 disabled={cannotBuy}
-                aria-label={`${buyLabel} · ${total}`}
+                aria-label={`${buyLabel} · ${buyTotal}`}
                 className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
               >
                 <span className="block max-w-full truncate">{buyLabel}</span>
-                <span className="block max-w-full truncate text-xs font-medium">{total}</span>
+                <span className="block max-w-full truncate text-xs font-medium">{buyTotal}</span>
               </button>
             </div>
           ) : (
