@@ -56,7 +56,7 @@
    "open-snackbar": {},
    "primitive-color": {
     "app/brand/[slug]/brand-actions.tsx": 14,
-    "app/gio-hang/page.tsx": 36,
+    "app/gio-hang/page.tsx": 34,
     "app/ma-giam-gia/vouchers-view.tsx": 1,
     "app/mua-chung/group-buy-view.tsx": 12,
     "app/s/[slug]/page.tsx": 27,
@@ -74,7 +74,7 @@
     "app/thanh-toan/invoice-section.tsx": 2,
     "app/thanh-toan/page.tsx": 58,
     "app/uu-dai/page.tsx": 1,
-    "components/add-to-cart.tsx": 9,
+    "components/add-to-cart.tsx": 2,
     "components/campaign/campaign-body.tsx": 1,
     "components/catalog/browse-view.tsx": 9,
     "components/catalog/chip.tsx": 9,
@@ -192,7 +192,7 @@
   "apps/web/src/app/uu-dai/page.tsx": 1,
   "apps/web/src/app/vuon-xanh/page.tsx": 1,
   "apps/web/src/components/account/account-deletion-section.tsx": 4,
-  "apps/web/src/components/add-to-cart.tsx": 33,
+  "apps/web/src/components/add-to-cart.tsx": 12,
   "apps/web/src/components/advisor-paused.tsx": 3,
   "apps/web/src/components/affiliate/storefront-builder.tsx": 3,
   "apps/web/src/components/affiliate/storefront-owner.tsx": 16,
@@ -241,6 +241,7 @@
   "apps/web/src/components/staff/staff-hub.tsx": 1,
   "apps/web/src/components/ui/error-state.tsx": 9,
   "apps/web/src/components/ui/page-header.tsx": 16,
+  "apps/web/src/components/variation-chip.tsx": 21,
   "apps/web/src/lib/phone-ui.ts": 21
  },
  "px": {
@@ -423,7 +424,7 @@
   "apps/miniapp/src/components/ui/time-input.tsx": 4,
   "apps/miniapp/src/components/ui/timeline.tsx": 6,
   "apps/miniapp/src/components/ui/voucher-ticket.tsx": 26,
-  "apps/miniapp/src/components/variation-sheet.tsx": 9,
+  "apps/miniapp/src/components/variation-sheet.tsx": 5,
   "apps/miniapp/src/components/waste-desk-perk.tsx": 4,
   "apps/miniapp/src/components/waste-phone-needed.tsx": 1,
   "apps/miniapp/src/components/waste-point-picker.tsx": 21,
@@ -462,7 +463,7 @@
   "apps/miniapp/src/pages/order-detail.tsx": 54,
   "apps/miniapp/src/pages/orders.tsx": 11,
   "apps/miniapp/src/pages/post-detail.tsx": 46,
-  "apps/miniapp/src/pages/product-detail.tsx": 71,
+  "apps/miniapp/src/pages/product-detail.tsx": 66,
   "apps/miniapp/src/pages/profile.tsx": 82,
   "apps/miniapp/src/pages/recycle-desk.tsx": 26,
   "apps/miniapp/src/pages/recycle-done.tsx": 6,
@@ -527,7 +528,7 @@
   "apps/web/src/components/account/account-shell.tsx": 4,
   "apps/web/src/components/account/avatar-crop-sheet.tsx": 4,
   "apps/web/src/components/account/font-scale.ts": 3,
-  "apps/web/src/components/add-to-cart.tsx": 4,
+  "apps/web/src/components/add-to-cart.tsx": 3,
   "apps/web/src/components/affiliate/choice-card.tsx": 1,
   "apps/web/src/components/affiliate/ctv-shortcuts.tsx": 1,
   "apps/web/src/components/affiliate/storefront-owner.tsx": 2,
@@ -641,7 +642,8 @@
   "apps/web/src/components/ui/page-header.tsx": 1,
   "apps/web/src/components/ui/quantity-selector.tsx": 5,
   "apps/web/src/components/ui/segmented-tabs.tsx": 1,
-  "apps/web/src/components/variation-sheet.tsx": 9,
+  "apps/web/src/components/variation-chip.tsx": 1,
+  "apps/web/src/components/variation-sheet.tsx": 5,
   "apps/web/src/lib/copy-text.ts": 1
  }
 }

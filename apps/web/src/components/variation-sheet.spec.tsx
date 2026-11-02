@@ -1,0 +1,129 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { byText, click, render, type Rendered } from '@/test-utils/dom';
+import { VariationSheet, type VariationOption } from './variation-sheet';
+
+const OVER_5 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 5 thì cả dòng tính giá thường.';
+
+const variations: VariationOption[] = [
+  { id: 'v1', sku: 'S1', name: 'Gói 80 tờ', retailPrice: 35_000, salePrice: null, stock: 245 },
+  { id: 'v2', sku: 'S2', name: 'Combo 3 gói', retailPrice: 90_000, salePrice: null, stock: 0 },
+  { id: 'v3', sku: 'S3', name: 'Gói 40 tờ', retailPrice: 20_000, salePrice: null, stock: 8 },
+];
+const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
+
+type Props = Parameters<typeof VariationSheet>[0];
+let mounted: Rendered[] = [];
+const baseProps = (over: Partial<Props> = {}): Props => ({
+  open: true, onClose: () => undefined, mode: 'buy', productName: 'Khăn ướt', thumbnail: null, variations, flash: flash(),
+  initialId: 'v1', initialQty: 3, onConfirm: () => undefined, ...over,
+});
+function mountSheet(over: Partial<Props> = {}) {
+  const r = render(<VariationSheet {...baseProps(over)} />);
+  mounted.push(r);
+  return r;
+}
+afterEach(() => {
+  mounted.forEach((m) => m.unmount());
+  mounted = [];
+});
+
+const dialog = () => document.body.querySelector('[role="dialog"]') as HTMLElement;
+const buy = () => byText(dialog(), 'button', /^(Mua ngay|Thêm vào giỏ|Tạm hết hàng)/) as HTMLButtonElement;
+const plus = () => dialog().querySelector('button[aria-label="Tăng số lượng"]');
+const minus = () => dialog().querySelector('button[aria-label="Giảm số lượng"]');
+const status = () => dialog().querySelector('[role="status"]');
+
+describe('VariationSheet web: giá Giờ vàng và tiền dòng theo luật máy chủ', () => {
+  it('phân loại đang Giờ vàng: nhãn "Giờ vàng", giới hạn "Tối đa 3/khách" có câu đọc riêng, giá màu deal', () => {
+    mountSheet();
+    const info = dialog().querySelector('[data-testid="variation-sheet-flash"]')!;
+    expect(info.textContent).toContain('Giờ vàng');
+    expect(byText(info as HTMLElement, '[aria-hidden="true"]', 'Tối đa 3/khách')).toBeTruthy();
+    expect(info.textContent).toContain('Tối đa 3 sản phẩm mỗi khách');
+    const price = Array.from(dialog().querySelectorAll<HTMLElement>('[data-testid="variation-sheet-price"] span')).find((x) => x.textContent === '26.000đ')!;
+    expect(price.getAttribute('style')).toContain('--color-text-price-deal');
+  });
+
+  it('qty = limit: nút ghi 3 × giá Giờ vàng, chưa có ghi chú; limit + 1 và 5: cả dòng giá thường và có câu ghi chú', () => {
+    mountSheet({ initialQty: 3 });
+    expect(buy().textContent).toBe('Mua ngay · 78.000đ');
+    expect(status()!.textContent).toBe('');
+    click(plus());
+    expect(buy().textContent).toBe('Mua ngay · 140.000đ');
+    click(plus());
+    expect(buy().textContent).toBe('Mua ngay · 175.000đ');
+    expect(status()!.textContent).toBe(OVER_5);
+    click(minus());
+    click(minus());
+    expect(buy().textContent).toBe('Mua ngay · 78.000đ');
+    expect(status()!.textContent).toBe('');
+  });
+
+  it('ghi chú có chỗ giữ cố định: vùng thông báo có sẵn khi chưa vượt', () => {
+    mountSheet({ initialQty: 1 });
+    expect((status() as HTMLElement).style.minHeight).not.toBe('');
+    expect(status()!.children).toHaveLength(0);
+  });
+
+  it('Thêm vào giỏ cũng ghi tổng đúng: mode add, qty 5', () => {
+    mountSheet({ mode: 'add', initialQty: 5 });
+    expect(buy().textContent).toBe('Thêm vào giỏ · 175.000đ');
+  });
+
+  it('bấm nút xác nhận gửi đúng phân loại và số lượng khách chọn (không kẹp theo giới hạn)', () => {
+    const onConfirm = vi.fn();
+    mountSheet({ initialQty: 5, onConfirm });
+    click(buy());
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ id: 'v1' }), 5);
+  });
+
+  it('API cũ không gửi giới hạn: giá Giờ vàng mọi số lượng, không ghi chú lẫn dòng giới hạn', () => {
+    mountSheet({ flash: flash({ perUserLimit: undefined }), initialQty: 5 });
+    expect(buy().textContent).toBe('Mua ngay · 130.000đ');
+    expect(status()).toBeNull();
+    expect(dialog().textContent).not.toContain('Tối đa');
+  });
+
+  it('hết giờ khi khách đang mở bảng (flash rỗng): giá thường, không nhãn Giờ vàng, không ghi chú', () => {
+    const r = mountSheet({ initialQty: 5 });
+    expect(status()!.textContent).toBe(OVER_5);
+    act(() => r.root.render(<VariationSheet {...baseProps({ flash: [], initialQty: 5 })} />));
+    expect(buy().textContent).toBe('Mua ngay · 175.000đ');
+    expect(dialog().querySelector('[data-testid="variation-sheet-flash"]')).toBeNull();
+    expect(status()).toBeNull();
+  });
+
+  it('chọn phân loại không phải Giờ vàng thì nhãn và ghi chú biến mất', () => {
+    mountSheet({ initialQty: 5 });
+    click(byText(dialog(), 'button', /Gói 40 tờ/));
+    expect(dialog().querySelector('[data-testid="variation-sheet-flash"]')).toBeNull();
+    expect(buy().textContent).toBe('Mua ngay · 100.000đ');
+  });
+});
+
+describe('VariationSheet web: hết hàng ghi "Tạm hết hàng" nhất quán', () => {
+  it('chip hết hàng có chữ "Tạm hết hàng", chip còn hàng có giá và dấu Giờ vàng', () => {
+    mountSheet();
+    const out = byText(dialog(), 'button', /Combo 3 gói/) as HTMLButtonElement;
+    expect(out.disabled).toBe(true);
+    expect(out.textContent).toContain('Tạm hết hàng');
+    const flashChip = byText(dialog(), 'button', /Gói 80 tờ/)!;
+    expect(flashChip.textContent).toContain('26.000đ');
+    expect(flashChip.textContent).toContain('Giờ vàng');
+    expect(flashChip.querySelector('svg')).not.toBeNull();
+    expect(byText(dialog(), 'button', /Gói 40 tờ/)!.textContent).toContain('20.000đ');
+  });
+
+  it('chú thích dưới giá và nút khi phân loại đang chọn hết hàng đều ghi "Tạm hết hàng"', () => {
+    const allOut: VariationOption[] = [
+      { id: 'v1', sku: 'S1', name: 'Gói 80 tờ', retailPrice: 35_000, salePrice: null, stock: 0 },
+      { id: 'v2', sku: 'S2', name: 'Gói 40 tờ', retailPrice: 20_000, salePrice: null, stock: 0 },
+    ];
+    mountSheet({ variations: allOut, flash: [], initialId: null, initialQty: 1 });
+    expect(dialog().textContent).toContain('Gói 40 tờ · Tạm hết hàng');
+    const btn = byText(dialog(), 'button', /^Tạm hết hàng$/) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+});
