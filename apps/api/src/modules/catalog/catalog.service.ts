@@ -450,7 +450,7 @@ export class CatalogService {
    */
   async listBrandProducts(slug: string, query: BrandProductsQuery) {
     const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true } });
-    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại hoặc chưa đăng.');
+    if (!brand) throw new NotFoundException('Thương hiệu không tồn tại hoặc chưa đăng.');
     return this.listPage({ ...PUBLIC_PRODUCT_WHERE, brandId: brand.id }, query);
   }
 

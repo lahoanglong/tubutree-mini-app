@@ -190,7 +190,7 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     api.get('/cart', { items: [], itemCount: 2, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 199000, couponCode: null });
     api.post('/cart/coupon', () => reply(400, { message: 'Đơn tối thiểu 199.000đ' }));
     await page.goto('/kho-qua/cua-toi');
-    await page.locator('[data-redemption]').filter({ hasText: 'Mã FREESHIP1 · HSD 31/12' }).getByRole('button').click();
+    await page.locator('[data-redemption]').filter({ hasText: 'Mã FREESHIP1 · Dùng đến 31/12' }).getByRole('button').click();
     await expect(page.getByRole('alert').filter({ hasText: 'Chưa chọn sẵn được mã: Đơn tối thiểu 199.000đ' })).toBeVisible();
     expect(api.callsTo('POST', '/cart/coupon')).toHaveLength(1);
   });

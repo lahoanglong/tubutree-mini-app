@@ -23,6 +23,7 @@ vi.mock('../../services/shop-api', () => ({
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { syncServerClock } from '../../utils/server-clock';
 import { VoucherSheet } from './voucher-sheet';
 
 const COUPONS = [
@@ -64,20 +65,15 @@ describe('VoucherSheet — vùng chạm >= 44px (C-021)', () => {
     expect(declared(close, 'h')).toBeGreaterThanOrEqual(44);
   });
 
-  it('nút "Dùng mã" / "Chưa đủ" / "Bỏ dùng" cao tối thiểu 44px', async () => {
-    mocks.getCoupons.mockResolvedValue(COUPONS);
-    renderSheet('GIAM10');
-    const used = await screen.findByRole('button', { name: /^Bỏ dùng mã/  });
-    const notEnough = await screen.findByRole('button', { name: /^Chưa đủ điều kiện dùng mã/  });
-    expect(px(used.style.minHeight)).toBeGreaterThanOrEqual(44);
-    expect(px(notEnough.style.minHeight)).toBeGreaterThanOrEqual(44);
-  });
-
-  it('"Dùng mã" cao tối thiểu 44px', async () => {
-    mocks.getCoupons.mockResolvedValue(COUPONS.slice(0, 1));
-    renderSheet();
-    const use = await screen.findByRole('button', { name: /^Dùng mã/  });
-    expect(px(use.style.minHeight)).toBeGreaterThanOrEqual(44);
+  // Nút của VoucherTicket cao 36px nhưng có vùng chạm 44px bằng lớp `tubu-hit-44` (phần tử giả trải rộng).
+  it('nút "Dùng" / "Chưa đủ" / "Bỏ chọn" / "Không áp dụng" có vùng chạm 44px', async () => {
+    mocks.getCoupons.mockResolvedValue([...COUPONS, { ...COUPONS[0], code: 'KHAC' }, { ...COUPONS[1], code: 'SHIP0', minOrder: null }]);
+    renderSheet('GIAM10', { shippingFee: 0 });
+    const used = await screen.findByRole('button', { name: /^Bỏ chọn mã/ });
+    const notEnough = await screen.findByRole('button', { name: /^Chưa đủ điều kiện dùng mã/ });
+    const use = await screen.findByRole('button', { name: /^Dùng mã/ });
+    const blocked = await screen.findByRole('button', { name: /^Không áp dụng mã/ });
+    for (const b of [used, notEnough, use, blocked]) expect(b.className).toContain('tubu-hit-44');
   });
 
   it('tải mã lỗi → "Thử lại" cao tối thiểu 44px', async () => {
@@ -102,21 +98,67 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(screen.getByText(fillCopy('coupon.oneCodeHint'))).toBeInTheDocument();
     expect(screen.getByText('Mỗi đơn dùng 1 mã')).toBeInTheDocument();
     expect(screen.getByLabelText('Nhập mã giảm giá khác')).toBeInTheDocument();
-    expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
+    expect(await screen.findByText('Giảm 10%, tối đa 50k')).toBeInTheDocument();
     expect(screen.getByText('Miễn phí giao hàng')).toBeInTheDocument();
     expect(screen.queryByText(/Miễn phí giao hàng \(tối đa/)).toBeNull();
-    expect(screen.getByText('Cần đơn tối thiểu 500.000đ')).toBeInTheDocument();
-    expect(screen.getAllByText('HSD: 01/01/2027')).toHaveLength(2);
+    expect(screen.getByText(/^Đơn từ 500k/)).toBeInTheDocument();
+    expect(screen.getByText('Mua thêm 400k để dùng')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Dùng đến 01\/01/)).toHaveLength(2);
   });
 
-  it('mã không có hạn hoặc hạn hỏng → "HSD: Không thời hạn", không hiện "—" hay Invalid Date', async () => {
+  it('hạn dùng không còn chữ "HSD"; mã không có hạn hoặc hạn hỏng không hiện dòng hạn, không "—" hay Invalid Date', async () => {
     mocks.getCoupons.mockResolvedValue([
       { ...COUPONS[0], code: 'KHONGHAN', endAt: null },
       { ...COUPONS[0], code: 'HANHONG', endAt: 'không phải ngày' },
+      COUPONS[0],
+    ]);
+    const { container } = renderSheet();
+    expect(await screen.findAllByRole('button', { name: /^Dùng mã/ })).toHaveLength(3);
+    expect(screen.getAllByText(/^Dùng đến /)).toHaveLength(1);
+    expect(container.ownerDocument.body.textContent).not.toMatch(/HSD|Không thời hạn|Invalid Date|—/);
+  });
+
+  it('thứ tự: mã dùng được trước (giảm nhiều trước), rồi chưa đủ (thiếu ít trước), rồi không áp dụng', async () => {
+    mocks.getCoupons.mockResolvedValue([
+      { ...COUPONS[1], code: 'XA', minOrder: 900_000 },
+      { ...COUPONS[1], code: 'GAN', minOrder: 150_000 },
+      { ...COUPONS[0], code: 'NHO', type: 'AMOUNT', value: 5_000, maxDiscount: null },
+      { ...COUPONS[0], code: 'LON', type: 'AMOUNT', value: 30_000, maxDiscount: null },
     ]);
     renderSheet();
-    expect(await screen.findAllByText('HSD: Không thời hạn')).toHaveLength(2);
-    expect(screen.queryByText(/Invalid Date|—/)).toBeNull();
+    await screen.findAllByRole('button', { name: /mã LON$/ });
+    const order = screen.getAllByRole('button', { name: / mã [A-Z]+$/ }).map((b) => b.getAttribute('aria-label')!.split(' ').pop());
+    expect(order).toEqual(['LON', 'NHO', 'GAN', 'XA']);
+  });
+
+  it('đơn tối thiểu 0: không ghi "Đơn tối thiểu 0đ"; câu "Đơn tối thiểu … để dùng mã này." của máy chủ không lặp dòng điều kiện', async () => {
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], code: 'ZERO', minOrder: 0 }, { ...COUPONS[0], code: 'MIN199', minOrder: 199_000 }]);
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'ZERO', eligible: true, discount: 1_000 },
+      { code: 'MIN199', eligible: false, discount: 0, reason: 'Đơn tối thiểu 199.000đ để dùng mã này.' },
+    ]);
+    renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 150_000 });
+    // Có xem trước: chỉ câu của máy chủ, một lần (dòng điều kiện "Đơn từ 199k" bị bỏ), không tự đếm "Mua thêm".
+    expect(await screen.findAllByText('Đơn tối thiểu 199.000đ để dùng mã này.')).toHaveLength(1);
+    expect(document.body.textContent).not.toMatch(/Đơn từ 199k|Mua thêm|(^|[^\d.])0đ/);
+    expect(document.body.textContent).not.toContain('Đơn tối thiểu 0');
+  });
+
+  it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; bấm vẫn áp đúng mã', async () => {
+    const raw = 'MILESTONE1000000-2026-10-CMV9MLSLB009KFKRUMVZQLRA7';
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], code: raw }]);
+    renderSheet();
+    fireEvent.click(await screen.findByRole('button', { name: 'Dùng mã Quà mốc chi tiêu 1 triệu' }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith(raw));
+    expect(document.body.textContent).not.toContain('CMV9MLSLB009');
+  });
+
+  it('không phần tử nào trong tấm bị làm mờ cả thẻ (opacity < 1), kể cả mã chưa đủ và không áp dụng', async () => {
+    mocks.getCoupons.mockResolvedValue([...COUPONS, { ...COUPONS[1], code: 'SHIP0', minOrder: null }]);
+    renderSheet(undefined, { shippingFee: 0 });
+    await screen.findByRole('button', { name: /^Không áp dụng mã/ });
+    const dimmed = Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter((el) => el.style.opacity !== '' && Number(el.style.opacity) < 1);
+    expect(dimmed).toEqual([]);
   });
 
   it('chạm "Dùng mã" → áp dụng đúng mã, báo thành công, báo cho trang và đóng sheet', async () => {
@@ -142,8 +184,8 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
 
   it('mã chưa đủ điều kiện: nút "Chưa đủ" bị khoá, bấm không gọi API', async () => {
     renderSheet();
-    const notEnough = await screen.findByRole('button', { name: /^Chưa đủ điều kiện dùng mã/  });
-    expect(notEnough).toBeDisabled();
+    const notEnough = await screen.findByRole('button', { name: /^Chưa đủ điều kiện dùng mã/ });
+    expect(notEnough).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(notEnough);
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
   });
@@ -151,7 +193,7 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
   it('trang đang tự áp/gỡ mã (busy) → khoá nút Dùng mã và ô nhập, bấm không gọi API', async () => {
     renderSheet(undefined, { busy: true });
     const use = await screen.findByRole('button', { name: /^Dùng mã/ });
-    expect(use).toBeDisabled();
+    expect(use).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(use);
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'abc' } });
@@ -175,11 +217,31 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     const onCouponApplied = vi.fn();
     renderSheet('giam10', { onClose, onCouponApplied });
     expect(await screen.findByText('Đang dùng')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^Bỏ dùng mã/  }));
+    fireEvent.click(screen.getByRole('button', { name: /^Bỏ chọn mã/  }));
     await waitFor(() => expect(mocks.removeCoupon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onCouponApplied).toHaveBeenCalledTimes(1));
     expect(onClose).not.toHaveBeenCalled();
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã bỏ mã giảm giá' }));
+  });
+
+  it('mã đang dùng mà ví (cache cũ) báo đã hết hạn theo đồng hồ máy: vẫn còn nút "Bỏ chọn" để gỡ', async () => {
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], endAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderSheet('giam10');
+    fireEvent.click(await screen.findByRole('button', { name: /^Bỏ chọn mã/ }));
+    await waitFor(() => expect(mocks.removeCoupon).toHaveBeenCalledTimes(1));
+  });
+
+  it('hạn tính theo giờ máy chủ: điện thoại chạy nhanh hơn nhưng máy chủ nói mã còn hạn thì vẫn có nút "Dùng"', async () => {
+    // Điện thoại nhanh 1 ngày so với máy chủ: mã hết hạn "hôm qua" theo điện thoại, còn nửa ngày theo máy chủ.
+    const device = Date.now();
+    syncServerClock(new Date(device - 86_400_000).toISOString());
+    try {
+      mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], endAt: new Date(device - 43_200_000).toISOString() }]);
+      renderSheet();
+      expect(await screen.findByRole('button', { name: /^Dùng mã/ })).toBeInTheDocument();
+    } finally {
+      syncServerClock(new Date().toISOString());
+    }
   });
 
   it('áp dụng đang chạy: nút của chính mã đó hiện trạng thái đang tải, nút khác bị khoá', async () => {
@@ -189,7 +251,8 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     const buttons = await screen.findAllByRole('button', { name: /^Dùng mã/  });
     fireEvent.click(buttons[0]!);
     await waitFor(() => expect(screen.getAllByRole('button', { name: /^Dùng mã/  })[0]).toHaveAttribute('aria-busy', 'true'));
-    expect(screen.getAllByRole('button', { name: /^Dùng mã/  })[1]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: /^Dùng mã/  })[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getAllByRole('button', { name: /^Dùng mã/  })[1]).not.toHaveAttribute('aria-busy');
   });
 
   it('áp dụng mã trong danh sách: nút "Áp dụng" của ô nhập tay bị khoá, không quay spinner', async () => {
@@ -212,7 +275,7 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'abc' } });
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Áp dụng' })).toHaveAttribute('aria-busy', 'true'));
-    expect(screen.getByRole('button', { name: /^Dùng mã/  })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Dùng mã/  })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('button', { name: /^Dùng mã/  })).not.toHaveAttribute('aria-busy');
   });
 
@@ -220,7 +283,7 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     mocks.getCoupons.mockResolvedValue([]);
     renderSheet();
     expect(await screen.findByText('Bạn chưa có mã giảm giá trong ví')).toBeInTheDocument();
-    expect(screen.getByText('Nhập mã giảm giá thủ công ở phía trên để áp dụng.')).toBeInTheDocument();
+    expect(screen.getByText('Nhập mã giảm giá ở trên để áp dụng.')).toBeInTheDocument();
   });
 
   it('tải lỗi → hiện lý do và "Thử lại" tải lại được', async () => {
@@ -256,14 +319,14 @@ describe('VoucherSheet — mã chỉ áp cho sản phẩm cụ thể (R2-BUYERMI
     mocks.getCoupons.mockResolvedValue([scoped]);
     renderWith(['p-dau-goi']);
     expect(await screen.findByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Dùng mã/  })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Không áp dụng mã/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('giỏ có sản phẩm của mã: dùng được như thường', async () => {
     mocks.getCoupons.mockResolvedValue([scoped]);
     renderWith(['p-chia']);
-    expect(await screen.findByRole('button', { name: /^Dùng mã/  })).toBeEnabled();
-    expect(screen.getByText('Chỉ áp cho Hạt chia Úc')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Dùng mã/ })).not.toHaveAttribute('aria-disabled');
+    expect(screen.getByText(/Chỉ áp cho Hạt chia Úc/)).toBeInTheDocument();
   });
 });
 
@@ -273,24 +336,24 @@ describe('VoucherSheet: mã freeship khi phí ship đã 0 (R6-BUYER-12)', () => 
   it('không tự tính "Giảm X cho đơn này": API tính trên hàng không flash, sau combo và theo phạm vi sản phẩm của mã', async () => {
     mocks.getCoupons.mockResolvedValue(COUPONS);
     renderSheet(undefined, { subtotal: 438_000 });
-    await screen.findByText('Giảm 10% (tối đa 50.000đ)');
+    await screen.findByText('Giảm 10%, tối đa 50k');
     expect(screen.queryByText(/cho đơn này/)).toBeNull();
   });
 
-  it('phí ship đã 0: mã freeship bị làm mờ và khoá, ghi lý do', async () => {
+  it('phí ship đã 0: mã freeship bị khoá, ghi lý do', async () => {
     mocks.getCoupons.mockResolvedValue([{ ...COUPONS[1], minOrder: null }]);
     renderSheet(undefined, { shippingFee: 0 });
     expect(await screen.findByText('Đơn này đã miễn phí giao hàng')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Dùng mã/  })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Không áp dụng mã/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('phí ship còn hoặc chưa biết: mã freeship dùng bình thường', async () => {
     mocks.getCoupons.mockResolvedValue([{ ...COUPONS[1], minOrder: null }]);
     renderSheet(undefined, { shippingFee: 30_000 });
-    expect(await screen.findByRole('button', { name: /^Dùng mã/  })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Dùng mã/ })).not.toHaveAttribute('aria-disabled');
     cleanup();
     renderSheet();
-    expect(await screen.findByRole('button', { name: /^Dùng mã/  })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Dùng mã/ })).not.toHaveAttribute('aria-disabled');
   });
 });
 
@@ -311,7 +374,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     ]);
     renderSheet(undefined, { previewParams: { addressId: 'a1', itemIds: ['l1'] }, shippingFee: 19_000 });
     expect(await screen.findByText('Giảm 43.800đ cho đơn này')).toBeInTheDocument();
-    expect(screen.getByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
+    expect(screen.getByText('Giảm 10%, tối đa 50k')).toBeInTheDocument();
     expect(screen.getByText('Miễn phí giao hàng 19.000đ cho đơn này')).toBeInTheDocument();
     expect(screen.getByText('Giảm 12.000đ cho đơn này')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Dùng mã/  })).toHaveLength(3);
@@ -325,7 +388,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     mocks.applyCoupon.mockResolvedValue({ couponCode: 'GIAM10', discount: 0, freeship: false, couponNotice: HELD_NOTICE });
     renderSheet(undefined, { previewParams: { itemIds: ['l1'] } });
     await screen.findByText('Giảm 10.000đ cho đơn này');
-    fireEvent.click(screen.getAllByRole('button', { name: /^Dùng mã/  })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng mã GIAM10' }));
     await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('GIAM10'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã GIAM10', type: 'success' })));
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
@@ -354,7 +417,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     mocks.applyCoupon.mockResolvedValue({ couponCode: 'FREESHIP', discount: 0, freeship: true, couponNotice: null });
     renderSheet(undefined, { previewParams: {} });
     expect(await screen.findByText(FIRST_ORDER_REASON)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Dùng mã FREESHIP$/  })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Không áp dụng mã FREESHIP$/ })).toHaveAttribute('aria-disabled', 'true');
     fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'freeship' } });
     fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
     await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('FREESHIP'));
@@ -407,11 +470,21 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     ]);
     renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 900_000 });
     expect(await screen.findByText(reason)).toBeInTheDocument();
-    const blocked = screen.getByRole('button', { name: /^Dùng mã GIAM10$/  });
-    expect(blocked).toBeDisabled();
+    const blocked = screen.getByRole('button', { name: /^Chưa đủ điều kiện dùng mã GIAM10$/ });
+    expect(blocked).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(blocked);
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Giảm .* cho đơn này/, { selector: 'div' })).toHaveTextContent('Giảm 1.000đ cho đơn này');
+    expect(screen.getByText('Giảm 1.000đ cho đơn này')).toBeInTheDocument();
+  });
+
+  it('máy chủ chặn vì lý do khác dù giỏ dưới đơn tối thiểu: giữ lý do máy chủ, nhãn "Không áp dụng", không bảo mua thêm', async () => {
+    const reason = 'Mã chỉ dành cho khách đặt đơn đầu tiên.';
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], code: 'WELCOME', minOrder: 200_000 }]);
+    mocks.getCouponPreviews.mockResolvedValue([{ code: 'WELCOME', eligible: false, reason, discount: 0 }]);
+    renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 120_000 });
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Không áp dụng mã WELCOME$/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByText(/Mua thêm/)).toBeNull();
   });
 
   it('API cũ / lỗi: giữ cách hiện cũ (không có số, phép đoán phía máy vẫn chạy)', async () => {
@@ -420,18 +493,18 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     expect(await screen.findByText('Đơn này đã miễn phí giao hàng')).toBeInTheDocument();
     await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalled());
     expect(screen.queryByText(/cho đơn này/)).toBeNull();
-    expect(screen.getByText('Chỉ áp cho Chậu gốm')).toBeInTheDocument();
+    expect(screen.getByText(/Chỉ áp cho Chậu gốm/)).toBeInTheDocument();
   });
 
   it('đang tải số: thẻ hiện như cũ, chưa có số; không truyền tham số thì không gọi API', async () => {
     mocks.getCouponPreviews.mockReturnValue(new Promise(() => {}));
     renderSheet(undefined, { previewParams: { addressId: 'a1' } });
-    expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
+    expect(await screen.findByText('Giảm 10%, tối đa 50k')).toBeInTheDocument();
     expect(screen.queryByText(/cho đơn này/)).toBeNull();
     cleanup();
     mocks.getCouponPreviews.mockClear();
     renderSheet();
-    await screen.findByText('Giảm 10% (tối đa 50.000đ)');
+    await screen.findByText('Giảm 10%, tối đa 50k');
     expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
   });
 });
@@ -454,14 +527,14 @@ describe('VoucherSheet: số xem trước cũ không được tin khi giỏ đ�
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const r = render(<QueryClientProvider client={qc}>{sheet(200_000, 'l1:4:200000')}</QueryClientProvider>);
     expect(await screen.findByText('Giảm 20.000đ cho đơn này')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Dùng mã/  })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Dùng mã/ })).not.toHaveAttribute('aria-disabled');
 
     mocks.getCouponPreviews.mockReturnValueOnce(new Promise(() => {}));
     r.rerender(<QueryClientProvider client={qc}>{sheet(100_000, 'l1:2:100000')}</QueryClientProvider>);
     expect(screen.queryByText('Giảm 20.000đ cho đơn này')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Chưa đủ điều kiện dùng mã/  })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Chưa đủ điều kiện dùng mã/ })).toHaveAttribute('aria-disabled', 'true');
     await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole('button', { name: /^Chưa đủ điều kiện dùng mã/  })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Chưa đủ điều kiện dùng mã/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('giỏ đổi liên tục: chỉ hỏi một lần sau khi đứng yên', async () => {

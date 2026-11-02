@@ -1,0 +1,303 @@
+import type { Locator, Page } from '@playwright/test';
+import { expect, makeUser, mockSession, test, type MockApi } from './support/mock-api';
+import { firstProduct, type PdpProduct } from './support/pdp-product';
+
+/**
+ * Sheet của web từ md (768px) là hộp thoại giữa màn rộng tối đa 480px, không tay nắm; dưới md vẫn dính đáy rộng hết khung (web 375 giống Mini).
+ * Hai sheet web: `mini/bottom-sheet` (Ưu đãi ở PDP) và `ui/sheet` (dòng "Nhận Điểm Xanh" ở PDP). Tiêu đề cả hai là tiêu đề khối Inter 16/700.
+ * Phần server của Next gọi API thật nên spec lấy sản phẩm có sẵn trong DB e2e và tự bỏ qua khi DB chưa có; mọi lời gọi từ trình duyệt đi qua mock.
+ * Cần API thật: chạy ở CI (web-gate.sh), không chạy ở Mini. `K7_SHOTS_DIR` (+ `K7_LABEL`) bật chụp ảnh trước/sau cho báo cáo gói.
+ */
+const DESKTOP = { width: 1280, height: 800 };
+const PHONE = { width: 375, height: 812 };
+const DIALOG_W = 480;
+
+async function mockPdp(page: Page, api: MockApi, p: PdpProduct): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tubu_web_session', '1');
+    } catch {
+      // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+    }
+  });
+  mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+  api.get('/flash-sales/active', []);
+  api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+  api.get(`/products/${p.slug}`, { variations: p.variations });
+  api.get(`/products/${p.slug}/related`, []);
+  api.get(`/products/${p.slug}/bought-together`, []);
+  api.get('/products/for-you', []);
+  api.get('/products', { data: [], meta: { page: 1, limit: 12, total: 0 } });
+  api.get(`/products/${p.slug}/reviews`, { average: 4.6, count: 27, videoCount: 0, distribution: {}, items: [] });
+  api.get(`/products/${p.slug}/reviews/can-review`, { canReview: false });
+  api.get('/me/wishlist/ids', []);
+  api.get('/affiliate/me', { isAffiliate: false });
+  api.get('/me/coupons', [
+    { code: 'GIAM20', type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z' },
+    { code: 'GIAM10', type: 'PERCENT', value: 10, minOrder: 100000, maxDiscount: 30000, endAt: '2027-01-01T00:00:00.000Z' },
+  ]);
+}
+
+const openOffers = (page: Page) => page.getByRole('button', { name: /Ưu đãi/ }).first();
+const openPoints = (page: Page) => page.getByTestId('pdp-points-earn');
+const dialogOf = (page: Page) => page.locator('[role="dialog"][aria-modal="true"]').last();
+
+/** Chờ hiệu ứng mở xong rồi mới đo: hộp đang scale/fade thì bề rộng và tâm chưa phải số cuối. */
+async function settled(dialog: Locator): Promise<void> {
+  await expect(dialog).toBeVisible();
+  await dialog.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+}
+
+async function shot(page: Page, name: string): Promise<void> {
+  const dir = process.env.K7_SHOTS_DIR;
+  if (!dir) return;
+  await page.screenshot({ path: `${dir}/${process.env.K7_LABEL ?? 'run'}__${name}.png` });
+}
+
+/** Tiêu đề khối: cùng họ chữ với thân trang (Inter), 700, 16px; không phải Fraunces 18px. */
+async function expectBlockTitle(page: Page, dialog: Locator): Promise<void> {
+  const bodyFamily = await page.locator('body').evaluate((el) => getComputedStyle(el).fontFamily);
+  const title = dialog.getByRole('heading', { level: 2 });
+  const css = await title.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { family: s.fontFamily, weight: s.fontWeight, size: s.fontSize };
+  });
+  expect(css.family).toBe(bodyFamily);
+  expect(css.family).toMatch(/Inter/);
+  expect(css.weight).toBe('700');
+  expect(css.size).toBe('16px');
+  // Tiêu đề và nút Đóng (44px) cùng một hàng: tâm lệch quá vài px thì nhìn như tiêu đề rơi khỏi hàng.
+  const [t, x] = [(await title.boundingBox())!, (await dialog.getByRole('button', { name: 'Đóng' }).boundingBox())!];
+  expect(Math.abs(t.y + t.height / 2 - (x.y + x.height / 2))).toBeLessThanOrEqual(2);
+}
+
+/** Tên animation đang áp (computed, còn nguyên sau khi hiệu ứng `both` kết thúc) của hộp và nền; 'none' là không chạy hiệu ứng. */
+async function animationNames(dialog: Locator): Promise<{ panel: string; backdrop: string }> {
+  return dialog.evaluate((el) => ({
+    panel: getComputedStyle(el).animationName,
+    backdrop: getComputedStyle(el.parentElement!.querySelector('[data-sheet-backdrop]')!).animationName,
+  }));
+}
+
+/**
+ * Animation CSS thật sự chạy trên hộp và nền ở khoảnh khắc hộp được dựng vào DOM. `animationNames` ở trên chỉ đọc computed style, mà
+ * `getComputedStyle` vẫn trả tên khi `@keyframes` không tồn tại; `getAnimations()` chỉ có phần tử khi hiệu ứng được tạo thật. Đo bằng MutationObserver
+ * (đặt trước khi bấm) vì hiệu ứng chỉ dài 180ms, đọc sau khi Playwright quay lại có thể đã hết.
+ */
+async function watchSheetAnimations(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __sheetAnimations?: { panel: string[]; backdrop: string[] } | null };
+    w.__sheetAnimations = null;
+    const names = (el: Element | null) => (el ? el.getAnimations().map((a) => (a as CSSAnimation).animationName) : []);
+    const observer = new MutationObserver(() => {
+      const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+      if (!dialog) return;
+      w.__sheetAnimations = { panel: names(dialog), backdrop: names(dialog.parentElement!.querySelector('[data-sheet-backdrop]')) };
+      observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function startedAnimations(page: Page): Promise<{ panel: string[]; backdrop: string[] }> {
+  await page.waitForFunction(() => (window as unknown as { __sheetAnimations?: unknown }).__sheetAnimations != null);
+  return page.evaluate(() => (window as unknown as { __sheetAnimations: { panel: string[]; backdrop: string[] } }).__sheetAnimations);
+}
+
+/** Tên `@keyframes` có trong CSSOM (kể cả lồng trong @media/@supports); đọc stylesheet cùng nguồn nên không bị chặn CORS. */
+async function definedKeyframes(page: Page, wanted: string[]): Promise<string[]> {
+  return page.evaluate((names) => {
+    const found = new Set<string>();
+    const scan = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSKeyframesRule && names.includes(rule.name)) found.add(rule.name);
+        else if ('cssRules' in rule) scan((rule as CSSGroupingRule).cssRules);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        scan(sheet.cssRules);
+      } catch {
+        // stylesheet khác nguồn: không đọc được, bỏ qua
+      }
+    }
+    return [...found].sort();
+  }, wanted);
+}
+
+async function expectCenteredDialog(dialog: Locator, viewport: { width: number; height: number }): Promise<void> {
+  const box = (await dialog.boundingBox())!;
+  expect(box.width).toBeLessThanOrEqual(DIALOG_W);
+  expect(box.height).toBeLessThanOrEqual(viewport.height * 0.85 + 1);
+  expect(Math.abs(box.x + box.width / 2 - viewport.width / 2)).toBeLessThanOrEqual(2);
+  expect(Math.abs(box.y + box.height / 2 - viewport.height / 2)).toBeLessThanOrEqual(2);
+  // Bo đủ bốn góc: bản bottom sheet chỉ bo hai góc trên.
+  const radii = await dialog.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return [s.borderTopLeftRadius, s.borderTopRightRadius, s.borderBottomLeftRadius, s.borderBottomRightRadius].map((v) => parseFloat(v));
+  });
+  for (const r of radii) expect(r).toBeGreaterThan(0);
+}
+
+test.describe('Web khách: sheet từ md là hộp thoại giữa màn', () => {
+  test('1280: sheet Ưu đãi (mini/bottom-sheet) giữa màn, rộng tối đa 480, không tay nắm, tiêu đề Inter 700 16px, đóng bằng Esc và bấm nền', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await expect(openOffers(page)).toBeVisible();
+    await openOffers(page).click();
+    const dialog = dialogOf(page);
+    await settled(dialog);
+    await shot(page, 'web1280-offers-sheet');
+
+    await expectCenteredDialog(dialog, DESKTOP);
+    await expect(dialog.locator('.mini-sheet-handler')).toBeHidden();
+    await expectBlockTitle(page, dialog);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await openOffers(page).click();
+    await settled(dialogOf(page));
+    await page.locator('[data-sheet-backdrop]').click({ position: { x: 8, y: 8 } });
+    await expect(dialogOf(page)).toBeHidden();
+  });
+
+  test('1280: sheet ui/sheet (Điểm Xanh ở PDP) cùng dạng hộp thoại, nội dung ngắn thì hộp ôm nội dung, hàng thanh kéo ẩn', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await expect(openPoints(page)).toBeVisible();
+    await openPoints(page).click();
+    const dialog = dialogOf(page);
+    await settled(dialog);
+    await shot(page, 'web1280-ui-sheet');
+
+    await expectCenteredDialog(dialog, DESKTOP);
+    await expect(dialog.locator('[data-sheet-handle]')).toBeHidden();
+    await expectBlockTitle(page, dialog);
+    expect((await dialog.boundingBox())!.height).toBeLessThan(DESKTOP.height * 0.5);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  });
+
+  test('375: cả hai sheet vẫn dính đáy, rộng hết khung, có tay nắm; tiêu đề Inter 700 16px', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.setViewportSize(PHONE);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await expect(openOffers(page)).toBeVisible();
+    await openOffers(page).click();
+    let dialog = dialogOf(page);
+    await settled(dialog);
+    await shot(page, 'web375-offers-sheet');
+    let box = (await dialog.boundingBox())!;
+    expect(Math.abs(box.width - PHONE.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.y + box.height - PHONE.height)).toBeLessThanOrEqual(1);
+    await expect(dialog.locator('.mini-sheet-handler')).toBeVisible();
+    await expectBlockTitle(page, dialog);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await openPoints(page).click();
+    dialog = dialogOf(page);
+    await settled(dialog);
+    await shot(page, 'web375-ui-sheet');
+    box = (await dialog.boundingBox())!;
+    expect(Math.abs(box.width - PHONE.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.y + box.height - PHONE.height)).toBeLessThanOrEqual(1);
+    await expect(dialog.locator('[data-sheet-handle]')).toBeVisible();
+    await expectBlockTitle(page, dialog);
+  });
+
+  test('1280: nội dung dài thì hộp kẹp 85vh và thân cuộn trong hộp, tiêu đề và nút Đóng vẫn trong hộp', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      code: `DAI${String(i + 1).padStart(2, '0')}`, type: 'AMOUNT', value: 10000 + i * 1000, minOrder: 100000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z',
+    }));
+    api.get('/me/coupons', many);
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await expect(openOffers(page)).toBeVisible();
+    await openOffers(page).click();
+    const dialog = dialogOf(page);
+    await settled(dialog);
+    await shot(page, 'web1280-offers-sheet-long');
+
+    const box = (await dialog.boundingBox())!;
+    expect(Math.abs(box.height - DESKTOP.height * 0.85)).toBeLessThanOrEqual(2);
+    await expectCenteredDialog(dialog, DESKTOP);
+    const body = dialog.getByTestId('bottom-sheet-body');
+    const m = await body.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+    expect(m.scroll).toBeGreaterThan(m.client + 50);
+    // Thân cuộn chứ hộp không dài ra: cuộn xuống cuối thì hàng mã cuối (theo thứ tự trên màn, bộ chọn xếp mã lợi nhiều lên trước) hiện trong khung hộp, nút Đóng vẫn ở đầu hộp.
+    await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    const last = dialog.getByRole('button', { name: 'Sao chép' }).last();
+    await expect(last).toBeVisible();
+    const [l, d] = [(await last.boundingBox())!, (await dialog.boundingBox())!];
+    expect(l.y + l.height).toBeLessThanOrEqual(d.y + d.height + 1);
+    expect(l.y).toBeGreaterThanOrEqual(d.y);
+    await expect(dialog.getByRole('button', { name: 'Đóng' })).toBeInViewport();
+    expect((await dialog.boundingBox())!.height).toBeCloseTo(box.height, 0);
+  });
+
+  test('1280 bình thường: hộp và nền mở bằng fade/scale ở cả hai sheet', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    // Tên animation trong computed style chưa đủ (vẫn có khi thiếu @keyframes): @keyframes phải tồn tại và hiệu ứng phải được tạo thật khi hộp dựng vào DOM.
+    expect(await definedKeyframes(page, ['tubu-dialog-fade', 'tubu-dialog-pop'])).toEqual(['tubu-dialog-fade', 'tubu-dialog-pop']);
+
+    await watchSheetAnimations(page);
+    await openOffers(page).click();
+    expect(await startedAnimations(page)).toEqual({ panel: ['tubu-dialog-pop'], backdrop: ['tubu-dialog-fade'] });
+    expect(await animationNames(dialogOf(page))).toEqual({ panel: 'tubu-dialog-pop', backdrop: 'tubu-dialog-fade' });
+    await page.keyboard.press('Escape');
+    await expect(dialogOf(page)).toBeHidden();
+
+    await watchSheetAnimations(page);
+    await openPoints(page).click();
+    expect(await startedAnimations(page)).toEqual({ panel: ['tubu-dialog-pop'], backdrop: ['tubu-dialog-fade'] });
+    expect(await animationNames(dialogOf(page))).toEqual({ panel: 'tubu-dialog-pop', backdrop: 'tubu-dialog-fade' });
+  });
+
+  test('1280 bật giảm chuyển động: cả hai sheet hiện ngay, hộp và nền không chạy hiệu ứng nào', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await openOffers(page).click();
+    let dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    expect(await animationNames(dialog)).toEqual({ panel: 'none', backdrop: 'none' });
+    expect(await dialog.evaluate((el) => el.getAnimations().length)).toBe(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await openPoints(page).click();
+    dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    expect(await animationNames(dialog)).toEqual({ panel: 'none', backdrop: 'none' });
+    expect(await dialog.evaluate((el) => el.getAnimations().length)).toBe(0);
+    // Không hiệu ứng nhưng vẫn là hộp thoại giữa màn.
+    await expectCenteredDialog(dialog, DESKTOP);
+  });
+});

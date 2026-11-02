@@ -330,7 +330,7 @@ describe('FlashSaleService.resolveEffective — người tạo đợt không đ�
     expect(offer).toMatchObject({ ownSale: true, allowance: 0 });
     const priced = priceFlashLine(100_000, 1, offer);
     expect(priced).toMatchObject({ unitPrice: 100_000, flash: null });
-    expect(priced.flashLimitNotice).toBe('Bạn tạo sale này nên không mua được giá flash.');
+    expect(priced.flashLimitNotice).toBe('Bạn tạo đợt Giờ vàng này nên không mua được giá Giờ vàng.');
   });
 
   it('khách khác vẫn có giá flash; tra không theo người mua (trang chủ) không đổi', async () => {

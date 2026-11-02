@@ -27,6 +27,7 @@ import { PriceTag } from '@/components/mini/price-tag';
 import { ProductThumb } from '@/components/mini/product-thumb';
 import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import { coreHttp } from '@/lib/core-http';
+import { phoneCaption } from '@/lib/phone-ui';
 import { useBundleAdd, type BundleAddResult } from '@/lib/use-bundle-add';
 import { useHydrated } from '@/lib/use-hydrated';
 import { PdpBundleSlots } from './pdp-bundle-slots';
@@ -194,12 +195,12 @@ export function PdpBundles({
                   <AddonRowView key={r.key} row={r} on={picked.has(r.key)} onToggle={() => toggle(r.key)} />
                 ))}
               </div>
-              {summary.count > 0 && (
-                <div data-testid="addon-save" className="mb-2 mt-1 text-xs font-semibold tabular-nums text-[var(--color-text-price-deal)]">
-                  {fillCopy('combo.save', { save: vnd(summary.save) })}
-                </div>
-              )}
-              <div className={summary.count > 0 ? '' : 'mt-2'}>
+              {/* Giữ chỗ một dòng ngay cả khi chưa chọn món: chữ hiện ra không đẩy nút bên dưới xuống (như Mini App). Điện thoại dùng thang caption của Mini
+                  (13/20px; chỗ giữ `min-h-5` = 20px) để khối Mua kèm cao bằng Mini ở 375px; từ md giữ 12/16px. */}
+              <div data-testid="addon-save" aria-live="polite" className={`mb-2 mt-1 min-h-5 text-xs font-semibold tabular-nums text-[var(--color-text-price-deal)] ${phoneCaption} md:min-h-4`}>
+                {summary.count > 0 ? fillCopy('combo.save', { save: vnd(summary.save) }) : null}
+              </div>
+              <div>
                 <Button
                   fullWidth
                   variant={justAdded ? 'secondary' : 'primary'}

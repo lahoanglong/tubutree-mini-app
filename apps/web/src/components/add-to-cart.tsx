@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart, Zap } from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
@@ -11,20 +11,24 @@ import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
-import { phoneBand, phoneBandPad, phoneSecondary } from '@/lib/phone-ui';
+import { phoneBand, phoneBandPad, phoneCaption, phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
+import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { usePdpSelection } from './pdp-selection';
 import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
+import { VariationChip } from './variation-chip';
 import { actionErrorText } from '@/lib/error-text';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
@@ -59,6 +63,8 @@ function forgetCouponParam() {
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
+type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
+
 export default function AddToCart({
   slug,
   variations: isrVariations,
@@ -92,6 +98,9 @@ export default function AddToCart({
   const [busy, setBusy] = useState(false);
   // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
   const [buying, setBuying] = useState(false);
+  // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (có món vừa thêm) được ghi vào cache trước khi `router.push` xong, và PDP còn đứng đó: nếu số nút
+  // và câu ghi chú tính lại theo giỏ mới thì `inCart` đã gồm số vừa thêm, nên giá nút nhảy sai chốc lát (trình đọc màn hình đọc câu sai). Giữ giỏ cũ tới khi lỗi hoặc rời trang.
+  const [buyFreeze, setBuyFreeze] = useState<{ lines: CartLines } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   // Câu về mã nhóm chưa áp được: màu cảnh báo, tách khỏi câu "Đã thêm vào giỏ!" (đã thành công) kẻo hai ý trái nhau chung một màu.
@@ -101,13 +110,18 @@ export default function AddToCart({
   const [sheetOpened, setSheetOpened] = useState(false);
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
-  const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
+  const cartData = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data;
+  const cartCount = cartData?.itemCount ?? 0;
+  const cartLines = buyFreeze ? buyFreeze.lines : cartData?.items;
   const flash = runningFlash(useActiveFlashSales());
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
-  const selectedPricing = selected ? variationPricing(selected, flash) : null;
-  const price = selectedPricing?.price ?? 0;
+  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
+  // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; "Thêm vào giỏ" ghi phần giỏ tăng (`total`). Giỏ chưa tải hay lỗi thì coi là rỗng.
+  const line = selected ? variationLinePreview(selected, flash, qty, inCartQuantity(cartLines, selected.id)) : null;
+  // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
+  const overLimitText = line ? lineNote(line, qty, true) : null;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
@@ -192,6 +206,7 @@ export default function AddToCart({
   const add = async (variationId: string, quantity: number, buyNow = false) => {
     setBusy(true);
     setBuying(buyNow);
+    setBuyFreeze(buyNow ? { lines: cartData?.items } : null);
     setMsg(null);
     setWarn(null);
     let leaving = false;
@@ -224,10 +239,13 @@ export default function AddToCart({
     } catch (e) {
       setMsg(actionErrorText(e));
       setSuccess(false);
-      // Thường là "Chỉ còn N sản phẩm": tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
+      // Thường là câu "Chỉ còn N sản phẩm trong kho." của máy chủ: tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
-      if (!leaving) setBusy(false);
+      if (!leaving) {
+        setBusy(false);
+        setBuyFreeze(null);
+      }
     }
   };
 
@@ -301,8 +319,9 @@ export default function AddToCart({
     );
   }
 
-  const total = formatVnd(price * qty);
-  const addLabel = !available ? 'Hết hàng' : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${total}`;
+  const addTotal = formatVnd(line?.total ?? 0);
+  const buyTotal = formatVnd(line?.lineTotal ?? 0);
+  const addLabel = !available ? fillTileCopy('stock.out') : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${addTotal}`;
   const buyLabel = busy && buying ? 'Đang xử lý…' : 'Mua ngay';
   const cannotBuy = busy || !available || phase === 'loading';
   const status = (msg || warn) && (
@@ -337,68 +356,25 @@ export default function AddToCart({
             {fillCopy('pdp.variation')}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 max-md:mt-0">
-            {variations.map((v) => {
-              const out = v.stock <= 0;
-              const active = v.id === selectedId;
-              const vp = variationPricing(v, flash);
-              return (
-                <button
-                  key={v.id}
-                  type="button"
-                  aria-pressed={active}
-                  // Hết hàng thì khoá hẳn như chip của Mini App: không chọn được (chọn xong nút mua chỉ đổi thành "Hết hàng", khó hiểu) và control
-                  // đang khoá được miễn luật tương phản, nên chữ mờ "Hết hàng" không bị tính là chữ nhạt đang tương tác.
-                  disabled={out}
-                  onClick={
-                    out
-                      ? undefined
-                      : () => {
-                          userPicked.current = true;
-                          setSelectedId(v.id);
-                        }
-                  }
-                  // Điện thoại: hai dòng (tên / giá) như chip của Mini App, viền 1,5px. Từ md giữ "tên · giá" một dòng để nút mua còn trong 1280×800.
-                  className={`min-h-11 rounded-control border px-4 text-sm transition max-md:flex max-md:flex-col max-md:items-start max-md:border-[1.5px] max-md:px-3.5 max-md:py-2 max-md:text-left ${
-                    active
-                      ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700 max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-action-secondary-bg)]'
-                      : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50 max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
-                  } ${out ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
-                >
-                  <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} max-md:text-sm`}>{v.name}</span>
-                  <span aria-hidden="true" className="max-md:hidden">
-                    {' · '}
-                  </span>
-                  <span
-                    className={`inline-flex items-center gap-0.5 max-md:text-xs max-md:font-normal ${
-                      out
-                        ? 'max-md:text-[var(--color-text-disabled)]'
-                        : vp.isFlash
-                          ? 'max-md:text-[var(--color-text-price-deal)]'
-                          : active
-                            ? 'max-md:text-[var(--color-text-brand)]'
-                            : 'max-md:text-[var(--color-text-secondary)]'
-                    }`}
-                  >
-                    {out ? (
-                      'Hết hàng'
-                    ) : (
-                      <>
-                        {vp.isFlash && <Zap className="hidden h-3 w-3 max-md:block" strokeWidth={2} aria-hidden="true" />}
-                        {formatVnd(vp.price)}
-                      </>
-                    )}
-                  </span>
-                  {vp.isFlash && !out && <span className="ml-1.5 text-xs font-bold text-promo-fg max-md:sr-only">Giờ vàng</span>}
-                </button>
-              );
-            })}
+            {variations.map((v) => (
+              <VariationChip
+                key={v.id}
+                variation={v}
+                pricing={variationPricing(v, flash)}
+                active={v.id === selectedId}
+                onClick={() => {
+                  userPicked.current = true;
+                  setSelectedId(v.id);
+                }}
+              />
+            ))}
           </div>
         </div>
       )}
 
       {/* Điện thoại: dòng nhắc tồn thấp nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
-        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
+        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">{stockText(selected!.stock)}</p>
       )}
 
       <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 max-md:order-6 max-md:justify-between ${phoneBand}`}>
@@ -408,6 +384,12 @@ export default function AddToCart({
         <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
           {addLabel}
         </button>
+      </div>
+      {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, các nút đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
+      <div role="status" data-section="pdp-flash-limit" className="max-md:order-6">
+        {overLimitText && (
+          <p className={`mt-2 text-sm text-[var(--color-text-secondary)] ${phoneCaption} ${phoneBandPad} max-md:mt-0 max-md:pb-3`}>{overLimitText}</p>
+        )}
       </div>
       <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
         {buyLabel}
@@ -426,6 +408,9 @@ export default function AddToCart({
           flash={flash}
           initialId={selectedId}
           initialQty={qty}
+          cartLines={cartLines}
+          // Khách chưa đăng nhập không bao giờ có giỏ: bảng Mua ngay không giữ dải ghi chú trống. Đang khôi phục phiên hay mất mạng tạm thời thì giỏ vẫn có thể về.
+          cartMayArrive={phase !== 'guest'}
           onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
         />
       )}
@@ -451,16 +436,16 @@ export default function AddToCart({
                 type="button"
                 onClick={onBuyNow}
                 disabled={cannotBuy}
-                aria-label={`${buyLabel} · ${total}`}
+                aria-label={`${buyLabel} · ${buyTotal}`}
                 className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
               >
                 <span className="block max-w-full truncate">{buyLabel}</span>
-                <span className="block max-w-full truncate text-xs font-medium">{total}</span>
+                <span className="block max-w-full truncate text-xs font-medium">{buyTotal}</span>
               </button>
             </div>
           ) : (
             <button type="button" disabled className={`${ui.btnPrimary} flex-1`}>
-              Hết hàng
+              {fillTileCopy('stock.out')}
             </button>
           )}
         </div>

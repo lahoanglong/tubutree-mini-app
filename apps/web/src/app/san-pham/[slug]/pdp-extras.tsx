@@ -5,14 +5,17 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
-import { voucherView } from '@tubutree/app-core/commerce/voucher';
+import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-picker';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
+import { autoCouponName } from '@/lib/coupon-name';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { FlashPriceBar } from '@/components/mini/flash-price-bar';
+import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { Icon } from '@/components/mini/icon';
 import { ListRow } from '@/components/mini/list-row';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
@@ -52,6 +55,18 @@ type PointsEarnProduct = {
   variations: { id: string; retailPrice: number; salePrice?: number | null }[];
 };
 
+/** Tiền hàng của món đang xem: giá phân loại đang chọn (đã tính Giờ vàng) × số lượng; chưa chọn thì giá thẻ × 1. */
+function usePdpPricing(product: PointsEarnProduct): { amount: number; isFlash: boolean; unit: number; quantity: number } {
+  const flash = runningFlash(useActiveFlashSales());
+  useFlashListExpiry(flash);
+  const selection = usePdpSelection();
+  const selected = product.variations.find((v) => v.id === selection?.selectedId);
+  const { price: unit, isFlash } = selected ? variationPricing(selected, flash) : cardPricing(product, flash);
+  const quantity = selection?.quantity ?? 1;
+  return { amount: unit * quantity, isFlash, unit, quantity };
+}
+const usePdpAmount = (product: PointsEarnProduct): number => usePdpPricing(product).amount;
+
 /**
  * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập thì server tính hệ số 1; tài khoản có hạng lấy hệ số từ
  * bảng hạng trong config công khai theo `tierId` của chính họ (không gọi thêm API, không phụ thuộc tổng quan Điểm Xanh đã tải).
@@ -64,16 +79,12 @@ function tierEarnFor(phase: string, tierId: string | null | undefined, loyalty: 
 
 /** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
 export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
-  const flash = runningFlash(useActiveFlashSales());
-  useFlashListExpiry(flash);
-  const selection = usePdpSelection();
+  const amount = usePdpAmount(product);
   const phase = useAuthPhase();
   const config = usePublicConfig();
   const { user } = useAuth();
-  const selected = product.variations.find((v) => v.id === selection?.selectedId);
-  const unit = selected ? variationPricing(selected, flash).price : cardPricing(product, flash).price;
   const tier = tierEarnFor(phase, user?.tierId, config.loyalty);
-  const preview = pointsEarnPreview(unit * (selection?.quantity ?? 1), config.loyalty, tier?.multiplier ?? null);
+  const preview = pointsEarnPreview(amount, config.loyalty, tier?.multiplier ?? null);
   const [open, setOpen] = useState(false);
   if (preview === null) return null;
   const text = preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points);
@@ -153,11 +164,13 @@ export function PdpShippingRow({ children, pressable = true }: { children: React
  * Dòng "Ưu đãi ›" ghi số mã khách đang có và dùng được cho sản phẩm này; bấm mở hộp thoại mã, chép mã (áp ở bước thanh toán, một đơn một mã).
  * Khách chưa đăng nhập không có ví mã nên không hiện. `divider`: đường kẻ dưới hàng chỉ có khi sau nó còn hàng "Vận chuyển" (Mini kẻ giữa các hàng, hàng cuối không kẻ).
  */
-export function PdpCoupons({ productId, divider = true }: { productId: string; divider?: boolean }) {
+export function PdpCoupons({ productId, product, divider = true }: { productId: string; product: PointsEarnProduct; divider?: boolean }) {
   const phase = useAuthPhase();
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: phase === 'authenticated' });
+  const pricing = usePdpPricing(product);
+  const amount = offerAmount(pricing.unit, pricing.quantity, pricing.isFlash);
   const [open, setOpen] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const { notice, notify } = useGameNotice();
   const list = pdpCoupons(couponsQ.data, productId);
   if (list.length === 0) return null;
 
@@ -168,10 +181,11 @@ export function PdpCoupons({ productId, divider = true }: { productId: string; d
     } catch {
       ok = false;
     }
-    setNote(ok ? `Đã chép mã ${code} — mã đã có sẵn trong ví, chọn ở bước thanh toán` : `Mã của bạn: ${code} — chọn ở bước thanh toán`);
+    // Thông báo nổi như snackbar của Mini App: một dòng trong hộp thoại sẽ làm hộp cao thêm mỗi lần chép.
+    notify(fillCopy(ok ? 'coupon.copiedToast' : 'coupon.copyShowToast', { code }), ok ? 'success' : 'info');
   };
 
-  const now = serverNow();
+  const rows = offerRows(list, { amount, now: serverNow(), displayCode: autoCouponName });
   return (
     <>
       <ListRow
@@ -179,25 +193,29 @@ export function PdpCoupons({ productId, divider = true }: { productId: string; d
         title={fillCopy('pdp.offers')}
         subtitle={fillCopy('pdp.offerCount', { n: list.length })}
         trailing="chevron"
-        onPress={() => {
-          setNote(null);
-          setOpen(true);
-        }}
+        onPress={() => setOpen(true)}
         style={divider ? { boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' } : undefined}
       />
       <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.title')}>
         <div className="flex flex-col">
-          {list.map((c) => (
-            <VoucherTicket key={c.code} variant="row" voucher={voucherView(c, now)} primary={{ label: fillCopy('coupon.copy'), onClick: () => void onCopy(c.code) }} />
+          {rows.map((r) => (
+            <VoucherTicket
+              key={r.coupon.code}
+              variant="row"
+              voucher={r.view}
+              reason={r.reason ?? undefined}
+              primary={{ label: fillCopy('coupon.copy'), onClick: () => void onCopy(r.coupon.code) }}
+            />
           ))}
         </div>
         <p className="mt-3 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
-        {note && (
-          <p role="status" className="mt-2 text-sm text-success-fg">
-            {note}
-          </p>
-        )}
+        {/* Vùng đọc cố định, luôn có mặt và trống lúc mở sheet: thông báo nổi nằm ngoài hộp thoại aria-modal nên trình đọc màn hình không nghe được; sr-only không làm sheet cao thêm. */}
+        <p role="status" aria-live="polite" data-testid="pdp-coupon-live" className="sr-only">
+          {/* Khoá theo lần bấm: chép cùng mã hai lần trong 4 giây thì chữ y hệt, React không đổi DOM và trình đọc im lần hai; nút con gắn lại thì lần nào cũng nghe. */}
+          {notice && <span key={notice.id}>{notice.text}</span>}
+        </p>
       </BottomSheet>
+      <GameNoticeBar notice={notice} overSheet visualOnly />
     </>
   );
 }
@@ -252,7 +270,7 @@ interface PdpVariation {
 
 /**
  * "Còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh, đúng chữ của Mini App (`vi.product.lowStock`, D2 chốt "Còn {n} sản phẩm").
- * Máy tính giữ dòng cũ "Chỉ còn N" trong khối mua (`AddToCart`, ngay dưới chip; chữ đó thuộc gói chữ riêng), nên bản này ẩn từ md.
+ * Máy tính có dòng cùng chữ trong khối mua (`AddToCart`, ngay dưới chip), nên bản này ẩn từ md.
  * Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
  */
 export function PdpLowStock({ slug, variations }: { slug: string; variations: { id: string; stock: number }[] }) {
@@ -263,7 +281,7 @@ export function PdpLowStock({ slug, variations }: { slug: string; variations: { 
   if (stock <= 0 || stock > LOW_STOCK_NOTICE) return null;
   return (
     <p data-testid="pdp-low-stock" className="mt-1 text-xs font-medium text-warning-fg md:hidden">
-      Còn {stock} sản phẩm
+      {stockText(stock)}
     </p>
   );
 }

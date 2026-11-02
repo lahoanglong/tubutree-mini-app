@@ -1,6 +1,7 @@
 import type { ProductCard } from '../api/catalog';
 import type { CouponDTO } from '../api/loyalty';
 import { productCardView, type ProductCardView } from './product-card-view';
+import { pickerRows, type PickerRow } from './voucher-picker';
 import { voucherView, type VoucherFlags, type VoucherView } from './voucher';
 
 /**
@@ -64,6 +65,23 @@ export const GALLERY_VOUCHERS: GalleryVoucher[] = [
   gv('CHUADU', { value: 15, minOrder: 500_000, maxDiscount: 60_000, claimed: true, ineligible: true }, { reason: 'Mua thêm 120k để dùng' }),
   gv('SHOP10', { claimed: true, shop: true }),
 ];
+
+/** Bảng chọn mã ở thanh toán: đang dùng, dùng được (có mức giảm máy chủ báo), chưa đủ, không áp dụng (đơn đã miễn phí giao). Đơn 150k, phí giao 0. */
+export const GALLERY_PICKER_ROWS: PickerRow[] = pickerRows(
+  [
+    { code: 'TUBU10', type: 'PERCENT', value: 10, minOrder: 99_000, maxDiscount: 30_000, endAt: new Date(GALLERY_NOW + 10 * DAY).toISOString() },
+    { code: 'GIAM50K', type: 'AMOUNT', value: 50_000, minOrder: 100_000, maxDiscount: null, endAt: new Date(GALLERY_NOW + 2 * DAY).toISOString() },
+    { code: 'LON200', type: 'AMOUNT', value: 40_000, minOrder: 199_000, maxDiscount: null, endAt: '2026-12-31T17:00:00Z' },
+    { code: 'FREESHIP', type: 'FREESHIP', value: 0, minOrder: null, maxDiscount: null, endAt: '2027-03-10T10:00:00Z' },
+  ],
+  {
+    currentCode: 'TUBU10',
+    subtotal: 150_000,
+    shippingFee: 0,
+    previews: new Map([['TUBU10', { code: 'TUBU10', eligible: true, discount: 15_000 }]]),
+    now: GALLERY_NOW,
+  },
+);
 
 const card = (over: Partial<ProductCard> & Pick<ProductCard, 'id' | 'slug' | 'name' | 'basePrice'>): ProductCardView & { thumbnail: string | null } => ({
   ...productCardView({

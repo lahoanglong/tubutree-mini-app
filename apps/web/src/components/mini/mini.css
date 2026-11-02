@@ -47,7 +47,7 @@
   --zaui-light-button-text-disabled: var(--color-action-primary-fg-disabled);
   --zaui-light-sheet-container: var(--color-bg-surface);
   --zaui-light-sheet-handler: var(--stone-100);
-  --zaui-mask-overlay-color: #000000b3;
+  --zaui-mask-overlay-color: var(--color-bg-sheet-scrim);
 }
 
 .tubu-press {
@@ -652,7 +652,7 @@
   }
 }
 
-/* Sheet: bản DOM của zmp-ui Sheet (lớp zaui-sheet*): mặt đáy bo 16px, tay nắm, nền mờ. */
+/* Sheet: bản DOM của zmp-ui Sheet (lớp zaui-sheet*): mặt đáy bo 16px, tay nắm, nền mờ. Từ md (máy tính) là hộp thoại giữa màn, xem khối md bên dưới. */
 @keyframes slideUp {
   0% {
     transform: translateY(100%);
@@ -710,11 +710,53 @@
   border-radius: 3px;
   background-color: var(--zaui-light-sheet-handler);
 }
+/* Từ md: hộp thoại giữa màn rộng tối đa --dialog-w, không tay nắm (không có gì để kéo xuống). Gốc căn flex để hộp không cần transform căn giữa: transform dành cho hiệu ứng mở. */
+@keyframes tubu-dialog-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tubu-dialog-fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
 @media (min-width: 768px) {
+  .mini-sheet-root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mini-sheet-mask {
+    animation: tubu-dialog-fade 0.18s ease-out both;
+  }
   .mini-sheet-panel {
-    left: 50%;
-    width: min(100%, 560px);
-    transform: translateX(-50%);
+    position: relative;
+    bottom: auto;
+    left: auto;
+    width: min(calc(100% - 32px), var(--dialog-w));
+    min-height: 0;
+    max-height: 85vh;
+    border-radius: var(--radius-sheet);
+    box-shadow: var(--elevation-4);
+    animation: tubu-dialog-pop 0.18s ease-out both;
+  }
+  .mini-sheet-handler {
+    display: none;
+  }
+}
+/* Giảm chuyển động: hộp hiện ngay, cả bản điện thoại (Mini cũng rút mọi chuyển động bằng luật * toàn cục). */
+@media (prefers-reduced-motion: reduce) {
+  .mini-sheet-panel,
+  .mini-sheet-mask {
     animation: none;
   }
 }

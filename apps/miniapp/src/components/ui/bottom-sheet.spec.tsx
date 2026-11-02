@@ -76,6 +76,15 @@ describe('BottomSheet', () => {
     expect((fullC.querySelector('.zaui-sheet-content') as HTMLElement).style.height).toBe('92vh');
   });
 
+  it('tiêu đề là tiêu đề khối Inter 16/700, không phải Fraunces 18 (final-critique P2 #2)', () => {
+    render(<BottomSheet open title="Chọn mã" onClose={() => {}}>y</BottomSheet>);
+    const h2 = screen.getByRole('heading', { level: 2, name: 'Chọn mã' });
+    expect(h2.style.fontFamily).toBe('var(--font-ui)');
+    expect(h2.style.fontSize).toBe('var(--type-title-sm-size)');
+    expect(h2.style.fontWeight).toBe('700');
+    expect(h2.style.letterSpacing).toBe('-0.01em');
+  });
+
   it('renders footer when provided', () => {
     render(
       <BottomSheet open onClose={() => {}} footer={<button type="button">Xác nhận</button>}>

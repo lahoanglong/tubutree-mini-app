@@ -35,3 +35,22 @@ export async function multiVariationProduct(request: APIRequestContext, scan = 5
   }
   return null;
 }
+
+/**
+ * Sản phẩm đầu tiên (theo thứ tự danh sách) có đúng một phân loại: nhánh "không chip phân loại" của PDP. DB e2e (migration demo) luôn có nhiều sản phẩm một phân loại,
+ * nên ca dùng hàm này không được bỏ qua lặng lẽ trên CI (xem `assertProductOnCi`).
+ */
+export async function singleVariationProduct(request: APIRequestContext, scan = 50): Promise<PdpProduct | null> {
+  for (const slug of await listSlugs(request, scan)) {
+    const d = await detailOf(request, slug);
+    if (d && d.variations.length === 1) return d;
+  }
+  return null;
+}
+
+/** Trên GitHub Actions DB là DB tạm đã migrate: không tìm được sản phẩm cần cho ca nghĩa là dữ liệu hay API hỏng, phải đỏ chứ không được skip. Ngoài CI để spec `test.skip` kèm lý do. */
+export function assertProductOnCi(product: PdpProduct | null, what: string, env: NodeJS.ProcessEnv = process.env): void {
+  if (env.GITHUB_ACTIONS === 'true' && !product) {
+    throw new Error(`DB e2e trên CI không có ${what}: ca PDP này không được bỏ qua (kiểm API /api/products và dữ liệu migration demo)`);
+  }
+}

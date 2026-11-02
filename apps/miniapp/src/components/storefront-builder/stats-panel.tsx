@@ -12,7 +12,7 @@ import { CARD_MARGIN } from './shared';
 
 function StatBox({ value, label, tone }: { value: string; label: string; tone?: 'brand' }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: 10, textAlign: 'center' }}>
+    <div data-testid="builder-stat" style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: 10, textAlign: 'center' }}>
       <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{value}</Text>
       <Text variant="caption" tone="tertiary" as="div">{label}</Text>
     </div>
@@ -45,49 +45,51 @@ export function StatsSection() {
   const hasLines = lines.length > 0 || orderLevel !== 0;
 
   return (
-    <Card padding={16} style={CARD_MARGIN}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-        <Icon icon={TrendingUp} size="md" tone="brand" />
-        <Heading variant="title-sm" as="h2">{BUILDER_COPY.stats30}</Heading>
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
-        <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
-        <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" tone="brand" />
-      </div>
-      {!hasLines ? (
-        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 12 }}>Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
-      ) : (
-        <>
-          <button
-            type="button"
-            aria-expanded={open}
-            className="tubu-press"
-            onClick={() => setOpen((v) => !v)}
-            style={{
-              width: '100%', minHeight: 44, marginTop: 4, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              border: 'none', background: 'transparent', cursor: 'pointer', font: 'inherit', color: 'var(--color-text-brand)',
-            }}
-          >
-            <Text variant="body-sm" tone="brand">{BUILDER_COPY.statsByProduct}</Text>
-            <Icon icon={ChevronDown} size="sm" tone="brand" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 150ms ease-out' }} />
-          </button>
-          {open && (
-            <div>
-              {lines.slice(0, 5).map((p) => (
-                <StatLine key={p.productSlug || p.productName} name={p.productName} value={`${p.qty} món · ${formatVnd(p.revenue)}`} />
-              ))}
-              {rest.length > 0 && (
-                <StatLine
-                  name={vi.storefront.statsOtherProducts(rest.length)}
-                  value={`${rest.reduce((t, p) => t + p.qty, 0)} món · ${formatVnd(rest.reduce((t, p) => t + p.revenue, 0))}`}
-                />
-              )}
-              {orderLevel !== 0 && <StatLine name={vi.storefront.statsOrderLevel} value={formatVnd(orderLevel)} />}
-            </div>
-          )}
-        </>
-      )}
-    </Card>
+    <div data-testid="builder-stats" style={CARD_MARGIN}>
+      <Card padding={16}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <Icon icon={TrendingUp} size="md" tone="brand" />
+          <Heading variant="title-sm" font="ui" as="h2">{BUILDER_COPY.stats30}</Heading>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <StatBox value={String(data.orders30d)} label={BUILDER_COPY.statsOrders} />
+          <StatBox value={formatVnd(data.revenue30d)} label={BUILDER_COPY.statsRevenue} />
+          <StatBox value={formatVnd(data.commission30d)} label={BUILDER_COPY.statsCommission} tone="brand" />
+        </div>
+        {!hasLines ? (
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 12 }}>Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</Text>
+        ) : (
+          <>
+            <button
+              type="button"
+              aria-expanded={open}
+              className="tubu-press"
+              onClick={() => setOpen((v) => !v)}
+              style={{
+                width: '100%', minHeight: 44, marginTop: 4, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                border: 'none', background: 'transparent', cursor: 'pointer', font: 'inherit', color: 'var(--color-text-brand)',
+              }}
+            >
+              <Text variant="body-sm" tone="brand">{BUILDER_COPY.statsByProduct}</Text>
+              <Icon icon={ChevronDown} size="sm" tone="brand" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 150ms ease-out' }} />
+            </button>
+            {open && (
+              <div>
+                {lines.slice(0, 5).map((p) => (
+                  <StatLine key={p.productSlug || p.productName} name={p.productName} value={`${p.qty} món · ${formatVnd(p.revenue)}`} />
+                ))}
+                {rest.length > 0 && (
+                  <StatLine
+                    name={vi.storefront.statsOtherProducts(rest.length)}
+                    value={`${rest.reduce((t, p) => t + p.qty, 0)} món · ${formatVnd(rest.reduce((t, p) => t + p.revenue, 0))}`}
+                  />
+                )}
+                {orderLevel !== 0 && <StatLine name={vi.storefront.statsOrderLevel} value={formatVnd(orderLevel)} />}
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+    </div>
   );
 }

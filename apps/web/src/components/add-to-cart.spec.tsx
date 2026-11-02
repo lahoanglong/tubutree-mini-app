@@ -55,8 +55,8 @@ const mount = (variations = VARIATIONS) => {
   mounted.push(r);
   return r;
 };
-// Neo đầu chữ: chip phân loại hết hàng cũng ghi "Hết hàng" nhưng bắt đầu bằng tên phân loại.
-const addButton = (c: HTMLElement) => byText(c, 'button', /^(Thêm vào giỏ|Hết hàng|Đang thêm)/) as HTMLButtonElement;
+// Neo đầu chữ: chip phân loại hết hàng cũng ghi "Tạm hết hàng" nhưng bắt đầu bằng tên phân loại.
+const addButton = (c: HTMLElement) => byText(c, 'button', /^(Thêm vào giỏ|Tạm hết hàng|Đang thêm)/) as HTMLButtonElement;
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -373,12 +373,12 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
 });
 
 describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
-  it('ISR báo còn hàng nhưng tồn thật = 0: nút "Hết hàng" và không cho thêm', async () => {
+  it('ISR báo còn hàng nhưng tồn thật = 0: nút "Tạm hết hàng" và không cho thêm', async () => {
     mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
     mocks.getProductStock.mockResolvedValue({ v1: 0 });
     const { container } = mount([VARIATIONS[0]!]);
     await flush();
-    expect(addButton(container).textContent).toBe('Hết hàng');
+    expect(addButton(container).textContent).toBe('Tạm hết hàng');
     expect(addButton(container).disabled).toBe(true);
   });
 
@@ -388,7 +388,7 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }]);
     await flush();
     expect(addButton(container).disabled).toBe(false);
-    expect(container.textContent).toContain('Chỉ còn 4 sản phẩm');
+    expect(container.textContent).toContain('Còn 4 sản phẩm');
   });
 
   it('phân loại mặc định hết thật mà phân loại khác còn: tự chọn phân loại còn hàng', async () => {
@@ -521,12 +521,12 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     expect(flash.className).toContain('max-md:flex-col');
   });
 
-  it('chip hết hàng: ghi "Hết hàng" thay giá, tên gạch ngang', async () => {
+  it('chip hết hàng: ghi "Tạm hết hàng" thay giá, tên gạch ngang', async () => {
     mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 9 });
     const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
     await flush();
     const out = byText(container, 'button', /250ml/) as HTMLButtonElement;
-    expect(out.textContent).toContain('Hết hàng');
+    expect(out.textContent).toContain('Tạm hết hàng');
     expect(out.textContent).not.toContain('150.000đ');
     expect(out.querySelector('.line-through')!.textContent).toBe('250ml');
   });
@@ -547,12 +547,13 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
   });
 
-  it('"Chỉ còn N" trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
+  it('"Còn N sản phẩm" (màu cảnh báo) trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
     mocks.getProductStock.mockResolvedValue({ v1: 3, v2: 9 });
     const { container } = mount();
     await flush();
-    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Chỉ còn 3 sản phẩm')!;
+    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Còn 3 sản phẩm')!;
     expect(note.className).toContain('max-md:hidden');
+    expect(note.className).toContain('text-warning-fg');
   });
 });
 
@@ -910,12 +911,12 @@ describe('AddToCart — Mua ngay', () => {
       expect(mocks.push).not.toHaveBeenCalled();
     });
 
-    it('hết hàng: thanh dính chỉ còn một nút "Hết hàng" đã khoá', async () => {
+    it('hết hàng: thanh dính chỉ còn một nút "Tạm hết hàng" đã khoá', async () => {
       mocks.getProductStock.mockResolvedValue({ v1: 0 });
       const { container } = mount([VARIATIONS[0]!]);
       await flush();
       const buttons = Array.from(bar(container).querySelectorAll('button'));
-      expect(buttons.map((b) => b.textContent)).toEqual(['Hết hàng']);
+      expect(buttons.map((b) => b.textContent)).toEqual(['Tạm hết hàng']);
       expect(buttons[0]!.disabled).toBe(true);
     });
 
@@ -991,6 +992,23 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
+  it('Mua ngay: khách chưa đăng nhập không có dải ghi chú trống trong bảng; đã đăng nhập thì giữ chỗ từ lúc mở (L5 2)', async () => {
+    mocks.auth = { status: 'idle', initialized: true, user: null };
+    const guest = mount();
+    await flush();
+    click(byText(guest.container, 'button', /^Mua ngay/));
+    await sheetReady();
+    expect(byText(sheet()!, 'button', /^Mua ngay · /)).toBeTruthy();
+    expect(sheet()!.querySelector('[role="status"]')).toBeNull();
+    guest.unmount();
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const member = mount();
+    await flush();
+    click(byText(member.container, 'button', /^Mua ngay/));
+    await sheetReady();
+    expect(sheet()!.querySelector('[role="status"]')).not.toBeNull();
+  });
+
   it('sản phẩm 1 phân loại thêm thẳng, không bảng chọn', async () => {
     const { container } = mount([VARIATIONS[0]!]);
     await flush();
@@ -1042,5 +1060,144 @@ describe('AddToCart — bảng chọn Phân loại và hết giờ Giờ vàng (
     expect(byText(container, 'button', /^500ml/)!.textContent).toContain('300.000đ');
     expect(byText(container, 'button', /^500ml/)!.textContent).not.toContain('Giờ vàng');
     expect(addButton(container).textContent).toContain('300.000đ');
+  });
+});
+
+describe('AddToCart — tiền nút mua theo luật máy chủ khi vượt giới hạn Giờ vàng mỗi khách', () => {
+  const LIMITED = {
+    itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 240000, retailPrice: 300000,
+    salePrice: null, soldCount: 1, quota: 10, perUserLimit: 3, endAt: '2099-10-14T16:00:00.000Z',
+  };
+  const OVER_4 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 4 thì cả dòng tính giá thường.';
+  const plus = (c: HTMLElement) => c.querySelector('[data-section="pdp-quantity"] button[aria-label="Tăng số lượng"]');
+  const stickyBuy = (c: HTMLElement) => c.querySelector('button[aria-label^="Mua ngay"]') as HTMLButtonElement;
+
+  async function openLimited(flash: object[] = [LIMITED]) {
+    mocks.getActiveFlashSales.mockResolvedValue(flash);
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const r = mount();
+    await flush();
+    click(byText(r.container, 'button', /^500ml/));
+    await flush();
+    return r;
+  }
+
+  it('qty = giới hạn: 3 × 240.000đ; qty 4: cả dòng giá thường 4 × 300.000đ, nút Thêm vào giỏ, Mua ngay và ghi chú khớp nhau', async () => {
+    const { container } = await openLimited();
+    click(plus(container));
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 720.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    expect(container.textContent).not.toContain(OVER_4);
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 1.200.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
+    expect(container.textContent).toContain(OVER_4);
+    expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe(OVER_4);
+  });
+
+  it('API cũ không gửi giới hạn: vẫn qty × giá Giờ vàng, không ghi chú', async () => {
+    const { container } = await openLimited([{ ...LIMITED, perUserLimit: undefined }]);
+    for (let i = 0; i < 3; i += 1) click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 960.000đ');
+    expect(container.textContent).not.toContain('cả dòng tính giá thường');
+  });
+
+  it('phân loại không phải Giờ vàng: không ghi chú dù mua nhiều', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const { container } = mount();
+    await flush();
+    for (let i = 0; i < 4; i += 1) click(plus(container));
+    expect(container.textContent).not.toContain('cả dòng tính giá thường');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 750.000đ');
+  });
+});
+
+describe('AddToCart — giỏ đã có sẵn cùng phân loại: thêm giỏ cộng dồn nên máy chủ giá cả dòng', () => {
+  const LIMITED = {
+    itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 240000, retailPrice: 300000,
+    salePrice: null, soldCount: 1, quota: 10, perUserLimit: 3, endAt: '2099-10-14T16:00:00.000Z',
+  };
+  const cartOf = (quantity: number) => ({ items: [{ id: 'ci1', variationId: 'v2', quantity }], itemCount: quantity });
+  const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+  const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
+  const plus = (c: HTMLElement) => c.querySelector('[data-section="pdp-quantity"] button[aria-label="Tăng số lượng"]');
+  const stickyBuy = (c: HTMLElement) => c.querySelector('button[aria-label^="Mua ngay"]') as HTMLButtonElement;
+
+  async function openWithCart(cart: object | Error) {
+    mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
+    mocks.getCart.mockImplementation(() => (cart instanceof Error ? Promise.reject(cart) : Promise.resolve(cart)));
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const r = mount();
+    await flush();
+    click(byText(r.container, 'button', /^500ml/));
+    await flush();
+    return r;
+  }
+
+  it('giới hạn 3, giỏ có 2: qty 1 (tổng 3) 3 × 240.000đ; qty 2 (tổng 4) Mua ngay ghi cả dòng 1.200.000đ, Thêm vào giỏ ghi giỏ tăng 720.000đ, ghi chú nói theo giỏ', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    // Chưa mất giá nhưng nút ghi cả dòng (3 × 240.000đ) cạnh ô Số lượng đang là 1: nói trước khi bấm.
+    const note = () => container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent;
+    expect(note()).toBe(MERGE_2);
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 720.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
+    expect(note()).toBe(IN_CART_2);
+  });
+
+  it('thêm giỏ thành công rồi nút vẽ lại theo giỏ mới, không đếm số cũ hai lần', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    mocks.addToCart.mockResolvedValue(cartOf(3));
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
+    expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe('Giỏ đã có 3. Thêm 1 thì cả 4 sản phẩm tính giá thường.');
+  });
+
+  it('Mua ngay: giỏ mới có món vừa thêm được ghi vào cache nhưng trang chưa chuyển, số trên nút và câu ghi chú giữ như lúc bấm (không nhảy sang 1.200.000đ)', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    mocks.addToCart.mockResolvedValue(cartOf(3));
+    // Trang thanh toán chưa tới (router.push thật còn chờ): PDP vẫn vẽ lại theo giỏ mới.
+    mocks.push.mockImplementation(() => undefined);
+    click(stickyBuy(container));
+    await flush(3);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(container.querySelector('button[aria-label^="Đang xử lý…"]')!.getAttribute('aria-label')).toBe('Đang xử lý… · 720.000đ');
+    expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe(MERGE_2);
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+  });
+
+  it('Mua ngay lỗi: ở lại trang thì không kẹt số cũ, thêm giỏ lần sau lại vẽ theo giỏ mới', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    mocks.addToCart.mockRejectedValueOnce(new Error('Hết hàng'));
+    click(stickyBuy(container));
+    await flush(3);
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    mocks.addToCart.mockResolvedValue(cartOf(3));
+    click(addButton(container));
+    await flush(3);
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
+  });
+
+  it('giỏ chưa tải được (lỗi): coi như giỏ rỗng, nút vẫn bấm được và ghi số như khi không có giỏ', async () => {
+    const { container } = await openWithCart(new Error('mất mạng'));
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 480.000đ');
+    expect(addButton(container).disabled).toBe(false);
+    expect(container.textContent).not.toContain('Giỏ đã có');
+  });
+
+  it('giỏ chỉ có phân loại khác (v1 đang 4): số như khi giỏ rỗng', async () => {
+    const { container } = await openWithCart({ items: [{ id: 'ci9', variationId: 'v1', quantity: 4 }], itemCount: 4 });
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 480.000đ');
+    expect(container.textContent).not.toContain('Giỏ đã có');
   });
 });

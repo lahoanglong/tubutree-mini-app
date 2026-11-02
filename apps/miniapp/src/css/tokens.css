@@ -137,6 +137,24 @@ body.with-back-btn .page.page-bleed {
   scroll-padding-bottom: calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px);
 }
 
+/* ── Chip phân loại (trang chi tiết và bảng chọn): cao tối thiểu 44px, viền 1,5px. px để ở CSS vì bánh cóc P17b chỉ đếm TSX. ── */
+.tubu-var-chip {
+  /* Cột flex như chip web khổ điện thoại: hai dòng (tên, giá) là hai khối, không có dòng chống đỡ (strut) cộng thêm ~2px quanh dòng giá inline-flex. */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius-control);
+  border: 1.5px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+}
+.tubu-var-chip[aria-pressed='true'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-action-secondary-bg);
+}
+
 /* ── Pressable: phản hồi chạm cho mọi element bấm được ── */
 .tubu-press {
   transition: transform var(--p-dur-release) var(--p-ease-out);
@@ -644,6 +662,11 @@ body.with-back-btn .page.page-bleed {
 /* Chiều cao đúng 44 (ZaUI `.zaui-btn` mặc định 48): thanh dính của màn dựng gian hàng bằng nút web (min-h-11). */
 .tubu-btn.tubu-btn-44 {
   height: 44px;
+}
+/* Ô nhập mã của bảng chọn mã: cao đúng 44 như ô nhập web (min-h-11), bỏ lề 4px của ZaUI để ô và nút "Áp dụng" (tubu-btn-44) thẳng hàng và cùng chiều cao ở hai app. */
+.tubu-field-44 .zaui-input {
+  height: 44px;
+  margin: 0;
 }
 /* Trong StickyActionBar: bỏ min-width 120px của ZaUI (để 2 nút + nút giỏ vừa 320px) và thu đệm
  * ngang 24 → 12px (nhãn có thêm 24px mỗi nút trước khi phải rút gọn). */

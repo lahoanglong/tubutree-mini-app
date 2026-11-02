@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
@@ -13,6 +15,11 @@ const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
   selection: vi.fn<(ids: string[]) => Promise<unknown>>(),
+}));
+// Giỏ trống vẽ EmptyCart (dùng useRouter); không có app router trong jsdom nên thiếu mock này thì giỏ trống làm vỡ cả cây khi test.
+vi.mock('next/navigation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next/navigation')>()),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -81,15 +88,46 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([]);
   });
 
-  it('chạm trần tồn kho: nút + bị khoá kèm chú thích "Chỉ còn N"; bấm không gửi lệnh nào', async () => {
+  it('chạm trần tồn kho: nút + bị khoá kèm chú thích "Còn N sản phẩm"; bấm không gửi lệnh nào', async () => {
     state.cart = cartOf([line({ stock: 2, quantity: 2 })]);
     const { container } = await mount();
     const plus = button(container, 'Tăng số lượng Dầu gội bồ kết')!;
     expect(plus.disabled).toBe(true);
-    expect(container.textContent).toContain('Chỉ còn 2 sản phẩm');
+    expect(container.textContent).toContain('Còn 2 sản phẩm');
     click(plus);
     await flush();
     expect(state.updates).toEqual([]);
+  });
+
+  it('chạm trần mà tồn cao (40/40): dòng "Còn 40 sản phẩm" vẫn giải thích nút + khoá nhưng chữ thường, không màu cảnh báo (L5 3)', async () => {
+    state.cart = cartOf([line({ stock: 40, quantity: 40 })]);
+    const { container } = await mount();
+    const note = Array.from(container.querySelectorAll('p')).find((p) => p.textContent === 'Còn 40 sản phẩm')!;
+    expect(note).toBeTruthy();
+    expect(note.className).not.toContain('text-warning-fg');
+    expect(note.className).toContain('--color-text-secondary');
+    expect(note.querySelector('svg')).toBeNull();
+    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
+  });
+
+  it('chạm trần mà tồn thấp (3/3) và vượt tồn (5 trên tồn 3): cảnh báo; chưa chạm trần (2/5) không có dòng (L5 3)', async () => {
+    const noteOf = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => /^Còn \d+ sản phẩm$/.test(p.textContent ?? ''));
+    state.cart = cartOf([line({ stock: 3, quantity: 3 })]);
+    const low = await mount();
+    expect(noteOf(low.container)!.className).toContain('text-warning-fg');
+    // Như Mini (cart.tsx): icon cảnh báo cạnh chữ, chữ không đậm thêm.
+    expect(noteOf(low.container)!.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(noteOf(low.container)!.className).not.toContain('font-medium');
+    low.unmount();
+    mounted = [];
+    state.cart = cartOf([line({ stock: 3, quantity: 5 })]);
+    const over = await mount();
+    expect(noteOf(over.container)!.className).toContain('text-warning-fg');
+    over.unmount();
+    mounted = [];
+    state.cart = cartOf([line({ stock: 5, quantity: 2 })]);
+    const free = await mount();
+    expect(noteOf(free.container)).toBeUndefined();
   });
 
   it('còn dư tồn kho: + tăng đúng 1, không bao giờ gửi số lượng 0', async () => {
@@ -346,17 +384,17 @@ describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang ch
     const { container } = await mount();
     await settle();
     expect(container.textContent).toContain('Giảm 30.000đ cho đơn này');
-    expect(card(container).disabled).toBe(false);
+    expect(card(container).getAttribute('aria-disabled')).toBeNull();
 
     state.previews.mockReturnValueOnce(new Promise(() => {}));
     state.cart = cartOf([line({ quantity: 1, total: 150000 })]);
     click(button(container, 'Giảm số lượng Dầu gội bồ kết'));
     await flush(6);
     expect(container.textContent).not.toContain('Giảm 30.000đ cho đơn này');
-    expect(card(container).disabled).toBe(true);
+    expect(card(container).getAttribute('aria-disabled')).toBe('true');
     await settle();
     expect(state.previews).toHaveBeenCalledTimes(2);
-    expect(card(container).disabled).toBe(true);
+    expect(card(container).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('bỏ chọn hết: không gọi xem trước (itemIds rỗng bị máy chủ coi là cả giỏ)', async () => {
@@ -593,5 +631,283 @@ describe('/gio-hang — giá gạch, Tiết kiệm, Countdown Giờ vàng (P8)',
     const { container } = await mount();
     expect(container.querySelector('[role="timer"]')!.textContent).toContain('Kết thúc sau 2 giờ 00 phút');
     expect(container.textContent).not.toMatch(/Đã bán \d+%/);
+  });
+});
+
+describe('/gio-hang — gom món của combo dưới đầu nhóm, báo trước khi bỏ món (K5, như Mini App)', () => {
+  const GROUP = {
+    id: 'collection:c1',
+    kind: 'STOREFRONT',
+    title: 'Bộ giặt sạch',
+    discount: 15000,
+    lineIds: ['i1', 'i2'],
+    keyLineIds: ['i1', 'i2'],
+  };
+  const soap = line({ id: 'i1', variationId: 'v1', productName: 'Xà bông thảo mộc', slug: 'xb', unitPrice: 50000, quantity: 1, total: 50000 });
+  const shampoo = line({ id: 'i2', variationId: 'v2', productName: 'Dầu gội', slug: 'dg', unitPrice: 100000, quantity: 1, total: 100000 });
+  const softener = line({ id: 'i3', variationId: 'v3', productName: 'Nước xả vải', slug: 'nxv', unitPrice: 80000, quantity: 1, total: 80000 });
+  const comboCart = (over: Record<string, unknown> = {}) => ({
+    ...cartOf([soap, softener, shampoo]),
+    subtotal: 230000,
+    itemCount: 3,
+    comboDiscount: 15000,
+    comboGroups: [GROUP],
+    ...over,
+  });
+  const groupEl = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-combo-group"]')!;
+  const heading = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-combo-heading"]')!;
+  const pick = (c: HTMLElement, name: string) => c.querySelector<HTMLInputElement>(`input[type="checkbox"][aria-label="Chọn ${name} để thanh toán"]`)!;
+  const trash = (c: HTMLElement, name: string) => button(c, `Xoá ${name} khỏi giỏ hàng`);
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+  const dialogButton = (label: string) => [...dialog()!.querySelectorAll('button')].find((b) => b.textContent === label)!;
+
+  it('các dòng của bộ nằm chung một khối có đầu nhóm "Combo: tên · Tiết kiệm số", dòng lẻ nằm ngoài; chân dính vẫn ghi số combo', async () => {
+    state.cart = comboCart();
+    const { container } = await mount();
+    const group = groupEl(container);
+    expect(heading(container).textContent).toBe('Combo: Bộ giặt sạch · Tiết kiệm 15.000đ');
+    expect(group.getAttribute('aria-label')).toBe('Combo: Bộ giặt sạch · Tiết kiệm 15.000đ');
+    expect(group.querySelectorAll('[data-testid="cart-line"]')).toHaveLength(2);
+    expect(group.textContent).toContain('Xà bông thảo mộc');
+    expect(group.textContent).toContain('Dầu gội');
+    expect(group.textContent).not.toContain('Nước xả vải');
+    expect(container.querySelectorAll('[data-testid="cart-line"]')).toHaveLength(3);
+    expect(container.textContent).toContain('Giảm giá combo');
+    expect(container.textContent).toContain('-15.000đ');
+  });
+
+  it('máy chủ chưa trả nhóm combo: mọi dòng vẽ như trước, không có đầu nhóm', async () => {
+    state.cart = comboCart({ comboGroups: undefined });
+    const { container } = await mount();
+    expect(groupEl(container)).toBeNull();
+    expect(container.querySelectorAll('[data-testid="cart-line"]')).toHaveLength(3);
+  });
+
+  it('bỏ chọn một món khoá của bộ: đầu nhóm bỏ số Tiết kiệm và nhắc chọn đủ món để được giảm', async () => {
+    state.cart = comboCart();
+    const { container } = await mount();
+    click(pick(container, 'Dầu gội'));
+    await flush();
+    expect(heading(container).textContent).toBe('Combo: Bộ giặt sạch');
+    expect(container.querySelector('[data-testid="cart-combo-hint"]')!.textContent).toBe('Chọn đủ các món để được giảm 15.000đ');
+    click(pick(container, 'Dầu gội'));
+    await flush();
+    expect(container.querySelector('[data-testid="cart-combo-hint"]')).toBeNull();
+    expect(heading(container).textContent).toContain('Tiết kiệm 15.000đ');
+  });
+
+  it('bấm Xoá món khoá: hỏi trước "sẽ mất giảm", chưa xoá; "Giữ lại" thì thôi', async () => {
+    state.cart = comboCart();
+    const { container } = await mount();
+    const trashBtn = trash(container, 'Dầu gội')!;
+    expect(trashBtn.getAttribute('aria-haspopup')).toBe('dialog');
+    click(trashBtn);
+    await flush();
+    expect(dialog()!.textContent).toContain('Bỏ món khỏi combo?');
+    expect(dialog()!.textContent).toContain('Combo Bộ giặt sạch sẽ mất giảm 15.000đ nếu bạn bỏ món này.');
+    expect(state.removed).toEqual([]);
+    click(dialogButton('Giữ lại'));
+    await flush();
+    expect(dialog()).toBeNull();
+    expect(state.removed).toEqual([]);
+    expect(container.textContent).toContain('Dầu gội');
+  });
+
+  it('"Vẫn bỏ" xoá đúng dòng; không chặn khách', async () => {
+    state.cart = comboCart();
+    const { container } = await mount();
+    click(trash(container, 'Dầu gội'));
+    await flush();
+    click(dialogButton('Vẫn bỏ'));
+    await flush();
+    expect(state.removed).toEqual(['i2']);
+    expect(dialog()).toBeNull();
+  });
+
+  it('dòng lẻ xoá ngay, không hỏi; nút Xoá dòng lẻ không khai hộp thoại', async () => {
+    state.cart = comboCart();
+    const { container } = await mount();
+    expect(trash(container, 'Nước xả vải')!.getAttribute('aria-haspopup')).toBeNull();
+    click(trash(container, 'Nước xả vải'));
+    await flush();
+    expect(state.removed).toEqual(['i3']);
+    expect(dialog()).toBeNull();
+  });
+
+  it('món trong bộ nhưng không phải món khoá (bộ vẫn khớp khi bỏ nó) xoá ngay, không hỏi', async () => {
+    state.cart = comboCart({ comboGroups: [{ ...GROUP, keyLineIds: ['i1'] }] });
+    const { container } = await mount();
+    click(trash(container, 'Dầu gội'));
+    await flush();
+    expect(state.removed).toEqual(['i2']);
+    expect(dialog()).toBeNull();
+  });
+
+  describe('mua kèm: sản phẩm chính (dòng khoá không mang giảm) nằm trong khối của bộ', () => {
+    // i1 là sản phẩm chính, i2 là món kèm duy nhất được giảm; i3 không thuộc bộ.
+    const ADDON = { id: 'bundle:a1', kind: 'ADDON', title: 'Mua kèm dầu gội', discount: 11000, lineIds: ['i2'], keyLineIds: ['i1'] };
+
+    it('khối ghi cả sản phẩm chính lẫn món kèm dưới đầu nhóm; món không thuộc bộ nằm ngoài', async () => {
+      state.cart = comboCart({ comboDiscount: 11000, comboGroups: [ADDON] });
+      const { container } = await mount();
+      const group = groupEl(container);
+      expect(heading(container).textContent).toBe('Combo: Mua kèm dầu gội · Tiết kiệm 11.000đ');
+      expect(group.querySelectorAll('[data-testid="cart-line"]')).toHaveLength(2);
+      expect(group.textContent).toContain('Xà bông thảo mộc');
+      expect(group.textContent).toContain('Dầu gội');
+      expect(group.textContent).not.toContain('Nước xả vải');
+    });
+
+    it('bấm Xoá sản phẩm chính (món nằm trong khối) hỏi trước "sẽ mất giảm"; "Vẫn bỏ" mới xoá', async () => {
+      state.cart = comboCart({ comboDiscount: 11000, comboGroups: [ADDON] });
+      const { container } = await mount();
+      const trashBtn = [...groupEl(container).querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Xoá Xà bông thảo mộc khỏi giỏ hàng')!;
+      expect(trashBtn).toBeTruthy();
+      click(trashBtn);
+      await flush();
+      expect(dialog()!.textContent).toContain('Combo Mua kèm dầu gội sẽ mất giảm 11.000đ nếu bạn bỏ món này.');
+      expect(state.removed).toEqual([]);
+      click(dialogButton('Vẫn bỏ'));
+      await flush();
+      expect(state.removed).toEqual(['i1']);
+    });
+  });
+
+  describe('chọn một phần giỏ: đầu nhóm theo giá phần chọn của máy chủ', () => {
+    const settle = async () => {
+      await new Promise((r) => setTimeout(r, 500));
+      await flush(6);
+    };
+    const keyed = { ...GROUP, keyLineIds: ['i1'] };
+
+    it('máy chủ không còn nhóm trong phần chọn: đầu nhóm bỏ số Tiết kiệm và nhắc chọn đủ món', async () => {
+      state.cart = comboCart({ comboGroups: [keyed] });
+      state.selection.mockResolvedValue({ ...cartOf([soap, softener]), subtotal: 130000, itemCount: 2, comboDiscount: 0, comboGroups: [] });
+      const { container } = await mount();
+      click(pick(container, 'Dầu gội'));
+      await flush();
+      expect(heading(container).textContent).toContain('Tiết kiệm 15.000đ');
+      await settle();
+      expect(heading(container).textContent).toBe('Combo: Bộ giặt sạch');
+      expect(container.querySelector('[data-testid="cart-combo-hint"]')!.textContent).toBe('Chọn đủ các món để được giảm 15.000đ');
+    });
+
+    // Số đầu nhóm là số của cả giỏ; chọn một phần mà máy chủ chưa trả giá phần đó (debounce, đang tải, lỗi) thì không có số nào đúng để ghi (K5 MINOR).
+    describe('chưa có giá phần chọn: đầu nhóm không ghi số của cả giỏ', () => {
+      const savingEl = (container: HTMLElement) => container.querySelector<HTMLElement>('[data-testid="cart-combo-saving"]')!;
+      const expectHidden = (container: HTMLElement) => {
+        expect(savingEl(container).getAttribute('aria-hidden')).toBe('true');
+        expect(savingEl(container).className).toContain('invisible');
+        expect(groupEl(container).getAttribute('aria-label')).toBe('Combo: Bộ giặt sạch');
+      };
+
+      it('vừa bỏ chọn một món không khoá (chờ debounce và đang hỏi máy chủ): chỗ của số giữ nguyên nhưng ẩn, tên khối không có số', async () => {
+        state.cart = comboCart({ comboGroups: [keyed] });
+        state.selection.mockReturnValue(new Promise(() => {}));
+        const { container } = await mount();
+        expect(savingEl(container).getAttribute('aria-hidden')).toBeNull();
+        click(pick(container, 'Dầu gội'));
+        await flush();
+        expectHidden(container);
+        await settle();
+        expect(state.selection).toHaveBeenCalledTimes(1);
+        expectHidden(container);
+        expect(savingEl(container).textContent).toBe(' · Tiết kiệm 15.000đ');
+      });
+
+      it('máy chủ trả lỗi (retry=false): vẫn ẩn số, không quay về số của cả giỏ', async () => {
+        state.cart = comboCart({ comboGroups: [keyed] });
+        state.selection.mockRejectedValue(new Error('chưa có giá phần chọn'));
+        const { container } = await mount();
+        click(pick(container, 'Dầu gội'));
+        await settle();
+        expect(state.selection).toHaveBeenCalledTimes(1);
+        expectHidden(container);
+      });
+
+      it('máy chủ trả giá phần chọn: số của phần chọn hiện lại; chọn lại cả giỏ thì số cả giỏ hiện, không hỏi thêm', async () => {
+        state.cart = comboCart({ comboGroups: [keyed] });
+        state.selection.mockResolvedValue({
+          ...cartOf([soap, softener]),
+          subtotal: 130000,
+          itemCount: 2,
+          comboDiscount: 6000,
+          comboGroups: [{ ...keyed, discount: 6000, lineIds: ['i1'] }],
+        });
+        const { container } = await mount();
+        click(pick(container, 'Dầu gội'));
+        await settle();
+        expect(savingEl(container).getAttribute('aria-hidden')).toBeNull();
+        expect(savingEl(container).textContent).toBe(' · Tiết kiệm 6.000đ');
+        click(pick(container, 'Dầu gội'));
+        await flush();
+        expect(savingEl(container).textContent).toBe(' · Tiết kiệm 15.000đ');
+        expect(savingEl(container).getAttribute('aria-hidden')).toBeNull();
+        expect(state.selection).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('máy chủ còn nhóm nhưng giảm ít hơn: đầu nhóm ghi số của phần chọn, khớp dòng "Giảm giá combo" ở chân', async () => {
+      state.cart = comboCart({ comboGroups: [keyed] });
+      state.selection.mockResolvedValue({
+        ...cartOf([soap, softener]),
+        subtotal: 130000,
+        itemCount: 2,
+        comboDiscount: 6000,
+        comboGroups: [{ ...keyed, discount: 6000, lineIds: ['i1'] }],
+      });
+      const { container } = await mount();
+      click(pick(container, 'Dầu gội'));
+      await settle();
+      expect(heading(container).textContent).toBe('Combo: Bộ giặt sạch · Tiết kiệm 6.000đ');
+      expect(container.textContent).toContain('-6.000đ');
+    });
+  });
+
+  describe('hộp báo bỏ món gỡ khi dòng chờ xoá không còn trong giỏ', () => {
+    const mountWithClient = async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const r = render(<CartPage />, qc);
+      mounted.push(r);
+      await flush(6);
+      return { ...r, qc };
+    };
+
+    it('giỏ về trống khi hộp đang mở (tab khác xoá hết): hộp gỡ, không tự bật lại khi giỏ có hàng lần sau', async () => {
+      state.cart = comboCart();
+      const { container, qc } = await mountWithClient();
+      click(trash(container, 'Dầu gội'));
+      await flush();
+      expect(dialog()).not.toBeNull();
+      state.cart = cartOf([]);
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['cart'] });
+      });
+      await flush(6);
+      expect(dialog()).toBeNull();
+      expect(container.querySelector('[data-testid="cart-line"]')).toBeNull();
+      state.cart = comboCart();
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['cart'] });
+      });
+      await flush(6);
+      expect(container.querySelectorAll('[data-testid="cart-line"]')).toHaveLength(3);
+      expect(dialog()).toBeNull();
+      expect(state.removed).toEqual([]);
+    });
+
+    it('dòng chờ xoá đã mất nhưng giỏ còn hàng khác: hộp gỡ, "Vẫn bỏ" không gọi xoá dòng đã mất', async () => {
+      state.cart = comboCart();
+      const { container, qc } = await mountWithClient();
+      click(trash(container, 'Dầu gội'));
+      await flush();
+      state.cart = comboCart({ items: [soap, softener], subtotal: 130000, itemCount: 2, comboDiscount: 0, comboGroups: [] });
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['cart'] });
+      });
+      await flush(6);
+      expect(dialog()).toBeNull();
+      expect(state.removed).toEqual([]);
+    });
   });
 });

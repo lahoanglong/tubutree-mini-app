@@ -1,6 +1,6 @@
-import type { Page } from '@playwright/test';
+import { test as plain, type Page, type TestInfo } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
-import { firstProduct, multiVariationProduct, type PdpProduct } from './support/pdp-product';
+import { assertProductOnCi, firstProduct, multiVariationProduct, singleVariationProduct, type PdpProduct } from './support/pdp-product';
 
 /**
  * Trang sản phẩm web ở khổ 375px phải giống Mini App ở ba chỗ: tiêu đề mục không chân, ô số lượng gồm hai nút vuông riêng,
@@ -79,12 +79,10 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     await page.goto(`/san-pham/${p.slug}`);
   }
 
-  test('thứ tự khối ở 375px như Mini App: chip phân loại (từ 2 phân loại), Số lượng, rồi Combo và Đánh giá nhanh; các dải trắng cách nhau tối đa 8px; không tràn ngang', async ({ page, api, request }, testInfo) => {
-    // Ưu tiên sản phẩm từ 2 phân loại để kiểm cả chip; không có thì dùng sản phẩm đầu: thứ tự khối và khe 8px vẫn kiểm, không skip theo số phân loại (ca chip hết hàng tách riêng bên dưới).
-    const p = (await multiVariationProduct(request)) ?? (await firstProduct(request));
-    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
-    const hasChips = p!.variations.length >= 2;
-    await openPdp375(page, api, p!, () => 3);
+  /**
+   * Phần đo chung của hai ca thứ tự khối: sản phẩm từ 2 phân loại (có chip) và sản phẩm một phân loại (không chip). Trang đã mở ở 375px bằng `openPdp375`.
+   */
+  async function assertPdpBlockOrder(page: Page, hasChips: boolean, testInfo: TestInfo, shot: string): Promise<void> {
     await expect(page.locator('[data-section="pdp-quick-reviews"]')).toBeVisible();
     await expect(page.locator('[data-section="pdp-reviews"]')).toBeVisible();
 
@@ -173,11 +171,32 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     await expect(chips).toHaveText(['Tất cả', '5 sao', '4 sao', '3 sao', 'Có ảnh']);
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
-    await page.screenshot({ path: testInfo.outputPath('pdp-web375-order.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath(shot), fullPage: true });
+  }
+  test('thứ tự khối ở 375px như Mini App: chip phân loại (từ 2 phân loại), Số lượng, rồi Combo và Đánh giá nhanh; các dải trắng cách nhau tối đa 8px; không tràn ngang', async ({ page, api, request }, testInfo) => {
+    const p = await multiVariationProduct(request);
+    // Trên CI thiếu sản phẩm từ 2 phân loại thì đỏ, không skip (DB migration demo luôn có).
+    assertProductOnCi(p, 'sản phẩm từ 2 phân loại');
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào từ 2 phân loại');
+    await openPdp375(page, api, p!, () => 3);
+    await assertPdpBlockOrder(page, true, testInfo, 'pdp-web375-order.png');
+  });
+  test('sản phẩm một phân loại ở 375px: không vẽ chip phân loại, Số lượng vẫn là dải riêng, thứ tự khối như Mini App', async ({ page, api, request }, testInfo) => {
+    const p = await singleVariationProduct(request);
+    assertProductOnCi(p, 'sản phẩm một phân loại');
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào chỉ một phân loại');
+    expect(p!.variations).toHaveLength(1);
+    await openPdp375(page, api, p!, () => 3);
+    await assertPdpBlockOrder(page, false, testInfo, 'pdp-web375-single-variation.png');
+    // Một phân loại thì không có gì để chọn: chip không có trong DOM (không chỉ ẩn), còn Số lượng và nút mua vẫn đủ.
+    await expect(page.locator('[data-section="pdp-variation-chips"]')).toHaveCount(0);
+    await expect(page.locator('[data-section="pdp-quantity"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toBeVisible();
   });
   test('chip phân loại hết hàng khoá như Mini App; "Còn 3 sản phẩm" nằm trong khối thông tin chính', async ({ page, api, request }) => {
-    // Cần từ 2 phân loại để có chip hết hàng; DB e2e không có thì skip kèm lý do (chỉ ca này, ca thứ tự khối vẫn chạy).
+    // Cần từ 2 phân loại để có chip hết hàng; ngoài CI DB không có thì skip kèm lý do, trên CI thì đỏ (assertProductOnCi).
     const p = await multiVariationProduct(request);
+    assertProductOnCi(p, 'sản phẩm từ 2 phân loại');
     test.skip(!p, 'DB e2e chưa có sản phẩm nào từ 2 phân loại, không kiểm được chip hết hàng');
     // Phân loại đầu hết hàng, còn lại còn 3.
     await openPdp375(page, api, p!, (i) => (i === 0 ? 0 : 3));
@@ -228,5 +247,17 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 1, name: 'Tất cả sản phẩm' })).toBeAttached();
     await page.screenshot({ path: test.info().outputPath('pdp-back-stay.png') });
+  });
+});
+
+plain.describe('PDP web: rào dữ liệu sản phẩm', () => {
+  plain.beforeEach(({}, testInfo) => {
+    plain.skip(testInfo.project.name !== 'Web Customer Mobile', 'hàm thuần: chạy một lần ở project Web Customer Mobile');
+  });
+  plain('assertProductOnCi: trên CI thiếu sản phẩm thì đỏ, ngoài CI để spec bỏ qua có lý do', () => {
+    const p: PdpProduct = { slug: 'x', variations: [{ id: 'v', stock: 1 }] };
+    expect(() => assertProductOnCi(null, 'sản phẩm một phân loại', { GITHUB_ACTIONS: 'true' })).toThrow(/sản phẩm một phân loại/);
+    expect(() => assertProductOnCi(p, 'sản phẩm một phân loại', { GITHUB_ACTIONS: 'true' })).not.toThrow();
+    expect(() => assertProductOnCi(null, 'sản phẩm một phân loại', {})).not.toThrow();
   });
 });

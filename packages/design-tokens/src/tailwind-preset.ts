@@ -44,6 +44,7 @@ export const tailwindPreset: Partial<Config> = {
         // Lớp ngữ nghĩa commerce: trỏ biến CSS của tokens.css nên không dùng được hậu tố độ trong suốt (`/40`).
         // Không đặt tên `cover`: đụng utility `bg-cover` (background-size) của Tailwind.
         media: 'var(--color-bg-media)',
+        'sheet-scrim': 'var(--color-bg-sheet-scrim)',
         chip: 'var(--color-bg-chip)',
         track: 'var(--color-track)',
         'shop-cover': 'var(--color-bg-cover)',

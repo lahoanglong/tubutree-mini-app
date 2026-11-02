@@ -66,7 +66,7 @@ export interface AddonRow {
 }
 
 /**
- * Các dòng "Mua kèm deal sốc" từ các bộ ADDON còn hiệu lực. Bỏ món hết hàng, chưa có phân loại, và món có giá kèm không thấp hơn giá
+ * Các dòng "Mua kèm giá tốt" từ các bộ ADDON còn hiệu lực. Bỏ món hết hàng, chưa có phân loại, và món có giá kèm không thấp hơn giá
  * đang bán (không giảm được đồng nào). Một sản phẩm nằm ở nhiều bộ chỉ một dòng, lấy giá kèm thấp nhất: thêm hai dòng cùng phân loại
  * sẽ thành hai đơn vị. Cắt còn `max` dòng.
  */
@@ -146,7 +146,7 @@ export function latchBundleSide<T>(live: T[], last: T[] | null, why: (held: T[])
   return { items: last, held: why(last), last };
 }
 
-/** Tiêu đề khối, kèm lý do khi đang giữ ("Mua kèm deal sốc · Tạm hết hàng"; chữ hết hàng dùng chung `stock.out` của thẻ sản phẩm). */
+/** Tiêu đề khối, kèm lý do khi đang giữ ("Mua kèm giá tốt · Tạm hết hàng"; chữ hết hàng dùng chung `stock.out` của thẻ sản phẩm). */
 export function bundleHoldTitle(titleKey: 'combo.pdpTitle' | 'addon.title', hold: BundleHold | null): string {
   return hold ? `${fillCopy(titleKey)} · ${fillCopy(hold === 'soldOut' ? 'stock.out' : 'bundle.ended')}` : fillCopy(titleKey);
 }

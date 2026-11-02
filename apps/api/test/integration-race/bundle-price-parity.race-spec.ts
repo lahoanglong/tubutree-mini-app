@@ -265,6 +265,11 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     expect(numbers.cart).toBe(numbers.quote);
     expect({ combo: c.comboDiscount, coupon: c.discount }).toEqual({ combo: o.comboDiscount, coupon: o.couponDiscount });
     expect(q.comboDiscount).toBe(o.comboDiscount);
+    // Nhóm combo của giỏ (K5) là cách chia của chính comboDiscount: cộng lại bằng đúng số báo giá và đơn trừ, mỗi dòng nằm tối đa một nhóm, dòng thuộc giỏ.
+    expect(c.comboGroups.reduce((sum, g) => sum + g.discount, 0)).toBe(o.comboDiscount);
+    const grouped = c.comboGroups.flatMap((g) => g.lineIds);
+    expect(new Set(grouped).size).toBe(grouped.length);
+    expect(grouped.every((id) => c.items.some((i) => i.id === id))).toBe(true);
     // Tiền khách thực trả từng dòng cộng lại đúng tiền hàng của đơn: nền hoa hồng và hoàn tiền không lệch đồng nào.
     expect(o.items.reduce((s, i) => s + (i.paidTotal ?? 0), 0)).toBe(o.total - o.shippingFee);
     return { c, q, o, numbers };
@@ -286,6 +291,35 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     expect(r.c).toMatchObject({ comboDiscount: 10_000, discount: 13_000, subtotal: 140_000 }); // 10% × (140.000 − 10.000)
     expect(r.numbers).toEqual({ cart: 117_000, quote: 117_000, order: 117_000 });
     expect(r.o.comboDiscount).toBe(10_000);
+  });
+
+  it('nhóm combo của giỏ (K5): bộ + combo gian hàng chung một món + một món lẻ; comboGroups cộng bằng comboDiscount = báo giá = đơn; bộ hết hạn thì không còn nhóm', async () => {
+    const b = await buyer();
+    const a = await product(60_000);
+    const c = await product(40_000);
+    const d = await product(30_000);
+    const loose = await product(20_000);
+    const slug = await comboStore(a.productId, c.productId, 5);
+    const bun = await bundle('BUNDLE_PCT', [{ productId: c.productId }, { productId: d.productId }], { pct: 20 });
+    for (const x of [a, c, d, loose]) await cart.addItem(b.userId, { variationId: x.variationId, quantity: 1 });
+
+    const cartLines = (await cart.getCart(b.userId, slug)).items;
+    const idOf = (variationId: string) => cartLines.find((i) => i.variationId === variationId)!.id;
+    const r = await cartQuoteOrder(b, slug);
+    // a: combo gian hàng 5% (3.000); c: bộ 20% thắng 5% (8.000); d: bộ 20% (6.000); món lẻ không giảm.
+    expect(r.c.comboDiscount).toBe(17_000);
+    const byKind = Object.fromEntries(r.c.comboGroups.map((g) => [g.kind, g]));
+    expect(byKind.STOREFRONT).toMatchObject({ discount: 3_000, lineIds: [idOf(a.variationId)], keyLineIds: [idOf(a.variationId), idOf(c.variationId)].sort((x, y) => cartLines.findIndex((l) => l.id === x) - cartLines.findIndex((l) => l.id === y)) });
+    expect(byKind.BUNDLE_PCT).toMatchObject({ id: `bundle:${bun.id}`, title: bun.title, discount: 14_000 });
+    expect(byKind.BUNDLE_PCT!.lineIds).toEqual([idOf(c.variationId), idOf(d.variationId)]);
+    expect(r.c.comboGroups.flatMap((g) => g.lineIds)).not.toContain(idOf(loose.variationId));
+
+    // Đặt đơn đã dọn giỏ: thêm lại rồi cho bộ hết hạn; chỉ còn nhóm combo gian hàng.
+    for (const x of [a, c, d, loose]) await cart.addItem(b.userId, { variationId: x.variationId, quantity: 1 });
+    await prisma.bundle.update({ where: { id: bun.id }, data: { endAt: new Date(Date.now() - 1_000) } });
+    const after = await cart.getCart(b.userId, slug);
+    expect(after.comboGroups.map((g) => g.kind)).toEqual(['STOREFRONT']);
+    expect(after.comboGroups.reduce((sum, g) => sum + g.discount, 0)).toBe(after.comboDiscount);
   });
 
   it('Giờ vàng + bundle + mã cùng lúc: dòng Giờ vàng không nhận bundle lẫn mã, giỏ = báo giá = đơn', async () => {

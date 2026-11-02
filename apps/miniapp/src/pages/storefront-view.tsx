@@ -9,6 +9,7 @@ import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE, sampleShareText } from
 import { getPublicStorefront, type Storefront } from '../services/storefront-api';
 import { apiMediaUrl, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { vi } from '../i18n/vi';
+import { trustBadgeLabel } from '../utils/storefront-badge';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
@@ -27,14 +28,6 @@ import { ShopStatsRow } from '../components/ui/shop-stats-row';
 import { ShopTopBar } from '../components/ui/shop-top-bar';
 import { ShopCategoriesTab } from '../components/shop-page/shop-categories-tab';
 import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
-
-/** Nhãn tin cậy chỉ cho gian hàng admin đã duyệt: tick và "CTV tuyển chọn" là lời cam kết của Tubu Tree, không phải của chủ shop tự gắn. */
-function trustBadgeLabel(sf: { type: 'CTV' | 'BRAND' | 'MERCHANT'; approved?: boolean }): string | null {
-  if (!sf.approved) return null;
-  if (sf.type === 'MERCHANT') return vi.storefront.badgePartner;
-  if (sf.type === 'BRAND') return vi.storefront.badgeBrand;
-  return vi.storefront.badgeSelectedCtv;
-}
 
 export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
@@ -137,12 +130,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
         badges={
           <>
             {sf.isSample && <Badge tone="promo">{SAMPLE_STOREFRONT_LABEL}</Badge>}
-            {badgeLabel && (
-              <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Sparkles size={12} />
-                {badgeLabel}
-              </Badge>
-            )}
+            {badgeLabel && <Badge tone="verified" icon={Sparkles}>{badgeLabel}</Badge>}
             {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
           </>
         }

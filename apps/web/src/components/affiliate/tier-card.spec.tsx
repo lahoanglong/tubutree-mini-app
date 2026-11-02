@@ -33,6 +33,13 @@ describe('TierCard — bậc CTV theo doanh số đã chốt', () => {
     expect(mounted.container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('30');
   });
 
+  it('nút mở bảng 5 bậc có chữ dòng 22 như Mini (cao 47px, không lệch 2px so với Mini ở điện thoại)', () => {
+    mounted = render(<TierCard dash={dash} tiers={tiers} />);
+    const toggle = mounted.container.querySelector('[data-testid="tier-toggle"]')!;
+    expect(toggle.textContent).toContain('Bảng 5 bậc CTV');
+    expect(toggle.querySelector('span')!.className).toContain('max-md:leading-[var(--type-body-sm-lh)]');
+  });
+
   it('bậc cao nhất: không có dòng "để lên bậc"', () => {
     mounted = render(<TierCard dash={{ ...dash, tier: { ...dash.tier, nextName: null, nextThreshold: null, toNext: 0 } }} tiers={tiers} />);
     expect(mounted.container.textContent).not.toContain('để lên bậc');

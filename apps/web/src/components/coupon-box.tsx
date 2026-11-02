@@ -12,21 +12,21 @@ import {
   type CouponPreviewParams,
 } from '@/lib/shop-client';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
+import { EmptyState } from '@/components/mini/empty-state';
+import { Skeleton } from '@/components/mini/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
+import { VoucherPicker } from '@/components/mini/voucher-picker';
 import { ui } from '@/lib/guest-ui';
-import {
-  couponExpiryLabel,
-  couponValueLabel,
-  isCouponEligible,
-  isFreeshipRedundant,
-  sortCouponsForCart,
-} from '@/lib/coupon-view';
+import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
-/** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
+/** Số voucher hiện sẵn trong panel tại chỗ (từ md); trong bảng trượt của điện thoại hiện đủ như Mini App. */
 const VISIBLE_COUPONS = 3;
 
 /** Chờ lựa chọn/số lượng đứng yên rồi mới hỏi lại mức giảm, để bấm liên tục không chạm giới hạn 30 lần/phút của API. */
@@ -47,6 +47,11 @@ export function useSettled<T>(value: T, delayMs: number): T {
  */
 export function couponPreviewKey(lines: { id: string; quantity: number; total: number }[]): string {
   return lines.map((l) => `${l.id}:${l.quantity}:${l.total}`).join(',');
+}
+
+/** Sản phẩm của các dòng đang tính cho CouponBox; undefined khi API cũ chưa trả `productId` (không khoá mã theo sản phẩm), như `cartProductIds` của Mini. */
+export function couponProductIds(lines: { productId?: string }[]): string[] | undefined {
+  return lines.every((l) => l.productId) ? lines.map((l) => l.productId!) : undefined;
 }
 
 /** Lời báo mã chưa được áp dụng tự tắt sau ngần này, như snackbar cảnh báo của Mini App. */
@@ -77,6 +82,7 @@ export function CouponBox({
   autoApply = false,
   memoryUserId,
   sheet = false,
+  productIds,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -114,8 +120,13 @@ export function CouponBox({
    * mở trong bảng trượt lên thay vì bung ngay tại chỗ (bung trong thanh dính thì thanh cao quá nửa màn). Chỉ dùng dưới md.
    */
   sheet?: boolean;
+  /** Sản phẩm của các dòng đang tính (`couponProductIds`): mã gắn riêng cho sản phẩm khác thì ghi "Chỉ áp cho …" và khoá nút khi chưa có xem trước. Thiếu thì không kiểm. */
+  productIds?: string[];
 }) {
   const qc = useQueryClient();
+  // Điện thoại: danh sách mã nằm trong bảng trượt (đúng VoucherSheet của Mini), không bung tại chỗ làm thanh/khối chứa cao thêm.
+  const phone = useMediaQuery(MD_DOWN);
+  const inSheet = sheet || phone;
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -147,10 +158,6 @@ export function CouponBox({
   );
   // Dòng thu gọn nhắc khách đang có mã dùng được (chỉ gợi ý, không tự áp); dùng chính số xem trước đã hỏi ở trên.
   const hint = !currentCode && previewTrusted ? couponHint(previewsQ.data) : null;
-  const usable = (c: { code: string; minOrder: number | null }) => {
-    const p = previews.get(c.code.toUpperCase());
-    return p ? p.eligible : isCouponEligible(c, subtotal);
-  };
 
   const memory = useMemo(() => autoCouponMemory(browserSession(), memoryUserId), [memoryUserId]);
   const [autoCode, setAutoCode] = useState<string | null>(() => memory.applied());
@@ -232,134 +239,70 @@ export function CouponBox({
     if (best) autoMutate(best);
   }, [autoApply, memoryUserId, memory, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate]);
   const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
-  const panelAria = { 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const;
+  const panelAria = inSheet ? ({ 'aria-haspopup': 'dialog' } as const) : ({ 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const);
+
+  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, productIds, previews, now: serverNow(), displayCode: autoCouponName });
+  const appliedRow = rows.find((r) => r.applied);
+  const shownRows = inSheet || showAll ? rows : rows.slice(0, VISIBLE_COUPONS);
+  // Nút đang quay: mã đang áp, hoặc hàng đang dùng khi đang gỡ; mã nhập tay không có hàng nào khớp.
+  const pendingCode = apply.isPending ? (apply.variables ?? null) : drop.isPending ? (appliedRow?.coupon.code ?? null) : null;
 
   const panelBody = (
     <>
-      {currentCode && (
-        <button
-          type="button"
-          onClick={() => drop.mutate()}
-          disabled={busy}
-          className={`${ui.btnText} mt-1 text-danger-fg`}
-        >
+      {currentCode && !appliedRow && (
+        <button type="button" onClick={() => drop.mutate()} disabled={busy} className={`${ui.btnText} mb-2 text-danger-fg`}>
           Bỏ mã đang áp dụng
         </button>
       )}
-      <label htmlFor="coupon-code" className="sr-only">
-        Mã giảm giá
-      </label>
-      <div className="mt-1 flex gap-2">
-        <input
-          id="coupon-code"
-          name="coupon-code"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="Nhập mã giảm giá"
-          autoCapitalize="characters"
-          autoComplete="off"
-          className={`${ui.field} min-w-0 flex-1`}
-        />
-        <button
-          type="button"
-          onClick={() => apply.mutate(code)}
-          disabled={!code.trim() || busy}
-          className={`${ui.btnPrimary} px-4`}
-        >
-          Áp dụng
-        </button>
+      <div className="rounded-card border border-[color:var(--color-border-subtle)] bg-[color:var(--color-bg-canvas)] p-3">
+        <label htmlFor="coupon-code" className="mb-2 block text-label font-semibold text-[color:var(--color-text-secondary)]">
+          {fillCopy('coupon.pickManual')}
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="coupon-code"
+            name="coupon-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder={fillCopy('coupon.pickPlaceholder')}
+            autoCapitalize="characters"
+            autoComplete="off"
+            className={`${ui.field} min-w-0 flex-1`}
+          />
+          <button type="button" onClick={() => apply.mutate(code)} disabled={!code.trim() || busy} className={`${ui.btnPrimary} min-w-[7.5rem] px-4`}>
+            {fillCopy('coupon.pickApply')}
+          </button>
+        </div>
       </div>
-      {(couponsQ.data?.length ?? 0) > 0 && (
+      {(rows.length > 0 || inSheet) && (
+        <p className="mb-2.5 mt-4 text-label font-semibold text-[color:var(--color-text-secondary)]">{fillCopy('coupon.pickMine')}</p>
+      )}
+      {/* Bảng trượt như VoucherSheet của Mini: ví đang tải có khung chờ, ví lỗi có "Thử lại"; panel tại chỗ (từ md) không có cả hai như trước. */}
+      {inSheet && couponsQ.isLoading && (
+        <div role="status" aria-label={fillCopy('coupon.pickLoading')} className="flex flex-col gap-2.5">
+          <Skeleton height={72} radius="var(--radius-card)" />
+          <Skeleton height={72} radius="var(--radius-card)" />
+        </div>
+      )}
+      {inSheet && couponsQ.isError && (
+        <ErrorState variant="inline" message={fillCopy('coupon.pickLoadError', { reason: loadErrorText(couponsQ.error) })} onRetry={() => void couponsQ.refetch()} />
+      )}
+      {rows.length > 0 && (
         <>
-          <ul aria-label="Mã giảm giá của bạn" className="mt-3 space-y-2">
-            {(previews.size > 0
-              ? [...couponsQ.data!.filter(usable), ...couponsQ.data!.filter((c) => !usable(c))]
-              : sortCouponsForCart(couponsQ.data!, subtotal)
-            )
-              .slice(0, showAll ? undefined : VISIBLE_COUPONS)
-              .map((c) => {
-                const pv = previews.get(c.code.toUpperCase());
-                const isApplied = currentCode?.toUpperCase() === c.code.toUpperCase();
-                // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
-                const redundant = !isApplied && !pv && isFreeshipRedundant(c, shippingFee);
-                const meetsMin = !!pv || isCouponEligible(c, subtotal);
-                const serverBlocked = !isApplied && !!pv && !pv.eligible;
-                const eligible = meetsMin && !redundant && !serverBlocked;
-                const saving = !pv
-                  ? null
-                  : pv.discount > 0
-                    ? `Giảm ${formatVnd(pv.discount)} cho đơn này`
-                    : (pv.freeshipSaving ?? 0) > 0
-                      ? `Miễn phí giao hàng ${formatVnd(pv.freeshipSaving!)} cho đơn này`
-                      : null;
-                return (
-                  <li
-                    key={c.code}
-                    className={`flex items-center gap-3 rounded-control border border-dashed border-promo-solid bg-promo-bg p-3 ${
-                      eligible ? '' : redundant ? 'opacity-60' : 'opacity-80'
-                    }`}
-                  >
-                    <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
-                    <div className="min-w-0 flex-1">
-                      <div className="break-all text-sm font-bold text-promo-fg">
-                        {autoCouponName(c.code) ?? c.code}
-                      </div>
-                      <div className="text-caption text-stone-800">{couponValueLabel(c)}</div>
-                      {saving && (
-                        <div className="text-caption font-semibold text-success-fg">{saving}</div>
-                      )}
-                      {serverBlocked && pv.reason && (
-                        <div className="text-caption font-medium text-warning-fg">{pv.reason}</div>
-                      )}
-                      {redundant && (
-                        <div className="text-caption text-stone-700">
-                          Đơn này đã miễn phí giao hàng
-                        </div>
-                      )}
-                      {c.minOrder != null && (
-                        <div
-                          className={`text-caption ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}
-                        >
-                          {meetsMin
-                            ? `Đơn tối thiểu ${formatVnd(c.minOrder)}`
-                            : `Cần đơn tối thiểu ${formatVnd(c.minOrder)} — mua thêm ${formatVnd(c.minOrder - subtotal)} để dùng mã này`}
-                        </div>
-                      )}
-                      <div className="text-caption text-stone-700">{couponExpiryLabel(c.endAt)}</div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={isApplied || !eligible || busy}
-                      onClick={() => apply.mutate(c.code)}
-                      aria-label={`${isApplied ? 'Đang dùng' : redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
-                      className={`${ui.btnPrimary} flex-none px-3`}
-                    >
-                      {isApplied
-                        ? 'Đang dùng'
-                        : redundant
-                          ? 'Không cần'
-                          : serverBlocked
-                            ? 'Không áp dụng'
-                            : eligible
-                              ? 'Dùng mã'
-                              : 'Chưa đủ'}
-                    </button>
-                  </li>
-                );
-              })}
-          </ul>
-          {couponsQ.data!.length > VISIBLE_COUPONS && (
-            <button
-              type="button"
-              onClick={() => setShowAll((v) => !v)}
-              className={`${ui.btnText} mt-1 text-forest-700`}
-            >
-              {showAll ? 'Thu gọn' : `Xem thêm ${couponsQ.data!.length - VISIBLE_COUPONS} mã`}
+          <VoucherPicker rows={shownRows} onUse={(c) => apply.mutate(c)} onRemove={() => drop.mutate()} busy={busy} pendingCode={pendingCode} />
+          {!inSheet && rows.length > VISIBLE_COUPONS && (
+            <button type="button" onClick={() => setShowAll((v) => !v)} className={`${ui.btnText} mt-1 text-[color:var(--color-text-brand)]`}>
+              {showAll ? 'Thu gọn' : `Xem thêm ${rows.length - VISIBLE_COUPONS} mã`}
             </button>
           )}
         </>
       )}
-      <p className="mt-2 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
+      {inSheet && couponsQ.isSuccess && rows.length === 0 && (
+        <div className="mt-2">
+          <EmptyState variant="inline" art="leaf" heading={fillCopy('coupon.pickEmptyTitle')} body={fillCopy('coupon.pickEmptyBody')} />
+        </div>
+      )}
+      {!inSheet && <p className="mt-2 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>}
     </>
   );
 
@@ -373,11 +316,11 @@ export function CouponBox({
       className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left shadow-[inset_0_-1px_0_var(--color-border-subtle)]"
     >
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <Ticket className="h-5 w-5 flex-none text-[color:var(--clay-700)]" aria-hidden="true" />
+        <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
         <span className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
         {currentCode ? (
           <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
+            <span className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-caption font-bold text-promo-fg">
               {currentCode}
             </span>
             {appliedDiscount > 0 && (
@@ -407,7 +350,7 @@ export function CouponBox({
       className={
         sheet
           ? undefined
-          : `mt-3 border-t border-stone-200 pt-3 max-md:mt-0 max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] ${
+          : `mt-3 border-t border-[color:var(--color-border-subtle)] pt-3 max-md:mt-0 max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] ${
               band ? 'max-md:p-4' : 'max-md:rounded-card max-md:p-3 max-md:shadow-[var(--elevation-1)]'
             }`
       }
@@ -420,15 +363,26 @@ export function CouponBox({
             <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">
               <Ticket className="h-4 w-4" aria-hidden="true" /> {currentCode}
             </span>
-            <button
-              type="button"
-              onClick={() => drop.mutate()}
-              disabled={busy}
-              aria-label={`Bỏ mã giảm giá ${currentCode}`}
-              className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <span className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                {...panelAria}
+                className="inline-flex min-h-11 items-center gap-0.5 px-2 text-caption font-medium text-[color:var(--color-text-brand)]"
+              >
+                {fillCopy('checkout.changeCode')}
+                <ChevronRight className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => drop.mutate()}
+                disabled={busy}
+                aria-label={`Bỏ mã giảm giá ${currentCode}`}
+                className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </span>
           </div>
           <button
             type="button"
@@ -438,13 +392,13 @@ export function CouponBox({
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
             <span className="inline-flex min-w-0 items-center gap-2.5">
-              <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-[var(--clay-50)]">
-                <Ticket className="h-5 w-5 text-[color:var(--clay-700)]" aria-hidden="true" />
+              <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-promo-bg">
+                <Ticket className="h-5 w-5 text-promo-fg" aria-hidden="true" />
               </span>
-              <span className="flex min-w-0 flex-col text-sm font-semibold text-stone-900">
+              <span className="flex min-w-0 flex-col text-sm font-semibold text-[color:var(--color-text-primary)]">
                 Mã giảm giá
                 <span className="inline-flex min-w-0 items-center gap-2">
-                  <span className="min-w-0 truncate rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
+                  <span className="min-w-0 truncate rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-caption font-bold text-promo-fg">
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
@@ -469,29 +423,29 @@ export function CouponBox({
           type="button"
           onClick={() => setOpen((v) => !v)}
           {...panelAria}
-          className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-stone-900"
+          className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)]"
         >
           <span className="inline-flex items-center gap-2 max-md:gap-2.5">
-            <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-[var(--clay-50)]">
+            <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-promo-bg">
               <Ticket
-                className="h-4 w-4 text-promo-fg max-md:h-5 max-md:w-5 max-md:text-[color:var(--clay-700)]"
+                className="h-4 w-4 text-promo-fg max-md:h-5 max-md:w-5 max-md:text-promo-fg"
                 aria-hidden="true"
               />
             </span>
             <span className="flex flex-col">
               Mã giảm giá
               {hint ? (
-                <span className="text-caption font-normal text-forest-700 max-md:text-[color:var(--color-text-brand)]">
+                <span className="text-caption font-normal text-[color:var(--color-text-brand)]">
                   {couponHintText(hint, formatVnd)}
                 </span>
               ) : (
-                <span className="text-caption font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
+                <span className="text-caption font-normal text-[color:var(--color-text-tertiary)]">
                   Chọn hoặc nhập mã giảm giá
                 </span>
               )}
             </span>
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-forest-700">
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
             {actionLabel}
             <ChevronRight
               className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -500,8 +454,8 @@ export function CouponBox({
           </span>
         </button>
       )}
-      {sheet ? (
-        <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.title')}>
+      {inSheet ? (
+        <BottomSheet open={open} onClose={() => setOpen(false)} title={fillCopy('coupon.pickTitle')} description={fillCopy('coupon.oneCodeHint')}>
           <div id="coupon-panel">
             {panelBody}
             {err && (
@@ -513,7 +467,7 @@ export function CouponBox({
         </BottomSheet>
       ) : (
         (!currentCode || open) && (
-          <div id="coupon-panel" hidden={!open} className={currentCode ? 'md:hidden' : undefined}>
+          <div id="coupon-panel" hidden={!open}>
             {panelBody}
           </div>
         )
@@ -545,7 +499,7 @@ export function CouponBox({
           {applyWarning}
         </p>
       )}
-      {err && !sheet && (
+      {err && (!inSheet || !open) && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {err}
         </p>

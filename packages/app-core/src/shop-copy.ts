@@ -41,6 +41,16 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.limitShort': 'Tối đa {n}/khách',
   // Bản đọc của 'flash.limitShort': trình đọc màn hình đọc dấu "/" thành "gạch chéo".
   'flash.limitSpoken': 'Tối đa {n} sản phẩm mỗi khách',
+  // Dòng ghi chú ở bảng chọn phân loại và dưới ô Số lượng khi số mua vượt giới hạn: máy chủ tính CẢ dòng giá thường (flash-line-price.ts).
+  'flash.sheetOverLimit': 'Giá Giờ vàng tối đa {n} sản phẩm mỗi khách. Mua {qty} thì cả dòng tính giá thường.',
+  // Cùng ghi chú khi giới hạn là số suất còn lại của đợt (ít hơn giới hạn mỗi khách), không phải giới hạn của riêng khách.
+  'flash.sheetOverQuota': 'Giờ vàng còn {n} suất. Mua {qty} thì cả dòng tính giá thường.',
+  // Giỏ đã có sẵn phân loại này: thêm giỏ cộng dồn và máy chủ giá cả dòng (n + qty = total), nên nói theo giỏ, không nêu nguyên nhân chặn.
+  'flash.sheetOverInCart': 'Giỏ đã có {n}. Thêm {qty} thì cả {total} sản phẩm tính giá thường.',
+  // Giỏ đã vượt suất từ trước (n > allowance): dòng giỏ đang tính giá thường rồi, phần thêm không phải nguyên nhân mất giá.
+  'flash.sheetOverInCartAlready': 'Giỏ đã có {n}, quá {allowance} suất Giờ vàng nên cả dòng đang tính giá thường.',
+  // "Mua ngay" thanh toán cả dòng giỏ của phân loại (số có sẵn + số thêm), nên nói trước khi bấm khi giỏ đã có sẵn mà chưa mất giá.
+  'flash.sheetBuyMerge': 'Giỏ đã có {n}: Mua ngay thanh toán cả {total} sản phẩm.',
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',
@@ -173,6 +183,33 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.newCustomerOnlyReason': 'Chỉ dành cho khách đặt đơn đầu tiên',
   'coupon.claimedIneligibleReason': 'Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng',
   'coupon.walletLoadError': 'Chưa tải được mã bạn đã lưu',
+  // Bảng chọn mã ở giỏ và thanh toán (VoucherPicker), một bộ chữ cho Mini App và web.
+  'coupon.pickTitle': 'Chọn mã giảm giá',
+  'coupon.pickMine': 'Mã giảm giá của bạn',
+  'coupon.pickManual': 'Nhập mã giảm giá khác',
+  'coupon.pickPlaceholder': 'Nhập mã',
+  'coupon.pickApply': 'Áp dụng',
+  'coupon.pickLoading': 'Đang tải danh sách mã',
+  'coupon.pickLoadError': 'Không thể tải danh sách mã giảm giá: {reason}',
+  'coupon.pickEmptyTitle': 'Bạn chưa có mã giảm giá trong ví',
+  'coupon.pickEmptyBody': 'Nhập mã giảm giá ở trên để áp dụng.',
+  'coupon.pickUse': 'Dùng',
+  'coupon.pickRemove': 'Bỏ chọn',
+  'coupon.pickShort': 'Chưa đủ',
+  'coupon.pickBlocked': 'Không áp dụng',
+  'coupon.pickApplied': 'Đang dùng',
+  'coupon.pickUseAria': 'Dùng mã {code}',
+  'coupon.pickRemoveAria': 'Bỏ chọn mã {code}',
+  'coupon.pickShortAria': 'Chưa đủ điều kiện dùng mã {code}',
+  'coupon.pickBlockedAria': 'Không áp dụng mã {code}',
+  'coupon.saveOrder': 'Giảm {amount} cho đơn này',
+  'coupon.saveShip': 'Miễn phí giao hàng {amount} cho đơn này',
+  'coupon.shipAlreadyFree': 'Đơn này đã miễn phí giao hàng',
+  'coupon.minOrderBase': 'Đơn tối thiểu {min} không tính hàng Giờ vàng và phần giảm combo',
+  'coupon.zeroDiscountPdp': 'Không giảm cho sản phẩm Giờ vàng này',
+  'coupon.scopeOnly': 'Chỉ áp cho {names}',
+  'coupon.copiedToast': 'Đã chép mã {code} — mã đã có sẵn trong ví, chọn ở bước thanh toán',
+  'coupon.copyShowToast': 'Mã của bạn: {code} — chọn ở bước thanh toán',
 
   // Ưu đãi khi chưa đăng nhập: mỗi khối cần tài khoản một thẻ mời, một nhãn nút chung ở hai app
   'login.cta': 'Đăng nhập',
@@ -191,7 +228,7 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.cartLine': 'Giảm giá combo',
   'combo.pdpTitle': 'Combo ưu đãi',
   'combo.homeTitle': 'Combo tiết kiệm',
-  'addon.title': 'Mua kèm deal sốc',
+  'addon.title': 'Mua kèm giá tốt',
   'addon.price': 'Giá mua kèm {price}',
   'addon.condition': 'Chỉ khi mua cùng {name}',
   'addon.add': 'Thêm {n} món vào giỏ',
@@ -217,6 +254,29 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.saving': 'Tiết kiệm {x}',
   'cart.subtotal': 'Tạm tính',
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
+  // Thanh toán (K2): Mini App và web cùng một nguồn chữ
+  'checkout.addressNeeded': 'Chọn địa chỉ giao hàng để đặt hàng.',
+  'checkout.quoteFailed': 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.',
+  'checkout.totalPending': 'Chưa tính',
+  'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
+  'checkout.calculating': 'Đang tính…',
+  'checkout.priceChangedHint': 'Giá ưu đãi đã thay đổi. Bạn xem lại giỏ hàng trước khi đặt nhé.',
+  'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',
+  'checkout.moreLines': 'Xem thêm {n} sản phẩm',
+  'checkout.fewerLines': 'Thu gọn',
+  'checkout.placeWith': 'Đặt hàng · {price}',
+  'checkout.changeCode': 'Đổi mã',
+  'checkout.pointsNone': 'Tích điểm từ đơn đầu tiên nhé',
+  'checkout.addressEmpty': 'Bạn chưa thêm địa chỉ',
+  'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
+  // Giỏ gom món của combo (K5): đầu nhóm, nhắc chọn đủ món, hộp báo trước khi bỏ món làm bộ mất giảm. Nút xác nhận không ghi "Xoá" để khỏi lặp nhãn thùng rác.
+  'cart.comboTitle': 'Combo: {name}',
+  'cart.comboSaving': 'Tiết kiệm {x}',
+  'cart.comboNeedAll': 'Chọn đủ các món để được giảm {x}',
+  'cart.comboRemoveTitle': 'Bỏ món khỏi combo?',
+  'cart.comboRemoveBody': 'Combo {name} sẽ mất giảm {x} nếu bạn bỏ món này.',
+  'cart.comboRemoveConfirm': 'Vẫn bỏ',
+  'cart.comboRemoveKeep': 'Giữ lại',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',
@@ -290,6 +350,7 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.comboError': 'Chưa thêm được combo, giỏ của bạn không thay đổi. Bạn thử lại nhé.',
   'shop.loginForCombo': 'Đăng nhập để thêm combo vào giỏ nhé',
   'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
+  'shop.tierBadge': 'CTV {name}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
@@ -307,7 +368,7 @@ export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /cửa hàng/i, use: 'Gian hàng' },
   { pattern: /\.{3}/, use: '… (một ký tự)' },
   { pattern: /\b\d+h \d+m\b/, use: 'countdownText, ví dụ "2 giờ 05 phút"' },
-  { pattern: /\bHOT\b|SỐC|Nhanh tay/, use: 'bỏ chữ giục mua' },
+  { pattern: /\bHOT\b|SỐC|Nhanh tay/i, use: 'bỏ chữ giục mua' },
 ];
 
 /** Điền mẫu `SHOP_COPY[key]`. Khoá lạ hoặc thiếu biến thì ném lỗi: lỗi của người viết mã, bắt ở test chứ không để "{t}" tới tay khách. */

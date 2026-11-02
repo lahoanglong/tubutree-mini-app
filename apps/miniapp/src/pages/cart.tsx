@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
+import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
+import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
   getCart,
@@ -50,6 +52,8 @@ import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } 
 import { cartKey, useCartKey } from '../services/cart-key';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { Countdown } from '../components/ui/countdown';
+import { ConfirmSheet } from '../components/ui/confirm-sheet';
+import { CartComboBlock } from '../components/cart-combo-block';
 
 const UNDO_WINDOW_MS = 3500;
 
@@ -88,6 +92,9 @@ export default function CartPage() {
   const cartKeyNow = useCartKey();
   const cart = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
   const [removed, setRemoved] = useState<CartLine | null>(null);
+  // Hộp báo "bộ sẽ mất giảm" trước khi xoá món khoá của combo. Dữ liệu giữ lại sau khi đóng để chữ không trống trong lúc tấm trượt xuống.
+  const [pendingRemove, setPendingRemove] = useState<{ line: CartLine; notice: ComboRemovalNotice } | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // Tấm chọn mã nằm ở cấp trang, không trong chân dính (position:fixed, z 20): zmp-ui Sheet không có portal nên lớp phủ và tấm
   // sẽ kẹt trong ngăn xếp z 20, nút Quay lại (z 200) và thanh Hoàn tác (z 30) vẽ đè lên và vẫn bấm được.
   const [voucherOpen, setVoucherOpen] = useState(false);
@@ -112,6 +119,11 @@ export default function CartPage() {
   useEffect(() => {
     if (noItems) setVoucherOpen(false);
   }, [noItems]);
+  // Hộp báo bỏ món gỡ khi dòng chờ xoá không còn trong giỏ (làm mới giỏ vì máy khác đã xoá, kể cả giỏ về trống): "Vẫn bỏ" không được xoá dòng đã mất.
+  const pendingGone = !!pendingRemove && !(cart.data?.items ?? []).some((l) => l.id === pendingRemove.line.id);
+  useEffect(() => {
+    if (pendingGone) setConfirmOpen(false);
+  }, [pendingGone]);
 
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã của VoucherSheet.
   // Chọn cả giỏ dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá này.
@@ -196,6 +208,17 @@ export default function CartPage() {
     );
   }
   const empty = summary.items.length === 0;
+  // Món khoá của combo (bỏ riêng nó thì bộ hết khớp) phải hỏi trước khi xoá; không chặn: "Vẫn bỏ" xoá như thường, "Giữ lại" thôi.
+  const requestRemove = (line: CartLine) => {
+    const notice = comboRemovalNotice(summary.comboGroups, line.id);
+    if (!notice) return handleRemove(line);
+    setPendingRemove({ line, notice });
+    setConfirmOpen(true);
+  };
+  const confirmRemove = () => {
+    setConfirmOpen(false);
+    if (pendingRemove) handleRemove(pendingRemove.line);
+  };
   // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
   const groups = groupByFulfiller(summary.items);
   const withHeaders = showFulfillerHeaders(groups);
@@ -267,30 +290,41 @@ export default function CartPage() {
               </Text>
             </Box>
           )}
-          {groups.map((g) => (
-            <section key={g.key} aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}>
-              {withHeaders && (
-                <Heading variant="title-sm" as="h2" style={{ padding: '12px 12px 0' }}>
-                  {fulfillerLabel(g.fulfiller)}
-                </Heading>
-              )}
-              <Box p={3} pt={2} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {g.items.map((line) => (
-                  <CartLineRow
-                    key={line.id}
-                    line={line}
-                    selected={!deselected.has(line.id)}
-                    onToggleSelect={() => toggleSelect(line.id)}
-                    onQty={(qty) => update.mutate({ id: line.id, qty })}
-                    onRemove={() => handleRemove(line)}
-                    onOpen={() => navigate(`/product/${line.slug}`)}
-                    onFlashEnd={() => void queryClient.invalidateQueries({ queryKey: ['cart'] })}
-                    pending={update.isPending && update.variables?.id === line.id}
-                  />
-                ))}
-              </Box>
-            </section>
-          ))}
+          {groups.map((g) => {
+            // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
+            const comboWaiting = comboSavingPending({ editing: summary.comboPending, partial: subsetSig !== null, priced: priced !== null });
+            const { blocks, loose } = cartComboBlocks(g.items, summary.comboGroups, deselected, priced?.comboGroups, comboWaiting);
+            const renderLine = (line: CartLine) => (
+              <CartLineRow
+                key={line.id}
+                line={line}
+                selected={!deselected.has(line.id)}
+                onToggleSelect={() => toggleSelect(line.id)}
+                onQty={(qty) => update.mutate({ id: line.id, qty })}
+                onRemove={() => requestRemove(line)}
+                onOpen={() => navigate(`/product/${line.slug}`)}
+                onFlashEnd={() => void queryClient.invalidateQueries({ queryKey: ['cart'] })}
+                pending={update.isPending && update.variables?.id === line.id}
+              />
+            );
+            return (
+              <section key={g.key} aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}>
+                {withHeaders && (
+                  <Heading variant="title-sm" as="h2" style={{ padding: '12px 12px 0' }}>
+                    {fulfillerLabel(g.fulfiller)}
+                  </Heading>
+                )}
+                <Box p={3} pt={2} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {blocks.map((block) => (
+                    <CartComboBlock key={block.group.id} block={block} headingAs={withHeaders ? 'h3' : 'h2'}>
+                      {block.lines.map(renderLine)}
+                    </CartComboBlock>
+                  ))}
+                  {loose.map(renderLine)}
+                </Box>
+              </section>
+            );
+          })}
         </>
       )}
 
@@ -350,6 +384,18 @@ export default function CartPage() {
               onOpen={() => setVoucherOpen(true)}
             />
           }
+        />
+      )}
+
+      {!empty && pendingRemove && (
+        <ConfirmSheet
+          open={confirmOpen}
+          title={pendingRemove.notice.title}
+          message={pendingRemove.notice.message}
+          confirmLabel={pendingRemove.notice.confirmLabel}
+          cancelLabel={pendingRemove.notice.keepLabel}
+          onConfirm={confirmRemove}
+          onCancel={() => setConfirmOpen(false)}
         />
       )}
 
@@ -449,11 +495,13 @@ function CartLineRow({
   /** PATCH số lượng của chính dòng này đang bay: line.total lúc đó là số client tự nhân (optimistic), chưa phải số server. */
   pending: boolean;
 }) {
-  const overStock = line.quantity > line.stock;
   // Bấm +/- nhanh 5 lần trước đây gọi 5 PATCH song song → debounce qty cuối cùng
   // (UI cập nhật tức thời qua local state, request chỉ bay sau ~380ms ổn định).
   const [localQty, setLocalQty] = useState(line.quantity);
   const debouncedQty = useDebounced(localQty, 380);
+  // Theo số đang chọn trên màn (localQty) để dòng hiện cùng lúc nút + khoá khi khách bấm tới trần, không đợi máy chủ. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật với web).
+  const stockNote = cartStockNote(localQty, line.stock);
+  const soldOut = line.stock <= 0;
   // CHỈ đồng bộ về line.quantity khi KHÔNG có thay đổi đang chờ flush — tránh case
   // refetch cart (do mutate line khác) trả về quantity CŨ và snap UI ngược lại khi
   // user đang tap. Sau khi debouncedQty đã đuổi kịp localQty thì server-truth là an toàn.
@@ -545,11 +593,11 @@ function CartLineRow({
             )}
           </Box>
         )}
-        {overStock && (
+        {(stockNote || soldOut) && (
           <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
-            <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
-            <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
-              {line.stock > 0 ? vi.cart.stockLimited(line.stock) : vi.cart.outOfStock}
+            {(soldOut || stockNote?.tone === 'warning') && <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />}
+            <Text size="xSmall" style={{ color: soldOut || stockNote?.tone === 'warning' ? 'var(--color-text-warning)' : 'var(--color-text-secondary)' }}>
+              {stockNote ? stockNote.text : vi.cart.outOfStock}
             </Text>
           </Box>
         )}

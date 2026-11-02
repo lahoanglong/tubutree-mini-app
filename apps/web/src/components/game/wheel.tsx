@@ -73,15 +73,17 @@ export function WheelOfFortune({
           }}
         >
           {SLOTS.map((s, i) => (
+            // Số đo của Mini (rộng 64px, chữ 12px, dòng 1.15): "Mã giảm giá" (D2) xuống 2 dòng trong ô thay vì một dòng chạm viền bánh,
+            // và "Chúc may mắn" 2 dòng vẫn trong ruột bánh. Chữ caption 13px (dòng 1.54) và emoji dòng 28px làm nhãn cao hơn Mini, đè viền ở ô chéo khi máy vẽ chữ rộng hơn (Linux, Android).
             <span
               key={i}
-              className="absolute left-1/2 top-1/2 flex w-[72px] flex-col items-center text-center leading-tight"
+              className="absolute left-1/2 top-1/2 flex w-[64px] flex-col items-center text-center leading-[1.15]"
               style={{
                 transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -80px) rotate(-${i * SEG + SEG / 2}deg)`,
               }}
             >
-              <span className="text-xl">{s.emoji}</span>
-              <span className="text-caption font-medium text-stone-800">{s.label}</span>
+              <span className="text-xl leading-[1.15]">{s.emoji}</span>
+              <span className="text-xs font-medium leading-[1.15] text-stone-800">{s.label}</span>
             </span>
           ))}
         </div>

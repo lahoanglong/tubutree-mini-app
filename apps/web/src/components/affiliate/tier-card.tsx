@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { AffiliateDashboard, CtvTiersResponse } from '@tubutree/app-core/api/affiliate';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneCaption, phoneFlatCard } from '@/lib/phone-ui';
+import { phoneBodySm, phoneCaption, phoneFlatCard } from '@/lib/phone-ui';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { progressPct, tierRewardLabel } from './milestone-copy';
 
@@ -21,7 +22,7 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
             {tier.emoji}
           </span>
           <div>
-            <div className="text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">CTV {tier.name}</div>
+            <div className="text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">{fillCopy('shop.tierBadge', { name: tier.name })}</div>
             <div className={`text-xs text-forest-700 ${phoneCaption}`}>Bậc theo doanh số đã chốt tháng này</div>
           </div>
         </div>
@@ -39,10 +40,11 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
       <button
         type="button"
         aria-expanded={showAll}
+        data-testid="tier-toggle"
         onClick={() => setShowAll((v) => !v)}
         className="mt-3 flex min-h-11 w-full items-center justify-between gap-2.5 border-t border-stone-200 py-3 text-left"
       >
-        <span className="text-sm font-semibold text-stone-900">Bảng 5 bậc CTV & thưởng mốc Điểm Xanh</span>
+        <span className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>Bảng 5 bậc CTV & thưởng mốc Điểm Xanh</span>
         {showAll ? <ChevronUp className="h-4 w-4 text-forest-600" aria-hidden="true" /> : <ChevronDown className="h-4 w-4 text-forest-600" aria-hidden="true" />}
       </button>
 

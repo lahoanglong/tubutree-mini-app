@@ -34,6 +34,7 @@ export function isTubuOnlyBundle(b: {
 const LIVE_SELECT = {
   id: true,
   kind: true,
+  title: true,
   pct: true,
   anchorProductId: true,
   createdById: true,
@@ -59,6 +60,7 @@ export async function loadLiveBundles(prisma: Pick<PrismaService, 'bundle'>, now
     .map((b) => ({
       id: b.id,
       kind: b.kind,
+      title: b.title,
       pct: b.pct,
       anchorProductId: b.anchorProductId,
       createdById: b.createdById,

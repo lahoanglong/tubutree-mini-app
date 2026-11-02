@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
-import { addToCart } from '@tubutree/app-core/api/cart';
+import { addToCart, getCart } from '@tubutree/app-core/api/cart';
 import { fetchProduct, type ProductCard, type VariationDetail } from '@tubutree/app-core/api/catalog';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
-import { cartKey, cartStorefrontSlug } from '@/lib/cart-key';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { cartKey, cartStorefrontSlug, useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -31,6 +32,9 @@ interface Notice {
 export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode } {
   const qc = useQueryClient();
   const flash = useActiveFlashSales();
+  const phase = useAuthPhase();
+  // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở thanh đầu và trang sản phẩm, thêm xong `setQueryData` cập nhật).
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: () => getCart(coreHttp, cartStorefrontSlug()), enabled: phase === 'authenticated' });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[] } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -135,6 +139,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
           flash={flash}
           initialId={picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
+          cartLines={cartQ.data?.items}
           onConfirm={(v, qty) => void confirmPick(v, qty)}
         />
       )}

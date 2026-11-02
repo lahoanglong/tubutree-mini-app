@@ -26,7 +26,7 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
 
   return (
     <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
-      <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 8 }}>
+      <Text variant="body-sm" as="div" data-ds="checkout-block-title" style={{ fontWeight: 600, marginBottom: 8 }}>
         {vi.checkout.address}
       </Text>
 
@@ -170,6 +170,7 @@ function AddressCard({
 }) {
   return (
     <div
+      data-ds="checkout-address-card"
       style={{
         marginBottom: 8,
         border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,

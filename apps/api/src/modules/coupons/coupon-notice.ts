@@ -4,28 +4,28 @@ import { CouponProductScopeError } from './coupons.service';
 /** Lý do khi mã vẫn hợp lệ nhưng phần hàng được tính giảm ra 0đ (vd giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu). */
 export const COUPON_ZERO_DISCOUNT_REASON = 'Không có sản phẩm nào trong đơn được giảm theo mã này.';
 
-/** Mã miễn phí vận chuyển chỉ miễn phí giao hàng do Tubu Tree giao; đơn chỉ có hàng gian hàng tự giao, hoặc đã miễn phí giao. */
+/** Mã miễn phí giao hàng chỉ miễn phí giao của hàng Tubu Tree giao; đơn chỉ có hàng gian hàng tự giao, hoặc đã miễn phí giao. */
 export const COUPON_FREESHIP_NOTHING_REASON =
-  'Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó.';
+  'Mã miễn phí giao hàng chỉ áp cho phí giao của hàng Tubu Tree giao, và đơn này không có phí giao đó.';
 
-/** Đơn đầu đã được miễn phí giao nên mã freeship không miễn thêm gì và không bị tiêu lượt. */
-export const COUPON_FREESHIP_FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+/** Đơn đầu đã được miễn phí giao nên mã miễn phí giao hàng không miễn thêm gì và không bị tiêu lượt. */
+export const COUPON_FREESHIP_FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
 
 /** Phí giao đã bằng 0 vì lý do khác đơn đầu và không có số ngưỡng để nêu (hạng được miễn phí giao toàn shop). */
-export const COUPON_FREESHIP_ALREADY_FREE_REASON = 'Đơn này đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+export const COUPON_FREESHIP_ALREADY_FREE_REASON = 'Đơn này đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
 
-/** Đơn đạt ngưỡng miễn phí giao thường nên mã freeship không miễn thêm gì; `threshold` là ngưỡng đang cấu hình cho hạng của khách. */
+/** Đơn đạt ngưỡng miễn phí giao thường nên mã miễn phí giao hàng không miễn thêm gì; `threshold` là ngưỡng đang cấu hình cho hạng của khách. */
 export function couponFreeshipThresholdReason(threshold: number): string {
-  return `Đơn từ ${vnd(threshold)} đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.`;
+  return `Đơn từ ${vnd(threshold)} đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.`;
 }
 
 /**
  * Đơn có kiện Tubu đã hết phí giao nhưng còn kiện gian hàng đối tác có phí giao: nói rõ mã chỉ miễn phần hàng Tubu Tree, nếu không
- * khách thấy phí giao của kiện đối tác vẫn còn mà hiểu mã bị lỗi. `why` là lý do kiện Tubu hết phí giao; null = không có con số ngưỡng để nêu (hạng được freeship toàn shop, hoặc phí giao dưới ngưỡng cấu hình 0đ).
+ * khách thấy phí giao của kiện đối tác vẫn còn mà hiểu mã bị lỗi. `why` là lý do kiện Tubu hết phí giao; null = không có con số ngưỡng để nêu (hạng được miễn phí giao toàn shop, hoặc phí giao dưới ngưỡng cấu hình 0đ).
  */
 export function couponFreeshipTubuPartReason(why: 'FIRST_ORDER' | { threshold: number } | null): string {
   const detail = why === null ? '' : why === 'FIRST_ORDER' ? ' (đơn đầu)' : ` (đơn từ ${vnd(why.threshold)})`;
-  return `Phần hàng Tubu Tree giao đã được miễn phí giao${detail}, mã FREESHIP chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.`;
+  return `Phần hàng Tubu Tree giao đã được miễn phí giao${detail}, mã miễn phí giao hàng chỉ áp cho hàng Tubu Tree nên được giữ cho đơn sau.`;
 }
 
 /**
@@ -33,7 +33,7 @@ export function couponFreeshipTubuPartReason(why: 'FIRST_ORDER' | { threshold: n
  * lượt). `reason` là thông điệp tiếng Việt của CouponsService (vd "Đơn tối thiểu 150.000đ để dùng mã này.").
  */
 export function couponNotAppliedNotice(reason: string, hasFlash: boolean, hasCombo = false): string {
-  const excluded = [hasFlash ? 'hàng giờ vàng' : null, hasCombo ? 'phần giảm combo' : null].filter(Boolean);
+  const excluded = [hasFlash ? 'hàng Giờ vàng' : null, hasCombo ? 'phần giảm combo' : null].filter(Boolean);
   const why = excluded.length > 0 ? ` (${excluded.join(' và ')} không được tính vào điều kiện của mã)` : '';
   return `Mã chưa được áp dụng cho đơn này${why}: ${reason}`;
 }
@@ -42,17 +42,17 @@ const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
 /** Mã đã áp nhưng giỏ có hàng giờ vàng: giá giờ vàng là giá cuối nên mã chỉ giảm trên phần hàng còn lại. */
 export function couponFlashExcludedNotice(base: number): string {
-  return `Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên ${vnd(base)} hàng còn lại.`;
+  return `Hàng Giờ vàng không được giảm thêm theo mã: mã chỉ tính trên ${vnd(base)} hàng còn lại.`;
 }
 
 /** Lỗi áp mã khi giỏ có hàng giờ vàng: nói thêm hàng giờ vàng không được tính vào điều kiện của mã. */
 export function couponRejectedWithFlash(reason: string, base: number): string {
-  return `${reason} Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là ${vnd(base)}.`;
+  return `${reason} Hàng Giờ vàng không được tính vào điều kiện của mã, phần được tính là ${vnd(base)}.`;
 }
 
 /** Mã gắn sản phẩm mà sản phẩm đó chỉ có trong giỏ ở giá giờ vàng. */
 export const COUPON_PRODUCT_FLASH_REASON =
-  'Sản phẩm áp dụng mã đang có giá giờ vàng. Giá giờ vàng là giá ưu đãi cuối nên không giảm thêm theo mã, bạn dùng được mã này khi giờ vàng kết thúc.';
+  'Sản phẩm áp dụng mã đang có giá Giờ vàng. Giá Giờ vàng là giá ưu đãi cuối nên không giảm thêm theo mã, bạn dùng được mã này khi Giờ vàng kết thúc.';
 
 /**
  * Câu lý do mã bị từ chối để báo khách: mã gắn sản phẩm mà sản phẩm đó có trong giỏ nhưng chỉ ở giá giờ vàng (dòng giờ vàng bị

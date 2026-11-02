@@ -60,7 +60,7 @@ describe('ds-shop-guard (web)', () => {
       'components/mini/price-tag.tsx',
       'components/flash-price.tsx', // khối giá lớn của trang chi tiết (PdpPrice)
       'components/add-to-cart.tsx', // giá theo phân loại ở thanh mua
-      'components/variation-sheet.tsx', // giá từng phân loại trong bảng chọn
+      'components/variation-chip.tsx', // tên phân loại hết hàng gạch ngang, không phải giá gạch
       'app/gio-hang/page.tsx', // dòng giỏ hàng
       'app/merchant/settlement-tab.tsx',
       'components/dealer/price-tab.tsx', // bảng giá đại lý
@@ -142,6 +142,12 @@ describe('ds-shop-guard mở rộng (web): luật có baseline chỉ giảm', ()
     ['strike-element', 'app/ban-chay/x.tsx', 'export const A = () => <s>10.000đ</s>;'],
     ['strike-element', 'components/home/s.tsx', 'export const A = () => <s className="text-xs">10.000đ</s>;'],
     ['primitive-color', 'app/uu-dai/x.tsx', 'export const A = () => <div className="bg-stone-100 max-md:text-forest-700" />;'],
+    ['primitive-color', 'app/thanh-toan/x.tsx', 'export const A = () => <input className="h-6 w-6 accent-forest-600" />;'],
+    ['primitive-color', 'app/thanh-toan/x.tsx', 'export const A = () => <input className="caret-clay-500" />;'],
+    ['primitive-color', 'app/thanh-toan/x.tsx', 'export const A = () => <div className="shadow-forest-200" />;'],
+    ['primitive-color', 'app/thanh-toan/x.tsx', 'export const A = () => <div className="ring-offset-stone-100" />;'],
+    ['primitive-color', 'app/thanh-toan/x.tsx', 'export const A = () => <div className="border-t-stone-200" />;'],
+    ['primitive-color', 'app/thanh-toan/x.tsx', 'export const A = () => <input className="hover:accent-forest-700" />;'],
     ['shadow-var-color', 'components/mini/z.tsx', 'export const A = () => <div className="max-md:shadow-[var(--elevation-1)]" />;'],
     ['zmp-ui-import', 'components/y.tsx', "import { Button } from 'zmp-ui';"],
     ['open-snackbar', 'lib/z.ts', "openSnackbar({ text: 'x' });"],
@@ -157,6 +163,7 @@ describe('ds-shop-guard mở rộng (web): luật có baseline chỉ giảm', ()
 
   it('chỗ hợp lệ không bị bắt: lớp ngữ nghĩa, [var(--color-*)], thành phần nền components/mini', () => {
     expect(check('app/ban-chay/x.tsx', 'export const A = () => <div className="bg-[var(--color-bg-media)] text-fg-secondary" />;')).toEqual([]);
+    expect(check('app/thanh-toan/x.tsx', 'export const A = () => <input className="accent-[color:var(--color-action-primary-bg)] text-[color:var(--color-text-primary)] border-t border-[var(--color-border-subtle)]" />;')).toEqual([]);
     expect(check('components/mini/x.tsx', 'export const A = () => <div className="bg-stone-100" />;')).toEqual([]);
     expect(check('app/tai-khoan/page.tsx', 'export const A = () => <div className="bg-stone-100" />;')).toEqual([]);
   });

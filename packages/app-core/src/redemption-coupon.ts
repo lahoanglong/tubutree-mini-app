@@ -13,7 +13,7 @@ function vnDayMonth(iso: string): string {
 }
 
 /**
- * Dòng phụ của lượt đổi quà là mã giảm giá: "Mã X · HSD dd/mm" khi còn dùng được, "Mã X · Đã dùng", "Mã X · Hết hạn". `usable`
+ * Dòng phụ của lượt đổi quà là mã giảm giá: "Mã X · Dùng đến dd/mm" khi còn dùng được, "Mã X · Đã dùng", "Mã X · Hết hạn". `usable`
  * quyết định dòng có bấm "Dùng ngay" được không. Mã đã bị dọn khỏi hệ thống (không còn `couponCode`) chỉ có thể là đã dùng hoặc hết hạn.
  */
 export function redemptionCouponLine(r: RedemptionCouponInfo, now: Date = new Date()): { text: string; usable: boolean } {
@@ -22,7 +22,7 @@ export function redemptionCouponLine(r: RedemptionCouponInfo, now: Date = new Da
   if (r.couponUsed) return { text: `${head} · Đã dùng`, usable: false };
   if (r.couponEndAt) {
     if (new Date(r.couponEndAt).getTime() < now.getTime()) return { text: `${head} · Hết hạn`, usable: false };
-    return { text: `${head} · HSD ${vnDayMonth(r.couponEndAt)}`, usable: true };
+    return { text: `${head} · Dùng đến ${vnDayMonth(r.couponEndAt)}`, usable: true };
   }
   return { text: head, usable: true };
 }

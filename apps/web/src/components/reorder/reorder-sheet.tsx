@@ -140,7 +140,7 @@ function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: L
           checked={checked}
           disabled={!line.available}
           onChange={() => onChange({ checked: !checked, quantity: qty })}
-          className="h-5 w-5 accent-forest-600"
+          className="h-5 w-5 accent-[color:var(--color-action-primary-bg)]"
         />
       </label>
       <ProductThumb src={line.thumbnail} alt="" size={56} />

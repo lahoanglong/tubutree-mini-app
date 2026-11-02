@@ -74,6 +74,41 @@ test.describe('Trình dựng gian hàng web 1280px (G6 #35)', () => {
   });
 });
 
+test.describe('Trình dựng gian hàng web 375px: bậc dài và tên dài (K6)', () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'chỉ chạy ở project Web Customer (đặt khổ 375px trong test)');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await setBuilderSession(page);
+  });
+
+  test('tên shop 80 ký tự + bậc "Kim Cương": huy hiệu một dòng, không tràn ngang', async ({ page, api }) => {
+    const longTitle = `Cửa hàng ${'xanh '.repeat(14)}`.trim().slice(0, 80);
+    mockBuilder(api, { tier: 'Kim Cương', title: longTitle });
+    await page.goto('/ctv/gian-hang');
+    const badge = page.getByText('CTV Kim Cương');
+    await expect(badge).toBeVisible({ timeout: 20_000 });
+    const box = (await badge.boundingBox())!;
+    expect(box.height, 'huy hiệu không xuống dòng').toBeLessThanOrEqual(28);
+    const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+    expect(w[0], 'trang không tràn ngang').toBeLessThanOrEqual(w[1]!);
+  });
+
+  test('bậc 1 (Tân binh): đầu xem trước không có huy hiệu bậc', async ({ page, api }) => {
+    mockBuilder(api);
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/^CTV /)).toHaveCount(0);
+  });
+
+  test('gian hàng đã duyệt: đầu xem trước có "CTV tuyển chọn", chưa duyệt thì không', async ({ page, api }) => {
+    mockBuilder(api, { approved: true });
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('CTV tuyển chọn')).toHaveCount(1);
+    await expect(page.getByText(/^CTV (?!tuyển chọn)/)).toHaveCount(0);
+  });
+});
+
 test.describe('Gian hàng công khai web (G6 #36)', () => {
   let seeded = false;
   test.beforeAll(async () => {

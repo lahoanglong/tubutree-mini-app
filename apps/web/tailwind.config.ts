@@ -91,7 +91,10 @@ const config: Config = {
       },
       borderRadius: { sm: '6px', md: '10px', lg: '16px', xl: '24px' },
       // Bóng đổ ấm của DS v2 (tokens.css --elevation-*); cần tokens.css được nạp trong globals.css.
-      boxShadow: { card: 'var(--elevation-1)', raised: 'var(--elevation-2)', nav: 'var(--elevation-nav)' },
+      boxShadow: { card: 'var(--elevation-1)', raised: 'var(--elevation-2)', nav: 'var(--elevation-nav)', dialog: 'var(--elevation-4)' },
+      // Hộp thoại từ md: keyframes `tubu-dialog-pop` và `tubu-dialog-fade` nằm ở components/mini/mini.css (globals.css nạp toàn trang), Tailwind chỉ đặt tên lớp.
+      // Dùng với `md:motion-safe:`: `motion-reduce:animate-none` đứng trước luật `md:` trong CSS sinh ra nên thua về thứ tự.
+      animation: { 'dialog-pop': 'tubu-dialog-pop 180ms ease-out both', 'dialog-fade': 'tubu-dialog-fade 180ms ease-out both' },
       // Bề rộng khung trang máy tính (lib/page-frame.ts).
       maxWidth: { frame: '1200px' },
     },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, Zap } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -49,9 +49,12 @@ import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation,
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
+import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -75,13 +78,15 @@ import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
 import { PdpBundles } from '../components/product/pdp-bundles';
+import { VariationChip } from '../components/product/variation-chip';
 import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
 import { ListRow } from '../components/ui/list-row';
 
-const LOW_STOCK_THRESHOLD = 5;
+type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
+
 const ADDED_FLASH_MS = 1_200;
 const DESC_COLLAPSED_LINES = 4;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
@@ -191,6 +196,10 @@ export default function ProductDetailPage() {
     queryFn: getCart,
     enabled: status === 'authenticated',
   });
+  // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (đã có món vừa thêm) vào cache trong lúc trang này còn mount ở hiệu ứng thoát: tính lại theo giỏ mới thì
+  // `inCart` đã gồm số vừa thêm, nên số nút và câu ghi chú nhảy sai chốc lát (trình đọc màn hình đọc câu sai). Giữ giỏ cũ tới khi lỗi hoặc trang gỡ.
+  const [buyFreeze, setBuyFreeze] = useState<{ lines: CartLines } | null>(null);
+  const cartLines = buyFreeze ? buyFreeze.lines : cart.data?.items;
   // Cùng queryKey với ReviewsSection → React Query dedupe, chỉ 1 request.
   const reviews = useQuery({
     queryKey: ['reviews', slug],
@@ -308,6 +317,7 @@ export default function ProductDetailPage() {
       const { cart: updatedCart, note } = await applyGroupCoupon(await addToCart(input.variation.id, input.qty));
       return { updatedCart, note, variationId: input.variation.id };
     },
+    onMutate: () => setBuyFreeze({ lines: cart.data?.items }),
     onSuccess: ({ updatedCart, note, variationId }, variables) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
@@ -335,7 +345,10 @@ export default function ProductDetailPage() {
       rememberCheckoutSelection(itemIds);
       navigate('/checkout', { state: { itemIds } });
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => {
+      setBuyFreeze(null);
+      notify({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   const groupBuyMutation = useMutation({
@@ -370,12 +383,19 @@ export default function ProductDetailPage() {
   const flashList = runningFlash(flashQ.data);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
+  // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
+  // "Mua ngay" chọn cả dòng giỏ của phân loại nên ghi `lineTotal`; điểm tích giữ `total` (phần đang chọn thêm). Giỏ chưa tải hay lỗi thì coi là rỗng.
+  const line = selected
+    ? variationLinePreview(selected, flashList, quantity, inCartQuantity(cartLines, selected.id))
+    : { total: price * quantity, lineTotal: price * quantity, lineQuantity: quantity, inCart: 0, overLimit: false, allowance: null, allowanceBy: null };
+  // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
+  const overLimitText = lineNote(line, quantity, true);
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
   const soldText = formatSold(p.sold);
   const ratingData = reviews.data && reviews.data.count > 0 ? reviews.data : null;
   const inStock = (selected?.stock ?? 0) > 0;
-  const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
+  const lowStock = isLowStock(selected?.stock ?? 0);
   const cartCount = cart.data?.itemCount ?? 0;
   // Ngưỡng freeship theo hạng của khách (cùng nguồn với giỏ hàng); khách chưa đăng nhập mới dùng ngưỡng chung. Đang đăng nhập
   // hoặc giỏ chưa về thì chưa hứa số nào để khỏi hiện ngưỡng chung rồi đổi.
@@ -445,8 +465,8 @@ export default function ProductDetailPage() {
     void copyText(code).then((ok) =>
       notify(
         ok
-          ? { text: `Đã chép mã ${code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`, type: 'success', duration: 2600 }
-          : { text: `Mã của bạn: ${code} — chọn ở bước thanh toán`, type: 'info', duration: 4000 },
+          ? { text: fillCopy('coupon.copiedToast', { code }), type: 'success', duration: 2600 }
+          : { text: fillCopy('coupon.copyShowToast', { code }), type: 'info', duration: 4000 },
       ),
     );
   };
@@ -634,7 +654,7 @@ export default function ProductDetailPage() {
           </Box>
         )}
 
-        <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
+        <PointsEarnLine goods={line.total} authStatus={status} tierId={user?.tierId} />
 
         {lowStock && (
           <Text size="xSmall" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
@@ -770,6 +790,23 @@ export default function ProductDetailPage() {
           }}
         />
       </Box>
+      {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, nút Mua ngay đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
+      <div role="status" style={{ background: 'var(--color-bg-surface)' }}>
+        {overLimitText && (
+          <p
+            style={{
+              margin: 0,
+              // Ngang bằng dải Số lượng ngay trên (Box p={4} = 16px) và phoneBandPad của web; dưới 12px như max-md:pb-3 của web.
+              padding: '0 var(--space-inset-page) var(--space-inset-card)',
+              fontSize: 'var(--type-caption-size)',
+              lineHeight: 'var(--type-caption-lh)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            {overLimitText}
+          </p>
+        )}
+      </div>
 
       {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 
@@ -965,11 +1002,14 @@ export default function ProductDetailPage() {
           initialId={selected?.id ?? null}
           initialQty={quantity}
           busy={addMutation.isPending || buyNowMutation.isPending}
+          cartLines={cartLines}
+          // 'idle' = khách chưa đăng nhập, giỏ không bao giờ về nên bảng Mua ngay không giữ dải ghi chú trống; 'loading' và 'error' thì giỏ vẫn có thể về.
+          cartMayArrive={status !== 'idle'}
           onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}
 
-      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} onCopy={copyCoupon} />
+      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={offerAmount(price, quantity, priceView.isFlash)} onCopy={copyCoupon} />
 
       {slug && (
         <ContentKitSheet
@@ -1062,12 +1102,12 @@ export default function ProductDetailPage() {
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
                 onPress={handleBuyNow}
-                aria-label={`Mua ngay · ${formatVnd(price * quantity)}`}
+                aria-label={`Mua ngay · ${formatVnd(line.lineTotal)}`}
                 style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
               >
                 <span style={BUY_NOW_LINE}>Mua ngay</span>
                 <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>
-                  {formatVnd(price * quantity)}
+                  {formatVnd(line.lineTotal)}
                 </span>
               </Button>
             </Box>
@@ -1196,71 +1236,6 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
           ))}
         </Box>
       )}
-    </Box>
-  );
-}
-
-/** Chip phân loại 2 dòng: tên + giá khách thật sự trả (đã áp Giờ vàng, như `variationPricing`). Hết hàng = mờ + gạch nhưng vẫn xem được. */
-function VariationChip({
-  variation,
-  pricing,
-  active,
-  onClick,
-}: {
-  variation: VariationDetail;
-  pricing: ReturnType<typeof variationPricing>;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const out = variation.stock <= 0;
-  return (
-    <Box
-      role="button"
-      aria-pressed={active}
-      aria-disabled={out}
-      {...(out ? null : rowKeyboardProps())}
-      // Hết hàng → KHÔNG cho chọn (trước đây vẫn select được → CTA disable, gây khó hiểu).
-      className={out ? undefined : 'tubu-press'}
-      onClick={out ? undefined : onClick}
-      style={{
-        padding: '8px 14px',
-        borderRadius: 'var(--radius-control)',
-        border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
-        background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-        opacity: out ? 0.55 : 1,
-        minHeight: 44,
-        boxSizing: 'border-box',
-      }}
-    >
-      <Text
-        size="small"
-        bold={active}
-        style={{
-          color: active ? 'var(--color-text-brand)' : 'var(--color-text-primary)',
-          textDecoration: out ? 'line-through' : 'none',
-        }}
-      >
-        {variation.name}
-      </Text>
-      <Text
-        size="xSmall"
-        style={{
-          color: out ? 'var(--color-text-disabled)' : pricing.isFlash ? 'var(--color-text-price-deal)' : active ? 'var(--color-text-brand)' : 'var(--color-text-secondary)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 2,
-        }}
-      >
-        {out ? (
-          vi.product.outOfStock
-        ) : (
-          <>
-            {pricing.isFlash && <Zap size={12} strokeWidth={2} aria-hidden="true" />}
-            {formatVnd(pricing.price)}
-            {pricing.isFlash && <span style={SR_ONLY}>, {fillCopy('flash.title')}</span>}
-          </>
-        )}
-      </Text>
     </Box>
   );
 }

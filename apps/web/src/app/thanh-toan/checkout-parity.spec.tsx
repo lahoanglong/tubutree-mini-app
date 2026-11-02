@@ -104,6 +104,14 @@ describe('/thanh-toan — Ví Tubu (R2-BUYERWEB-2)', () => {
     expect(r.container.querySelector(`#${wallet.getAttribute('aria-describedby')}`)!.textContent).toBe('Số dư chưa đủ — cần thêm 80.000đ');
   });
 
+  it('lý do thụt lề thẳng với chữ nhãn như Mini dưới md, không thụt từ md (K2)', async () => {
+    const r = await mount();
+    const wallet = radio(r, 'Ví Tubu')!;
+    const reason = r.container.querySelector<HTMLElement>(`#${wallet.getAttribute('aria-describedby')}`)!;
+    expect(reason.className).toMatch(/\bpl-9\b/);
+    expect(reason.className).toMatch(/\bmd:pl-0\b/);
+  });
+
   it('đang chọn Ví mà tổng đơn tăng vượt số dư (bỏ dùng điểm) → tự về COD', async () => {
     m.quote.mockImplementation(async (_addr: string, points: number) =>
       points > 0
@@ -194,7 +202,7 @@ describe('/thanh-toan — hoá đơn VAT (R2-BUYERWEB-6)', () => {
     click(checkbox(r, 'Yêu cầu xuất hoá đơn VAT'));
     await flush(1);
     expect(placeButton(r).disabled).toBe(true);
-    expect(r.container.textContent).toContain('Vui lòng điền đủ MST, tên công ty, địa chỉ và email hợp lệ.');
+    expect(r.container.textContent).toContain('Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.');
     typeInto(field(r, 'Mã số thuế'), ' 0312345678 ');
     typeInto(field(r, 'Tên công ty'), 'Công ty A');
     typeInto(field(r, 'Địa chỉ xuất hoá đơn'), '1 Phố Huế, Hà Nội');
@@ -328,7 +336,7 @@ describe('/thanh-toan — hết hàng (R2-BUYERWEB-11)', () => {
   it('vượt tồn kho: nói còn bao nhiêu', async () => {
     m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 2 })];
     const r = await mount();
-    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('chỉ còn 2');
+    expect(r.container.querySelector('[data-testid="checkout-cart-issue"]')!.textContent).toContain('hiện còn 2');
     expect(placeButton(r).disabled).toBe(true);
   });
 

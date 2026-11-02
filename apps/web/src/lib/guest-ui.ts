@@ -12,6 +12,9 @@ export const ui = {
   /** Tiêu đề trang (h1) — Fraunces như trang chủ. */
   pageTitle: 'font-display text-2xl font-semibold text-stone-900',
   sectionTitle: 'font-display text-lg font-semibold text-stone-900',
+  /** Tiêu đề khối trong trang (Q1): Inter 16/700 -0,01em ở mọi khổ như `Heading font="ui" variant="title-sm"` của Mini App, cùng số đo `pdpSectionTitle`. Fraunces chỉ cho tiêu đề trang. */
+  blockTitle:
+    'font-ui text-[length:var(--type-title-sm-size)] font-bold leading-[var(--type-title-sm-lh)] tracking-[-0.01em] text-[var(--color-text-primary)]',
   backLink: 'inline-flex min-h-11 items-center text-sm font-medium text-forest-600 hover:text-forest-700 hover:underline',
   field: `${FIELD_BASE} border-stone-450`,
   /** Ô nhập đang báo lỗi: đổi màu viền bằng lớp riêng, không chồng hai lớp `border-*` lên nhau (thứ tự CSS không đảm bảo). */

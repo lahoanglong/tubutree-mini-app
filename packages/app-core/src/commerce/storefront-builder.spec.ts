@@ -312,3 +312,14 @@ describe('BUILDER_COPY', () => {
     expect(() => builderCopy('comboPctClamped')).toThrow(/thiếu biến/);
   });
 });
+
+describe('nhãn ô thống kê 30 ngày (K6)', () => {
+  it('nhãn ngắn, một dòng trong ô ~78px ở 375px; tiêu đề khối đã nói "30 ngày" nên ô không nhắc lại', () => {
+    expect(BUILDER_COPY.statsOrders).toBe('Đơn hàng');
+    expect(BUILDER_COPY.statsRevenue).toBe('Doanh thu');
+    expect(BUILDER_COPY.statsCommission).toBe('Hoa hồng');
+    for (const label of [BUILDER_COPY.statsOrders, BUILDER_COPY.statsRevenue, BUILDER_COPY.statsCommission]) {
+      expect(label.length, label).toBeLessThanOrEqual(9);
+    }
+  });
+});

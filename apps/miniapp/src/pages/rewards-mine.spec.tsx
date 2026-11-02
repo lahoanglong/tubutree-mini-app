@@ -112,10 +112,10 @@ describe('/rewards/mine (§4.8)', () => {
     const voucher = (over: Partial<Parameters<typeof makeGiftRedemption>[0]> = {}) =>
       makeGiftRedemption({ giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC', claimPoint: null, fulfilledAt: '2026-10-17T03:00:00.000Z', ...over });
 
-    it('còn hạn, chưa dùng: "Mã X · HSD dd/mm", bấm là dùng mã như nút "Dùng ngay" (không đi trang khác)', async () => {
+    it('còn hạn, chưa dùng: "Mã X · Dùng đến dd/mm", bấm là dùng mã như nút "Dùng ngay" (không đi trang khác)', async () => {
       mocks.getMyRedemptions.mockResolvedValue([voucher({ couponEndAt: '2099-11-16T05:00:00.000Z', couponUsed: false })]);
       renderPage();
-      expect(await screen.findByText('Mã FREESHIP-ABC · HSD 16/11')).toBeInTheDocument();
+      expect(await screen.findByText('Mã FREESHIP-ABC · Dùng đến 16/11')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /Miễn phí vận chuyển/ }));
       expect(mocks.useCoupon).toHaveBeenCalledWith('FREESHIP-ABC');
       expect(mocks.navigate).not.toHaveBeenCalled();

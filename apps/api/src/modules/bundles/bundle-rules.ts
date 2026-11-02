@@ -11,6 +11,8 @@ export interface BundleLine {
 export interface LiveBundle {
   id: string;
   kind: 'BUNDLE_PCT' | 'ADDON';
+  /** Tên bộ, để giỏ đặt tên nhóm combo; thiếu thì giỏ ghi "Combo". */
+  title?: string;
   pct: number | null;
   anchorProductId: string | null;
   /** Người tạo bộ: nhân viên (không phải ADMIN) không hưởng bộ do chính mình tạo (`isOwnStaffBundle`). */
@@ -60,6 +62,33 @@ export function mergeMaxPerLine(a: BundleDiscount, b: BundleDiscount): BundleDis
   const perLine: Record<string, number> = { ...a.perLine };
   for (const [variationId, d] of Object.entries(b.perLine)) perLine[variationId] = Math.max(perLine[variationId] ?? 0, d);
   return { total: Object.values(perLine).reduce((s, d) => s + d, 0), perLine };
+}
+
+/**
+ * Khoản giảm kèm CHỦ của từng dòng (K5): `owner[variationId]` là id nguồn (bộ hoặc combo gian hàng) giữ khoản lớn nhất của dòng đó. Nhóm combo của giỏ
+ * là `perLine` gộp theo `owner`, nên tổng các nhóm bằng `total` theo cấu trúc, và cùng MỘT lần khớp với số tiền thật (các hàm không-"Owned" gọi bản này).
+ */
+export interface OwnedDiscount extends BundleDiscount {
+  owner: Record<string, string>;
+}
+
+const EMPTY_OWNED: OwnedDiscount = { total: 0, perLine: {}, owner: {} };
+
+const stripOwner = ({ total, perLine }: OwnedDiscount): BundleDiscount => ({ total, perLine });
+
+const ownedBy = (id: string, d: BundleDiscount): OwnedDiscount => ({ ...d, owner: Object.fromEntries(Object.keys(d.perLine).map((v) => [v, id])) });
+
+/** Như `mergeMaxPerLine` nhưng nhớ chủ: bằng nhau thì `a` (đứng trước) giữ dòng. */
+export function mergeMaxOwned(a: OwnedDiscount, b: OwnedDiscount): OwnedDiscount {
+  const perLine: Record<string, number> = { ...a.perLine };
+  const owner: Record<string, string> = { ...a.owner };
+  for (const [variationId, d] of Object.entries(b.perLine)) {
+    if (d > (perLine[variationId] ?? 0)) {
+      perLine[variationId] = d;
+      owner[variationId] = b.owner[variationId]!;
+    }
+  }
+  return { total: Object.values(perLine).reduce((s, d) => s + d, 0), perLine, owner };
 }
 
 /** Các dòng của một món trong bộ: món ghim phân loại chỉ nhận đúng dòng đó, không ghim nhận mọi phân loại của sản phẩm (chỉ BUNDLE_PCT được không ghim: giảm theo %, không theo giá cố định). */
@@ -120,8 +149,13 @@ function addonBundle(b: LiveBundle, lines: readonly BundleLine[]): BundleDiscoun
  * mọi đường tính tiền vẫn đi qua trần; nơi khác cần số cuối cùng phải hỏi `computeForStorefront`, không gọi hàm này.
  */
 export function allocateBundleDiscounts(bundles: readonly LiveBundle[], lines: readonly BundleLine[], maxPct: number): BundleDiscount {
-  let acc = EMPTY;
-  for (const b of bundles) acc = mergeMaxPerLine(acc, b.kind === 'ADDON' ? addonBundle(b, lines) : percentBundle(b, lines, maxPct));
+  return stripOwner(allocateBundleDiscountsOwned(bundles, lines, maxPct));
+}
+
+/** `allocateBundleDiscounts` kèm chủ (`bundle:<id>`) của từng dòng; đây là cài đặt DUY NHẤT, hàm không-"Owned" chỉ bỏ `owner`. */
+export function allocateBundleDiscountsOwned(bundles: readonly LiveBundle[], lines: readonly BundleLine[], maxPct: number): OwnedDiscount {
+  let acc = EMPTY_OWNED;
+  for (const b of bundles) acc = mergeMaxOwned(acc, ownedBy(`bundle:${b.id}`, b.kind === 'ADDON' ? addonBundle(b, lines) : percentBundle(b, lines, maxPct)));
   return acc;
 }
 
@@ -155,9 +189,33 @@ export function clampDiscountTotal(d: BundleDiscount, maxAmount: number): Bundle
  * thêm tối đa bằng phần đã kẹp, nên dòng trùng với bộ ADMIN không giúp họ lọt trần (đổi lại phần trần rơi vào dòng ADMIN đã phủ là "mất").
  */
 export function allocateBundleDiscountsCapped(bundles: readonly LiveBundle[], lines: readonly BundleLine[], maxPct: number, cap: StaffBundleCap): BundleDiscount {
-  const staff = allocateBundleDiscounts(bundles.filter((b) => cap.isStaff(b)), lines, maxPct);
-  const admin = allocateBundleDiscounts(bundles.filter((b) => !cap.isStaff(b)), lines, maxPct);
-  return mergeMaxPerLine(admin, clampDiscountTotal(staff, cap.maxAmount));
+  return stripOwner(allocateBundleDiscountsCappedOwned(bundles, lines, maxPct, cap));
+}
+
+/** `allocateBundleDiscountsCapped` kèm chủ; dòng bị trần cắt về 0 không còn chủ. Cài đặt DUY NHẤT của luật trần nhân viên. */
+export function allocateBundleDiscountsCappedOwned(bundles: readonly LiveBundle[], lines: readonly BundleLine[], maxPct: number, cap: StaffBundleCap): OwnedDiscount {
+  const staff = allocateBundleDiscountsOwned(bundles.filter((b) => cap.isStaff(b)), lines, maxPct);
+  const admin = allocateBundleDiscountsOwned(bundles.filter((b) => !cap.isStaff(b)), lines, maxPct);
+  const clamped = clampDiscountTotal(staff, cap.maxAmount);
+  const kept: OwnedDiscount = clamped === staff ? staff : { ...clamped, owner: Object.fromEntries(Object.keys(clamped.perLine).map((v) => [v, staff.owner[v]!])) };
+  return mergeMaxOwned(admin, kept);
+}
+
+/**
+ * Phân loại mà bỏ MỘT mình nó khỏi giỏ thì bộ không còn khớp (giỏ báo trước khi khách xoá, K5): BUNDLE_PCT = dòng duy nhất của một mục (mục có hai
+ * phân loại trong giỏ thì bỏ một vẫn đủ bộ); ADDON = dòng duy nhất của sản phẩm chính, dòng này không nằm trong `perLine` vì sản phẩm chính không được giảm.
+ * Bộ không khớp giỏ thì `[]`. Dùng cùng `matching` với phần tính tiền nên "khớp" hiểu giống hệt.
+ */
+export function bundleKeyVariationIds(b: LiveBundle, lines: readonly BundleLine[]): string[] {
+  const sole = (rows: BundleLine[]) => (rows.length === 1 ? [rows[0]!.variationId] : []);
+  if (b.kind === 'ADDON') {
+    const anchor = b.anchorProductId;
+    const anchorRows = anchor ? lines.filter((l) => l.productId === anchor && l.quantity >= 1) : [];
+    return anchorRows.length === 0 ? [] : sole(anchorRows);
+  }
+  const rows = b.items.map((it) => matching(lines, it));
+  if (rows.some((r) => r.length === 0)) return [];
+  return [...new Set(rows.flatMap(sole))].sort();
 }
 
 /**

@@ -1,4 +1,5 @@
 import { makeUser, mockSession, reply, type MockApi } from './mock-api';
+import { CTV_TIERS } from './affiliate-mocks';
 import { EMPTY_CART } from './shop-page-mocks';
 
 type Rec = Record<string, unknown>;
@@ -58,6 +59,8 @@ export interface BuilderOptions {
   storefront?: Rec;
   /** Trần `%` giảm của máy chủ (`storefront.max_combo_pct`); mặc định 30. */
   maxComboPct?: number;
+  /** Bậc của chủ shop (`GET /affiliate/tiers`); mặc định Tân binh (bậc thấp nhất, không huy hiệu ở đầu xem trước). */
+  tier?: 'Tân binh' | 'Đồng' | 'Kim Cương';
 }
 
 /**
@@ -76,6 +79,8 @@ export function mockBuilder(api: MockApi, opts: BuilderOptions = {}): { collecti
 
   mockSession(api, makeUser({ id: 'aff-1', role: 'AFFILIATE', fullName: 'Affiliate 1', referralCode: 'AFF1' }));
   api.get('/affiliate/me', { isAffiliate: true, canRegister: true, canOpenStorefront: true, referralCode: 'AFF1', walletBalance: 0 });
+  const tier = CTV_TIERS.allTiers.find((t) => t.name === (opts.tier ?? 'Tân binh'))!;
+  api.get('/affiliate/tiers', { ...CTV_TIERS, tier: { name: tier.name, emoji: tier.emoji } });
   api.get('/storefront/me', () => sf());
   api.get('/storefront/me/stats', { orders7d: 2, orders30d: 9, revenue30d: 1_250_000, commission30d: 125_000, byProduct: [] });
   api.get('/storefront/me/quests', {

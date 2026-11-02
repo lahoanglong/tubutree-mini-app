@@ -7,12 +7,23 @@ export interface VoucherTicketProps {
   voucher: VoucherView;
   /** ticket: Ưu đãi, Mã giảm giá (~88px) · chip: PDP, giỏ, trang shop · row: chỗ chọn mã ở thanh toán. */
   variant: 'ticket' | 'chip' | 'row';
-  /** Nút duy nhất của phiếu: Lưu mã / Dùng ngay. Bỏ qua ở mã đã dùng, hết hạn, hết lượt. */
-  primary?: { label: string; onClick: () => void; busy?: boolean };
+  /**
+   * Nút duy nhất của phiếu: Lưu mã / Dùng ngay. Bỏ qua ở mã đã dùng, hết hạn, hết lượt.
+   * `ariaLabel`: tên đọc khi nhãn ngắn ("Dùng") không đủ phân biệt các phiếu cùng danh sách.
+   * `busy`: nút này đang chạy (aria-busy); `disabled`: nơi gọi đang khoá cả danh sách vì thao tác khác đang chạy (aria-disabled, không aria-busy).
+   */
+  primary?: { label: string; onClick: () => void; busy?: boolean; disabled?: boolean; ariaLabel?: string };
   /** Có thì phần thân (tiêu đề, điều kiện, hạn) là nút mở chi tiết, đứng cạnh nút chính chứ không bao nó. */
   onDetail?: () => void;
-  /** Lý do chưa dùng được ("Mua thêm 50k để dùng"); chỉ hiện ở trạng thái ineligible. */
+  /**
+   * Lý do chưa dùng được hoặc điều còn thiếu ("Mua thêm 50k để dùng"). Hiện ở mọi trạng thái trừ đã dùng, hết hạn, hết lượt (nhãn trạng thái đã nói đủ);
+   * nút chỉ khoá khi trạng thái là ineligible, nên mã còn dùng được kèm lý do (sheet Ưu đãi: mua thêm mới dùng) vẫn bấm được.
+   */
   reason?: string;
+  /** Mã đang được chọn cho đơn: chữ "Đang dùng" (không chỉ màu); nút chính do nơi gọi đặt là "Bỏ chọn". */
+  selected?: boolean;
+  /** Mức giảm máy chủ báo cho đơn này ("Giảm 30.000đ cho đơn này"), tông thành công. */
+  saving?: string;
   /** Sắp hết hạn: dòng hạn dùng tông cảnh báo (chữ vẫn là "Còn 2 ngày", không chỉ màu). */
   expiring?: boolean;
 }
@@ -35,14 +46,15 @@ const NOTCH = 'radial-gradient(circle at 64px 0, transparent 6px, black 6.5px) t
  * vạch đứt chỉ để trang trí (a11y B6), mọi thông tin quan trọng là chữ. Mã không dùng được viết lý do bằng chữ và nút `aria-disabled`
  * (vẫn Tab tới được, đọc được lý do) thay vì `disabled`.
  */
-export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, expiring }: VoucherTicketProps) {
+export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, selected, saving, expiring }: VoucherTicketProps) {
   const uid = useId();
   const palette = KIND[v.kind];
   const inactive = v.state === 'used' || v.state === 'expired' || v.state === 'soldout';
   const ineligible = v.state === 'ineligible';
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
-  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), tối đa hai dòng (chữ phụ của khuyến mãi thương hiệu hay kết bằng "với mã X": một dòng sẽ cắt mất mã). Ticket/row thêm mã: không cắt gì,
-  // hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
+  // Chip: tiêu đề + điều kiện cắt hai dòng (chữ phụ của khuyến mãi thương hiệu hay kết bằng "với mã X" và có thể dài hơn hai dòng), nên mã đứng ở hàng riêng dưới điều kiện, không nằm
+  // trong phần bị cắt: phụ đề dài đến đâu mã vẫn thấy nguyên. Ticket/row thêm mã vào meta/hàng đáy: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
+  const chipCode = variant === 'chip' && Boolean(v.code);
   const showCode = variant !== 'chip' && Boolean(v.code);
   // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng hàng riêng, co bằng "…" (không đẩy điều kiện và mã xuống dòng,
   // phiếu giữ ~88px); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
@@ -66,8 +78,9 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       {v.quota}
     </span>
   );
-  const codeNode = showCode && (
-    <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>
+  // Chip: mã ở hàng riêng trong thân hẹp (cạnh nút Sao chép), mã admin tới 40 ký tự không có chỗ ngắt nên phải được phép xuống dòng; không cắt "…" vì khách cần đọc đủ mã. Ticket giữ nguyên khối ở hàng đáy.
+  const codeNode = (showCode || chipCode) && (
+    <span data-testid="voucher-code" style={chipCode ? { overflowWrap: 'anywhere' } : { whiteSpace: 'nowrap' }}>
       {v.code}
     </span>
   );
@@ -94,10 +107,10 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
     </span>
   );
   // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).
-  const reasonText = ineligible ? reason ?? '' : '';
+  const reasonText = inactive ? '' : reason ?? '';
   const showPrimary = primary && !inactive;
-  const blocked = ineligible || Boolean(primary?.busy);
-  const describedBy = !ineligible ? undefined : reasonText ? `${uid}-reason` : v.condition ? `${uid}-meta` : undefined;
+  const blocked = ineligible || Boolean(primary?.busy) || Boolean(primary?.disabled);
+  const describedBy = reasonText ? `${uid}-reason` : ineligible && v.condition ? `${uid}-meta` : undefined;
 
   const small = variant !== 'ticket';
   const text = inactive ? 'var(--color-text-tertiary)' : palette.fg;
@@ -120,6 +133,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       ) : (
         metaNode
       )}
+      {chipCode && <span style={{ display: 'block', ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span>}
       {footItems.length > 0 && (
         <span data-testid="voucher-foot" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--p-space-2)', ...captionStyle }}>
           {footItems.map((item, i) => (
@@ -132,6 +146,16 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       )}
       {!ticket && expiryNode && variant !== 'chip' && <span style={{ display: 'block' }}>{expiryNode}</span>}
       {!ticket && quotaNode && <span style={{ display: 'block' }}>{quotaNode}</span>}
+      {selected && !inactive && (
+        <span data-testid="voucher-selected" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-brand)' }}>
+          {fillCopy('coupon.pickApplied')}
+        </span>
+      )}
+      {saving && !inactive && (
+        <span data-testid="voucher-saving" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-status-success-fg)' }}>
+          {saving}
+        </span>
+      )}
       {reasonText && (
         <span id={`${uid}-reason`} data-testid="voucher-reason" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-status-warning-fg)' }}>
           {reasonText}
@@ -167,6 +191,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       className="tubu-press tubu-hit-44"
       aria-disabled={blocked || undefined}
       aria-busy={primary.busy || undefined}
+      aria-label={primary.ariaLabel}
       aria-describedby={describedBy}
       onClick={() => {
         if (blocked) return;

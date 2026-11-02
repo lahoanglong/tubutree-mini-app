@@ -67,7 +67,7 @@ describe('ds-shop-guard (Mini App)', () => {
   it('gạch giá (line-through) chỉ ở PriceTag; ngoại lệ có sẵn là dòng giá ngoài thẻ sản phẩm', () => {
     const NOT_A_CARD = [
       'components/ui/price-tag.tsx',
-      'components/variation-sheet.tsx', // giá từng phân loại trong bảng chọn
+      'components/product/variation-chip.tsx', // tên phân loại hết hàng gạch ngang, không phải giá gạch
       'pages/product-detail.tsx', // khối giá lớn của trang chi tiết
       'pages/cart.tsx', // dòng giỏ hàng
       'pages/dealer.tsx', // bảng giá đại lý
@@ -80,7 +80,6 @@ describe('ds-shop-guard (Mini App)', () => {
     const BADGE_STYLE = /<Badge\b[^>]*style=\{\{[^}]*\b(background|color)\s*:/;
     const DYNAMIC = [
       'pages/loyalty.tsx', // màu hạng thành viên đến từ dữ liệu
-      'components/checkout/voucher-sheet.tsx', // nhãn mã giảm giá tông promo đặc; VoucherTicket (P5) thay
     ];
     expect(hits(BADGE_STYLE, DYNAMIC)).toEqual([]);
     expect(hits(/flash-solid-bg|flash-solid-fg/, ['components/ui/badge.tsx', 'components/ui/button.tsx', 'components/ui/progress-bar.tsx', 'components/ui/tiles.tsx', 'components/ui/flash-sold-bar.tsx', 'components/ui/section-header.tsx'])).toEqual([]);

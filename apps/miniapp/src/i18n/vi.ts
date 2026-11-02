@@ -3,6 +3,8 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
@@ -118,7 +120,6 @@ export const vi = {
     endsIn: (t: string) => `Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',
-    priceChangedBody: 'Một số sản phẩm giờ vàng đã hết suất hoặc hết giờ. Vui lòng xem lại giỏ hàng trước khi đặt.',
     priceChangedCta: 'Xem lại giỏ hàng',
     upcomingTitle: 'Sắp diễn ra',
     live: 'Đang diễn ra',
@@ -128,8 +129,8 @@ export const vi = {
 
   product: {
     addToCart: 'Thêm vào giỏ',
-    outOfStock: 'Tạm hết — sẽ về sớm',
-    lowStock: (n: number) => `Còn ${n} sản phẩm`,
+    outOfStock: 'Tạm hết hàng',
+    lowStock: (n: number) => stockText(n),
     freeshipFrom: (min: string) => `Miễn phí giao hàng cho đơn từ ${min}`,
     freeshipAll: 'Miễn phí giao hàng cho mọi đơn hàng',
     added: 'Đã thêm vào giỏ 🌿',
@@ -232,7 +233,6 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí giao hàng 🌿',
     freeshipReachedTubuOnly: 'Miễn phí giao hàng cho phần hàng Tubu Tree giao',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí giao hàng`,
-    stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
     outOfStock: 'Sản phẩm đã hết hàng',
     overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
     outOfStockBlocked: (names: string[]) =>
@@ -249,11 +249,11 @@ export const vi = {
     title: 'Thanh toán',
     overStock: (name: string, stock: number) =>
       stock > 0
-        ? `Sản phẩm "${name}" chỉ còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
+        ? `Sản phẩm "${name}" hiện còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
         : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
     backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',
-    addressEmpty: 'Bạn chưa thêm địa chỉ',
+    addressEmpty: fillCopy('checkout.addressEmpty'),
     addAddress: 'Thêm địa chỉ mới',
     addressDefault: 'Mặc định',
     addressLegacy: 'Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.',
@@ -274,7 +274,6 @@ export const vi = {
     paymentBank: 'Chuyển khoản ngân hàng',
     paymentWallet: (balance: string) => `Ví Tubu (${balance})`,
     points: 'Điểm Xanh',
-    pointsNone: 'Tích điểm từ đơn đầu tiên nhé',
     note: 'Ghi chú cho Tubu',
     notePlaceholder: 'Ví dụ: giao giờ hành chính...',
     summary: 'Tóm tắt đơn hàng',

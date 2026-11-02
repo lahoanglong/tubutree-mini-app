@@ -1,5 +1,5 @@
 import { test, expect, reply } from './support/mock-api';
-import { BRAND_SLUG, COMBO_TITLE, EMPTY_CART, SHOP_SLUG, SHOP_TITLE, mockBrandPage, mockShopPage } from './support/shop-page-mocks';
+import { BRAND_SLUG, COMBO_TITLE, EMPTY_CART, SHOP_SLUG, SHOP_STOREFRONT, SHOP_TITLE, mockBrandPage, mockShopPage } from './support/shop-page-mocks';
 import type { Page } from '@playwright/test';
 
 /**
@@ -30,6 +30,22 @@ test.describe('Trang gian hàng CTV (Mini App)', () => {
     await expect(page.getByText('Tân binh')).toHaveCount(0);
     // Ghi chú của chủ shop nằm trong thẻ, không có hộp xanh ngoài thẻ.
     await expect(page.getByTestId('shop-rail').getByText('Mình dùng mỗi ngày')).toBeVisible();
+  });
+
+  test('gian hàng bậc 2: huy hiệu "CTV Đồng" ở đầu shop, một lần, đọc được "CTV" (emoji aria-hidden)', async ({ page, api }) => {
+    api.get('/storefront/public/:slug', { ...SHOP_STOREFRONT, ownerTier: { name: 'Đồng', emoji: '🌿', publicBadge: true } });
+    await page.goto(`/s/${SHOP_SLUG}`);
+    await expect(page.getByRole('heading', { level: 1, name: SHOP_TITLE })).toBeVisible({ timeout: 15_000 });
+    const badge = page.getByText('CTV Đồng');
+    await expect(badge).toHaveCount(1);
+    await expect(badge).toBeVisible();
+    // Chữ trình đọc nghe được (bỏ emoji aria-hidden) phải có "CTV", không chỉ "Đồng".
+    const readable = await badge.evaluate((el) => {
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('[aria-hidden]').forEach((n) => n.remove());
+      return (clone.textContent ?? '').trim();
+    });
+    expect(readable).toBe('CTV Đồng');
   });
 
   test('kệ ngang sát mép như Trang chủ và web: thẻ đầu kệ cách mép trái 12px (đệm của kệ), không thụt thêm 16px của lề trang', async ({ page }) => {

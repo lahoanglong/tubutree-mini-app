@@ -132,6 +132,16 @@ export const BANK_QR: BankQr = {
   qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
 };
 
+/** Phần web còn gọi thêm so với Mini ở /thanh-toan (ví mã, kệ, chuông thông báo, đại lý): rỗng đúng shape để trang không rơi vào E2E_UNMOCKED. */
+export function mockWebCheckoutExtras(api: MockApi): void {
+  api.get('/me/coupons', []);
+  api.post('/checkout/coupon-previews', { previews: [] });
+  api.get('/me/notifications', []);
+  api.get('/auth/me', () => ({ id: 'user-checkout', ownsBrand: false }));
+  api.get('/dealer/me', { status: 'NONE', isDealer: false });
+  api.get('/me/new-customer-offer', { isNewCustomer: false, welcomeVoucher: null });
+}
+
 export function mockCheckout(api: MockApi): void {
   mockSession(
     api,

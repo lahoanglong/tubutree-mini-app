@@ -825,7 +825,7 @@ export class FlashSaleService {
         variation: { select: { isActive: true, product: { select: { isActive: true, approvalStatus: true } } } },
       },
     });
-    if (!item || !isSellableVariation(item.variation)) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
+    if (!item || !isSellableVariation(item.variation)) throw new BadRequestException('Không tìm thấy sản phẩm Giờ vàng.');
     if (item.flashSale.startAt <= now) throw new BadRequestException(FLASH_ALREADY_STARTED_MSG);
     return this.prisma.flashSaleReminder.upsert({
       where: { userId_flashSaleItemId: { userId, flashSaleItemId: itemId } },

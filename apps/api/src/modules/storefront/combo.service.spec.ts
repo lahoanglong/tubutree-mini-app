@@ -1,4 +1,4 @@
-import { ComboService, allocateComboDiscounts } from './combo.service';
+import { ComboService, allocateComboDiscounts, allocateComboDiscountsOwned, comboKeyVariationIds, buildComboGroups, type ComboGroup } from './combo.service';
 import { publicStorefrontWhere } from './storefront-visibility';
 
 describe('allocateComboDiscounts (thuần)', () => {
@@ -512,5 +512,127 @@ describe('ComboService.computeForStorefront: trần tổng của bộ do nhân v
     const out = await new ComboService(prisma, config).computeForStorefront(null, lines, 'buyer');
     expect(out.total).toBe(100_000);
     expect(out.perLine.vX).toBeUndefined();
+  });
+});
+
+describe('ComboService.computeWithGroups: nhóm combo của giỏ lấy từ cùng lần khớp (K5)', () => {
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
+  const withCap = (maxAmount: number) => ({ get: async (k: string, fb?: unknown) => (k === 'coupon.staff_max_amount_vnd' ? maxAmount : k === 'storefront.require_approval' ? false : fb) }) as any;
+  const sfItem = (productId: string) => ({ productId, isHidden: false, product: { storefrontId: null } });
+  const collection = (id: string, title: string, pct: number, products: string[]) => ({ id, title, comboDiscountPct: pct, items: products.map(sfItem) });
+  const bItem = (productId: string, o: Record<string, unknown> = {}) => ({ productId, variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null }, ...o });
+  const bundle = (id: string, title: string, pct: number, products: string[], o: Record<string, unknown> = {}) => ({
+    id, kind: 'BUNDLE_PCT', title, pct, anchorProductId: null, anchorProduct: null, createdById: null, items: products.map((p) => bItem(p)), ...o,
+  });
+  const addon = (id: string, title: string, o: Record<string, unknown> = {}) => ({
+    id, kind: 'ADDON', title, pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, createdById: null,
+    items: [bItem('p2', { variationId: 'v2', addonPrice: 39_000, refPrice: 50_000 })], ...o,
+  });
+  const makePrisma = (collections: any[] | null, bundles: any[] = [], adminIds: string[] = []) =>
+    ({
+      storefront: { findFirst: jest.fn().mockResolvedValue(collections === null ? null : { ownerUserId: null, collections }) },
+      bundle: { findMany: jest.fn().mockResolvedValue(bundles) },
+      user: { findUnique: jest.fn().mockResolvedValue({ role: 'CUSTOMER' }), findMany: jest.fn().mockResolvedValue(adminIds.map((id) => ({ id }))) },
+    }) as any;
+  const L = (variationId: string, productId: string, total: number, quantity = 1) => ({ variationId, productId, total, quantity });
+  const lines12 = [L('v1', 'p1', 100_000), L('v2', 'p2', 100_000)];
+  const sum = (groups: ComboGroup[]) => groups.reduce((s, g) => s + g.discount, 0);
+  /** Bất biến của gói: nhóm là cách chia của chính `total`, và đường tiền cũ trả đúng cùng số. */
+  async function expectConsistent(svc: ComboService, slug: string | null, lines: ReturnType<typeof L>[]) {
+    const match = await svc.computeWithGroups(slug, lines);
+    expect(sum(match.groups)).toBe(match.total);
+    expect(await svc.computeForStorefront(slug, lines)).toEqual({ total: match.total, perLine: match.perLine });
+    const grouped = match.groups.flatMap((g) => g.variationIds).sort();
+    expect(grouped).toEqual(Object.keys(match.perLine).sort());
+    return match;
+  }
+
+  it('combo gian hàng đủ bộ: một nhóm collection:<id> có tên, dòng, khoản giảm và dòng khoá', async () => {
+    const svc = new ComboService(makePrisma([collection('c1', 'Bộ giặt sạch', 10, ['p1', 'p2'])]), config);
+    const m = await expectConsistent(svc, 'linh-shop', lines12);
+    expect(m.groups).toEqual([{ id: 'collection:c1', kind: 'STOREFRONT', title: 'Bộ giặt sạch', discount: 20_000, variationIds: ['v1', 'v2'], keyVariationIds: ['v1', 'v2'] }]);
+  });
+
+  it('khớp một phần (thiếu một sản phẩm của combo): không giảm, không nhóm nào', async () => {
+    const svc = new ComboService(makePrisma([collection('c1', 'Bộ giặt sạch', 10, ['p1', 'p2'])], [bundle('b1', 'Bộ B', 10, ['p1', 'p3'])]), config);
+    const m = await expectConsistent(svc, 'linh-shop', [L('v1', 'p1', 100_000)]);
+    expect(m).toEqual({ total: 0, perLine: {}, groups: [] });
+  });
+
+  it('giỏ rỗng hoặc không có combo: groups rỗng', async () => {
+    const svc = new ComboService(makePrisma(null), config);
+    expect(await svc.computeWithGroups(null, [])).toEqual({ total: 0, perLine: {}, groups: [] });
+    expect(await svc.computeWithGroups(null, lines12)).toEqual({ total: 0, perLine: {}, groups: [] });
+  });
+
+  it('một món thuộc hai combo (A: p1+p2 10%, B: p2+p3 20%): p2 thuộc combo 20%, mỗi dòng đúng một nhóm, tổng khớp', async () => {
+    const svc = new ComboService(makePrisma([collection('A', 'Bộ A', 10, ['p1', 'p2']), collection('B', 'Bộ B', 20, ['p2', 'p3'])]), config);
+    const lines = [L('v1', 'p1', 100_000), L('v2', 'p2', 100_000), L('v3', 'p3', 100_000)];
+    const m = await expectConsistent(svc, 'linh-shop', lines);
+    expect(m.groups.map((g) => [g.id, g.variationIds, g.discount])).toEqual([
+      ['collection:A', ['v1'], 10_000],
+      ['collection:B', ['v2', 'v3'], 40_000],
+    ]);
+    expect(m.perLine).toEqual(allocateComboDiscounts([{ pct: 10, productIds: ['p1', 'p2'] }, { pct: 20, productIds: ['p2', 'p3'] }], lines).perLine);
+  });
+
+  it('combo gian hàng 10% và bundle 20% cùng dòng: bundle giữ nhóm; bằng nhau thì combo gian hàng đứng trước', async () => {
+    const svc = new ComboService(makePrisma([collection('c1', 'Bộ gian hàng', 10, ['p1', 'p2'])], [bundle('b1', 'Bộ Tubu', 20, ['p1', 'p2'])]), config);
+    const m = await expectConsistent(svc, 'linh-shop', lines12);
+    expect(m.groups.map((g) => [g.id, g.kind, g.discount])).toEqual([['bundle:b1', 'BUNDLE_PCT', 40_000]]);
+    const tie = await expectConsistent(new ComboService(makePrisma([collection('c1', 'Bộ gian hàng', 20, ['p1', 'p2'])], [bundle('b1', 'Bộ Tubu', 20, ['p1', 'p2'])]), config), 'linh-shop', lines12);
+    expect(tie.groups.map((g) => g.id)).toEqual(['collection:c1']);
+  });
+
+  it('số lượng lẻ: floor từng dòng, tổng nhóm khớp; maxQty 1 chỉ giảm một đơn vị', async () => {
+    const odd = await expectConsistent(new ComboService(makePrisma([collection('c1', 'Bộ lẻ', 10, ['p1', 'p2'])]), config), 'linh-shop', [L('v1', 'p1', 99_999, 3), L('v2', 'p2', 33_333, 3)]);
+    expect(odd.perLine).toEqual({ v1: 9_999, v2: 3_333 });
+    const capped = await expectConsistent(new ComboService(makePrisma([], [bundle('b1', 'Bộ Tubu', 10, ['p1', 'p2'])]), config), null, [L('v1', 'p1', 99_999, 3), L('v2', 'p2', 50_000)]);
+    expect(capped.perLine).toEqual({ v1: 3_333, v2: 5_000 });
+  });
+
+  it('mua kèm (ADDON): nhóm chỉ có món kèm, dòng khoá là sản phẩm chính', async () => {
+    const svc = new ComboService(makePrisma([], [addon('a1', 'Mua kèm nước giặt')]), config);
+    const m = await expectConsistent(svc, null, [L('v1', 'p1', 80_000), L('v2', 'p2', 50_000)]);
+    expect(m.groups).toEqual([{ id: 'bundle:a1', kind: 'ADDON', title: 'Mua kèm nước giặt', discount: 11_000, variationIds: ['v2'], keyVariationIds: ['v1'] }]);
+  });
+
+  it('mục có hai phân loại trong giỏ thì không phân loại nào là khoá; mục một dòng là khoá', async () => {
+    const svc = new ComboService(makePrisma([], [bundle('b1', 'Bộ Tubu', 10, ['p1', 'p2'])]), config);
+    const m = await expectConsistent(svc, null, [L('v1', 'p1', 100_000), L('v2a', 'p2', 100_000), L('v2b', 'p2', 100_000)]);
+    expect(m.groups[0]!.keyVariationIds).toEqual(['v1']);
+  });
+
+  it('bộ của nhân viên vượt trần: nhóm là phần đã kẹp, dòng bị cắt về 0 không nằm trong nhóm', async () => {
+    const addonOn = (id: string, productId: string) => ({
+      id, kind: 'ADDON', title: `Kèm ${productId}`, pct: null, anchorProductId: 'P', anchorProduct: { storefrontId: null }, createdById: `s-${id}`,
+      items: [bItem(productId, { variationId: `v${productId}`, addonPrice: 240_000, refPrice: 340_000 })],
+    });
+    const lines = [L('vP', 'P', 80_000), L('vX', 'X', 340_000), L('vY', 'Y', 340_000)];
+    const svc = new ComboService(makePrisma([], [addonOn('B1', 'X'), addonOn('B2', 'Y')]), withCap(100_000));
+    const m = await expectConsistent(svc, null, lines);
+    expect(m.total).toBe(100_000);
+    expect(m.groups.map((g) => [g.id, g.variationIds, g.discount])).toEqual([['bundle:B1', ['vX'], 100_000]]);
+  });
+
+  describe('hàm thuần', () => {
+    it('allocateComboDiscountsOwned: cùng perLine với allocateComboDiscounts, chủ là combo % cao nhất (bằng nhau: đứng trước)', () => {
+      const combos = [{ id: 'A', pct: 10, productIds: ['p1', 'p2'] }, { id: 'B', pct: 10, productIds: ['p2', 'p3'] }];
+      const lines = [L('v1', 'p1', 100), L('v2', 'p2', 100), L('v3', 'p3', 100)];
+      const out = allocateComboDiscountsOwned(combos, lines);
+      const { owner, ...plain } = out;
+      expect(plain).toEqual(allocateComboDiscounts(combos, lines));
+      expect(owner).toEqual({ v1: 'A', v2: 'A', v3: 'B' });
+    });
+
+    it('comboKeyVariationIds: dòng duy nhất của một sản phẩm của combo', () => {
+      expect(comboKeyVariationIds(['p1', 'p2'], [L('v1', 'p1', 1), L('v2a', 'p2', 1), L('v2b', 'p2', 1)])).toEqual(['v1']);
+      expect(comboKeyVariationIds(['p1', 'p2'], [L('v1', 'p1', 1)])).toEqual([]);
+    });
+
+    it('buildComboGroups: chủ không có trong nguồn vẫn thành nhóm dự phòng, tổng không mất', () => {
+      const groups = buildComboGroups({ total: 30, perLine: { v1: 10, v2: 20 }, owner: { v1: 'bundle:x', v2: 'bundle:y' } }, new Map([['bundle:x', { kind: 'BUNDLE_PCT' as const, title: 'X', keyVariationIds: ['v1'] }]]));
+      expect(groups.map((g) => [g.id, g.title, g.discount])).toEqual([['bundle:x', 'X', 10], ['bundle:y', 'Combo', 20]]);
+    });
   });
 });

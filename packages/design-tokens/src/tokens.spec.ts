@@ -114,6 +114,8 @@ describe('design-tokens/tokens.css: commerce tokens (P1 tokens-a11y)', () => {
 
   it.each([
     ['--color-bg-media', 'var(--stone-100)'],
+    // Nền sheet/hộp thoại: một màu cho cả hai sheet web và zmp Sheet của Mini App (mặc định zmp-ui #000000b3 = đen 70%).
+    ['--color-bg-sheet-scrim', 'rgba(0, 0, 0, 0.7)'],
     ['--color-bg-cover', 'var(--forest-700)'],
     ['--color-bg-chip', 'var(--stone-100)'],
     ['--color-track', 'var(--stone-200)'],

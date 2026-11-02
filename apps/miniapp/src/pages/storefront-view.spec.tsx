@@ -140,10 +140,26 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     const view = renderPage('abcd1234');
     await title();
     expect(screen.queryByText('CTV tuyển chọn')).not.toBeInTheDocument();
+    // Không vẽ Badge verified rỗng khi chưa được duyệt (L5 5).
+    expect(document.querySelector('[style*="--color-verified-bg"]')).toBeNull();
     view.unmount();
     mocks.getPublicStorefront.mockResolvedValue(storefront({ approved: true, ...withItems }));
     renderPage('abcd1234');
     expect(await screen.findByText('CTV tuyển chọn')).toBeInTheDocument();
+  });
+
+  it('huy hiệu "CTV tuyển chọn" là Badge verified có icon 14px như đầu xem trước của trình dựng, không vẽ tay icon 12px (L5 5)', async () => {
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ approved: true, ...withItems }));
+    renderPage('abcd1234');
+    const badge = await screen.findByText('CTV tuyển chọn');
+    const icon = badge.querySelector('svg')!;
+    expect(icon.getAttribute('width')).toBe('14');
+    expect(icon.getAttribute('stroke-width')).toBe('1.75');
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+    // Màu và khoảng cách do Badge đặt, trang không ghi đè.
+    expect(badge.style.background).toContain('--color-verified-bg');
+    expect(badge.style.gap).toBe('4px');
+    expect((badge.getAttribute('style') ?? '').match(/gap/g)).toHaveLength(1);
   });
 
   it('nhãn không còn nói "chính hãng": đối tác ghi "Đối tác của Tubu Tree" (khi đã duyệt), nhãn hàng ghi "Nhãn hàng trên Tubu Tree"', async () => {
@@ -357,7 +373,7 @@ describe('StorefrontViewPage: khung shop (tab, khối theo layout, thống kê)'
     view.unmount();
     mocks.getPublicStorefront.mockResolvedValue(storefront({ ownerTier: { name: 'Bạc', emoji: '🥈', publicBadge: true }, ...withItems }));
     renderPage('abcd1234');
-    expect(await screen.findByText(/Bạc/)).toBeInTheDocument();
+    expect(await screen.findByText('CTV Bạc')).toBeInTheDocument();
   });
 
   it('chủ gian hàng: nút Chia sẻ nằm ở đầu shop, không còn thanh dính đáy', async () => {

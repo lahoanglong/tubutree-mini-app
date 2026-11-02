@@ -3,8 +3,10 @@
 // Nguồn: apps/miniapp/src/pages/ds-gallery.tsx
 import { useState, type ReactNode } from 'react';
 import { Truck } from 'lucide-react';
-import { GALLERY_COMBO_ITEMS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
-import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, Section, SectionHeader, SortBar, Text, VoucherTicket } from '@/components/mini';
+import { GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
+import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
+import { CartComboBlock } from '@/components/cart-combo-block';
+import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, Section, SectionHeader, SortBar, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
 
 /**
  * Trang dev `/ds-gallery`: vẽ mọi biến thể và trạng thái của bộ section-kit bằng dữ liệu giả (app-core/commerce/ds-gallery-data),
@@ -12,6 +14,18 @@ import { BannerCarousel, ComboCard, Countdown, FlashSoldBar, Heading, Section, S
  */
 
 const noop = () => {};
+
+/** Khối combo ở giỏ: ba trạng thái dựng bằng đúng hàm chia khối của giỏ, dòng bên trong là khung giữ chỗ (dòng thật là CartLineRow). */
+const COMBO_LINES = [{ id: 'a' }, { id: 'b' }];
+const comboGroupOf = (title: string) => ({ id: 'g', kind: 'STOREFRONT' as const, title, discount: 65250, lineIds: ['a', 'b'], keyLineIds: ['a', 'b'] });
+const comboApplied = cartComboBlocks(COMBO_LINES, [comboGroupOf('Bộ giặt sạch')]).blocks[0]!;
+const comboBroken = cartComboBlocks(COMBO_LINES, [comboGroupOf('Bộ giặt sạch')], new Set(['b'])).blocks[0]!;
+const comboLong = cartComboBlocks(COMBO_LINES, [comboGroupOf('Bộ giặt tẩy sinh học dành cho gia đình đông người Fuwa3eKhongDauCach0123456789')]).blocks[0]!;
+const comboRows = COMBO_LINES.map((l) => (
+  <div key={l.id} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', padding: 12, boxShadow: 'var(--elevation-1)' }}>
+    <Text variant="body-sm" as="div">Dòng giỏ {l.id.toUpperCase()}</Text>
+  </div>
+));
 
 function Group({ name, children }: { name: string; children: ReactNode }) {
   return (
@@ -195,6 +209,15 @@ export function DsGallery() {
           ))}
         </Group>
 
+        <Group name="voucher-picker">
+          <Variant label="đang dùng, chưa đủ (có lý do), không áp dụng; hạn có năm khi khác năm">
+            <VoucherPicker rows={GALLERY_PICKER_ROWS} onUse={noop} onRemove={noop} />
+          </Variant>
+          <Variant label="đang đổi mã (busy)">
+            <VoucherPicker rows={GALLERY_PICKER_ROWS} onUse={noop} onRemove={noop} busy />
+          </Variant>
+        </Group>
+
         <Group name="combo-card">
           <Variant label="3 món, giảm 10%">
             <ComboCard title="Combo giặt sạch" items={GALLERY_COMBO_ITEMS.slice(0, 3)} pct={10} total={three.total} comboTotal={three.comboTotal} onAddAll={noop} />
@@ -207,6 +230,18 @@ export function DsGallery() {
           </Variant>
           <Variant label="đang thêm vào giỏ (busy)">
             <ComboCard title="Combo giặt sạch" items={GALLERY_COMBO_ITEMS.slice(0, 3)} pct={10} total={three.total} comboTotal={three.comboTotal} onAddAll={noop} busy />
+          </Variant>
+        </Group>
+
+        <Group name="cart-combo-block">
+          <Variant label="bộ đang áp: đầu nhóm ghi Tiết kiệm">
+            <CartComboBlock block={comboApplied}>{comboRows}</CartComboBlock>
+          </Variant>
+          <Variant label="bỏ chọn một món của bộ: không ghi Tiết kiệm, nhắc chọn đủ món">
+            <CartComboBlock block={comboBroken}>{comboRows}</CartComboBlock>
+          </Variant>
+          <Variant label="tên combo dài không dấu cách: xuống dòng, không tràn">
+            <CartComboBlock block={comboLong}>{comboRows}</CartComboBlock>
           </Variant>
         </Group>
 

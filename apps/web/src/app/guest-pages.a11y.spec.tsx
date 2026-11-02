@@ -180,7 +180,7 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     expect(names).toContain('Tăng số lượng Dầu gội bồ kết');
     const coupon = container.querySelector('#coupon-code');
     expect(coupon).not.toBeNull();
-    expect(accessibleName(coupon!)).toBe('Mã giảm giá');
+    expect(accessibleName(coupon!)).toBe('Nhập mã giảm giá khác');
   });
 
   it('/gio-hang đã áp mã: nút bỏ mã có tên', async () => {
@@ -217,7 +217,7 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     await flush();
     expect(container.textContent).toContain('1 Xuân Thuỷ, Cầu Giấy, Hà Nội');
     click(Array.from(container.querySelectorAll('input[type="radio"]')).filter((r) => (r as HTMLInputElement).name === 'pay')[1] ?? null);
-    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Đặt hàng')) ?? null);
     await flush(8);
     expect(mocks.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
     expect(container.textContent).not.toContain('Cảm ơn bạn đã chọn Tubu');
@@ -300,7 +300,7 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
   it('/thanh-toan sau khi đặt đơn: nút chính dẫn tới chi tiết đơn vừa đặt', async () => {
     const { container } = mount(<CheckoutPage />);
     await flush();
-    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Đặt hàng')) ?? null);
     await flush(8);
     expect(container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
     const detail = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/don-hang/TB-9"]');

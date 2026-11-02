@@ -114,10 +114,13 @@ describe('Badge / Chip / TierBadge', () => {
     expect(off.style.minHeight).toBe('32px');
   });
 
-  it('TierBadge hiện emoji (ẩn khỏi trình đọc) và tên bậc', () => {
+  it('TierBadge hiện emoji (ẩn khỏi trình đọc) và "CTV {tên bậc}"', () => {
     const c = mount(<TierBadge name="Vàng" emoji="🥇" />).container;
-    expect(c.textContent).toBe('🥇Vàng');
+    expect(c.textContent).toBe('🥇CTV Vàng');
     expect(c.querySelector('[aria-hidden]')!.textContent).toBe('🥇');
+    const clone = c.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('[aria-hidden]').forEach((n) => n.remove());
+    expect((clone.textContent ?? '').trim()).toBe('CTV Vàng');
   });
 });
 

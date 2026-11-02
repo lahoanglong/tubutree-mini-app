@@ -8,6 +8,15 @@ import { SHOP_COVER_HEIGHT, ShopHeader } from './shop-header';
 const q = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
 describe('ShopHeader (web)', () => {
+  it('titleAs đổi thẻ tiêu đề (đầu xem trước trong trình dựng không thêm h1 thứ hai); mặc định h1', () => {
+    const a = mount(<ShopHeader title="Gian hàng Lan" />);
+    expect(a.container.querySelectorAll('h1')).toHaveLength(1);
+    a.unmount();
+    const b = mount(<ShopHeader title="Gian hàng Lan" titleAs="h2" />);
+    expect(b.container.querySelectorAll('h1')).toHaveLength(0);
+    expect(b.container.querySelector('h2')!.textContent).toBe('Gian hàng Lan');
+  });
+
   it('chưa có ảnh bìa: bìa phẳng màu token, không gradient', () => {
     mount(<ShopHeader title="Gian hàng Lan" />);
     expect(q('shop-cover')!.style.background).toContain('var(--color-bg-cover)');

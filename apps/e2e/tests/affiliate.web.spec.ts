@@ -223,6 +223,7 @@ test.describe('Web khách: CTV', () => {
           : [],
       });
     api.get('/affiliate/me', { isAffiliate: true, canRegister: true, canOpenStorefront: true, referralCode: 'AN123', walletBalance: 0 });
+    api.get('/affiliate/tiers', { revenue: 0, tier: { name: 'Hạt Giống', emoji: '🌱' }, allTiers: [{ name: 'Hạt Giống', emoji: '🌱', min: 0, milestoneRewardPoints: null }] });
     api.get('/storefront/me', () => (state.created ? draft() : reply(404, { message: 'Chưa có gian hàng' })));
     api.get('/categories', [{ id: 'cat1', name: 'Chăm sóc da', slug: 'cham-soc-da', image: null }]);
     api.get('/storefront/me/products', []);
@@ -281,6 +282,7 @@ test.describe('Web khách: CTV', () => {
     let added = false;
     let created = false;
     const SOAP = { id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 };
+    api.get('/affiliate/tiers', { revenue: 0, tier: { name: 'Hạt Giống', emoji: '🌱' }, allTiers: [{ name: 'Hạt Giống', emoji: '🌱', min: 0, milestoneRewardPoints: null }] });
     api.get('/storefront/me', () =>
       SF({
         collections: [

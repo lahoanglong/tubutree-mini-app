@@ -4,9 +4,9 @@ import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
 import { getWishlist } from '../services/wishlist-api';
-import { addToCart, fetchActiveFlashSales, fetchProduct, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
+import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
-import { cartKey } from '../services/cart-key';
+import { cartKey, useCartKey } from '../services/cart-key';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { VariationSheet } from '../components/variation-sheet';
@@ -46,6 +46,8 @@ export default function WishlistPage() {
   // Gate auth: tránh gọi /me/wishlist khi chưa login → 401 → màn lỗi (đáng lẽ là empty).
   const wishQ = useQuery({ queryKey: ['wishlist'], queryFn: getWishlist, enabled: phase === 'authenticated' });
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: picker !== null });
+  // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở trang chi tiết, thêm xong `setQueryData` cập nhật).
+  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
 
   const addLine = async (variationId: string, qty: number) => {
     const cart = await addToCart(variationId, qty, 'wishlist');
@@ -131,6 +133,7 @@ export default function WishlistPage() {
           initialId={picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
           busy={busyId === picker.product.id}
+          cartLines={cartQ.data?.items}
           onConfirm={confirmPick}
         />
       )}

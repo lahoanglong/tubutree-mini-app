@@ -45,12 +45,43 @@ export const PROBES: readonly Probe[] = [
   // Tiêu đề khối: SectionHeader đầu tiên của trang Ưu đãi là khối Giờ vàng (Q1: Inter 16/700 -0,01em, chữ promo).
   { id: 'section-title', root: '[data-testid="section-header"]', target: 'h2', props: TEXT },
   { id: 'section-header', root: '[data-testid="section-header"]', target: '', props: ['height', 'display', 'justifyContent'] },
+  // Trình dựng gian hàng (K6): tiêu đề khối Inter 16/700, ô thống kê và thẻ thống kê cao bằng nhau ở hai app.
+  { id: 'builder-stats-title', root: '[data-testid="builder-stats"]', target: 'h2', props: TEXT },
+  { id: 'builder-stats-card', root: '[data-testid="builder-stats"]', target: '', props: ['height'] },
+  { id: 'builder-stat-value', root: '[data-testid="builder-stat"]', target: ':scope > div:first-child', props: TEXT },
+  { id: 'builder-stat-label', root: '[data-testid="builder-stat"]', target: ':scope > div:last-child', props: TEXT },
+  { id: 'builder-stat-box', root: '[data-testid="builder-stat"]', target: '', props: ['height', 'borderRadius', 'backgroundColor', ...PAD] },
+  { id: 'builder-sections-title', root: '[data-testid="builder-sections-head"]', target: 'h2', props: TEXT },
+  // Thưởng mốc doanh số tháng trên trang CTV (K6): web theo thang chữ và chiều cao dòng của Mini.
+  // Không đo height: chữ "Bảng 5 bậc CTV & thưởng mốc Điểm Xanh" chỉ dư khoảng 3px nên xuống dòng hay không tuỳ cách vẽ chữ của máy
+  // (Pixel 7 trên Linux ở CI xuống dòng, máy Mac thì không). Đo những thứ quyết định chỗ cho nhãn: bề rộng nút, khoảng cách, cỡ mũi tên
+  // (height, vì width của svg co lại khi chữ dài) và thang chữ. Hai app cùng các số này thì xuống dòng như nhau trên cùng một máy.
+  { id: 'tier-toggle', root: '[data-testid="tier-toggle"]', target: '', props: ['width', 'columnGap', 'minHeight', ...PAD] },
+  { id: 'tier-toggle-label', root: '[data-testid="tier-toggle"]', target: ':scope > :first-child', props: TEXT },
+  { id: 'tier-toggle-icon', root: '[data-testid="tier-toggle"]', target: ':scope > :last-child', props: ['height'] },
+  { id: 'milestone-card', root: '[data-testid="milestone-rewards"]', target: '', props: ['height'] },
+  { id: 'milestone-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-title"]', props: TEXT },
+  { id: 'milestone-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-meta"]', props: TEXT },
+  { id: 'milestone-note', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-note"]', props: TEXT },
+  { id: 'milestone-row', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row"]', props: ['height'] },
+  { id: 'milestone-row-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row-title"]', props: TEXT },
+  { id: 'milestone-row-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row-meta"]', props: TEXT },
+  { id: 'milestone-claim', root: '[data-testid="milestone-rewards"]', target: 'button', props: ['height', 'fontSize', 'lineHeight', 'fontWeight'] },
   ...tileProbes('flash'),
   ...tileProbes('line'),
   ...tileProbes('grid', [
     { id: 'tile-grid-brand', root: tile('grid'), target: '[data-ds-part="brand"]', props: TEXT },
     { id: 'tile-grid-meta', root: tile('grid'), target: '[data-ds-part="meta"]', props: TEXT },
   ]),
+  // Thanh toán (K2): móc `data-ds="checkout-*"` có ở cả Mini (pages/checkout.tsx, components/checkout/address-section.tsx) và web (app/thanh-toan/page.tsx).
+  { id: 'checkout-block-title', root: '[data-ds="checkout-block-title"]', target: '', props: TEXT },
+  { id: 'checkout-address-card', root: '[data-ds="checkout-address-card"]', target: '', props: ['heightNoBorder', 'borderRadius'] },
+  { id: 'checkout-summary-row', root: '[data-ds="checkout-summary-row"]', target: '', props: ['height', 'paddingTop', 'paddingBottom', 'marginTop', 'marginBottom'] },
+  { id: 'checkout-summary-label', root: '[data-ds="checkout-summary-row"]', target: ':scope > :first-child', props: [...TEXT, 'height'] },
+  { id: 'checkout-summary-value', root: '[data-ds="checkout-summary-row"]', target: ':scope > :last-child', props: ['fontSize', 'lineHeight', 'fontWeight', 'color', 'height'] },
+  { id: 'checkout-summary-total-label', root: '[data-ds="checkout-summary-total"]', target: ':scope > :first-child', props: TEXT },
+  { id: 'checkout-summary-total-value', root: '[data-ds="checkout-summary-total"]', target: ':scope > :last-child', props: ['fontSize', 'lineHeight', 'fontWeight', 'color'] },
+  { id: 'checkout-note', root: '[data-ds="checkout-note"]', target: 'input, textarea', props: ['height', 'borderRadius'] },
 ];
 
 /** Dung sai 0,5px cho số đo px (làm tròn khác nhau của hai bộ dựng hình); mọi giá trị khác so đúng chuỗi. */
@@ -91,7 +122,13 @@ export function measure(page: Page, probes: readonly Probe[]): Promise<Measure> 
         continue;
       }
       const cs = getComputedStyle(el);
-      out[p.id] = Object.fromEntries(p.props.map((k) => [k, k === 'fontFamilyKind' ? kind(cs.fontFamily) : cs.getPropertyValue(kebab(k))]));
+      // `heightNoBorder`: viền bị làm tròn theo mật độ điểm ảnh (Mini đo ở DPR 3, web ở DPR 2,625) nên chiều cao thẻ có viền lệch nhau dù CSS giống hệt.
+      const value = (k: string): string => {
+        if (k === 'fontFamilyKind') return kind(cs.fontFamily);
+        if (k === 'heightNoBorder') return `${(el.getBoundingClientRect().height - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth)).toFixed(2)}px`;
+        return cs.getPropertyValue(kebab(k));
+      };
+      out[p.id] = Object.fromEntries(p.props.map((k) => [k, value(k)]));
     }
     return out;
   }, probes);
@@ -119,6 +156,27 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'section-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: 'rgb(122, 67, 0)', fontFamilyKind: 'inter' },
   'section-header': { height: '44px', display: 'flex', justifyContent: 'space-between' },
 
+  // Trình dựng gian hàng (K6): nhãn ô thống kê một dòng (80 + 20px thấp hơn khi nhãn xuống dòng), tiêu đề khối Inter 16/700 -0,01em (Q1).
+  'builder-stats-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
+  'builder-stats-card': { height: '180.1px' },
+  'builder-stat-value': { fontSize: '15px', lineHeight: '22.05px', fontWeight: '700', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'builder-stat-label': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'builder-stat-box': { height: '62.07px', borderRadius: '12px', backgroundColor: 'rgb(242, 245, 236)', paddingTop: '10px', paddingRight: '10px', paddingBottom: '10px', paddingLeft: '10px' },
+  'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
+
+  // Thưởng mốc doanh số tháng (K6): số đo Mini 375px, nút Button 48px/15px là chuẩn; web dùng cùng Button và thang chữ caption/body-sm.
+  'tier-toggle': { width: '311px', columnGap: '10px', minHeight: '44px', paddingTop: '12px', paddingRight: '0px', paddingBottom: '12px', paddingLeft: '0px' },
+  'tier-toggle-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'tier-toggle-icon': { height: '16px' },
+  'milestone-card': { height: '416.06px' },
+  'milestone-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'milestone-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-note': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-row': { height: '90.97px' },
+  'milestone-row-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'milestone-row-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-claim': { height: '48px', fontSize: '15px', lineHeight: '20px', fontWeight: '600' },
+
   'tile-flash': { width: '128px', ...FRAME_SPEC },
   'tile-flash-body': INSET,
   'tile-flash-name': { fontSize: '13px', lineHeight: px(M.nameCaption / 2), fontWeight: '400', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
@@ -138,4 +196,15 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'tile-grid-price': PRICE,
   'tile-grid-compare': { ...STRIKE, fontSize: '13px', lineHeight: px(M.compare) },
   'tile-grid-meta': SMALL,
+
+  // Thanh toán: số đo Mini 375px (thẻ địa chỉ một dòng + huy hiệu Mặc định, dòng KeyValueRow đệm 6px, ô Input 48px).
+  'checkout-block-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'checkout-address-card': { heightNoBorder: '67.97px', borderRadius: '12px' },
+  'checkout-summary-row': { height: '35.55px', paddingTop: '6px', paddingBottom: '6px', marginTop: '0px', marginBottom: '0px' },
+  'checkout-summary-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '400', letterSpacing: 'normal', color: 'rgb(90, 84, 74)', fontFamilyKind: 'inter', height: '23.55px' },
+  // Giá trị 15px/600: KeyValueRow của Mini ghi đè fontSize bằng undefined nên thừa kế cỡ 15px của khối cha; web theo số đo đó.
+  'checkout-summary-value': { fontSize: '15px', lineHeight: '23.55px', fontWeight: '600', color: INK, height: '23.55px' },
+  'checkout-summary-total-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '400', letterSpacing: 'normal', color: 'rgb(90, 84, 74)', fontFamilyKind: 'inter' },
+  'checkout-summary-total-value': { fontSize: '16px', lineHeight: '25.12px', fontWeight: '700', color: INK },
+  'checkout-note': { height: '48px', borderRadius: '8px' },
 };

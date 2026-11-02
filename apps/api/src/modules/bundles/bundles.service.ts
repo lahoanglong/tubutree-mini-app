@@ -184,7 +184,7 @@ export class BundlesService {
       let addonPrice: number | null = null;
       if (b.kind === 'ADDON') {
         // Cùng hàm với giỏ: giá khách trả sau trần theo giá tham chiếu lúc tạo. Không giảm được đồng nào (giá kèm không thấp hơn, hay thiếu
-        // giá tham chiếu) thì giỏ tính giá thường, nên không quảng cáo "deal sốc".
+        // giá tham chiếu) thì giỏ tính giá thường, nên không quảng cáo là giá tốt.
         if (it.addonPrice === null) continue;
         const unit = product.salePrice ?? product.basePrice;
         addonPrice = addonPayPrice(unit, it.addonPrice, it.refPrice);

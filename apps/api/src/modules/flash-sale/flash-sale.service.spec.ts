@@ -705,6 +705,16 @@ describe('FlashSaleService.setReminder', () => {
     expect(prisma.flashSaleReminder.upsert).not.toHaveBeenCalled();
   });
 
+  // Lời này tới tay khách bấm "Nhắc tôi": đúng thuật ngữ "Giờ vàng" (Q5), không "flash".
+  it('item không tồn tại hoặc ngừng bán → câu báo khách đọc nói "Giờ vàng", không nói "flash"', async () => {
+    const notFound = new FlashSaleService(mkPrisma(null) as any, config, notifications, lifecycle).setReminder('u1', 'fiX', NOW);
+    await expect(notFound).rejects.toThrow('Không tìm thấy sản phẩm Giờ vàng.');
+    const stopped = mkPrisma({ id: 'fi1', flashSale: { startAt: new Date('2026-07-06T00:00:00Z') }, variation: { ...sellable, isActive: false } });
+    await expect(new FlashSaleService(stopped as any, config, notifications, lifecycle).setReminder('u1', 'fi1', NOW)).rejects.toThrow(
+      'Không tìm thấy sản phẩm Giờ vàng.',
+    );
+  });
+
   it('hàng đã ngừng bán (biến thể/sản phẩm tắt hoặc chưa duyệt) → reject, KHÔNG upsert', async () => {
     for (const variation of [
       { ...sellable, isActive: false },

@@ -100,10 +100,14 @@
   --color-bg-surface: var(--stone-0);
   --color-bg-subtle: var(--sage-50);
   --color-bg-inverse: var(--stone-900);
+  /* Lớp phủ tối quanh khung cắt ảnh và trên ảnh đang tải ở Mini. Nền của sheet/hộp thoại là --color-bg-sheet-scrim bên dưới. */
   --color-bg-scrim: rgba(28, 26, 22, 0.6);
   /* Lớp phủ SÁNG (= stone-50 72% alpha) — dùng cho overlay "tạm hết hàng" đè lên ảnh sản phẩm;
-     khác --color-bg-scrim (tối, dùng cho backdrop modal/sheet). Thêm ở Task 23 (ProductTile). */
+     khác --color-bg-scrim (tối, phủ ảnh). Thêm ở Task 23 (ProductTile). */
   --color-bg-scrim-light: rgba(246, 244, 239, 0.72);
+  /* Nền mờ sau sheet và hộp thoại: MỘT màu cho zmp Sheet của Mini App (`--zaui-mask-overlay-color`, mặc định zmp-ui #000000b3 = đen 70%),
+     `mini/bottom-sheet` và `ui/sheet` của web ở mọi khổ. Sheet không tự đặt màu nền riêng. */
+  --color-bg-sheet-scrim: rgba(0, 0, 0, 0.7);
 
   --color-text-primary: var(--stone-900);
   --color-text-secondary: var(--stone-600);
@@ -273,6 +277,7 @@
   --rail-pad-block: var(--p-space-2) var(--p-space-4); /* chừa chỗ cho bóng và vòng focus của thẻ trong kệ */
   --section-header-h: 44px;
   --sort-bar-top: 0px; /* SortBar sticky dính dưới header của trang; trang có header cố định đặt lại giá trị */
+  --dialog-w: 480px; /* sheet web từ md là hộp thoại giữa màn; mini/bottom-sheet và ui/sheet cùng bề rộng */
   --banner-ratio: 5 / 2;
   --badge-h-sm: 20px;
   --badge-h-md: 24px;

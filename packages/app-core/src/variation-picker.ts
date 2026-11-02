@@ -1,9 +1,7 @@
-import { pickDefaultVariation, variationPricing, type FlashPriceItem, type VariationPricingResult } from './flash-price';
+import { stockText } from './commerce/stock-text';
+import { pickDefaultVariation } from './flash-price';
 
 type PickerVariation = { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number };
-
-/** Còn từng này trở xuống thì bảng chọn ghi "Chỉ còn N". */
-const LOW_STOCK_NOTICE = 5;
 
 /** Sản phẩm từ 2 phân loại: Thêm vào giỏ và Mua ngay hỏi khách chọn phân loại; 1 phân loại thì thêm thẳng. */
 export function needsVariationPicker(variations: readonly unknown[]): boolean {
@@ -21,12 +19,7 @@ export function clampPickerQty(variation: { stock: number } | undefined, qty: nu
   return Math.min(Math.max(1, Math.floor(qty) || 1), max);
 }
 
+/** Dòng tồn kho của phân loại đang chọn trong bảng: cùng chữ với PDP và giỏ (`stockText`); màu cảnh báo cho tồn thấp do nơi vẽ lo (`isLowStock`). */
 export function pickerStockText(stock: number): string {
-  if (stock <= 0) return 'Hết hàng';
-  return stock <= LOW_STOCK_NOTICE ? `Chỉ còn ${stock}` : `Còn ${stock}`;
-}
-
-/** Giá một dòng chọn trong bảng: cùng luật Giờ vàng với trang chi tiết. */
-export function pickerView(variation: PickerVariation, flash: readonly FlashPriceItem[]): VariationPricingResult {
-  return variationPricing(variation, flash);
+  return stockText(stock);
 }

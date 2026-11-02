@@ -137,6 +137,27 @@ describe('web tailwind.config', () => {
     });
   });
 
+  it('hộp thoại từ md: có bóng shadow-dialog (elevation-4) và animate-dialog-pop dùng keyframes tubu-dialog-pop của mini.css', () => {
+    expect(ext?.boxShadow).toMatchObject({ dialog: 'var(--elevation-4)' });
+    expect((ext?.animation as Record<string, string>)['dialog-pop']).toMatch(/^tubu-dialog-pop /);
+    expect((ext?.animation as Record<string, string>)['dialog-fade']).toMatch(/^tubu-dialog-fade /);
+  });
+
+  // Bản sinh thật: CSS ra chỉ có luật trong md > no-preference, không có luật animation nào ngoài khối đó. Lỗi cũ: `md:animate-*` kèm
+  // `motion-reduce:animate-none` thua về thứ tự (luật md sinh sau) nên giảm chuyển động vẫn chạy hiệu ứng.
+  it('hiệu ứng hộp thoại từ md chỉ nằm trong @media (prefers-reduced-motion: no-preference)', async () => {
+    const postcss = (await import('postcss')).default;
+    const tailwind = (await import('tailwindcss')).default;
+    const out = await postcss([
+      tailwind({ ...config, content: [{ raw: 'md:motion-safe:animate-dialog-pop md:motion-safe:animate-dialog-fade' }] }),
+    ]).process('@tailwind utilities;', { from: undefined });
+    const css = out.css.replace(/\s+/g, ' ').trim();
+    const nested = /^@media \(min-width: 768px\) \{ @media \(prefers-reduced-motion: no-preference\) \{ (.*) \} \}$/.exec(css);
+    expect(nested, css).not.toBeNull();
+    expect(nested![1]).toContain('animation: tubu-dialog-pop 180ms ease-out both');
+    expect(nested![1]).toContain('animation: tubu-dialog-fade 180ms ease-out both');
+  });
+
   it('có bóng thanh dưới (shadow-nav) và cỡ chữ nhãn 12px (text-label) theo token', () => {
     expect(ext?.boxShadow).toMatchObject({ nav: 'var(--elevation-nav)' });
     expect(ext?.fontSize).toMatchObject({ label: ['var(--type-label-size)', { lineHeight: 'var(--type-label-lh)' }] });

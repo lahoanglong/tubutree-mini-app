@@ -9,7 +9,8 @@ import { calcTierDiscount, firstOrderFreeShipFrom, freeShipThreshold, tierDiscou
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
-import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
+import { ComboService, goodsAfterComboOf, type ComboGroup } from '../storefront/combo.service';
+import type { CartComboGroup } from '@tubutree/shared-types';
 import { resolvePublishedStorefront } from '../storefront/resolve-storefront';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -316,6 +317,7 @@ export class CartService {
       couponRemoved,
       subtotal,
       comboDiscount: combo.total,
+      comboGroups: comboGroupsOf(combo.groups, lines),
       discount,
       tierDiscount,
       freeship,
@@ -336,7 +338,7 @@ export class CartService {
   ) {
     const nonFlash = lines.filter((l) => !l.isFlash);
     const storefront = storefrontSlug ? await resolvePublishedStorefront(this.prisma, await loadPublicVisibility(this.config), storefrontSlug) : null;
-    const combo = await this.combo.computeForStorefront(
+    const combo = await this.combo.computeWithGroups(
       storefront?.slug ?? null,
       nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity })),
       userId,
@@ -364,7 +366,7 @@ export class CartService {
   /** Vượt tồn kho khi cộng thêm `addQty` vào `currentQty` đang có trong giỏ. */
   private assertStock(variation: AddableVariation, currentQty: number, addQty: number): void {
     if (currentQty + addQty > variation.stock) {
-      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
+      throw new BadRequestException(`Còn ${variation.stock} sản phẩm trong kho.`);
     }
   }
 
@@ -561,7 +563,7 @@ export class CartService {
       await this.prisma.cartItem.delete({ where: { id: itemId } });
     } else {
       if (quantity > item.variation.stock) {
-        throw new BadRequestException(`Chỉ còn ${item.variation.stock} sản phẩm trong kho.`);
+        throw new BadRequestException(`Còn ${item.variation.stock} sản phẩm trong kho.`);
       }
       await this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
     }
@@ -684,4 +686,16 @@ export class CartService {
     await db.cartItem.deleteMany({ where: { cartId: cart.id, id: { in: itemIds } } });
     await db.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
   }
+}
+
+/**
+ * Nhóm combo của giỏ cho client: đổi `variationId` của nhóm (do ComboService chia từ chính lần khớp tính `comboDiscount`) sang id dòng giỏ, theo thứ tự dòng.
+ * Nhóm không còn dòng nào (giá trị lệch giữa hai lần đọc) bị bỏ; ComboService cũ không trả `groups` thì rỗng. Chỉ để hiển thị, không số tiền nào đọc nó.
+ */
+function comboGroupsOf(groups: ComboGroup[] | undefined, lines: { id: string; variationId: string }[]): CartComboGroup[] {
+  const idsOf = (variationIds: string[]) => lines.filter((l) => variationIds.includes(l.variationId)).map((l) => l.id);
+  return (groups ?? []).flatMap((g) => {
+    const lineIds = idsOf(g.variationIds);
+    return lineIds.length === 0 ? [] : [{ id: g.id, kind: g.kind, title: g.title, discount: g.discount, lineIds, keyLineIds: idsOf(g.keyVariationIds) }];
+  });
 }

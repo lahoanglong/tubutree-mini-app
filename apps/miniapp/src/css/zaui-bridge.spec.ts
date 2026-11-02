@@ -31,6 +31,9 @@ const REQUIRED_VARS = [
 ];
 
 describe('zaui-bridge.css', () => {
+  it('nền mờ của zmp Sheet lấy token chung --color-bg-sheet-scrim, cùng màu với hai sheet web', () => {
+    expect(css).toMatch(/--zaui-mask-overlay-color:\s*var\(--color-bg-sheet-scrim\)\s*;/);
+  });
   it('overrides every required --zaui-light-* variable', () => {
     for (const v of REQUIRED_VARS) {
       expect(css, `missing override for ${v}`).toMatch(new RegExp(`${v}\\s*:`));

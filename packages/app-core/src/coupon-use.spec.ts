@@ -146,7 +146,7 @@ describe('pickBestCoupon', () => {
 
 describe('couponAutoCopy', () => {
   it('nhãn theo chữ chủ chốt', () => {
-    expect(couponAutoCopy.applied).toBe('Đã tự áp');
+    expect(couponAutoCopy.applied).toBe('Tubu đã tự áp mã tốt nhất');
     expect(couponAutoCopy.remove).toBe('Gỡ');
   });
 });

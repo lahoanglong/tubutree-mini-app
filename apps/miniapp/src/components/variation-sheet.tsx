@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
-import {
-  clampPickerQty,
-  pickerStartId,
-  pickerStockText,
-  pickerView,
-} from '@tubutree/app-core/variation-picker';
-import type { FlashPriceItem } from '@tubutree/app-core/flash-price';
+import { Zap } from 'lucide-react';
+import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
+import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
+import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { PriceTag } from './ui/price-tag';
 import { ProductThumb } from './ui/product-thumb';
 import { QuantitySelector } from './ui/quantity-selector';
+import { SR_ONLY } from './ui/sr-only';
 import { Text } from './ui/text';
-import { rowKeyboardProps } from './ui/row-keyboard';
+import { VariationChip } from './product/variation-chip';
 
 export interface VariationOption {
   id: string;
@@ -42,6 +44,8 @@ export function VariationSheet({
   initialId,
   initialQty,
   busy,
+  cartLines,
+  cartMayArrive = true,
   onConfirm,
 }: {
   open: boolean;
@@ -54,10 +58,25 @@ export function VariationSheet({
   initialId: string | null;
   initialQty: number;
   busy: boolean;
+  /**
+   * Giỏ hiện tại (`GET /cart`): thêm giỏ cộng dồn và máy chủ giá cả dòng, nên số đã có của phân loại đang chọn đổi tiền hai nút. Bắt buộc ghi ra (chỗ gọi
+   * quên truyền thì bảng âm thầm coi giỏ rỗng và nút ghi sai tiền); `undefined` chỉ khi giỏ chưa tải, lỗi hoặc khách chưa đăng nhập, khi đó coi là giỏ rỗng.
+   */
+  cartLines: readonly { variationId: string; quantity: number }[] | undefined;
+  /**
+   * `GET /cart` còn có thể về (đã đăng nhập, đang khôi phục phiên, mất mạng tạm thời) nên "Mua ngay" giữ sẵn chỗ cho câu về giỏ. Khách chắc chắn chưa đăng nhập truyền
+   * `false`: giỏ không bao giờ về, không có gì để nhảy nên không giữ dải trống. Chỉ đọc ở chế độ "Mua ngay", và chốt theo giá trị lúc mở bảng; mặc định `true` (giữ chỗ, như trước).
+   */
+  cartMayArrive?: boolean;
   onConfirm: (variation: VariationOption, qty: number) => void | Promise<void>;
 }) {
   const [id, setId] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
+  // `cartMayArrive` chốt một lần lúc mở bảng: trạng thái phiên đổi khi bảng còn mở (đăng nhập bấm từ chính bảng này đưa 'idle' sang 'loading', huỷ thì về lại) mà chạy theo thì dải ghi chú
+  // hiện/ẩn ngay dưới ngón tay, bảng cao thêm hay co lại sau cú bấm. Cập nhật state ngay lúc vẽ (không dùng effect) để lần vẽ đầu của lượt mở đã có giá trị đúng.
+  const [mayArriveAtOpen, setMayArriveAtOpen] = useState({ open, value: cartMayArrive });
+  if (mayArriveAtOpen.open !== open) setMayArriveAtOpen({ open, value: open ? cartMayArrive : mayArriveAtOpen.value });
+  const mayArrive = mayArriveAtOpen.value;
 
   useEffect(() => {
     if (!open) return;
@@ -67,9 +86,19 @@ export function VariationSheet({
   }, [open]);
 
   const selected = variations.find((v) => v.id === id);
-  const view = selected ? pickerView(selected, flash) : null;
   const available = (selected?.stock ?? 0) > 0;
   const label = mode === 'buy' ? 'Mua ngay' : 'Thêm vào giỏ';
+  const shownQty = clampPickerQty(selected, qty);
+  // Tiền dòng theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng (số có sẵn trong giỏ + số thêm) tính giá thường. "Mua ngay" thanh toán cả dòng
+  // giỏ của phân loại này (`lineTotal`); "Thêm vào giỏ" ghi phần giỏ tăng thật (`total`). Giỏ rỗng thì hai số bằng nhau.
+  const line = selected ? variationLinePreview(selected, flash, shownQty, inCartQuantity(cartLines, selected.id)) : null;
+  const view = line?.pricing ?? null;
+  // Một vùng ghi chú một câu: mất giá Giờ vàng, hoặc ("Mua ngay") giỏ đã có sẵn nên thanh toán cả dòng.
+  const note = line ? lineNote(line, shownQty, mode === 'buy') : null;
+  // Chỗ ghi chú giữ từ lúc mở bảng: có Giờ vàng giới hạn (câu mất giá, không liên quan giỏ), hoặc "Mua ngay" khi giỏ còn có thể về hay đã có. Giữ theo nội dung giỏ thì bảng mở trước khi
+  // GET /cart về sẽ cao thêm lúc giỏ về, và giỏ về rỗng lại co lại, cả hai dưới ngón tay đang bấm; đổi chip cũng không được làm bảng cao thêm. Khách chưa đăng nhập (`cartMayArrive`
+  // = false) không bao giờ có giỏ nên không có gì để nhảy: không giữ dải trống 2 dòng. "Thêm vào giỏ" không có câu về giỏ nên không giữ.
+  const reserveNote = line?.allowance != null || (mode === 'buy' && (mayArrive || cartLines !== undefined));
 
   return (
     <BottomSheet
@@ -85,64 +114,63 @@ export function VariationSheet({
           disabled={!selected || !available}
           onPress={() => selected && onConfirm(selected, clampPickerQty(selected, qty))}
         >
-          {available && view ? `${label} · ${formatVnd(view.price * clampPickerQty(selected, qty))}` : 'Hết hàng'}
+          {available && line ? `${label} · ${formatVnd(mode === 'buy' ? line.lineTotal : line.total)}` : fillTileCopy('stock.out')}
         </Button>
       }
     >
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <ProductThumb src={thumbnail} alt={productName} size={80} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          {view && <PriceTag value={view.price} compareAt={view.compareAt} size="lg" />}
+          {view && (
+            <span data-testid="variation-sheet-price">
+              <PriceTag value={view.price} compareAt={view.compareAt} size="lg" tone={view.isFlash ? 'deal' : 'default'} />
+            </span>
+          )}
+          {view?.isFlash && (
+            <div data-testid="variation-sheet-flash" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-inline-xs) var(--space-inline-sm)', marginTop: 'var(--space-stack-xs)' }}>
+              <Badge tone="flash" size="sm" icon={Zap}>
+                {fillCopy('flash.title')}
+              </Badge>
+              {line?.limit != null && (
+                <>
+                  <Text variant="caption" tone="secondary" aria-hidden="true">
+                    {fillCopy('flash.limitShort', { n: line.limit })}
+                  </Text>
+                  <span style={SR_ONLY}>{fillCopy('flash.limitSpoken', { n: line.limit })}</span>
+                </>
+              )}
+            </div>
+          )}
           <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
-            {selected ? `${selected.name} · ${pickerStockText(selected.stock)}` : productName}
+            {selected ? (
+              <>
+                {selected.name} ·{' '}
+                {/* Tồn thấp chỉ đổi màu (token cảnh báo), chữ vẫn "Còn n sản phẩm" như mọi mức tồn. */}
+                <span data-testid="variation-sheet-stock" style={isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : undefined}>
+                  {pickerStockText(selected.stock)}
+                </span>
+              </>
+            ) : (
+              productName
+            )}
           </Text>
         </div>
       </div>
 
       <div role="group" aria-label="Phân loại" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
-        {variations.map((v) => {
-          const out = v.stock <= 0;
-          const active = v.id === id;
-          return (
-            <div
-              key={v.id}
-              role="button"
-              aria-pressed={active}
-              aria-disabled={out}
-              {...(out ? null : rowKeyboardProps())}
-              className={out ? undefined : 'tubu-press'}
-              onClick={
-                out
-                  ? undefined
-                  : () => {
-                      haptic('light');
-                      setId(v.id);
-                      setQty((q) => clampPickerQty(v, q));
-                    }
-              }
-              style={{
-                padding: '8px 14px',
-                minHeight: 44,
-                boxSizing: 'border-box',
-                borderRadius: 'var(--radius-control)',
-                border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
-                background: active ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-surface)',
-                opacity: out ? 0.55 : 1,
-              }}
-            >
-              <Text
-                variant="body-sm"
-                style={{
-                  color: active ? 'var(--color-text-brand)' : 'var(--color-text-primary)',
-                  textDecoration: out ? 'line-through' : 'none',
-                  fontWeight: active ? 600 : 400,
-                }}
-              >
-                {v.name}
-              </Text>
-            </div>
-          );
-        })}
+        {variations.map((v) => (
+          <VariationChip
+            key={v.id}
+            variation={v}
+            pricing={variationPricing(v, flash)}
+            active={v.id === id}
+            onClick={() => {
+              haptic('light');
+              setId(v.id);
+              setQty((q) => clampPickerQty(v, q));
+            }}
+          />
+        ))}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
@@ -158,6 +186,16 @@ export function VariationSheet({
           }}
         />
       </div>
+      {reserveNote && (
+        // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption, đủ cho cả câu mất giá lẫn câu giỏ có sẵn; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
+        <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
+          {note && (
+            <Text variant="caption" tone="secondary" as="p">
+              {note}
+            </Text>
+          )}
+        </div>
+      )}
     </BottomSheet>
   );
 }

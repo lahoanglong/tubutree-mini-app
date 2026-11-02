@@ -53,7 +53,7 @@ describe('/thanh-toan — đặt đơn xong làm mới số dư', () => {
     mounted.push(r);
     await flush(8);
     spy.mockClear();
-    click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
+    click([...r.container.querySelectorAll('button')].find((b) => /^Đặt hàng/.test(b.textContent ?? ''))!);
     await flush(8);
     const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0]);
     expect(keys).toEqual(expect.arrayContaining(['me', 'wallet', 'wallet-txn', 'points-txn']));
@@ -66,7 +66,7 @@ describe('/thanh-toan — đặt đơn xong làm mới số dư', () => {
     mounted.push(r);
     await flush(8);
     spy.mockClear();
-    click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
+    click([...r.container.querySelectorAll('button')].find((b) => /^Đặt hàng/.test(b.textContent ?? ''))!);
     await flush(8);
     const keys = spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0]);
     expect(keys).not.toContain('wallet');

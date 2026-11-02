@@ -9,14 +9,14 @@ import ts from 'typescript';
 const MINI_SHOP = [
   /^pages\/(home|browse|product-detail|cart|checkout|offers|vouchers|flash-sale|best-sellers|campaign|brand-view|storefront-view|storefront-builder|wishlist|group-buy)\.tsx$/,
   /^components\/(home|catalog|flash|campaign|offers|shop-page|reorder|checkout|storefront-builder|product)\//,
-  /^components\/(flash-sale|storefront-[^/]+|store-page-shell|variation-sheet|catalog-grid)\.tsx$/,
+  /^components\/(flash-sale|storefront-[^/]+|store-page-shell|variation-sheet|catalog-grid|cart-combo-block)\.tsx$/,
 ];
 const WEB_SHOP = [
   /^app\/page\.tsx$/,
   /^app\/(san-pham|ban-chay|gio-vang|gio-hang|thanh-toan|uu-dai|ma-giam-gia|chien-dich|brand|s|mua-chung)\//,
   /^app\/tai-khoan\/yeu-thich\//,
   /^components\/(home|catalog|flash|campaign|offers|shop-page|reorder|checkout|product)\//,
-  /^components\/(flash-price|add-to-cart|variation-sheet)\.tsx$/,
+  /^components\/(flash-price|add-to-cart|variation-sheet|variation-chip|cart-combo-block|coupon-box|pdp-selection|pdp-stock)\.tsx?$/,
 ];
 const inAny = (res) => (rel) => res.some((re) => re.test(rel));
 const miniShop = inAny(MINI_SHOP);
@@ -28,7 +28,7 @@ const STRIKE_TAG = /<(?:del|s)(?=[\s>/])/;
 
 const MINI_PRIMITIVE = /var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|red|amber|blue|navy|tubu-orange)(?:-\d+)?\)/;
 const WEB_PRIMITIVE =
-  /\b(?:bg|text|border|ring|from|to|via|fill|stroke|divide|outline|decoration|placeholder)-(?:stone|forest|sage|clay|honey|terracotta|orange)-\d+\b|var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|tubu-orange)(?:-\d+)?\)/;
+  /\b(?:bg|text|border(?:-[xytblrse])?|ring(?:-offset)?|from|to|via|fill|stroke|divide|outline|decoration|placeholder|accent|caret|shadow)-(?:stone|forest|sage|clay|honey|terracotta|orange)-\d+\b|var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|tubu-orange)(?:-\d+)?\)/;
 
 export const GUARD_RULES = [
   {
