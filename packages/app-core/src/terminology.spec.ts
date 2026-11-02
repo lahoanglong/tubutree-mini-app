@@ -113,7 +113,6 @@ const USE = {
   stock: 'Còn {n} sản phẩm',
   flash: 'Giờ vàng (hoa chữ G)',
   expiry: 'Hạn dùng hoặc Dùng đến',
-  coupon: 'Mã giảm giá',
 } as const;
 
 // Mỗi lý do nêu vì sao chữ cũ còn đó và ai sẽ đổi: không có dòng nào là "đã chấp nhận vĩnh viễn".
@@ -126,7 +125,6 @@ const REASON = {
   STOCK: '"Chỉ còn n" viết trước đợt này; D2 chốt "Còn {n} sản phẩm" (brief §3.2), đổi thuộc gói chữ riêng',
   FLASH: '"giờ vàng" viết thường hoặc "Ưu đãi giờ vàng" (D2: luôn hoa chữ G, bỏ "Ưu đãi giờ vàng"); đổi thuộc gói chữ riêng',
   EXPIRY: '"HSD" viết tắt (D2: "Hạn dùng" hoặc "Dùng đến"); đổi thuộc gói chữ riêng, `/uu-dai` còn do P14 dựng lại',
-  COUPON: 'nhãn ô vòng quay "Mã giảm" (`game-wheel.ts`) còn thiếu chữ "giá" (D2: luôn "Mã giảm giá") vì ô hẹp; đổi khi vẽ lại vòng quay. Chữ Mua chung, Ưu đãi và Trang chủ đã đổi hết',
   LEGAL: 'văn bản pháp lý (điều khoản, bảo mật, đổi trả, vận chuyển): "chúng tôi" là chủ thể ký trong văn bản, đổi chữ cần chủ duyệt nội dung, không phải chữ giao diện',
 } as const;
 
@@ -233,7 +231,6 @@ const EXEMPT: Exemption[] = [
   { file: 'packages/app-core/src/loyalty-copy.ts', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },
   { file: 'packages/app-core/src/notification-route.ts', use: USE.flash, max: 2, reason: REASON.FLASH },
   { file: 'packages/app-core/src/variation-picker.ts', use: USE.stock, max: 1, reason: REASON.STOCK },
-  { file: 'packages/app-core/src/game-wheel.ts', use: USE.coupon, max: 2, reason: REASON.COUPON },
 ];
 
 // Đối chứng trên nguồn giả: mẫu quét phải bắt đúng chữ hiển thị và bỏ qua mã (comment, tên biến, className, import, kiểu literal).

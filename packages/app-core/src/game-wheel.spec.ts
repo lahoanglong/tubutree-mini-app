@@ -14,6 +14,11 @@ describe('game-wheel', () => {
     expect(wheelKindOf(prize('MYSTERY', 5))).toBe('NONE');
   });
 
+  it('nhãn ô mã giảm là "Mã giảm giá" (D2: luôn đủ chữ "giá"), cả hai ô COUPON', () => {
+    const labels = WHEEL_SLOTS.filter((s) => s.kind === 'COUPON').map((s) => s.label);
+    expect(labels).toEqual(['Mã giảm giá', 'Mã giảm giá']);
+  });
+
   it('chỉ chọn ô đúng loại, mọi ô cùng loại đều có thể được chọn', () => {
     for (const [p, kind] of [
       [prize('SEEDS', 30), 'SEEDS'],

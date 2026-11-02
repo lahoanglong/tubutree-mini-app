@@ -139,13 +139,35 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect(box.querySelector('[role="region"][aria-label="Chứng nhận"]')!.textContent).toBe('Hữu cơ');
   });
 
-  it('khuyến mãi là phiếu chip: có mã thì có nút Sao chép, không mã chỉ là thông tin; mã không in ra', async () => {
+  it('khuyến mãi là phiếu chip: có mã thì có nút Sao chép và mã hiện ở hàng riêng, không mã chỉ là thông tin', async () => {
     const box = await html();
     const vouchers = box.querySelector('[data-testid="brand-vouchers"]')!;
     expect(vouchers.textContent).toContain('Giảm 10%');
     expect(vouchers.textContent).toContain('Quà tặng');
     expect(Array.from(vouchers.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Sao chép']);
-    expect(box.textContent).not.toContain('XANH10');
+    expect(Array.from(vouchers.querySelectorAll('[data-testid="voucher-code"]')).map((c) => c.textContent)).toEqual(['XANH10']);
+  });
+
+  it('chip khuyến mãi: phụ đề dài hơn 2 dòng bị cắt nhưng mã vẫn ở hàng riêng, nguyên vẹn; khuyến mãi không mã không có hàng mã', async () => {
+    const long = 'Tri ân khách hàng thân thiết của thương hiệu nhân dịp khai trương gian hàng mới, áp dụng cho mọi sản phẩm trong kho và mọi đơn từ 250.000đ trở lên với mã NHANLOCXANH2026';
+    mocks.brand = {
+      ...BRAND,
+      promotions: [
+        { id: 'long', title: 'Khai trương', subtitle: long, themeColor: null, couponCode: 'NHANLOCXANH2026', endAt: '2099-01-01T00:00:00Z' },
+        { id: 'plain', title: 'Quà tặng', subtitle: long, themeColor: null, couponCode: null, endAt: '2099-01-01T00:00:00Z' },
+      ],
+    };
+    const box = await html();
+    const chips = Array.from(box.querySelectorAll<HTMLElement>('[data-testid="brand-vouchers"] [role="group"]'));
+    const [withCode, plain] = chips;
+    const meta = withCode!.querySelector<HTMLElement>('[data-testid="voucher-meta"]')!;
+    expect(meta.textContent).toBe(long);
+    expect(meta.style.overflow).toBe('hidden');
+    expect(meta.style.getPropertyValue('-webkit-line-clamp') || (meta.style as unknown as Record<string, string>).WebkitLineClamp).toBe('2');
+    const code = withCode!.querySelector<HTMLElement>('[data-testid="voucher-code"]')!;
+    expect(code.textContent).toBe('NHANLOCXANH2026');
+    expect(meta.contains(code)).toBe(false);
+    expect(plain!.querySelector('[data-testid="voucher-code"]')).toBeNull();
   });
 
   // D15-01: themeColor do chủ thương hiệu nhập; phiếu chip dùng token nên chuỗi độc không có đường nào vào style.

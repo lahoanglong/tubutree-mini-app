@@ -73,9 +73,10 @@ export function WheelOfFortune({
           }}
         >
           {SLOTS.map((s, i) => (
+            // 64px như Mini: "Mã giảm giá" (D2) xuống 2 dòng trong ô thay vì một dòng chạm viền bánh.
             <span
               key={i}
-              className="absolute left-1/2 top-1/2 flex w-[72px] flex-col items-center text-center leading-tight"
+              className="absolute left-1/2 top-1/2 flex w-[64px] flex-col items-center text-center leading-tight"
               style={{
                 transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -80px) rotate(-${i * SEG + SEG / 2}deg)`,
               }}
