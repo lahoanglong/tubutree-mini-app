@@ -4,6 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 /** Số tin mỗi lần gọi khi client không nói; cũng là trần, khớp `listForUser` cũ để client cũ nhận đúng 50 tin. */
 export const NOTIFICATION_PAGE_MAX = 50;
 
+/** Tin trong app chưa đọc của chính khách; một nguồn cho đếm chưa đọc ở GET /me/notifications/unread-count và GET /me/summary. */
+export const unreadInappWhere = (userId: string) => ({ userId, channel: 'INAPP', status: { not: 'READ' } });
+
 export interface NotificationFeedQuery {
   /** `sentAt` (ISO) của tin cuối trang trước: chỉ lấy tin cũ hơn mốc này. */
   before?: string;
@@ -37,7 +40,7 @@ export class NotificationFeedService {
   }
 
   async unreadCount(userId: string): Promise<{ count: number }> {
-    const count = await this.prisma.notificationLog.count({ where: { userId, channel: 'INAPP', status: { not: 'READ' } } });
+    const count = await this.prisma.notificationLog.count({ where: unreadInappWhere(userId) });
     return { count };
   }
 }
