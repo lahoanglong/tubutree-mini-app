@@ -354,7 +354,19 @@ describe('PdpBundles (web): Mua kèm deal sốc', () => {
     click(rows(c)[0]!);
     click(rows(c)[1]!);
     expect(buttonText(c, 'Chọn món muốn mua kèm')).toBeDefined();
-    expect(c.querySelector('[data-testid="addon-save"]')).toBeNull();
+    // Dòng giữ chỗ: bỏ chọn hết thì chữ rỗng nhưng phần tử còn (nút bên dưới không nhảy 22px mỗi lần chọn).
+    expect(c.querySelector('[data-testid="addon-save"]')!.textContent).toBe('');
+  });
+
+  it('chưa chọn món nào: dòng "Tiết kiệm" đã có sẵn trong DOM (giữ chỗ, đọc lên khi có chữ), nên chọn món không đẩy nút xuống', async () => {
+    const c = await mount({ combos: [], addons: TWO_ADDONS });
+    const save = c.querySelector('[data-testid="addon-save"]') as HTMLElement;
+    expect(save).not.toBeNull();
+    expect(save.textContent).toBe('');
+    expect(save.getAttribute('aria-live')).toBe('polite');
+    expect(save.className).toContain('min-h-4');
+    click(rows(c)[0]!);
+    expect(c.querySelector('[data-testid="addon-save"]')).toBe(save);
   });
 
   it('thêm: chỉ các món đã chọn (không kèm món chính), rồi bỏ chọn và nhãn nút báo đã thêm', async () => {

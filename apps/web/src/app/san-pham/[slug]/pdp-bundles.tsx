@@ -194,12 +194,11 @@ export function PdpBundles({
                   <AddonRowView key={r.key} row={r} on={picked.has(r.key)} onToggle={() => toggle(r.key)} />
                 ))}
               </div>
-              {summary.count > 0 && (
-                <div data-testid="addon-save" className="mb-2 mt-1 text-xs font-semibold tabular-nums text-[var(--color-text-price-deal)]">
-                  {fillCopy('combo.save', { save: vnd(summary.save) })}
-                </div>
-              )}
-              <div className={summary.count > 0 ? '' : 'mt-2'}>
+              {/* Giữ chỗ một dòng ngay cả khi chưa chọn món: chữ hiện ra không đẩy nút bên dưới xuống (như Mini App). */}
+              <div data-testid="addon-save" aria-live="polite" className="mb-2 mt-1 min-h-4 text-xs font-semibold tabular-nums text-[var(--color-text-price-deal)]">
+                {summary.count > 0 ? fillCopy('combo.save', { save: vnd(summary.save) }) : null}
+              </div>
+              <div>
                 <Button
                   fullWidth
                   variant={justAdded ? 'secondary' : 'primary'}

@@ -168,12 +168,11 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
                   <AddonRowView key={r.key} row={r} on={picked.has(r.key)} onToggle={() => toggle(r.key)} />
                 ))}
               </div>
-              {summary.count > 0 && (
-                <div data-testid="addon-save" style={{ margin: '4px 0 8px', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
-                  {fillCopy('combo.save', { save: vnd(summary.save) })}
-                </div>
-              )}
-              <div style={{ marginTop: summary.count > 0 ? 0 : 8 }}>
+              {/* Giữ chỗ một dòng ngay cả khi chưa chọn món: chữ hiện ra không đẩy nút bên dưới xuống (trước đây nhảy 22px mỗi lần chọn). Là vùng đọc để trình đọc màn hình nghe số tiền tiết kiệm khi đổi. */}
+              <div data-testid="addon-save" aria-live="polite" style={{ margin: '4px 0 8px', minHeight: 'var(--type-caption-lh)', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
+                {summary.count > 0 ? fillCopy('combo.save', { save: vnd(summary.save) }) : null}
+              </div>
+              <div>
                 <Button
                   fullWidth
                   variant={justAdded ? 'secondary' : 'primary'}

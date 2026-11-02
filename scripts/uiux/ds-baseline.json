@@ -344,7 +344,7 @@
   "apps/miniapp/src/components/policy-sheet.tsx": 6,
   "apps/miniapp/src/components/product/flash-price-bar.tsx": 5,
   "apps/miniapp/src/components/product/pdp-bundle-slots.tsx": 2,
-  "apps/miniapp/src/components/product/pdp-bundles.tsx": 12,
+  "apps/miniapp/src/components/product/pdp-bundles.tsx": 11,
   "apps/miniapp/src/components/product/pdp-feed.tsx": 3,
   "apps/miniapp/src/components/product/pdp-offers-sheet.tsx": 1,
   "apps/miniapp/src/components/product/pdp-quick-reviews.tsx": 9,
