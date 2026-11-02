@@ -23,7 +23,7 @@
 
 ## Review Focus
 
-1. Khách đang gõ ở ô ngoài khung "Đơn hàng" (ô ghi chú, hoá đơn) lúc báo giá tải lại xong: focus không bị kéo về nút Đặt hàng, Space/Enter kế tiếp không bấm nhầm nút. Test Task 1.
+1. Khách đang gõ ở ô khác (ghi chú, hoá đơn, và cả ô nhập mã giảm giá, ô tick Điểm Xanh nằm trong khung "Đơn hàng") lúc báo giá tải lại xong: focus không bị kéo về nút Đặt hàng, Space/Enter kế tiếp không bấm nhầm nút. Test Task 1.
 2. Khách chưa đăng nhập mở "Mua ngay" ở sản phẩm Giờ vàng có giới hạn: dải ghi chú vẫn có chỗ (câu mất giá Giờ vàng có thể hiện) dù giỏ không về. Test Task 2.
 3. Giỏ: tồn 40 mà khách chọn 40 thì chữ thường (không cam); tồn 3 chọn 3 thì cam; chọn 50 mà tồn 40 (đang chặn thanh toán) vẫn cam; hết hàng không dùng dòng này. Test Task 3.
 4. Bộ quét: `FREESHIP-${id}`, `${a}-FREESHIP`, `${base}/HOT/${id}`, `HOT_${x}` là mã định danh, không bị bắt; `(HSD ${d})`, `${n} HOT!` bị bắt. Test Task 4.
@@ -45,14 +45,14 @@
 ### Task 1: thanh toán lg, chỉ trả focus về nút khi khách chưa đi chỗ khác
 
 **Files:**
-- Modify: `apps/web/src/app/thanh-toan/page.tsx` (ref mới `summaryRef` trên khung "Đơn hàng" ở `<div className={\`h-fit p-4 ${ui.card} ...\`}>`; effect focus quanh dòng 352-358)
+- Modify: `apps/web/src/app/thanh-toan/page.tsx` (effect focus quanh dòng 352-358)
 - Test: `apps/web/src/app/thanh-toan/checkout-lg-place.spec.tsx`
 
-**Interfaces:** nội bộ, không đổi chữ ký. `focusIsFree` là biến cục bộ trong effect: đúng khi `active` là `null`/`document.body`, chính `button`, hoặc nằm trong `frame`.
+**Interfaces:** nội bộ, không đổi chữ ký. `focusIsFree` là biến cục bộ trong effect: đúng khi `active` là `null`/`document.body` hoặc chính `button`. Bản đầu của gói còn tính "nằm trong khung Đơn hàng" là tự do (`summaryRef`), reviewer chỉ ra khung đó chứa ô `#coupon-code` và ô tick Điểm Xanh (bung tại chỗ từ lg) nên lỗ cũ vẫn còn; đã bỏ `summaryRef`, mọi phần tử khác (kể cả liên kết cạnh nút, Enter trên đó là đi trang) được giữ focus.
 
 - [ ] **Step 1: Test đỏ.** Trong `describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)')` thêm: (a) `lỗi TOTAL_CHANGED, báo giá tải lại 40ms, khách tab vào ô ghi chú rồi gõ: báo giá về thì focus ở lại ô ghi chú` (`state.placeError = new Error('TOTAL_CHANGED')` dạng `ApiError` có `code`; nếu mock không dựng được `ApiError` thì dùng `PRICE_CHANGED` như ca cũ): bấm nút, `flush(4)`, `textarea = c.querySelector('[data-mini-block="note"] textarea')`, `textarea.focus()`, đợi 80ms, `expect(document.activeElement).toBe(textarea)` và `expect(lgButton(c).disabled).toBe(false)`; (b) `focus đang ở body khi báo giá về: nút nhận focus` (giữ ca đang có, thêm `expect(document.activeElement).toBe(lgButton(c))` sau khi `blur()` mọi thứ); (c) `focus đang ở một nút khác trong khung Đơn hàng: vẫn trả về nút Đặt hàng` (focus nút đầu tiên khác `lgButton` nằm trong `part(c).closest('.h-fit')`; nếu khung không có nút nào focus được thì bỏ ca này và ghi vào notes); (d) sau (a), lần vẽ lại tiếp theo cũng không kéo focus (cờ đã hạ).
 - [ ] **Step 2: Run** `cd apps/web && npx vitest run src/app/thanh-toan/checkout-lg-place.spec.tsx` → FAIL ở (a) (activeElement là nút Đặt hàng).
-- [ ] **Step 3: Implement.** `summaryRef` gắn vào khung "Đơn hàng". Effect 2: sau khi hạ cờ, đọc `document.activeElement`; chỉ gọi `button.focus({ preventScroll: true })` khi `!button.disabled && focusIsFree(...)`. Cập nhật comment ngay trên effect: nói cờ bị bỏ khi khách đã focus chỗ khác ngoài khung, vì sao (Space/Enter kế tiếp bấm nhầm nút đặt hàng).
+- [ ] **Step 3: Implement.** Effect 2: sau khi hạ cờ, đọc `document.activeElement`; chỉ gọi `button.focus({ preventScroll: true })` khi `!button.disabled && focusIsFree(...)`. Cập nhật comment ngay trên effect: nói cờ bị bỏ khi khách đã focus chỗ khác (kể cả trong khung Đơn hàng: ô mã giảm giá, ô Điểm Xanh), vì sao (Space/Enter kế tiếp bấm nhầm nút đặt hàng).
 - [ ] **Step 4: Run** file spec trên và `checkout-errors`, `checkout-race`, `checkout-sticky`, `checkout-parity` (cùng thư mục) → PASS.
 - [ ] **Step 5: Commit** `fix(web): thanh toán lg không giật focus về nút Đặt hàng khi khách đã focus chỗ khác ngoài khung Đơn hàng (L5 1)`.
 
@@ -65,7 +65,7 @@
 - Test: `apps/web/src/components/variation-sheet.spec.tsx`, `apps/miniapp/src/components/variation-sheet.spec.tsx`
 
 **Interfaces:**
-- Produces: prop tuỳ chọn `cartMayArrive?: boolean` (mặc định `true`) của `VariationSheet` ở hai app. `true` khi `GET /cart` còn có thể về (đã đăng nhập, đang khôi phục phiên, mất mạng tạm thời); `false` chỉ cho khách chắc chắn chưa đăng nhập. Chỉ đọc ở chế độ `buy`.
+- Produces: prop tuỳ chọn `cartMayArrive?: boolean` (mặc định `true`) của `VariationSheet` ở hai app. `true` khi `GET /cart` còn có thể về (đã đăng nhập, đang khôi phục phiên, mất mạng tạm thời); `false` chỉ cho khách chắc chắn chưa đăng nhập. Chỉ đọc ở chế độ `buy`, và chốt theo giá trị lúc mở bảng (state cập nhật ngay lúc vẽ khi `open` đổi): Mini mở bảng lúc `idle`, bấm xác nhận gọi `loginWithNotice()` đưa `status` sang `loading` khi bảng còn mở, giá trị chạy theo thì dải trống 2 dòng hiện (rồi ẩn khi huỷ) dưới ngón tay.
 - `reserveNote = line?.allowance != null || (mode === 'buy' && (cartMayArrive || cartLines !== undefined))`. Có suất Giờ vàng giới hạn thì vẫn giữ chỗ (câu mất giá có thể hiện, không liên quan giỏ). `cartLines !== undefined` giữ chỗ cho giỏ đã có trong cache dù phiên đang lỗi.
 
 Chọn prop thay vì suy ra từ `cartLines`: `cartLines === undefined` không phân biệt "giỏ chưa về" với "giỏ không bao giờ về" nên không dùng được.
@@ -145,5 +145,10 @@ Lựa chọn (ghi vào notes): giữ dòng ở `quantity === stock` vì nó gi�
 ## Self-Review
 
 - Spec coverage: (1) Task 1; (2) Task 2; (3) Task 3; (4) Task 4; (5) Task 5; ảnh, gate Task 6.
-- Tên dùng chung khớp giữa các task: `cartMayArrive`, `cartStockNote`, `CartStockNote`, `TEMPLATE_WORD_PROSE`, `summaryRef`, `focusIsFree`.
+- Tên dùng chung khớp giữa các task: `cartMayArrive`, `cartStockNote`, `CartStockNote`, `TEMPLATE_WORD_PROSE`, `focusIsFree`.
 - Chọn thay chủ: dòng tồn kho ở giỏ giữ ở `quantity === stock` (giải thích nút `+` khoá), chữ thường ở tồn cao, cam khi tồn thấp hoặc đang vượt, Mini cùng luật (Mini thêm dòng này ở `quantity === stock`); `cartMayArrive` là prop tuỳ chọn mặc định `true` để nơi gọi quên truyền thì giữ hành vi L4, chỉ hai nơi gọi chế độ buy truyền theo trạng thái đăng nhập.
+
+## Sửa sau review (vòng 2)
+
+- MAJOR (thanh toán lg, `focusIsFree`): khung "Đơn hàng" chứa ô `#coupon-code` và ô tick Điểm Xanh nên "trong khung là tự do" vẫn giật focus khỏi hai ô đó. Chọn cách hẹp nhất: tự do chỉ khi focus ở body/null hoặc ở chính nút (cả liên kết cạnh nút cũng giữ focus, vì Enter trên liên kết là đi trang, cùng loại lỗi). Test mới ở `checkout-lg-place.spec.tsx`: ô mã giảm giá (bung tại chỗ, `#coupon-code`), ô tick Điểm Xanh, liên kết "Đổi lựa chọn", liên kết Điều khoản sát nút giữ focus; body thì nút nhận focus. Kiểm đột biến: đưa lại luật "trong khung là tự do" thì ba ca đầu đỏ.
+- MINOR (Mini `cartMayArrive`): chốt giá trị lúc mở trong chính `VariationSheet` (hai app, vì web cũng có thể đổi `phase` lúc bảng mở). Test sheet hai app (đổi prop khi mở, đóng rồi mở lại lấy giá trị mới) và Mini `product-detail-flash.spec.tsx` (idle sang loading sang idle khi bảng mở không có `role=status`; loading sang idle không co lại). Kiểm đột biến: bỏ chốt thì ba ca đỏ.
