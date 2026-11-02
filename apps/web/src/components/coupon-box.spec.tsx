@@ -32,6 +32,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 
 import { useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
+import { MD_DOWN } from '@/lib/use-media-query';
 import { CouponBox, forgetAutoCoupon } from './coupon-box';
 
 const c = (code: string, over: Record<string, unknown> = {}) => ({
@@ -59,7 +60,23 @@ beforeEach(() => {
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+  delete (window as { matchMedia?: unknown }).matchMedia;
 });
+
+/** Điện thoại (dưới md): jsdom không có matchMedia nên mặc định là máy tính; gọi trước khi dựng. */
+const phone = () => {
+  window.matchMedia = ((q: string) => ({
+    matches: q === MD_DOWN,
+    media: q,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+};
+const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
 
 describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
   it('mỗi voucher hiện giá trị giảm, mức tối đa, đơn tối thiểu và hạn dùng', async () => {
@@ -67,9 +84,10 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     const box = await mount();
     const t = card(box, 'WELCOME30').textContent!;
     expect(t).toContain('WELCOME30');
-    expect(t).toContain('Giảm 30% (tối đa 50.000đ)');
-    expect(t).toContain('Đơn tối thiểu 200.000đ');
-    expect(t).toContain('HSD 01/01/2030');
+    expect(t).toContain('Giảm 30%, tối đa 50k');
+    expect(t).toContain('Đơn từ 200k');
+    expect(t).toContain('Dùng đến 01/01/2030');
+    expect(t).not.toContain('HSD');
   });
 
   it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; bấm vẫn áp đúng mã (R6-BUYER-3)', async () => {
@@ -91,17 +109,19 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     ];
     const box = await mount();
     expect(card(box, 'SHIP0').textContent).toContain('Miễn phí giao hàng');
-    expect(card(box, 'TIEN20').textContent).toContain('Giảm 20.000đ');
-    expect(card(box, 'TIEN20').textContent).toContain('Không thời hạn');
+    expect(card(box, 'TIEN20').textContent).toContain('Giảm 20k');
+    // Không hạn thì không có dòng hạn, không viết "Không thời hạn" hay "HSD".
+    expect(card(box, 'TIEN20').textContent).not.toMatch(/Dùng đến|HSD|Không thời hạn/);
   });
 
   it('chưa đủ điều kiện: nói thẳng còn thiếu và khoá nút, ngay trên điện thoại (không chỉ ở tooltip)', async () => {
     state.coupons = [c('BIG', { minOrder: 500000 })];
     const box = await mount(300000);
     const t = card(box, 'BIG');
-    expect(t.textContent).toContain('Cần đơn tối thiểu 500.000đ — mua thêm 200.000đ để dùng mã này');
+    expect(t.textContent).toContain('Mua thêm 200k để dùng');
+    expect(t.textContent).not.toContain('Đơn tối thiểu');
     const btn = t.querySelector('button')!;
-    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
     expect(btn.textContent).toBe('Chưa đủ');
   });
 
@@ -111,22 +131,23 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
       c('GBUY', { type: 'AMOUNT', value: 17250, maxDiscount: null, products: [{ id: 'p1', name: 'Hạt chia' }] }),
     ];
     const box = await mount(438000);
-    expect(card(box, 'XANH10').textContent).toContain('Giảm 10% (tối đa 50.000đ)');
+    expect(card(box, 'XANH10').textContent).toContain('Giảm 10%, tối đa 50k');
     expect(box.textContent).not.toContain('cho đơn này');
   });
 
-  it('R6-BUYER-12: freeship khi phí ship đã 0 thì mờ và khoá; còn phí thì vẫn dùng được', async () => {
+  it('R6-BUYER-12: freeship khi phí ship đã 0 thì khoá, ghi lý do, KHÔNG làm mờ cả thẻ; còn phí thì vẫn dùng được', async () => {
     state.coupons = [c('SHIP', { type: 'FREESHIP', value: 0, maxDiscount: null })];
     const free = card(await mount(438000, 0), 'SHIP');
-    expect(free.querySelector('button')!.disabled).toBe(true);
-    expect(free.querySelector('button')!.textContent).toBe('Không cần');
-    expect(free.querySelector('button')!.getAttribute('aria-label')).toBe('Không cần dùng mã SHIP');
+    expect(free.querySelector('button')!.getAttribute('aria-disabled')).toBe('true');
+    expect(free.querySelector('button')!.textContent).toBe('Không áp dụng');
+    expect(free.querySelector('button')!.getAttribute('aria-label')).toBe('Không áp dụng mã SHIP');
     expect(free.textContent).toContain('Đơn này đã miễn phí giao hàng');
     expect(free.textContent).not.toContain('cho đơn này');
-    expect(free.className).toContain('opacity-60');
+    expect(free.className).not.toContain('opacity');
+    expect(free.querySelector('[class*="opacity"], [style*="opacity"]')).toBeNull();
 
     const paid = card(await mount(438000, 30000), 'SHIP');
-    expect(paid.querySelector('button')!.disabled).toBe(false);
+    expect(paid.querySelector('button')!.getAttribute('aria-disabled')).toBeNull();
     expect(paid.textContent).not.toContain('cho đơn này');
   });
 
@@ -134,7 +155,7 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     state.coupons = [c('BIG', { minOrder: 500000 }), c('OK')];
     const box = await mount(300000);
     const codes = [...box.querySelectorAll('li')].map((li) => li.querySelector('button')!.getAttribute('aria-label'));
-    expect(codes).toEqual(['Dùng mã OK', 'Dùng mã BIG']);
+    expect(codes).toEqual(['Dùng mã OK', 'Chưa đủ điều kiện dùng mã BIG']);
     click(card(box, 'OK').querySelector('button'));
     await flush(4);
     expect(state.applied).toEqual(['OK']);
@@ -174,7 +195,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     const box = await mountWith({ addressId: 'a1', itemIds: ['l1'] }, 19000);
     expect(state.previews).toHaveBeenCalledWith({ addressId: 'a1', itemIds: ['l1'] });
     const giam = card(box, 'GIAM30').textContent!;
-    expect(giam).toContain('Giảm 30% (tối đa 50.000đ)');
+    expect(giam).toContain('Giảm 30%, tối đa 50k');
     expect(giam).toContain('Giảm 43.800đ cho đơn này');
     expect(card(box, 'FS').textContent).toContain('Miễn phí giao hàng 19.000đ cho đơn này');
   });
@@ -184,7 +205,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     state.previews.mockResolvedValue([{ code: 'FS', eligible: true, discount: 0 }]);
     const box = await mountWith({});
     expect(card(box, 'FS').textContent).not.toContain('cho đơn này');
-    expect(card(box, 'FS').querySelector('button')!.disabled).toBe(false);
+    expect(card(box, 'FS').querySelector('button')!.getAttribute('aria-disabled')).toBeNull();
   });
 
   it('mã không dùng được: lý do của máy chủ, nút khoá, kể cả khi phép đoán phía máy nói đủ điều kiện', async () => {
@@ -195,7 +216,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     const li = card(box, 'MUACHUNG');
     expect(li.textContent).toContain(reason);
     const btn = li.querySelector('button')!;
-    expect(btn.disabled).toBe(true);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
     expect(btn.textContent).toBe('Không áp dụng');
     click(btn);
     expect(state.applied).toEqual([]);
@@ -214,7 +235,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     state.coupons = [c('GIAM30')];
     state.previews.mockReturnValue(new Promise(() => {}));
     const box = await mountWith({ addressId: 'a1' });
-    expect(card(box, 'GIAM30').textContent).toContain('Giảm 30% (tối đa 50.000đ)');
+    expect(card(box, 'GIAM30').textContent).toContain('Giảm 30%, tối đa 50k');
     expect(card(box, 'GIAM30').textContent).not.toContain('cho đơn này');
     state.previews.mockClear();
     await mountWith(undefined);
@@ -225,6 +246,19 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     state.coupons = [];
     await mountWith({ addressId: 'a1', itemIds: ['l1'] });
     expect(state.previews).not.toHaveBeenCalled();
+  });
+
+  it('câu "Đơn tối thiểu … để dùng mã này." của máy chủ không lặp dòng điều kiện; đơn tối thiểu 0 không ghi "0đ"', async () => {
+    state.coupons = [c('MIN199', { minOrder: 199000 }), c('ZERO', { minOrder: 0 })];
+    state.previews.mockResolvedValue([
+      { code: 'MIN199', eligible: false, discount: 0, reason: 'Đơn tối thiểu 199.000đ để dùng mã này.' },
+      { code: 'ZERO', eligible: true, discount: 1000 },
+    ]);
+    const r = render(<CouponBox currentCode={null} subtotal={150000} preview={{ addressId: 'a1' }} />);
+    mounted.push(r);
+    await flush(8);
+    expect(card(r.container, 'MIN199').textContent).toContain('Mua thêm 49k để dùng');
+    expect(r.container.textContent).not.toMatch(/Đơn tối thiểu|(^|[^\d.])0đ/);
   });
 });
 
@@ -329,7 +363,8 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(r.container.querySelector('button[aria-expanded]:not([data-testid="coupon-change"])')).toBeNull();
   });
 
-  it('điện thoại, đã áp mã: thẻ như Mini App có chip mã, số đã giảm và chữ "Thay đổi"; bấm mở ô nhập, có nút bỏ mã', async () => {
+  it('điện thoại, đã áp mã: thẻ như Mini App có chip mã, số đã giảm và chữ "Thay đổi"; bấm mở bảng chọn mã, có nút bỏ mã', async () => {
+    phone();
     state.coupons = [c('A1')];
     const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} appliedDiscount={30000} />);
     mounted.push(r);
@@ -340,15 +375,27 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(card.textContent).toContain('-30.000đ');
     expect(card.textContent).toContain('Thay đổi');
     expect(card.textContent).not.toContain('Chọn mã');
-    expect(r.container.querySelector('#coupon-panel')).toBeNull();
+    expect(card.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(document.querySelector('#coupon-panel')).toBeNull();
     click(card);
-    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
-    expect(panel.hidden).toBe(false);
-    expect(panel.className).toMatch(/\bmd:hidden\b/);
+    await flush(3);
+    const panel = dialog().querySelector<HTMLElement>('#coupon-panel')!;
+    expect(panel).not.toBeNull();
+    expect(r.container.querySelector('#coupon-panel')).toBeNull();
     expect(byText(panel, 'button', 'Bỏ mã đang áp dụng')).not.toBeNull();
   });
 
-  it('điện thoại, đã áp FREESHIP30 và phí ship 0: mở "Thay đổi" thì hỏi máy chủ, mã đang dùng ghi "Đang dùng", mã freeship khác không bị "Không cần"', async () => {
+  it('máy tính, đã áp mã: không có bảng hay panel mở rộng, chỉ thẻ mã và nút bỏ mã (đổi mã thì bỏ rồi chọn lại)', async () => {
+    state.coupons = [c('A1')];
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} />);
+    mounted.push(r);
+    await flush(4);
+    expect(r.container.querySelector('#coupon-panel')).toBeNull();
+    expect(r.container.querySelector('button[aria-label="Bỏ mã giảm giá WELCOME30"]')).not.toBeNull();
+  });
+
+  it('điện thoại, đã áp FREESHIP30 và phí ship 0: mở "Thay đổi" thì hỏi máy chủ, mã đang dùng ghi "Đang dùng" và "Bỏ chọn", mã freeship khác không bị "Không áp dụng"', async () => {
+    phone();
     state.coupons = [c('FREESHIP30', { type: 'FREESHIP', value: 30000, maxDiscount: null }), c('FREESHIP15', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
     state.previews.mockResolvedValue([
       { code: 'FREESHIP30', eligible: true, discount: 0 },
@@ -361,27 +408,30 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     click(r.container.querySelector('[data-testid="coupon-change"]'));
     await flush(8);
     expect(state.previews).toHaveBeenCalledWith({ addressId: 'a1' });
-    expect(card(r.container, 'FREESHIP30').textContent).toContain('Đang dùng');
-    expect(card(r.container, 'FREESHIP30').textContent).not.toContain('Dùng mã');
-    expect(card(r.container, 'FREESHIP15').textContent).not.toContain('Không cần');
+    expect(card(document.body, 'FREESHIP30').textContent).toContain('Đang dùng');
+    expect(card(document.body, 'FREESHIP30').querySelector('button')!.getAttribute('aria-label')).toBe('Bỏ chọn mã FREESHIP30');
+    expect(card(document.body, 'FREESHIP15').textContent).not.toContain('Không áp dụng');
   });
 
-  it('chưa có số máy chủ: mã đang áp vẫn ghi "Đang dùng", không bị khoá "Không cần"', async () => {
+  it('chưa có số máy chủ: mã đang áp vẫn ghi "Đang dùng" và gỡ được, không bị khoá "Không áp dụng"', async () => {
+    phone();
     state.coupons = [c('FREESHIP30', { type: 'FREESHIP', value: 30000, maxDiscount: null })];
     const r = render(<CouponBox currentCode="FREESHIP30" subtotal={300000} shippingFee={0} />);
     mounted.push(r);
     await flush(4);
     click(r.container.querySelector('[data-testid="coupon-change"]'));
-    const t = card(r.container, 'FREESHIP30').textContent!;
+    await flush(3);
+    const t = card(document.body, 'FREESHIP30').textContent!;
     expect(t).toContain('Đang dùng');
-    expect(t).not.toContain('Không cần');
+    expect(t).not.toContain('Không áp dụng');
   });
 
-  it('nhãn của ô nhập vẫn là "Mã giảm giá" (cho trình đọc màn hình) và vùng chạm 44px', async () => {
+  it('ô nhập có nhãn hiện "Nhập mã giảm giá khác" như Mini App và vùng chạm 44px', async () => {
     state.coupons = [c('A1')];
     const box = await mount();
     const field = box.querySelector<HTMLInputElement>('input[name="coupon-code"]')!;
-    expect(box.querySelector(`label[for="${field.id}"]`)!.textContent).toBe('Mã giảm giá');
+    expect(box.querySelector(`label[for="${field.id}"]`)!.textContent).toBe('Nhập mã giảm giá khác');
+    expect(field.placeholder).toBe('Nhập mã');
     expect(smallTouchTargets(box)).toEqual([]);
     expect(unnamedControls(box)).toEqual([]);
   });
@@ -435,14 +485,15 @@ describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () =>
     state.previews.mockResolvedValue([{ code: 'FS', eligible: false, reason: REASON, discount: 0 }]);
     state.applyCart = { couponCode: 'FS', freeship: true };
     const text = `Mã chưa được áp dụng cho đơn này: ${REASON}`;
+    phone();
     const r = render(<CouponBox currentCode="FS" subtotal={300000} shippingFee={0} preview={{ addressId: 'a1' }} notice={text} />);
     mounted.push(r);
     await flush(8);
     const box = r.container;
-    click(box.querySelector<HTMLButtonElement>('button[aria-controls="coupon-panel"]')!);
+    click(box.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]')!);
     await flush(8);
-    typeInto(box.querySelector('input[name="coupon-code"]'), 'fs');
-    click(byText(box, 'button', 'Áp dụng'));
+    typeInto(dialog().querySelector('input[name="coupon-code"]'), 'fs');
+    click(byText(dialog(), 'button', 'Áp dụng'));
     await flush(6);
     expect(state.applied).toEqual(['FS']);
     expect(box.querySelector('[data-testid="coupon-notice"]')!.textContent).toBe(text);
@@ -508,10 +559,11 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
   });
 
   it('khách tự chọn mã khác → nhãn "Đã tự áp" biến mất', async () => {
+    phone();
     const box = await mountHarness();
-    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    click(box.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]'));
     await flush(3);
-    click(box.querySelector<HTMLButtonElement>('button[aria-label$="mã FS"]'));
+    click(dialog().querySelector<HTMLButtonElement>('button[aria-label$="mã FS"]'));
     await flush(10);
     expect(state.applied).toEqual(['GIAM30', 'FS']);
     expect(label(box)).toBeNull();
@@ -561,16 +613,17 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(state.applied).toEqual([]);
   });
 
-  it('gỡ bằng ô mã rồi chọn lại đúng mã đó bằng tay → không còn nhãn', async () => {
+  it('gỡ bằng nút "Bỏ chọn" trong bảng rồi chọn lại đúng mã đó bằng tay → không còn nhãn', async () => {
+    phone();
     const box = await mountHarness();
-    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    click(box.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]'));
     await flush(3);
-    click(byText(box, 'button', 'Bỏ mã đang áp dụng'));
+    click(dialog().querySelector<HTMLButtonElement>('button[aria-label="Bỏ chọn mã GIAM30"]'));
     await flush(10);
     expect(label(box)).toBeNull();
-    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
-    await flush(3);
-    click(box.querySelector<HTMLButtonElement>('button[aria-label$="mã GIAM30"]'));
+    expect(state.removed).toBe(1);
+    // Gỡ mã không đóng bảng (như Mini App): chọn lại ngay trong bảng đang mở.
+    click(dialog().querySelector<HTMLButtonElement>('button[aria-label$="mã GIAM30"]'));
     await flush(10);
     expect(box.textContent).toContain('GIAM30');
     expect(label(box)).toBeNull();
@@ -586,10 +639,11 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
   it('đang tự áp mã → ô mã bận (nút gỡ và áp bị khoá)', async () => {
     let release!: () => void;
     state.applyGate = new Promise<void>((r) => (release = r));
+    phone();
     const box = await mountHarness();
-    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    click(box.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]'));
     await flush(3);
-    expect(box.querySelector<HTMLButtonElement>('button[aria-label$="mã FS"]')!.disabled).toBe(true);
+    expect(dialog().querySelector<HTMLButtonElement>('button[aria-label$="mã FS"]')!.getAttribute('aria-disabled')).toBe('true');
     release();
     await flush(10);
     expect(label(box)).not.toBeNull();
@@ -624,7 +678,7 @@ describe('CouponBox — "Mỗi đơn dùng 1 mã"', () => {
     await flush(6);
     click(r.container.querySelector('button[aria-haspopup="dialog"]'));
     await flush(3);
-    expect(byText(document.querySelector<HTMLElement>('[role="dialog"]')!, 'p', 'Mỗi đơn dùng 1 mã')).not.toBeNull();
+    expect(dialog().textContent).toContain('Mỗi đơn dùng 1 mã');
   });
 });
 
@@ -701,16 +755,52 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it('đang có mã: hàng hiện mã, bảng có nút "Bỏ mã đang áp dụng"', async () => {
-    state.coupons = [c('WELCOME30')];
+  it('đang có mã không nằm trong ví: hàng hiện mã, bảng có nút "Bỏ mã đang áp dụng"', async () => {
+    state.coupons = [c('OTHER')];
     const box = await mountSheet('WELCOME30');
     expect(box.textContent).toContain('WELCOME30');
     click(box.querySelector('button[aria-haspopup="dialog"]'));
     await flush(3);
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    click(byText(dialog, 'button', 'Bỏ mã đang áp dụng'));
+    click(byText(dialog(), 'button', 'Bỏ mã đang áp dụng'));
     await flush(6);
     expect(state.removed).toBe(1);
+  });
+
+  it('đang có mã nằm trong ví: hàng mã ghi "Đang dùng" kèm "Bỏ chọn" gỡ mã, không thêm nút "Bỏ mã đang áp dụng"', async () => {
+    state.coupons = [c('WELCOME30'), c('OTHER')];
+    const box = await mountSheet('WELCOME30');
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(byText(dialog(), 'button', 'Bỏ mã đang áp dụng')).toBeNull();
+    expect(card(document.body, 'WELCOME30').textContent).toContain('Đang dùng');
+    click(dialog().querySelector('button[aria-label="Bỏ chọn mã WELCOME30"]'));
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('ví chưa có mã: bảng nói chưa có mã và mời nhập mã ở trên (cùng chữ với Mini App)', async () => {
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(dialog().textContent).toContain('Bạn chưa có mã giảm giá trong ví');
+    expect(dialog().textContent).toContain('Nhập mã giảm giá ở trên để áp dụng.');
+  });
+
+  it('đang áp một mã: nút của mã đó aria-busy, các mã khác aria-disabled', async () => {
+    let release!: () => void;
+    state.applyGate = new Promise<void>((r) => (release = r));
+    state.coupons = [c('A1'), c('B2')];
+    const box = await mountSheet();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    click(dialog().querySelector('button[aria-label$="mã A1"]'));
+    await flush(2);
+    expect(dialog().querySelector('button[aria-label$="mã A1"]')!.getAttribute('aria-busy')).toBe('true');
+    const other = dialog().querySelector('button[aria-label$="mã B2"]')!;
+    expect(other.getAttribute('aria-disabled')).toBe('true');
+    expect(other.getAttribute('aria-busy')).toBeNull();
+    release();
+    await flush(6);
   });
 
   it('mã sai: lỗi hiện ngay trong bảng (bảng che phần thân) và bảng vẫn mở', async () => {
@@ -725,5 +815,33 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     const still = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(still.querySelector('[role="alert"]')).not.toBeNull();
     expect(box.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe('CouponBox — điện thoại ngoài thanh dính (thanh toán): bảng trượt giống Mini App, không bung tại chỗ', () => {
+  beforeEach(() => phone());
+
+  it('bấm hàng mở bảng "Chọn mã giảm giá" có ô nhập và đủ mọi mã (không "Xem thêm"); panel tại chỗ không dựng', async () => {
+    state.coupons = ['A', 'B', 'C', 'D', 'E'].map((x) => c(x));
+    const box = await mount();
+    expect(box.querySelector('#coupon-panel')).toBeNull();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(dialog().getAttribute('aria-label') ?? dialog().textContent).toContain('Chọn mã giảm giá');
+    expect(dialog().querySelector('input[name="coupon-code"]')).not.toBeNull();
+    expect(dialog().querySelectorAll('li')).toHaveLength(5);
+    expect(byText(dialog(), 'button', /Xem thêm/)).toBeNull();
+    expect(box.querySelector('input[name="coupon-code"]')).toBeNull();
+  });
+
+  it('dùng mã trong bảng thì áp mã và đóng bảng', async () => {
+    state.coupons = [c('A1')];
+    const box = await mount();
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    click(dialog().querySelector('button[aria-label$="mã A1"]'));
+    await flush(6);
+    expect(state.applied).toEqual(['A1']);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });

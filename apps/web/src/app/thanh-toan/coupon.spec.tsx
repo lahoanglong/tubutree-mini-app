@@ -164,7 +164,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     const { container } = await mount();
     const field = input(container);
     expect(field).not.toBeNull();
-    expect(container.querySelector(`label[for="${field!.id}"]`)?.textContent).toBe('Mã giảm giá');
+    expect(container.querySelector(`label[for="${field!.id}"]`)?.textContent).toBe('Nhập mã giảm giá khác');
     expect(voucher(container, 'WELCOME30')).not.toBeNull();
     expect(btn(container, 'Áp dụng')!.disabled).toBe(true);
   });
@@ -237,9 +237,9 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
   it('mã đòi đơn tối thiểu cao hơn tạm tính bị khoá và nói rõ lý do', async () => {
     state.coupons = [{ ...COUPON, code: 'BIGSPEND', minOrder: 500000 }];
     const { container } = await mount();
-    const chip = voucher(container, 'BIGSPEND')!;
-    expect(chip.disabled).toBe(true);
-    expect(chip.closest('li')!.textContent).toContain('Cần đơn tối thiểu 500.000đ');
+    const chip = container.querySelector<HTMLButtonElement>('button[aria-label="Chưa đủ điều kiện dùng mã BIGSPEND"]')!;
+    expect(chip.getAttribute('aria-disabled')).toBe('true');
+    expect(chip.closest('li')!.textContent).toMatch(/Mua thêm \d+k để dùng/);
   });
 
   it('đang tính lại báo giá sau khi đổi mã thì chưa cho đặt hàng (tránh đặt khi con số trên màn hình đã cũ)', async () => {
@@ -307,7 +307,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     click(btn(container, 'Đặt hàng')!);
     await flush(3);
     expect(btn(container, 'Áp dụng')!.disabled).toBe(true);
-    expect(voucher(container, 'WELCOME30')!.disabled).toBe(true);
+    expect(voucher(container, 'WELCOME30')!.getAttribute('aria-disabled')).toBe('true');
     release();
     await flush(4);
   });
