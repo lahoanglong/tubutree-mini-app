@@ -164,6 +164,28 @@ describe('BrandService.getPublicBySlug', () => {
   });
 });
 
+// Khách đọc lỗi 404 của trang thương hiệu: thuật ngữ chuẩn là "Thương hiệu", không "Nhãn hàng" (thiết kế §4 Q5).
+describe('BrandService: lỗi 404 gọi là "Thương hiệu"', () => {
+  const missing = () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue(null);
+    return new BrandService(prisma, brandConfig);
+  };
+
+  it('trang công khai chưa đăng: "Thương hiệu không tồn tại hoặc chưa đăng."', async () => {
+    await expect(missing().getPublicBySlug('khong-co', new Date())).rejects.toThrow('Thương hiệu không tồn tại hoặc chưa đăng.');
+  });
+
+  it.each([
+    ['getShareToEarn', (svc: BrandService) => svc.getShareToEarn('khong-co', 'u1')],
+    ['followBrand', (svc: BrandService) => svc.followBrand('u1', 'khong-co')],
+    ['unfollowBrand', (svc: BrandService) => svc.unfollowBrand('u1', 'khong-co')],
+    ['followState', (svc: BrandService) => svc.followState('u1', 'khong-co')],
+  ])('%s: "Thương hiệu không tồn tại."', async (_name, call) => {
+    await expect(call(missing())).rejects.toThrow('Thương hiệu không tồn tại.');
+  });
+});
+
 describe('BrandService.getShareToEarn', () => {
   it('trả eligible=false nếu user không phải AFFILIATE', async () => {
     const prisma = makePrisma();

@@ -41,6 +41,12 @@ describe('pickerStockText', () => {
   it('hết hàng, sắp hết, còn nhiều', () => {
     expect(pickerStockText(0)).toBe('Tạm hết hàng');
     expect(pickerStockText(3)).toBe('Còn 3 sản phẩm');
+    expect(pickerStockText(5)).toBe('Còn 5 sản phẩm');
+    expect(pickerStockText(6)).toBe('Còn 6');
     expect(pickerStockText(40)).toBe('Còn 40');
+  });
+
+  it('không có chữ "Chỉ còn" (thuật ngữ cấm, DESIGN.md: Còn {n} sản phẩm)', () => {
+    for (const n of [0, 1, 3, 5, 6, 40]) expect(pickerStockText(n)).not.toMatch(/Chỉ còn/i);
   });
 });

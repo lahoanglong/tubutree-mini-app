@@ -618,7 +618,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(add.parentElement!.className).toContain('max-md:contents');
   });
 
-  describe('Combo ưu đãi và Mua kèm deal sốc (P15)', () => {
+  describe('Combo ưu đãi và Mua kèm giá tốt (P15)', () => {
     const FUTURE = new Date(Date.now() + 86_400_000).toISOString();
     const cardOf = (id: string) => ({ id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}` });
     const itemOf = (id: string, addonPrice: number | null = null) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice, inStock: true, product: cardOf(id) });

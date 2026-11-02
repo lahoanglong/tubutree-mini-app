@@ -307,7 +307,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
       expect(applied.discount).toBe(0);
       expect(applied.couponNotice).toContain('phần giảm combo');
       expect(applied.couponNotice).toContain('Đơn tối thiểu 95.000đ');
-      expect(applied.couponNotice).not.toContain('giờ vàng');
+      expect(applied.couponNotice).not.toContain('Giờ vàng');
       const { c: got, q } = await expectCartEqualsQuote(b.userId, b.addressId, slug);
       expect(got.couponNotice).toContain('phần giảm combo');
       expect(got.couponCode).toBe(code);
@@ -358,15 +358,15 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
       const code = await coupon(b.userId, 'AMOUNT', 10_000, { minOrder: 95_000 });
       const applied = await cart.applyCoupon(b.userId, code, slug);
       expect(applied.couponCode).toBe(code);
-      expect(applied.couponNotice).toContain('hàng giờ vàng và phần giảm combo');
+      expect(applied.couponNotice).toContain('hàng Giờ vàng và phần giảm combo');
       const { c: got } = await expectCartEqualsQuote(b.userId, b.addressId, slug);
-      expect(got.couponNotice).toContain('hàng giờ vàng và phần giảm combo');
+      expect(got.couponNotice).toContain('hàng Giờ vàng và phần giảm combo');
       expect(got.discount).toBe(0);
 
       // Hàng thường trước combo (100.000đ) cũng chưa đạt 120.000đ, chỉ cả giỏ có giờ vàng mới đạt: từ chối như cũ, nêu cả hai lý do.
       await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: null } });
       const high = await coupon(b.userId, 'AMOUNT', 10_000, { minOrder: 120_000 });
-      await expectApplyRejected(b.userId, high, slug, 'hàng giờ vàng và phần giảm combo');
+      await expectApplyRejected(b.userId, high, slug, 'hàng Giờ vàng và phần giảm combo');
     } finally {
       await prisma.flashSale.update({ where: { id: f.saleId }, data: { isActive: false } });
     }
@@ -386,7 +386,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
       await prisma.cart.update({ where: { userId: b.userId }, data: { couponCode: onFlash } });
       const r1 = await expectCartEqualsQuote(b.userId, b.addressId, slug);
       expect(r1.c.discount).toBe(0);
-      expect(r1.c.couponNotice).toContain('giờ vàng');
+      expect(r1.c.couponNotice).toContain('Giờ vàng');
 
       const onA = await coupon(b.userId, 'PERCENT', 50, { productIds: [a.productId] });
       await cart.applyCoupon(b.userId, onA, slug);

@@ -364,7 +364,7 @@ export class CartService {
   /** Vượt tồn kho khi cộng thêm `addQty` vào `currentQty` đang có trong giỏ. */
   private assertStock(variation: AddableVariation, currentQty: number, addQty: number): void {
     if (currentQty + addQty > variation.stock) {
-      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
+      throw new BadRequestException(`Còn ${variation.stock} sản phẩm trong kho.`);
     }
   }
 
@@ -561,7 +561,7 @@ export class CartService {
       await this.prisma.cartItem.delete({ where: { id: itemId } });
     } else {
       if (quantity > item.variation.stock) {
-        throw new BadRequestException(`Chỉ còn ${item.variation.stock} sản phẩm trong kho.`);
+        throw new BadRequestException(`Còn ${item.variation.stock} sản phẩm trong kho.`);
       }
       await this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity } });
     }

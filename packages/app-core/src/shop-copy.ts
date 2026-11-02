@@ -220,7 +220,7 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.cartLine': 'Giảm giá combo',
   'combo.pdpTitle': 'Combo ưu đãi',
   'combo.homeTitle': 'Combo tiết kiệm',
-  'addon.title': 'Mua kèm deal sốc',
+  'addon.title': 'Mua kèm giá tốt',
   'addon.price': 'Giá mua kèm {price}',
   'addon.condition': 'Chỉ khi mua cùng {name}',
   'addon.add': 'Thêm {n} món vào giỏ',
@@ -351,7 +351,7 @@ export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /cửa hàng/i, use: 'Gian hàng' },
   { pattern: /\.{3}/, use: '… (một ký tự)' },
   { pattern: /\b\d+h \d+m\b/, use: 'countdownText, ví dụ "2 giờ 05 phút"' },
-  { pattern: /\bHOT\b|SỐC|Nhanh tay/, use: 'bỏ chữ giục mua' },
+  { pattern: /\bHOT\b|SỐC|Nhanh tay/i, use: 'bỏ chữ giục mua' },
 ];
 
 /** Điền mẫu `SHOP_COPY[key]`. Khoá lạ hoặc thiếu biến thì ném lỗi: lỗi của người viết mã, bắt ở test chứ không để "{t}" tới tay khách. */

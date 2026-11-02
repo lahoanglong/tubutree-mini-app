@@ -13,14 +13,20 @@ import { FORBIDDEN_TERMS } from './shop-copy';
  */
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const ROOTS = ['apps/miniapp/src', 'apps/web/src', 'packages/app-core/src'];
+// API: chỉ file nào chắc chắn chỉ chứa chữ trả cho khách (`*-notice.ts`, `*-price.ts`) và danh sách tên file ghi sẵn; service lớn lẫn log, quản trị và lỗi nội bộ nên không quét cả cây.
+const API_ROOT = 'apps/api/src/modules';
+const API_COPY_FILE = /-(notice|price)(\.service)?\.ts$/;
+const API_COPY_EXTRA = new Set([`${API_ROOT}/cart/cart.batch-error.ts`]);
+const isApiCopyFile = (file: string) => file.startsWith(`${API_ROOT}/`) && (API_COPY_FILE.test(file) || API_COPY_EXTRA.has(file));
 // Quản trị có bảng chữ riêng (Q16, admin/terminology.spec.ts), spec và dữ liệu giả không tới tay khách.
 const NOT_SCANNED = [/\.(spec|test)\.tsx?$/, /(^|\/)admin\//, /(^|\/)components\/admin\//, /(^|\/)test-utils\//, /(^|\/)lib\/admin-/];
 
 // Chữ cái tiếng Việt có dấu: dấu hiệu chắc chắn của chữ khách đọc, vì tên mã, className, đường dẫn và id đều là ASCII.
 const VI_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
-// Chữ ASCII đọc như câu: chữ hoa đầu rồi chữ thường ("Freeship", "Flash sale"), hai từ cách nhau bằng dấu cách ("HSD 12/2026", "2h 05m") hoặc có "...".
-// Mã định danh như 'FREESHIP', 'voucher', 'flash-sale' không dính các dạng này nên không bị coi là chữ khách đọc; 'HSD', 'HOT' đứng một mình trong chuỗi thường chỉ bắt được khi nằm ở chữ JSX, thuộc tính chữ hoặc con trực tiếp của thẻ.
-const ASCII_PROSE = /^[A-Z][a-z]|\w \w|\.{3}/;
+// Chữ ASCII đọc như câu: chữ hoa đầu rồi chữ thường ("Freeship", "Flash sale"), hai từ cách nhau bằng dấu cách ("HSD 12/2026", "2h 05m"), có "...", hoặc chữ hoa viết tắt rồi dấu cách / hai chấm
+// (đầu chuỗi template `HSD ${d}` chỉ còn "HSD ": phần số nằm ở biểu thức nên không có "từ sau dấu cách").
+// Mã định danh như 'FREESHIP', 'FREESHIP-${id}', 'voucher', 'flash-sale' không dính các dạng này nên không bị coi là chữ khách đọc; 'HSD', 'HOT' đứng một mình trong chuỗi thường chỉ bắt được khi nằm ở chữ JSX, thuộc tính chữ hoặc con trực tiếp của thẻ.
+const ASCII_PROSE = /^[A-Z][a-z]|^[A-Z]{2,}[ :]|\w \w|\.{3}/;
 // Thuộc tính mang chữ cho người đọc màn hình, đọc cả khi chữ không có dấu ("Voucher", "Freeship").
 const TEXT_ATTRS = new Set(['aria-label', 'title', 'alt', 'placeholder', 'label']);
 const CODE_ATTRS = new Set(['className', 'id', 'key', 'href']);
@@ -92,10 +98,10 @@ function walk(dir: string): string[] {
 }
 
 function loadSources(): { file: string; text: string }[] {
-  return ROOTS.flatMap((root) => walk(join(REPO, root)))
+  return [...ROOTS.flatMap((root) => walk(join(REPO, root))), ...walk(join(REPO, API_ROOT))]
     .filter((f) => /\.tsx?$/.test(f))
     .map((f) => ({ file: relative(REPO, f).split(sep).join('/'), text: readFileSync(f, 'utf8') }))
-    .filter((s) => !NOT_SCANNED.some((re) => re.test(s.file)));
+    .filter((s) => (s.file.startsWith('apps/api/') ? isApiCopyFile(s.file) : true) && !NOT_SCANNED.some((re) => re.test(s.file)));
 }
 
 interface Exemption {
@@ -248,6 +254,8 @@ describe('displayStrings: chỉ lấy chữ khách đọc', () => {
     ["const LEFT = '2h 05m';", '2h 05m'],
     ["const hint = 'voucher của bạn';", 'voucher của bạn'],
     ['<p>Mất kết nối. Vui\n            lòng thử lại</p>', 'Mất kết nối. Vui lòng thử lại'],
+    ['const label = `HSD ${d}`;', 'HSD'],
+    ["const label = `HSD: ${d}`;", 'HSD:'],
   ])('bắt %s', (src, expected) => {
     expect(texts(src, 'apps/miniapp/src/pages/x.tsx')).toContain(expected);
   });
@@ -335,6 +343,8 @@ describe('findHits: ca vi phạm cố ý', () => {
     ['Còn 12h 30m', 'countdownText, ví dụ "2 giờ 05 phút"'],
     ['Hàng HOT', 'bỏ chữ giục mua'],
     ['Giá SỐC', 'bỏ chữ giục mua'],
+    ['Giá sốc', 'bỏ chữ giục mua'],
+    ['Mua kèm deal sốc', 'bỏ chữ giục mua'],
     ['Nhanh tay kẻo hết', 'bỏ chữ giục mua'],
   ];
 
@@ -364,6 +374,7 @@ describe('findHits: ca vi phạm cố ý', () => {
     'Topping',
     'Hotline',
     'Bạn thử lại nhé',
+    'Mua kèm giá tốt',
   ])('"%s" sạch', (text) => {
     expect(findHits([{ file: 'apps/web/src/a.tsx', text: `export const t = ${JSON.stringify(text)};` }])).toEqual([]);
   });
@@ -375,8 +386,34 @@ describe('findHits: ca vi phạm cố ý', () => {
     ["export const LEFT = '2h 05m';", 'countdownText, ví dụ "2 giờ 05 phút"'],
     ["export const B = () => <Badge>{ok && 'HSD'}</Badge>;", 'Hạn dùng hoặc Dùng đến'],
     ['export const B = () => <span>HOT</span>;', 'bỏ chữ giục mua'],
+    ['export const hsd = (d: string) => `HSD ${d}`;', 'Hạn dùng hoặc Dùng đến'],
+    ['export const hsd = (d: string) => `HSD: ${d}`;', 'Hạn dùng hoặc Dùng đến'],
   ])('chữ ASCII không dấu %s bị bắt', (text, use) => {
     expect(findHits([{ file: 'apps/web/src/a.tsx', text }]).map((h) => h.use)).toContain(use);
+  });
+});
+
+describe('findHits: chuỗi template bắt đầu bằng chữ hoa ASCII', () => {
+  const at = (src: string) => findHits([{ file: 'apps/web/src/a.ts', text: src }]).map((h) => h.use);
+
+  it('"HSD ${d}" bị bắt dù đầu chuỗi chỉ là "HSD " (không dấu, không dạng "Chữ hoa + chữ thường")', () => {
+    expect(at('export const hsd = (d: string) => `HSD ${d}`;')).toEqual(['Hạn dùng hoặc Dùng đến']);
+  });
+
+  it('template kiểu `GET ${path}` hoặc `FREESHIP-${id}` không có chữ cấm nên không ra hit', () => {
+    expect(at('export const call = (path: string) => `GET ${path}`;')).toEqual([]);
+    expect(at('export const code = (id: string) => `FREESHIP-${id}`;')).toEqual([]);
+  });
+});
+
+describe('findHits: file chữ khách đọc của API', () => {
+  const at = (file: string, text: string) => findHits([{ file, text }]).map((h) => h.use);
+
+  it('câu lý do cũ của coupon-notice ("mã FREESHIP", "giờ vàng", "Chỉ còn") bị bắt', () => {
+    const file = 'apps/api/src/modules/coupons/x-notice.ts';
+    expect(at(file, "export const r = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';")).toContain('Miễn phí giao hàng');
+    expect(at(file, "export const r = 'Hàng giờ vàng không được giảm thêm theo mã.';")).toContain('Giờ vàng (hoa chữ G)');
+    expect(at('apps/api/src/modules/flash-sale/x-price.ts', 'export const m = (n: number) => `Chỉ còn ${n} suất Giờ vàng.`;')).toContain('Còn {n} sản phẩm');
   });
 });
 
@@ -395,6 +432,15 @@ describe('findHits: câu JSX bị Prettier ngắt dòng', () => {
 
 describe('mã thật của apps/miniapp và apps/web', () => {
   const sources = loadSources();
+
+  // Chữ API trả cho khách (lý do mã không dùng được, lời báo Giờ vàng, lỗi tồn kho) đến tận màn hình mà ngoài tầm quét của app (review/extra-critique-2 P2 #18).
+  it('quét cả file chữ khách đọc của API, không quét service và chữ cấm mới ở đó bị bắt', () => {
+    for (const f of ['coupons/coupon-notice.ts', 'flash-sale/flash-line-price.ts', 'cart/cart.batch-error.ts', 'loyalty/tier-drop-notice.service.ts']) {
+      expect(sources.some((s) => s.file === `apps/api/src/modules/${f}`), f).toBe(true);
+    }
+    expect(sources.some((s) => s.file === 'apps/api/src/modules/cart/cart.service.ts')).toBe(false);
+    expect(sources.some((s) => s.file.startsWith('apps/api/') && !isApiCopyFile(s.file))).toBe(false);
+  });
   const hits = findHits(sources);
   const countOf = (file: string, use: string) => hits.filter((h) => h.file === file && h.use === use).length;
 

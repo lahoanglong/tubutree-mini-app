@@ -105,7 +105,7 @@ describe('PdpBundles: Combo ưu đãi', () => {
   });
 });
 
-describe('PdpBundles: Mua kèm deal sốc', () => {
+describe('PdpBundles: Mua kèm giá tốt', () => {
   const data = (): ProductBundles => ({
     combos: [],
     addons: [addon('a1', [item('x', { addonPrice: 40_000 }), item('y', { addonPrice: 70_000, product: card('y', { basePrice: 80_000 }) })])],
@@ -113,7 +113,7 @@ describe('PdpBundles: Mua kèm deal sốc', () => {
 
   it('dòng role=checkbox có tên đọc đủ giá và % giảm; điều kiện mua cùng món chính', async () => {
     renderBlock(data());
-    const region = await screen.findByRole('region', { name: 'Mua kèm deal sốc' });
+    const region = await screen.findByRole('region', { name: 'Mua kèm giá tốt' });
     expect(within(region).getByText('Chỉ khi mua cùng Xà phòng sả')).toBeInTheDocument();
     expect(within(region).getByRole('checkbox', { name: 'Chọn mua kèm Sản phẩm x, 40.000đ, giảm 60%' })).toHaveAttribute('aria-checked', 'false');
     expect(within(region).getByRole('checkbox', { name: 'Chọn mua kèm Sản phẩm y, 70.000đ, giảm 13%' })).toBeInTheDocument();
@@ -192,7 +192,7 @@ describe('PdpBundles: Mua kèm deal sốc', () => {
   it('có cả combo và mua kèm: hai vùng riêng trong một khung', async () => {
     renderBlock({ combos: [combo('c1', [item('a'), item('b')])], addons: data().addons });
     expect(await screen.findByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Mua kèm deal sốc' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Mua kèm giá tốt' })).toBeInTheDocument();
     expect(screen.getAllByTestId('pdp-bundle-slots')).toHaveLength(1);
   });
 });
@@ -214,7 +214,7 @@ describe('PdpBundles: khối đã hiện thì không gỡ giữa trang (giữ ch
     const { qc } = renderBlock({ combos: COMBOS, addons: ADDONS });
     await shown(qc);
     await label('pdp-combos', 'Combo ưu đãi · Đã kết thúc');
-    await label('pdp-addons', 'Mua kèm deal sốc · Đã kết thúc');
+    await label('pdp-addons', 'Mua kèm giá tốt · Đã kết thúc');
     for (const section of [screen.getByTestId('pdp-combos'), screen.getByTestId('pdp-addons')]) {
       const body = within(section).getByTestId('bundle-ended');
       expect(body).toHaveAttribute('inert');
@@ -233,26 +233,26 @@ describe('PdpBundles: khối đã hiện thì không gỡ giữa trang (giữ ch
 
   it('bộ Mua kèm còn hạn nhưng mọi món vừa hết hàng, hay sản phẩm chính vừa hết (addonsSoldOut): "Tạm hết hàng", không phải "Đã kết thúc"', async () => {
     const { qc } = renderBlock({ combos: COMBOS, addons: ADDONS });
-    await screen.findByRole('region', { name: 'Mua kèm deal sốc' });
+    await screen.findByRole('region', { name: 'Mua kèm giá tốt' });
     await act(async () => {
       qc.setQueryData(KEY, { combos: COMBOS, addons: [addon('a1', [item('x', { addonPrice: 40_000, inStock: false }), item('y', { addonPrice: 70_000, inStock: false })])] });
     });
-    await label('pdp-addons', 'Mua kèm deal sốc · Tạm hết hàng');
+    await label('pdp-addons', 'Mua kèm giá tốt · Tạm hết hàng');
     expect(screen.getByTestId('pdp-combos')).toHaveAttribute('aria-label', 'Combo ưu đãi');
     await act(async () => {
       qc.setQueryData(KEY, { combos: COMBOS, addons: [], addonsSoldOut: true });
     });
-    await label('pdp-addons', 'Mua kèm deal sốc · Tạm hết hàng');
+    await label('pdp-addons', 'Mua kèm giá tốt · Tạm hết hàng');
     expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
   });
 
   it('bộ đang hiện (a1) bị tắt trong khi bộ khác (b1) còn chạy nhưng mọi món hết hàng: vẫn "Đã kết thúc", không bị kéo thành "Tạm hết hàng"', async () => {
     const { qc } = renderBlock({ combos: COMBOS, addons: ADDONS });
-    await screen.findByRole('region', { name: 'Mua kèm deal sốc' });
+    await screen.findByRole('region', { name: 'Mua kèm giá tốt' });
     await act(async () => {
       qc.setQueryData(KEY, { combos: COMBOS, addons: [addon('b1', [item('z', { addonPrice: 40_000, inStock: false })])] });
     });
-    await label('pdp-addons', 'Mua kèm deal sốc · Đã kết thúc');
+    await label('pdp-addons', 'Mua kèm giá tốt · Đã kết thúc');
     expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
   });
 

@@ -133,7 +133,7 @@ describe('PdpBundles (web): HTML dựng sẵn (ISR) và lần hydrate đầu ph�
     vi.setSystemTime(NOW);
     const html = renderToString(ui(new QueryClient()));
     expect(html).toContain('Combo ưu đãi');
-    expect(html).toContain('Mua kèm deal sốc');
+    expect(html).toContain('Mua kèm giá tốt');
     vi.setSystemTime(visitTime);
     const container = document.createElement('div');
     container.innerHTML = html;
@@ -192,7 +192,7 @@ describe('PdpBundles (web): HTML dựng sẵn (ISR) và lần hydrate đầu ph�
       await new Promise((res) => setTimeout(res, 0));
     });
     expect(r.final.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi · Đã kết thúc');
-    expect(r.final.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+    expect(r.final.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Đã kết thúc');
     expect(r.final.querySelectorAll('[data-testid="bundle-ended"]').length).toBe(2);
     r.cleanup();
   });
@@ -207,7 +207,7 @@ describe('PdpBundles (web): khối đã hiện thì không gỡ giữa trang', (
     const c = r.container;
     expect(c.querySelector('[data-testid="pdp-combos"] h2')!.textContent).toBe('Combo ưu đãi');
     expect(c.querySelector('[data-testid="pdp-combos"] [data-testid="bundle-ended"]')).toBeNull();
-    expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+    expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Đã kết thúc');
     expect(rows(c).length).toBe(2);
     expect(buttonText(c, 'Chọn món muốn mua kèm')!.disabled).toBe(true);
   });
@@ -224,7 +224,7 @@ describe('PdpBundles (web): khối đã hiện thì không gỡ giữa trang', (
     it('bộ Mua kèm còn hạn nhưng mọi món vừa hết hàng: tiêu đề "Tạm hết hàng", khối mờ, không bấm được, nút khoá', async () => {
       const soldOut = [addon('a1', [item('x', { addonPrice: 60_000, inStock: false }), item('y', { addonPrice: 70_000, inStock: false })])];
       const c = await mountStale({ combos: ONE_COMBO, addons: soldOut });
-      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Tạm hết hàng');
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Tạm hết hàng');
       expect(c.querySelector('[data-testid="pdp-addons"] [data-testid="bundle-ended"]')!.hasAttribute('inert')).toBe(true);
       expect(rows(c).length).toBe(2);
       expect(buttonText(c, 'Chọn món muốn mua kèm')!.disabled).toBe(true);
@@ -233,21 +233,21 @@ describe('PdpBundles (web): khối đã hiện thì không gỡ giữa trang', (
 
     it('sản phẩm chính vừa hết hàng (API báo addonsSoldOut, addons rỗng): cũng "Tạm hết hàng"', async () => {
       const c = await mountStale({ combos: ONE_COMBO, addons: [], addonsSoldOut: true });
-      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Tạm hết hàng');
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Tạm hết hàng');
       expect(rows(c).length).toBe(2);
     });
 
     it('bộ đang hiện (a1) bị tắt trong khi bộ khác (b1) còn chạy nhưng mọi món hết hàng: vẫn "Đã kết thúc", không bị kéo thành "Tạm hết hàng"', async () => {
       const otherSoldOut = [addon('b1', [item('z', { addonPrice: 60_000, inStock: false })])];
       const c = await mountStale({ combos: ONE_COMBO, addons: otherSoldOut });
-      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Đã kết thúc');
       expect(rows(c).length).toBe(2);
     });
 
     it('bộ quá hạn thì vẫn "Đã kết thúc" (không lẫn với hết hàng)', async () => {
       const expired = [addon('a1', [item('x', { addonPrice: 60_000 })], { endAt: PAST })];
       const c = await mountStale({ combos: ONE_COMBO, addons: expired });
-      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm deal sốc · Đã kết thúc');
+      expect(c.querySelector('[data-testid="pdp-addons"] h2')!.textContent).toBe('Mua kèm giá tốt · Đã kết thúc');
     });
   });
 
@@ -325,11 +325,11 @@ describe('PdpBundles (web): Combo ưu đãi', () => {
   });
 });
 
-describe('PdpBundles (web): Mua kèm deal sốc', () => {
+describe('PdpBundles (web): Mua kèm giá tốt', () => {
   it('vẽ dòng mua kèm với điều kiện, giá kèm và nhãn % giảm; nút khoá tới khi chọn', async () => {
     const c = await mount({ combos: [], addons: TWO_ADDONS });
     const section = c.querySelector('[data-testid="pdp-addons"]')!;
-    expect(section.querySelector('h2')!.textContent).toBe('Mua kèm deal sốc');
+    expect(section.querySelector('h2')!.textContent).toBe('Mua kèm giá tốt');
     expect(section.textContent).toContain('Chỉ khi mua cùng Xà phòng sả');
     expect(rows(c).length).toBe(2);
     expect(section.textContent).toContain('-40%');

@@ -185,7 +185,7 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     });
     renderPdp();
     expect(await screen.findByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
-    const addons = screen.getByRole('region', { name: 'Mua kèm deal sốc' });
+    const addons = screen.getByRole('region', { name: 'Mua kèm giá tốt' });
     expect(within(addons).getByText('Chỉ khi mua cùng Xà phòng sả chanh')).toBeInTheDocument();
   });
 

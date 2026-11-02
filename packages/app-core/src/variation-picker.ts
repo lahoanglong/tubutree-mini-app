@@ -3,7 +3,7 @@ import { pickDefaultVariation } from './flash-price';
 
 type PickerVariation = { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number };
 
-/** Còn từng này trở xuống thì bảng chọn ghi "Còn N sản phẩm". */
+/** Còn từng này trở xuống thì bảng chọn nêu cả đơn vị ("Còn N sản phẩm") để khách thấy hàng sắp hết, không dùng chữ giục "Chỉ còn". */
 const LOW_STOCK_NOTICE = 5;
 
 /** Sản phẩm từ 2 phân loại: Thêm vào giỏ và Mua ngay hỏi khách chọn phân loại; 1 phân loại thì thêm thẳng. */
