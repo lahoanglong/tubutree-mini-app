@@ -101,7 +101,7 @@ Mỗi gói đi theo vòng: agent làm, reviewer Opus xem, agent sửa tới khi 
 
 - **Quyết deploy:** main sau khi PR đợt 7 merge.
 - **Tải bản Mini App mới lên Zalo (Testing),** nếu muốn khách Mini thấy thay đổi.
-- **Cho phép chạy `recompute-sold` trên PROD:** đây là thao tác ghi PROD.
+- **`recompute-sold` trên PROD:** đã chạy ngày 2026-11-02 (phiên review-1028, chủ cho phép). PROD chưa có đơn DELIVERED nên không số nào đổi (`updated: 0`). Kệ Bán chạy nhất vẫn xếp theo số nhập tay hoặc id. Chạy lại khi đã có đơn giao xong.
 - **Xem lại các quyết định ở §3.**
 - **Còn từ `handoff-wave6.md` §5:**
   - Duyệt độ lệch §5 của F9.
