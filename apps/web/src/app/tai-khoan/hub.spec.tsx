@@ -399,10 +399,10 @@ describe('hub /tai-khoan — đại lý và chủ nhãn', () => {
     });
   });
 
-  it('chủ nhãn thật thấy "Quản lý nhãn hàng" kèm tên nhãn', async () => {
+  it('chủ nhãn thật thấy "Quản lý thương hiệu" kèm tên nhãn', async () => {
     mocks.routes['/brand/owner/me'] = () => ({ id: 'b1', name: 'Nhãn A' });
     const row = link(await mount(), '/chu-thuong-hieu')!;
-    expect(row.textContent).toContain('Quản lý nhãn hàng');
+    expect(row.textContent).toContain('Quản lý thương hiệu');
     expect(row.textContent).toContain('Nhãn A');
   });
 

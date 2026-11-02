@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { ownedBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -21,7 +22,7 @@ import { ProfileTab } from './profile-tab';
 import { SalesTab } from './sales-tab';
 import { ViewBrandLink } from './view-brand-link';
 
-const TITLE = 'Quản lý nhãn hàng';
+const TITLE = BRAND_OWNER_TITLE;
 const TABS = [
   { key: 'profile', label: 'Hồ sơ & khuyến mãi' },
   { key: 'sales', label: 'Doanh thu' },
@@ -44,7 +45,7 @@ function Editor() {
     if (q.isSuccess || errorStatus(q.error) === 404) {
       return (
         <section aria-label="Chưa có nhãn" className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
-          <h2 className="font-display text-base font-semibold text-stone-900">Quản lý nhãn hàng</h2>
+          <h2 className="font-display text-base font-semibold text-stone-900">{TITLE}</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.</p>
           <Link href="/ho-tro/chat" className={`${ui.btnPrimary} mt-4`}>
             {chatOn ? 'Nhắn Tubu' : 'Liên hệ Tubu'}
@@ -90,7 +91,7 @@ export function BrandOwnerHub() {
   let body: React.ReactNode;
   if (phase === 'loading') body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
-  else if (phase === 'guest') body = <LoginRequired message="Đăng nhập để quản lý nhãn hàng của bạn." returnTo="/chu-thuong-hieu" />;
+  else if (phase === 'guest') body = <LoginRequired message="Đăng nhập để quản lý thương hiệu của bạn." returnTo="/chu-thuong-hieu" />;
   else body = <Editor />;
   return (
     <StaffShell title={TITLE}>

@@ -209,7 +209,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
   const oneH1 = () => {
     const h1 = screen.getAllByRole('heading', { level: 1 });
     expect(h1).toHaveLength(1);
-    expect(h1[0]!.textContent).toBe('Quản lý nhãn hàng');
+    expect(h1[0]!.textContent).toBe('Quản lý thương hiệu');
   };
 
   it('đúng một h1 khi đang tải', () => {

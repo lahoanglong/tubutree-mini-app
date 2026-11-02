@@ -196,7 +196,7 @@ test.describe('Web chủ thương hiệu', () => {
     api.get('/config/public', {});
     api.get('/brand/owner/me', () => reply(404, { message: 'Not Found' }));
     await page.goto('/chu-thuong-hieu');
-    await expect(page.getByRole('heading', { name: 'Quản lý nhãn hàng', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Quản lý thương hiệu', level: 1 })).toBeVisible();
     await expect(page.getByText('Bạn chưa được cấp quyền quản lý nhãn nào.')).toBeVisible();
   });
 

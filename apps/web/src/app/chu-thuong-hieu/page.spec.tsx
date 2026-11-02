@@ -120,17 +120,17 @@ afterEach(() => {
 });
 
 describe('khung trang /chu-thuong-hieu', () => {
-  it('đúng một h1 "Quản lý nhãn hàng" khi đang tải và khi có dữ liệu; tên nhãn là h2', async () => {
+  it('đúng một h1 "Quản lý thương hiệu" khi đang tải và khi có dữ liệu; tên nhãn là h2', async () => {
     m.data = {};
     const r = render(<BrandOwnerPage />);
     mounted.push(r);
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(document.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
     mounted.pop()!.unmount();
 
     m.data = { '/brand/owner/me': BRAND };
     await mount();
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(Array.from(document.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Sachi');
     expect(headingProblems(document.body)).toEqual([]);
   });
@@ -138,7 +138,7 @@ describe('khung trang /chu-thuong-hieu', () => {
   it('khách chưa đăng nhập: mời đăng nhập mang returnTo, không gọi API', async () => {
     m.phase = 'guest';
     await mount();
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(document.querySelector('a[href="/dang-nhap?returnTo=%2Fchu-thuong-hieu"]')).not.toBeNull();
     expect(m.calls).toEqual([]);
   });
@@ -147,7 +147,7 @@ describe('khung trang /chu-thuong-hieu', () => {
     m.fail.set('GET /brand/owner/me', httpError(404, 'Not Found'));
     await mount();
     expect(text()).toContain('Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.');
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(btn(/thử lại/i)).toBeNull();
   });
 
@@ -170,15 +170,15 @@ describe('khung trang /chu-thuong-hieu', () => {
   it('máy chủ từ chối (403): báo không có quyền bằng lời dễ hiểu, không lộ mã lỗi', async () => {
     m.fail.set('GET /brand/owner/me', httpError(403, 'Forbidden resource'));
     await mount();
-    expect(text()).toContain('Tài khoản này không có quyền quản lý nhãn hàng.');
+    expect(text()).toContain('Tài khoản này không có quyền quản lý thương hiệu.');
     expect(text()).not.toContain('Forbidden');
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
   });
 
   it('lỗi tải: có nút Thử lại, bấm thì tải lại được', async () => {
     m.failOnce.add('GET /brand/owner/me');
     await mount();
-    expect(h1s()).toEqual(['Quản lý nhãn hàng']);
+    expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(text()).toContain('Mất kết nối');
     await press('Thử lại');
     expect(text()).toContain('Thông tin nhãn');
@@ -396,7 +396,7 @@ describe('tab Doanh thu', () => {
   it('403 khi tải doanh thu: báo không có quyền bằng lời dễ hiểu', async () => {
     m.fail.set('GET /brand/owner/me/sales', httpError(403, 'Forbidden resource'));
     await mount();
-    expect(text()).toContain('Tài khoản này không có quyền quản lý nhãn hàng.');
+    expect(text()).toContain('Tài khoản này không có quyền quản lý thương hiệu.');
   });
 });
 

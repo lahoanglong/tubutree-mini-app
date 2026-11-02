@@ -3,6 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { BRAND_BADGE } from '@tubutree/app-core/client-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
@@ -625,7 +626,7 @@ export const vi = {
     emptyBody: 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.',
     emptyOwnerBody: 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.',
     badgePartner: 'Đối tác của Tubu Tree',
-    badgeBrand: 'Nhãn hàng trên Tubu Tree',
+    badgeBrand: BRAND_BADGE,
     badgeSelectedCtv: 'CTV tuyển chọn',
     title: 'Gian hàng của tôi',
     empty: 'Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.',

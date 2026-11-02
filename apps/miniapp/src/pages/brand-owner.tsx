@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Page, Input, useSnackbar, useNavigate } from 'zmp-ui';
+import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { Check, Gift, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,7 +30,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BrandSalesTab } from './brand-owner-sales';
 
-const PAGE_TITLE = 'Quản lý nhãn hàng';
+const PAGE_TITLE = BRAND_OWNER_TITLE;
 
 function OwnerShell({ children, paddingBottom = 0 }: { children: ReactNode; paddingBottom?: number }) {
   return (
@@ -67,7 +68,7 @@ export default function BrandOwnerPage() {
           <div style={{ padding: 24 }}>
             <EmptyState
               art="sprout"
-              heading="Quản lý nhãn hàng"
+              heading={BRAND_OWNER_TITLE}
               body="Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn."
               ctaLabel={canMessage ? (chatOn ? 'Nhắn Tubu' : 'Liên hệ Tubu') : undefined}
               onCta={canMessage ? messageTubu : undefined}

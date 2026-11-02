@@ -162,7 +162,7 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     expect((badge.getAttribute('style') ?? '').match(/gap/g)).toHaveLength(1);
   });
 
-  it('nhãn không còn nói "chính hãng": đối tác ghi "Đối tác của Tubu Tree" (khi đã duyệt), nhãn hàng ghi "Nhãn hàng trên Tubu Tree"', async () => {
+  it('nhãn không còn nói "chính hãng": đối tác ghi "Đối tác của Tubu Tree" (khi đã duyệt), thương hiệu ghi "Thương hiệu trên Tubu Tree"', async () => {
     mocks.getPublicStorefront.mockResolvedValue(storefront({ type: 'MERCHANT', referralCode: null, approved: true, ...withItems }));
     const view = renderPage('doi-tac');
     expect(await screen.findByText('Đối tác của Tubu Tree')).toBeInTheDocument();
@@ -170,7 +170,7 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     view.unmount();
     mocks.getPublicStorefront.mockResolvedValue(storefront({ type: 'BRAND', referralCode: null, approved: true, ...withItems }));
     renderPage('nhan-hang');
-    expect(await screen.findByText('Nhãn hàng trên Tubu Tree')).toBeInTheDocument();
+    expect(await screen.findByText('Thương hiệu trên Tubu Tree')).toBeInTheDocument();
   });
 
   it('khách (không phải chủ): không có nút dính đáy kéo ra danh mục; lối sang Tubu Tree là link phụ cuối trang, không có nút chia sẻ', async () => {

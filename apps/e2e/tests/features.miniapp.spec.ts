@@ -69,8 +69,8 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
 
     // Timeout 15s: restore() thử Zalo SDK bridge (login/getAccessToken, tối đa ~3s timeout riêng)
     // trước khi rơi xuống guest login mock.
-    await expect(page.getByText('Quản lý nhãn hàng')).toBeVisible({ timeout: 15_000 });
-    await page.getByText('Quản lý nhãn hàng').click();
+    await expect(page.getByText('Quản lý thương hiệu')).toBeVisible({ timeout: 15_000 });
+    await page.getByText('Quản lý thương hiệu').click();
 
     // .first(): trang /profile trước đó vẫn còn "Tubu Official" (hint menu) trong DOM lúc chuyển
     // màn (AnimationRoutes của zmp-ui).
@@ -111,7 +111,7 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     await page.goto('/profile');
 
     await expect(page.getByText('Cộng tác viên', { exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Quản lý nhãn hàng')).toHaveCount(0);
+    await expect(page.getByText('Quản lý thương hiệu')).toHaveCount(0);
     expect(api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
     expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
     await page.getByText('Cộng tác viên', { exact: true }).click();

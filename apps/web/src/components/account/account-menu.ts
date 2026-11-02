@@ -2,6 +2,7 @@ import { ctvMenuEntry, type CtvAccessHint } from '@tubutree/app-core/storefront-
 import { BadgeDollarSign, BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Recycle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
 import type { DealerMe } from '@tubutree/app-core/api/dealer';
 import { canSeeAcademy } from '@tubutree/app-core/account-copy';
+import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { DESK_ENTRY_LABEL } from '@tubutree/app-core/profile-sections';
 
@@ -50,7 +51,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
         ...(ctvEntry ? [{ icon: Users, ...ctvEntry, to: '/ctv' }] : []),
         ...(canSeeAcademy(c.role) ? [{ icon: GraduationCap, label: homeCopy.earn.academy.label, to: '/hoc-vien', hint: homeCopy.earn.academy.hint }] : []),
         dealerItem,
-        ...(c.ownedBrandName ? [{ icon: Store, label: 'Quản lý nhãn hàng', to: '/chu-thuong-hieu', hint: c.ownedBrandName }] : []),
+        ...(c.ownedBrandName ? [{ icon: Store, label: BRAND_OWNER_TITLE, to: '/chu-thuong-hieu', hint: c.ownedBrandName }] : []),
       ],
     },
     {
