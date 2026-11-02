@@ -27,11 +27,13 @@ const VI_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽ�
 // Chữ ASCII đọc như câu: chữ hoa đầu rồi chữ thường ("Freeship", "Flash sale"), hai từ cách nhau bằng dấu cách ("HSD 12/2026", "2h 05m"), có "...", hoặc chữ hoa viết tắt rồi dấu cách / hai chấm
 // (đầu chuỗi template `HSD ${d}` chỉ còn "HSD ": phần số nằm ở biểu thức nên không có "từ sau dấu cách").
 // Mã định danh như 'FREESHIP', 'FREESHIP-${id}', 'voucher', 'flash-sale' không dính các dạng này nên không bị coi là chữ khách đọc; 'HSD', 'HOT' đứng một mình trong chuỗi thường chỉ bắt được khi nằm ở chữ JSX, thuộc tính chữ hoặc con trực tiếp của thẻ.
-// Các mẫu này neo ở ĐẦU chuỗi nên chỉ đúng với chuỗi thường và đầu template.
+// Các mẫu này neo ở ĐẦU chuỗi nên chỉ đúng với chuỗi thường và đầu template; đoạn template ở vị trí khác còn được xét thêm bằng `TEMPLATE_WORD_PROSE` bên dưới.
 const ASCII_PROSE = /^[A-Z][a-z]|^[A-Z]{2,}[ :]|\w \w|\.{3}/;
-// Đoạn giữa/cuối của template (`${code} · HSD ${d}` cho ra " · HSD ") đứng sau một biểu thức nên không có đầu chuỗi: chữ hoa viết tắt hoặc chữ hoa đầu từ
-// được xét ở bất kỳ vị trí nào của đoạn, miễn đứng sau ký tự không phải chữ/số/gạch (để `${a}-FREESHIP` và `${a}/voucher/${b}` vẫn là mã định danh).
-const TEMPLATE_TAIL_PROSE = /(?:^|[^A-Za-z0-9_-])(?:[A-Z][a-z]|[A-Z]{2,}(?:[ :]|$))/;
+// Mọi đoạn của template có biểu thức (đầu, giữa, cuối): `(HSD ${d})` cho đầu "(HSD ", `${code} · HSD ${d}` cho giữa " · HSD ", `${n} HOT!` cho cuối " HOT!". Đầu đoạn không phải đầu chuỗi
+// (đứng sau một biểu thức, hoặc bắt đầu bằng dấu câu) nên `ASCII_PROSE` neo ở đầu chuỗi bỏ sót. Từ ASCII đứng riêng: chữ hoa đầu từ ("Top", "Freeship") hoặc chữ hoa viết tắt từ hai chữ ("HSD", "HOT")
+// mà trước đó không phải ký tự mã (chữ/số, `_`, `-`, `/`, `.`) và, với chữ viết tắt, sau đó cũng không phải chữ/số, `_`, `-`, `/`; mọi ký tự khác (cách, dấu câu, ngoặc, `·`, hết đoạn) là ranh giới.
+// Nhờ vậy `FREESHIP-${id}`, `${a}-FREESHIP`, `${base}/HOT/${id}`, `HOT_${x}`, `${a}.HOT` vẫn là mã định danh, còn `${n} HOT!`, `(HSD ${d})`, `${n}, HSD.` là chữ khách đọc.
+const TEMPLATE_WORD_PROSE = /(?<![A-Za-z0-9_\-/.])(?:[A-Z][a-z]|[A-Z]{2,}(?![A-Za-z0-9_\-/]))/;
 // Thuộc tính mang chữ cho người đọc màn hình, đọc cả khi chữ không có dấu ("Voucher", "Freeship").
 const TEXT_ATTRS = new Set(['aria-label', 'title', 'alt', 'placeholder', 'label']);
 const CODE_ATTRS = new Set(['className', 'id', 'key', 'href']);
@@ -68,8 +70,8 @@ function displayStrings(source: string, fileName: string): { line: number; text:
       const isCode = attr !== null && (CODE_ATTRS.has(attr.name) || attr.name.startsWith('data-'));
       const isTextAttr = attr !== null && attr.direct && TEXT_ATTRS.has(attr.name);
       const isChild = slot?.kind === 'child' && slot.direct;
-      const afterExpression = ts.isTemplateMiddle(n) || ts.isTemplateTail(n);
-      if (!isCode && (VI_LETTER.test(n.text) || ASCII_PROSE.test(n.text) || (afterExpression && TEMPLATE_TAIL_PROSE.test(n.text)) || isTextAttr || isChild)) push(n, n.text);
+      const isTemplatePart = ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n);
+      if (!isCode && (VI_LETTER.test(n.text) || ASCII_PROSE.test(n.text) || (isTemplatePart && TEMPLATE_WORD_PROSE.test(n.text)) || isTextAttr || isChild)) push(n, n.text);
     }
     ts.forEachChild(n, visit);
   };
@@ -260,6 +262,12 @@ describe('displayStrings: chỉ lấy chữ khách đọc', () => {
     ['const label = `${code} · HSD ${d}`;', '· HSD'],
     ['const label = `${n} HOT`;', 'HOT'],
     ['const label = `${a} Freeship`;', 'Freeship'],
+    ['const label = `(HSD ${d})`;', '(HSD'],
+    ['const label = `(Top ${n})`;', '(Top'],
+    ['const label = `${n} HOT!`;', 'HOT!'],
+    ['const label = `${n}, HSD.`;', ', HSD.'],
+    ['const label = `${n} (HOT)`;', '(HOT)'],
+    ['const label = `${a} · HSD\\n`;', '· HSD'],
   ])('bắt %s', (src, expected) => {
     expect(texts(src, 'apps/miniapp/src/pages/x.tsx')).toContain(expected);
   });
@@ -425,6 +433,43 @@ describe('findHits: chuỗi template bắt đầu bằng chữ hoa ASCII', () =>
     expect(at('export const b = (a: string, b: string) => `${a}/voucher/${b}`;')).toEqual([]);
     expect(at('export const c = (a: string, b: string) => `${a} GET ${b}`;')).toEqual([]);
     expect(at('export const d = (a: string) => `${a}-FREESHIP`;')).toEqual([]);
+  });
+});
+
+describe('findHits: mọi đoạn template (đầu, giữa, cuối) có từ hoa ASCII đứng riêng (L5 4)', () => {
+  const at = (src: string) => findHits([{ file: 'apps/web/src/a.ts', text: src }]).map((h) => h.use);
+
+  // Đầu template bắt đầu bằng dấu câu: `ASCII_PROSE` neo ở đầu chuỗi nên bỏ sót "(HSD ".
+  it('đầu template bắt đầu bằng dấu câu `(HSD ${d})` bị bắt', () => {
+    expect(at('export const t = (d: string) => `(HSD ${d})`;')).toEqual(['Hạn dùng hoặc Dùng đến']);
+    expect(at('export const t = (n: number) => `(HOT) ${n}`;')).toEqual(['bỏ chữ giục mua']);
+    expect(at('export const t = (n: number) => `(Top ${n})`;')).toEqual(['Bán chạy nhất']);
+  });
+
+  // Nhánh chữ hoa cũ chỉ nhận dấu cách, hai chấm hoặc hết đoạn ngay sau chữ.
+  it.each([
+    ['export const t = (n: number) => `${n} HOT!`;', 'bỏ chữ giục mua'],
+    ['export const t = (n: number, d: string) => `${n}, HSD.${d}`;', 'Hạn dùng hoặc Dùng đến'],
+    ['export const t = (n: number) => `${n} (HOT)`;', 'bỏ chữ giục mua'],
+    ['export const t = (a: string, d: string) => `${a} · HSD\\n${d}`;', 'Hạn dùng hoặc Dùng đến'],
+    ['export const t = (a: string) => `${a} · HSD\\n`;', 'Hạn dùng hoặc Dùng đến'],
+    ['export const t = (a: string) => `${a} - HOT, ${a}`;', 'bỏ chữ giục mua'],
+  ])('đoạn có từ hoa đứng riêng sau dấu câu hoặc ngoặc %s bị bắt', (src, use) => {
+    expect(at(src)).toEqual([use]);
+  });
+
+  it('mã định danh, đường dẫn và tên lớp có từ hoa dính ký tự mã không bị coi là chữ khách đọc', () => {
+    expect(at('export const a = (id: string, n: string) => `FREESHIP-${id}-${n}-x`;')).toEqual([]);
+    expect(at('export const b = (a: string) => `${a}-FREESHIP`;')).toEqual([]);
+    expect(at('export const c = (a: string, b: string) => `${a}/voucher/${b}`;')).toEqual([]);
+    expect(at('export const d = (a: string, b: string) => `${a} GET ${b}`;')).toEqual([]);
+    expect(at('export const e = (base: string, id: string) => `${base}/HOT/${id}`;')).toEqual([]);
+    expect(at('export const f = (x: string) => `HOT_${x}`;')).toEqual([]);
+    expect(at('export const g = (a: string) => `${a}_HSD`;')).toEqual([]);
+    expect(at('export const h = (a: string) => `${a}.HOT`;')).toEqual([]);
+    expect(at('export const i = (a: string, b: string) => `${a}-HSD-${b}`;')).toEqual([]);
+    expect(at('export const j = (a: string) => `tubu-${a}-HOT`;')).toEqual([]);
+    expect(at('export const k = (x: string) => `HOT/${x}`;')).toEqual([]);
   });
 });
 
