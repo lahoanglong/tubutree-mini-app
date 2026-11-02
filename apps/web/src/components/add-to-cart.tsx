@@ -24,6 +24,7 @@ import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { usePdpSelection } from './pdp-selection';
 import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -238,7 +239,7 @@ export default function AddToCart({
     } catch (e) {
       setMsg(actionErrorText(e));
       setSuccess(false);
-      // Thường là "Chỉ còn N sản phẩm": tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
+      // Thường là câu "Chỉ còn N sản phẩm trong kho." của máy chủ: tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
     } finally {
       if (!leaving) {
@@ -373,7 +374,7 @@ export default function AddToCart({
 
       {/* Điện thoại: dòng nhắc tồn thấp nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
-        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
+        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">{stockText(selected!.stock)}</p>
       )}
 
       <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 max-md:order-6 max-md:justify-between ${phoneBand}`}>

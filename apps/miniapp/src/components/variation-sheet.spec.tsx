@@ -14,7 +14,7 @@ const variations: VariationOption[] = [
 ];
 const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
 
-function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[] } = {}) {
+function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; variations?: VariationOption[] } = {}) {
   const onConfirm = vi.fn();
   const view = render(
     <VariationSheet
@@ -23,7 +23,7 @@ function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: num
       mode={props.mode ?? 'buy'}
       productName="Khăn ướt"
       thumbnail={null}
-      variations={variations}
+      variations={props.variations ?? variations}
       flash={props.flash ?? flash()}
       initialId="v1"
       initialQty={props.initialQty ?? 3}
@@ -197,6 +197,30 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
   });
 });
 
+describe('VariationSheet: chữ tồn kho "Còn n sản phẩm" cho mọi n, tồn thấp chỉ nhấn bằng màu cảnh báo (L4 5)', () => {
+  const withStock = (stock: number): VariationOption[] => [{ ...variations[0]!, stock }, ...variations.slice(1)];
+
+  it('tồn 3 (thấp): "Gói 80 tờ · Còn 3 sản phẩm", phần tồn có màu cảnh báo', () => {
+    renderSheet({ variations: withStock(3), flash: [] });
+    const stock = screen.getByTestId('variation-sheet-stock');
+    expect(stock).toHaveTextContent(/^Còn 3 sản phẩm$/);
+    expect(stock.parentElement).toHaveTextContent('Gói 80 tờ · Còn 3 sản phẩm');
+    expect(stock.style.color).toBe('var(--color-status-warning-fg)');
+  });
+
+  it('tồn 6 và 245: cùng chữ "Còn n sản phẩm" nhưng không màu cảnh báo; tồn 5 vẫn là mức thấp', () => {
+    const six = renderSheet({ variations: withStock(6), flash: [] });
+    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Còn 6 sản phẩm$/);
+    expect(screen.getByTestId('variation-sheet-stock').style.color).toBe('');
+    six.unmount();
+    const big = renderSheet({ variations: withStock(245), flash: [] });
+    expect(screen.getByTestId('variation-sheet-stock')).toHaveTextContent(/^Còn 245 sản phẩm$/);
+    big.unmount();
+    renderSheet({ variations: withStock(5), flash: [] });
+    expect(screen.getByTestId('variation-sheet-stock').style.color).toBe('var(--color-status-warning-fg)');
+  });
+});
+
 describe('VariationSheet: hết hàng ghi "Tạm hết hàng" nhất quán', () => {
   it('chip hết hàng có chữ "Tạm hết hàng" (không chỉ gạch ngang), chip còn hàng có giá và dấu Giờ vàng', () => {
     renderSheet();
@@ -228,14 +252,14 @@ describe('VariationSheet: hết hàng ghi "Tạm hết hàng" nhất quán', () 
       <VariationSheet open onClose={() => undefined} mode="buy" productName="Khăn ướt" thumbnail={null} variations={allOut} flash={[]} initialId={null} initialQty={1} busy={false} cartLines={undefined} onConfirm={() => undefined} />,
     );
     // Cả hai hết hàng thì bảng mở ở phân loại rẻ nhất theo luật mặc định của thẻ.
-    expect(screen.getByText('Gói 40 tờ · Tạm hết hàng')).toBeInTheDocument();
+    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 40 tờ · Tạm hết hàng');
     expect(screen.getByRole('button', { name: 'Tạm hết hàng' })).toBeDisabled();
   });
 
-  it('chú thích còn hàng ghi "Còn n" theo phân loại đang chọn', () => {
+  it('chú thích còn hàng ghi "Còn n sản phẩm" theo phân loại đang chọn', () => {
     renderSheet({ flash: [] });
-    expect(screen.getByText('Gói 80 tờ · Còn 245')).toBeInTheDocument();
+    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 80 tờ · Còn 245 sản phẩm');
     fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
-    expect(screen.getByText('Gói 40 tờ · Còn 8')).toBeInTheDocument();
+    expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 40 tờ · Còn 8 sản phẩm');
   });
 });

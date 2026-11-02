@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
 import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-picker';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
@@ -269,7 +270,7 @@ interface PdpVariation {
 
 /**
  * "Còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh, đúng chữ của Mini App (`vi.product.lowStock`, D2 chốt "Còn {n} sản phẩm").
- * Máy tính giữ dòng cũ "Chỉ còn N" trong khối mua (`AddToCart`, ngay dưới chip; chữ đó thuộc gói chữ riêng), nên bản này ẩn từ md.
+ * Máy tính có dòng cùng chữ trong khối mua (`AddToCart`, ngay dưới chip), nên bản này ẩn từ md.
  * Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
  */
 export function PdpLowStock({ slug, variations }: { slug: string; variations: { id: string; stock: number }[] }) {
@@ -280,7 +281,7 @@ export function PdpLowStock({ slug, variations }: { slug: string; variations: { 
   if (stock <= 0 || stock > LOW_STOCK_NOTICE) return null;
   return (
     <p data-testid="pdp-low-stock" className="mt-1 text-xs font-medium text-warning-fg md:hidden">
-      Còn {stock} sản phẩm
+      {stockText(stock)}
     </p>
   );
 }

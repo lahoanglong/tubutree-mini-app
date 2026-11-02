@@ -3,6 +3,7 @@ import { Zap } from 'lucide-react';
 import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
+import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
@@ -129,7 +130,17 @@ export function VariationSheet({
             </div>
           )}
           <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
-            {selected ? `${selected.name} · ${pickerStockText(selected.stock)}` : productName}
+            {selected ? (
+              <>
+                {selected.name} ·{' '}
+                {/* Tồn thấp chỉ đổi màu (token cảnh báo), chữ vẫn "Còn n sản phẩm" như mọi mức tồn. */}
+                <span data-testid="variation-sheet-stock" style={isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : undefined}>
+                  {pickerStockText(selected.stock)}
+                </span>
+              </>
+            ) : (
+              productName
+            )}
           </Text>
         </div>
       </div>

@@ -4,6 +4,7 @@
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
@@ -129,7 +130,7 @@ export const vi = {
   product: {
     addToCart: 'Thêm vào giỏ',
     outOfStock: 'Tạm hết hàng',
-    lowStock: (n: number) => `Còn ${n} sản phẩm`,
+    lowStock: (n: number) => stockText(n),
     freeshipFrom: (min: string) => `Miễn phí giao hàng cho đơn từ ${min}`,
     freeshipAll: 'Miễn phí giao hàng cho mọi đơn hàng',
     added: 'Đã thêm vào giỏ 🌿',
@@ -232,7 +233,7 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí giao hàng 🌿',
     freeshipReachedTubuOnly: 'Miễn phí giao hàng cho phần hàng Tubu Tree giao',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí giao hàng`,
-    stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
+    stockLimited: (n: number) => stockText(n),
     outOfStock: 'Sản phẩm đã hết hàng',
     overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
     outOfStockBlocked: (names: string[]) =>
@@ -249,7 +250,7 @@ export const vi = {
     title: 'Thanh toán',
     overStock: (name: string, stock: number) =>
       stock > 0
-        ? `Sản phẩm "${name}" chỉ còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
+        ? `Sản phẩm "${name}" hiện còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
         : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
     backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',

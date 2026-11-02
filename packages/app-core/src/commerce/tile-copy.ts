@@ -17,6 +17,7 @@ export const TILE_COPY = {
   'badge.flashSpoken': 'Giờ vàng giảm {pct}%',
   'badge.discountSpoken': 'Giảm {pct}%',
   'stock.out': 'Tạm hết hàng',
+  'stock.left': 'Còn {n} sản phẩm',
   'price.spoken': 'Giá {price}',
   'price.flashSpoken': 'Giá Giờ vàng {price}',
   'price.compareSpoken': ', giá gốc {price}',

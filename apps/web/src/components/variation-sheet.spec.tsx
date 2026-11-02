@@ -200,6 +200,30 @@ describe('VariationSheet web: giỏ đã có sẵn cùng phân loại (thêm gi�
   });
 });
 
+describe('VariationSheet web: chữ tồn kho "Còn n sản phẩm" cho mọi n, tồn thấp chỉ nhấn bằng màu cảnh báo (L4 5)', () => {
+  const withStock = (stock: number): VariationOption[] => [{ ...variations[0]!, stock }, ...variations.slice(1)];
+  const stockNode = () => dialog().querySelector<HTMLElement>('[data-testid="variation-sheet-stock"]')!;
+
+  it('tồn 3 (thấp): "Gói 80 tờ · Còn 3 sản phẩm", phần tồn có màu cảnh báo', () => {
+    mountSheet({ variations: withStock(3), flash: [] });
+    expect(stockNode().textContent).toBe('Còn 3 sản phẩm');
+    expect(stockNode().parentElement!.textContent).toBe('Gói 80 tờ · Còn 3 sản phẩm');
+    expect(stockNode().style.color).toBe('var(--color-status-warning-fg)');
+  });
+
+  it('tồn 6 và 245: cùng chữ "Còn n sản phẩm" nhưng không màu cảnh báo; tồn 5 vẫn là mức thấp', () => {
+    mountSheet({ variations: withStock(6), flash: [] });
+    expect(stockNode().textContent).toBe('Còn 6 sản phẩm');
+    expect(stockNode().style.color).toBe('');
+    mounted.pop()!.unmount();
+    mountSheet({ variations: withStock(245), flash: [] });
+    expect(stockNode().textContent).toBe('Còn 245 sản phẩm');
+    mounted.pop()!.unmount();
+    mountSheet({ variations: withStock(5), flash: [] });
+    expect(stockNode().style.color).toBe('var(--color-status-warning-fg)');
+  });
+});
+
 describe('VariationSheet web: hết hàng ghi "Tạm hết hàng" nhất quán', () => {
   it('chip hết hàng có chữ "Tạm hết hàng", chip còn hàng có giá và dấu Giờ vàng', () => {
     mountSheet();

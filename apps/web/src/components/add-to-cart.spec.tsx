@@ -388,7 +388,7 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }]);
     await flush();
     expect(addButton(container).disabled).toBe(false);
-    expect(container.textContent).toContain('Chỉ còn 4 sản phẩm');
+    expect(container.textContent).toContain('Còn 4 sản phẩm');
   });
 
   it('phân loại mặc định hết thật mà phân loại khác còn: tự chọn phân loại còn hàng', async () => {
@@ -547,12 +547,13 @@ describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
   });
 
-  it('"Chỉ còn N" trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
+  it('"Còn N sản phẩm" (màu cảnh báo) trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
     mocks.getProductStock.mockResolvedValue({ v1: 3, v2: 9 });
     const { container } = mount();
     await flush();
-    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Chỉ còn 3 sản phẩm')!;
+    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Còn 3 sản phẩm')!;
     expect(note.className).toContain('max-md:hidden');
+    expect(note.className).toContain('text-warning-fg');
   });
 });
 

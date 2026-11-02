@@ -54,6 +54,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { isLowStock } from '@tubutree/app-core/commerce/stock-text';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -86,7 +87,6 @@ import { ListRow } from '../components/ui/list-row';
 
 type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
 
-const LOW_STOCK_THRESHOLD = 5;
 const ADDED_FLASH_MS = 1_200;
 const DESC_COLLAPSED_LINES = 4;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
@@ -395,7 +395,7 @@ export default function ProductDetailPage() {
   const soldText = formatSold(p.sold);
   const ratingData = reviews.data && reviews.data.count > 0 ? reviews.data : null;
   const inStock = (selected?.stock ?? 0) > 0;
-  const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
+  const lowStock = isLowStock(selected?.stock ?? 0);
   const cartCount = cart.data?.itemCount ?? 0;
   // Ngưỡng freeship theo hạng của khách (cùng nguồn với giỏ hàng); khách chưa đăng nhập mới dùng ngưỡng chung. Đang đăng nhập
   // hoặc giỏ chưa về thì chưa hứa số nào để khỏi hiện ngưỡng chung rồi đổi.
