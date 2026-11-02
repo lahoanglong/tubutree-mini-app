@@ -108,7 +108,7 @@ describe('CartService guard tồn kho', () => {
     it('hàng Tubu giao không bị ảnh hưởng bởi trạng thái gian hàng', async () => {
       const tubu = { id: 'v1', isActive: true, stock: 3, product: { isActive: true, approvalStatus: 'APPROVED', name: 'X', fulfilment: 'TUBU', storefrontId: null, storefront: null } };
       const { svc } = build(tubu);
-      await expect(svc.addItem('u1', { variationId: 'v1', quantity: 5 })).rejects.toThrow('Chỉ còn 3 sản phẩm');
+      await expect(svc.addItem('u1', { variationId: 'v1', quantity: 5 })).rejects.toThrow('Còn 3 sản phẩm trong kho.');
     });
   });
 
@@ -276,7 +276,7 @@ describe('CartService guard tồn kho', () => {
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
     // đã có 2, thêm 2 = 4 > 3
-    await expect(svc.addItem('u1', { variationId: 'v1', quantity: 2 })).rejects.toThrow('Chỉ còn 3');
+    await expect(svc.addItem('u1', { variationId: 'v1', quantity: 2 })).rejects.toThrow('Còn 3 sản phẩm trong kho.');
     expect((prisma.cartItem!.upsert as jest.Mock)).not.toHaveBeenCalled();
   });
 
@@ -423,7 +423,7 @@ describe('CartService guard tồn kho', () => {
       },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, config, flash, analytics, combo);
-    await expect(svc.updateItem('u1', 'it1', 10)).rejects.toThrow('Chỉ còn 5');
+    await expect(svc.updateItem('u1', 'it1', 10)).rejects.toThrow('Còn 5 sản phẩm trong kho.');
     expect((prisma.cartItem!.update as jest.Mock)).not.toHaveBeenCalled();
   });
 
@@ -1361,7 +1361,7 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
   it('vượt tồn nhưng còn hàng → câu nêu số còn lại', async () => {
     const { svc } = setup([sellable('v1', 3)]);
     const body = await reject(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 4 }], undefined));
-    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1', message: 'SP v1 chỉ còn 3 sản phẩm. Chưa có món nào được thêm vào giỏ.' });
+    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1', message: 'SP v1 còn 3 sản phẩm. Chưa có món nào được thêm vào giỏ.' });
   });
 
   it('món không bán được (ngừng bán, chưa duyệt) hoặc không tồn tại → reason UNAVAILABLE, dòng đầu tiên hỏng theo thứ tự đến', async () => {

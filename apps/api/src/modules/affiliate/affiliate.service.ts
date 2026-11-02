@@ -843,7 +843,7 @@ export class AffiliateService {
         statusCode: 400,
         error: 'Bad Request',
         code: 'PRICE_CHANGED',
-        message: `Giá giờ vàng của "${productName}" vừa hết suất hoặc hết giờ. Vui lòng xem lại giá rồi tạo đơn lại.`,
+        message: `Giá Giờ vàng của "${productName}" vừa hết suất hoặc hết giờ. Bạn xem lại giá rồi tạo đơn lại nhé.`,
       });
     let outcomes: FlashQuotaOutcome[];
     try {

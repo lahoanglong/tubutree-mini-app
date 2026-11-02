@@ -847,6 +847,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as BadRequestException).getResponse()).toMatchObject({ code: 'PRICE_CHANGED' });
       expect((err as BadRequestException).message).toContain('Granola');
+      expect((err as BadRequestException).message).toBe('Giá Giờ vàng của "Granola" vừa hết suất hoặc hết giờ. Bạn xem lại giá rồi tạo đơn lại nhé.');
       expect(orderCreate).not.toHaveBeenCalled();
       expect(commissionCreate).not.toHaveBeenCalled();
     });

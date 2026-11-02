@@ -1427,6 +1427,7 @@ describe('CatalogService.listBrandProducts — GET /brand/public/:slug/products'
   it('nhãn chưa đăng hoặc không có → NotFound', async () => {
     const { svc, brandFindFirst } = setup(null);
     await expect(svc.listBrandProducts('khong-co', { page: 1, limit: 20 })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.listBrandProducts('khong-co', { page: 1, limit: 20 })).rejects.toThrow('Thương hiệu không tồn tại hoặc chưa đăng.');
     expect(brandFindFirst).toHaveBeenCalledWith({ where: { slug: 'khong-co', isPublished: true }, select: { id: true } });
   });
 

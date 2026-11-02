@@ -20,5 +20,5 @@ export function cartBatchRejected(i: { reason: CartBatchReason; variationId: str
 
 /** Câu cho món vượt tồn: hết hẳn thì nói hết hàng, còn thì nói còn bao nhiêu (ux-copy B `overStock`). */
 export function batchStockMessage(productName: string, stock: number): string {
-  return stock > 0 ? `${productName} chỉ còn ${stock} sản phẩm.` : `${productName} đã hết hàng.`;
+  return stock > 0 ? `${productName} còn ${stock} sản phẩm.` : `${productName} đã hết hàng.`;
 }

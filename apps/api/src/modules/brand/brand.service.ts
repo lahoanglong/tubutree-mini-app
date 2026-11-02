@@ -97,7 +97,7 @@ export class BrandService {
   /** Trang nhãn flagship cho khách. `now` truyền vào để test tất định. KHÔNG lộ % hoa hồng. */
   async getPublicBySlug(slug: string, now: Date = new Date()) {
     const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true } });
-    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại hoặc chưa đăng.');
+    if (!brand) throw new NotFoundException('Thương hiệu không tồn tại hoặc chưa đăng.');
 
     const certs: Cert[] = Array.isArray(brand.certifications) ? (brand.certifications as unknown as Cert[]) : [];
     const verifiedCerts = certs
@@ -161,7 +161,7 @@ export class BrandService {
   /** Banner "Chia sẻ nhận HH" — chỉ vai trò hưởng hoa hồng (affiliate.commission_eligible_roles: CTV, đại lý) thấy %; khách thường eligible=false (guardrail server-side). */
   async getShareToEarn(slug: string, userId: string) {
     const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true, slug: true } });
-    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    if (!brand) throw new NotFoundException('Thương hiệu không tồn tại.');
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { role: true, referralCode: true },
@@ -487,7 +487,7 @@ export class BrandService {
   /** Theo dõi nhãn (idempotent qua @@unique(userId,brandId): theo dõi lại → no-op). */
   async followBrand(userId: string, slug: string) {
     const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true } });
-    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    if (!brand) throw new NotFoundException('Thương hiệu không tồn tại.');
     try {
       await this.prisma.$transaction([
         this.prisma.brandFollow.create({ data: { userId, brandId: brand.id } }),
@@ -504,7 +504,7 @@ export class BrandService {
   /** Bỏ theo dõi (chỉ giảm count khi thực sự đang theo dõi). */
   async unfollowBrand(userId: string, slug: string) {
     const brand = await this.prisma.brand.findFirst({ where: { slug }, select: { id: true } });
-    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    if (!brand) throw new NotFoundException('Thương hiệu không tồn tại.');
     const del = await this.prisma.brandFollow.deleteMany({ where: { userId, brandId: brand.id } });
     if (del.count > 0) {
       await this.prisma.brand.update({ where: { id: brand.id }, data: { followerCount: { decrement: 1 } } });
@@ -709,7 +709,7 @@ export class BrandService {
   /** Trạng thái theo dõi của user với nhãn (cho FE hiện nút). */
   async followState(userId: string, slug: string) {
     const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true, followerCount: true } });
-    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại.');
+    if (!brand) throw new NotFoundException('Thương hiệu không tồn tại.');
     const f = await this.prisma.brandFollow.findUnique({ where: { userId_brandId: { userId, brandId: brand.id } } });
     return { following: Boolean(f), followerCount: brand.followerCount };
   }
