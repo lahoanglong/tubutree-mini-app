@@ -31,9 +31,11 @@ const VI_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽ�
 const ASCII_PROSE = /^[A-Z][a-z]|^[A-Z]{2,}[ :]|\w \w|\.{3}/;
 // Mọi đoạn của template có biểu thức (đầu, giữa, cuối): `(HSD ${d})` cho đầu "(HSD ", `${code} · HSD ${d}` cho giữa " · HSD ", `${n} HOT!` cho cuối " HOT!". Đầu đoạn không phải đầu chuỗi
 // (đứng sau một biểu thức, hoặc bắt đầu bằng dấu câu) nên `ASCII_PROSE` neo ở đầu chuỗi bỏ sót. Từ ASCII đứng riêng: chữ hoa đầu từ ("Top", "Freeship") hoặc chữ hoa viết tắt từ hai chữ ("HSD", "HOT")
-// mà trước đó không phải ký tự mã (chữ/số, `_`, `-`, `/`, `.`) và, với chữ viết tắt, sau đó cũng không phải chữ/số, `_`, `-`, `/`; mọi ký tự khác (cách, dấu câu, ngoặc, `·`, hết đoạn) là ranh giới.
+// hoặc từ ASCII viết thường từ hai chữ (`${n} voucher`, `${n} flash sale`) mà trước đó không phải ký tự mã (chữ/số, `_`, `-`, `/`, `.`, `=`) và, với từ không viết hoa đầu, sau đó cũng không phải chữ/số, `_`, `-`, `/`, `=`; mọi ký tự khác (cách, dấu câu, ngoặc, `·`, hết đoạn) là ranh giới.
 // Nhờ vậy `FREESHIP-${id}`, `${a}-FREESHIP`, `${base}/HOT/${id}`, `HOT_${x}`, `${a}.HOT` vẫn là mã định danh, còn `${n} HOT!`, `(HSD ${d})`, `${n}, HSD.` là chữ khách đọc.
-const TEMPLATE_WORD_PROSE = /(?<![A-Za-z0-9_\-/.])(?:[A-Z][a-z]|[A-Z]{2,}(?![A-Za-z0-9_\-/]))/;
+const TEMPLATE_WORD_PROSE = /(?<![A-Za-z0-9_\-/.=])(?:[A-Z][a-z]|[A-Za-z]{2,}(?![A-Za-z0-9_\-/=]))/;
+// Địa chỉ đầy đủ (`https://api.tubu.vn/vouchers/`) và giá trị truy vấn (`?tab=HOT`, `&sort=hot`, `=HOT`) là mã gửi cho máy chủ, không phải chữ khách đọc: bỏ khỏi đoạn template trước khi xét.
+const QUERY_VALUE = /[A-Za-z][A-Za-z0-9+.-]*:\/\/\S*|[?&=][^\s&#]*/g;
 // Thuộc tính mang chữ cho người đọc màn hình, đọc cả khi chữ không có dấu ("Voucher", "Freeship").
 const TEXT_ATTRS = new Set(['aria-label', 'title', 'alt', 'placeholder', 'label']);
 const CODE_ATTRS = new Set(['className', 'id', 'key', 'href']);
@@ -71,7 +73,8 @@ function displayStrings(source: string, fileName: string): { line: number; text:
       const isTextAttr = attr !== null && attr.direct && TEXT_ATTRS.has(attr.name);
       const isChild = slot?.kind === 'child' && slot.direct;
       const isTemplatePart = ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n);
-      if (!isCode && (VI_LETTER.test(n.text) || ASCII_PROSE.test(n.text) || (isTemplatePart && TEMPLATE_WORD_PROSE.test(n.text)) || isTextAttr || isChild)) push(n, n.text);
+      const text = isTemplatePart ? n.text.replace(QUERY_VALUE, ' ') : n.text;
+      if (!isCode && (VI_LETTER.test(text) || ASCII_PROSE.test(text) || (isTemplatePart && TEMPLATE_WORD_PROSE.test(text)) || isTextAttr || isChild)) push(n, text);
     }
     ts.forEachChild(n, visit);
   };
@@ -470,6 +473,48 @@ describe('findHits: mọi đoạn template (đầu, giữa, cuối) có từ hoa
     expect(at('export const i = (a: string, b: string) => `${a}-HSD-${b}`;')).toEqual([]);
     expect(at('export const j = (a: string) => `tubu-${a}-HOT`;')).toEqual([]);
     expect(at('export const k = (x: string) => `HOT/${x}`;')).toEqual([]);
+  });
+});
+
+describe('findHits: từ cấm viết thường và giá trị truy vấn trong template (M2)', () => {
+  const at = (src: string) => findHits([{ file: 'apps/web/src/a.ts', text: src }]).map((h) => h.use);
+
+  // Nhánh chữ hoa cũ bỏ sót từ cấm viết thường đứng riêng ở đoạn giữa và cuối: `${n} voucher` là chữ khách đọc.
+  it.each([
+    ['export const t = (n: number) => `${n} voucher`;', 'Mã giảm giá'],
+    ['export const t = (n: number) => `${n} freeship`;', 'Miễn phí giao hàng'],
+    ['export const t = (n: number) => `${n} flash sale`;', 'Giờ vàng'],
+    ['export const t = (a: string, b: string) => `${a} · voucher ${b}`;', 'Mã giảm giá'],
+    ['export const t = (n: number) => `${n} hot`;', 'bỏ chữ giục mua'],
+    ['export const t = (n: number) => `${n} voucher của bạn`;', 'Mã giảm giá'],
+  ])('từ cấm viết thường %s bị bắt', (src, use) => {
+    expect(at(src)).toEqual([use]);
+  });
+
+  // Giá trị truy vấn và đường dẫn không phải chữ khách đọc; mã dính ký tự mã vẫn là mã định danh.
+  it.each([
+    'export const a = () => `/san-pham?tab=HOT`;',
+    'export const b = (base: string, p: number) => `${base}?tab=HOT&page=${p}`;',
+    'export const c = (base: string) => `${base}&sort=hot`;',
+    'export const d = (p: number) => `/x?sort=hot&page=${p}`;',
+    'export const e = (base: string, id: string) => `${base}/voucher/${id}`;',
+    'export const f = (id: string) => `voucher-${id}`;',
+    'export const g = (a: string) => `${a}_voucher`;',
+    'export const h = (a: string) => `${a}-freeship`;',
+    'export const i = (id: string) => `FREESHIP-${id}`;',
+    'export const j = (x: string) => `HOT_${x}`;',
+    'export const k = (base: string, id: string) => `${base}/HOT/${id}`;',
+    'export const l = (a: string) => `${a}.voucher`;',
+    'export const m = (id: string) => `https://api.tubu.vn/vouchers/${id}`;',
+    'export const n = (a: string, t: string) => `${a}?tab=Top&q=${t}`;',
+  ])('giá trị truy vấn hoặc mã dính ký tự mã %s không bị bắt', (src) => {
+    expect(at(src)).toEqual([]);
+  });
+
+  it('displayStrings giữ từ viết thường ở đoạn template và bỏ giá trị truy vấn', () => {
+    const texts = (src: string) => displayStrings(src, 'apps/web/src/a.ts').map((s) => s.text.trim());
+    expect(texts('const t = `${n} voucher`;')).toContain('voucher');
+    expect(texts('const u = `/x?tab=HOT&p=${p}`;').join('|')).not.toMatch(/HOT/);
   });
 });
 
