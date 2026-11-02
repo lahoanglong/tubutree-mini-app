@@ -28,7 +28,7 @@ import { createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPo
 const PRICE = 100_000;
 const STOCK = 10;
 const ROUNDS = 3;
-const STORE_CHANGED = 'Gian hàng vừa thay đổi, vui lòng đặt lại.';
+const STORE_CHANGED = 'Gian hàng vừa thay đổi, bạn đặt lại nhé.';
 
 /**
  * Checkout đọc gian hàng đối tác (isPartner) NGOÀI tx (giỏ → nơi giao) rồi mới ghi đơn tự giao; admin tắt cờ (setStorePartner:

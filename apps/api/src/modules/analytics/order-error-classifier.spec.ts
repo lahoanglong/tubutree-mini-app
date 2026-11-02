@@ -9,7 +9,7 @@ describe('classifyOrderError', () => {
   });
   it('tổng đơn tăng lúc đặt (TOTAL_CHANGED) → PRICE_CHANGED; địa chỉ sai địa giới → ADDRESS_INVALID', () => {
     expect(classifyOrderError('Tổng tiền đơn vừa thay đổi từ 90đ thành 100đ do giá hoặc phí giao vừa cập nhật.')).toBe('PRICE_CHANGED');
-    expect(classifyOrderError('Phường/xã không thuộc tỉnh/thành đã chọn. Vui lòng chọn lại địa chỉ.')).toBe('ADDRESS_INVALID');
+    expect(classifyOrderError('Phường/xã không thuộc tỉnh/thành đã chọn. Bạn chọn lại địa chỉ nhé.')).toBe('ADDRESS_INVALID');
   });
   it('message chứa "Địa chỉ giao hàng" → ADDRESS_INVALID', () => {
     expect(classifyOrderError('Địa chỉ giao hàng không hợp lệ.')).toBe('ADDRESS_INVALID');
@@ -17,7 +17,7 @@ describe('classifyOrderError', () => {
   it('message chứa "Số dư"/"Điểm Xanh"/"COD" → BALANCE', () => {
     expect(classifyOrderError('Số dư Ví Tubu không đủ.')).toBe('BALANCE');
     expect(classifyOrderError('Số điểm Xanh không đủ (hiện có 10 điểm).')).toBe('BALANCE');
-    expect(classifyOrderError('Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.600.000đ. Vui lòng chuyển khoản hoặc trả bằng Ví Tubu.')).toBe('BALANCE');
+    expect(classifyOrderError('Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.600.000đ. Bạn chuyển khoản hoặc trả bằng Ví Tubu nhé.')).toBe('BALANCE');
   });
   it('message chứa "Idempotency" → VALIDATION', () => {
     expect(classifyOrderError('Idempotency-Key không hợp lệ.')).toBe('VALIDATION');
@@ -31,7 +31,7 @@ describe('classifyOrderError', () => {
   });
   it('message "Điểm Xanh" viết hoa chữ Đ (message thật từ checkout.service.ts) → BALANCE', () => {
     expect(
-      classifyOrderError('Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1000 điểm: abc. Vui lòng tải lại trang thanh toán.'),
+      classifyOrderError('Đơn này dùng 500 Điểm Xanh nhưng hiện bạn chỉ dùng được 200/1000 điểm: abc. Bạn tải lại trang thanh toán nhé.'),
     ).toBe('BALANCE');
   });
 });
