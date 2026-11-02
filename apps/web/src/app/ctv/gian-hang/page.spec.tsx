@@ -1143,7 +1143,7 @@ describe('thống kê và hành trình gian hàng', () => {
     await flush();
     const s = document.querySelector('[aria-label="Thống kê 30 ngày"]')!.textContent!;
     expect(s).toContain('9');
-    expect(s).toContain('Đơn 30 ngày');
+    expect(s).toContain('Đơn hàng');
     expect(s).toContain('1.250.000đ');
     expect(s).toContain('125.000đ');
     expect(s).not.toContain('4 món · 320.000đ');
@@ -1152,14 +1152,26 @@ describe('thống kê và hành trình gian hàng', () => {
     expect(document.querySelector('[aria-label="Thống kê 30 ngày"]')!.textContent).toContain('4 món · 320.000đ');
   });
 
-  it('điện thoại: tiêu đề thẻ thống kê và "Bố cục gian hàng" 16px như Mini App', async () => {
+  it('tiêu đề thẻ thống kê và "Bố cục gian hàng" là Inter 16/700 như Mini App, nhãn ba ô ngắn một dòng', async () => {
     live();
     mount();
     await flush();
-    const stats = document.querySelector('[aria-label="Thống kê 30 ngày"] h2')!;
-    expect(stats.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
-    const layout = Array.from(document.querySelectorAll('h2')).find((h) => h.textContent === 'Bố cục gian hàng')!;
-    expect(layout.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+    const stats = document.querySelector('[data-testid="builder-stats"]')!;
+    const layout = document.querySelector('[data-testid="builder-sections-head"] h2')!;
+    expect(layout.textContent).toBe('Bố cục gian hàng');
+    for (const h of [stats.querySelector('h2')!, layout]) {
+      expect(h.className).toContain('font-ui');
+      expect(h.className).toContain('font-bold');
+      expect(h.className).toContain('text-[length:var(--type-title-sm-size)]');
+      expect(h.className).not.toContain('font-display');
+      expect(h.className).not.toContain('max-md:');
+    }
+    const labels = Array.from(stats.querySelectorAll('[data-testid="builder-stat"]')).map((b) => b.lastElementChild!.textContent);
+    expect(labels).toEqual(['Đơn hàng', 'Doanh thu', 'Hoa hồng']);
+    for (const b of stats.querySelectorAll('[data-testid="builder-stat"]')) {
+      expect(b.lastElementChild!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+      expect(b.firstElementChild!.className).toContain('text-[length:var(--type-body-md-size)]');
+    }
   });
 
   it('chưa có đơn: nhắn chia sẻ link; thống kê lỗi thì ẩn khối, không vỡ trang', async () => {
@@ -1463,7 +1475,7 @@ describe('kiểu Mini App ở điện thoại: nút thêm sản phẩm, ô số 
     state.sf = storefront({ isPublished: true, status: 'LIVE' });
     mount();
     await flush();
-    const tile = Array.from(document.querySelectorAll('div')).find((d) => d.className.includes('bg-stone-100') && d.textContent?.endsWith('Đơn 30 ngày'));
+    const tile = Array.from(document.querySelectorAll('div')).find((d) => d.className.includes('bg-stone-100') && d.textContent?.endsWith('Đơn hàng'));
     expect(tile?.className).toContain('max-md:bg-[var(--color-bg-subtle)]');
   });
 
@@ -2239,7 +2251,7 @@ describe('màn dựng theo khối (P10)', () => {
       state.sf = storefront({ isPublished: true, status: 'LIVE' });
       const view = mount();
       await flush();
-      const orders = $$('*').find((e) => e.children.length === 0 && e.textContent === 'Đơn 30 ngày')!;
+      const orders = $$('*').find((e) => e.children.length === 0 && e.textContent === 'Đơn hàng')!;
       const firstCard = $('[data-testid="section-card"]')!;
       expect(orders.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       view.unmount();
@@ -2248,7 +2260,7 @@ describe('màn dựng theo khối (P10)', () => {
       mount();
       await flush();
       expect(calls('get', '/storefront/me/stats')).toHaveLength(0);
-      expect(text()).not.toContain('Đơn 30 ngày');
+      expect(text()).not.toContain('Đơn hàng');
     });
   });
 });

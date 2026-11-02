@@ -979,12 +979,24 @@ describe('Thống kê và Hành trình gian hàng', () => {
     expect(strip.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('nhãn ba ô thống kê ngắn để không xuống dòng, hai tiêu đề khối là Inter 700 (Q1)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(liveStorefront());
+    renderPage();
+    const stats = await screen.findByTestId('builder-stats');
+    const labels = within(stats).getAllByTestId('builder-stat').map((box) => box.lastElementChild!.textContent);
+    expect(labels).toEqual(['Đơn hàng', 'Doanh thu', 'Hoa hồng']);
+    for (const title of [within(stats).getByRole('heading', { level: 2, name: 'Thống kê 30 ngày' }), within(screen.getByTestId('builder-sections-head')).getByRole('heading', { level: 2, name: 'Bố cục gian hàng' })]) {
+      expect(title.style.fontFamily).toBe('var(--font-ui)');
+      expect(title.style.fontWeight).toBe('700');
+    }
+  });
+
   it('thống kê 30 ngày hiện đơn, doanh thu, hoa hồng; top sản phẩm gập sau nút "Theo sản phẩm"', async () => {
     mocks.getMyStorefront.mockResolvedValue(liveStorefront());
     renderPage();
     expect(await screen.findByText('Thống kê 30 ngày')).toBeInTheDocument();
     expect(screen.getByText('9')).toBeInTheDocument();
-    expect(screen.getByText('Đơn 30 ngày')).toBeInTheDocument();
+    expect(screen.getByText('Đơn hàng')).toBeInTheDocument();
     expect(screen.queryByText(/7 ngày/)).not.toBeInTheDocument();
     expect(screen.getByText('1.250.000đ')).toBeInTheDocument();
     expect(screen.getByText('125.000đ')).toBeInTheDocument();
@@ -1706,7 +1718,7 @@ describe('Màn dựng theo khối (P10)', () => {
     it('LIVE: ba ô thống kê nằm trước khối đầu tiên; nháp hoặc chờ duyệt thì không có thống kê', async () => {
       mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, status: 'LIVE' }));
       const view = renderPage();
-      const orders = await screen.findByText('Đơn 30 ngày');
+      const orders = await screen.findByText('Đơn hàng');
       const firstCard = screen.getAllByTestId('section-card')[0]!;
       expect(orders.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.getByText('9')).toBeInTheDocument();
@@ -1714,7 +1726,7 @@ describe('Màn dựng theo khối (P10)', () => {
       mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, status: 'PENDING_APPROVAL' }));
       renderPage();
       await screen.findByText('Chờ duyệt', { selector: 'span' });
-      expect(screen.queryByText('Đơn 30 ngày')).not.toBeInTheDocument();
+      expect(screen.queryByText('Đơn hàng')).not.toBeInTheDocument();
       expect(mocks.getStorefrontStats).toHaveBeenCalledTimes(1);
     });
   });

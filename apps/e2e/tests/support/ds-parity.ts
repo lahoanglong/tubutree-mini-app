@@ -45,6 +45,13 @@ export const PROBES: readonly Probe[] = [
   // Tiêu đề khối: SectionHeader đầu tiên của trang Ưu đãi là khối Giờ vàng (Q1: Inter 16/700 -0,01em, chữ promo).
   { id: 'section-title', root: '[data-testid="section-header"]', target: 'h2', props: TEXT },
   { id: 'section-header', root: '[data-testid="section-header"]', target: '', props: ['height', 'display', 'justifyContent'] },
+  // Trình dựng gian hàng (K6): tiêu đề khối Inter 16/700, ô thống kê và thẻ thống kê cao bằng nhau ở hai app.
+  { id: 'builder-stats-title', root: '[data-testid="builder-stats"]', target: 'h2', props: TEXT },
+  { id: 'builder-stats-card', root: '[data-testid="builder-stats"]', target: '', props: ['height'] },
+  { id: 'builder-stat-value', root: '[data-testid="builder-stat"]', target: ':scope > div:first-child', props: TEXT },
+  { id: 'builder-stat-label', root: '[data-testid="builder-stat"]', target: ':scope > div:last-child', props: TEXT },
+  { id: 'builder-stat-box', root: '[data-testid="builder-stat"]', target: '', props: ['height', 'borderRadius', 'backgroundColor', ...PAD] },
+  { id: 'builder-sections-title', root: '[data-testid="builder-sections-head"]', target: 'h2', props: TEXT },
   ...tileProbes('flash'),
   ...tileProbes('line'),
   ...tileProbes('grid', [
@@ -118,6 +125,14 @@ const SMALL = { fontSize: '12px', lineHeight: px(M.meta), fontWeight: '500', let
 export const EXPECTED: Record<string, Record<string, string>> = {
   'section-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: 'rgb(122, 67, 0)', fontFamilyKind: 'inter' },
   'section-header': { height: '44px', display: 'flex', justifyContent: 'space-between' },
+
+  // Trình dựng gian hàng (K6): nhãn ô thống kê một dòng (80 + 20px thấp hơn khi nhãn xuống dòng), tiêu đề khối Inter 16/700 -0,01em (Q1).
+  'builder-stats-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
+  'builder-stats-card': { height: '180.1px' },
+  'builder-stat-value': { fontSize: '15px', lineHeight: '22.05px', fontWeight: '700', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'builder-stat-label': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'builder-stat-box': { height: '62.07px', borderRadius: '12px', backgroundColor: 'rgb(242, 245, 236)', paddingTop: '10px', paddingRight: '10px', paddingBottom: '10px', paddingLeft: '10px' },
+  'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
 
   'tile-flash': { width: '128px', ...FRAME_SPEC },
   'tile-flash-body': INSET,

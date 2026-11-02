@@ -6,6 +6,8 @@ import { diffMeasure, expectedFor, measure, probesFor, type Measure, type Side }
 import { mockFlashSlots, mockNoSession } from './support/flash-slot-mocks';
 import { mockPilotProduct } from './support/pilot-mocks';
 import { mockCollectable } from './support/voucher-mocks';
+import { mockBuilder as mockBuilderMini } from './support/builder-mocks';
+import { mockBuilder as mockBuilderWeb, setBuilderSession } from './support/builder-web-mocks';
 
 /**
  * So số đo 375px của thẻ sản phẩm, tiêu đề khối và giá giữa Mini App (project "Zalo Mini App") và web ("Web Customer Mobile") trên cùng dữ liệu mock.
@@ -85,6 +87,22 @@ const SCENARIOS: Scenario[] = [
       }
       api.get('/me/wishlist', [wish(1), wish(2, { salePrice: null })]);
       api.get('/me/wishlist/ids', ['p1', 'p2']);
+    },
+  },
+  {
+    name: 'Trình dựng: tiêu đề khối + ô thống kê',
+    route: { miniapp: '/storefront', web: '/ctv/gian-hang' },
+    ready: '[data-testid="builder-stats"]',
+    probeIds: ['builder-stats-title', 'builder-stats-card', 'builder-stat-value', 'builder-stat-label', 'builder-stat-box', 'builder-sections-title'],
+    async setup(api, side, page) {
+      if (side === 'miniapp') {
+        mockBuilderMini(api, { storefront: { isPublished: true, status: 'LIVE' } });
+      } else {
+        mockBuilderWeb(api);
+        await setBuilderSession(page);
+      }
+      // Cùng một số liệu ở hai app (đơn 0: đo luôn dòng "Chưa có đơn nào"), cùng chiều cao thẻ.
+      api.get('/storefront/me/stats', { orders7d: 0, orders30d: 0, revenue30d: 0, commission30d: 0, byProduct: [] });
     },
   },
 ];

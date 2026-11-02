@@ -685,8 +685,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         </div>
       )}
 
-      <div style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Heading variant="title-sm" as="h2">{BUILDER_COPY.sections}</Heading>
+      <div data-testid="builder-sections-head" style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Heading variant="title-sm" font="ui" as="h2">{BUILDER_COPY.sections}</Heading>
         {sf.collections.length > 1 && (
           <Button variant="ghost" onPress={() => setSectionSort((v) => !v)}>{sectionSort ? BUILDER_COPY.sortDone : BUILDER_COPY.sort}</Button>
         )}
