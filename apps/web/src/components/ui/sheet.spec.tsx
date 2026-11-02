@@ -201,6 +201,14 @@ describe('Sheet từ md là hộp thoại giữa màn (K7)', () => {
     expect(backdrop.className.split(' ')).toContain('md:motion-safe:animate-dialog-fade');
   });
 
+  // Cùng nền với mini/bottom-sheet (`--zaui-mask-overlay-color` = token này) ở mọi khổ: không dùng primitive stone-900 với độ trong suốt riêng.
+  it('nền mờ dùng token ngữ nghĩa chung bg-sheet-scrim, không phải primitive bg-stone-900/50', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    const classes = document.querySelector('[data-sheet-backdrop]')!.className.split(' ');
+    expect(classes).toContain('bg-sheet-scrim');
+    expect(classes.filter((c) => /^bg-stone-/.test(c))).toEqual([]);
+  });
+
   it('dưới md không đổi: bo hai góc trên, cao tối đa 92vh', () => {
     mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
     expect(classOf().split(' ')).toEqual(expect.arrayContaining(['rounded-t-sheet', 'max-h-[92vh]', 'w-full']));

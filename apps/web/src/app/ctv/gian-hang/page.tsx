@@ -3,7 +3,7 @@
 import { Suspense, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
+import { ownerTierPending, ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { sectionIdFromSearch } from '@tubutree/app-core/commerce/storefront-builder';
 import { affiliateCtvTiersQuery } from '@tubutree/app-core/queries/affiliate';
 import { myStorefrontQuery } from '@tubutree/app-core/queries/storefront';
@@ -50,7 +50,7 @@ function CtvStorefront() {
   // retry: false để 404 (chưa có gian hàng) không bị thử lại; lỗi khác có nút Thử lại.
   const sfQ = useQuery({ ...myStorefrontQuery(coreHttp), enabled: phase === 'authenticated', retry: false });
   // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
-  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi hoặc mất mạng (`paused`) cũng là đã xong: vẽ đủ, thiếu huy hiệu.
   const tiersQ = useQuery({ ...affiliateCtvTiersQuery(coreHttp), staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
@@ -103,7 +103,7 @@ function CtvStorefront() {
       </Shell>
     );
   }
-  if (sf.type === 'CTV' && tiersQ.isPending) {
+  if (sf.type === 'CTV' && ownerTierPending(tiersQ)) {
     return (
       <Shell>
         <Skeleton height={120} />

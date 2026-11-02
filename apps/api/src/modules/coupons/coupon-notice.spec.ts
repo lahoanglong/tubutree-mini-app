@@ -1,6 +1,7 @@
 import {
   COUPON_FREESHIP_ALREADY_FREE_REASON,
   COUPON_FREESHIP_FIRST_ORDER_REASON,
+  COUPON_FREESHIP_NOTHING_REASON,
   COUPON_PRODUCT_FLASH_REASON,
   couponFlashExcludedNotice,
   couponFreeshipThresholdReason,
@@ -9,8 +10,9 @@ import {
   couponRejectedWithFlash,
 } from './coupon-notice';
 
-// Chữ khách đọc: "Giờ vàng" hoa chữ G và "mã miễn phí giao" (thiết kế §4 Q5); "mã FREESHIP" đọc như một mã khác tên FREESHIP (review/extra-critique-2 P1 #7).
+// Chữ khách đọc: "Giờ vàng" hoa chữ G và "mã miễn phí giao hàng", đúng tên chip `coupon.freeship` của app (thiết kế §4 Q5); "mã FREESHIP" đọc như một mã khác tên FREESHIP (review/extra-critique-2 P1 #7).
 const NOTICES: [name: string, text: string][] = [
+  ['không có phí giao của Tubu', COUPON_FREESHIP_NOTHING_REASON],
   ['đơn đầu', COUPON_FREESHIP_FIRST_ORDER_REASON],
   ['đã miễn phí giao', COUPON_FREESHIP_ALREADY_FREE_REASON],
   ['đạt ngưỡng', couponFreeshipThresholdReason(199_000)],
@@ -24,13 +26,22 @@ const NOTICES: [name: string, text: string][] = [
 ];
 
 describe('coupon-notice: chữ khách đọc', () => {
-  it('câu mã miễn phí giao nói "mã miễn phí giao", không nói "mã FREESHIP"', () => {
-    expect(COUPON_FREESHIP_FIRST_ORDER_REASON).toBe('Đơn đầu đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.');
-    expect(COUPON_FREESHIP_ALREADY_FREE_REASON).toBe('Đơn này đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.');
-    expect(couponFreeshipThresholdReason(199_000)).toBe('Đơn từ 199.000đ đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.');
+  it('câu mã miễn phí giao nói "mã miễn phí giao hàng", không nói "mã FREESHIP"', () => {
+    expect(COUPON_FREESHIP_NOTHING_REASON).toBe('Mã miễn phí giao hàng chỉ áp cho phí giao của hàng Tubu Tree giao, và đơn này không có phí giao đó.');
+    expect(COUPON_FREESHIP_FIRST_ORDER_REASON).toBe('Đơn đầu đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.');
+    expect(COUPON_FREESHIP_ALREADY_FREE_REASON).toBe('Đơn này đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.');
+    expect(couponFreeshipThresholdReason(199_000)).toBe('Đơn từ 199.000đ đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.');
     expect(couponFreeshipTubuPartReason({ threshold: 199_000 })).toBe(
-      'Phần hàng Tubu Tree giao đã được miễn phí giao (đơn từ 199.000đ), mã miễn phí giao chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.',
+      'Phần hàng Tubu Tree giao đã được miễn phí giao (đơn từ 199.000đ), mã miễn phí giao hàng chỉ áp cho hàng Tubu Tree nên được giữ cho đơn sau.',
     );
+  });
+
+  // Một loại mã, một tên: chip của app ghi "Miễn phí giao hàng" nên câu cũng gọi "mã miễn phí giao hàng", không "mã miễn phí vận chuyển" hay "mã miễn phí giao" cụt.
+  it.each(NOTICES.filter(([, text]) => /miễn phí giao/i.test(text)))('%s: gọi mã bằng đúng một tên', (_name, text) => {
+    expect(text).toMatch(/[Mm]ã miễn phí giao hàng/);
+    expect(text).not.toMatch(/vận chuyển/i);
+    expect(text).not.toMatch(/mã miễn phí giao(?! hàng)/i);
+    expect(text).not.toMatch(/miễn phí giao hàng Tubu Tree/);
   });
 
   it('câu về Giờ vàng viết hoa chữ G', () => {

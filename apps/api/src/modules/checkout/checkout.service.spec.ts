@@ -2130,7 +2130,7 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
     expect(coupons.redeem).not.toHaveBeenCalled();
   });
 
-  const FIRST_ORDER_FREESHIP_REASON = 'Đơn đầu đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.';
+  const FIRST_ORDER_FREESHIP_REASON = 'Đơn đầu đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
 
   it('mã freeship trên đơn đầu đã miễn phí giao → lời báo nói đúng lý do là đơn đầu, không nói "không có phí giao" (U1-B03)', async () => {
     const { svc } = setup({
@@ -2172,8 +2172,8 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
       items: [{ id: 'l1', variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 250000, quantity: 1, total: 250000 }],
       subtotal: 250000, discount: 0, freeship: false, couponCode: null,
     };
-    const THRESHOLD_REASON = 'Đơn từ 199.000đ đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.';
-    const GENERIC_REASON = 'Đơn này đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.';
+    const THRESHOLD_REASON = 'Đơn từ 199.000đ đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
+    const GENERIC_REASON = 'Đơn này đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
     // Cấu hình sau Q12: ngưỡng miễn phí giao thường và ngưỡng đơn đầu cùng 199.000đ, nên đơn đầu 250k được miễn vì ĐẠT NGƯỠNG.
     const Q12 = { 'shipping.free_threshold': 199000, 'shipping.first_order_free_enabled': true, 'shipping.first_order_free_min_subtotal': 199000 };
     const previewOf = (svc: CheckoutService, coupons: unknown, loyalty: unknown) => {
@@ -2222,7 +2222,7 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
         cartData: BIG,
       });
       const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
-      expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: 'Đơn từ 150.000đ đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.' });
+      expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: 'Đơn từ 150.000đ đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.' });
     });
 
     it('hạng được freeship toàn shop (ngưỡng 0đ): câu chung "đơn đã được miễn phí giao", không in "từ 0đ"', async () => {
@@ -2274,7 +2274,7 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
       };
       const SHOP_FEE = [{ id: 'sf-a', shippingFee: 25000, freeShipFrom: null, commissionPct: null }];
       const SHOP_FREE = [{ id: 'sf-a', shippingFee: 25000, freeShipFrom: 80000, commissionPct: null }];
-      const TAIL = 'mã miễn phí giao chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.';
+      const TAIL = 'mã miễn phí giao hàng chỉ áp cho hàng Tubu Tree nên được giữ cho đơn sau.';
       const MIXED_THRESHOLD = `Phần hàng Tubu Tree giao đã được miễn phí giao (đơn từ 199.000đ), ${TAIL}`;
       const MIXED_FIRST_ORDER = `Phần hàng Tubu Tree giao đã được miễn phí giao (đơn đầu), ${TAIL}`;
       const MIXED_GENERIC = `Phần hàng Tubu Tree giao đã được miễn phí giao, ${TAIL}`;

@@ -129,6 +129,14 @@ export function ownerTierPreview(
   return { name: r.tier.name, emoji: r.tier.emoji, publicBadge: lowest !== undefined && r.tier.name !== lowest.name };
 }
 
+/**
+ * Trình dựng chờ bậc của chủ shop trước khi dựng (để huy hiệu không chèn vào làm cả trang nhảy), nhưng chỉ khi bậc còn hy vọng về. TanStack v5 giữ `status: 'pending'` khi mất mạng
+ * (`fetchStatus: 'paused'`) nên chờ theo `isPending` thì khung chờ treo mãi dù gian hàng đã có trong cache: `paused` coi như xong, dựng không huy hiệu; có mạng lại thì bậc về và huy hiệu hiện.
+ */
+export function ownerTierPending(q: { isPending: boolean; fetchStatus: 'fetching' | 'paused' | 'idle' }): boolean {
+  return q.isPending && q.fetchStatus !== 'paused';
+}
+
 /** Số tối thiểu đánh giá để khoe sao trung bình của cả shop. */
 const MIN_REVIEWS_FOR_RATING = 5;
 

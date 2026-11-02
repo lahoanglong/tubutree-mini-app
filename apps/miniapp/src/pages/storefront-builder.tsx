@@ -12,7 +12,7 @@ import {
   reorderCollections, reorderItems, getQuests,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
-import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
+import { ownerTierPending, ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
@@ -25,6 +25,7 @@ import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { trustBadgeLabel } from '../utils/storefront-badge';
 import { announce, useNotify } from '../hooks/use-notify';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -77,7 +78,7 @@ function BuilderLoading() {
 export default function StorefrontBuilderPage() {
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
   // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
-  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi hoặc mất mạng (`paused`) cũng là đã xong: vẽ đủ, thiếu huy hiệu.
   const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
@@ -98,7 +99,7 @@ export default function StorefrontBuilderPage() {
   // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
   wizardRef.current ??= shouldStartSignupWizard(sf);
   if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) {
-    if (sf.type === 'CTV' && tiersQ.isPending) return <BuilderLoading />;
+    if (sf.type === 'CTV' && ownerTierPending(tiersQ)) return <BuilderLoading />;
     return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} />;
   }
   return (
@@ -628,6 +629,8 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
   }
 
   const overflow = overflowSectionsNotice(sf.collections);
+  // Đầu xem trước là đúng cái khách thấy: dấu tích và nhãn tin cậy chỉ khi admin đã duyệt (`approved`), như storefront-view.tsx.
+  const trustLabel = trustBadgeLabel(sf);
   return (
     <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
       <ShopHeader
@@ -635,8 +638,18 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
         titleAs="h2"
         coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null}
         avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null}
+        verified={Boolean(trustLabel)}
         note={sf.headerNote}
-        badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
+        badges={
+          trustLabel || tier ? (
+            <>
+              {trustLabel && (
+                <Badge tone="verified" icon={Sparkles}>{trustLabel}</Badge>
+              )}
+              {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
+            </>
+          ) : undefined
+        }
       />
       <div style={{ padding: '12px 16px 0' }}>
         <Card padding={16}>
@@ -654,7 +667,7 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
               onClick={() => setProfileOpen(true)}
               style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
             >
-              <Text variant="caption" tone="brand" as="div">{vi.storefront.addCover}</Text>
+              <Text variant="caption" tone="brand" as="span" style={{ display: 'block' }}>{vi.storefront.addCover}</Text>
             </button>
           )}
           {view.code === 'LIVE' && (

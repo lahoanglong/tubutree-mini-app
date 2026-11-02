@@ -47,7 +47,7 @@
   --zaui-light-button-text-disabled: var(--color-action-primary-fg-disabled);
   --zaui-light-sheet-container: var(--color-bg-surface);
   --zaui-light-sheet-handler: var(--stone-100);
-  --zaui-mask-overlay-color: #000000b3;
+  --zaui-mask-overlay-color: var(--color-bg-sheet-scrim);
 }
 
 .tubu-press {

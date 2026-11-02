@@ -761,6 +761,61 @@ describe('/gio-hang — gom món của combo dưới đầu nhóm, báo trước
       expect(container.querySelector('[data-testid="cart-combo-hint"]')!.textContent).toBe('Chọn đủ các món để được giảm 15.000đ');
     });
 
+    // Số đầu nhóm là số của cả giỏ; chọn một phần mà máy chủ chưa trả giá phần đó (debounce, đang tải, lỗi) thì không có số nào đúng để ghi (K5 MINOR).
+    describe('chưa có giá phần chọn: đầu nhóm không ghi số của cả giỏ', () => {
+      const savingEl = (container: HTMLElement) => container.querySelector<HTMLElement>('[data-testid="cart-combo-saving"]')!;
+      const expectHidden = (container: HTMLElement) => {
+        expect(savingEl(container).getAttribute('aria-hidden')).toBe('true');
+        expect(savingEl(container).className).toContain('invisible');
+        expect(groupEl(container).getAttribute('aria-label')).toBe('Combo: Bộ giặt sạch');
+      };
+
+      it('vừa bỏ chọn một món không khoá (chờ debounce và đang hỏi máy chủ): chỗ của số giữ nguyên nhưng ẩn, tên khối không có số', async () => {
+        state.cart = comboCart({ comboGroups: [keyed] });
+        state.selection.mockReturnValue(new Promise(() => {}));
+        const { container } = await mount();
+        expect(savingEl(container).getAttribute('aria-hidden')).toBeNull();
+        click(pick(container, 'Dầu gội'));
+        await flush();
+        expectHidden(container);
+        await settle();
+        expect(state.selection).toHaveBeenCalledTimes(1);
+        expectHidden(container);
+        expect(savingEl(container).textContent).toBe(' · Tiết kiệm 15.000đ');
+      });
+
+      it('máy chủ trả lỗi (retry=false): vẫn ẩn số, không quay về số của cả giỏ', async () => {
+        state.cart = comboCart({ comboGroups: [keyed] });
+        state.selection.mockRejectedValue(new Error('chưa có giá phần chọn'));
+        const { container } = await mount();
+        click(pick(container, 'Dầu gội'));
+        await settle();
+        expect(state.selection).toHaveBeenCalledTimes(1);
+        expectHidden(container);
+      });
+
+      it('máy chủ trả giá phần chọn: số của phần chọn hiện lại; chọn lại cả giỏ thì số cả giỏ hiện, không hỏi thêm', async () => {
+        state.cart = comboCart({ comboGroups: [keyed] });
+        state.selection.mockResolvedValue({
+          ...cartOf([soap, softener]),
+          subtotal: 130000,
+          itemCount: 2,
+          comboDiscount: 6000,
+          comboGroups: [{ ...keyed, discount: 6000, lineIds: ['i1'] }],
+        });
+        const { container } = await mount();
+        click(pick(container, 'Dầu gội'));
+        await settle();
+        expect(savingEl(container).getAttribute('aria-hidden')).toBeNull();
+        expect(savingEl(container).textContent).toBe(' · Tiết kiệm 6.000đ');
+        click(pick(container, 'Dầu gội'));
+        await flush();
+        expect(savingEl(container).textContent).toBe(' · Tiết kiệm 15.000đ');
+        expect(savingEl(container).getAttribute('aria-hidden')).toBeNull();
+        expect(state.selection).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('máy chủ còn nhóm nhưng giảm ít hơn: đầu nhóm ghi số của phần chọn, khớp dòng "Giảm giá combo" ở chân', async () => {
       state.cart = comboCart({ comboGroups: [keyed] });
       state.selection.mockResolvedValue({

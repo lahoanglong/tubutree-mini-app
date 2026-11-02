@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CartComboGroup } from '@tubutree/shared-types';
-import { cartComboBlocks, comboHeadingText, comboRemovalNotice } from './cart-combo';
+import { cartComboBlocks, comboHeadingText, comboRemovalNotice, comboSavingPending } from './cart-combo';
 
 const L = (id: string) => ({ id, name: `Dòng ${id}` });
 const fuwa: CartComboGroup = { id: 'bundle:b1', kind: 'BUNDLE_PCT', title: 'Bộ giặt sạch Fuwa3e', discount: 65_250, lineIds: ['i1', 'i2'], keyLineIds: ['i1', 'i2'] };
@@ -176,6 +176,27 @@ describe('cartComboBlocks: chia dòng giỏ thành khối combo + dòng lẻ', (
       const { blocks } = cartComboBlocks(rows, [A], deselected, []);
       expect(blocks.map((b) => [b.group.id, b.lines.map((l) => l.id), b.saving])).toEqual([['collection:a', ['p1', 'p2', 'p3'], null]]);
     });
+  });
+});
+
+describe('comboSavingPending: số đầu nhóm chỉ đúng khi chọn cả giỏ hoặc máy chủ đã trả giá phần chọn', () => {
+  it.each([
+    ['chọn cả giỏ, giỏ không vừa sửa', { partial: false, priced: false }, false],
+    ['chọn cả giỏ, giỏ vừa sửa ở máy khách', { editing: true, partial: false, priced: false }, true],
+    ['chọn một phần, chưa có giá phần chọn (debounce, đang tải, refetch, lỗi)', { partial: true, priced: false }, true],
+    ['chọn một phần, máy chủ đã trả giá đúng phần chọn', { partial: true, priced: true }, false],
+    ['chọn một phần, đã có giá nhưng giỏ vừa sửa ở máy khách', { editing: true, partial: true, priced: true }, true],
+  ] as const)('%s', (_name, input, expected) => {
+    expect(comboSavingPending(input)).toBe(expected);
+  });
+
+  it('nối với cartComboBlocks: chọn một phần chưa có giá thì khối giữ chỗ của số, không đưa số cả giỏ vào chữ đọc', () => {
+    // Bỏ chọn dòng không phải dòng khoá: luật khoá vẫn nói bộ áp, nên số của cả giỏ là thứ duy nhất có thể hiện nhầm.
+    const group: CartComboGroup = { ...fuwa, keyLineIds: ['i1'] };
+    const pending = comboSavingPending({ partial: true, priced: false });
+    const block = cartComboBlocks(lines, [group], new Set(['i2']), null, pending).blocks[0]!;
+    expect(block).toMatchObject({ applied: true, saving: 'Tiết kiệm 65.250đ', savingPending: true });
+    expect(comboHeadingText(block)).toBe('Combo: Bộ giặt sạch Fuwa3e');
   });
 });
 

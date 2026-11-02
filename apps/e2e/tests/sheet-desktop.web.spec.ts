@@ -79,6 +79,52 @@ async function animationNames(dialog: Locator): Promise<{ panel: string; backdro
   }));
 }
 
+/**
+ * Animation CSS thật sự chạy trên hộp và nền ở khoảnh khắc hộp được dựng vào DOM. `animationNames` ở trên chỉ đọc computed style, mà
+ * `getComputedStyle` vẫn trả tên khi `@keyframes` không tồn tại; `getAnimations()` chỉ có phần tử khi hiệu ứng được tạo thật. Đo bằng MutationObserver
+ * (đặt trước khi bấm) vì hiệu ứng chỉ dài 180ms, đọc sau khi Playwright quay lại có thể đã hết.
+ */
+async function watchSheetAnimations(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __sheetAnimations?: { panel: string[]; backdrop: string[] } | null };
+    w.__sheetAnimations = null;
+    const names = (el: Element | null) => (el ? el.getAnimations().map((a) => (a as CSSAnimation).animationName) : []);
+    const observer = new MutationObserver(() => {
+      const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+      if (!dialog) return;
+      w.__sheetAnimations = { panel: names(dialog), backdrop: names(dialog.parentElement!.querySelector('[data-sheet-backdrop]')) };
+      observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function startedAnimations(page: Page): Promise<{ panel: string[]; backdrop: string[] }> {
+  await page.waitForFunction(() => (window as unknown as { __sheetAnimations?: unknown }).__sheetAnimations != null);
+  return page.evaluate(() => (window as unknown as { __sheetAnimations: { panel: string[]; backdrop: string[] } }).__sheetAnimations);
+}
+
+/** Tên `@keyframes` có trong CSSOM (kể cả lồng trong @media/@supports); đọc stylesheet cùng nguồn nên không bị chặn CORS. */
+async function definedKeyframes(page: Page, wanted: string[]): Promise<string[]> {
+  return page.evaluate((names) => {
+    const found = new Set<string>();
+    const scan = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSKeyframesRule && names.includes(rule.name)) found.add(rule.name);
+        else if ('cssRules' in rule) scan((rule as CSSGroupingRule).cssRules);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        scan(sheet.cssRules);
+      } catch {
+        // stylesheet khác nguồn: không đọc được, bỏ qua
+      }
+    }
+    return [...found].sort();
+  }, wanted);
+}
+
 async function expectCenteredDialog(dialog: Locator, viewport: { width: number; height: number }): Promise<void> {
   const box = (await dialog.boundingBox())!;
   expect(box.width).toBeLessThanOrEqual(DIALOG_W);
@@ -195,9 +241,9 @@ test.describe('Web khách: sheet từ md là hộp thoại giữa màn', () => {
     const body = dialog.getByTestId('bottom-sheet-body');
     const m = await body.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
     expect(m.scroll).toBeGreaterThan(m.client + 50);
-    // Thân cuộn chứ hộp không dài ra: cuộn xuống cuối thì mã cuối hiện trong khung hộp, nút Đóng vẫn ở đầu hộp.
+    // Thân cuộn chứ hộp không dài ra: cuộn xuống cuối thì hàng mã cuối (theo thứ tự trên màn, bộ chọn xếp mã lợi nhiều lên trước) hiện trong khung hộp, nút Đóng vẫn ở đầu hộp.
     await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
-    const last = dialog.getByText('DAI15', { exact: true });
+    const last = dialog.getByRole('button', { name: 'Sao chép' }).last();
     await expect(last).toBeVisible();
     const [l, d] = [(await last.boundingBox())!, (await dialog.boundingBox())!];
     expect(l.y + l.height).toBeLessThanOrEqual(d.y + d.height + 1);
@@ -214,10 +260,19 @@ test.describe('Web khách: sheet từ md là hộp thoại giữa màn', () => {
     await page.setViewportSize(DESKTOP);
     await page.goto(`/san-pham/${p!.slug}`);
 
+    // Tên animation trong computed style chưa đủ (vẫn có khi thiếu @keyframes): @keyframes phải tồn tại và hiệu ứng phải được tạo thật khi hộp dựng vào DOM.
+    expect(await definedKeyframes(page, ['tubu-dialog-fade', 'tubu-dialog-pop'])).toEqual(['tubu-dialog-fade', 'tubu-dialog-pop']);
+
+    await watchSheetAnimations(page);
     await openOffers(page).click();
+    expect(await startedAnimations(page)).toEqual({ panel: ['tubu-dialog-pop'], backdrop: ['tubu-dialog-fade'] });
     expect(await animationNames(dialogOf(page))).toEqual({ panel: 'tubu-dialog-pop', backdrop: 'tubu-dialog-fade' });
     await page.keyboard.press('Escape');
+    await expect(dialogOf(page)).toBeHidden();
+
+    await watchSheetAnimations(page);
     await openPoints(page).click();
+    expect(await startedAnimations(page)).toEqual({ panel: ['tubu-dialog-pop'], backdrop: ['tubu-dialog-fade'] });
     expect(await animationNames(dialogOf(page))).toEqual({ panel: 'tubu-dialog-pop', backdrop: 'tubu-dialog-fade' });
   });
 

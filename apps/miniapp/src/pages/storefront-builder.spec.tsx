@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /** Lịch sử giả đủ dùng cho trang: đẩy/thay mục, lùi bằng số âm, báo cho `useLocation` vẽ lại; `window.history.state.idx` bắt chước react-router để nút lùi nổi đọc được. */
 const router = vi.hoisted(() => {
@@ -137,8 +137,7 @@ const stats = {
   byProduct: [{ productSlug: 'tra-xanh', productName: 'Trà xanh', qty: 4, revenue: 320_000 }],
 };
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function renderPage(qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   // Nút lùi nổi của app là lối lùi duy nhất của trang chi tiết khối (trang không vẽ thêm nút lùi riêng).
   return render(<QueryClientProvider client={qc}><BackButton /><StorefrontBuilderPage /></QueryClientProvider>);
 }
@@ -740,6 +739,57 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
+  // Đầu xem trước phải là đúng cái khách thấy (storefront-view.tsx): dấu tích ở avatar và huy hiệu "CTV tuyển chọn" chỉ khi admin đã duyệt, đứng trước huy hiệu bậc.
+  it('gian hàng đã duyệt: dấu tích ở avatar và huy hiệu "CTV tuyển chọn" như trang khách; chưa duyệt thì không có cả hai', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ approved: true }));
+    const view = renderPage();
+    expect(await screen.findByText('CTV tuyển chọn')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Đã được Tubu Tree duyệt' })).toBeInTheDocument();
+    view.unmount();
+    mocks.getMyStorefront.mockResolvedValue(storefront({ approved: false }));
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    expect(screen.queryByText('CTV tuyển chọn')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Đã được Tubu Tree duyệt' })).not.toBeInTheDocument();
+  });
+
+  it('đã duyệt và bậc 2: "CTV tuyển chọn" đứng trước "CTV Đồng", cùng một hàng huy hiệu', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ approved: true }));
+    mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+    renderPage();
+    const selected = await screen.findByText('CTV tuyển chọn');
+    const tier = await screen.findByText('CTV Đồng');
+    expect(selected.compareDocumentPosition(tier) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // TanStack v5: mất mạng thì truy vấn bậc đứng ở `fetchStatus: 'paused'` nhưng `status` vẫn 'pending', nên chờ theo `isPending` treo khung chờ mãi dù gian hàng đã có trong cache.
+  describe('mất mạng khi gian hàng đã có trong cache', () => {
+    afterEach(() => onlineManager.setOnline(true));
+
+    it('bậc đang paused: dựng đủ đầu xem trước và "Sửa hồ sơ", không huy hiệu bậc, không treo khung chờ', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      qc.setQueryData(['my-storefront'], storefront());
+      onlineManager.setOnline(false);
+      renderPage(qc);
+      expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+      expect(screen.getByTestId('shop-cover')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
+      expect(mocks.getCtvTiers).not.toHaveBeenCalled();
+      expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+    });
+
+    it('có mạng lại: bậc về thì huy hiệu hiện, không cần tải lại trang', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      qc.setQueryData(['my-storefront'], storefront());
+      mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+      onlineManager.setOnline(false);
+      renderPage(qc);
+      await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+      await act(async () => { onlineManager.setOnline(true); });
+      expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
+    });
+  });
+
   it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
     mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
@@ -772,6 +822,16 @@ describe('Ảnh bìa trống (D7)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm ảnh bìa' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Hồ sơ gian hàng')).toBeInTheDocument();
+  });
+
+  // div trong button là HTML sai (nội dung của button chỉ được là phrasing): chữ nằm trong span nhưng vẫn chiếm cả hàng như trước.
+  it('nút "Thêm ảnh bìa" không chứa phần tử khối: chữ là span, vẫn display:block để hình không đổi', async () => {
+    renderPage();
+    const button = await screen.findByRole('button', { name: 'Thêm ảnh bìa' });
+    expect(button.querySelector('div, p, h1, h2, h3')).toBeNull();
+    const label = within(button).getByText('Thêm ảnh bìa');
+    expect(label.tagName).toBe('SPAN');
+    expect(label.style.display).toBe('block');
   });
 });
 

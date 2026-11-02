@@ -89,11 +89,12 @@ test.describe('Mini App: đầu xem trước của màn dựng (K6)', () => {
     for (const x of w) expect(x).toBeLessThanOrEqual(375);
   });
 
-  test('bậc 1 (Tân binh): đầu xem trước không có huy hiệu bậc', async ({ page, api }) => {
+  test('bậc 1 (Tân binh): đầu xem trước không có huy hiệu bậc, chỉ có "CTV tuyển chọn" của gian hàng đã duyệt', async ({ page, api }) => {
     mockBuilder(api);
     await page.goto('/storefront');
     await expect(page.getByRole('heading', { level: 2, name: BUILDER_TITLE })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/^CTV /)).toHaveCount(0);
+    await expect(page.getByText(/^CTV (?!tuyển chọn)/)).toHaveCount(0);
+    await expect(page.getByText('CTV tuyển chọn')).toHaveCount(1);
   });
 
   test('tên shop 80 ký tự + bậc "Kim Cương": huy hiệu một dòng, không tràn ngang', async ({ page, api }) => {

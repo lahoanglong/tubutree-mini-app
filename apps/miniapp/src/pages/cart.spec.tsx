@@ -1060,6 +1060,58 @@ describe('CartPage: gom món của combo dưới đầu nhóm (K5)', () => {
       expect(within(block).getByTestId('cart-combo-hint')).toHaveTextContent('Chọn đủ các món để được giảm 15.000đ');
     });
 
+    // Số đầu nhóm là số của cả giỏ; chọn một phần mà máy chủ chưa trả giá phần đó (debounce, đang tải, lỗi) thì không có số nào đúng để ghi (K5 MINOR).
+    describe('chưa có giá phần chọn: đầu nhóm không ghi số của cả giỏ', () => {
+      const keyOnlyOk = () => comboCart({ comboGroups: [{ ...GROUP, keyLineIds: ['ci-ok'] }] });
+      const savingOf = (block: HTMLElement) => within(block).getByTestId('cart-combo-heading').querySelector<HTMLElement>('[data-testid="cart-combo-saving"]')!;
+      const expectHidden = (block: HTMLElement) => {
+        expect(savingOf(block)).toHaveAttribute('aria-hidden', 'true');
+        expect(savingOf(block).style.visibility).toBe('hidden');
+        expect(block).toHaveAccessibleName('Combo: Bộ giặt sạch');
+      };
+
+      it('vừa bỏ chọn một món không khoá (chờ debounce và đang hỏi máy chủ): chỗ của số giữ nguyên nhưng ẩn, tên khối không có số', async () => {
+        mocks.getCart.mockResolvedValue(keyOnlyOk());
+        mocks.getCartSelection.mockReturnValue(new Promise(() => {}));
+        renderPage();
+        const block = await screen.findByTestId('cart-combo-group');
+        expect(savingOf(block)).not.toHaveAttribute('aria-hidden');
+        fireEvent.click(within(block).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+        expectHidden(block);
+        await waitFor(() => expect(mocks.getCartSelection).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+        expectHidden(block);
+        expect(savingOf(block).textContent).toBe(' · Tiết kiệm 15.000đ');
+      });
+
+      it('máy chủ trả lỗi (retry=false): vẫn ẩn số, không quay về số của cả giỏ', async () => {
+        mocks.getCart.mockResolvedValue(keyOnlyOk());
+        mocks.getCartSelection.mockRejectedValue(new Error('chưa có giá phần chọn'));
+        renderPage();
+        const block = await screen.findByTestId('cart-combo-group');
+        fireEvent.click(within(block).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+        await waitFor(() => expect(mocks.getCartSelection).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+        await wait(50);
+        expectHidden(block);
+      });
+
+      it('máy chủ trả giá phần chọn: số của phần chọn hiện lại; chọn lại cả giỏ thì số cả giỏ hiện, không hỏi thêm', async () => {
+        const group = { ...GROUP, keyLineIds: ['ci-ok'] };
+        mocks.getCart.mockResolvedValue(comboCart({ comboGroups: [group] }));
+        mocks.getCartSelection.mockResolvedValue(
+          summary({ items: [OK_LINE, LINE_C], subtotal: 130_000, itemCount: 2, comboDiscount: 6_000, comboGroups: [{ ...group, discount: 6_000, lineIds: ['ci-ok'] }] }),
+        );
+        renderPage();
+        const block = await screen.findByTestId('cart-combo-group');
+        fireEvent.click(within(block).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+        await waitFor(() => expect(savingOf(block)).not.toHaveAttribute('aria-hidden'), { timeout: 2_000 });
+        expect(savingOf(block).textContent).toBe(' · Tiết kiệm 6.000đ');
+        fireEvent.click(within(block).getByRole('checkbox', { name: 'Chọn Dầu gội' }));
+        expect(savingOf(block).textContent).toBe(' · Tiết kiệm 15.000đ');
+        expect(savingOf(block)).not.toHaveAttribute('aria-hidden');
+        expect(mocks.getCartSelection).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('máy chủ còn nhóm nhưng giảm ít hơn: đầu nhóm ghi số của phần chọn, khớp dòng "Giảm giá combo" ở chân', async () => {
       const group = { ...GROUP, keyLineIds: ['ci-ok'] };
       mocks.getCart.mockResolvedValue(comboCart({ comboGroups: [group] }));
