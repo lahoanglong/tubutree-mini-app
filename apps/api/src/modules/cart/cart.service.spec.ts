@@ -618,7 +618,7 @@ describe('CartService guard tồn kho', () => {
         total: 260000,
         isFlash: false,
         flashSaleItemId: null,
-        flashLimitNotice: 'Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.',
+        flashLimitNotice: 'Bạn đã dùng hết suất Giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.',
       });
       expect(c.subtotal).toBe(260000);
     });
@@ -626,13 +626,13 @@ describe('CartService guard tồn kho', () => {
     it('qty 3 > suất còn 1 (hết suất chung) → giá thường, báo còn bao nhiêu suất', async () => {
       const l = (await cartWith(3, { allowance: 1, perUserLeft: 5, quotaLeft: 1 })).items[0]!;
       expect(l).toMatchObject({ unitPrice: 260000, isFlash: false, flashSaleItemId: null });
-      expect(l.flashLimitNotice).toBe('Chỉ còn 1 suất giờ vàng. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.');
+      expect(l.flashLimitNotice).toBe('Còn 1 suất Giờ vàng. Giảm số lượng còn 1 để được giá Giờ vàng, hoặc mua 3 sản phẩm với giá thường.');
     });
 
     it('qty 2 > giới hạn/khách còn 1 → giá thường, báo giới hạn mỗi khách', async () => {
       const l = (await cartWith(2, { allowance: 1, perUserLeft: 1, quotaLeft: 5 })).items[0]!;
       expect(l.isFlash).toBe(false);
-      expect(l.flashLimitNotice).toBe('Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 2 sản phẩm với giá thường.');
+      expect(l.flashLimitNotice).toBe('Giá Giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá Giờ vàng, hoặc mua 2 sản phẩm với giá thường.');
     });
   });
 
@@ -802,7 +802,7 @@ describe('CartService guard tồn kho', () => {
         .mockResolvedValueOnce({ discount: 25000, freeship: false });
       const prisma = flashCart(null);
       await expect(new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics, combo).applyCoupon('u1', 'XANH10')).rejects.toThrow(
-        'Đơn tối thiểu 250.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 165.000đ.',
+        'Đơn tối thiểu 250.000đ để dùng mã này. Hàng Giờ vàng không được tính vào điều kiện của mã, phần được tính là 165.000đ.',
       );
       expect(validateAndCompute).toHaveBeenLastCalledWith('XANH10', 'u1', 303000, [
         { productId: 'p1', total: 138000 },
@@ -886,7 +886,7 @@ describe('CartService guard tồn kho', () => {
         const fs = { resolveEffective: jest.fn().mockResolvedValue(new Map([['vG1', { flashPrice: 69000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10 }]])) } as any;
         const err = await new CartService(prisma, realCoupons(), config, fs, analytics, combo).applyCoupon('u1', 'GBUY1').catch((e: Error) => e);
         expect((err as Error).message).toBe(
-          'Đơn tối thiểu 200.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 100.000đ.',
+          'Đơn tối thiểu 200.000đ để dùng mã này. Hàng Giờ vàng không được tính vào điều kiện của mã, phần được tính là 100.000đ.',
         );
       });
     });
@@ -903,7 +903,7 @@ describe('CartService guard tồn kho', () => {
       const couponsSvc = { validateAndCompute: jest.fn().mockResolvedValue({ discount: 16500, freeship: false }) } as any;
       const c = await new CartService(flashCart('XANH10'), couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
       expect(c.discount).toBe(16500);
-      expect(c.couponNotice).toBe('Hàng giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 165.000đ hàng còn lại.');
+      expect(c.couponNotice).toBe('Hàng Giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 165.000đ hàng còn lại.');
     });
   });
 
@@ -952,7 +952,7 @@ describe('CartService guard tồn kho', () => {
     expect(update).not.toHaveBeenCalled(); // KHÔNG null hoá coupon
     // MONEY-3: giỏ nói rõ mã đang giữ nhưng CHƯA áp (vì hàng giờ vàng không được tính).
     expect(cart.couponNotice).toContain('Mã chưa được áp dụng');
-    expect(cart.couponNotice).toContain('giờ vàng');
+    expect(cart.couponNotice).toContain('Giờ vàng');
     expect(cart.couponNotice).toContain('minOrder');
     expect(cart.couponRemoved).toBeNull();
   });
@@ -1039,7 +1039,7 @@ describe('CartService guard tồn kho', () => {
       expect(cart.couponCode).toBe('BDAY50K');
       expect(cart.discount).toBe(0);
       expect(cart.couponNotice).toMatch(/^Mã chưa được áp dụng cho đơn này/);
-      expect(cart.couponNotice).toContain('giờ vàng');
+      expect(cart.couponNotice).toContain('Giờ vàng');
     });
 
     it('mã miễn phí vận chuyển → không có couponNotice', async () => {

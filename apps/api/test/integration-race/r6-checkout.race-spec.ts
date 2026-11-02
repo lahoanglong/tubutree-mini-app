@@ -248,7 +248,7 @@ describe('r6-checkout (UAT vòng 4) — real Postgres', () => {
     await cart.addItem(u.userId, { variationId: other.id, quantity: 1 });
     expect((await cart.getCart(u.userId)).items.find((l) => l.variationId === granola.id)).toMatchObject({ isFlash: true, unitPrice: 120_000 });
     await expect(cart.applyCoupon(u.userId, code)).rejects.toThrow(
-      'Sản phẩm áp dụng mã đang có giá giờ vàng. Giá giờ vàng là giá ưu đãi cuối nên không giảm thêm theo mã, bạn dùng được mã này khi giờ vàng kết thúc.',
+      'Sản phẩm áp dụng mã đang có giá Giờ vàng. Giá Giờ vàng là giá ưu đãi cuối nên không giảm thêm theo mã, bạn dùng được mã này khi Giờ vàng kết thúc.',
     );
     expect((await prisma.cart.findUniqueOrThrow({ where: { userId: u.userId } })).couponCode).toBeNull();
   });
@@ -328,7 +328,7 @@ describe('r6-checkout (UAT vòng 4) — real Postgres', () => {
         } as never);
       await order(2);
       const quote = await affiliate.quoteOrderForCustomer(ctv.id, { items: [{ variationId: granola.id, quantity: 1 }] });
-      expect(quote.items[0]).toMatchObject({ unitPrice: 140_000, isFlash: false, flashLimitNotice: expect.stringContaining('hết suất giờ vàng') });
+      expect(quote.items[0]).toMatchObject({ unitPrice: 140_000, isFlash: false, flashLimitNotice: expect.stringContaining('hết suất Giờ vàng') });
       const second = await order(1);
       const items = await prisma.orderItem.findMany({ where: { orderId: second.id } });
       expect(items.map((i) => [i.unitPrice, i.flashSaleItemId])).toEqual([[140_000, null]]);

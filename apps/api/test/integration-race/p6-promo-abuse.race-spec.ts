@@ -199,7 +199,7 @@ describe('p6-promo-abuse: mã giảm giá, giờ vàng, nhiệm vụ (real Postg
 
     const c = await cart.getCart(u.id);
     expect(c.items[0]).toMatchObject({ unitPrice: 260_000, isFlash: false, flashSaleItemId: null });
-    expect(c.items[0]!.flashLimitNotice).toBe('Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.');
+    expect(c.items[0]!.flashLimitNotice).toBe('Bạn đã dùng hết suất Giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.');
 
     const order = (await checkout.placeOrder(u.id, { addressId: addr.id, paymentMethod: 'COD' } as never)) as { id: string };
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).subtotal).toBe(260_000);
