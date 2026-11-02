@@ -43,7 +43,7 @@ export function StickyActionBar({ children, label, hideFrom = 'md' }: { children
       aria-label={label}
       data-testid="sticky-bar"
       data-sticky-bar
-      className={`fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-0 pt-3 shadow-raised ${hideFrom === 'lg' ? 'lg:hidden' : 'md:hidden'}`}
+      className={`fixed inset-x-0 bottom-0 z-30 bg-[var(--color-bg-surface)] pt-3 [box-shadow:var(--elevation-3)] ${hideFrom === 'lg' ? 'lg:hidden' : 'md:hidden'}`}
       style={{ ...safeAreaPadX('1rem'), paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
     >
       {children}
