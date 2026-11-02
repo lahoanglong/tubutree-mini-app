@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
+import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
 // Chép ý nghĩa flash-sale.spec của Mini App: giờ vàng đang chạy, sắp diễn ra + nhắc, tải lại sau lỗi, giá khớp giá thật.
@@ -22,7 +23,7 @@ import { resetFlashSales } from '@/lib/use-flash-sales';
 /** Khối thật được nối như Trang chủ: dữ liệu và chống trùng đến từ `useHomeShelves`, không tự tải. */
 function FlashSale({ initial }: { initial?: unknown[] }) {
   const s = useHomeShelves('new', { flash: initial as never });
-  return <FlashSaleBlock items={s.flash} loading={s.flashQuery.isLoading} error={s.flashQuery.error} onRetry={s.flashQuery.refetch} retrying={s.flashQuery.isFetching} onExpire={s.onFlashEnd} />;
+  return <FlashSaleBlock items={s.flash} loading={s.flashQuery.isLoading} error={s.flashQuery.error} onRetry={s.flashQuery.refetch} retrying={s.flashQuery.isFetching} onExpire={s.onFlashEnd} guardEndAts={s.flashQuery.data?.map((it) => it.endAt)} />;
 }
 
 const HOUR = 3_600_000;
@@ -80,7 +81,8 @@ describe('FlashSale hydrate', () => {
     const html = renderToString(ui());
     expect(html).toContain('role="timer"');
     expect(html).toContain('Nước rửa chén');
-    expect(html).not.toMatch(/\d{2}:\d{2}:\d{2}/);
+    // Đoạn script chống ISR cũ mang mốc endAt ISO, không phải chữ số đồng hồ.
+    expect(html.replace(/<script>[\s\S]*?<\/script>/g, '')).not.toMatch(/\d{2}:\d{2}:\d{2}/);
     vi.setSystemTime(new Date('2026-10-28T10:02:05Z'));
     const container = document.createElement('div');
     container.innerHTML = html;
@@ -125,6 +127,136 @@ describe('FlashSale hydrate', () => {
     expect(container.querySelector('[role="timer"]')).toBeNull();
     act(() => root.unmount());
     container.remove();
+  });
+
+  it('HTML ISR cũ quá giờ: đoạn script ngay sau kệ ẩn kệ TRƯỚC lần vẽ đầu (không vẽ rồi biến mất); hydrate không lỗi và gỡ kệ, script', async () => {
+    activeResult = () => new Promise(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T11:55:00Z'));
+    const items = three({ endAt: '2026-10-28T12:00:00Z' });
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items} />
+      </QueryClientProvider>
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(ui());
+    document.body.appendChild(container);
+    const run = () => {
+      const script = container.querySelector('script')!;
+      new Function('document', script.textContent!.replace('document.currentScript', 'document.__s'))({ __s: script });
+    };
+    // Còn giờ khi trình duyệt đọc script: kệ giữ nguyên.
+    vi.setSystemTime(new Date('2026-10-28T11:59:00Z'));
+    run();
+    expect((container.querySelector('section') as HTMLElement).style.display).toBe('');
+    // Quá giờ: ẩn ngay, trước khi React chạy.
+    vi.setSystemTime(new Date('2026-10-28T12:30:00Z'));
+    run();
+    expect((container.querySelector('section') as HTMLElement).style.display).toBe('none');
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    expect(container.querySelector('section')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('quá 8 suất: 8 suất đầu kệ đã hết giờ nhưng còn 3 suất sau còn giờ: script đếm trên danh sách gốc nên KHÔNG ẩn kệ mà hydrate vẫn hiện', async () => {
+    activeResult = () => new Promise(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T11:55:00Z'));
+    const ended = Array.from({ length: 8 }, (_, i) => active({ itemId: `e${i}`, variationId: `ve${i}`, productSlug: `sp-e${i}`, productName: `Hết ${i}`, endAt: '2026-10-28T12:00:00Z' }));
+    const later = Array.from({ length: 3 }, (_, i) => active({ itemId: `l${i}`, variationId: `vl${i}`, productSlug: `sp-l${i}`, productName: `Còn ${i}`, endAt: '2026-10-28T14:00:00Z' }));
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={[...ended, ...later]} />
+      </QueryClientProvider>
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(ui());
+    document.body.appendChild(container);
+    vi.setSystemTime(new Date('2026-10-28T12:30:00Z'));
+    const script = container.querySelector('script')!;
+    new Function('document', script.textContent!.replace('document.currentScript', 'document.__s'))({ __s: script });
+    expect((container.querySelector('section') as HTMLElement).style.display).toBe('');
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui());
+    });
+    const section = container.querySelector('section') as HTMLElement;
+    expect(section).not.toBeNull();
+    expect(section.style.display).toBe('');
+    expect(section.textContent).toContain('Còn 0');
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('HTML ISR còn giờ: hydrate gỡ script nhưng KHÔNG remount kệ (thẻ và đồng hồ giữ nguyên nút DOM)', async () => {
+    activeResult = () => new Promise(() => undefined);
+    const items = three();
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items} />
+      </QueryClientProvider>
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(ui());
+    document.body.appendChild(container);
+    const before = container.querySelector('section');
+    expect(container.querySelector('script')).not.toBeNull();
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui());
+    });
+    expect(container.querySelector('section')).toBe(before);
+    expect(container.querySelector('script')).toBeNull();
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('script đã ẩn kệ theo đồng hồ máy, nhưng hydrate thấy máy chủ còn giờ (máy nhanh hơn máy chủ): kệ hiện lại, không mất suất', async () => {
+    activeResult = () => new Promise(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // Máy nhanh 10 phút so với máy chủ; suất còn 5 phút theo máy chủ nhưng đã quá giờ theo đồng hồ máy.
+    vi.setSystemTime(new Date('2026-10-28T12:10:00Z'));
+    const items = three({ endAt: '2026-10-28T12:05:00Z' });
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items} />
+      </QueryClientProvider>
+    );
+    vi.setSystemTime(new Date('2026-10-28T11:55:00Z'));
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(ui());
+    document.body.appendChild(container);
+    vi.setSystemTime(new Date('2026-10-28T12:10:00Z'));
+    const script = container.querySelector('script')!;
+    new Function('document', script.textContent!.replace('document.currentScript', 'document.__s'))({ __s: script });
+    const section = container.querySelector('section') as HTMLElement;
+    expect(section.style.display).toBe('none');
+    syncServerClock('2026-10-28T12:00:00Z');
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    expect(container.querySelector('section')).toBe(section);
+    expect(section.style.display).toBe('');
+    act(() => root.unmount());
+    container.remove();
+    // Độ lệch giờ máy chủ là biến toàn cục: trả về 0 để test sau không bị lệch.
+    vi.useRealTimers();
+    syncServerClock(new Date().toISOString());
   });
 });
 

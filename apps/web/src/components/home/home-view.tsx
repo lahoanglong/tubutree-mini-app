@@ -165,6 +165,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         onRetry={shelves.flashQuery.refetch}
         retrying={shelves.flashQuery.isFetching}
         onExpire={shelves.onFlashEnd}
+        guardEndAts={shelves.flashQuery.data?.map((it) => it.endAt)}
       />
     ),
     categories: (
