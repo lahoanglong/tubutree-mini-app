@@ -33,7 +33,7 @@
 
 ## File Structure
 
-- `packages/app-core/src/home-layout.ts`: thêm hằng `CATEGORY_LABEL_BLEED` cạnh `CATEGORY_LABEL_HEIGHT` (Task 1).
+- `packages/app-core/src/home-layout.ts`: thêm hằng `CATEGORY_LABEL_GUTTER` và `CATEGORY_LABEL_TRACKING` cạnh `CATEGORY_LABEL_HEIGHT` (Task 1; bản đầu dùng `CATEGORY_LABEL_BLEED` lấn 2px sang ô kề, reviewer bắt chữ hai nhãn kề chạm nhau nên bỏ).
 - `apps/miniapp/src/components/home/category-row.tsx` + `.spec.tsx`, `apps/web/src/components/home/category-row.tsx` + `.spec.tsx` (Task 1).
 - `apps/miniapp/src/components/ui/voucher-ticket.tsx` + `.spec.tsx`, `apps/web/src/components/mini/voucher-ticket.tsx` + `.spec.tsx` (Task 2).
 - `apps/web/src/components/sticky-action-bar.tsx` + `.spec.tsx`, `scripts/uiux/ds-shop-rules.mjs` (Task 3).
@@ -53,15 +53,15 @@ Số đo đã đo (Mac, Inter 600, độ rộng chữ px): `thiên nhiên` 69,9 
 - Test: `apps/miniapp/src/components/home/category-row.spec.tsx`, `apps/web/src/components/home/category-row.spec.tsx`
 
 **Interfaces:**
-- Produces: `export const CATEGORY_LABEL_BLEED = 2;` (px mỗi bên mà vùng nhãn được lấn sang ô kề, chỉ ở chế độ cuộn 5,5 cột). `CATEGORY_LABEL_HEIGHT` (32) và `CATEGORY_CELL_HEIGHT` không đổi, nên `HOME_SETTLING_HEIGHTS.categories` và khung chờ không đổi.
+- Produces: `export const CATEGORY_LABEL_GUTTER = 1;` (px mỗi bên nhãn chừa trong ô, chỉ ở chế độ cuộn 5,5 cột; hai nhãn kề cách nhau ≥ 2px) và `CATEGORY_LABEL_TRACKING = '-0.04em'`. `CATEGORY_LABEL_HEIGHT` (32) và `CATEGORY_CELL_HEIGHT` không đổi, nên `HOME_SETTLING_HEIGHTS.categories` và khung chờ không đổi.
 
 - [ ] **Step 1: Test đỏ** (cả hai app). Thêm `describe('nhãn hai dòng (M3)')` với tên thật `LONG = ['Chăm sóc nhà cửa thiên nhiên', 'Nông sản & đặc sản', 'Thực phẩm hữu cơ']`:
   - mỗi nhãn: `style.getPropertyValue('-webkit-line-clamp') === '2'`, `style.whiteSpace` không là `nowrap`, không có `textOverflow: ellipsis` một dòng, `textAlign: center`, `height` đúng `${CATEGORY_LABEL_HEIGHT}px`; văn bản đầy đủ có trong DOM (`getByRole('button', { name: LONG[0] })`).
   - nhãn dùng token nhãn nhỏ: `style.fontSize === 'var(--type-label-size)'` và `style.lineHeight === 'var(--type-label-lh)'` (không còn `--type-caption-*` và không còn `16px` viết tay).
-  - lưới tới 10 ô (6 danh mục): nhãn `width: 100%`, không `marginLeft/marginRight`; lưới quá 10 ô (12 danh mục): `style.width === 'calc(100% + 4px)'` và `marginLeft`/`marginRight` `-2px`, `letterSpacing: -0.01em` (đọc `CATEGORY_LABEL_BLEED`, không gõ số 2).
+  - lưới tới 10 ô (6 danh mục): nhãn `width: 100%`, không `marginLeft/marginRight`; lưới quá 10 ô (12 danh mục): `width: 100%`, `boxSizing: border-box`, `paddingLeft`/`paddingRight` bằng `CATEGORY_LABEL_GUTTER`, `letterSpacing` bằng `CATEGORY_LABEL_TRACKING` (đọc hằng, không gõ số), không lấn lề âm.
   - tên một từ 10 ký tự ("Probiotics") và tên một từ ngắn ("Thú cưng"): cùng `height` `32px`, `overflowWrap: anywhere` (từ dài hơn cột thì mới ngắt giữa từ, vì cắt bằng overflow sẽ mất chữ cuối không có "…").
 - [ ] **Step 2:** chạy `cd apps/miniapp && npx vitest run src/components/home/category-row.spec.tsx` và `cd apps/web && npx vitest run src/components/home/category-row.spec.tsx`; kỳ vọng FAIL (nhãn còn `caption`, chưa có bleed).
-- [ ] **Step 3: Implement** `Label({ children, scrolls })` ở hai app: `Text variant="label"` (12px/600 từ token, bỏ `fontWeight` và `lineHeight` viết tay); khi `scrolls`: `letterSpacing: '-0.01em'`, `width: calc(100% + ${2 * CATEGORY_LABEL_BLEED}px)`, `marginInline: -CATEGORY_LABEL_BLEED` (mép ngoài của hộp lề vẫn đúng bằng ô nên ô không đổi cỡ). Giữ `display: -webkit-box`, clamp 2, `height: CATEGORY_LABEL_HEIGHT`, `overflow: hidden`. Cập nhật câu chú thích của `Label` (vì sao 12px và vì sao lấn 2px: 5,5 cột chỉ rộng 62,4px, "Nông sản &" ở 12px là 64,9px). Cập nhật hai test cũ nói "cột 5,5 hẹp" và "siết chữ" cho khớp (nhãn nay dùng `label`).
+- [ ] **Step 3: Implement** `Label({ children, scrolls })` ở hai app: `Text variant="label"` (12px/600 từ token, bỏ `fontWeight` và `lineHeight` viết tay); khi `scrolls`: `letterSpacing: CATEGORY_LABEL_TRACKING`, `boxSizing: border-box`, `padding: 0 CATEGORY_LABEL_GUTTER`. Giữ `display: -webkit-box`, clamp 2, `height: CATEGORY_LABEL_HEIGHT`, `overflow: hidden`. Cập nhật câu chú thích của `Label` (vì sao 12px, vì sao siết chữ và chừa 1px mỗi bên: 5,5 cột chỉ rộng 62,4px). Cập nhật hai test cũ nói "cột 5,5 hẹp" và "siết chữ" cho khớp (nhãn nay dùng `label`).
 - [ ] **Step 4:** chạy lại hai lệnh Step 2; kỳ vọng PASS toàn file (cả các ca cũ).
 - [ ] **Step 5: Commit** `fix(home): nhãn danh mục 12px tối đa hai dòng, lấn 2px ở cột 5,5 để tên dài không bị "…" oan`.
 
@@ -136,7 +136,7 @@ Số đo đã đo (Mac, Inter 600, độ rộng chữ px): `thiên nhiên` 69,9 
 - Modify: `scripts/uiux/ds-baseline.json` (chỉ hạ), `docs/2026-10-31-shop-redesign/PROGRESS.md`
 
 - [ ] **Step 1:** `node scripts/uiux/ds-ratchet.mjs --write` nếu số px/màu thô hạ (xem `git diff scripts/uiux/ds-baseline.json`: chỉ được giảm); `pnpm lint:parity`, `pnpm lint:vars`.
-- [ ] **Step 2:** thêm mục M3 vào PROGRESS (đã sửa gì, quyết định thay chủ: 12px + lấn 2px ở cột 5,5, tên mã tối đa 2 dòng cao thêm tối đa 20px, huy hiệu bậc là khung chờ).
+- [ ] **Step 2:** thêm mục M3 vào PROGRESS (đã sửa gì, quyết định thay chủ: 12px + chừa 1px mỗi bên và siết chữ ở cột 5,5, tên mã tối đa 2 dòng cao thêm tối đa 20px, huy hiệu bậc là khung chờ).
 - [ ] **Step 3:** gate đầy đủ một lần: `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 173de56b3 --out <gate-M3.txt>`; sau đó e2e Mini đầy đủ `cd apps/e2e && E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3601 npx playwright test --workers=2 --reporter=line` và `E2E_API_PORT=3602 E2E_WEB_PORT=3603 E2E_MINIAPP_PORT=3604 bash apps/e2e/scripts/web-gate.sh tests/ds-parity.shop.spec.ts tests/a11y-shop.web.spec.ts`. Bước FAIL phải so với base (worktree tạm) rồi ghi "có sẵn" hoặc sửa tới PASS.
 - [ ] **Step 4: Commit** `docs(shop): PROGRESS đợt 8 M3 ui-minors` (kèm baseline nếu đổi).
 
@@ -145,5 +145,5 @@ Số đo đã đo (Mac, Inter 600, độ rộng chữ px): `thiên nhiên` 69,9 
 ## Self-Review
 
 - Spec coverage: (1) Task 1 + Task 5 Step 1; (2) Task 2 + Task 5 Step 2; (3) Task 3; (4) Task 4 + Task 5 Step 3; chụp 375px Task 5 Step 4; gate Task 6.
-- Tên nhất quán: `CATEGORY_LABEL_BLEED` (Task 1), `TierBadgeSkeleton` / `tier-badge-skeleton` / `tierPending` (Task 4, Task 5), `ownerTierPending` giữ chữ ký.
+- Tên nhất quán: `CATEGORY_LABEL_GUTTER` / `CATEGORY_LABEL_TRACKING` (Task 1), `TierBadgeSkeleton` / `tier-badge-skeleton` / `tierPending` (Task 4, Task 5), `ownerTierPending` giữ chữ ký.
 - Không đụng file gói khác: `home-layout.ts` chỉ thêm một hằng (M1 không sửa số đo, M4 không đụng).

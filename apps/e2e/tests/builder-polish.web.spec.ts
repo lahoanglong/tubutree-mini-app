@@ -1,4 +1,5 @@
 import { expect, reply, test } from './support/mock-api';
+import { CTV_TIERS } from './support/affiliate-mocks';
 import { mockBuilder, setBuilderSession } from './support/builder-web-mocks';
 import { mockDiscovery } from './support/discovery-mocks';
 import { assertSeededOnCi } from './support/a11y-db';
@@ -106,6 +107,51 @@ test.describe('Trình dựng gian hàng web 375px: bậc dài và tên dài (K6)
     await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText('CTV tuyển chọn')).toHaveCount(1);
     await expect(page.getByText(/^CTV (?!tuyển chọn)/)).toHaveCount(0);
+  });
+});
+
+test.describe('Bậc CTV chậm web 375px (M3)', () => {
+  const dong = CTV_TIERS.allTiers.find((t) => t.name === 'Đồng')!;
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'chỉ chạy ở project Web Customer (đặt khổ 375px trong test)');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await setBuilderSession(page);
+  });
+
+  test('/affiliate/tiers chưa về: trình dựng vẽ ngay, huy hiệu là khung chờ cao bằng huy hiệu thật; bậc về thì khối bên dưới không nhích', async ({ page, api }) => {
+    let release!: () => void;
+    const hold = new Promise<void>((r) => { release = r; });
+    mockBuilder(api, { approved: true });
+    api.get('/affiliate/tiers', async () => {
+      await hold;
+      return { ...CTV_TIERS, tier: { name: dong.name, emoji: dong.emoji } };
+    });
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Sửa hồ sơ', exact: true })).toBeVisible();
+    const skeleton = page.getByTestId('tier-badge-skeleton');
+    await expect(skeleton).toBeVisible();
+    const head = page.getByTestId('builder-sections-head');
+    const before = { head: (await head.boundingBox())!.y, skeleton: (await skeleton.boundingBox())! };
+    release();
+    const badge = page.getByText('CTV Đồng');
+    await expect(badge).toBeVisible();
+    await expect(skeleton).toHaveCount(0);
+    const after = { head: (await head.boundingBox())!.y, badge: (await badge.boundingBox())! };
+    expect(Math.abs(after.head - before.head), `khối bên dưới nhích ${after.head - before.head}px`).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.badge.height - before.skeleton.height), `khung chờ cao ${before.skeleton.height}px, huy hiệu ${after.badge.height}px`).toBeLessThanOrEqual(1);
+  });
+
+  test('/affiliate/tiers lỗi 500: không màn lỗi, không huy hiệu bậc, trình dựng đủ', async ({ page, api }) => {
+    mockBuilder(api, { approved: true });
+    api.get('/affiliate/tiers', reply(500, { statusCode: 500, message: 'Máy chủ lỗi' }));
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('tier-badge-skeleton')).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText(/^CTV (Tân binh|Đồng)/)).toHaveCount(0);
+    await expect(page.getByText('CTV tuyển chọn')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /Thử lại/ })).toHaveCount(0);
   });
 });
 

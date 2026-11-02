@@ -2,7 +2,7 @@
 
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_BLEED, CATEGORY_LABEL_HEIGHT, CATEGORY_SCROLL_COLUMNS, CATEGORY_TILE_SIZE, categoryGridScrolls, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING, CATEGORY_SCROLL_COLUMNS, CATEGORY_TILE_SIZE, categoryGridScrolls, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { Icon, ScrollRow, SectionHeader, Skeleton, Text } from '@/components/mini';
 
@@ -45,7 +45,7 @@ const cellStyle = {
 /**
  * Nhãn nhỏ 12px/600 (token `label`; 13px của `caption` làm "Mỹ phẩm thiên nhiên" và "Nông sản & Thực phẩm" cần ba dòng nên bị "…" ở dòng hai). Tối đa hai dòng, ngắt ở dấu cách,
  * vùng nhãn cao cố định để mọi ô thẳng hàng. `overflowWrap: anywhere` chỉ cứu từ đơn dài hơn cả cột (chữ nước ngoài): cắt bằng overflow thì mất chữ cuối mà không có "…".
- * `scrolls`: cột 5,5 chỉ rộng ~62px nên siết chữ -0,01em và cho nhãn lấn `CATEGORY_LABEL_BLEED` sang ô kề.
+ * `scrolls`: cột 5,5 chỉ rộng ~62px nên siết chữ và chừa `CATEGORY_LABEL_GUTTER` mỗi bên để nhãn không chạm nhãn ô kề (số đo ở `home-layout.ts`).
  */
 function Label({ children, scrolls = false }: { children: string; scrolls?: boolean }) {
   return (
@@ -53,7 +53,7 @@ function Label({ children, scrolls = false }: { children: string; scrolls?: bool
       variant="label"
       style={{
         textAlign: 'center', width: '100%', height: LABEL_HEIGHT, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere',
-        ...(scrolls ? { letterSpacing: '-0.01em', width: `calc(100% + ${2 * CATEGORY_LABEL_BLEED}px)`, margin: `0 -${CATEGORY_LABEL_BLEED}px` } : null),
+        ...(scrolls ? { letterSpacing: CATEGORY_LABEL_TRACKING, boxSizing: 'border-box', padding: `0 ${CATEGORY_LABEL_GUTTER}px` } : null),
       }}
     >
       {children}

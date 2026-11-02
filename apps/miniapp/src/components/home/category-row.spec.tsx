@@ -6,7 +6,7 @@ import type { CategoryEntry } from '../../hooks/use-categories';
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_BLEED, CATEGORY_LABEL_HEIGHT } from '@tubutree/app-core/home-layout';
+import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING } from '@tubutree/app-core/home-layout';
 import { CategoryRow } from './category-row';
 
 const entries = (n: number): CategoryEntry[] =>
@@ -54,14 +54,17 @@ describe('CategoryRow — nhãn hai dòng cho tên dài (M3)', () => {
     expect(label.style.letterSpacing).toBe('');
   });
 
-  it('lưới cuộn 5,5 cột (cột ~62px): nhãn siết -0,01em và lấn CATEGORY_LABEL_BLEED mỗi bên, hộp lề vẫn bằng ô nên ô không đổi cỡ', () => {
+  it('lưới cuộn 5,5 cột (cột ~62px): nhãn không lấn sang ô kề: hộp đúng bề rộng ô, chừa CATEGORY_LABEL_GUTTER mỗi bên (hai nhãn kề cách nhau ≥ 2 lần), siết chữ', () => {
     renderRow(0, { entries: named([...LONG_NAMES, ...entries(9).map((e) => e.label)]) });
     const label = labelOf(LONG_NAMES[0]!);
-    expect(CATEGORY_LABEL_BLEED).toBeGreaterThan(0);
-    expect(label.style.letterSpacing).toBe('-0.01em');
-    expect(label.style.width).toBe(`calc(100% + ${2 * CATEGORY_LABEL_BLEED}px)`);
-    expect(label.style.marginLeft).toBe(`-${CATEGORY_LABEL_BLEED}px`);
-    expect(label.style.marginRight).toBe(`-${CATEGORY_LABEL_BLEED}px`);
+    expect(CATEGORY_LABEL_GUTTER).toBeGreaterThanOrEqual(1);
+    expect(label.style.letterSpacing).toBe(CATEGORY_LABEL_TRACKING);
+    expect(label.style.width).toBe('100%');
+    expect(label.style.boxSizing).toBe('border-box');
+    expect(label.style.paddingLeft).toBe(`${CATEGORY_LABEL_GUTTER}px`);
+    expect(label.style.paddingRight).toBe(`${CATEGORY_LABEL_GUTTER}px`);
+    expect(label.style.marginLeft).toBe('0px');
+    expect(label.style.marginRight).toBe('0px');
     expect(label).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
   });
 
@@ -181,9 +184,9 @@ describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
     expect(label).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
   });
 
-  it('cột 5,5 chỉ vừa ~62px: nhãn siết chữ -0,01em (cứu "Chăm sóc" dài 62,6px); lưới tới 10 ô cột 20% vẫn chữ thường (H3 #5)', () => {
+  it('cột 5,5 chỉ vừa ~62px: nhãn siết chữ CATEGORY_LABEL_TRACKING; lưới tới 10 ô cột 20% vẫn chữ thường (H3 #5)', () => {
     const wide = renderRow(12);
-    expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe('-0.01em');
+    expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe(CATEGORY_LABEL_TRACKING);
     wide.unmount();
     renderRow(6);
     expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe('');
