@@ -183,7 +183,6 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/web/src/lib/refund-rules.ts', use: USE.voice, max: 2, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/components/waste-desk-perk.tsx', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/miniapp/src/components/waste-point-picker.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
-  { file: 'apps/miniapp/src/i18n/vi.ts', use: USE.store, max: 1, reason: REASON.STORE_CTV },
   { file: 'apps/miniapp/src/pages/dealer.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/miniapp/src/pages/recycle-desk.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/miniapp/src/services/account-api.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
@@ -192,18 +191,9 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/web/src/components/recycle/recycle-desk.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/web/src/components/recycle/waste-point-picker.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/web/src/lib/ledger-labels.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
-  { file: 'apps/miniapp/src/utils/waste-labels.ts', use: USE.stock, max: 3, reason: REASON.STOCK },
-  { file: 'apps/web/src/components/recycle/recycle-labels.ts', use: USE.stock, max: 3, reason: REASON.STOCK },
-  { file: 'apps/miniapp/src/i18n/vi.ts', use: USE.flash, max: 1, reason: REASON.FLASH },
-  { file: 'apps/web/src/app/merchant/settlement-tab.tsx', use: USE.flash, max: 2, reason: REASON.FLASH },
-  { file: 'apps/web/src/components/affiliate/ctv-order-copy.ts', use: USE.flash, max: 1, reason: REASON.FLASH },
-  { file: 'apps/web/src/lib/home-text.ts', use: USE.flash, max: 2, reason: REASON.FLASH },
-  { file: 'apps/miniapp/src/pages/about-data.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
-  { file: 'apps/web/src/lib/faq-fallback.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'packages/app-core/src/legal.ts', use: USE.voice, max: 6, reason: REASON.LEGAL },
   { file: 'packages/app-core/src/dealer-apply-copy.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'packages/app-core/src/loyalty-copy.ts', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },
-  { file: 'packages/app-core/src/notification-route.ts', use: USE.flash, max: 2, reason: REASON.FLASH },
 ];
 
 // Đối chứng trên nguồn giả: mẫu quét phải bắt đúng chữ hiển thị và bỏ qua mã (comment, tên biến, className, import, kiểu literal).

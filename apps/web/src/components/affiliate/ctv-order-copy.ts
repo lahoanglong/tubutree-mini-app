@@ -22,7 +22,7 @@ export const CTV_ORDER_COPY = {
   shippingFee: 'Phí giao',
   customerTotal: 'Tổng khách trả',
   calculating: 'Đang tính…',
-  flashPrice: 'Giá giờ vàng',
+  flashPrice: 'Giá Giờ vàng',
   totalChangedHint: 'Báo lại khách tổng tiền mới bên dưới rồi bấm tạo đơn lần nữa.',
   submit: 'Tạo đơn hộ khách',
   emptyItems: 'Thêm ít nhất 1 sản phẩm',

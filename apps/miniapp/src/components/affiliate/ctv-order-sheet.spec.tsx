@@ -280,7 +280,7 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng 
     renderSheet();
     await addProduct();
     expect(await screen.findByText('Chanh · 52.000đ')).toBeInTheDocument();
-    expect(screen.getByText('Giá giờ vàng')).toBeInTheDocument();
+    expect(screen.getByText('Giá Giờ vàng')).toBeInTheDocument();
     expect(screen.getByTestId('ctv-order-goods')).toHaveTextContent('52.000đ');
     expect(screen.getByTestId('ctv-order-shipping')).toHaveTextContent('19.000đ');
     expect(screen.getByTestId('ctv-order-total')).toHaveTextContent('71.000đ');

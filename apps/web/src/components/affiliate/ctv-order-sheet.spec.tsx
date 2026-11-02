@@ -321,7 +321,7 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng'
     state.quote = async () => FLASH;
     await readyWithAn();
     await until(() => text().includes('Chanh · 52.000đ'));
-    expect(text()).toContain('Giá giờ vàng');
+    expect(text()).toContain('Giá Giờ vàng');
     expect(body().querySelector('[data-testid="ctv-order-goods"]')?.textContent).toBe('52.000đ');
     expect(body().querySelector('[data-testid="ctv-order-shipping"]')?.textContent).toBe('19.000đ');
     expect(body().querySelector('[data-testid="ctv-order-total"]')?.textContent).toBe('71.000đ');

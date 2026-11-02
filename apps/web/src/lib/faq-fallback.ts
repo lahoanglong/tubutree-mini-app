@@ -64,7 +64,7 @@ export function fallbackFaq(cfg?: FaqConfig): FaqView[] {
     {
       cat: 'Đổi trả',
       q: 'Chính sách đổi/trả thế nào?',
-      a: `Chỉ đổi/trả khi sản phẩm bị lỗi nhà sản xuất (hỏng bao bì, sai HSD, sai mã, không đúng mô tả) ${returnDays}. Tubu chịu phí ship 2 chiều.`,
+      a: `Chỉ đổi/trả khi sản phẩm bị lỗi nhà sản xuất (hỏng bao bì, sai hạn dùng, sai mã, không đúng mô tả) ${returnDays}. Tubu chịu phí ship 2 chiều.`,
     },
   ];
 }

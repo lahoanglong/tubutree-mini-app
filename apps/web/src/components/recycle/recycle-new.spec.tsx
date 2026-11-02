@@ -184,12 +184,12 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(barButton(c, 'Tiếp tục').disabled).toBe(false);
     click(plus);
     await flush(10);
-    expect(bar(c).textContent).toContain('Tháng này Thùng carton chỉ còn 1 thùng');
+    expect(bar(c).textContent).toContain('Tháng này Thùng carton còn 1 thùng');
     expect(bar(c).textContent).not.toContain('Ước tính');
     expect(barButton(c, 'Tiếp tục').disabled).toBe(true);
     click(plus);
     await flush(10);
-    expect(bar(c).textContent).toContain('Tháng này bạn chỉ còn 60.000 điểm trong trần tháng');
+    expect(bar(c).textContent).toContain('Tháng này bạn còn 60.000 điểm trong trần tháng');
     expect(bar(c).textContent).not.toContain('Dùng như');
     expect(barButton(c, 'Tiếp tục').disabled).toBe(true);
     click(stepper(c, 'Thùng carton', 'Giảm số lượng'));
@@ -212,7 +212,7 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(barButton(c, 'Tiếp tục').disabled).toBe(true);
     release(preview({ blocks: [{ code: 'ITEM_MONTH_CAP', itemId: 'item-carton' }], itemCaps: [{ itemId: 'item-carton', monthRemainingQty: 1, dayRemainingQty: null }] }));
     await flush(10);
-    expect(bar(c).textContent).toContain('Tháng này Thùng carton chỉ còn 1 thùng');
+    expect(bar(c).textContent).toContain('Tháng này Thùng carton còn 1 thùng');
     expect(barButton(c, 'Tiếp tục').disabled).toBe(true);
     click(stepper(c, 'Thùng carton', 'Giảm số lượng'));
     await flush(10);

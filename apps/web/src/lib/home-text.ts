@@ -67,8 +67,8 @@ export const pointsBoostText = {
 };
 
 export const flashSaleText = {
-  sectionTitle: 'Ưu đãi giờ vàng',
-  sectionName: 'Ưu đãi giờ vàng',
+  sectionTitle: 'Giờ vàng',
+  sectionName: 'Giờ vàng',
   endsIn: (t: string) => `Còn ${t}`,
   soldPct: (n: number) => `Đã bán ${n}%`,
   upcomingTitle: 'Sắp diễn ra',
