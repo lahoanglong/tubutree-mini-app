@@ -910,7 +910,7 @@ function DesktopLines({ items, shipments }: { items: CartLine[]; shipments: Ship
           className="flex min-h-11 w-full items-center justify-between gap-2 text-left font-semibold text-[color:var(--color-text-brand)]"
         >
           <span>{expanded ? fillCopy('checkout.fewerLines') : fillCopy('checkout.moreLines', { n: hiddenCount })}</span>
-          {!expanded && <span className="text-[color:var(--color-text-primary)]">{formatVnd(hiddenTotal)}</span>}
+          {!expanded && <span className="tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(hiddenTotal)}</span>}
         </button>
       )}
     </div>
@@ -927,7 +927,7 @@ function LineRow({ item }: { item: CartLine }) {
           {item.variationName ? ' · ' : ''}×{item.quantity}
         </span>
       </span>
-      <span className="shrink-0 text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
+      <span className="shrink-0 tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
     </div>
   );
 }
