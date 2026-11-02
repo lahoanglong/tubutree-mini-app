@@ -172,3 +172,12 @@ describe('Sheet', () => {
     expect(footer.style.paddingBottom).toContain('safe-area-inset-bottom');
   });
 });
+
+describe('Sheet thanh kéo', () => {
+  it('có thanh kéo trang trí chỉ ở khổ điện thoại, giống sheet Mini App', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    const handle = document.querySelector<HTMLElement>('[data-sheet-handle]')!;
+    expect(handle.getAttribute('aria-hidden')).toBe('true');
+    expect(handle.className).toContain('md:hidden');
+  });
+});

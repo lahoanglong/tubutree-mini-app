@@ -3143,10 +3143,10 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     const { container } = await mount();
 
     click(container.querySelector('[data-inbox="communityReports"]')!);
-    await flush();
+    await waitFor(() => (container.textContent ?? '').includes('Mua hàng giá rẻ'));
 
     expect(window.location.search).toBe('?tab=community');
-    expect(activeChip(container)).toContain('Báo cáo vi phạm');
+    expect(activeChip(container)).toContain('Báo cáo');
     expect(container.textContent).toContain('Mua hàng giá rẻ');
   });
 
@@ -4069,6 +4069,35 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
       await flush();
       expect(mocks.listOrders.mock.lastCall![7]).toBe(mocks.listOrders.mock.lastCall![8]);
       expect(mocks.listOrders.mock.lastCall![7]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+});
+
+describe('admin/page — 390px: hàng đợi và Gomdon nằm trong ngăn kéo "Lọc (n)" (R-189)', () => {
+  it('trên danh sách chỉ còn hàng chip trạng thái; thu gom, VAT, hàng đợi tiền tính vào (n) và bật/tắt được trong ngăn kéo', async () => {
+    const mm = vi.fn().mockImplementation((q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    window.matchMedia = mm as unknown as typeof window.matchMedia;
+    try {
+      window.history.replaceState(null, '', '/admin?tab=orders&recycling=attention&invoice=pending&queue=bank_transfer_to_confirm');
+      const { container } = await mount();
+      expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn thu kèm Gomdon"]')).toBeNull();
+      expect(container.querySelector('[role="group"][aria-label="Chờ nhận tiền chuyển khoản"]')).toBeNull();
+      expect(container.querySelector('[role="group"][aria-label="Cần xử lý"]')).toBeNull();
+      expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"]')).toBeNull();
+      expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Chưa lên Pancake'))).toBe(false);
+      expect(container.querySelectorAll('[role="group"][aria-label="Lọc đơn theo trạng thái"]')).toHaveLength(1);
+      const open = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!;
+      expect(open.textContent).toBe('Lọc (3)');
+      click(open);
+      await flush();
+      const queue = document.body.querySelector('[role="dialog"] [role="group"][aria-label="Cần xử lý"]')!;
+      const pressed = [...queue.querySelectorAll('[aria-pressed="true"]')].map((b) => b.textContent);
+      expect(pressed).toEqual([expect.stringContaining('Chuyển khoản chờ tiền'), expect.stringContaining('Cần xử lý thu gom'), expect.stringContaining('VAT chờ xuất')]);
+      click([...queue.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Cần xử lý thu gom'))!);
+      await flush();
+      expect([...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!.textContent).toBe('Lọc (2)');
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
     }

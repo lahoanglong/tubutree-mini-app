@@ -193,7 +193,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
       expect(screen.getByText('Ngày đã chọn: 03/02/1991')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-      expect(screen.getByText('Ngày sinh 03/02/1991 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
+      expect(screen.getByText('Ngày sinh 3 tháng 2 năm 1991 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
       expect(mocks.updateMe).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole('button', { name: 'Sửa lại' }));
       expect(screen.queryByText(/chỉ đặt được một lần\. Xác nhận/)).toBeNull();
@@ -270,7 +270,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       renderPage();
       fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '29/02/2000' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-      expect(screen.getByText('Ngày sinh 29/02/2000 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
+      expect(screen.getByText('Ngày sinh 29 tháng 2 năm 2000 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Xác nhận' }));
       await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
       expect(mocks.updateMe.mock.calls[0]![0].dob).toBe('2000-02-29');

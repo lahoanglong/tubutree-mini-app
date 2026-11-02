@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { Heart } from 'lucide-react';
 import { getWishlistIds, addWishlist, removeWishlist } from '../services/wishlist-api';
 import { useAuthStore } from '../store/auth';
+import { useLoginWithNotice } from '../hooks/use-login-notice';
 import { haptic } from '../utils/haptic';
 
 const IDS_KEY = ['wishlist-ids'];
@@ -50,7 +51,8 @@ export function WishlistHeart({
   /** Tên sản phẩm để nhãn nút phân biệt được 20 tim trong một lưới (a11y A6). Thiếu thì giữ nhãn cũ đổi theo trạng thái (trang chi tiết chưa truyền, thuộc gói PDP). */
   productName?: string;
 }) {
-  const { status, login } = useAuthStore();
+  const { status } = useAuthStore();
+  const login = useLoginWithNotice();
   const qc = useQueryClient();
   const authed = status === 'authenticated';
 

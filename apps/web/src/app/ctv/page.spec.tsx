@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
+import { affiliateDashboardQuery } from '@tubutree/app-core/queries/affiliate';
+import { resetTransferLock } from '@tubutree/app-core/ctv-dashboard';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 type Call = { method: string; path: string; body?: unknown; query?: Record<string, unknown> };
@@ -85,8 +88,8 @@ vi.mock('@/lib/core-http', () => ({
 import AffiliatePage from './page';
 
 let mounted: Rendered[] = [];
-const mount = () => {
-  const r = render(<AffiliatePage />);
+const mount = (client?: QueryClient) => {
+  const r = render(<AffiliatePage />, client);
   mounted.push(r);
   return r;
 };
@@ -106,6 +109,7 @@ const DASH = {
 };
 
 beforeEach(() => {
+  resetTransferLock();
   state.phase = 'authenticated';
   state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
   state.dash = DASH;
@@ -490,6 +494,53 @@ describe('/ctv — bảng điều khiển', () => {
     release();
     await flush();
     expect(container.textContent).toContain('Số dư Ví Tubu');
+  });
+
+  describe('khoá nút Chuyển vào Ví trong lúc làm mới sau khi chuyển', () => {
+    const transferBtn = (container: HTMLElement) => byText(container, '[role="group"] button', 'Chuyển vào Ví') as HTMLButtonElement;
+    const startTransfer = async (client: QueryClient) => {
+      const m = mount(client);
+      await flush();
+      click(transferBtn(m.container));
+      await flush();
+      let release!: () => void;
+      state.walletGate = new Promise<void>((r) => (release = r));
+      state.dash = { ...DASH, withdrawableCommission: 0 };
+      click(byText(document.body, '[role="dialog"] button', 'vào Ví'));
+      await flush();
+      return { m, release };
+    };
+
+    it('(a) lần tải dashboard cũ trả về trong lúc làm mới chưa xong: nút vẫn khoá', async () => {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const { m, release } = await startTransfer(client);
+      expect(transferBtn(m.container).disabled).toBe(true);
+      client.setQueryData(affiliateDashboardQuery(null as never).queryKey, DASH);
+      await flush();
+      expect(transferBtn(m.container).disabled).toBe(true);
+      release();
+      await flush();
+    });
+
+    it('(b) gỡ trang rồi gắn lại trong lúc làm mới: nút vẫn khoá', async () => {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const { m, release } = await startTransfer(client);
+      m.unmount();
+      mounted = mounted.filter((x) => x !== m);
+      const again = mount(client);
+      await flush();
+      expect(transferBtn(again.container).disabled).toBe(true);
+      release();
+      await flush();
+    });
+
+    it('(c) làm mới xong: nút mở', async () => {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const { m, release } = await startTransfer(client);
+      release();
+      await flush();
+      expect(transferBtn(m.container).disabled).toBe(false);
+    });
   });
 
   it('vừa chuyển vào Ví: nút Chuyển vào Ví mờ tới khi dashboard tải lại, rồi bấm lại được', async () => {

@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   copyText: vi.fn(),
   couponUse: vi.fn(),
-  auth: { status: 'authenticated' as string },
+  auth: { status: 'authenticated' as string, error: undefined as string | undefined },
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   features: { seasonPass: false },
   getLoyalty: vi.fn(),
@@ -58,12 +58,11 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, user: { id: 'u1' }, login: mocks.login };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.auth.status, error: mocks.auth.error, user: { id: 'u1' }, login: mocks.login });
+  // getState: useLoginWithNotice đọc trạng thái sau login().
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
+});
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../utils/features', () => ({
   get SEASON_PASS_ENABLED() {
@@ -145,8 +144,10 @@ async function openTab(name: 'Hôm nay' | 'Vườn') {
 beforeEach(() => {
   mocks.publicConfig.waste.enabled = true;
   vi.clearAllMocks();
+  mocks.login.mockReset();
   mocks.getDailyCheckInStatus.mockResolvedValue(null);
   mocks.auth.status = 'authenticated';
+  mocks.auth.error = undefined;
   mocks.features.seasonPass = false;
   mocks.wheel.cost = undefined;
   mocks.wheel.onSpin = undefined;
@@ -198,6 +199,33 @@ describe('GamePage — trạng thái trang', () => {
     expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
     expect(mocks.api.getMissions).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản bị khoá: cổng nói lời máy chủ ngay, bấm đăng nhập lại thì thanh thông báo nhắc lại', async () => {
+    mocks.auth.status = 'idle';
+    mocks.auth.error = 'Tài khoản đã bị khoá.';
+    // Lời mới sau login() khác lời cũ: thanh báo phải đọc lại trạng thái sau login(), không dùng lời đã có trước cú bấm.
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth.error = 'Tài khoản đã bị khoá đến 05/11.';
+    });
+    renderPage();
+    expect(screen.getByText('Tài khoản đã bị khoá.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá đến 05/11.', type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
+  });
+
+  it('mất mạng khi bấm đăng nhập ở cổng: trang tự đổi sang màn lỗi phiên nên không báo thêm thanh thông báo', async () => {
+    mocks.auth.status = 'idle';
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+    });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 
   it('lỗi tải hồ sơ: báo lỗi rõ ràng và "Thử lại" tải lại hồ sơ, không dựng phần còn lại', async () => {

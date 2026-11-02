@@ -6,6 +6,12 @@ export function formatDobDisplay(iso: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
 }
 
+/** "03/05/1990" thành "3 tháng 5 năm 1990": ghi tháng bằng chữ để khách thấy ngay nếu ô đọc đảo ngày và tháng. Không đúng dd/mm/yyyy thì giữ nguyên. */
+function dobInWords(display: string): string {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(display);
+  return m ? `${Number(m[1])} tháng ${Number(m[2])} năm ${m[3]}` : display;
+}
+
 export const orderCopy = {
   /** `eta` là khoảng ngày đã ghép sẵn ("30/10 – 01/11"). */
   etaLine: (eta: string) => `Dự kiến giao ${eta}`,
@@ -23,7 +29,7 @@ export function orderRowLabel(key: string, fullLabel: string): string {
 export const profileCopy = {
   ordersFailed: 'Không tải được số đơn.',
   dobPicked: (display: string) => `Ngày đã chọn: ${display}`,
-  dobConfirm: (display: string) => `Ngày sinh ${display} chỉ đặt được một lần. Xác nhận?`,
+  dobConfirm: (display: string) => `Ngày sinh ${dobInWords(display)} chỉ đặt được một lần. Xác nhận?`,
   dobConfirmYes: 'Xác nhận',
   dobConfirmNo: 'Sửa lại',
 };

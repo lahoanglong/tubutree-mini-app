@@ -3,9 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 const login = vi.fn();
-const auth = vi.hoisted(() => ({ status: 'anonymous' as 'anonymous' | 'authenticated' }));
+const auth = vi.hoisted(() => ({ status: 'anonymous' as 'anonymous' | 'idle' | 'authenticated', error: undefined as string | undefined }));
 const api = vi.hoisted(() => ({ getWishlistIds: vi.fn(), addWishlist: vi.fn(), removeWishlist: vi.fn() }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: auth.status, login }) }));
+const snack = vi.hoisted(() => ({ openSnackbar: vi.fn() }));
+vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useSnackbar: () => snack }));
+vi.mock('../store/auth', () => {
+  const get = () => ({ status: auth.status, error: auth.error, login });
+  return { useAuthStore: Object.assign((sel?: (s: ReturnType<typeof get>) => unknown) => (sel ? sel(get()) : get()), { getState: get }) };
+});
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/wishlist-api', () => api);
 
@@ -13,7 +18,9 @@ import { WishlistHeart } from './wishlist-heart';
 
 beforeEach(() => {
   auth.status = 'anonymous';
+  auth.error = undefined;
   login.mockClear();
+  snack.openSnackbar.mockClear();
   api.getWishlistIds.mockReset();
   api.addWishlist.mockReset();
   api.removeWishlist.mockReset();
@@ -44,6 +51,16 @@ describe('WishlistHeart', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Thêm yêu thích' }));
     expect(parentClick).not.toHaveBeenCalled();
     expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it('tài khoản bị khoá: chạm tim thì nói lời máy chủ bằng thanh thông báo, không im lặng', async () => {
+    auth.status = 'idle';
+    auth.error = 'Tài khoản đã bị khoá.';
+    renderHeart(() => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm yêu thích' }));
+    await waitFor(() => expect(snack.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(api.addWishlist).not.toHaveBeenCalled();
   });
 });
 

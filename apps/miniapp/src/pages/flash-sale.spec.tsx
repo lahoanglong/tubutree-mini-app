@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
     openSnackbar: vi.fn(),
     login: vi.fn(),
     status: 'authenticated' as string,
+    error: undefined as string | undefined,
     listeners: new Set<() => void>(),
     /** Đổi trạng thái phiên và báo cho các trang đang render (cửa hàng giả phản ứng như zustand thật). */
     setStatus: (_status: string): void => undefined,
@@ -43,7 +44,7 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
 }));
 vi.mock('../store/auth', async () => {
   const { useSyncExternalStore } = await import('react');
-  const state = () => ({ status: mocks.status, login: mocks.login });
+  const state = () => ({ status: mocks.status, error: mocks.error, login: mocks.login });
   const subscribe = (l: () => void) => {
     mocks.listeners.add(l);
     return () => void mocks.listeners.delete(l);
@@ -132,7 +133,10 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   vi.clearAllMocks();
+  // clearAllMocks không bỏ mockImplementationOnce chưa dùng: test hỏng trước cú bấm sẽ để lại cho test sau.
+  mocks.login.mockReset();
   mocks.status = 'authenticated';
+  mocks.error = undefined;
   mocks.fetchUpcoming.mockResolvedValue([]);
   mocks.fetchCategories.mockResolvedValue([
     { id: 'food', slug: 'food', name: 'Thực phẩm', image: null, productCount: 9, children: [] },
@@ -344,6 +348,18 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('máy chủ báo tài khoản bị khoá khi bấm Mua ngay: nói lời máy chủ bằng thanh thông báo, không thêm giỏ', async () => {
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.error = 'Tài khoản đã bị khoá.';
+    });
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
   it('phiên đang khôi phục (loading): bấm Mua ngay hay Nhắc tôi không mở thêm một lần đăng nhập song song', async () => {

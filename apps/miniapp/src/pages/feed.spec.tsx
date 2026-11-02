@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -7,6 +7,7 @@ import type { FeedItem } from '../services/feed-api';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   login: vi.fn(),
+  openSnackbar: vi.fn(),
   getFeed: vi.fn(),
   getCategories: vi.fn(),
   getPreview: vi.fn(),
@@ -16,24 +17,24 @@ const mocks = vi.hoisted(() => ({
   openOAChat: vi.fn(),
   hasOA: true,
   search: '',
-  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
+  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' | 'idle' | 'error', error: undefined as string | undefined },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
+  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }),
   useLocation: () => ({ pathname: '/feed', search: mocks.search, state: null }),
 }));
 vi.mock('../services/feed-api', () => ({ getFeed: mocks.getFeed, getCategories: mocks.getCategories, getFeedPublicPreview: mocks.getPreview }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, ...mocks.config }) }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.auth.status, error: mocks.auth.error, login: mocks.login });
+  // getState: useLoginWithNotice đọc trạng thái sau login().
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
+});
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../services/zmp-bridge', () => ({
   openExternal: mocks.openExternal,
@@ -88,8 +89,11 @@ const lastFeedArgs = () => mocks.getFeed.mock.calls.at(-1)![0];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks không bỏ mockImplementationOnce chưa dùng: test hỏng trước cú bấm sẽ để lại cho test sau.
+  mocks.login.mockReset();
   mocks.search = '';
   mocks.auth.status = 'authenticated';
+  mocks.auth.error = undefined;
   mocks.hasOA = true;
   mocks.config = { communityPublicPreview: false };
   mocks.getCategories.mockResolvedValue(CATS);
@@ -373,6 +377,32 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     expect(mocks.getFeed).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Zalo' }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
+  it('máy chủ báo tài khoản bị khoá khi bấm đăng nhập ở danh sách xem trước: nói lời máy chủ bằng thanh thông báo', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1')] });
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth = { status: 'idle', error: 'Tài khoản đã bị khoá.' };
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tiếp tục với Zalo' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('mất mạng khi bấm đăng nhập ở danh sách xem trước: trang tự đổi sang màn lỗi phiên nên không báo thêm thanh thông báo', async () => {
+    mocks.config = { communityPublicPreview: true };
+    mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1')] });
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tiếp tục với Zalo' }));
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 
   it('bài xem trước không có nút thích/bình luận/mở bài: đọc xong chỉ có lối đăng nhập', async () => {

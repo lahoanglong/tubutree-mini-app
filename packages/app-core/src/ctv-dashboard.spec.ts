@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote, isTransferRefreshing, subscribeTransferRefreshing, lockTransferUntil, resetTransferLock } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -122,5 +122,51 @@ describe('commissionPendingNote', () => {
     expect(commissionPendingNote(true)).toContain('vào Ví lúc 8:00');
     expect(commissionPendingNote(false)).toBe(COMMISSION_PENDING_NOTE);
     expect(COMMISSION_PENDING_NOTE).not.toContain('8:00');
+  });
+});
+
+describe('khoá nút Chuyển vào Ví trong lúc làm mới sau khi chuyển', () => {
+  beforeEach(() => resetTransferLock());
+
+  it('mặc định không khoá', () => {
+    expect(isTransferRefreshing()).toBe(false);
+  });
+
+  it('khoá trong lúc làm mới, mở khi làm mới xong; listener được báo hai lần', async () => {
+    const seen: boolean[] = [];
+    const off = subscribeTransferRefreshing(() => seen.push(isTransferRefreshing()));
+    let done!: () => void;
+    const p = lockTransferUntil(() => new Promise<void>((r) => (done = r)));
+    expect(isTransferRefreshing()).toBe(true);
+    done();
+    await p;
+    expect(isTransferRefreshing()).toBe(false);
+    expect(seen).toEqual([true, false]);
+    off();
+  });
+
+  it('hai lần làm mới chồng nhau: lần xong trước không mở nút khi lần sau chưa xong', async () => {
+    let first!: () => void;
+    let second!: () => void;
+    const p1 = lockTransferUntil(() => new Promise<void>((r) => (first = r)));
+    const p2 = lockTransferUntil(() => new Promise<void>((r) => (second = r)));
+    first();
+    await p1;
+    expect(isTransferRefreshing()).toBe(true);
+    second();
+    await p2;
+    expect(isTransferRefreshing()).toBe(false);
+  });
+
+  it('làm mới lỗi vẫn mở nút', async () => {
+    await expect(lockTransferUntil(() => Promise.reject(new Error('x')))).resolves.toBeUndefined();
+    expect(isTransferRefreshing()).toBe(false);
+  });
+
+  it('bỏ đăng ký thì listener không được báo nữa', async () => {
+    const fn = vi.fn();
+    subscribeTransferRefreshing(fn)();
+    await lockTransferUntil(async () => undefined);
+    expect(fn).not.toHaveBeenCalled();
   });
 });

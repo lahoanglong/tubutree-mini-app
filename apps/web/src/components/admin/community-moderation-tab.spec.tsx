@@ -387,7 +387,7 @@ describe('CommunityModerationTab — khung', () => {
     await flush();
 
     expect(r.container.querySelector('h2')!.textContent).toBe('Cộng đồng');
-    const chips = ['Chờ duyệt', 'Báo cáo vi phạm', 'Đã đăng', 'Chưa trả lời', 'Sự kiện'].map((t) => byText(r.container, 'button[aria-pressed]', t)!);
+    const chips = ['Chờ duyệt', 'Báo cáo', 'Đã đăng', 'Chưa trả lời', 'Sự kiện'].map((t) => byText(r.container, 'button[aria-pressed]', t)!);
     expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false', 'false']);
     click(chips[3]!);
     await flush();
@@ -406,14 +406,14 @@ describe('CommunityModerationTab: báo cáo vi phạm (R-75)', () => {
   it('chip lấy số thật từ hộp việc khi danh sách bị cắt ở 50 (hộp việc ghi 73)', async () => {
     const { r } = setup({ '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'communityReports', count: 73 }] } } }, { initialView: 'reports', isAdmin: true });
     await flush();
-    expect(byText(r.container, 'button[aria-pressed]', 'Báo cáo vi phạm (73)')).not.toBeNull();
+    expect(byText(r.container, 'button[aria-pressed]', 'Báo cáo (73)')).not.toBeNull();
   });
 
   it('chip ghi số báo cáo đang mở; danh sách hiện loại, người đăng, trích nội dung và lý do báo cáo; nội dung đã xoá hẳn vẫn đóng được', async () => {
     const { r } = setup({}, { initialView: 'reports', isAdmin: true });
     await flush();
 
-    expect(byText(r.container, 'button[aria-pressed]', 'Báo cáo vi phạm (3)')).not.toBeNull();
+    expect(byText(r.container, 'button[aria-pressed]', 'Báo cáo (3)')).not.toBeNull();
     expect(r.container.textContent).toContain('3 báo cáo đang mở');
     const bai = r.container.querySelector('[data-report="r1"]')!;
     expect(bai.textContent).toContain('Bài viết');
