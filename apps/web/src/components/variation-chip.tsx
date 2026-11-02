@@ -16,7 +16,8 @@ export interface VariationChipProps {
 
 /**
  * Chip phân loại, dùng chung ở trang sản phẩm (`AddToCart`) và bảng chọn phân loại để hai nơi ghi cùng giá, cùng dấu Giờ vàng và cùng chữ
- * hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Điện thoại: hai dòng (tên 14px/22px, giá 13px/20px như `Text variant="body-sm"` và `"caption"` của Mini App, nên chip cao 61px ở cả hai app), viền 1,5px. Từ md giữ "tên · giá" một
+ * hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Điện thoại: hai dòng (tên cỡ chữ 14px với dòng 22px, giá cỡ chữ 13px với dòng 20px, như `Text variant="body-sm"` và `"caption"` của Mini App), đệm dọc và viền 1,5px; cùng cấu trúc đó
+ * nên chip hai app cao bằng nhau. Không ghi chiều cao tuyệt đối: viền 1,5px làm tròn theo mật độ điểm ảnh của từng thiết bị (xem `apps/e2e/tests/support/variation-chip.ts`). Từ md giữ "tên · giá" một
  * dòng để nút mua còn trong 1280×800.
  */
 export function VariationChip({ variation, pricing, active, onClick }: VariationChipProps) {

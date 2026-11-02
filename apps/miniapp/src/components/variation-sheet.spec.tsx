@@ -14,7 +14,7 @@ const variations: VariationOption[] = [
 ];
 const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
 
-function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy' } = {}) {
+function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[] } = {}) {
   const onConfirm = vi.fn();
   const view = render(
     <VariationSheet
@@ -28,6 +28,7 @@ function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: num
       initialId="v1"
       initialQty={props.initialQty ?? 3}
       busy={false}
+      cartLines={props.cartLines}
       onConfirm={onConfirm}
     />,
   );
@@ -103,7 +104,7 @@ describe('VariationSheet: giá Giờ vàng và tiền dòng theo luật máy ch�
     const { rerender } = renderSheet({ initialQty: 5 });
     expect(screen.getByRole('status')).toHaveTextContent(OVER_5);
     rerender(
-      <VariationSheet open onClose={() => undefined} mode="buy" productName="Khăn ướt" thumbnail={null} variations={variations} flash={[]} initialId="v1" initialQty={5} busy={false} onConfirm={() => undefined} />,
+      <VariationSheet open onClose={() => undefined} mode="buy" productName="Khăn ướt" thumbnail={null} variations={variations} flash={[]} initialId="v1" initialQty={5} busy={false} cartLines={undefined} onConfirm={() => undefined} />,
     );
     expect(buyButton()).toHaveTextContent('Mua ngay · 175.000đ');
     expect(screen.queryByTestId('variation-sheet-flash')).toBeNull();
@@ -115,6 +116,67 @@ describe('VariationSheet: giá Giờ vàng và tiền dòng theo luật máy ch�
     fireEvent.click(screen.getByRole('button', { name: /Gói 40 tờ/ }));
     expect(screen.queryByTestId('variation-sheet-flash')).toBeNull();
     expect(buyButton()).toHaveTextContent('Mua ngay · 100.000đ');
+  });
+});
+
+describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ cộng dồn, máy chủ giá cả dòng)', () => {
+  const inCart2 = [{ variationId: 'v1', quantity: 2 }];
+  const IN_CART_NOTE = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+
+  it('ví dụ reviewer (giới hạn 3, giỏ có 2, chọn 2): Mua ngay ghi cả dòng 140.000đ, Thêm vào giỏ ghi phần giỏ tăng 88.000đ, ghi chú nói theo giỏ', () => {
+    const buy = renderSheet({ mode: 'buy', initialQty: 2, cartLines: inCart2 });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 140.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent(IN_CART_NOTE);
+    buy.unmount();
+    renderSheet({ mode: 'add', initialQty: 2, cartLines: inCart2 });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 88.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent(IN_CART_NOTE);
+  });
+
+  it('giảm về qty 1 (tổng 3 = limit): Mua ngay 3 × giá Giờ vàng, hết mất giá nên chỉ còn câu "Mua ngay thanh toán cả dòng" (không có ở bảng Thêm vào giỏ)', () => {
+    const buy = renderSheet({ mode: 'buy', initialQty: 2, cartLines: inCart2 });
+    fireEvent.click(minus());
+    expect(buyButton()).toHaveTextContent('Mua ngay · 78.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+    buy.unmount();
+    renderSheet({ mode: 'add', initialQty: 2, cartLines: inCart2 });
+    fireEvent.click(minus());
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 26.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('giỏ đã vượt suất từ trước (5 > 3): câu nói dòng giỏ đang tính giá thường, không đổ cho phần thêm; Thêm vào giỏ ghi 1 × giá thường', () => {
+    const add = renderSheet({ mode: 'add', initialQty: 1, cartLines: [{ variationId: 'v1', quantity: 5 }] });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 35.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('Giỏ đã có 5, quá 3 suất Giờ vàng nên cả dòng đang tính giá thường.');
+    add.unmount();
+    renderSheet({ mode: 'buy', initialQty: 1, cartLines: [{ variationId: 'v1', quantity: 5 }] });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 210.000đ');
+  });
+
+  it('sản phẩm không Giờ vàng, giỏ có 2 chọn 1: Mua ngay ghi cả 3 và có câu giải thích, vùng ghi chú giữ chỗ từ lúc mở; Thêm vào giỏ không có vùng', () => {
+    const buy = renderSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: inCart2 });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 105.000đ');
+    const region = screen.getByRole('status');
+    expect(region).toHaveTextContent('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+    expect(region.style.minHeight).not.toBe('');
+    buy.unmount();
+    renderSheet({ mode: 'add', initialQty: 1, flash: [], cartLines: inCart2 });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 35.000đ');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('giỏ chỉ có phân loại khác (hoặc không truyền cartLines): số như khi giỏ rỗng', () => {
+    const other = renderSheet({ mode: 'buy', initialQty: 2, cartLines: [{ variationId: 'v3', quantity: 9 }] });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
+    other.unmount();
+    renderSheet({ mode: 'buy', initialQty: 2 });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
+  });
+
+  it('vùng ghi chú vẫn có chỗ giữ cố định khi giỏ có sẵn (ô Số lượng không nhảy)', () => {
+    renderSheet({ mode: 'buy', initialQty: 1, cartLines: inCart2 });
+    expect(screen.getByRole('status').style.minHeight).not.toBe('');
   });
 });
 
@@ -146,7 +208,7 @@ describe('VariationSheet: hết hàng ghi "Tạm hết hàng" nhất quán', () 
       { id: 'v2', sku: 'S2', name: 'Gói 40 tờ', retailPrice: 20_000, salePrice: null, stock: 0 },
     ];
     render(
-      <VariationSheet open onClose={() => undefined} mode="buy" productName="Khăn ướt" thumbnail={null} variations={allOut} flash={[]} initialId={null} initialQty={1} busy={false} onConfirm={() => undefined} />,
+      <VariationSheet open onClose={() => undefined} mode="buy" productName="Khăn ướt" thumbnail={null} variations={allOut} flash={[]} initialId={null} initialQty={1} busy={false} cartLines={undefined} onConfirm={() => undefined} />,
     );
     // Cả hai hết hàng thì bảng mở ở phân loại rẻ nhất theo luật mặc định của thẻ.
     expect(screen.getByText('Gói 40 tờ · Tạm hết hàng')).toBeInTheDocument();

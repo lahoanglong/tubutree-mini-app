@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchReviews: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchReviews: vi.fn(), getCart: vi.fn(), addToCart: vi.fn(), authStatus: 'guest' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -17,15 +17,15 @@ vi.mock('../services/shop-api', () => ({
   fetchBoughtTogether: vi.fn().mockResolvedValue([]),
   fetchReviews: mocks.fetchReviews,
   fetchActiveFlashSales: mocks.fetchActiveFlashSales,
-  getCart: vi.fn().mockResolvedValue({ items: [], itemCount: 0 }),
-  addToCart: vi.fn(),
+  getCart: mocks.getCart,
+  addToCart: mocks.addToCart,
 }));
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn() }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.authStatus, login: vi.fn() }) }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -67,6 +67,8 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     vi.clearAllMocks();
     mocks.fetchProduct.mockResolvedValue(product);
     mocks.fetchReviews.mockResolvedValue({ data: [], count: 0, average: 0, items: [] });
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.authStatus = 'guest';
   });
 
   it('còn giờ: thanh Giờ vàng dưới ảnh có "Kết thúc sau …" theo phút và "Đã bán %" (Q3, không "Còn")', async () => {
@@ -243,6 +245,58 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       await waitFor(() => expect(screen.queryByTestId('flash-price-bar')).toBeNull(), { timeout: 4_000 });
       expect(screen.queryByText(OVER_4)).toBeNull();
       expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+    });
+  });
+  describe('giỏ đã có sẵn cùng phân loại: thêm giỏ cộng dồn nên máy chủ giá cả dòng', () => {
+    const buyNow = () => screen.getByRole('button', { name: /^Mua ngay/ });
+    const plus = () => screen.getByRole('button', { name: 'Tăng số lượng' });
+    const cartOf = (quantity: number) => ({
+      items: [{ id: 'ci1', variationId: 'v1', slug: 'xa-phong', productName: 'Xà phòng sả chanh', variationName: 'Mặc định', thumbnail: null, unitPrice: 80_000, quantity, stock: 5, weight: 100, total: 80_000 * quantity }],
+      itemCount: quantity,
+    });
+    const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+    const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
+
+    it('giới hạn 3, giỏ có 2: qty 1 (tổng 3) 3 × 80.000đ; qty 2 (tổng 4) cả dòng giá thường 400.000đ kèm ghi chú theo giỏ', async () => {
+      mocks.authStatus = 'authenticated';
+      mocks.getCart.mockResolvedValue(cartOf(2));
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
+      // Chưa mất giá nhưng nút ghi cả dòng (3 × 80.000đ) cạnh ô Số lượng đang là 1: nói trước khi bấm, không đợi tới thông báo sau khi bấm.
+      expect(screen.getByText(MERGE_2)).toBeInTheDocument();
+      expect(screen.queryByText(/tính giá thường/)).toBeNull();
+      fireEvent.click(plus());
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ');
+      expect(screen.getByText(IN_CART_2)).toBeInTheDocument();
+      expect(screen.queryByText(MERGE_2)).toBeNull();
+    });
+
+    it('thêm giỏ thành công rồi nút vẽ lại theo giỏ mới, không đếm số cũ hai lần', async () => {
+      mocks.authStatus = 'authenticated';
+      mocks.getCart.mockResolvedValue(cartOf(2));
+      mocks.addToCart.mockResolvedValue(cartOf(3));
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 240.000đ'));
+      fireEvent.click(screen.getByRole('button', { name: /^Thêm vào giỏ$/ }));
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1));
+      // Giỏ giờ có 3 (đúng limit); qty đang chọn vẫn 1 nên thêm tiếp là cả 4 giá thường.
+      await waitFor(() => expect(buyNow()).toHaveAccessibleName('Mua ngay · 400.000đ'));
+      expect(screen.getByText('Giỏ đã có 3. Thêm 1 thì cả 4 sản phẩm tính giá thường.')).toBeInTheDocument();
+    });
+
+    it('giỏ chưa tải được (lỗi): coi như giỏ rỗng, nút vẫn bấm được và ghi số như khi không có giỏ', async () => {
+      mocks.authStatus = 'authenticated';
+      mocks.getCart.mockRejectedValue(new Error('mất mạng'));
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 3 })]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 80.000đ');
+      expect(buyNow()).not.toBeDisabled();
+      expect(screen.queryByText(/Giỏ đã có/)).toBeNull();
     });
   });
 });

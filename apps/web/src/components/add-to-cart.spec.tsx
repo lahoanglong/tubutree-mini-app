@@ -1095,3 +1095,64 @@ describe('AddToCart — tiền nút mua theo luật máy chủ khi vượt giớ
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 750.000đ');
   });
 });
+
+describe('AddToCart — giỏ đã có sẵn cùng phân loại: thêm giỏ cộng dồn nên máy chủ giá cả dòng', () => {
+  const LIMITED = {
+    itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 240000, retailPrice: 300000,
+    salePrice: null, soldCount: 1, quota: 10, perUserLimit: 3, endAt: '2099-10-14T16:00:00.000Z',
+  };
+  const cartOf = (quantity: number) => ({ items: [{ id: 'ci1', variationId: 'v2', quantity }], itemCount: quantity });
+  const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+  const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
+  const plus = (c: HTMLElement) => c.querySelector('[data-section="pdp-quantity"] button[aria-label="Tăng số lượng"]');
+  const stickyBuy = (c: HTMLElement) => c.querySelector('button[aria-label^="Mua ngay"]') as HTMLButtonElement;
+
+  async function openWithCart(cart: object | Error) {
+    mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
+    mocks.getCart.mockImplementation(() => (cart instanceof Error ? Promise.reject(cart) : Promise.resolve(cart)));
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const r = mount();
+    await flush();
+    click(byText(r.container, 'button', /^500ml/));
+    await flush();
+    return r;
+  }
+
+  it('giới hạn 3, giỏ có 2: qty 1 (tổng 3) 3 × 240.000đ; qty 2 (tổng 4) Mua ngay ghi cả dòng 1.200.000đ, Thêm vào giỏ ghi giỏ tăng 720.000đ, ghi chú nói theo giỏ', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 720.000đ');
+    // Chưa mất giá nhưng nút ghi cả dòng (3 × 240.000đ) cạnh ô Số lượng đang là 1: nói trước khi bấm.
+    const note = () => container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent;
+    expect(note()).toBe(MERGE_2);
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 720.000đ');
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
+    expect(note()).toBe(IN_CART_2);
+  });
+
+  it('thêm giỏ thành công rồi nút vẽ lại theo giỏ mới, không đếm số cũ hai lần', async () => {
+    const { container } = await openWithCart(cartOf(2));
+    mocks.addToCart.mockResolvedValue(cartOf(3));
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+    expect(stickyBuy(container).getAttribute('aria-label')).toBe('Mua ngay · 1.200.000đ');
+    expect(container.querySelector('[role="status"][data-section="pdp-flash-limit"]')!.textContent).toBe('Giỏ đã có 3. Thêm 1 thì cả 4 sản phẩm tính giá thường.');
+  });
+
+  it('giỏ chưa tải được (lỗi): coi như giỏ rỗng, nút vẫn bấm được và ghi số như khi không có giỏ', async () => {
+    const { container } = await openWithCart(new Error('mất mạng'));
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 480.000đ');
+    expect(addButton(container).disabled).toBe(false);
+    expect(container.textContent).not.toContain('Giỏ đã có');
+  });
+
+  it('giỏ chỉ có phân loại khác (v1 đang 4): số như khi giỏ rỗng', async () => {
+    const { container } = await openWithCart({ items: [{ id: 'ci9', variationId: 'v1', quantity: 4 }], itemCount: 4 });
+    click(plus(container));
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 480.000đ');
+    expect(container.textContent).not.toContain('Giỏ đã có');
+  });
+});

@@ -14,6 +14,12 @@ const HOUR = 3_600_000;
 const FLASH_PRICE = 1_000;
 const LIMIT = 3;
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
+const user = {
+  id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
+  pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0,
+};
 
 interface Priced {
   slug: string;
@@ -25,8 +31,30 @@ async function pricedProduct(request: APIRequestContext, slug: string): Promise<
   return r?.ok() ? ((await r.json()) as Priced) : null;
 }
 
-async function openPdp(page: Page, api: MockApi, p: Priced, flashIndex: number): Promise<void> {
+/** Đăng nhập giả và giỏ đã có `quantity` sản phẩm của phân loại `variationId`: thêm giỏ cộng dồn và máy chủ giá cả dòng. */
+async function mockCartWith(page: Page, api: MockApi, p: Priced, variationId: string, quantity: number): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tubu_web_session', '1');
+    } catch {
+      // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+    }
+  });
+  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
+  api.get('/me', () => user);
+  api.get('/me/coupons', []);
+  api.allowUnmocked('GET /affiliate/me', 'GET /products/:slug/reviews/can-review');
+  const v = p.variations.find((x) => x.id === variationId)!;
+  const unit = v.salePrice ?? v.retailPrice;
+  api.get('/cart', {
+    items: [{ id: 'ci-1', variationId, slug: p.slug, productName: 'Sản phẩm thử', variationName: v.name, thumbnail: null, unitPrice: unit, quantity, stock: 50, weight: 600, total: unit * quantity }],
+    couponCode: null, subtotal: unit * quantity, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: quantity,
+  });
+}
+
+async function openPdp(page: Page, api: MockApi, p: Priced, flashIndex: number, opts: { inCart?: number } = {}): Promise<void> {
   const flashVariation = p.variations[flashIndex]!;
+  if (opts.inCart) await mockCartWith(page, api, p, flashVariation.id, opts.inCart);
   api.get('/flash-sales/active', () => {
     const now = Date.now();
     return [
@@ -51,7 +79,7 @@ async function openPdp(page: Page, api: MockApi, p: Priced, flashIndex: number):
 }
 
 test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bảng chọn phân loại', () => {
-  async function setup(page: Page, api: MockApi, request: APIRequestContext) {
+  async function setup(page: Page, api: MockApi, request: APIRequestContext, opts: { inCart?: number } = {}) {
     const base = await multiVariationProduct(request);
     test.skip(!base, 'DB e2e chưa có sản phẩm nào từ 2 phân loại');
     const p = await pricedProduct(request, base!.slug);
@@ -59,7 +87,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     const flashIndex = 0;
     const standing = p!.variations[flashIndex]!.salePrice ?? p!.variations[flashIndex]!.retailPrice;
     test.skip(standing <= FLASH_PRICE, 'giá phân loại thử không cao hơn giá Giờ vàng giả');
-    await openPdp(page, api, p!, flashIndex);
+    await openPdp(page, api, p!, flashIndex, opts);
     return { p: p!, standing };
   }
 
@@ -104,5 +132,32 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
     await plus.click();
     await expect(add).toHaveText(`Thêm vào giỏ · ${vnd(5 * standing)}`);
+  });
+
+  test('giỏ đã có 2 sản phẩm Giờ vàng (giới hạn 3): "Mua ngay" ghi cả dòng, "Thêm vào giỏ" ghi giỏ tăng, ghi chú nói theo giỏ, ô Số lượng không nhảy', async ({ page, api, request }) => {
+    const { standing } = await setup(page, api, request, { inCart: 2 });
+    await page.getByRole('button', { name: /^Mua ngay · / }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await expect(dialog).toBeVisible();
+    const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
+    const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });
+    // Giỏ 2 + chọn 1 = 3 = giới hạn: cả dòng còn giá Giờ vàng.
+    await expect(buy).toHaveText(`Mua ngay · ${vnd(3 * FLASH_PRICE)}`);
+    await expect(dialog.getByRole('status')).toHaveText(MERGE_2);
+    // Bảng còn đang trượt lên lúc vừa mở: hover chờ nó đứng yên rồi mới đo vị trí.
+    await plus.hover();
+    const before = (await plus.boundingBox())!;
+    await plus.click();
+    await expect(buy).toHaveText(`Mua ngay · ${vnd(4 * standing)}`);
+    await expect(dialog.getByRole('status')).toHaveText(IN_CART_2);
+    const after = (await plus.boundingBox())!;
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    await dialog.getByRole('button', { name: 'Đóng' }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.getByRole('button', { name: 'Thêm vào giỏ', exact: true }).click();
+    const addDialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await addDialog.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(addDialog.getByRole('button', { name: /^Thêm vào giỏ · / })).toHaveText(`Thêm vào giỏ · ${vnd(4 * standing - 2 * FLASH_PRICE)}`);
   });
 });

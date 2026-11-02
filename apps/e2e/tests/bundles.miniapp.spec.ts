@@ -59,6 +59,8 @@ test.describe('Trang sản phẩm: Combo ưu đãi và Mua kèm', () => {
     await rows.nth(0).click();
     await expect(rows.nth(0)).toHaveAttribute('aria-checked', 'true');
     await expect(addons(page).getByTestId('addon-save')).toHaveText('Tiết kiệm 45.000đ');
+    // Dòng giữ chỗ cao 20px (caption 13/20); web khổ 375 dùng cùng thang này (lớp `phoneCaption` + `min-h-5`, khoá ở pdp-bundles.spec.tsx của web).
+    expect((await addons(page).getByTestId('addon-save').boundingBox())!.height).toBeCloseTo(20, 0);
     await addons(page).getByRole('button', { name: 'Thêm 1 món vào giỏ' }).click();
     await expect(addons(page).getByRole('button', { name: 'Đã thêm vào giỏ' })).toBeVisible();
     await expect(rows.nth(0)).toHaveAttribute('aria-checked', 'false');
