@@ -211,7 +211,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(container.textContent).toContain('Ngày đã chọn: 03/02/1991');
     click(saveBtn(container));
     await flush(2);
-    expect(container.textContent).toContain('Ngày sinh 03/02/1991 chỉ đặt được một lần. Xác nhận?');
+    expect(container.textContent).toContain('Ngày sinh 3 tháng 2 năm 1991 chỉ đặt được một lần. Xác nhận?');
     expect(mocks.patch).not.toHaveBeenCalled();
     click(byText(container, 'button', 'Xác nhận'));
     await flush(6);

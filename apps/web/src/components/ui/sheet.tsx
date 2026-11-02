@@ -107,7 +107,10 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
         tabIndex={-1}
         className={`relative flex w-full flex-col overflow-hidden rounded-t-sheet bg-stone-0 shadow-card outline-none md:max-w-lg md:rounded-sheet ${SIZE_CLASS[size]}`}
       >
-        <div className="flex items-start justify-between gap-2 px-4 pt-4">
+        <div data-sheet-handle aria-hidden="true" className="flex h-6 shrink-0 items-center justify-center md:hidden">
+          <span className="h-1.5 w-12 rounded-full bg-stone-200" />
+        </div>
+        <div className="flex items-start justify-between gap-2 px-4 pt-1 md:pt-4">
           <div className="min-w-0">
             {title && (
               <h2 id={titleId} className="font-display text-lg font-semibold text-stone-900">

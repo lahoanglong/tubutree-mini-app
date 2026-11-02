@@ -105,3 +105,37 @@ export function nextMilestoneRows<T extends { achieved: boolean; canClaim: boole
 }
 
 export { AFFILIATE_PAGE_SIZE, affiliateNextCursor } from './affiliate-page';
+
+/**
+ * Nút "Chuyển vào Ví" khoá từ lúc chuyển xong tới khi lần làm mới dashboard BẮT ĐẦU sau lúc đó đã về, để không mở form với số dư cũ.
+ * Không so `dataUpdatedAt`: một lần tải cũ trả về muộn hay đồng hồ máy lùi đều không mở nhầm. Cờ nằm ngoài component nên còn
+ * nguyên khi khách rời trang rồi quay lại giữa chừng.
+ */
+/** Đếm số lần làm mới đang chạy: hai lần chuyển chồng nhau thì lần xong trước không mở nút khi lần sau chưa xong. */
+let transferRefreshing = 0;
+const transferListeners = new Set<() => void>();
+const notifyTransfer = () => transferListeners.forEach((fn) => fn());
+
+export const isTransferRefreshing = (): boolean => transferRefreshing > 0;
+export function subscribeTransferRefreshing(fn: () => void): () => void {
+  transferListeners.add(fn);
+  return () => transferListeners.delete(fn);
+}
+/** `refresh` làm mới Ví rồi dashboard; lỗi hay thành công đều mở lại nút (lỗi không được giữ nút khoá mãi). */
+export async function lockTransferUntil(refresh: () => Promise<unknown>): Promise<void> {
+  transferRefreshing += 1;
+  notifyTransfer();
+  try {
+    await refresh();
+  } catch {
+    /* mở nút ở finally; lỗi tải lại đã hiện ở chính màn dashboard */
+  } finally {
+    transferRefreshing -= 1;
+    notifyTransfer();
+  }
+}
+/** Chỉ cho test: đặt lại cờ giữa các ca. */
+export function resetTransferLock(): void {
+  transferRefreshing = 0;
+  transferListeners.clear();
+}
