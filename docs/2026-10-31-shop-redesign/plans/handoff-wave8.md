@@ -72,7 +72,9 @@
   - "nhãn" đứng một mình không bị bắt (chỉ bắt "Nhãn hàng", "theo dõi nhãn", "nhãn này").
   - Ở đoạn giữa và cuối của chuỗi template, từ viết thường được coi là mã khi dính `_ - / . =`.
 - **Chữ client lặp lại câu API:** `checkout-rules.ts` hai app, `order-actions` chưa khớp từng chữ với câu API mới. Nghĩa vẫn đúng.
-- **E2E:** `bundles-cls.miniapp` chập chờn khi máy tải nặng (đỏ cả ở base 173de56b3, mỗi lần một ca).
+- **E2E:**
+  - `bundles-cls.miniapp` chập chờn khi máy tải nặng (đỏ cả ở base 173de56b3, mỗi lần một ca).
+  - Chiều cao phiếu mã chỉ có e2e ở Mini (`voucher-ticket-height.miniapp.spec.ts`). Web giữ cùng cấu trúc qua vitest và ảnh 375px cùng bộ mock (88/138/98/88px ở cả hai app).
 
 ## 5. Việc của chủ
 
