@@ -59,7 +59,6 @@ const ME_FEED = {
   forYou: [card('fy', 'Gợi ý riêng')],
   flashUpcoming: [],
   purchasedItems: { items: [], nextCursor: null },
-  activeOrderCount: { count: 0 },
   subscriptions: [],
   notifications: [],
   newCustomerOffer: {

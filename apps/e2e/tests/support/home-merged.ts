@@ -35,7 +35,6 @@ export const HOME_ME: HomeMeDTO = {
     }],
     nextCursor: null,
   },
-  activeOrderCount: { count: 0 },
   subscriptions: [],
   notifications: [],
   newCustomerOffer: { isNewCustomer: false, welcomeVoucher: null } as HomeMeDTO['newCustomerOffer'],

@@ -711,11 +711,6 @@ export interface HomeTodo {
 export const fetchHomeTodo = () => api.get<HomeTodo>('/orders/home-todo').then((r) => r.data);
 export const fetchOrder = (code: string) =>
   api.get<OrderView>(`/orders/${code}`).then((r) => r.data);
-/** Badge tab Đơn hàng. Dữ liệu lạ (vd mock/route khác trả nhầm) → 0 thay vì NaN. */
-export const fetchActiveOrderCount = async () => {
-  const body = (await takeMeBlock('activeOrderCount')) ?? (await api.get<{ count?: unknown }>('/orders/active-count').then((r) => r.data));
-  return typeof body?.count === 'number' ? body.count : 0;
-};
 
 export interface PurchasedItem {
   variationId: string;

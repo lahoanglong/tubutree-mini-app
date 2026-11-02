@@ -52,8 +52,6 @@ export interface NotificationPageParams extends Partial<NotificationCursor> {
 }
 export const getNotificationsPage = (http: HttpClient, params: NotificationPageParams = {}) =>
   http.get<NotificationDTO[]>('/me/notifications', { query: { ...params } });
-/** Số tin chưa đọc của TOÀN BỘ hộp thư (không chỉ trang đang tải). */
-export const getUnreadNotificationCount = (http: HttpClient) => http.get<{ count: number }>('/me/notifications/unread-count');
 export const markNotificationRead = (http: HttpClient, id: string) => http.post<{ ok: boolean }>(`/me/notifications/${id}/read`);
 export const markAllNotificationsRead = (http: HttpClient) => http.post<{ ok: boolean; count: number }>('/me/notifications/read-all');
 

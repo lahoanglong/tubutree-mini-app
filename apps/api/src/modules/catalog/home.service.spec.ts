@@ -15,7 +15,6 @@ function setup() {
     listUpcoming: jest.fn().mockResolvedValue([{ itemId: 'u1', reminded: true }]),
   };
   const orders = {
-    activeCount: jest.fn().mockResolvedValue({ count: 2 }),
     list: jest.fn().mockResolvedValue(page(['o1'])),
   };
   const purchased = { list: jest.fn().mockResolvedValue({ items: [], nextCursor: null }) };
@@ -39,7 +38,7 @@ function setup() {
     flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const svc = new HomeService(
-    catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
+    catalog as never, flashSale as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
     prisma as never,
   );
   return { svc, catalog, flashSale, orders, purchased, subs, notifications, config, loyalty, prisma, factRows };
@@ -284,8 +283,7 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
     const r = await svc.getForUser('u1', 10);
     expect(r.wasteOpenRequestCount).toBe(2);
     expect(prisma.wasteRequest.count).toHaveBeenCalledWith({ where: { userId: 'u1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } } });
-    expect(r.activeOrderCount).toEqual({ count: 2 });
-    expect(orders.activeCount).toHaveBeenCalledWith('u1');
+    expect(r).not.toHaveProperty('activeOrderCount');
     expect(r.forYou).toEqual([{ id: 'fy' }]);
     expect(catalog.getForYou).toHaveBeenCalledWith('u1', { seed: expect.stringMatching(/^\d{8}$/) });
     expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
@@ -305,7 +303,7 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
       expect(catalog.getForYou).toHaveBeenCalledWith('u1', { seed: expect.stringMatching(/^\d{8}$/) });
       const r = await pending;
       expect(r.forYou).toEqual([{ id: 'fy' }]);
-      expect(r.activeOrderCount).toEqual({ count: 2 });
+      expect(r).not.toHaveProperty('activeOrderCount');
       expect(r.wasteOpenRequestCount).toBe(2);
     } finally {
       jest.useRealTimers();
@@ -350,7 +348,7 @@ describe('HomeService.getForUser', () => {
     expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: false, seed: expect.stringMatching(/^\d{8}$/) });
     expect(r.purchasedItems).toEqual({ items: [], nextCursor: null });
     expect(r).not.toHaveProperty('shippingOrders');
-    expect(r.activeOrderCount).toEqual({ count: 0 });
+    expect(r).not.toHaveProperty('activeOrderCount');
     expect(r.purchasedLimit).toBe(10);
   });
 
@@ -362,7 +360,7 @@ describe('HomeService.getForUser', () => {
     expect(orders.list).not.toHaveBeenCalled();
     expect(r).not.toHaveProperty('shippingOrders');
     expect(flashSale.listUpcoming).toHaveBeenCalledWith('u1');
-    expect(r.activeOrderCount).toEqual({ count: 3 });
+    expect(r).not.toHaveProperty('activeOrderCount');
     expect(loyalty.getNewCustomerOffer).not.toHaveBeenCalled();
     expect(r.newCustomerOffer).toEqual({ isNewCustomer: false, welcomeVoucher: null });
     await svc.getForUser('u2');
