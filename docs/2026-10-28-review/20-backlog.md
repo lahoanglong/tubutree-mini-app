@@ -344,7 +344,7 @@ Bảng dưới thay trạng thái của các mục cùng số trong bảng "Mụ
 | R-114 | một phần | — | Hai chỗ thừa đã bỏ (`/orders/status-counts`, `/notifications/unread-count`). Chưa có `GET /me/summary`; trang Cá nhân Mini còn khoảng 10 lời gọi, phần lớn có điều kiện. Đề xuất đóng. |
 | R-164 | một phần | PR #118 (1028h-giovang, main `e9315ae3b`) | Ca 1 (HTML ISR phát sau giờ hết suất) xong ở web: script cuối khối kệ ẩn kệ trước lần vẽ đầu, đếm trên danh sách suất gốc; CLS 0,2411 → 0,0035. Ca 2 (suất về sau bản dựng rỗng) để mở: bản giữ chỗ theo dấu nhớ tự sinh cú nhảy ở ca khác nên đã bỏ. Mini lần mở đầu không nhảy. Suất mới về giữa phiên vẫn đẩy trang ở cả hai nền; giữ để không giấu suất đang bán. |
 
-Cả #97, #98, #100, #104, #107 đã merge vào main và đã lên PROD ở bản `cefec4276` (deploy chiều 01/11, phiên c2, không migration). #108, #110, #111, #112 lên PROD ở `f7b7a09ef` (01/11 20:19). Shop redesign #109, #113, #114 lên PROD ở `4364ec325` (02/11 06:50, phiên shop, migration 257 → 261). #116, #117, #118 lên PROD ở `e9315ae3b` (02/11 09:41, không migration).
+Cả #97, #98, #100, #104, #107 đã merge vào main và đã lên PROD ở bản `cefec4276` (deploy chiều 01/11, phiên c2, không migration). #108, #110, #111, #112 lên PROD ở `f7b7a09ef` (01/11 20:19). Shop redesign #109, #113, #114 lên PROD ở `4364ec325` (02/11 06:50, phiên shop, migration 257 → 261). #115, #116, #117, #118 lên PROD ở `e9315ae3b` (02/11 09:41, không migration).
 
 ### Mục mới
 
