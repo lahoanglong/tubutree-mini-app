@@ -202,3 +202,18 @@ Mỗi hàng: `VoucherTicket variant="row" voucher={row.view} selected={row.appli
 - [ ] **Step 2:** e2e Mini: spec `checkout.miniapp.spec.ts`/`cart-lines.miniapp.spec.ts` có sẵn giữ xanh (tiêu đề "Chọn mã giảm giá"); thêm ca mở bảng chọn mã ở thanh toán với mock: 3 mã (dùng được, chưa đủ, đã áp), chụp axe 0 serious/critical, chữ lý do đạt 4,5:1 (đọc `getComputedStyle` màu chữ và nền, tính tỉ lệ). Không thêm vào `ds-parity.shop.spec.ts`: bảng chuẩn ở đó chỉ đo thẻ sản phẩm và tiêu đề khối trên trang chạy hoàn toàn bằng mock trình duyệt ở cả hai app, còn bảng chọn mã web nằm ở giỏ/thanh toán cần phiên đăng nhập; hai app dùng chung `VoucherPicker` và `VoucherTicket` cùng props nên số đo theo từ một nguồn. Ca e2e thực tế là `apps/e2e/tests/voucher-picker.miniapp.spec.ts` (tấm của giỏ Mini, axe color-contrast thay cho phép tính tay).
 - [ ] **Step 3:** chụp 375px Mini và web trước/sau: bảng chọn mã (khách mới, khách cũ) và sheet Ưu đãi PDP → `docs/2026-10-31-shop-redesign/screens/K3/`.
 - [ ] **Step 4:** gate: `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 62a02f232 --out …/gate-K3.txt`, rồi e2e Mini `--workers=2`.
+
+---
+
+### Ghi chú bàn giao (sau review)
+
+Chạm file thuộc gói khác, chỉ ở chỗ gọi bảng mã, không đụng vùng gói đó sửa (gộp sẽ không xung đột hunk):
+
+- `apps/miniapp/src/pages/product-detail.tsx` (K1 sở hữu phần nút/sheet): truyền `amount` cho `PdpOffersSheet` bằng `offerAmount(price, quantity, priceView.isFlash)`, dùng khoá `coupon.copiedToast`/`coupon.copyShowToast` ở `copyCoupon`, thêm một import.
+- `packages/app-core/src/terminology.spec.ts` (K2 sở hữu dòng EXEMPT thanh toán): gỡ dòng miễn `voucher-sheet.tsx` USE.expiry vì phiếu không còn chữ "HSD".
+- `apps/web/src/components/game/game-notice.tsx`: thêm tone `info` (nền `bg-info-bg`) để báo "không chép được mã" giống snackbar info của Mini; thay đổi cộng thêm, không đổi hai tone cũ.
+
+Hành vi cần biết khi gộp:
+
+- `pickerRows`: mã bị máy chủ chặn vì lý do khác đơn tối thiểu (khách mới, sản phẩm, hết lượt, hạn) luôn là `blocked` kèm câu của máy chủ và nhãn "Không áp dụng", kể cả khi giỏ dưới đơn tối thiểu. Chỉ khi máy chủ im lặng hoặc nói đúng câu "Đơn tối thiểu … để dùng mã này." thì mới là `short` / "Mua thêm … để dùng".
+- `offerAmount`: món đang ở giá Giờ vàng góp 0 vào tiền hàng của sheet Ưu đãi (máy chủ loại dòng Giờ vàng khỏi tiền hàng áp mã).
