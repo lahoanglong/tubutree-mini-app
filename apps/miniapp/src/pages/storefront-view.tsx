@@ -130,12 +130,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
         badges={
           <>
             {sf.isSample && <Badge tone="promo">{SAMPLE_STOREFRONT_LABEL}</Badge>}
-            {badgeLabel && (
-              <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Sparkles size={12} />
-                {badgeLabel}
-              </Badge>
-            )}
+            {badgeLabel && <Badge tone="verified" icon={Sparkles}>{badgeLabel}</Badge>}
             {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
           </>
         }
