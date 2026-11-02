@@ -4,28 +4,28 @@ import { CouponProductScopeError } from './coupons.service';
 /** Lý do khi mã vẫn hợp lệ nhưng phần hàng được tính giảm ra 0đ (vd giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu). */
 export const COUPON_ZERO_DISCOUNT_REASON = 'Không có sản phẩm nào trong đơn được giảm theo mã này.';
 
-/** Mã miễn phí vận chuyển chỉ miễn phí giao hàng do Tubu Tree giao; đơn chỉ có hàng gian hàng tự giao, hoặc đã miễn phí giao. */
+/** Mã miễn phí giao hàng chỉ miễn phí giao của hàng Tubu Tree giao; đơn chỉ có hàng gian hàng tự giao, hoặc đã miễn phí giao. */
 export const COUPON_FREESHIP_NOTHING_REASON =
-  'Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó.';
+  'Mã miễn phí giao hàng chỉ áp cho phí giao của hàng Tubu Tree giao, và đơn này không có phí giao đó.';
 
-/** Đơn đầu đã được miễn phí giao nên mã freeship không miễn thêm gì và không bị tiêu lượt. */
-export const COUPON_FREESHIP_FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.';
+/** Đơn đầu đã được miễn phí giao nên mã miễn phí giao hàng không miễn thêm gì và không bị tiêu lượt. */
+export const COUPON_FREESHIP_FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
 
 /** Phí giao đã bằng 0 vì lý do khác đơn đầu và không có số ngưỡng để nêu (hạng được miễn phí giao toàn shop). */
-export const COUPON_FREESHIP_ALREADY_FREE_REASON = 'Đơn này đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.';
+export const COUPON_FREESHIP_ALREADY_FREE_REASON = 'Đơn này đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.';
 
-/** Đơn đạt ngưỡng miễn phí giao thường nên mã freeship không miễn thêm gì; `threshold` là ngưỡng đang cấu hình cho hạng của khách. */
+/** Đơn đạt ngưỡng miễn phí giao thường nên mã miễn phí giao hàng không miễn thêm gì; `threshold` là ngưỡng đang cấu hình cho hạng của khách. */
 export function couponFreeshipThresholdReason(threshold: number): string {
-  return `Đơn từ ${vnd(threshold)} đã được miễn phí giao, mã miễn phí giao được giữ cho đơn sau.`;
+  return `Đơn từ ${vnd(threshold)} đã được miễn phí giao, mã miễn phí giao hàng được giữ cho đơn sau.`;
 }
 
 /**
  * Đơn có kiện Tubu đã hết phí giao nhưng còn kiện gian hàng đối tác có phí giao: nói rõ mã chỉ miễn phần hàng Tubu Tree, nếu không
- * khách thấy phí giao của kiện đối tác vẫn còn mà hiểu mã bị lỗi. `why` là lý do kiện Tubu hết phí giao; null = không có con số ngưỡng để nêu (hạng được freeship toàn shop, hoặc phí giao dưới ngưỡng cấu hình 0đ).
+ * khách thấy phí giao của kiện đối tác vẫn còn mà hiểu mã bị lỗi. `why` là lý do kiện Tubu hết phí giao; null = không có con số ngưỡng để nêu (hạng được miễn phí giao toàn shop, hoặc phí giao dưới ngưỡng cấu hình 0đ).
  */
 export function couponFreeshipTubuPartReason(why: 'FIRST_ORDER' | { threshold: number } | null): string {
   const detail = why === null ? '' : why === 'FIRST_ORDER' ? ' (đơn đầu)' : ` (đơn từ ${vnd(why.threshold)})`;
-  return `Phần hàng Tubu Tree giao đã được miễn phí giao${detail}, mã miễn phí giao chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.`;
+  return `Phần hàng Tubu Tree giao đã được miễn phí giao${detail}, mã miễn phí giao hàng chỉ áp cho hàng Tubu Tree nên được giữ cho đơn sau.`;
 }
 
 /**
