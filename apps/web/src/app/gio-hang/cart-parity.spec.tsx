@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
+import { cartComboBlocks, comboHeadingText } from '@tubutree/app-core/commerce/cart-combo';
 
 // BUYERWEB-10: bấm "+" trên dòng hết hàng làm dòng bị xoá (quantity kẹp về 0) mà không báo gì.
 // BUYERWEB-11: tên sản phẩm dài không khoảng trắng làm giỏ tràn ngang ở 390px.
@@ -152,3 +153,20 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
   });
 });
 
+
+describe('/gio-hang — đầu nhóm combo giống Mini App (K5)', () => {
+  it('chữ đầu nhóm và chữ nhắc là đúng chữ của cartComboBlocks/comboHeadingText mà Mini App dùng', async () => {
+    const items = [line({ id: 'i1', variationId: 'v1', productName: 'Xà bông', slug: 'xb' }), line({ id: 'i2', variationId: 'v2', productName: 'Dầu gội', slug: 'dg' })];
+    const comboGroups = [{ id: 'collection:c1', kind: 'STOREFRONT' as const, title: 'Bộ giặt sạch Fuwa3e', discount: 65250, lineIds: ['i1', 'i2'], keyLineIds: ['i1', 'i2'] }];
+    state.cart = { ...cartOf(items), comboDiscount: 65250, comboGroups };
+    const { container } = await mount();
+    const [applied] = cartComboBlocks(items, comboGroups).blocks;
+    expect(container.querySelector('[data-testid="cart-combo-heading"]')!.textContent).toBe(comboHeadingText(applied!));
+    expect(container.querySelector('[data-testid="cart-combo-heading"]')!.textContent).toBe('Combo: Bộ giặt sạch Fuwa3e · Tiết kiệm 65.250đ');
+    click(container.querySelector<HTMLInputElement>('input[type="checkbox"][aria-label="Chọn Xà bông để thanh toán"]'));
+    await flush();
+    const [unapplied] = cartComboBlocks(items, comboGroups, new Set(['i1'])).blocks;
+    expect(container.querySelector('[data-testid="cart-combo-heading"]')!.textContent).toBe(comboHeadingText(unapplied!));
+    expect(container.querySelector('[data-testid="cart-combo-hint"]')!.textContent).toBe(unapplied!.hint);
+  });
+});
