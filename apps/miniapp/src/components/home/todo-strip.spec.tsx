@@ -11,7 +11,20 @@ const mocks = vi.hoisted(() => ({
   status: 'authenticated',
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
-vi.mock('../../services/shop-api', () => ({ fetchOrders: mocks.fetchOrders, fetchHomeTodo: mocks.fetchHomeTodo, fetchActiveOrderCount: mocks.fetchActive }));
+vi.mock('../../services/shop-api', () => ({ fetchOrders: mocks.fetchOrders, fetchHomeTodo: mocks.fetchHomeTodo }));
+// Số đơn đang xử lý lấy từ /me/summary (cùng query với thanh đáy); `fetchActive` trả số đó.
+vi.mock('../../services/core-http', () => ({
+  coreHttp: {
+    get: (path: string) =>
+      path === '/me/summary'
+        ? Promise.resolve(mocks.fetchActive()).then((active: number) => ({
+            orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active },
+            unreadNotifications: 0,
+            activeSubscriptions: 0,
+          }))
+        : Promise.reject(new Error(`không mock ${path}`)),
+  },
+}));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } }) => unknown) => sel({ status: mocks.status, user: { id: 'u1' } }),
 }));

@@ -84,3 +84,30 @@ describe('mutation đánh dấu không ghi gì thì không làm cũ khoá admin 
     expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(true);
   });
 });
+
+describe('createQueryClient — làm mới số đếm /me/summary', () => {
+  const stale = (client: ReturnType<typeof createQueryClient>) => client.getQueryState(['me-summary'])?.isInvalidated === true;
+  const seed = () => {
+    const client = createQueryClient();
+    client.setQueryData(['me-summary'], { orders: { active: 1 } });
+    return client;
+  };
+
+  it.each([['orders'], ['orders', 'list', 'all'], ['notifications'], ['subscriptions']])('làm mới %j đánh dấu summary cũ', async (...key) => {
+    const client = seed();
+    await client.invalidateQueries({ queryKey: key });
+    expect(stale(client)).toBe(true);
+  });
+
+  it.each([['wallet'], ['products'], ['coupons'], ['me']])('làm mới %j không đụng summary (Vườn Xanh làm mới ["me"] sau mỗi lần tưới)', async (...key) => {
+    const client = seed();
+    await client.invalidateQueries({ queryKey: key });
+    expect(stale(client)).toBe(false);
+  });
+
+  it('làm mới không kèm khoá (mọi truy vấn) cũng làm cũ summary', async () => {
+    const client = seed();
+    await client.invalidateQueries();
+    expect(stale(client)).toBe(true);
+  });
+});

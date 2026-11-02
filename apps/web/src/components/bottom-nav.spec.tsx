@@ -102,11 +102,11 @@ describe('BottomNav (điện thoại)', () => {
     expect(render('/')).toContain('>99+<');
   });
 
-  it('badge hỏi /orders/active-count chỉ khi đã đăng nhập, dưới khoá orders nên đặt/huỷ đơn làm mới nó', async () => {
+  it('badge hỏi /me/summary chỉ khi đã đăng nhập, cùng khoá với Cá nhân; đặt/huỷ đơn làm mới nó qua TubuQueryClient', async () => {
     mocks.ready = () => true;
     render('/');
     const opts = mocks.query.mock.calls[0]![0] as { queryKey: string[]; enabled: boolean; retry: boolean };
-    expect(opts.queryKey.slice(0, 1)).toEqual(['orders']);
+    expect(opts.queryKey).toEqual(['me-summary']);
     expect(opts.enabled).toBe(true);
     expect(opts.retry).toBe(false);
     mocks.status = 'anonymous';

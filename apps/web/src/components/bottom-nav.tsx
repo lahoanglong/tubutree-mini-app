@@ -4,21 +4,13 @@ import Link from 'next/link';
 
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
-import { apiFetch } from '@/lib/client-api';
+import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
+import { coreHttp } from '@/lib/core-http';
 import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
 import { useOffersDot } from '@/lib/use-offers-dot';
 import { GardenHintBubble } from './garden-hint-bubble';
 import { CountBadge } from './mini/badge';
 import { useShellPathname } from '@/lib/shell-pathname';
-
-/** Khoá nằm dưới tiền tố ['orders'] nên mọi lần làm mới ['orders'] (đặt đơn, huỷ đơn) cũng làm mới badge, như Mini App. */
-const ACTIVE_ORDER_COUNT_KEY = ['orders', 'active-count'] as const;
-
-/** Dữ liệu lạ (route khác trả nhầm) → 0 thay vì NaN, như `fetchActiveOrderCount` của Mini App. */
-const fetchActiveOrderCount = async () => {
-  const body = await apiFetch<{ count?: unknown }>('/orders/active-count');
-  return typeof body?.count === 'number' ? body.count : 0;
-};
 
 /** Bấm lại tab đang mở thì cuộn mượt về đầu trang (như Mini App). Khách bật giảm chuyển động thì nhảy thẳng. */
 function scrollToTop() {
@@ -35,9 +27,10 @@ export default function BottomNav() {
   const { status } = useAuth();
   const isRoot = isWebRootPath(pathname);
   const tabs = readyNavTabs();
+  // Cùng query /me/summary với Cá nhân và chuông (số đơn đang xử lý); đặt/huỷ đơn làm mới nó (TubuQueryClient).
   const activeQ = useQuery({
-    queryKey: ACTIVE_ORDER_COUNT_KEY,
-    queryFn: fetchActiveOrderCount,
+    ...meSummaryQuery(coreHttp),
+    select: (s) => s.orders.active,
     enabled: isRoot && status === 'authenticated' && tabs.some((t) => t.badge === 'active-orders'),
     staleTime: 30_000,
     retry: false,

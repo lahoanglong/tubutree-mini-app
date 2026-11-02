@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
-import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
+import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { coreHttp } from '@/lib/core-http';
 import { homeText } from '@/lib/home-text';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -27,9 +27,9 @@ export function HeaderBell({ authed }: { authed: boolean }) {
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
   }, []);
-  const q = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed && wide });
+  const q = useQuery({ ...meSummaryQuery(coreHttp), select: (s) => s.unreadNotifications, enabled: authed && wide });
   if (!authed || !isWebRouteReady('/tai-khoan/thong-bao')) return null;
-  const unread = q.data?.count ?? 0;
+  const unread = q.data ?? 0;
   return (
     <Link
       href="/tai-khoan/thong-bao"

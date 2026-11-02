@@ -23,7 +23,7 @@ test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển b�
     onboarded: true, segments: [], pointsBalance: 120, pointsConvertedBalance: 0, walletBalance: 50000,
   });
 
-  test('Cá nhân, khách thường: một lời gọi đếm đơn, một lời gọi đếm tin, không hỏi điểm quầy', async ({ page, api }) => {
+  test('Cá nhân, khách thường: MỘT lời gọi /me/summary cho đơn, đơn đang xử lý, tin và gói định kỳ, không hỏi điểm quầy', async ({ page, api }) => {
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: me() }));
     api.get('/me', () => me());
     api.get('/auth/me', () => ({ ...me(), ownsBrand: false }));
@@ -33,8 +33,7 @@ test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển b�
     api.get('/dealer/me', { status: 'NONE', isDealer: false });
     api.get('/orders', { data: [], meta: { page: 1, limit: 1, total: 0 } });
     api.get('/me/notifications', []);
-    api.get('/me/notifications/unread-count', { count: 73 });
-    api.get('/orders/status-counts', { pending_payment: 2, processing: 1, shipping: 0, delivered: 5, closed: 0 });
+    api.get('/me/summary', { orders: { pending_payment: 2, processing: 1, shipping: 0, delivered: 5, closed: 0, active: 3 }, unreadNotifications: 73, activeSubscriptions: 0 });
     api.allowUnmocked('GET /me/wallet', 'GET /me/referral', 'GET /me/subscriptions', 'GET /brand/owner/me');
     const calls: string[] = [];
     page.on('request', (r) => {
@@ -48,10 +47,13 @@ test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển b�
     console.log(`PROFILE_CALLS_WEB ${calls.length}\n${calls.join('\n')}`);
 
     const count = (re: RegExp) => calls.filter((c) => re.test(c)).length;
-    expect(count(/^GET \/orders\/status-counts/)).toBe(1);
+    expect(count(/^GET \/me\/summary/)).toBe(1);
+    expect(count(/^GET \/orders\/status-counts/)).toBe(0);
+    expect(count(/^GET \/orders\/active-count/)).toBe(0);
+    expect(count(/^GET \/me\/subscriptions/)).toBe(0);
     // Ba lời gọi đếm theo bộ lọc (status=/group=) đã gộp; danh sách đơn của khối máy tính (hiện từ md) vẫn tải ở mọi khổ.
     expect(count(/^GET \/orders\?(status|group)=/)).toBe(0);
-    expect(count(/^GET \/me\/notifications\/unread-count/)).toBe(1);
+    expect(count(/^GET \/me\/notifications\/unread-count/)).toBe(0);
     expect(count(/^GET \/me\/notifications(\?|$)/)).toBe(0);
     expect(count(/^GET \/waste\/desk\/points/)).toBe(0);
   });

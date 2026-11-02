@@ -17,6 +17,16 @@ export const ORDER_COUNT_GROUPS = {
 
 export type OrderStatusCounts = Record<keyof typeof ORDER_COUNT_GROUPS, number>;
 
+/** Số đơn từng tab từ kết quả `groupBy status`; dùng chung với GET /me/summary để hai nơi không lệch nhau. */
+export function orderCountsFromRows(rows: readonly { status: string; _count: { _all: number } }[]): OrderStatusCounts {
+  const byStatus = new Map<string, number>(rows.map((r) => [r.status, r._count._all]));
+  const out = {} as OrderStatusCounts;
+  for (const key of Object.keys(ORDER_COUNT_GROUPS) as (keyof OrderStatusCounts)[]) {
+    out[key] = ORDER_COUNT_GROUPS[key].reduce((sum, status) => sum + (byStatus.get(status) ?? 0), 0);
+  }
+  return out;
+}
+
 @Injectable()
 export class OrderCountsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -24,11 +34,6 @@ export class OrderCountsService {
   /** Số đơn của khách theo từng tab trong một truy vấn, thay cho một lời gọi GET /orders?limit=1 mỗi tab. */
   async statusCounts(userId: string): Promise<OrderStatusCounts> {
     const rows = await this.prisma.order.groupBy({ by: ['status'], where: { userId }, _count: { _all: true } });
-    const byStatus = new Map<string, number>(rows.map((r) => [r.status, r._count._all]));
-    const out = {} as OrderStatusCounts;
-    for (const key of Object.keys(ORDER_COUNT_GROUPS) as (keyof OrderStatusCounts)[]) {
-      out[key] = ORDER_COUNT_GROUPS[key].reduce((sum, status) => sum + (byStatus.get(status) ?? 0), 0);
-    }
-    return out;
+    return orderCountsFromRows(rows);
   }
 }

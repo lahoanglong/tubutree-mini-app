@@ -67,11 +67,10 @@ beforeEach(() => {
     '/products/for-you': () => [card('f1', 'Trùng gợi ý')],
     '/brands': () => [],
     '/categories': () => CATEGORIES,
-    '/me/notifications/unread-count': () => ({ count: 0 }),
+    '/me/summary': () => ({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 }),
     '/me/purchased-items': () => ({ items: [], nextCursor: null }),
     '/config/public': () => CONFIG,
     '/me/new-customer-offer': () => ({ isNewCustomer: true, welcomeVoucher: null }),
-    '/orders/active-count': () => ({ count: 0 }),
     '/me/subscriptions': () => [],
     '/me/loyalty': () => ({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 }),
     '/me/coupons': () => [],
@@ -434,16 +433,18 @@ describe('HomeView — banner chiến dịch (P11)', () => {
 
 describe('HomeView — chuông và khách vãng lai', () => {
   it('chuông báo số tin chưa đọc (chỉ khi đã đăng nhập), dẫn sang trang Thông báo', async () => {
-    routes['/me/notifications/unread-count'] = () => ({ count: 2 });
+    routes['/me/summary'] = () => ({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 2, activeSubscriptions: 0 });
     const c = await mount();
     const bell = c.querySelector<HTMLAnchorElement>('a[aria-label="Thông báo, 2 chưa đọc"]')!;
     expect(bell.getAttribute('href')).toBe('/tai-khoan/thong-bao');
     expect(bell.querySelector('[aria-label="2 thông báo chưa đọc"]')?.textContent).toBe('2');
   });
 
-  it('chuông chỉ đếm: một lời gọi unread-count, không tải danh sách tin', async () => {
+  it('chuông chỉ đếm: một lời gọi /me/summary (cùng lời gọi với thanh đáy và Cá nhân), không tải danh sách tin', async () => {
     await mount();
-    expect(calls('/me/notifications/unread-count')).toHaveLength(1);
+    expect(calls('/me/summary')).toHaveLength(1);
+    expect(calls('/me/notifications/unread-count')).toHaveLength(0);
+    expect(calls('/orders/active-count')).toHaveLength(0);
     expect(calls('/me/notifications')).toHaveLength(0);
   });
 
@@ -462,7 +463,7 @@ describe('HomeView — chuông và khách vãng lai', () => {
   it('khách chưa đăng nhập: không gọi for-you/notifications/purchased-items/loyalty, không có thẻ thành viên; vẫn thấy Quà khách mới (chỉ lợi ích)', async () => {
     mocks.phase = 'guest';
     const c = await mount();
-    for (const p of ['/products/for-you', '/me/notifications/unread-count', '/me/notifications', '/me/purchased-items', '/me/new-customer-offer', '/orders/active-count', '/me/loyalty']) {
+    for (const p of ['/products/for-you', '/me/summary', '/me/notifications', '/me/purchased-items', '/me/new-customer-offer', '/orders/active-count', '/me/loyalty']) {
       expect(calls(p)).toHaveLength(0);
     }
     expect(c.querySelector('a[aria-label="Thông báo"]')!.getAttribute('href')).toBe('/tai-khoan/thong-bao');

@@ -1,6 +1,28 @@
-import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryClient, type InvalidateOptions, type InvalidateQueryFilters } from '@tanstack/react-query';
+import { ME_SUMMARY_KEY, summaryKeyAffectedBy } from '@tubutree/app-core/api/me-summary';
 import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
 import { ApiError } from '@/lib/client-api';
+
+/**
+ * Làm mới ['orders'] (đặt đơn, huỷ đơn, thanh toán), ['notifications'] (đọc tin) hay ['subscriptions'] cũng làm cũ các số của
+ * /me/summary (huy hiệu thanh đáy, số đơn và tin chưa đọc ở Cá nhân). Gom ở đây để mọi nơi đang gọi invalidateQueries,
+ * kể cả trang chưa viết, không phải nhớ khoá summary; query không có người xem chỉ bị đánh dấu cũ, không gọi mạng.
+ */
+export class TubuQueryClient extends QueryClient {
+  private summaryRefresh: Promise<void> | null = null;
+
+  override invalidateQueries(filters?: InvalidateQueryFilters, options?: InvalidateOptions): Promise<void> {
+    const own = super.invalidateQueries(filters, options);
+    if (!summaryKeyAffectedBy(filters?.queryKey)) return own;
+    // Kéo-để-làm-mới làm mới ba gốc khoá liền nhau: gộp theo microtask để chỉ MỘT lời gọi summary, vẫn giữ cancelRefetch mặc định
+    // (lần tải cũ đang bay bị huỷ nên không ghi đè số cũ lên số mới). Promise trả về chờ cả summary.
+    this.summaryRefresh ??= Promise.resolve().then(() => {
+      this.summaryRefresh = null;
+      return super.invalidateQueries({ queryKey: ME_SUMMARY_KEY });
+    });
+    return Promise.all([own, this.summaryRefresh]).then(() => undefined);
+  }
+}
 
 /** Lỗi 4xx là nghiệp vụ (404, 401...): thử lại vẫn y vậy, chỉ nhân đôi request. Mất mạng và 5xx thì thử một lần. */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
@@ -43,7 +65,7 @@ export function createQueryClient(): QueryClient {
       void client.invalidateQueries({ predicate: isAdminKey });
     },
   });
-  const client: QueryClient = new QueryClient({
+  const client: QueryClient = new TubuQueryClient({
     mutationCache,
     defaultOptions: {
       queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false, staleTime: defaultStaleTime },

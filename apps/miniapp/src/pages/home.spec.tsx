@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 
@@ -29,12 +29,18 @@ vi.mock('../services/shop-api', () => ({
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
-// Chuông chỉ đếm: một lời gọi unread-count, không tải danh sách tin (/me/notifications).
+// Chuông chỉ đếm: một lời gọi /me/summary (chung với thanh đáy), không tải danh sách tin (/me/notifications).
 vi.mock('../services/core-http', () => ({
   coreHttp: {
     get: (path: string) => {
       mocks.coreGet(path);
-      if (path === '/me/notifications/unread-count') return mocks.unreadCount();
+      if (path === '/me/summary') {
+        return Promise.resolve(mocks.unreadCount()).then(({ count }: { count: number }) => ({
+          orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 },
+          unreadNotifications: count,
+          activeSubscriptions: 0,
+        }));
+      }
       if (path === '/campaigns' || path === '/bundles/combos') return Promise.resolve([]);
       return Promise.reject(new Error(`không mock ${path}`));
     },
@@ -72,6 +78,7 @@ vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
+import { TubuQueryClient } from '../services/query-client';
 import { homeBlockOrder } from '../components/home/home-blocks';
 import { HOME_BEST_SELLER_LIMIT, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
@@ -89,7 +96,7 @@ const BEST_PAGE = () => PAGE([1, 2, 3, 4].map((n) => card(`bs${n}`, `Bán chạy
 const BEST_QUERY = { limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' };
 
 function renderHome() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const qc = new TubuQueryClient({ defaultOptions: { queries: { retry: false } } });
   const utils = render(
     <QueryClientProvider client={qc}>
       <HomePage />
@@ -267,7 +274,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     renderHome();
     expect(await screen.findByRole('button', { name: 'Thông báo, 73 chưa đọc' })).toBeInTheDocument();
     // Một lời gọi đếm nhỏ, không tải trang tin nào: khách có hơn 50 tin chưa đọc thấy đúng số như ở Cá nhân.
-    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns' && p !== '/bundles/combos')).toEqual(['/me/notifications/unread-count']);
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns' && p !== '/bundles/combos')).toEqual(['/me/summary']);
   });
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ', async () => {

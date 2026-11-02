@@ -10,8 +10,11 @@ vi.mock('@/lib/use-hydrated', async (orig) => {
   return { useHydrated: () => (mocks.hydrated === 'real' ? actual.useHydrated() : mocks.hydrated) };
 });
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: (o: { queryKey: unknown[] }) => ({
-    data: o.queryKey.join('/') === 'notifications/unread' ? { count: mocks.notifications.filter((n) => n.status !== 'READ').length } : mocks.cart,
+  useQuery: (o: { queryKey: unknown[]; select?: (s: unknown) => unknown }) => ({
+    data:
+      o.queryKey.join('/') === 'me-summary'
+        ? o.select?.({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: mocks.notifications.filter((n) => n.status !== 'READ').length, activeSubscriptions: 0 })
+        : mocks.cart,
   }),
 }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));

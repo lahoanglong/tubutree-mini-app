@@ -22,6 +22,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { MeSummaryModule } from './modules/me-summary/me-summary.module';
 import { GameModule } from './modules/game/game.module';
 import { DailyCheckInModule } from './modules/daily-check-in/daily-check-in.module';
 import { FeedModule } from './modules/feed/feed.module';
@@ -86,6 +87,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     CartModule,
     CheckoutModule,
     OrdersModule,
+    MeSummaryModule,
     GameModule,
     DailyCheckInModule,
     FeedModule,
