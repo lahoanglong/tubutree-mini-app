@@ -39,7 +39,7 @@
 | Spec API khớp chữ cũ | `cart/cart.service.spec.ts`, `checkout/checkout.service.spec.ts`, `flash-sale/flash-sale.staff.spec.ts`, `affiliate/affiliate.service.spec.ts` nếu khớp, `apps/api/test/integration-race/*.race-spec.ts` khớp chữ |
 | "Mua kèm giá tốt" | `packages/app-core/src/shop-copy.ts` (`addon.title`), spec trích chữ: `commerce/bundle-view.spec.ts`, Mini `pdp-bundles.spec.tsx`, `product-detail-info.spec.tsx`, web `pdp-bundles.spec.tsx`, `page.spec.tsx`, e2e `bundles.miniapp.spec.ts`, `bundles-cls.miniapp.spec.ts` |
 | `pickerStockText` | `packages/app-core/src/variation-picker.ts` (chỉ hàm này), `variation-picker.spec.ts` |
-| Lưới chặn chữ cấm | `packages/app-core/src/shop-copy.ts` (`FORBIDDEN_TERMS`), `packages/app-core/src/terminology.spec.ts`, `packages/app-core/src/shop-copy.spec.ts` |
+| Lưới chặn chữ cấm | `packages/app-core/src/shop-copy.ts` (`FORBIDDEN_TERMS`, cờ `i`), `packages/app-core/src/terminology.spec.ts` |
 | Tài liệu | `DESIGN.md` (đoạn terminology.spec + Nhật ký), `docs/2026-10-31-shop-redesign/01-thiet-ke.md` §5 |
 
 ---
@@ -118,8 +118,8 @@ Chữ chốt (hàm không có sẵn mã đang xét nên dùng "mã miễn phí g
 - Test: chính `terminology.spec.ts`, `shop-copy.spec.ts`
 
 **Interfaces:**
-- `displayStrings(source, fileName)` giữ chữ ký; `ASCII_PROSE` thêm nhánh `^[A-Z]{2,} ` (chữ hoa ASCII rồi dấu cách) để template `HSD ${d}` (đầu template là `HSD `) bị coi là chữ khách đọc. Không dùng nhánh không có dấu cách: `'FREESHIP'` vẫn là mã định danh.
-- `loadSources()` đọc thêm `apps/api/src/modules/**` chỉ với file khớp `API_COPY_FILE`: `/-(notice|price)\.ts$/` hoặc nằm trong `API_COPY_EXTRA = ['apps/api/src/modules/cart/cart.batch-error.ts']`.
+- `displayStrings(source, fileName)` giữ chữ ký; `ASCII_PROSE` thêm nhánh `^[A-Z]{2,}[ :]` (chữ hoa ASCII rồi dấu cách) để template `HSD ${d}` (đầu template là `HSD `) bị coi là chữ khách đọc. Không dùng nhánh không có dấu cách: `'FREESHIP'` vẫn là mã định danh.
+- `loadSources()` đọc thêm `apps/api/src/modules/**` chỉ với file khớp `API_COPY_FILE`: `/-(notice|price)(\.service)?\.ts$/` (gồm `loyalty/tier-drop-notice.service.ts`) hoặc nằm trong `API_COPY_EXTRA = ['apps/api/src/modules/cart/cart.batch-error.ts']`.
 
 - [ ] **Step 1: Viết ca đỏ.** (a) `it('quét file chữ khách đọc của API')`: `sources` có `coupon-notice.ts`, `flash-line-price.ts`, `cart.batch-error.ts`; một file API tên lạ (`apps/api/src/modules/x/x.service.ts`) không nằm trong `sources`; chữ cấm giả ở `apps/api/src/modules/x/x-notice.ts` ra đúng một hit. (b) `bắt`: `` const t = `HSD ${d}`; `` ra `HSD`; `findHits` template đó ra use `Hạn dùng hoặc Dùng đến`; ca `bỏ qua` thêm `` const k = `FREESHIP-${id}`; `` không ra chữ. (c) `CATCH` thêm `['Mua kèm deal sốc', 'bỏ chữ giục mua']`, `['Giá sốc', 'bỏ chữ giục mua']`.
 - [ ] **Step 2: Chạy đỏ** `cd packages/app-core && npx vitest run src/terminology.spec.ts` → FAIL ở ba ca.
@@ -138,3 +138,11 @@ Chữ chốt (hàm không có sẵn mã đang xét nên dùng "mã miễn phí g
 - [ ] **Step 2: Cập nhật tài liệu.**
 - [ ] **Step 3: Gate** `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 07818cc2b --out /Users/longla/coding/tubutree-mini-app/.claude/worktrees/gate-K4.txt`; `pnpm lint:parity`, `pnpm lint:vars`; e2e Mini cả bộ `E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3491 npx playwright test --workers=2 --reporter=line`.
 - [ ] **Step 4: Commit** `docs(shop): ghi chữ chuẩn K4 vào DESIGN.md và thiết kế`.
+
+---
+
+## Kết quả (ghi sau khi làm)
+
+- Chữ API còn sót ở nơi khác được sửa trong Task 2: hai câu "Chỉ còn n sản phẩm trong kho" của `cart.service.ts` (hai dòng, ngoài phần combo của K5), `cart.batch-error.ts`, sáu lỗi 404 "Nhãn hàng không tồn tại" (`brand.service.ts` ×5, `catalog.service.ts` ×1), câu đổi giá Giờ vàng của CTV (`affiliate.service.ts`, kèm bỏ "Vui lòng" trong chính câu đó).
+- Bộ quét mới chỉ bắt thêm một chỗ ngoài danh sách miễn: `apps/web/src/lib/coupon-view.ts:21` ("HSD ${d}", file của K3), vào `EXEMPT` tạm với lý do `gói K2/K3 đang sửa, gỡ khi gộp`. "Vui lòng"/"Đang tính..." của K2 đã có sẵn dòng miễn nên không cần dòng mới; K2 gỡ khi sửa.
+- Không làm (ghi để gói chữ riêng): "Vui lòng" trong lỗi API (khoảng 100 chỗ ở 40 file), "chỉ còn" của chữ Đổi rác (`waste-messages.ts`, `waste-labels.ts`, `recycle-labels.ts`), mô tả/nhãn "freeship", "HOT" trong `waste-seed-data.ts` (dữ liệu seed đã nằm trong DB), chữ quản trị Giờ vàng ("flash sale" ở `flash-sale.service.ts`).
