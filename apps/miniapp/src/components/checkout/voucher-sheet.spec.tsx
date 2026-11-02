@@ -23,6 +23,7 @@ vi.mock('../../services/shop-api', () => ({
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { syncServerClock } from '../../utils/server-clock';
 import { VoucherSheet } from './voucher-sheet';
 
 const COUPONS = [
@@ -137,8 +138,10 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
       { code: 'MIN199', eligible: false, discount: 0, reason: 'Đơn tối thiểu 199.000đ để dùng mã này.' },
     ]);
     renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 150_000 });
-    expect(await screen.findByText('Mua thêm 49k để dùng')).toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/Đơn tối thiểu|(^|[^\d.])0đ/);
+    // Có xem trước: chỉ câu của máy chủ, một lần (dòng điều kiện "Đơn từ 199k" bị bỏ), không tự đếm "Mua thêm".
+    expect(await screen.findAllByText('Đơn tối thiểu 199.000đ để dùng mã này.')).toHaveLength(1);
+    expect(document.body.textContent).not.toMatch(/Đơn từ 199k|Mua thêm|(^|[^\d.])0đ/);
+    expect(document.body.textContent).not.toContain('Đơn tối thiểu 0');
   });
 
   it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; bấm vẫn áp đúng mã', async () => {
@@ -219,6 +222,26 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     await waitFor(() => expect(onCouponApplied).toHaveBeenCalledTimes(1));
     expect(onClose).not.toHaveBeenCalled();
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã bỏ mã giảm giá' }));
+  });
+
+  it('mã đang dùng mà ví (cache cũ) báo đã hết hạn theo đồng hồ máy: vẫn còn nút "Bỏ chọn" để gỡ', async () => {
+    mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], endAt: new Date(Date.now() - 60_000).toISOString() }]);
+    renderSheet('giam10');
+    fireEvent.click(await screen.findByRole('button', { name: /^Bỏ chọn mã/ }));
+    await waitFor(() => expect(mocks.removeCoupon).toHaveBeenCalledTimes(1));
+  });
+
+  it('hạn tính theo giờ máy chủ: điện thoại chạy nhanh hơn nhưng máy chủ nói mã còn hạn thì vẫn có nút "Dùng"', async () => {
+    // Điện thoại nhanh 1 ngày so với máy chủ: mã hết hạn "hôm qua" theo điện thoại, còn nửa ngày theo máy chủ.
+    const device = Date.now();
+    syncServerClock(new Date(device - 86_400_000).toISOString());
+    try {
+      mocks.getCoupons.mockResolvedValue([{ ...COUPONS[0], endAt: new Date(device - 43_200_000).toISOString() }]);
+      renderSheet();
+      expect(await screen.findByRole('button', { name: /^Dùng mã/ })).toBeInTheDocument();
+    } finally {
+      syncServerClock(new Date().toISOString());
+    }
   });
 
   it('áp dụng đang chạy: nút của chính mã đó hiện trạng thái đang tải, nút khác bị khoá', async () => {
@@ -447,7 +470,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     ]);
     renderSheet(undefined, { previewParams: { addressId: 'a1' }, subtotal: 900_000 });
     expect(await screen.findByText(reason)).toBeInTheDocument();
-    const blocked = screen.getByRole('button', { name: /^Không áp dụng mã GIAM10$/ });
+    const blocked = screen.getByRole('button', { name: /^Chưa đủ điều kiện dùng mã GIAM10$/ });
     expect(blocked).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(blocked);
     expect(mocks.applyCoupon).not.toHaveBeenCalled();

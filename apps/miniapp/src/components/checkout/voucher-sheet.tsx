@@ -9,6 +9,7 @@ import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/sho
 import { getErrorMessage, getLoadErrorMessage } from '../../services/api';
 import { useNotify } from '../../hooks/use-notify';
 import { haptic } from '../../utils/haptic';
+import { serverNow } from '../../utils/server-clock';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -120,7 +121,7 @@ export function VoucherSheet({
   // Spinner của "Áp dụng" chỉ quay khi chính mã tay đang được áp; mã bấm từ danh sách thì khoá nút này.
   const applyingCustom = applyMut.isPending && applyMut.variables === customCode.trim().toUpperCase();
 
-  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, productIds, previews, now: Date.now(), displayCode: autoCouponName });
+  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, productIds, previews, now: serverNow(), displayCode: autoCouponName });
   // Nút đang quay: mã đang áp (mã tay thì không có hàng nào khớp), hoặc mã đang gỡ là hàng đang dùng.
   const pendingCode = applyMut.isPending ? (applyMut.variables ?? null) : removeMut.isPending ? (rows.find((r) => r.applied)?.coupon.code ?? null) : null;
 

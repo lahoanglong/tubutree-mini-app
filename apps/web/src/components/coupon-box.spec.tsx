@@ -35,6 +35,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 import { useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
 import { MD_DOWN } from '@/lib/use-media-query';
+import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { CouponBox, forgetAutoCoupon } from './coupon-box';
 
 const c = (code: string, over: Record<string, unknown> = {}) => ({
@@ -271,8 +272,21 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     const r = render(<CouponBox currentCode={null} subtotal={150000} preview={{ addressId: 'a1' }} />);
     mounted.push(r);
     await flush(8);
-    expect(card(r.container, 'MIN199').textContent).toContain('Mua thêm 49k để dùng');
-    expect(r.container.textContent).not.toMatch(/Đơn tối thiểu|(^|[^\d.])0đ/);
+    // Có xem trước: chỉ câu của máy chủ, một lần (dòng điều kiện "Đơn từ 199k" bị bỏ), không tự đếm "Mua thêm".
+    expect(card(r.container, 'MIN199').textContent).toContain('Đơn tối thiểu 199.000đ để dùng mã này.');
+    expect(r.container.textContent?.match(/Đơn tối thiểu/g)).toHaveLength(1);
+    expect(r.container.textContent).not.toMatch(/Đơn từ 199k|Mua thêm|(^|[^\d.])0đ/);
+    expect(card(r.container, 'MIN199').querySelector('button')!.textContent).toBe('Chưa đủ');
+  });
+
+  it('giỏ có món Giờ vàng (subtotal gồm cả món đó): không ghi số "Mua thêm" thấp hơn thật, giữ câu đơn tối thiểu của máy chủ', async () => {
+    state.coupons = [c('MIN400', { minOrder: 400000 })];
+    state.previews.mockResolvedValue([{ code: 'MIN400', eligible: false, discount: 0, reason: 'Đơn tối thiểu 400.000đ để dùng mã này.' }]);
+    const r = render(<CouponBox currentCode={null} subtotal={350000} preview={{ addressId: 'a1' }} />);
+    mounted.push(r);
+    await flush(8);
+    expect(card(r.container, 'MIN400').textContent).toContain('Đơn tối thiểu 400.000đ để dùng mã này.');
+    expect(r.container.textContent).not.toContain('Mua thêm');
   });
 });
 
@@ -801,6 +815,31 @@ describe('CouponBox — dạng bảng trượt (điện thoại, trong thanh dí
     click(dialog().querySelector('button[aria-label="Bỏ chọn mã WELCOME30"]'));
     await flush(6);
     expect(state.removed).toBe(1);
+  });
+
+  it('đang có mã nằm trong ví mà ví (cache cũ) báo hết hạn theo đồng hồ máy: vẫn còn nút "Bỏ chọn", không mất đường gỡ mã', async () => {
+    state.coupons = [c('WELCOME30', { endAt: new Date(Date.now() - 60_000).toISOString() })];
+    const box = await mountSheet('WELCOME30');
+    click(box.querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(byText(dialog(), 'button', 'Bỏ mã đang áp dụng')).toBeNull();
+    click(dialog().querySelector('button[aria-label="Bỏ chọn mã WELCOME30"]'));
+    await flush(6);
+    expect(state.removed).toBe(1);
+  });
+
+  it('hạn tính theo giờ máy chủ: điện thoại chạy nhanh hơn nhưng máy chủ nói mã còn hạn thì vẫn có nút "Dùng"', async () => {
+    const device = Date.now();
+    syncServerClock(new Date(device - 86_400_000).toISOString());
+    try {
+      state.coupons = [c('SOONEND', { endAt: new Date(device - 43_200_000).toISOString() })];
+      const box = await mountSheet();
+      click(box.querySelector('button[aria-haspopup="dialog"]'));
+      await flush(3);
+      expect(dialog().querySelector('button[aria-label="Dùng mã SOONEND"]')).not.toBeNull();
+    } finally {
+      syncServerClock(new Date().toISOString());
+    }
   });
 
   it('ví chưa có mã: bảng nói chưa có mã và mời nhập mã ở trên (cùng chữ với Mini App)', async () => {

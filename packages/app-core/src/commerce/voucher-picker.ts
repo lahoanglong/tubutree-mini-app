@@ -74,7 +74,8 @@ const ACTION: Record<PickerGroup, { action: PickerAction; label: string; aria: s
 
 /**
  * Các hàng của bảng chọn mã ở giỏ và thanh toán. Có xem trước của máy chủ thì theo số đó (máy chủ tính trên hàng không Giờ vàng, sau combo,
- * theo phạm vi sản phẩm của mã); chưa có thì phép đoán phía máy (đơn tối thiểu, sản phẩm, phí giao đã 0), đúng như bảng cũ của cả hai app.
+ * theo phạm vi sản phẩm của mã) và chỉ nói lại câu của nó; chưa có thì phép đoán phía máy (đơn tối thiểu, sản phẩm, phí giao đã 0), đúng như bảng
+ * cũ của cả hai app, và chỉ phép đoán này mới ghi "Mua thêm …" (`subtotal` gồm cả dòng Giờ vàng, nên con số chỉ là ước cho tới khi xem trước về).
  * Mã đang chọn luôn là `applied` dù xem trước nói gì: khách phải gỡ được nó.
  * Thứ tự: đang chọn, dùng được (giảm nhiều trước, hoà thì hạn sớm trước), chưa đủ (thiếu ít trước), không áp dụng; trong nhóm giữ thứ tự vào.
  */
@@ -94,15 +95,11 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
     if (applied) group = 'applied';
     else if (preview?.eligible) group = 'usable';
     else if (preview) {
-      // Máy chủ kiểm khách mới, sản phẩm, lượt dùng, hạn trước đơn tối thiểu: chỉ khi nó nói đúng câu đơn tối thiểu (hoặc im lặng) thì "mua thêm" mới là lối ra.
+      // Máy chủ kiểm khách mới, sản phẩm, lượt dùng, hạn trước đơn tối thiểu. Câu đơn tối thiểu của nó tính trên hàng không Giờ vàng, sau combo,
+      // nên số "mua thêm" tự trừ từ `subtotal` sẽ thấp hơn số thật: giữ nguyên câu của máy chủ, không tự đếm.
       const serverReason = preview.reason?.trim() || null;
-      if (missing > 0 && (serverReason === null || MIN_ORDER_SENTENCE.test(serverReason))) {
-        group = 'short';
-        reason = needMore(missing);
-      } else {
-        group = 'blocked';
-        reason = serverReason;
-      }
+      reason = serverReason;
+      group = (serverReason !== null && MIN_ORDER_SENTENCE.test(serverReason)) || (serverReason === null && missing > 0) ? 'short' : 'blocked';
     } else if (scope && ctx.productIds && !scope.some((x) => ctx.productIds!.includes(x.id))) {
       group = 'blocked';
       reason = scopeText;
@@ -115,7 +112,9 @@ export function pickerRows<T extends CouponDTO>(coupons: readonly T[], ctx: Pick
       reason = fillCopy('coupon.shipAlreadyFree');
     }
 
-    const view = voucherView({ ...coupon, claimed: true, ineligible: group === 'short' || group === 'blocked' }, ctx.now);
+    const live = voucherView({ ...coupon, claimed: true, ineligible: group === 'short' || group === 'blocked' }, ctx.now);
+    // VoucherTicket ẩn nút chính của phiếu hết hạn/đã dùng: đồng hồ máy lệch hay ví lấy từ cache cũ không được lấy mất nút "Bỏ chọn" của mã đang áp.
+    const view: VoucherView = applied && (live.state === 'expired' || live.state === 'used' || live.state === 'soldout') ? { ...live, state: 'saved' } : live;
     const duplicatesMin = reason !== null && MIN_ORDER_SENTENCE.test(reason);
     const condition = [duplicatesMin ? null : view.condition, scopeText && !scopeAsReason ? scopeText : null].filter(Boolean).join(' · ');
     const display = ctx.displayCode?.(coupon.code) ?? null;

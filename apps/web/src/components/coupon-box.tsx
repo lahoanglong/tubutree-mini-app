@@ -13,6 +13,7 @@ import {
 } from '@/lib/shop-client';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { EmptyState } from '@/components/mini/empty-state';
 import { VoucherPicker } from '@/components/mini/voucher-picker';
@@ -230,7 +231,7 @@ export function CouponBox({
   const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
   const panelAria = inSheet ? ({ 'aria-haspopup': 'dialog' } as const) : ({ 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const);
 
-  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, previews, now: Date.now(), displayCode: autoCouponName });
+  const rows = pickerRows(couponsQ.data ?? [], { currentCode, subtotal, shippingFee, previews, now: serverNow(), displayCode: autoCouponName });
   const appliedRow = rows.find((r) => r.applied);
   const shownRows = inSheet || showAll ? rows : rows.slice(0, VISIBLE_COUPONS);
   // Nút đang quay: mã đang áp, hoặc hàng đang dùng khi đang gỡ; mã nhập tay không có hàng nào khớp.
