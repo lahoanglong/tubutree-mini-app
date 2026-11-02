@@ -600,7 +600,7 @@ export default function CheckoutPage() {
               <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
                 <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.productName}</Text>
+                  <Text size="small" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{it.productName}</Text>
                   {it.variationName && (
                     <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                       {typeof it.variationName === 'object' && it.variationName !== null
@@ -650,13 +650,13 @@ export default function CheckoutPage() {
                 width: 36,
                 height: 36,
                 borderRadius: 'var(--radius-control)',
-                background: 'var(--clay-50)',
+                background: 'var(--color-promo-bg)',
                 display: 'grid',
                 placeItems: 'center',
                 flex: '0 0 auto',
               }}
             >
-              <Ticket size={20} color="var(--clay-700)" />
+              <Ticket size={20} color="var(--color-promo-fg)" />
             </Box>
             <Box style={{ minWidth: 0 }}>
               <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
@@ -666,12 +666,12 @@ export default function CheckoutPage() {
                 <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
                   <span
                     style={{
-                      background: 'var(--clay-50)',
-                      border: '1px dashed var(--clay-500)',
+                      background: 'var(--color-promo-bg)',
+                      border: '1px dashed var(--color-promo-solid-bg)',
                       borderRadius: 'var(--radius-control)',
                       padding: '2px 6px',
-                      color: 'var(--clay-700)',
-                      fontSize: 11,
+                      color: 'var(--color-promo-fg)',
+                      fontSize: 'var(--type-label-size)',
                       fontWeight: 700,
                       minWidth: 0,
                       overflow: 'hidden',

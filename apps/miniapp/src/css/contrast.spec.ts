@@ -50,6 +50,7 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
   const pairs: [string, string][] = [
     ['--color-text-price-deal', '--color-bg-surface'],
     ['--color-text-price-deal', '--color-promo-bg'],
+    ['--color-promo-fg', '--color-promo-bg'],
     ['--color-text-price-deal', '--color-bg-canvas'],
     ['--color-flash-fg', '--color-flash-bg'],
     ['--color-flash-solid-fg', '--color-flash-solid-bg'],

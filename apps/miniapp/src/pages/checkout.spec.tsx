@@ -750,6 +750,51 @@ describe('CheckoutPage — thiếu địa chỉ: nút Đặt hàng khoá có lý
   });
 });
 
+describe('CheckoutPage — dòng hàng và chip mã (K2)', () => {
+  const LONG = 'Nước rửa chén sinh học hương chanh sả gừng can lớn tiết kiệm cho gia đình đông người dùng';
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.locState = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('tên sản phẩm tối đa hai dòng, phân loại ở dòng riêng ngay sau tên', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...CART.items[0]!, productName: LONG, variationName: 'Can 5 lít hương chanh' }] });
+    renderPage();
+    const name = await screen.findByText(LONG);
+    expect(name.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    expect(name.style.whiteSpace).not.toBe('nowrap');
+    const variation = screen.getByText('Can 5 lít hương chanh');
+    expect(variation).not.toBe(name);
+    expect(variation.contains(name) || name.contains(variation)).toBe(false);
+    expect(name.compareDocumentPosition(variation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('chip mã và ô icon dùng token ngữ nghĩa (--color-promo-*), không primitive --clay và không cỡ chữ 11', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SALE', discount: 5_000 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, discount: 5_000 });
+    renderPage();
+    const chip = await screen.findByText('SALE');
+    const style = chip.getAttribute('style') ?? '';
+    expect(style).toContain('--color-promo-bg');
+    expect(style).toContain('--color-promo-fg');
+    expect(style).not.toMatch(/--clay|font-size:\s*11px/);
+    const row = chip.closest('.tubu-press') as HTMLElement;
+    expect(row.innerHTML).not.toContain('--clay');
+  });
+});
+
 describe('CheckoutPage — vùng chạm >= 44px (C-021)', () => {
   beforeEach(() => {
     mocks.publicConfig.waste.pickup = false;
