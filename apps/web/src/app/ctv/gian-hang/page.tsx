@@ -49,8 +49,8 @@ function CtvStorefront() {
   const params = useSearchParams();
   // retry: false để 404 (chưa có gian hàng) không bị thử lại; lỗi khác có nút Thử lại.
   const sfQ = useQuery({ ...myStorefrontQuery(coreHttp), enabled: phase === 'authenticated', retry: false });
-  // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
-  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi hoặc mất mạng (`paused`) cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  // Bậc của chủ shop chỉ quyết định một huy hiệu ở đầu xem trước, nên trình dựng không chờ nó: huy hiệu là khung chờ (cao bằng huy hiệu thật) tới khi bậc về, lỗi hay hết hạn chờ thì bỏ huy hiệu, không màn lỗi.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV có sẵn bậc, không có khung chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV).
   const tiersQ = useQuery({ ...affiliateCtvTiersQuery(coreHttp), staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
@@ -103,20 +103,13 @@ function CtvStorefront() {
       </Shell>
     );
   }
-  if (sf.type === 'CTV' && ownerTierPending(tiersQ)) {
-    return (
-      <Shell>
-        <Skeleton height={120} />
-      </Shell>
-    );
-  }
   // Cùng điều kiện với trình dựng: id trên địa chỉ phải là một khối còn tồn tại, không thì trình dựng vẽ danh sách và trang cần dải tiêu đề của nó.
   const khoi = sectionIdFromSearch(params?.toString() ?? '');
   const detail = khoi !== null && sf.collections.some((c) => c.id === khoi);
   return (
     <Shell detail={detail} builder>
       <Suspense fallback={<Skeleton height={120} />}>
-        <StorefrontBuilder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} />
+        <StorefrontBuilder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} tierPending={sf.type === 'CTV' && ownerTierPending(tiersQ)} />
       </Suspense>
     </Shell>
   );

@@ -16,7 +16,7 @@ const WEB_SHOP = [
   /^app\/(san-pham|ban-chay|gio-vang|gio-hang|thanh-toan|uu-dai|ma-giam-gia|chien-dich|brand|s|mua-chung)\//,
   /^app\/tai-khoan\/yeu-thich\//,
   /^components\/(home|catalog|flash|campaign|offers|shop-page|reorder|checkout|product)\//,
-  /^components\/(flash-price|add-to-cart|variation-sheet|variation-chip|cart-combo-block|coupon-box|pdp-selection|pdp-stock)\.tsx?$/,
+  /^components\/(flash-price|add-to-cart|variation-sheet|variation-chip|cart-combo-block|coupon-box|pdp-selection|pdp-stock|sticky-action-bar)\.tsx?$/,
 ];
 const inAny = (res) => (rel) => res.some((re) => re.test(rel));
 const miniShop = inAny(MINI_SHOP);

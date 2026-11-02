@@ -24,6 +24,15 @@ describe('StickyActionBar', () => {
     expect(bar.textContent).toBe('nội dung');
   });
 
+  it('màu và bóng theo token semantic như bản Mini (không bảng màu thô stone-*)', () => {
+    const r = render(<StickyActionBar label="Mua hàng">x</StickyActionBar>);
+    mounted.push(r);
+    const bar = r.container.querySelector('[data-testid="sticky-bar"]') as HTMLElement;
+    expect(bar.className).toContain('bg-[var(--color-bg-surface)]');
+    expect(bar.className).toContain('[box-shadow:var(--elevation-3)]');
+    expect(bar.className).not.toMatch(/\b(?:bg|border|text)-stone-\d+\b/);
+  });
+
   it('chừa inset trái/phải của tai thỏ khi xoay ngang (không nhỏ hơn lề 1rem sẵn có)', () => {
     const r = render(<StickyActionBar label="Mua hàng">x</StickyActionBar>);
     mounted.push(r);

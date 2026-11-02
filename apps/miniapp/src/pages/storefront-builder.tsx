@@ -33,7 +33,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ShopHeader } from '../components/ui/shop-header';
 import { Skeleton } from '../components/ui/skeleton';
-import { TierBadge } from '../components/ui/tier-badge';
+import { TierBadge, TierBadgeSkeleton } from '../components/ui/tier-badge';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { MoveButtons } from '../components/ui/move-buttons';
@@ -77,8 +77,8 @@ function BuilderLoading() {
 
 export default function StorefrontBuilderPage() {
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
-  // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
-  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi hoặc mất mạng (`paused`) cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  // Bậc của chủ shop chỉ quyết định một huy hiệu ở đầu xem trước, nên trình dựng không chờ nó: huy hiệu là khung chờ (cao bằng huy hiệu thật) tới khi bậc về, lỗi hay hết hạn chờ thì bỏ huy hiệu, không màn lỗi.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV có sẵn bậc, không có khung chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV).
   const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
@@ -99,8 +99,7 @@ export default function StorefrontBuilderPage() {
   // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
   wizardRef.current ??= shouldStartSignupWizard(sf);
   if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) {
-    if (sf.type === 'CTV' && ownerTierPending(tiersQ)) return <BuilderLoading />;
-    return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} />;
+    return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} tierPending={sf.type === 'CTV' && ownerTierPending(tiersQ)} />;
   }
   return (
     <BuilderShell>
@@ -137,7 +136,7 @@ function ActionMenu({ open, title, actions, onClose }: { open: boolean; title: s
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
 
-function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null }) {
+function Builder({ sf, tier, tierPending }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -641,12 +640,12 @@ function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji
         verified={Boolean(trustLabel)}
         note={sf.headerNote}
         badges={
-          trustLabel || tier ? (
+          trustLabel || tier || tierPending ? (
             <>
               {trustLabel && (
                 <Badge tone="verified" icon={Sparkles}>{trustLabel}</Badge>
               )}
-              {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
+              {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : null}
             </>
           ) : undefined
         }
