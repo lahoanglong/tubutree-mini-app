@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -116,7 +117,7 @@ function OrdersPageBody() {
             </ul>
             {orders.isFetchNextPageError && (
               <p role="alert" className={`mt-2 text-center ${ui.error}`}>
-                Không tải thêm được đơn hàng. Vui lòng thử lại.
+                {loadMoreFailed('đơn hàng')}
               </p>
             )}
             {orders.hasNextPage && (

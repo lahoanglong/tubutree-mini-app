@@ -1,6 +1,7 @@
 'use client';
 
 import { useContext } from 'react';
+import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
 import { QueryClientContext } from '@tanstack/react-query';
 import { TriangleAlert } from 'lucide-react';
 import { ui } from '@/lib/guest-ui';
@@ -12,7 +13,7 @@ import { SupportHotline } from '@/components/support-hotline';
  * khung viền (Mini App không có), từ md giữ thẻ viền.
  */
 export function ErrorState({
-  message = 'Đã có lỗi xảy ra — Vui lòng thử lại',
+  message = ERROR_GENERIC,
   onRetry,
   retryLabel = 'Thử lại',
   title = 'Chưa tải được trang này',

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -203,7 +204,7 @@ export default function NotificationsPage() {
       </ul>
       {notifQ.isFetchNextPageError && (
         <p role="alert" className={`mt-2 text-center ${ui.error}`}>
-          Không tải thêm được thông báo. Vui lòng thử lại.
+          {loadMoreFailed('thông báo')}
         </p>
       )}
       {notifQ.hasNextPage && (

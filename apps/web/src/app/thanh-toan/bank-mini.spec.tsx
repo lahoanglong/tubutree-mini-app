@@ -137,7 +137,7 @@ describe('/thanh-toan/chuyen-khoan — sao chép ở điện thoại', () => {
     const c = await mount();
     c.querySelector<HTMLElement>('button[aria-label="Sao chép số tài khoản"]')!.click();
     await flush(4);
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không thể sao chép số tài khoản. Vui lòng sao chép thủ công.');
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không thể sao chép số tài khoản. Bạn chép thủ công nhé.');
     expect(c.querySelector('[role="alert"]')!.classList.contains('sr-only')).toBe(false);
     expect(c.textContent).not.toContain('Đã sao chép');
   });

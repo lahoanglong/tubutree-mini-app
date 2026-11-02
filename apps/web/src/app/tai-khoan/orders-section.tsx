@@ -1,6 +1,7 @@
 'use client';
 
 import { LineItemSkeleton } from '@/components/ui/skeleton';
+import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -187,7 +188,7 @@ export function OrdersSection() {
               </button>
               {ordersQ.isFetchNextPageError && (
                 <p role="alert" className={`mt-2 ${ui.error}`}>
-                  Không tải thêm được đơn hàng. Vui lòng thử lại.
+                  {loadMoreFailed('đơn hàng')}
                 </p>
               )}
             </div>

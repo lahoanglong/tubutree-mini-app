@@ -994,7 +994,7 @@ describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-1
     mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 }] });
     renderPage();
     const banner = await screen.findByTestId('checkout-cart-issue');
-    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" hiện còn 1 sản phẩm. Vui lòng sửa số lượng trong giỏ.')).toBeInTheDocument();
+    expect(within(banner).getByText('Sản phẩm "Xà bông thảo mộc" hiện còn 1 sản phẩm. Sửa số lượng trong giỏ để tiếp tục.')).toBeInTheDocument();
     const btn = await screen.findByText(/Đặt hàng · /);
     expect(btn.closest('button')).toBeDisabled();
   });

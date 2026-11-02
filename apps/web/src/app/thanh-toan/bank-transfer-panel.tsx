@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { CheckCircle2, Check, Clock, Copy, Download, Loader2, TriangleAlert } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -124,7 +125,7 @@ export function BankTransferPanel({
     checkResult === 'error'
       ? checkError
       : checkResult === 'failed'
-        ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
+        ? BANK_TX_FAILED
         : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.';
 
   const handleSaveQr = async (url: string, orderCode: string) => {
@@ -387,7 +388,7 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
       )}
       {failed && (
         <span role="alert" className="basis-full text-xs text-danger-fg md:hidden">
-          Không thể sao chép {name}. Vui lòng sao chép thủ công.
+          {bankCopyFailed(name)}
         </span>
       )}
     </>

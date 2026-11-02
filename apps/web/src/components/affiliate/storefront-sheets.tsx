@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { STOREFRONT_TEMPLATE_BUSY, STOREFRONT_TEMPLATE_HINT } from '@tubutree/app-core/client-copy';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { EyeOff, Plus } from 'lucide-react';
 import {
@@ -68,7 +69,7 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
       open={open}
       onClose={onClose}
       title="Bắt đầu nhanh với 1 mẫu có sẵn"
-      description="Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được."
+      description={STOREFRONT_TEMPLATE_HINT}
     >
       {catQ.isLoading && <Skeleton height={120} />}
       {catQ.isError && <ErrorState message={errText(catQ.error)} onRetry={() => void catQ.refetch()} />}
@@ -93,7 +94,7 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
               ) : (
                 <div className="mx-auto mb-1.5 h-9 w-9 rounded-control bg-stone-100" />
               )}
-              {withTemplate.isPending && withTemplate.variables === c.id ? 'Đang dựng…' : c.name}
+              {withTemplate.isPending && withTemplate.variables === c.id ? STOREFRONT_TEMPLATE_BUSY : c.name}
             </button>
           ))}
         </div>

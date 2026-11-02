@@ -426,7 +426,7 @@ describe('/tai-khoan/ho-so — ảnh đại diện', () => {
     expect(mocks.patch.mock.calls[0]![1].avatarUrl).toBeUndefined();
   });
 
-  it('không đọc được ảnh: báo "Không tải được ảnh, vui lòng thử lại.", không mở khung cắt', async () => {
+  it('không đọc được ảnh: báo "Không tải được ảnh. Thử lại sau ít phút.", không mở khung cắt', async () => {
     mocks.compress.mockRejectedValue(new Error('x'));
     const { container } = await mount();
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -435,7 +435,7 @@ describe('/tai-khoan/ho-so — ảnh đại diện', () => {
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await flush(4);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không tải được ảnh, vui lòng thử lại.');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không tải được ảnh. Thử lại sau ít phút.');
     expect(byText(document.body, 'button', 'Xác nhận cắt')).toBeNull();
   });
 
@@ -448,7 +448,7 @@ describe('/tai-khoan/ho-so — ảnh đại diện', () => {
     });
     await flush(4);
     expect(mocks.compress).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không tải được ảnh, vui lòng thử lại.');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không tải được ảnh. Thử lại sau ít phút.');
   });
 
   it('máy chủ từ chối ảnh sau khi khách vừa đổi: vẫn lưu phần còn lại nhưng nói rõ ảnh chưa lưu, ảnh trong phiên giữ nguyên', async () => {

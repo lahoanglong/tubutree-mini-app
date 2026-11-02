@@ -13,6 +13,7 @@
 // ngay ở server để dựng đúng khung chờ, nên cờ được GHI THÊM thành cookie thường `tubu_web_session`
 // của chính origin web (JS ghi, không HttpOnly, không chứa bí mật), cùng lúc và cùng vòng đời với cờ localStorage.
 import { resolveServedMedia } from '@tubutree/app-core/served-media';
+import { ERROR_GENERIC, ERROR_NETWORK } from '@tubutree/app-core/client-copy';
 import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 
 const BASE =
@@ -186,10 +187,10 @@ export class NetworkError extends Error {
 
 /** Quá hạn thì thôi chờ: mạng yếu/máy chủ treo không được giữ nút "Đang đặt hàng…" mãi. */
 export const REQUEST_TIMEOUT_MS = 20_000;
-const OFFLINE_MESSAGE = 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.';
-const TIMEOUT_MESSAGE = 'Máy chủ phản hồi quá lâu. Vui lòng thử lại.';
+const OFFLINE_MESSAGE = ERROR_NETWORK;
+const TIMEOUT_MESSAGE = 'Máy chủ phản hồi quá lâu. Thử lại sau ít phút.';
 /** Câu thay khi phản hồi lỗi không có lời nào (thân rỗng/không phải JSON); error-text không coi đây là lời nghiệp vụ. */
-export const GENERIC_ERROR = 'Có lỗi xảy ra. Vui lòng thử lại.';
+export const GENERIC_ERROR = ERROR_GENERIC;
 
 interface Reply {
   status: number;

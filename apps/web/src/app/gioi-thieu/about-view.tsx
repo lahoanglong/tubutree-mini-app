@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { ABOUT_MISSION } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, TreePine } from 'lucide-react';
@@ -43,8 +44,7 @@ export function AboutView({ initialFaqs, initialConfig, initialSupport }: { init
           Sống Xanh An Lành
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-stone-100">
-          Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Chúng tôi kết nối bạn với những thương hiệu Việt tử tế — minh bạch
-          nguồn gốc, lành cho da, nhẹ với đất.
+          {ABOUT_MISSION}
         </p>
       </section>
 

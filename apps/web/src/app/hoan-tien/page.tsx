@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { CASHBACK_REDIRECT } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Undo2 } from 'lucide-react';
@@ -80,7 +81,7 @@ export default function CashbackPage() {
       partnerTab.current = null;
       if (!isHttpUrl(r.deeplink)) {
         win?.close();
-        setClickError('Không mở được liên kết sàn — Vui lòng thử lại sau');
+        setClickError('Không mở được liên kết sàn. Thử lại sau ít phút.');
         return;
       }
       if (!win || win.closed) {
@@ -92,7 +93,7 @@ export default function CashbackPage() {
       win.opener = null;
       win.location.replace(r.deeplink);
       setSelected(null);
-      setNotice('Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…');
+      setNotice(CASHBACK_REDIRECT);
     },
     onError: (e) => {
       partnerTab.current?.close();

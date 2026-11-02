@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
 import { Hourglass, Store } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { applyDealer, type DealerApplyInput } from '@tubutree/app-core/api/dealer';
@@ -92,7 +93,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
 
         {rejected && (
           <div className="mt-3 rounded-control bg-danger-bg p-3 text-sm text-danger-fg">
-            <p>Hồ sơ trước bị từ chối. Vui lòng kiểm tra lại thông tin và nộp lại.</p>
+            <p>{DEALER_REJECTED_RESUBMIT}</p>
             {rejectionReason && <p className="mt-1 font-semibold">Lý do: {rejectionReason}</p>}
           </div>
         )}

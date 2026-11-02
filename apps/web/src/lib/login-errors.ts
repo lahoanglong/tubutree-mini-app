@@ -8,9 +8,9 @@ const VIETNAMESE_CHARS =
 // API cũ ghép nguyên lời của Zalo vào sau tiền tố tiếng Việt ("Zalo OAuth thất bại: invalid code"): có dấu nên lọt bộ lọc
 // trên nhưng vẫn là chuỗi kỹ thuật. Nay API trả câu sạch; web vẫn chặn để bản API cũ không làm lộ chuỗi thô.
 const UPSTREAM_ZALO_FAILURE = /^Zalo (?:OAuth|verify) thất bại/i;
-const CODE_REJECTED = 'Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.';
+const CODE_REJECTED = 'Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Đăng nhập lại để tiếp tục.';
 
-const GENERIC = 'Không đăng nhập được lúc này. Vui lòng thử lại; nếu vẫn lỗi, hãy liên hệ hotline để được hỗ trợ.';
+const GENERIC = 'Không đăng nhập được lúc này. Thử lại sau ít phút; nếu vẫn lỗi, liên hệ hotline để được hỗ trợ.';
 
 /** Lỗi Zalo trả về qua ?error=… ở trang callback. */
 export function oauthErrorMessage(code: string | null | undefined): string {
@@ -21,19 +21,19 @@ export function oauthErrorMessage(code: string | null | undefined): string {
     case 'invalid_scope':
     case 'unauthorized_client':
     case 'redirect_uri_mismatch':
-      return 'Đăng nhập bằng Zalo đang gặp sự cố cấu hình. Vui lòng thử lại sau hoặc liên hệ hotline để được hỗ trợ.';
+      return 'Đăng nhập bằng Zalo đang gặp sự cố cấu hình. Thử lại sau hoặc liên hệ hotline để được hỗ trợ.';
     case 'temporarily_unavailable':
     case 'server_error':
-      return 'Zalo đang bận. Vui lòng đợi một lúc rồi đăng nhập lại.';
+      return 'Zalo đang bận. Đợi một lúc rồi đăng nhập lại.';
     default:
-      return 'Zalo chưa hoàn tất việc đăng nhập. Vui lòng thử lại.';
+      return 'Zalo chưa hoàn tất việc đăng nhập. Thử đăng nhập lại.';
   }
 }
 
 /** Lỗi khi đổi mã Zalo lấy phiên đăng nhập (handleCallback). */
 export function loginFailureMessage(e: unknown): string {
   if (e instanceof NetworkError) return e.message;
-  if (e instanceof ApiError && e.status === 429) return 'Bạn thử đăng nhập quá nhiều lần. Vui lòng đợi ít phút rồi thử lại.';
+  if (e instanceof ApiError && e.status === 429) return 'Bạn thử đăng nhập quá nhiều lần. Đợi ít phút rồi thử lại.';
   const message = e instanceof Error ? e.message.trim() : '';
   if (UPSTREAM_ZALO_FAILURE.test(message)) return CODE_REJECTED;
   return message && VIETNAMESE_CHARS.test(message) ? message : GENERIC;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { AVATAR_READ_FAILED } from '@tubutree/app-core/client-copy';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
@@ -28,7 +29,6 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
 const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
-const AVATAR_READ_FAILED = 'Không tải được ảnh, vui lòng thử lại.';
 
 // Ảnh đã cắt là data URL; đổi sang Blob bằng atob thay vì fetch vì CSP connect-src của web không mở cho data:.
 function dataUrlToBlob(dataUrl: string): Blob {

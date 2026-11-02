@@ -210,7 +210,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
   it('nhập thiếu: báo lỗi từng trường bằng icon DS, không còn ký tự ⚠ trong chữ', () => {
     renderSheet();
     fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
-    expect(screen.getAllByText('Vui lòng nhập')).toHaveLength(3);
+    expect(screen.getAllByText('Nhập mục này')).toHaveLength(3);
     expect(screen.getByText('Thêm ít nhất 1 sản phẩm')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('⚠');
   });

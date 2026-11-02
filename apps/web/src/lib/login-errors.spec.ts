@@ -23,12 +23,12 @@ describe('oauthErrorMessage — lỗi Zalo trả về qua ?error=', () => {
 
 describe('loginFailureMessage — lỗi khi đổi mã lấy phiên', () => {
   it('lỗi mạng giữ câu tiếng Việt của NetworkError, không phải "Failed to fetch"', () => {
-    expect(loginFailureMessage(new NetworkError(false))).toBe('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.');
+    expect(loginFailureMessage(new NetworkError(false))).toBe('Mất kết nối. Kiểm tra mạng rồi thử lại.');
     expect(loginFailureMessage(new NetworkError(true))).toContain('quá lâu');
   });
 
   it('câu tiếng Việt của chính web/API (state sai, mã đã dùng) được giữ nguyên', () => {
-    const m = 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.';
+    const m = 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Đăng nhập lại để tiếp tục.';
     expect(loginFailureMessage(new Error(m))).toBe(m);
     expect(loginFailureMessage(new ApiError('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn.', 401))).toContain('Zalo');
   });
@@ -43,12 +43,12 @@ describe('loginFailureMessage — lỗi khi đổi mã lấy phiên', () => {
     for (const raw of ['Zalo OAuth thất bại: invalid code', 'Zalo verify thất bại: Access token is invalid', 'Zalo OAuth thất bại: unknown']) {
       const m = loginFailureMessage(new ApiError(raw, 401));
       expect(m).not.toMatch(/invalid|unknown|Access token/i);
-      expect(m).toBe('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
+      expect(m).toBe('Mã đăng nhập Zalo không hợp lệ hoặc đã hết hạn. Đăng nhập lại để tiếp tục.');
     }
   });
 
   it('429: nói rõ đợi rồi thử lại', () => {
-    expect(loginFailureMessage(new ApiError('ThrottlerException: Too Many Requests', 429))).toContain('đợi ít phút');
+    expect(loginFailureMessage(new ApiError('ThrottlerException: Too Many Requests', 429))).toContain('Đợi ít phút');
   });
 });
 

@@ -222,7 +222,7 @@ export default function MerchantPage() {
         </div>
         <h1 className="mt-4 font-display text-2xl font-semibold text-stone-900">Cổng Quản Trị Đối Tác</h1>
         <p className="mt-2 text-sm text-stone-600">
-          Vui lòng đăng nhập tài khoản đối tác doanh nghiệp để quản lý gian hàng, sản phẩm và đơn hàng.
+          Đăng nhập tài khoản đối tác doanh nghiệp để quản lý gian hàng, sản phẩm và đơn hàng.
         </p>
         <Link
           href="/dang-nhap"

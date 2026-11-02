@@ -192,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.removeItem(STATE_KEY);
     if (!expectedState || state !== expectedState) {
       setStatus('idle');
-      throw new Error('Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.');
+      throw new Error('Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Đăng nhập lại để tiếp tục.');
     }
     try {
       const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;

@@ -234,7 +234,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm', () => {
   it('nhập thiếu: báo lỗi từng trường, không gửi', async () => {
     mount();
     click(submit());
-    expect(text().match(/Vui lòng nhập/g)).toHaveLength(3);
+    expect(text().match(/Nhập mục này/g)).toHaveLength(3);
     expect(text()).toContain('Thêm ít nhất 1 sản phẩm');
     expect(orderPosts()).toHaveLength(0);
   });

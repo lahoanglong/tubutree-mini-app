@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CASHBACK_REDIRECT } from '@tubutree/app-core/client-copy';
 import { Page, Avatar, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { AlertTriangle, Undo2 } from 'lucide-react';
@@ -53,7 +54,7 @@ export default function CashbackPage() {
     onSuccess: (r) => {
       haptic('medium');
       setSelected(null);
-      openSnackbar({ text: 'Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…', type: 'success' });
+      openSnackbar({ text: CASHBACK_REDIRECT, type: 'success' });
       void openAffiliateLink(r.deeplink);
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),

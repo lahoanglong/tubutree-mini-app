@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import type { ReactNode } from 'react';
 import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
@@ -91,7 +92,7 @@ export default function BankPaymentPage() {
     openSnackbar(
       ok
         ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
-        : { text: `Không thể sao chép ${label}. Vui lòng sao chép thủ công.`, type: 'error', position: 'top' },
+        : { text: bankCopyFailed(label), type: 'error', position: 'top' },
     );
     return ok;
   };
@@ -115,13 +116,13 @@ export default function BankPaymentPage() {
         });
       } else if (status === 'UNPAID') {
         openSnackbar({
-          text: 'Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Vui lòng kiểm tra lại sau ít phút nhé!',
+          text: 'Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Kiểm tra lại sau ít phút nhé!',
           type: 'warning',
           position: 'top',
         });
       } else if (status === 'FAILED' || status === 'REFUNDED') {
         openSnackbar({
-          text: 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.',
+          text: BANK_TX_FAILED,
           type: 'error',
           position: 'top',
         });
@@ -138,7 +139,7 @@ export default function BankPaymentPage() {
           ? getErrorMessage(err)
           : isSessionExpired(err)
             ? sessionExpiredText(err)
-            : 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
+            : 'Không thể kết nối tới máy chủ. Kiểm tra lại kết nối mạng.',
         type: 'error',
         position: 'top',
       });

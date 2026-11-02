@@ -270,7 +270,7 @@ describe('chi tiết đơn web — hoá đơn VAT', () => {
     mounted = [];
     mocks.order = { ...ORDER, invoiceStatus: 'FAILED' };
     ({ container } = await mount());
-    expect(invoiceBlock(container)!.textContent).toContain('Phát hành lỗi — vui lòng liên hệ hỗ trợ');
+    expect(invoiceBlock(container)!.textContent).toContain('Phát hành lỗi. Liên hệ Tubu để được hỗ trợ.');
   });
 
   it('không yêu cầu hoá đơn hoặc URL không phải http(s): không khối, không link', async () => {
@@ -368,7 +368,7 @@ describe('chi tiết đơn web — hạn đổi/trả', () => {
   it('đơn đã giao quá hạn (theo returnWindowDays của cấu hình): báo quá hạn, không nút đổi/trả', async () => {
     mocks.order = { ...ORDER, status: 'DELIVERED', deliveredAt: '2026-09-01T00:00:00Z' };
     const { container } = await mount();
-    expect(text(container)).toContain('Đã quá hạn đổi/trả (7 ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, vui lòng liên hệ Tubu bên dưới.');
+    expect(text(container)).toContain('Đã quá hạn đổi/trả (7 ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, liên hệ Tubu bên dưới.');
     expect(byText(container, 'button', 'Yêu cầu đổi/trả')).toBeNull();
   });
 

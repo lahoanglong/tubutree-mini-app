@@ -63,7 +63,7 @@ describe('/thanh-toan — mất mạng khi bấm Đặt hàng (R4-BUYER-1 cho we
     await flush(6);
 
     expect(m.placeOrder).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối. Kiểm tra mạng rồi thử lại.');
     expect(place().textContent).toBe('Đặt hàng · 130.000đ');
     expect(place().disabled).toBe(false);
 

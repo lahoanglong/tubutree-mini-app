@@ -3,7 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
-import { BRAND_BADGE } from '@tubutree/app-core/client-copy';
+import { BRAND_BADGE, ERROR_NETWORK, overStockMessage } from '@tubutree/app-core/client-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
@@ -33,7 +33,7 @@ export const vi = {
     generic: 'Có chút trục trặc, thử lại nhé',
     sessionExpired: 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.',
     loadFailed: 'Chưa tải được nội dung',
-    sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
+    sessionUnavailable: ERROR_NETWORK,
     sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau khoảng một phút nhé.',
     title: 'Chưa tải được trang này',
     notFoundTitle: 'Không tìm thấy',
@@ -248,10 +248,7 @@ export const vi = {
 
   checkout: {
     title: 'Thanh toán',
-    overStock: (name: string, stock: number) =>
-      stock > 0
-        ? `Sản phẩm "${name}" hiện còn ${stock} sản phẩm. Vui lòng sửa số lượng trong giỏ.`
-        : `Sản phẩm "${name}" đã hết hàng. Vui lòng bỏ khỏi giỏ để đặt các món còn lại.`,
+    overStock: overStockMessage,
     backToCart: 'Về giỏ hàng',
     address: 'Địa chỉ giao hàng',
     addressEmpty: fillCopy('checkout.addressEmpty'),
@@ -693,7 +690,7 @@ export const vi = {
     emptyItems: 'Thêm ít nhất 1 sản phẩm',
     phoneInvalid: 'Số điện thoại chưa đúng',
     recipientTooShort: 'Tên người nhận cần ít nhất 2 ký tự',
-    requiredField: 'Vui lòng nhập',
+    requiredField: 'Nhập mục này',
     checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
     unconfirmed:
       'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',
