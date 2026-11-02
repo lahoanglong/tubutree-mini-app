@@ -317,3 +317,40 @@ describe('VariationSheet: hết hàng ghi "Tạm hết hàng" nhất quán', () 
     expect(screen.getByTestId('variation-sheet-stock').parentElement).toHaveTextContent('Gói 40 tờ · Còn 8 sản phẩm');
   });
 });
+
+describe('VariationSheet: perUserLeft (số suất khách còn mua được sau các đơn trước)', () => {
+  const SPENT = 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.';
+
+  it('hết suất (0): Thêm vào giỏ và Mua ngay ghi giá thường, ghi chú hết suất, vẫn giữ nhãn "Tối đa 3/khách" của suất', () => {
+    const add = renderSheet({ mode: 'add', initialQty: 1, flash: flash({ perUserLeft: 0 }) });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 35.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent(SPENT);
+    expect(screen.getByTestId('variation-sheet-flash')).toHaveTextContent('Tối đa 3/khách');
+    add.unmount();
+    renderSheet({ mode: 'buy', initialQty: 2, flash: flash({ perUserLeft: 0 }) });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 70.000đ');
+  });
+
+  it('còn 1 (nhỏ hơn giới hạn 3): chọn 1 giá Giờ vàng không ghi chú; chọn 2 cả dòng giá thường kèm "Bạn còn 1 suất"', () => {
+    renderSheet({ mode: 'add', initialQty: 1, flash: flash({ perUserLeft: 1 }) });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 26.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    fireEvent.click(plus());
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 70.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('Bạn còn 1 suất Giờ vàng. Mua 2 thì cả dòng tính giá thường.');
+  });
+
+  it('chưa có perUserLeft (khách chưa đăng nhập, số chưa về): số như trước', () => {
+    renderSheet({ mode: 'add', initialQty: 1 });
+    expect(buyButton()).toHaveTextContent('Thêm vào giỏ · 26.000đ');
+  });
+
+  it('số về muộn không làm đổi chỗ ghi chú: vùng role=status có sẵn từ trước khi perUserLeft về', () => {
+    const view = renderSheet({ mode: 'add', initialQty: 1 });
+    const before = screen.getByRole('status');
+    expect(before.style.minHeight).not.toBe('');
+    view.rerender(sheetElement({ mode: 'add', initialQty: 1, flash: flash({ perUserLeft: 0 }) }));
+    expect(screen.getByRole('status')).toBe(before);
+    expect(before).toHaveTextContent(SPENT);
+  });
+});
