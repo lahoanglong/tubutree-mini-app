@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-10-28T01:14:46.958Z",
+  "builtAt": "2026-11-01T23:52:03.410Z",
   "lane": 5,
   "params": {
     "groupBuyId": "cmvrf8j95000kxu8szo29ahzq",
@@ -35,6 +35,40 @@
       "lane": "shop",
       "mini": "/browse",
       "web": "/san-pham",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "best-sellers",
+      "lane": "shop",
+      "mini": "/best-sellers",
+      "web": "/ban-chay",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "flash-sale",
+      "lane": "shop",
+      "mini": "/flash-sale",
+      "web": "/gio-vang",
       "miniPersonas": [
         "returning",
         "new",
@@ -120,6 +154,23 @@
       "lane": "shop",
       "mini": "/brand/fuwa3e",
       "web": "/brand/fuwa3e",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "campaign-slug",
+      "lane": "shop",
+      "mini": "/campaign/nuoc-rua-chen-fuwa3e",
+      "web": "/chien-dich/nuoc-rua-chen-fuwa3e",
       "miniPersonas": [
         "returning",
         "new",
@@ -394,7 +445,24 @@
         "new",
         "guest"
       ],
-      "private": true
+      "private": false
+    },
+    {
+      "key": "vouchers",
+      "lane": "loyalty",
+      "mini": "/vouchers",
+      "web": "/ma-giam-gia",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
     },
     {
       "key": "wallet",
@@ -519,7 +587,7 @@
       "key": "feed-leaderboard",
       "lane": "community",
       "mini": "/feed/leaderboard",
-      "web": "/cong-dong/xep-hang",
+      "web": "/cong-dong",
       "miniPersonas": [
         "returning",
         "new",
@@ -530,7 +598,7 @@
         "new",
         "guest"
       ],
-      "private": true
+      "private": false
     },
     {
       "key": "feed-events",
@@ -873,6 +941,40 @@
       "private": true
     },
     {
+      "key": "refill",
+      "lane": "recycle",
+      "mini": "/refill",
+      "web": "/doi-rac",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "ds-gallery",
+      "lane": "ds",
+      "mini": "/ds-gallery",
+      "web": "/ds-gallery",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
       "key": "points-scan",
       "lane": "skip",
       "mini": "/points/scan",
@@ -925,10 +1027,14 @@
       "mini": "/browse?focus=search&q=nuoc",
       "web": "/san-pham?q=nuoc",
       "miniPersonas": [
-        "returning"
+        "returning",
+        "new",
+        "guest"
       ],
       "webPersonas": [
-        "returning"
+        "returning",
+        "new",
+        "guest"
       ],
       "extra": true
     },
@@ -1205,11 +1311,14 @@
   "pairs": [
     "home",
     "browse",
+    "best-sellers",
+    "flash-sale",
     "product-slug",
     "wishlist",
     "group-buy",
     "group-buy-id",
     "brand-slug",
+    "campaign-slug",
     "brand-story",
     "cart",
     "checkout",
@@ -1226,6 +1335,7 @@
     "chat",
     "loyalty",
     "offers",
+    "vouchers",
     "wallet",
     "rewards",
     "rewards-mine",
@@ -1256,15 +1366,11 @@
     "recycle-requests",
     "recycle-done-id",
     "recycle-desk",
+    "refill",
+    "ds-gallery",
     "404"
   ],
   "skips": [
-    {
-      "key": "refill",
-      "app": "miniapp",
-      "path": "/refill",
-      "skip": "Mini App đã gỡ Refill, /refill chỉ còn chuyển sang /recycle; web không làm /doi-vo"
-    },
     {
       "key": "khoi-phuc",
       "app": "web",
