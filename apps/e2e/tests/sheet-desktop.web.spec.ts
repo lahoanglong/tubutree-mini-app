@@ -241,9 +241,9 @@ test.describe('Web khách: sheet từ md là hộp thoại giữa màn', () => {
     const body = dialog.getByTestId('bottom-sheet-body');
     const m = await body.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
     expect(m.scroll).toBeGreaterThan(m.client + 50);
-    // Thân cuộn chứ hộp không dài ra: cuộn xuống cuối thì mã cuối hiện trong khung hộp, nút Đóng vẫn ở đầu hộp.
+    // Thân cuộn chứ hộp không dài ra: cuộn xuống cuối thì hàng mã cuối (theo thứ tự trên màn, bộ chọn xếp mã lợi nhiều lên trước) hiện trong khung hộp, nút Đóng vẫn ở đầu hộp.
     await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
-    const last = dialog.getByText('DAI15', { exact: true });
+    const last = dialog.getByRole('button', { name: 'Sao chép' }).last();
     await expect(last).toBeVisible();
     const [l, d] = [(await last.boundingBox())!, (await dialog.boundingBox())!];
     expect(l.y + l.height).toBeLessThanOrEqual(d.y + d.height + 1);
