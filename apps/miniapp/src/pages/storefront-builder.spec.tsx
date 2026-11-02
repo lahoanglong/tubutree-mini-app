@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   getQuests: vi.fn(),
   claimQuest: vi.fn(),
   getStorefrontStats: vi.fn(),
+  getCtvTiers: vi.fn(),
   getStorefrontCategories: vi.fn(),
   applyStorefrontTemplate: vi.fn(),
   shareSheet: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('zmp-ui', async (importOriginal) => {
   };
 });
 vi.mock('../services/storefront-api', () => ({ ...mocks }));
+vi.mock('../services/affiliate-api', () => ({ getCtvTiers: mocks.getCtvTiers }));
 vi.mock('../components/share-sheet', () => ({
   ShareSheet: (props: { visible: boolean }) => {
     mocks.shareSheet(props);
@@ -125,6 +127,11 @@ const quests = {
     { code: 'Q3', title: 'Viết hồ sơ', hint: '', goal: 1, progress: 1, done: true, claimed: true, rewardPoints: 2 },
   ],
 };
+const TIERS = [
+  { name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null },
+  { name: 'Đồng', emoji: '🌿', min: 5_000_000, milestoneRewardPoints: 10 },
+];
+const tiersAt = (i: number) => ({ revenue: 0, tier: { name: TIERS[i]!.name, emoji: TIERS[i]!.emoji }, allTiers: TIERS });
 const stats = {
   orders7d: 2, orders30d: 9, revenue30d: 1_250_000, commission30d: 125_000,
   byProduct: [{ productSlug: 'tra-xanh', productName: 'Trà xanh', qty: 4, revenue: 320_000 }],
@@ -157,6 +164,7 @@ beforeEach(() => {
   mocks.getMyStorefront.mockResolvedValue(storefront());
   mocks.getQuests.mockResolvedValue(quests);
   mocks.getStorefrontStats.mockResolvedValue(stats);
+  mocks.getCtvTiers.mockResolvedValue(tiersAt(0));
   mocks.pickerProducts.mockResolvedValue([
     { ...product, id: 'p2', name: 'Xà phòng', slug: 'xa-phong', maxAffiliateRate: 12 },
   ]);
@@ -675,6 +683,79 @@ describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
   });
 });
 
+describe('Đầu xem trước như khách thấy (K6)', () => {
+  it('bậc 2: huy hiệu "CTV Đồng" ngay dưới tên shop, tên vẫn là h2 duy nhất của đầu trang', async () => {
+    mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+    renderPage();
+    expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toHaveLength(1);
+  });
+
+  it('bậc 1 (Tân binh): không huy hiệu, như trang khách', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
+  it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
+    mocks.getCtvTiers.mockRejectedValue({ response: { status: 401 }, message: 'x' });
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
+  it('bậc về muộn hơn gian hàng: chờ cả hai rồi mới dựng, huy hiệu hiện cùng lúc với đầu xem trước (trang không nhảy xuống)', async () => {
+    let release!: (v: unknown) => void;
+    mocks.getCtvTiers.mockReturnValue(new Promise((r) => { release = r; }));
+    const view = renderPage();
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByTestId('shop-cover')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sửa hồ sơ' })).not.toBeInTheDocument();
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => {
+      if (view.container.querySelector('[data-testid="shop-cover"]')) seen.push(/CTV Đồng/.test(view.container.textContent ?? ''));
+    });
+    watch.observe(view.container, { childList: true, subtree: true });
+    await act(async () => { release(tiersAt(1)); });
+    expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
+    watch.disconnect();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+  });
+
+  it('đang chờ bậc: khung chờ, chưa vẽ trình dựng; bậc về lỗi thì dựng đủ, không huy hiệu', async () => {
+    let fail!: (e: unknown) => void;
+    mocks.getCtvTiers.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    renderPage();
+    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
+    expect(screen.queryByTestId('shop-cover')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    await act(async () => { fail({ response: { status: 500 }, message: 'x' }); });
+    expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
+  it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT' }));
+    mocks.getCtvTiers.mockResolvedValue(tiersAt(1));
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    expect(mocks.getCtvTiers).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+  });
+
+  it('lời nhắn của shop hiện ở đầu xem trước, ảnh bìa thiếu là bìa phẳng', async () => {
+    renderPage();
+    expect(await screen.findByText('Mua giúp mình nhé')).toBeInTheDocument();
+    expect(screen.getByTestId('shop-cover').getAttribute('style')).toContain('var(--color-bg-cover)');
+  });
+});
+
 describe('Ảnh bìa trống (D7)', () => {
   it('chưa có ảnh bìa: hiện lời mời thêm ảnh bìa trong khung bìa; có ảnh thì không', async () => {
     const view = renderPage();
@@ -939,12 +1020,24 @@ describe('Thống kê và Hành trình gian hàng', () => {
     expect(strip.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('nhãn ba ô thống kê ngắn để không xuống dòng, hai tiêu đề khối là Inter 700 (Q1)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(liveStorefront());
+    renderPage();
+    const stats = await screen.findByTestId('builder-stats');
+    const labels = within(stats).getAllByTestId('builder-stat').map((box) => box.lastElementChild!.textContent);
+    expect(labels).toEqual(['Đơn hàng', 'Doanh thu', 'Hoa hồng']);
+    for (const title of [within(stats).getByRole('heading', { level: 2, name: 'Thống kê 30 ngày' }), within(screen.getByTestId('builder-sections-head')).getByRole('heading', { level: 2, name: 'Bố cục gian hàng' })]) {
+      expect(title.style.fontFamily).toBe('var(--font-ui)');
+      expect(title.style.fontWeight).toBe('700');
+    }
+  });
+
   it('thống kê 30 ngày hiện đơn, doanh thu, hoa hồng; top sản phẩm gập sau nút "Theo sản phẩm"', async () => {
     mocks.getMyStorefront.mockResolvedValue(liveStorefront());
     renderPage();
     expect(await screen.findByText('Thống kê 30 ngày')).toBeInTheDocument();
     expect(screen.getByText('9')).toBeInTheDocument();
-    expect(screen.getByText('Đơn 30 ngày')).toBeInTheDocument();
+    expect(screen.getByText('Đơn hàng')).toBeInTheDocument();
     expect(screen.queryByText(/7 ngày/)).not.toBeInTheDocument();
     expect(screen.getByText('1.250.000đ')).toBeInTheDocument();
     expect(screen.getByText('125.000đ')).toBeInTheDocument();
@@ -1666,7 +1759,7 @@ describe('Màn dựng theo khối (P10)', () => {
     it('LIVE: ba ô thống kê nằm trước khối đầu tiên; nháp hoặc chờ duyệt thì không có thống kê', async () => {
       mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, status: 'LIVE' }));
       const view = renderPage();
-      const orders = await screen.findByText('Đơn 30 ngày');
+      const orders = await screen.findByText('Đơn hàng');
       const firstCard = screen.getAllByTestId('section-card')[0]!;
       expect(orders.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.getByText('9')).toBeInTheDocument();
@@ -1674,7 +1767,7 @@ describe('Màn dựng theo khối (P10)', () => {
       mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, status: 'PENDING_APPROVAL' }));
       renderPage();
       await screen.findByText('Chờ duyệt', { selector: 'span' });
-      expect(screen.queryByText('Đơn 30 ngày')).not.toBeInTheDocument();
+      expect(screen.queryByText('Đơn hàng')).not.toBeInTheDocument();
       expect(mocks.getStorefrontStats).toHaveBeenCalledTimes(1);
     });
   });

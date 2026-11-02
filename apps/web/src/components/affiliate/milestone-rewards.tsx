@@ -11,8 +11,9 @@ import { coreHttp } from '@/lib/core-http';
 import { invalidateBalances } from '@/lib/balances';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneFlatCard } from '@/lib/phone-ui';
+import { phoneBodySm, phoneCaption, phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/mini/button';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { formatPoints, milestoneStatusText, monthLabel, revenueRuleText } from './milestone-copy';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
@@ -107,10 +108,10 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const totalPoints = targets.reduce((s, t) => s + t.points, 0);
 
   const renderRow = (m: CtvMilestoneItem, month: string, revenue: number) => (
-    <li key={`${month}:${m.id}`} className="flex min-h-14 items-center gap-2.5 border-b border-stone-200 py-2">
+    <li key={`${month}:${m.id}`} data-testid="milestone-row" className="flex min-h-14 items-center gap-2.5 border-b border-stone-200 py-2">
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-stone-900">{m.title}</div>
-        <div className="text-xs text-stone-600">{milestoneStatusText(m, revenue)}</div>
+        <div data-testid="milestone-row-title" className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>{m.title}</div>
+        <div data-testid="milestone-row-meta" className={`text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>{milestoneStatusText(m, revenue)}</div>
         {!m.achieved && (
           <div className="mt-1.5">
             <ProgressBar value={m.progressPct} max={100} ariaLabel={`${m.title}: tiến độ mốc thưởng`} />
@@ -118,17 +119,16 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        <span className="text-sm font-semibold text-forest-700">+{formatPoints(m.rewardPoints)}</span>
+        <span className={`text-sm font-semibold text-[var(--color-text-brand)] ${phoneBodySm}`}>+{formatPoints(m.rewardPoints)}</span>
         {m.canClaim ? (
-          <button
-            type="button"
+          <Button
+            icon={Check}
             disabled={busy}
-            onClick={() => claimOne.mutate({ id: m.id, month, title: m.title, points: m.rewardPoints })}
-            className={`${ui.btnPrimary} gap-1`}
+            loading={claimOne.isPending && claimOne.variables?.id === m.id && claimOne.variables?.month === month}
+            onPress={() => claimOne.mutate({ id: m.id, month, title: m.title, points: m.rewardPoints })}
           >
-            <Check className="h-4 w-4" aria-hidden="true" />
             Nhận thưởng
-          </button>
+          </Button>
         ) : m.claimed ? (
           <Badge size="sm">Đã nhận</Badge>
         ) : null}
@@ -137,31 +137,30 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   );
 
   return (
-    <section aria-label="Thưởng mốc doanh số tháng" className={`${ui.card} ${phoneFlatCard} p-4`}>
+    <section aria-label="Thưởng mốc doanh số tháng" data-testid="milestone-rewards" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-2 flex items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-control bg-forest-50">
           <Trophy className="h-5 w-5 text-forest-600" aria-hidden="true" />
         </span>
         <div>
-          <h2 className="text-sm font-semibold text-stone-900">Thưởng mốc doanh số tháng</h2>
-          <div className="text-xs text-stone-600">
+          <h2 data-testid="milestone-title" className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>Thưởng mốc doanh số tháng</h2>
+          <div data-testid="milestone-meta" className={`text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>
             {monthLabel(data.monthKey)} · Đã chốt {formatVnd(data.currentRevenue)}
           </div>
         </div>
       </div>
 
-      <p className="mb-1 text-xs text-stone-600">{revenueRuleText(data.holdDays)}</p>
+      <p data-testid="milestone-note" className={`mb-1 text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>{revenueRuleText(data.holdDays)}</p>
       {data.pendingRevenue > 0 && (
-        <p className="mb-2 text-xs text-stone-700">
+        <p className={`mb-2 text-xs text-[var(--color-text-secondary)] ${phoneCaption}`}>
           Đang chờ chốt: <b>{formatVnd(data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
         </p>
       )}
 
       {targets.length >= 2 && (
-        <button type="button" disabled={busy} aria-busy={claimAll.isPending} onClick={() => claimAll.mutate(targets)} className={`${ui.btnPrimary} mb-2 w-full gap-1`}>
-          <Check className="h-4 w-4" aria-hidden="true" />
+        <Button fullWidth icon={Check} disabled={claimOne.isPending} loading={claimAll.isPending} onPress={() => claimAll.mutate(targets)} className="mb-2">
           {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
-        </button>
+        </Button>
       )}
 
       <div role="status" aria-live="polite">
@@ -174,7 +173,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       {failures.length > 0 && (
         <div role="alert" className="mb-2">
           {failures.map((f) => (
-            <div key={`${f.month}:${f.id}`} className="text-xs text-danger-fg">
+            <div key={`${f.month}:${f.id}`} className={`text-xs text-danger-fg ${phoneCaption}`}>
               {f.title} ({monthLabel(f.month)}): {f.message}
             </div>
           ))}
@@ -183,7 +182,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
 
       {prev && (
         <div>
-          <div className="mt-2 text-xs font-semibold text-forest-700">
+          <div className={`mt-2 text-xs font-semibold text-[var(--color-text-brand)] ${phoneCaption}`}>
             Thưởng {monthLabel(prev.monthKey)} chưa nhận — nhận trước khi hết {monthLabel(data.monthKey)}
           </div>
           <ul>{prev.milestones.map((m) => renderRow(m, prev.monthKey, prev.revenue))}</ul>
@@ -191,7 +190,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       )}
       <ul>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</ul>
       {data.milestones.length > nextMilestoneRows(data.milestones).length && (
-        <button type="button" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)} className="mt-1 min-h-11 w-full text-sm font-semibold text-forest-700">
+        <button type="button" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)} className={`mt-1 min-h-11 w-full text-sm font-semibold text-[var(--color-text-brand)] ${phoneBodySm}`}>
           {showAll ? 'Thu gọn' : `Xem tất cả ${data.milestones.length} mốc`}
         </button>
       )}

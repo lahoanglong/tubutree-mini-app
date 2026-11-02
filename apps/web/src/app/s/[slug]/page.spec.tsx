@@ -169,7 +169,7 @@ describe('trang gian hàng — khung shop giống Mini App', () => {
     mocks.sf = { ...SF, ownerTier: { name: 'Tân binh', emoji: '🌱' } };
     expect((await html()).textContent).not.toContain('Tân binh');
     mocks.sf = { ...SF, ownerTier: { name: 'Cây Con', emoji: '🌿', publicBadge: true } };
-    expect((await html()).textContent).toContain('Cây Con');
+    expect((await html()).textContent).toContain('CTV Cây Con');
   });
 
   it('dải cam kết chỉ cho máy tính (md trở lên)', async () => {

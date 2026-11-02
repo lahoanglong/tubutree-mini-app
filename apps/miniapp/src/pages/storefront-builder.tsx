@@ -12,6 +12,7 @@ import {
   reorderCollections, reorderItems, getQuests,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
+import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
@@ -19,7 +20,8 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
@@ -28,7 +30,9 @@ import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { ShopHeader } from '../components/ui/shop-header';
 import { Skeleton } from '../components/ui/skeleton';
+import { TierBadge } from '../components/ui/tier-badge';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { MoveButtons } from '../components/ui/move-buttons';
@@ -62,19 +66,24 @@ function BuilderShell({ children, style, bare }: { children: ReactNode; style?: 
   );
 }
 
+function BuilderLoading() {
+  return (
+    <BuilderShell>
+      <div style={{ padding: 16 }}><Skeleton height={120} radius="var(--radius-card)" /></div>
+    </BuilderShell>
+  );
+}
+
 export default function StorefrontBuilderPage() {
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
+  // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  const tiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
   const wizardRef = useRef<boolean | null>(null);
 
-  if (sfQ.isLoading) {
-    return (
-      <BuilderShell>
-        <div style={{ padding: 16 }}><Skeleton height={120} radius="var(--radius-card)" /></div>
-      </BuilderShell>
-    );
-  }
+  if (sfQ.isLoading) return <BuilderLoading />;
   // Chỉ 404 = chưa có gian hàng. Lỗi network/500/401 → ErrorState có retry (không nuốt lỗi thành màn tạo gian hàng
   // vì bấm tạo cũng sẽ fail). retry:false để 404 không retry.
   const status = (sfQ.error as { response?: { status?: number } } | null)?.response?.status;
@@ -88,7 +97,10 @@ export default function StorefrontBuilderPage() {
   const sf = sfQ.data ?? null;
   // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
   wizardRef.current ??= shouldStartSignupWizard(sf);
-  if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) return <Builder sf={sf} />;
+  if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) {
+    if (sf.type === 'CTV' && tiersQ.isPending) return <BuilderLoading />;
+    return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} />;
+  }
   return (
     <BuilderShell>
       <StorefrontSignupFlow sf={sf} onOpenEditor={() => setFullEditor(true)} />
@@ -124,7 +136,7 @@ function ActionMenu({ open, title, actions, onClose }: { open: boolean; title: s
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
 
-function Builder({ sf }: { sf: StorefrontEdit }) {
+function Builder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -618,39 +630,33 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const overflow = overflowSectionsNotice(sf.collections);
   return (
     <BuilderShell style={{ paddingBottom: 'calc(100px + var(--safe-bottom))' }}>
+      <ShopHeader
+        title={sf.title}
+        titleAs="h2"
+        coverUrl={sf.coverUrl ? apiMediaUrl(sf.coverUrl) : null}
+        avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : null}
+        note={sf.headerNote}
+        badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
+      />
       <div style={{ padding: '12px 16px 0' }}>
         <Card padding={16}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              aria-hidden="true"
-              style={{
-                width: 56, height: 56, flexShrink: 0, borderRadius: 'var(--radius-media)',
-                background: sf.coverUrl
-                  ? `center/cover no-repeat url(${sf.coverUrl})`
-                  : 'linear-gradient(135deg, var(--color-bg-subtle), var(--color-action-secondary-bg-pressed))',
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                <Heading variant="title-md" as="h2" style={{ overflowWrap: 'anywhere' }}>{sf.title}</Heading>
-                {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
-                <Badge tone={view.tone} size="sm">{view.label}</Badge>
-              </div>
-              <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
-                {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
-              </Text>
-              {!sf.coverUrl && (
-                <button
-                  type="button"
-                  className="tubu-press tubu-hit-44"
-                  onClick={() => setProfileOpen(true)}
-                  style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
-                >
-                  <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
-                </button>
-              )}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+            {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
+            <Badge tone={view.tone} size="sm">{view.label}</Badge>
+            <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
+              {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
+            </Text>
           </div>
+          {!sf.coverUrl && (
+            <button
+              type="button"
+              className="tubu-press tubu-hit-44"
+              onClick={() => setProfileOpen(true)}
+              style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+            >
+              <Text variant="caption" tone="brand" as="div">{vi.storefront.addCover}</Text>
+            </button>
+          )}
           {view.code === 'LIVE' && (
             <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.storefront.webRefreshNote}</Text>
           )}
@@ -684,8 +690,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         </div>
       )}
 
-      <div style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Heading variant="title-sm" as="h2">{BUILDER_COPY.sections}</Heading>
+      <div data-testid="builder-sections-head" style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Heading variant="title-sm" font="ui" as="h2">{BUILDER_COPY.sections}</Heading>
         {sf.collections.length > 1 && (
           <Button variant="ghost" onPress={() => setSectionSort((v) => !v)}>{sectionSort ? BUILDER_COPY.sortDone : BUILDER_COPY.sort}</Button>
         )}

@@ -3,7 +3,9 @@
 import { Suspense, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { sectionIdFromSearch } from '@tubutree/app-core/commerce/storefront-builder';
+import { affiliateCtvTiersQuery } from '@tubutree/app-core/queries/affiliate';
 import { myStorefrontQuery } from '@tubutree/app-core/queries/storefront';
 import { shouldStartSignupWizard } from '@tubutree/app-core/storefront-signup';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
@@ -25,6 +27,7 @@ const TITLE = 'Gian hàng của tôi';
  * Khung trang. `detail` = đang mở trang chi tiết một khối (`?khoi=`): ở điện thoại dải đầu của khối (nút "Gian hàng của tôi", ⋯, tên khối) là dải đầu duy nhất, như Mini App,
  * nên dải tiêu đề của trang không chiếm thêm một hàng. h1 "Gian hàng của tôi" vẫn nằm trong cây truy cập (chỉ ẩn bằng sr-only dưới md) nên trang luôn có đúng một h1;
  * khung bỏ đệm đỉnh để dải đầu của khối bắt đầu từ mép trên, chừa chỗ cho nút lùi nổi bằng lề trái của chính nó.
+ * Trình dựng (`builder`) ở điện thoại cũng không chừa khoảng giữa dải tiêu đề và đầu xem trước: bìa liền ngay dưới thanh tiêu đề như Mini App.
  */
 function Shell({ children, detail = false, builder = false }: { children: ReactNode; detail?: boolean; builder?: boolean }) {
   // `builder`: hàng tiêu đề có ô cho "Xem trước" và nút chính từ lg (trình dựng gắn nút vào đây; điện thoại dùng thanh dính đáy). Hàng cao tối thiểu 44px từ lg ở MỌI trạng thái của trang, để nút tới (cao 44px) không đẩy tiêu đề dịch xuống.
@@ -36,7 +39,7 @@ function Shell({ children, detail = false, builder = false }: { children: ReactN
         ← Cộng tác viên
       </BackLink>
       {detail ? <div className="max-md:sr-only">{header}</div> : header}
-      <div className={detail ? 'mt-4 max-md:mt-0' : 'mt-4'}>{children}</div>
+      <div className={detail || builder ? 'mt-4 max-md:mt-0' : 'mt-4'}>{children}</div>
     </main>
   );
 }
@@ -46,6 +49,9 @@ function CtvStorefront() {
   const params = useSearchParams();
   // retry: false để 404 (chưa có gian hàng) không bị thử lại; lỗi khác có nút Thử lại.
   const sfQ = useQuery({ ...myStorefrontQuery(coreHttp), enabled: phase === 'authenticated', retry: false });
+  // Bậc của chủ shop quyết định hàng huy hiệu ở đầu xem trước, nên chờ nó cùng với gian hàng rồi mới dựng trình dựng: để huy hiệu về muộn thì hàng 36px chèn vào và đẩy cả trang xuống.
+  // Cùng khoá với trang CTV để dùng chung cache (lần vào từ trang CTV không chờ). Chỉ gian hàng CTV có bậc (API cũng chỉ trả `ownerTier` cho CTV). Lỗi cũng là đã xong: vẽ đủ, thiếu huy hiệu.
+  const tiersQ = useQuery({ ...affiliateCtvTiersQuery(coreHttp), staleTime: 5 * 60_000, retry: false, enabled: sfQ.data?.type === 'CTV' });
   const [fullEditor, setFullEditor] = useState(false);
   // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
   const wizardRef = useRef<boolean | null>(null);
@@ -97,13 +103,20 @@ function CtvStorefront() {
       </Shell>
     );
   }
+  if (sf.type === 'CTV' && tiersQ.isPending) {
+    return (
+      <Shell>
+        <Skeleton height={120} />
+      </Shell>
+    );
+  }
   // Cùng điều kiện với trình dựng: id trên địa chỉ phải là một khối còn tồn tại, không thì trình dựng vẽ danh sách và trang cần dải tiêu đề của nó.
   const khoi = sectionIdFromSearch(params?.toString() ?? '');
   const detail = khoi !== null && sf.collections.some((c) => c.id === khoi);
   return (
     <Shell detail={detail} builder>
       <Suspense fallback={<Skeleton height={120} />}>
-        <StorefrontBuilder sf={sf} />
+        <StorefrontBuilder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} />
       </Suspense>
     </Shell>
   );

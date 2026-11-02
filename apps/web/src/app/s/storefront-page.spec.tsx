@@ -137,6 +137,6 @@ describe('/s/[slug] — gian hàng mở qua subdomain', () => {
     api.storefront = { ...SF, collections: [COL], ownerTier: { name: 'Cây Con', emoji: '🌿', publicBadge: true } };
     mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
     expect(mounted.container.textContent).toContain('Mình dùng 3 tháng, da đỡ khô hẳn.');
-    expect(mounted.container.textContent).toContain('Cây Con');
+    expect(mounted.container.textContent).toContain('CTV Cây Con');
   });
 });

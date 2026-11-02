@@ -1,11 +1,13 @@
-import { useId, useState, type CSSProperties, type ReactNode } from 'react';
+import { useId, useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import { CheckCircle2, Sprout } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Heading, Text } from './text';
 
 export interface ShopHeaderProps {
-  /** Tên shop, h1 (Fraunces); tối đa 2 dòng. */
+  /** Tên shop (Fraunces); tối đa 2 dòng. */
   title: string;
+  /** Thẻ của tên shop, mặc định `h1`. Đầu xem trước trong trình dựng truyền `h2` vì trang đã có tiêu đề riêng. */
+  titleAs?: ElementType;
   /** Thiếu thì bìa phẳng `--color-bg-cover`. */
   coverUrl?: string | null;
   /** Thiếu thì nền chủ đạo + biểu tượng lá, một kiểu cho cả hai app. */
@@ -31,7 +33,7 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
  * Đầu trang shop dùng chung cho gian hàng CTV và thương hiệu (critique-store 3.1): bìa phẳng, avatar 56px đè mép bìa, tên, huy hiệu,
  * nút hành động ở hàng avatar (không còn thanh dính đáy). Bìa/avatar/dấu tích chỉ trang trí; tên là h1.
  */
-export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, action, note }: ShopHeaderProps) {
+export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
   const noteId = useId();
   // Ngoặc kép quanh URL + mã hoá ký tự phá chuỗi (", \, xuống dòng) để URL lạ không thoát khỏi url().
@@ -64,7 +66,7 @@ export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, actio
           </div>
           {action && <div style={{ flex: '0 0 auto', paddingBottom: 2 }}>{action}</div>}
         </div>
-        <Heading variant="title-lg" as="h1" style={{ marginTop: 8, minWidth: 0, ...CLAMP_2 }}>
+        <Heading variant="title-lg" as={titleAs} style={{ marginTop: 8, minWidth: 0, ...CLAMP_2 }}>
           {title}
         </Heading>
         {badges && <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>{badges}</div>}

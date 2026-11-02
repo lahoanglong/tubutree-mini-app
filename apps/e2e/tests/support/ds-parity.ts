@@ -45,6 +45,23 @@ export const PROBES: readonly Probe[] = [
   // Tiêu đề khối: SectionHeader đầu tiên của trang Ưu đãi là khối Giờ vàng (Q1: Inter 16/700 -0,01em, chữ promo).
   { id: 'section-title', root: '[data-testid="section-header"]', target: 'h2', props: TEXT },
   { id: 'section-header', root: '[data-testid="section-header"]', target: '', props: ['height', 'display', 'justifyContent'] },
+  // Trình dựng gian hàng (K6): tiêu đề khối Inter 16/700, ô thống kê và thẻ thống kê cao bằng nhau ở hai app.
+  { id: 'builder-stats-title', root: '[data-testid="builder-stats"]', target: 'h2', props: TEXT },
+  { id: 'builder-stats-card', root: '[data-testid="builder-stats"]', target: '', props: ['height'] },
+  { id: 'builder-stat-value', root: '[data-testid="builder-stat"]', target: ':scope > div:first-child', props: TEXT },
+  { id: 'builder-stat-label', root: '[data-testid="builder-stat"]', target: ':scope > div:last-child', props: TEXT },
+  { id: 'builder-stat-box', root: '[data-testid="builder-stat"]', target: '', props: ['height', 'borderRadius', 'backgroundColor', ...PAD] },
+  { id: 'builder-sections-title', root: '[data-testid="builder-sections-head"]', target: 'h2', props: TEXT },
+  // Thưởng mốc doanh số tháng trên trang CTV (K6): web theo thang chữ và chiều cao dòng của Mini.
+  { id: 'tier-toggle', root: '[data-testid="tier-toggle"]', target: '', props: ['height'] },
+  { id: 'milestone-card', root: '[data-testid="milestone-rewards"]', target: '', props: ['height'] },
+  { id: 'milestone-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-title"]', props: TEXT },
+  { id: 'milestone-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-meta"]', props: TEXT },
+  { id: 'milestone-note', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-note"]', props: TEXT },
+  { id: 'milestone-row', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row"]', props: ['height'] },
+  { id: 'milestone-row-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row-title"]', props: TEXT },
+  { id: 'milestone-row-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row-meta"]', props: TEXT },
+  { id: 'milestone-claim', root: '[data-testid="milestone-rewards"]', target: 'button', props: ['height', 'fontSize', 'lineHeight', 'fontWeight'] },
   ...tileProbes('flash'),
   ...tileProbes('line'),
   ...tileProbes('grid', [
@@ -133,6 +150,25 @@ const SMALL = { fontSize: '12px', lineHeight: px(M.meta), fontWeight: '500', let
 export const EXPECTED: Record<string, Record<string, string>> = {
   'section-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: 'rgb(122, 67, 0)', fontFamilyKind: 'inter' },
   'section-header': { height: '44px', display: 'flex', justifyContent: 'space-between' },
+
+  // Trình dựng gian hàng (K6): nhãn ô thống kê một dòng (80 + 20px thấp hơn khi nhãn xuống dòng), tiêu đề khối Inter 16/700 -0,01em (Q1).
+  'builder-stats-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
+  'builder-stats-card': { height: '180.1px' },
+  'builder-stat-value': { fontSize: '15px', lineHeight: '22.05px', fontWeight: '700', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'builder-stat-label': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'builder-stat-box': { height: '62.07px', borderRadius: '12px', backgroundColor: 'rgb(242, 245, 236)', paddingTop: '10px', paddingRight: '10px', paddingBottom: '10px', paddingLeft: '10px' },
+  'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
+
+  // Thưởng mốc doanh số tháng (K6): số đo Mini 375px, nút Button 48px/15px là chuẩn; web dùng cùng Button và thang chữ caption/body-sm.
+  'tier-toggle': { height: '46.97px' },
+  'milestone-card': { height: '416.06px' },
+  'milestone-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'milestone-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-note': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-row': { height: '90.97px' },
+  'milestone-row-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'milestone-row-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-claim': { height: '48px', fontSize: '15px', lineHeight: '20px', fontWeight: '600' },
 
   'tile-flash': { width: '128px', ...FRAME_SPEC },
   'tile-flash-body': INSET,

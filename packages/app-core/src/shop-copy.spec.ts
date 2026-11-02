@@ -127,6 +127,11 @@ describe('chữ của bộ thành phần section-kit', () => {
     expect(fillCopy('combo.itemsLabel', { n: 3 })).toBe('Gồm 3 món');
     expect(fillCopy('combo.more', { n: 2 })).toBe('+2');
   });
+
+  it('huy hiệu bậc CTV ghi "CTV {tên bậc}" (K6: emoji bị ẩn khỏi trình đọc nên chữ phải tự nói "CTV")', () => {
+    expect(fillCopy('shop.tierBadge', { name: 'Đồng' })).toBe('CTV Đồng');
+    expect(fillCopy('shop.tierBadge', { name: 'Kim Cương' })).toBe('CTV Kim Cương');
+  });
 });
 
 describe('fillCopy', () => {

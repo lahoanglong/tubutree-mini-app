@@ -27,6 +27,7 @@ test.describe('Mini App: đăng ký gian hàng', () => {
     api.get('/storefront/me/products', []);
     api.get('/storefront/me/stats', EMPTY_STATS);
     api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
+    api.get('/affiliate/tiers', { revenue: 0, tier: { name: 'Tân binh', emoji: '🌱' }, allTiers: [{ name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null }] });
     api.post('/storefront', () => {
       state.created = true;
       return current();

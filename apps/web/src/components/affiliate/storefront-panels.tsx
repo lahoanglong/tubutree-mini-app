@@ -10,7 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
+import { phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
@@ -18,9 +18,9 @@ import { actErrText, type Notify } from './storefront-sheets';
 
 function StatBox({ value, label, brand }: { value: string; label: string; brand?: boolean }) {
   return (
-    <div className="min-w-0 flex-1 rounded-control bg-stone-100 p-2.5 text-center max-md:bg-[var(--color-bg-subtle)]">
-      <div className={`break-words text-base font-bold tabular-nums ${brand ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
-      <div className="text-xs text-stone-600">{label}</div>
+    <div data-testid="builder-stat" className="min-w-0 flex-1 rounded-control bg-stone-100 p-2.5 text-center max-md:bg-[var(--color-bg-subtle)]">
+      <div className={`break-words text-[length:var(--type-body-md-size)] font-bold leading-[var(--type-body-md-lh)] tabular-nums ${brand ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
+      <div className={`text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>{label}</div>
     </div>
   );
 }
@@ -37,18 +37,18 @@ export function StatsSection() {
   const rows = statsRows(data);
 
   return (
-    <section aria-label={BUILDER_COPY.stats30} className={`${ui.card} ${phoneFlatCard} p-4`}>
+    <section aria-label={BUILDER_COPY.stats30} data-testid="builder-stats" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-2.5 flex items-center gap-1.5">
         <TrendingUp className="h-5 w-5 text-forest-700" aria-hidden="true" />
-        <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{BUILDER_COPY.stats30}</h2>
+        <h2 className={ui.blockTitle}>{BUILDER_COPY.stats30}</h2>
       </div>
       <div className="flex gap-2">
-        <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
-        <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
-        <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" brand />
+        <StatBox value={String(data.orders30d)} label={BUILDER_COPY.statsOrders} />
+        <StatBox value={formatVnd(data.revenue30d)} label={BUILDER_COPY.statsRevenue} />
+        <StatBox value={formatVnd(data.commission30d)} label={BUILDER_COPY.statsCommission} brand />
       </div>
       {rows.length === 0 ? (
-        <p className="mt-3 text-xs text-stone-600">Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</p>
+        <p className={`mt-3 text-xs text-stone-600 ${phoneCaption}`}>Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</p>
       ) : (
         <>
           <button

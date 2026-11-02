@@ -37,6 +37,15 @@ describe('ShopHeader', () => {
     expect(screen.queryByRole('img', { name: 'Đã được Tubu Tree duyệt' })).toBeNull();
   });
 
+  it('titleAs đổi thẻ tiêu đề (đầu xem trước trong trình dựng không thêm h1 thứ hai); mặc định h1', () => {
+    const { unmount } = render(<ShopHeader title="Gian hàng Lan" />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Gian hàng Lan' })).toBeInTheDocument();
+    unmount();
+    render(<ShopHeader title="Gian hàng Lan" titleAs="h2" />);
+    expect(screen.getByRole('heading', { level: 2, name: 'Gian hàng Lan' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+  });
+
   it('tên là h1; tên dài có dấu cắt 2 dòng, không tràn ngang', () => {
     const long = 'Gian hàng Nguyễn Thị Phương Thảo - Sản phẩm xanh sạch từ vườn nhà Đà Lạt';
     render(<ShopHeader title={long} />);

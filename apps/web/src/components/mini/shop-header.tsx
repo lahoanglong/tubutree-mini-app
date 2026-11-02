@@ -1,14 +1,16 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/shop-header.tsx
-import { useId, useState, type CSSProperties, type ReactNode } from 'react';
+import { useId, useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import { CheckCircle2, Sprout } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Heading, Text } from './text';
 
 export interface ShopHeaderProps {
-  /** Tên shop, h1 (Fraunces); tối đa 2 dòng. */
+  /** Tên shop (Fraunces); tối đa 2 dòng. */
   title: string;
+  /** Thẻ của tên shop, mặc định `h1`. Đầu xem trước trong trình dựng truyền `h2` vì trang đã có tiêu đề riêng. */
+  titleAs?: ElementType;
   /** Thiếu thì bìa phẳng `--color-bg-cover`. */
   coverUrl?: string | null;
   /** Thiếu thì nền chủ đạo + biểu tượng lá, một kiểu cho cả hai app. */
@@ -56,7 +58,7 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
  * bên phải, số liệu ngay dưới thông tin), avatar không còn đè mép bìa mà đứng đầu hàng tên. Phần khác nhau giữa điện thoại và lg nằm ở lớp
  * Tailwind (không ở style nội tuyến, vì style nội tuyến đè lớp `lg:`); các lớp `lg:` viết nguyên văn trong `LG` để Tailwind quét được.
  */
-export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false }: ShopHeaderProps) {
+export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
   const noteId = useId();
   // Ngoặc kép quanh URL + mã hoá ký tự phá chuỗi (", \, xuống dòng) để URL lạ không thoát khỏi url().
@@ -96,7 +98,7 @@ export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, actio
           {action && <div className={`flex-none pb-0.5${lg('action')}`}>{action}</div>}
         </div>
         <div className={`mt-2 min-w-0${lg('name')}`}>
-          <Heading variant="title-lg" as="h1" style={{ minWidth: 0, ...CLAMP_2 }}>
+          <Heading variant="title-lg" as={titleAs} style={{ minWidth: 0, ...CLAMP_2 }}>
             {title}
           </Heading>
         </div>

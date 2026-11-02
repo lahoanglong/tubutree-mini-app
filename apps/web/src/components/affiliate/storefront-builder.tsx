@@ -28,12 +28,13 @@ import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/s
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
-import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
-import { cssUrl } from '@/lib/safe-color';
+import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
+import { ShopHeader } from '@/components/mini/shop-header';
+import { TierBadge } from '@/components/mini/tier-badge';
 import { QuestStrip } from '@/components/mini/quest-strip';
 import { SectionCard } from '@/components/mini/section-card';
 import { StorefrontNewSection } from './storefront-new-section';
@@ -124,7 +125,7 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
 /** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
 export const BUILDER_HEAD_SLOT = 'builder-head-actions';
 
-export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
+export function StorefrontBuilder({ sf, tier }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null }) {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -500,30 +501,30 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
           <div className="lg:col-start-1">
-            <div className={`${ui.card} ${phoneFlatCard} p-4`}>
-              <div className="flex items-center gap-3">
-                <div
-                  aria-hidden="true"
-                  data-testid="profile-cover"
-                  className="h-14 w-14 shrink-0 rounded-control bg-forest-50 bg-cover bg-center max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]"
-                  style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <h2 className="break-words font-display text-lg font-semibold text-stone-900">{sf.title}</h2>
-                    {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
-                    <Badge tone={view.tone} size="sm">
-                      {view.label}
-                    </Badge>
-                  </div>
-                  <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
-                  {!sf.coverUrl && (
-                    <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
-                      Thêm ảnh bìa
-                    </button>
-                  )}
-                </div>
+            {/* Đầu xem trước dùng đúng ShopHeader của trang khách; `.tubu-bleed` kéo bìa ra mép màn điện thoại như Mini (từ md nằm trong khung trang). */}
+            <div className="tubu-bleed md:overflow-hidden md:rounded-card">
+              <ShopHeader
+                title={sf.title}
+                titleAs="h2"
+                coverUrl={sf.coverUrl}
+                avatarUrl={sf.avatarUrl}
+                note={sf.headerNote}
+                badges={tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : undefined}
+              />
+            </div>
+            <div className={`${ui.card} ${phoneFlatCard} mt-3 p-4`}>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
+                <Badge tone={view.tone} size="sm">
+                  {view.label}
+                </Badge>
+                <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
               </div>
+              {!sf.coverUrl && (
+                <button type="button" onClick={() => setProfileOpen(true)} className={`tubu-hit-44 block text-left text-xs text-forest-700 ${phoneCaption}`}>
+                  Thêm ảnh bìa
+                </button>
+              )}
               {view.code === 'LIVE' && <div className={`mt-2 text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
               {(view.hint || sf.publicHiddenReason) && (
                 <div data-testid="hidden-reason" role="status" className={`mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg ${phoneCaption}`}>
@@ -549,8 +550,8 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
           </div>
 
           <div className="mt-3 space-y-3 lg:col-start-1">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{BUILDER_COPY.sections}</h2>
+            <div data-testid="builder-sections-head" className="flex items-center justify-between gap-2">
+              <h2 className={ui.blockTitle}>{BUILDER_COPY.sections}</h2>
               {sf.collections.length > 1 && (
                 <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => setSectionSort((v) => !v)}>
                   {sectionSort ? BUILDER_COPY.sortDone : BUILDER_COPY.sort}

@@ -61,6 +61,7 @@ const state = vi.hoisted(() => ({
   sfStatus: 200,
   quests: null as unknown,
   stats: null as unknown,
+  tiers: null as unknown,
   picker: [] as unknown[],
   categories: [] as unknown[],
   kit: null as unknown,
@@ -130,6 +131,7 @@ vi.mock('@/lib/core-http', () => {
       if (path === '/affiliate/me') return state.me;
       if (path === '/storefront/me/quests') return state.quests;
       if (path === '/storefront/me/stats') return state.stats;
+      if (path === '/affiliate/tiers') return state.tiers;
       if (path === '/storefront/me/products') return state.picker;
       if (path === '/categories') return state.categories;
       if (path.startsWith('/affiliate/content-kit/')) return state.kit;
@@ -169,6 +171,11 @@ const QUESTS = {
     { code: 'Q3', title: 'Viết hồ sơ', hint: '', goal: 1, progress: 1, done: true, claimed: true, rewardPoints: 2 },
   ],
 };
+const TIERS = [
+  { name: 'Tân binh', emoji: '🌱', min: 0, milestoneRewardPoints: null },
+  { name: 'Đồng', emoji: '🌿', min: 5_000_000, milestoneRewardPoints: 10 },
+];
+const tiersAt = (i: number) => ({ revenue: 0, tier: { name: TIERS[i]!.name, emoji: TIERS[i]!.emoji }, allTiers: TIERS });
 const STATS = { orders7d: 2, orders30d: 9, revenue30d: 1_250_000, commission30d: 125_000, byProduct: [{ productSlug: 'tra-xanh', productName: 'Trà xanh', qty: 4, revenue: 320_000 }] };
 
 let mounted: Rendered[] = [];
@@ -222,6 +229,7 @@ beforeEach(() => {
   state.sfStatus = 200;
   state.quests = QUESTS;
   state.stats = STATS;
+  state.tiers = tiersAt(0);
   state.picker = [{ ...PRODUCT, id: 'p2', name: 'Xà phòng', slug: 'xa-phong', maxAffiliateRate: 12 }];
   state.categories = [
     { id: 'cat1', name: 'Chăm sóc da', slug: 'cham-soc-da', image: null },
@@ -1135,7 +1143,7 @@ describe('thống kê và hành trình gian hàng', () => {
     await flush();
     const s = document.querySelector('[aria-label="Thống kê 30 ngày"]')!.textContent!;
     expect(s).toContain('9');
-    expect(s).toContain('Đơn 30 ngày');
+    expect(s).toContain('Đơn hàng');
     expect(s).toContain('1.250.000đ');
     expect(s).toContain('125.000đ');
     expect(s).not.toContain('4 món · 320.000đ');
@@ -1144,14 +1152,26 @@ describe('thống kê và hành trình gian hàng', () => {
     expect(document.querySelector('[aria-label="Thống kê 30 ngày"]')!.textContent).toContain('4 món · 320.000đ');
   });
 
-  it('điện thoại: tiêu đề thẻ thống kê và "Bố cục gian hàng" 16px như Mini App', async () => {
+  it('tiêu đề thẻ thống kê và "Bố cục gian hàng" là Inter 16/700 như Mini App, nhãn ba ô ngắn một dòng', async () => {
     live();
     mount();
     await flush();
-    const stats = document.querySelector('[aria-label="Thống kê 30 ngày"] h2')!;
-    expect(stats.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
-    const layout = Array.from(document.querySelectorAll('h2')).find((h) => h.textContent === 'Bố cục gian hàng')!;
-    expect(layout.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+    const stats = document.querySelector('[data-testid="builder-stats"]')!;
+    const layout = document.querySelector('[data-testid="builder-sections-head"] h2')!;
+    expect(layout.textContent).toBe('Bố cục gian hàng');
+    for (const h of [stats.querySelector('h2')!, layout]) {
+      expect(h.className).toContain('font-ui');
+      expect(h.className).toContain('font-bold');
+      expect(h.className).toContain('text-[length:var(--type-title-sm-size)]');
+      expect(h.className).not.toContain('font-display');
+      expect(h.className).not.toContain('max-md:');
+    }
+    const labels = Array.from(stats.querySelectorAll('[data-testid="builder-stat"]')).map((b) => b.lastElementChild!.textContent);
+    expect(labels).toEqual(['Đơn hàng', 'Doanh thu', 'Hoa hồng']);
+    for (const b of stats.querySelectorAll('[data-testid="builder-stat"]')) {
+      expect(b.lastElementChild!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+      expect(b.firstElementChild!.className).toContain('text-[length:var(--type-body-md-size)]');
+    }
   });
 
   it('chưa có đơn: nhắn chia sẻ link; thống kê lỗi thì ẩn khối, không vỡ trang', async () => {
@@ -1225,11 +1245,12 @@ describe('kiểu Mini App ở điện thoại', () => {
     }
   });
 
-  it('ảnh bìa thiếu: gradient xanh nhạt, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
+  it('ảnh bìa thiếu: bìa phẳng như khách thấy, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
     const a = mount();
     await flush();
-    const cover = a.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!;
-    expect(cover.className).toContain('max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]');
+    const cover = a.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!;
+    expect(cover.getAttribute('style')).toContain('var(--color-bg-cover)');
+    expect(a.container.querySelector('[data-testid="profile-cover"]')).toBeNull();
     const addCover = btn('Thêm ảnh bìa');
     expect(addCover.className).toContain('tubu-hit-44');
     expect(addCover.className).not.toMatch(/font-(medium|semibold|bold)/);
@@ -1237,7 +1258,7 @@ describe('kiểu Mini App ở điện thoại', () => {
     state.sf = storefront({ coverUrl: 'https://cdn.example/c.jpg");background:red;("' });
     const b = mount();
     await flush();
-    const style = b.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!.getAttribute('style')!;
+    const style = b.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!.getAttribute('style')!;
     expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
   });
 
@@ -1250,6 +1271,99 @@ describe('kiểu Mini App ở điện thoại', () => {
     const preview = document.querySelector<HTMLElement>('a[href^="/s/"]')!;
     expect(preview.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(btn('Chia sẻ gian hàng').className).toContain('max-md:whitespace-nowrap');
+  });
+});
+
+describe('đầu xem trước như khách thấy (K6)', () => {
+  const heading2 = (root: ParentNode) => Array.from(root.querySelectorAll('h2')).filter((h) => h.textContent === 'Cửa hàng Xanh');
+
+  it('bậc 2: huy hiệu "CTV Đồng" dưới tên shop; tên là h2, trang vẫn một h1', async () => {
+    state.tiers = tiersAt(1);
+    const { container } = mount();
+    await flush();
+    expect(text()).toContain('CTV Đồng');
+    expect(heading2(container)).toHaveLength(1);
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+  });
+
+  it('bậc 1 (Tân binh): không huy hiệu, như trang khách', async () => {
+    const { container } = mount();
+    await flush();
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
+    expect(heading2(container)).toHaveLength(1);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
+    state.fail.add('get /affiliate/tiers');
+    const { container } = mount();
+    await flush();
+    expect(heading2(container)).toHaveLength(1);
+    expect(hasBtn('Sửa hồ sơ')).toBe(true);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('bậc về muộn hơn gian hàng: chờ cả hai rồi mới dựng, huy hiệu hiện cùng lúc với đầu xem trước (trang không nhảy xuống)', async () => {
+    state.tiers = tiersAt(1);
+    let release!: () => void;
+    state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
+    const { container } = mount();
+    await flush();
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
+    expect(container.querySelector('[data-testid="shop-cover"]')).toBeNull();
+    expect(hasBtn('Sửa hồ sơ')).toBe(false);
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => {
+      if (container.querySelector('[data-testid="shop-cover"]')) seen.push(/CTV Đồng/.test(container.textContent ?? ''));
+    });
+    watch.observe(container, { childList: true, subtree: true });
+    release();
+    await flush();
+    watch.disconnect();
+    expect(heading2(container)).toHaveLength(1);
+    expect(text()).toContain('CTV Đồng');
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+  });
+
+  it('đang chờ bậc: khung chờ, chưa vẽ trình dựng; bậc về lỗi thì dựng đủ, không huy hiệu', async () => {
+    state.fail.add('get /affiliate/tiers');
+    let release!: () => void;
+    state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[data-testid="shop-cover"]')).toBeNull();
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    release();
+    await flush();
+    expect(heading2(container)).toHaveLength(1);
+    expect(hasBtn('Sửa hồ sơ')).toBe(true);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('điện thoại: bìa liền ngay dưới thanh tiêu đề như Mini (khung nội dung bỏ mt-4), chữ "Thêm ảnh bìa" thang caption', async () => {
+    const { container } = mount();
+    await flush();
+    const cover = container.querySelector('[data-testid="shop-cover"]')!;
+    const frame = cover.closest('main')!.querySelector(':scope > div:last-child')!;
+    expect(frame.className).toContain('max-md:mt-0');
+    expect(btn('Thêm ảnh bìa').className).toContain('max-md:text-[length:var(--type-caption-size)]');
+  });
+
+  it('gian hàng thương gia (MERCHANT): không có bậc CTV nên không gọi bậc và không huy hiệu', async () => {
+    state.sf = storefront({ type: 'MERCHANT' });
+    state.tiers = tiersAt(1);
+    const { container } = mount();
+    await flush();
+    expect(heading2(container)).toHaveLength(1);
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('lời nhắn của shop hiện ở đầu xem trước', async () => {
+    mount();
+    await flush();
+    expect(document.querySelector('[data-testid="shop-note"]')?.textContent).toBe('Mua giúp mình nhé');
   });
 });
 
@@ -1418,7 +1532,7 @@ describe('kiểu Mini App ở điện thoại: nút thêm sản phẩm, ô số 
     state.sf = storefront({ isPublished: true, status: 'LIVE' });
     mount();
     await flush();
-    const tile = Array.from(document.querySelectorAll('div')).find((d) => d.className.includes('bg-stone-100') && d.textContent?.endsWith('Đơn 30 ngày'));
+    const tile = Array.from(document.querySelectorAll('div')).find((d) => d.className.includes('bg-stone-100') && d.textContent?.endsWith('Đơn hàng'));
     expect(tile?.className).toContain('max-md:bg-[var(--color-bg-subtle)]');
   });
 
@@ -2194,7 +2308,7 @@ describe('màn dựng theo khối (P10)', () => {
       state.sf = storefront({ isPublished: true, status: 'LIVE' });
       const view = mount();
       await flush();
-      const orders = $$('*').find((e) => e.children.length === 0 && e.textContent === 'Đơn 30 ngày')!;
+      const orders = $$('*').find((e) => e.children.length === 0 && e.textContent === 'Đơn hàng')!;
       const firstCard = $('[data-testid="section-card"]')!;
       expect(orders.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       view.unmount();
@@ -2203,7 +2317,7 @@ describe('màn dựng theo khối (P10)', () => {
       mount();
       await flush();
       expect(calls('get', '/storefront/me/stats')).toHaveLength(0);
-      expect(text()).not.toContain('Đơn 30 ngày');
+      expect(text()).not.toContain('Đơn hàng');
     });
   });
 });
