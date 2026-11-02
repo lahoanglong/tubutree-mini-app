@@ -81,6 +81,8 @@ describe('ProductDetailPage — mã giảm giá trên trang sản phẩm (R2-BUY
     fireEvent.click(await screen.findByRole('button', { name: /Ưu đãi/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Mã giảm giá' });
     const codes = within(dialog).getAllByTestId('voucher-code').map((el) => el.textContent);
-    expect(codes).toEqual(['XANH10', 'GBUY-XP']);
+    // Mã đủ điều kiện cho món đang xem (GBUY-XP) xếp trước mã còn thiếu đơn tối thiểu (XANH10).
+    expect(codes).toEqual(['GBUY-XP', 'XANH10']);
+    expect(within(dialog).getByText(/^Mua thêm .* để dùng$/)).toBeInTheDocument();
   });
 });

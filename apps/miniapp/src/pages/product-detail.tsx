@@ -445,8 +445,8 @@ export default function ProductDetailPage() {
     void copyText(code).then((ok) =>
       notify(
         ok
-          ? { text: `Đã chép mã ${code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`, type: 'success', duration: 2600 }
-          : { text: `Mã của bạn: ${code} — chọn ở bước thanh toán`, type: 'info', duration: 4000 },
+          ? { text: fillCopy('coupon.copiedToast', { code }), type: 'success', duration: 2600 }
+          : { text: fillCopy('coupon.copyShowToast', { code }), type: 'info', duration: 4000 },
       ),
     );
   };
@@ -969,7 +969,7 @@ export default function ProductDetailPage() {
         />
       )}
 
-      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} onCopy={copyCoupon} />
+      <PdpOffersSheet open={offersOpen} onClose={() => setOffersOpen(false)} coupons={pdpCoupons} amount={price * quantity} onCopy={copyCoupon} />
 
       {slug && (
         <ContentKitSheet
