@@ -143,7 +143,7 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
       state.mine = [voucher({ couponEndAt: '2099-12-31T10:00:00.000Z', couponUsed: false })];
       const c = await mount();
       const row = entry(c, 'Miễn phí vận chuyển');
-      expect(row.textContent).toContain('Mã FREESHIP-ABC · HSD 31/12');
+      expect(row.textContent).toContain('Mã FREESHIP-ABC · Dùng đến 31/12');
       const btn = row.querySelector<HTMLButtonElement>('button')!;
       expect(btn.textContent).toContain('Dùng ngay');
       click(btn);
