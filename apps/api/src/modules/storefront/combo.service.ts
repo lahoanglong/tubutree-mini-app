@@ -5,7 +5,15 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
 import { loadLiveBundles, readBundleMaxPct } from '../bundles/bundle-read';
-import { allocateBundleDiscounts, allocateBundleDiscountsCapped, isOwnStaffBundle, mergeMaxPerLine, type LiveBundle } from '../bundles/bundle-rules';
+import {
+  allocateBundleDiscountsCappedOwned,
+  allocateBundleDiscountsOwned,
+  bundleKeyVariationIds,
+  isOwnStaffBundle,
+  mergeMaxOwned,
+  type LiveBundle,
+  type OwnedDiscount,
+} from '../bundles/bundle-rules';
 import { loadStaffCouponCaps } from '../admin/coupon-input-rules';
 
 export interface ComboLine {
@@ -22,6 +30,27 @@ export interface ComboResult {
   perLine: Record<string, number>;
 }
 
+/** Nguồn của nhóm combo: combo gian hàng đang ghi công, bộ "mua đủ bộ giảm %" hoặc bộ "mua kèm" toàn sàn. */
+export type ComboGroupKind = 'STOREFRONT' | 'BUNDLE_PCT' | 'ADDON';
+/**
+ * Một combo đã khớp của giỏ (K5), chia từ chính `perLine` của lần khớp: `Σ discount === total`. Mỗi dòng giảm giá thuộc đúng một nhóm (combo cho khoản lớn nhất;
+ * bằng nhau thì combo gian hàng rồi bộ đứng trước).
+ */
+export interface ComboGroup {
+  /** `collection:<id>` hoặc `bundle:<id>`. */
+  id: string;
+  kind: ComboGroupKind;
+  title: string;
+  discount: number;
+  /** Phân loại mang khoản giảm của nhóm, tăng dần. */
+  variationIds: string[];
+  /** Phân loại mà bỏ MỘT mình nó thì bộ không còn khớp (có thể gồm dòng không được giảm, như sản phẩm chính của "mua kèm"), tăng dần. */
+  keyVariationIds: string[];
+}
+export interface ComboMatch extends ComboResult {
+  groups: ComboGroup[];
+}
+
 /** Combo phải gồm ít nhất từng này sản phẩm KHÁC NHAU — "combo" 1 sản phẩm chỉ là mã giảm % trá hình (MONEY-5). */
 export const MIN_COMBO_PRODUCTS = 2;
 
@@ -35,28 +64,77 @@ export function allocateComboDiscounts(
   combos: { pct: number; productIds: string[] }[],
   lines: ComboLine[],
 ): ComboResult {
+  const { total, perLine } = allocateComboDiscountsOwned(combos.map((c, i) => ({ id: String(i), ...c })), lines);
+  return { total, perLine };
+}
+
+/**
+ * `allocateComboDiscounts` kèm chủ của từng dòng: combo cho % cao nhất của sản phẩm đó, bằng nhau thì combo đứng trước. Đây là cài đặt DUY NHẤT của luật
+ * (hàm không-"Owned" chỉ bỏ `owner`), nên nhóm của giỏ và số tiền thật đến từ cùng một lần khớp.
+ */
+export function allocateComboDiscountsOwned(combos: { id: string; pct: number; productIds: string[] }[], lines: ComboLine[]): OwnedDiscount {
   const cartProductIds = new Set(lines.map((l) => l.productId));
-  const pctByProduct = new Map<string, number>();
+  const best = new Map<string, { pct: number; id: string }>();
   for (const combo of combos) {
     if (!combo.pct || combo.pct <= 0 || new Set(combo.productIds).size < MIN_COMBO_PRODUCTS) continue;
     const allPresent = combo.productIds.every((pid) => cartProductIds.has(pid));
     if (!allPresent) continue;
     for (const pid of combo.productIds) {
-      pctByProduct.set(pid, Math.max(pctByProduct.get(pid) ?? 0, combo.pct));
+      const cur = best.get(pid);
+      if (!cur || combo.pct > cur.pct) best.set(pid, { pct: combo.pct, id: combo.id });
     }
   }
   const perLine: Record<string, number> = {};
+  const owner: Record<string, string> = {};
   let total = 0;
   for (const line of lines) {
-    const pct = pctByProduct.get(line.productId) ?? 0;
-    if (pct <= 0) continue;
-    const d = Math.floor((line.total * Math.min(pct, 100)) / 100);
+    const hit = best.get(line.productId);
+    if (!hit) continue;
+    const d = Math.floor((line.total * Math.min(hit.pct, 100)) / 100);
     if (d > 0) {
       perLine[line.variationId] = d;
+      owner[line.variationId] = hit.id;
       total += d;
     }
   }
-  return { total, perLine };
+  return { total, perLine, owner };
+}
+
+/** Dòng duy nhất của một sản phẩm của combo (combo đã khớp): bỏ MỘT mình dòng đó thì sản phẩm vắng mặt và combo không còn khớp. Sản phẩm có hai phân loại trong giỏ thì không dòng nào là khoá. */
+export function comboKeyVariationIds(productIds: string[], lines: ComboLine[]): string[] {
+  const keys: string[] = [];
+  for (const pid of new Set(productIds)) {
+    const rows = lines.filter((l) => l.productId === pid);
+    if (rows.length === 0) return [];
+    if (rows.length === 1) keys.push(rows[0]!.variationId);
+  }
+  return keys.sort();
+}
+
+/** Nguồn của một chủ trong `OwnedDiscount.owner`: loại, tên và dòng khoá của combo đó. */
+export interface ComboSource {
+  kind: ComboGroupKind;
+  title: string;
+  keyVariationIds: string[];
+}
+
+const FALLBACK_SOURCE: ComboSource = { kind: 'BUNDLE_PCT', title: 'Combo', keyVariationIds: [] };
+
+/**
+ * Chia `perLine` đã gộp theo chủ thành nhóm (THUẦN). Chủ lạ (không có trong `sources`) vẫn thành nhóm dự phòng để tổng các nhóm luôn bằng `total`,
+ * không bao giờ làm mất khoản giảm khỏi nhóm.
+ */
+export function buildComboGroups(merged: OwnedDiscount, sources: ReadonlyMap<string, ComboSource>): ComboGroup[] {
+  const groups = new Map<string, ComboGroup>();
+  for (const variationId of Object.keys(merged.perLine).sort()) {
+    const id = merged.owner[variationId] ?? 'combo:other';
+    const src = sources.get(id) ?? FALLBACK_SOURCE;
+    const g = groups.get(id) ?? { id, kind: src.kind, title: src.title, discount: 0, variationIds: [], keyVariationIds: [...src.keyVariationIds] };
+    g.discount += merged.perLine[variationId]!;
+    g.variationIds.push(variationId);
+    groups.set(id, g);
+  }
+  return [...groups.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /**
@@ -77,7 +155,8 @@ export function goodsAfterComboOf(
   };
 }
 
-const NO_COMBO: ComboResult = { total: 0, perLine: {} };
+const NO_MATCH: ComboMatch = { total: 0, perLine: {}, groups: [] };
+const NO_OWNED: OwnedDiscount = { total: 0, perLine: {}, owner: {} };
 
 /**
  * Giảm giá combo của giỏ: combo của gian hàng đang ghi công (collection kind=COMBO + comboDiscountPct) hợp với bundle toàn sàn
@@ -98,19 +177,30 @@ export class ComboService {
    * `lines` là các dòng KHÔNG giờ vàng (dòng giờ vàng không nhận combo, cũng không tính vào điều kiện đủ bộ).
    */
   async computeForStorefront(slug: string | null | undefined, lines: ComboLine[], buyerId?: string, now: Date = new Date()): Promise<ComboResult> {
-    if (lines.length === 0) return NO_COMBO;
+    const { total, perLine } = await this.computeWithGroups(slug, lines, buyerId, now);
+    return { total, perLine };
+  }
+
+  /**
+   * Cùng một lần khớp với `computeForStorefront` (nó gọi hàm này rồi bỏ `groups`) nhưng chia thêm khoản giảm theo combo để giỏ nói khách món nào thuộc bộ nào.
+   * `Σ groups.discount === total`; tiền không đổi.
+   */
+  async computeWithGroups(slug: string | null | undefined, lines: ComboLine[], buyerId?: string, now: Date = new Date()): Promise<ComboMatch> {
+    if (lines.length === 0) return NO_MATCH;
     const store = await this.storefrontCombo(slug, lines, buyerId);
     const live = await loadLiveBundles(this.prisma, now, [...new Set(lines.map((l) => l.productId))]);
     const bundles = await this.withoutOwnStaffBundles(live, buyerId);
-    if (bundles.length === 0) return store;
+    if (bundles.length === 0) return matchOf(store.owned, store.sources);
     const maxPct = await readBundleMaxPct(this.config);
     const bundleLines = lines.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity ?? 1 }));
     // Trần chỉ kiểm từng bộ lúc ghi nên không chặn nhiều bộ cộng dồn hay giá tăng sau khi lưu: kẹp tổng bộ của nhân viên ở đây, nơi tiền thật mất đi.
     const staffMax = (await loadStaffCouponCaps(this.config)).maxAmount;
-    const raw = allocateBundleDiscounts(bundles, bundleLines, maxPct);
+    const raw = allocateBundleDiscountsOwned(bundles, bundleLines, maxPct);
     // `raw` là cận trên của mọi kết quả sau khi kẹp: chưa vượt trần thì không bộ nào bị kẹp, khỏi tra vai trò người tạo.
-    const bundle = raw.total <= staffMax ? raw : allocateBundleDiscountsCapped(bundles, bundleLines, maxPct, { isStaff: await this.staffBundlePredicate(bundles), maxAmount: staffMax });
-    return mergeMaxPerLine(store, bundle);
+    const bundle = raw.total <= staffMax ? raw : allocateBundleDiscountsCappedOwned(bundles, bundleLines, maxPct, { isStaff: await this.staffBundlePredicate(bundles), maxAmount: staffMax });
+    const sources = new Map(store.sources);
+    for (const b of bundles) sources.set(`bundle:${b.id}`, { kind: b.kind, title: b.title ?? 'Combo', keyVariationIds: bundleKeyVariationIds(b, bundleLines) });
+    return matchOf(mergeMaxOwned(store.owned, bundle), sources);
   }
 
   /**
@@ -136,8 +226,9 @@ export class ComboService {
     return bundles.filter((b) => !isOwnStaffBundle(b, user));
   }
 
-  private async storefrontCombo(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<ComboResult> {
-    if (!slug) return NO_COMBO;
+  private async storefrontCombo(slug: string | null | undefined, lines: ComboLine[], buyerId?: string): Promise<{ owned: OwnedDiscount; sources: Map<string, ComboSource> }> {
+    const none = { owned: NO_OWNED, sources: new Map<string, ComboSource>() };
+    if (!slug) return none;
     const sf = await this.prisma.storefront.findFirst({
       where: { slug, ...publicStorefrontWhere(await loadPublicVisibility(this.config)) },
       select: {
@@ -145,14 +236,16 @@ export class ComboService {
         collections: {
           where: { kind: 'COMBO' },
           select: {
+            id: true,
+            title: true,
             comboDiscountPct: true,
             items: { select: { productId: true, isHidden: true, product: { select: { storefrontId: true } } } },
           },
         },
       },
     });
-    if (!sf) return NO_COMBO;
-    if (buyerId && sf.ownerUserId === buyerId) return NO_COMBO;
+    if (!sf) return none;
+    if (buyerId && sf.ownerUserId === buyerId) return none;
     // Clamp LẦN 2 tại nơi đọc — phòng dữ liệu ghi từ trước khi StorefrontService có trần
     // (hoặc ghi thẳng DB) vẫn không cho phép combo vượt trần hiện hành (P0,
     // docs/2026-09-08-review-progress.md). StorefrontService.clampComboPct là lớp chính (chặn
@@ -160,12 +253,21 @@ export class ComboService {
     const maxPct = await this.config.get<number>('storefront.max_combo_pct', 30);
     const combos = sf.collections
       .map((c) => ({
+        id: `collection:${c.id}`,
+        title: c.title,
         pct: Math.min(c.comboDiscountPct ?? 0, maxPct),
         // SP ẩn không tính vào điều kiện combo (CTV ẩn tạm → vẫn render được combo phần còn lại). Hàng của gian hàng đối tác
         // cũng vậy: chỉ bán giá lẻ, không được giảm combo (partner-goods.ts).
         productIds: c.items.filter((i) => !i.isHidden && !isPartnerOwnedProduct(i.product)).map((i) => i.productId),
       }))
       .filter((c) => c.productIds.length > 0);
-    return allocateComboDiscounts(combos, lines);
+    const sources = new Map<string, ComboSource>(
+      combos.map((c) => [c.id, { kind: 'STOREFRONT', title: c.title, keyVariationIds: comboKeyVariationIds(c.productIds, lines) }]),
+    );
+    return { owned: allocateComboDiscountsOwned(combos, lines), sources };
   }
+}
+
+function matchOf(merged: OwnedDiscount, sources: ReadonlyMap<string, ComboSource>): ComboMatch {
+  return { total: merged.total, perLine: merged.perLine, groups: buildComboGroups(merged, sources) };
 }
