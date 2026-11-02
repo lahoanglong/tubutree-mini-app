@@ -34,11 +34,11 @@
 
 ## File Structure
 
-- Modify: `packages/design-tokens/src/tokens.css` (thêm `--dialog-w`), `docs` không cần ghi token ngoài DESIGN.md nhật ký.
+- Modify: `packages/design-tokens/src/tokens.css` (thêm `--dialog-w`).
 - Modify: `apps/web/src/components/mini/mini.css` (khối `.mini-sheet-*`, keyframes `tubu-dialog-pop`), `apps/web/src/components/mini/css.spec.ts` (ca CSS mới).
 - Modify: `apps/web/src/components/mini/bottom-sheet.tsx` (+ `bottom-sheet.spec.tsx`): tiêu đề Inter 16/700.
 - Modify: `apps/miniapp/src/components/ui/bottom-sheet.tsx` (+ `bottom-sheet.spec.tsx`): tiêu đề Inter 16/700.
-- Modify: `apps/web/src/components/ui/sheet.tsx` (+ `sheet.spec.tsx`), `apps/web/tailwind.config.ts` (+ `tailwind.config.spec.ts`): hộp thoại md.
+- Modify: `apps/web/src/components/ui/sheet.tsx` (+ `sheet.spec.tsx`, và một dòng `md:max-w-lg` → `md:max-w-[var(--dialog-w)]` ở `app/san-pham/[slug]/pdp-extras.spec.tsx`), `apps/web/tailwind.config.ts` (+ `tailwind.config.spec.ts`): hộp thoại md; tiêu đề `mt-1.5` để tâm trùng nút Đóng.
 - Create: `apps/e2e/tests/sheet-desktop.web.spec.ts` (web 1280 + 375), `apps/e2e/tests/sheet-title.miniapp.spec.ts` (Mini 375).
 - Modify: `DESIGN.md` (một dòng nhật ký quyết định + dòng token `--dialog-w`).
 
