@@ -142,8 +142,8 @@ export function VariationSheet({
         <QuantitySelector value={qty} max={Math.max(1, selected?.stock ?? 1)} onChange={setQty} />
       </div>
       {line?.limit != null && (
-        // Vùng thông báo có chỗ giữ cố định (2 dòng chữ nhỏ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
-        <div role="status" style={{ minHeight: 'calc(var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
+        // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
+        <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
           {line.overLimit && (
             <Text variant="caption" tone="secondary" as="p">
               {fillCopy('flash.sheetOverLimit', { n: line.limit, qty: shownQty })}

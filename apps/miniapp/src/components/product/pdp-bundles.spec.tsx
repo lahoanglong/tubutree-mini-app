@@ -147,7 +147,7 @@ describe('PdpBundles: Mua kèm deal sốc', () => {
     const save = screen.getByTestId('addon-save');
     expect(save).toBeEmptyDOMElement();
     expect(save).toHaveAttribute('aria-live', 'polite');
-    expect(save.style.minHeight).toBe('var(--type-caption-lh)');
+    expect(save.style.minHeight).toBe('calc(var(--type-caption-size) * var(--type-caption-lh))');
     fireEvent.click(x);
     expect(screen.getByTestId('addon-save')).toBe(save);
     expect(save).toHaveTextContent('Tiết kiệm 60.000đ');

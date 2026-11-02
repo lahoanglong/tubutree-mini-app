@@ -169,7 +169,7 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
                 ))}
               </div>
               {/* Giữ chỗ một dòng ngay cả khi chưa chọn món: chữ hiện ra không đẩy nút bên dưới xuống (trước đây nhảy 22px mỗi lần chọn). Là vùng đọc để trình đọc màn hình nghe số tiền tiết kiệm khi đổi. */}
-              <div data-testid="addon-save" aria-live="polite" style={{ margin: '4px 0 8px', minHeight: 'var(--type-caption-lh)', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
+              <div data-testid="addon-save" aria-live="polite" style={{ margin: '4px 0 8px', minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh))', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
                 {summary.count > 0 ? fillCopy('combo.save', { save: vnd(summary.save) }) : null}
               </div>
               <div>
