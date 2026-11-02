@@ -121,24 +121,12 @@ interface Exemption {
 }
 const USE = {
   voice: 'Bạn hoặc Tubu',
-  ellipsis: '… (một ký tự)',
-  brand: 'Thương hiệu',
   store: 'Gian hàng',
-  stock: 'Còn {n} sản phẩm',
-  flash: 'Giờ vàng (hoa chữ G)',
-  expiry: 'Hạn dùng hoặc Dùng đến',
 } as const;
 
 // Mỗi lý do nêu vì sao chữ cũ còn đó và ai sẽ đổi: không có dòng nào là "đã chấp nhận vĩnh viễn".
 const REASON = {
-  VOICE: 'câu lỗi, nhắc nhập liệu và giới thiệu viết trước đợt này dùng "Vui lòng"/"chúng tôi"; ux-copy D2 cấm trong chữ khách xem, đổi hàng loạt sang "bạn/Tubu" thuộc gói chữ riêng, không sửa trong P17a',
-  ELLIPSIS: 'chữ trạng thái "Đang ..." và chữ giữ chỗ (kể cả "https://...") viết ba dấu chấm thay vì "…" (ux-copy D2 dấu câu); đổi hàng loạt thuộc gói chữ riêng',
-  BRAND: 'màn chủ thương hiệu còn "Nhãn hàng"; ux-copy UC-01 đổi sang "Thương hiệu", thuộc gói chữ riêng (dải "Cùng nhà" ở PDP đã đổi ở G3)',
   STORE_PHYSICAL: '"cửa hàng" ở đây là điểm bán/điểm nhận vật lý của đối tác hoặc của khách (Đổi rác, đại lý, sổ điểm), không phải Gian hàng CTV; D2 chưa tách hai nghĩa nên chưa quyết đổi chữ',
-  STORE_CTV: 'chữ cũ của màn Gian hàng CTV ("Đang xem cửa hàng") chưa đổi sang "Gian hàng" (ux-copy D2); đổi thuộc gói chữ riêng',
-  STOCK: '"Chỉ còn n" viết trước đợt này; D2 chốt "Còn {n} sản phẩm" (brief §3.2), đổi thuộc gói chữ riêng',
-  FLASH: '"giờ vàng" viết thường hoặc "Ưu đãi giờ vàng" (D2: luôn hoa chữ G, bỏ "Ưu đãi giờ vàng"); đổi thuộc gói chữ riêng',
-  EXPIRY: '"HSD" viết tắt (D2: "Hạn dùng" hoặc "Dùng đến"); đổi thuộc gói chữ riêng, `/uu-dai` còn do P14 dựng lại',
   LEGAL: 'văn bản pháp lý (điều khoản, bảo mật, đổi trả, vận chuyển): "chúng tôi" là chủ thể ký trong văn bản, đổi chữ cần chủ duyệt nội dung, không phải chữ giao diện',
 } as const;
 
