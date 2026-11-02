@@ -66,6 +66,7 @@ vi.mock('../hooks/use-public-config', () => ({
 }));
 
 import AffiliatePage from './affiliate';
+import { resetTransferMark } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import {
   claimCtvMilestone,
@@ -81,6 +82,8 @@ import {
 
 /** Dữ liệu từng tab chỉ tải khi mở tab đó. */
 const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
+
+beforeEach(() => resetTransferMark());
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
