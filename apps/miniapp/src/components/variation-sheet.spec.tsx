@@ -14,11 +14,11 @@ const variations: VariationOption[] = [
 ];
 const flash = (extra: Record<string, unknown> = {}) => [{ productSlug: 'khan-uot', variationId: 'v1', flashPrice: 26_000, perUserLimit: 3, ...extra }];
 
-function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; cartMayArrive?: boolean; variations?: VariationOption[] } = {}) {
-  const onConfirm = vi.fn();
-  const view = render(
+type SheetProps = { flash?: ReturnType<typeof flash>; initialQty?: number; mode?: 'add' | 'buy'; cartLines?: { variationId: string; quantity: number }[]; cartMayArrive?: boolean; variations?: VariationOption[]; open?: boolean };
+function sheetElement(props: SheetProps, onConfirm: () => void = () => undefined) {
+  return (
     <VariationSheet
-      open
+      open={props.open ?? true}
       onClose={() => undefined}
       mode={props.mode ?? 'buy'}
       productName="Khăn ướt"
@@ -31,8 +31,12 @@ function renderSheet(props: { flash?: ReturnType<typeof flash>; initialQty?: num
       cartLines={props.cartLines}
       cartMayArrive={props.cartMayArrive}
       onConfirm={onConfirm}
-    />,
+    />
   );
+}
+function renderSheet(props: SheetProps = {}) {
+  const onConfirm = vi.fn();
+  const view = render(sheetElement(props, onConfirm));
   return { ...view, onConfirm };
 }
 
@@ -212,6 +216,30 @@ describe('VariationSheet: giỏ đã có sẵn cùng phân loại (thêm giỏ c
     const region = screen.getByRole('status');
     expect(region.style.minHeight).not.toBe('');
     expect(region).toHaveTextContent('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
+  });
+
+  it('cartMayArrive đổi khi bảng còn mở (đăng nhập bấm từ chính bảng này, rồi huỷ): chốt theo lúc mở, dải trống không hiện rồi ẩn dưới ngón tay (L5 2)', () => {
+    const base = { mode: 'buy', initialQty: 1, flash: [], cartLines: undefined } as const;
+    const guest = render(sheetElement({ ...base, cartMayArrive: false }));
+    expect(screen.queryByRole('status')).toBeNull();
+    guest.rerender(sheetElement({ ...base, cartMayArrive: true }));
+    expect(screen.queryByRole('status')).toBeNull();
+    guest.rerender(sheetElement({ ...base, cartMayArrive: false }));
+    expect(screen.queryByRole('status')).toBeNull();
+    guest.unmount();
+    const member = render(sheetElement({ ...base, cartMayArrive: true }));
+    expect(screen.getByRole('status').style.minHeight).not.toBe('');
+    member.rerender(sheetElement({ ...base, cartMayArrive: false }));
+    expect(screen.getByRole('status').style.minHeight).not.toBe('');
+  });
+
+  it('đóng rồi mở lại: cartMayArrive lấy lại theo giá trị lúc mở lần mới (L5 2)', () => {
+    const base = { mode: 'buy', initialQty: 1, flash: [], cartLines: undefined } as const;
+    const view = render(sheetElement({ ...base, cartMayArrive: true }));
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    view.rerender(sheetElement({ ...base, cartMayArrive: false, open: false }));
+    view.rerender(sheetElement({ ...base, cartMayArrive: false }));
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('cartMayArrive=true (đã đăng nhập): vẫn giữ chỗ khi giỏ chưa về; chế độ add không có vùng dù cartMayArrive (L5 2)', () => {

@@ -215,6 +215,45 @@ describe('VariationSheet web: giỏ đã có sẵn cùng phân loại (thêm gi�
     expect(status()!.textContent).toBe('Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.');
   });
 
+  // Harness giữ `cartMayArrive` và `open` trong state để đổi khi bảng còn mở (phiên đổi trạng thái giữa chừng).
+  function mountMayArrive(initial: boolean) {
+    let setMay: (v: boolean) => void = () => undefined;
+    let setOpen: (v: boolean) => void = () => undefined;
+    function Harness() {
+      const [may, m] = useState(initial);
+      const [open, o] = useState(true);
+      setMay = m;
+      setOpen = o;
+      return <VariationSheet {...baseProps({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: may, open })} />;
+    }
+    mounted.push(render(<Harness />));
+    return { setMay: (v: boolean) => act(() => setMay(v)), setOpen: (v: boolean) => act(() => setOpen(v)) };
+  }
+
+  it('cartMayArrive đổi khi bảng còn mở: chốt theo lúc mở, dải trống không hiện rồi ẩn dưới ngón tay (L5 2)', () => {
+    const guest = mountMayArrive(false);
+    expect(status()).toBeNull();
+    guest.setMay(true);
+    expect(status()).toBeNull();
+    guest.setMay(false);
+    expect(status()).toBeNull();
+    mounted.pop()!.unmount();
+    const member = mountMayArrive(true);
+    const region = status() as HTMLElement;
+    expect(region.style.minHeight).not.toBe('');
+    member.setMay(false);
+    expect(status()).toBe(region);
+  });
+
+  it('đóng rồi mở lại: cartMayArrive lấy lại theo giá trị lúc mở lần mới (L5 2)', () => {
+    const view = mountMayArrive(true);
+    expect(status()).not.toBeNull();
+    view.setMay(false);
+    view.setOpen(false);
+    view.setOpen(true);
+    expect(status()).toBeNull();
+  });
+
   it('cartMayArrive=true (đã đăng nhập) hoặc không truyền: vẫn giữ chỗ khi giỏ chưa về; chế độ add không có vùng dù cartMayArrive (L5 2)', () => {
     const r = mountSheet({ mode: 'buy', initialQty: 1, flash: [], cartLines: undefined, cartMayArrive: true });
     expect(status()).not.toBeNull();

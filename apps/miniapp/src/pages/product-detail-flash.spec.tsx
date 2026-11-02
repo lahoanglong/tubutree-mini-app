@@ -51,15 +51,18 @@ const flash = (over: Record<string, unknown> = {}) => ({
 
 function renderPdp() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const tree = () => (
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={['/product/xa-phong']} future={FUTURE}>
         <Routes>
           <Route path="/product/:slug" element={<ProductDetailPage />} />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree());
+  // Vẽ lại cùng cây (cùng QueryClient, cùng state) để trang đọc lại `mocks.authStatus` vừa đổi.
+  return { ...view, rerenderPdp: () => view.rerender(tree()) };
 }
 
 describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
@@ -364,5 +367,30 @@ describe('ProductDetailPage — bảng Mua ngay theo trạng thái đăng nhập
     mocks.authStatus = 'authenticated';
     const dialog = await openBuySheet();
     expect(within(dialog).getByRole('status').style.minHeight).not.toBe('');
+  });
+
+  it('mở bảng lúc chưa đăng nhập rồi bấm xác nhận (phiên idle sang loading khi bảng còn mở), huỷ đăng nhập (về idle): bảng không hiện rồi ẩn dải trống, chiều cao không đổi', async () => {
+    mocks.authStatus = 'idle';
+    const view = renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /^Mua ngay/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('status')).toBeNull();
+    mocks.authStatus = 'loading';
+    view.rerenderPdp();
+    expect(within(screen.getByRole('dialog')).queryByRole('status')).toBeNull();
+    mocks.authStatus = 'idle';
+    view.rerenderPdp();
+    expect(within(screen.getByRole('dialog')).queryByRole('status')).toBeNull();
+  });
+
+  it('mở bảng lúc đang khôi phục phiên (loading) rồi ra khách (idle): dải ghi chú đã giữ từ lúc mở không co lại dưới ngón tay', async () => {
+    mocks.authStatus = 'loading';
+    const view = renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /^Mua ngay/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('status').style.minHeight).not.toBe('');
+    mocks.authStatus = 'idle';
+    view.rerenderPdp();
+    expect(within(screen.getByRole('dialog')).getByRole('status').style.minHeight).not.toBe('');
   });
 });
