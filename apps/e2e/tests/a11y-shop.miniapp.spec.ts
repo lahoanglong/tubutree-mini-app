@@ -1,13 +1,14 @@
-import { test, expect, type MockApi } from './support/mock-api';
+import { test, expect, makeUser, mockSession, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
 import { blockingViolations, runAxe, staleBaseline, type AxeViolation } from './support/axe';
 import type { AxeBaselineEntry } from './support/a11y-baseline';
 import { mockFlashSlots, mockNoSession } from './support/flash-slot-mocks';
 import { BRAND_SLUG, SHOP_SLUG, mockBrandPage, mockShopPage } from './support/shop-page-mocks';
 import { mockCollectable } from './support/voucher-mocks';
+import { mockComboCart } from './support/cart-combo-mocks';
 
 /**
- * Mini App, axe smoke 375px bảy màn mua sắm (P17b, review/a11y.md C7): Trang chủ, Danh mục, chi tiết sản phẩm, gian hàng CTV, thương hiệu, Ưu đãi, Giờ vàng.
+ * Mini App, axe smoke 375px tám màn mua sắm (P17b, review/a11y.md C7): Trang chủ, Danh mục, chi tiết sản phẩm, gian hàng CTV, thương hiệu, Ưu đãi, Giờ vàng, Giỏ có combo (K5).
  * WCAG AA (a, aa, 2.1 aa, 2.2 aa); chỉ `serious`/`critical` chặn. Vi phạm có sẵn ghi ở support/a11y-baseline.ts kèm lý do, không tắt luật. API mock toàn bộ.
  */
 test.use({ viewport: { width: 375, height: 812 } });
@@ -42,6 +43,10 @@ const SCREENS: Screen[] = [
   { name: 'Thương hiệu', path: `/brand/${BRAND_SLUG}`, ready: 'h1', setup: mockBrandPage },
   { name: 'Ưu đãi', path: '/offers', ready: VOUCHER_READY, setup: (api) => { mockNoSession(api); mockFlash(api); mockCollectable(api); } },
   { name: 'Giờ vàng', path: '/flash-sale', ready: '[data-ds="product-tile"][data-ds-variant="line"]', setup: (api) => { mockNoSession(api); mockFlashSlots(api); } },
+  {
+    name: 'Giỏ có combo', path: '/cart', ready: '[data-testid="cart-combo-group"]',
+    setup: (api) => { mockSession(api, makeUser({ id: 'a11y-combo', fullName: 'Khách Giỏ Combo' })); mockComboCart(api); },
+  },
 ];
 
 test.describe('axe smoke Mini App 375px: serious/critical', () => {
@@ -80,5 +85,22 @@ test.describe('axe smoke: bài tự kiểm', () => {
     expect(blockingViolations('miniapp', 'Y', [v('color-contrast', 'critical')], base)).toHaveLength(1);
     expect(() => blockingViolations('miniapp', 'X', [], [{ side: 'miniapp', screen: 'X', rule: 'r', reason: '' }])).toThrow(/thiếu lý do/);
     expect(staleBaseline('miniapp', 'X', [], base)).toEqual(['X: color-contrast không còn vi phạm, xoá khỏi AXE_BASELINE']);
+  });
+});
+
+test.describe('axe smoke Mini App 375px: hộp báo bỏ món của combo (K5)', () => {
+  const SCREEN = 'Giỏ có combo (hộp báo bỏ món)';
+  test('axe serious/critical khi hộp "Bỏ món khỏi combo?" đang mở', async ({ page, api }) => {
+    mockSession(api, makeUser({ id: 'a11y-combo', fullName: 'Khách Giỏ Combo' }));
+    mockComboCart(api);
+    await page.goto('/cart');
+    await expect(page.getByTestId('cart-combo-group')).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Xoá Món combo 2' }).click();
+    await expect(page.getByText('Bỏ món khỏi combo?')).toBeVisible();
+    await page.waitForTimeout(400);
+    await page.evaluate(() => document.fonts.ready);
+    const found = await runAxe(page);
+    expect(blockingViolations('miniapp', SCREEN, found)).toEqual([]);
+    expect(staleBaseline('miniapp', SCREEN, found)).toEqual([]);
   });
 });

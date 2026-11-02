@@ -9,6 +9,7 @@ import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, assertSeededOnCi, firstPublicBra
 import { mockFlashSlots } from './support/flash-slot-mocks';
 import { mockCollectable } from './support/voucher-mocks';
 import { mockBuilder, setBuilderSession } from './support/builder-web-mocks';
+import { mockComboCartRoutes } from './support/cart-combo-mocks';
 
 /**
  * Web khách, axe smoke 375px bảy màn mua sắm (bản web của a11y-shop.miniapp.spec.ts; P17b, review/a11y.md C7): Trang chủ, Danh mục (hub và danh sách), chi tiết sản phẩm,
@@ -199,5 +200,51 @@ plain.describe('axe smoke web: rào seed', () => {
     expect(() => assertSeededOnCi(false, { GITHUB_ACTIONS: 'true' })).toThrow(/seedShopScreens/);
     expect(() => assertSeededOnCi(true, { GITHUB_ACTIONS: 'true' })).not.toThrow();
     expect(() => assertSeededOnCi(false, {})).not.toThrow();
+  });
+});
+
+test.describe('axe smoke web 375px: giỏ có combo (K5)', () => {
+  const user = {
+    id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
+    pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0,
+  };
+  test.beforeEach(async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ 375px chỉ chạy ở project Web Customer Mobile');
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
+    api.get('/me', () => user);
+    api.get('/me/coupons', []);
+    api.get('/me/wishlist/ids', []);
+    api.get('/config/public', { freeshipThreshold: 200_000, support: { hotline: '0984606774', email: 'tubutree@gmail.com' }, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } });
+    api.get('/flash-sales/active', []);
+    api.allowUnmocked('POST /coupons/preview', 'GET /coupons/available');
+    mockComboCartRoutes(api);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/gio-hang');
+    await expect(page.getByTestId('cart-combo-group')).toBeVisible({ timeout: 30_000 });
+    await expect(page).toHaveTitle(/\S/, { timeout: 20_000 });
+    await page.evaluate(() => document.fonts.ready);
+  });
+
+  test('axe serious/critical ở giỏ có khối combo', async ({ page }) => {
+    const screen = 'Giỏ có combo';
+    const found = await runAxe(page);
+    expect(blockingViolations('web', screen, found)).toEqual([]);
+    expect(staleBaseline('web', screen, found)).toEqual([]);
+  });
+
+  test('axe serious/critical khi hộp "Bỏ món khỏi combo?" đang mở', async ({ page }) => {
+    const screen = 'Giỏ có combo (hộp báo bỏ món)';
+    await page.getByRole('button', { name: 'Xoá Món combo 2 khỏi giỏ hàng' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    const found = await runAxe(page);
+    expect(blockingViolations('web', screen, found)).toEqual([]);
+    expect(staleBaseline('web', screen, found)).toEqual([]);
   });
 });
