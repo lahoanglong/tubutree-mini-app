@@ -124,10 +124,10 @@ describe('publicTier', () => {
 });
 
 // TanStack v5 giữ `status: 'pending'` khi mất mạng (`fetchStatus: 'paused'`): chờ theo `isPending` thì khung chờ treo mãi dù gian hàng đã có trong cache.
-describe('ownerTierPending: trình dựng có còn nên chờ bậc không', () => {
+describe('ownerTierPending: chỗ huy hiệu bậc có còn chờ bậc không (không chặn trình dựng)', () => {
   it.each([
     ['đang tải lần đầu', { isPending: true, fetchStatus: 'fetching' as const }, true],
-    ['mất mạng khi chưa có dữ liệu (paused): không chờ, dựng không huy hiệu', { isPending: true, fetchStatus: 'paused' as const }, false],
+    ['mất mạng khi chưa có dữ liệu (paused): không khung chờ, không huy hiệu', { isPending: true, fetchStatus: 'paused' as const }, false],
     ['chưa chạy (idle) mà chưa có dữ liệu', { isPending: true, fetchStatus: 'idle' as const }, true],
     ['đã có dữ liệu', { isPending: false, fetchStatus: 'idle' as const }, false],
     ['đã có dữ liệu, đang tải lại', { isPending: false, fetchStatus: 'fetching' as const }, false],

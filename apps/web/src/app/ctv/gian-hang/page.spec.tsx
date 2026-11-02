@@ -1304,42 +1304,68 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
   });
 
-  it('bậc về muộn hơn gian hàng: chờ cả hai rồi mới dựng, huy hiệu hiện cùng lúc với đầu xem trước (trang không nhảy xuống)', async () => {
+  // M3: `/affiliate/tiers` treo không được giữ cả trình dựng. Chỉ chỗ huy hiệu bậc là khung chờ (cao bằng huy hiệu thật), còn lại vẽ ngay.
+  const skeleton = (root: ParentNode) => root.querySelectorAll('[data-testid="tier-badge-skeleton"]');
+
+  it('bậc không bao giờ về: đầu xem trước, "Sửa hồ sơ" và khối vẫn vẽ ngay, huy hiệu bậc là khung chờ, không màn lỗi', async () => {
+    state.hold.add('get /affiliate/tiers');
+    const { container } = mount();
+    await flush();
+    expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
+    expect(container.querySelector('[data-testid="shop-cover"]')).not.toBeNull();
+    expect(heading2(container)).toHaveLength(1);
+    expect(hasBtn('Sửa hồ sơ')).toBe(true);
+    expect(container.querySelectorAll('[data-testid="section-card"]')).toHaveLength(1);
+    expect(skeleton(container)).toHaveLength(1);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(hasBtn('Thử lại')).toBe(false);
+  });
+
+  it('bậc về sau khi đã dựng: khung chờ được thay bằng huy hiệu, phần còn lại của trang không bị dựng lại', async () => {
     state.tiers = tiersAt(1);
     let release!: () => void;
     state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
     const { container } = mount();
     await flush();
-    expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
-    expect(container.querySelector('[data-testid="shop-cover"]')).toBeNull();
-    expect(hasBtn('Sửa hồ sơ')).toBe(false);
-    const seen: boolean[] = [];
-    const watch = new MutationObserver(() => {
-      if (container.querySelector('[data-testid="shop-cover"]')) seen.push(/CTV Đồng/.test(container.textContent ?? ''));
-    });
-    watch.observe(container, { childList: true, subtree: true });
+    const cover = container.querySelector('[data-testid="shop-cover"]');
+    expect(cover).not.toBeNull();
+    expect(skeleton(container)).toHaveLength(1);
     release();
     await flush();
-    watch.disconnect();
-    expect(heading2(container)).toHaveLength(1);
     expect(text()).toContain('CTV Đồng');
-    expect(seen.length).toBeGreaterThan(0);
-    expect(seen.every(Boolean)).toBe(true);
+    expect(skeleton(container)).toHaveLength(0);
+    expect(container.querySelector('[data-testid="shop-cover"]')).toBe(cover);
   });
 
-  it('đang chờ bậc: khung chờ, chưa vẽ trình dựng; bậc về lỗi thì dựng đủ, không huy hiệu', async () => {
+  it('bậc về lỗi 500: khung chờ biến mất, không huy hiệu, không trạng thái lỗi chặn, trình dựng vẫn đủ', async () => {
     state.fail.add('get /affiliate/tiers');
     let release!: () => void;
     state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
     const { container } = mount();
     await flush();
-    expect(container.querySelector('[data-testid="shop-cover"]')).toBeNull();
-    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    expect(container.querySelector('[data-testid="shop-cover"]')).not.toBeNull();
+    expect(skeleton(container)).toHaveLength(1);
     release();
     await flush();
+    expect(skeleton(container)).toHaveLength(0);
+    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(heading2(container)).toHaveLength(1);
     expect(hasBtn('Sửa hồ sơ')).toBe(true);
-    expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+  });
+
+  it('bậc thấp nhất (không khoe) về sau: không huy hiệu, khung chờ biến mất và không để lại hàng huy hiệu rỗng dưới tên shop', async () => {
+    let release!: () => void;
+    state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
+    const { container } = mount();
+    await flush();
+    const title = heading2(container)[0]!;
+    expect(skeleton(container)).toHaveLength(1);
+    release();
+    await flush();
+    expect(skeleton(container)).toHaveLength(0);
+    expect(title.nextElementSibling?.querySelector('[data-testid="shop-note"]')).not.toBeNull();
   });
 
   it('điện thoại: bìa liền ngay dưới thanh tiêu đề như Mini (khung nội dung bỏ mt-4), chữ "Thêm ảnh bìa" thang caption', async () => {
@@ -1397,6 +1423,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
       expect(heading2(container)).toHaveLength(1);
       expect(hasBtn('Sửa hồ sơ')).toBe(true);
       expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
+      expect(skeleton(container)).toHaveLength(0);
       expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
     });
 
@@ -1419,6 +1446,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     await flush();
     expect(heading2(container)).toHaveLength(1);
     expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
+    expect(skeleton(container)).toHaveLength(0);
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
   });
 

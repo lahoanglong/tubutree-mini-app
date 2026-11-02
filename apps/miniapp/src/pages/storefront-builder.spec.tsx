@@ -707,36 +707,56 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
-  it('bậc về muộn hơn gian hàng: chờ cả hai rồi mới dựng, huy hiệu hiện cùng lúc với đầu xem trước (trang không nhảy xuống)', async () => {
-    let release!: (v: unknown) => void;
-    mocks.getCtvTiers.mockReturnValue(new Promise((r) => { release = r; }));
-    const view = renderPage();
+  // M3: `/affiliate/tiers` treo không được giữ cả trình dựng. Chỉ chỗ huy hiệu bậc là khung chờ (cao bằng huy hiệu thật), còn lại vẽ ngay.
+  it('bậc không bao giờ về: đầu xem trước, "Sửa hồ sơ" và khối vẫn vẽ ngay, huy hiệu bậc là khung chờ, không màn lỗi', async () => {
+    mocks.getCtvTiers.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
     await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
-    expect(screen.queryByTestId('shop-cover')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sửa hồ sơ' })).not.toBeInTheDocument();
-    const seen: boolean[] = [];
-    const watch = new MutationObserver(() => {
-      if (view.container.querySelector('[data-testid="shop-cover"]')) seen.push(/CTV Đồng/.test(view.container.textContent ?? ''));
-    });
-    watch.observe(view.container, { childList: true, subtree: true });
-    await act(async () => { release(tiersAt(1)); });
-    expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
-    watch.disconnect();
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(seen.length).toBeGreaterThan(0);
-    expect(seen.every(Boolean)).toBe(true);
+    expect(screen.getByTestId('shop-cover')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
+    expect(await screen.findAllByTestId('section-card')).toHaveLength(1);
+    expect(screen.getAllByTestId('tier-badge-skeleton')).toHaveLength(1);
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Thử lại/ })).not.toBeInTheDocument();
   });
 
-  it('đang chờ bậc: khung chờ, chưa vẽ trình dựng; bậc về lỗi thì dựng đủ, không huy hiệu', async () => {
+  it('bậc về sau khi đã dựng: khung chờ được thay bằng huy hiệu, phần còn lại của trang không bị dựng lại', async () => {
+    let release!: (v: unknown) => void;
+    mocks.getCtvTiers.mockReturnValue(new Promise((r) => { release = r; }));
+    renderPage();
+    const cover = await screen.findByTestId('shop-cover');
+    expect(screen.getByTestId('tier-badge-skeleton')).toBeInTheDocument();
+    await act(async () => { release(tiersAt(1)); });
+    expect(await screen.findByText('CTV Đồng')).toBeInTheDocument();
+    expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument();
+    expect(screen.getByTestId('shop-cover')).toBe(cover);
+  });
+
+  it('bậc về lỗi 500: khung chờ biến mất, không huy hiệu, không trạng thái lỗi chặn, trình dựng vẫn đủ', async () => {
     let fail!: (e: unknown) => void;
     mocks.getCtvTiers.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
     renderPage();
-    await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
-    expect(screen.queryByTestId('shop-cover')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    await screen.findByTestId('shop-cover');
+    expect(screen.getByTestId('tier-badge-skeleton')).toBeInTheDocument();
     await act(async () => { fail({ response: { status: 500 }, message: 'x' }); });
-    expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
+  });
+
+  it('bậc thấp nhất (không khoe) về sau: không huy hiệu, khung chờ biến mất và không để lại hàng huy hiệu rỗng dưới tên shop', async () => {
+    let release!: (v: unknown) => void;
+    mocks.getCtvTiers.mockReturnValue(new Promise((r) => { release = r; }));
+    renderPage();
+    const title = await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
+    expect(screen.getByTestId('tier-badge-skeleton')).toBeInTheDocument();
+    await act(async () => { release(tiersAt(0)); });
+    await waitFor(() => expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument());
+    expect(title.nextElementSibling?.querySelector('[data-testid="shop-note"]')).not.toBeNull();
   });
 
   // Đầu xem trước phải là đúng cái khách thấy (storefront-view.tsx): dấu tích ở avatar và huy hiệu "CTV tuyển chọn" chỉ khi admin đã duyệt, đứng trước huy hiệu bậc.
@@ -775,6 +795,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
       expect(screen.getByTestId('shop-cover')).toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
       expect(mocks.getCtvTiers).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument();
       expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
     });
 
@@ -796,6 +817,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     renderPage();
     await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
     expect(mocks.getCtvTiers).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument();
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
