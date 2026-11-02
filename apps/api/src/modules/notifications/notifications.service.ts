@@ -278,9 +278,9 @@ export class NotificationsService {
     } catch (err) {
       const reason = `Không xếp được hàng đợi gửi ZNS: ${err instanceof Error ? err.message : String(err)}`;
       this.logger.error(`${reason} (log ${log.id})`);
-      // Chỉ đóng log còn PENDING: job vào Redis trước khi báo lỗi quá hạn có thể đã được worker gửi (SENT) hoặc đang thử lại,
-      // đóng đè lên đó rồi nhả khoá sẽ làm đêm sau gửi đôi.
-      await this.prisma.notificationLog.updateMany({
+      // Chỉ đóng log còn PENDING: job vào Redis trước khi báo lỗi quá hạn có thể đã được worker nhận (deliverZns đổi PENDING thành
+      // RETRYING trước khi gọi Zalo), đã gửi (SENT) hoặc đang thử lại; đóng đè lên đó rồi nhả khoá sẽ làm đêm sau gửi đôi.
+      const closed = await this.prisma.notificationLog.updateMany({
         where: { id: log.id, status: 'PENDING' },
         data: {
           status: 'FAILED',
@@ -290,7 +290,9 @@ export class NotificationsService {
         },
       });
       // Chỉ nơi gọi dùng retryZns (đã tự nhận phần việc) mới cần biết để nhả phần việc của nó; tin thường thì lỗi này không ném ra ngoài.
-      if (dedupeKey) throw err;
+      // Không đóng được log nào (count 0) nghĩa là worker đã nhận log: kết cục (SENT/FAILED) do worker ghi, như khi xếp hàng thành
+      // công, nên không ném; nếu ném, nơi gọi trả phần việc và đêm sau tính lại một khách đã được báo.
+      if (dedupeKey && closed.count > 0) throw err;
     }
   }
 
@@ -338,16 +340,27 @@ export class NotificationsService {
 
   /**
    * Gọi bởi NotificationsProcessor cho mỗi lượt gửi ZNS của một NotificationLog (lượt đầu lẫn thử lại). Ghi kết quả vào
-   * log: SENT; RETRYING (lỗi tạm thời, còn lượt); FAILED (lỗi vĩnh viễn hoặc hết lượt) kèm mã + lý do để admin lọc.
+   * log: SENT; RETRYING (đang gửi, hoặc lỗi tạm thời còn lượt); FAILED (lỗi vĩnh viễn hoặc hết lượt) kèm mã + lý do để admin lọc.
    * Trả kết cục thay vì ném — processor tự quyết định khi nào ném cho BullMQ xếp lịch thử lại.
    */
   async deliverZns(job: ZnsSendJobData, finalAttempt: boolean): Promise<ZnsDeliveryOutcome> {
     const where = { id: job.notificationLogId };
-    const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
-    if (current?.status === 'SENT') return 'SENT';
-    // Log bị đóng vì xếp hàng báo lỗi (dù Redis vẫn nhận job) đã nhả khoá để lượt retryZns sau tạo log mới: gửi tiếp ở đây là gửi đôi.
-    // Tin thường không có khoá để nhả và không ai gửi lại, nên job đến muộn vẫn phải gửi.
-    if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
+    // Nhận log trước khi gọi Zalo, cùng một câu lệnh với việc kiểm trạng thái: catch của dispatchZns (queue.add quá hạn dù Redis đã
+    // nhận job) chỉ đóng log còn PENDING, nên sau bước này nó không còn nhả khoá của một tin đang đi được. RETRYING ở đây là "đang
+    // gửi hoặc chờ thử lại"; kết quả cuối ghi đè ở dưới. Đây không phải khoá loại trừ giữa các worker: RETRYING vẫn nhận lại được, nên
+    // job BullMQ bị coi là treo khi Zalo trả chậm có thể được worker khác gửi lần nữa (giống trước đây).
+    const claimed = await this.prisma.notificationLog.updateMany({
+      where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
+      data: { status: 'RETRYING' },
+    });
+    if (claimed.count === 0) {
+      const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
+      if (current?.status === 'SENT') return 'SENT';
+      // Log bị đóng vì xếp hàng báo lỗi (dù Redis vẫn nhận job) đã nhả khoá để lượt retryZns sau tạo log mới: gửi tiếp ở đây là gửi đôi.
+      // Tin thường không có khoá để nhả và không ai gửi lại, nên job đến muộn vẫn phải gửi (catch chỉ đóng PENDING nên không còn
+      // ai tranh log này nữa).
+      if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
+    }
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
     if (result.ok) {

@@ -13,12 +13,13 @@ import { CategoryAdminController } from './category-admin.controller';
 import { CategoryAdminService } from './category-admin.service';
 import { ProductCategoryAdminController } from './product-category-admin.controller';
 import { ProductCategoryAdminService } from './product-category-admin.service';
+import { ImageRegistryModule } from './image-registry.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
-  imports: [FlashSaleModule, OrdersModule, SubscriptionsModule],
+  imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule],
   controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, PublicImageController, ImageResizeController],
   providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],

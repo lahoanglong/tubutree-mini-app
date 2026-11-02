@@ -26,6 +26,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { ImageRegistryModule } from '../../src/modules/catalog/image-registry.module';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
@@ -52,7 +53,7 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule],
+      imports: [PrismaModule, ImageRegistryModule],
       providers: [
         SystemConfigService,
         AnalyticsEventsService,

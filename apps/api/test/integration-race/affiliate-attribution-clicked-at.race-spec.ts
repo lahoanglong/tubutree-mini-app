@@ -23,6 +23,7 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { ImageRegistryModule } from '../../src/modules/catalog/image-registry.module';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { COMMISSION_ELIGIBLE_ROLES_KEY } from '../../src/modules/affiliate/commission-eligibility';
@@ -42,7 +43,7 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule],
+      imports: [PrismaModule, ImageRegistryModule],
       providers: [
         SystemConfigService,
         AnalyticsEventsService,

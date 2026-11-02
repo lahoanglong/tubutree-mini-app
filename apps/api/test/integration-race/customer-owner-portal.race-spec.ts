@@ -11,6 +11,7 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { MerchantController } from '../../src/modules/merchant/merchant.controller';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { ImageRegistryModule } from '../../src/modules/catalog/image-registry.module';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { JwtAuthGuard } from '../../src/common/guards/jwt-auth.guard';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
@@ -33,7 +34,7 @@ describe('Cổng người bán cho chủ CUSTOMER còn phiếu đối soát (rea
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule],
+      imports: [PrismaModule, ImageRegistryModule],
       controllers: [MerchantController],
       providers: [
         SystemConfigService,

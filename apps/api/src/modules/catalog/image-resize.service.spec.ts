@@ -11,6 +11,7 @@ const lookupMock = jest.fn();
 jest.mock('node:dns', () => ({ lookup: (...args: unknown[]) => lookupMock(...args) }));
 
 import { ImageResizeService } from './image-resize.service';
+import { ImageRegistryStale } from './image-registry-stale';
 import { MAX_SOURCE_BYTES } from './image-resize';
 
 let dir: string;
@@ -33,7 +34,7 @@ afterEach(() => {
 const ownImages = (data: Buffer | null) => ({ get: jest.fn(async () => (data ? { mime: 'image/png', data, versionOk: true } : Promise.reject(new NotFoundException()))) });
 const REGISTERED = ['a.jpg', 'a.png', 'big.jpg', 'big2.jpg', 'dns.png', 'bomb.png'].map((n) => `https://content.pancake.vn/${n}`);
 const prismaWith = (urls: string[] = REGISTERED) => ({ $queryRaw: jest.fn(async () => urls.map((u) => ({ u }))) });
-const make = (own = ownImages(png), prisma = prismaWith()) => ({ svc: new ImageResizeService(own as never, prisma as never), own, prisma });
+const make = (own = ownImages(png), prisma = prismaWith()) => ({ svc: new ImageResizeService(own as never, prisma as never, new ImageRegistryStale()), own, prisma });
 
 /** Phản hồi giả của https.request: gọi callback với res rồi phát dữ liệu. */
 function fakeHttps(res: { status: number; headers?: Record<string, string>; body?: Buffer }) {
@@ -300,3 +301,116 @@ describe('ImageResizeService', () => {
     expect(readdirSync(sub).sort()).toEqual(['f2', 'f3', 'f4', 'f5']);
   });
 });
+
+describe('ImageResizeService — ảnh mới từ đồng bộ/đối tác (R-182)', () => {
+  it('bên ghi ảnh đánh dấu ImageRegistryStale (không qua ImageResizeService): lần /img kế tiếp không 404, không đợi 30 giây', async () => {
+    const rows: string[][] = [[], ['https://content.pancake.vn/a.jpg']];
+    let call = 0;
+    const prisma = { $queryRaw: jest.fn(async () => (rows[Math.min(call++, 1)] ?? []).map((u) => ({ u }))) };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    stale.markStale();
+    now.mockReturnValue(1_002_000);
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).resolves.toBeDefined();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
+  it('đánh dấu hàng trăm lần trong một lượt đồng bộ chỉ gây một lần nạp lại', async () => {
+    const prisma = prismaWith();
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    await svc.get('https://content.pancake.vn/a.jpg', 320, 'webp');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 300; i++) stale.markStale();
+    await svc.get('https://content.pancake.vn/a.png', 320, 'webp');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('yêu cầu nhập vào lần nạp đã bắt đầu trước khi đánh dấu vẫn thấy ảnh mới (nạp thêm một lần)', async () => {
+    const url = 'https://content.pancake.vn/a.jpg';
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let call = 0;
+    const prisma = {
+      $queryRaw: jest.fn(async () => {
+        const n = call++;
+        if (n === 0) {
+          await gate;
+          return [];
+        }
+        return [{ u: url }];
+      }),
+    };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    const isReg = (u: string) => (svc as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(u);
+    const first = isReg(url);
+    await new Promise((r) => setImmediate(r));
+    stale.markStale();
+    const joined = isReg(url);
+    release();
+    expect(await first).toBe(true);
+    expect(await joined).toBe(true);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('hai yêu cầu cùng nhập lần nạp cũ, lần nạp thêm chậm như DB thật: cả hai đều thấy ảnh mới', async () => {
+    const url = 'https://content.pancake.vn/a.jpg';
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let call = 0;
+    const prisma = {
+      $queryRaw: jest.fn(async () => {
+        if (call++ === 0) {
+          await gate;
+          return [];
+        }
+        await new Promise((r) => setTimeout(r, 20));
+        return [{ u: url }];
+      }),
+    };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    const isReg = (u: string) => (svc as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(u);
+    const first = isReg(url);
+    await new Promise((r) => setImmediate(r));
+    stale.markStale();
+    const b = isReg(url);
+    const c = isReg(url);
+    release();
+    expect([await first, await b, await c]).toEqual([true, true, true]);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('đồng bộ đánh dấu liên tục trong lúc nạp: một /img chờ tối đa hai lần nạp, không bị giữ tới khi đồng bộ ngừng', async () => {
+    const url = 'https://content.pancake.vn/a.jpg';
+    const prisma = {
+      $queryRaw: jest.fn(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+        return [{ u: url }];
+      }),
+    };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, prisma as never, stale);
+    const isReg = (u: string) => (svc as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(u);
+    await isReg(url);
+    prisma.$queryRaw.mockClear();
+    const marker = setInterval(() => stale.markStale(), 2);
+    const stop = setTimeout(() => clearInterval(marker), 1000);
+    try {
+      stale.markStale();
+      expect(await isReg(url)).toBe(true);
+      expect(prisma.$queryRaw.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      clearInterval(marker);
+      clearTimeout(stop);
+    }
+  });
+});
+

@@ -171,7 +171,8 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
       expect(await svc.deliverZns(data, false)).toBe('SENT');
       throw new Error('queue timeout');
     });
-    await expect(svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT8' }, { dedupeKey: 'it-zns:8', retryZns: true })).rejects.toThrow('queue timeout');
+    // Log đã SENT nên catch không đóng được gì: tin đã tới khách, notify không ném (nơi gọi không trả phần việc, không đếm hụt).
+    await expect(svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT8' }, { dedupeKey: 'it-zns:8', retryZns: true })).resolves.toBeUndefined();
     expect(hits).toBe(1);
     expect(await znsLog(u.id)).toMatchObject({ status: 'SENT', error: null });
 
