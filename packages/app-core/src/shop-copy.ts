@@ -307,7 +307,7 @@ export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /cửa hàng/i, use: 'Gian hàng' },
   { pattern: /\.{3}/, use: '… (một ký tự)' },
   { pattern: /\b\d+h \d+m\b/, use: 'countdownText, ví dụ "2 giờ 05 phút"' },
-  { pattern: /\bHOT\b|SỐC|Nhanh tay/, use: 'bỏ chữ giục mua' },
+  { pattern: /\bHOT\b|SỐC|Nhanh tay/i, use: 'bỏ chữ giục mua' },
 ];
 
 /** Điền mẫu `SHOP_COPY[key]`. Khoá lạ hoặc thiếu biến thì ném lỗi: lỗi của người viết mã, bắt ở test chứ không để "{t}" tới tay khách. */
