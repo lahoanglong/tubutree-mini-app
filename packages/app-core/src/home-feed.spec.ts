@@ -85,7 +85,8 @@ describe('khối shippingOrders đã bỏ khỏi /home/me', () => {
 });
 
 describe('khối activeOrderCount đã bỏ khỏi /home/me', () => {
-  // Mini đã phát hành (Testing V29 từ 173de56b3) đọc takeMe('activeOrderCount') ?? GET /orders/active-count; API mới không có khoá nên take() trả null và Mini tự gọi /orders/active-count.
+  // Mini Testing V28 (a3842b551: todo-strip, use-active-order-count) đọc takeMe('activeOrderCount') ?? GET /orders/active-count; API mới
+  // không có khoá nên take() trả null và bản đó tự gọi /orders/active-count. Ca này giữ nhánh `value == null` của take() ở HEAD.
   it('Mini cũ vẫn gọi takeMe(activeOrderCount): thân mới không có khoá thì null để tự gọi /orders/active-count', async () => {
     fetchMe.mockResolvedValue({ forYou: [{ id: 'p' }], hasOrders: true });
     feed.arm();

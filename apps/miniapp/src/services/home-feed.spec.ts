@@ -57,7 +57,7 @@ describe('home-feed', () => {
     expect(get).toHaveBeenCalledWith('/home/me', expect.objectContaining({ params: { purchasedLimit: 10 } }));
   });
 
-  it('Mini đã phát hành đọc takeMeBlock(activeOrderCount) ?? /orders/active-count: /home/me không có khoá thì null, bản đó tự gọi /orders/active-count', async () => {
+  it('Mini Testing V28 (a3842b551) đọc takeMeBlock(activeOrderCount) ?? /orders/active-count: /home/me không có khoá thì null, bản đó tự gọi /orders/active-count', async () => {
     get.mockResolvedValue({ data: { purchasedItems: { items: [], nextCursor: null }, hasOrders: true } });
     armHomeFeed(() => authState.user?.id);
     expect(await takeMeBlock('activeOrderCount' as never)).toBeNull();

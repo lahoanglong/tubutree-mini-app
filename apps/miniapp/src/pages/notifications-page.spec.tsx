@@ -486,6 +486,20 @@ describe('Đếm chưa đọc của cả hộp thư và lỗi "Xem thêm"', () =
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).toBeNull());
   });
 
+  it('summary trong cache còn tươi (Trang chủ vừa tải, staleTime 10 giây) vẫn tải lại khi mở trang: tin mới chưa đọc hiện "Đọc tất cả"', async () => {
+    mocks.getNotifications.mockResolvedValue([ORDER_UNREAD, POINTS_READ]);
+    mocks.getSummary.mockResolvedValue(summaryOf(1));
+    const qc = new TubuQueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000 }, mutations: { retry: false } } });
+    qc.setQueryData(['me-summary'], summaryOf(0));
+    render(
+      <QueryClientProvider client={qc}>
+        <NotificationsPage />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(mocks.getSummary).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('button', { name: 'Đọc tất cả' })).toBeInTheDocument();
+  });
+
   it('summary lỗi: không hiện số sai, lùi về đếm trong danh sách đã tải', async () => {
     mocks.getSummary.mockRejectedValue(new Error('boom'));
     mocks.getNotifications.mockResolvedValue(rows(20));

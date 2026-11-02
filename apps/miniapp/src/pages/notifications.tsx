@@ -150,7 +150,8 @@ export default function NotificationsPage() {
   });
   const list = notifQ.data?.pages.flat();
   // Đếm chưa đọc của cả hộp thư (tin chưa đọc có thể nằm ngoài các trang đã nạp), cùng nguồn /me/summary với chuông, Cá nhân và thanh đáy.
-  const summaryUnread = useMeSummary({ enabled: phase === 'authenticated', select: (s) => s.unreadNotifications }).data;
+  // staleTime 0: summary Trang chủ vừa tải (mặc định tươi 10 giây) có thể chưa có tin mới mà danh sách ở đây đã có.
+  const summaryUnread = useMeSummary({ enabled: phase === 'authenticated', select: (s) => s.unreadNotifications, staleTime: 0 }).data;
   selectedIdRef.current = selectedNotif?.id ?? null;
   // Tin gói định kỳ chỉ có nút "Xem gói" khi khách đã có gói (đặt trên web): tra khi mở đúng loại tin đó.
   const { hasSubscription } = useHasSubscription(phase === 'authenticated' && !!selectedNotif?.templateCode.startsWith('SUBSCRIPTION'));
