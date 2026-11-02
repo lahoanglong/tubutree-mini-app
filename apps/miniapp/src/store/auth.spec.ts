@@ -300,6 +300,31 @@ describe('useAuthStore — restore() và login() chồng nhau', () => {
     expect(useAuthStore.getState().error).toBe('Tài khoản đã bị khoá.');
   });
 
+  it('restore() gọi lúc login() đang chạy mà login() ném ra ngoài (phiên còn kẹt loading): restore() vẫn khôi phục tiếp', async () => {
+    useAuthStore.setState({ user: null, status: 'idle', error: undefined });
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    // Khoá rồi xoá token ném lỗi: applyBlocked ném trước khi đặt 'idle', login() reject khi phiên vẫn 'loading'.
+    mockedRemoveStorage.mockRejectedValueOnce(new Error('storage broken'));
+    let fail!: (e: unknown) => void;
+    mockedLoginGuest.mockReturnValueOnce(
+      new Promise<LoginResponse>((_, reject) => {
+        fail = reject;
+      }),
+    );
+    mockedLoginGuest.mockResolvedValueOnce(loginResponse('guest-1'));
+
+    const loggingIn = useAuthStore.getState().login();
+    await flush();
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    fail(blocked());
+    const [login] = await Promise.allSettled([loggingIn, restoring]);
+
+    expect(login.status).toBe('rejected');
+    expect(mockedLoginGuest).toHaveBeenCalledTimes(2);
+    expect(useAuthStore.getState().status).toBe('authenticated');
+  });
+
   it('restore() gọi lúc login() đang chạy: chờ login() xong, ra phiên rồi thì không đăng nhập lại', async () => {
     useAuthStore.setState({ user: null, status: 'idle', error: undefined });
     mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));

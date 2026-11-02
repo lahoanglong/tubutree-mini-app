@@ -288,11 +288,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const keepSession = get().status === 'authenticated' && get().user !== null;
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
-      // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó. Chỉ chạy tiếp khi nó gặp lỗi
-      // tạm; ra phiên hay bị khoá ('idle' kèm lời máy chủ) là đã có kết luận, đăng nhập lại chỉ có thể làm sai kết luận đó.
+      // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó. Ra phiên hay bị khoá ('idle'
+      // kèm lời máy chủ) là đã có kết luận, đăng nhập lại chỉ có thể làm sai kết luận đó. Lỗi tạm, hay login() ném ra ngoài mà
+      // phiên còn kẹt 'loading', thì khôi phục tiếp.
       if (loginInFlight) {
         await loginInFlight.catch(() => undefined);
-        if (get().status !== 'error') return;
+        const after = get().status;
+        if (after === 'authenticated' || after === 'idle') return;
       }
       try {
         const res = await refreshSession();
