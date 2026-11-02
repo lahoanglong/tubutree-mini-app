@@ -11,6 +11,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
+import { autoCouponName } from '@/lib/coupon-name';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { FlashPriceBar } from '@/components/mini/flash-price-bar';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
@@ -180,7 +181,7 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
     notify(fillCopy(ok ? 'coupon.copiedToast' : 'coupon.copyShowToast', { code }), 'success');
   };
 
-  const rows = offerRows(list, { amount, now: serverNow() });
+  const rows = offerRows(list, { amount, now: serverNow(), displayCode: autoCouponName });
   return (
     <>
       <ListRow

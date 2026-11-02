@@ -176,6 +176,17 @@ describe('offerRows: sheet Ưu đãi ở trang sản phẩm', () => {
     expect(rows.every((r) => r.reason === null)).toBe(true);
   });
 
+  it('mã tự cấp hiện tên thân thiện qua displayCode, không lộ mã thô kèm id khách; mã thường giữ mã', () => {
+    const raw = 'WELCOME-CMV9MLSLB009KFKRUMVZQLRA7';
+    const rows = offerRows([c(raw), c('GIAM20K', { value: 20_000 })], {
+      amount: 400_000,
+      now: NOW,
+      displayCode: (code) => (code === raw ? 'Quà chào mừng' : null),
+    });
+    expect(rows.map((r) => r.view.code)).toEqual(['Quà chào mừng', 'GIAM20K']);
+    expect(rows.map((r) => r.coupon.code)).toEqual([raw, 'GIAM20K']);
+  });
+
   it('nhiều mã chưa đủ: thiếu ít trước; hoà giảm thì hạn sớm trước', () => {
     const rows = offerRows(
       [c('FAR', { minOrder: 900_000 }), c('NEAR', { minOrder: 150_000 }), c('A', { endAt: iso(NOW + 9 * D) }), c('B', { endAt: iso(NOW + 3 * D) })],

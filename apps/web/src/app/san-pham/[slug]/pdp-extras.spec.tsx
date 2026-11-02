@@ -190,6 +190,19 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     await flush();
     expect(dialog()!.textContent).not.toContain('Mua thêm');
   });
+  it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; vẫn chép đúng mã thô', async () => {
+    const raw = 'WELCOME-CMV9MLSLB009KFKRUMVZQLRA7';
+    mocks.http.get.mockResolvedValue([coupon(raw)]);
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    click(rowButton(container));
+    await flush();
+    expect(dialog()!.textContent).toContain('Quà chào mừng thành viên mới');
+    expect(dialog()!.textContent).not.toContain('CMV9MLSLB009');
+    click(Array.from(dialog()!.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
+    await flush();
+    expect(writeText).toHaveBeenCalledWith(raw);
+  });
   it('khách chưa đăng nhập không có ví mã: không gọi API, không hiện', async () => {
     mocks.phase = 'guest';
     const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);

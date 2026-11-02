@@ -1,6 +1,7 @@
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
 import { offerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { autoCouponName } from '../../utils/coupon-name';
 import { serverNow } from '../../utils/server-clock';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Text } from '../ui/text';
@@ -21,7 +22,7 @@ export interface PdpOffersSheetProps {
  * "Sao chép" (mã chưa đủ đơn tối thiểu vẫn chép được: khách còn mua thêm món khác). Một đơn một mã, ghi ngay chỗ chọn.
  */
 export function PdpOffersSheet({ open, onClose, coupons, amount, onCopy }: PdpOffersSheetProps) {
-  const rows = offerRows(coupons, { amount, now: serverNow() });
+  const rows = offerRows(coupons, { amount, now: serverNow(), displayCode: autoCouponName });
   return (
     <BottomSheet open={open} onClose={onClose} title={fillCopy('coupon.title')}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>

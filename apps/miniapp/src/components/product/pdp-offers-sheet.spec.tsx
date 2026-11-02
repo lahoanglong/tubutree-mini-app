@@ -51,6 +51,17 @@ describe('PdpOffersSheet', () => {
     expect(onCopy).toHaveBeenCalledWith('XANH10');
   });
 
+  it('mã tự cấp hiện tên thân thiện, không lộ mã thô kèm id khách; vẫn chép đúng mã thô', () => {
+    const raw = 'WELCOME-CMV9MLSLB009KFKRUMVZQLRA7';
+    const onCopy = vi.fn();
+    render(<PdpOffersSheet open onClose={() => undefined} coupons={[{ ...coupons[2]!, code: raw }]} amount={120_000} onCopy={onCopy} />);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Quà chào mừng thành viên mới')).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain('CMV9MLSLB009');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sao chép' }));
+    expect(onCopy).toHaveBeenCalledWith(raw);
+  });
+
   it('đóng thì không có hộp thoại', () => {
     render(<PdpOffersSheet open={false} onClose={() => undefined} coupons={coupons} amount={120_000} onCopy={() => undefined} />);
     expect(screen.queryByRole('dialog')).toBeNull();

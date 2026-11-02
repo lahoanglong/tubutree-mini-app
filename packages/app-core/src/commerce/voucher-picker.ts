@@ -155,11 +155,18 @@ export interface OfferRow<T extends CouponDTO = CouponDTO> {
  * (giảm tiền nhiều trước, freeship sau vì số tiền phụ thuộc phí giao), mã chưa đủ sau (thiếu ít trước, kèm "Mua thêm … để dùng").
  * Mã vẫn là `saved` và chép được: khách còn có thể mua thêm món khác trong cùng đơn.
  */
-export function offerRows<T extends CouponDTO>(coupons: readonly T[], o: { amount: number; now: number }): OfferRow<T>[] {
+export function offerRows<T extends CouponDTO>(
+  coupons: readonly T[],
+  o: { amount: number; now: number; /** Tên thân thiện cho mã tự cấp (thay mã thô kèm id khách); null thì giữ mã. */ displayCode?: (code: string) => string | null },
+): OfferRow<T>[] {
   const built = coupons.map((coupon, index) => {
     const missing = shortfall(coupon, o.amount);
     return {
-      row: { coupon, view: voucherView({ ...coupon, claimed: true }, o.now), reason: missing > 0 ? needMore(missing) : null } as OfferRow<T>,
+      row: {
+        coupon,
+        view: { ...voucherView({ ...coupon, claimed: true }, o.now), code: o.displayCode?.(coupon.code) ?? coupon.code },
+        reason: missing > 0 ? needMore(missing) : null,
+      } as OfferRow<T>,
       index,
       missing,
       gain: missing > 0 ? 0 : coupon.type === 'FREESHIP' ? 0 : estimate(coupon, o.amount, null),
