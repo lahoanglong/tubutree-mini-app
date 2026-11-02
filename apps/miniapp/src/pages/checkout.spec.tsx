@@ -587,7 +587,10 @@ describe('CheckoutPage — mã giữ trong giỏ nhưng chưa áp (MONEY-3)', ()
   });
 });
 
-describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ combo như báo giá', () => {
+// Hàng "Tổng cộng" của khối tóm tắt (KeyValueRow: nhãn và giá trị cùng một dòng).
+const totalRow = () => screen.getByText('Tổng cộng').parentElement!;
+
+describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: các dòng giảm như báo giá, chưa có tổng', () => {
   const TWO = {
     ...CART,
     items: [
@@ -623,7 +626,8 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     renderPage();
     expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
     expect(screen.getByText('-10.000đ')).toBeInTheDocument();
-    expect(screen.getByText('85.000đ')).toBeInTheDocument();
+    expect(totalRow().textContent).toContain('Chưa tính');
+    expect(screen.queryByText('85.000đ')).toBeNull();
   });
 
   it('lựa chọn nhớ lại bằng đúng mọi dòng của giỏ: vẫn là cả giỏ, trừ combo', async () => {
@@ -631,7 +635,7 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     mocks.getCart.mockResolvedValue(TWO);
     renderPage();
     expect(await screen.findByText('Giảm giá combo')).toBeInTheDocument();
-    expect(screen.getByText('85.000đ')).toBeInTheDocument();
+    expect(totalRow().textContent).toContain('Chưa tính');
   });
 
   it('xem trước mã gửi cho máy chủ cả khi chưa có địa chỉ (không kèm addressId) để đủ điều kiện tính trên phần hàng sau combo', async () => {
@@ -657,7 +661,8 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     renderPage();
     expect(await screen.findByText('Ưu đãi hạng thành viên')).toBeInTheDocument();
     expect(screen.getByText('-4.000đ')).toBeInTheDocument();
-    expect(screen.getByText('81.000đ')).toBeInTheDocument();
+    expect(totalRow().textContent).toContain('Chưa tính');
+    expect(screen.queryByText('81.000đ')).toBeNull();
     expect(screen.queryByText('85.000đ')).toBeNull();
   });
 
@@ -679,7 +684,69 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: trừ co
     renderPage();
     await screen.findByText('Nhập địa chỉ để tính phí');
     expect(screen.queryByText('Giảm giá combo')).toBeNull();
-    expect(screen.getByText('95.000đ')).toBeInTheDocument();
+    expect(totalRow().textContent).toContain('Chưa tính');
+    expect(screen.queryByText('95.000đ')).toBeNull();
+  });
+});
+
+describe('CheckoutPage — thiếu địa chỉ: nút Đặt hàng khoá có lý do ngay cạnh (K2)', () => {
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
+    mocks.user.fullName = 'Long';
+    mocks.user.phone = '0900000000';
+    mocks.locState = null;
+    mocks.voucherProps = [];
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('chưa có địa chỉ: thanh dính ghi lý do, nút khoá, không kèm số tiền', async () => {
+    renderPage();
+    const bar = await screen.findByTestId('sticky-bar');
+    expect(within(bar).getByRole('status')).toHaveTextContent('Chọn địa chỉ giao hàng để đặt hàng.');
+    const button = within(bar).getByRole('button');
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent(/^Đặt hàng$/);
+  });
+
+  it('khối tóm tắt: phí giao nhắc nhập địa chỉ, "Tổng cộng" ghi "Chưa tính" (không số nào đóng vai tổng cuối)', async () => {
+    renderPage();
+    expect(await screen.findByText('Nhập địa chỉ để tính phí')).toBeInTheDocument();
+    expect(totalRow().textContent).toBe('Tổng cộngChưa tính');
+    expect(screen.getAllByText('50.000đ').length).toBeGreaterThan(0); // Tạm tính vẫn là tiền hàng
+  });
+
+  it('sheet "Chi tiết tính tiền": "Tổng thanh toán" cũng ghi "Chưa tính"', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByText('Chi tiết'));
+    const label = await screen.findByText('Tổng thanh toán');
+    expect(label.parentElement!.textContent).toBe('Tổng thanh toánChưa tính');
+  });
+
+  it('báo giá lỗi (đã có địa chỉ): lý do khác, nút khoá, không hiện số cũ', async () => {
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockRejectedValue(new Error('Mạng lỗi'));
+    renderPage();
+    const bar = await screen.findByTestId('sticky-bar');
+    await waitFor(() => expect(within(bar).getByRole('status')).toHaveTextContent('Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.'));
+    expect(within(bar).getByRole('button')).toBeDisabled();
+  });
+
+  it('đủ địa chỉ và báo giá: không có dòng lý do, nút ghi "Đặt hàng · tổng"', async () => {
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    renderPage();
+    const bar = await screen.findByTestId('sticky-bar');
+    await waitFor(() => expect(within(bar).getByRole('button')).toHaveTextContent('Đặt hàng · 70.000đ'));
+    expect(within(bar).queryByRole('status')).toBeNull();
   });
 });
 

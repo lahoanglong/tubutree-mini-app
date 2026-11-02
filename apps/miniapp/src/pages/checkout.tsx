@@ -20,6 +20,7 @@ import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
+import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
@@ -63,6 +64,7 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
+import { Text as DsText } from '../components/ui/text';
 import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
 
@@ -520,7 +522,8 @@ export default function CheckoutPage() {
   const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
-  const previewTotal = Math.max(0, previewSubtotal - previewCombo - previewDiscount - previewTier);
+  // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
+  const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError });
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
@@ -1124,7 +1127,7 @@ export default function CheckoutPage() {
               label={vi.checkout.shippingFee}
               value={addressId ? fillCopy('checkout.calculating') : fillCopy('checkout.shipNeedsAddress')}
             />
-            <KeyValueRow label={vi.checkout.total} value={formatVnd(previewTotal)} emphasis />
+            <KeyValueRow label={vi.checkout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
           </>
         )}
       </Box>
@@ -1155,6 +1158,13 @@ export default function CheckoutPage() {
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar
+        summary={placeHint ? (
+          <div role="status">
+            <DsText variant="caption" tone="secondary">
+              {placeHint}
+            </DsText>
+          </div>
+        ) : undefined}
         primary={
           <Button
             fullWidth
@@ -1281,7 +1291,7 @@ export default function CheckoutPage() {
 
           <KeyValueRow
             label="Tổng thanh toán"
-            value={formatVnd(quote.data?.total ?? previewTotal)}
+            value={checkoutTotalText({ total: quote.data?.total ?? null, hasAddress: !!addressId }, formatVnd)}
             emphasis
           />
 
