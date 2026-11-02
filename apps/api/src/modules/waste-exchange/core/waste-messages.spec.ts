@@ -9,7 +9,7 @@ describe('WASTE_MESSAGES (registry 4.13 pinned sentences)', () => {
     expect(M.POINT_UNAVAILABLE).toBe('Điểm nhận đang tạm ngừng, hãy chọn điểm khác');
     expect(M.ITEM_NOT_ACTIVE).toBe('Món này hiện chưa nhận, hãy bỏ khỏi danh sách');
     expect(M.NOT_MAIL_IN).toBe('Yêu cầu này không dùng mã vận đơn');
-    expect(M.RETRY).toBe('Vui lòng thử lại');
+    expect(M.RETRY).toBe('Bạn thử lại nhé');
   });
   it('builders', () => {
     expect(M.BELOW_MIN('MAIL_IN', 15_000, 5_000)).toBe('Gói gửi về kho cần tối thiểu 15.000 điểm, bạn cần thêm 5.000 điểm nữa');

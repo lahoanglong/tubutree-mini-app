@@ -592,7 +592,7 @@ export class OrderReversalService {
         if (debited) result.commissionDebited.push(debited);
       } else if (debited) {
         // Dòng hoa hồng được khoá từ đầu hàm nên không đổi giữa chừng; nếu vẫn lệch thì huỷ cả lần duyệt, không để Ví đã trừ mà hoa hồng còn nguyên.
-        throw new ConflictException('Hoa hồng của đơn vừa thay đổi, vui lòng thử lại.');
+        throw new ConflictException('Hoa hồng của đơn vừa thay đổi, bạn thử lại nhé.');
       }
     }
 

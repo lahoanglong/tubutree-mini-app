@@ -169,7 +169,7 @@ export function refundNote(refund: RefundOutcome | null, bank: { bankName?: stri
  */
 function assertNotOwnReturn(actorId: string, req: { userId: string }): void {
   if (req.userId === actorId) {
-    throw new ForbiddenException('Bạn không thể tự xử lý yêu cầu đổi/trả của chính mình. Vui lòng nhờ người khác trong đội ngũ duyệt.');
+    throw new ForbiddenException('Bạn không thể tự xử lý yêu cầu đổi/trả của chính mình. Bạn nhờ người khác trong đội ngũ duyệt nhé.');
   }
 }
 
@@ -210,7 +210,7 @@ export class OrderReturnsService {
     const reasonCode = dto.reasonCode ?? null;
     const text = dto.reason?.trim() ?? '';
     if ((!reasonCode || reasonCode === 'OTHER') && text.length < 5) {
-      throw new BadRequestException('Vui lòng mô tả lý do đổi/trả (ít nhất 5 ký tự).');
+      throw new BadRequestException('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
     }
     const reason = text || RETURN_REASONS[reasonCode as ReturnReasonCode].label;
 
@@ -219,7 +219,7 @@ export class OrderReturnsService {
     const remainingAll = order.items.every((i) => (lines.get(i.id) ?? 0) + (prior.approvedQty.get(i.id) ?? 0) >= i.quantity);
     // Đơn đại lý có công nợ/đặt trước/thưởng doanh số theo cả đơn — chưa đảo theo phần được, chỉ nhận trả cả đơn.
     if (order.type === 'DEALER' && !remainingAll) {
-      throw new BadRequestException('Đơn đại lý chỉ trả được cả đơn. Vui lòng chọn tất cả sản phẩm hoặc liên hệ Tubu.');
+      throw new BadRequestException('Đơn đại lý chỉ trả được cả đơn. Bạn chọn tất cả sản phẩm hoặc liên hệ Tubu nhé.');
     }
     const destination = this.destinationFor(order, dto);
 
@@ -386,7 +386,7 @@ export class OrderReturnsService {
     const note = input.note?.trim() || undefined;
 
     if (!input.approve) {
-      if (!note || note.length < 3) throw new BadRequestException('Vui lòng ghi lý do từ chối để báo cho khách.');
+      if (!note || note.length < 3) throw new BadRequestException('Ghi lý do từ chối để báo cho khách.');
       const rejected = await this.prisma.returnRequest.updateMany({
         where: { id, status: 'REQUESTED' },
         data: { status: 'REJECTED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
@@ -418,7 +418,7 @@ export class OrderReturnsService {
       const refund = moneyRefundable ? shares.goods + shares.shipping : 0;
       if (input.expectedRefund !== undefined && input.expectedRefund !== refund) {
         throw new ConflictException(
-          `Số tiền hoàn đã đổi thành ${formatVnd(refund)} (đơn vừa có thay đổi). Vui lòng xem lại trước khi duyệt.`,
+          `Số tiền hoàn đã đổi thành ${formatVnd(refund)} (đơn vừa có thay đổi). Xem lại trước khi duyệt.`,
         );
       }
       const destination = this.storedDestination(req, order);

@@ -31,7 +31,7 @@ import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { loadAdminRequestDetail } from './waste-admin-detail.mapper';
 
 const NOT_FOUND = 'Không tìm thấy mã';
-const RETRY = 'Vui lòng thử lại';
+const RETRY = 'Bạn thử lại nhé';
 const NOT_REOPENABLE = 'Chỉ mở lại được yêu cầu gửi kho hoặc thu kèm đơn đã hết hạn';
 const UNMATCHED_NOT_OPEN = 'Dòng hàng không rõ chủ không còn mở';
 const BAD_CURSOR = 'Con trỏ phân trang không hợp lệ';

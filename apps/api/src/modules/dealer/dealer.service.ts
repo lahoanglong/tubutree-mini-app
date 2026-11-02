@@ -247,7 +247,7 @@ export class DealerService {
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
       if (existing && existing.userId === userId) return this.orderForDealer(existing.id);
-      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, vui lòng thử lại.');
+      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
     }
     if (dto.items.length === 0) throw new BadRequestException('Đơn trống.');
 
@@ -281,7 +281,7 @@ export class DealerService {
 
     if (subtotal > DEALER_ORDER_TOTAL_MAX) {
       throw new BadRequestException(
-        `Tổng đơn ${vnd(subtotal)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — vui lòng tách thành nhiều đơn.`,
+        `Tổng đơn ${vnd(subtotal)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — bạn tách thành nhiều đơn nhé.`,
       );
     }
 
@@ -289,7 +289,7 @@ export class DealerService {
     if (rules.minOrder > 0 && subtotal < rules.minOrder) {
       throw new BadRequestException({
         code: 'DEALER_ORDER_BELOW_MIN',
-        message: `Đơn đại lý tối thiểu ${vnd(rules.minOrder)} tiền hàng, đơn của bạn mới ${vnd(subtotal)}. Vui lòng thêm hàng vào đơn.`,
+        message: `Đơn đại lý tối thiểu ${vnd(rules.minOrder)} tiền hàng, đơn của bạn mới ${vnd(subtotal)}. Bạn thêm hàng vào đơn nhé.`,
       });
     }
     const shippingFee = subtotal >= rules.freeShipFrom ? 0 : rules.feeBelow;
@@ -301,7 +301,7 @@ export class DealerService {
       throw new BadRequestException(
         dto.addressId
           ? 'Không tìm thấy địa chỉ nhận hàng đã chọn.'
-          : 'Chưa có địa chỉ nhận hàng. Vui lòng thêm địa chỉ trong sổ địa chỉ trước khi đặt đơn đại lý.',
+          : 'Chưa có địa chỉ nhận hàng. Bạn thêm địa chỉ trong sổ địa chỉ trước khi đặt đơn đại lý nhé.',
       );
     }
 
@@ -315,7 +315,7 @@ export class DealerService {
       new BadRequestException(
         tier
           ? 'Vượt hạn mức công nợ.'
-          : 'Tài khoản đại lý chưa được gán bậc nên chưa có hạn mức công nợ. Vui lòng chọn thanh toán trả trước hoặc liên hệ Tubu Tree để được gán bậc.',
+          : 'Tài khoản đại lý chưa được gán bậc nên chưa có hạn mức công nợ. Bạn chọn thanh toán trả trước hoặc liên hệ Tubu Tree để được gán bậc nhé.',
       );
     const termDays = DealerService.netDaysOf(tier?.paymentTerms);
     if (onCredit) {
@@ -383,7 +383,7 @@ export class DealerService {
     } catch (err) {
       // P2034: serialization failure — 2 đơn CREDIT chạm nhau. Báo thử lại thay vì 500.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý đơn công nợ, vui lòng thử lại.');
+        throw new BadRequestException('Hệ thống đang bận xử lý đơn công nợ, bạn thử lại nhé.');
       }
       // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
@@ -477,7 +477,7 @@ export class DealerService {
           code: 'DEALER_CREDIT_OVERDUE',
           message:
             `Bạn còn nợ đơn ngày ${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()} đã quá hạn thanh toán (${paymentTerms}). ` +
-            'Vui lòng thanh toán công nợ trước khi đặt thêm đơn ghi công nợ, hoặc chọn thanh toán trả trước.',
+            'Bạn thanh toán công nợ trước khi đặt thêm đơn ghi công nợ, hoặc chọn thanh toán trả trước nhé.',
         });
       }
       return; // đơn nợ cũ nhất còn dư chưa tới hạn thì các đơn sau (mới hơn) cũng chưa tới hạn
@@ -591,7 +591,7 @@ export class DealerService {
         if (existing.delta !== -amount) {
           throw new BadRequestException(
             opts.idempotencyKey?.trim()
-              ? 'Idempotency-Key đã được sử dụng với số tiền khác, vui lòng thử lại.'
+              ? 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.'
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
         }
@@ -653,7 +653,7 @@ export class DealerService {
     } catch (err) {
       // P2034: serialization failure — 2 lần duyệt công nợ của CÙNG đại lý chạm nhau.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý công nợ đại lý này, vui lòng thử lại.');
+        throw new BadRequestException('Hệ thống đang bận xử lý công nợ đại lý này, bạn thử lại nhé.');
       }
       // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như
       // replay của cùng 1 lần xác nhận, trả kết quả hiện tại thay vì lỗi 500.
@@ -1243,7 +1243,7 @@ export class DealerService {
       where: { id, status: 'PENDING' },
       data: { status: 'APPROVED', reviewedBy: adminId, reviewedAt: new Date(), ...(note?.trim() ? { adminNote: note.trim() } : {}) },
     });
-    if (res.count === 0) throw new BadRequestException('Yêu cầu vừa được xử lý bởi người khác — vui lòng tải lại.');
+    if (res.count === 0) throw new BadRequestException('Yêu cầu vừa được xử lý bởi người khác — bạn tải lại nhé.');
     this.logger.log(`Admin ${adminId} duyệt yêu cầu nhận thưởng ${id} (${claim.rewardTitle} ${period.label}).`);
     await this.notifyDealerOfClaim(claimRow, period, 'DEALER_REWARD_CLAIM_APPROVED');
     return claimView(await this.prisma.dealerRewardClaim.findUniqueOrThrow({ where: { id } }));
@@ -1252,7 +1252,7 @@ export class DealerService {
   /** Từ chối yêu cầu PENDING → REJECTED (bắt buộc lý do, gửi kèm cho đại lý). Trạng thái cuối. */
   async rejectRewardClaim(adminId: string, id: string, reason: string) {
     const why = reason?.trim();
-    if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
+    if (!why) throw new BadRequestException('Nhập lý do từ chối.');
     const res = await this.prisma.dealerRewardClaim.updateMany({
       where: { id, status: 'PENDING' },
       data: { status: 'REJECTED', reviewedBy: adminId, reviewedAt: new Date(), rejectionReason: why },
@@ -1380,7 +1380,7 @@ export class DealerService {
         },
       });
       if (flip.count === 0) {
-        throw new BadRequestException('Đơn vừa thay đổi trạng thái (thanh toán/huỷ) — vui lòng tải lại rồi thử lại.');
+        throw new BadRequestException('Đơn vừa thay đổi trạng thái (thanh toán/huỷ) — bạn tải lại rồi thử lại nhé.');
       }
       if (this.analytics) {
         await this.analytics.record(tx, {

@@ -759,7 +759,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       const q = await svc.quoteOrderForCustomer('ctv', { items: [{ variationId: 'v1', quantity: 3 }] });
       expect(q.total).toBe(5_400_000);
       expect(q.blockedPaymentMethods).toEqual({
-        COD: 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Vui lòng chọn chuyển khoản.',
+        COD: 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ, đơn này là 5.400.000đ. Bạn chọn chuyển khoản nhé.',
       });
       const err = await svc
         .placeOrderForCustomer('ctv', DTO({ items: [{ variationId: 'v1', quantity: 3 }] }) as never)
@@ -918,7 +918,7 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as BadRequestException).getResponse()).toMatchObject({
         code: 'TOTAL_CHANGED',
-        message: 'Tổng tiền đơn vừa thay đổi từ 139.000đ thành 159.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt.',
+        message: 'Tổng tiền đơn vừa thay đổi từ 139.000đ thành 159.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Bạn xem lại trước khi đặt nhé.',
       });
       expect(executeRaw).not.toHaveBeenCalled();
       expect(orderCreate).not.toHaveBeenCalled();

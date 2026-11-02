@@ -194,13 +194,13 @@ describe('WasteAdminRequestsService.reopen', () => {
 
   it('409s when the status flip finds no EXPIRED row', async () => {
     const { service } = setup({ requestCount: 0 });
-    await expect(service.reopen('a1', 'r1', { reason: 'kiện đến muộn' })).rejects.toThrow('Vui lòng thử lại');
+    await expect(service.reopen('a1', 'r1', { reason: 'kiện đến muộn' })).rejects.toThrow('Bạn thử lại nhé');
     expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
   it('409s when an account merge moved the request between the pre-read and the locked read', async () => {
     const { service, hold } = setup({ lockedUserId: 'u2' });
-    await expect(service.reopen('a1', 'r1', { reason: 'kiện đến muộn' })).rejects.toThrow(new ConflictException('Vui lòng thử lại'));
+    await expect(service.reopen('a1', 'r1', { reason: 'kiện đến muộn' })).rejects.toThrow(new ConflictException('Bạn thử lại nhé'));
     expect(hold.validateAndHold).not.toHaveBeenCalled();
   });
 

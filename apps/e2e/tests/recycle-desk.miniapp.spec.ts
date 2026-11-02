@@ -83,11 +83,11 @@ test.describe('Đổi rác lấy quà — quầy nhận', () => {
 
   test('khách vừa sửa yêu cầu: 409, nhắc tra lại', async ({ page, api }) => {
     setup(api);
-    api.post('/waste/desk/requests/:id/confirm', reply(409, { statusCode: 409, message: 'Khách vừa sửa yêu cầu, vui lòng tra lại mã' }));
+    api.post('/waste/desk/requests/:id/confirm', reply(409, { statusCode: 409, message: 'Khách vừa sửa yêu cầu, bạn tra lại mã' }));
     await lookUp(page);
     await lowerReceived(page, 0);
     await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
-    await expect(page.getByText('Khách vừa sửa yêu cầu, vui lòng tra lại mã')).toBeVisible();
+    await expect(page.getByText('Khách vừa sửa yêu cầu, bạn tra lại mã')).toBeVisible();
   });
 
   test('nhận thiếu: số thực nhận nhỏ hơn số khai thì phải chọn lý do', async ({ page, api }) => {

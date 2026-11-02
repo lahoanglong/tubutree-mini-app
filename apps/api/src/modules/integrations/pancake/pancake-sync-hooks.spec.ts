@@ -40,7 +40,7 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
     const t = setup({}, { getOrder: jest.fn().mockResolvedValue({ id: 'pk-1', status }) });
     const err = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(PancakeHandedOverError);
-    expect((err as Error).message).toBe('Đơn đã bàn giao cho đơn vị vận chuyển, vui lòng liên hệ CSKH');
+    expect((err as Error).message).toBe('Đơn đã bàn giao cho đơn vị vận chuyển, bạn liên hệ CSKH');
     expect(t.client.updateOrder).not.toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe('PancakeSyncHooks.precheckCancel (D1)', () => {
       const t = setup({}, { getOrder: jest.fn().mockRejectedValue(failure) });
       const err = await t.hooks.precheckCancel(subject({ pancakeOrderId: 'pk-1' }), 'INTERACTIVE').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(PancakeUnreachableError);
-      expect((err as Error).message).toBe('Kho chưa phản hồi, vui lòng thử lại sau ít phút');
+      expect((err as Error).message).toBe('Kho chưa phản hồi, bạn thử lại sau ít phút');
       expect(t.client.updateOrder).not.toHaveBeenCalled();
     });
 

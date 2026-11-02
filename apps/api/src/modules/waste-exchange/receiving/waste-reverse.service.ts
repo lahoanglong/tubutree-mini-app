@@ -13,7 +13,7 @@ import { WasteShipLockService } from '../core/waste-ship-lock.service';
 type TxResult = { replay: boolean; result: WasteReverseResultDTO; userId: string; code: string; method: WasteMethod; taken: number };
 
 const NOT_FOUND = 'Không tìm thấy mã';
-const RETRY = 'Vui lòng thử lại';
+const RETRY = 'Bạn thử lại nhé';
 
 function isUniqueViolation(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'P2002';

@@ -202,7 +202,7 @@ describe('WasteReverseService.reverse', () => {
 
   it('answers 409 when the conditional transition moves no row', async () => {
     const { svc } = setup({ updateCount: 0 });
-    await expect(svc.reverse('a1', 'r1', BODY)).rejects.toEqual(new ConflictException('Vui lòng thử lại'));
+    await expect(svc.reverse('a1', 'r1', BODY)).rejects.toEqual(new ConflictException('Bạn thử lại nhé'));
     expect(applyPointsDelta).not.toHaveBeenCalled();
   });
 

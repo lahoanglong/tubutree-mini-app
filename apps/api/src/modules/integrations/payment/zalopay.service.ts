@@ -138,7 +138,7 @@ export class ZalopayService {
       this.logger.warn(
         `ZaloPay từ chối tạo lệnh cho đơn ${order.code}: return_code=${data?.return_code} sub_return_code=${data?.sub_return_code} ${data?.sub_return_message ?? data?.return_message ?? ''}`,
       );
-      throw new BadGatewayException('ZaloPay chưa tạo được lệnh thanh toán, vui lòng thử lại sau.');
+      throw new BadGatewayException('ZaloPay chưa tạo được lệnh thanh toán, bạn thử lại sau nhé.');
     }
     // Ghi TỪNG lần thử: app_trans_id có tiền tố ngày nên bấm thanh toán lại hôm sau sinh mã
     // khác. Nếu chỉ giữ mã mới nhất ở orders.paymentTxnId thì callback của lần thử cũ (khách
@@ -188,7 +188,7 @@ export class ZalopayService {
     if (now?.paymentStatus === 'PAID') throw new BadRequestException('Đơn đã thanh toán.');
     if (now && now.status !== 'PENDING_PAYMENT') throw new BadRequestException('Đơn không còn ở trạng thái chờ thanh toán.');
     if (processing) {
-      throw new BadRequestException('Lần thanh toán ZaloPay trước của đơn đang được xử lý — vui lòng chờ vài phút rồi xem lại đơn.');
+      throw new BadRequestException('Lần thanh toán ZaloPay trước của đơn đang được xử lý — bạn chờ vài phút rồi xem lại đơn nhé.');
     }
   }
 
