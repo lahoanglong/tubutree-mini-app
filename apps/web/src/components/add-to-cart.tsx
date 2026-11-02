@@ -17,7 +17,7 @@ import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
@@ -111,6 +111,7 @@ export default function AddToCart({
   const selected = variations.find((v) => v.id === selectedId);
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường (nút ghi số đó, không phải qty × giá Giờ vàng).
   const line = selected ? variationLinePreview(selected, flash, qty) : null;
+  const overLimitText = line ? overLimitNote(line, qty) : null;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
@@ -371,10 +372,8 @@ export default function AddToCart({
       </div>
       {/* Mua quá giới hạn Giờ vàng mỗi khách: máy chủ tính cả dòng giá thường, nên nói trước ở đây (các nút đã ghi đúng số đó). Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
       <div role="status" data-section="pdp-flash-limit" className="max-md:order-6">
-        {line?.overLimit && line.limit != null && (
-          <p className={`mt-2 text-sm text-[var(--color-text-secondary)] ${phoneCaption} ${phoneBandPad} max-md:mt-0 max-md:pb-3`}>
-            {fillCopy('flash.sheetOverLimit', { n: line.limit, qty })}
-          </p>
+        {overLimitText && (
+          <p className={`mt-2 text-sm text-[var(--color-text-secondary)] ${phoneCaption} ${phoneBandPad} max-md:mt-0 max-md:pb-3`}>{overLimitText}</p>
         )}
       </div>
       <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>

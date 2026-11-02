@@ -1,5 +1,5 @@
 import { fillTileCopy } from './commerce/tile-copy';
-import { pickDefaultVariation, variationPricing, type FlashPriceItem, type VariationPricingResult } from './flash-price';
+import { pickDefaultVariation } from './flash-price';
 
 type PickerVariation = { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number };
 
@@ -25,9 +25,4 @@ export function clampPickerQty(variation: { stock: number } | undefined, qty: nu
 export function pickerStockText(stock: number): string {
   if (stock <= 0) return fillTileCopy('stock.out');
   return stock <= LOW_STOCK_NOTICE ? `Còn ${stock} sản phẩm` : `Còn ${stock}`;
-}
-
-/** Giá một dòng chọn trong bảng: cùng luật Giờ vàng với trang chi tiết. */
-export function pickerView(variation: PickerVariation, flash: readonly FlashPriceItem[]): VariationPricingResult {
-  return variationPricing(variation, flash);
 }

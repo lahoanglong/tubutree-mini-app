@@ -1,5 +1,6 @@
 import { test, expect } from './support/mock-api';
 import { mockPilotProduct, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
+import { expectChipMetrics } from './support/variation-chip';
 
 /**
  * Mini App, trang sản phẩm: mua quá giới hạn Giờ vàng mỗi khách thì máy chủ tính CẢ dòng giá thường (flash-line-price.ts), nên nút Mua ngay,
@@ -38,6 +39,7 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     mockPage(api);
     await page.goto(`/product/${PILOT_SLUG}`);
     await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    await expectChipMetrics(page.getByRole('group', { name: 'Phân loại nhanh' }).getByRole('button').first());
     await page.getByRole('button', { name: /^Mua ngay/ }).click();
     const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
     await expect(dialog).toBeVisible();
@@ -51,6 +53,8 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     // Chip hết hàng có chữ, không chỉ gạch ngang; chip Giờ vàng có giá.
     await expect(dialog.getByRole('button', { name: /Combo 3 gói/ })).toContainText('Tạm hết hàng');
     await expect(dialog.getByRole('button', { name: /Gói 80 tờ/ })).toContainText('26.000đ');
+    // Cùng số đo với chip web khổ 375px (flash-sheet-price.web.spec.ts).
+    await expectChipMetrics(dialog.getByRole('button', { name: /Gói 80 tờ/ }));
 
     const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
     const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });

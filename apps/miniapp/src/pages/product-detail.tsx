@@ -52,7 +52,7 @@ import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -373,7 +373,8 @@ export default function ProductDetailPage() {
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường (nút và điểm tích dùng số này, không phải qty × giá Giờ vàng).
-  const line = selected ? variationLinePreview(selected, flashList, quantity) : { total: price * quantity, overLimit: false, limit: null };
+  const line = selected ? variationLinePreview(selected, flashList, quantity) : { total: price * quantity, overLimit: false, allowance: null, allowanceBy: null };
+  const overLimitText = overLimitNote(line, quantity);
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
   const soldText = formatSold(p.sold);
@@ -776,17 +777,18 @@ export default function ProductDetailPage() {
       </Box>
       {/* Mua quá giới hạn Giờ vàng mỗi khách: máy chủ tính cả dòng giá thường, nên nói trước ở đây (nút Mua ngay đã ghi đúng số đó). Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
       <div role="status" style={{ background: 'var(--color-bg-surface)' }}>
-        {line.overLimit && line.limit != null && (
+        {overLimitText && (
           <p
             style={{
               margin: 0,
-              padding: '0 var(--space-inline-md) var(--space-stack-sm)',
+              // Ngang bằng dải Số lượng ngay trên (Box p={4} = 16px) và phoneBandPad của web; dưới 12px như max-md:pb-3 của web.
+              padding: '0 var(--space-inset-page) var(--space-inset-card)',
               fontSize: 'var(--type-caption-size)',
               lineHeight: 'var(--type-caption-lh)',
               color: 'var(--color-text-secondary)',
             }}
           >
-            {fillCopy('flash.sheetOverLimit', { n: line.limit, qty: quantity })}
+            {overLimitText}
           </p>
         )}
       </div>

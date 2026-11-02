@@ -213,6 +213,18 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
       expect(screen.getByText(OVER_4)).toBeInTheDocument();
     });
 
+    it('đợt gần hết suất (còn 2, giới hạn khách 5): qty 3 đã là cả dòng giá thường 300.000đ, ghi chú nói số suất còn và lề ngang 16px như dải Số lượng', async () => {
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ perUserLimit: 5, quota: 10, soldCount: 8 })]);
+      renderPdp();
+      await screen.findByTestId('flash-price-bar');
+      fireEvent.click(plus());
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 160.000đ');
+      fireEvent.click(plus());
+      expect(buyNow()).toHaveAccessibleName('Mua ngay · 300.000đ');
+      const note = screen.getByText('Giờ vàng còn 2 suất. Mua 3 thì cả dòng tính giá thường.');
+      expect(note.style.padding).toContain('var(--space-inset-page)');
+    });
+
     it('API cũ không gửi giới hạn: vẫn qty × giá Giờ vàng, không ghi chú', async () => {
       mocks.fetchActiveFlashSales.mockResolvedValue([flash()]);
       renderPdp();

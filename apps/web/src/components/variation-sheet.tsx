@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { clampPickerQty, pickerStartId, pickerStockText } from '@tubutree/app-core/variation-picker';
-import { variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
+import { overLimitNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
@@ -71,6 +71,7 @@ export function VariationSheet({
   // Tiền dòng theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng tính giá thường, nên nút ghi số đó chứ không phải qty × giá Giờ vàng.
   const line = selected ? variationLinePreview(selected, flash, shownQty) : null;
   const view = line?.pricing ?? null;
+  const overNote = line ? overLimitNote(line, shownQty) : null;
 
   return (
     <BottomSheet
@@ -141,12 +142,12 @@ export function VariationSheet({
         </Text>
         <QuantitySelector value={qty} max={Math.max(1, selected?.stock ?? 1)} onChange={setQty} />
       </div>
-      {line?.limit != null && (
+      {line?.allowance != null && (
         // Vùng thông báo có chỗ giữ cố định (2 dòng chữ caption; `--type-caption-lh` là số không đơn vị nên nhân với cỡ chữ) từ lúc mở: chữ hiện ra không làm bảng cao thêm và đẩy ô Số lượng dưới ngón tay đang bấm "+".
         <div role="status" style={{ minHeight: 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2)', marginTop: 'var(--space-stack-xs)' }}>
-          {line.overLimit && (
+          {overNote && (
             <Text variant="caption" tone="secondary" as="p">
-              {fillCopy('flash.sheetOverLimit', { n: line.limit, qty: shownQty })}
+              {overNote}
             </Text>
           )}
         </div>

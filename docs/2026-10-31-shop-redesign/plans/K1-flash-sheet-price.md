@@ -64,7 +64,7 @@
   export interface VariationLinePreview extends FlashLinePreview { pricing: VariationPricingResult; limit: number | null }
   export function variationLinePreview(v: { id: string; retailPrice: number; salePrice?: number | null }, flash: readonly FlashPriceItem[], quantity: number): VariationLinePreview;
   ```
-  `limit` của `VariationLinePreview` chỉ có khi phân loại đang Giờ vàng (`pricing.isFlash`); `overLimit` = có giá Giờ vàng thật sự rẻ hơn giá đang bán VÀ `quantity > limit`.
+  `limit` (giới hạn mỗi khách, để vẽ nhãn) và `allowance` (min với suất còn lại của đợt, để tính tiền và ghi chú) của `VariationLinePreview` chỉ có khi phân loại đang Giờ vàng (`pricing.isFlash`); `overLimit` = có giá Giờ vàng thật sự rẻ hơn giá đang bán VÀ `quantity > allowance`. `overLimitNote(line, quantity)` ra câu ghi chú đúng loại (`flash.sheetOverLimit` hoặc `flash.sheetOverQuota`).
 
 - [ ] **Step 1: Viết spec đỏ** (`flash-line.spec.ts`): đối chiếu `priceFlashLine` bằng cách chuyển mã file API bằng `ts.transpileModule` (CommonJS, `import type` bị bỏ nên không kéo cả service) rồi chạy trên cùng bộ ca. Bộ ca (standing 35.000, flashPrice 26.000, limit 3): qty 1, 3 (= limit), 4 (limit+1), 5; không giới hạn (`limit` null/undefined/0/NaN → coi như đủ suất); flashPrice 40.000 > standing 35.000 (qty ≤ limit và qty > limit đều ra 35.000, `overLimit` false); flashPrice null (không Giờ vàng). Với mỗi ca: `flashLinePreview(...).unitPrice` bằng `priceFlashLine(standing, qty, offer).unitPrice` với `offer = { flashPrice, allowance: limit }`; `total = unitPrice * qty`; `overLimit` đúng như bảng ở Review Focus 1–2. Thêm ca `variationLinePreview`: có `perUserLimit: 3` ở item thì `limit` = 3; không có item thì `limit` null và `overLimit` false.
 - [ ] **Step 2: Chạy** `cd packages/app-core && npx vitest run src/commerce/flash-line.spec.ts`. Expected: FAIL (module chưa có).
@@ -143,5 +143,5 @@
 ## Self-review
 
 - Spec coverage: P1 #1 (Task 1, 3, 4, 6), P1 #6 (Task 3, 4), P2 #1 (Task 2, 3, 4), P2 #12 (Task 5), ảnh trước/sau (Task 6). Không có việc API.
-- Giới hạn client biết là `perUserLimit` mỗi khách đang hiển thị; số suất còn lại của khách (`perUserLeft`, `quotaLeft`) và số đã có sẵn trong giỏ client không biết: ghi ở notes.
+- Số suất client biết: `allowance` = min(giới hạn mỗi khách `perUserLimit`, suất còn lại của đợt `quota - soldCount` theo danh sách Giờ vàng đang giữ, có thể cũ vài chục giây). Client không biết phần khách đã mua (`perUserLeft` = giới hạn trừ số đã mua) và số lượng đã nằm sẵn trong giỏ: ghi ở notes. Đợt gần hết suất dùng câu riêng `flash.sheetOverQuota` ("Giờ vàng còn {n} suất…"), nhãn "Tối đa n/khách" vẫn là giới hạn của khách.
 - Tên nhất quán: `flashLinePreview`, `variationLinePreview`, `flashLimitFor`, `VariationChip`, `flash.sheetOverLimit` dùng như nhau ở các task.

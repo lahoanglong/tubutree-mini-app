@@ -86,6 +86,16 @@ describe('VariationSheet web: giá Giờ vàng và tiền dòng theo luật máy
     expect(dialog().textContent).not.toContain('Tối đa');
   });
 
+  it('đợt gần hết suất (còn 2 suất, giới hạn khách 5): qty 3 ghi cả dòng giá thường 105.000đ và câu nói số suất còn, nhãn giới hạn vẫn là "Tối đa 5/khách"', () => {
+    mountSheet({ flash: flash({ quota: 10, soldCount: 8, perUserLimit: 5 }), initialQty: 2 });
+    expect(buy().textContent).toBe('Mua ngay · 52.000đ');
+    expect(status()!.textContent).toBe('');
+    click(plus());
+    expect(buy().textContent).toBe('Mua ngay · 105.000đ');
+    expect(status()!.textContent).toBe('Giờ vàng còn 2 suất. Mua 3 thì cả dòng tính giá thường.');
+    expect(dialog().querySelector('[data-testid="variation-sheet-flash"]')!.textContent).toContain('Tối đa 5/khách');
+  });
+
   it('hết giờ khi khách đang mở bảng (flash rỗng): giá thường, không nhãn Giờ vàng, không ghi chú', () => {
     const r = mountSheet({ initialQty: 5 });
     expect(status()!.textContent).toBe(OVER_5);
@@ -114,6 +124,15 @@ describe('VariationSheet web: hết hàng ghi "Tạm hết hàng" nhất quán',
     expect(flashChip.textContent).toContain('Giờ vàng');
     expect(flashChip.querySelector('svg')).not.toBeNull();
     expect(byText(dialog(), 'button', /Gói 40 tờ/)!.textContent).toContain('20.000đ');
+  });
+
+  it('chip hai dòng ở điện thoại: tên theo body-sm (dòng 22px) và giá theo caption (13px, dòng 20px) như chip Mini, để hai app cùng cao', () => {
+    mountSheet();
+    const chip = byText(dialog(), 'button', /Gói 40 tờ/) as HTMLElement;
+    const [name, , price] = Array.from(chip.children) as HTMLElement[];
+    expect(name!.className).toContain('max-md:leading-[var(--type-body-sm-lh)]');
+    expect(price!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+    expect(price!.className).toContain('max-md:leading-[var(--type-caption-lh)]');
   });
 
   it('chú thích dưới giá và nút khi phân loại đang chọn hết hàng đều ghi "Tạm hết hàng"', () => {

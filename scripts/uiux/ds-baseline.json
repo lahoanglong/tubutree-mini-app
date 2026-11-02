@@ -241,7 +241,7 @@
   "apps/web/src/components/staff/staff-hub.tsx": 1,
   "apps/web/src/components/ui/error-state.tsx": 9,
   "apps/web/src/components/ui/page-header.tsx": 16,
-  "apps/web/src/components/variation-chip.tsx": 21,
+  "apps/web/src/components/variation-chip.tsx": 19,
   "apps/web/src/lib/phone-ui.ts": 21
  },
  "px": {

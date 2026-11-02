@@ -89,6 +89,16 @@ describe('VariationSheet: giá Giờ vàng và tiền dòng theo luật máy ch�
     expect(screen.queryByText(/Tối đa/)).toBeNull();
   });
 
+  it('đợt gần hết suất (còn 2 suất, giới hạn khách 5): qty 3 ghi cả dòng giá thường 105.000đ và câu nói số suất còn, nhãn giới hạn vẫn là "Tối đa 5/khách"', () => {
+    renderSheet({ flash: flash({ quota: 10, soldCount: 8, perUserLimit: 5 }), initialQty: 2 });
+    expect(buyButton()).toHaveTextContent('Mua ngay · 52.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    fireEvent.click(plus());
+    expect(buyButton()).toHaveTextContent('Mua ngay · 105.000đ');
+    expect(screen.getByRole('status')).toHaveTextContent('Giờ vàng còn 2 suất. Mua 3 thì cả dòng tính giá thường.');
+    expect(screen.getByTestId('variation-sheet-flash')).toHaveTextContent('Tối đa 5/khách');
+  });
+
   it('hết giờ khi khách đang mở bảng (flash rỗng): giá thường, không nhãn Giờ vàng, không ghi chú', () => {
     const { rerender } = renderSheet({ initialQty: 5 });
     expect(screen.getByRole('status')).toHaveTextContent(OVER_5);
@@ -118,6 +128,16 @@ describe('VariationSheet: hết hàng ghi "Tạm hết hàng" nhất quán', () 
     expect(flashChip).toHaveTextContent('26.000đ');
     expect(flashChip).toHaveTextContent('Giờ vàng');
     expect(screen.getByRole('button', { name: /Gói 40 tờ/ })).toHaveTextContent('20.000đ');
+  });
+
+  it('chip hai dòng: tên theo body-sm (14/22) và giá theo caption (13/20); web khổ điện thoại dùng đúng hai bậc này để chip hai app cùng cao', () => {
+    renderSheet();
+    const rows = screen.getByRole('button', { name: /Gói 40 tờ/ }).children;
+    expect(rows).toHaveLength(2);
+    expect((rows[0] as HTMLElement).style.fontSize).toBe('var(--type-body-sm-size)');
+    expect((rows[0] as HTMLElement).style.lineHeight).toBe('var(--type-body-sm-lh)');
+    expect((rows[1] as HTMLElement).style.fontSize).toBe('var(--type-caption-size)');
+    expect((rows[1] as HTMLElement).style.lineHeight).toBe('var(--type-caption-lh)');
   });
 
   it('chú thích dưới giá và nút khi phân loại đang chọn hết hàng đều ghi "Tạm hết hàng"', () => {

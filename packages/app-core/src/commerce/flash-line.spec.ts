@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { flashLimitFor, flashLinePreview, variationLinePreview } from './flash-line';
+import { flashLimitFor, flashLinePreview, flashQuotaLeftFor, overLimitNote, variationLinePreview } from './flash-line';
 
 /**
  * Đối chiếu với luật máy chủ `priceFlashLine` (apps/api/src/modules/flash-sale/flash-line-price.ts): file API được chuyển sang CommonJS rồi chạy
  * thật, không chép lại luật vào spec. `import type` bị bỏ khi chuyển nên không kéo cả `FlashSaleService` vào.
  */
-type EffectivePriceLike = { flashPrice: number; allowance?: number };
+type EffectivePriceLike = { flashPrice: number; allowance?: number; quotaLeft?: number; perUserLeft?: number };
 type PriceFlashLine = (standing: number, quantity: number, offer: EffectivePriceLike | undefined) => { unitPrice: number };
 
 function loadServerRule(): PriceFlashLine {
@@ -103,5 +103,74 @@ describe('variationLinePreview', () => {
     const preview = variationLinePreview(variation, flash({ flashPrice: 40_000 }), 5);
     expect(preview.pricing.isFlash).toBe(false);
     expect(preview).toMatchObject({ limit: null, unitPrice: 35_000, total: 175_000, overLimit: false });
+  });
+});
+
+describe('flashQuotaLeftFor', () => {
+  it('quota - soldCount khi có cả hai số và còn suất; thiếu số hoặc hết thì null', () => {
+    expect(flashQuotaLeftFor({ quota: 10, soldCount: 8 })).toBe(2);
+    expect(flashQuotaLeftFor({ quota: 10, soldCount: 10 })).toBeNull();
+    expect(flashQuotaLeftFor({ quota: 10, soldCount: 12 })).toBeNull();
+    expect(flashQuotaLeftFor({ quota: 10 })).toBeNull();
+    expect(flashQuotaLeftFor({ soldCount: 3 })).toBeNull();
+    expect(flashQuotaLeftFor({ quota: Number.NaN, soldCount: 1 })).toBeNull();
+    expect(flashQuotaLeftFor(undefined)).toBeNull();
+  });
+});
+
+describe('variationLinePreview: suất còn lại của đợt cũng là giới hạn (allowance = min(suất còn lại, giới hạn mỗi khách))', () => {
+  const variation = { id: 'v1', retailPrice: STANDING, salePrice: null };
+  const item = (extra: object) => [{ productSlug: 'p', variationId: 'v1', flashPrice: FLASH, ...extra }];
+
+  it('đợt gần hết suất: quota 10, đã bán 8, giới hạn khách 5 thì chỉ 2 sản phẩm giá Giờ vàng, như máy chủ', () => {
+    const flash = item({ quota: 10, soldCount: 8, perUserLimit: 5 });
+    // Máy chủ: allowance = min(quotaLeft 2, perUserLeft 5) = 2. Khách mới (chưa mua) nên perUserLeft = perUserLimit.
+    const offer = { flashPrice: FLASH, quotaLeft: 2, perUserLeft: 5, allowance: 2 };
+    for (const qty of [1, 2, 3, 5]) {
+      const got = variationLinePreview(variation, flash, qty);
+      expect(got.total).toBe(server(STANDING, qty, offer).unitPrice * qty);
+      expect(got).toMatchObject({ limit: 5, allowance: 2, allowanceBy: 'quota', overLimit: qty > 2 });
+    }
+    expect(variationLinePreview(variation, flash, 3).total).toBe(105_000);
+  });
+
+  it('suất còn lại nhiều hơn giới hạn của khách: giới hạn của khách chặn', () => {
+    const got = variationLinePreview(variation, item({ quota: 100, soldCount: 10, perUserLimit: 3 }), 4);
+    expect(got).toMatchObject({ limit: 3, allowance: 3, allowanceBy: 'perUser', overLimit: true, total: 140_000 });
+  });
+
+  it('suất còn lại bằng giới hạn của khách: nói theo giới hạn của khách', () => {
+    expect(variationLinePreview(variation, item({ quota: 10, soldCount: 7, perUserLimit: 3 }), 4)).toMatchObject({ allowance: 3, allowanceBy: 'perUser', overLimit: true });
+  });
+
+  it('API không gửi perUserLimit nhưng có quota: suất còn lại vẫn là giới hạn, giới hạn mỗi khách vẫn null (không ghi "Tối đa n/khách")', () => {
+    expect(variationLinePreview(variation, item({ quota: 10, soldCount: 8 }), 3)).toMatchObject({ limit: null, allowance: 2, allowanceBy: 'quota', overLimit: true, total: 105_000 });
+  });
+
+  it('không có số suất nào: không giới hạn', () => {
+    expect(variationLinePreview(variation, item({}), 9)).toMatchObject({ limit: null, allowance: null, allowanceBy: null, overLimit: false, total: 234_000 });
+  });
+});
+
+describe('overLimitNote', () => {
+  const variation = { id: 'v1', retailPrice: STANDING, salePrice: null };
+  const item = (extra: object) => [{ productSlug: 'p', variationId: 'v1', flashPrice: FLASH, ...extra }];
+
+  it('vượt giới hạn mỗi khách: nêu giới hạn và số đang mua', () => {
+    const line = variationLinePreview(variation, item({ perUserLimit: 3 }), 5);
+    expect(overLimitNote(line, 5)).toBe('Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 5 thì cả dòng tính giá thường.');
+  });
+
+  it('vượt số suất còn lại của đợt: câu riêng, không "Chỉ còn", viết hoa Giờ vàng', () => {
+    const line = variationLinePreview(variation, item({ quota: 10, soldCount: 8, perUserLimit: 5 }), 3);
+    const note = overLimitNote(line, 3);
+    expect(note).toBe('Giờ vàng còn 2 suất. Mua 3 thì cả dòng tính giá thường.');
+    expect(note).not.toMatch(/Chỉ còn/);
+  });
+
+  it('trong giới hạn hoặc không đổi giá thì không có ghi chú', () => {
+    expect(overLimitNote(variationLinePreview(variation, item({ perUserLimit: 3 }), 3), 3)).toBeNull();
+    expect(overLimitNote(variationLinePreview(variation, [], 5), 5)).toBeNull();
+    expect(overLimitNote(variationLinePreview(variation, item({ perUserLimit: 3, flashPrice: 40_000 }), 5), 5)).toBeNull();
   });
 });

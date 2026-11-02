@@ -4,6 +4,7 @@
 import { Zap } from 'lucide-react';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { formatVnd } from '@/lib/shop-client';
+import { phoneBodySm, phoneCaption } from '@/lib/phone-ui';
 
 export interface VariationChipProps {
   variation: { name: string; stock: number };
@@ -15,7 +16,7 @@ export interface VariationChipProps {
 
 /**
  * Chip phân loại, dùng chung ở trang sản phẩm (`AddToCart`) và bảng chọn phân loại để hai nơi ghi cùng giá, cùng dấu Giờ vàng và cùng chữ
- * hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Điện thoại: hai dòng (tên / giá) như chip của Mini App, viền 1,5px. Từ md giữ "tên · giá" một
+ * hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Điện thoại: hai dòng (tên 14px/22px, giá 13px/20px như `Text variant="body-sm"` và `"caption"` của Mini App, nên chip cao 61px ở cả hai app), viền 1,5px. Từ md giữ "tên · giá" một
  * dòng để nút mua còn trong 1280×800.
  */
 export function VariationChip({ variation, pricing, active, onClick }: VariationChipProps) {
@@ -34,12 +35,12 @@ export function VariationChip({ variation, pricing, active, onClick }: Variation
           : 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] max-md:border-[var(--color-border-subtle)]'
       } ${out ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
     >
-      <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} max-md:text-sm`}>{variation.name}</span>
+      <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} ${phoneBodySm}`}>{variation.name}</span>
       <span aria-hidden="true" className="max-md:hidden">
         {' · '}
       </span>
       <span
-        className={`inline-flex items-center gap-0.5 max-md:text-xs max-md:font-normal ${
+        className={`inline-flex items-center gap-0.5 ${phoneCaption} max-md:font-normal ${
           out
             ? 'max-md:text-[var(--color-text-disabled)]'
             : pricing.isFlash

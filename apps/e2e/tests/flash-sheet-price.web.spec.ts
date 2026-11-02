@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { multiVariationProduct } from './support/pdp-product';
+import { expectChipMetrics } from './support/variation-chip';
 
 /**
  * Web khổ 375px, trang sản phẩm: mua quá giới hạn Giờ vàng mỗi khách thì máy chủ tính CẢ dòng giá thường (flash-line-price.ts), nên các nút mua và
@@ -67,6 +68,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     const plus = page.locator('[data-section="pdp-quantity"]').getByRole('button', { name: 'Tăng số lượng' });
     const buy = page.getByRole('button', { name: /^Mua ngay · / });
     await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
+    await expectChipMetrics(page.locator('[data-section="pdp-variation-chips"] button').first());
     await plus.click();
     await plus.click();
     await expect(buy).toHaveAccessibleName(`Mua ngay · ${vnd(LIMIT * FLASH_PRICE)}`);
@@ -84,6 +86,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     await expect(dialog).toBeVisible();
     await expect(dialog.getByTestId('variation-sheet-flash')).toContainText('Giờ vàng');
     await expect(dialog.getByTestId('variation-sheet-flash')).toContainText(`Tối đa ${LIMIT}/khách`);
+    await expectChipMetrics(dialog.getByRole('group', { name: 'Phân loại' }).getByRole('button').first());
     const outChip = dialog.getByRole('button', { name: new RegExp(p.variations[p.variations.length - 1]!.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) });
     await expect(outChip).toBeDisabled();
     await expect(outChip).toContainText('Tạm hết hàng');
