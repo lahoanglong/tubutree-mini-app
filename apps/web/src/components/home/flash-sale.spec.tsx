@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
+import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
 // Chép ý nghĩa flash-sale.spec của Mini App: giờ vàng đang chạy, sắp diễn ra + nhắc, tải lại sau lỗi, giá khớp giá thật.
@@ -189,6 +190,44 @@ describe('FlashSale hydrate', () => {
     act(() => root.unmount());
     container.remove();
   });
+
+  it('script đã ẩn kệ theo đồng hồ máy, nhưng hydrate thấy máy chủ còn giờ (máy nhanh hơn máy chủ): kệ hiện lại, không mất suất', async () => {
+    activeResult = () => new Promise(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // Máy nhanh 10 phút so với máy chủ; suất còn 5 phút theo máy chủ nhưng đã quá giờ theo đồng hồ máy.
+    vi.setSystemTime(new Date('2026-10-28T12:10:00Z'));
+    const items = three({ endAt: '2026-10-28T12:05:00Z' });
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items} />
+      </QueryClientProvider>
+    );
+    vi.setSystemTime(new Date('2026-10-28T11:55:00Z'));
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(ui());
+    document.body.appendChild(container);
+    vi.setSystemTime(new Date('2026-10-28T12:10:00Z'));
+    const script = container.querySelector('script')!;
+    new Function('document', script.textContent!.replace('document.currentScript', 'document.__s'))({ __s: script });
+    const section = container.querySelector('section') as HTMLElement;
+    expect(section.style.display).toBe('none');
+    syncServerClock('2026-10-28T12:00:00Z');
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    expect(container.querySelector('section')).toBe(section);
+    expect(section.style.display).toBe('');
+    act(() => root.unmount());
+    container.remove();
+    // Độ lệch giờ máy chủ là biến toàn cục: trả về 0 để test sau không bị lệch.
+    vi.useRealTimers();
+    syncServerClock(new Date().toISOString());
+  });
 });
 
 describe('FlashSale dữ liệu dựng sẵn rỗng', () => {
@@ -204,11 +243,8 @@ describe('FlashSale dữ liệu dựng sẵn rỗng', () => {
       </QueryClientProvider>
     );
     const html = renderToString(ui());
-    // Chỉ có chỗ giữ cho ca "dự kiến mở" (ẩn, và đoạn script không hiện nó với hint "1"): không có khung chờ hay nội dung nào.
-    expect(html).toContain('data-testid="flash-sale-reserve"');
-    expect(html).not.toContain('flash-sale-loading');
+    expect(html).toBe('');
     const container = document.createElement('div');
-    container.innerHTML = html;
     document.body.appendChild(container);
     const seen: boolean[] = [];
     const watch = new MutationObserver(() => seen.push(container.querySelector('[data-testid="flash-sale-loading"]') !== null));
@@ -223,86 +259,6 @@ describe('FlashSale dữ liệu dựng sẵn rỗng', () => {
     expect(container.innerHTML).toBe('');
     act(() => root.unmount());
     container.remove();
-  });
-
-  /** Dựng HTML như máy chủ rồi hydrate; trả về các lần DOM đổi: có khung giữ chỗ hay chỗ giữ của máy chủ ở từng thời điểm. */
-  async function hydrateEmpty(hint: string | null, opts: { now?: Date; activeIs?: () => Promise<unknown> } = {}) {
-    withStorage(hint);
-    if (opts.now) {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(opts.now);
-    }
-    activeResult = opts.activeIs ?? (() => new Promise(() => undefined));
-    const ui = () => (
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <FlashSale initial={[]} />
-      </QueryClientProvider>
-    );
-    const container = document.createElement('div');
-    container.innerHTML = renderToString(ui());
-    document.body.appendChild(container);
-    const reserve = container.querySelector<HTMLElement>('[data-testid="flash-sale-reserve"]')!;
-    // Giống trình duyệt: đoạn script liền sau chỗ giữ chạy trước hydrate.
-    const script = container.querySelector('script')!;
-    new Function('document', 'localStorage', script.textContent!.replace('document.currentScript', 'document.__s'))(
-      Object.assign(Object.create(null), { __s: script }),
-      localStorage,
-    );
-    const states: string[] = [];
-    const snap = () => `${reserve.isConnected && reserve.style.display === 'block' ? 'giữ-chỗ' : ''}${container.querySelector('[data-testid="flash-sale-loading"]') ? 'khung' : ''}` || 'trống';
-    states.push(snap());
-    const watch = new MutationObserver(() => {
-      const next = snap();
-      if (states[states.length - 1] !== next) states.push(next);
-    });
-    watch.observe(container, { childList: true, subtree: true, attributes: true });
-    const errors: unknown[] = [];
-    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
-    let root!: ReturnType<typeof hydrateRoot>;
-    await act(async () => {
-      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
-    });
-    await flush(8);
-    consoleError.mockRestore();
-    watch.disconnect();
-    const done = () => {
-      act(() => root.unmount());
-      container.remove();
-    };
-    return { container, states, errors, snap, done };
-  }
-
-  it('HTML dựng chưa có suất, máy nhớ suất kế mở lúc 12:00 và giờ đó đã tới: lần vẽ đầu đã giữ chỗ, hydrate thay bằng khung chờ cùng chiều cao, không có lúc nào trống', async () => {
-    const now = new Date('2026-10-28T12:03:00Z');
-    const r = await hydrateEmpty(`0@${Date.parse('2026-10-28T12:00:00Z')}`, { now });
-    expect(r.errors).toEqual([]);
-    expect(r.states[0]).toBe('giữ-chỗ');
-    expect(r.states).not.toContain('trống');
-    expect(r.snap()).toBe('khung');
-    expect((r.container.querySelector('[data-testid="flash-sale-loading"]')!.firstElementChild as HTMLElement).style.height).toBe(`${FLASH_SKELETON_HEIGHT}px`);
-    r.done();
-  });
-
-  it('cùng ca đó nhưng lần tải lại không mang suất nào về: khung chờ gỡ đi, không treo', async () => {
-    const r = await hydrateEmpty(`0@${Date.parse('2026-10-28T12:00:00Z')}`, { now: new Date('2026-10-28T12:03:00Z'), activeIs: async () => [] });
-    expect(r.errors).toEqual([]);
-    expect(r.snap()).toBe('trống');
-    r.done();
-  });
-
-  it('giờ mở dự kiến chưa tới, đã quá cửa sổ, hay máy chỉ nhớ "có Giờ vàng": không giữ chỗ lần vẽ đầu và không chèn khung chờ', async () => {
-    for (const [hint, now] of [
-      [`0@${Date.parse('2026-10-28T12:00:00Z')}`, '2026-10-28T11:59:00Z'],
-      [`0@${Date.parse('2026-10-28T12:00:00Z')}`, '2026-10-28T14:00:00Z'],
-      ['1', '2026-10-28T12:03:00Z'],
-      [null, '2026-10-28T12:03:00Z'],
-    ] as const) {
-      const r = await hydrateEmpty(hint, { now: new Date(now) });
-      expect(r.errors).toEqual([]);
-      expect(r.states, `${hint} @${now}`).toEqual(['trống']);
-      r.done();
-      vi.useRealTimers();
-    }
   });
   it('chưa nhớ Giờ vàng: không vẽ khung giữ chỗ', async () => {
     withStorage(null);

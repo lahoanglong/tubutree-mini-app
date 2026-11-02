@@ -6,7 +6,7 @@ import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
-  readFlashHint, readFlashSlotHint, readFlashExpected, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT, FLASH_EXPECT_WINDOW_MS,
+  readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, categoryGridScrolls, CATEGORY_CELL_HEIGHT, CATEGORY_SCROLL_COLUMNS,
   BANNER_HINT_KEY, OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint,
   COLLECT_HINT_KEY, COLLECT_HINT_MAX, collectSkeletonHeight, readCollectHint, writeCollectHint, HOME_BEST_SELLER_LIMIT,
@@ -158,36 +158,6 @@ describe('gợi ý nhớ Giờ vàng (có suất, có dòng suất kế)', () =>
     expect(readFlashSlotHint(boom)).toBe(false);
     expect(() => writeFlashHint(boom, true, true)).not.toThrow();
     expect(FLASH_NEXT_SLOT_HEIGHT).toBe(44);
-  });
-});
-
-describe('gợi ý Giờ vàng "dự kiến mở" (lần mở trước chưa có suất nhưng biết suất kế mở lúc nào)', () => {
-  const mem = () => {
-    const m = new Map<string, string>();
-    return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
-  };
-  const T = Date.parse('2026-11-02T12:00:00Z');
-  it('chưa tới giờ mở thì không giữ chỗ; từ giờ mở tới hết cửa sổ thì giữ chỗ; quá cửa sổ thì thôi', () => {
-    const st = mem();
-    writeFlashHint(st, false, true, T);
-    expect(st.m.get(FLASH_HINT_KEY)).toBe(`0@${T}`);
-    expect([readFlashHint(st, T - 1), readFlashExpected(st, T - 1)]).toEqual([false, false]);
-    expect([readFlashHint(st, T), readFlashExpected(st, T)]).toEqual([true, true]);
-    expect([readFlashHint(st, T + FLASH_EXPECT_WINDOW_MS - 1), readFlashExpected(st, T + FLASH_EXPECT_WINDOW_MS - 1)]).toEqual([true, true]);
-    expect([readFlashHint(st, T + FLASH_EXPECT_WINDOW_MS), readFlashExpected(st, T + FLASH_EXPECT_WINDOW_MS)]).toEqual([false, false]);
-    expect(readFlashSlotHint(st)).toBe(false);
-  });
-  it('có suất đang chạy thì mốc dự kiến bị bỏ; không có mốc thì ghi "0"; giá trị hỏng đọc là không giữ chỗ', () => {
-    const st = mem();
-    writeFlashHint(st, true, false, T);
-    expect(st.m.get(FLASH_HINT_KEY)).toBe('1');
-    expect(readFlashExpected(st, T)).toBe(false);
-    writeFlashHint(st, false, true);
-    expect(st.m.get(FLASH_HINT_KEY)).toBe('0');
-    for (const bad of ['0@', '0@abc', '0@-5', '0@1e3x', '@5']) {
-      st.setItem(FLASH_HINT_KEY, bad);
-      expect(readFlashHint(st, T)).toBe(false);
-    }
   });
 });
 

@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { FLASH_EXPECT_WINDOW_MS, FLASH_HINT_KEY, readFlashExpected } from '@tubutree/app-core/home-layout';
-import { flashReserveScript, flashShelfGuardScript } from './flash-boot-script';
+import { flashShelfGuardScript } from './flash-boot-script';
 
 /** Chạy đoạn script như trình duyệt: `document.currentScript` là thẻ script, phần tử liền trước là `target`. */
-function run(code: string, opts: { now: number; stored?: string | null; throwStorage?: boolean }) {
+function run(code: string, opts: { now: number }) {
   const target = { style: { display: 'initial' } as Record<string, string> };
   const script = { previousElementSibling: target };
   const RealDate = Date;
@@ -12,13 +11,7 @@ function run(code: string, opts: { now: number; stored?: string | null; throwSto
       return opts.now;
     }
   }
-  const storage = {
-    getItem: (k: string) => {
-      if (opts.throwStorage) throw new Error('blocked');
-      return k === FLASH_HINT_KEY ? (opts.stored ?? null) : null;
-    },
-  };
-  new Function('document', 'Date', 'localStorage', code)({ currentScript: script }, FakeDate, storage);
+  new Function('document', 'Date', code)({ currentScript: script }, FakeDate);
   return target.style.display;
 }
 
@@ -40,21 +33,5 @@ describe('flashShelfGuardScript (kệ trong HTML ISR cũ)', () => {
   });
   it('không để chuỗi thoát khỏi thẻ script', () => {
     expect(flashShelfGuardScript(['</script><b>'], 1)).not.toContain('</script>');
-  });
-});
-
-describe('flashReserveScript (HTML dựng chưa có suất)', () => {
-  const reserve = flashReserveScript();
-  it('hiện khung giữ chỗ khi giờ mở dự kiến đã tới và chưa quá cửa sổ, cùng kết luận với readFlashExpected', () => {
-    for (const [now, stored] of [
-      [T - 1, `0@${T}`], [T, `0@${T}`], [T + FLASH_EXPECT_WINDOW_MS - 1, `0@${T}`], [T + FLASH_EXPECT_WINDOW_MS, `0@${T}`],
-      [T, '1'], [T, '2'], [T, '0'], [T, null], [T, '0@abc'], [T, '0@'],
-    ] as const) {
-      const shown = run(reserve, { now, stored }) === 'block';
-      expect(shown, `${stored} @${now - T}`).toBe(readFlashExpected({ getItem: () => stored, setItem: () => undefined }, now));
-    }
-  });
-  it('kho bị chặn thì không văng và không giữ chỗ', () => {
-    expect(run(reserve, { now: T, throwStorage: true })).toBe('initial');
   });
 });

@@ -12,12 +12,12 @@ import { shelf } from '@tubutree/app-core/merch/shelves';
 import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { serverNow } from '@tubutree/app-core/server-clock';
-import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashExpected, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { flashCardProduct, soldPercent } from '@/lib/flash-display';
 import { productHref } from '@/lib/product-href';
-import { flashReserveScript, flashShelfGuardScript } from '@/lib/flash-boot-script';
+import { flashShelfGuardScript } from '@/lib/flash-boot-script';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { useFlashExpiry } from '@/lib/use-flash-expiry';
@@ -45,19 +45,6 @@ export function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
     <div data-testid="flash-sale-loading" aria-hidden="true">
       <Skeleton height={FLASH_SKELETON_HEIGHT + (withNextSlot ? FLASH_NEXT_SLOT_HEIGHT : 0)} radius="var(--radius-card)" />
     </div>
-  );
-}
-
-/**
- * Chỗ giữ cho suất sắp về, có trong HTML máy chủ khi chưa có suất nào. Ẩn mặc định; đoạn script liền sau hiện nó ngay lần vẽ đầu nếu máy nhớ giờ mở dự kiến đã tới
- * (`flashReserveScript`). Server không đọc được kho nên không tự quyết được; hydrate xong khung này được thay bằng `FlashSkeleton` cùng chiều cao.
- */
-function FlashReserve() {
-  return (
-    <>
-      <div data-testid="flash-sale-reserve" aria-hidden="true" suppressHydrationWarning style={{ display: 'none', height: FLASH_SKELETON_HEIGHT }} />
-      <script dangerouslySetInnerHTML={{ __html: flashReserveScript() }} />
-    </>
   );
 }
 
@@ -110,17 +97,14 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
   // Đọc bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ", sau hydrate mới đọc thật.
   const hadFlash = useSyncExternalStore(subscribeNothing, () => readFlashHint(browserStorage()), () => false);
   const hadNextSlot = useSyncExternalStore(subscribeNothing, () => readFlashSlotHint(browserStorage()), () => false);
-  // Riêng ca "dự kiến mở" mới được giữ chỗ khi bản dựng sẵn rỗng: "lần trước có Giờ vàng" thì phần lớn là suất đã hết và lần này cũng không có (khung chỉ làm trang nhảy hai lần).
-  const expectOpen = useSyncExternalStore(subscribeNothing, () => readFlashExpected(browserStorage()), () => false);
   const sectionRef = useRef<HTMLElement>(null);
   // Đang tải lại thì chưa chốt: dữ liệu dựng sẵn có thể cũ, ghi "không có" lúc này sẽ xoá dấu nhớ trước khi biết kết quả thật.
   const settled = !loading && !error && !retrying && hydrated;
   const hasSlot = slot !== null;
   const slotKnown = !upcoming.isPending;
-  const opensAt = slot ? Date.parse(slot.startAt) : undefined;
   useEffect(() => {
-    if (settled && (!visible || slotKnown)) writeFlashHint(browserStorage(), visible, hasSlot, opensAt);
-  }, [settled, visible, slotKnown, hasSlot, opensAt]);
+    if (settled && (!visible || slotKnown)) writeFlashHint(browserStorage(), visible, hasSlot);
+  }, [settled, visible, slotKnown, hasSlot]);
   // Đoạn script trước hydrate ẩn kệ theo đồng hồ máy; khối vẫn thấy còn đủ suất (lệch vài ms) thì trả lại.
   useEffect(() => {
     if (visible) sectionRef.current?.style.removeProperty('display');
@@ -130,10 +114,7 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
   if (items.length === 0 && error) {
     return <HomeBlockError title={fillCopy('flash.title')} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
   }
-  if (!visible) {
-    if (!hydrated) return items.length === 0 ? <FlashReserve /> : null;
-    return expectOpen && retrying ? <FlashSkeleton withNextSlot={false} /> : null;
-  }
+  if (!visible) return null;
 
   const title = fillCopy('flash.title');
   const seeAll = seeAllHref('home.flash', 'web');
