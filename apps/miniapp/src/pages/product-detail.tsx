@@ -1003,6 +1003,8 @@ export default function ProductDetailPage() {
           initialQty={quantity}
           busy={addMutation.isPending || buyNowMutation.isPending}
           cartLines={cartLines}
+          // 'idle' = khách chưa đăng nhập, giỏ không bao giờ về nên bảng Mua ngay không giữ dải ghi chú trống; 'loading' và 'error' thì giỏ vẫn có thể về.
+          cartMayArrive={status !== 'idle'}
           onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}

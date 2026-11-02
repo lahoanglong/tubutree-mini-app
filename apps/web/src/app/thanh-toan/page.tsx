@@ -340,6 +340,9 @@ export default function CheckoutPage() {
   // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút bị khoá lúc đang gửi nên mất focus. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
   // Query-core chạy `onError` (tải lại báo giá/giỏ) TRƯỚC khi ghi trạng thái lỗi, nên lúc `isError` hiện ra nút thường còn khoá vì báo giá đang tải và `focus()` vào nút khoá không có tác dụng:
   // lỗi chỉ ghi một "yêu cầu focus", làm khi báo giá và giỏ tải xong. Xong mà nút vẫn khoá vì lý do khác thì bỏ yêu cầu, kẻo lúc khách sửa xong ô hoá đơn focus bị giật về nút.
+  // Báo giá có thể về sau vài giây, lúc đó khách đã tab sang ô khác và đang gõ (ghi chú, hoá đơn, ô nhập mã giảm giá, ô tick Điểm Xanh nằm ngay trong khung "Đơn hàng"): giật focus về nút
+  // thì Space/Enter kế tiếp bấm nhầm Đặt hàng. Nên chỉ trả focus khi nó không ở đâu cả (body, nút khoá làm mất focus) hoặc còn ở chính nút; focus ở bất kỳ phần tử nào khác (kể cả
+  // liên kết cạnh nút, Enter trên đó là đi trang) thì khách đã chọn chỗ đó, yêu cầu bị bỏ, không giật.
   const placePartRef = useRef<HTMLDivElement>(null);
   const placeButtonRef = useRef<HTMLButtonElement>(null);
   const placeFocusDue = useRef(false);
@@ -354,7 +357,9 @@ export default function CheckoutPage() {
     placeFocusDue.current = false;
     // Đọc trạng thái khoá từ chính nút đã vẽ (hook phải đứng trước các `return` sớm, lúc đó `placeDisabled` chưa tính).
     const button = placeButtonRef.current;
-    if (button && !button.disabled) button.focus({ preventScroll: true });
+    const active = document.activeElement;
+    const focusIsFree = !active || active === document.body || active === button;
+    if (button && !button.disabled && focusIsFree) button.focus({ preventScroll: true });
   }, [placeSettled, place.error, place.submittedAt]);
 
   if (phase === 'loading') {

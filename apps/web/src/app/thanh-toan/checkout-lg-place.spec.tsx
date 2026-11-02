@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
   noAddress: false,
   // Báo giá về chậm: lỗi đặt đơn như PRICE_CHANGED/TOTAL_CHANGED tải lại báo giá trong onError nên nút còn khoá đúng lúc trạng thái lỗi hiện ra.
   quoteDelay: 0,
+  // Điểm Xanh dùng được: > 0 thì ô tick "Điểm Xanh" hiện trong khung Đơn hàng.
+  points: 0,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({
@@ -38,7 +40,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     if (state.quoteError) throw state.quoteError;
     return {
       subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0,
-      pointsBalance: 0, redeemablePoints: 0,
+      pointsBalance: state.points, redeemablePoints: state.points,
     };
   },
   placeOrder: async () => {
@@ -83,6 +85,7 @@ beforeEach(() => {
   state.quoteError = null;
   state.noAddress = false;
   state.quoteDelay = 0;
+  state.points = 0;
   scrollIntoView.mockClear();
   Element.prototype.scrollIntoView = scrollIntoView;
   setDesktop(true);
@@ -178,6 +181,93 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
     expect(lgButton(c).disabled).toBe(false);
     expect(document.activeElement).toBe(lgButton(c));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách đã focus ô ghi chú (ngoài khung Đơn hàng) lúc báo giá tải lại: báo giá về thì focus ở lại ô, nút không giật focus (L5 1)', async () => {
+    state.placeError = new Error('PRICE_CHANGED');
+    const c = await mount();
+    state.quoteDelay = 40;
+    click(lgButton(c));
+    await flush(4);
+    expect(lgButton(c).disabled).toBe(true);
+    const textarea = c.querySelector<HTMLTextAreaElement>('[data-mini-block="note"] textarea')!;
+    textarea.focus();
+    expect(document.activeElement).toBe(textarea);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    await flush(4);
+    expect(lgButton(c).disabled).toBe(false);
+    expect(document.activeElement).toBe(textarea);
+    // Cờ đã hạ: các lần vẽ lại sau đó cũng không kéo focus về nút (Space/Enter kế tiếp không được bấm nhầm Đặt hàng).
+    await flush(4);
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  // Báo giá về sau lúc khách đã chọn một chỗ trong khung "Đơn hàng" (không chỉ ô ngoài khung): focus ở lại, Space/Enter kế tiếp không bấm nhầm nút.
+  const keepsFocus = async (c: HTMLElement, target: HTMLElement) => {
+    target.focus();
+    expect(document.activeElement).toBe(target);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    await flush(4);
+    expect(lgButton(c).disabled).toBe(false);
+    expect(document.activeElement).toBe(target);
+    await flush(4);
+    expect(document.activeElement).toBe(target);
+  };
+  const failWithSlowQuote = async () => {
+    state.placeError = new Error('PRICE_CHANGED');
+    const c = await mount();
+    state.quoteDelay = 40;
+    click(lgButton(c));
+    await flush(4);
+    expect(lgButton(c).disabled).toBe(true);
+    return c;
+  };
+
+  it('khách đang gõ ô nhập mã giảm giá (trong khung Đơn hàng, bung tại chỗ từ lg) lúc báo giá về: focus ở lại ô, Enter kế tiếp không bấm nhầm Đặt hàng (L5 1)', async () => {
+    const c = await failWithSlowQuote();
+    const chooseCoupon = [...c.querySelectorAll<HTMLButtonElement>('[data-mini-block="coupon"] button')].find((b) => b.textContent?.includes('Chọn mã'))!;
+    click(chooseCoupon);
+    await flush(2);
+    const input = c.querySelector<HTMLInputElement>('#coupon-code')!;
+    expect(input).not.toBeNull();
+    expect(input.closest('[data-mini-part="place-order"]')).toBeNull();
+    await keepsFocus(c, input);
+  });
+
+  it('khách đang ở ô tick Điểm Xanh (trong khung Đơn hàng) lúc báo giá về: focus ở lại ô, Space kế tiếp không bấm nhầm Đặt hàng (L5 1)', async () => {
+    state.points = 100;
+    const c = await failWithSlowQuote();
+    const checkbox = c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[type="checkbox"]')!;
+    expect(checkbox).not.toBeNull();
+    await keepsFocus(c, checkbox);
+  });
+
+  it('khách đang ở liên kết "Đổi lựa chọn" trong khung Đơn hàng: focus ở lại, Enter là đi trang chứ không đặt hàng (L5 1)', async () => {
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
+    const c = await failWithSlowQuote();
+    const link = c.querySelector<HTMLAnchorElement>('[data-mini-block="items"] a[href="/gio-hang"]')!;
+    expect(link).not.toBeNull();
+    await keepsFocus(c, link);
+  });
+
+  it('khách đang ở liên kết Điều khoản ngay trên nút Đặt hàng: focus ở lại, không kéo về nút (L5 1)', async () => {
+    const c = await failWithSlowQuote();
+    await keepsFocus(c, part(c).querySelector<HTMLAnchorElement>('a[href="/chinh-sach/dieu-khoan"]')!);
+  });
+
+  it('focus bị mất vì nút khoá (body) khi báo giá về: nút Đặt hàng nhận lại focus (L5 1)', async () => {
+    const c = await failWithSlowQuote();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    await flush(4);
+    expect(document.activeElement).toBe(lgButton(c));
   });
 
   it('focus đã trả về nút một lần thì yêu cầu hết: các lần vẽ lại sau đó (lỗi cũ còn hiện) không kéo focus về nút nữa', async () => {

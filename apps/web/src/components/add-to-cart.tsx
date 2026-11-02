@@ -409,6 +409,8 @@ export default function AddToCart({
           initialId={selectedId}
           initialQty={qty}
           cartLines={cartLines}
+          // Khách chưa đăng nhập không bao giờ có giỏ: bảng Mua ngay không giữ dải ghi chú trống. Đang khôi phục phiên hay mất mạng tạm thời thì giỏ vẫn có thể về.
+          cartMayArrive={phase !== 'guest'}
           onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
         />
       )}

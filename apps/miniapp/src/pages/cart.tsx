@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
+import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
@@ -494,11 +495,13 @@ function CartLineRow({
   /** PATCH số lượng của chính dòng này đang bay: line.total lúc đó là số client tự nhân (optimistic), chưa phải số server. */
   pending: boolean;
 }) {
-  const overStock = line.quantity > line.stock;
   // Bấm +/- nhanh 5 lần trước đây gọi 5 PATCH song song → debounce qty cuối cùng
   // (UI cập nhật tức thời qua local state, request chỉ bay sau ~380ms ổn định).
   const [localQty, setLocalQty] = useState(line.quantity);
   const debouncedQty = useDebounced(localQty, 380);
+  // Theo số đang chọn trên màn (localQty) để dòng hiện cùng lúc nút + khoá khi khách bấm tới trần, không đợi máy chủ. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật với web).
+  const stockNote = cartStockNote(localQty, line.stock);
+  const soldOut = line.stock <= 0;
   // CHỈ đồng bộ về line.quantity khi KHÔNG có thay đổi đang chờ flush — tránh case
   // refetch cart (do mutate line khác) trả về quantity CŨ và snap UI ngược lại khi
   // user đang tap. Sau khi debouncedQty đã đuổi kịp localQty thì server-truth là an toàn.
@@ -590,11 +593,11 @@ function CartLineRow({
             )}
           </Box>
         )}
-        {overStock && (
+        {(stockNote || soldOut) && (
           <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
-            <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
-            <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
-              {line.stock > 0 ? vi.cart.stockLimited(line.stock) : vi.cart.outOfStock}
+            {(soldOut || stockNote?.tone === 'warning') && <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />}
+            <Text size="xSmall" style={{ color: soldOut || stockNote?.tone === 'warning' ? 'var(--color-text-warning)' : 'var(--color-text-secondary)' }}>
+              {stockNote ? stockNote.text : vi.cart.outOfStock}
             </Text>
           </Box>
         )}

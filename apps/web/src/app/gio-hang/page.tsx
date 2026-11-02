@@ -28,7 +28,7 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Badge, Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { stockText } from '@tubutree/app-core/commerce/stock-text';
+import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 
@@ -223,6 +223,7 @@ export default function CartPage() {
     // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
     const soldOut = it.stock <= 0;
     const atMax = !soldOut && it.quantity >= it.stock;
+    const stockNote = cartStockNote(it.quantity, it.stock);
     const busy = busyItemId === it.id;
     const compareAt = lineCompareAt(it);
     return (
@@ -297,8 +298,15 @@ export default function CartPage() {
               Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
             </p>
           )}
-          {!soldOut && atMax && (
-            <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{stockText(it.stock)}</p>
+          {/* Chạm trần tồn: giải thích nút + khoá. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật `cartStockNote` với Mini). */}
+          {stockNote && (
+            <p
+              className={`mt-1 basis-full text-caption max-md:order-2 ${
+                stockNote.tone === 'warning' ? 'font-medium text-warning-fg' : 'text-[color:var(--color-text-secondary)]'
+              }`}
+            >
+              {stockNote.text}
+            </p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
             {!soldOut && (
