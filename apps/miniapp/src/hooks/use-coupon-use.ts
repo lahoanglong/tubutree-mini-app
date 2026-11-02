@@ -27,7 +27,7 @@ export function useCouponUse() {
     notify(ok ? { text: couponUseCopy.copied, type: 'success' } : { text: couponUseCopy.copyFailed, type: 'error' });
   };
 
-  const use = async (code: string, onBeforeNavigate?: () => void) => {
+  const apply = async (code: string, onBeforeNavigate?: () => void) => {
     if (busy.current) return;
     busy.current = true;
     try {
@@ -67,5 +67,5 @@ export function useCouponUse() {
     navigate('/cart');
   };
 
-  return { copy, use };
+  return { copy, apply };
 }

@@ -73,7 +73,7 @@ vi.mock('../utils/features', () => ({
 vi.mock('../hooks/use-coupon-use', () => ({
   useCouponUse: () => ({
     copy: vi.fn(),
-    use: (code: string, before?: () => void) => {
+    apply: (code: string, before?: () => void) => {
       mocks.couponUse(code, before);
       before?.();
     },

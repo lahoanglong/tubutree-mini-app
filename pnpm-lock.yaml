@@ -246,6 +246,9 @@ importers:
       eslint:
         specifier: ^9.15.0
         version: 9.39.4(jiti@1.21.7)
+      eslint-plugin-react-hooks:
+        specifier: 5.2.0
+        version: 5.2.0(eslint@9.39.4(jiti@1.21.7))
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
@@ -9140,6 +9143,10 @@ snapshots:
   eslint-plugin-react-hooks@5.2.0(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
+
+  eslint-plugin-react-hooks@5.2.0(eslint@9.39.4(jiti@1.21.7)):
+    dependencies:
+      eslint: 9.39.4(jiti@1.21.7)
 
   eslint-plugin-react@7.37.5(eslint@8.57.1):
     dependencies:

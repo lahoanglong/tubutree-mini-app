@@ -29,14 +29,42 @@ const DEVICE_KEY = 'tubu_device_id';
 /** Thông tin hoá đơn khách nhập ở checkout (pages/checkout.tsx); máy dùng chung không được để người sau thấy. */
 const INVOICE_KEY = 'tubu_invoice';
 
+/**
+ * Trần thời gian cho storage của ZMP ở đường đăng nhập. Cầu nối native không trả lời thì đăng nhập treo mãi, và vì login() gộp
+ * các lần bấm chồng nhau, mọi lần bấm sau cũng im lặng theo. Hết trần là lỗi tạm (isTransientSessionError): báo mất kết nối, giữ
+ * refresh token, không rơi xuống tài khoản Khách.
+ */
+const AUTH_STORAGE_TIMEOUT_MS = 3000;
+class StorageTimeoutError extends Error {}
+function withStorageTimeout<T>(p: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new StorageTimeoutError('ZMP storage timeout')), AUTH_STORAGE_TIMEOUT_MS);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
+/** Id vừa sinh mà lần ghi hết trần (có thể vẫn đang ghi): lần sau dùng lại đúng id này, id khác là một tài khoản Khách khác. */
+let unsavedDeviceId: string | null = null;
+
 /** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
 export async function getDeviceId(): Promise<string> {
-  const res = await getStorage({ keys: [DEVICE_KEY] });
+  // Không đọc được thì ném, không sinh id mới: id mới là một tài khoản Khách khác.
+  const res = await withStorageTimeout(getStorage({ keys: [DEVICE_KEY] }));
   const existing = (res as Record<string, unknown>)[DEVICE_KEY];
   if (typeof existing === 'string' && existing.length > 0) return existing;
   // deviceId là thứ DUY NHẤT xác thực tài khoản khách — phải sinh bằng crypto (xem newDeviceId).
-  const id = newDeviceId();
-  await setStorage({ data: { [DEVICE_KEY]: id } });
+  const id = (unsavedDeviceId ??= newDeviceId());
+  await withStorageTimeout(setStorage({ data: { [DEVICE_KEY]: id } }));
+  unsavedDeviceId = null;
   return id;
 }
 
@@ -60,15 +88,20 @@ interface AuthState {
 }
 
 async function persistRefresh(token: string): Promise<void> {
-  await setStorage({ data: { [REFRESH_KEY]: token } });
+  await withStorageTimeout(setStorage({ data: { [REFRESH_KEY]: token } }));
 }
-async function readRefresh(): Promise<string | null> {
-  const res = await getStorage({ keys: [REFRESH_KEY] });
+async function readRefresh({ limit = true }: { limit?: boolean } = {}): Promise<string | null> {
+  const read = getStorage({ keys: [REFRESH_KEY] });
+  const res = await (limit ? withStorageTimeout(read) : read);
   const val = (res as Record<string, unknown>)[REFRESH_KEY];
   return typeof val === 'string' && val.length > 0 ? val : null;
 }
 async function clearRefresh(): Promise<void> {
-  await removeStorage({ keys: [REFRESH_KEY] });
+  // Xoá treo thì bỏ qua: chỉ gọi khi máy chủ đã từ chối token này (khoá, hết hạn, đã xoay) nên token còn lại cũng bị từ chối
+  // ở lần refresh sau, còn chờ thì treo cả báo khoá. Đăng xuất không dùng hàm này (xem logout).
+  await withStorageTimeout(removeStorage({ keys: [REFRESH_KEY] })).catch((e: unknown) => {
+    if (!(e instanceof StorageTimeoutError)) throw e;
+  });
 }
 
 /**
@@ -91,6 +124,7 @@ function isAccountBlocked(err: unknown): boolean {
  * đẩy họ sang tài khoản Khách (mất điểm, giỏ, đơn đang hiện); app giữ phiên cũ và thử lại (hooks/use-auth-phase.ts).
  */
 function isTransientSessionError(err: unknown): boolean {
+  if (err instanceof StorageTimeoutError) return true;
   if (!isHttpError(err)) return false;
   const status = err.response?.status;
   return !status || status === 408 || status === 429 || status >= 500;
@@ -189,7 +223,10 @@ function refreshSession(): Promise<LoginResponse | null> {
   return refreshInFlight;
 }
 
-/** restore() đang chạy: login() chờ nó xong thay vì đăng nhập song song. login() cũng gộp các lần bấm chồng nhau làm một. */
+/**
+ * restore() và login() đang chạy. Mỗi bên gộp các lần gọi chồng nhau của chính nó làm một, và bên đến sau chờ bên đang chạy xong
+ * thay vì đăng nhập song song (bên xong sau sẽ đè phiên của bên kia, hai bên cùng xoay refresh token).
+ */
 let restoreInFlight: Promise<void> | null = null;
 let loginInFlight: Promise<void> | null = null;
 
@@ -243,12 +280,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * khi chưa có access token. Mở app từ push/deeplink là đúng tình huống đó: trang đích fetch
    * ngay, request đi trần → 401, và React Query (retry:false cho 4xx) kẹt luôn màn lỗi.
    */
-  restore: async () => {
+  restore: () => {
+    // Chạm đúp Thử lại, hay useSessionRecovery gọi lúc app còn đang khôi phục: dùng chung lần đang chạy.
+    if (restoreInFlight) return restoreInFlight;
     // Làm mới một phiên ĐANG đăng nhập (vd sau khi đặt hàng để cập nhật số dư): không nháy 'loading' và không bao giờ hạ
     // phiên xuống 'error' chỉ vì lần làm mới này gặp lỗi mạng — khách vẫn đang đăng nhập với token còn dùng được.
     const keepSession = get().status === 'authenticated' && get().user !== null;
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
+      // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó. Ra phiên hay bị khoá ('idle'
+      // kèm lời máy chủ) là đã có kết luận, đăng nhập lại chỉ có thể làm sai kết luận đó. Lỗi tạm, hay login() ném ra ngoài mà
+      // phiên còn kẹt 'loading', thì khôi phục tiếp.
+      if (loginInFlight) {
+        await loginInFlight.catch(() => undefined);
+        const after = get().status;
+        if (after === 'authenticated' || after === 'idle') return;
+      }
       try {
         const res = await refreshSession();
         if (res) {
@@ -277,14 +324,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo, không có thì Khách (im lặng, không sheet SĐT).
       await silentLogin(keepSession);
     })();
-    restoreInFlight = done;
     setAuthReady(done);
-    try {
-      await done;
-    } finally {
+    const tracked = done.finally(() => {
       setAuthReady(null);
-      if (restoreInFlight === done) restoreInFlight = null;
-    }
+      if (restoreInFlight === tracked) restoreInFlight = null;
+    });
+    restoreInFlight = tracked;
+    return tracked;
   },
 
   // Xin SĐT (sheet native) rồi đính vào tài khoản hiện tại.
@@ -324,10 +370,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // Không đặt trần ở đây: trên máy dùng chung, đăng xuất phải chắc đã đọc được token để thu hồi và đã xoá nó. Storage treo thì
+    // đăng xuất treo theo (khách thấy chưa xong), còn hơn báo đã đăng xuất mà token vẫn nằm trên máy cho người sau mở lại.
     // Đọc trước khi xoá: sau đó không còn token để thu hồi trên máy chủ.
-    const refreshToken = await readRefresh().catch(() => null);
+    const refreshToken = await readRefresh({ limit: false }).catch(() => null);
     setAccessToken(null);
-    await clearRefresh();
+    await removeStorage({ keys: [REFRESH_KEY] });
     set({ user: null, status: 'idle', error: undefined });
     clearHomeHints(browserStorage());
     clearCtvTouched();

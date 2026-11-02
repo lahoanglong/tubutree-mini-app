@@ -385,7 +385,7 @@ export default function GamePage() {
         couponCapped={harvestMeta?.couponCapped ?? null}
         nextTarget={harvestMeta?.nextTarget ?? null}
         onClose={() => setHarvested(false)}
-        onUseCoupon={(code) => void couponUse.use(code, () => setHarvested(false))}
+        onUseCoupon={(code) => void couponUse.apply(code, () => setHarvested(false))}
         onShare={shareHarvest}
       />
     </>,

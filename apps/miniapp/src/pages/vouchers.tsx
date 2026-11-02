@@ -50,7 +50,7 @@ export default function VouchersPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const { claim, pendingCode } = useClaimCoupon();
-  const { use } = useCouponUse();
+  const { apply } = useCouponUse();
 
   const collectableQ = useQuery(collectableCouponsQuery(coreHttp));
   const walletQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
@@ -93,7 +93,7 @@ export default function VouchersPage() {
     if (row.view.state === 'collectable') {
       return { label: fillCopy('coupon.save'), onClick: () => void claim(row.view.code), busy: pendingCode === row.view.code };
     }
-    if (row.view.state === 'saved') return { label: fillCopy('coupon.use'), onClick: () => void use(row.view.code) };
+    if (row.view.state === 'saved') return { label: fillCopy('coupon.use'), onClick: () => void apply(row.view.code) };
     return undefined;
   };
 
