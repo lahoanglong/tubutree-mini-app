@@ -3143,7 +3143,7 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     const { container } = await mount();
 
     click(container.querySelector('[data-inbox="communityReports"]')!);
-    await flush();
+    await waitFor(() => (container.textContent ?? '').includes('Mua hàng giá rẻ'));
 
     expect(window.location.search).toBe('?tab=community');
     expect(activeChip(container)).toContain('Báo cáo');
@@ -4085,6 +4085,8 @@ describe('admin/page — 390px: hàng đợi và Gomdon nằm trong ngăn kéo "
       expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn thu kèm Gomdon"]')).toBeNull();
       expect(container.querySelector('[role="group"][aria-label="Chờ nhận tiền chuyển khoản"]')).toBeNull();
       expect(container.querySelector('[role="group"][aria-label="Cần xử lý"]')).toBeNull();
+      expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"]')).toBeNull();
+      expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Chưa lên Pancake'))).toBe(false);
       expect(container.querySelectorAll('[role="group"][aria-label="Lọc đơn theo trạng thái"]')).toHaveLength(1);
       const open = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!;
       expect(open.textContent).toBe('Lọc (3)');
