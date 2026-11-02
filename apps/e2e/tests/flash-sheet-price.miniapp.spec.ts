@@ -1,5 +1,5 @@
 import { test, expect } from './support/mock-api';
-import { mockPilotProduct, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
+import { mockPilotProduct, PILOT_CART, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
 import { expectChipMetrics } from './support/variation-chip';
 
 /**
@@ -13,14 +13,21 @@ test.use({ viewport: { width: 375, height: 812 } });
 const HOUR = 3_600_000;
 const OVER_5 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 5 thì cả dòng tính giá thường.';
 const OVER_4 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 4 thì cả dòng tính giá thường.';
+const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
 
 const VARIATIONS = [
   { id: 'var-1', sku: 'KU-80', name: 'Gói 80 tờ', attributes: {}, retailPrice: 35_000, salePrice: null, stock: 245 },
   { id: 'var-2', sku: 'KU-3', name: 'Combo 3 gói', attributes: {}, retailPrice: 90_000, salePrice: null, stock: 0 },
 ];
 
-function mockPage(api: Parameters<typeof mockPilotProduct>[0]) {
+/** Giỏ đã có `quantity` sản phẩm của `var-1` (giá Giờ vàng trong giỏ nếu chưa vượt suất); thêm giỏ cộng dồn và máy chủ giá cả dòng. */
+function cartWith(quantity: number) {
+  return { ...PILOT_CART, items: [{ ...PILOT_CART.items[0]!, variationId: 'var-1', variationName: 'Gói 80 tờ', unitPrice: 26_000, quantity, stock: 245, total: 26_000 * quantity }], subtotal: 26_000 * quantity, itemCount: quantity };
+}
+
+function mockPage(api: Parameters<typeof mockPilotProduct>[0], inCart = 0) {
   mockPilotProduct(api);
+  if (inCart > 0) api.get('/cart', cartWith(inCart));
   api.get('/products/:slug', { ...PILOT_PRODUCT, variations: VARIATIONS });
   api.get('/flash-sales/active', () => {
     const now = Date.now();
@@ -103,5 +110,51 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     await page.getByRole('button', { name: 'Giảm số lượng' }).click();
     await expect(page.getByRole('button', { name: /^Mua ngay · / })).toHaveAccessibleName('Mua ngay · 78.000đ');
     await expect(page.getByText(/cả dòng tính giá thường/)).toHaveCount(0);
+  });
+
+  test('giỏ đã có 2 gói var-1 (giới hạn 3): bảng "Mua ngay" ghi cả dòng 140.000đ, "Thêm vào giỏ" ghi giỏ tăng 88.000đ, ghi chú nói theo giỏ và ô Số lượng không nhảy', async ({ page, api }) => {
+    mockPage(api, 2);
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /^Mua ngay/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await expect(dialog).toBeVisible();
+    const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
+    const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });
+    const note = dialog.getByRole('status');
+    // Giỏ có 2 + chọn 1 = 3 = giới hạn: còn giá Giờ vàng cho cả dòng.
+    await expect(buy).toHaveText('Mua ngay · 78.000đ');
+    await expect(note).toHaveText('');
+    const before = (await plus.boundingBox())!;
+    await plus.click();
+    await expect(buy).toHaveText('Mua ngay · 140.000đ');
+    await expect(note).toHaveText(IN_CART_2);
+    const after = (await plus.boundingBox())!;
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('giỏ đã có 2 gói var-1: bảng "Thêm vào giỏ" ghi 88.000đ (giỏ tăng thật) và gửi đúng số lượng 2 vừa chọn', async ({ page, api }) => {
+    mockPage(api, 2);
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Thêm vào giỏ', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await dialog.getByRole('button', { name: 'Tăng số lượng' }).click();
+    const add = dialog.getByRole('button', { name: /^Thêm vào giỏ · / });
+    await expect(add).toHaveText('Thêm vào giỏ · 88.000đ');
+    const posted = api.waitForCall('POST', '/cart/items');
+    await add.click();
+    expect((await posted).body).toMatchObject({ variationId: 'var-1', quantity: 2 });
+  });
+
+  test('giỏ đã có 2 gói var-1: nút Mua ngay ở thanh dưới ghi cả dòng sau khi chọn thêm 2, ghi chú dưới ô Số lượng nói theo giỏ', async ({ page, api }) => {
+    mockPage(api, 2);
+    await page.goto(`/product/${PILOT_SLUG}`);
+    await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
+    const buy = page.getByRole('button', { name: /^Mua ngay · / });
+    await expect(buy).toHaveAccessibleName('Mua ngay · 78.000đ');
+    await page.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(buy).toHaveAccessibleName('Mua ngay · 140.000đ');
+    await expect(page.getByText(IN_CART_2)).toBeVisible();
   });
 });
