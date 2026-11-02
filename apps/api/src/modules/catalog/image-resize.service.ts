@@ -136,8 +136,9 @@ export class ImageResizeService {
       });
       try {
         await this.registryLoad;
-        // Yêu cầu nhập vào lần nạp đã bắt đầu trước khi cờ bật thì chưa thấy ảnh mới: nạp thêm đúng một lần.
-        if (this.stale.isStale()) {
+        // Yêu cầu nhập vào lần nạp đã bắt đầu trước khi cờ bật thì chưa thấy ảnh mới: nạp thêm.
+        // Vòng lặp: nhiều yêu cầu cùng nhập lần nạp cũ đều phải đợi lần nạp mới hơn (do yêu cầu khác mở) rồi mới tra.
+        while (this.stale.isStale() || this.registryLoad) {
           this.registryLoad ??= this.loadRegistry().finally(() => {
             this.registryLoad = null;
           });
