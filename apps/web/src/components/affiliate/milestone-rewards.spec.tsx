@@ -87,6 +87,30 @@ describe('MilestoneRewards — danh sách gọn', () => {
     expect(container.textContent).toContain('Đã cộng 200 điểm');
   });
 
+  it('thang chữ và nút theo Mini ở điện thoại: tên mốc dòng 22, chữ phụ 13px màu tertiary, nút Button của Mini (48px)', () => {
+    const { container } = mount(data({ pendingRevenue: 750_000 }));
+    const id = (t: string) => container.querySelector(`[data-testid="${t}"]`)!;
+    for (const t of ['milestone-title', 'milestone-row-title']) expect(id(t).className).toContain('max-md:leading-[var(--type-body-sm-lh)]');
+    for (const t of ['milestone-meta', 'milestone-note', 'milestone-row-meta']) {
+      expect(id(t).className).toContain('max-md:text-[length:var(--type-caption-size)]');
+      expect(id(t).className).toContain('text-[var(--color-text-tertiary)]');
+      expect(id(t).className).not.toContain('text-stone-600');
+    }
+    const claim = btn(/^Nhận thưởng$/);
+    expect(claim.className).toContain('zaui-btn');
+    expect(claim.className).not.toContain('bg-forest-600');
+  });
+
+  it('nhận tất cả: nút Button của Mini toàn chiều rộng, loading báo aria-busy', async () => {
+    state.handler = () => new Promise(() => {});
+    mount(data({ milestones: [claimable('B'), claimable('C')] }));
+    const all = btn(/Nhận tất cả/);
+    expect(all.className).toContain('zaui-btn-full-width');
+    click(all);
+    await flush();
+    expect(btn(/Nhận tất cả/).getAttribute('aria-busy')).toBe('true');
+  });
+
   it('không có mốc nào: không vẽ gì', () => {
     expect(mount(data({ milestones: [] })).container.innerHTML).toBe('');
   });

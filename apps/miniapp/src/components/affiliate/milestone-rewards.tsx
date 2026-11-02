@@ -105,6 +105,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const renderRow = (m: CtvMilestoneItem, month: string, revenue: number) => (
     <div
       key={`${month}:${m.id}`}
+      data-testid="milestone-row"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -115,10 +116,10 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="body-sm" as="div" style={BOLD}>
+        <Text variant="body-sm" as="div" style={BOLD} data-testid="milestone-row-title">
           {m.title}
         </Text>
-        <Text variant="caption" tone="tertiary" as="div">
+        <Text variant="caption" tone="tertiary" as="div" data-testid="milestone-row-meta">
           {milestoneStatusText(m, revenue)}
         </Text>
         {!m.achieved && (
@@ -148,93 +149,95 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   );
 
   return (
-    <Card padding={16} style={{ margin: '0 16px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <div
-          style={{
-            display: 'grid',
-            placeItems: 'center',
-            width: 32,
-            height: 32,
-            flexShrink: 0,
-            borderRadius: 'var(--radius-control)',
-            background: 'var(--color-action-secondary-bg)',
-          }}
-        >
-          <Icon icon={Trophy} size="md" tone="brand" />
-        </div>
-        <div>
-          <Text variant="body-sm" as="div" style={BOLD}>
-            Thưởng mốc doanh số tháng
-          </Text>
-          <Text variant="caption" tone="tertiary" as="div">
-            {monthLabel(data.monthKey)} · Đã chốt {formatVnd(data.currentRevenue)}
-          </Text>
-        </div>
-      </div>
-
-      <Text variant="caption" tone="tertiary" as="div" style={{ marginBottom: 4 }}>
-        {revenueRuleText(data.holdDays)}
-      </Text>
-      {data.pendingRevenue > 0 && (
-        <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 8 }}>
-          Đang chờ chốt: <b>{formatVnd(data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
-        </Text>
-      )}
-
-      {targets.length >= 2 && (
-        <Button
-          fullWidth
-          icon={Check}
-          loading={claimAll.isPending}
-          disabled={claimOne.isPending}
-          onPress={() => claimAll.mutate(targets)}
-          style={{ marginBottom: 8 }}
-        >
-          {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
-        </Button>
-      )}
-
-      {failures.length > 0 && (
-        <div role="alert" style={{ marginBottom: 8 }}>
-          {failures.map((f) => (
-            <Text key={`${f.month}:${f.id}`} variant="caption" tone="danger" as="div">
-              {f.title} ({monthLabel(f.month)}): {f.message}
+    <div data-testid="milestone-rewards" style={{ margin: '0 16px 12px' }}>
+      <Card padding={16}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div
+            style={{
+              display: 'grid',
+              placeItems: 'center',
+              width: 32,
+              height: 32,
+              flexShrink: 0,
+              borderRadius: 'var(--radius-control)',
+              background: 'var(--color-action-secondary-bg)',
+            }}
+          >
+            <Icon icon={Trophy} size="md" tone="brand" />
+          </div>
+          <div>
+            <Text variant="body-sm" as="div" style={BOLD} data-testid="milestone-title">
+              Thưởng mốc doanh số tháng
             </Text>
-          ))}
+            <Text variant="caption" tone="tertiary" as="div" data-testid="milestone-meta">
+              {monthLabel(data.monthKey)} · Đã chốt {formatVnd(data.currentRevenue)}
+            </Text>
+          </div>
         </div>
-      )}
-
-      {prev && (
-        <div>
-          <Text variant="caption" tone="brand" as="div" style={{ ...BOLD, marginTop: 8 }}>
-            Thưởng {monthLabel(prev.monthKey)} chưa nhận — nhận trước khi hết {monthLabel(data.monthKey)}
+  
+        <Text variant="caption" tone="tertiary" as="div" style={{ marginBottom: 4 }} data-testid="milestone-note">
+          {revenueRuleText(data.holdDays)}
+        </Text>
+        {data.pendingRevenue > 0 && (
+          <Text variant="caption" tone="secondary" as="div" style={{ marginBottom: 8 }}>
+            Đang chờ chốt: <b>{formatVnd(data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
           </Text>
-          {prev.milestones.map((m) => renderRow(m, prev.monthKey, prev.revenue))}
-        </div>
-      )}
-      <div>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</div>
-      {data.milestones.length > nextMilestoneRows(data.milestones).length && (
-        <button
-          type="button"
-          className="tubu-press"
-          aria-expanded={showAll}
-          onClick={() => setShowAll((v) => !v)}
-          style={{
-            width: '100%',
-            minHeight: 44,
-            marginTop: 4,
-            border: 'none',
-            background: 'none',
-            font: 'inherit',
-            cursor: 'pointer',
-          }}
-        >
-          <Text variant="body-sm" tone="brand" style={BOLD}>
-            {showAll ? 'Thu gọn' : `Xem tất cả ${data.milestones.length} mốc`}
-          </Text>
-        </button>
-      )}
-    </Card>
+        )}
+  
+        {targets.length >= 2 && (
+          <Button
+            fullWidth
+            icon={Check}
+            loading={claimAll.isPending}
+            disabled={claimOne.isPending}
+            onPress={() => claimAll.mutate(targets)}
+            style={{ marginBottom: 8 }}
+          >
+            {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
+          </Button>
+        )}
+  
+        {failures.length > 0 && (
+          <div role="alert" style={{ marginBottom: 8 }}>
+            {failures.map((f) => (
+              <Text key={`${f.month}:${f.id}`} variant="caption" tone="danger" as="div">
+                {f.title} ({monthLabel(f.month)}): {f.message}
+              </Text>
+            ))}
+          </div>
+        )}
+  
+        {prev && (
+          <div>
+            <Text variant="caption" tone="brand" as="div" style={{ ...BOLD, marginTop: 8 }}>
+              Thưởng {monthLabel(prev.monthKey)} chưa nhận — nhận trước khi hết {monthLabel(data.monthKey)}
+            </Text>
+            {prev.milestones.map((m) => renderRow(m, prev.monthKey, prev.revenue))}
+          </div>
+        )}
+        <div>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</div>
+        {data.milestones.length > nextMilestoneRows(data.milestones).length && (
+          <button
+            type="button"
+            className="tubu-press"
+            aria-expanded={showAll}
+            onClick={() => setShowAll((v) => !v)}
+            style={{
+              width: '100%',
+              minHeight: 44,
+              marginTop: 4,
+              border: 'none',
+              background: 'none',
+              font: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
+            <Text variant="body-sm" tone="brand" style={BOLD}>
+              {showAll ? 'Thu gọn' : `Xem tất cả ${data.milestones.length} mốc`}
+            </Text>
+          </button>
+        )}
+      </Card>
+    </div>
   );
 }

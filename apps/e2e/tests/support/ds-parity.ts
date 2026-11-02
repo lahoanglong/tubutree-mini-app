@@ -52,6 +52,15 @@ export const PROBES: readonly Probe[] = [
   { id: 'builder-stat-label', root: '[data-testid="builder-stat"]', target: ':scope > div:last-child', props: TEXT },
   { id: 'builder-stat-box', root: '[data-testid="builder-stat"]', target: '', props: ['height', 'borderRadius', 'backgroundColor', ...PAD] },
   { id: 'builder-sections-title', root: '[data-testid="builder-sections-head"]', target: 'h2', props: TEXT },
+  // Thưởng mốc doanh số tháng trên trang CTV (K6): web theo thang chữ và chiều cao dòng của Mini.
+  { id: 'milestone-card', root: '[data-testid="milestone-rewards"]', target: '', props: ['height'] },
+  { id: 'milestone-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-title"]', props: TEXT },
+  { id: 'milestone-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-meta"]', props: TEXT },
+  { id: 'milestone-note', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-note"]', props: TEXT },
+  { id: 'milestone-row', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row"]', props: ['height'] },
+  { id: 'milestone-row-title', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row-title"]', props: TEXT },
+  { id: 'milestone-row-meta', root: '[data-testid="milestone-rewards"]', target: '[data-testid="milestone-row-meta"]', props: TEXT },
+  { id: 'milestone-claim', root: '[data-testid="milestone-rewards"]', target: 'button', props: ['height', 'fontSize', 'lineHeight', 'fontWeight'] },
   ...tileProbes('flash'),
   ...tileProbes('line'),
   ...tileProbes('grid', [
@@ -133,6 +142,16 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'builder-stat-label': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
   'builder-stat-box': { height: '62.07px', borderRadius: '12px', backgroundColor: 'rgb(242, 245, 236)', paddingTop: '10px', paddingRight: '10px', paddingBottom: '10px', paddingLeft: '10px' },
   'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
+
+  // Thưởng mốc doanh số tháng (K6): số đo Mini 375px, nút Button 48px/15px là chuẩn; web dùng cùng Button và thang chữ caption/body-sm.
+  'milestone-card': { height: '416.06px' },
+  'milestone-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'milestone-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-note': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-row': { height: '90.97px' },
+  'milestone-row-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
+  'milestone-row-meta': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
+  'milestone-claim': { height: '48px', fontSize: '15px', lineHeight: '20px', fontWeight: '600' },
 
   'tile-flash': { width: '128px', ...FRAME_SPEC },
   'tile-flash-body': INSET,
