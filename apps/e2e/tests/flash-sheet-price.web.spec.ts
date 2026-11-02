@@ -15,6 +15,7 @@ const FLASH_PRICE = 1_000;
 const LIMIT = 3;
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
 const user = {
   id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
   pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0,
@@ -142,7 +143,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });
     // Giỏ 2 + chọn 1 = 3 = giới hạn: cả dòng còn giá Giờ vàng.
     await expect(buy).toHaveText(`Mua ngay · ${vnd(3 * FLASH_PRICE)}`);
-    await expect(dialog.getByRole('status')).toHaveText('');
+    await expect(dialog.getByRole('status')).toHaveText(MERGE_2);
     // Bảng còn đang trượt lên lúc vừa mở: hover chờ nó đứng yên rồi mới đo vị trí.
     await plus.hover();
     const before = (await plus.boundingBox())!;

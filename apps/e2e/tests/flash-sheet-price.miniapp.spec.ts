@@ -14,6 +14,7 @@ const HOUR = 3_600_000;
 const OVER_5 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 5 thì cả dòng tính giá thường.';
 const OVER_4 = 'Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 4 thì cả dòng tính giá thường.';
 const IN_CART_2 = 'Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.';
+const MERGE_2 = 'Giỏ đã có 2: Mua ngay thanh toán cả 3 sản phẩm.';
 
 const VARIATIONS = [
   { id: 'var-1', sku: 'KU-80', name: 'Gói 80 tờ', attributes: {}, retailPrice: 35_000, salePrice: null, stock: 245 },
@@ -70,7 +71,7 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     await plus.click();
     await plus.click();
     await expect(buy).toHaveText('Mua ngay · 78.000đ');
-    await expect(note).toHaveText('');
+    await expect(note).toHaveText(MERGE_2);
     const before = (await plus.boundingBox())!;
 
     await plus.click();
@@ -124,7 +125,7 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     const note = dialog.getByRole('status');
     // Giỏ có 2 + chọn 1 = 3 = giới hạn: còn giá Giờ vàng cho cả dòng.
     await expect(buy).toHaveText('Mua ngay · 78.000đ');
-    await expect(note).toHaveText('');
+    await expect(note).toHaveText(MERGE_2);
     const before = (await plus.boundingBox())!;
     await plus.click();
     await expect(buy).toHaveText('Mua ngay · 140.000đ');
@@ -153,6 +154,7 @@ test.describe('Mini App — giá Giờ vàng ở bảng chọn phân loại và 
     await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
     const buy = page.getByRole('button', { name: /^Mua ngay · / });
     await expect(buy).toHaveAccessibleName('Mua ngay · 78.000đ');
+    await expect(page.getByText(MERGE_2)).toBeVisible();
     await page.getByRole('button', { name: 'Tăng số lượng' }).click();
     await expect(buy).toHaveAccessibleName('Mua ngay · 140.000đ');
     await expect(page.getByText(IN_CART_2)).toBeVisible();

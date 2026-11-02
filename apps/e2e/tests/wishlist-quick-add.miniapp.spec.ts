@@ -1,5 +1,5 @@
 import { test, expect } from './support/mock-api';
-import { mockPilotProduct, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
+import { mockPilotProduct, PILOT_CART, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
 
 /**
  * Mini App, trang Yêu thích: nút giỏ nhanh trên thẻ. Một phân loại thêm thẳng, nhiều phân loại mở bảng chọn,
@@ -48,5 +48,38 @@ test.describe('Mini App — Yêu thích: nút giỏ nhanh', () => {
     const posted = api.waitForCall('POST', '/cart/items');
     await page.getByRole('button', { name: /^Thêm vào giỏ/ }).click();
     expect((await posted).body).toMatchObject({ variationId: 'var-2', quantity: 1, addSource: 'wishlist' });
+  });
+
+  test('Giờ vàng giới hạn 3, giỏ đã có 2 gói var-1: bảng Thêm nhanh ghi phần giỏ tăng 88.000đ (4 × 35.000 − 2 × 26.000), không phải 52.000đ', async ({ page, api }) => {
+    const second = { ...PILOT_PRODUCT.variations[0]!, id: 'var-2', name: 'Hương Sả', sku: 'TUBU-NRC-500-SA' };
+    const first = { ...PILOT_PRODUCT.variations[0]!, id: 'var-1', name: 'Gói 80 tờ', retailPrice: 35_000, salePrice: null, stock: 245 };
+    mockWishlist(api, [first, second]);
+    api.get('/me/wishlist', [{ ...card('prod-1', PILOT_SLUG, PILOT_PRODUCT_NAME, true), repVariationId: 'var-1' }]);
+    api.get('/cart', {
+      ...PILOT_CART,
+      items: [{ ...PILOT_CART.items[0]!, variationId: 'var-1', variationName: 'Gói 80 tờ', unitPrice: 26_000, quantity: 2, stock: 245, total: 52_000 }],
+      subtotal: 52_000,
+      itemCount: 2,
+    });
+    api.get('/flash-sales/active', () => {
+      const now = Date.now();
+      return [
+        {
+          itemId: 'fi-1', variationId: 'var-1', productSlug: PILOT_SLUG, productName: PILOT_PRODUCT_NAME, variationName: 'Gói 80 tờ', thumbnail: null,
+          flashPrice: 26_000, retailPrice: 35_000, salePrice: null, soldCount: 10, quota: 100, perUserLimit: 3,
+          endAt: new Date(now + 3_600_000).toISOString(), serverNow: new Date(now).toISOString(),
+        },
+      ];
+    });
+    await page.goto('/wishlist');
+    await page.getByRole('button', { name: `Thêm ${PILOT_PRODUCT_NAME} vào giỏ` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const add = dialog.getByRole('button', { name: /^Thêm vào giỏ · / });
+    // Giỏ 2 + chọn 1 = 3 = giới hạn: còn giá Giờ vàng cho cả dòng, giỏ tăng 26.000đ.
+    await expect(add).toHaveText('Thêm vào giỏ · 26.000đ');
+    await dialog.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await expect(add).toHaveText('Thêm vào giỏ · 88.000đ');
+    await expect(dialog.getByRole('status')).toHaveText('Giỏ đã có 2. Thêm 2 thì cả 4 sản phẩm tính giá thường.');
   });
 });
