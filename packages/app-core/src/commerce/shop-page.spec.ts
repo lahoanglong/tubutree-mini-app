@@ -7,6 +7,7 @@ import {
   comboTotals,
   followerStat,
   nextShopSort,
+  ownerTierPreview,
   pageWindow,
   planShopSections,
   promotionVoucher,
@@ -118,6 +119,30 @@ describe('publicTier', () => {
     expect(publicTier(null)).toBeNull();
     expect(publicTier(undefined)).toBeNull();
     expect(publicTier({ name: 'Bạc', emoji: '🥈', publicBadge: true })).toEqual({ name: 'Bạc', emoji: '🥈' });
+  });
+});
+
+describe('ownerTierPreview', () => {
+  const ALL = [
+    { name: 'Tân binh', emoji: '🌱' },
+    { name: 'Đồng', emoji: '🌿' },
+    { name: 'Bạc', emoji: '🌳' },
+  ];
+
+  it('bậc thấp nhất (phần tử đầu của allTiers) không khoe; từ bậc 2 thì khoe', () => {
+    expect(ownerTierPreview({ tier: ALL[0]!, allTiers: ALL })).toEqual({ name: 'Tân binh', emoji: '🌱', publicBadge: false });
+    expect(ownerTierPreview({ tier: ALL[1]!, allTiers: ALL })).toEqual({ name: 'Đồng', emoji: '🌿', publicBadge: true });
+  });
+
+  it('thiếu dữ liệu bậc thì không có xem trước; không biết bậc thấp nhất thì không khoe', () => {
+    expect(ownerTierPreview(null)).toBeNull();
+    expect(ownerTierPreview(undefined)).toBeNull();
+    expect(ownerTierPreview({ tier: ALL[1]!, allTiers: [] })).toEqual({ name: 'Đồng', emoji: '🌿', publicBadge: false });
+  });
+
+  it('ghép với publicTier ra đúng cái khách thấy trên /s/:slug', () => {
+    expect(publicTier(ownerTierPreview({ tier: ALL[1]!, allTiers: ALL }))).toEqual({ name: 'Đồng', emoji: '🌿' });
+    expect(publicTier(ownerTierPreview({ tier: ALL[0]!, allTiers: ALL }))).toBeNull();
   });
 });
 
