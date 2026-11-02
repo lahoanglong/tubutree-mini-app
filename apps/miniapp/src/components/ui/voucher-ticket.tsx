@@ -56,8 +56,8 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   // trong phần bị cắt: phụ đề dài đến đâu mã vẫn thấy nguyên. Ticket/row thêm mã vào meta/hàng đáy: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const chipCode = variant === 'chip' && Boolean(v.code);
   const showCode = variant !== 'chip' && Boolean(v.code);
-  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng hàng riêng, co bằng "…" (không đẩy điều kiện và mã xuống dòng,
-  // phiếu giữ ~88px); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
+  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng cạnh điều kiện, tối đa hai dòng, "…" khi quá (không đẩy điều kiện và mã xuống dòng,
+  // phiếu giữ ~88px khi tên ngắn); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
   // ngay dưới nhãn hoặc sau điều kiện, đứng đầu dòng thì thành mảnh lơ lửng.
   const name = variant !== 'chip' ? v.name : null;
   const ticket = variant === 'ticket';
@@ -120,12 +120,13 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         {v.title}
       </span>
       {ticket && (showMeta || name) ? (
-        // Ticket: điều kiện (nguyên khối) và tên admin chung một hàng, tên co bằng "…" ở đuôi; mỗi dòng caption là 20px nên một hàng riêng cho tên làm phiếu cao hơn phiếu trơn.
-        <span style={{ display: 'flex', alignItems: 'baseline', columnGap: 'var(--p-space-2)', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)' }}>
+        // Ticket: điều kiện (nguyên khối) và tên admin chung một hàng để phiếu có tên không cao hơn phiếu trơn; tên chỉ có ~100px nên được xuống tối đa hai dòng ("…" khi quá),
+        // `flex-start` để dòng đầu của tên thẳng với điều kiện. Tên hai dòng cao thêm tối đa một dòng caption; nút chính giữ cỡ (flex 0 0 auto) và căn giữa theo chiều cao phiếu.
+        <span style={{ display: 'flex', alignItems: 'flex-start', columnGap: 'var(--p-space-2)', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)' }}>
           {metaNode}
           {showMeta && name && <span aria-hidden="true" style={{ flex: '0 0 auto' }}>·</span>}
           {name && (
-            <span data-testid="voucher-name" style={{ ...TITLE_ONE_LINE, flex: '1 1 0', minWidth: 0 }}>
+            <span data-testid="voucher-name" style={{ ...TITLE_CLAMP, flex: '1 1 0', minWidth: 0 }}>
               {name}
             </span>
           )}

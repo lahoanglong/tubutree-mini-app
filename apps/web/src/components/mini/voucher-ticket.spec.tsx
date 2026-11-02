@@ -110,11 +110,9 @@ describe('VoucherTicket (web)', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
   });
 
-  it('ticket: tên admin đặt có hàng riêng (một dòng, co bằng "…"), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện; chip không vẽ tên', () => {
+  it('ticket: tên admin đặt đứng cạnh điều kiện (tối đa hai dòng), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện; chip không vẽ tên', () => {
     const a = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
     expect(q('voucher-name')!.textContent).toBe('Chào bạn mới');
-    expect(q('voucher-name')!.style.whiteSpace).toBe('nowrap');
-    expect(q('voucher-name')!.style.textOverflow).toBe('ellipsis');
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
     a.unmount();
     const b = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="ticket" />);
@@ -150,7 +148,25 @@ describe('VoucherTicket (web)', () => {
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 100k');
   });
 
-  it('ticket: điều kiện và tên admin cùng một hàng (điều kiện trước, nguyên khối; tên sau, co bằng "…"), mã nằm ở hàng đáy', () => {
+  it('ticket: tên admin 40 ký tự xuống tối đa hai dòng (clamp 2, không nowrap một dòng), không đẩy nút chính, điều kiện cùng đường trên với dòng đầu của tên', () => {
+    const NAME = 'Quà tri ân khách hàng thân thiết mùa thu';
+    expect(NAME).toHaveLength(40);
+    mount(<VoucherTicket voucher={view({ name: NAME, quota: 'Còn 3 lượt', code: 'NHANLOCXANH2026' })} variant="ticket" primary={{ label: 'Lưu mã', onClick: vi.fn() }} />);
+    const name = q('voucher-name')!;
+    expect(name.textContent).toBe(NAME);
+    expect(name.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    expect(name.style.whiteSpace).not.toBe('nowrap');
+    expect(name.style.textOverflow).toBe('');
+    expect(name.style.overflow).toBe('hidden');
+    expect(name.style.minWidth).toBe('0px');
+    expect(name.parentElement!.style.alignItems).toBe('flex-start');
+    const button = buttons().find((b) => b.textContent === 'Lưu mã')!;
+    expect(button.style.flex).toBe('0 0 auto');
+    expect(button.style.whiteSpace).toBe('nowrap');
+    expect(button.closest('[style*="overflow: hidden"]')).toBe(button.closest('[role="group"]'));
+  });
+
+  it('ticket: điều kiện và tên admin cùng một hàng (điều kiện trước, nguyên khối; tên sau, tối đa hai dòng), mã nằm ở hàng đáy', () => {
     mount(<VoucherTicket voucher={view({ name: 'Quà tri ân khách hàng thân thiết' })} variant="ticket" />);
     const meta = q('voucher-meta')!;
     const name = q('voucher-name')!;
