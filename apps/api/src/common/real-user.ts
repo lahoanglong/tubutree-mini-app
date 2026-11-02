@@ -24,7 +24,7 @@ export function isRealUser(u: { phone?: string | null; zaloId?: string | null } 
 }
 
 export const REAL_USER_REQUIRED_MSG =
-  'Ưu đãi này chỉ dành cho tài khoản đã đăng nhập Zalo. Vui lòng đăng nhập bằng Zalo rồi thử lại.';
+  'Ưu đãi này chỉ dành cho tài khoản đã đăng nhập Zalo. Bạn đăng nhập bằng Zalo rồi thử lại nhé.';
 
 /** Câu báo khi khách vãng lai làm việc có thưởng Điểm Xanh: điểm chỉ dành cho tài khoản đã đăng nhập Zalo. */
 export const GUEST_POINTS_MSG = 'Đăng nhập Zalo để nhận Điểm Xanh';

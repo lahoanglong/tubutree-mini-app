@@ -68,7 +68,7 @@ describe('JwtAuthGuard — lỗi 401 bằng tiếng Việt (D8-3)', () => {
     const { status, body } = await call('', auth);
     expect(status).toBe(401);
     expect(body.statusCode).toBe(401);
-    expect(body.message).toBe('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+    expect(body.message).toBe('Phiên đăng nhập đã hết hạn, bạn đăng nhập lại nhé.');
     expect(body.code).toBe('SESSION_EXPIRED');
   });
 

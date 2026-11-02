@@ -1,4 +1,4 @@
-import { isRealUser } from './real-user';
+import { isRealUser, REAL_USER_REQUIRED_MSG } from './real-user';
 
 describe('isRealUser', () => {
   it('khách guest_ không SĐT → không phải user thật', () => {
@@ -14,5 +14,13 @@ describe('isRealUser', () => {
   it('không zaloId, không SĐT, hoặc null → không phải user thật', () => {
     expect(isRealUser({ zaloId: null, phone: null })).toBe(false);
     expect(isRealUser(null)).toBe(false);
+  });
+});
+
+describe('REAL_USER_REQUIRED_MSG', () => {
+  // Mini App và web bản cũ mở cổng đăng nhập Zalo khi lời nhắn khớp `/đăng nhập Zalo/i` (coupon-claim-gate, coupon-claim.ts): đổi câu không được làm mất cụm này.
+  it('còn cụm "đăng nhập Zalo" mà client cũ so khớp, và không còn "Vui lòng"', () => {
+    expect(REAL_USER_REQUIRED_MSG).toMatch(/đăng nhập Zalo/i);
+    expect(REAL_USER_REQUIRED_MSG).not.toMatch(/vui lòng/i);
   });
 });

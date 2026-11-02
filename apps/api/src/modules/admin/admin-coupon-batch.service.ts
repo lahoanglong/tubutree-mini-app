@@ -167,7 +167,7 @@ export class AdminCouponBatchService {
           const inserted = await tx.coupon.createMany({ data: [...fresh].map(row), skipDuplicates: true });
           created += inserted.count;
         }
-        if (created < input.quantity) throw new InternalServerErrorException('Không sinh đủ mã duy nhất cho lô. Vui lòng thử lại.');
+        if (created < input.quantity) throw new InternalServerErrorException('Không sinh đủ mã duy nhất cho lô. Bạn thử lại nhé.');
         return tx.coupon.findMany({ where: { batch }, orderBy: { code: 'asc' }, select: { code: true } });
       },
       { timeout: 60_000 },

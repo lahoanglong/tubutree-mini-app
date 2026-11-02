@@ -85,7 +85,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     await expect(c.byOrder('real', 'o1')).resolves.toEqual({ ok: 'byOrder' });
     expect(requests.detail).toHaveBeenCalledWith('blocked', 'r1');
     expect(requests.byOrder).toHaveBeenCalledWith('real', 'o1');
-    await expect(c.list('guest')).rejects.toThrow('Ưu đãi này chỉ dành cho tài khoản đã đăng nhập Zalo. Vui lòng đăng nhập bằng Zalo rồi thử lại.');
+    await expect(c.list('guest')).rejects.toThrow('Ưu đãi này chỉ dành cho tài khoản đã đăng nhập Zalo. Bạn đăng nhập bằng Zalo rồi thử lại nhé.');
   });
   it('route table: paths, by-order declared before :id, nearby POST 200 with 30/min', () => {
     const p = WasteCustomerController.prototype;

@@ -35,7 +35,7 @@ export function normalizeSubdomain(raw: string): string {
     );
   }
   if (RESERVED_STOREFRONT_IDENTIFIERS.has(clean)) {
-    throw new BadRequestException(`"${clean}" thuộc từ khoá hệ thống, vui lòng chọn tên khác.`);
+    throw new BadRequestException(`"${clean}" thuộc từ khoá hệ thống, bạn chọn tên khác nhé.`);
   }
   return clean;
 }
@@ -74,7 +74,7 @@ export async function assertIdentifierAvailable(
     },
   });
   if (existing) {
-    throw new BadRequestException(`"${value}" đã được sử dụng bởi gian hàng khác, vui lòng chọn tên khác.`);
+    throw new BadRequestException(`"${value}" đã được sử dụng bởi gian hàng khác, bạn chọn tên khác nhé.`);
   }
   // Tên thương hiệu đang có (slug hoặc tên): gian hàng CTV đặt trùng sẽ mạo danh thương hiệu. Thương hiệu gắn với chính gian hàng này thì được dùng.
   const brand = await prisma.brand?.findFirst({
@@ -97,7 +97,7 @@ export async function assertIdentifierAvailable(
     released.releasedAt.getTime() > Date.now() - cooldownDays * 86_400_000
   ) {
     throw new BadRequestException(
-      `"${value}" vừa được một gian hàng khác ngừng dùng, tạm thời chưa thể đăng ký lại. Vui lòng chọn tên khác.`,
+      `"${value}" vừa được một gian hàng khác ngừng dùng, tạm thời chưa thể đăng ký lại. Bạn chọn tên khác nhé.`,
     );
   }
 }

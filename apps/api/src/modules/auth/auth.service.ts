@@ -373,7 +373,7 @@ export class AuthService {
         `đổi sang zaloId khác (${zaloId}) trên máy — từ chối gộp, giữ nguyên phiên hiện tại.`,
     );
     return new ConflictException(
-      'Tài khoản Zalo trên máy hiện khác với phiên đang đăng nhập. Vui lòng đăng xuất rồi đăng nhập lại để tiếp tục.',
+      'Tài khoản Zalo trên máy hiện khác với phiên đang đăng nhập. Bạn đăng xuất rồi đăng nhập lại để tiếp tục nhé.',
     );
   }
 
@@ -520,7 +520,7 @@ export class AuthService {
         select: { isBlocked: true, metadata: true, firstTouchSource: true },
       });
       if (lockedTarget.isBlocked || isAnonymized(lockedTarget.metadata)) {
-        throw new ConflictException('Tài khoản Zalo này đã bị khoá hoặc đã xoá, không thể gộp phiên khách vào. Vui lòng liên hệ hỗ trợ.');
+        throw new ConflictException('Tài khoản Zalo này đã bị khoá hoặc đã xoá, không thể gộp phiên khách vào. Bạn liên hệ hỗ trợ nhé.');
       }
       const gid = guest.id;
       const tid = target.id;
@@ -998,7 +998,7 @@ export class AuthService {
     // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
     // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).
     if (user.mergedIntoId) {
-      throw new UnauthorizedException('Phiên đã hết hiệu lực, vui lòng đăng nhập lại.');
+      throw new UnauthorizedException('Phiên đã hết hiệu lực, bạn đăng nhập lại nhé.');
     }
     // Áp quyền theo SĐT (allowlist) — chạy cho cả login lẫn refresh ⇒ đổi role có hiệu lực
     // ở lần refresh kế. Không có phone / không có grant → trả nguyên user.
