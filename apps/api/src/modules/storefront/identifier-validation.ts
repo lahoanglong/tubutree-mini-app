@@ -76,7 +76,7 @@ export async function assertIdentifierAvailable(
   if (existing) {
     throw new BadRequestException(`"${value}" đã được sử dụng bởi gian hàng khác, vui lòng chọn tên khác.`);
   }
-  // Tên nhãn hàng đang có (slug hoặc tên): gian hàng CTV đặt trùng sẽ mạo danh nhãn. Nhãn gắn với chính gian hàng này thì được dùng.
+  // Tên thương hiệu đang có (slug hoặc tên): gian hàng CTV đặt trùng sẽ mạo danh thương hiệu. Thương hiệu gắn với chính gian hàng này thì được dùng.
   const brand = await prisma.brand?.findFirst({
     where: {
       OR: [{ slug: value }, { name: { equals: value, mode: 'insensitive' } }],
@@ -85,7 +85,7 @@ export async function assertIdentifierAvailable(
     select: { id: true },
   });
   if (brand) {
-    throw new BadRequestException(`"${value}" trùng tên một nhãn hàng của Tubu Tree, vui lòng chọn tên khác.`);
+    throw new BadRequestException(`"${value}" trùng tên một thương hiệu của Tubu Tree. Bạn chọn tên khác nhé.`);
   }
   // SELLER-5: link cũ của gian hàng vừa đổi tên vẫn nằm trong tin nhắn, bài đăng của khách; gian hàng khác nhận ngay tên đó là
   // nhận luôn khách (và ghi công đơn) của người trước. Chủ cũ lấy lại tên của chính mình thì được.
