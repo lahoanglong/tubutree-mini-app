@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
+import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import type { ReactNode } from 'react';
 import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
@@ -116,7 +116,7 @@ export default function BankPaymentPage() {
         });
       } else if (status === 'UNPAID') {
         openSnackbar({
-          text: 'Hệ thống chưa thấy tiền về. Ngân hàng thường xử lý từ 30s - 1 phút sau khi chuyển. Kiểm tra lại sau ít phút nhé!',
+          text: BANK_NOT_RECEIVED,
           type: 'warning',
           position: 'top',
         });
@@ -139,7 +139,7 @@ export default function BankPaymentPage() {
           ? getErrorMessage(err)
           : isSessionExpired(err)
             ? sessionExpiredText(err)
-            : 'Không thể kết nối tới máy chủ. Kiểm tra lại kết nối mạng.',
+            : BANK_CHECK_NETWORK,
         type: 'error',
         position: 'top',
       });

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { REQUIRED_FIELD } from '@tubutree/app-core/client-copy';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -234,7 +235,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm', () => {
   it('nhập thiếu: báo lỗi từng trường, không gửi', async () => {
     mount();
     click(submit());
-    expect(text().match(/Nhập mục này/g)).toHaveLength(3);
+    expect(text().split(REQUIRED_FIELD).length - 1).toBe(3);
     expect(text()).toContain('Thêm ít nhất 1 sản phẩm');
     expect(orderPosts()).toHaveLength(0);
   });

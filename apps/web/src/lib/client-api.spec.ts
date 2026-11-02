@@ -276,7 +276,7 @@ describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
     const err = await apiFetch('/cart').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(502);
-    expect((err as Error).message).toBe('Đã có lỗi xảy ra. Thử lại sau ít phút.');
+    expect((err as Error).message).toBe('Đã có lỗi xảy ra. Bạn thử lại nhé.');
   });
 
   it('refresh gặp lỗi mạng KHÔNG xoá cờ phiên (cookie vẫn sống)', async () => {

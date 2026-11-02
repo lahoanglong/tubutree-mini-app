@@ -34,7 +34,7 @@
 
 | Chỗ | Cũ | Mới |
 |---|---|---|
-| Lỗi chung (Mini error-boundary, web error-state, home-text, global-error, client-api GENERIC_ERROR, loyalty-pos) | Đã có lỗi xảy ra — Vui lòng thử lại / Có lỗi xảy ra. Vui lòng thử lại. | Đã có lỗi xảy ra. Thử lại sau ít phút. |
+| Lỗi chung (Mini error-boundary, web error-state, home-text, global-error, client-api GENERIC_ERROR, loyalty-pos) | Đã có lỗi xảy ra — Vui lòng thử lại / Có lỗi xảy ra. Vui lòng thử lại. | Đã có lỗi xảy ra. Bạn thử lại nhé. (nơi có nút Thử lại ngay dưới câu, không bảo khách đợi) |
 | Mất mạng (Mini vi.ts + web client-api) | Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại. | Mất kết nối. Kiểm tra mạng rồi thử lại. |
 | Quá lâu (web client-api) | Máy chủ phản hồi quá lâu. Vui lòng thử lại. | Máy chủ phản hồi quá lâu. Thử lại sau ít phút. |
 | Trang lỗi web `error.tsx` | Đã có lỗi xảy ra khi tải trang. Vui lòng thử lại. | Không tải được trang. Thử lại sau ít phút. |
@@ -45,13 +45,15 @@
 | Nhập tài khoản nhận hoàn tiền | Vui lòng nhập tên ngân hàng. / …tên chủ tài khoản. | Nhập tên ngân hàng. / Nhập tên chủ tài khoản. |
 | Chuyển khoản: giao dịch lỗi | … Vui lòng liên hệ bộ phận hỗ trợ. | … Liên hệ Tubu để được hỗ trợ. |
 | Chuyển khoản: chép số tài khoản lỗi | Không thể sao chép {x}. Vui lòng sao chép thủ công. | Không thể sao chép {x}. Bạn chép thủ công nhé. |
-| Chưa thấy tiền về (Mini) | … Vui lòng kiểm tra lại sau ít phút nhé! | … Kiểm tra lại sau ít phút nhé! |
+| Chưa thấy tiền về (Mini và web, `BANK_NOT_RECEIVED`) | Mini: Hệ thống chưa thấy tiền về … 30s - 1 phút …; web: Chưa thấy tiền về … 30 giây đến 1 phút … | Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển. Bạn kiểm tra lại sau ít phút nhé. |
+| Chuyển khoản: lỗi mạng khi bấm Kiểm tra (`BANK_CHECK_NETWORK`) | Mini: Không thể kết nối tới máy chủ …; web: Không kết nối được tới Tubu Tree … | Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé. |
+| Bỏ trống mục bắt buộc (checkout Mini, form lên đơn hộ khách hai app, `REQUIRED_FIELD`) | Bạn điền giúp Tubu mục này nhé / Vui lòng nhập | Bạn điền giúp Tubu mục này nhé |
 | Tải thêm lỗi (thông báo, đơn hàng, lịch sử) | Không tải thêm được X. Vui lòng thử lại. | Không tải thêm được X. Thử lại sau ít phút. |
 | Ảnh đại diện | Không tải được ảnh, vui lòng thử lại. | Không tải được ảnh. Thử lại sau ít phút. |
 | Vượt tồn ở thanh toán | … Vui lòng sửa số lượng trong giỏ. / … Vui lòng bỏ khỏi giỏ… | … Sửa số lượng trong giỏ để tiếp tục. / … Bỏ khỏi giỏ để đặt các món còn lại. |
 | Hoàn tiền sàn | Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn... | Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn… |
-| Thương hiệu | Nhãn hàng trên Tubu Tree; Quản lý nhãn hàng | Thương hiệu trên Tubu Tree; Quản lý thương hiệu |
-| Gian hàng CTV | Đang xem cửa hàng | Gian hàng |
+| Thương hiệu | Nhãn hàng trên Tubu Tree; Quản lý nhãn hàng; màn chủ thương hiệu còn "nhãn" (Thông tin nhãn, Xem trang nhãn, Nhãn đang là nháp, đối tác nhãn) | Thương hiệu trên Tubu Tree; Quản lý thương hiệu; Thông tin thương hiệu, Xem trang thương hiệu, Thương hiệu đang là nháp, đối tác thương hiệu (hằng `BRAND_OWNER_*`, "nhãn" còn là nhãn dán ngoài hộp) |
+| Gian hàng CTV | Đang xem cửa hàng | Đang xem gian hàng (giữ nghĩa "đang ở trong gian hàng" cạnh nút Về Tubu Tree; bản "Gian hàng" trơn mất nghĩa) |
 | Giờ vàng | Giá giờ vàng; Ưu đãi giờ vàng; Xem ưu đãi giờ vàng | Giá Giờ vàng; Giờ vàng; Xem Giờ vàng |
 | Hạn dùng | sai HSD | sai hạn dùng |
 | Đổi rác | …chỉ còn n {đơn vị} / Tháng này bạn chỉ còn n điểm… | …còn n {đơn vị} / Tháng này bạn còn n điểm… |

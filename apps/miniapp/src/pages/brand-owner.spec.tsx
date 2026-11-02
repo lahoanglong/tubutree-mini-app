@@ -68,7 +68,7 @@ describe('BrandOwnerPage tab Doanh thu (C-034, Q-18)', () => {
     await screen.findByText('Sachi');
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Hồ sơ & khuyến mãi', 'Doanh thu']);
     expect(screen.getByRole('tab', { name: 'Hồ sơ & khuyến mãi' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('Thông tin nhãn')).toBeInTheDocument();
+    expect(screen.getByText('Thông tin thương hiệu')).toBeInTheDocument();
     expect(mocks.getOwnedBrandSales).not.toHaveBeenCalled();
   });
 
@@ -88,7 +88,7 @@ describe('BrandOwnerPage tab Doanh thu (C-034, Q-18)', () => {
     expect(within(rows[0]!).getByText('3.000.000đ')).toBeInTheDocument();
     expect(within(rows[0]!).getByText(/20/)).toBeInTheDocument();
     expect(screen.getByText(/không hiện thông tin khách/i)).toBeInTheDocument();
-    expect(screen.queryByText('Thông tin nhãn')).toBeNull();
+    expect(screen.queryByText('Thông tin thương hiệu')).toBeNull();
   });
 
   it('đổi kỳ báo cáo -> gọi lại API với kỳ đó', async () => {
@@ -221,7 +221,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
   it('đúng một h1 khi chưa được cấp nhãn (404)', async () => {
     mocks.getOwnedBrand.mockRejectedValue({ response: { status: 404 } });
     renderPage();
-    await screen.findByText(/chưa được cấp quyền quản lý nhãn/);
+    await screen.findByText(/chưa được cấp quyền quản lý thương hiệu/);
     oneH1();
   });
 
@@ -272,16 +272,16 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     expect(screen.getByText('Bản nháp, chờ Tubu duyệt')).toBeInTheDocument();
   });
 
-  it('"Xem trang nhãn": đã đăng thì sang /brand/:slug, nháp thì chỉ báo cảnh báo', async () => {
+  it('"Xem trang thương hiệu": đã đăng thì sang /brand/:slug, nháp thì chỉ báo cảnh báo', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xem trang nhãn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem trang thương hiệu' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/brand/sachi');
   });
 
-  it('"Xem trang nhãn" khi nhãn còn nháp: không chuyển trang, báo cảnh báo', async () => {
+  it('"Xem trang thương hiệu" khi nhãn còn nháp: không chuyển trang, báo cảnh báo', async () => {
     mocks.getOwnedBrand.mockResolvedValue({ ...BRAND, isPublished: false });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xem trang nhãn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem trang thương hiệu' }));
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
   });

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { BRAND_OWNER_NO_ORDERS, BRAND_OWNER_REVENUE_NOTE } from '@tubutree/app-core/client-copy';
 import { Package, ShoppingBag, Wallet } from 'lucide-react';
 import { getOwnedBrandSales, type BrandSalesPeriod } from '../services/brand-owner-api';
 import { getLoadErrorMessage } from '../services/api';
@@ -40,7 +41,7 @@ export function BrandSalesTab() {
             variant="inline"
             art="box"
             heading="Chưa có đơn nào trong kỳ này"
-            body="Khi khách đặt sản phẩm của nhãn, số liệu sẽ hiện ở đây."
+            body={BRAND_OWNER_NO_ORDERS}
           />
         ) : (
           <>
@@ -79,9 +80,7 @@ export function BrandSalesTab() {
       </div>
 
       <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 16 }}>
-        Doanh thu là giá bán sản phẩm của nhãn trong các đơn đã xác nhận (chưa trừ mã giảm giá của đơn, chưa gồm phí
-        vận chuyển; không tính đơn chờ thanh toán, đã huỷ, đã trả hoặc đã hoàn tiền). Số liệu tổng hợp, không hiện
-        thông tin khách.
+        {BRAND_OWNER_REVENUE_NOTE}
       </Text>
     </div>
   );

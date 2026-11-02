@@ -3,7 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
-import { BRAND_BADGE, ERROR_NETWORK, overStockMessage } from '@tubutree/app-core/client-copy';
+import { BRAND_BADGE, ERROR_NETWORK, REQUIRED_FIELD, overStockMessage } from '@tubutree/app-core/client-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
@@ -264,7 +264,7 @@ export const vi = {
     district: 'Quận/Huyện',
     ward: 'Phường/Xã',
     street: 'Số nhà, tên đường',
-    requiredField: 'Bạn điền giúp Tubu mục này nhé',
+    requiredField: REQUIRED_FIELD,
     phoneInvalid: 'Số điện thoại chưa đúng định dạng',
     payment: 'Phương thức thanh toán',
     paymentCod: 'Thanh toán khi nhận hàng (COD)',
@@ -638,7 +638,7 @@ export const vi = {
     show: 'Hiện',
     pickerSearch: 'Tìm sản phẩm…',
     commission: 'hoa hồng',
-    inStore: 'Gian hàng',
+    inStore: 'Đang xem gian hàng',
     backToTubu: '⤺ Về Tubu Tree',
     shareTitle: 'Chia sẻ gian hàng',
     shareZalo: 'Chia sẻ qua Zalo',
@@ -690,7 +690,7 @@ export const vi = {
     emptyItems: 'Thêm ít nhất 1 sản phẩm',
     phoneInvalid: 'Số điện thoại chưa đúng',
     recipientTooShort: 'Tên người nhận cần ít nhất 2 ký tự',
-    requiredField: 'Nhập mục này',
+    requiredField: REQUIRED_FIELD,
     checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
     unconfirmed:
       'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',

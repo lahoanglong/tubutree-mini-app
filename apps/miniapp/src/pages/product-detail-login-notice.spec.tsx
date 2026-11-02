@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ERROR_NETWORK } from '@tubutree/app-core/client-copy';
 
 // Lối mua trên trang sản phẩm phải đi qua useLoginWithNotice thật (không mock): tài khoản bị khoá bấm mua thì thấy lời máy chủ.
 const mocks = vi.hoisted(() => ({
@@ -107,11 +108,11 @@ describe('ProductDetailPage — tài khoản bị khoá bấm mua', () => {
 
   it('mất mạng khi đăng nhập (status error): thanh báo câu lỗi phiên thay vì im lặng, không thêm giỏ', async () => {
     mocks.login.mockImplementation(async () => {
-      mocks.auth = { status: 'error', error: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.' };
+      mocks.auth = { status: 'error', error: ERROR_NETWORK };
     });
     renderPdp();
     fireEvent.click(await screen.findByRole('button', { name: /^Mua ngay/ }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.', type: 'error' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: ERROR_NETWORK, type: 'error' }));
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 

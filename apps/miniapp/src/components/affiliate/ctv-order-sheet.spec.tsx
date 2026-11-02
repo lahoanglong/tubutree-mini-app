@@ -1,4 +1,5 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { REQUIRED_FIELD } from '@tubutree/app-core/client-copy';
 import { HttpError } from '../../services/http';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -210,7 +211,7 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
   it('nhập thiếu: báo lỗi từng trường bằng icon DS, không còn ký tự ⚠ trong chữ', () => {
     renderSheet();
     fireEvent.click(screen.getByRole('button', { name: 'Tạo đơn hộ khách' }));
-    expect(screen.getAllByText('Nhập mục này')).toHaveLength(3);
+    expect(screen.getAllByText(REQUIRED_FIELD)).toHaveLength(3);
     expect(screen.getByText('Thêm ít nhất 1 sản phẩm')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('⚠');
   });

@@ -24,7 +24,7 @@ describe('ErrorState', () => {
   it('chữ mặc định, role alert, nút Thử lại gọi onRetry', () => {
     const onRetry = vi.fn();
     const { container } = mount(<ErrorState onRetry={onRetry} />);
-    expect(container.querySelector('[role="alert"]')!.textContent).toContain('Đã có lỗi xảy ra. Thử lại sau ít phút.');
+    expect(container.querySelector('[role="alert"]')!.textContent).toContain('Đã có lỗi xảy ra. Bạn thử lại nhé.');
     click(container.querySelector('button'));
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(container.querySelector('button')!.textContent).toBe('Thử lại');

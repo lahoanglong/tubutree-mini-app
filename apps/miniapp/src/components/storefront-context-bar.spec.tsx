@@ -25,7 +25,7 @@ describe('StorefrontContextBar', () => {
   it('ở trong gian hàng: hiện nhãn ngữ cảnh và nút về Tubu Tree', () => {
     useStorefrontContext.getState().setContext({ slug: 'an-lanh', referralCode: 'CTV1' });
     render(<StorefrontContextBar />);
-    expect(screen.getByText(t.storefront.inStore)).toBeInTheDocument();
+    expect(screen.getByText('Đang xem gian hàng')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: t.storefront.backToTubu })).toBeInTheDocument();
   });
 

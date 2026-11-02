@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { BRAND_OWNER_COUPON_HINT, BRAND_OWNER_INFO, BRAND_OWNER_SAVED } from '@tubutree/app-core/client-copy';
 import { Gift, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   createOwnedPromotion,
@@ -37,7 +38,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
   const saveMut = useMutation({
     mutationFn: () => updateOwnedBrand(coreHttp, f),
     onSuccess: () => {
-      notify({ text: 'Đã lưu thông tin nhãn', tone: 'success' });
+      notify({ text: BRAND_OWNER_SAVED, tone: 'success' });
       void refresh();
     },
     onError: (e) => notify({ text: ownerActionError(e), tone: 'error' }),
@@ -96,8 +97,8 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 pb-6 xl:grid-cols-2 xl:items-start">
       {notice && <div className="xl:col-span-2">{notice}</div>}
 
-      <section aria-label="Thông tin nhãn" className={`flex flex-col gap-3 p-4 ${skin.card}`}>
-        <h2 className={skin.cardTitleSans}>Thông tin nhãn</h2>
+      <section aria-label={BRAND_OWNER_INFO} className={`flex flex-col gap-3 p-4 ${skin.card}`}>
+        <h2 className={skin.cardTitleSans}>{BRAND_OWNER_INFO}</h2>
         <BrandImageField label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} />
         <BrandImageField label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} />
         <Field label="Câu giới thiệu ngắn">
@@ -168,10 +169,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
             value={promo.couponCode}
             onChange={(e) => setPromo({ ...promo, couponCode: e.target.value.toUpperCase() })}
           />
-          <p className="text-xs text-stone-600">
-            Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã giảm giá phải do Tubu tạo sẵn, công khai và còn hạn — mã không có trong hệ thống
-            sẽ bị từ chối khi lưu. Để trống ô này khi sửa để gỡ mã.
-          </p>
+          <p className="text-xs text-stone-600">{BRAND_OWNER_COUPON_HINT}</p>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
             <Field label="Từ ngày">
               <input type="date" className={dateClass} value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} />

@@ -3,6 +3,7 @@ import { act, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider, focusManager, type QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ERROR_NETWORK } from '@tubutree/app-core/client-copy';
 import { ApiError } from '@/lib/client-api';
 import { createQueryClient } from '@/lib/query-client';
 import { flush } from '@/test-utils/dom';
@@ -847,7 +848,7 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
 
     it('chat đang đóng: xem tin cũ hơn lỗi vẫn hiện thông báo', async () => {
       mocks.getThread.mockResolvedValue(thread({ blocked: true, hasMore: true, messages: [m(5)] }));
-      mocks.getPage.mockRejectedValue(new Error('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.'));
+      mocks.getPage.mockRejectedValue(new Error(ERROR_NETWORK));
       const c = mount();
       await waitFor(() => expect(buttonByName(c, 'Xem tin cũ hơn')).not.toBeNull());
       click(buttonByName(c, 'Xem tin cũ hơn'));
