@@ -99,6 +99,14 @@ test.describe('Trình dựng gian hàng web 375px: bậc dài và tên dài (K6)
     await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(/^CTV /)).toHaveCount(0);
   });
+
+  test('gian hàng đã duyệt: đầu xem trước có "CTV tuyển chọn", chưa duyệt thì không', async ({ page, api }) => {
+    mockBuilder(api, { approved: true });
+    await page.goto('/ctv/gian-hang');
+    await expect(page.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('CTV tuyển chọn')).toHaveCount(1);
+    await expect(page.getByText(/^CTV (?!tuyển chọn)/)).toHaveCount(0);
+  });
 });
 
 test.describe('Gian hàng công khai web (G6 #36)', () => {
