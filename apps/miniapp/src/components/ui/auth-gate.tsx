@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useSnackbar } from 'zmp-ui';
 import { Clock } from 'lucide-react';
 import { useAuthStore } from '../../store/auth';
 import { useAuthPhase, type AuthPhase } from '../../hooks/use-auth-phase';
@@ -7,8 +6,10 @@ import { vi } from '../../i18n/vi';
 import { LineItemSkeleton } from './skeleton';
 import { EmptyState, ErrorState } from './empty-state';
 
-// Khớp tiêu đề màn web (login-required.tsx).
+// Khớp tiêu đề màn web (login-required.tsx). Thân là câu của web bỏ vế "Bạn vẫn đang đăng nhập" (xem SessionUnavailable),
+// không lặp lại tiêu đề như vi.errors.sessionRateLimited.
 const RATE_LIMITED_TITLE = 'Bạn thao tác quá nhanh';
+const RATE_LIMITED_BODY = 'Tubu tạm dừng khoảng một phút để giữ tài khoản an toàn. Đợi một lát rồi bấm nút bên dưới nhé.';
 
 /**
  * Mất kết nối lúc khôi phục phiên: nói đúng chuyện đó và cho thử lại. Không bao giờ vẽ màn "trống" hay lời mời đăng nhập —
@@ -21,7 +22,7 @@ export function SessionUnavailable({ variant }: { variant?: 'page' | 'inline' })
   // Không nói "bạn vẫn đang đăng nhập": 429 cũng đến lúc mở app lần đầu hay bấm đăng nhập quá nhanh, khi chưa có phiên.
   if (error === vi.errors.sessionRateLimited) {
     return (
-      <ErrorState icon={Clock} title={RATE_LIMITED_TITLE} message={error} onRetry={() => void restore()} variant={variant} />
+      <ErrorState icon={Clock} title={RATE_LIMITED_TITLE} message={RATE_LIMITED_BODY} onRetry={() => void restore()} variant={variant} />
     );
   }
   return <ErrorState message={error ?? vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;
@@ -80,16 +81,4 @@ export function AuthGate({ loading, guest, children }: { loading?: ReactNode; gu
   return <AuthPhaseView phase={phase} loading={loading} guest={guest} />;
 }
 
-/**
- * Nút "đăng nhập" nằm giữa màn đang dùng (không có chỗ để đổi cả màn): đăng nhập xong mà tài khoản bị khoá thì nói lời máy chủ
- * bằng thanh thông báo, nếu không nút bấm xong im lặng và khách tưởng app hỏng.
- */
-export function useLoginWithNotice() {
-  const { openSnackbar } = useSnackbar();
-  const login = useAuthStore((s) => s.login);
-  return async () => {
-    await login();
-    const { status, error } = useAuthStore.getState();
-    if (status === 'idle' && error) openSnackbar({ text: error, type: 'error' });
-  };
-}
+export { useLoginWithNotice } from '../../hooks/use-login-notice';

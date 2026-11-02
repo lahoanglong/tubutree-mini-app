@@ -109,7 +109,7 @@ export default function ProductDetailPage() {
   const { notify } = useNotify();
   const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
-  const { status, login, user } = useAuthStore();
+  const { status, user } = useAuthStore();
   const loginWithNotice = useLoginWithNotice();
   // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
   // kèm `products` và chỉ hiện trên trang của đúng sản phẩm đó). Để user KHÁM PHÁ ưu đãi ngay ở PDP.
@@ -394,7 +394,7 @@ export default function ProductDetailPage() {
     confirming.current = true;
     try {
       if (status !== 'authenticated') {
-        await login();
+        await loginWithNotice();
         if (useAuthStore.getState().status !== 'authenticated') return;
       }
       const mode = sheetMode;
@@ -414,7 +414,7 @@ export default function ProductDetailPage() {
       return;
     }
     if (status !== 'authenticated') {
-      await login();
+      await loginWithNotice();
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock && !addMutation.isPending) {
@@ -430,7 +430,7 @@ export default function ProductDetailPage() {
       return;
     }
     if (status !== 'authenticated') {
-      await login();
+      await loginWithNotice();
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock && !buyNowMutation.isPending) {
@@ -681,7 +681,7 @@ export default function ProductDetailPage() {
             onClick={async () => {
               haptic('light');
               if (status !== 'authenticated') {
-                await login();
+                await loginWithNotice();
                 if (useAuthStore.getState().status !== 'authenticated') return;
               }
               setShowSubscribe(true);
@@ -792,7 +792,7 @@ export default function ProductDetailPage() {
             if (groupBuyMutation.isPending) return;
             haptic('light');
             if (status !== 'authenticated') {
-              await login();
+              await loginWithNotice();
               return;
             }
             groupBuyMutation.mutate(p.id);

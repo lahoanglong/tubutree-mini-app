@@ -12,6 +12,7 @@ import { cartKey } from '../services/cart-key';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { addToCart, cancelFlashReminder, fetchUpcomingFlashSales, setFlashReminder, type UpcomingFlashItem } from '../services/shop-api';
 import { useAuthStore } from '../store/auth';
+import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { useCategories } from '../hooks/use-categories';
 import { useNotify } from '../hooks/use-notify';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -105,9 +106,10 @@ export default function FlashSalePage() {
     refetchInterval: activeTab?.status === 'LIVE' ? LIVE_ITEMS_REFETCH_MS : false,
   });
 
+  const loginWithNotice = useLoginWithNotice();
   // Phiên đang khôi phục thì chờ: mở thêm một lần đăng nhập song song chỉ làm hai lời gọi dẫm lên nhau.
   const login = () => {
-    if (authStatus !== 'loading') void useAuthStore.getState().login();
+    if (authStatus !== 'loading') void loginWithNotice();
   };
 
   const buyMut = useMutation({

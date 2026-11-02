@@ -4,8 +4,7 @@ import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
-import { useAuthStore } from '../store/auth';
-import { SessionUnavailable } from '../components/ui/auth-gate';
+import { SessionUnavailable, useLoginWithNotice } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useCouponUse } from '../hooks/use-coupon-use';
@@ -52,7 +51,7 @@ import { SEASON_PASS_ENABLED } from '../utils/features';
 
 export default function GamePage() {
   const phase = useAuthPhase();
-  const login = useAuthStore((s) => s.login);
+  const login = useLoginWithNotice({ sessionErrorShown: true });
   const couponUse = useCouponUse();
   const navigate = useNavigate();
   const publicConfig = usePublicConfig();

@@ -74,7 +74,9 @@ describe('AuthGate — một cổng cho mọi trang cần đăng nhập (R5-BUYE
     act(() => useAuthStore.setState({ status: 'error', restore, login, error: copy.errors.sessionRateLimited }));
     renderGate();
     expect(screen.getByText('Bạn thao tác quá nhanh')).toBeInTheDocument();
-    expect(screen.getByText(copy.errors.sessionRateLimited)).toBeInTheDocument();
+    // Thân không lặp tiêu đề (lời 429 của store cũng mở đầu bằng "Bạn thao tác quá nhanh").
+    expect(screen.getByText(/Tubu tạm dừng khoảng một phút/)).toBeInTheDocument();
+    expect(screen.queryByText(copy.errors.sessionRateLimited)).toBeNull();
     expect(screen.queryByText(/vẫn đang đăng nhập/)).toBeNull();
     expect(screen.queryByText(copy.errors.title)).toBeNull();
     expect(screen.getByTestId('error-state-icon').querySelector('.lucide-clock')).not.toBeNull();
