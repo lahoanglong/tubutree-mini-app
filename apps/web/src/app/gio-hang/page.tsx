@@ -7,7 +7,7 @@ import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
-import { cartComboBlocks, comboRemovalNotice, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
+import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -445,7 +445,8 @@ export default function CartPage() {
             <div className="space-y-3">
               {groups.map((g) => {
                 // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
-                const { blocks, loose } = cartComboBlocks(g.items, cart.comboGroups, deselected, priced?.comboGroups);
+                const comboWaiting = comboSavingPending({ partial: subsetSig !== null, priced: priced !== null });
+                const { blocks, loose } = cartComboBlocks(g.items, cart.comboGroups, deselected, priced?.comboGroups, comboWaiting);
                 return (
                   <section
                     key={g.key}

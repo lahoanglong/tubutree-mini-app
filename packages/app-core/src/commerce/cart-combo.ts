@@ -91,6 +91,15 @@ export function cartComboBlocks<L extends { id: string }>(
   return { blocks, loose: lines.filter((l) => !owner.has(l.id)) };
 }
 
+/**
+ * Số "Tiết kiệm" ở đầu nhóm là số máy chủ tính cho CẢ giỏ; nó chỉ đúng khi khách thanh toán cả giỏ. Chọn một phần (`partial`) mà máy chủ chưa trả giá của đúng phần đó
+ * (`priced` false: đang chờ debounce, đang tải, refetch sau +/−, hoặc `getCartSelection` lỗi) thì không có số nào đúng để ghi, nên coi như đang chờ: truyền kết quả vào `pending`
+ * của `cartComboBlocks`. `editing`: giỏ vừa sửa ở máy khách (cùng cơ chế với chân giỏ, nơi dòng "Giảm giá combo" tắt chờ máy chủ).
+ */
+export function comboSavingPending(i: { editing?: boolean; partial: boolean; priced: boolean }): boolean {
+  return !!i.editing || (i.partial && !i.priced);
+}
+
 /** Chữ đầu nhóm cho trình đọc màn hình và kiểm thử: "Combo: {tên} · Tiết kiệm {số}" (không ghi số khi bộ không áp hoặc số đang chờ máy chủ tính lại). */
 export function comboHeadingText(block: Pick<ComboBlock<{ id: string }>, 'title' | 'saving' | 'savingPending'>): string {
   return block.saving && !block.savingPending ? `${block.title} · ${block.saving}` : block.title;
