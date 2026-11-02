@@ -10,6 +10,7 @@ const WORST: Record<string, string> = {
   time: '12:00',
   day: '02/11',
   n: '99',
+  qty: '99',
   pct: '99',
   d: '99',
   h: '23',
@@ -79,6 +80,8 @@ describe('SHOP_COPY', () => {
     expect(fillCopy('flash.endsIn', { t: '02:05:33' })).toBe('Kết thúc sau 02:05:33');
     expect(SHOP_COPY['flash.endsLabel']).toBe('Kết thúc sau');
     expect(fillCopy('flash.limitShort', { n: 2 })).toBe('Tối đa 2/khách');
+    expect(fillCopy('flash.sheetOverLimit', { n: 3, qty: 5 })).toBe('Giá Giờ vàng tối đa 3 sản phẩm mỗi khách. Mua 5 thì cả dòng tính giá thường.');
+    expect(fillCopy('flash.sheetOverQuota', { n: 2, qty: 3 })).toBe('Giờ vàng còn 2 suất. Mua 3 thì cả dòng tính giá thường.');
     expect(SHOP_COPY['flash.justOpened']).toBe('Vừa mở bán');
     expect(SHOP_COPY['flash.almostGone']).toBe('Sắp hết');
     expect(SHOP_COPY['flash.soldOut']).toBe('Đã bán hết');

@@ -15,6 +15,11 @@ export interface FlashPriceItem {
   salePrice?: number | null;
   /** Hạn của đợt (ISO). Có thì thẻ bỏ suất đã quá hạn dù danh sách ở trình duyệt chưa kịp tải lại. */
   endAt?: string;
+  /** Giới hạn mua mỗi khách của suất (API cũ không gửi): bảng chọn phân loại và nút mua tính tiền dòng theo luật vượt suất của máy chủ (`commerce/flash-line.ts`). */
+  perUserLimit?: number | null;
+  /** Hạn mức và số đã bán của suất (danh sách Giờ vàng ở trình duyệt, có thể cũ vài chục giây): suất còn lại = quota − soldCount cũng giới hạn số mua giá Giờ vàng của khách, như `allowance` của máy chủ. */
+  quota?: number;
+  soldCount?: number;
 }
 
 /** Suất còn chạy theo giờ máy chủ; không có hạn hoặc hạn không đọc được thì coi như còn chạy (máy chủ vẫn tính lại giá lúc thêm giỏ). */

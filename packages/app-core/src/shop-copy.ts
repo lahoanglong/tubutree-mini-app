@@ -41,6 +41,10 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.limitShort': 'Tối đa {n}/khách',
   // Bản đọc của 'flash.limitShort': trình đọc màn hình đọc dấu "/" thành "gạch chéo".
   'flash.limitSpoken': 'Tối đa {n} sản phẩm mỗi khách',
+  // Dòng ghi chú ở bảng chọn phân loại và dưới ô Số lượng khi số mua vượt giới hạn: máy chủ tính CẢ dòng giá thường (flash-line-price.ts).
+  'flash.sheetOverLimit': 'Giá Giờ vàng tối đa {n} sản phẩm mỗi khách. Mua {qty} thì cả dòng tính giá thường.',
+  // Cùng ghi chú khi giới hạn là số suất còn lại của đợt (ít hơn giới hạn mỗi khách), không phải giới hạn của riêng khách.
+  'flash.sheetOverQuota': 'Giờ vàng còn {n} suất. Mua {qty} thì cả dòng tính giá thường.',
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',

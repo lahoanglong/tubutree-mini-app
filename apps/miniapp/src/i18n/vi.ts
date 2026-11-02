@@ -128,7 +128,7 @@ export const vi = {
 
   product: {
     addToCart: 'Thêm vào giỏ',
-    outOfStock: 'Tạm hết — sẽ về sớm',
+    outOfStock: 'Tạm hết hàng',
     lowStock: (n: number) => `Còn ${n} sản phẩm`,
     freeshipFrom: (min: string) => `Miễn phí giao hàng cho đơn từ ${min}`,
     freeshipAll: 'Miễn phí giao hàng cho mọi đơn hàng',

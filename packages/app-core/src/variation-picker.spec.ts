@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPickerQty, needsVariationPicker, pickerStartId, pickerStockText, pickerView } from './variation-picker';
+import { clampPickerQty, needsVariationPicker, pickerStartId, pickerStockText } from './variation-picker';
 
 const v = (id: string, retailPrice: number, stock: number, salePrice: number | null = null) => ({ id, sku: id, retailPrice, salePrice, stock });
 
@@ -39,22 +39,8 @@ describe('clampPickerQty', () => {
 
 describe('pickerStockText', () => {
   it('hết hàng, sắp hết, còn nhiều', () => {
-    expect(pickerStockText(0)).toBe('Hết hàng');
-    expect(pickerStockText(3)).toBe('Chỉ còn 3');
+    expect(pickerStockText(0)).toBe('Tạm hết hàng');
+    expect(pickerStockText(3)).toBe('Còn 3 sản phẩm');
     expect(pickerStockText(40)).toBe('Còn 40');
-  });
-});
-
-describe('pickerView', () => {
-  it('lấy giá Giờ vàng khi rẻ hơn', () => {
-    const view = pickerView(v('a', 200000, 5), [{ variationId: 'a', flashPrice: 150000 } as never]);
-    expect(view.price).toBe(150000);
-    expect(view.compareAt).toBe(200000);
-    expect(view.isFlash).toBe(true);
-  });
-  it('không có Giờ vàng thì giá bán', () => {
-    const view = pickerView(v('a', 200000, 5, 180000), []);
-    expect(view.price).toBe(180000);
-    expect(view.isFlash).toBe(false);
   });
 });

@@ -141,6 +141,21 @@ describe('PdpBundles: Mua kèm deal sốc', () => {
     expect(screen.getByText('Tiết kiệm 10.000đ')).toBeInTheDocument();
   });
 
+  it('dòng "Tiết kiệm" giữ chỗ: có sẵn khi chưa chọn (chữ rỗng, cao đúng một dòng) và chọn món chỉ đổi chữ, không thêm phần tử đẩy nút', async () => {
+    renderBlock(data());
+    const x = await screen.findByRole('checkbox', { name: /Sản phẩm x/ });
+    const save = screen.getByTestId('addon-save');
+    expect(save).toBeEmptyDOMElement();
+    expect(save).toHaveAttribute('aria-live', 'polite');
+    expect(save.style.minHeight).toBe('calc(var(--type-caption-size) * var(--type-caption-lh))');
+    fireEvent.click(x);
+    expect(screen.getByTestId('addon-save')).toBe(save);
+    expect(save).toHaveTextContent('Tiết kiệm 60.000đ');
+    fireEvent.click(x);
+    expect(screen.getByTestId('addon-save')).toBe(save);
+    expect(save).toBeEmptyDOMElement();
+  });
+
   it('bàn phím: Enter trên dòng cũng chọn', async () => {
     renderBlock(data());
     const x = await screen.findByRole('checkbox', { name: /Sản phẩm x/ });

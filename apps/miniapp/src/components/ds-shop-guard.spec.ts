@@ -67,7 +67,7 @@ describe('ds-shop-guard (Mini App)', () => {
   it('gạch giá (line-through) chỉ ở PriceTag; ngoại lệ có sẵn là dòng giá ngoài thẻ sản phẩm', () => {
     const NOT_A_CARD = [
       'components/ui/price-tag.tsx',
-      'components/variation-sheet.tsx', // giá từng phân loại trong bảng chọn
+      'components/product/variation-chip.tsx', // tên phân loại hết hàng gạch ngang, không phải giá gạch
       'pages/product-detail.tsx', // khối giá lớn của trang chi tiết
       'pages/cart.tsx', // dòng giỏ hàng
       'pages/dealer.tsx', // bảng giá đại lý

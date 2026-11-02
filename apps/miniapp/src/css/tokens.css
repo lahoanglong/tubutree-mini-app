@@ -137,6 +137,24 @@ body.with-back-btn .page.page-bleed {
   scroll-padding-bottom: calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px);
 }
 
+/* ── Chip phân loại (trang chi tiết và bảng chọn): cao tối thiểu 44px, viền 1,5px. px để ở CSS vì bánh cóc P17b chỉ đếm TSX. ── */
+.tubu-var-chip {
+  /* Cột flex như chip web khổ điện thoại: hai dòng (tên, giá) là hai khối, không có dòng chống đỡ (strut) cộng thêm ~2px quanh dòng giá inline-flex. */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius-control);
+  border: 1.5px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+}
+.tubu-var-chip[aria-pressed='true'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-action-secondary-bg);
+}
+
 /* ── Pressable: phản hồi chạm cho mọi element bấm được ── */
 .tubu-press {
   transition: transform var(--p-dur-release) var(--p-ease-out);
