@@ -10,8 +10,9 @@ const state = vi.hoisted(() => ({
   placeError: null as Error | null,
   quoteError: null as Error | null,
   noAddress: false,
-  // Báo giá về chậm: lỗi đặt đơn như PRICE_CHANGED/TOTAL_CHANGED tải lại báo giá trong onError nên nút còn khoá đúng lúc trạng thái lỗi hiện ra.
-  quoteDelay: 0,
+  // Báo giá bị giữ tới khi test mở (holdQuote/releaseQuote): lỗi đặt đơn như PRICE_CHANGED/TOTAL_CHANGED tải lại báo giá trong onError nên
+  // nút còn khoá đúng lúc trạng thái lỗi hiện ra. Không dùng hẹn giờ thật: máy CI bận thì báo giá về trước khi test kịp thấy nút khoá.
+  quoteHeld: null as Promise<void> | null,
   // Điểm Xanh dùng được: > 0 thì ô tick "Điểm Xanh" hiện trong khung Đơn hàng.
   points: 0,
 }));
@@ -36,7 +37,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
       ? []
       : [{ id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: 'p', districtCode: '', wardCode: 'w', isDefault: true }],
   checkoutQuote: async () => {
-    if (state.quoteDelay) await new Promise((r) => setTimeout(r, state.quoteDelay));
+    if (state.quoteHeld) await state.quoteHeld;
     if (state.quoteError) throw state.quoteError;
     return {
       subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0,
@@ -65,6 +66,20 @@ const lgButton = (c: HTMLElement) => part(c).querySelector<HTMLButtonElement>('b
 const note = (c: HTMLElement) => part(c).querySelector<HTMLElement>('[data-testid="place-note-lg"]');
 const errorNote = (c: HTMLElement) => part(c).querySelector<HTMLElement>('[data-testid="place-error-lg"]');
 
+let releaseHeld: (() => void) | null = null;
+const holdQuote = () => {
+  state.quoteHeld = new Promise<void>((resolve) => {
+    releaseHeld = resolve;
+  });
+};
+const releaseQuote = async () => {
+  state.quoteHeld = null;
+  await act(async () => {
+    releaseHeld?.();
+  });
+  await flush(4);
+};
+
 const scrollIntoView = vi.fn();
 const setDesktop = (desktop: boolean) => {
   window.matchMedia = ((query: string) => ({
@@ -84,7 +99,7 @@ beforeEach(() => {
   state.placeError = null;
   state.quoteError = null;
   state.noAddress = false;
-  state.quoteDelay = 0;
+  state.quoteHeld = null;
   state.points = 0;
   scrollIntoView.mockClear();
   Element.prototype.scrollIntoView = scrollIntoView;
@@ -169,15 +184,12 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
   it('lỗi mà onError tải lại báo giá (nút còn khoá lúc trạng thái lỗi hiện ra): nút nhận focus ngay khi báo giá về, không bỏ sót', async () => {
     state.placeError = new Error('PRICE_CHANGED');
     const c = await mount();
-    state.quoteDelay = 40;
+    holdQuote();
     click(lgButton(c));
     await flush(4);
     expect(part(c).querySelector('[data-testid="place-error-lg"]')).not.toBeNull();
     expect(lgButton(c).disabled).toBe(true);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 80));
-    });
-    await flush(4);
+    await releaseQuote();
     expect(lgButton(c).disabled).toBe(false);
     expect(document.activeElement).toBe(lgButton(c));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -186,17 +198,14 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
   it('khách đã focus ô ghi chú (ngoài khung Đơn hàng) lúc báo giá tải lại: báo giá về thì focus ở lại ô, nút không giật focus (L5 1)', async () => {
     state.placeError = new Error('PRICE_CHANGED');
     const c = await mount();
-    state.quoteDelay = 40;
+    holdQuote();
     click(lgButton(c));
     await flush(4);
     expect(lgButton(c).disabled).toBe(true);
     const textarea = c.querySelector<HTMLTextAreaElement>('[data-mini-block="note"] textarea')!;
     textarea.focus();
     expect(document.activeElement).toBe(textarea);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 80));
-    });
-    await flush(4);
+    await releaseQuote();
     expect(lgButton(c).disabled).toBe(false);
     expect(document.activeElement).toBe(textarea);
     // Cờ đã hạ: các lần vẽ lại sau đó cũng không kéo focus về nút (Space/Enter kế tiếp không được bấm nhầm Đặt hàng).
@@ -208,10 +217,7 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
   const keepsFocus = async (c: HTMLElement, target: HTMLElement) => {
     target.focus();
     expect(document.activeElement).toBe(target);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 80));
-    });
-    await flush(4);
+    await releaseQuote();
     expect(lgButton(c).disabled).toBe(false);
     expect(document.activeElement).toBe(target);
     await flush(4);
@@ -220,7 +226,7 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
   const failWithSlowQuote = async () => {
     state.placeError = new Error('PRICE_CHANGED');
     const c = await mount();
-    state.quoteDelay = 40;
+    holdQuote();
     click(lgButton(c));
     await flush(4);
     expect(lgButton(c).disabled).toBe(true);
@@ -263,10 +269,7 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
     const c = await failWithSlowQuote();
     (document.activeElement as HTMLElement | null)?.blur();
     expect(document.activeElement).toBe(document.body);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 80));
-    });
-    await flush(4);
+    await releaseQuote();
     expect(document.activeElement).toBe(lgButton(c));
   });
 
