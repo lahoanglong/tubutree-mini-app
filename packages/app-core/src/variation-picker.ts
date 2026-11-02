@@ -1,8 +1,9 @@
+import { fillTileCopy } from './commerce/tile-copy';
 import { pickDefaultVariation, variationPricing, type FlashPriceItem, type VariationPricingResult } from './flash-price';
 
 type PickerVariation = { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number };
 
-/** Còn từng này trở xuống thì bảng chọn ghi "Chỉ còn N". */
+/** Còn từng này trở xuống thì bảng chọn ghi "Còn N sản phẩm". */
 const LOW_STOCK_NOTICE = 5;
 
 /** Sản phẩm từ 2 phân loại: Thêm vào giỏ và Mua ngay hỏi khách chọn phân loại; 1 phân loại thì thêm thẳng. */
@@ -22,8 +23,8 @@ export function clampPickerQty(variation: { stock: number } | undefined, qty: nu
 }
 
 export function pickerStockText(stock: number): string {
-  if (stock <= 0) return 'Hết hàng';
-  return stock <= LOW_STOCK_NOTICE ? `Chỉ còn ${stock}` : `Còn ${stock}`;
+  if (stock <= 0) return fillTileCopy('stock.out');
+  return stock <= LOW_STOCK_NOTICE ? `Còn ${stock} sản phẩm` : `Còn ${stock}`;
 }
 
 /** Giá một dòng chọn trong bảng: cùng luật Giờ vàng với trang chi tiết. */

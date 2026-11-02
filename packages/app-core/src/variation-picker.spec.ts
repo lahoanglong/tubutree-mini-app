@@ -39,8 +39,8 @@ describe('clampPickerQty', () => {
 
 describe('pickerStockText', () => {
   it('hết hàng, sắp hết, còn nhiều', () => {
-    expect(pickerStockText(0)).toBe('Hết hàng');
-    expect(pickerStockText(3)).toBe('Chỉ còn 3');
+    expect(pickerStockText(0)).toBe('Tạm hết hàng');
+    expect(pickerStockText(3)).toBe('Còn 3 sản phẩm');
     expect(pickerStockText(40)).toBe('Còn 40');
   });
 });
