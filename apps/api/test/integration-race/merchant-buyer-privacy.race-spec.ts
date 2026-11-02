@@ -10,6 +10,7 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { MERCHANT_FULFIL_STATUSES, MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
+import { ImageRegistryModule } from '../../src/modules/catalog/image-registry.module';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
@@ -66,7 +67,7 @@ describe('Đối tác không thấy tài khoản người mua (real Postgres)', 
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
-      imports: [PrismaModule],
+      imports: [PrismaModule, ImageRegistryModule],
       providers: [
         SystemConfigService,
         LoyaltyService,

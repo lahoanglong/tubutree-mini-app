@@ -6,9 +6,10 @@ import { MerchantFulfilmentService } from './merchant-fulfilment.service';
 import { MerchantAdminController, StorefrontPartnerAdminController } from './merchant-admin.controller';
 import { MerchantSlaCron } from './merchant-sla.cron';
 import { OrdersModule } from '../orders/orders.module';
+import { ImageRegistryModule } from '../catalog/image-registry.module';
 
 @Module({
-  imports: [PrismaModule, OrdersModule],
+  imports: [PrismaModule, OrdersModule, ImageRegistryModule],
   controllers: [MerchantController, MerchantAdminController, StorefrontPartnerAdminController],
   providers: [MerchantService, MerchantFulfilmentService, MerchantSlaCron],
   exports: [MerchantService, MerchantFulfilmentService],
