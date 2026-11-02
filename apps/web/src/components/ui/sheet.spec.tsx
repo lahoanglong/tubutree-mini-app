@@ -185,12 +185,20 @@ describe('Sheet thanh kéo', () => {
 describe('Sheet từ md là hộp thoại giữa màn (K7)', () => {
   const classOf = () => dialog()!.className;
 
-  it('rộng tối đa --dialog-w, cao tối đa 85vh, bo đủ góc, bóng dialog, mở fade/scale và tắt khi giảm chuyển động', () => {
+  it('rộng tối đa --dialog-w, cao tối đa 85vh, bo đủ góc, bóng dialog, mở fade/scale chỉ khi không giảm chuyển động', () => {
     mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
-    for (const c of ['md:max-w-[var(--dialog-w)]', 'md:max-h-[85vh]', 'md:rounded-sheet', 'md:shadow-dialog', 'md:animate-dialog-pop', 'motion-reduce:animate-none']) {
+    for (const c of ['md:max-w-[var(--dialog-w)]', 'md:max-h-[85vh]', 'md:rounded-sheet', 'md:shadow-dialog', 'md:motion-safe:animate-dialog-pop']) {
       expect(classOf().split(' '), c).toContain(c);
     }
     expect(classOf()).not.toContain('md:max-w-lg');
+    // `md:animate-*` kèm `motion-reduce:animate-none` thua về thứ tự CSS (luật md sinh sau): chỉ `md:motion-safe:` tắt được khi giảm chuyển động.
+    expect(classOf().split(' ')).not.toContain('md:animate-dialog-pop');
+  });
+
+  it('nền mờ hiện dần từ md như nền của mini/bottom-sheet, chỉ khi không giảm chuyển động', () => {
+    mount(<Sheet open onClose={() => {}} title="T">x</Sheet>);
+    const backdrop = document.querySelector('[data-sheet-backdrop]')!;
+    expect(backdrop.className.split(' ')).toContain('md:motion-safe:animate-dialog-fade');
   });
 
   it('dưới md không đổi: bo hai góc trên, cao tối đa 92vh', () => {

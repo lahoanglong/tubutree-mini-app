@@ -71,6 +71,14 @@ async function expectBlockTitle(page: Page, dialog: Locator): Promise<void> {
   expect(Math.abs(t.y + t.height / 2 - (x.y + x.height / 2))).toBeLessThanOrEqual(2);
 }
 
+/** Tên animation đang áp (computed, còn nguyên sau khi hiệu ứng `both` kết thúc) của hộp và nền; 'none' là không chạy hiệu ứng. */
+async function animationNames(dialog: Locator): Promise<{ panel: string; backdrop: string }> {
+  return dialog.evaluate((el) => ({
+    panel: getComputedStyle(el).animationName,
+    backdrop: getComputedStyle(el.parentElement!.querySelector('[data-sheet-backdrop]')!).animationName,
+  }));
+}
+
 async function expectCenteredDialog(dialog: Locator, viewport: { width: number; height: number }): Promise<void> {
   const box = (await dialog.boundingBox())!;
   expect(box.width).toBeLessThanOrEqual(DIALOG_W);
@@ -162,5 +170,79 @@ test.describe('Web khách: sheet từ md là hộp thoại giữa màn', () => {
     expect(Math.abs(box.y + box.height - PHONE.height)).toBeLessThanOrEqual(1);
     await expect(dialog.locator('[data-sheet-handle]')).toBeVisible();
     await expectBlockTitle(page, dialog);
+  });
+
+  test('1280: nội dung dài thì hộp kẹp 85vh và thân cuộn trong hộp, tiêu đề và nút Đóng vẫn trong hộp', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    const many = Array.from({ length: 15 }, (_, i) => ({
+      code: `DAI${String(i + 1).padStart(2, '0')}`, type: 'AMOUNT', value: 10000 + i * 1000, minOrder: 100000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z',
+    }));
+    api.get('/me/coupons', many);
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await expect(openOffers(page)).toBeVisible();
+    await openOffers(page).click();
+    const dialog = dialogOf(page);
+    await settled(dialog);
+    await shot(page, 'web1280-offers-sheet-long');
+
+    const box = (await dialog.boundingBox())!;
+    expect(Math.abs(box.height - DESKTOP.height * 0.85)).toBeLessThanOrEqual(2);
+    await expectCenteredDialog(dialog, DESKTOP);
+    const body = dialog.getByTestId('bottom-sheet-body');
+    const m = await body.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+    expect(m.scroll).toBeGreaterThan(m.client + 50);
+    // Thân cuộn chứ hộp không dài ra: cuộn xuống cuối thì mã cuối hiện trong khung hộp, nút Đóng vẫn ở đầu hộp.
+    await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    const last = dialog.getByText('DAI15', { exact: true });
+    await expect(last).toBeVisible();
+    const [l, d] = [(await last.boundingBox())!, (await dialog.boundingBox())!];
+    expect(l.y + l.height).toBeLessThanOrEqual(d.y + d.height + 1);
+    expect(l.y).toBeGreaterThanOrEqual(d.y);
+    await expect(dialog.getByRole('button', { name: 'Đóng' })).toBeInViewport();
+    expect((await dialog.boundingBox())!.height).toBeCloseTo(box.height, 0);
+  });
+
+  test('1280 bình thường: hộp và nền mở bằng fade/scale ở cả hai sheet', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await openOffers(page).click();
+    expect(await animationNames(dialogOf(page))).toEqual({ panel: 'tubu-dialog-pop', backdrop: 'tubu-dialog-fade' });
+    await page.keyboard.press('Escape');
+    await openPoints(page).click();
+    expect(await animationNames(dialogOf(page))).toEqual({ panel: 'tubu-dialog-pop', backdrop: 'tubu-dialog-fade' });
+  });
+
+  test('1280 bật giảm chuyển động: cả hai sheet hiện ngay, hộp và nền không chạy hiệu ứng nào', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await mockPdp(page, api, p!);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize(DESKTOP);
+    await page.goto(`/san-pham/${p!.slug}`);
+
+    await openOffers(page).click();
+    let dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    expect(await animationNames(dialog)).toEqual({ panel: 'none', backdrop: 'none' });
+    expect(await dialog.evaluate((el) => el.getAnimations().length)).toBe(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    await openPoints(page).click();
+    dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    expect(await animationNames(dialog)).toEqual({ panel: 'none', backdrop: 'none' });
+    expect(await dialog.evaluate((el) => el.getAnimations().length)).toBe(0);
+    // Không hiệu ứng nhưng vẫn là hộp thoại giữa màn.
+    await expectCenteredDialog(dialog, DESKTOP);
   });
 });

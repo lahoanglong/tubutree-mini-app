@@ -26,7 +26,7 @@
 
 1. Sheet cao hơn 85vh (nội dung dài, `size="full"` 92vh): từ md hộp bị kẹp 85vh, phần thân cuộn trong hộp, tiêu đề và chân luôn thấy; không cuộn nền. Test: e2e web đo `boundingBox().height <= 0.85 × viewport` với sheet nhiều nội dung; vitest class `md:max-h-[85vh]` ở `ui/sheet`.
 2. Khung hẹp 768–800px: hộp không chạm mép (còn lề ≥16px mỗi bên). Test: css.spec khẳng định `width: min(calc(100% - 32px), var(--dialog-w))`.
-3. Người bật giảm chuyển động: hộp hiện ngay, không scale/fade. Test: css.spec (khối `prefers-reduced-motion` tắt `animation`) và vitest class `motion-reduce:animate-none` ở `ui/sheet`.
+3. Người bật giảm chuyển động: hộp hiện ngay, không scale/fade. Test: css.spec (khối `prefers-reduced-motion` tắt `animation`) vitest class `md:motion-safe:animate-dialog-pop` ở `ui/sheet` và bản Tailwind sinh thật (`tailwind.config.spec.ts`: luật animation chỉ nằm trong md > no-preference), e2e `emulateMedia({ reducedMotion: 'reduce' })` ở 1280 khẳng định animation-name `none`. Lỗi đã gặp ở review: `md:animate-*` kèm `motion-reduce:animate-none` thua về thứ tự CSS (luật md sinh sau luật motion-reduce) nên giảm chuyển động vẫn chạy hiệu ứng; dùng `md:motion-safe:`.
 4. Sheet `size="auto"` nội dung ngắn (vài dòng): hộp ôm nội dung, không kéo dài 50% màn (luật `min-height: 50%` của bản điện thoại không áp từ md). Test: css.spec `min-height: 0` trong khối md; e2e đo chiều cao hộp của `ui/sheet` nội dung ngắn nhỏ hơn 50vh.
 5. Hai sheet chồng nhau, `dismissible=false`: không đổi (focus trap và Esc chỉ ở sheet trên cùng). Test: các ca có sẵn trong `bottom-sheet.spec.tsx`/`sheet.spec.tsx` vẫn xanh.
 
@@ -99,11 +99,11 @@
 
 - [ ] **Step 1: Viết test đỏ.**
   - `tailwind.config.spec.ts`: `ext.boxShadow` có `dialog: 'var(--elevation-4)'`; `ext.animation` có `'dialog-pop'` bắt đầu bằng `tubu-dialog-pop`.
-  - `sheet.spec.tsx`, ca `hộp thoại từ md: rộng --dialog-w, cao tối đa 85vh, bo đủ góc, bóng, mở fade/scale tắt khi giảm chuyển động`: lấy `[role="dialog"]`, khẳng định `className` chứa `md:max-w-[var(--dialog-w)]`, `md:max-h-[85vh]`, `md:rounded-sheet`, `md:shadow-dialog`, `md:animate-dialog-pop`, `motion-reduce:animate-none`, và KHÔNG chứa `md:max-w-lg`. Ca `size="full"` có `md:h-[85vh]` (không còn `92vh` ở md). Ca `size="half"` giữ `h-[50vh]`.
+  - `sheet.spec.tsx`, ca `hộp thoại từ md: rộng --dialog-w, cao tối đa 85vh, bo đủ góc, bóng, mở fade/scale tắt khi giảm chuyển động`: lấy `[role="dialog"]`, khẳng định `className` chứa `md:max-w-[var(--dialog-w)]`, `md:max-h-[85vh]`, `md:rounded-sheet`, `md:shadow-dialog`, `md:motion-safe:animate-dialog-pop`, và KHÔNG chứa `md:max-w-lg` hay `md:animate-dialog-pop` trần; nền `[data-sheet-backdrop]` chứa `md:motion-safe:animate-dialog-fade`. Ca `size="full"` có `md:h-[85vh]` (không còn `92vh` ở md). Ca `size="half"` giữ `h-[50vh]`.
   - ca `tiêu đề là tiêu đề khối`: `h2` có class `font-ui`, `text-base`, `font-bold`, không có `font-display`.
   - ca `hàng thanh kéo giữ nguyên`: `[data-sheet-handle]` có class `md:hidden` (R-193).
 - [ ] **Step 2: Chạy, thấy đỏ.** `pnpm --filter @tubutree/web exec vitest run src/components/ui/sheet.spec.tsx tailwind.config.spec.ts`.
-- [ ] **Step 3: Cài đặt.** `SIZE_CLASS`: auto `max-h-[92vh] md:max-h-[85vh]`, half `h-[50vh]`, full `h-[92vh] md:h-[85vh]`. Khung hộp: `md:max-w-[var(--dialog-w)] md:rounded-sheet md:shadow-dialog md:animate-dialog-pop motion-reduce:animate-none`; giữ `rounded-t-sheet shadow-card`. Tiêu đề: `font-ui text-base font-bold leading-6 tracking-[-0.01em] text-stone-900`. `tailwind.config.ts`: thêm `boxShadow.dialog`, `animation`. Cập nhật doc-comment của `Sheet` (từ md rộng tối đa 480px, cao tối đa 85vh).
+- [ ] **Step 3: Cài đặt.** `SIZE_CLASS`: auto `max-h-[92vh] md:max-h-[85vh]`, half `h-[50vh]`, full `h-[92vh] md:h-[85vh]`. Khung hộp: `md:max-w-[var(--dialog-w)] md:rounded-sheet md:shadow-dialog md:animate-dialog-pop motion-reduce:animate-none`; giữ `rounded-t-sheet shadow-card`. Tiêu đề: `font-ui text-base font-bold leading-6 tracking-[-0.01em] text-stone-900`. `tailwind.config.ts`: thêm `boxShadow.dialog`, `animation` (`dialog-pop`, `dialog-fade`). Cập nhật doc-comment của `Sheet` (từ md rộng tối đa 480px, cao tối đa 85vh).
 - [ ] **Step 4: Chạy lại, thấy xanh** (lệnh Step 2 + toàn bộ spec dùng `Sheet`: `pnpm --filter @tubutree/web exec vitest run src/components/ui/sheet.spec.tsx src/app/san-pham src/app/kho-qua src/app/tai-khoan`).
 - [ ] **Step 5: Commit** `feat(web): ui/sheet từ md rộng 480px, cao tối đa 85vh, bóng và mở fade/scale như sheet mini; tiêu đề Inter 16/700`.
 

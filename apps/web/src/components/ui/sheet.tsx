@@ -34,7 +34,7 @@ const SAFE_BOTTOM = { paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px)
 
 /**
  * Sheet chuẩn của web: bottom sheet trên điện thoại, hộp thoại giữa màn hình từ md trở lên (rộng tối đa `--dialog-w`, cao tối đa 85vh, cùng
- * dạng với `mini/bottom-sheet`; `animate-dialog-pop` dùng keyframes của mini.css). Tiêu đề là tiêu đề khối Inter 16/700. Cùng API với `BottomSheet`
+ * dạng với `mini/bottom-sheet`; hiệu ứng mở và nền mờ dùng keyframes của mini.css, chỉ chạy khi người dùng không bật giảm chuyển động). Tiêu đề là tiêu đề khối Inter 16/700. Cùng API với `BottomSheet`
  * của Mini App (`open`/`onClose`/`title`/`description`/`footer`/`size`/`dismissible`). `dismissible=false` chặn cả nút X,
  * Esc và bấm nền. Không dựng khi đóng nên không có hoạt ảnh đóng; đổi lại không có nội dung ẩn trong cây truy cập.
  */
@@ -100,14 +100,14 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
   const titleId = `${uid}-title`;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
-      <div data-sheet-backdrop className="absolute inset-0 bg-stone-900/50" onClick={dismissible ? onClose : undefined} />
+      <div data-sheet-backdrop className="absolute inset-0 bg-stone-900/50 md:motion-safe:animate-dialog-fade" onClick={dismissible ? onClose : undefined} />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
-        className={`relative flex w-full flex-col overflow-hidden rounded-t-sheet bg-stone-0 shadow-card outline-none md:max-w-[var(--dialog-w)] md:rounded-sheet md:shadow-dialog md:animate-dialog-pop motion-reduce:animate-none ${SIZE_CLASS[size]}`}
+        className={`relative flex w-full flex-col overflow-hidden rounded-t-sheet bg-stone-0 shadow-card outline-none md:max-w-[var(--dialog-w)] md:rounded-sheet md:shadow-dialog md:motion-safe:animate-dialog-pop ${SIZE_CLASS[size]}`}
       >
         <div data-sheet-handle aria-hidden="true" className="flex h-6 shrink-0 items-center justify-center md:hidden">
           <span className="h-1.5 w-12 rounded-full bg-stone-200" />
