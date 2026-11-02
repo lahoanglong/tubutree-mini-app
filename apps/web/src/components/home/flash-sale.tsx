@@ -59,6 +59,11 @@ export interface FlashSaleProps {
   retrying?: boolean;
   /** Gọi khi đồng hồ về 0 (suất sớm nhất hết giờ): chỗ nối dữ liệu tính lại chống trùng để món hết giờ trở lại kệ khác. */
   onExpire?: () => void;
+  /**
+   * `endAt` của danh sách suất gốc (trước chống trùng và cắt 8) cho đoạn script chặn trước hydrate. Sau hydrate kệ lọc suất hết giờ TRƯỚC khi cắt,
+   * nên đếm trên `items` đã cắt có thể ẩn một kệ mà hydrate lại hiện; đếm trên danh sách gốc thì không bao giờ ẩn nhầm.
+   */
+  guardEndAts?: readonly string[];
 }
 
 /**
@@ -69,7 +74,7 @@ export interface FlashSaleProps {
  * Khác Mini: kệ có trong HTML server (dữ liệu dựng sẵn) nên KHÔNG chờ suất sắp mở tải xong mới hiện, mà dòng "suất kế" vào sau; lần mở trước có dòng đó
  * thì chỗ của nó được giữ sẵn. Trước hydrate mọi suất coi là còn giờ (đúng như HTML máy chủ đã vẽ), sau hydrate mới tính theo giờ máy chủ thật.
  */
-export function FlashSale({ items, loading, error, onRetry, retrying = false, onExpire }: FlashSaleProps) {
+export function FlashSale({ items, loading, error, onRetry, retrying = false, onExpire, guardEndAts }: FlashSaleProps) {
   const titleId = useId();
   const hydrated = useHydrated();
   // Chờ biết phiên xong rồi mới hỏi: hỏi sớm thì đi request lẻ dù khách đã đăng nhập. Không dùng `useAuthRestoring`: ở lượt hydrate đầu nó là `false`
@@ -149,7 +154,7 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
       ) : !slotKnown && hadNextSlot ? (
         <div aria-hidden="true" style={{ height: FLASH_NEXT_SLOT_HEIGHT }} />
       ) : null}
-      {!hydrated && <script dangerouslySetInnerHTML={{ __html: flashShelfGuardScript(live.map((it) => it.endAt), FLASH_SHELF.minItems) }} />}
+      {!hydrated && <script dangerouslySetInnerHTML={{ __html: flashShelfGuardScript(guardEndAts ?? live.map((it) => it.endAt), FLASH_SHELF.minItems) }} />}
     </section>
   );
 }
