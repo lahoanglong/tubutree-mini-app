@@ -210,4 +210,49 @@ describe('VoucherTicket (web)', () => {
       m.unmount();
     }
   });
+  describe('chọn mã (K3): selected, saving, ariaLabel, reason cho mã còn dùng được', () => {
+    it('selected: hiện chữ "Đang dùng"; không selected thì không có', () => {
+      const a = mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" selected primary={{ label: 'Bỏ chọn', onClick: vi.fn() }} />);
+      expect(q('voucher-selected')!.textContent).toBe('Đang dùng');
+      a.unmount();
+      mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', onClick: vi.fn() }} />);
+      expect(q('voucher-selected')).toBeNull();
+    });
+
+    it('saving: hiện mức giảm cho đơn này, tông thành công', () => {
+      mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" saving="Giảm 30.000đ cho đơn này" primary={{ label: 'Dùng', onClick: vi.fn() }} />);
+      expect(q('voucher-saving')!.textContent).toBe('Giảm 30.000đ cho đơn này');
+      expect(q('voucher-saving')!.style.color).toBe('var(--color-status-success-fg)');
+    });
+
+    it('primary.ariaLabel thành aria-label của nút', () => {
+      mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', ariaLabel: 'Dùng mã FUWA3E', onClick: vi.fn() }} />);
+      expect(buttons()[0]!.getAttribute('aria-label')).toBe('Dùng mã FUWA3E');
+    });
+
+    it('reason với mã còn dùng được (saved): hiện chữ, nút vẫn bấm được, mô tả bằng lý do', () => {
+      const onClick = vi.fn();
+      mount(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" reason="Mua thêm 130k để dùng" primary={{ label: 'Sao chép', onClick }} />);
+      expect(q('voucher-reason')!.textContent).toBe('Mua thêm 130k để dùng');
+      const btn = buttons()[0]!;
+      expect(btn.getAttribute('aria-disabled')).toBeNull();
+      expect(document.getElementById(btn.getAttribute('aria-describedby')!)!.textContent).toBe('Mua thêm 130k để dùng');
+      click(btn);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('reason không hiện khi used, expired, soldout', () => {
+      for (const state of ['used', 'expired', 'soldout'] as const) {
+        const a = mount(<VoucherTicket voucher={view({ state })} variant="row" reason="Mua thêm 130k để dùng" />);
+        expect(q('voucher-reason')).toBeNull();
+        a.unmount();
+      }
+    });
+
+    it('phiếu chưa đủ điều kiện không làm mờ cả thẻ: không phần tử nào có opacity < 1', () => {
+      const m = mount(<VoucherTicket voucher={view({ state: 'ineligible' })} variant="row" reason="Mua thêm 50k để dùng" primary={{ label: 'Chưa đủ', onClick: vi.fn() }} />);
+      const dimmed = [m.container, ...Array.from(m.container.querySelectorAll<HTMLElement>('*'))].filter((el) => el.style.opacity !== '' && Number(el.style.opacity) < 1);
+      expect(dimmed).toEqual([]);
+    });
+  });
 });

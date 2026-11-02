@@ -173,6 +173,7 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.newCustomerOnlyReason': 'Chỉ dành cho khách đặt đơn đầu tiên',
   'coupon.claimedIneligibleReason': 'Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng',
   'coupon.walletLoadError': 'Chưa tải được mã bạn đã lưu',
+  'coupon.pickApplied': 'Đang dùng',
 
   // Ưu đãi khi chưa đăng nhập: mỗi khối cần tài khoản một thẻ mời, một nhãn nút chung ở hai app
   'login.cta': 'Đăng nhập',

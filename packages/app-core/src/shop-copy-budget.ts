@@ -178,6 +178,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.newCustomerOnlyReason': null,
   'coupon.claimedIneligibleReason': null,
   'coupon.walletLoadError': null,
+  'coupon.pickApplied': 12,
 
   'login.cta': 12,
   'offers.guestPointsTitle': 26,

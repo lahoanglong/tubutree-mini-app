@@ -256,4 +256,48 @@ describe('VoucherTicket', () => {
     render(<VoucherTicket voucher={view({ kind: 'freeship' })} variant="ticket" />);
     expect(q('voucher-stub')!.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
   });
+  describe('chọn mã (K3): selected, saving, ariaLabel, reason cho mã còn dùng được', () => {
+    it('selected: hiện chữ "Đang dùng" (không chỉ màu)', () => {
+      render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" selected primary={{ label: 'Bỏ chọn', onClick: vi.fn() }} />);
+      expect(q('voucher-selected')).toHaveTextContent('Đang dùng');
+    });
+
+    it('không selected: không có dòng "Đang dùng"', () => {
+      render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', onClick: vi.fn() }} />);
+      expect(q('voucher-selected')).toBeNull();
+    });
+
+    it('saving: hiện mức giảm cho đơn này, tông thành công', () => {
+      render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" saving="Giảm 30.000đ cho đơn này" primary={{ label: 'Dùng', onClick: vi.fn() }} />);
+      expect(q('voucher-saving')).toHaveTextContent('Giảm 30.000đ cho đơn này');
+      expect(q('voucher-saving')!.style.color).toBe('var(--color-status-success-fg)');
+    });
+
+    it('primary.ariaLabel thành tên của nút', () => {
+      render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" primary={{ label: 'Dùng', ariaLabel: 'Dùng mã FUWA3E', onClick: vi.fn() }} />);
+      expect(screen.getByRole('button', { name: 'Dùng mã FUWA3E' })).toBeInTheDocument();
+    });
+
+    it('reason với mã còn dùng được (saved): hiện chữ, nút vẫn bấm được, mô tả bằng lý do', () => {
+      const onClick = vi.fn();
+      render(<VoucherTicket voucher={view({ state: 'saved' })} variant="row" reason="Mua thêm 130k để dùng" primary={{ label: 'Sao chép', onClick }} />);
+      expect(q('voucher-reason')).toHaveTextContent('Mua thêm 130k để dùng');
+      const btn = screen.getByRole('button', { name: 'Sao chép' });
+      expect(btn).not.toHaveAttribute('aria-disabled');
+      expect(btn).toHaveAccessibleDescription('Mua thêm 130k để dùng');
+      fireEvent.click(btn);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['used', 'expired', 'soldout'] as const)('reason không hiện khi %s (nhãn trạng thái đã nói đủ)', (state) => {
+      render(<VoucherTicket voucher={view({ state })} variant="row" reason="Mua thêm 130k để dùng" />);
+      expect(q('voucher-reason')).toBeNull();
+    });
+
+    it('phiếu chưa đủ điều kiện không làm mờ cả thẻ: không phần tử nào có opacity < 1', () => {
+      const { container } = render(<VoucherTicket voucher={view({ state: 'ineligible' })} variant="row" reason="Mua thêm 50k để dùng" primary={{ label: 'Chưa đủ', onClick: vi.fn() }} />);
+      const dimmed = [container, ...Array.from(container.querySelectorAll<HTMLElement>('*'))].filter((el) => el.style.opacity !== '' && Number(el.style.opacity) < 1);
+      expect(dimmed).toEqual([]);
+    });
+  });
 });
