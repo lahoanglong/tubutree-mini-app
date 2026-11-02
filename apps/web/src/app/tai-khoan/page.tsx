@@ -5,22 +5,20 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Truck, type LucideIcon } from 'lucide-react';
-import { orderStatusCountsQuery, type OrderStatusKey } from '@tubutree/app-core/api/order-counts';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
-import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery, loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
 import { hasDeskPointQuery, ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
-import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
 import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { useMeSummary } from '@/lib/use-me-summary';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
 import { formatVnd, getMe } from '@/lib/shop-client';
@@ -98,7 +96,7 @@ function AccountContent() {
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: authed, refetchOnWindowFocus: true });
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
-  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed });
+  const summaryQ = useMeSummary();
   const referralQ = useQuery({ ...referralQuery(coreHttp), enabled: authed });
   const referralRef = useRef<HTMLElement>(null);
   const wantsReferral = useSearchParams()?.get('section') === PROFILE_REFERRAL_SECTION;
@@ -106,8 +104,6 @@ function AccountContent() {
   useEffect(() => {
     if (wantsReferral && referralReady) referralRef.current?.scrollIntoView?.({ block: 'start' });
   }, [wantsReferral, referralReady]);
-  const subsQ = useQuery({ ...subscriptionsQuery(coreHttp), enabled: authed });
-  const orderCountsQ = useQuery({ ...orderStatusCountsQuery(coreHttp), enabled: authed });
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   const chatEnabled = cfgQ.data?.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQuery(coreHttp), enabled: authed && chatEnabled });
@@ -163,7 +159,7 @@ function AccountContent() {
   const fullName = meQ.data?.fullName !== undefined ? meQ.data.fullName : user.fullName;
   const tierName = loyaltyQ.data?.tier?.name ?? null;
   const tierFailed = loyaltyQ.isError && !loyaltyQ.data;
-  const unread = unreadQ.data?.count ?? 0;
+  const unread = summaryQ.data?.unreadNotifications ?? 0;
   const referral = referralQ.data;
   const code = referral?.referralCode ?? user.referralCode;
   const minOrder = referral?.minOrderAmount ? formatVnd(referral.minOrderAmount) : null;
@@ -180,15 +176,15 @@ function AccountContent() {
     isReady: isWebRouteReady,
   });
 
-  const countsFailed = orderCountsQ.isError || (subsQ.isError && !subsQ.data);
+  const countsFailed = summaryQ.isError;
   const reloadCounts = () => {
-    void orderCountsQ.refetch();
-    void subsQ.refetch();
+    void summaryQ.refetch();
   };
 
   const countFor = (key: string): number | null => {
-    if (key === 'subscriptions') return subsQ.data ? subsQ.data.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length : null;
-    return orderCountsQ.data?.[key as OrderStatusKey] ?? null;
+    if (!summaryQ.data) return null;
+    if (key === 'subscriptions') return summaryQ.data.activeSubscriptions;
+    return summaryQ.data.orders[key as keyof typeof summaryQ.data.orders] ?? null;
   };
 
   const copyReferral = async () => {

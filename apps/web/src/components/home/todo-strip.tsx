@@ -7,7 +7,8 @@ import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
 import type { HomeTodoPart } from '@tubutree/app-core/api/orders';
-import { activeOrderCountQuery, ordersHomeTodoQuery } from '@tubutree/app-core/queries/orders';
+import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
+import { ordersHomeTodoQuery } from '@tubutree/app-core/queries/orders';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { syncHomeHintCookie } from './use-home-customer-kind';
@@ -69,7 +70,7 @@ function TodoSkeleton({ rows }: { rows: number }) {
 /** Dữ liệu của "Việc cần làm"; Trang chủ dùng riêng `loading` để biết khối đã chốt chưa (cùng query nên không thêm request). */
 export function useHomeTodoQueries() {
   const authed = useAuthPhase() === 'authenticated';
-  const count = useQuery({ ...activeOrderCountQuery(coreHttp), enabled: authed, staleTime: 30_000, retry: false });
+  const count = useQuery({ ...meSummaryQuery(coreHttp), select: (s) => s.orders.active, enabled: authed, staleTime: 30_000, retry: false });
   const enabled = authed && (count.data ?? 0) > 0;
   const todoQ = useQuery({ ...ordersHomeTodoQuery(coreHttp), enabled, staleTime: 30_000, retry: false });
   const loading = authed && (count.isPending || (enabled && todoQ.isLoading));

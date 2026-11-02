@@ -227,6 +227,22 @@ export class MockApi {
     return this.calls.map((c) => `${c.method} ${c.path}`).join(', ') || '(chưa có)';
   }
 
+  /**
+   * Đọc thân phản hồi mà mock đang trả cho `method path`, không tính là một lời gọi (không vào `calls`). Dùng cho mock gộp như
+   * `/me/summary`, dựng từ các mock lẻ mà spec đã khai (số đơn, tin chưa đọc...). Không có mock thì `undefined`.
+   */
+  async peek(method: string, path: string): Promise<unknown> {
+    const best = this.pickRoute(method.toUpperCase(), path);
+    if (!best) return undefined;
+    const params: Record<string, string> = {};
+    best.route.keys.forEach((k, idx) => {
+      params[k] = decodeURIComponent(best.match[idx + 1] ?? '');
+    });
+    const call: MockCall = { method: method.toUpperCase(), path, query: new URLSearchParams(), body: undefined, headers: {} };
+    const out = typeof best.route.handler === 'function' ? await (best.route.handler as HandlerFn)({ call, params, request: undefined as never }) : best.route.handler;
+    return isReply(out) ? out.json : out;
+  }
+
   /** Route khớp method + path: nhiều đoạn cố định nhất, hoà thì đăng ký sau cùng. */
   private pickRoute(method: string, path: string): { route: RouteDef; match: RegExpExecArray } | undefined {
     let best: { route: RouteDef; match: RegExpExecArray } | undefined;
@@ -380,8 +396,20 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Combo ưu đãi / Mua kèm (PDP) và kệ Combo tiết kiệm (Trang chủ) là công khai và tự ẩn khi rỗng: mặc định không có bộ nào.
       api.fallback('GET', '/bundles/combos', []);
       api.fallback('GET', '/products/:slug/bundles', { combos: [], addons: [] });
-      // Cá nhân, Trang chủ và chuông web chỉ đếm tin chưa đọc (không tải danh sách); mặc định không có tin nào.
+      // Cá nhân, Trang chủ, thanh đáy và chuông web đọc mọi số đếm từ MỘT lời gọi /me/summary. Mock gộp này dựng từ các mock lẻ mà spec
+      // đã khai (số đơn theo tab, đơn đang xử lý, tin chưa đọc, gói định kỳ), nên spec chỉ cần mô tả dữ liệu như trước; mặc định không có gì.
       api.fallback('GET', '/me/notifications/unread-count', { count: 0 });
+      api.fallback('GET', '/me/summary', async () => {
+        const counts = ((await api.peek('GET', '/orders/status-counts')) ?? ZERO_ORDER_COUNTS) as typeof ZERO_ORDER_COUNTS;
+        const active = ((await api.peek('GET', '/orders/active-count')) as { count?: number } | undefined)?.count ?? 0;
+        const unread = ((await api.peek('GET', '/me/notifications/unread-count')) as { count?: number } | undefined)?.count ?? 0;
+        const subs = ((await api.peek('GET', '/me/subscriptions')) as { status?: string }[] | undefined) ?? [];
+        return {
+          orders: { ...counts, active },
+          unreadNotifications: unread,
+          activeSubscriptions: subs.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length,
+        };
+      });
       if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
       if (testInfo.project.name === 'Web Admin') adminShellDefaults(api);
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).

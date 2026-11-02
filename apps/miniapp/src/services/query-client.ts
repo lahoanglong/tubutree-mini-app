@@ -1,4 +1,5 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type InvalidateOptions, type InvalidateQueryFilters } from '@tanstack/react-query';
+import { ME_SUMMARY_KEY, summaryKeyAffectedBy } from '@tubutree/app-core/api/me-summary';
 import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
 import { isHttpError } from './http';
 
@@ -11,6 +12,19 @@ function isTransientError(error: unknown): boolean {
 
 /** Cache danh mục dùng chung mọi khách: không gắn với danh tính nên không cần làm mới khi đổi tài khoản. */
 export const CATALOG_KEYS = [['products'], ['for-you'], ['categories'], ['brands']] as const;
+
+/**
+ * Làm mới ['orders'] (đặt đơn, huỷ đơn, thanh toán), ['notifications'] (đọc tin) hay ['subscriptions'] cũng làm cũ các số của
+ * /me/summary (huy hiệu thanh đáy, số đơn và tin chưa đọc ở Cá nhân). Gom ở đây để mọi nơi đang gọi invalidateQueries,
+ * kể cả trang chưa viết, không phải nhớ khoá summary; query không có người xem chỉ bị đánh dấu cũ, không gọi mạng.
+ */
+export class TubuQueryClient extends QueryClient {
+  override invalidateQueries(filters?: InvalidateQueryFilters, options?: InvalidateOptions): Promise<void> {
+    // cancelRefetch: false vì kéo-để-làm-mới làm mới ba gốc khoá liền nhau, mà chỉ cần MỘT lời gọi summary.
+    if (summaryKeyAffectedBy(filters?.queryKey)) void super.invalidateQueries({ queryKey: ME_SUMMARY_KEY }, { cancelRefetch: false });
+    return super.invalidateQueries(filters, options);
+  }
+}
 
 let activeClient: QueryClient | null = null;
 
@@ -39,7 +53,7 @@ function isOffline(): boolean {
  *    gửi request thật, lỗi mạng rơi vào onError (hiện câu "Có vẻ mất mạng…"), không có hàng đợi nào chạy lại về sau.
  */
 export function createQueryClient(): QueryClient {
-  const client = new QueryClient({
+  const client = new TubuQueryClient({
     defaultOptions: {
       queries: {
         networkMode: 'always',

@@ -23,6 +23,12 @@ const mocks = vi.hoisted(() => ({
   notReady: new Set<string>(),
   meName: 'Nguyễn An' as string | null,
   search: '',
+  // Nguồn dữ liệu cho /me/summary (số đơn, tin chưa đọc, gói định kỳ); mỗi ca đổi nguồn của mình.
+  summarySource: {
+    orderCounts: (): unknown => ({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 }),
+    unread: (): number => 2,
+    subscriptions: (): unknown => [],
+  },
 }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(mocks.search) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -49,15 +55,20 @@ import { ApiError } from '@/lib/client-api';
 const defaults = (): Record<string, () => unknown> => ({
   '/me/loyalty': () => ({ tier: { name: 'Hạt Giống' }, pointsBalance: 1800, pointsConvertedBalance: 0 }),
   '/me/coupons': () => [{ id: 'c1' }, { id: 'c2' }],
-  '/me/notifications/unread-count': () => ({ count: 2 }),
   '/config/public': () => ({ aiAdvisorEnabled: false, loyalty: { marketplaceClaimEnabled: false } }),
   '/brand/owner/me': () => {
     throw new ApiError('Không tìm thấy', 404);
   },
   '/dealer/me': () => ({ status: 'NONE', isDealer: false }),
   '/auth/me': () => ({ id: 'u1' }),
-  '/orders/status-counts': () => ({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 }),
-  '/me/subscriptions': () => [],
+  '/me/summary': () => {
+    const counts = mocks.summarySource.orderCounts() as Record<string, number>;
+    return {
+      orders: { ...counts, active: (counts.pending_payment ?? 0) + (counts.processing ?? 0) + (counts.shipping ?? 0) },
+      unreadNotifications: mocks.summarySource.unread(),
+      activeSubscriptions: (mocks.summarySource.subscriptions() as { status: string }[]).filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length,
+    };
+  },
 });
 
 let mounted: Rendered[] = [];
@@ -80,6 +91,9 @@ beforeEach(() => {
   mocks.notReady = new Set();
   mocks.meName = 'Nguyễn An';
   mocks.search = '';
+  mocks.summarySource.orderCounts = () => ({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 });
+  mocks.summarySource.unread = () => 2;
+  mocks.summarySource.subscriptions = () => [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -235,9 +249,10 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
     expect(row.getAttribute('aria-label')).toContain('2 chưa đọc');
   });
 
-  it('đếm tin chưa đọc bằng một lời gọi unread-count, không tải danh sách tin', async () => {
+  it('tin chưa đọc lấy từ /me/summary (cùng lời gọi với số đơn), không tải danh sách tin', async () => {
     await mount();
-    expect(mocks.calls.filter((p) => p === '/me/notifications/unread-count')).toHaveLength(1);
+    expect(mocks.calls.filter((p) => p === '/me/summary')).toHaveLength(1);
+    expect(mocks.calls).not.toContain('/me/notifications/unread-count');
     expect(mocks.calls).not.toContain('/me/notifications');
   });
 
@@ -418,8 +433,8 @@ describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
 
 describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ cái đầu (R-33, R-34, R-110)', () => {
   it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
-    mocks.routes['/orders/status-counts'] = () => ({ pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 });
-    mocks.routes['/me/subscriptions'] = () => [{ status: 'ACTIVE' }];
+    mocks.summarySource.orderCounts = () => ({ pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 });
+    mocks.summarySource.subscriptions = () => [{ status: 'ACTIVE' }];
     const c = await mount();
     const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
     expect(Array.from(row.querySelectorAll('[data-testid="order-count-badge"]')).map((b) => b.textContent)).toEqual(['3', '3', '3', '1']);
@@ -428,7 +443,9 @@ describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ c�
 
   it('một lời gọi đếm cho cả ba ô đơn, không còn mỗi ô một lời gọi danh sách (E-91)', async () => {
     await mount();
-    expect(mocks.calls.filter((p) => p === '/orders/status-counts')).toHaveLength(1);
+    expect(mocks.calls.filter((p) => p === '/me/summary')).toHaveLength(1);
+    expect(mocks.calls).not.toContain('/orders/status-counts');
+    expect(mocks.calls).not.toContain('/me/subscriptions');
     expect(mocks.calls).not.toContain('/orders');
   });
 
@@ -438,12 +455,12 @@ describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ c�
   });
 
   it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
-    mocks.routes['/orders/status-counts'] = () => {
+    mocks.summarySource.orderCounts = () => {
       throw new Error('boom');
     };
     const c = await mount();
     expect(c.textContent).toContain('Không tải được số đơn.');
-    mocks.routes['/orders/status-counts'] = () => ({ pending_payment: 2, processing: 2, shipping: 2, delivered: 2, closed: 2 });
+    mocks.summarySource.orderCounts = () => ({ pending_payment: 2, processing: 2, shipping: 2, delivered: 2, closed: 2 });
     click(byText(c, 'button', 'Thử lại'));
     await flush(8);
     expect(c.textContent).not.toContain('Không tải được số đơn.');

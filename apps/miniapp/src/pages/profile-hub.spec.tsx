@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   shareLink: vi.fn(),
   cashback: false,
   subscriptions: true,
+  activeSubs: 1,
 }));
 vi.mock('../utils/features', () => ({
   get CASHBACK_ENABLED() {
@@ -40,17 +41,22 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getPublicConfig: mocks.getPublicConfig,
 }));
-// Số tin chưa đọc đi qua coreHttp (cùng khoá ['notifications', 'unread'] với trang Thông báo); mọi đường khác ở đây là lời gọi lạ.
+// Số đơn, tin chưa đọc và gói định kỳ đi qua MỘT lời gọi /me/summary của coreHttp; mọi đường khác ở đây là lời gọi lạ.
 vi.mock('../services/core-http', () => ({
   coreHttp: {
     get: (path: string) => {
       mocks.coreGet(path);
-      if (path === '/me/notifications/unread-count') return Promise.resolve({ count: mocks.notifications.filter((n) => n.status !== 'READ').length });
+      if (path === '/me/summary') {
+        return Promise.resolve(mocks.orderCounts()).then((counts: Record<string, number>) => ({
+          orders: { ...counts, active: (counts.pending_payment ?? 0) + (counts.processing ?? 0) + (counts.shipping ?? 0) },
+          unreadNotifications: mocks.notifications.filter((n) => n.status !== 'READ').length,
+          activeSubscriptions: mocks.activeSubs,
+        }));
+      }
       return Promise.reject(new Error(`không mock ${path}`));
     },
   },
 }));
-vi.mock('../services/order-counts-api', () => ({ fetchOrderStatusCounts: mocks.orderCounts }));
 vi.mock('../services/waste-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getDeskPoints: mocks.deskPoints,
@@ -245,12 +251,13 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/notifications');
   });
 
-  it('đếm tin chưa đọc bằng một lời gọi unread-count, không tải danh sách tin', async () => {
+  it('tin chưa đọc lấy từ /me/summary (một lời gọi, cùng lời gọi với số đơn), không tải danh sách tin', async () => {
     mocks.notifications = [{ status: 'UNREAD' }];
     renderPage();
     await waitFor(() => expect(screen.getByRole('button', { name: /Thông báo/ })).toHaveTextContent('1'));
     const paths = mocks.coreGet.mock.calls.map(([p]) => p);
-    expect(paths.filter((p) => p === '/me/notifications/unread-count')).toHaveLength(1);
+    expect(paths.filter((p) => p === '/me/summary')).toHaveLength(1);
+    expect(paths).not.toContain('/me/notifications/unread-count');
     expect(paths).not.toContain('/me/notifications');
   });
 
@@ -336,6 +343,17 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đang giao' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=shipping');
+  });
+
+  it('summary lỗi: không hiện số sai ở bất kỳ ô nào (đơn, định kỳ, tin chưa đọc), các ô vẫn bấm được', async () => {
+    mocks.orderCounts.mockRejectedValue(new Error('boom'));
+    mocks.notifications = [{ status: 'UNREAD' }, { status: 'UNREAD' }];
+    renderPage();
+    await screen.findByRole('button', { name: 'Đang giao' });
+    await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /đơn$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Định kỳ, / })).toBeNull();
+    expect(screen.getByRole('button', { name: /Thông báo/ })).not.toHaveTextContent(/\d/);
   });
 });
 

@@ -191,3 +191,30 @@ describe('getQueryClient — client đang chạy cho store/auth.ts', () => {
     for (const key of CATALOG_KEYS) expect(client.getQueryDefaults(key).staleTime).toBe(CATALOG_STALE_MS);
   });
 });
+
+describe('createQueryClient — làm mới số đếm /me/summary', () => {
+  const stale = (client: ReturnType<typeof createQueryClient>) => client.getQueryState(['me', 'summary'])?.isInvalidated === true;
+  const seed = () => {
+    const client = createQueryClient();
+    client.setQueryData(['me', 'summary'], { orders: { active: 1 } });
+    return client;
+  };
+
+  it.each([['orders'], ['orders', 'list', 'all'], ['notifications'], ['subscriptions'], ['me']])('làm mới %j đánh dấu summary cũ', async (...key) => {
+    const client = seed();
+    await client.invalidateQueries({ queryKey: key });
+    expect(stale(client)).toBe(true);
+  });
+
+  it.each([['wallet'], ['products'], ['coupons']])('làm mới %j không đụng summary', async (...key) => {
+    const client = seed();
+    await client.invalidateQueries({ queryKey: key });
+    expect(stale(client)).toBe(false);
+  });
+
+  it('làm mới không kèm khoá (mọi truy vấn) cũng làm cũ summary', async () => {
+    const client = seed();
+    await client.invalidateQueries();
+    expect(stale(client)).toBe(true);
+  });
+});

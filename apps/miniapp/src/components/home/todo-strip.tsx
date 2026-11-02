@@ -4,9 +4,9 @@ import { useNavigate } from 'zmp-ui';
 import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
-import { ACTIVE_ORDER_COUNT_KEY } from '../../hooks/use-active-order-count';
+import { useMeSummary } from '../../hooks/use-me-summary';
 import { useRemaining } from '../../hooks/use-remaining';
-import { fetchActiveOrderCount, fetchHomeTodo, type OrderView } from '../../services/shop-api';
+import { fetchHomeTodo, type OrderView } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
@@ -74,8 +74,8 @@ function TodoSkeleton({ rows }: { rows: number }) {
 /** Dữ liệu của "Việc cần làm"; Trang chủ dùng riêng `loading` để biết khối đã chốt chưa (cùng query nên không thêm request). */
 export function useHomeTodoQueries() {
   const authed = useAuthStore((s) => s.status === 'authenticated');
-  // Cùng khoá và hàm tải với useActiveOrderCount (thanh đáy) để dùng chung dữ liệu, nhưng cần cả trạng thái đã tải xong hay chưa.
-  const countQ = useQuery({ queryKey: ACTIVE_ORDER_COUNT_KEY, queryFn: fetchActiveOrderCount, enabled: authed, staleTime: 30_000, retry: false });
+  // Cùng query /me/summary với useActiveOrderCount (thanh đáy) để dùng chung dữ liệu, nhưng cần cả trạng thái đã tải xong hay chưa.
+  const countQ = useMeSummary({ select: (s) => s.orders.active, staleTime: 30_000 });
   const enabled = authed && (countQ.data ?? 0) > 0;
   const todoQ = useQuery({
     queryKey: ['orders', 'home-todo'],

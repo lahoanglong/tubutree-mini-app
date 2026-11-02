@@ -108,7 +108,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/products'] = () => ({ data: PAGE([card('f2', 'Chỉ nổi bật')]) });
     mocks.routes['/feed'] = () => ({ data: { posts: [] } });
     // Chuông chỉ đếm bằng một lời gọi nhỏ (cả hộp thư, không dừng ở 50 tin của khối gộp): request riêng của khách đã đăng nhập.
-    mocks.routes['/me/notifications/unread-count'] = () => ({ data: { count: 0 } });
+    mocks.routes['/me/summary'] = () => ({ data: { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 } });
     mocks.get.mockImplementation(async (url: string) => {
       const r = mocks.routes[url];
       if (!r) throw Object.assign(new Error(`404 ${url}`), { response: { status: 404 } });
@@ -118,7 +118,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     });
   });
 
-  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng Cộng đồng và số tin chưa đọc, vẽ đủ khối; lưới gợi ý cuối trang chưa tải khi chưa tới gần', async () => {
+  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng Cộng đồng và /me/summary (số tin chưa đọc, đơn đang xử lý), vẽ đủ khối; lưới gợi ý cuối trang chưa tải khi chưa tới gần', async () => {
     keepSuggestOffScreen();
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
@@ -129,7 +129,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     // Gợi ý cá nhân (khối forYou của /home/me) đứng đầu lưới cuối trang nên cũng chờ lưới tới gần màn.
     expect(screen.queryByText('Gợi ý riêng')).toBeNull();
     // Lưới "Gợi ý hôm nay" (request riêng, xáo theo ngày) chưa tải vì còn ở xa màn; số yêu cầu đổi rác đang mở lấy từ /home/me (không gọi /waste/me).
-    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/me/notifications/unread-count']);
+    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/me/summary']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
   });
 
@@ -166,7 +166,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/notifications/unread-count']);
+    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/summary']);
   });
 
   it('banner chiến dịch đến từ khối gộp /home: hiện slide, không thêm request /campaigns', async () => {
@@ -242,7 +242,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('LẻBrand')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/me/notifications/unread-count']);
+    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/me/summary']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {

@@ -9,7 +9,7 @@ import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
-import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
+import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { homeKeptOrder, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
@@ -102,8 +102,8 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Cờ phiên còn mà mất mạng hay API tạm lỗi lúc khôi phục: khách KHÔNG phải khách vãng lai, giữ loại khách đã nhớ để trang không tụt về bố cục khách mới.
   const unavailable = phase === 'unavailable';
 
-  // Chuông ở đây dùng chung queryKey ['notifications', 'unread'] với trang Thông báo và chuông thanh đầu: chỉ đếm, không tải danh sách tin.
-  const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
+  // Chuông ở đây dùng chung /me/summary với Cá nhân, thanh đáy và chuông thanh đầu: chỉ đếm, không tải danh sách tin.
+  const unreadCount = useQuery({ ...meSummaryQuery(coreHttp), select: (s) => s.unreadNotifications, enabled: authed }).data ?? 0;
 
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).

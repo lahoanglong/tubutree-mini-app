@@ -39,7 +39,7 @@ beforeEach(() => {
   mocks.push.mockReset();
   ordersFor = (status) => page(status === 'PENDING_PAYMENT' ? [pendingOrder] : status === 'SHIPPING' ? [shippingOrder] : []);
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: { status?: string } }) => {
-    if (path === '/orders/active-count') return { count: mocks.active };
+    if (path === '/me/summary') return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: mocks.active }, unreadNotifications: 0, activeSubscriptions: 0 };
     if (path === '/orders/home-todo') return homeTodo();
     throw new Error(`đường dẫn lạ ${path}`);
   });
@@ -93,7 +93,7 @@ describe('TodoStrip web — Việc cần làm', () => {
     expect((await mount()).textContent).toBe('');
     mounted!.unmount();
     mocks.get.mockImplementation(async (path: string) => {
-      if (path === '/orders/active-count') return { count: 2 };
+      if (path === '/me/summary') return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 2 }, unreadNotifications: 0, activeSubscriptions: 0 };
       throw new Error('boom');
     });
     expect((await mount()).textContent).toBe('');
@@ -104,7 +104,7 @@ describe('TodoStrip web — Việc cần làm', () => {
     const hold = () => {
       let release: (v: unknown) => void = () => {};
       mocks.get.mockImplementation(async (path: string, opts?: { query?: { status?: string } }) => {
-        if (path === '/orders/active-count') return { count: 2 };
+        if (path === '/me/summary') return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 2 }, unreadNotifications: 0, activeSubscriptions: 0 };
         await new Promise((r) => { release = r; });
         return homeTodo();
       });
@@ -128,7 +128,7 @@ describe('TodoStrip web — Việc cần làm', () => {
     it('một lời con lỗi (partial): dòng còn lại vẫn hiện, không ghi số dòng sai', async () => {
       window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
       mocks.get.mockImplementation(async (path: string) => {
-        if (path === '/orders/active-count') return { count: 2 };
+        if (path === '/me/summary') return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 2 }, unreadNotifications: 0, activeSubscriptions: 0 };
         return { pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null, partial: true };
       });
       const c = await mount();

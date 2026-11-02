@@ -20,7 +20,7 @@ const setViewport = (wide: boolean) => {
 const paths = () => mocks.get.mock.calls.map(([p]) => p);
 
 beforeEach(() => {
-  mocks.get.mockReset().mockResolvedValue({ count: 73 });
+  mocks.get.mockReset().mockResolvedValue({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 73, activeSubscriptions: 0 });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -28,11 +28,11 @@ afterEach(() => {
 });
 
 describe('HeaderBell', () => {
-  it('khổ rộng: một lời gọi đếm unread-count (không tải danh sách tin), huy hiệu hiện số thật của hộp thư', async () => {
+  it('khổ rộng: một lời gọi /me/summary (không tải danh sách tin), huy hiệu hiện số thật của hộp thư', async () => {
     setViewport(true);
     mounted = render(<HeaderBell authed />);
     await flush(5);
-    expect(paths()).toEqual(['/me/notifications/unread-count']);
+    expect(paths()).toEqual(['/me/summary']);
     expect(mounted.container.querySelector('a')?.getAttribute('aria-label')).toBe('Thông báo, 73 chưa đọc');
     expect(mounted.container.textContent).toBe('73');
   });

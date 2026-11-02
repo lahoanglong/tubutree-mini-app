@@ -24,9 +24,13 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
   getPublicConfig: vi.fn().mockResolvedValue({}),
 }));
 vi.mock('../services/core-http', () => ({
-  coreHttp: { get: (path: string) => (path === '/me/notifications/unread-count' ? Promise.resolve({ count: 0 }) : Promise.reject(new Error(`không mock ${path}`))) },
+  coreHttp: {
+    get: (path: string) =>
+      path === '/me/summary'
+        ? Promise.resolve({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 })
+        : Promise.reject(new Error(`không mock ${path}`)),
+  },
 }));
-vi.mock('../services/order-counts-api', () => ({ fetchOrderStatusCounts: vi.fn().mockResolvedValue({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 }) }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: mocks.getOwnedBrand, getAuthMeFlags: mocks.getAuthMeFlags }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));

@@ -8,8 +8,6 @@ import {
 import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
-import { ORDER_STATUS_COUNTS_KEY } from '@tubutree/app-core/api/order-counts';
-import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { DESK_ENTRY_LABEL, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { useAuthStore } from '../store/auth';
@@ -33,9 +31,7 @@ import { getAuthMeFlags, getOwnedBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { getDeskPoints, WASTE_QUERY_KEYS } from '../services/waste-api';
-import { fetchOrderStatusCounts } from '../services/order-counts-api';
-import { coreHttp } from '../services/core-http';
-import { getSubscriptions } from '../services/subscriptions-api';
+import { useMeSummary } from '../hooks/use-me-summary';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
@@ -102,7 +98,8 @@ export default function ProfilePage() {
   const blocked = useBlockedMessage();
   const authed = status === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
-  const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
+  const summaryQ = useMeSummary();
+  const unreadCount = summaryQ.data?.unreadNotifications ?? 0;
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
@@ -114,8 +111,6 @@ export default function ProfilePage() {
   }, [wantsReferral, referralReady]);
   // Mini App tạm không bán giao định kỳ nên hàng đơn bỏ ô Định kỳ khi cờ tắt; web vẫn có ô này.
   const orderRow = SUBSCRIPTIONS_IN_MINIAPP ? ORDER_STATUS_ROW : ORDER_STATUS_ROW.filter((r) => r.key !== 'subscriptions');
-  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed && SUBSCRIPTIONS_IN_MINIAPP });
-  const orderCountsQ = useQuery({ queryKey: ORDER_STATUS_COUNTS_KEY, queryFn: fetchOrderStatusCounts, enabled: authed });
 
   const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.ownsBrand, enabled: authed, retry: false });
   const hasDeskPointQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.hasDeskPoint, enabled: authed, retry: false });
@@ -236,16 +231,15 @@ export default function ProfilePage() {
     );
   };
 
-  const countsFailed = orderCountsQ.isError || (SUBSCRIPTIONS_IN_MINIAPP && subsQ.isError && !subsQ.data);
+  const countsFailed = summaryQ.isError;
   const reloadCounts = () => {
-    void orderCountsQ.refetch();
-    // refetch() vẫn gọi API khi query đang tắt (enabled: false), nên phải tự kiểm cờ.
-    if (SUBSCRIPTIONS_IN_MINIAPP) void subsQ.refetch();
+    void summaryQ.refetch();
   };
 
   const countFor = (key: string): number | null => {
-    if (key === 'subscriptions') return subsQ.data ? subsQ.data.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length : null;
-    return orderCountsQ.data?.[key as keyof NonNullable<typeof orderCountsQ.data>] ?? null;
+    if (!summaryQ.data) return null;
+    if (key === 'subscriptions') return summaryQ.data.activeSubscriptions;
+    return summaryQ.data.orders[key as keyof typeof summaryQ.data.orders] ?? null;
   };
 
   return (

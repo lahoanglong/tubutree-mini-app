@@ -2,11 +2,11 @@ import { Fragment, useState, type CSSProperties, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchUpcomingFlashSales } from '../services/shop-api';
-import { coreHttp } from '../services/core-http';
 import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
 import { useHomeBanners } from '../hooks/use-home-banners';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
+import { useMeSummary } from '../hooks/use-me-summary';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -37,7 +37,6 @@ import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
 import { categorySkeletonCells, homeRenderOrder, readBannerHint, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
-import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { haptic } from '../utils/haptic';
 import { browserStorage } from '../utils/recently-viewed';
 
@@ -61,8 +60,8 @@ export default function HomePage() {
   const sessionFailed = useAuthStore((s) => s.status === 'error');
   const userId = useAuthStore((s) => s.user?.id);
   // Voucher sinh nhật, nhắc giỏ, hoa hồng duyệt đều nằm trong Thông báo nên chuông phải báo. Đếm cả hộp thư (không dừng ở 50 tin đầu), chung
-  // queryKey với Cá nhân và trang Thông báo, và không tải danh sách tin chỉ để đếm.
-  const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
+  // query với Cá nhân và thanh đáy (/me/summary), và không tải danh sách tin chỉ để đếm.
+  const unreadCount = useMeSummary({ select: (s) => s.unreadNotifications }).data ?? 0;
 
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
