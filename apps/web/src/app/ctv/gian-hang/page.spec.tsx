@@ -1303,6 +1303,15 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
   });
 
+  it('điện thoại: bìa liền ngay dưới thanh tiêu đề như Mini (khung nội dung bỏ mt-4), chữ "Thêm ảnh bìa" thang caption', async () => {
+    const { container } = mount();
+    await flush();
+    const cover = container.querySelector('[data-testid="shop-cover"]')!;
+    const frame = cover.closest('main')!.querySelector(':scope > div:last-child')!;
+    expect(frame.className).toContain('max-md:mt-0');
+    expect(btn('Thêm ảnh bìa').className).toContain('max-md:text-[length:var(--type-caption-size)]');
+  });
+
   it('lời nhắn của shop hiện ở đầu xem trước', async () => {
     mount();
     await flush();

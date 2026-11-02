@@ -649,7 +649,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
               onClick={() => setProfileOpen(true)}
               style={{ display: 'block', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
             >
-              <Text variant="caption" tone="brand">{vi.storefront.addCover}</Text>
+              <Text variant="caption" tone="brand" as="div">{vi.storefront.addCover}</Text>
             </button>
           )}
           {view.code === 'LIVE' && (

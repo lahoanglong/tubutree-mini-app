@@ -526,7 +526,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                 <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
               </div>
               {!sf.coverUrl && (
-                <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
+                <button type="button" onClick={() => setProfileOpen(true)} className={`tubu-hit-44 block text-left text-xs text-forest-700 ${phoneCaption}`}>
                   Thêm ảnh bìa
                 </button>
               )}

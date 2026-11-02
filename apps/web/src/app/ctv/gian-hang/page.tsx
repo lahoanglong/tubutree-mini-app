@@ -25,6 +25,7 @@ const TITLE = 'Gian hàng của tôi';
  * Khung trang. `detail` = đang mở trang chi tiết một khối (`?khoi=`): ở điện thoại dải đầu của khối (nút "Gian hàng của tôi", ⋯, tên khối) là dải đầu duy nhất, như Mini App,
  * nên dải tiêu đề của trang không chiếm thêm một hàng. h1 "Gian hàng của tôi" vẫn nằm trong cây truy cập (chỉ ẩn bằng sr-only dưới md) nên trang luôn có đúng một h1;
  * khung bỏ đệm đỉnh để dải đầu của khối bắt đầu từ mép trên, chừa chỗ cho nút lùi nổi bằng lề trái của chính nó.
+ * Trình dựng (`builder`) ở điện thoại cũng không chừa khoảng giữa dải tiêu đề và đầu xem trước: bìa liền ngay dưới thanh tiêu đề như Mini App.
  */
 function Shell({ children, detail = false, builder = false }: { children: ReactNode; detail?: boolean; builder?: boolean }) {
   // `builder`: hàng tiêu đề có ô cho "Xem trước" và nút chính từ lg (trình dựng gắn nút vào đây; điện thoại dùng thanh dính đáy). Hàng cao tối thiểu 44px từ lg ở MỌI trạng thái của trang, để nút tới (cao 44px) không đẩy tiêu đề dịch xuống.
@@ -36,7 +37,7 @@ function Shell({ children, detail = false, builder = false }: { children: ReactN
         ← Cộng tác viên
       </BackLink>
       {detail ? <div className="max-md:sr-only">{header}</div> : header}
-      <div className={detail ? 'mt-4 max-md:mt-0' : 'mt-4'}>{children}</div>
+      <div className={detail || builder ? 'mt-4 max-md:mt-0' : 'mt-4'}>{children}</div>
     </main>
   );
 }
