@@ -323,8 +323,28 @@ Bảng dưới thay trạng thái của các mục cùng số trong bảng "Mụ
 | R-188 | xong | PR #111 | Mutation đặt `meta: { skipAdminInvalidate: true }` thì không làm cũ khoá `admin-*`. Gắn cho gửi tin chat CSKH, tin thử cầu nối, xuất mã lô thẻ, hai bản xem trước import, quét thẻ POS, tra đổi rác (ba chỗ), kiểm mã Pancake (hai chỗ). Hộp xác nhận ở 6 thẻ cấu hình chuyển ra trước `mutate`, nên bấm Huỷ không chạy mutation. Không đổi chữ. |
 | R-191 | xong | PR #111 | Ca HTML máy chủ của header chạy `useHydrated` thật bằng `renderToString`; hai spec R-24 dọn mock, root, container, spy trong `afterEach` và `try/finally`. |
 | R-192 | xong | PR #111 | Bỏ lời `/orders?page=1&limit=1` của dải Quà khách mới: `/home/me` thêm khối `hasOrders` từ câu đếm sẵn có (không thêm SQL), thiếu khối thì lùi về `/orders`. Mini vãng lai 10/11 → 9/10 (mở lạnh/mở lại). Các lời còn lại đều cần: `/cart` (khách tạm mở lại app vẫn là tài khoản cũ, có thể có giỏ), `/auth/guest` (response không cho biết tài khoản vừa tạo hay đã có). Muốn bớt nữa cần API báo "tài khoản vừa tạo". |
+| R-156, R-158, R-161, R-163, R-168 | xong | PR #80, #81, #82 (1028c) | Rà mã 02/11 trên main `4364ec325` (agent Opus): đã có ở main. |
+| R-157 | xong | đã có ở main `4364ec325` | Mini chỉ nhắc định kỳ khi `SUBSCRIPTIONS_IN_MINIAPP` bật (`new-customer-gift.tsx:49`). Web vẫn nhắc vì web bán định kỳ. |
+| R-159 | xong | đã có ở main `4364ec325` (`daf888327`) | `trust proxy` = 1 (`bootstrap.ts:120`). Danh sách ảnh làm mới khi lưu ảnh sản phẩm và khi duyệt sửa. Phần ảnh từ đồng bộ Pancake là R-182 (chủ chốt chưa sửa). |
+| R-162 | xong | đã có ở main `4364ec325` | Điểm Xanh web dùng khung chờ `loyalty`, Vườn Xanh dùng `kind="game"`. |
+| R-165 | xong | test ở `9dfcda1f6`; `routes.json` dựng lại ở PR tài liệu 1028h | browse-search có persona returning, new, guest. |
+| R-167, R-169 | xong | đã có ở main `4364ec325` | Dòng nhắc của ô ngày nằm trong luồng; `touched` đặt lại khi focus (`vn-date-input.tsx:111`). Ảnh cũ không chụp lại. |
+| R-172 | đóng | không có mã | Chỉ là ảnh. PR #79 đổi ngày giao dự kiến thành 1–5 ngày nên ảnh cũ hết giá trị; chụp lại ở lượt UAT sau. |
+| R-173, R-174, R-175, R-176 | xong | đã có ở main `4364ec325` | Khung chờ Trang chủ thả ngay khi phiên lỗi; giữ nội dung đã vẽ; test cấp trang ở `home-settle.spec.tsx`; chiều cao khung chờ lấy từ `HOME_SETTLING_HEIGHTS`. |
+| R-177 | giữ | quyết định chủ 28/10 | Mini vẫn chờ biết loại khách mới hiện khối. Chỉ mở lại khi chủ yêu cầu. |
+| R-193 | một phần | PR #117 (1028h-khach, `1575dfe1f`) | Sheet web khổ điện thoại có thanh kéo `md:hidden`, `aria-hidden` như zmp-ui. Liên kết "Gửi đơn sàn" chờ web có trang gửi đơn sàn. |
+| R-185 | xong | PR #117 | Nút "Chuyển vào Ví" khoá bằng store đếm ở app-core (`lockTransferUntil`) tới khi Ví rồi dashboard làm mới xong (`refetchType: 'all'`); không so `dataUpdatedAt` nên lần tải cũ trả muộn, rời trang rồi quay lại hay đồng hồ máy lùi đều không mở nhầm. Máy chủ vẫn là chốt chặn tiền. Review Opus hai lượt. Còn P3: web mất mạng ngay sau khi chuyển thì nút mở sớm (gửi form sẽ lỗi hoặc bị máy chủ chặn). |
+| R-190 | xong | PR #117 | Hộp xác nhận ngày sinh ghi tháng bằng chữ ("3 tháng 5 năm 1990"), một câu ở app-core cho hai nền. Không tự đảo ngày và tháng. |
+| R-189 | xong | PR #116 (1028h-quantri, `5e1bdbc8b`) | Phần chip ở 375 đã có ở main, thêm test. Tab kiểm duyệt một nhãn "Báo cáo" cho cả hai nền (bỏ `shortLabel`). Còn P3: admin web có hai nút cùng tên "Báo cáo" (thanh bên và chip trong Cộng đồng, chip nằm trong nhóm có tên riêng). |
+| R-93, R-95, R-99, R-100, R-101, R-102, R-106, R-121, R-122, R-125, R-130, R-131, R-133, R-134, R-135, R-136, R-138, R-143, R-150, R-151, R-152, R-153, R-154, R-155 | xong | đã có ở main `1575dfe1f` | Rà mã 02/11 nhóm "Sau" (agent Sonnet, soát lại bốn mục: R-121 `tree-title.ts:7`, R-151 không còn `window.confirm` ở Mini, R-152 `providers.tsx:12`, R-155 `capPreviewCodes`). Phần lớn đã làm ở shop redesign và các đợt 1028d–h. Chưa chụp lại ảnh nên phần lệch vài px chưa kiểm. |
+| R-92 | xong (còn nhỏ) | đã có ở main | Khối Gợi ý ẩn khi chip "Tất cả" rỗng. Chip khác rỗng vẫn không có câu báo; vùng Trang chủ của phiên shop. |
+| R-140 | xong (chưa chụp lại) | đã có ở main | Trạng thái rỗng có hình, khung chờ CTV, ô tải CCCD, thanh dính. Kiểu chữ mã giới thiệu và gạch đầu dòng chưa soát lại. |
+| R-94 | chờ chủ | — | Cỡ nhãn thanh đáy đã khớp. Phần còn lại là chỉnh đường chân chữ nhãn giữa khoảng 2,5px: đổi thanh đáy. |
+| R-112 | một phần, chờ chủ | — | Nhãn "Cộng đồng" và "Xem thêm" đã có. Emoji còn trong mẫu tin `COMMUNITY_*` (`seed.ts`, migration `20261018100100`); bỏ cần migration sửa mẫu tin khách trên PROD. |
+| R-114 | một phần | — | Hai chỗ thừa đã bỏ (`/orders/status-counts`, `/notifications/unread-count`). Chưa có `GET /me/summary`; trang Cá nhân Mini còn khoảng 10 lời gọi, phần lớn có điều kiện. Đề xuất đóng. |
+| R-164 | một phần | PR #118 (1028h-giovang, main `e9315ae3b`) | Ca 1 (HTML ISR phát sau giờ hết suất) xong ở web: script cuối khối kệ ẩn kệ trước lần vẽ đầu, đếm trên danh sách suất gốc; CLS 0,2411 → 0,0035. Ca 2 (suất về sau bản dựng rỗng) để mở: bản giữ chỗ theo dấu nhớ tự sinh cú nhảy ở ca khác nên đã bỏ. Mini lần mở đầu không nhảy. Suất mới về giữa phiên vẫn đẩy trang ở cả hai nền; giữ để không giấu suất đang bán. |
 
-Cả #97, #98, #100, #104, #107 đã merge vào main và đã lên PROD ở bản `cefec4276` (deploy chiều 01/11, phiên c2, không migration).
+Cả #97, #98, #100, #104, #107 đã merge vào main và đã lên PROD ở bản `cefec4276` (deploy chiều 01/11, phiên c2, không migration). #108, #110, #111, #112 lên PROD ở `f7b7a09ef` (01/11 20:19). Shop redesign #109, #113, #114 lên PROD ở `4364ec325` (02/11 06:50, phiên shop, migration 257 → 261). #116, #117, #118 lên PROD ở `e9315ae3b` (02/11 09:41, không migration).
 
 ### Mục mới
 
