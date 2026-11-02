@@ -57,7 +57,7 @@ export default function OffersPage() {
   const user = useAuthStore((s) => s.user);
   const blocked = useBlockedMessage();
   const cfg = usePublicConfig();
-  const { use } = useCouponUse();
+  const { apply } = useCouponUse();
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const couponsRef = useRef<HTMLElement>(null);
@@ -153,7 +153,7 @@ export default function OffersPage() {
                     key={row.view.code}
                     voucher={row.view}
                     variant="ticket"
-                    primary={{ label: fillCopy('coupon.use'), onClick: () => void use(row.view.code) }}
+                    primary={{ label: fillCopy('coupon.use'), onClick: () => void apply(row.view.code) }}
                     expiring={isCouponExpiring(row.coupon, now)}
                   />
                 ))}
