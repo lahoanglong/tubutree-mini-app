@@ -31,6 +31,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'flash.limitSpoken': null,
   'flash.sheetOverLimit': 90,
   'flash.sheetOverQuota': 90,
+  'flash.sheetOverInCart': 90,
   'flash.buy': 12,
   'flash.remind': 12,
   'flash.reminded': 12,

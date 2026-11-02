@@ -45,6 +45,8 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.sheetOverLimit': 'Giá Giờ vàng tối đa {n} sản phẩm mỗi khách. Mua {qty} thì cả dòng tính giá thường.',
   // Cùng ghi chú khi giới hạn là số suất còn lại của đợt (ít hơn giới hạn mỗi khách), không phải giới hạn của riêng khách.
   'flash.sheetOverQuota': 'Giờ vàng còn {n} suất. Mua {qty} thì cả dòng tính giá thường.',
+  // Giỏ đã có sẵn phân loại này: thêm giỏ cộng dồn và máy chủ giá cả dòng (n + qty = total), nên nói theo giỏ, không nêu nguyên nhân chặn.
+  'flash.sheetOverInCart': 'Giỏ đã có {n}. Thêm {qty} thì cả {total} sản phẩm tính giá thường.',
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',
