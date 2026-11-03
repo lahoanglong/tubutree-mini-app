@@ -802,7 +802,7 @@ export default function ProductDetailPage() {
         data-section="pdp-flash-limit"
         style={{
           background: 'var(--color-bg-surface)',
-          minHeight: reserveFlashNote ? 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card))' : undefined,
+          minHeight: reserveFlashNote ? 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card) + 1px)' : undefined,
         }}
       >
         {overLimitText && (

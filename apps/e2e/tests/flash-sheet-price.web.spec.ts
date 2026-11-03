@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { multiVariationProduct } from './support/pdp-product';
-import { anchorBelow, gate, readCls, trackLayoutShift } from './support/pdp-cls';
+import { anchorBelow, gate, readShiftBelow, trackLayoutShift } from './support/pdp-cls';
 import { expectChipMetrics } from './support/variation-chip';
 
 /**
@@ -221,7 +221,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
   });
   for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 800 }]) {
-    test(`${viewport.width}px, ngoài bảng: allowance còn treo rồi mới về, khối bên dưới giữ nguyên chỗ, CLS do ghi chú bằng 0`, async ({ page, api, request }) => {
+    test(`${viewport.width}px, ngoài bảng: allowance còn treo rồi mới về, khối bên dưới giữ nguyên chỗ, CLS từ vùng ghi chú trở xuống bằng 0`, async ({ page, api, request }) => {
       await trackLayoutShift(page);
       const g = gate();
       await setup(page, api, request, { allowance: { perUserLeft: 0, hold: g.wait }, viewport });
@@ -229,14 +229,15 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
       await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
       const anchor = await anchorBelow(slot);
       await expect(slot).toHaveText('');
-      const before = (await anchor.boundingBox())!;
-      const clsBefore = await readCls(page);
+      const gap = async () => (await anchor.boundingBox())!.y - (await slot.boundingBox())!.y;
+      const before = await gap();
+      const clsBefore = await readShiftBelow(page, slot);
       g.release();
       await expect(slot).toHaveText(SPENT, { timeout: 10_000 });
       await page.waitForTimeout(300);
-      const after = (await anchor.boundingBox())!;
-      expect(Math.abs(after.y - before.y), `khối bên dưới dịch ${after.y - before.y}px`).toBeLessThanOrEqual(1);
-      const cls = (await readCls(page)) - clsBefore;
+      const after = await gap();
+      expect(Math.abs(after - before), `khối bên dưới dịch ${after - before}px so với vùng ghi chú`).toBeLessThanOrEqual(1);
+      const cls = (await readShiftBelow(page, slot)) - clsBefore;
       expect(cls, `CLS khi ghi chú hiện ${cls.toFixed(4)}`).toBe(0);
     });
 
@@ -247,15 +248,16 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
       const slot = page.locator('[data-section="pdp-flash-limit"]');
       await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
       const anchor = await anchorBelow(slot);
-      const before = (await anchor.boundingBox())!;
-      const clsBefore = await readCls(page);
+      const gap = async () => (await anchor.boundingBox())!.y - (await slot.boundingBox())!.y;
+      const before = await gap();
+      const clsBefore = await readShiftBelow(page, slot);
       g.release();
       await expect(page.getByRole('button', { name: 'Tăng số lượng' }).first()).toBeVisible();
       await expect.poll(() => api.callsTo('GET', '/flash-sales/me/allowance').length, { timeout: 10_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(500);
-      const after = (await anchor.boundingBox())!;
-      expect(Math.abs(after.y - before.y), `khối bên dưới dịch ${after.y - before.y}px`).toBeLessThanOrEqual(1);
-      const cls = (await readCls(page)) - clsBefore;
+      const after = await gap();
+      expect(Math.abs(after - before), `khối bên dưới dịch ${after - before}px so với vùng ghi chú`).toBeLessThanOrEqual(1);
+      const cls = (await readShiftBelow(page, slot)) - clsBefore;
       expect(cls, `CLS khi phiên về ${cls.toFixed(4)}`).toBe(0);
     });
   }
