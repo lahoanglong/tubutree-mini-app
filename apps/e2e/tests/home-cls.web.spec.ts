@@ -5,6 +5,9 @@ const USER = {
   id: 'u-cls', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
   pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
 };
+/** Ngưỡng theo số đo thật (home-r3a.md): máy đã nhớ 0,0004 (375) / 0,0074 (1280); máy mới 0,076 (375) vì HIEUNANG-03 còn hoãn (summary về muộn chèn dòng Việc cần làm). Chặn hồi quy, không phải mục tiêu. */
+const CLS_REMEMBERED_MAX = 0.02;
+const CLS_FRESH_MAX = 0.2;
 const SHOT_DIR = process.env.HOME_SHOT_DIR;
 
 /** Web: Trang chủ khách cũ khi /me/summary về muộn báo có đơn đang xử lý. Ghi CLS; ngưỡng chỉ chặn hồi quy lớn, số thật đọc ở annotation. */
@@ -14,10 +17,18 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
       await page.setViewportSize({ width: vp.width, height: vp.height });
       let release!: () => void;
       const hold = new Promise<void>((resolve) => { release = resolve; });
+      // Bản server dựng khung chờ theo cookie gợi ý (middleware rewrite "/" sang /khoi-phuc/<slug>).
+      await page.context().addCookies([
+        { name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' },
+        ...(remembered ? [{ name: 'tubu_home_hint', value: 'returning-1', domain: 'localhost', path: '/' }] : []),
+      ]);
       await page.addInitScript((mem) => {
         try {
           localStorage.setItem('tubu_web_session', '1');
-          if (mem) localStorage.setItem('tubu_home_todo_rows', '1');
+          if (mem) {
+            localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u-cls', rows: 1 }));
+            localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'u-cls', kind: 'returning' }));
+          }
         } catch { /* không có localStorage */ }
         const w = window as unknown as { __cls: number };
         w.__cls = 0;
@@ -60,7 +71,7 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
       console.log((await page.evaluate(() => (window as unknown as { __src: string[] }).__src)).map((x) => `  shift ${x}`).join('\n'));
       console.log(`CLS ${vp.name} ${remembered ? 'nho' : 'chua-nho'} = ${cls.toFixed(4)}`);
       if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/${vp.name}-${remembered ? 'nho' : 'chua-nho'}.png` });
-      expect(cls).toBeLessThan(0.5);
+      expect(cls).toBeLessThan(remembered ? CLS_REMEMBERED_MAX : CLS_FRESH_MAX);
     });
   }
 }
