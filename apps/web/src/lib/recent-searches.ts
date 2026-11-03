@@ -5,6 +5,16 @@ export const RECENT_SEARCHES_KEY = 'tubu_recent_searches';
 export const RECENT_SEARCHES_MAX = 8;
 /** Chủ của lịch sử đang lưu (mã khách đăng nhập gần nhất). */
 export const RECENT_SEARCHES_OWNER_KEY = 'tubu_recent_searches_owner';
+/** Phát khi lịch sử bị xoá vì đổi/mất chủ, để màn đang mở (BrowseView) đọc lại thay vì giữ danh sách cũ trong state. */
+export const RECENT_SEARCHES_CHANGED_EVENT = 'tubu:recent-searches';
+
+function announceRecentSearchesChanged(): void {
+  try {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(RECENT_SEARCHES_CHANGED_EVENT));
+  } catch {
+    /* bỏ qua */
+  }
+}
 
 /**
  * Định dạng lưu = mảng JSON các chuỗi, mới nhất trước (giống bản cũ trong browse.tsx). Dữ liệu hỏng/lạ
@@ -73,7 +83,9 @@ export function scopeRecentSearchesToUser(
     const mergedFromGuest = !isGuest && owner != null && owner.startsWith('guest:');
     if (owner != null && !mergedFromGuest) clearRecentSearches(storage);
     storage?.setItem(RECENT_SEARCHES_OWNER_KEY, mine);
-    return owner != null && !mergedFromGuest;
+    const cleared = owner != null && !mergedFromGuest;
+    if (cleared) announceRecentSearchesChanged();
+    return cleared;
   } catch {
     return false;
   }
@@ -87,6 +99,7 @@ export function forgetRecentSearchesOfSignedOutUser(storage: StorageLike | null 
     if (storage?.getItem(RECENT_SEARCHES_OWNER_KEY) == null) return false;
     clearRecentSearches(storage);
     storage.removeItem(RECENT_SEARCHES_OWNER_KEY);
+    announceRecentSearchesChanged();
     return true;
   } catch {
     return false;
