@@ -33,7 +33,8 @@ function buildApp() {
   app.use(privateNoStoreForAuthenticated);
   app.use((req, res) => {
     if (req.path === '/api/public-cached') res.setHeader('Cache-Control', 'public, max-age=60');
-    res.json({ ok: true, keys: Object.keys(req.body ?? {}).length });
+    const raw = (req as { rawBody?: Buffer }).rawBody;
+    res.json({ ok: true, keys: Object.keys(req.body ?? {}).length, raw: raw ? raw.toString('utf8') : null });
   });
   return app;
 }
@@ -296,6 +297,19 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
     it('route khác không bị hỏi token', async () => {
       process.env.PANCAKE_WEBHOOK_SECRET = SECRET;
       expect((await post('/api/webhooks/zalo-oa', { a: 1 })).status).toBe(200);
+    });
+  });
+
+  describe('thân gốc cho webhook ký chữ ký (Zalo OA)', () => {
+    const exact = '{"url":"https:\\/\\/a.vn\\/x","name":"Lan \\u00c1nh","n":1}';
+    it('webhook giữ nguyên byte ở req.rawBody (cả \\/ và \\uXXXX)', async () => {
+      const body = (await bodyOf(await post('/api/webhooks/zalo-oa', exact))) as { raw: string | null; keys: number };
+      expect(body.raw).toBe(exact);
+      expect(body.keys).toBe(3);
+    });
+    it('route thường và Pancake không giữ thân gốc', async () => {
+      expect(((await bodyOf(await post('/api/cart/coupon', exact))) as { raw: string | null }).raw).toBeNull();
+      expect(((await bodyOf(await post('/api/webhooks/pancake', exact))) as { raw: string | null }).raw).toBeNull();
     });
   });
 

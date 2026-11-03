@@ -123,11 +123,22 @@ export function eventsBodyParser(): RequestHandler {
   return json({ limit: '512kb', verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) });
 }
 
+/**
+ * Webhook ký trên byte gốc (Zalo OA: chữ ký tính trên thân như nhận được): giữ buffer ở `req.rawBody` (dạng `RawBodyRequest` của Nest),
+ * vì JSON.stringify lại thân đã parse làm mất `\/` và `\uXXXX` nên chữ ký lệch.
+ */
+function keepRawBody(verify: ReturnType<typeof rawGuard>): ReturnType<typeof rawGuard> {
+  return (req, res, buf, encoding) => {
+    verify(req, res, buf, encoding);
+    (req as { rawBody?: Buffer }).rawBody = buf;
+  };
+}
+
 /** json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần. */
 export function createBodyParsers(): RequestHandler[] {
   const specs: Record<BodyTier, { limit: string; verify: ReturnType<typeof rawGuard> }> = {
     default: { limit: DEFAULT_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
-    webhook: { limit: WEBHOOK_BODY_LIMIT, verify: rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH) },
+    webhook: { limit: WEBHOOK_BODY_LIMIT, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
     pancake: { limit: PANCAKE_WEBHOOK_BODY_LIMIT, verify: rawGuard(MAX_PANCAKE_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH) },
     large: { limit: LARGE_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
   };
