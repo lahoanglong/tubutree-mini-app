@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { Logger, UnauthorizedException } from '@nestjs/common';
 import { ZaloOaWebhookController, zaloOaEventSignature } from './zalo-oa-webhook.controller';
@@ -143,21 +144,41 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it('không có thân thô (hoặc rỗng) → 401 dù chữ ký khớp JSON đã parse, không lưu, ghi lỗi; có thân thô thì không nhắc chuyện thân thô', async () => {
+  it('không có thân thô (hoặc rỗng) → 401 dù chữ ký khớp JSON đã parse, không lưu; chỉ ghi lỗi khi thân là JSON', async () => {
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     try {
       const { ctrl, create } = build(both);
-      for (const req of [undefined, {}, { rawBody: Buffer.alloc(0) }]) {
+      const form = (ct: string) => ({ headers: { 'content-type': ct } });
+      const forms = ['application/x-www-form-urlencoded', 'application/x-www-form-urlencoded; x=json', 'text/plain; charset=utf-8; boundary=json', 'application/vnd.api+json'].map(form);
+      for (const req of [undefined, {}, { rawBody: Buffer.alloc(0) }, ...forms]) {
         await expect(ctrl.handle(signed, undefined, sign(), req)).rejects.toBeInstanceOf(UnauthorizedException);
       }
-      expect(create).not.toHaveBeenCalled();
+      // Người ngoài gửi form có timestamp (route không giới hạn tần suất): 401 im lặng, không làm tràn log lỗi.
+      expect(error).not.toHaveBeenCalled();
+      await expect(ctrl.handle(signed, undefined, sign(), form('Application/JSON; charset=utf-8'))).rejects.toBeInstanceOf(UnauthorizedException);
       expect(error).toHaveBeenCalledWith(expect.stringContaining('thân thô'));
+      expect(create).not.toHaveBeenCalled();
       error.mockClear();
-      await expect(ctrl.handle(signed, undefined, 'sai', raw())).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(ctrl.handle(signed, undefined, 'sai', { ...raw(), headers: { 'content-type': 'application/json' } })).rejects.toBeInstanceOf(UnauthorizedException);
       expect(error).not.toHaveBeenCalled();
     } finally {
       error.mockRestore();
     }
+  });
+
+  it('chữ ký băm trên byte: thân thô có byte UTF-8 lỗi vẫn khớp (không mã hoá lại thành EF BF BD)', async () => {
+    const { ctrl, create } = build(both);
+    const ts = String(Date.now());
+    const rawBody = Buffer.concat([
+      Buffer.from(`{"app_id":"${APP_ID}","event_name":"user_send_text","sender":{"id":"zalo-user-1"},"message":{"msg_id":"m9","text":"a`),
+      Buffer.from([0xc3, 0x28]),
+      Buffer.from(`"},"timestamp":"${ts}"}`),
+    ]);
+    const parsed = JSON.parse(rawBody.toString('utf8'));
+    // Tính độc lập với hàm của module: sha256 trên đúng byte Zalo gửi.
+    const sig = createHash('sha256').update(Buffer.concat([Buffer.from(APP_ID), rawBody, Buffer.from(ts + OA_KEY)])).digest('hex');
+    await expect(ctrl.handle(parsed, undefined, sig, { rawBody })).resolves.toEqual({ received: true });
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('thân thô khác thân đã parse (thân giả, chữ ký của thân thật) → 401', async () => {

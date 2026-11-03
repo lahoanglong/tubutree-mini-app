@@ -15,7 +15,7 @@ import { browseText } from '@/lib/browse-text';
 import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
-import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '@/lib/recent-searches';
+import { clearRecentSearches, pushRecentSearch, readRecentSearches, RECENT_SEARCHES_CHANGED_EVENT } from '@/lib/recent-searches';
 import {
   BROWSE_PATH, CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, browseHref, isBrowseHub, isBrowseRoot,
   toCatalogQuery, withListMode, type FilterDraft, type SearchState, type TitleScope,
@@ -111,7 +111,13 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const [filtersOpen, setFiltersOpen] = useState(false);
   // localStorage chỉ có phía trình duyệt: đọc sau hydrate để HTML server và lần vẽ đầu của client giống nhau.
   const [recent, setRecent] = useState<string[]>([]);
-  useEffect(() => setRecent(readRecentSearches()), []);
+  useEffect(() => {
+    const sync = () => setRecent(readRecentSearches());
+    sync();
+    // Phiên hết hạn/đổi tài khoản xoá lịch sử sau khi màn đã mount (effect của AuthProvider chạy sau con).
+    window.addEventListener(RECENT_SEARCHES_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(RECENT_SEARCHES_CHANGED_EVENT, sync);
+  }, []);
 
   // `?focus=search` từ ô tìm ở trang chủ: focus thẳng ô thật rồi bỏ cờ khỏi URL, để quay lại không bật bàn phím lần nữa.
   useEffect(() => {

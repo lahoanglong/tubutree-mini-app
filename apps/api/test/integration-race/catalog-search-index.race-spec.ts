@@ -30,7 +30,7 @@ describe('C-038 — tìm không dấu có index (real Postgres)', () => {
     await moduleRef?.close();
   });
 
-  async function createProduct(name: string, tags: string[] = []) {
+  async function createProduct(name: string, tags: string[] = [], extra: { isFeatured?: boolean; soldApp?: number } = {}) {
     const tag = randCode(8);
     return prisma.product.create({
       data: {
@@ -41,6 +41,7 @@ describe('C-038 — tìm không dấu có index (real Postgres)', () => {
         description: 'IT',
         basePrice: 100_000,
         tags,
+        ...extra,
       },
     });
   }
@@ -152,13 +153,29 @@ describe('C-038 — tìm không dấu có index (real Postgres)', () => {
     }
   });
 
-  it('khoảng trắng của từ khoá không thành ký tự đại diện rộng hơn một ký tự: "bh  nong" (nhiều dấu cách) vẫn chỉ ra SP đúng', async () => {
+  it('nhiều dấu cách giữa các từ không đổi kết quả; từng từ khớp riêng nên "bh nong" ra cả BH.Nong lẫn BH..Nong (KHAMPHA-02)', async () => {
     const tag = randCode(6).toLowerCase();
     const p = await createProduct(`Gạo lứt BH.Nong ${tag}`);
     const other = await createProduct(`Gạo lứt BH..Nong ${tag}`);
     const ids = async (q: string) => (await catalog.list({ page: 1, limit: 50, q: `${q} ${tag}` })).data.map((c) => c.id).sort();
-    expect(await ids('bh   nong')).toEqual([p.id]);
-    expect(await ids('bh nong')).not.toContain(other.id);
+    expect(await ids('bh   nong')).toEqual([p.id, other.id].sort());
+    expect(await ids('bh nong')).toEqual([p.id, other.id].sort());
+  });
+
+  // KHAMPHA-02: trước đây từ khoá nhiều từ phải liền và đúng thứ tự mới có kết quả.
+  it('nhiều từ khớp rời và đảo thứ tự ("nuoc chen", "Fuwa nuoc"); xếp khớp đầu tên rồi khớp cả cụm trước; gợi ý theo cùng thứ tự', async () => {
+    // Từ khoá riêng của lần chạy: suggest chỉ lấy 8 id đầu, SP của lần chạy trước (cùng tên) trên DB dùng lại sẽ chen vào top.
+    const t = `xq${randCode(6).toLowerCase()}`;
+    const loose = await createProduct(`${t} rửa chén sinh học Fuwa`, [], { isFeatured: true, soldApp: 50 });
+    const phrase = await createProduct(`Bộ ${t} chén thủy tinh`);
+    const prefix = await createProduct(`${t} chén dừa`);
+    const mine = new Set([loose.id, phrase.id, prefix.id]);
+    const ids = async (q: string) => (await catalog.list({ page: 1, limit: 100, q })).data.map((c) => c.id).filter((id) => mine.has(id));
+    expect(await ids(`${t} chen`)).toEqual([prefix.id, phrase.id, loose.id]);
+    expect(await ids(`fuwa ${t}`)).toEqual([loose.id]);
+    expect((await ids(`chen ${t}`)).sort()).toEqual([loose.id, phrase.id, prefix.id].sort());
+    const sug = (await catalog.suggest(`${t} chen`)).map((s) => s.slug).filter((slug) => [prefix.slug, phrase.slug, loose.slug].includes(slug));
+    expect(sug).toEqual([prefix.slug, phrase.slug, loose.slug]);
   });
 
   it('suggest: từ khoá dưới 2 ký tự (sau gấp) → [] không chạm DB', async () => {

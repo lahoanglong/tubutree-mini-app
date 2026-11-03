@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RECENT_SEARCHES_KEY, clearRecentSearches, pushRecentSearch, readRecentSearches } from './recent-searches';
+import { RECENT_SEARCHES_KEY, RECENT_SEARCHES_OWNER_KEY, clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
 import type { StorageLike } from './recently-viewed';
 
 function memoryStorage(): StorageLike & { data: Record<string, string> } {
@@ -72,5 +72,34 @@ describe('recent-searches (giữ khoá cũ tubu_recent_searches)', () => {
     expect(readRecentSearches(null)).toEqual([]);
     expect(pushRecentSearch('nước rửa', null)).toEqual(['nước rửa']);
     expect(() => clearRecentSearches(null)).not.toThrow();
+  });
+});
+
+describe('scopeRecentSearchesToUser (KHAMPHA-15, đồng bộ với Mini)', () => {
+  it('đổi tài khoản không qua logout: xoá lịch sử người trước', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('kem chống hăm', s);
+    expect(scopeRecentSearchesToUser('u2', s)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('u2');
+  });
+
+  it('chưa biết ai hoặc cùng tài khoản: giữ; lịch sử cũ chưa có chủ được nhận', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser(undefined, s)).toBe(false);
+    expect(scopeRecentSearchesToUser('u1', s)).toBe(false);
+    expect(scopeRecentSearchesToUser('u1', s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+  });
+
+  it('forgetRecentSearchesOfSignedOutUser xoá lịch sử có chủ, bỏ qua khi chưa có chủ', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(forgetRecentSearchesOfSignedOutUser(s)).toBe(false);
+    scopeRecentSearchesToUser('u1', s);
+    expect(forgetRecentSearchesOfSignedOutUser(s)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
   });
 });

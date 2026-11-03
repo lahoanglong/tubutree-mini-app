@@ -25,6 +25,8 @@ export interface FlashSlotItemProps {
   slotStatus: FlashSlotStatus;
   reminded: boolean;
   remindPending: boolean;
+  /** Mua ngay đã chạm lúc app còn khôi phục phiên: nút báo đang chờ. */
+  buyPending?: boolean;
   onBuy: () => void;
   onToggleRemind: () => void;
 }
@@ -35,7 +37,7 @@ export interface FlashSlotItemProps {
  * chiều cao nên thẻ không nhảy khi khung mở). Món hết suất vẫn hiện nhưng ảnh và nút mờ, nút khoá (aria-disabled, không `disabled` thật để vẫn nằm trong
  * thứ tự Tab; lý do đọc qua thanh "Đã bán hết" ở khung đang diễn ra, còn khung sắp mở không có thanh nên dòng "Hết hàng" thay chỗ và nút trỏ aria-describedby tới nó); chữ giữ nguyên độ đậm vì chữ thông tin mờ đi thì tụt dưới tương phản 4,5:1. Chạm nút không mở sản phẩm.
  */
-export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy, onToggleRemind }: FlashSlotItemProps) {
+export function FlashSlotItem({ item, slotStatus, reminded, remindPending, buyPending = false, onBuy, onToggleRemind }: FlashSlotItemProps) {
   const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'line', now: serverNow() });
   const upcoming = slotStatus === 'UPCOMING';
   const outOfStockId = useId();
@@ -64,7 +66,8 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       size="md"
       variant="flash"
       aria-label={slotBuyLabel(item.productName)}
-      aria-disabled={item.soldOut || undefined}
+      loading={buyPending}
+      aria-disabled={item.soldOut || buyPending || undefined}
       style={item.soldOut ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
         if (item.soldOut) return;

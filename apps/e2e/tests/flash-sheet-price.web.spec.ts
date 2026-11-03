@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { multiVariationProduct } from './support/pdp-product';
+import { anchorBelow, gate, readShiftBelow, trackLayoutShift } from './support/pdp-cls';
 import { expectChipMetrics } from './support/variation-chip';
 
 /**
@@ -33,7 +34,7 @@ async function pricedProduct(request: APIRequestContext, slug: string): Promise<
 }
 
 /** Đăng nhập giả: cờ phiên trong trình duyệt, làm mới phiên và hồ sơ qua mock. */
-async function mockSignedIn(page: Page, api: MockApi): Promise<void> {
+async function mockSignedIn(page: Page, api: MockApi, holdRefresh?: Promise<void>): Promise<void> {
   await page.addInitScript(() => {
     try {
       localStorage.setItem('tubu_web_session', '1');
@@ -41,7 +42,10 @@ async function mockSignedIn(page: Page, api: MockApi): Promise<void> {
       // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
     }
   });
-  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
+  api.post('/auth/refresh', async () => {
+    await holdRefresh;
+    return { accessToken: 'e2e-token', user };
+  });
   api.get('/me', () => user);
   api.get('/me/coupons', []);
   api.allowUnmocked('GET /affiliate/me', 'GET /products/:slug/reviews/can-review');
@@ -61,20 +65,24 @@ async function mockCartWith(page: Page, api: MockApi, p: Priced, variationId: st
 type PdpOpts = {
   inCart?: number;
   /** Đăng nhập giả, `perUserLeft` của suất `fi-1` ở các đơn trước (giỏ rỗng); `delayMs` cho số về muộn. */
-  allowance?: { perUserLeft: number; delayMs?: number };
+  allowance?: { perUserLeft: number; delayMs?: number; hold?: Promise<void> };
+  /** Treo POST /auth/refresh cho tới khi test mở: phiên còn đang khôi phục. */
+  holdRefresh?: Promise<void>;
+  viewport?: { width: number; height: number };
 };
 
 async function openPdp(page: Page, api: MockApi, p: Priced, flashIndex: number, opts: PdpOpts = {}): Promise<void> {
   const flashVariation = p.variations[flashIndex]!;
   if (opts.inCart) await mockCartWith(page, api, p, flashVariation.id, opts.inCart);
   if (opts.allowance) {
-    const { perUserLeft, delayMs } = opts.allowance;
+    const { perUserLeft, delayMs, hold } = opts.allowance;
     if (!opts.inCart) {
-      await mockSignedIn(page, api);
+      await mockSignedIn(page, api, opts.holdRefresh);
       api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
     }
     api.get('/flash-sales/me/allowance', async () => {
       if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+      await hold;
       return { items: { 'fi-1': { perUserLeft, allowance: Math.min(perUserLeft, 90) } } };
     });
   }
@@ -97,7 +105,7 @@ async function openPdp(page: Page, api: MockApi, p: Priced, flashIndex: number, 
   api.get('/products', { data: [], meta: { page: 1, limit: 12, total: 0 } });
   api.get(`/products/${p.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
   api.get('/me/wishlist/ids', []);
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize(opts.viewport ?? { width: 375, height: 812 });
   await page.goto(`/san-pham/${p.slug}`);
 }
 
@@ -211,5 +219,54 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     await expect(dialog.getByRole('status')).toHaveText(SPENT);
     const after = (await plus.boundingBox())!;
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  });
+  for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 800 }]) {
+    test(`${viewport.width}px, ngoài bảng: allowance còn treo rồi mới về, khối bên dưới giữ nguyên chỗ, CLS từ vùng ghi chú trở xuống bằng 0`, async ({ page, api, request }) => {
+      await trackLayoutShift(page);
+      const g = gate();
+      await setup(page, api, request, { allowance: { perUserLeft: 0, hold: g.wait }, viewport });
+      const slot = page.locator('[data-section="pdp-flash-limit"]');
+      await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
+      const anchor = await anchorBelow(slot);
+      await expect(slot).toHaveText('');
+      const gap = async () => (await anchor.boundingBox())!.y - (await slot.boundingBox())!.y;
+      const before = await gap();
+      const clsBefore = await readShiftBelow(page, slot);
+      g.release();
+      await expect(slot).toHaveText(SPENT, { timeout: 10_000 });
+      await page.waitForTimeout(300);
+      const after = await gap();
+      expect(Math.abs(after - before), `khối bên dưới dịch ${after - before}px so với vùng ghi chú`).toBeLessThanOrEqual(1);
+      const cls = (await readShiftBelow(page, slot)) - clsBefore;
+      expect(cls, `CLS khi ghi chú hiện ${cls.toFixed(4)}`).toBe(0);
+    });
+
+    test(`${viewport.width}px: phiên về sau khi trang đã vẽ (còn suất, không có ghi chú) không chèn dải mới đẩy phần bên dưới`, async ({ page, api, request }) => {
+      await trackLayoutShift(page);
+      const g = gate();
+      await setup(page, api, request, { allowance: { perUserLeft: 3 }, holdRefresh: g.wait, viewport });
+      const slot = page.locator('[data-section="pdp-flash-limit"]');
+      await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
+      const anchor = await anchorBelow(slot);
+      const gap = async () => (await anchor.boundingBox())!.y - (await slot.boundingBox())!.y;
+      const before = await gap();
+      const clsBefore = await readShiftBelow(page, slot);
+      g.release();
+      await expect(page.getByRole('button', { name: 'Tăng số lượng' }).first()).toBeVisible();
+      await expect.poll(() => api.callsTo('GET', '/flash-sales/me/allowance').length, { timeout: 10_000 }).toBeGreaterThan(0);
+      await page.waitForTimeout(500);
+      const after = await gap();
+      expect(Math.abs(after - before), `khối bên dưới dịch ${after - before}px so với vùng ghi chú`).toBeLessThanOrEqual(1);
+      const cls = (await readShiftBelow(page, slot)) - clsBefore;
+      expect(cls, `CLS khi phiên về ${cls.toFixed(4)}`).toBe(0);
+    });
+  }
+
+  test('không có Giờ vàng hoặc chưa đăng nhập: vùng ghi chú không giữ dải trống', async ({ page, api, request }) => {
+    // Giờ vàng đang chạy nhưng khách chưa đăng nhập: không có số theo khách để chờ nên không giữ chỗ.
+    await setup(page, api, request);
+    const slot = page.locator('[data-section="pdp-flash-limit"]');
+    await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
+    expect((await slot.boundingBox())?.height ?? 0).toBe(0);
   });
 });
