@@ -368,8 +368,8 @@ test.describe('ds-parity: thanh toán 375px, câu lý do ví không đủ tiền
       const b = r.getBoundingClientRect();
       return { top: b.top, bottom: b.bottom };
     };
-    const labelBox = await walletText.evaluate(textRect, 'first');
-    const hintBox = await hint.evaluate(textRect, 'first');
+    const labelBox = await walletText.evaluate(textRect, 'first' as const);
+    const hintBox = await hint.evaluate(textRect, 'first' as const);
     const gapY = Math.round(hintBox.top - labelBox.bottom);
     await testInfo.attach(`wallet-gap-${side}`, { body: String(gapY), contentType: 'text/plain' });
     expect(Math.abs(gapY - MINI_WALLET_GAP_Y), `khoảng dọc nhãn → câu lý do ${gapY} so với Mini ${MINI_WALLET_GAP_Y}`).toBeLessThanOrEqual(2);
