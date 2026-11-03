@@ -219,6 +219,34 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
     expect(await build({}).svc.zaloTokenProblems(NOW)).toEqual([]);
   });
 
+  describe('vừa cấu hình token, chưa tới lượt cron đầu (báo động giả tối đa 6 giờ)', () => {
+    const cronRow = (lastOutcome: string) => ({ job: 'ZaloOaTokenCron.refresh', lastOutcome });
+    function withCron(rows: unknown[], store: Record<string, string> = configured) {
+      const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key in store ? { value: store[key] } : null)) } };
+      return new OpsHealthService(prisma as never, { get: () => '' } as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => rows } as never);
+    }
+
+    it('chưa có dòng cron nào hoặc lượt gần nhất OK → chưa báo', async () => {
+      expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
+      expect(await withCron([cronRow('OK')]).zaloTokenProblems(NOW)).toEqual([]);
+      expect(await withCron([cronRow('SKIPPED')]).zaloTokenProblems(NOW)).toEqual([]);
+    });
+
+    it('lượt cron gần nhất đã lỗi mà vẫn chưa có mốc hạn → báo "chưa từng được làm mới"', async () => {
+      for (const outcome of ['ERRORS', 'THREW']) {
+        const out = await withCron([cronRow(outcome)]).zaloTokenProblems(NOW);
+        expect(out).toHaveLength(1);
+        expect(out[0]!.message).toContain('chưa từng được làm mới');
+      }
+    });
+
+    it('đã có mốc hạn thì cách xét hạn như cũ, không phụ thuộc cron', async () => {
+      const out = await withCron([cronRow('OK')], { ...configured, 'zalo.oa_token_expires_at': iso(2 * H) }).zaloTokenProblems(NOW);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.message).toContain('2 giờ');
+    });
+  });
+
   it('đọc DB lỗi → không làm hỏng màn sức khoẻ, trả rỗng', async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const svc = new OpsHealthService({ systemConfig: { findUnique: async () => Promise.reject(new Error('db down')) } } as never, { get: () => '' } as never, []);

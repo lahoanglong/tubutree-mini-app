@@ -39,14 +39,14 @@ function mechanismProblem(tier: Tier, perk: string): string {
     // LoyaltyService.getMultiplier / calcPointsEarned đọc MembershipTier.pointMultiplier
     return Number(tier.pointMultiplier) === Number(m[1]) ? '' : 'hệ số tích điểm lệch pointMultiplier';
   }
-  if ((m = /^Freeship đơn ≥ (\d+)k$/.exec(perk))) {
+  if ((m = /^Miễn phí giao hàng đơn từ (\d+)k$/.exec(perk))) {
     // PricingService.calcShippingFee đọc shipping.tier_freeship_overrides[tier.id]
     return freeshipOverrides[tier.id] === Number(m[1]) * 1000 ? '' : 'ngưỡng freeship lệch shipping.tier_freeship_overrides';
   }
-  if (perk === 'Freeship toàn shop') {
+  if (perk === 'Miễn phí giao hàng mọi đơn') {
     return freeshipOverrides[tier.id] === 0 ? '' : 'freeship toàn shop lệch shipping.tier_freeship_overrides';
   }
-  if (perk === 'Freeship + giảm 5% mọi đơn') {
+  if (perk === 'Miễn phí giao hàng và giảm 5% mọi đơn') {
     // CheckoutService tính tierDiscount từ MembershipTier.discountPct
     return freeshipOverrides[tier.id] === 0 && Number(tier.discountPct) === 0.05 ? '' : 'lệch freeship/discountPct';
   }
@@ -72,9 +72,9 @@ describe('quyền lợi hạng trong seed (C-010, Q-16)', () => {
   it('danh sách quyền lợi chốt cho từng hạng', () => {
     expect(Object.fromEntries(TIERS.map((t) => [t.id, t.perks]))).toEqual({
       MAM_XANH: ['Tích Điểm Xanh x1'],
-      LOC_BIEC: ['Tích Điểm Xanh x1.2', 'Freeship đơn ≥ 99k', 'Mã giảm giá sinh nhật 50k'],
-      DAI_THU: ['Tích Điểm Xanh x1.5', 'Freeship toàn shop', 'Mã giảm giá sinh nhật 150k'],
-      CO_THU: ['Tích Điểm Xanh x2', 'Freeship + giảm 5% mọi đơn', 'Mã giảm giá sinh nhật 300k'],
+      LOC_BIEC: ['Tích Điểm Xanh x1.2', 'Miễn phí giao hàng đơn từ 99k', 'Mã giảm giá sinh nhật 50k'],
+      DAI_THU: ['Tích Điểm Xanh x1.5', 'Miễn phí giao hàng mọi đơn', 'Mã giảm giá sinh nhật 150k'],
+      CO_THU: ['Tích Điểm Xanh x2', 'Miễn phí giao hàng và giảm 5% mọi đơn', 'Mã giảm giá sinh nhật 300k'],
     });
   });
 });
@@ -99,6 +99,13 @@ describe('câu chữ "cây thật/PanNature" trong seed (C-010, Q-16)', () => {
 });
 
 const toPointsXanh = (perk: string) => perk.replace(/^Tích điểm ([\d.]+)x$/, 'Tích Điểm Xanh x$1');
+// Hai migration cũ còn viết "Freeship"; migration _tier_perks_free_shipping_wording (XANH-03) đổi tiếp sang chữ của seed.
+const LEGACY_FREESHIP: Record<string, string> = {
+  'Miễn phí giao hàng đơn từ 99k': 'Freeship đơn ≥ 99k',
+  'Miễn phí giao hàng mọi đơn': 'Freeship toàn shop',
+  'Miễn phí giao hàng và giảm 5% mọi đơn': 'Freeship + giảm 5% mọi đơn',
+};
+const toLegacyFreeship = (perk: string) => LEGACY_FREESHIP[perk] ?? perk;
 
 describe('migration cập nhật chữ + quyền lợi hạng đã có trên PROD (C-010)', () => {
   const dir = readdirSync(join(PRISMA_DIR, 'migrations')).find((d) => d.endsWith('_pd1_tree_fund_wording_tier_perks'));
@@ -130,7 +137,7 @@ describe('migration cập nhật chữ + quyền lợi hạng đã có trên PRO
     for (const p of parsed) {
       const tier = TIERS.find((t) => t.name === p.name)!;
       // Chữ "Tích điểm Nx" của migration này được migration _pd1_review_wording đổi tiếp sang "Tích Điểm Xanh xN".
-      expect(p.next.map(toPointsXanh)).toEqual(tier.perks);
+      expect(p.next.map(toPointsXanh)).toEqual(tier.perks.map(toLegacyFreeship));
       expect(p.prev).not.toEqual(p.next);
     }
     const prevOf = Object.fromEntries(parsed.map((p) => [p.name, p.prev]));
@@ -188,7 +195,7 @@ describe('migration _pd1_review_wording: "Điểm Xanh" cho quyền lợi tích 
     });
     for (const p of parsed) {
       const tier = TIERS.find((t) => t.name === p.name)!;
-      expect(p.next).toEqual(tier.perks);
+      expect(p.next).toEqual(tier.perks.map(toLegacyFreeship));
       expect(p.prev.map(toPointsXanh)).toEqual(p.next);
       expect(p.prev).not.toEqual(p.next);
       // Hạng đã được migration trước đổi mảng: mảng cũ ở đây phải đúng là mảng mới của migration đó.

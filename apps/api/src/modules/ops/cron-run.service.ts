@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { notifyAdmins } from '../../common/notify-admins';
-import { setCronRunSink, type CronRunReport, type CronRunSink } from '../../common/cron-run/track-cron';
+import { registeredCronJobNames, setCronRunSink, type CronRunReport, type CronRunSink } from '../../common/cron-run/track-cron';
 import { firstNonEmptyLine } from '../../common/cron-run/cron-aware-logger';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -113,7 +113,10 @@ export class CronRunService implements OnModuleInit, CronRunSink {
   }
 
   async list(): Promise<CronRunRow[]> {
-    const rows = await this.prisma.cronRun.findMany({ orderBy: { job: 'asc' } });
+    const all = await this.prisma.cronRun.findMany({ orderBy: { job: 'asc' } });
+    // Job đã đổi tên hoặc gỡ khỏi mã không bao giờ chạy lại, nên dòng lỗi cuối của nó làm banner lỗi không tắt: chỉ liệt kê job còn khai báo.
+    const live = registeredCronJobNames();
+    const rows = live.size === 0 ? all : all.filter((r) => live.has(r.job));
     const iso = (d: Date | null) => (d ? d.toISOString() : null);
     return rows.map((r) => ({
       job: r.job,

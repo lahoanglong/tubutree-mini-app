@@ -1,5 +1,5 @@
 import { CronRunService, describeCronError } from './cron-run.service';
-import { setCronRunSink } from '../../common/cron-run/track-cron';
+import { setCronRunSink, TrackCron } from '../../common/cron-run/track-cron';
 
 interface Row {
   job: string;
@@ -164,6 +164,23 @@ describe('CronRunService.record', () => {
 });
 
 describe('CronRunService.list', () => {
+  // Khai báo job như mã thật: list() chỉ liệt kê job còn @TrackCron() trong mã.
+  class A {
+    @TrackCron()
+    async x() {}
+    @TrackCron()
+    async y() {}
+  }
+  void A;
+
+  it('job đã đổi tên/gỡ khỏi mã (còn dòng lỗi cũ trong cron_runs) không được liệt kê, để banner lỗi tắt được', async () => {
+    const { svc } = build();
+    await svc.record(threw('A.x', 0));
+    await svc.record(threw('Cu.daBiGo', 0));
+    await svc.record(ok('A.y', 0));
+    expect((await svc.list()).map((r) => r.job)).toEqual(['A.x', 'A.y']);
+  });
+
   it('trả các dòng ở dạng chuỗi ISO cho màn admin', async () => {
     const { svc } = build();
     await svc.record(threw('A.x', 0));
