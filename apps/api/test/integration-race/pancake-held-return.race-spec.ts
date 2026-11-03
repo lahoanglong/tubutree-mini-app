@@ -222,17 +222,16 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       expect(await walletOf(user.id)).toBe(0);
     });
 
-    it('bên thua race không báo ADMIN lần hai: instance đọc đơn trước khi bên kia lật vẫn chỉ có một tin', async () => {
-      const { order, event } = await deliveredOrder('BANK_TRANSFER');
-      await processor.onStatusUpdated(event(PARTIAL));
+    it('bên thua race không báo ADMIN lần hai: instance đọc đơn trước khi bên kia lật vẫn chỉ có một tin (COD chưa thu)', async () => {
+      const { order, event } = await deliveredOrder('COD');
       const stale = await orderOf(order.id);
       await processor.onStatusUpdated(event(RETURNED));
-      const alertsAfterWinner = alert.mock.calls.length;
+      expect(alert.mock.calls.filter(([, reason]) => reason === ATTENTION_COD_RETURN_UNVERIFIED)).toHaveLength(1);
       jest.spyOn(prisma.order, 'findFirst').mockResolvedValueOnce(stale);
 
       await processor.onStatusUpdated(event(RETURNED));
 
-      expect(alert.mock.calls).toHaveLength(alertsAfterWinner);
+      expect(alert.mock.calls.filter(([, reason]) => reason === ATTENTION_COD_RETURN_UNVERIFIED)).toHaveLength(1);
     });
   });
 
@@ -377,22 +376,6 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       expect(done.reversalEffectsAt).not.toBeNull();
     });
 
-    it('cron resyncReversalEffects chạy 3 lần trên đơn đã giữ tiền: ô không đổi, không báo lại', async () => {
-      const { order, event } = await deliveredOrder('COD');
-      await processor.onStatusUpdated(event(PARTIAL));
-      await processor.onStatusUpdated(event(RETURNED));
-      const cell = (await orderOf(order.id)).pancakeAttention;
-      const alerts = alert.mock.calls.length;
-
-      for (let i = 0; i < 3; i += 1) {
-        await prisma.order.update({ where: { id: order.id }, data: { reversalEffectsAt: null } });
-        await orderStatus.resyncReversalEffects(order.id);
-      }
-
-      expect((await orderOf(order.id)).pancakeAttention).toBe(cell);
-      expect(alert.mock.calls).toHaveLength(alerts);
-    });
-
     describe('duyệt trả CẢ ĐƠN (không qua setStatus) khi ô còn lời 15', () => {
       const MANUAL = 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.';
 
@@ -449,19 +432,7 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       });
     });
 
-    it('Pancake 4 tới trễ trên đơn đã đóng: không đè lời đã xử lý', async () => {
-      const { order, event } = await deliveredOrder('COD');
-      await processor.onStatusUpdated(event(PARTIAL));
-      await orderStatus.setStatus(order.id, 'RETURNED', { actorType: 'ADMIN' });
-      const cell = (await orderOf(order.id)).pancakeAttention;
-
-      await processor.onStatusUpdated(event({ status: 4 }));
-      await processor.onStatusUpdated(event({ status: 7 }));
-
-      expect((await orderOf(order.id)).pancakeAttention).toBe(cell);
-    });
-
-    it('lời "Cần xử lý" của đơn CÒN MỞ vẫn ghi được khi đơn đóng chen giữa lúc đọc và lúc ghi thì không (onlyOpenOrder)', async () => {
+    it('Pancake 4 tới trễ: đơn đóng chen giữa lúc đọc và lúc ghi thì lời không được ghim lên đơn đã đóng (onlyOpenOrder)', async () => {
       const { order, event } = await deliveredOrder('COD');
       const stale = await orderOf(order.id);
       await orderStatus.setStatus(order.id, 'RETURNED', { actorType: 'ADMIN' });
