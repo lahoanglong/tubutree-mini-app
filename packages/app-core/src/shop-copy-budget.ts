@@ -351,4 +351,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'shop.loginForCombo': null,
   'shop.learnStore': null,
   'shop.tierBadge': null,
+  'shop.tierHint': 20,
+  'shop.tierHintNext': 22,
 };
