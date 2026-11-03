@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import {
   ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_PARTIAL_RETURN_ACK,
@@ -73,8 +74,10 @@ describe('gỡ lý do khi ô đổi liên tục (mọi lần ghi có điều ki�
 
   it('removeAttentionReason (tx của Kế toán) ném lỗi để tx rollback, không để dòng COD kẹt lại sau khi đã chốt khoản', async () => {
     const db = stuckDb();
+    // 409 chứ không phải 500: Kế toán chỉ cần bấm lại.
+    await expect(removeAttentionReason(db as never, 'o1', ATTENTION_COD_RETURN_UNVERIFIED)).rejects.toBeInstanceOf(ConflictException);
     await expect(removeAttentionReason(db as never, 'o1', ATTENTION_COD_RETURN_UNVERIFIED)).rejects.toThrow('Ô Cần xử lý vừa đổi, bạn bấm lại nhé');
-    expect(db.order.updateMany).toHaveBeenCalledTimes(10);
+    expect(db.order.updateMany).toHaveBeenCalledTimes(20);
   });
 
   it('removeAttentionReasonsByPrefix (dọn việc best-effort sau khi đóng đơn) chỉ ghi log, không ném', async () => {

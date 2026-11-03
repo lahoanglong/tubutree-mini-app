@@ -1620,3 +1620,108 @@ describe('CustomerRefundsTab — khoản COD ở các trạng thái sau đối s
     });
   });
 });
+
+// Đơn đã trả hàng mà Pancake báo "Hoàn một phần" lúc Tubu không có yêu cầu trả rồi "Đã hoàn": nhân viên có thể đã hoàn tay. Đơn có thể đã
+// trả trước, nên chữ không được nhắc hãng vận chuyển hay COD, và Kế toán nhập số CÒN PHẢI HOÀN sau khi trừ phần hoàn tay.
+describe('CustomerRefundsTab — khoản đơn trả hàng bị giữ lại chờ trừ phần hoàn tay', () => {
+  const HELD_REF = 'pancake-partial-return-held';
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const held = (over: Partial<AdminCustomerRefund> = {}) =>
+    refund({ kind: 'RETURN', refKey: HELD_REF, status: 'UNVERIFIED', userId: 'u1', reason: 'RETURNED', amount: 300_000, recipientName: null, phone: null, ...over });
+
+  function stub(list: () => AdminCustomerRefund[]) {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        if (url.includes('/verify')) return json({ id: 'r1', status: 'PENDING' });
+        if (url.includes('/dismiss')) return json({ id: 'r1', status: 'DISMISSED' });
+        return json(page(list()));
+      }),
+    );
+    return {
+      verifies: () => calls.filter((c) => c.url.includes('/verify')),
+      dismisses: () => calls.filter((c) => c.url.includes('/dismiss')),
+    };
+  }
+  const open = async (container: HTMLElement) => {
+    click(byText(container, 'button', 'Chờ đối soát'));
+    await flush();
+    return container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+  };
+
+  it('chữ không nhắc hãng/COD/tiền dư; nút "Xác nhận số còn phải hoàn" và "Không hoàn"; loại ghi có thể đã hoàn tay', async () => {
+    stub(() => [held()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    expect(Array.from(card.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Xác nhận số còn phải hoàn', 'Không hoàn']);
+    const text = card.textContent ?? '';
+    expect(text).toContain('Trả hàng, có thể đã hoàn tay');
+    expect(text).toContain('hoàn tay');
+    expect(text).not.toMatch(/COD|hãng|tiền dư|trả nhiều hơn/);
+    expect((card.querySelector('input[name="overpaidAmount"]') as HTMLInputElement).value).toBe('300.000');
+  });
+
+  it('xác nhận số còn phải hoàn: hộp hỏi nói trừ phần hoàn tay, không nhắc hãng; gửi đúng số', async () => {
+    const api = stub(() => [held()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    typeInto(card.querySelector('input[name="overpaidAmount"]'), '200.000');
+    click(byText(card, 'button', 'Xác nhận số còn phải hoàn'));
+    await flush(1);
+    const d = confirmDialog()!;
+    const text = d.textContent ?? '';
+    expect(text).toContain('200.000đ');
+    expect(text).toContain('hoàn tay');
+    expect(text).not.toMatch(/COD|hãng/);
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(JSON.parse(String(api.verifies()[0]!.init?.body))).toEqual({ amount: 200_000 });
+    expect(container.querySelector('[role="status"]')?.textContent).not.toMatch(/COD|hãng/);
+  });
+
+  it('số hoàn vượt khoản giữ lại → báo, không gửi', async () => {
+    const api = stub(() => [held()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    typeInto(card.querySelector('input[name="overpaidAmount"]'), '900.000');
+    click(byText(card, 'button', 'Xác nhận số còn phải hoàn'));
+    await flush(1);
+    expect(confirmDialog()).toBeNull();
+    expect(api.verifies()).toHaveLength(0);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('300.000đ');
+  });
+
+  it('"Không hoàn": hộp hỏi nói nhân viên đã hoàn tay đủ, bắt buộc lý do', async () => {
+    const api = stub(() => [held()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    click(byText(card, 'button', 'Không hoàn'));
+    await flush(1);
+    const d = confirmDialog()!;
+    const text = d.textContent ?? '';
+    expect(text).toContain('hoàn tay');
+    expect(text).not.toMatch(/COD|hãng|không phải tiền khách trả dư/);
+    typeInto(d.querySelector('textarea') as HTMLTextAreaElement, 'Nhân viên đã chuyển khoản tay đủ');
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(JSON.parse(String(api.dismisses()[0]!.init?.body))).toEqual({ reason: 'Nhân viên đã chuyển khoản tay đủ' });
+  });
+
+  it('đã bỏ qua (kể cả phần ":rest"): nhãn trạng thái nói đã hoàn tay, vẫn là khoản trả hàng', async () => {
+    stub(() => [held({ refKey: `${HELD_REF}:rest`, status: 'DISMISSED', adminNote: 'Phần nhân viên đã hoàn tay', completedAt: '2026-10-02T03:00:00.000Z' })]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    click(byText(container, 'button', /^Không phải tiền dư$/));
+    await flush();
+    const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+    expect(card.querySelector('[data-refund-status="DISMISSED"]')?.textContent).toBe('Không hoàn (đã hoàn tay)');
+    expect(card.textContent).toContain('Trả hàng, có thể đã hoàn tay');
+  });
+});
