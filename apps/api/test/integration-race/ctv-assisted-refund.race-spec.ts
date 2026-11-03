@@ -307,7 +307,8 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
     const pending = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
 
-    const listed = await refunds.list('PENDING', 1, 100);
+    // Lọc theo mã đơn: hàng chờ xếp cũ nhất trước, DB chung của cả bộ race có thể đã quá một trang khoản mở.
+    const listed = await refunds.list('PENDING', 1, 100, undefined, { q: order.code });
     expect(listed.data.map((r) => r.id)).toContain(pending.id);
 
     // Hai admin cùng bấm "Bắt đầu chuyển khoản": chỉ một người giữ khoản, người kia bị chặn.

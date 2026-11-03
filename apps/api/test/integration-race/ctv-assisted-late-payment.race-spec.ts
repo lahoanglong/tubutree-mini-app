@@ -171,7 +171,8 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
     expect(await walletOf(customerAccount.id)).toBe(0);
     await expectCtvLockedOut(ctv.id, order.id, rows[0]!.id);
 
-    const queue = await refunds.list('OPEN', 1, 100);
+    // Lọc theo mã đơn: hàng chờ xếp cũ nhất trước, DB chung của cả bộ race có thể đã quá một trang khoản mở.
+    const queue = await refunds.list('OPEN', 1, 100, undefined, { q: order.code });
     expect(queue.data.map((r) => r.id)).toContain(rows[0]!.id);
 
     // Khoản chuyển khoản tay nào cũng phải "Bắt đầu chuyển khoản" (claim) trước khi xác nhận đã chuyển (RC-01); riêng khoản của khách cuối
