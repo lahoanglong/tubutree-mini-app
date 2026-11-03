@@ -159,6 +159,9 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     const prisma: Record<string, unknown> = {
       dealerCreditPaymentReport: { updateMany: reportUpdateMany, findFirst: reportFindFirst },
       user: { findUnique: jest.fn().mockResolvedValue(dealer) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      orderStatusHistory: { findMany: jest.fn().mockResolvedValue(opts.bankRefHistory ?? []) },
+      order: { findFirst: jest.fn().mockResolvedValue(opts.bankRefOrder ?? null) },
       dealerCreditLedger: {
         findFirst,
         aggregate,
@@ -316,6 +319,16 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect((err as Error).message).toMatch(/Mã giao dịch FT9 đã ghi nhận 5\.000\.000/);
     expect((err as Error).message).toMatch(/bỏ trống ô mã/);
     expect((err as Error).message).not.toMatch(/Idempotency-Key|thử lại/);
+  });
+
+  it('mã giao dịch đã xác nhận một đơn trả trước: 409 nêu mã đơn, không ghi dòng sổ', async () => {
+    const { svc, ledgerCreate } = build({
+      debt: 9_000_000,
+      bankRefHistory: [{ orderId: 'o1', note: 'Admin xác nhận đã nhận chuyển khoản (UNPAID → PAID) · Mã GD FT7' }],
+      bankRefOrder: { code: 'TUBU77' },
+    });
+    await expect(svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { bankRef: 'ft7' })).rejects.toThrow(/Mã giao dịch ft7 đã dùng để xác nhận đơn TUBU77/);
+    expect(ledgerCreate).not.toHaveBeenCalled();
   });
 
   it('race 2 admin duyệt CÙNG lúc cho CÙNG đại lý (P2034 serialization failure) → BadRequest thân thiện, không sập 500', async () => {
