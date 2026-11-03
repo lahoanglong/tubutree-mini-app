@@ -87,7 +87,7 @@ export class GameReminderService {
   /** Duyệt GameProfile theo lô bằng cursor — trần an toàn để job không chạy vô tận. */
   private async *pageProfiles(
     where: Record<string, unknown>,
-  ): AsyncGenerator<{ userId: string; streakDays?: number; streakFreezes?: number }[]> {
+  ): AsyncGenerator<{ userId: string; streakDays?: number; streakFreezes?: number; ecoImpact?: unknown }[]> {
     let cursor: string | undefined;
     for (let page = 0; page < GameReminderService.MAX_PAGES; page++) {
       const rows = await this.prisma.gameProfile.findMany({
@@ -95,7 +95,7 @@ export class GameReminderService {
         orderBy: { id: 'asc' },
         take: GameReminderService.PAGE,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        select: { id: true, userId: true, streakDays: true, streakFreezes: true },
+        select: { id: true, userId: true, streakDays: true, streakFreezes: true, ecoImpact: true },
       });
       if (rows.length === 0) return;
       cursor = rows[rows.length - 1]!.id;
@@ -132,8 +132,21 @@ export class GameReminderService {
       // đã từng tưới (cây đang lớn) + rơi vào cửa sổ sắp héo, chưa chết
       lastWateredAt: { lte: warnAfter, gt: remindUntil },
     })) {
+      // Lô phụ có mốc tưới riêng (waterPlot không đụng lastWateredAt của hồ sơ): ai vừa tưới lô phụ thì cây không khát.
+      const wateredPlots = new Set(
+        (
+          await this.prisma.gardenPlot.findMany({
+            where: { userId: { in: batch.map((p) => p.userId) }, lastWateredAt: { gt: warnAfter } },
+            select: { userId: true },
+            distinct: ['userId'],
+          })
+        ).map((r) => r.userId),
+      );
       for (const p of batch) {
-        if (recentlyReminded.has(p.userId)) continue;
+        if (recentlyReminded.has(p.userId) || wateredPlots.has(p.userId)) continue;
+        // Cây vừa thu hoạch chưa có tiến độ: màn Vườn coi là khoẻ (treeHealth), không nhắc khát.
+        const progress = (p.ecoImpact as { progress?: number } | null)?.progress ?? 0;
+        if (progress <= 0) continue;
         await this.notifications.notifySafe(p.userId, 'GAME_TREE_THIRSTY', {});
         sent++;
       }
