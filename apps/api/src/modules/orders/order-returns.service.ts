@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequestItem } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -10,6 +10,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { GameOrderWaterService } from '../game/game-order-water.service';
 import { isMoneyBackable, OrderReversalService, type PartialReversalResult, type RefundOutcome } from './order-reversal.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
@@ -189,6 +190,7 @@ export class OrderReturnsService {
     private readonly loyalty: LoyaltyService,
     private readonly affiliate: AffiliateService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly gameWater?: GameOrderWaterService,
   ) {}
 
   // ── Khách ──
@@ -507,6 +509,12 @@ export class OrderReturnsService {
       } catch (err) {
         reversalFailure ??= err;
         this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
+      }
+      try {
+        await this.gameWater?.reverseForOrder(order.id);
+      } catch (err) {
+        reversalFailure ??= err;
+        this.logger.error(`Đảo nước game của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
       }
     } else {
       // Phần cắt của hoa hồng đã vào Ví đã trừ Ví CTV trong commit; kế toán cần biết khi khoản đó đã kê là thu nhập, Ví CTV âm hoặc phần không tự trừ được.
