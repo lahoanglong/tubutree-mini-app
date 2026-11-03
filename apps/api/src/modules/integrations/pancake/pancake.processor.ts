@@ -418,8 +418,9 @@ export class PancakeProcessor extends WorkerHost {
     order: Pick<Order, 'id' | 'code'>,
     reason: string,
     onlyReplacingPrefix?: string,
+    onlyOpenOrder = false,
   ): Promise<boolean> {
-    const written = await writePancakeAttention(this.prisma, order.id, reason, onlyReplacingPrefix);
+    const written = await writePancakeAttention(this.prisma, order.id, reason, onlyReplacingPrefix, onlyOpenOrder);
     if (!written) return false;
     this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${written}`);
     await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
@@ -540,6 +541,8 @@ export class PancakeProcessor extends WorkerHost {
         requests.length > 0
           ? 'Pancake báo HOÀN MỘT PHẦN trong khi khách đang có yêu cầu đổi/trả chờ duyệt — duyệt yêu cầu trả trên Tubu (hệ thống tự hoàn tiền/điểm), KHÔNG hoàn tay.'
           : manualReason,
+        undefined,
+        true,
       );
       return;
     }

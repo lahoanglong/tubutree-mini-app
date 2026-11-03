@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { OrderStatus, Prisma } from '@prisma/client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import { PANCAKE_ALERT_TEMPLATE, type GomdonAlertService } from '../gomdon/gomdon-alert.service';
 
@@ -55,13 +55,17 @@ export async function writePancakeAttention(
   orderId: string,
   reason: string,
   onlyReplacingPrefix?: string,
+  /** Chỉ ghi khi đơn còn mở: lệnh ghi không được thắng một lần huỷ/trả vừa commit sau lúc đọc trạng thái. */
+  onlyOpenOrder = false,
 ): Promise<string | null> {
+  const open = onlyOpenOrder ? { status: { notIn: ['CANCELLED', 'RETURNED'] as OrderStatus[] } } : {};
   const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
-  const notCod = { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } };
+  // NOT (NULL LIKE ..) ra NULL trong SQL: ô trống phải được nêu riêng, không thì dòng không khớp.
+  const notCod = { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] };
   const first = await db.order.updateMany({
     where: onlyReplacingPrefix
-      ? { id: orderId, AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
-      : { id: orderId, AND: [changed, notCod] },
+      ? { id: orderId, ...open, AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
+      : { id: orderId, ...open, AND: [changed, notCod] },
     data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
   });
   if (first.count === 1) return reason;
@@ -71,10 +75,11 @@ export async function writePancakeAttention(
     const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
     const current = row?.pancakeAttention ?? null;
     if (current === null || !current.split(ATTENTION_SEPARATOR).includes(ATTENTION_COD_RETURN_UNVERIFIED)) return null;
-    const next = appendAttentionReason(ATTENTION_COD_RETURN_UNVERIFIED, reason);
-    if (current === next) return null;
+    // Lý do đã nằm trong ô (ở bất kỳ vị trí nào, vd 'X | COD' do order-status nối) thì không đổi và không báo lại.
+    if (current.split(ATTENTION_SEPARATOR).includes(reason)) return null;
+    const next = `${current}${ATTENTION_SEPARATOR}${reason}`;
     const r = await db.order.updateMany({
-      where: { id: orderId, pancakeAttention: current },
+      where: { id: orderId, ...open, pancakeAttention: current },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
     });
     if (r.count === 1) return next;

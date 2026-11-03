@@ -18,7 +18,7 @@ describe('writePancakeAttention — một ô nhiều lý do (PNK-02)', () => {
     expect(await writePancakeAttention(prisma as never, 'o1', WAYBILL)).toBe(`${ATTENTION_COD_RETURN_UNVERIFIED} | ${WAYBILL}`);
     expect(row().pancakeAttention).toBe(`${ATTENTION_COD_RETURN_UNVERIFIED} | ${WAYBILL}`);
     expect(await writePancakeAttention(prisma as never, 'o1', WAYBILL)).toBeNull();
-    expect(await writePancakeAttention(prisma as never, 'o1', ATTENTION_PARTIAL_RETURN_ACK)).toBe(`${ATTENTION_COD_RETURN_UNVERIFIED} | ${ATTENTION_PARTIAL_RETURN_ACK}`);
+    expect(await writePancakeAttention(prisma as never, 'o1', ATTENTION_PARTIAL_RETURN_ACK)).toBe(`${ATTENTION_COD_RETURN_UNVERIFIED} | ${WAYBILL} | ${ATTENTION_PARTIAL_RETURN_ACK}`);
   });
 
   it('flagPancakeAttention cũng giữ dòng COD và chỉ báo ADMIN khi có thay đổi', async () => {
@@ -29,5 +29,20 @@ describe('writePancakeAttention — một ô nhiều lý do (PNK-02)', () => {
     await flagPancakeAttention(prisma as unknown as PrismaService, alerts as never, order, WAYBILL);
     expect(row().pancakeAttention).toContain(ATTENTION_COD_RETURN_UNVERIFIED);
     expect(alerts.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('lý do đã nằm sau dòng COD ở vị trí khác (X | COD do order-status nối): ghi lại không đổi, không báo lại', async () => {
+    const mixed = `${WAYBILL} | ${ATTENTION_COD_RETURN_UNVERIFIED}`;
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakeAttention: mixed })]);
+    expect(await writePancakeAttention(prisma as never, 'o1', WAYBILL)).toBeNull();
+    expect(row().pancakeAttention).toBe(mixed);
+  });
+
+  it('onlyOpenOrder: đơn đã huỷ/trả thì không ghi, đơn còn mở thì ghi', async () => {
+    const closed = fakeOrderDb([baseOrder({ status: 'RETURNED', pancakeAttention: null })]);
+    expect(await writePancakeAttention(closed.prisma as never, 'o1', 'A', undefined, true)).toBeNull();
+    expect(closed.row().pancakeAttention).toBeNull();
+    const open = fakeOrderDb([baseOrder({ status: 'DELIVERED', pancakeAttention: null })]);
+    expect(await writePancakeAttention(open.prisma as never, 'o1', 'A', undefined, true)).toBe('A');
   });
 });
