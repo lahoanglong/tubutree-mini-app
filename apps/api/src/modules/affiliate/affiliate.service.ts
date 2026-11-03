@@ -66,6 +66,7 @@ import {
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
 import { VN_OFFSET_MS, vnDateKey } from '../../common/vn-time';
+import { alreadyPaidConflict, isSameConfirmation } from '../../common/payout-paid-conflict';
 import { paidLineTotals } from './commission-base';
 import { consignmentLinkedSql } from '../merchant/consignment-link-sql';
 import { forBuyer } from '../orders/buyer-order-fields';
@@ -2348,6 +2349,11 @@ export class AffiliateService {
       return flipped;
     });
     if (res.count === 0) {
+      const current = await this.prisma.payout.findUnique({ where: { id } });
+      if (current?.status === 'PAID') {
+        if (isSameConfirmation(current, adminId, opts.bankRef?.trim())) return current;
+        throw await alreadyPaidConflict(this.prisma, current);
+      }
       const stale = opts.expectedAmount != null ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
       if (stale) throw stale;
       throw new BadRequestException(
