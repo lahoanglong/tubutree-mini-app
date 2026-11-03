@@ -5,10 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { GameQuizService } from '../../src/modules/game/game-quiz.service';
 import { createRealUser, randCode, setConfig, summarize } from './helpers';
 
-/**
- * VX-02: trần câu đố/ngày phải giữ khi các câu KHÁC nhau gửi song song, và chỉ nhận câu thuộc bộ hôm nay. Trước khi sửa,
- * đếm-rồi-ghi không khoá nên mọi request lọt qua trước lần ghi đầu đều được ghi và cộng nước.
- */
+/** Trần câu đố/ngày giữ khi các câu KHÁC nhau gửi song song, và chỉ nhận câu thuộc bộ hôm nay. */
 describe('GameQuizService.answerQuiz song song (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
