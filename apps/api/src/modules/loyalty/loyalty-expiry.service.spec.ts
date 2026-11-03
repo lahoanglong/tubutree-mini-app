@@ -18,7 +18,6 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import { milestoneGrantReason } from '../wallet/referral-reward';
-import { formatVnDate, vnDateKey } from '../../common/vn-time';
 
 const DAY = 864e5;
 const NOW = new Date('2026-07-05T00:00:00.000Z');
@@ -1369,51 +1368,6 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     expect(code).toBe('POINTS_EXPIRING');
     expect(vars.points).toBe('40');
     expect(typeof vars.date).toBe('string');
-  });
-
-  it('TK-04: hai lô trong cửa sổ khác ngày VN → tin ghi số điểm của lô sớm nhất cùng ngày với nó, khớp trang Điểm Xanh', async () => {
-    const early = new Date(Date.now() + 2 * DAY);
-    const later = new Date(Date.now() + 6 * DAY);
-    const { svc, notify } = setup({
-      candidates: [{ userId: 'u1' }],
-      userTxns: [tx('a', 100, '2025-08-01', early.toISOString()), tx('b', 5000, '2025-08-02', later.toISOString())],
-      recentLog: null,
-    });
-    await svc.remindExpiringPoints();
-    const [, , vars] = notify.mock.calls[0];
-    expect(vars.points).toBe('100');
-    expect(vars.date).toBe(formatVnDate(early));
-  });
-
-  it('TK-04: 3 lô ở 3 ngày khác nhau → lượt 1 nhắc lô đầu, lượt sau (lô đầu đã hết hạn) nhắc lô thứ hai, khoá dedup khác nhau theo ngày', async () => {
-    const d2 = new Date(Date.now() + 2 * DAY);
-    const d4 = new Date(Date.now() + 4 * DAY);
-    const d6 = new Date(Date.now() + 6 * DAY);
-    const lots = [tx('a', 100, '2025-08-01', d2.toISOString()), tx('b', 200, '2025-08-02', d4.toISOString()), tx('c', 5000, '2025-08-03', d6.toISOString())];
-    const first = setup({ candidates: [{ userId: 'u1' }], userTxns: lots, recentLog: null });
-    await first.svc.remindExpiringPoints();
-    expect(first.notify.mock.calls[0][2]).toEqual({ points: '100', date: formatVnDate(d2) });
-    expect(first.notify.mock.calls[0][3]).toEqual({ dedupeKey: `points-exp:u1:${vnDateKey(d2)}` });
-
-    jest.useFakeTimers({ now: new Date(Date.now() + 3 * DAY) });
-    try {
-      const second = setup({ candidates: [{ userId: 'u1' }], userTxns: lots, recentLog: null });
-      await second.svc.remindExpiringPoints();
-      expect(second.notify.mock.calls[0][2]).toEqual({ points: '200', date: formatVnDate(d4) });
-      expect(second.notify.mock.calls[0][3]).toEqual({ dedupeKey: `points-exp:u1:${vnDateKey(d4)}` });
-      expect(second.notifFindFirst.mock.calls[0][0].where.sentAt.gte.getTime()).toBeGreaterThan(Date.now() - DAY);
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('TK-04: cùng mốc ở hai lượt → cùng dedupeKey để notify chặn trùng', async () => {
-    const soon = new Date(Date.now() + 3 * DAY);
-    const a = setup({ candidates: [{ userId: 'u1' }], userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())], recentLog: null });
-    await a.svc.remindExpiringPoints();
-    const b = setup({ candidates: [{ userId: 'u1' }], userTxns: [tx('a', 40, '2025-08-01', soon.toISOString())], recentLog: null });
-    await b.svc.remindExpiringPoints();
-    expect(a.notify.mock.calls[0][3]).toEqual(b.notify.mock.calls[0][3]);
   });
 
   it('đã nhắc trong kỳ (NotificationLog gần đây) → bỏ qua, KHÔNG notify (dedup)', async () => {

@@ -498,7 +498,7 @@ export class LoyaltyExpiryService {
 
   /**
    * Cron 8h sáng: nhắc user có điểm sắp hết hạn trong cửa sổ (config point_expiry_reminder_days).
-   * Dedup theo ngày hết hạn của mốc được nhắc (dedupeKey) + trần một tin mỗi ngày qua NotificationLog.
+   * Dedup qua NotificationLog: bỏ qua nếu đã gửi POINTS_EXPIRING trong ≤ reminderDays ngày.
    *
    * Cùng lỗi thiếu orderBy/cursor như expirePoints() (candidate cũ chiếm chỗ vĩnh viễn khi vượt
    * BATCH) — phân trang bằng keyset y hệt cho nhất quán trong cùng file.
@@ -534,7 +534,7 @@ export class LoyaltyExpiryService {
         if (candidates.length === 0) break;
         cursor = candidates[candidates.length - 1]!.userId;
         for (const c of candidates) {
-          const ok = await this.remindUser(c.userId, now, windowMs).catch((e) => {
+          const ok = await this.remindUser(c.userId, now, windowMs, reminderDays).catch((e) => {
             this.logger.warn(`remindExpiringPoints lỗi user=${c.userId}: ${(e as Error).message}`);
             return false;
           });
@@ -552,29 +552,25 @@ export class LoyaltyExpiryService {
     userId: string,
     now: Date,
     windowMs: number,
+    reminderDays: number,
   ): Promise<boolean> {
     const txns = await this.loadTxns(userId);
-    // Cùng luật với trang Điểm Xanh (nextPointExpiry): số điểm là các lô cùng ngày VN với mốc sớm nhất, để tin và trang không báo hai số.
-    const next = nextPointExpiry(txns, now);
-    if (!next || next.amount <= 0 || next.expiresAt.getTime() > now.getTime() + windowMs) return false;
+    const { expiringSoon } = computePointExpiry(txns, now, windowMs);
+    if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) return false;
 
-    // Trần chống spam: tối đa một tin mỗi ngày. Dùng nửa ngày thay vì đúng 24h vì sentAt luôn muộn hơn mốc cron vài giây,
-    // nên cửa sổ 24h sẽ chặn nhầm lượt 8h sáng hôm sau.
-    const since = new Date(now.getTime() - DAY / 2);
+    // Dedup: đã nhắc trong kỳ (POINTS_EXPIRING trong ≤ reminderDays) → bỏ qua (chống spam).
+    const since = new Date(now.getTime() - reminderDays * DAY);
     const recent = await this.prisma.notificationLog.findFirst({
       where: { userId, templateCode: 'POINTS_EXPIRING', sentAt: { gte: since } },
       select: { id: true },
     });
     if (recent) return false;
 
-    // Dedup theo ngày hết hạn của mốc được nhắc, không theo khoảng reminderDays: lô hết hạn ngày khác trong cùng cửa sổ vẫn
-    // được nhắc ở lượt sau, còn cùng một mốc thì chỉ nhắc một lần.
-    await this.notifications.notifySafe(
-      userId,
-      'POINTS_EXPIRING',
-      { points: formatPoints(next.amount), date: formatVnDate(next.expiresAt) },
-      { dedupeKey: `points-exp:${userId}:${vnDateKey(next.expiresAt)}` },
-    ); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
+    await this.notifications
+      .notifySafe(userId, 'POINTS_EXPIRING', {
+        points: formatPoints(expiringSoon.amount),
+        date: formatVnDate(expiringSoon.earliestExpiresAt),
+      }); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;
   }
 }
