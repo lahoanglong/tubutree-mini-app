@@ -201,6 +201,8 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.goto('/tai-khoan/don-hang');
     await expect(page.getByRole('region', { name: 'Mua lại', exact: true })).toBeVisible();
     expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth])).toEqual([375, 375]);
+    const rail = await page.locator('.tubu-bleed-rail').first().boundingBox();
+    expect([rail!.x, rail!.x + rail!.width]).toEqual([0, 375]);
   });
 
   test('chi tiết đơn chờ chuyển khoản ở 375px: dải hạn thanh toán, thanh đáy "Huỷ đơn | Thanh toán ngay" tới trang QR, không nhúng khung QR', async ({ page, api }) => {

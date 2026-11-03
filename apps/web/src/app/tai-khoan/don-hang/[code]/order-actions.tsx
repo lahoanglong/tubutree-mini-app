@@ -142,7 +142,7 @@ export function OrderActions({
   const returnInBar = showsReturnButton && !isPhone;
   const hasButtons = (canCancel && !cancel.isSuccess) || !!payHref || canReorder || returnInBar;
   // Lời từ chối hủy của BE phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
-  const nothingToDo = !canCancel && !canReorder && !showsReturns && !cancel.isError;
+  const nothingToDo = !canCancel && !payHref && !canReorder && !showsReturns && !cancel.isError;
   if (nothingToDo) return null;
 
   const cancelFields = (
@@ -248,7 +248,9 @@ export function OrderActions({
             <button
               ref={cancelTriggerRef}
               type="button"
+              disabled={cancel.isPending}
               onClick={() => {
+                if (cancel.isPending) return;
                 cancel.reset();
                 setConfirmCancel(true);
               }}
@@ -277,7 +279,9 @@ export function OrderActions({
           open={confirmCancel}
           onClose={() => setConfirmCancel(false)}
           title={CANCEL_TITLE}
-          description={CANCEL_NOTE}
+          role="alertdialog"
+          dismissible={!cancel.isPending}
+          describedBy={refundMode === 'wallet' || refundMode === 'unpaidTransfer' ? 'cancel-note cancel-refund' : 'cancel-note'}
           footer={
             <div className="flex flex-col gap-2">
               {keepButton}
@@ -285,11 +289,12 @@ export function OrderActions({
             </div>
           }
         >
+          <p id="cancel-note" className="text-sm text-stone-600">
+            {CANCEL_NOTE}
+          </p>
           {cancelFields}
         </Sheet>
       )}
-
-      {isPhone && showsReturnButton && <div className="mt-2 text-center">{returnButton}</div>}
 
       {canRequestMore && !returnWindow.open && (
         <p className="mt-3 rounded-control bg-stone-50 p-3 text-xs text-stone-700">
@@ -305,6 +310,8 @@ export function OrderActions({
           Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24 giờ.
         </p>
       )}
+
+      {isPhone && showsReturnButton && <div className="mt-2 text-center">{returnButton}</div>}
 
       {delivered && returnOpen && (
         <ReturnRequestForm

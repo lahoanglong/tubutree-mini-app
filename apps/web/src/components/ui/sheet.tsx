@@ -14,6 +14,10 @@ export interface SheetProps {
   footer?: ReactNode;
   size?: SheetSize;
   dismissible?: boolean;
+  /** `alertdialog` cho hộp xác nhận việc khó hoàn tác; mặc định `dialog`. */
+  role?: 'dialog' | 'alertdialog';
+  /** Id (cách nhau bằng dấu cách) của các phần tử mô tả hộp; không truyền thì không gắn `aria-describedby`. */
+  describedBy?: string;
   children: ReactNode;
 }
 
@@ -38,7 +42,7 @@ const SAFE_BOTTOM = { paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px)
  * của Mini App (`open`/`onClose`/`title`/`description`/`footer`/`size`/`dismissible`). `dismissible=false` chặn cả nút X,
  * Esc và bấm nền. Không dựng khi đóng nên không có hoạt ảnh đóng; đổi lại không có nội dung ẩn trong cây truy cập.
  */
-export function Sheet({ open, onClose, title, description, footer, size = 'auto', dismissible = true, children }: SheetProps) {
+export function Sheet({ open, onClose, title, description, footer, size = 'auto', dismissible = true, role = 'dialog', describedBy, children }: SheetProps) {
   const uid = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -103,9 +107,10 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
       <div data-sheet-backdrop className="absolute inset-0 bg-sheet-scrim md:motion-safe:animate-dialog-fade" onClick={dismissible ? onClose : undefined} />
       <div
         ref={panelRef}
-        role="dialog"
+        role={role}
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-describedby={describedBy}
         tabIndex={-1}
         className={`relative flex w-full flex-col overflow-hidden rounded-t-sheet bg-stone-0 shadow-card outline-none md:max-w-[var(--dialog-w)] md:rounded-sheet md:shadow-dialog md:motion-safe:animate-dialog-pop ${SIZE_CLASS[size]}`}
       >
