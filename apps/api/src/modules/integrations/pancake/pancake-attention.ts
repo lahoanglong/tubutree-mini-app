@@ -29,9 +29,9 @@ export const ATTENTION_COD_RETURN_UNVERIFIED =
 const heldReasonFor = (closed: string, queueName: string) =>
   `Pancake đã báo hoàn một phần rồi hoàn cả đơn, mà Tubu không có yêu cầu trả hàng nào: nhân viên có thể đã hoàn tay phần bị trả. Đơn đã chuyển "${closed}", điểm/hoa hồng/kho đã đảo, nhưng hệ thống KHÔNG tự hoàn tiền cho khách. ` +
   `Kế toán trừ phần đã hoàn tay, rồi xác nhận phần còn lại ở mục "Hoàn tiền khách" (khoản "${queueName}" chờ đối soát của đơn này).`;
-export const ATTENTION_PARTIAL_RETURN_HELD = heldReasonFor('Đã trả hàng', 'Trả hàng');
+export const ATTENTION_PARTIAL_RETURN_HELD = heldReasonFor('Đã trả hàng', 'Trả hàng, có thể đã hoàn tay');
 /** Cùng việc cho đơn CHƯA giao: Pancake "Đã hoàn" huỷ đơn (CANCELLED), khoản mang lý do huỷ chứ không phải trả hàng. */
-export const ATTENTION_PARTIAL_RETURN_HELD_CANCELLED = heldReasonFor('Đã huỷ', 'Hoàn tiền huỷ đơn');
+export const ATTENTION_PARTIAL_RETURN_HELD_CANCELLED = heldReasonFor('Đã huỷ', 'Huỷ đơn, có thể đã hoàn tay');
 export const ATTENTION_PARTIAL_RETURN_HELD_REASONS = [ATTENTION_PARTIAL_RETURN_HELD, ATTENTION_PARTIAL_RETURN_HELD_CANCELLED];
 /** Lý do chờ Kế toán theo trạng thái đích của lần lật. */
 export const partialReturnHeldReason = (target: 'CANCELLED' | 'RETURNED'): string =>

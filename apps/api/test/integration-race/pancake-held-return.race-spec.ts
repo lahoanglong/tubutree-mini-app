@@ -20,6 +20,7 @@ import {
   ATTENTION_PARTIAL_RETURN_SETTLED,
 } from '../../src/modules/integrations/pancake/pancake-attention';
 import { COD_HAND_REFUND_NOTE } from '../../src/modules/orders/refund-queue';
+import { AdminService } from '../../src/modules/admin/admin.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
@@ -659,6 +660,51 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       await refunds.chooseDestination(user.id, rows[0]!.id, { refundMethod: 'WALLET' });
       expect(await walletOf(user.id)).toBe(120_000);
       expect((await orderOf(order.id)).paymentStatus).toBe('REFUNDED');
+      expect((await orderOf(order.id)).pancakeAttention).toBeNull();
+    });
+
+    it('bất biến cho dòng giữ của đơn HUỶ: writer khác nối sau không đè, KHO không bấm "Đã xử lý" được, Kế toán quyết xong chỉ gỡ dòng của mình', async () => {
+      const accountant = await createUser(prisma, { role: 'ADMIN' });
+      const { order, event } = await shippingOrder('BANK_TRANSFER');
+      await processor.onStatusUpdated(event(PARTIAL));
+      await processor.onStatusUpdated(event(RETURNED));
+
+      expect(await attention.writePancakeAttention(prisma, order.id, 'Lý do X')).toBe(`${ATTENTION_PARTIAL_RETURN_HELD_CANCELLED} | Lý do X`);
+      expect(await attention.writePancakeAttention(prisma, order.id, 'Lý do Y', 'Lý do')).toBeNull();
+      expect((await orderOf(order.id)).pancakeAttention).toBe(`${ATTENTION_PARTIAL_RETURN_HELD_CANCELLED} | Lý do X`);
+
+      const storekeeper = await createUser(prisma, { role: 'ADMIN' });
+      await expect(
+        AdminService.prototype.resolvePancakeAttention.call({ prisma } as never, storekeeper.id, order.code),
+      ).rejects.toThrow('chờ Kế toán quyết');
+      expect((await orderOf(order.id)).pancakeAttention).toBe(`${ATTENTION_PARTIAL_RETURN_HELD_CANCELLED} | Lý do X`);
+
+      const row = (await rowsOf(order.id))[0]!;
+      await refunds.dismissOverpayment(accountant.id, row.id, { reason: 'Đã hoàn tay đủ tiền' });
+      expect((await orderOf(order.id)).pancakeAttention).toBe('Lý do X');
+    });
+
+    it('bộ lọc loại khoản: khoản giữ của đơn huỷ nằm ở "Huỷ đơn" (CANCEL), không ở "Trả hàng" (RETURN); đơn trả hàng thì ngược lại; đếm/phân trang đúng', async () => {
+      const cancelled = await shippingOrder('BANK_TRANSFER');
+      await processor.onStatusUpdated(cancelled.event(PARTIAL));
+      await processor.onStatusUpdated(cancelled.event(RETURNED));
+      const returned = await deliveredOrder('BANK_TRANSFER');
+      await processor.onStatusUpdated(returned.event(PARTIAL));
+      await processor.onStatusUpdated(returned.event(RETURNED));
+      const ids = async (code: string, kind: 'CANCEL' | 'RETURN') =>
+        (await refunds.list('OPEN', 1, 20, kind, { q: code })).data.map((r) => r.orderCode);
+
+      expect(await ids(cancelled.order.code, 'CANCEL')).toEqual([cancelled.order.code]);
+      expect(await ids(cancelled.order.code, 'RETURN')).toEqual([]);
+      expect(await ids(returned.order.code, 'RETURN')).toEqual([returned.order.code]);
+      expect(await ids(returned.order.code, 'CANCEL')).toEqual([]);
+      const page = await refunds.list('OPEN', 1, 20, 'CANCEL', { q: cancelled.order.code });
+      expect(page.meta.total).toBe(1);
+    });
+
+    it('tên khoản trong lời nhắc Kế toán khớp nhãn trên màn admin', () => {
+      expect(ATTENTION_PARTIAL_RETURN_HELD_CANCELLED).toContain('khoản "Huỷ đơn, có thể đã hoàn tay"');
+      expect(ATTENTION_PARTIAL_RETURN_HELD).toContain('khoản "Trả hàng, có thể đã hoàn tay"');
     });
 
     it('COD chưa thu: không có tiền để giữ, đơn CANCELLED, không khoản nào', async () => {

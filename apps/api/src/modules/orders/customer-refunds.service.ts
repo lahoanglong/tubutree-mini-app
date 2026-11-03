@@ -6,7 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { anonymizedAtOf, creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { canRefundToBank, formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
-import { COD_HAND_REFUND_NOTE, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, isCodReturnRef, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
+import { COD_HAND_REFUND_NOTE, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, HELD_RETURN_UNVERIFIED_REF, isCodReturnRef, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
 import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD_REASONS, removeAttentionReason } from '../integrations/pancake/pancake-attention';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
@@ -67,6 +67,18 @@ const toMyView = <T extends { kind: CustomerRefundKind; reason: string; method: 
   };
 };
 
+/**
+ * Bộ lọc loại khoản. Khoản giữ chờ Kế toán của đơn huỷ lưu kind RETURN (chung đường đối soát) nhưng hiện là "Huỷ đơn" (toMyView, màn admin), nên
+ * lọc CANCEL lấy thêm nó và lọc RETURN loại nó ra.
+ */
+const HELD_CANCELLED_ROW = { kind: 'RETURN', refKey: { startsWith: HELD_RETURN_UNVERIFIED_REF }, reason: 'CANCELLED' } satisfies Prisma.OrderCustomerRefundWhereInput;
+function kindWhere(kind?: CustomerRefundKind): Prisma.OrderCustomerRefundWhereInput {
+  // AND riêng: ô tìm (q) cũng dùng OR ở cấp trên.
+  if (kind === 'CANCEL') return { AND: [{ OR: [{ kind: 'CANCEL' }, HELD_CANCELLED_ROW] }] };
+  if (kind === 'RETURN') return { kind: 'RETURN', NOT: HELD_CANCELLED_ROW };
+  return kind ? { kind } : {};
+}
+
 const MINE_SELECT = {
   id: true,
   orderId: true,
@@ -115,7 +127,7 @@ export class CustomerRefundsService {
     const userIds = q ? ((await findSearchUserIds(this.prisma, q, search.exactPhoneOnly)) ?? []) : [];
     const where: Prisma.OrderCustomerRefundWhereInput = {
       ...(status === 'OPEN' ? { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } : status ? { status } : {}),
-      ...(kind ? { kind } : {}),
+      ...kindWhere(kind),
       ...(q
         ? {
             OR: [
