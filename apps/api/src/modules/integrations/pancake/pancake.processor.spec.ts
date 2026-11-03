@@ -1334,7 +1334,8 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       await proc.onStatusUpdated({ id: 'p1', status: 15 });
       expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
       const clear = {
-        where: { id: 'o1', OR: expect.arrayContaining([{ pancakeAttention: { startsWith: 'Khách trả một phần đơn' } }]) as unknown },
+        // Gỡ theo dòng (ghi có điều kiện theo đúng giá trị đã đọc), không chỉ khi lời nhắc đứng đầu ô.
+        where: { id: 'o1', pancakeAttention: expect.stringContaining('Khách trả một phần đơn') as unknown },
         data: { pancakeAttention: null, pancakeAttentionAt: null },
       };
       expect(orderUpdateMany).toHaveBeenCalledWith(clear);
@@ -1349,7 +1350,8 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       (prisma.returnRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'rr1', status: 'APPROVED', receivedAt: new Date() }]);
       await proc.onStatusUpdated({ id: 'p1', status: 15 });
       expect(orderUpdateMany).toHaveBeenCalledWith({
-        where: { id: 'o1', OR: expect.arrayContaining([{ pancakeAttention: { startsWith: 'Khách trả một phần đơn' } }]) as unknown },
+        // Gỡ theo dòng (ghi có điều kiện theo đúng giá trị đã đọc), không chỉ khi lời nhắc đứng đầu ô.
+        where: { id: 'o1', pancakeAttention: expect.stringContaining('Khách trả một phần đơn') as unknown },
         data: { pancakeAttention: null, pancakeAttentionAt: null },
       });
       expect(attentionFlags(orderUpdateMany).filter(Boolean)).toHaveLength(0);
