@@ -69,7 +69,7 @@ export class UsersService {
     const { dob, ...rest } = dto;
     if (rest.fullName !== undefined && !NO_HTML.test(rest.fullName)) {
       const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
-      if (current?.fullName !== rest.fullName) throw new BadRequestException('Tên không được chứa ký tự < hoặc >.');
+      if (current?.fullName?.trim() !== rest.fullName.trim()) throw new BadRequestException('Tên không được chứa ký tự < hoặc >.');
     }
     const data: { fullName?: string; email?: string; avatarUrl?: string } = { ...rest };
     if (dob !== undefined) {

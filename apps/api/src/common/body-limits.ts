@@ -88,12 +88,27 @@ export function scanRawJson(buf: Buffer, maxNodes: number, maxDepth: number): bo
   return true;
 }
 
+export const CHARSET_UNSUPPORTED_MESSAGE = 'Dữ liệu gửi lên phải dùng mã hoá UTF-8.';
+
+/**
+ * body-parser nhận mọi charset bắt đầu bằng `utf-` (utf-7, utf-16le...) và giải mã đồng bộ bằng iconv SAU verify;
+ * giải mã 10 MB utf-7 chặn event loop hàng chục giây và buffer thô không còn các byte 0x22/0x3a để quét. Verify chạy
+ * trước bước giải mã nên chặn ở đây là chặn luôn chi phí đó.
+ */
 function rawGuard(maxNodes: number, maxDepth: number) {
-  return (_req: unknown, _res: unknown, buf: Buffer): void => {
+  return (_req: unknown, _res: unknown, buf: Buffer, encoding?: string): void => {
+    if (String(encoding ?? 'utf-8').toLowerCase() !== 'utf-8') {
+      throw Object.assign(new Error('charset'), { status: 415, type: 'charset.unsupported' });
+    }
     if (buf.length > 1024 && !scanRawJson(buf, maxNodes, maxDepth)) {
       throw Object.assign(new Error('body too complex'), { status: 400, type: 'entity.complex' });
     }
   };
+}
+
+/** Parser riêng của /api/events: cùng chốt charset, không quét khoá (trần 512 KB đã nhỏ). */
+export function eventsBodyParser(): RequestHandler {
+  return json({ limit: '512kb', verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) });
 }
 
 /** json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần. */
@@ -147,7 +162,7 @@ export function inspectBody(body: unknown, maxNodes: number, limits: BodyShapeLi
 }
 
 function reject(res: Response, status: number, message: string): void {
-  res.status(status).json({ statusCode: status, message, error: status === 413 ? 'Payload Too Large' : 'Bad Request' });
+  res.status(status).json({ statusCode: status, message, error: status === 413 ? 'Payload Too Large' : status === 415 ? 'Unsupported Media Type' : 'Bad Request' });
 }
 
 // %00 trong URL (đường dẫn, query) đã giải mã thành NUL; Postgres từ chối NUL nên Prisma trả 500 thay vì 400.
@@ -169,6 +184,7 @@ export const bodyParserErrorHandler: ErrorRequestHandler = (err: unknown, _req, 
   const e = err as { type?: string; status?: number; statusCode?: number } | undefined;
   const status = e?.status ?? e?.statusCode;
   if (e?.type === 'entity.too.large') return reject(res, 413, BODY_TOO_LARGE_MESSAGE);
+  if (e?.type === 'charset.unsupported') return reject(res, 415, CHARSET_UNSUPPORTED_MESSAGE);
   if (e?.type === 'entity.complex') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   if (status === 400 && typeof e?.type === 'string' && e.type.startsWith('entity.')) {
     return reject(res, 400, 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.');

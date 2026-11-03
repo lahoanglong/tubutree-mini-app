@@ -4,12 +4,7 @@ import { Logger, type NestApplicationOptions, type Type } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-// Import trực tiếp — không phải qua @nestjs/platform-express — nên PHẢI là dependency trực
-// tiếp của package này (đã thêm ở package.json). Trước đây chỉ resolve được nhờ hoist tình cờ
-// khi cài đặt TOÀN BỘ monorepo (dev/CI); Docker build chỉ copy apps/api + packages nên hoist
-// khác đi, và `require('express')` vỡ ở runtime với "Cannot find module 'express'".
-import { json } from 'express';
-import { bodyParserErrorHandler, createBodyParsers, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
+import { bodyParserErrorHandler, createBodyParsers, eventsBodyParser, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
@@ -122,7 +117,7 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   // Set trust proxy=1 để Express lấy IP thật từ X-Forwarded-For (1 hop = reverse proxy chuẩn).
   app.set('trust proxy', 1);
   // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser theo nhóm route (body đã parse thì parser sau bỏ qua).
-  app.use('/api/events', json({ limit: '512kb' }));
+  app.use('/api/events', eventsBodyParser());
   // Trần theo nhóm route (mặc định 256kb; ảnh base64/CSV 10mb; webhook 1mb), rồi duyệt khoá/phần tử/NUL trước ValidationPipe.
   app.use(...createBodyParsers(), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);

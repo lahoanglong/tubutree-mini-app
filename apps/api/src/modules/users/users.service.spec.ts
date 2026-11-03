@@ -124,6 +124,36 @@ function prismaForAddress(opts: {
 
 const GEO = { provinceCode: '84_VN01', wardCode: '84_VN01_00004' };
 
+describe('UsersService.updateMe: tên có < > (BAOMAT-09)', () => {
+  function svcWithName(stored: string) {
+    const update = jest.fn().mockResolvedValue(fakeUser);
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findUnique = jest.fn().mockResolvedValue({ fullName: stored });
+    const prisma = { user: { update, updateMany, findUnique } } as unknown as PrismaService;
+    return { svc: new UsersService(prisma), update };
+  }
+  it('tên đang lưu "A", gửi "<b>x" → 400, không ghi', async () => {
+    const { svc, update } = svcWithName('A');
+    await expect(svc.updateMe('u1', { fullName: '<b>x' })).rejects.toThrow('Tên không được chứa ký tự < hoặc >.');
+    expect(update).not.toHaveBeenCalled();
+  });
+  it('tên đang lưu "Hoa <3", gửi lại "Hoa <3" kèm dob → ghi được', async () => {
+    const { svc, update } = svcWithName('Hoa <3');
+    await svc.updateMe('u1', { fullName: 'Hoa <3', dob: '1995-03-20' });
+    expect(update).toHaveBeenCalled();
+  });
+  it('tên đang lưu " Hoa <3" (khoảng trắng thừa từ Zalo), client gửi đã trim → ghi được', async () => {
+    const { svc, update } = svcWithName(' Hoa <3 ');
+    await svc.updateMe('u1', { fullName: 'Hoa <3' });
+    expect(update).toHaveBeenCalled();
+  });
+  it('tên đang lưu "Hoa <3", gửi "Hoa <4" → 400', async () => {
+    const { svc, update } = svcWithName('Hoa <3');
+    await expect(svc.updateMe('u1', { fullName: 'Hoa <4' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
 describe('UsersService.createAddress: trần số địa chỉ (BAOMAT-07)', () => {
   it('đã đủ 20 địa chỉ → từ chối với câu rõ, không ghi', async () => {
     const { prisma, create, updateMany } = prismaForAddress({ count: 20 });

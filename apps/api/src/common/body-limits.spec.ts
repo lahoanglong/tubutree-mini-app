@@ -1,11 +1,14 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import express, { json } from 'express';
+import express from 'express';
 import {
   bodyParserErrorHandler,
   BODY_TOO_COMPLEX_MESSAGE,
   BODY_TOO_LARGE_MESSAGE,
   createBodyParsers,
+  eventsBodyParser,
+  scanRawJson,
+  CHARSET_UNSUPPORTED_MESSAGE,
   inspectBody,
   MAX_ARRAY_LENGTH,
   MAX_BODY_DEPTH,
@@ -21,7 +24,7 @@ const bodyOf = async (res: Response) => (await res.json()) as { message?: unknow
 /** Cùng thứ tự middleware với bootstrap.ts (events → parser theo nhóm → lỗi parser → guard → no-store). */
 function buildApp() {
   const app = express();
-  app.use('/api/events', json({ limit: '512kb' }));
+  app.use('/api/events', eventsBodyParser());
   app.use(...createBodyParsers(), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);
   app.use((req, res) => {
@@ -62,9 +65,47 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect((await post('/api/admin/x', '['.repeat(40) + ']'.repeat(40))).status).toBe(400);
       expect((await post('/api/admin/x', { s: '{'.repeat(5000) + '[[[[[[[[[[[[[[[[[\\"' })).status).toBe(200);
     });
+    it('quét thô bắt thân lồng sâu quá 1024 byte, JSON.parse không chạy', async () => {
+      const raw = `{"pad":"${'x'.repeat(2000)}","d":${'['.repeat(40)}${']'.repeat(40)}}`;
+      const spy = jest.spyOn(JSON, 'parse');
+      try {
+        expect((await post('/api/admin/x', raw)).status).toBe(400);
+        expect(spy.mock.calls.some(([arg]) => typeof arg === 'string' && arg.length > 2000)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(scanRawJson(Buffer.from('['.repeat(11) + ']'.repeat(11)), 6000, 10)).toBe(false);
+      expect(scanRawJson(Buffer.from('['.repeat(10) + ']'.repeat(10)), 6000, 10)).toBe(true);
+    });
     it('thân hợp lệ lớn nhất (500 dòng × 5 trường) vẫn qua', async () => {
       const items = Array.from({ length: 500 }, (_, i) => ({ a: i, b: 'x', c: 1, d: true, e: null }));
       expect((await post('/api/admin/x', { items })).status).toBe(200);
+    });
+  });
+
+  describe('charset khác UTF-8 bị từ chối trước khi giải mã (BAOMAT-01)', () => {
+    const utf7 = `{"note":"${'a+ACI-'.repeat(40_000)}"}`;
+    const utf16 = Buffer.from(`{"note":"${'a'.repeat(100_000)}"}`, 'utf16le');
+    it.each(['/api/feed/posts', '/api/auth/guest', '/api/webhooks/pancake', '/api/events'])('%s: utf-7 → 415 nhanh, không JSON.parse', async (path) => {
+      const spy = jest.spyOn(JSON, 'parse');
+      const t = Date.now();
+      try {
+        const res = await post(path, utf7, { 'content-type': 'application/json; charset=utf-7' });
+        expect(res.status).toBe(415);
+        expect(await bodyOf(res)).toMatchObject({ message: CHARSET_UNSUPPORTED_MESSAGE });
+        expect(spy.mock.calls.some(([arg]) => typeof arg === 'string' && arg.length > 100_000)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(Date.now() - t).toBeLessThan(2000);
+    });
+    it('utf-16le → 415', async () => {
+      const res = await post('/api/feed/posts', utf16 as unknown as string, { 'content-type': 'application/json; charset=utf-16le' });
+      expect(res.status).toBe(415);
+    });
+    it('charset=utf-8 (hoa/thường) và không khai báo vẫn qua', async () => {
+      expect((await post('/api/feed/posts', { a: 1 }, { 'content-type': 'application/json; charset=UTF-8' })).status).toBe(200);
+      expect((await post('/api/feed/posts', { a: 1 })).status).toBe(200);
     });
   });
 
