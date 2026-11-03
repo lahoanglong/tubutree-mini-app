@@ -2,6 +2,7 @@ import type { AdminCustomerRefund, AdminCustomerRefundFilter, AdminCustomerRefun
 import type { Tone } from './recycling';
 import { ApiError } from './client-api';
 import { formatVnd } from './shop-client';
+import { actionErrorText, isBusinessMessage } from './error-text';
 
 /** Tiền tố khoá query của mọi truy vấn hoàn tiền khách (danh sách, số đếm), để invalidate một lần sau khi ghi. */
 export const CUSTOMER_REFUNDS_QUERY_KEY = 'admin-customer-refunds';
@@ -184,5 +185,5 @@ export function markPaidFailure(e: unknown, action: RefundAction = 'paid'): Mark
       message: `Máy chủ đang gặp lỗi nên chưa rõ khoản này đã được ghi nhận chưa. Bấm "${button}" để thử lại; nếu đã ghi nhận, danh sách sẽ tự cập nhật.`,
     };
   }
-  return { stale: false, message: e.message || 'Không ghi nhận được. Thử lại sau ít phút.' };
+  return { stale: false, message: isBusinessMessage(e.message) ? e.message : actionErrorText(e) };
 }

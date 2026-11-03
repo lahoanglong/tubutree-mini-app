@@ -42,6 +42,7 @@ import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refun
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 import { useDebounced } from '@/lib/use-debounced';
+import { loadErrorText } from '@/lib/error-text';
 import { searchEmptyHint } from './search-empty-hint';
 
 const PAGE_SIZE = 20;
@@ -448,7 +449,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
       {q.isError && (
         <Notice tone="danger" role="alert">
           <div className="flex flex-wrap items-center gap-2">
-            <span>Không tải được danh sách hoàn tiền.</span>
+            <span>Không tải được danh sách hoàn tiền. {loadErrorText(q.error)}</span>
             <button type="button" className={BTN_SECONDARY} disabled={q.isFetching} onClick={() => void q.refetch()}>
               Thử lại
             </button>

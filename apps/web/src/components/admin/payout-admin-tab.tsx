@@ -18,6 +18,9 @@ import { useConfirm } from './confirm-dialog';
 import { VnMonthInput } from './vn-date-input';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText } from '@/lib/error-text';
+
+const RELOAD_HINT = 'Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa trước khi chi lần nữa.';
 
 const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
   REQUESTED: 'warning',
@@ -247,7 +250,9 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
       void qc.invalidateQueries({ queryKey: ['admin-payouts'] });
     },
     onError: (e) => {
-      setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+      const text = actionErrorText(e);
+      // Lời nghiệp vụ của máy chủ đã nói rõ kết quả; các lỗi còn lại (5xx, mạng, hết giờ) chưa chắc lệnh đã chi hay chưa.
+      setErr(e instanceof Error && text === e.message ? text : `${text} ${RELOAD_HINT}`);
       // Trạng thái có thể vừa bị admin khác đổi — tải lại để thấy trạng thái thật.
       void qc.invalidateQueries({ queryKey: ['admin-payouts'] });
     },

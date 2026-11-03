@@ -5,6 +5,8 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from './customer-refunds-tab';
 import { byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminCustomerRefund } from '@/lib/admin-client';
+import { ApiError } from '@/lib/client-api';
+import { markPaidFailure } from '@/lib/customer-refunds-admin';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -687,6 +689,24 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(confirmDialog()).toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('KHÔNG chuyển khoản');
     expect(api.lists().length).toBeGreaterThan(1);
+  });
+
+  it('ERR-03: markPaidFailure với 404/409 tiếng Anh của framework → câu tiếng Việt; lời nghiệp vụ giữ nguyên', () => {
+    expect(markPaidFailure(new ApiError('Cannot POST /api/admin/customer-refunds/r1/claim', 404), 'claim').message).not.toContain('Cannot POST');
+    expect(markPaidFailure(new ApiError('Conflict', 409), 'paid').message).not.toBe('Conflict');
+    const business = 'Khoản này đã được Admin An xác nhận chuyển khoản.';
+    expect(markPaidFailure(new ApiError(business, 409), 'paid').message).toBe(business);
+  });
+
+  it('ERR-03: tải danh sách lỗi 500 → báo lý do bằng tiếng Việt, không lộ "Internal server error"', async () => {
+    const api = mockFetch({ '/admin/customer-refunds': { status: 500, body: { statusCode: 500, message: 'Internal server error' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const text = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(text).toContain('Không tải được danh sách hoàn tiền');
+    expect(text).toContain('Máy chủ đang bận');
+    expect(text).not.toContain('Internal server error');
   });
 
   it('R2-LIFECYCLE-2: dòng "Đang chuyển khoản" có "Đã chuyển khoản" (gửi mã GD) và "Trả về hàng chờ"', async () => {
