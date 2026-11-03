@@ -7,6 +7,7 @@ import { paginated, skipTake } from '../../common/pagination';
 import { maskFullName, publicDisplayName } from '../../common/mask-name';
 import { maskPhoneOrNull } from '../../common/mask-pii';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
+import { assertReachedStatus } from '../orders/status-race';
 import {
   normalizeSubdomain,
   normalizeCustomDomain,
@@ -1135,13 +1136,16 @@ export class MerchantService {
     // không cộng/đảo điểm Xanh + hoa hồng CTV (đơn CTV tự đổi DELIVERED/CANCELLED không bao
     // giờ credit/reverse — mất vĩnh viễn, P1-1). Ủy quyền cho OrderStatusService — cùng nguồn
     // ghi status với admin/pancake. Xem docs/2026-09-08-review-progress.md.
+    let updated;
     try {
-      return await this.orderStatus.setStatus(order.id, status as OrderStatus, {
+      updated = await this.orderStatus.setStatus(order.id, status as OrderStatus, {
         actorType: 'MERCHANT',
         actorId: userId,
       });
     } catch (err) {
       toHttpBadRequest(err);
     }
+    assertReachedStatus(updated, status);
+    return updated;
   }
 }
