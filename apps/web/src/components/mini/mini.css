@@ -640,6 +640,27 @@
     color: var(--color-action-secondary-fg-disabled);
   }
 }
+/* Thứ tự các khối của cột thông tin trang sản phẩm khi xếp một cột (< md), như Mini App. Viết ở CSS thường thay cho `max-md:order-N` để bánh cóc `max-md` của PDP giảm; từ md không đặt `order` nên giữ bố cục máy tính. */
+@media (max-width: 767px) {
+  .tubu-pdp-order-1 { order: 1; }
+  .tubu-pdp-order-2 { order: 2; }
+  .tubu-pdp-order-3 { order: 3; }
+  .tubu-pdp-order-4 { order: 4; }
+  .tubu-pdp-order-5 { order: 5; }
+  .tubu-pdp-order-6 { order: 6; }
+  .tubu-pdp-order-8 { order: 8; }
+  .tubu-pdp-order-9 { order: 9; }
+  .tubu-pdp-order-11 { order: 11; }
+}
+/* Chỗ giữ cho ghi chú Giờ vàng dưới ô Số lượng (PDP), khách đã đăng nhập đang xem Giờ vàng: ghi chú về muộn theo GET /flash-sales/me/allowance không đẩy phần bên dưới. Máy tính: một dòng text-sm (20px) cộng mt-2; điện thoại: 2 dòng caption cộng đệm dưới, như Mini App. */
+.tubu-pdp-flash-note {
+  min-height: 1.75rem;
+}
+@media (max-width: 767px) {
+  .tubu-pdp-flash-note {
+    min-height: calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card));
+  }
+}
 .tubu-sticky-bar .tubu-btn {
   min-width: 0;
   padding-left: 12px;

@@ -393,6 +393,9 @@ export default function ProductDetailPage() {
     : { total: price * quantity, lineTotal: price * quantity, lineQuantity: quantity, inCart: 0, overLimit: false, allowance: null, allowanceBy: null };
   // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
   const overLimitText = lineNote(line, quantity, true);
+  // Giữ chỗ 2 dòng caption từ lần vẽ đầu khi khách đã đăng nhập đang xem Giờ vàng: câu hết suất chỉ biết sau GET /flash-sales/me/allowance (về muộn 1–3 s) và không được đẩy phần dưới.
+  // Khách chưa đăng nhập hoặc sản phẩm không có Giờ vàng thì không có số theo khách để chờ, không giữ dải trống.
+  const reserveFlashNote = status === 'authenticated' && priceView.isFlash;
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
   const soldText = formatSold(p.sold);
@@ -794,7 +797,14 @@ export default function ProductDetailPage() {
         />
       </Box>
       {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, nút Mua ngay đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
-      <div role="status" style={{ background: 'var(--color-bg-surface)' }}>
+      <div
+        role="status"
+        data-section="pdp-flash-limit"
+        style={{
+          background: 'var(--color-bg-surface)',
+          minHeight: reserveFlashNote ? 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card))' : undefined,
+        }}
+      >
         {overLimitText && (
           <p
             style={{

@@ -212,4 +212,35 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
     const after = (await plus.boundingBox())!;
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
   });
+  for (const delayMs of [1_000, 3_000]) {
+    test(`ngoài bảng: allowance về sau ${delayMs}ms không đẩy phần bên dưới, CLS do ghi chú bằng 0`, async ({ page, api, request }) => {
+      await page.addInitScript(() => {
+        const w = window as unknown as { __cls: number };
+        w.__cls = 0;
+        new PerformanceObserver((list) => {
+          for (const e of list.getEntries() as unknown as { hadRecentInput: boolean; value: number }[]) if (!e.hadRecentInput) w.__cls += e.value;
+        }).observe({ type: 'layout-shift', buffered: true });
+      });
+      await setup(page, api, request, { allowance: { perUserLeft: 0, delayMs } });
+      const slot = page.locator('[data-section="pdp-flash-limit"]');
+      await expect(slot).toBeVisible();
+      const before = (await slot.boundingBox())!;
+      const readCls = () => page.evaluate(() => new Promise<number>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r((window as unknown as { __cls: number }).__cls)))));
+      const clsBefore = await readCls();
+      await expect(slot).toHaveText(SPENT, { timeout: delayMs + 10_000 });
+      const after = (await slot.boundingBox())!;
+      expect(Math.abs(after.y - before.y), 'vùng ghi chú dịch chỗ').toBeLessThanOrEqual(1);
+      expect(Math.abs(after.height - before.height), 'vùng ghi chú đổi chiều cao').toBeLessThanOrEqual(1);
+      const cls = (await readCls()) - clsBefore;
+      expect(cls, `CLS khi ghi chú hiện ${cls.toFixed(4)}`).toBe(0);
+    });
+  }
+
+  test('không có Giờ vàng hoặc chưa đăng nhập: vùng ghi chú không giữ dải trống', async ({ page, api, request }) => {
+    // Giờ vàng đang chạy nhưng khách chưa đăng nhập: không có số theo khách để chờ nên không giữ chỗ.
+    await setup(page, api, request);
+    const slot = page.locator('[data-section="pdp-flash-limit"]');
+    await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
+    expect((await slot.boundingBox())?.height ?? 0).toBe(0);
+  });
 });
