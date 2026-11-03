@@ -8,8 +8,17 @@ export function firstLogLine(message: unknown): string {
   return typeof message;
 }
 
-function firstNonEmptyLine(text: string): string {
-  return text.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
+// Lỗi Prisma mở đầu bằng "Invalid `prisma.x()` invocation:" (ở dev kèm đường dẫn và khung mã); câu lỗi thật là dòng cuối của message.
+const PRISMA_INVOCATION = /^Invalid `[^`]+` invocation\b/;
+
+/** Dòng đầu không rỗng; với lỗi Prisma thì nối phần trước dòng "Invalid ... invocation" với câu lỗi thật, bỏ stack. */
+export function firstNonEmptyLine(text: string): string {
+  const lines = text.split('\n').map((l) => l.trim()).filter((l) => l !== '');
+  const at = lines.findIndex((l) => PRISMA_INVOCATION.test(l));
+  if (at < 0) return lines[0] ?? '';
+  const stack = lines.findIndex((l, i) => i > at && l.startsWith('at '));
+  const last = (stack < 0 ? lines.length : stack) - 1;
+  return [...lines.slice(0, at), lines[last]!].join(' ');
 }
 
 /**

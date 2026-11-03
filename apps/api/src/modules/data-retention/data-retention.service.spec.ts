@@ -1,5 +1,8 @@
 import 'reflect-metadata';
+import { Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
+import { firstLogLine } from '../../common/cron-run/cron-aware-logger';
 import { DataRetentionService, RETENTION_POLICY, resolveRetentionDays } from './data-retention.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -194,6 +197,40 @@ describe('DataRetentionService (C-046)', () => {
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 11);
     expect((res as { deleted: Record<string, number> }).deleted).not.toHaveProperty('analytics_events');
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty('refresh_tokens');
+  });
+
+  it('mỗi câu dọn lọc theo cột khoá có thật trong schema (support_recall_tombstones khoá theo zaloMsgId, không có id)', async () => {
+    const { svc, prisma } = make();
+    await svc.runAll({ now: NOW, pauseMs: 0 });
+    const columnsOf = (table: string) => {
+      const model = Prisma.dmmf.datamodel.models.find((m) => (m.dbName ?? m.name) === table);
+      return new Set((model?.fields ?? []).filter((f) => f.kind === 'scalar').map((f) => f.dbName ?? f.name));
+    };
+    const seen: string[] = [];
+    for (const [strings, ...values] of prisma.$executeRaw.mock.calls as unknown as [TemplateStringsArray, ...unknown[]][]) {
+      const { sql } = Prisma.sql(strings, ...values);
+      const m = /^\s*(?:DELETE FROM|UPDATE) "(\w+)" .*?WHERE "(\w+)" IN \(SELECT "(\w+)" FROM "(\w+)"/s.exec(sql);
+      expect(m).not.toBeNull();
+      const [, table, key, innerKey, innerTable] = m!;
+      expect({ table, key }).toEqual({ table: innerTable, key: innerKey });
+      expect([...columnsOf(table!)]).toContain(key);
+      seen.push(`${table}.${key}`);
+    }
+    expect(seen).toContain('support_recall_tombstones.zaloMsgId');
+  });
+
+  it('log lỗi của một bảng ghi câu lỗi thật của Postgres, không chỉ dòng mở đầu của Prisma', async () => {
+    const { svc, prisma } = make();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    prisma.$executeRaw.mockRejectedValueOnce(
+      new Error('\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column "id" does not exist`'),
+    );
+    await svc.runAll({ now: NOW, pauseMs: 0 });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(firstLogLine(error.mock.calls[0]![0])).toBe(
+      'Dọn analytics_events lỗi: Raw query failed. Code: `42703`. Message: `column "id" does not exist`',
+    );
+    error.mockRestore();
   });
 
   it('handleCron không bao giờ ném lỗi ra ngoài', async () => {
