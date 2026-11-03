@@ -1319,7 +1319,7 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       expect(writeAt).toBeGreaterThan(txReturnRequestCount.mock.invocationCallOrder[0]!);
       expect(flags[0]).toMatch(/^Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu/);
       expect(flags[0]).toContain('Đã nhận hàng về');
-      expect(flags[0]).toContain('tồn kho lấy theo Pancake');
+      expect(flags[0]).toContain('Tồn kho Tubu lấy theo Pancake');
       expect(flags[0]).not.toContain('để cộng kho');
       expect(flags[0]).not.toMatch(/hoàn tiền\/điểm.*bằng tay/);
       expect(alerts.alert).not.toHaveBeenCalled();

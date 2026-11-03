@@ -714,7 +714,7 @@ export class OrderReturnsService {
     );
     const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
     this.logger.log(
-      `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`,
+      `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị (không tính biến thể Pancake).`,
     );
     await this.notifications.notifySafe(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }, undefined, `return=${id}`);
   }
@@ -824,7 +824,7 @@ export class OrderReturnsService {
     const what = shares.lines
       .map((l) => `${byId.get(l.orderItemId)?.productName ?? l.orderItemId} ×${l.quantity}`)
       .join(', ');
-    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho (nhập kho trên Pancake: tồn kho lấy theo Pancake).`;
+    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho (kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake).`;
     try {
       // Nối vào ô, không đè: lý do khác (lệch tổng, COD chờ Kế toán, lời đã xử lý của Pancake 15) còn việc. Chỉ thay lời "tạo phiếu trả" cũ.
       await appendPancakeAttention(this.prisma, order.id, reason, ATTENTION_RETURN_APPROVED);
