@@ -139,7 +139,7 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     expect(text).toContain('Tổng hoàn104.000đ');
     expect(text).toContain('Về Ví Tubu của khách (cộng ngay khi duyệt)');
     expect(text).toContain('Thu hồi 89 Điểm Xanh đã tích');
-    expect(text).toContain('Kho chỉ cộng lại khi bấm "Đã nhận hàng về".');
+    expect(text).toContain('Bấm "Đã nhận hàng về" khi hàng về kho; tồn kho hàng Pancake lấy theo Pancake (nhập kho trên Pancake).');
     click(btn(box, 'Xác nhận hoàn 104.000đ'));
     await flush();
     expect(mocks.review).toHaveBeenCalledWith('r1', true, undefined, {

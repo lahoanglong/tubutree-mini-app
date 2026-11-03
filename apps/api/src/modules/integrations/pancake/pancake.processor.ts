@@ -561,7 +561,7 @@ export class PancakeProcessor extends WorkerHost {
         await removeAttentionReasonsByPrefix(tx, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
         return;
       }
-      const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;
+      const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để ghi nhận, rồi nhập kho trên Pancake: tồn kho lấy theo Pancake.`;
       await writePancakeAttention(tx, order.id, reason);
     });
     const note = `${ATTENTION_PARTIAL_RETURN_ACK} (Pancake #${order.pancakeOrderId ?? '?'})`;
@@ -914,13 +914,21 @@ export class PancakeProcessor extends WorkerHost {
     if (applied) return;
     const current = await this.prisma.variation.findUnique({
       where: { pancakeId: pancakeVariationId },
-      select: { pancakeStockEventAt: true, pancakeStockSyncReadAt: true },
+      select: { pancakeStockEventAt: true, pancakeStockSyncReadAt: true, pancakeStockWebhookReceivedAt: true },
     });
     if (current?.pancakeStockSyncReadAt && current.pancakeStockSyncReadAt >= receivedAt) {
       this.logger.warn(`Bỏ qua tồn kho của biến thể Pancake ${pancakeVariationId}: ${n}, nhận trước lượt đồng bộ danh mục.`);
       return (
         `Webhook tồn kho (${n}) nhận lúc ${receivedAt.toISOString()}, không sau lúc lượt đồng bộ danh mục bắt đầu đọc số Pancake (` +
         `${current.pancakeStockSyncReadAt.toISOString()}) — số đồng bộ mới hơn, không áp để tồn kho không lùi.`
+      );
+    }
+    // Webhook không có updated_at, hoặc chưa có mốc updated_at nào để so: chỉ còn mốc nhận để biết số này cũ hơn số đã áp.
+    if ((!eventAt || !current?.pancakeStockEventAt) && current?.pancakeStockWebhookReceivedAt && current.pancakeStockWebhookReceivedAt > receivedAt) {
+      this.logger.warn(`Bỏ qua tồn kho của biến thể Pancake ${pancakeVariationId}: ${n}, nhận trước webhook tồn kho đã áp.`);
+      return (
+        `Webhook tồn kho (${n}) nhận lúc ${receivedAt.toISOString()}, trước webhook đã áp (nhận lúc ` +
+        `${current.pancakeStockWebhookReceivedAt.toISOString()}) — không có updated_at để so, số đã áp mới hơn nên không áp để tồn kho không lùi.`
       );
     }
     if (!eventAt || !current?.pancakeStockEventAt) return;

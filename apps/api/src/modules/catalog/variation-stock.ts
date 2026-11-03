@@ -105,6 +105,29 @@ export async function releaseVariationStock(
 }
 
 /**
+ * Cộng lại kho hàng đã RỜI kho (đã giao, hoặc Pancake đã phản ánh đơn vào số tồn) khi hàng được trả về.
+ *
+ * Biến thể có `pancakeStock` (Pancake là nguồn tồn) KHÔNG bị đụng tới `stock` lẫn `reservedStock`: phần giữ chỗ của đơn này đã
+ * được nhả khi Pancake phản ánh đơn, nên `reservedStock` lúc này là của các đơn KHÁC (nhả nó làm `stock` phồng lên), còn số hàng
+ * nhập lại do Pancake báo về qua đồng bộ/webhook — Tubu tự cộng thì lần Pancake báo sau cộng trùng hoặc xoá mất. Chỉ biến thể tự
+ * quản (`pancakeStock IS NULL`, không có nguồn nào khác báo tồn) mới cộng như `releaseVariationStock`. Đường huỷ trước khi giao
+ * vẫn dùng `releaseVariationStock`.
+ */
+export async function restockReturnedVariationStock(
+  tx: StockExecutor,
+  variationId: string,
+  quantity: number,
+): Promise<void> {
+  if (!Number.isInteger(quantity) || quantity <= 0) return;
+  await tx.$executeRaw`
+    UPDATE "variations"
+       SET "stock" = "stock" + ${quantity},
+           "reservedStock" = GREATEST(0, "reservedStock" - ${quantity})
+     WHERE "id" = ${variationId} AND "pancakeStock" IS NULL
+  `;
+}
+
+/**
  * Số tồn kho Pancake này tới từ đâu — quyết định so với mốc nào trước khi áp.
  *
  * - `webhook`: `eventAt` = `updated_at` của Pancake (có thể vắng), `receivedAt` = lúc Tubu nhận webhook
@@ -141,12 +164,18 @@ function stockOriginSql(origin: PancakeStockOrigin | undefined): { set: Prisma.S
       ? Prisma.sql`, "pancakeStockEventAt" = ${eventAt},
            "pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ${receivedAt})`
       : Prisma.sql`, "pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ${receivedAt})`,
+    // Webhook không mang updated_at thì không còn mốc Pancake nào để so; mốc nhận (giờ máy chủ) là thứ duy nhất phân biệt sự kiện cũ
+    // được BullMQ thử lại sau một sự kiện mới hơn. Cùng sự kiện thử lại mang cùng receivedAt nên vẫn qua (<=). Có updated_at thì
+    // mốc đó quyết định (webhook gửi muộn nhưng updated_at mới hơn phải được áp, R5-SYNC-3); chỉ khi chưa có mốc updated_at nào
+    // thì mới so lúc nhận.
     guard: eventAt
       ? Prisma.sql`
        AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})
-       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})`
+       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})
+       AND ("pancakeStockEventAt" IS NOT NULL OR "pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ${receivedAt})`
       : Prisma.sql`
-       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})`,
+       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})
+       AND ("pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ${receivedAt})`,
   };
 }
 
