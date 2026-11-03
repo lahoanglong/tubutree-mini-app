@@ -110,8 +110,11 @@ export async function releaseVariationStock(
  * Biến thể có `pancakeStock` (Pancake là nguồn tồn) KHÔNG bị đụng tới `stock` lẫn `reservedStock`: đơn đã giao thì giữ chỗ của nó
  * đã được nhả khi Pancake phản ánh đơn, nên `reservedStock` lúc này là của các đơn KHÁC (nhả nó làm `stock` phồng lên), còn số hàng
  * nhập lại do Pancake báo về qua đồng bộ/webhook — Tubu tự cộng thì lần Pancake báo sau cộng trùng hoặc xoá mất. Chỉ biến thể tự
- * quản (`pancakeStock IS NULL`, không có nguồn nào khác báo tồn) mới cộng như `releaseVariationStock`. Đường huỷ trước khi giao
- * (hoặc đơn giao tay chưa lên Pancake) vẫn dùng `releaseVariationStock`.
+ * quản (`pancakeStock IS NULL`, không có nguồn nào khác báo tồn) mới cộng như `releaseVariationStock`.
+ *
+ * Hai nơi gọi: `restockReturnedItems` (admin xác nhận đã nhận hàng trả về) dùng hàm này cho mọi đơn, kể cả đơn giao tay; còn đường huỷ
+ * (`restoreStockAndFlash`) chỉ dùng khi đơn đã DELIVERED và đã có `pancakeOrderId`, mọi huỷ khác (trước khi giao, hoặc đơn giao tay
+ * chưa lên Pancake) dùng `releaseVariationStock`.
  */
 export async function restockReturnedVariationStock(
   tx: StockExecutor,
