@@ -30,6 +30,7 @@ describe('Data retention cleanup (real Postgres)', () => {
       'retention.notification_logs_days',
       'retention.webhook_events_days',
       'retention.refresh_sessions_days',
+      'retention.support_chat_days',
     ]) {
       await prisma.systemConfig.deleteMany({ where: { key: k } });
     }
@@ -134,6 +135,40 @@ describe('Data retention cleanup (real Postgres)', () => {
     const second = await run();
     expect(second).toMatchObject({ truncated: false });
     expect(await alive()).toEqual(after);
+  });
+
+  it('support_chat: xoá tin và lượt chuyển quá hạn, tombstone thu hồi quá 2 ngày (bảng khoá theo zaloMsgId, không có cột id)', async () => {
+    const t = randCode(8);
+    const owner = await createUser(prisma);
+    const conv = await prisma.supportConversation.create({ data: { userId: owner.id, code: randCode(6).toUpperCase() } });
+    const msg = (suffix: string, createdAt: Date) =>
+      prisma.supportMessage.create({ data: { conversationId: conv.id, sender: 'CUSTOMER', source: 'MINIAPP', body: `${t}-${suffix}`, createdAt } });
+    const fwd = (createdAt: Date) => prisma.supportForward.create({ data: { conversationId: conv.id, groupId: t, createdAt } });
+    await msg('old', ago(366));
+    const mNew = await msg('new', ago(364));
+    await fwd(ago(366));
+    const fNew = await fwd(ago(364));
+    await prisma.supportRecallTombstone.createMany({
+      data: [
+        { zaloMsgId: `${t}-old`, createdAt: new Date(NOW.getTime() - 2 * DAY - 60_000) },
+        { zaloMsgId: `${t}-new`, createdAt: new Date(NOW.getTime() - 2 * DAY + 3_600_000) },
+      ],
+    });
+
+    const res = await svc.runAll({ now: NOW, batchSize: 2, pauseMs: 0 });
+    const deleted = (res as { deleted: Record<string, number> }).deleted;
+    expect(deleted.support_messages).toBeGreaterThanOrEqual(1);
+    expect(deleted.support_forwards).toBeGreaterThanOrEqual(1);
+    expect(deleted.support_recall_tombstones).toBeGreaterThanOrEqual(1);
+
+    const msgs = await prisma.supportMessage.findMany({ where: { conversationId: conv.id }, select: { id: true } });
+    expect(msgs.map((r) => r.id)).toEqual([mNew.id]);
+    const fwds = await prisma.supportForward.findMany({ where: { groupId: t }, select: { id: true } });
+    expect(fwds.map((r) => r.id)).toEqual([fNew.id]);
+    const tombs = await prisma.supportRecallTombstone.findMany({ where: { zaloMsgId: { startsWith: t } }, select: { zaloMsgId: true } });
+    expect(tombs.map((r) => r.zaloMsgId)).toEqual([`${t}-new`]);
+    // Hội thoại giữ lại để mã của khách không đổi.
+    expect(await prisma.supportConversation.count({ where: { id: conv.id } })).toBe(1);
   });
 
   it('TTL đọc từ SystemConfig, đặt thấp hơn sàn thì kẹp về sàn', async () => {

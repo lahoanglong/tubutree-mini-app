@@ -1027,20 +1027,20 @@ export class CatalogService {
     });
     const productIdBySku = new Map(variations.map((v) => [v.sku, v.productId]));
 
+    // Nhiều SKU cùng một sản phẩm: cộng dồn rồi ghi một lần, không để dòng cuối đè các dòng trước.
+    const totalByProduct = new Map<string, number>();
+    for (const r of valid) {
+      const productId = productIdBySku.get(r.sku);
+      if (!productId) continue;
+      totalByProduct.set(productId, (totalByProduct.get(productId) ?? 0) + Math.floor(r.count));
+    }
+    const entries = [...totalByProduct];
+
     let updated = 0;
-    for (let i = 0; i < valid.length; i += BATCH_SIZE) {
-      const batch = valid.slice(i, i + BATCH_SIZE);
-      const ops = batch
-        .map((r) => {
-          const productId = productIdBySku.get(r.sku);
-          if (!productId) return null;
-          return this.prisma.product.update({
-            where: { id: productId },
-            data: { soldExternal: Math.floor(r.count) },
-          });
-        })
-        .filter((op): op is NonNullable<typeof op> => op !== null);
-      if (ops.length === 0) continue;
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const ops = entries
+        .slice(i, i + BATCH_SIZE)
+        .map(([productId, total]) => this.prisma.product.update({ where: { id: productId }, data: { soldExternal: total } }));
       await this.prisma.$transaction(ops);
       updated += ops.length;
     }

@@ -25,6 +25,7 @@
         Require all denied
     </LocationMatch>
 
+    LimitRequestBody 10485760
     ProxyPass /.well-known/acme-challenge/ !
     ProxyPass / http://127.0.0.1:14001/
     ProxyPassReverse / http://127.0.0.1:14001/

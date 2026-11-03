@@ -7,8 +7,9 @@
  * có approvedAt trong tháng (giờ VN). Commission chỉ lên APPROVED sau khi đơn DELIVERED + hết
  * max(affiliate.hold_days, returns.window_days) + không còn yêu cầu đổi/trả chờ duyệt
  * (AffiliateService.approveDueCommissions) nên khách đã hết hạn đổi/trả; chỉ đơn bị trả muộn (Pancake báo hoàn, admin đổi trạng
- * thái) mới thu hồi được hoa hồng đã chốt, khi đó khoản đó thành REJECTED và rời doanh số tháng. Thưởng mốc đã nhận không bị thu lại
- * (chưa có luồng clawback). Không tính PENDING (đơn còn huỷ được) — lỗ hổng cũ: lên đơn hộ 80tr COD, nhận 2,85tr
+ * thái) mới thu hồi được hoa hồng đã chốt, khi đó khoản đó thành REJECTED (hoặc bị cắt khi trả một phần) và rời doanh số tháng.
+ * Doanh số tháng đó rơi dưới ngưỡng của mốc đã nhận thì điểm mốc bị thu hồi cùng transaction (revokeLostCtvMilestones, ghi nợ nếu
+ * số dư thiếu); doanh số lên lại thì nhận lại được. Không tính PENDING (đơn còn huỷ được) — lỗ hổng cũ: lên đơn hộ 80tr COD, nhận 2,85tr
  * thưởng rồi tự huỷ đơn.
  *
  * Bậc chỉ là DANH HIỆU theo doanh số — KHÔNG có "+X% bonus hoa hồng": chưa có luồng nào trả

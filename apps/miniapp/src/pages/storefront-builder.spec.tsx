@@ -691,11 +691,12 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.getAllByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toHaveLength(1);
   });
 
-  it('bậc 1 (Tân binh): không huy hiệu, như trang khách', async () => {
+  it('bậc 1 (Tân binh): không huy hiệu như trang khách, chỗ huy hiệu giữ bằng dòng gợi ý (hàng không thu lại)', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
     await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Huy hiệu từ bậc Đồng');
   });
 
   it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
@@ -705,6 +706,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
     await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Huy hiệu chưa tải');
   });
 
   // M3: `/affiliate/tiers` treo không được giữ cả trình dựng. Chỉ chỗ huy hiệu bậc là khung chờ (cao bằng huy hiệu thật), còn lại vẽ ngay.
@@ -743,12 +745,13 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     await act(async () => { fail({ response: { status: 500 }, message: 'x' }); });
     await waitFor(() => expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+    expect(screen.getByTestId('tier-badge-hint')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
   });
 
-  it('bậc thấp nhất (không khoe) về sau: không huy hiệu, khung chờ biến mất và không để lại hàng huy hiệu rỗng dưới tên shop', async () => {
+  it('bậc thấp nhất (không khoe) về sau: không huy hiệu, khung chờ được thay bằng dòng gợi ý nên hàng huy hiệu không thu lại', async () => {
     let release!: (v: unknown) => void;
     mocks.getCtvTiers.mockReturnValue(new Promise((r) => { release = r; }));
     renderPage();
@@ -756,7 +759,8 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.getByTestId('tier-badge-skeleton')).toBeInTheDocument();
     await act(async () => { release(tiersAt(0)); });
     await waitFor(() => expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument());
-    expect(title.nextElementSibling?.querySelector('[data-testid="shop-note"]')).not.toBeNull();
+    expect(title.nextElementSibling?.querySelector('[data-testid="tier-badge-hint"]')).not.toBeNull();
+    expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 
   // Đầu xem trước phải là đúng cái khách thấy (storefront-view.tsx): dấu tích ở avatar và huy hiệu "CTV tuyển chọn" chỉ khi admin đã duyệt, đứng trước huy hiệu bậc.
@@ -797,6 +801,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
       expect(mocks.getCtvTiers).not.toHaveBeenCalled();
       expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument();
       expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
+      expect(screen.getByTestId('tier-badge-hint')).toBeInTheDocument();
     });
 
     it('có mạng lại: bậc về thì huy hiệu hiện, không cần tải lại trang', async () => {
@@ -818,6 +823,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
     expect(mocks.getCtvTiers).not.toHaveBeenCalled();
     expect(screen.queryByTestId('tier-badge-skeleton')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tier-badge-hint')).not.toBeInTheDocument();
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
   });
 

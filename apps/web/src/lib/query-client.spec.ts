@@ -26,6 +26,12 @@ describe('createQueryClient (R-80)', () => {
     expect(staleOf(client, ['cart'])).toBe(0);
   });
 
+  it('cấu hình công khai tươi 5 phút cho mọi trang (không gọi /config/public hai lần khi chuyển trang)', () => {
+    const client = createQueryClient();
+    expect(staleOf(client, ['public-config'])).toBe(5 * 60_000);
+    expect(staleOf(client, ['me'])).toBe(0);
+  });
+
   it('khoá admin và huy hiệu hoàn tiền tươi 30 giây (đổi tab qua lại không gọi lại mạng)', () => {
     const client = createQueryClient();
     for (const key of [['admin-orders', 1], ['admin-ops-inbox'], ['admin-customer-refunds', 'OPEN', 'count'], ['admin-dealers', 'PENDING']]) {
