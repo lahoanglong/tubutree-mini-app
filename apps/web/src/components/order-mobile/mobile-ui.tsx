@@ -42,11 +42,9 @@ export const miniRadio =
 /** Khung 24px bọc input ô chọn + CheckMark. */
 export const miniCheckboxWrap = 'relative inline-flex h-6 w-6 flex-none';
 
-/** Checkbox/Radio của zmp-ui rộng hơn ô vẽ 24px: ở Mini ô chọn lùi vào 20px khỏi mép phải (checkbox) và chữ cạnh radio bắt đầu muộn 18px (đây 16px, trong dung sai 2px của e2e). Đo bằng ds-parity.shop.spec.ts. */
+/** Checkbox/Radio của zmp-ui rộng hơn ô vẽ 24px: ở Mini ô chọn lùi vào 20px khỏi mép phải (checkbox) và chữ cạnh radio bắt đầu muộn 18px . Đo bằng ds-parity.shop.spec.ts. */
 export const miniCheckboxGutter = 'mr-5 md:mr-0';
-export const miniRadioGutter = 'mr-4 md:mr-0';
-/** Câu lý do dưới nhãn radio thụt thẳng cột chữ: ô 24px + miniRadioGutter 16px + khoảng 12px = 52px (3,25rem). Đổi gutter thì đổi cả số này. */
-export const miniRadioHintIndent = 'pl-[3.25rem] md:pl-0';
+export const miniRadioGutter = 'mr-[1.125rem] md:mr-0';
 
 /** Dấu tick trắng nằm đè lên ô chọn tự vẽ; đặt NGAY SAU input, cả hai bọc trong `<CheckBox>`-style span `relative inline-flex h-6 w-6` (xem miniCheckboxWrap) để tick bám đúng ô. */
 export function CheckMark() {

@@ -64,7 +64,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
-import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, miniRadioHintIndent, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -220,6 +220,13 @@ export default function CheckoutPage() {
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote, usablePoints);
   const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
+  // Dưới md ghi chú nằm trong cột chữ cạnh ô tick như Mini; từ md trở lên giữ dòng riêng dưới ô. Hai bản chỉ khác nhau ở lớp hiển thị.
+  const pointNotes = (vis: 'md:hidden' | 'md:block') => {
+    const cls = vis === 'md:hidden' ? 'mt-0.5 block text-caption text-[color:var(--color-text-tertiary)] md:hidden' : 'mt-1 hidden text-caption text-[color:var(--color-text-secondary)] md:block';
+    const Tag = vis === 'md:hidden' ? 'span' : 'p';
+    const notes = [usablePoints > 0 && partnerPoints.capNote, usablePoints > 0 && partnerPoints.partnerNote, convertedLine, pointsOffer.lockNote];
+    return notes.map((n, i) => (n ? <Tag key={i} className={cls}>{n}</Tag> : null));
+  };
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -572,7 +579,7 @@ export default function CheckoutPage() {
                   const reason = p.hint;
                   return (
                     <div key={p.k}>
-                      <label className={`${payOptionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
+                      <label className={`${payOptionClass(payment === p.k)} ${reason ? 'cursor-not-allowed' : ''}`}>
                         <input
                           type="radio"
                           name="pay"
@@ -580,12 +587,19 @@ export default function CheckoutPage() {
                           onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className={`${miniRadio} ${miniRadioGutter}`}
+                          className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-60' : ''}`}
                         />
-                        {p.label}
+                        <span className="flex min-w-0 flex-col">
+                          <span className={reason ? 'opacity-60' : undefined}>{p.label}</span>
+                          {reason && (
+                            <span id={`pay-blocked-${p.k}`} className="text-caption text-[color:var(--color-text-secondary)] md:hidden">
+                              {reason}
+                            </span>
+                          )}
+                        </span>
                       </label>
                       {reason && (
-                        <p id={`pay-blocked-${p.k}`} className={`mt-1 ${miniRadioHintIndent} text-caption text-[color:var(--color-text-secondary)]`}>
+                        <p aria-hidden="true" className="mt-1 text-caption text-[color:var(--color-text-secondary)] hidden md:block">
                           {reason}
                         </p>
                       )}
@@ -706,7 +720,7 @@ export default function CheckoutPage() {
               </Link>
             </p>
           )}
-          {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] max-md:hidden">{splitNote}</p>}
+          {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] hidden md:block">{splitNote}</p>}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
@@ -766,11 +780,12 @@ export default function CheckoutPage() {
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="min-w-0 text-[color:var(--color-text-brand)]">
                 <span className="block font-semibold max-md:text-[color:var(--color-text-primary)]">Điểm Xanh</span>
-                <span className="block text-caption max-md:text-[color:var(--color-text-secondary)]">
+                <span className="block text-caption max-md:text-[color:var(--color-text-tertiary)]">
                   {partnerPoints.disabled
                     ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
                 </span>
+                {pointNotes('md:hidden')}
               </span>
             </label>
           )}
@@ -779,6 +794,7 @@ export default function CheckoutPage() {
               <span className="min-w-0">
                 <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
                 <span className="block text-caption text-[color:var(--color-text-tertiary)]">{idlePointsLabel(quote ?? user)}</span>
+                {pointNotes('md:hidden')}
               </span>
               <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
                 <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
@@ -786,10 +802,7 @@ export default function CheckoutPage() {
               </span>
             </div>
           )}
-          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.capNote}</p>}
-          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.partnerNote}</p>}
-          {convertedLine && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{convertedLine}</p>}
-          {pointsOffer.lockNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{pointsOffer.lockNote}</p>}
+          {pointNotes('md:block')}
           </div>
           <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
           <div

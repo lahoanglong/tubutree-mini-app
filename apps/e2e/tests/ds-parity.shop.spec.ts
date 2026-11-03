@@ -269,10 +269,12 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     // Web đặt các dòng ghi chú điểm (phần không hết hạn, trần) ngay dưới ô; Mini để trong cùng khối chữ. Chữ khách đọc được thì giống nhau.
     const notesBelow = await pointsTitle.evaluate((el) => {
       const out: string[] = [];
-      for (let n = el.closest('label')?.nextElementSibling ?? null; n && n.tagName === 'P'; n = n.nextElementSibling) out.push((n as HTMLElement).innerText);
+      for (let n = el.closest('label')?.nextElementSibling ?? null; n && n.tagName === 'P'; n = n.nextElementSibling) if (n.checkVisibility()) out.push((n as HTMLElement).innerText);
       return out.join(' ');
     });
-    const pointsSubtext = `${pointsBlockText.replace(/^Điểm Xanh\s*/, '')} ${notesBelow}`.replace(/\s+/g, ' ').trim();
+    // Mini để các dòng ghi chú trong cùng khối chữ cạnh ô tick: web ở 375 không còn dòng ghi chú riêng dưới ô.
+    expect(notesBelow, 'ghi chú điểm Xanh phải nằm trong khối chữ cạnh ô tick, không có dòng riêng dưới ô').toBe('');
+    const pointsSubtext = pointsBlockText.replace(/^Điểm Xanh\s*/, '').replace(/\s+/g, ' ').trim();
 
     const pointsCheckboxRight = await rightOfCheckbox(pointsTitle);
 
@@ -321,6 +323,9 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
   });
 });
 
+// Đo trên Mini: đường chân chữ nhãn → đỉnh câu lý do (px).
+const MINI_WALLET_GAP_Y = 2;
+
 test.describe('ds-parity: thanh toán 375px, câu lý do ví không đủ tiền thẳng cột chữ nhãn (R-23)', () => {
   test('ví 50.000đ, đơn 149.000đ: câu lý do bắt đầu cùng x với chữ "Ví Tubu" và cùng x Mini (±2px)', async ({ page, api }, testInfo) => {
     const side = sideOf(testInfo.project.name);
@@ -356,5 +361,17 @@ test.describe('ds-parity: thanh toán 375px, câu lý do ví không đủ tiền
     if (process.env.PARITY_SHOT_DIR) await page.screenshot({ path: `${process.env.PARITY_SHOT_DIR}/checkout-wallet-blocked-${side}375.png` });
     expect(Math.abs(hintLeft - labelLeft), `câu lý do ${hintLeft} so với nhãn ${labelLeft}`).toBeLessThanOrEqual(2);
     expect(Math.abs(hintLeft - 70), `câu lý do ${hintLeft} so với Mini 70`).toBeLessThanOrEqual(2);
+    const textRect = (el: Element, pick: 'first' | 'last') => {
+      const nodes = Array.from(el.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim());
+      const r = document.createRange();
+      r.selectNodeContents(pick === 'first' ? nodes[0] ?? el : nodes[nodes.length - 1] ?? el);
+      const b = r.getBoundingClientRect();
+      return { top: b.top, bottom: b.bottom };
+    };
+    const labelBox = await walletText.evaluate(textRect, 'first');
+    const hintBox = await hint.evaluate(textRect, 'first');
+    const gapY = Math.round(hintBox.top - labelBox.bottom);
+    await testInfo.attach(`wallet-gap-${side}`, { body: String(gapY), contentType: 'text/plain' });
+    expect(Math.abs(gapY - MINI_WALLET_GAP_Y), `khoảng dọc nhãn → câu lý do ${gapY} so với Mini ${MINI_WALLET_GAP_Y}`).toBeLessThanOrEqual(2);
   });
 });
