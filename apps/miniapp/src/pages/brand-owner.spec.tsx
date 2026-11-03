@@ -330,7 +330,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     fireEvent.change(screen.getByPlaceholderText(/Tiêu đề/), { target: { value: 'Giảm sốc' } });
     fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-11-10' } });
     fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-11-01' } });
-    expect(screen.getByText('Ngày kết thúc phải sau ngày bắt đầu.')).toBeInTheDocument();
+    expect(screen.getByText('Ngày kết thúc không được trước ngày bắt đầu.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Thêm khuyến mãi' })).toBeDisabled();
   });
 });

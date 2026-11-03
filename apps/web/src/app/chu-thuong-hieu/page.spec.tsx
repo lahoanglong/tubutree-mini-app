@@ -258,7 +258,10 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     expect(body.title).toBe('Giảm sốc');
     expect(body.couponCode).toBeUndefined();
     expect(body.subtitle).toBeUndefined();
-    expect(new Date(body.endAt!).getTime() - new Date(body.startAt!).getTime()).toBe(30 * 864e5);
+    const span = new Date(body.endAt!).getTime() - new Date(body.startAt!).getTime();
+    expect(span).toBeGreaterThanOrEqual(30 * 864e5 - 1000);
+    expect(span).toBeLessThan(31 * 864e5);
+    expect(body.endAt).toMatch(/T16:59:59\.000Z$/);
     expect(text()).toContain('Đã thêm khuyến mãi');
   });
 
@@ -317,7 +320,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     typeInto(byLabel('Tiêu đề (MUA 2 TẶNG 1)'), 'Giảm sốc');
     typeInto(byVisibleLabel('Từ ngày'), '2026-11-10');
     typeInto(byVisibleLabel('Đến ngày'), '2026-11-01');
-    expect(text()).toContain('Ngày kết thúc phải sau ngày bắt đầu.');
+    expect(text()).toContain('Ngày kết thúc không được trước ngày bắt đầu.');
     expect((btn('Thêm khuyến mãi') as HTMLButtonElement).disabled).toBe(true);
   });
 
