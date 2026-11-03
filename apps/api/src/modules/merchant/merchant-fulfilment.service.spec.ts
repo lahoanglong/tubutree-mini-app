@@ -442,7 +442,7 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     it('người khác bấm sau (mã GD khác) → 409 nêu người đã xác nhận, giờ VN và mã GD, không báo đối tác lần hai', async () => {
       const { svc, notify } = paid();
       await expect(svc.markPayoutPaid('admin-2', 'p1', 'FT-B')).rejects.toThrow(
-        'Phiếu đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A',
+        'Phiếu đối soát đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A',
       );
       expect(notify).not.toHaveBeenCalled();
     });

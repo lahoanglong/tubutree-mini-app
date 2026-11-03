@@ -12,11 +12,21 @@ type UserNames = { user: { findUnique(args: { where: { id: string }; select: { f
 export const isSameConfirmation = (row: PaidRow, adminId: string, bankRef: string | undefined): boolean =>
   row.paidBy === adminId && (!bankRef || row.bankRef === bankRef);
 
-export async function alreadyPaidConflict(prisma: UserNames, row: PaidRow): Promise<ConflictException> {
+export type PaidConflictContext = {
+  /** Tên gọi trên màn hình: lệnh rút của CTV là "Lệnh rút", phiếu gian hàng là "Phiếu đối soát". */
+  noun: 'Lệnh rút' | 'Phiếu đối soát';
+  /** Phiếu âm: gian hàng nộp tiền cho Tubu, không có khoản nào chuyển đi để thu hồi. */
+  collected?: boolean;
+};
+
+export async function alreadyPaidConflict(prisma: UserNames, row: PaidRow, ctx: PaidConflictContext): Promise<ConflictException> {
   const holder = row.paidBy
     ? ((await prisma.user.findUnique({ where: { id: row.paidBy }, select: { fullName: true } }))?.fullName?.trim() || 'một quản trị viên khác')
     : 'một quản trị viên khác';
   const at = row.paidAt ? ` lúc ${formatVnDateTime(row.paidAt)}` : '';
   const ref = row.bankRef ? `, mã GD ${row.bankRef}` : '';
-  return new ConflictException(`Phiếu đã được ${holder} xác nhận chuyển${at}${ref}. Nếu bạn đã chuyển tiền, liên hệ người nhận để thu hồi khoản chuyển trùng.`);
+  if (ctx.collected) return new ConflictException(`${ctx.noun} đã được ${holder} xác nhận đã thu${at}${ref}. Tải lại danh sách để xem trạng thái mới nhất.`);
+  return new ConflictException(
+    `${ctx.noun} đã được ${holder} xác nhận chuyển${at}${ref}. Nếu bạn đã chuyển tiền, liên hệ người nhận để thu hồi khoản chuyển trùng.`,
+  );
 }

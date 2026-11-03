@@ -28,7 +28,6 @@ import {
   customerRefundView,
   markPaidFailure,
   needsBankAccount,
-  needsClaim,
   overpaidAmountError,
   overpaymentFailure,
   refundKindLabel,
@@ -696,7 +695,7 @@ export function CustomerRefundRow({
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
           {recorded ? (
             <span className="text-xs text-stone-500">Đã ghi nhận, đang cập nhật danh sách…</span>
-          ) : view === 'PENDING' && needsClaim(r) ? (
+          ) : view === 'PENDING' ? (
             <>
               <button type="button" className={BTN_WARNING} onClick={() => onAction('claim')}>
                 Bắt đầu chuyển khoản

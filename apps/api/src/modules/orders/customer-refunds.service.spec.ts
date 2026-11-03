@@ -609,11 +609,18 @@ describe('CustomerRefundsService — khoản của khách cuối đơn CTV lên 
       ...over,
     });
 
-  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: admin xác nhận thẳng từ hàng chờ, không bắt gõ tài khoản', async (kind) => {
+  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: từ hàng chờ bị chặn, phải "Bắt đầu chuyển khoản" trước', async (kind) => {
     const { service, tx } = setup(endCustomerLate({ kind }));
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow(BadRequestException);
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: đã bắt đầu chuyển khoản (đúng người giữ) thì xác nhận được, không bắt gõ tài khoản', async (kind) => {
+    const { service, tx } = setup(endCustomerLate({ kind, status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PENDING' }] } }),
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PROCESSING', claimedBy: 'a1' }] } }),
     );
   });
 
@@ -654,7 +661,7 @@ describe('CustomerRefundsService — khoản của khách cuối đơn CTV lên 
   });
 
   it('xác nhận xong khoản không chủ tài khoản → không có ai để báo REFUND_BANK_COMPLETED', async () => {
-    const { service, notifications } = setup(endCustomerLate());
+    const { service, notifications } = setup(endCustomerLate({ status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(notifications.notify).not.toHaveBeenCalled();
   });
