@@ -63,6 +63,11 @@ vi.mock('@/lib/core-http', () => ({
 
 import DealerPage from './page';
 
+function amountInput() {
+  const label = byText(document.body, 'label', 'Số tiền đã chuyển');
+  return label ? document.getElementById((label as HTMLLabelElement).htmlFor) as HTMLInputElement | null : null;
+}
+
 const DESIGN_TOKENS_CSS = readFileSync(resolve(process.cwd(), '../../packages/design-tokens/src/tokens.css'), 'utf8');
 
 const APPROVED = { isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000, hasPartnerStorefront: true };
@@ -584,7 +589,7 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     await open('Công nợ');
     expect(document.body.textContent).toContain('3.000.000đ');
     expect(document.body.textContent).toContain('Chưa có giao dịch công nợ');
-    const amount = document.querySelector<HTMLInputElement>('input[placeholder="Nhập số tiền"]')!;
+    const amount = amountInput()!;
     typeInto(amount, '4000000');
     expect(button('Báo đã chuyển khoản').disabled).toBe(true);
     expect(document.body.textContent).toContain('Số tiền vượt dư nợ hiện tại (3.000.000đ).');
@@ -607,12 +612,12 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
       return { ok: true };
     };
     await open('Công nợ');
-    typeInto(document.querySelector('input[placeholder="Nhập số tiền"]'), '1000000');
+    typeInto(amountInput(), '1000000');
     click(button('Báo đã chuyển khoản'));
     await flush();
     click(button('Báo đã chuyển khoản'));
     await flush();
-    typeInto(document.querySelector('input[placeholder="Nhập số tiền"]'), '500000');
+    typeInto(amountInput(), '500000');
     click(button('Báo đã chuyển khoản'));
     await flush();
     const keys = posts('/dealer/credit-payment').map((p) => p.headers?.['Idempotency-Key']);

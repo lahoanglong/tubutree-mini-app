@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/ui/page-header';
 export default function StorefrontNotFound() {
   const router = useRouter();
   return (
-    <main className="mx-auto max-w-3xl px-4">
+    <main className="mx-auto max-w-3xl md:px-4 md:py-6">
       <PageHeader title={STOREFRONT_PUBLIC_TITLE} />
       <ErrorState title={NOT_FOUND_TITLE} message={STOREFRONT_NOT_FOUND} retryLabel={GO_HOME_LABEL} onRetry={() => router.replace('/')} />
       <SuggestedRail />

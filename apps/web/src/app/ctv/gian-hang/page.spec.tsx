@@ -1172,7 +1172,12 @@ describe('thống kê và hành trình gian hàng', () => {
     for (const b of stats.querySelectorAll('[data-testid="builder-stat"]')) {
       expect(b.lastElementChild!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
       expect(b.firstElementChild!.className).toContain('whitespace-nowrap');
-      expect((b.firstElementChild as HTMLElement).style.fontSize).toContain('var(--type-body-md-size)');
+      const value = b.firstElementChild as HTMLElement;
+      expect(value.className).toContain('md:text-[length:var(--type-body-md-size)]');
+      expect(value.className).toContain('lg:text-[length:calc(var(--type-body-md-size)*var(--stat-scale))]');
+      expect(value.className).toContain('overflow-hidden');
+      expect(value.className).toContain('text-ellipsis');
+      expect(Number(value.style.getPropertyValue('--stat-scale'))).toBeGreaterThan(0);
     }
   });
 

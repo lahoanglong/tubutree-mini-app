@@ -42,7 +42,6 @@ export const STOREFRONT_NOT_FOUND = 'Gian hàng này không tồn tại hoặc �
 export const NOT_FOUND_TITLE = 'Không tìm thấy';
 export const GO_HOME_LABEL = 'Về trang chủ';
 export const DEALER_PAY_AMOUNT_LABEL = 'Số tiền đã chuyển';
-export const DEALER_PAY_AMOUNT_PLACEHOLDER = 'Nhập số tiền';
 
 export const ABOUT_MISSION =
   'Tubu Tree tin rằng mỗi lựa chọn tiêu dùng nhỏ đều là một hạt mầm cho thiên nhiên. Tubu kết nối bạn với những thương hiệu Việt tử tế — minh bạch nguồn gốc, lành cho da, nhẹ với đất.';

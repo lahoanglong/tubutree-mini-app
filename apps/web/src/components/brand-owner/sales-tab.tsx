@@ -22,7 +22,7 @@ function Stat({ icon: Icon, label, value, wide }: { icon: LucideIcon; label: str
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
       <div className="min-w-0 max-lg:contents lg:flex lg:flex-col-reverse">
-        <div className="mt-1 font-display text-[length:var(--type-title-lg-size)] font-semibold leading-[var(--type-title-lg-lh)] tabular-nums text-stone-900 lg:mt-0 lg:font-sans lg:text-lg lg:font-bold lg:leading-normal">{value}</div>
+        <div className="mt-1 font-display text-[length:var(--type-title-lg-size)] font-semibold leading-[var(--type-title-lg-lh)] tabular-nums text-stone-900 lg:mt-0 lg:font-ui lg:text-lg lg:font-bold lg:leading-normal">{value}</div>
         <div className="text-xs text-[var(--color-text-tertiary)] lg:text-stone-600">{label}</div>
       </div>
     </div>
@@ -62,7 +62,7 @@ export function SalesTab() {
             {d.delivered.orderCount} đơn đã giao · {formatVnd(d.delivered.revenue)}
           </p>
           <section aria-label="Sản phẩm bán chạy" className={`${skin.plain} p-0 md:p-4`}>
-            <h2 className="mb-2 mt-2 font-display md:mt-0 text-base font-semibold text-stone-900">Sản phẩm bán chạy</h2>
+            <h2 className="mb-2 mt-2 text-base font-display md:mt-0 md:font-ui font-semibold text-stone-900">Sản phẩm bán chạy</h2>
             <ol>
               {d.topProducts.map((p, i) => (
                 <li key={p.productId} className="flex min-h-11 items-center gap-3 border-b border-stone-200 py-2 last:border-b-0">

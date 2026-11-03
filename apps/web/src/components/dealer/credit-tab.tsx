@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { AlertTriangle, Leaf } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DEALER_PAY_AMOUNT_LABEL, DEALER_PAY_AMOUNT_PLACEHOLDER } from '@tubutree/app-core/client-copy';
+import { DEALER_PAY_AMOUNT_LABEL } from '@tubutree/app-core/client-copy';
 import { payCredit } from '@tubutree/app-core/api/dealer';
 import { dealerCreditQuery, dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
@@ -67,7 +67,6 @@ export function CreditTab() {
               <input
                 type="number"
                 inputMode="numeric"
-                placeholder={DEALER_PAY_AMOUNT_PLACEHOLDER}
                 className={ui.field}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

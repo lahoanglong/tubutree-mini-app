@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, TrendingUp } from 'lucide-react';
 import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
 import { claimQuest, type QuestList as QuestData } from '@tubutree/app-core/api/storefront';
 import { storefrontQuestsQuery, storefrontStatsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
-import { statValueFontSize } from '@tubutree/app-core/commerce/stat-value-fit';
+import { statValueScale } from '@tubutree/app-core/commerce/stat-value-fit';
 import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
@@ -20,7 +20,7 @@ import { actErrText, type Notify } from './storefront-sheets';
 function StatBox({ value, label, brand }: { value: string; label: string; brand?: boolean }) {
   return (
     <div data-testid="builder-stat" className="min-w-0 flex-1 rounded-control bg-stone-100 px-1 py-2.5 text-center max-md:bg-[var(--color-bg-subtle)]">
-      <div style={{ fontSize: statValueFontSize(value) }} className={`whitespace-nowrap font-bold leading-[var(--type-body-md-lh)] tabular-nums ${brand ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
+      <div style={{ '--stat-scale': statValueScale(value) } as CSSProperties} className={`overflow-hidden text-ellipsis whitespace-nowrap text-[length:calc(var(--type-body-md-size)*var(--stat-scale))] font-bold leading-[var(--type-body-md-lh)] tabular-nums md:text-[length:var(--type-body-md-size)] lg:text-[length:calc(var(--type-body-md-size)*var(--stat-scale))] ${brand ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
       <div className={`text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>{label}</div>
     </div>
   );

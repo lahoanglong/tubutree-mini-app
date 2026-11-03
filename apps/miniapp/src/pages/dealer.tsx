@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEALER_PAY_AMOUNT_LABEL, DEALER_PAY_AMOUNT_PLACEHOLDER, DEALER_PRICE_LOADING, DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
+import { DEALER_PAY_AMOUNT_LABEL, DEALER_PRICE_LOADING, DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import {
@@ -937,7 +937,6 @@ function DealerCredit() {
             <Field label={DEALER_PAY_AMOUNT_LABEL}>
               <Input
                 type="number"
-                placeholder={DEALER_PAY_AMOUNT_PLACEHOLDER}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
