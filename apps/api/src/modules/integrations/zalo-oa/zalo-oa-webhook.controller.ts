@@ -13,7 +13,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
@@ -30,20 +30,31 @@ interface ZaloOaWebhookBody {
 }
 
 /**
+ * `X-ZEvent-Signature` của webhook Zalo OA: sha256(appId + thân + timestamp + khoá bí mật của OA), hex thường. Chữ ký tính trên
+ * thân thô; ở đây dùng thân đã parse rồi stringify lại (Zalo gửi JSON gọn, giữ thứ tự khoá), nên thân mang khác biệt hình thức
+ * (vd ký tự thoát) sẽ lệch chữ ký và rơi về token tĩnh.
+ */
+export function zaloOaEventSignature(appId: string, body: unknown, timestamp: string, oaSecretKey: string): string {
+  return createHash('sha256').update(appId + JSON.stringify(body) + timestamp + oaSecretKey).digest('hex');
+}
+
+/**
  * Nhận webhook tin nhắn khách gửi vào Zalo OA (CSKH quick-reply/auto-reply). URL cấu hình
  * trong Zalo OA dashboard: https://api.tubutree.com/api/webhooks/zalo-oa (xem
  * docs/GO-LIVE-KEYS.md). Quy trình mirror `PancakeWebhookController`: verify token tĩnh →
  * lưu raw (RECEIVED) → enqueue → trả 200 ngay (auto-reply xử lý async ở `ZaloOaEventsProcessor`).
  *
- * TODO xác nhận cơ chế verify chính thức của Zalo OA webhook (có thể là HMAC ký payload thay
- * vì header token tĩnh) khi đăng ký webhook thật — tạm dùng token tĩnh như Pancake vì Zalo OA
- * cũng cho phép khai báo 1 giá trị xác thực tuỳ chỉnh lúc đăng ký webhook.
+ * Xác thực: `X-ZEvent-Signature` (cần ZALO_OA_SECRET_KEY + ZALO_APP_ID) hoặc token tĩnh `x-webhook-token`
+ * (ZALO_OA_WEBHOOK_SECRET) làm lớp phụ; một trong hai đúng là qua. Đã cấu hình khoá nào thì khoá đó phải khớp; production mà
+ * không khoá nào → 401.
  */
 @SkipThrottle()
 @Controller('webhooks/zalo-oa')
 export class ZaloOaWebhookController {
   private readonly logger = new Logger(ZaloOaWebhookController.name);
   private readonly secret: string;
+  private readonly oaSecretKey: string;
+  private readonly appId: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,19 +62,25 @@ export class ZaloOaWebhookController {
     @InjectQueue(QUEUE_ZALO_OA_EVENTS) private readonly queue: Queue,
   ) {
     this.secret = config.get('ZALO_OA_WEBHOOK_SECRET', { infer: true });
+    this.oaSecretKey = config.get('ZALO_OA_SECRET_KEY', { infer: true }) ?? '';
+    this.appId = config.get('ZALO_APP_ID', { infer: true }) ?? '';
   }
 
   @Public()
   @Post()
   @HttpCode(HttpStatus.OK)
-  async handle(@Body() body: ZaloOaWebhookBody, @Headers('x-webhook-token') token?: string) {
-    if (!this.secret) {
+  async handle(
+    @Body() body: ZaloOaWebhookBody,
+    @Headers('x-webhook-token') token?: string,
+    @Headers('x-zevent-signature') signature?: string,
+  ) {
+    if (!this.secret && !this.oaSecretKey) {
       if (process.env.NODE_ENV === 'production') {
         throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
       }
       // Dev/test: bỏ qua cho dễ thử nghiệm.
-    } else if (!this.verifyToken(token)) {
-      throw new UnauthorizedException('Token webhook không hợp lệ.');
+    } else if (!this.verifySignature(body, signature) && !this.verifyToken(token)) {
+      throw new UnauthorizedException('Chữ ký hoặc token webhook không hợp lệ.');
     }
 
     // Chỉ tin khách gửi vào OA (user_send_text/image/...): sự kiện OA tự gửi (oa_send_*) mang sender là chính OA nên nếu lưu
@@ -97,11 +114,22 @@ export class ZaloOaWebhookController {
     return { received: true };
   }
 
-  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). */
+  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). Chưa đặt token thì lớp này không bao giờ qua. */
   private verifyToken(token?: string): boolean {
-    if (!token) return false;
-    const a = Buffer.from(token, 'utf8');
-    const b = Buffer.from(this.secret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+    if (!this.secret || !token) return false;
+    return constantTimeEqual(token, this.secret);
   }
+
+  private verifySignature(body: ZaloOaWebhookBody, signature?: string): boolean {
+    if (!this.oaSecretKey || !this.appId || !signature || !body || typeof body !== 'object') return false;
+    const timestamp = body['timestamp'];
+    if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return false;
+    return constantTimeEqual(signature.trim().toLowerCase(), zaloOaEventSignature(this.appId, body, String(timestamp), this.oaSecretKey));
+  }
+}
+
+function constantTimeEqual(x: string, y: string): boolean {
+  const a = Buffer.from(x, 'utf8');
+  const b = Buffer.from(y, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
 }

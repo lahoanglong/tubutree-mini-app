@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { UnauthorizedException } from '@nestjs/common';
-import { ZaloOaWebhookController } from './zalo-oa-webhook.controller';
+import { ZaloOaWebhookController, zaloOaEventSignature } from './zalo-oa-webhook.controller';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Queue } from 'bullmq';
 import { QUEUE_COMMAND_TIMEOUT_MS } from '../../../jobs/queue-timeout';
@@ -107,5 +107,68 @@ describe('ZaloOaWebhookController.handle (verify token tĩnh)', () => {
     expect(r).toEqual({ received: true });
     expect(create).not.toHaveBeenCalled();
     expect(add).not.toHaveBeenCalled();
+  });
+});
+
+describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () => {
+  const APP_ID = '1234567890';
+  const OA_KEY = 'oa-secret-key';
+  const signed = { ...body, app_id: APP_ID, timestamp: '1730600000000' };
+  const sign = (b: object = signed, key = OA_KEY) => zaloOaEventSignature(APP_ID, b, String((b as { timestamp: string }).timestamp), key);
+  function build(env: Record<string, string>) {
+    const create = jest.fn().mockResolvedValue({ id: 'evt1' });
+    const add = jest.fn().mockResolvedValue(undefined);
+    const config = { get: (k: string) => env[k] ?? '' } as never;
+    const ctrl = new ZaloOaWebhookController({ oaInboundMessage: { create } } as unknown as PrismaService, config, { add } as unknown as Queue);
+    return { ctrl, create };
+  }
+  const both = { ZALO_OA_SECRET_KEY: OA_KEY, ZALO_APP_ID: APP_ID, ZALO_OA_WEBHOOK_SECRET: SECRET };
+
+  it('chữ ký đúng (không có token) → lưu', async () => {
+    const { ctrl, create } = build(both);
+    await expect(ctrl.handle(signed, undefined, sign())).resolves.toEqual({ received: true });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('chữ ký in hoa vẫn khớp; chữ ký sai/khác thân/khác khoá → 401, không lưu', async () => {
+    const { ctrl, create } = build(both);
+    await expect(ctrl.handle(signed, undefined, sign().toUpperCase())).resolves.toEqual({ received: true });
+    create.mockClear();
+    for (const sig of [sign(signed, 'khoa-khac'), sign({ ...signed, message: { text: 'giả' } }), 'abc', '']) {
+      await expect(ctrl.handle(signed, undefined, sig)).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('thân thiếu timestamp hoặc chưa có ZALO_APP_ID → chữ ký không qua được', async () => {
+    const { ctrl } = build(both);
+    const { timestamp: _t, ...noTs } = signed;
+    await expect(ctrl.handle(noTs, undefined, sign())).rejects.toBeInstanceOf(UnauthorizedException);
+    const noApp = build({ ZALO_OA_SECRET_KEY: OA_KEY });
+    await expect(noApp.ctrl.handle(signed, undefined, sign())).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('token tĩnh đúng vẫn qua khi không có chữ ký (lớp phụ); token sai và chữ ký sai → 401', async () => {
+    const { ctrl } = build(both);
+    await expect(ctrl.handle(signed, SECRET, undefined)).resolves.toEqual({ received: true });
+    await expect(ctrl.handle(signed, 'sai', 'sai')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('chỉ có khoá ký (không đặt token tĩnh): thiếu chữ ký → 401; token rỗng không bao giờ khớp', async () => {
+    const { ctrl } = build({ ZALO_OA_SECRET_KEY: OA_KEY, ZALO_APP_ID: APP_ID });
+    await expect(ctrl.handle(signed, undefined, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, '', undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('production mà thiếu cả hai khoá → 401 (fail-closed)', async () => {
+    const prev = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const { ctrl, create } = build({});
+      await expect(ctrl.handle(signed, 'x', sign())).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = prev;
+    }
   });
 });
