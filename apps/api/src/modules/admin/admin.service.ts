@@ -14,7 +14,6 @@ import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.ser
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
-import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';

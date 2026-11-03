@@ -120,6 +120,8 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   app.set('trust proxy', 1);
   // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser 10MB (body đã parse thì parser sau bỏ qua).
   app.use('/api/events', json({ limit: '512kb' }));
+  // Chữ ký webhook Zalo OA tính trên byte thô: parser riêng giữ lại req.rawBody (Zalo gửi JSON có \/ hoặc \uXXXX thì JSON.stringify(body) không khớp).
+  app.use('/api/webhooks/zalo-oa', json({ limit: '1mb', verify: (req, _res, buf) => { (req as { rawBody?: Buffer }).rawBody = buf; } }));
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ limit: '10mb', extended: true }));
   app.use(helmet());
