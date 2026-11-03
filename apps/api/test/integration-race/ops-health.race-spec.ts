@@ -107,6 +107,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       { data: { order_id: 13 } },
       { id: null, order_id: '' },
       { id: 0 },
+      { id: false },
+      { extension: { external_order_id: 123 } },
       { extension: 'chuỗi', note: 42, id: 14 },
       { extension: { external_order_id: '' }, note: 'Order code: DLR7004' },
       { data: null, id: 15 },

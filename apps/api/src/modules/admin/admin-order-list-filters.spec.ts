@@ -82,6 +82,15 @@ describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D
     expect(findMany.mock.calls[0][0].where).toEqual({ storefrontId: { in: ['sf-1', 'sf-2'] } });
   });
 
+  it('storefront có % hoặc _ → khớp nghĩa đen (ILIKE không coi là ký tự đại diện)', async () => {
+    const { prisma, storefrontFind, storefrontMany } = listPrisma(null, []);
+    await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, {
+      storefront: 'Giảm 50%_x',
+    });
+    expect(storefrontFind.mock.calls[0][0].where).toEqual({ slug: { equals: 'giảm 50\\%\\_x', mode: 'insensitive' } });
+    expect(storefrontMany.mock.calls[0][0].where).toEqual({ title: { contains: 'giảm 50\\%\\_x', mode: 'insensitive' } });
+  });
+
   it('storefront không tồn tại → danh sách rỗng, không bỏ lọc (không lộ mọi đơn)', async () => {
     const { prisma, findMany } = listPrisma(null);
     await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, {

@@ -977,13 +977,15 @@ export class AdminService {
   private async findStorefrontId(raw?: string): Promise<string | { in: string[] } | undefined> {
     const s = raw?.trim().toLowerCase();
     if (!s) return undefined;
-    const eq = { equals: s, mode: 'insensitive' } as const;
+    // `equals`/`contains` + insensitive là ILIKE: "%" hay "_" admin gõ phải khớp đúng nghĩa đen, không thành ký tự đại diện.
+    const lit = escapePrismaLike(s);
+    const eq = { equals: lit, mode: 'insensitive' } as const;
     const row =
       (await this.prisma.storefront.findFirst({ where: { slug: eq }, select: { id: true } })) ??
       (await this.prisma.storefront.findFirst({ where: { subdomain: eq }, select: { id: true } }));
     if (row) return row.id;
     const byTitle = await this.prisma.storefront.findMany({
-      where: { title: { contains: s, mode: 'insensitive' } },
+      where: { title: { contains: lit, mode: 'insensitive' } },
       select: { id: true },
       take: 50,
     });
