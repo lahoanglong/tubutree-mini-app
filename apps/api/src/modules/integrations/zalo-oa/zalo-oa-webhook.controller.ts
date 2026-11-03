@@ -136,8 +136,13 @@ export class ZaloOaWebhookController {
     const ts = Number(timestamp);
     if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_EVENT_SKEW_MS) return false;
     const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
-    const signed: unknown = rawBody && rawBody.length > 0 ? rawBody.toString('utf8') : body;
-    return constantTimeEqual(given, zaloOaEventSignature(this.appId, signed, String(timestamp), this.oaSecretKey));
+    const hasRaw = Boolean(rawBody && rawBody.length > 0);
+    const signed: unknown = hasRaw ? rawBody!.toString('utf8') : body;
+    const ok = constantTimeEqual(given, zaloOaEventSignature(this.appId, signed, String(timestamp), this.oaSecretKey));
+    if (!ok && !hasRaw) {
+      this.logger.warn('Chữ ký webhook OA lệch và request không có thân thô (bootstrap chưa giữ): chữ ký đang băm lại từ JSON đã parse nên lệch khi Zalo gửi ký tự thoát.');
+    }
+    return ok;
   }
 }
 

@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { ZaloOaWebhookController, zaloOaEventSignature } from './zalo-oa-webhook.controller';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Queue } from 'bullmq';
@@ -139,6 +139,20 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     await expect(ctrl.handle(parsed, undefined, sig)).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(ctrl.handle(parsed, undefined, sig, { rawBody: Buffer.from(raw, 'utf8') })).resolves.toEqual({ received: true });
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('chữ ký lệch mà không có thân thô → ghi cảnh báo để lỗi không im lặng; có thân thô thì không nhắc chuyện thân thô', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { ctrl } = build(both);
+      await expect(ctrl.handle(signed, undefined, 'sai')).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('thân thô'));
+      warn.mockClear();
+      await expect(ctrl.handle(signed, undefined, 'sai', { rawBody: Buffer.from(JSON.stringify(signed)) })).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('thân thô'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('header mang tiền tố mac= vẫn khớp', async () => {
