@@ -132,7 +132,7 @@ describe('RbacService.addGrant', () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'g1', role: 'STAFF' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]),
       },
       user: {
@@ -141,9 +141,9 @@ describe('RbacService.addGrant', () => {
       },
     });
     const out = await new RbacService(prisma).addGrant('admin1', ' 0900000001 ', 'STAFF');
-    expect(prisma.roleGrant.create).toHaveBeenCalledWith(
+    expect(prisma.roleGrant.createMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ phone: '0900000001', role: 'STAFF', grantedBy: 'admin1' }),
+        data: [expect.objectContaining({ phone: '0900000001', role: 'STAFF', grantedBy: 'admin1' })],
       }),
     );
     expect(out.applied).toBe(true);
@@ -153,20 +153,20 @@ describe('RbacService.addGrant', () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue({ id: 'g1', role: 'STAFF' }),
-        create: jest.fn(),
+        createMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]),
       },
       user: { findUnique: jest.fn().mockResolvedValue(null) },
     });
     await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
-    expect(prisma.roleGrant.create).not.toHaveBeenCalled();
+    expect(prisma.roleGrant.createMany).not.toHaveBeenCalled();
   });
 
   it('user chưa tồn tại → chỉ tạo grant, applied=false', async () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       user: { findUnique: jest.fn().mockResolvedValue(null) },
     });
@@ -174,17 +174,13 @@ describe('RbacService.addGrant', () => {
     expect(out.applied).toBe(false);
   });
 
-  // Việc 5 (audit round 2): findFirst rồi create trong 1 $transaction READ COMMITTED vẫn không
-  // atomic — 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
-  // grant". Partial unique index role_grants_active_phone_role_key chặn ở DB, request thua ăn
-  // P2002 → phải coi như ĐÃ cấp (idempotent), KHÔNG throw/rollback, vẫn tiếp tục áp role cho user.
-  it('race 2 request đồng thời (P2002 khi create) → coi như đã cấp, vẫn áp role cho user, không throw', async () => {
-    const { Prisma } = jest.requireActual('@prisma/client');
-    const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
+  // Hai addGrant đồng thời cùng phone+role: bản thua gặp ON CONFLICT DO NOTHING (count 0), không ném lỗi trong tx
+  // nên bước applyGrants ngay sau vẫn chạy được (bắt P2002 trong tx gây 25P02).
+  it('RC-05: createMany không chèn dòng nào (bản kia đã cấp) → vẫn áp role cho user, không throw', async () => {
     const prisma = makePrisma({
       roleGrant: {
-        findFirst: jest.fn().mockResolvedValue(null), // pre-check chưa thấy — request kia chưa commit lúc check chạy
-        create: jest.fn().mockRejectedValue(p2002),
+        findFirst: jest.fn().mockResolvedValue(null),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]),
       },
       user: {
@@ -194,14 +190,14 @@ describe('RbacService.addGrant', () => {
     });
     const out = await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
     expect(out.applied).toBe(true);
-    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'STAFF' } }));
+    expect(prisma.roleGrant.createMany).toHaveBeenCalledWith(expect.objectContaining({ skipDuplicates: true }));
   });
 
-  it('lỗi KHÔNG phải P2002 khi create → vẫn throw (không nuốt lỗi hạ tầng khác)', async () => {
+  it('lỗi hạ tầng khi tạo grant → vẫn throw (không nuốt lỗi hạ tầng khác)', async () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockRejectedValue(new Error('DB down')),
+        createMany: jest.fn().mockRejectedValue(new Error('DB down')),
       },
       user: { findUnique: jest.fn().mockResolvedValue(null) },
     });
@@ -424,13 +420,13 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
 describe('RbacService.addGrant — không tự cấp quyền cho chính mình', () => {
   it('SĐT của chính admin đang thao tác → từ chối, không tạo grant, không nâng role', async () => {
     const prisma = makePrisma({
-      roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn(), findMany: jest.fn() },
+      roleGrant: { findFirst: jest.fn().mockResolvedValue(null), createMany: jest.fn(), findMany: jest.fn() },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ id: 'u_admin2', phone: '0900000098' })), update: jest.fn() },
     });
     await expect(new RbacService(prisma).addGrant('u_admin2', ' 0900000098 ', 'ADMIN')).rejects.toBeInstanceOf(
       BadRequestException,
     );
-    expect(prisma.roleGrant.create).not.toHaveBeenCalled();
+    expect(prisma.roleGrant.createMany).not.toHaveBeenCalled();
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
@@ -439,31 +435,29 @@ describe('RbacService.addGrant: nhóm việc', () => {
   const noUser = { findUnique: jest.fn().mockResolvedValue(null) };
 
   it('lưu nhóm trên lời mời theo thứ tự chuẩn, bỏ trùng', async () => {
-    const create = jest.fn().mockResolvedValue({ id: 'g1' });
-    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create }, user: noUser });
+    const create = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), createMany: create }, user: noUser });
     await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO', 'CSKH', 'KHO']);
-    expect(create).toHaveBeenCalledWith({
-      data: { phone: '0900000001', role: 'STAFF', grantedBy: 'admin1', staffPermissions: ['CSKH', 'KHO'] },
-    });
+    expect(create).toHaveBeenCalledWith({ data: [{ phone: '0900000001', role: 'STAFF', grantedBy: 'admin1', staffPermissions: ['CSKH', 'KHO'] }], skipDuplicates: true });
   });
 
   it('không truyền nhóm → lời mời lưu danh sách rỗng như cũ', async () => {
-    const create = jest.fn().mockResolvedValue({ id: 'g1' });
-    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create }, user: noUser });
+    const create = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), createMany: create }, user: noUser });
     await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
-    expect(create).toHaveBeenCalledWith({ data: { phone: '0900000001', role: 'STAFF', grantedBy: 'admin1', staffPermissions: [] } });
+    expect(create).toHaveBeenCalledWith({ data: [{ phone: '0900000001', role: 'STAFF', grantedBy: 'admin1', staffPermissions: [] }], skipDuplicates: true });
   });
 
   it('lời mời ADMIN không lưu nhóm (quản trị đã có mọi quyền)', async () => {
-    const create = jest.fn().mockResolvedValue({ id: 'g1' });
-    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create }, user: noUser });
+    const create = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), createMany: create }, user: noUser });
     await new RbacService(prisma).addGrant('admin1', '0900000001', 'ADMIN', ['KHO']);
-    expect(create).toHaveBeenCalledWith({ data: { phone: '0900000001', role: 'ADMIN', grantedBy: 'admin1', staffPermissions: [] } });
+    expect(create).toHaveBeenCalledWith({ data: [{ phone: '0900000001', role: 'ADMIN', grantedBy: 'admin1', staffPermissions: [] }], skipDuplicates: true });
   });
 
   it('nhóm không hợp lệ → 400, không tạo gì', async () => {
     const create = jest.fn();
-    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn(), create }, user: noUser });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn(), createMany: create }, user: noUser });
     await expect(new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO', 'ROOT'])).rejects.toBeInstanceOf(BadRequestException);
     expect(create).not.toHaveBeenCalled();
   });
@@ -472,7 +466,7 @@ describe('RbacService.addGrant: nhóm việc', () => {
     const update = jest.fn().mockResolvedValue({});
     const create = jest.fn();
     const prisma = makePrisma({
-      roleGrant: { findFirst: jest.fn().mockResolvedValue({ id: 'g1', staffPermissions: ['KHO'] }), create, update },
+      roleGrant: { findFirst: jest.fn().mockResolvedValue({ id: 'g1', staffPermissions: ['KHO'] }), createMany: create, update },
       user: noUser,
     });
     await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KE_TOAN']);
@@ -483,7 +477,7 @@ describe('RbacService.addGrant: nhóm việc', () => {
   it('lời mời đã có, gửi lại không kèm nhóm → giữ nguyên nhóm đã lưu', async () => {
     const update = jest.fn();
     const prisma = makePrisma({
-      roleGrant: { findFirst: jest.fn().mockResolvedValue({ id: 'g1', staffPermissions: ['KHO'] }), create: jest.fn(), update },
+      roleGrant: { findFirst: jest.fn().mockResolvedValue({ id: 'g1', staffPermissions: ['KHO'] }), createMany: jest.fn(), update },
       user: noUser,
     });
     await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
@@ -495,7 +489,7 @@ describe('RbacService.addGrant: nhóm việc', () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['CSKH'] }]),
       },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
@@ -514,7 +508,7 @@ describe('RbacService.addGrant: nhóm việc', () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]),
       },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
@@ -529,7 +523,7 @@ describe('RbacService.addGrant: nhóm việc', () => {
     const prisma = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['KHO'] }]),
       },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
@@ -540,12 +534,12 @@ describe('RbacService.addGrant: nhóm việc', () => {
   });
 
   it('người chưa có tài khoản hoặc vừa được nâng vai trò → permissionsChanged=false (đã có applied cho trường hợp nâng)', async () => {
-    const noUserPrisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'g1' }) }, user: noUser });
+    const noUserPrisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), createMany: jest.fn().mockResolvedValue({ count: 1 }) }, user: noUser });
     expect(await new RbacService(noUserPrisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO'])).toEqual({ granted: 'STAFF', applied: false, permissionsChanged: false });
     const promoted = makePrisma({
       roleGrant: {
         findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['KHO'] }]),
       },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser()), update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)) },

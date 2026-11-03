@@ -111,17 +111,14 @@ export class RbacService {
         await tx.roleGrant.update({ where: { id: existing.id }, data: { staffPermissions: perms } });
       }
       if (!existing) {
-        try {
-          await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId, staffPermissions: perms } });
-          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
-        } catch (err) {
-          // findFirst rồi create trong 1 $transaction READ COMMITTED (mặc định) vẫn không atomic —
-          // 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
-          // grant" trước khi tx đầu commit. Partial unique index role_grants_active_phone_role_key
-          // (phone,role WHERE revokedAt IS NULL) chặn ở DB, request thua ăn P2002 → coi như ĐÃ cấp
-          // (idempotent), tiếp tục áp role cho user thay vì rollback/throw lỗi DB thô.
-          if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
-        }
+        // findFirst rồi create trong $transaction READ COMMITTED không atomic: hai addGrant đồng thời cùng phone+role cùng qua
+        // check "chưa có". ON CONFLICT DO NOTHING (skipDuplicates) trên partial unique index role_grants_active_phone_role_key
+        // để bản thua là no-op; bắt P2002 trong tx sẽ làm Postgres huỷ tx (25P02) ở bước applyGrants ngay sau.
+        const { count } = await tx.roleGrant.createMany({
+          data: [{ phone: normalized, role, grantedBy: adminId, staffPermissions: perms }],
+          skipDuplicates: true,
+        });
+        if (count > 0) this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
       }
       // Áp ngay nếu user đã tồn tại
       let applied = false;
