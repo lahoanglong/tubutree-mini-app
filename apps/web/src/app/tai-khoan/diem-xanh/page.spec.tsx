@@ -133,6 +133,12 @@ afterEach(() => {
 });
 
 describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
+  it('đang chờ hạng: khung chờ mang aria-busy để CSS ẩn chân trang gọn, không để nó hiện rồi bị đẩy đi (HIEUNANG-04)', async () => {
+    state.pending.add('/me/loyalty');
+    const c = await mount();
+    expect(c.querySelector('[aria-busy="true"] [data-skeleton]')).not.toBeNull();
+  });
+
   it('hiện hạng, hệ số, tổng hai lô Điểm Xanh, dòng không hết hạn và phần còn lại để lên hạng kế', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Mầm Xanh');

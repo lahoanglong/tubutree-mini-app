@@ -3,14 +3,14 @@
 import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { PurchasedItemsPage } from '@tubutree/app-core/api/orders';
-import { HOME_KIND_KEY, readLastTodoRows } from '@tubutree/app-core/home-layout';
-import { hasSessionMarker, writeWebCookie } from '@/lib/client-api';
-import { HOME_HINT_COOKIE, hintSlug } from '@/lib/home-restore-hint';
+import { HOME_KIND_KEY } from '@tubutree/app-core/home-layout';
+import { readLastStoredHomeKind, syncHomeHintCookie } from '@/lib/home-hint-cookie';
 import { HomeRestoreHintContext, subscribeStorageEvent } from '@/lib/home-restore-context';
 import { browserStorage } from '@/lib/recently-viewed';
 import { customerKind, resolveHomeKind, type HomeCustomerKind, type HomeKindState } from './home-blocks';
 
 export { HOME_KIND_KEY };
+export { readLastStoredHomeKind, syncHomeHintCookie };
 
 /** Giá trị lưu: `{ userId, kind }` của khách đăng nhập gần nhất. Sai dạng / khác tài khoản → bỏ qua. */
 export function readStoredHomeKind(userId: string | null | undefined): HomeCustomerKind | null {
@@ -26,28 +26,6 @@ export function readStoredHomeKind(userId: string | null | undefined): HomeCusto
   } catch {
     return null;
   }
-}
-
-/** Loại của tài khoản dùng gần nhất trên máy, bất kể là ai: chỉ dùng trong lúc khôi phục phiên, khi chưa biết đang là tài khoản nào. */
-export function readLastStoredHomeKind(): HomeCustomerKind | null {
-  try {
-    const raw = browserStorage()?.getItem(HOME_KIND_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as { kind?: unknown } | null;
-    return v?.kind === 'new' || v?.kind === 'returning' ? v.kind : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Ghi cookie gợi ý bố cục (loại khách + số dòng Việc cần làm đã nhớ) để lần mở sau server dựng sẵn đúng khung chờ. Chỉ khi đang có phiên
- * (cờ phiên còn), vì cookie này vô nghĩa với khách vãng lai và bị xoá cùng cờ phiên khi đăng xuất.
- */
-export function syncHomeHintCookie(): void {
-  if (!hasSessionMarker()) return;
-  const rows = readLastTodoRows(browserStorage());
-  writeWebCookie(HOME_HINT_COOKIE, hintSlug({ kind: readLastStoredHomeKind() ?? 'unknown', rows: rows === 1 || rows === 2 ? rows : 0 }));
 }
 
 function writeStoredHomeKind(userId: string, kind: HomeCustomerKind): void {

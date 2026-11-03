@@ -140,7 +140,7 @@ export default function NotificationsPage() {
 
   if (notifQ.isLoading) {
     return shell(
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-4 flex flex-col gap-2" aria-busy="true">
         <LineItemSkeleton />
         <LineItemSkeleton />
       </div>,

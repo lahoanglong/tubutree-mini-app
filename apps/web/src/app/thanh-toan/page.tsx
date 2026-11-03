@@ -9,7 +9,7 @@ import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
 import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
 import { browserStorage } from '@/lib/recently-viewed';
-import { syncHomeHintCookie } from '@/components/home/use-home-customer-kind';
+import { syncHomeHintCookie } from '@/lib/home-hint-cookie';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
 import { OrderConsent } from '@/components/order-consent';
