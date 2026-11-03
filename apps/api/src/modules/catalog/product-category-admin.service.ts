@@ -5,6 +5,7 @@ import { decodeListCursor, encodeListCursor } from '../affiliate/commission-admi
 import { CatalogService } from './catalog.service';
 import { CATEGORY_MSG, CATEGORY_TREE_LOCK } from './category-tree';
 import { HomeService } from './home.service';
+import { PRODUCT_CATEGORIES_MAX } from './product-admin.service';
 import { PUBLIC_PRODUCT_WHERE } from './public-product';
 import { escapePrismaLike, foldVietnamese } from './search-text';
 
@@ -87,15 +88,22 @@ export class ProductCategoryAdminService {
       throw new BadRequestException(`Mỗi lần chỉ gán tối đa ${CATEGORY_ASSIGN_MAX_PRODUCTS} sản phẩm.`);
     }
     // ADD giữ khoá cây rồi mới kiểm lá và ghi: một admin vừa thêm mục con vào danh mục này thì lệnh gán phải thấy mục con, không lọt vào cha.
-    const { category, changed } = mode === 'ADD' ? await this.addToLeaf(ids, categoryId) : await this.removeFrom(ids, categoryId);
+    const { category, changed, overLimit } = mode === 'ADD' ? await this.addToLeaf(ids, categoryId) : { ...(await this.removeFrom(ids, categoryId)), overLimit: [] };
     if (changed > 0) {
       this.catalog.invalidateCategoryCache();
       this.home.invalidateStatic();
     }
     this.logger.log(
-      `Admin ${adminId} ${mode === 'ADD' ? 'gán' : 'gỡ'} danh mục "${category.name}" (${categoryId}) cho ${changed}/${ids.length} sản phẩm.`,
+      `Admin ${adminId} ${mode === 'ADD' ? 'gán' : 'gỡ'} danh mục "${category.name}" (${categoryId}) cho ${changed}/${ids.length} sản phẩm${overLimit.length > 0 ? `, ${overLimit.length} sản phẩm đã đủ ${PRODUCT_CATEGORIES_MAX} danh mục nên bỏ qua` : ''}.`,
     );
-    return { requested: ids.length, changed, unchanged: ids.length - changed, category: { id: category.id, name: category.name } };
+    // `unchanged` chỉ là sản phẩm đã đúng sẵn; sản phẩm bị trần chặn nằm riêng ở `overLimit`.
+    return {
+      requested: ids.length,
+      changed,
+      unchanged: ids.length - changed - overLimit.length,
+      overLimit,
+      category: { id: category.id, name: category.name },
+    };
   }
 
   private async addToLeaf(ids: string[], categoryId: string) {
@@ -105,10 +113,18 @@ export class ProductCategoryAdminService {
       if (!category) throw new NotFoundException(CATEGORY_MSG.notFound());
       if ((await tx.category.count({ where: { parentId: categoryId } })) > 0) throw new BadRequestException(CATEGORY_MSG.notLeaf(category.name));
       await this.assertProductsExist(tx, ids);
+      // Trần PRODUCT_CATEGORIES_MAX như ngăn kéo sửa sản phẩm: vượt thì ngăn kéo từ chối cả khi admin chỉ bỏ bớt. Đọc dưới khoá cây (mọi đường ghi danh mục giữ khoá này) để báo đúng sản phẩm bị bỏ qua.
+      const lacking = await tx.product.findMany({
+        where: { id: { in: ids }, NOT: { categoryIds: { has: categoryId } } },
+        select: { id: true, name: true, categoryIds: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      });
+      const overLimit = lacking.filter((p) => p.categoryIds.length >= PRODUCT_CATEGORIES_MAX).map((p) => ({ id: p.id, name: p.name }));
       const changed = await tx.$executeRaw`
         UPDATE "products" SET "categoryIds" = array_append(COALESCE("categoryIds", ARRAY[]::text[]), ${categoryId}), "updatedAt" = now()
-        WHERE "id" = ANY(${ids}) AND NOT (${categoryId} = ANY(COALESCE("categoryIds", ARRAY[]::text[])))`;
-      return { category, changed };
+        WHERE "id" = ANY(${ids}) AND NOT (${categoryId} = ANY(COALESCE("categoryIds", ARRAY[]::text[])))
+          AND cardinality(COALESCE("categoryIds", ARRAY[]::text[])) < ${PRODUCT_CATEGORIES_MAX}`;
+      return { category, changed, overLimit };
     });
   }
 

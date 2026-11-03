@@ -29,13 +29,20 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(current: ReturnType<typeof row> | null = row(), categories = 1, sellableVariations = 1, parents: { name: string }[] = []) {
+function setup(current: ReturnType<typeof row> | null = row(), alive: string[] | 'all' = 'all', sellableVariations = 1, parents: { name: string }[] = []) {
   const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...current, ...data }));
   const prisma = {
     product: { findUnique: jest.fn().mockResolvedValue(current), update },
-    category: { count: jest.fn().mockResolvedValue(categories), findMany: jest.fn().mockResolvedValue(parents) },
+    category: {
+      findMany: jest.fn().mockImplementation(({ where }: { where: { id: { in: string[] }; children?: unknown } }) =>
+        Promise.resolve(where.children ? parents : where.id.in.filter((i) => alive === 'all' || alive.includes(i)).map((id) => ({ id }))),
+      ),
+    },
     variation: { count: jest.fn().mockResolvedValue(sellableVariations) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn(),
   };
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
   const imageResize = { invalidateRegistry: jest.fn() };
   return { svc: new ProductAdminService(prisma as never, imageResize as never), update, prisma, imageResize };
 }
@@ -90,29 +97,65 @@ describe('ProductAdminService — sửa sản phẩm', () => {
   it('mô tả, mô tả ngắn, nổi bật và danh mục: cắt khoảng trắng, bỏ trùng, kiểm danh mục tồn tại', async () => {
     const { svc, update, prisma } = setup();
     await svc.update('a1', 'p1', { description: '  Mô tả mới  ', shortDesc: '   ', isFeatured: true, categoryIds: ['c1', 'c1'] });
-    expect(prisma.category.count).toHaveBeenCalledWith({ where: { id: { in: ['c1'] } } });
+    expect(prisma.category.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['c1'] } });
     expect(update.mock.calls[0][0].data).toEqual({ description: 'Mô tả mới', shortDesc: null, isFeatured: true, categoryIds: ['c1'] });
   });
 
   it('thêm danh mục có mục con vào sản phẩm → 400 nêu tên, không ghi; kiểm lá chỉ với id mới thêm', async () => {
-    const { svc, update, prisma } = setup(row({ categoryIds: ['cu'] }), 2, 1, [{ name: 'Gia dụng' }]);
+    const { svc, update, prisma } = setup(row({ categoryIds: ['cu'] }), 'all', 1, [{ name: 'Gia dụng' }]);
     await expect(svc.update('a1', 'p1', { categoryIds: ['cu', 'cha'] })).rejects.toThrow(CATEGORY_MSG.notLeaf('Gia dụng'));
     expect(update).not.toHaveBeenCalled();
     // `cu` đã có sẵn trên sản phẩm nên không bị hỏi lại (dữ liệu gán vào cha từ trước vẫn giữ được khi sửa trường khác).
-    expect(prisma.category.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['cha'] }, children: { some: {} } });
+    expect(prisma.category.findMany.mock.calls[1][0].where).toEqual({ id: { in: ['cha'] }, children: { some: {} } });
   });
 
   it('giữ nguyên danh mục cũ (kể cả cha có con) khi sửa: không kiểm lá, không lỗi', async () => {
-    const { svc, update, prisma } = setup(row({ categoryIds: ['cha'] }), 1, 1, [{ name: 'Gia dụng' }]);
+    const { svc, update, prisma } = setup(row({ categoryIds: ['cha'] }), 'all', 1, [{ name: 'Gia dụng' }]);
     await svc.update('a1', 'p1', { categoryIds: ['cha'] });
-    expect(prisma.category.findMany).not.toHaveBeenCalled();
+    expect(prisma.category.findMany).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalled();
   });
 
   it('danh mục không tồn tại → 400, không ghi', async () => {
-    const { svc, update } = setup(row(), 0);
+    const { svc, update } = setup(row(), []);
     await expect(svc.update('a1', 'p1', { categoryIds: ['ghost'] })).rejects.toBeInstanceOf(BadRequestException);
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('ghi danh mục trong transaction giữ khoá cây, rồi mới kiểm và ghi', async () => {
+    const order: string[] = [];
+    const { svc, prisma } = setup();
+    prisma.$executeRaw.mockImplementation((async () => void order.push('lock')) as never);
+    prisma.category.findMany.mockImplementation((async ({ where }: { where: { children?: unknown } }) => (where.children ? [] : (order.push('check'), [{ id: 'c1' }]))) as never);
+    prisma.product.update.mockImplementation((async ({ data }: { data: object }) => (order.push('write'), { ...row(), ...data })) as never);
+    await svc.update('a1', 'p1', { categoryIds: ['c1'] });
+    expect(order).toEqual(['lock', 'check', 'write']);
+  });
+
+  it('danh mục ma đã nằm trên sản phẩm (bị xoá từ trước) được bỏ khi lưu, không chặn mãi mãi', async () => {
+    const { svc, update } = setup(row({ categoryIds: ['ghost', 'c1'] }), ['c1', 'c2']);
+    await svc.update('a1', 'p1', { categoryIds: ['ghost', 'c1', 'c2'] });
+    expect(update.mock.calls[0][0].data.categoryIds).toEqual(['c1', 'c2']);
+  });
+
+  it('danh mục ma mới thêm vào vẫn bị chặn', async () => {
+    const { svc, update } = setup(row({ categoryIds: ['c1'] }), ['c1']);
+    await expect(svc.update('a1', 'p1', { categoryIds: ['c1', 'ghost'] })).rejects.toThrow(/không còn tồn tại/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('trần 10 danh mục chỉ chặn khi số danh mục tăng; đang quá trần (do gán hàng loạt cũ) mà bỏ bớt thì lưu được', async () => {
+    const eleven = Array.from({ length: 11 }, (_, i) => `c${i}`);
+    const down = setup(row({ categoryIds: eleven }));
+    await down.svc.update('a1', 'p1', { categoryIds: eleven.slice(0, 10) });
+    expect(down.update.mock.calls[0][0].data.categoryIds).toHaveLength(10);
+    const stillOver = setup(row({ categoryIds: eleven }));
+    await stillOver.svc.update('a1', 'p1', { categoryIds: eleven.slice(0, 11) });
+    expect(stillOver.update).toHaveBeenCalled();
+    const ten = eleven.slice(0, 10);
+    const up = setup(row({ categoryIds: ten }));
+    await expect(up.svc.update('a1', 'p1', { categoryIds: [...ten, 'c10'] })).rejects.toThrow(/Tối đa 10 danh mục/);
+    expect(up.update).not.toHaveBeenCalled();
   });
 
   it('ẩn sản phẩm luôn được; bật lại bị chặn khi Pancake đang giữ hoặc chưa duyệt', async () => {
@@ -149,7 +192,7 @@ describe('ProductAdminService — sửa sản phẩm', () => {
   });
 
   it('bật sản phẩm không còn biến thể nào đang bán (ví dụ đã chuyển hết sang đối tác) → 400, không ghi', async () => {
-    const { svc, update, prisma } = setup(row({ isActive: false }), 1, 0);
+    const { svc, update, prisma } = setup(row({ isActive: false }), 'all', 0);
     await expect(svc.update('a1', 'p1', { isActive: true })).rejects.toThrow('không còn biến thể');
     expect(prisma.variation.count).toHaveBeenCalledWith({ where: { productId: 'p1', isActive: true } });
     expect(update).not.toHaveBeenCalled();
