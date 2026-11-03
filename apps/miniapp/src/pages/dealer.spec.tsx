@@ -332,6 +332,18 @@ describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
     await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
     expect(mocks.navigate).not.toHaveBeenCalledWith('/bank-payment/TUBU4');
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error', text: expect.stringMatching(/TUBU4.*lần trước.*Ghi công nợ.*không cần chuyển khoản/) });
+  });
+
+  it('bấm Ghi công nợ mà máy chủ trả đơn Trả trước còn chờ chuyển khoản (lần trước): báo đúng hình thức và mở màn QR', async () => {
+    mocks.placeDealerOrder.mockResolvedValue({ code: 'TUBU6', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', items: [{ backorderedQty: 0, quantity: 1 }] });
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    fireEvent.click(await screen.findByRole('button', { name: 'Ghi công nợ' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error', text: expect.stringMatching(/TUBU6.*lần trước.*Trả trước.*chuyển khoản/) });
+    expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU6');
   });
 
   it('lỗi mạng rồi đổi giỏ hoặc đổi phương thức thì vẫn giữ Idempotency-Key (máy chủ có thể đã tạo đơn)', async () => {

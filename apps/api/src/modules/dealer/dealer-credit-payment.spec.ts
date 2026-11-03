@@ -333,6 +333,22 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(ledgerCreate).not.toHaveBeenCalled();
   });
 
+  it('mã giao dịch đã ghi giảm nợ ở khoản khác (đại lý khác hoặc khác hoa thường): 409, không ghi dòng sổ', async () => {
+    const { svc, prisma, ledgerCreate } = build({ debt: 9_000_000 });
+    const ledger = (prisma as unknown as { dealerCreditLedger: { findMany: jest.Mock } }).dealerCreditLedger;
+    ledger.findMany.mockResolvedValue([{ userId: 'd2', refId: 'FT9', note: 'Admin kt xác nhận đã nhận chuyển khoản · Mã GD FT9' }]);
+    await expect(svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { bankRef: 'ft9', idempotencyKey: 'k1' })).rejects.toThrow(/Mã giao dịch ft9 đã dùng để ghi giảm công nợ/);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('dòng sổ có đúng khoá của lần ghi này không tính là mã đã dùng (replay song song)', async () => {
+    const { svc, prisma, ledgerCreate } = build({ debt: 9_000_000 });
+    const ledger = (prisma as unknown as { dealerCreditLedger: { findMany: jest.Mock } }).dealerCreditLedger;
+    ledger.findMany.mockResolvedValue([{ userId: 'd1', refId: 'FT9', note: 'Mã GD FT9' }]);
+    await svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { bankRef: 'FT9', idempotencyKey: 'FT9' });
+    expect(ledgerCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('race 2 admin duyệt CÙNG lúc cho CÙNG đại lý (P2034 serialization failure) → BadRequest thân thiện, không sập 500', async () => {
     const { svc, prisma } = build({ debt: 500_000 });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(

@@ -157,20 +157,34 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
       if (got !== '' && sent !== got) {
         orderKey.current = newIdempotencyKey();
         setNotice({
-          text: `Đơn ${order.code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt — kiểm tra tab Đơn hàng trước khi đặt lại.`,
+          text: `Đơn ${order.code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt, kiểm tra tab Đơn hàng trước khi đặt lại.`,
           error: true,
         });
         return;
       }
+      // Cùng giỏ nhưng khác hình thức so với nút vừa bấm: đơn là của lần trước (mạng lỗi), báo hình thức thật của đơn.
+      const waitingTransfer = order.status === 'PENDING_PAYMENT';
+      const earlier: 'CREDIT' | 'PREPAID' | null =
+        method === 'PREPAID' && order.status && !waitingTransfer ? 'CREDIT' : method === 'CREDIT' && waitingTransfer ? 'PREPAID' : null;
       const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
-      setNotice({
-        text: hasPreorder ? 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.' : 'Đã tạo đơn đại lý!',
-        error: false,
-      });
+      setNotice(
+        earlier
+          ? {
+              text:
+                earlier === 'CREDIT'
+                  ? `Đơn ${order.code} đã tạo ở lần trước theo hình thức Ghi công nợ, không cần chuyển khoản.`
+                  : `Đơn ${order.code} đã tạo ở lần trước theo hình thức Trả trước, cần chuyển khoản để đơn được giao.`,
+              error: true,
+            }
+          : {
+              text: hasPreorder ? 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.' : 'Đã tạo đơn đại lý!',
+              error: false,
+            },
+      );
       orderKey.current = newIdempotencyKey();
       setQty({});
       // Chỉ đơn máy chủ trả về còn chờ chuyển khoản mới có trang để chuyển; đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái.
-      if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') router.push(bankPaymentHref(order.code));
+      if (waitingTransfer && order.paymentMethod === 'BANK_TRANSFER') router.push(bankPaymentHref(order.code));
     },
     onError: (e) => setNotice({ text: errText(e), error: true }),
     onSettled: () => {

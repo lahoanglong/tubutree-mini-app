@@ -639,9 +639,9 @@ export class DealerService {
           // Re-check TRONG transaction Serializable — dư nợ có thể đã đổi kể từ lúc admin xem màn
           // hình (đơn CREDIT mới / khoản báo khác vừa được duyệt). 2 admin duyệt đồng thời cho
           // cùng đại lý sẽ khiến 1 bên serialization-fail (P2034) thay vì cùng qua check.
-          // Cùng mã đã xác nhận một đơn trả trước thì tiền đó đã tính cho đơn, không giảm nợ thêm lần nữa.
+          // Cùng mã đã xác nhận một đơn trả trước hoặc đã ghi giảm nợ (của đại lý nào cũng vậy) thì tiền đó đã được tính, không giảm nợ thêm lần nữa.
           const payRef = opts.bankRef?.trim();
-          if (payRef) await this.assertBankRefNotOnOrder(tx, payRef);
+          if (payRef) await this.assertBankRefFreeForPayment(tx, payRef, key ? { userId: dealerUserId, refId: key } : undefined);
           const agg = await tx.dealerCreditLedger.aggregate({ where: { userId: dealerUserId }, _sum: { delta: true } });
           const debt = agg._sum.delta ?? 0;
           if (amount > debt) {
@@ -1335,11 +1335,15 @@ export class DealerService {
 
   // ── Admin: xác nhận đã nhận chuyển khoản cho đơn đại lý trả trước ──
 
-  /** Khoá advisory theo mã rồi kiểm mã đã ghi ở một đơn đại lý khác; `exceptOrderId` bỏ qua chính đơn đang xác nhận. */
-  private async assertBankRefNotOnOrder(tx: Prisma.TransactionClient, bankRef: string, exceptOrderId?: string) {
+  /** Khoá advisory theo mã giao dịch, tự nhả khi transaction kết thúc. */
+  private async lockBankRef(tx: Prisma.TransactionClient, bankRef: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${bankRef.toLowerCase()}`}))`;
+  }
+
+  /** Mã giao dịch đã ghi ở một đơn đại lý (khác `exceptOrderId`): trả mã đơn, không có thì null. */
+  private async findOrderUsingBankRef(db: Prisma.TransactionClient | PrismaService, bankRef: string, exceptOrderId?: string) {
     const ref = bankRef.toLowerCase();
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${ref}`}))`;
-    const history = await tx.orderStatusHistory.findMany({
+    const history = await db.orderStatusHistory.findMany({
       where: {
         note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' },
         actorType: 'ADMIN',
@@ -1348,32 +1352,56 @@ export class DealerService {
       select: { orderId: true, note: true },
     });
     const usedIds = history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId);
-    const usedOrder = usedIds.length
-      ? await tx.order.findFirst({ where: { id: { in: usedIds }, type: 'DEALER' }, select: { code: true } })
-      : null;
+    return usedIds.length ? db.order.findFirst({ where: { id: { in: usedIds }, type: 'DEALER' }, select: { code: true } }) : null;
+  }
+
+  /** Mã giao dịch đã ghi giảm công nợ của bất kỳ đại lý nào (refId hoặc phần "Mã GD" trong ghi chú), trừ dòng có `own` (khoá của chính lần ghi này). */
+  private async isBankRefOnPayment(
+    db: Prisma.TransactionClient | PrismaService,
+    bankRef: string,
+    own?: { userId: string; refId: string },
+  ) {
+    const ref = bankRef.toLowerCase();
+    const payments = await db.dealerCreditLedger.findMany({
+      where: {
+        refType: 'PAYMENT',
+        OR: [{ refId: { equals: bankRef, mode: 'insensitive' } }, { note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' } }],
+      },
+      select: { userId: true, refId: true, note: true },
+    });
+    return payments.some(
+      (p) => !(own && p.userId === own.userId && p.refId === own.refId) && (p.refId?.toLowerCase() === ref || noteHasBankRef(p.note, ref)),
+    );
+  }
+
+  /**
+   * Đường ghi trả nợ chạy Serializable nên snapshot đã chụp trước lúc chờ khoá: kiểm bằng kết nối riêng (mỗi câu một snapshot mới)
+   * sau khi giữ khoá, để thấy dòng lịch sử mà bên xác nhận đơn vừa commit trước khi nhả khoá.
+   */
+  private async assertBankRefFreeForPayment(tx: Prisma.TransactionClient, bankRef: string, own?: { userId: string; refId: string }) {
+    await this.lockBankRef(tx, bankRef);
+    const usedOrder = await this.findOrderUsingBankRef(this.prisma, bankRef);
     if (usedOrder) {
       throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+    if (await this.isBankRefOnPayment(this.prisma, bankRef, own)) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
     }
   }
 
   /**
    * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn trả
    * trước khác hoặc ở một khoản trả nợ thì 409. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB; khoá advisory theo mã
-   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm.
+   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm. Transaction này Read
+   * Committed nên mỗi câu đọc thấy dữ liệu mới nhất sau khi chờ khoá.
    */
   private async assertBankRefUnused(tx: Prisma.TransactionClient, bankRef: string, orderId: string) {
-    await this.assertBankRefNotOnOrder(tx, bankRef, orderId);
-    const ref = bankRef.toLowerCase();
-    const marker = `Mã GD ${bankRef}`;
-    const sameRef = (note: string | null) => noteHasBankRef(note, ref);
-    const payments = await tx.dealerCreditLedger.findMany({
-      where: {
-        refType: 'PAYMENT',
-        OR: [{ refId: { equals: bankRef, mode: 'insensitive' } }, { note: { contains: marker, mode: 'insensitive' } }],
-      },
-      select: { refId: true, note: true },
-    });
-    if (payments.some((p) => p.refId?.toLowerCase() === ref || sameRef(p.note))) {
+    await this.lockBankRef(tx, bankRef);
+    const usedOrder = await this.findOrderUsingBankRef(tx, bankRef, orderId);
+    if (usedOrder) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+    if (await this.isBankRefOnPayment(tx, bankRef)) {
       throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
     }
   }

@@ -472,11 +472,16 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
         return;
       }
       haptic('medium');
+      // Cùng giỏ nhưng khác hình thức so với nút vừa bấm: đơn là của lần trước (mạng lỗi), báo hình thức thật của đơn.
+      const waitingTransfer = order.status === 'PENDING_PAYMENT';
+      const earlier: 'CREDIT' | 'PREPAID' | null =
+        method === 'PREPAID' && order.status && !waitingTransfer ? 'CREDIT' : method === 'CREDIT' && waitingTransfer ? 'PREPAID' : null;
       const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
-      openSnackbar({
-        text: hasPreorder ? vi.dealerOrder.createdWithPreorder : vi.dealerOrder.created,
-        type: 'success',
-      });
+      openSnackbar(
+        earlier
+          ? { text: vi.dealerOrder.createdEarlierMethod(order.code, earlier), type: 'error' }
+          : { text: hasPreorder ? vi.dealerOrder.createdWithPreorder : vi.dealerOrder.created, type: 'success' },
+      );
       orderKey.current = newIdempotencyKey();
       setQty({});
       void qc.invalidateQueries({ queryKey: ['dealer-orders'] });
@@ -489,7 +494,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
       // Đơn "Trả trước" tạo ra ở trạng thái PENDING_PAYMENT / BANK_TRANSFER nhưng trước đây
       // không có đường nào tới màn QR — đại lý đặt xong không biết chuyển khoản vào đâu.
       // Đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái: chỉ đơn còn chờ chuyển khoản mới có màn QR.
-      if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') {
+      if (waitingTransfer && order.paymentMethod === 'BANK_TRANSFER') {
         navigate(`/bank-payment/${order.code}`);
       }
     },

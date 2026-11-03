@@ -152,6 +152,48 @@ describe('Công nợ và mã giao dịch đại lý (real Postgres)', () => {
       expect(results.rejected).toHaveLength(1);
     });
 
+    it('xác nhận đơn lấy khoá trước và giữ lâu: ghi giảm nợ cùng mã chờ khoá rồi vẫn thấy mã đã dùng', async () => {
+      const d = await newDealer();
+      await addDebt(d.id, 9_000_000);
+      const o = await prepaidOrder(d.id);
+      const ref = `FT${randCode(8)}`;
+      const svc = dealer as unknown as { assertBankRefUnused: (tx: unknown, r: string, id: string) => Promise<void> };
+      const orig = svc.assertBankRefUnused.bind(dealer);
+      svc.assertBankRefUnused = async (tx, r, id) => {
+        await orig(tx, r, id);
+        await new Promise((res) => setTimeout(res, 400));
+      };
+      try {
+        const p1 = dealer.confirmDealerOrderPayment('ad1', o.id, { bankRef: ref });
+        await new Promise((res) => setTimeout(res, 150));
+        const p2 = dealer.adminRecordCreditPayment('kt', d.id, 5_000_000, { bankRef: ref });
+        const results = summarize(await Promise.allSettled([p1, p2]));
+        expect(results.fulfilled).toHaveLength(1);
+        expect(results.rejected).toHaveLength(1);
+        expect(results.errors[0]).toMatch(/đã dùng/);
+      } finally {
+        svc.assertBankRefUnused = orig;
+      }
+      expect(await debtOf(d.id)).toBe(9_000_000);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).paymentStatus).toBe('PAID');
+    });
+
+    it('trả nợ: mã đã ghi cho đại lý khác hoặc khác hoa thường thì 409, không giảm nợ lần hai', async () => {
+      const d1 = await newDealer();
+      const d2 = await newDealer();
+      await addDebt(d1.id, 9_000_000);
+      await addDebt(d2.id, 9_000_000);
+      const ref = `FT${randCode(8)}`;
+      await dealer.adminRecordCreditPayment('kt', d1.id, 5_000_000, { bankRef: ref, idempotencyKey: ref });
+      await expect(dealer.adminRecordCreditPayment('kt', d1.id, 2_000_000, { bankRef: ref.toLowerCase(), idempotencyKey: `k-${randCode(6)}` })).rejects.toThrow(/đã dùng để ghi giảm công nợ/);
+      await expect(dealer.adminRecordCreditPayment('kt', d2.id, 2_000_000, { bankRef: ref, idempotencyKey: `k-${randCode(6)}` })).rejects.toThrow(/đã dùng để ghi giảm công nợ/);
+      expect(await debtOf(d1.id)).toBe(4_000_000);
+      expect(await debtOf(d2.id)).toBe(9_000_000);
+      // Bấm lại đúng khoản cũ (cùng khoá, cùng số) vẫn là replay hợp lệ.
+      await dealer.adminRecordCreditPayment('kt', d1.id, 5_000_000, { bankRef: ref, idempotencyKey: ref });
+      expect(await debtOf(d1.id)).toBe(4_000_000);
+    });
+
     it('mã khác tiền tố và đơn không có mã vẫn xác nhận được', async () => {
       const d = await newDealer();
       const [o1, o2, o3] = [await prepaidOrder(d.id), await prepaidOrder(d.id), await prepaidOrder(d.id)];
