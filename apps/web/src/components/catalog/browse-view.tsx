@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ChevronRight, Leaf, Search, X } from 'lucide-react';
+import { ChevronRight, Search, X } from 'lucide-react';
 import type { CatalogPage, CategoryDTO, ProductCard as ProductCardData, ProductSuggestion } from '@tubutree/app-core/api/catalog';
 import { categoryTrail, chipScope, findCategory } from '@tubutree/app-core/browse/category-tree';
+import { softBreakLongWords } from '@tubutree/app-core/browse/soft-break';
 import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
 import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
 import { brandsQuery, browseQuery, categoriesQuery } from '@tubutree/app-core/queries/catalog';
@@ -14,6 +15,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { browseText } from '@/lib/browse-text';
 import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
+import { EmptyState } from '@/components/mini/empty-state';
 import { ui } from '@/lib/guest-ui';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches, RECENT_SEARCHES_CHANGED_EVENT } from '@/lib/recent-searches';
 import {
@@ -485,19 +487,12 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
 
 function EmptyResults({ q, root, onClear }: { q: string; root: boolean; onClear: () => void }) {
   return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-10 text-center shadow-card">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-forest-50 text-forest-600">
-        {q ? <Search className="h-6 w-6" aria-hidden="true" /> : <Leaf className="h-6 w-6" aria-hidden="true" />}
-      </div>
-      <h3 className="mt-3 break-words font-display text-lg font-semibold text-stone-900">
-        {q ? browseText.noResultHeading(q) : root ? browseText.emptyHeading : browseText.noResultFiltered}
-      </h3>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">{root ? browseText.emptyBody : browseText.noResultBody}</p>
-      {!root && (
-        <button type="button" onClick={onClear} className={`${ui.btnPrimary} mt-4`}>
-          {browseText.clearAll}
-        </button>
-      )}
-    </div>
+    <EmptyState
+      art={q ? 'search' : 'leaf'}
+      heading={q ? browseText.noResultHeading(softBreakLongWords(q)) : root ? browseText.emptyHeading : browseText.noResultFiltered}
+      body={root ? browseText.emptyBody : browseText.noResultBody}
+      ctaLabel={root ? undefined : browseText.clearAll}
+      onCta={root ? undefined : onClear}
+    />
   );
 }

@@ -3,6 +3,7 @@ import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
+import { PRODUCT_NOT_FOUND } from '@tubutree/app-core/client-copy';
 import {
   fetchProduct,
   fetchRelated,
@@ -370,7 +371,7 @@ export default function ProductDetailPage() {
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
         {isNotFoundError(product.error) ? (
           <>
-            <ErrorState message="Không tìm thấy sản phẩm này." onRetry={() => undefined} onHome={() => navigate('/')} />
+            <ErrorState message={PRODUCT_NOT_FOUND} onRetry={() => undefined} onHome={() => navigate('/')} />
             {/* Khách từ link sàn/CTV vào sản phẩm đã gỡ: cho họ chỗ đi tiếp thay vì ngõ cụt. */}
             <SuggestedRail listSource="pdp_not_found" />
           </>

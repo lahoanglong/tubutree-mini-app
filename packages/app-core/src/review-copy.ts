@@ -4,6 +4,7 @@ export const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
 // Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy thông báo không kèm điểm.
 export const REWARD_ALREADY_GIVEN =
   'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+export const REVIEW_NEEDS_PURCHASE = 'Mua và nhận hàng để đánh giá';
 export const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 
 /** Chữ trên ô chọn video và nút gửi khi video đang tải lên; ở đây để form nạp được mà không kéo theo mã tải video. */

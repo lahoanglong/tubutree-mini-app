@@ -183,7 +183,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
   it('BE báo chưa đủ điều kiện → ẩn nút, hiện lý do', async () => {
     mocks.canReview.mockResolvedValue({ canReview: false, reason: 'NOT_PURCHASED' });
     renderSection();
-    expect(await screen.findByText('Mua & nhận hàng để đánh giá')).toBeInTheDocument();
+    expect(await screen.findByText('Mua và nhận hàng để đánh giá')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Sửa đánh giá của bạn' })).toBeNull();
   });
