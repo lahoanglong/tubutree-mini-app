@@ -52,3 +52,4 @@ Quyền (chủ duyệt trong phiên): worktree/nhánh, sửa mã, test, commit, 
 | 04:0x | pk15 tip `7903e8b84` (gộp r2 + main 90c3290cb): gate FAIL 0 (`logs/gate-pk15.txt`: jest-api 551/12 973, vitest web 9 659, mini 6 608 ×2, app-core 2 642), race đủ 336/336 (2 625 test) trên Postgres mới 46330 (`logs/race-pk15-full.txt`), khởi động thật OK | chờ #145 + dep3 |
 | 04:4x | CI #145 xanh 8/8 trên `f4830ed87`. ĐÃ MERGE: main `5b6379606`, CÓ migration (3, chỉ dữ liệu; tổng 267); đã báo 2a SHA + danh sách PR. 2a deploy dep1–dep3, không gồm pk15 | xong |
 | 04:4x | pk15 gộp main `5b6379606` (`1279de0ea`, chỉ thêm spec e2e), push, mở **PR #149** (không migration). Chỉ merge sau khi 2a báo dep3 xong | chờ CI + dep3 |
+| 05:xx | 2a dep3 XONG: PROD Vietnix `98803f006` (gồm #145), migration 263→267, go-live 48 PASS / 18 WARN / 0 FAIL, rollback `:prev-0aa8af5d`. CI #149 xanh 8/8 trên `1279de0ea`. ĐÃ MERGE: main `1259e56d9`, không migration; đã báo 2a. #149 chưa deploy (đợt sau) | xong |
