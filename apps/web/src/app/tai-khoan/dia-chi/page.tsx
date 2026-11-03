@@ -154,6 +154,7 @@ export default function AddressBookPage() {
                   headingLevel={2}
                   submitLabel="Lưu"
                   initial={addressToForm(a)}
+                  userId={userId}
                   onSubmit={async (payload) => {
                     await updateAddress(a.id, payload);
                     setEditingId(null);

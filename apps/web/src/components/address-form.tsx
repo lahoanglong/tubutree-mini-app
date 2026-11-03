@@ -71,7 +71,10 @@ export function AddressForm({
 
   const save = useMutation({
     mutationFn: (p: AddressPayload) => onSubmit(p),
-    onSuccess: (_r, p) => rememberLastGeo(p, browserStorage(), userId),
+    onSuccess: (_r, p) => {
+      // Không biết tài khoản thì không ghi: khoá chung sẽ điền nhầm tỉnh/phường cho người dùng sau trên máy dùng chung.
+      if (userId) rememberLastGeo(p, browserStorage(), userId);
+    },
   });
 
   const prefilled = useRef(false);

@@ -1103,6 +1103,7 @@ function AddressPicker({
             title="Sửa địa chỉ"
             submitLabel="Lưu"
             initial={addressToForm(a)}
+            userId={userId}
             onSubmit={async (payload) => {
               const saved = await updateAddress(a.id, payload);
               setEditingId(null);

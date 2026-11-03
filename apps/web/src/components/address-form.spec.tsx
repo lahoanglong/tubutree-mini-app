@@ -21,12 +21,12 @@ const submit = vi.fn();
 const cancel = vi.fn();
 const mocks = vi.hoisted(() => ({
   me: { fullName: 'Phạm Văn CTV', phone: '0901000004' } as { fullName?: string | null; phone?: string | null },
-  meDelay: false,
+  meGate: null as Promise<void> | null,
 }));
 vi.mock('@/lib/shop-client', async (orig) => ({
   ...(await orig<typeof import('@/lib/shop-client')>()),
   getMe: async () => {
-    if (mocks.meDelay) await new Promise((r) => setTimeout(r, 30));
+    if (mocks.meGate) await mocks.meGate;
     return { pointsBalance: 0, walletBalance: 0, ...mocks.me };
   },
 }));
@@ -44,7 +44,7 @@ const saveBtn = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).fin
 
 beforeEach(() => {
   mocks.me = { fullName: 'Phạm Văn CTV', phone: '0901000004' };
-  mocks.meDelay = false;
+  mocks.meGate = null;
   localStorage.clear();
   submit.mockReset().mockResolvedValue(undefined);
   cancel.mockReset();
@@ -171,11 +171,13 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
   });
 
   it('hồ sơ tải xong sau khi mở form: điền vào ô còn trống, không đè ô khách đã gõ', async () => {
-    mocks.meDelay = true;
+    let resolveMe!: () => void;
+    mocks.meGate = new Promise<void>((r) => { resolveMe = r; });
     const c = await mount();
     expect(input(c, 'Người nhận').value).toBe('');
+    expect(input(c, 'Số điện thoại').value).toBe('');
     typeInto(input(c, 'Số điện thoại'), '0988777666');
-    await act(async () => { await new Promise((r) => setTimeout(r, 60)); });
+    resolveMe();
     await flush();
     expect(input(c, 'Người nhận').value).toBe('Phạm Văn CTV');
     expect(input(c, 'Số điện thoại').value).toBe('0988777666');
@@ -218,5 +220,22 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     await flush();
     expect(submit).toHaveBeenCalled();
     expect(JSON.parse(localStorage.getItem('tubu_last_geo:u1')!)).toMatchObject({ provinceCode: '84_VN01', wardCode: '84_VN0101' });
+  });
+
+  it('không có userId thì không ghi bộ nhớ tỉnh/phường dưới khoá nào (kể cả khoá chung)', async () => {
+    const r = render(<AddressForm title="Thêm địa chỉ" submitLabel="Lưu" onSubmit={submit} onCancel={cancel} />);
+    mounted.push(r);
+    await flush();
+    const c = r.container;
+    typeInto(input(c, 'Người nhận'), 'An');
+    typeInto(input(c, 'Số nhà, tên đường'), '1 Xuân Thuỷ');
+    selectValue(selectByLabel(c, 'Tỉnh/Thành phố'), '84_VN01');
+    await flush();
+    selectValue(selectByLabel(c, 'Phường/Xã'), '84_VN0101');
+    await flush();
+    click(saveBtn(c));
+    await flush();
+    expect(submit).toHaveBeenCalled();
+    expect(localStorage.length).toBe(0);
   });
 });

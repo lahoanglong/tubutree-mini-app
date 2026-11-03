@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/auth-context', async (orig) => ({
+  ...(await orig<typeof import('@/lib/auth-context')>()),
+  useOptionalAuth: () => ({ user: { id: 'u1' } }),
+}));
 vi.mock('@/lib/geo-client', () => ({
   getProvinces: async () => [{ code: '84_VN01', name: 'Hà Nội' }],
   getCommunes: async () => [{ code: '84_VN01_001', name: 'Cầu Giấy' }],
@@ -54,6 +58,7 @@ const btn = (c: HTMLElement, name: string) =>
   Array.from(c.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim() === name);
 
 beforeEach(() => {
+  localStorage.clear();
   mocks.phase = 'authenticated';
   mocks.list = [A1, A2];
   mocks.listError = false;
@@ -112,6 +117,17 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(mocks.update.mock.calls[0]![0]).toBe('a2');
     expect(mocks.update.mock.calls[0]![1]).toMatchObject({ phone: '0911222333', recipient: 'Trần Bình', provinceCode: '84_VN01', wardCode: '84_VN01_001' });
     expect(c.querySelector('form')).toBeNull();
+  });
+
+  it('sửa xong thì nhớ tỉnh/phường theo tài khoản đang đăng nhập, không rơi về khoá chung', async () => {
+    const c = await mount();
+    click(btn(c, 'Sửa địa chỉ của Trần Bình')!);
+    await flush(4);
+    click(btn(c, 'Lưu')!);
+    await flush(6);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem('tubu_last_geo:u1')!)).toMatchObject({ provinceCode: '84_VN01', wardCode: '84_VN01_001' });
+    expect(localStorage.getItem('tubu_last_geo')).toBeNull();
   });
 
   it('sửa với SĐT sai: không gọi API, báo ngay tại ô', async () => {
