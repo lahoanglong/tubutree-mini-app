@@ -596,6 +596,20 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     expect(r.updated).toBe(1);
   });
 
+  it('setSoldExternal: hai SKU cùng một sản phẩm → cộng dồn, ghi một lần (QTAPI-04)', async () => {
+    const prisma = {
+      variation: { findMany: jest.fn().mockResolvedValue([{ sku: 'A', productId: 'p1' }, { sku: 'B', productId: 'p1' }, { sku: 'C', productId: 'p2' }]) },
+      product: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).setSoldExternal([{ sku: 'A', count: 100 }, { sku: 'B', count: 50.9 }, { sku: 'C', count: 7 }]);
+    const update = (prisma as any).product.update as jest.Mock;
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldExternal: 150 } });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldExternal: 7 } });
+    expect(r.updated).toBe(2);
+  });
+
   it('setSoldExternal: bỏ qua sku không tồn tại / count âm', async () => {
     const prisma = {
       variation: { findMany: jest.fn().mockResolvedValue([]) }, // 'NOPE' không khớp variation nào

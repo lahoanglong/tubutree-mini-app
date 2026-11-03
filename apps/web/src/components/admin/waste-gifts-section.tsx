@@ -333,8 +333,8 @@ function GiftCatalogue() {
       {gifts.isError && <LoadError onRetry={() => void gifts.refetch()} retrying={gifts.isFetching}>Không tải được danh mục quà.</LoadError>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng danh mục quà">
-        <table className="w-full min-w-[880px] border-collapse">
-          <thead>
+        <table className="w-full border-collapse max-sm:block sm:min-w-[880px]">
+          <thead className="max-sm:hidden">
             <tr className="border-b border-stone-200">
               <th className={TH}>Thứ tự</th>
               <th className={TH}>Tên</th>
@@ -346,10 +346,10 @@ function GiftCatalogue() {
               <th className={TH}>Sửa</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-sm:block max-sm:space-y-2">
             {sorted.map((g, idx) => (
-              <tr key={g.id} data-gift={g.id} className="border-b border-stone-100">
-                <td className={TD}>
+              <tr key={g.id} data-gift={g.id} className="border-b border-stone-100 max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1 max-sm:rounded-control max-sm:border max-sm:border-stone-200 max-sm:p-3">
+                <td className={`${TD} max-sm:order-6 max-sm:ml-auto max-sm:p-0`}>
                   <div className="flex gap-1">
                     <button type="button" className={BTN_XS_SECONDARY} aria-label={`Đưa ${g.name} lên`} disabled={idx === 0 || reorder.isPending} onClick={() => move(idx, -1)}>
                       <ChevronUp size={14} aria-hidden="true" />
@@ -359,25 +359,28 @@ function GiftCatalogue() {
                     </button>
                   </div>
                 </td>
-                <td className={TD}>{g.name}</td>
-                <td className={TD}>{WASTE_GIFT_KIND_LABELS[g.kind]}</td>
-                <td className={TD}>{g.kind === 'TREE' ? (g.treePointsPrice === undefined ? '—' : `${formatCount(g.treePointsPrice)} điểm (giá Vườn Xanh)`) : `${formatCount(g.pointsCost)} điểm`}</td>
-                <td className={TD}>{stockText(g.stock)}</td>
-                <td className={TD}>
+                <td className={`${TD} font-medium max-sm:order-1 max-sm:w-full max-sm:p-0`}>{g.name}</td>
+                <td className={`${TD} max-sm:hidden`}>{WASTE_GIFT_KIND_LABELS[g.kind]}</td>
+                <td className={`${TD} max-sm:order-2 max-sm:p-0`}>{g.kind === 'TREE' ? (g.treePointsPrice === undefined ? '—' : `${formatCount(g.treePointsPrice)} điểm (giá Vườn Xanh)`) : `${formatCount(g.pointsCost)} điểm`}</td>
+                <td className={`${TD} max-sm:order-3 max-sm:p-0`}>{stockText(g.stock)}</td>
+                <td className={`${TD} max-sm:hidden`}>
                   <div>{formatCount(g.redemptionCount)} lượt đổi</div>
                   {g.kind === 'TREE' && g.fundTreeTotal !== undefined && <div className="text-xs text-stone-600">Tổng số cây của quỹ (gồm cây thu hoạch trong game): {formatCount(g.fundTreeTotal)}</div>}
                 </td>
-                <td className={TD}>
+                <td className={`${TD} max-sm:order-4 max-sm:p-0`}>
+                  <span data-gift-chip className="sm:hidden">
+                    <ToneBadge tone={g.status === 'ACTIVE' ? 'success' : 'neutral'}>{WASTE_GIFT_STATUS_LABELS[g.status]}</ToneBadge>
+                  </span>
                   <select
                     aria-label={`Trạng thái ${g.name}`}
-                    className={FIELD_XS}
+                    className={`${FIELD_XS} max-sm:hidden`}
                     value={g.status}
                     onChange={(e) => patch.mutate({ id: g.id, body: { status: e.target.value as WasteGiftStatus } })}
                   >
                     {STATUSES.map((s) => <option key={s} value={s}>{WASTE_GIFT_STATUS_LABELS[s]}</option>)}
                   </select>
                 </td>
-                <td className={TD}>
+                <td className={`${TD} max-sm:order-5 max-sm:p-0`}>
                   <button type="button" className={BTN_XS_SECONDARY} onClick={() => setPanel({ id: g.id, form: toForm(g) })}>Sửa</button>
                 </td>
               </tr>

@@ -15,6 +15,7 @@ import { WasteHoldService } from '../../src/modules/waste-exchange/core/waste-ho
 import { WasteNotifierService } from '../../src/modules/waste-exchange/core/waste-notifier.service';
 import { WasteShipLockService } from '../../src/modules/waste-exchange/core/waste-ship-lock.service';
 import { WasteConfirmService } from '../../src/modules/waste-exchange/receiving/waste-confirm.service';
+import { loadAdminRequestDetail } from '../../src/modules/waste-exchange/receiving/waste-admin-detail.mapper';
 import { WasteReverseService } from '../../src/modules/waste-exchange/receiving/waste-reverse.service';
 import { createUser, deleteItData, setConfig, summarize, warmPool } from './helpers';
 import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
@@ -25,6 +26,7 @@ const DAY = 86_400_000;
 let moduleRef: TestingModule;
 let prisma: PrismaService;
 let reverse: WasteReverseService;
+let access: WasteAccessService;
 let confirm: WasteConfirmService;
 let expiry: LoyaltyExpiryService;
 let rewards: RewardPointsService;
@@ -150,6 +152,7 @@ beforeAll(async () => {
   await moduleRef.init();
   prisma = moduleRef.get(PrismaService);
   reverse = moduleRef.get(WasteReverseService);
+  access = moduleRef.get(WasteAccessService);
   confirm = moduleRef.get(WasteConfirmService);
   expiry = moduleRef.get(LoyaltyExpiryService);
   rewards = moduleRef.get(RewardPointsService);
@@ -268,5 +271,36 @@ describe('WasteReverseService races (real Postgres)', () => {
     expect(result).toMatchObject({ pointsTaken: 0, status: 'REVERSED' });
     await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: a.id } })).resolves.toMatchObject({ status: 'REVERSED' });
     await expect(prisma.pointsTransaction.count({ where: { refType: 'RECYCLE_REVERSED', refId: a.id } })).resolves.toBe(0);
+  });
+
+  describe('reversePreview.expectedTake matches what reverse() takes', () => {
+    const previewTake = async (requestId: string) => (await loadAdminRequestDetail(prisma, access, requestId, true)).reversePreview;
+
+    it('after a partial spend (balance below the awarded points)', async () => {
+      const c = await newCustomer();
+      const a = await completed(c, 50_000);
+      await spend(c.id, 35_000);
+      const preview = await previewTake(a.id);
+      const result = await reverse.reverse(admin.id, a.id, reasonGiven);
+      expect(preview).toEqual({ pointsBalance: 15_000, expectedTake: 15_000 });
+      expect(result.pointsTaken).toBe(preview!.expectedTake);
+    });
+
+    it('with the awarded lot already expired, other points are not taken for it', async () => {
+      const { a } = await expiredLotCustomer();
+      const preview = await previewTake(a.id);
+      const result = await reverse.reverse(admin.id, a.id, reasonGiven);
+      expect(result.pointsTaken).toBe(preview!.expectedTake);
+    });
+
+    it('with nothing left the preview says 0', async () => {
+      const c = await newCustomer();
+      const a = await completed(c, 10_000);
+      await spend(c.id, 10_000);
+      const preview = await previewTake(a.id);
+      const result = await reverse.reverse(admin.id, a.id, reasonGiven);
+      expect(preview!.expectedTake).toBe(0);
+      expect(result.pointsTaken).toBe(0);
+    });
   });
 });

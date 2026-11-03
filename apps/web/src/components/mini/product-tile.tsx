@@ -258,6 +258,8 @@ export function ProductTile({
         {/* Tên truy cập = tên sản phẩm (không kèm nhãn đầu tên, giá, meta: những thứ đó nằm ở mô tả). */}
         <Link
           href={href}
+          // PDP là trang ISR: prefetch mặc định kéo trọn RSC (~58 KB) cho mỗi thẻ trong khung nhìn; chỉ tải khi bấm như trước.
+          prefetch={false}
           className={`${STRETCHED_LINK_CLASS} md:transition-colors md:group-hover:text-forest-700`}
           aria-label={view.name}
           aria-describedby={descId}

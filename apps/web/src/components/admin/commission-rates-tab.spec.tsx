@@ -186,6 +186,36 @@ describe('CommissionRatesTab (Hoa hồng & giá sỉ, D1-01)', () => {
     expect(container.querySelector<HTMLInputElement>('input[aria-label="% hoa hồng NRC-500"]')!.value).toBe('9');
   });
 
+  it('QTUI-07: lưu đủ % khiến sản phẩm rơi khỏi bộ lọc "chưa có %" → thẻ ở lại với dấu "Đã đủ %" và câu "Đã lưu"; đổi bộ lọc thì bỏ', async () => {
+    const SOLO = { ...PAGE.items[0]!, variations: [PAGE.items[0]!.variations[0]!] };
+    let saved = false;
+    const m = mockFetch({
+      '/admin/dealer-tiers': { body: [] },
+      '/admin/commission-rates/variations/v1': () => {
+        saved = true;
+        return { body: { id: 'v1', sku: 'NRC-500', affiliateRate: 10 } };
+      },
+      '/admin/commission-rates?': () => ({ body: saved ? { ...PAGE, items: [], summary: { missing: 0, missingTubu: 0 } } : { ...PAGE, items: [SOLO] } }),
+    });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<CommissionRatesTab />);
+    await flush();
+    typeInto(container.querySelector('input[aria-label="% hoa hồng NRC-500"]'), '10');
+    click(byText(container.querySelector('[data-commission-variation]')!, 'button', 'Lưu'));
+    await flush();
+    await flush();
+    const card = container.querySelector<HTMLElement>('[data-commission-product]')!;
+    expect(card).toBeTruthy();
+    expect(card.textContent).toContain('Đã đủ %');
+    expect(card.textContent).toContain('Đã lưu 10%.');
+    expect(card.textContent).toContain('≈ 10.000');
+    expect(container.textContent).not.toContain('Không còn sản phẩm nào thiếu % hoa hồng.');
+
+    click(byText(container, 'button', 'Chỉ SP còn biến thể chưa có %'));
+    await flush();
+    expect(container.querySelector('[data-commission-product]')).toBeNull();
+  });
+
   it('rỗng → câu rõ ràng; lỗi → thông báo + Thử lại', async () => {
     stub({}, { ...PAGE, items: [], summary: { missing: 0, missingTubu: 0 } });
     const { container } = mount(<CommissionRatesTab />);

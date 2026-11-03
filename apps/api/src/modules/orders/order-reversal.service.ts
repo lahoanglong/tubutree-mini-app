@@ -25,6 +25,7 @@ import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type R
 import { maskPhone } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
+import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
 import { lockRewardedReviewsOfOrder, lockReviewRewardsOfProducts, revokeReviewRewardsForReturn } from '../reviews/review-reward-reversal';
 
@@ -530,7 +531,7 @@ export class OrderReversalService {
     // vẫn tính đủ 80tr vào mốc thưởng tháng khi hoa hồng được duyệt.
     const rows = await tx.commission.findMany({
       where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED', 'APPROVED', 'PAID'] } },
-      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true, status: true, payoutBatchId: true, walletPayoutId: true, paidAt: true },
+      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true, status: true, payoutBatchId: true, walletPayoutId: true, paidAt: true, approvedAt: true },
     });
     const itemById = new Map(order.items.map((i) => [i.id, i]));
     const paid = paidLineTotals(order, order.items);
@@ -590,6 +591,10 @@ export class OrderReversalService {
         result.commissionCut += cut;
         if (cut > 0) result.commissionCutBy.push({ affiliateUserId: row.affiliateUserId, amount: cut });
         if (debited) result.commissionDebited.push(debited);
+        // Nền doanh số tháng của hoa hồng đã chốt vừa giảm: mốc đã nhận mà doanh số nay dưới ngưỡng bị thu hồi điểm (CTV-01).
+        if (baseCut > 0 && (row.status === 'APPROVED' || row.status === 'PAID')) {
+          await revokeLostCtvMilestones(tx, row.affiliateUserId, row.approvedAt);
+        }
       } else if (debited) {
         // Dòng hoa hồng được khoá từ đầu hàm nên không đổi giữa chừng; nếu vẫn lệch thì huỷ cả lần duyệt, không để Ví đã trừ mà hoa hồng còn nguyên.
         throw new ConflictException('Hoa hồng của đơn vừa thay đổi, bạn thử lại nhé.');
