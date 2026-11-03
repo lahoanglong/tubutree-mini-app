@@ -6,6 +6,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
+import { slotStartsFor } from '../../src/modules/flash-sale/flash-slots';
 import { deleteItData, warmPool } from './helpers';
 
 const ADMINS = 5;
@@ -57,6 +58,25 @@ describe('generateSlots: nhiều admin bấm cùng lúc không tạo trùng khun
       expect(results.reduce((n, r) => n + r.created, 0)).toBe(4);
       expect(results.reduce((n, r) => n + r.skipped, 0)).toBe(4 * (ADMINS - 1));
       expect(rows.every((r) => r.endAt.getTime() - r.startAt.getTime() === 2 * 3_600_000)).toBe(true);
+    }
+  });
+
+  it('đợt tạo tay lệch vài phút chồng khung mặc định: khung đó bị bỏ qua, các đợt còn lại không chồng giờ nhau', async () => {
+    for (let round = 0; round < 3; round++) {
+      const now = new Date(Date.UTC(2100 + randomInt(0, 800), randomInt(0, 12), 1 + randomInt(0, 27), 22, 0, 0) - 24 * 3_600_000);
+      const starts = slotStartsFor(now, ['12:00', '20:00'], 2);
+      const manual = await prisma.flashSale.create({
+        data: { title: 'IT tay lệch', startAt: new Date(starts[0]!.getTime() - 60_000), endAt: new Date(starts[0]!.getTime() + 119 * 60_000), createdBy: 'it-admin-0' },
+      });
+      const result = await flash.generateSlots('it-admin-0', 2, now);
+      const rows = await prisma.flashSale.findMany({
+        where: { startAt: { gte: new Date(starts[0]!.getTime() - 3_600_000), lt: new Date(starts[3]!.getTime() + 3_600_000) } },
+        orderBy: { startAt: 'asc' },
+      });
+      created.flashSaleIds.push(...rows.map((r) => r.id), manual.id);
+      expect(result).toEqual({ created: 3, skipped: 1 });
+      expect(rows).toHaveLength(4);
+      for (let i = 1; i < rows.length; i++) expect(rows[i]!.startAt.getTime()).toBeGreaterThanOrEqual(rows[i - 1]!.endAt.getTime());
     }
   });
 });
