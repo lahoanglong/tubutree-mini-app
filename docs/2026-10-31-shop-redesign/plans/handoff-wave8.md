@@ -1,6 +1,8 @@
 # Bàn giao đợt 8 (hạn chế còn lại của đợt 7: chữ, lưới chặn chữ, MINOR giao diện, suất Giờ vàng theo khách)
 
-Đợt 8 làm các mục còn sửa được bằng mã trong `handoff-wave7.md` §4. Có 4 gói, mỗi gói đi theo vòng: agent làm, reviewer Opus xem, agent sửa tới khi APPROVE. Gói đường tiền (M4) được review 2 lượt. Không deploy: deploy là việc chủ quyết.
+Đợt 8 làm các mục còn sửa được bằng mã trong `handoff-wave7.md` §4. Có 4 gói, mỗi gói đi theo vòng: agent làm, reviewer Opus xem, agent sửa tới khi APPROVE. Gói đường tiền (M4) được review 2 lượt.
+
+**Trạng thái (03/11):** PR #132 đã merge vào main (0aa8af5d1) và đã deploy PROD Vietnix lúc 02:17, chủ duyệt. Mini App Testing V30 đã lên từ 0aa8af5d1, chưa gửi duyệt. Chi tiết ở §2.
 
 ## 1. Đã có gì
 
@@ -33,18 +35,19 @@
 
 Ảnh trước/sau của từng gói nằm ngoài git, ở `screens/<gói>/` của worktree gói (`.claude/worktrees/shop-M3`, `shop-M4`).
 
-## 2. Deploy (việc chủ quyết)
+## 2. Deploy (đã chạy 03/11 02:17)
 
+- **Đã deploy:** main 0aa8af5d1 lên PROD Vietnix lúc 02:17 ngày 03/11, chủ duyệt. Migration 262 → 263. Rollback: ảnh `:prev-0f9aec44`.
 - Có **1 migration dữ liệu**, không đổi schema: `20261102200000_customer_templates_voice`.
   - Đổi lời 4 mẫu tin khách còn "Vui lòng": ORDER_AWAITING_PAYMENT, ORDER_UNDERPAID, SUBSCRIPTION_PAUSED, SUBSCRIPTION_ORDER_AWAITING_PAYMENT.
   - Mỗi câu `UPDATE` chỉ đổi khi lời trong DB vẫn đúng bản mặc định cũ, nên không đè bản admin đã sửa. Chạy lại thì không đổi gì.
   - Đã thử trên Postgres trống: chạy hết migration xong không còn mẫu nào có "Vui lòng" hay "chúng tôi".
   - `seed.ts` cùng lời từng chữ; `notification-templates-seed.spec` giữ hai bên khớp nhau và chặn "Vui lòng"/"chúng tôi" ở mọi mẫu.
-  - Kiểm sau deploy (đọc PROD, cần chủ cho phép): `SELECT code, "bodyTemplate" FROM notification_templates WHERE code IN ('ORDER_AWAITING_PAYMENT','ORDER_UNDERPAID','SUBSCRIPTION_PAUSED','SUBSCRIPTION_ORDER_AWAITING_PAYMENT') AND "bodyTemplate" ~* 'vui lòng'` phải ra 0 dòng. Có dòng nghĩa là admin đã sửa tay mẫu đó nên migration bỏ qua: sửa ở trang quản trị mẫu thông báo.
+  - **Đã kiểm trên PROD sau deploy** (chủ cho phép, giao dịch chỉ đọc): 4/4 mẫu đã đổi lời, không mẫu nào còn "Vui lòng". Câu kiểm, để chạy lại khi cần: `SELECT code, "bodyTemplate" FROM notification_templates WHERE code IN ('ORDER_AWAITING_PAYMENT','ORDER_UNDERPAID','SUBSCRIPTION_PAUSED','SUBSCRIPTION_ORDER_AWAITING_PAYMENT') AND "bodyTemplate" ~* 'vui lòng'` phải ra 0 dòng. Có dòng nghĩa là admin đã sửa tay mẫu đó nên migration bỏ qua: sửa ở trang quản trị mẫu thông báo.
 - API đổi hai loại:
   - Chữ lỗi và chữ thông báo khách đọc. Câu nào Mini bản cũ còn so khớp thì giữ nguyên.
   - Thêm endpoint `GET /flash-sales/me/allowance`. Mini và web bản cũ không gọi endpoint này. Bản mới gặp API cũ thì coi như không có số theo khách, chạy như đợt 7.
-- Khách Mini App chỉ thấy thay đổi sau khi build và tải bản Mini mới lên Zalo.
+- Khách Mini App chỉ thấy thay đổi sau khi build và tải bản Mini mới lên Zalo. Mini App Testing V30 đã lên từ 0aa8af5d1 (khớp PROD), chưa gửi duyệt.
 
 ## 3. Quyết định thay chủ (chủ giao "tự chốt thiết kế"; muốn đổi thì báo)
 
@@ -79,8 +82,8 @@
 
 ## 5. Việc của chủ
 
-- **Quyết deploy:** main sau khi PR đợt 8 merge.
-- **Tải bản Mini App mới lên Zalo (Testing),** nếu muốn khách Mini thấy thay đổi.
+- **Gửi duyệt bản Mini App V30** (Testing đã lên từ 0aa8af5d1), nếu muốn khách Mini thấy thay đổi.
+- **Đã xong:** deploy main 0aa8af5d1 (03/11 02:17); kiểm 4 mẫu tin trên PROD (§2); tải Mini App V30 lên Testing.
 - **Xem lại các quyết định ở §3.**
 - **Còn từ `handoff-wave7.md` §5 và `handoff-wave6.md` §5:**
   - Duyệt độ lệch §5 của F9.
