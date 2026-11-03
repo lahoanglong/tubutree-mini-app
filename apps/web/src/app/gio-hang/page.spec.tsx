@@ -88,6 +88,27 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([]);
   });
 
+  it('hết hàng mà SL ≥ 2: cả − lẫn + đều khoá, bấm không gửi lệnh nào', async () => {
+    state.cart = cartOf([line({ stock: 0, quantity: 3 })]);
+    const { container } = await mount();
+    const minus = button(container, 'Giảm số lượng Dầu gội bồ kết')!;
+    expect(minus.disabled).toBe(true);
+    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
+    click(minus);
+    await flush();
+    expect(state.updates).toEqual([]);
+  });
+
+  it('vượt tồn nhưng còn hàng (SL 3, tồn 2): nút − vẫn bật và kéo SL về tồn', async () => {
+    state.cart = cartOf([line({ stock: 2, quantity: 3 })]);
+    const { container } = await mount();
+    const minus = button(container, 'Giảm số lượng Dầu gội bồ kết')!;
+    expect(minus.disabled).toBe(false);
+    click(minus);
+    await flush();
+    expect(state.updates).toEqual([{ id: 'i1', q: 2 }]);
+  });
+
   it('chạm trần tồn kho: nút + bị khoá kèm chú thích "Còn N sản phẩm"; bấm không gửi lệnh nào', async () => {
     state.cart = cartOf([line({ stock: 2, quantity: 2 })]);
     const { container } = await mount();

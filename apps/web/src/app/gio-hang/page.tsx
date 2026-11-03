@@ -319,7 +319,7 @@ export default function CartPage() {
               <button
                 type="button"
                 onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
-                disabled={busy || it.quantity <= 1}
+                disabled={busy || soldOut || it.quantity <= 1}
                 aria-label={`Giảm số lượng ${it.productName}`}
                 className={qtyButton}
               >
@@ -332,7 +332,7 @@ export default function CartPage() {
               <button
                 type="button"
                 onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
-                disabled={busy || atMax}
+                disabled={busy || soldOut || atMax}
                 aria-label={`Tăng số lượng ${it.productName}`}
                 className={qtyButton}
               >

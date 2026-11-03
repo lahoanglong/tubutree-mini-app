@@ -17,9 +17,11 @@ interface QuantitySelectorProps {
   min?: number;
   size?: 'sm' | 'md';
   onChange: (n: number) => void;
+  /** Khoá cả − lẫn + (dòng hết hàng): nút vẫn là phần tử đọc được, chỉ không đổi số. */
+  disabled?: boolean;
 }
 
-export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }: QuantitySelectorProps) {
+export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, disabled }: QuantitySelectorProps) {
   const side = size === 'md' ? 44 : 36;
   const btn = (disabled: boolean): React.CSSProperties => ({
     width: side,
@@ -43,10 +45,10 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
       <button
         type="button"
         aria-label="Giảm số lượng"
-        aria-disabled={value <= min}
-        className={value > min ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
-        style={btn(value <= min)}
-        onClick={() => value > min && onChange(value - 1)}
+        aria-disabled={disabled || value <= min}
+        className={!disabled && value > min ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
+        style={btn(!!disabled || value <= min)}
+        onClick={() => !disabled && value > min && onChange(value - 1)}
       >
         <Minus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
@@ -56,10 +58,10 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
       <button
         type="button"
         aria-label="Tăng số lượng"
-        aria-disabled={value >= max}
-        className={value < max ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
-        style={btn(value >= max)}
-        onClick={() => value < max && onChange(value + 1)}
+        aria-disabled={disabled || value >= max}
+        className={!disabled && value < max ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
+        style={btn(!!disabled || value >= max)}
+        onClick={() => !disabled && value < max && onChange(value + 1)}
       >
         <Plus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
