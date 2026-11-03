@@ -9,10 +9,11 @@ import { CreateAddressDto, NO_HTML, UpdateAddressDto } from './dto/address.dto';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 
-/** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
 /** Trần sổ địa chỉ mỗi khách: GET /me/addresses trả toàn bộ, và mỗi dòng đi theo đơn dưới dạng snapshot. */
 export const MAX_ADDRESSES_PER_USER = 20;
 export const ADDRESS_LIMIT_MESSAGE = `Bạn đã lưu đủ ${MAX_ADDRESSES_PER_USER} địa chỉ. Bạn xoá bớt địa chỉ cũ rồi thêm tiếp nhé.`;
+
+/** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
 export const ADDRESS_IN_USE_BY_SUBSCRIPTION = 'ADDRESS_IN_USE_BY_SUBSCRIPTION';
 
 /** Mã lỗi khi Ví còn tiền mà khách chưa đồng ý bỏ số dư, hoặc số dư đã đổi so với số khách đã thấy. */

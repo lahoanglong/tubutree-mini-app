@@ -14,6 +14,9 @@ import {
   MAX_BODY_DEPTH,
   MAX_BODY_NODES,
   MAX_KEYS_PER_OBJECT,
+  PANCAKE_TOKEN_INVALID_MESSAGE,
+  PANCAKE_TOKEN_MISSING_SECRET_MESSAGE,
+  pancakeWebhookTokenGuard,
   NUL_CHAR_MESSAGE,
   privateNoStoreForAuthenticated,
   requestInputGuard,
@@ -25,6 +28,7 @@ const bodyOf = async (res: Response) => (await res.json()) as { message?: unknow
 function buildApp() {
   const app = express();
   app.use('/api/events', eventsBodyParser());
+  app.use(pancakeWebhookTokenGuard);
   app.use(...createBodyParsers(), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);
   app.use((req, res) => {
@@ -50,7 +54,7 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
   describe('quét thô trước JSON.parse (route 10 MB không cần token)', () => {
     const manyKeys = (n: number) => `{${Array.from({ length: n }, (_, i) => `"k${i}":1`).join(',')}}`;
     it.each(['/api/admin/x', '/api/feed', '/api/webhooks/pancake'])('%s: thân hàng trăm nghìn khoá bị loại mà JSON.parse không chạy trên thân đó', async (path) => {
-      const raw = manyKeys(path.includes('webhooks') ? 60_000 : 300_000);
+      const raw = manyKeys(path.includes('webhooks') ? 250_000 : 300_000);
       const spy = jest.spyOn(JSON, 'parse');
       try {
         const res = await post(path, raw);
@@ -142,6 +146,33 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect((await post('/api/webhooks/pancake', body)).status).toBe(200);
       expect((await post('/api/cart/coupon', body)).status).toBe(413);
     });
+    it('Pancake nhận thân 2 MB / 50 000 nút; webhook khác giữ trần 1 MB / 20 000 nút', async () => {
+      const wide = JSON.stringify({ items: Array.from({ length: 50_000 }, (_, i) => ({ i })), pad: 'x'.repeat(1_200_000) });
+      const res = await post('/api/webhooks/pancake', wide);
+      expect(res.status).toBe(200);
+      expect((await post('/api/webhooks/zalo-oa', wide)).status).toBe(413);
+      const nodes = JSON.stringify({ items: Array.from({ length: 50_000 }, () => 1) });
+      expect((await post('/api/webhooks/pancake', nodes)).status).toBe(200);
+      expect((await post('/api/webhooks/zalo-oa', nodes)).status).toBe(400);
+    });
+    it('Pancake: thân 2 MB (một chuỗi) qua, zalo-oa 413; vượt 10 MB thì 413', async () => {
+      const two = { data: 'x'.repeat(2_000_000) };
+      expect((await post('/api/webhooks/pancake', two)).status).toBe(200);
+      expect((await post('/api/webhooks/zalo-oa', two)).status).toBe(413);
+      expect((await post('/api/webhooks/pancake', { data: 'x'.repeat(10_500_000) })).status).toBe(413);
+    });
+    it('regex nhóm route không phân biệt hoa thường như Express: /api/Admin, /API/Webhooks/Pancake', async () => {
+      expect((await post('/api/Admin/catalog-products', { note: 'x'.repeat(2_000_000) })).status).toBe(200);
+      expect((await post('/api/FEED', { note: 'x'.repeat(2_000_000) })).status).toBe(200);
+      expect((await post('/API/Webhooks/Pancake', { data: 'x'.repeat(2_000_000) })).status).toBe(200);
+      expect((await post('/api/Webhooks/zalo-oa', { data: 'x'.repeat(2_000_000) })).status).toBe(413);
+    });
+    it('urlencoded quá nhiều tham số → JSON 413', async () => {
+      const body = Array.from({ length: 1500 }, (_, i) => `k${i}=1`).join('&');
+      const res = await fetch(base + '/api/auth/guest', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+      expect(res.status).toBe(413);
+      expect(await bodyOf(res)).toMatchObject({ statusCode: 413, message: BODY_TOO_COMPLEX_MESSAGE });
+    });
     it('/api/events giữ trần 512 KB riêng', async () => {
       expect((await post('/api/events', { data: 'x'.repeat(400_000) })).status).toBe(200);
       expect((await post('/api/events', { data: 'x'.repeat(600_000) })).status).toBe(413);
@@ -183,6 +214,66 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect((await post('/api/webhooks/pancake', { order: keys(MAX_KEYS_PER_OBJECT + 50) })).status).toBe(200);
       expect((await post('/api/webhooks/pancake', { items: Array.from({ length: MAX_ARRAY_LENGTH + 100 }, (_, i) => i) })).status).toBe(200);
       expect((await post('/api/cart/coupon', { order: deep })).status).toBe(400);
+    });
+  });
+
+  describe('token webhook Pancake kiểm trước khi parse thân', () => {
+    const SECRET = 's3cret-token';
+    const heavy = JSON.stringify({ items: Array.from({ length: 50_000 }, (_, i) => ({ i })), pad: 'x'.repeat(1_200_000) });
+    const saved = { secret: process.env.PANCAKE_WEBHOOK_SECRET, env: process.env.NODE_ENV };
+    afterEach(() => {
+      if (saved.secret === undefined) delete process.env.PANCAKE_WEBHOOK_SECRET;
+      else process.env.PANCAKE_WEBHOOK_SECRET = saved.secret;
+      (process.env as Record<string, string | undefined>).NODE_ENV = saved.env;
+    });
+    const parsedHeavy = (spy: jest.SpyInstance) => spy.mock.calls.some(([arg]) => typeof arg === 'string' && arg.length > 1_000_000);
+
+    it('đúng token: thân 2 MB / 50 000 nút qua parser và guard', async () => {
+      process.env.PANCAKE_WEBHOOK_SECRET = SECRET;
+      const spy = jest.spyOn(JSON, 'parse');
+      try {
+        expect((await post('/api/webhooks/pancake', heavy, { 'x-webhook-token': SECRET })).status).toBe(200);
+        expect(parsedHeavy(spy)).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    it.each([
+      ['không có token', {}],
+      ['token sai', { 'x-webhook-token': 'sai-token!' }],
+      ['token khác độ dài', { 'x-webhook-token': 'x' }],
+    ])('%s: 401 JSON, JSON.parse không chạy trên thân', async (_name, headers) => {
+      process.env.PANCAKE_WEBHOOK_SECRET = SECRET;
+      const spy = jest.spyOn(JSON, 'parse');
+      try {
+        const res = await post('/api/webhooks/pancake', heavy, headers as Record<string, string>);
+        expect(res.status).toBe(401);
+        expect(await bodyOf(res)).toEqual({ statusCode: 401, message: PANCAKE_TOKEN_INVALID_MESSAGE, error: 'Unauthorized' });
+        expect(parsedHeavy(spy)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    it('production chưa có secret → 401, JSON.parse không chạy', async () => {
+      delete process.env.PANCAKE_WEBHOOK_SECRET;
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      const spy = jest.spyOn(JSON, 'parse');
+      try {
+        const res = await post('/api/webhooks/pancake', heavy, { 'x-webhook-token': 'bat-ky' });
+        expect(res.status).toBe(401);
+        expect(await bodyOf(res)).toEqual({ statusCode: 401, message: PANCAKE_TOKEN_MISSING_SECRET_MESSAGE, error: 'Unauthorized' });
+        expect(parsedHeavy(spy)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    it('dev/test chưa có secret → cho qua như controller', async () => {
+      delete process.env.PANCAKE_WEBHOOK_SECRET;
+      expect((await post('/api/webhooks/pancake', { a: 1 })).status).toBe(200);
+    });
+    it('route khác không bị hỏi token', async () => {
+      process.env.PANCAKE_WEBHOOK_SECRET = SECRET;
+      expect((await post('/api/webhooks/zalo-oa', { a: 1 })).status).toBe(200);
     });
   });
 
