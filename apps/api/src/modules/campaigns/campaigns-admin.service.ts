@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client';
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, CouponScope } from '@prisma/client';
 import { publicImage } from '../../common/public-image';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
@@ -187,12 +186,12 @@ export class CampaignsAdminService {
     return { ok: true };
   }
 
-  /** Banner kiểu sản phẩm/danh mục phải trỏ tới slug có thật (sản phẩm phải đang hiện công khai), nếu không khách bấm vào trang không tìm thấy. */
+  /** Banner kiểu sản phẩm/danh mục phải trỏ tới slug có thật. Chỉ kiểm tồn tại, không bắt sản phẩm đang bán: admin đặt banner trước cho hàng ra mắt chưa bật. */
   private async assertLinkTarget(linkType: CampaignLinkType, value: string | null): Promise<void> {
     if (!value) return;
     if (linkType === 'PRODUCT') {
-      const found = await this.prisma.product.findFirst({ where: { slug: value, ...PUBLIC_PRODUCT_WHERE }, select: { id: true } });
-      if (!found) throw new BadRequestException(`Không có sản phẩm đang bán với slug "${value}". Kiểm lại slug, hoặc sản phẩm đang ẩn hay chưa duyệt.`);
+      const found = await this.prisma.product.findFirst({ where: { slug: value }, select: { id: true } });
+      if (!found) throw new BadRequestException(`Không có sản phẩm với slug "${value}". Kiểm lại slug.`);
     } else if (linkType === 'CATEGORY') {
       const found = await this.prisma.category.findUnique({ where: { slug: value }, select: { id: true } });
       if (!found) throw new BadRequestException(`Không có danh mục với slug "${value}". Kiểm lại slug danh mục.`);

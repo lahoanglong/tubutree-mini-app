@@ -145,12 +145,12 @@ describe('CampaignsAdminService.create', () => {
 });
 
 describe('CampaignsAdminService: đích banner phải tồn tại', () => {
-  it('PRODUCT với slug không có sản phẩm công khai: 400, không ghi', async () => {
+  it('PRODUCT với slug không có sản phẩm nào: 400, không ghi; sản phẩm chưa bật hay chưa duyệt vẫn đặt trước được cho đợt ra mắt', async () => {
     const { svc, prisma } = setup({ productSlugs: ['sua-hat'] });
     await expect(svc.create(input({ linkType: 'PRODUCT', linkValue: 'sua-hat-sai' }), NOW)).rejects.toThrow(/sản phẩm/);
     expect(prisma.campaign.create).not.toHaveBeenCalled();
     await svc.create(input({ linkType: 'PRODUCT', linkValue: 'sua-hat' }), NOW);
-    expect(prisma.product.findFirst.mock.calls[1][0].where).toMatchObject({ slug: 'sua-hat', isActive: true, approvalStatus: 'APPROVED' });
+    expect(prisma.product.findFirst.mock.calls[1][0].where).toEqual({ slug: 'sua-hat' });
     expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
   });
 
