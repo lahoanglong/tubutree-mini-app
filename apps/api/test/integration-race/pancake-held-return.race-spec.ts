@@ -418,6 +418,28 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       expect(done.reversalEffectsAt).not.toBeNull();
     });
 
+    it('resyncReversalEffects: việc tồn vẫn không đóng được thì trả INCOMPLETE và CHƯA ghi mốc; đóng được ở lần sau mới ghi', async () => {
+      const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+      const order = await createOrder(prisma, {
+        userId: user.id,
+        status: 'CONFIRMED',
+        paymentMethod: 'COD',
+        total: 0,
+        subtotal: 0,
+        pancakeAttention: 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.',
+        pancakeAttentionAt: new Date(),
+      });
+      const spy = jest.spyOn(attention, 'replaceAttentionReasonsByPrefix').mockRejectedValue(new Error('P2024: hết kết nối trong pool'));
+      await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
+
+      await expect(orderStatus.resyncReversalEffects(order.id)).resolves.toMatchObject({ outcome: 'INCOMPLETE' });
+      expect((await orderOf(order.id)).reversalEffectsAt).toBeNull();
+
+      spy.mockRestore();
+      await expect(orderStatus.resyncReversalEffects(order.id)).resolves.toMatchObject({ outcome: 'DONE' });
+      expect((await orderOf(order.id)).reversalEffectsAt).not.toBeNull();
+    });
+
     describe('duyệt trả CẢ ĐƠN (không qua setStatus) khi ô còn lời 15', () => {
       const MANUAL = 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.';
 
@@ -553,6 +575,27 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
 
       expect((await orderOf(order.id)).pancakeAttention).toBe(cell);
     });
+  });
+
+  it('đơn trả trước mà DB còn UNPAID (khách chưa trả tiền): có dấu 15 vẫn không dựng khoản giữ tiền — chỉ đơn đang PAID mới có tiền để giữ', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'SHIPPING',
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'UNPAID',
+      total: 300_000,
+      subtotal: 300_000,
+      pancakeOrderId: `pk-held-${randCode(8)}`,
+    });
+    const event = (e: { status: number }) => ({ id: order.pancakeOrderId, ...e });
+
+    await processor.onStatusUpdated(event(PARTIAL));
+    await processor.onStatusUpdated(event(RETURNED));
+
+    expect((await orderOf(order.id)).status).toBe('CANCELLED');
+    expect(await rowsOf(order.id)).toHaveLength(0);
+    expect(await walletOf(user.id)).toBe(0);
   });
 
   describe('đơn CHƯA giao (SHIPPING) nhận 15 rồi 5: huỷ nhưng tiền vẫn chờ Kế toán', () => {
