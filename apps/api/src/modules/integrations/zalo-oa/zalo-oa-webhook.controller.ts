@@ -21,6 +21,8 @@ import { QUEUE_ZALO_OA_EVENTS } from '../../../jobs/queues';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 
 const USER_SEND_PREFIX = 'user_send_';
+/** Chữ ký đúng mà timestamp lệch quá mức này (cũ hoặc tương lai) là tin gửi lại: Zalo thử lại trong vài phút, không hàng giờ. */
+const MAX_EVENT_SKEW_MS = 30 * 60 * 1000;
 
 interface ZaloOaWebhookBody {
   event_name?: string;
@@ -44,9 +46,9 @@ export function zaloOaEventSignature(appId: string, body: unknown, timestamp: st
  * docs/GO-LIVE-KEYS.md). Quy trình mirror `PancakeWebhookController`: verify token tĩnh →
  * lưu raw (RECEIVED) → enqueue → trả 200 ngay (auto-reply xử lý async ở `ZaloOaEventsProcessor`).
  *
- * Xác thực: `X-ZEvent-Signature` (cần ZALO_OA_SECRET_KEY + ZALO_APP_ID) hoặc token tĩnh `x-webhook-token`
- * (ZALO_OA_WEBHOOK_SECRET) làm lớp phụ; một trong hai đúng là qua. Đã cấu hình khoá nào thì khoá đó phải khớp; production mà
- * không khoá nào → 401.
+ * Xác thực: có ZALO_OA_SECRET_KEY + ZALO_APP_ID thì BẮT BUỘC `X-ZEvent-Signature` đúng và còn mới (token tĩnh bị bỏ qua: nó
+ * nằm trong URL/cấu hình nên dễ lộ, để làm cửa thay thế thì chữ ký vô nghĩa). Chưa đủ hai khoá đó thì dùng token tĩnh
+ * `x-webhook-token` (ZALO_OA_WEBHOOK_SECRET). Production mà không khoá nào → 401.
  */
 @SkipThrottle()
 @Controller('webhooks/zalo-oa')
@@ -79,7 +81,7 @@ export class ZaloOaWebhookController {
         throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
       }
       // Dev/test: bỏ qua cho dễ thử nghiệm.
-    } else if (!this.verifySignature(body, signature) && !this.verifyToken(token)) {
+    } else if (this.signingReady ? !this.verifySignature(body, signature) : !this.verifyToken(token)) {
       throw new UnauthorizedException('Chữ ký hoặc token webhook không hợp lệ.');
     }
 
@@ -114,6 +116,10 @@ export class ZaloOaWebhookController {
     return { received: true };
   }
 
+  private get signingReady(): boolean {
+    return Boolean(this.oaSecretKey && this.appId);
+  }
+
   /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). Chưa đặt token thì lớp này không bao giờ qua. */
   private verifyToken(token?: string): boolean {
     if (!this.secret || !token) return false;
@@ -124,6 +130,8 @@ export class ZaloOaWebhookController {
     if (!this.oaSecretKey || !this.appId || !signature || !body || typeof body !== 'object') return false;
     const timestamp = body['timestamp'];
     if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return false;
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_EVENT_SKEW_MS) return false;
     return constantTimeEqual(signature.trim().toLowerCase(), zaloOaEventSignature(this.appId, body, String(timestamp), this.oaSecretKey));
   }
 }

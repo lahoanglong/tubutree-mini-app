@@ -14,7 +14,7 @@ function makeController(secret: string, createImpl?: jest.Mock) {
   const add = jest.fn().mockResolvedValue(undefined);
   const prisma = { oaInboundMessage: { create } } as unknown as PrismaService;
   const queue = { add } as unknown as Queue;
-  const config = { get: () => secret } as never;
+  const config = { get: (k: string) => (k === 'ZALO_OA_WEBHOOK_SECRET' ? secret : '') } as never;
   return { ctrl: new ZaloOaWebhookController(prisma, config, queue), create, add };
 }
 
@@ -113,7 +113,7 @@ describe('ZaloOaWebhookController.handle (verify token tĩnh)', () => {
 describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () => {
   const APP_ID = '1234567890';
   const OA_KEY = 'oa-secret-key';
-  const signed = { ...body, app_id: APP_ID, timestamp: '1730600000000' };
+  const signed = { ...body, app_id: APP_ID, timestamp: String(Date.now()) };
   const sign = (b: object = signed, key = OA_KEY) => zaloOaEventSignature(APP_ID, b, String((b as { timestamp: string }).timestamp), key);
   function build(env: Record<string, string>) {
     const create = jest.fn().mockResolvedValue({ id: 'evt1' });
@@ -148,10 +148,27 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     await expect(noApp.ctrl.handle(signed, undefined, sign())).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('token tĩnh đúng vẫn qua khi không có chữ ký (lớp phụ); token sai và chữ ký sai → 401', async () => {
-    const { ctrl } = build(both);
+  it('đã có khoá ký: token tĩnh (dù đúng/lộ) không thay được chữ ký; chỉ chữ ký đúng mới qua', async () => {
+    const { ctrl, create } = build(both);
+    await expect(ctrl.handle(signed, SECRET, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, SECRET, 'sai')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(create).not.toHaveBeenCalled();
+    await expect(ctrl.handle(signed, undefined, sign())).resolves.toEqual({ received: true });
+  });
+
+  it('chưa đủ khoá ký (thiếu ZALO_APP_ID) mà có token tĩnh: token là cửa duy nhất', async () => {
+    const { ctrl } = build({ ZALO_OA_SECRET_KEY: OA_KEY, ZALO_OA_WEBHOOK_SECRET: SECRET });
     await expect(ctrl.handle(signed, SECRET, undefined)).resolves.toEqual({ received: true });
-    await expect(ctrl.handle(signed, 'sai', 'sai')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, 'sai', undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('chữ ký đúng nhưng timestamp quá hạn hoặc ở tương lai xa (gửi lại tin cũ) → 401, không lưu', async () => {
+    const { ctrl, create } = build(both);
+    for (const ts of [String(Date.now() - 3 * 3600_000), String(Date.now() + 3 * 3600_000), 'không-phải-số']) {
+      const b = { ...signed, timestamp: ts };
+      await expect(ctrl.handle(b, undefined, sign(b))).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('chỉ có khoá ký (không đặt token tĩnh): thiếu chữ ký → 401; token rỗng không bao giờ khớp', async () => {
