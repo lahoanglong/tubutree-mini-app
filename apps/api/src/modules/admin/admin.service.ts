@@ -76,6 +76,7 @@ import {
 import { startOfVnDay } from '../../common/vn-time';
 import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
+import { vatInvoiceUrlError } from '../../common/vat-invoice-url';
 import {
   actorLabel,
   actorUserId,
@@ -1260,6 +1261,11 @@ export class AdminService {
       throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hoá đơn VAT.`);
     }
     const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
+    // Khách thấy link này thành nút "Tải PDF": chỉ nhận tên miền nhà cung cấp hoá đơn, kể cả khi người nhập là ADMIN.
+    if (invoiceUrl) {
+      const urlError = vatInvoiceUrlError(invoiceUrl);
+      if (urlError) throw new BadRequestException(urlError);
+    }
     const res = await this.prisma.order.updateMany({
       where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
       data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },

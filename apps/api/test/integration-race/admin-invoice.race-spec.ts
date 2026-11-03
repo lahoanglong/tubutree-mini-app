@@ -42,7 +42,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     const u = await createUser(prisma, {});
     const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', invoiceRequest: REQUEST, invoiceStatus: 'REQUESTED' });
     const results = await Promise.allSettled(
-      Array.from({ length: 5 }, (_, i) => admin.issueOrderInvoice(`admin${i}`, o.code, { invoiceUrl: `https://hd.example.vn/${i}` })),
+      Array.from({ length: 5 }, (_, i) => admin.issueOrderInvoice(`admin${i}`, o.code, { invoiceUrl: `https://hd.meinvoice.vn/${i}` })),
     );
     const s = summarize(results);
     const row = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
