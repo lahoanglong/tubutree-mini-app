@@ -38,6 +38,13 @@ function buildApp() {
   return app;
 }
 
+// Test không phụ thuộc secret của shell (set -a; . .env): ca nào cần secret tự đặt.
+const SHELL_PANCAKE_SECRET = process.env.PANCAKE_WEBHOOK_SECRET;
+delete process.env.PANCAKE_WEBHOOK_SECRET;
+afterAll(() => {
+  if (SHELL_PANCAKE_SECRET !== undefined) process.env.PANCAKE_WEBHOOK_SECRET = SHELL_PANCAKE_SECRET;
+});
+
 describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
   let server: Server;
   let base: string;
@@ -167,11 +174,11 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect((await post('/API/Webhooks/Pancake', { data: 'x'.repeat(2_000_000) })).status).toBe(200);
       expect((await post('/api/Webhooks/zalo-oa', { data: 'x'.repeat(2_000_000) })).status).toBe(413);
     });
-    it('urlencoded quá nhiều tham số → JSON 413', async () => {
+    it('urlencoded quá nhiều tham số → JSON 400', async () => {
       const body = Array.from({ length: 1500 }, (_, i) => `k${i}=1`).join('&');
       const res = await fetch(base + '/api/auth/guest', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
-      expect(res.status).toBe(413);
-      expect(await bodyOf(res)).toMatchObject({ statusCode: 413, message: BODY_TOO_COMPLEX_MESSAGE });
+      expect(res.status).toBe(400);
+      expect(await bodyOf(res)).toMatchObject({ statusCode: 400, message: BODY_TOO_COMPLEX_MESSAGE });
     });
     it('/api/events giữ trần 512 KB riêng', async () => {
       expect((await post('/api/events', { data: 'x'.repeat(400_000) })).status).toBe(200);
@@ -249,6 +256,21 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
         const res = await post('/api/webhooks/pancake', heavy, headers as Record<string, string>);
         expect(res.status).toBe(401);
         expect(await bodyOf(res)).toEqual({ statusCode: 401, message: PANCAKE_TOKEN_INVALID_MESSAGE, error: 'Unauthorized' });
+        expect(parsedHeavy(spy)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    it.each([
+      ['PUT', '/api/webhooks/pancake'],
+      ['PATCH', '/api/webhooks/PANCAKE/x'],
+      ['DELETE', '/api/webhooks/pancake'],
+    ])('%s %s không token: 401, thân lớn không được parse', async (method, path) => {
+      process.env.PANCAKE_WEBHOOK_SECRET = SECRET;
+      const spy = jest.spyOn(JSON, 'parse');
+      try {
+        const res = await fetch(base + path, { method, headers: { 'content-type': 'application/json' }, body: heavy });
+        expect(res.status).toBe(401);
         expect(parsedHeavy(spy)).toBe(false);
       } finally {
         spy.mockRestore();

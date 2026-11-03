@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { json, urlencoded } from 'express';
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -15,7 +15,7 @@ export const WEBHOOK_BODY_LIMIT = '1mb';
 // Ảnh base64 (6 ảnh đổi/trả × 1,5M ký tự là trần lớn nhất của DTO) và CSV import (300 nghìn ký tự).
 export const LARGE_BODY_LIMIT = '10mb';
 // Pancake gửi nguyên object đơn (dòng hàng + variation_info + customer + histories). Đơn lớn mà bị 400/413 thì sự kiện không được lưu
-// và reconcile không cứu được; token đã kiểm trước khi parse nên người ẩn danh không tới được trần này.
+// và reconcile không cứu được; token đã kiểm trước khi parse (mọi method) nên người ẩn danh không tới được trần này.
 export const PANCAKE_WEBHOOK_BODY_LIMIT = '10mb';
 
 /** Nhóm route nhận ảnh base64 hoặc CSV: đối chiếu với DTO dùng IsUploadedImage/IsImageRef/IMAGE_MAX/*_CSV_MAX_LENGTH. */
@@ -209,7 +209,8 @@ export const PANCAKE_TOKEN_INVALID_MESSAGE = 'Token webhook không hợp lệ.';
  * không bắt server parse 10 MB. Cùng nguồn và cùng hành vi với PancakeWebhookController (controller vẫn kiểm lại, phòng thủ hai lớp).
  */
 export const pancakeWebhookTokenGuard: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-  if (req.method !== 'POST' || !PANCAKE_WEBHOOK_ROUTE.test(req.path)) return next();
+  // Mọi method: trần 10 MB xếp theo đường dẫn, nên PUT/PATCH/DELETE không token cũng phải dừng ở đây (controller chỉ có POST).
+  if (!PANCAKE_WEBHOOK_ROUTE.test(req.path)) return next();
   const secret = process.env.PANCAKE_WEBHOOK_SECRET ?? '';
   if (!secret) {
     if (process.env.NODE_ENV === 'production') return reject(res, 401, PANCAKE_TOKEN_MISSING_SECRET_MESSAGE);
@@ -217,9 +218,9 @@ export const pancakeWebhookTokenGuard: RequestHandler = (req: Request, res: Resp
   }
   const header = req.headers['x-webhook-token'];
   const token = Array.isArray(header) ? header[0] : header;
-  const a = Buffer.from(token ?? '', 'utf8');
-  const b = Buffer.from(secret, 'utf8');
-  if (!token || a.length !== b.length || !timingSafeEqual(a, b)) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
+  // So băm cùng độ dài để thời gian phản hồi không lộ độ dài secret.
+  const digest = (v: string) => createHash('sha256').update(v, 'utf8').digest();
+  if (!token || !timingSafeEqual(digest(token), digest(secret))) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
   next();
 };
 
@@ -230,8 +231,8 @@ export const bodyParserErrorHandler: ErrorRequestHandler = (err: unknown, _req, 
   if (e?.type === 'entity.too.large') return reject(res, 413, BODY_TOO_LARGE_MESSAGE);
   if (e?.type === 'charset.unsupported') return reject(res, 415, CHARSET_UNSUPPORTED_MESSAGE);
   if (e?.type === 'entity.complex') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
-  // urlencoded: quá 1000 tham số (parameterLimit) → 413; qs ném RangeError khi vượt trần → 400.
-  if (e?.type === 'parameters.too.many') return reject(res, 413, BODY_TOO_COMPLEX_MESSAGE);
+  // urlencoded: quá 1000 tham số (parameterLimit) hoặc qs ném RangeError khi vượt trần → 400 như thân JSON quá phức tạp.
+  if (e?.type === 'parameters.too.many') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   if (e?.type === 'querystring.parse.rangeError') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   if (status === 400 && typeof e?.type === 'string' && e.type.startsWith('entity.')) {
     return reject(res, 400, 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.');
