@@ -26,14 +26,17 @@ export function useClaimCoupon() {
     async (code: string): Promise<boolean> => {
       if (busy.current) return false;
       const auth = useAuthStore.getState();
-      if (auth.status !== 'authenticated') {
-        haptic('light');
-        void auth.login();
-        return false;
-      }
       busy.current = true;
-      setPendingCode(code);
       try {
+        if (auth.status !== 'authenticated') {
+          haptic('light');
+          // Chạm lúc app còn đang khôi phục phiên: chờ phiên rồi lưu tiếp đúng mã đó, thay vì nuốt lần chạm.
+          const wasRestoring = auth.status === 'loading';
+          if (wasRestoring) setPendingCode(code);
+          await auth.login();
+          if (!(wasRestoring && useAuthStore.getState().status === 'authenticated')) return false;
+        }
+        setPendingCode(code);
         await claimCoupon(code);
         haptic('light');
         notify({ text: fillCopy('coupon.savedToast'), type: 'success' });

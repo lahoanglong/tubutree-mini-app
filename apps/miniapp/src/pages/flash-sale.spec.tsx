@@ -377,6 +377,69 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
+  it('phiên đang khôi phục: bấm Mua ngay nhiều lần, ra phiên thì mua tiếp đúng món đó một lần', async () => {
+    mocks.status = 'loading';
+    mocks.addToCart.mockResolvedValue({ items: [{ id: 'line-a', variationId: 'v-a' }] });
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    const buy = await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    let release!: () => void;
+    mocks.login.mockImplementation(
+      () =>
+        new Promise<void>((res) => {
+          release = () => {
+            mocks.status = 'authenticated';
+            res();
+          };
+        }),
+    );
+    fireEvent.click(buy);
+    fireEvent.click(buy);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    await act(async () => release());
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+    expect(mocks.addToCart).toHaveBeenCalledWith('v-a', 1, 'buy_now');
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', expect.anything()));
+  });
+
+  it('phiên đang khôi phục: nút đã chạm hiện trạng thái chờ; rời trang trước khi khôi phục xong thì không tự mua', async () => {
+    mocks.status = 'loading';
+    mocks.addToCart.mockResolvedValue({ items: [{ id: 'line-a', variationId: 'v-a' }] });
+    serve({ items: { s12: itemsOf(S12, [item('a'), item('b')]) } });
+    const view = renderPage();
+    const buy = await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    let release!: () => void;
+    mocks.login.mockImplementation(
+      () =>
+        new Promise<void>((res) => {
+          release = () => {
+            mocks.status = 'authenticated';
+            res();
+          };
+        }),
+    );
+    fireEvent.click(buy);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mua ngay Sản phẩm a' })).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('button', { name: 'Mua ngay Sản phẩm b' })).not.toHaveAttribute('aria-busy', 'true');
+    view.unmount();
+    await act(async () => release());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/checkout', expect.anything());
+  });
+
+  it('phiên đang khôi phục: khôi phục không ra phiên thì Mua ngay không thêm giỏ', async () => {
+    mocks.status = 'loading';
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    mocks.login.mockImplementation(async () => {
+      mocks.status = 'idle';
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
   it('phiên đang khôi phục: khôi phục lỗi rồi lần đăng nhập sau cũng không thành thì bỏ Nhắc tôi đã bấm', async () => {
     mocks.status = 'loading';
     mocks.fetchUpcoming.mockResolvedValue([{ itemId: 'c', variationId: 'v-c', productSlug: 'sp-c', productName: 'Sản phẩm c', thumbnail: null, flashPrice: 1, retailPrice: 2, startAt: S20.startAt, reminded: false }]);

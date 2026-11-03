@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 const login = vi.fn();
-const auth = vi.hoisted(() => ({ status: 'anonymous' as 'anonymous' | 'idle' | 'authenticated', error: undefined as string | undefined }));
+const auth = vi.hoisted(() => ({ status: 'anonymous' as 'anonymous' | 'idle' | 'loading' | 'authenticated', error: undefined as string | undefined }));
 const api = vi.hoisted(() => ({ getWishlistIds: vi.fn(), addWishlist: vi.fn(), removeWishlist: vi.fn() }));
 const snack = vi.hoisted(() => ({ openSnackbar: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useSnackbar: () => snack }));
