@@ -42,6 +42,7 @@ import {
   ATTENTION_SETTLED_BY_CANCEL,
   clearPancakeAttention,
   flagPancakeAttention,
+  writePancakeAttention,
 } from './pancake-attention';
 
 export { PANCAKE_TAG_GOMDON, PANCAKE_TAG_RECYCLING } from './pancake-order-body';
@@ -684,10 +685,7 @@ export class PancakeOrderService {
       ? `Đơn không có dòng nào có mã Pancake hợp lệ (${count} dòng) — chưa gửi kho, cần xử lý tay.`
       : `${count} dòng không có mã Pancake (hàng đối tác tự giao hoặc dữ liệu lỗi) — chỉ gửi kho phần còn lại, xử lý tay phần này.`;
     this.logger.warn(`Đơn ${code}: ${reason}`);
-    await this.prisma.order.updateMany({
-      where: { id: orderId, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
-      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-    });
+    await writePancakeAttention(this.prisma, orderId, reason);
   }
 
   /** Đơn đại lý ghi công nợ — cùng điều kiện DealerService.confirmDealerOrderPayment dùng để nhận diện. */

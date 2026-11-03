@@ -247,6 +247,23 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
       }
     });
 
+    it('mốc chờ tính từ lúc token được nhập vào SystemConfig, không phải từ lúc tiến trình khởi động lại', async () => {
+      const withRow = (updatedAt: Date) => {
+        const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key === 'zalo.oa_access_token' ? { value: 'acc', updatedAt } : null)) } };
+        return new OpsHealthService(prisma as never, { get: () => '' } as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => [cronRow('OK')] } as never);
+      };
+      const uptime = jest.spyOn(process, 'uptime');
+      try {
+        uptime.mockReturnValue(60);
+        const stale = await withRow(new Date(NOW.getTime() - 8 * H)).zaloTokenProblems(NOW);
+        expect(stale).toHaveLength(1);
+        uptime.mockReturnValue(20 * 3600);
+        expect(await withRow(new Date(NOW.getTime() - 1 * H)).zaloTokenProblems(NOW)).toEqual([]);
+      } finally {
+        uptime.mockRestore();
+      }
+    });
+
     it('lượt cron gần nhất đã lỗi mà vẫn chưa có mốc hạn → báo "chưa từng được làm mới"', async () => {
       for (const outcome of ['ERRORS', 'THREW']) {
         const out = await withCron([cronRow(outcome)]).zaloTokenProblems(NOW);

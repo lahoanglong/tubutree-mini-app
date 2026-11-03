@@ -2,6 +2,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { ATTENTION_COD_RETURN_UNVERIFIED, writePancakeAttention } from '../../src/modules/integrations/pancake/pancake-attention';
+import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
 
@@ -47,6 +48,21 @@ describe('writePancakeAttention (real Postgres)', () => {
     expect(await writePancakeAttention(prisma, order.id, 'X')).toBe(`${ATTENTION_COD_RETURN_UNVERIFIED} | X`);
     expect(await writePancakeAttention(prisma, order.id, 'X')).toBeNull();
     expect(await attentionOf(order.id)).toBe(`${ATTENTION_COD_RETURN_UNVERIFIED} | X`);
+  });
+
+  it('dòng không có mã Pancake (flagUnpushableLines) không xoá dòng COD chờ Kế toán', async () => {
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'RETURNED',
+      pancakeOrderId: `pk-${randCode(8)}`,
+      pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED,
+    });
+    const flag = (PancakeOrderService.prototype as unknown as { flagUnpushableLines: (this: unknown, id: string, code: string, n: number, none: boolean) => Promise<void> }).flagUnpushableLines;
+    await flag.call({ prisma, logger: { warn: jest.fn() } }, order.id, order.code, 1, false);
+    const cell = await attentionOf(order.id);
+    expect(cell).toContain(ATTENTION_COD_RETURN_UNVERIFIED);
+    expect(cell).toContain('1 dòng không có mã Pancake');
   });
 
   it('Pancake báo 15 mà đơn bị huỷ/trả chen vào sau lúc đọc đơn: không ghim lời "hoàn tay"', async () => {

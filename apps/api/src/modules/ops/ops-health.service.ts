@@ -273,7 +273,10 @@ export class OpsHealthService {
       if (Number.isNaN(expiresAt)) {
         // Vừa cấu hình/khởi động thì mốc hạn chỉ có sau lượt làm mới đầu của cron (tới 6 giờ): trong ngần ấy thời gian chỉ báo khi lượt gần nhất
         // đã lỗi. Quá hạn đó mà vẫn chưa có mốc thì cron không chạy được (tắt, mất lease), im lặng nữa là token hết hạn mà không ai biết.
-        if (this.cronRuns && process.uptime() * 1000 < ZALO_TOKEN_CRON_GRACE_MS && !(await this.zaloTokenCronFailed())) return [];
+        // Mốc tính: lúc token được nhập vào SystemConfig (updatedAt, bền qua deploy); token chỉ nằm trong env thì có từ lần khởi động.
+        const configuredAt = access?.updatedAt instanceof Date && typeof access.value === 'string' && access.value !== '' ? access.updatedAt.getTime() : null;
+        const waitedMs = configuredAt !== null ? now.getTime() - configuredAt : process.uptime() * 1000;
+        if (this.cronRuns && waitedMs < ZALO_TOKEN_CRON_GRACE_MS && !(await this.zaloTokenCronFailed())) return [];
         return [
           {
             key: 'zalo.oa_token',

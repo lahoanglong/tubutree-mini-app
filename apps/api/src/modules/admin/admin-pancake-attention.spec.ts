@@ -127,6 +127,17 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     expect(updateMany.mock.calls[0][0].where).toMatchObject({ pancakeAttention: 'Pancake báo ĐANG HOÀN' });
   });
 
+  it('ô đổi giữa lúc đọc và lúc xoá mà đơn vẫn còn trong hàng đợi: báo "vừa thay đổi", không nói đã rời hàng đợi', async () => {
+    const before = { id: 'o1', code: 'TUBU1', status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+    const after = { pancakeAttentionAt: new Date() };
+    const findFirst = jest.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+    const prisma = { order: { findFirst, updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: jest.fn() } };
+    await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow(/vừa thay đổi/);
+    const gone = jest.fn().mockResolvedValueOnce(before).mockResolvedValueOnce({ pancakeAttentionAt: null });
+    const prisma2 = { order: { findFirst: gone, updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: jest.fn() } };
+    await expect(mkAdmin(prisma2).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow(/không còn trong hàng đợi/);
+  });
+
   it('đơn không còn trong hàng đợi → 400; đơn không tồn tại → 404', async () => {
     const free = { id: 'o1', code: 'TUBU1', pancakeAttention: null, pancakeAttentionAt: null };
     const prisma = { order: { findFirst: jest.fn().mockResolvedValue(free), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod };

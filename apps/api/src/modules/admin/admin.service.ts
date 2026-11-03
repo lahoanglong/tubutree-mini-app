@@ -1395,7 +1395,11 @@ export class AdminService {
       where: { id: order.id, pancakeAttentionAt: { not: null }, pancakeAttention: order.pancakeAttention },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
-    if (r.count === 0) throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    if (r.count === 0) {
+      const now = await this.prisma.order.findFirst({ where: { id: order.id }, select: { pancakeAttentionAt: true } });
+      if (now?.pancakeAttentionAt) throw new BadRequestException(`Việc của đơn ${order.code} vừa thay đổi — tải lại rồi xử lý lại.`);
+      throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    }
     const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);
     this.logger.warn(
       `Admin ${adminId} đánh dấu đã xử lý việc Pancake của đơn ${order.code}: "${order.pancakeAttention ?? ''}"` +
