@@ -158,4 +158,14 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(cls).toContain('max-md:px-2');
     expect(cls).toContain('lg:hidden');
   });
+
+  it('cấu hình công khai chưa về: khung trơn cao 84px thay lưới, không ô bấm được; lỗi (hết chờ) thì dựng lưới với cờ tắt', () => {
+    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
+    const c = mount();
+    expect(c.querySelectorAll('button')).toHaveLength(0);
+    expect(c.querySelector<HTMLElement>('[data-testid="shortcut-grid-pending"] [aria-hidden]')).not.toBeNull();
+    mounted?.unmount();
+    mocks.cfg = { isLoaded: false, isPending: false, waste: { enabled: false } };
+    expect(mount().querySelectorAll('button')).toHaveLength(5);
+  });
 });

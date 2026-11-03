@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   getPublicConfig: vi.fn(),
   getNewCustomerOffer: vi.fn(),
 }));
+// Khôi phục cuộn cần Router; spec này không dựng Router và không kiểm vị trí cuộn.
+vi.mock('../hooks/use-scroll-restoration', () => ({ useScrollRestoration: () => ({ anchorRef: { current: null } }) }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,

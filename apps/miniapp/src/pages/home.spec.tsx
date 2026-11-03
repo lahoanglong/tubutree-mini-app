@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'error', user: { id: 'u1' } as { id: string } | null },
   onRefresh: undefined as undefined | (() => Promise<unknown> | void),
   restore: vi.fn(),
+  scrollRestoration: vi.fn(),
 }));
+// Khôi phục cuộn cần Router; spec này không dựng Router và không kiểm vị trí cuộn.
+vi.mock('../hooks/use-scroll-restoration', () => ({ useScrollRestoration: (...a: unknown[]) => { mocks.scrollRestoration(...a); return { anchorRef: { current: null } }; } }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -178,7 +181,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
 
   it('ô tìm là vỏ: chạm mở /browse?focus=search', async () => {
     renderHome();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
   });
 
@@ -301,6 +304,12 @@ describe('HomePage (phương án A, 9 khối)', () => {
   it('có tiêu đề h1 "Tubu Tree" làm điểm mốc của trang', async () => {
     renderHome();
     expect(screen.getByRole('heading', { level: 1, name: 'Tubu Tree' })).toBeInTheDocument();
+  });
+
+  it('giữ vị trí cuộn Trang chủ khi vào PDP/danh mục rồi quay lại: dùng khoá "home", chỉ sẵn sàng khi dữ liệu các khối cao đã về', async () => {
+    renderHome();
+    await waitFor(() => expect(mocks.scrollRestoration).toHaveBeenLastCalledWith('home', true));
+    expect(mocks.scrollRestoration.mock.calls.every(([key]) => key === 'home')).toBe(true);
   });
 
   describe('thứ tự khối không nhảy sau khung hình đầu (khách cũ mở lạnh)', () => {

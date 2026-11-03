@@ -25,9 +25,9 @@ export function resolvePublicConfig(data: PublicConfig | undefined): PublicConfi
 }
 
 /** `isLoaded` = số liệu đến từ server thật; màn nào hứa một con số cụ thể với khách nên chờ `isLoaded`. */
-export function usePublicConfig(): PublicConfig & { isLoaded: boolean } {
+export function usePublicConfig(): PublicConfig & { isLoaded: boolean; isPending: boolean } {
   const q = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
-  return { ...resolvePublicConfig(q.data), isLoaded: q.data != null };
+  return { ...resolvePublicConfig(q.data), isLoaded: q.data != null, isPending: q.isPending };
 }
 
 /** Đóng khi chưa biết: lối vào AI chỉ hiện sau khi server xác nhận bật. */

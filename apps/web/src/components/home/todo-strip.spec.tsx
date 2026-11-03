@@ -111,11 +111,11 @@ describe('TodoStrip web — Việc cần làm', () => {
       return () => release(undefined);
     };
 
-    it('lần đầu chưa nhớ gì: chờ đơn thì im lặng, không khung chờ', async () => {
+    it('lần đầu chưa nhớ gì nhưng tổng quan báo có đơn đang xử lý: giữ chỗ một dòng 64px, không chèn dải đẩy trang', async () => {
       hold();
       const c = await mount();
-      expect(c.querySelector('[data-testid="todo-strip-loading"]')).toBeNull();
-      expect(c.textContent).toBe('');
+      expect(c.querySelector('[data-testid="todo-strip-loading"]')).not.toBeNull();
+      expect(c.querySelector<HTMLElement>('[data-testid="todo-strip-loading"] [aria-hidden]')?.style.height).toBe('64px');
     });
 
     it('lần trước có hai dòng: khung chờ đúng chiều cao 2 dòng; xong thì ghi lại số dòng thật', async () => {

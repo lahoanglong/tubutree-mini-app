@@ -24,14 +24,14 @@ export function resolvePublicConfig(data: PublicConfig | undefined): PublicConfi
  * `isLoaded` = số liệu đến từ server thật. Màn nào hứa một con số cụ thể với user
  * (ví dụ ngưỡng freeship) nên chờ `isLoaded` rồi mới hiện, thay vì hiện giá trị mặc định.
  */
-export function usePublicConfig(): PublicConfig & { isLoaded: boolean } {
+export function usePublicConfig(): PublicConfig & { isLoaded: boolean; isPending: boolean } {
   const q = useQuery({
     queryKey: ['public-config'],
     // Gọi trễ như `useCatalogLaunchDate`: tham chiếu trực tiếp làm mọi spec mock một phần `shop-api` vỡ ngay lúc vẽ thẻ.
     queryFn: () => getPublicConfig(),
     staleTime: 5 * 60_000,
   });
-  return { ...resolvePublicConfig(q.data), isLoaded: q.data != null };
+  return { ...resolvePublicConfig(q.data), isLoaded: q.data != null, isPending: q.isPending };
 }
 
 /**

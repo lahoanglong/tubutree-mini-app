@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_SHORTCUT_SLOTS, SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
+import { HOME_SETTLING_HEIGHTS, HOME_SHORTCUT_SLOTS, SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { Icon, Text } from '@/components/mini';
+import { Icon, Skeleton, Text } from '@/components/mini';
 import { EarnSheet } from './earn-sheet';
 import { SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visuals';
 import { ShortcutsSheet } from './shortcuts-sheet';
@@ -75,6 +75,15 @@ export function ShortcutGrid() {
     if (to) router.push(to);
     else setEarnOpen(true);
   };
+
+  // Cờ Đổi rác chưa về thì chưa biết ô nào nằm trong 4 ô cố định: giữ khung trơn cùng chiều cao, không dựng ô rồi đổi chỗ dưới ngón tay.
+  if (cfg.isPending) {
+    return (
+      <div data-testid="shortcut-grid-pending" aria-hidden="true" className="lg:hidden">
+        <Skeleton height={HOME_SETTLING_HEIGHTS.shortcuts} radius="var(--radius-card)" />
+      </div>
+    );
+  }
 
   return (
     <section aria-label={homeCopy.shortcuts.title} className="tubu-bleed max-md:px-2 lg:hidden">

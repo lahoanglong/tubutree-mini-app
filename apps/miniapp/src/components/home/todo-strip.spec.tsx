@@ -122,13 +122,13 @@ describe('TodoStrip — Việc cần làm', () => {
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
-  it('lần đầu chưa nhớ gì: chờ đơn thì im lặng (không khung chờ rồi sụp), có việc thì khối hiện', async () => {
+  it('lần đầu chưa nhớ gì nhưng tổng quan báo có đơn đang xử lý: giữ chỗ một dòng (không chèn dải đẩy trang), có việc thì khối hiện', async () => {
     let release: (v: unknown) => void = () => {};
     mocks.fetchHomeTodo.mockImplementation(() => new Promise((r) => { release = r; }));
     const { container } = renderStrip();
     await waitFor(() => expect(mocks.fetchHomeTodo).toHaveBeenCalled());
-    expect(screen.queryByTestId('todo-strip-loading')).toBeNull();
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByTestId('todo-strip-loading')).toHaveStyle({ padding: '0px 16px' });
+    expect(container.querySelector('.tubu-skeleton')).toHaveStyle({ height: '64px' });
     release({ pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null });
     await screen.findByText(/TUBU2/);
   });

@@ -37,6 +37,7 @@ import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
 import { categorySkeletonCells, homeRenderOrder, readBannerHint, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
+import { useScrollRestoration } from '../hooks/use-scroll-restoration';
 import { haptic } from '../utils/haptic';
 import { browserStorage } from '../utils/recently-viewed';
 
@@ -89,6 +90,9 @@ export default function HomePage() {
     todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading || banners.loading,
     sessionFailed,
   );
+
+  // Quay lại từ PDP/danh mục về đúng chỗ đã cuộn (zmp Page gỡ trang cũ nên không tự giữ). Chỉ khôi phục khi các khối cao đã có dữ liệu thật, nếu không trang còn ngắn và vị trí bị kẹp.
+  const { anchorRef } = useScrollRestoration('home', !settling && !restoring && !categories.isLoading && !shelves.bestSellerQuery.isLoading);
 
   // API sập hẳn: kệ Bán chạy nhất (mọi loại khách đều thấy) lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi.
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
@@ -162,6 +166,7 @@ export default function HomePage() {
   return (
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
+      <div ref={anchorRef} />
       <PullToRefresh onRefresh={refreshAll} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         {homeRenderOrder(kind, settling).map((id) => (
