@@ -179,15 +179,24 @@ describe('DataRetentionService (C-046)', () => {
   it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
     const { svc, prisma } = make();
     const perTable: Record<string, number> = {};
+    // Đồng hồ ảo: mỗi lô của bảng tồn đọng tốn đúng 5 ms, nên kết quả không phụ thuộc máy chạy test nhanh hay chậm.
+    let clock = 1_000_000;
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => clock);
     prisma.$executeRaw.mockImplementation((async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const table = (values[0] as { strings?: string[] })?.strings?.[0] ?? '';
       perTable[table] = (perTable[table] ?? 0) + 1;
       if (table !== '"analytics_events"' && table !== '"refresh_tokens"') return 0;
-      await new Promise((r) => setTimeout(r, 5));
+      clock += 5;
       return 3;
     }) as never);
-    await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: 400 });
-    expect(perTable['"refresh_tokens"']).toBeGreaterThan(3);
+    try {
+      await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: 400 });
+    } finally {
+      now.mockRestore();
+    }
+    // analytics_events chỉ được 400/5 = 80 ms (16 lô); phần còn lại chia cho các bảng sau.
+    expect(perTable['"analytics_events"']).toBe(16);
+    expect(perTable['"refresh_tokens"']).toBeGreaterThan(16);
   });
 
   it('một bảng lỗi không chặn các bảng sau', async () => {

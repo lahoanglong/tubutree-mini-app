@@ -38,9 +38,23 @@ describe('firstLogLine', () => {
       'Error: Raw query failed. Code: `23505`. Message: `…',
     );
     const orm = raw('Error occurred during query execution:\nConnectorError(ConnectorError { kind: QueryError(PostgresError { code: "23514", detail: Some("Failing row contains (0901234567)") }) })');
-    expect(firstLogLine(orm)).toBe('Error: Error occurred during query execution:');
+    expect(firstLogLine(orm)).toBe('Error: Error occurred during query execution: 23514');
     expect(firstLogLine('Dọn lỗi: Key (phone)=(0901234567) already exists.')).toBe('Dọn lỗi: …');
     expect(firstLogLine('Đồng bộ lỗi: ghi chú\nInvalid `x` invocation: 0901234567\nchi tiết')).toBe('Đồng bộ lỗi: ghi chú');
+    expect(firstLogLine(raw('Raw query failed. Code: `22P02`. Message: `ERROR: invalid input syntax for type uuid: "0901234567"`'))).toBe(
+      'Error: Raw query failed. Code: `22P02`. Message: `ERROR: invalid input syntax for type uuid…',
+    );
+  });
+
+  it('lỗi ORM: kèm mã SQLSTATE; lỗi kiểm tham số ở production: bỏ đoạn cây tham số', () => {
+    const orm = new Error(
+      '\nInvalid `prisma.user.update()` invocation:\n\n\nError occurred during query execution:\nConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row violates check constraint", severity: "ERROR", detail: Some("Failing row contains (0901234567)") }) })',
+    );
+    expect(firstLogLine(orm)).toBe('Error: Error occurred during query execution: 23514');
+    const validation = new Error(
+      '\nInvalid `prisma.user.create()` invocation:\n\n{\n  data: {\n    phone: "0901234567",\n+   referralCode: String\n  }\n}\n\nArgument `referralCode` is missing.',
+    );
+    expect(firstLogLine(validation)).toBe('Error: Argument `referralCode` is missing.');
   });
 });
 
