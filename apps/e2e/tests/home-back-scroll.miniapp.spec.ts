@@ -27,7 +27,11 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
   }
 
   test('cuộn sâu, chạm món, Back: scrollTop về trong 2px sau 1,2s', async ({ page }) => {
-    const before = await scrollDeep(page);
+    await scrollDeep(page);
+    // Về giữa trang, không phải đáy: trình duyệt kẹp scrollTop ở đáy nên lỗi khôi phục kéo xuống đáy sẽ lọt.
+    await scrollerOf(page).evaluate((el) => { el.scrollTop = el.scrollHeight - el.clientHeight - 800; });
+    await page.waitForTimeout(500);
+    const before = await scrollTop(page);
     test.info().annotations.push({ type: 'before', description: `scrollTop=${before}` });
     expect(before).toBeGreaterThan(1500);
 
@@ -45,6 +49,8 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     await page.waitForTimeout(400);
     await tile.click();
     await expect(page).toHaveURL(/\/product\//, { timeout: 15_000 });
+    // Trang '/' còn trượt ra trong 400ms của AnimationRoutes; Back lúc đó nhận lại DOM cũ và scrollTop còn nguyên dù không có hook.
+    await expect(page.locator('.zaui-page')).toHaveCount(1, { timeout: 5_000 });
     await page.goBack();
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
@@ -59,6 +65,7 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     expect(before).toBeGreaterThan(1500);
     await page.getByRole('navigation').getByRole('button', { name: /^Danh mục/ }).click();
     await expect(page).toHaveURL(/\/(browse|categories)/, { timeout: 15_000 });
+    await expect(page.locator('.zaui-page')).toHaveCount(1, { timeout: 5_000 });
     await page.getByRole('navigation').getByRole('button', { name: /^Trang chủ/ }).click();
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
