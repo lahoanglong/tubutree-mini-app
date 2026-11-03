@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Heart } from 'lucide-react';
 import { getWishlistIds, addWishlist, removeWishlist } from '../services/wishlist-api';
@@ -65,6 +65,7 @@ export function WishlistHeart({
   const liked = idsQ.data?.includes(productId) ?? false;
   // Nảy theo thao tác của khách chứ không theo `liked`: tải danh sách đã có sẵn tim đỏ không được nảy, bỏ thích cũng không.
   const [popping, setPopping] = useState(false);
+  const pendingLike = useRef(false);
 
   const toggle = () => {
     void qc.cancelQueries({ queryKey: IDS_KEY });
@@ -82,7 +83,11 @@ export function WishlistHeart({
     // Chạm lúc app còn đang khôi phục phiên: login() chờ khôi phục xong (không đăng nhập song song); ra phiên rồi thì làm đúng việc
     // khách vừa chạm, thay vì nuốt lần chạm.
     const wasRestoring = status === 'loading';
+    // Chạm nhiều lần lúc chờ vẫn là một ý định (thích), không xếp nhiều lần đảo: ra phiên thì thêm rồi bỏ là sai ý khách.
+    if (wasRestoring && pendingLike.current) return;
+    if (wasRestoring) pendingLike.current = true;
     void login().then(() => {
+      pendingLike.current = false;
       if (wasRestoring && useAuthStore.getState().status === 'authenticated') toggle();
     });
   };

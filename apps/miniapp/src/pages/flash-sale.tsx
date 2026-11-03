@@ -204,8 +204,19 @@ export default function FlashSalePage() {
     remindMut.mutate({ itemId: item.itemId, reminded: reminded.has(item.itemId), startAt: activeSlot.startAt });
   };
 
+  // Mua ngay chạm lúc app còn đang khôi phục phiên: chờ phiên rồi mua tiếp đúng món đó (một lần dù chạm nhiều), thay vì nuốt lần chạm.
+  const pendingBuy = useRef<string | null>(null);
   const onBuy = (item: FlashSlotItemData) => {
     if (!authed) {
+      if (authStatus === 'loading') {
+        if (pendingBuy.current) return;
+        pendingBuy.current = item.itemId;
+        void loginWithNotice().finally(() => {
+          pendingBuy.current = null;
+          if (useAuthStore.getState().status === 'authenticated' && !buyMut.isPending) buyMut.mutate(item);
+        });
+        return;
+      }
       login();
       return;
     }

@@ -31,7 +31,7 @@ const INVOICE_KEY = 'tubu_invoice';
 
 /**
  * Trần thời gian cho storage của ZMP ở đường đăng nhập. Cầu nối native không trả lời thì đăng nhập treo mãi, và vì login() gộp
- * các lần bấm chồng nhau, mọi lần bấm sau cũng im lặng theo. Hết trần là lỗi tạm (isTransientSessionError): báo mất kết nối, giữ
+ * các lần bấm chồng nhau, mọi lần bấm sau cũng im lặng theo. Hết trần là lỗi tạm (isTransientSessionError): báo câu lỗi máy (vi.errors.sessionStorage), giữ
  * refresh token, không rơi xuống tài khoản Khách.
  */
 const AUTH_STORAGE_TIMEOUT_MS = 3000;
@@ -114,6 +114,10 @@ async function clearRefresh(): Promise<void> {
  * đời lúc bắt đầu; máy chủ trả lời sau một lần đăng xuất thì kết quả bị bỏ, kẻo máy dùng chung tự đăng nhập lại người vừa thoát.
  */
 let sessionEpoch = 0;
+/** logout() đang chờ storage. Trong khe đó token cũ còn trên máy: đường tạo phiên phải chờ xong, kẻo đọc lại token cũ và xoay nó. */
+let logoutInFlight: Promise<void> | null = null;
+/** Storage treo thì logout treo theo (xem logout): chờ tới trần rồi đi tiếp, để bước đọc storage kế tiếp tự báo lỗi máy thay vì treo mãi. */
+const afterLogout = (): Promise<unknown> => (logoutInFlight ? withStorageTimeout(() => logoutInFlight!).catch(() => undefined) : Promise.resolve());
 
 /** Refresh token mới mà storage không ghi được: giữ trong bộ nhớ để refresh của phiên này vẫn chạy, khỏi đá khách ra. */
 let unpersistedRefresh: string | null = null;
@@ -144,7 +148,10 @@ async function adoptSession(res: LoginResponse, epoch: number): Promise<boolean>
     // Đăng xuất chen vào lúc đang ghi: lần ghi có thể đáp sau lần xoá của logout.
     setAccessToken(null);
     revokeInBackground(res.refreshToken);
-    void removeStorage({ keys: [REFRESH_KEY] }).catch(() => undefined);
+    // Chỉ xoá khi máy còn đúng token vừa ghi: một đăng nhập mới có thể đã ghi token khác lên trên.
+    void readRefresh({ limit: false })
+      .then((stored) => (stored === res.refreshToken ? removeStorage({ keys: [REFRESH_KEY] }) : undefined))
+      .catch(() => undefined);
     return false;
   }
   unpersistedRefresh = saved ? null : res.refreshToken;
@@ -268,6 +275,7 @@ let refreshInFlight: Promise<LoginResponse | null> | null = null;
 function refreshSession(): Promise<LoginResponse | null> {
   if (refreshInFlight) return refreshInFlight;
   const p = (async () => {
+    await afterLogout();
     const token = unpersistedRefresh ?? (await readRefresh());
     if (!token) return null;
     return refreshTokens(token);
@@ -318,6 +326,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (loginInFlight) return loginInFlight;
     const epoch = sessionEpoch;
     const run = (async () => {
+      await afterLogout();
       // Bấm đăng nhập lúc app còn đang khôi phục phiên: chờ khôi phục xong. Khôi phục ra phiên rồi thì thôi, vì đăng nhập
       // lại từ đầu song song sẽ ghi đè phiên vừa khôi phục (có khi bằng phiên Khách) và hai bên xoay refresh token dẫm lên nhau.
       if (restoreInFlight) {
@@ -351,6 +360,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const keepSession = get().status === 'authenticated' && get().user !== null;
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
+      if (logoutInFlight) {
+        await afterLogout();
+        if (epoch !== sessionEpoch) return;
+        set({ status: 'loading', error: undefined });
+      }
       // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó. Ra phiên hay bị khoá ('idle'
       // kèm lời máy chủ) là đã có kết luận, đăng nhập lại chỉ có thể làm sai kết luận đó. Lỗi tạm, hay login() ném ra ngoài mà
       // phiên còn kẹt 'loading', thì khôi phục tiếp.
@@ -436,36 +450,44 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return res.user.phone ?? null;
   },
 
-  logout: async () => {
-    // Đồng bộ, trước mọi await: từ đây mọi phiên đang chờ máy chủ bị bỏ, và đăng nhập bắt đầu sau đó là một lần mới
-    // (không gộp vào lần đang chạy của đời trước).
-    sessionEpoch += 1;
-    refreshInFlight = null;
-    restoreInFlight = null;
-    loginInFlight = null;
-    setAuthReady(null);
-    unpersistedRefresh = null;
-    // Không đặt trần ở đây: trên máy dùng chung, đăng xuất phải chắc đã đọc được token để thu hồi và đã xoá nó. Storage treo thì
-    // đăng xuất treo theo (khách thấy chưa xong), còn hơn báo đã đăng xuất mà token vẫn nằm trên máy cho người sau mở lại.
-    // Đọc trước khi xoá: sau đó không còn token để thu hồi trên máy chủ.
-    const refreshToken = await readRefresh({ limit: false }).catch(() => null);
-    setAccessToken(null);
-    await removeStorage({ keys: [REFRESH_KEY] });
-    set({ user: null, status: 'idle', error: undefined });
-    clearHomeHints(browserStorage());
-    clearCtvTouched();
-    try {
-      browserStorage()?.removeItem(INVOICE_KEY);
-    } catch {
-      /* storage bị chặn: không có gì để xoá */
-    }
-    // Xoá sạch cache React Query (ví, lương, hoa hồng...) — không để lộ dữ liệu tài
-    // chính của user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung
-    // (VD tablet chấm công cửa hàng). Đăng ký qua setLogoutCleanup() ở app.tsx để
-    // tránh import vòng (store/auth.ts <-> components/app.tsx).
-    onLogoutCleanup?.();
-    // Không chờ: đăng xuất trên máy không phụ thuộc mạng. Token còn sống trên máy chủ chỉ là lỗi dọn dẹp, tự hết hạn.
-    if (refreshToken) revokeInBackground(refreshToken);
+  logout: () => {
+    const p = (async () => {
+      // Đồng bộ, trước mọi await: từ đây mọi phiên đang chờ máy chủ bị bỏ, và đăng nhập bắt đầu sau đó là một lần mới
+      // (không gộp vào lần đang chạy của đời trước).
+      sessionEpoch += 1;
+      refreshInFlight = null;
+      restoreInFlight = null;
+      loginInFlight = null;
+      setAuthReady(null);
+      unpersistedRefresh = null;
+      // Không đặt trần ở đây: trên máy dùng chung, đăng xuất phải chắc đã đọc được token để thu hồi và đã xoá nó. Storage treo thì
+      // đăng xuất treo theo (khách thấy chưa xong), còn hơn báo đã đăng xuất mà token vẫn nằm trên máy cho người sau mở lại.
+      // Đọc trước khi xoá: sau đó không còn token để thu hồi trên máy chủ.
+      const refreshToken = await readRefresh({ limit: false }).catch(() => null);
+      setAccessToken(null);
+      await removeStorage({ keys: [REFRESH_KEY] });
+      set({ user: null, status: 'idle', error: undefined });
+      clearHomeHints(browserStorage());
+      clearCtvTouched();
+      try {
+        browserStorage()?.removeItem(INVOICE_KEY);
+      } catch {
+        /* storage bị chặn: không có gì để xoá */
+      }
+      // Xoá sạch cache React Query (ví, lương, hoa hồng...) — không để lộ dữ liệu tài
+      // chính của user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung
+      // (VD tablet chấm công cửa hàng). Đăng ký qua setLogoutCleanup() ở app.tsx để
+      // tránh import vòng (store/auth.ts <-> components/app.tsx).
+      onLogoutCleanup?.();
+      // Không chờ: đăng xuất trên máy không phụ thuộc mạng. Token còn sống trên máy chủ chỉ là lỗi dọn dẹp, tự hết hạn.
+      if (refreshToken) revokeInBackground(refreshToken);
+    })();
+    logoutInFlight = p;
+    const clear = () => {
+      if (logoutInFlight === p) logoutInFlight = null;
+    };
+    p.then(clear, clear);
+    return p;
   },
 }));
 
@@ -478,7 +500,9 @@ useAuthStore.subscribe((s, prev) => {
   // phiên: điểm, giỏ, đơn, vườn trong cache vẫn là của tài khoản Khách. Lần đăng nhập đầu (chưa có user trước) và đăng xuất
   // (user về null; app.tsx đã clear cache) không cần.
   if (prev.user?.id && s.user && (s.user.id !== prev.user.id || (isGuestUser(prev.user) && !isGuestUser(s.user)))) {
-    void getQueryClient()?.invalidateQueries({ predicate: (q) => !CATALOG_KEYS.some((k) => q.queryKey[0] === k[0]) });
+    void getQueryClient()?.invalidateQueries({
+      predicate: (q) => !CATALOG_KEYS.some((k) => q.queryKey[0] === k[0]),
+    });
   }
 });
 
@@ -501,7 +525,11 @@ setUnauthorizedHandler(async () => {
     if (epoch !== sessionEpoch) return null;
     if (isRefreshRejected(err)) {
       await clearRefresh();
-      useAuthStore.setState({ user: null, status: 'idle', error: isAccountBlocked(err) ? getErrorMessage(err) : undefined });
+      useAuthStore.setState({
+        user: null,
+        status: 'idle',
+        error: isAccountBlocked(err) ? getErrorMessage(err) : undefined,
+      });
       onLogoutCleanup?.();
     } else {
       // Mạng/429/5xx: chưa biết phiên còn hay không. 'error' (như restore()) để useSessionRecovery tự thử lại, thay vì mời đăng nhập.

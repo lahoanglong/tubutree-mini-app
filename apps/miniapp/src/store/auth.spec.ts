@@ -1044,14 +1044,32 @@ describe('useAuthStore — storage ZMP không trả lời', () => {
 
   it('đọc token treo lúc đăng xuất: không báo đã đăng xuất, không xoá phiên (token còn trên máy cho người sau)', async () => {
     useAuthStore.setState({ user: loginResponse('u1').user, status: 'authenticated', error: undefined });
-    mockedGetStorage.mockReturnValue(hang() as never);
+    let release!: (v: Record<string, unknown>) => void;
+    mockedGetStorage.mockReturnValueOnce(new Promise((res) => (release = res)) as never);
 
-    void useAuthStore.getState().logout();
+    const loggingOut = useAuthStore.getState().logout();
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().user?.id).toBe('u1');
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
+    // Thả cho logout xong, kẻo ca sau chờ một logout không bao giờ kết thúc.
+    release({});
+    await loggingOut;
+  });
+
+  it('logout treo: đường refresh chỉ chờ tới trần rồi báo lỗi máy, không treo mãi', async () => {
+    useAuthStore.setState({ user: loginResponse('u1').user, status: 'authenticated', error: undefined });
+    let release!: (v: Record<string, unknown>) => void;
+    mockedGetStorage.mockReturnValueOnce(new Promise((res) => (release = res)) as never);
+    mockedGetStorage.mockReturnValue(hang() as never);
+    const loggingOut = useAuthStore.getState().logout();
+    const handled = unauthorizedHandler!();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await handled).toBeNull();
+    expect(mockedRefresh).not.toHaveBeenCalled();
+    release({});
+    await loggingOut;
   });
 });
 
@@ -1198,6 +1216,187 @@ describe('đăng xuất khi máy chủ còn chưa trả lời: phiên về sau b
     expect(useAuthStore.getState().user?.id).toBe('g2');
     expect(revoked('refresh-g1')).toBe(true);
     expect(revoked('refresh-g2')).toBe(false);
+  });
+});
+
+describe('đăng xuất đang chạy dở (storage chậm): đường tạo phiên không lọt qua', () => {
+  const mockedSetAccessToken = vi.mocked(setAccessToken);
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+  const user = () => loginResponse('u1', 'zalo-1');
+  const refreshWritten = () => mockedSetStorage.mock.calls.filter((c) => 'tubu_refresh_token' in (c[0] as { data: object }).data);
+  const revoked = (token: string) =>
+    mockedApiPost.mock.calls.some((c) => c[0] === '/auth/logout' && (c[1] as { refreshToken: string }).refreshToken === token);
+
+  beforeEach(async () => {
+    await useAuthStore.getState().logout();
+    vi.clearAllMocks();
+    mockedSetStorage.mockResolvedValue(undefined as never);
+    mockedRemoveStorage.mockResolvedValue(undefined as never);
+    mockedGetStorage.mockResolvedValue({});
+    mockedApiPost.mockResolvedValue({} as never);
+    useAuthStore.setState({ user: null, status: 'loading', error: undefined });
+  });
+
+  /** Đăng xuất mà lần đọc refresh token còn treo: khe giữa lúc đời mới bắt đầu và lúc storage được xoá. */
+  function startSlowLogout() {
+    const read = deferred<Record<string, unknown>>();
+    mockedGetStorage.mockReturnValueOnce(read.promise as never);
+    useAuthStore.setState({ user: user().user, status: 'authenticated', error: undefined });
+    const loggingOut = useAuthStore.getState().logout();
+    return { read, loggingOut };
+  }
+
+  it('handler 401 bay trong lúc logout còn chờ storage: không đọc lại refresh token cũ, không ra phiên', async () => {
+    const { read, loggingOut } = startSlowLogout();
+    mockedRefresh.mockResolvedValue(user());
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'old-refresh' });
+    const handled = unauthorizedHandler!();
+    await flush();
+    read.resolve({ tubu_refresh_token: 'old-refresh' });
+    mockedRemoveStorage.mockImplementation((async () => {
+      mockedGetStorage.mockResolvedValue({});
+    }) as never);
+    await loggingOut;
+    expect(await handled).toBeNull();
+    await flush();
+    expect(mockedRefresh).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(refreshWritten()).toHaveLength(0);
+    expect(mockedSetAccessToken).not.toHaveBeenCalledWith('access-u1');
+  });
+
+  it('restore() bắt đầu trong lúc logout còn chờ storage: không ra phiên của người vừa thoát', async () => {
+    const { read, loggingOut } = startSlowLogout();
+    mockedRefresh.mockResolvedValue(user());
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'old-refresh' });
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockResolvedValue(loginResponse('g9'));
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    read.resolve({ tubu_refresh_token: 'old-refresh' });
+    mockedRemoveStorage.mockImplementation((async () => {
+      mockedGetStorage.mockResolvedValue({});
+    }) as never);
+    await loggingOut;
+    await restoring;
+    expect(mockedRefresh).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().user?.id).not.toBe('u1');
+    expect(refreshWritten().some((c) => (c[0] as { data: Record<string, string> }).data.tubu_refresh_token === 'refresh-u1')).toBe(false);
+  });
+
+  it('login() bấm sau khi logout bắt đầu: chờ logout xong rồi mới chạy, phiên mới không bị logout xoá', async () => {
+    const { read, loggingOut } = startSlowLogout();
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockResolvedValue(loginResponse('g2'));
+    const logging = useAuthStore.getState().login();
+    await flush();
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    read.resolve({});
+    await loggingOut;
+    await logging;
+    expect(useAuthStore.getState().user?.id).toBe('g2');
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(revoked('refresh-g2')).toBe(false);
+  });
+
+  it('lần ghi refresh đáp sau logout: bỏ phiên, xoá token vừa ghi, thu hồi', async () => {
+    const write = deferred<void>();
+    mockedGetStorage.mockResolvedValue({});
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(user());
+    mockedSetStorage.mockReturnValueOnce(write.promise as never);
+    const logging = useAuthStore.getState().login();
+    await flush();
+    expect(mockedSetAccessToken).toHaveBeenCalledWith('access-u1');
+    await useAuthStore.getState().logout();
+    mockedRemoveStorage.mockClear();
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'refresh-u1' });
+    write.resolve();
+    await logging;
+    await flush();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(mockedSetAccessToken).toHaveBeenLastCalledWith(null);
+    expect(mockedRemoveStorage).toHaveBeenCalledWith({ keys: ['tubu_refresh_token'] });
+    expect(revoked('refresh-u1')).toBe(true);
+  });
+
+  it('logout lúc login() còn chờ restore: status không kẹt loading', async () => {
+    const d = deferred<LoginResponse>();
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'old-refresh' });
+    mockedRefresh.mockReturnValue(d.promise);
+    const restoring = useAuthStore.getState().restore();
+    const logging = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    mockedGetStorage.mockResolvedValue({});
+    d.reject(httpFail(503));
+    await Promise.all([restoring, logging]);
+    await flush();
+    expect(useAuthStore.getState().status).toBe('idle');
+  });
+
+  it('login Zalo lỗi 503 về sau logout: giữ idle, không về error', async () => {
+    const d = deferred<LoginResponse>();
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockReturnValue(d.promise);
+    const logging = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.reject(httpFail(503));
+    await logging;
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBeUndefined();
+  });
+
+  it('login khách lỗi 503 về sau logout: giữ idle, không về error', async () => {
+    const d = deferred<LoginResponse>();
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockReturnValue(d.promise);
+    const logging = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.reject(httpFail(503));
+    await logging;
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBeUndefined();
+  });
+
+  it('restore() refresh lỗi 503 về sau logout: giữ idle, không về error', async () => {
+    const d = deferred<LoginResponse>();
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'old-refresh' });
+    mockedRefresh.mockReturnValue(d.promise);
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    await useAuthStore.getState().logout();
+    mockedGetStorage.mockResolvedValue({});
+    d.reject(httpFail(503));
+    await restoring;
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBeUndefined();
+  });
+
+  it('logout trong lúc loadFirstTouch còn treo: không gọi đăng nhập nào sau đó', async () => {
+    const touch = deferred<undefined>();
+    vi.mocked(loadFirstTouch).mockReturnValueOnce(touch.promise);
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(user());
+    const logging = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    touch.resolve(undefined);
+    await logging;
+    expect(mockedLoginZalo).not.toHaveBeenCalled();
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
   });
 });
 

@@ -79,4 +79,17 @@ describe('WishlistHeart — chạm lúc app đang khôi phục phiên', () => {
     expect(mocks.refreshTokens).toHaveBeenCalledTimes(1);
     expect(mocks.loginGuest).not.toHaveBeenCalled();
   });
+
+  it('chạm hai lần lúc đang khôi phục: chỉ một lần thêm, không thêm rồi bỏ', async () => {
+    renderHeart();
+    const restoring = useAuthStore.getState().restore();
+    const heart = screen.getByRole('button', { name: 'Thêm yêu thích' });
+    fireEvent.click(heart);
+    fireEvent.click(heart);
+    resolveRefresh(session);
+    await restoring;
+    await waitFor(() => expect(api.addWishlist).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.removeWishlist).not.toHaveBeenCalled();
+  });
 });
