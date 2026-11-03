@@ -6,6 +6,7 @@ const RETRY_MS = 50;
 // Cuộn vô tận nạp từng trang: tới được độ sâu cũ cần vài vòng tải, máy chậm mất vài giây.
 const MAX_MS = 4000;
 const POP_WINDOW_MS = 2000;
+// Trình duyệt tự khôi phục vị trí cũ của nó đè lên khoảng 30ms sau scrollTo (đo ở Chromium, CPU x5); 300ms là hơn mười lần số đó cho máy chậm.
 const SETTLE_MS = 300;
 // Sau một cú bấm, chuyển trang mềm co chiều cao trang và cuộn cửa sổ về đầu trước khi hook này gỡ: các cú cuộn đó không phải vị trí khách rời đi.
 // Vị trí lúc bấm được giữ; hết nhịp này mà vẫn ở lại trang (bấm chip, mở hộp thoại) thì lấy lại vị trí hiện tại.
@@ -68,7 +69,9 @@ export function useWindowScrollRestore(key: string): void {
     };
     const onClick = () => {
       if (restoring) return;
-      clickY ??= window.scrollY;
+      clickY = window.scrollY;
+      // Ghi ngay: nạp cứng sang trang khác không chạy cleanup.
+      write(key, clickY);
       clearTimeout(saveTimer);
       clearTimeout(holdTimer);
       holdTimer = setTimeout(() => {
@@ -82,8 +85,9 @@ export function useWindowScrollRestore(key: string): void {
     let stopped = false;
     const stop = () => {
       stopped = true;
+      // Chỉ lúc đang khôi phục mới lấy vị trí hiện tại (onScroll bỏ qua các cú cuộn đó); rời trang không qua khôi phục thì giữ vị trí đã ghi nhận.
+      if (restoring) lastY = window.scrollY;
       restoring = false;
-      lastY = window.scrollY;
       clearTimeout(retryTimer);
       window.removeEventListener('touchstart', stop);
       window.removeEventListener('pointerdown', stop);

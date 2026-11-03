@@ -18,9 +18,10 @@ test.describe('Web khách: Trang chủ — Back giữ vị trí cuộn', () => {
     // Chế độ mềm: chỉ dùng đúng số sản phẩm thật có trong DB (mỗi món một slug, không trùng để lưới không bỏ món).
     let realSlugs: string[] = [];
     if (mode === 'mềm') {
-      const res = await request.get(`http://localhost:${process.env.E2E_API_PORT}/api/products?limit=40`).catch(() => null);
-      realSlugs = res?.ok() ? (((await res.json()) as { data?: { slug: string }[] }).data ?? []).map((x) => x.slug) : [];
-      test.skip(realSlugs.length < 30, 'DB e2e có ít hơn 30 sản phẩm');
+      const res = await request.get(`http://localhost:${process.env.E2E_API_PORT}/api/products?limit=40`);
+      expect(res.ok(), 'API e2e trả danh sách sản phẩm').toBe(true);
+      realSlugs = (((await res.json()) as { data?: { slug: string }[] }).data ?? []).map((x) => x.slug);
+      expect(realSlugs.length, 'DB e2e (seed) có đủ sản phẩm thật').toBeGreaterThanOrEqual(30);
       api.allowUnmocked('GET /products/:slug', 'GET /products/:slug/reviews', 'GET /products/:slug/reviews/can-review', 'GET /products/for-you', 'GET /affiliate/me');
     }
     if (browserName === 'chromium') {

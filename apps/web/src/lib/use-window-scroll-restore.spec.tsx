@@ -199,4 +199,53 @@ describe('useWindowScrollRestore', () => {
     });
     expect(y).toBe(6091);
   });
+
+  it('rời trang không qua bấm (Back trình duyệt) khi scrollY đã đổi: vẫn lưu vị trí đã ghi nhận', () => {
+    vi.setSystemTime(Date.now() + 10_000);
+    const { unmount } = renderHook(() => useWindowScrollRestore('home'));
+    y = 5000;
+    window.dispatchEvent(new Event('scroll'));
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    y = 0;
+    unmount();
+    expect(sessionStorage.getItem('tubu_scroll_web:home')).toBe('5000');
+  });
+
+  it('bấm ở 5000, cuộn tới 6000 trong nhịp giữ, bấm tiếp: lưu 6000', () => {
+    vi.setSystemTime(Date.now() + 10_000);
+    const { unmount } = renderHook(() => useWindowScrollRestore('home'));
+    y = 5000;
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    y = 6000;
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    y = 0;
+    unmount();
+    expect(sessionStorage.getItem('tubu_scroll_web:home')).toBe('6000');
+  });
+
+  it('bấm là ghi ngay (nạp cứng không có cleanup)', () => {
+    vi.setSystemTime(Date.now() + 10_000);
+    renderHook(() => useWindowScrollRestore('home'));
+    y = 4200;
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(sessionStorage.getItem('tubu_scroll_web:home')).toBe('4200');
+  });
+
+  it('trình duyệt kéo ngược ở ~200ms (sau nhịp ổn định đầu): vẫn kéo lại về đích', () => {
+    sessionStorage.setItem('tubu_scroll_web:home', '6091');
+    maxY = 7000;
+    back();
+    renderHook(() => useWindowScrollRestore('home'));
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(y).toBe(6091);
+    y = 5938;
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    expect(y).toBe(6091);
+  });
 });
