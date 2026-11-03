@@ -3,9 +3,10 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { CatalogService } from './catalog.service';
 import type { HomeService } from './home.service';
 import { CATEGORY_MSG } from './category-tree';
+import { PRODUCT_CATEGORIES_MAX } from './product-admin.service';
 import { CATEGORY_ASSIGN_MAX_PRODUCTS, ProductCategoryAdminService } from './product-category-admin.service';
 
-function make(over: { category?: unknown; found?: number; changed?: number; children?: number } = {}) {
+function make(over: { category?: unknown; found?: number; changed?: number; children?: number; candidates?: { id: string; name: string; categoryIds: string[] }[] } = {}) {
   const self: { current: unknown } = { current: null };
   const prisma = {
     category: {
@@ -14,7 +15,7 @@ function make(over: { category?: unknown; found?: number; changed?: number; chil
     },
     product: {
       count: jest.fn().mockResolvedValue(over.found ?? 2),
-      findMany: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue(over.candidates ?? []),
     },
     // Câu khoá advisory và câu UPDATE đều đi qua $executeRaw: phân biệt bằng nội dung câu.
     $executeRaw: jest.fn(async (strings: TemplateStringsArray) => (strings.join('').includes('pg_advisory') ? 1 : (over.changed ?? 2))),
@@ -61,6 +62,27 @@ describe('ProductCategoryAdminService.assign', () => {
     const kinds = prisma.$executeRaw.mock.calls.map(([s]) => (s.join('').includes('pg_advisory') ? 'lock' : 'write'));
     expect(kinds).toEqual(['lock', 'write']);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('trần 10 danh mục mỗi sản phẩm: sản phẩm đã đủ 10 bị bỏ qua, nêu tên, và câu UPDATE tự chặn theo cardinality', async () => {
+    const full = Array.from({ length: PRODUCT_CATEGORIES_MAX }, (_, i) => `k${i}`);
+    const { svc, prisma } = make({
+      changed: 1,
+      found: 3,
+      candidates: [
+        { id: 'p1', name: 'Đầy', categoryIds: full },
+        { id: 'p2', name: 'Còn chỗ', categoryIds: full.slice(1) },
+      ],
+    });
+    const r = await svc.assign('a', ['p1', 'p2', 'p3'], 'c1', 'ADD');
+    expect(r).toMatchObject({ requested: 3, changed: 1, unchanged: 1, overLimit: [{ id: 'p1', name: 'Đầy' }] });
+    expect(prisma.product.findMany.mock.calls[0]![0].where).toMatchObject({ id: { in: ['p1', 'p2', 'p3'] }, NOT: { categoryIds: { has: 'c1' } } });
+    expect(updates(prisma)[0]![0].join('')).toContain('cardinality');
+  });
+
+  it('gỡ không có overLimit', async () => {
+    const { svc } = make({ changed: 1, found: 1 });
+    expect(await svc.assign('a', ['p1'], 'c1', 'REMOVE')).toMatchObject({ overLimit: [] });
   });
 
   it('gán lại cùng danh sách không nhân đôi: lần hai báo 0 đổi, n không đổi', async () => {

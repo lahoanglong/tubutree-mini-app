@@ -38,7 +38,7 @@ export function parseSlotClocks(raw: unknown): string[] {
 export const FLASH_SLOTS_KEY = 'flashsale.slots';
 export const FLASH_SLOTS_MAX = 6;
 
-/** Luật ghi `flashsale.slots`: 1–6 mốc `HH:MM` giờ VN, tăng dần, không trùng. Trả lời lỗi hoặc null. */
+/** Luật ghi `flashsale.slots`: 1–6 mốc `HH:MM` giờ VN, tăng dần, không trùng, hai mốc liền nhau (kể cả cuối ngày với đầu ngày sau) cách nhau ít nhất một khung. Trả lời lỗi hoặc null. */
 export function flashSlotsProblem(value: unknown): string | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > FLASH_SLOTS_MAX) {
     return `phải là mảng 1–${FLASH_SLOTS_MAX} mốc giờ dạng "HH:MM", vd ["12:00","20:00"]`;
@@ -47,6 +47,14 @@ export function flashSlotsProblem(value: unknown): string | null {
     const c = value[i];
     if (typeof c !== 'string' || !CLOCK_RE.test(c)) return `mốc ${JSON.stringify(c)} không đúng dạng "HH:MM" (00:00 đến 23:59, đủ hai chữ số)`;
     if (i > 0 && c <= (value[i - 1] as string)) return 'các mốc phải tăng dần, không trùng nhau';
+  }
+  // Mỗi khung dài FLASH_SLOT_MINUTES; mốc sát nhau hơn thế thì hai khung chồng giờ và addItem chặn cùng một món ở cả hai.
+  const minutes = (value as string[]).map(clockMinutes);
+  for (let i = 0; i < minutes.length; i++) {
+    const next = i + 1 < minutes.length ? minutes[i + 1]! : minutes[0]! + DAY_MS / 60e3;
+    if (next - minutes[i]! < FLASH_SLOT_MINUTES) {
+      return `hai mốc liền nhau phải cách nhau ít nhất ${FLASH_SLOT_MINUTES} phút (mỗi khung dài ${FLASH_SLOT_MINUTES} phút), kể cả mốc cuối ngày với mốc đầu ngày hôm sau`;
+    }
   }
   return null;
 }

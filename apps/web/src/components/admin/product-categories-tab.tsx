@@ -21,6 +21,13 @@ import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_X
 
 const LIST_KEY = ['admin-category-products'] as const;
 const OPTIONS_KEY = ['admin-category-options'] as const;
+/** Sản phẩm đã đủ danh mục tối đa bị lệnh gán bỏ qua: nêu tên vài sản phẩm đầu để admin gỡ bớt rồi gán lại. */
+function overLimitText(over: { name: string }[] | undefined): string {
+  if (!over || over.length === 0) return '';
+  const names = over.slice(0, 3).map((o) => `"${o.name}"`).join(', ');
+  return ` ${over.length} sản phẩm đã đủ danh mục tối đa nên chưa gán được: ${names}${over.length > 3 ? '…' : ''}. Gỡ bớt danh mục của chúng rồi gán lại.`;
+}
+
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
 /**
@@ -91,7 +98,7 @@ export function ProductCategoriesTab({
     onSuccess: (r, v) => {
       setMsg({
         ok: true,
-        text: `${v.mode === 'ADD' ? 'Đã gán' : 'Đã gỡ'} "${r.category.name}": ${r.changed} sản phẩm đổi${r.unchanged ? `, ${r.unchanged} không đổi (đã đúng sẵn)` : ''}.`,
+        text: `${v.mode === 'ADD' ? 'Đã gán' : 'Đã gỡ'} "${r.category.name}": ${r.changed} sản phẩm đổi${r.unchanged ? `, ${r.unchanged} không đổi (đã đúng sẵn)` : ''}.${overLimitText(r.overLimit)}`,
       });
       setSelected(new Set());
       void qc.invalidateQueries({ queryKey: LIST_KEY });

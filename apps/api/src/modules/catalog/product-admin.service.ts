@@ -2,7 +2,8 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { PrismaService } from '../../prisma/prisma.service';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 import { storedThumbnailFor } from '../../common/public-image';
-import { CATEGORY_MSG } from './category-tree';
+import { CATEGORY_MSG, CATEGORY_TREE_LOCK } from './category-tree';
+import type { Prisma } from '@prisma/client';
 import { ImageResizeService } from './image-resize.service';
 
 export const PRODUCT_IMAGES_MAX = 8;
@@ -113,28 +114,50 @@ export class ProductAdminService {
       }
       data.isActive = patch.isActive;
     }
-    if (patch.categoryIds !== undefined) {
-      const ids = [...new Set(patch.categoryIds)];
-      if (ids.length > PRODUCT_CATEGORIES_MAX) throw new BadRequestException(`Tối đa ${PRODUCT_CATEGORIES_MAX} danh mục cho một sản phẩm.`);
-      if (ids.length > 0) {
-        const found = await this.prisma.category.count({ where: { id: { in: ids } } });
-        if (found !== ids.length) throw new BadRequestException('Có danh mục không còn tồn tại, tải lại danh sách danh mục.');
-        // Chỉ hỏi các id mới thêm: sản phẩm đã gán vào một danh mục từ trước khi nó có mục con vẫn sửa được các trường khác.
-        const added = ids.filter((c) => !current.categoryIds.includes(c));
-        if (added.length > 0) {
-          const parent = await this.prisma.category.findMany({ where: { id: { in: added }, children: { some: {} } }, select: { name: true }, take: 1 });
-          if (parent[0]) throw new BadRequestException(CATEGORY_MSG.notLeaf(parent[0].name));
-        }
-      }
-      data.categoryIds = ids;
+    let updated;
+    if (patch.categoryIds === undefined) {
+      if (Object.keys(data).filter((k) => k !== 'thumbnail').length === 0) return this.view(current);
+      updated = await this.prisma.product.update({ where: { id }, data, select: SELECT });
+    } else {
+      // Kiểm danh mục và ghi mảng cùng một transaction giữ khoá cây: lệnh xoá danh mục và gán hàng loạt ADD cũng giữ khoá này, nên danh mục vừa kiểm còn sống không bị xoá trước khi ghi.
+      const categoryIds = patch.categoryIds;
+      updated = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${CATEGORY_TREE_LOCK}))`;
+        data.categoryIds = await this.resolveCategoryIds(tx, id, categoryIds);
+        return tx.product.update({ where: { id }, data, select: SELECT });
+      });
     }
-
     const fields = Object.keys(data).filter((k) => k !== 'thumbnail');
-    if (fields.length === 0) return this.view(current);
-    const updated = await this.prisma.product.update({ where: { id }, data, select: SELECT });
     if (data.images !== undefined) this.imageResize.invalidateRegistry();
     this.logger.warn(`Admin ${adminId} sửa sản phẩm ${id} (${current.name}): ${fields.join(', ')}`);
     return this.view(updated);
+  }
+
+  /**
+   * Danh mục sẽ ghi, tính trên bản đang lưu (đọc dưới khoá cây). Id không còn tồn tại mà sản phẩm đã mang từ trước thì bỏ đi
+   * (danh mục bị xoá khi sản phẩm vẫn gắn), nếu không sản phẩm bị 400 mãi vì drawer không vẽ chip để gỡ. Trần chỉ chặn khi số danh mục tăng:
+   * sản phẩm đã quá trần thì admin vẫn bỏ bớt được.
+   */
+  private async resolveCategoryIds(tx: Prisma.TransactionClient, productId: string, raw: string[]): Promise<string[]> {
+    const ids = [...new Set(raw)];
+    const stored = await tx.product.findUnique({ where: { id: productId }, select: { categoryIds: true } });
+    if (!stored) throw new NotFoundException('Không tìm thấy sản phẩm.');
+    const had = new Set(stored.categoryIds);
+    const lookup = [...new Set([...ids, ...stored.categoryIds])];
+    const alive = new Set(lookup.length > 0 ? (await tx.category.findMany({ where: { id: { in: lookup } }, select: { id: true } })).map((c) => c.id) : []);
+    if (ids.some((c) => !alive.has(c) && !had.has(c))) throw new BadRequestException('Có danh mục không còn tồn tại, tải lại danh sách danh mục.');
+    const kept = ids.filter((c) => alive.has(c));
+    const liveBefore = stored.categoryIds.filter((c) => alive.has(c)).length;
+    if (kept.length > PRODUCT_CATEGORIES_MAX && kept.length > liveBefore) {
+      throw new BadRequestException(`Tối đa ${PRODUCT_CATEGORIES_MAX} danh mục cho một sản phẩm.`);
+    }
+    // Chỉ hỏi các id mới thêm: sản phẩm đã gán vào một danh mục từ trước khi nó có mục con vẫn sửa được các trường khác.
+    const added = kept.filter((c) => !had.has(c));
+    if (added.length > 0) {
+      const parent = await tx.category.findMany({ where: { id: { in: added }, children: { some: {} } }, select: { name: true }, take: 1 });
+      if (parent[0]) throw new BadRequestException(CATEGORY_MSG.notLeaf(parent[0].name));
+    }
+    return kept;
   }
 
   private view(p: {

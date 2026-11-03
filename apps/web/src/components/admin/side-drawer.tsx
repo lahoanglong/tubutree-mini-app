@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { safeAreaPad } from '@/lib/safe-area';
@@ -24,9 +24,23 @@ export function SideDrawer({
 }) {
   const titleId = useId();
   const panelRef = useModalA11y<HTMLDivElement>(onClose);
+  // Bôi đen chữ trong ngăn rồi thả chuột ra nền thì click rơi vào nền (tổ tiên chung): chỉ đóng khi cả bấm xuống lẫn thả ra đều ở nền.
+  const pressedOnBackdrop = useRef(false);
 
   return createPortal(
-    <div data-drawer-backdrop onClick={onClose} className="fixed inset-0 z-[90] flex bg-stone-900/40">
+    <div
+      data-drawer-backdrop
+      onMouseDown={(e) => {
+        pressedOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        // detail 0: click không do chuột sinh ra (bàn phím, công cụ hỗ trợ), không có bấm xuống để đối chiếu.
+        const fromBackdrop = pressedOnBackdrop.current || e.detail === 0;
+        pressedOnBackdrop.current = false;
+        if (fromBackdrop) onClose();
+      }}
+      className="fixed inset-0 z-[90] flex bg-stone-900/40"
+    >
       <div
         ref={panelRef}
         role="dialog"

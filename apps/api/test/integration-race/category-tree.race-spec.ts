@@ -7,6 +7,7 @@ import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import type { HomeService } from '../../src/modules/catalog/home.service';
 import { CategoryAdminService } from '../../src/modules/catalog/category-admin.service';
 import { CATEGORY_MAX_CHILDREN, CATEGORY_MAX_ROOTS, CATEGORY_MSG, CATEGORY_TREE_LOCK } from '../../src/modules/catalog/category-tree';
+import { ProductAdminService, PRODUCT_CATEGORIES_MAX } from '../../src/modules/catalog/product-admin.service';
 import { ProductCategoryAdminService } from '../../src/modules/catalog/product-category-admin.service';
 import { PancakeSyncService } from '../../src/modules/integrations/pancake/pancake-sync.service';
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
@@ -23,6 +24,7 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   let prisma: PrismaService;
   let svc: CategoryAdminService;
   let products: ProductCategoryAdminService;
+  let productAdmin: ProductAdminService;
   let capParent: string;
   let orderParent: string;
   let listParent: string;
@@ -39,6 +41,7 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
     const home = { invalidateStatic: jest.fn() } as unknown as HomeService;
     svc = new CategoryAdminService(prisma, catalog, home);
     products = new ProductCategoryAdminService(prisma, catalog, home);
+    productAdmin = new ProductAdminService(prisma, { invalidateRegistry: jest.fn() } as never);
     // Ba cha cho ba ca đầu: ưu tiên gốc sẵn có chưa có con (DB IT đã có danh mục seed, hết chỗ cho gốc mới), thiếu mới tự tạo.
     const hosts = (await prisma.category.findMany({ where: { parentId: null, children: { none: {} } }, orderBy: { id: 'asc' }, take: 3 })).map((r) => r.id);
     while (hosts.length < 3) hosts.push((await svc.create('it', { name: name(`cha-${hosts.length}`) })).id);
@@ -228,6 +231,52 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
     expect(outcome).toBeInstanceOf(BadRequestException);
     expect((outcome as BadRequestException).message).toBe(CATEGORY_MSG.notLeaf(root.name));
     expect(await categoriesOf(p.id)).not.toContain(root.id);
+  });
+
+  it('lưu danh mục ở ngăn kéo chờ khoá cây rồi mới kiểm; danh mục bị xoá trong lúc chờ thì lệnh lưu bị 400, không ghi id ma', async () => {
+    const leaf = await under(listParent, 'la-ngan-keo');
+    const p = await product('ngan-keo');
+    let saving: Promise<unknown> = Promise.resolve();
+    let finishedWhileLocked = true;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${CATEGORY_TREE_LOCK}))`;
+      saving = productAdmin.update('it', p.id, { categoryIds: [leaf.id] }).then(() => 'ok', (e: unknown) => e);
+      finishedWhileLocked = await Promise.race([saving.then(() => true), sleep(400).then(() => false)]);
+      await tx.category.delete({ where: { id: leaf.id } });
+    });
+
+    expect(finishedWhileLocked).toBe(false);
+    expect(await saving).toBeInstanceOf(BadRequestException);
+    expect(await categoriesOf(p.id)).toEqual([]);
+  });
+
+  it('xoá danh mục trống và lưu danh mục đó cho sản phẩm song song (nhiều vòng): sản phẩm không bao giờ mang id danh mục đã xoá', async () => {
+    for (let round = 0; round < 8; round++) {
+      const leaf = await under(listParent, `la-xoa-${round}`);
+      const p = await product(`xoa-${round}`);
+      await Promise.allSettled([svc.remove('it', leaf.id), productAdmin.update('it', p.id, { categoryIds: [leaf.id] })]);
+      const exists = (await prisma.category.count({ where: { id: leaf.id } })) > 0;
+      if (!exists) expect(await categoriesOf(p.id)).not.toContain(leaf.id);
+      if (exists) await products.assign('it', [p.id], leaf.id, 'REMOVE');
+      await prisma.category.deleteMany({ where: { id: leaf.id } });
+    }
+  });
+
+  it('gán hàng loạt tôn trọng trần danh mục mỗi sản phẩm: sản phẩm đủ 10 bị bỏ qua và nêu tên, sản phẩm còn chỗ vẫn được gán', async () => {
+    const leaf = await under(listParent, 'la-tran');
+    const full = await product('tran-day');
+    const room = await product('tran-con');
+    await prisma.product.update({ where: { id: full.id }, data: { categoryIds: Array.from({ length: PRODUCT_CATEGORIES_MAX }, (_, i) => `it-ghost-${tag}-${i}`) } });
+    await prisma.product.update({ where: { id: room.id }, data: { categoryIds: Array.from({ length: PRODUCT_CATEGORIES_MAX - 1 }, (_, i) => `it-ghost-${tag}-${i}`) } });
+
+    const r = await products.assign('it', [full.id, room.id], leaf.id, 'ADD');
+
+    expect(r).toMatchObject({ requested: 2, changed: 1, unchanged: 0, overLimit: [{ id: full.id }] });
+    expect(await categoriesOf(full.id)).toHaveLength(PRODUCT_CATEGORIES_MAX);
+    expect(await categoriesOf(full.id)).not.toContain(leaf.id);
+    expect(await categoriesOf(room.id)).toContain(leaf.id);
+    expect(await categoriesOf(room.id)).toHaveLength(PRODUCT_CATEGORIES_MAX);
   });
 
   it('đồng bộ Pancake: sản phẩm chưa có danh mục được điền theo bản đồ, lần sau không đổi', async () => {
