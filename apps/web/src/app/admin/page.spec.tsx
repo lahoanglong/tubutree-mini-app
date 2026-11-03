@@ -4416,8 +4416,8 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     await flush();
     expect(mocks.createFlashSale).toHaveBeenCalledWith({
       title: 'Đợt tối',
-      startAt: new Date('2026-10-20T20:00').toISOString(),
-      endAt: new Date('2026-10-20T23:45').toISOString(),
+      startAt: '2026-10-20T13:00:00.000Z',
+      endAt: '2026-10-20T16:45:00.000Z',
     });
   });
 
