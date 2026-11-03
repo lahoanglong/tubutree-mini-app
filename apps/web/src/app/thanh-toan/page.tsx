@@ -87,6 +87,8 @@ const addressOptionClass = (selected: boolean) =>
       : 'max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
   }`;
 // Ô ghi chú: dưới md cao một dòng và bo 8px như Input của Mini, từ md nhiều dòng với bo của ô nhập thường.
+// Bộ đếm chỉ hiện khi sắp chạm trần: ô ghi chú giống Mini App (không bộ đếm), nhưng gõ tới 500 mà bị cắt im lặng thì khách không biết vì sao.
+const ORDER_NOTE_COUNT_FROM = 450;
 const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:rounded-control');
 // Mỗi phần của trang thanh toán ở điện thoại là dải trắng phẳng tràn ngang cách nhau 8px (Box p=4 mt=2 của Mini App).
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
@@ -612,13 +614,15 @@ export default function CheckoutPage() {
                 rows={2}
                 placeholder="Ví dụ: giao giờ hành chính…"
                 disabled={place.isPending}
-                aria-describedby="order-note-count"
+                aria-describedby={note.length >= ORDER_NOTE_COUNT_FROM ? 'order-note-count' : undefined}
                 className={`${NOTE_FIELD} mt-1 h-12 resize-none py-2 md:h-auto md:resize-y`}
               />
             </label>
-            <p id="order-note-count" className="mt-1 text-caption text-[color:var(--color-text-secondary)] max-md:sr-only">
-              {note.length}/{ORDER_NOTE_MAX} ký tự
-            </p>
+            {note.length >= ORDER_NOTE_COUNT_FROM && (
+              <p id="order-note-count" className="mt-1 text-caption text-[color:var(--color-text-secondary)]">
+                {note.length}/{ORDER_NOTE_MAX} ký tự
+              </p>
+            )}
           </section>
 
           {pickupReq !== undefined && (

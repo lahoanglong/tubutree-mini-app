@@ -98,7 +98,7 @@ describe('/thanh-toan — ghi chú đơn hàng (BUYERWEB-20)', () => {
     const note = c.querySelector<HTMLTextAreaElement>('textarea')!;
     expect(note.maxLength).toBe(500);
     typeInto(note, '  Gọi trước khi giao, gửi ở bảo vệ  ');
-    expect(c.textContent).toContain('36/500 ký tự');
+    expect(c.textContent).not.toContain('/500 ký tự');
     click(btn(c, 'Đặt hàng')!);
     await flush(8);
     expect(mocks.placeCalls).toHaveLength(1);

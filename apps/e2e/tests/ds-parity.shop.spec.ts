@@ -196,3 +196,78 @@ test.describe('ds-parity: Mini ↔ web ở 375px', () => {
     expect(diff[0]).toContain('"17px"');
   });
 });
+
+test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Điểm Xanh (R-23)', () => {
+  const CHECKOUT_FORM_EXPECTED = {
+    notePlaceholder: 'Ví dụ: giao giờ hành chính…',
+    noteCounterVisible: false,
+    vatLabel: 'Yêu cầu xuất hoá đơn VAT',
+    vatCheckboxOnRight: true,
+    pointsTitle: 'Điểm Xanh',
+    pointsSubtext: 'Dùng 100 điểm, giảm 100đ',
+    consentText: 'Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.',
+    consentAboveButton: true,
+    consentGapToButton: 'gần',
+  };
+
+  test('ghi chú một dòng không bộ đếm, ô VAT bên phải, điểm Xanh cùng chữ, câu đồng ý sát nút Đặt hàng', async ({ page, api }, testInfo) => {
+    const side = sideOf(testInfo.project.name);
+    mockCheckout(api);
+    if (side === 'web') {
+      await mockWebCheckoutExtras(api);
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem('tubu_web_session', '1');
+        } catch {
+          // không có localStorage: trang vẫn mở, chỉ không khôi phục phiên
+        }
+      });
+    }
+    await page.goto(side === 'web' ? '/thanh-toan' : '/checkout');
+    await expect(page.locator('[data-ds="checkout-summary-total"]').first()).toBeVisible({ timeout: 20_000 });
+    await page.evaluate(() => document.fonts.ready);
+
+    const note = page.getByPlaceholder(/Ví dụ: giao giờ hành chính/);
+    await note.scrollIntoViewIfNeeded();
+    const counter = page.getByText(/^\d+\/500 ký tự$/);
+    const noteCounterVisible = (await counter.count()) > 0 && (await counter.first().isVisible()) && ((await counter.first().boundingBox())?.width ?? 0) > 1;
+
+    const vat = page.getByText('Yêu cầu xuất hoá đơn VAT', { exact: true });
+    await vat.scrollIntoViewIfNeeded();
+    const vatBox = (await vat.boundingBox())!;
+    const vatRow = vat.locator('xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or @role="checkbox"][1]');
+    const vatRowBox = (await vatRow.boundingBox())!;
+    const vatCheckboxOnRight = vatBox.x + vatBox.width / 2 < vatRowBox.x + vatRowBox.width / 2 && vatBox.x < 375 / 2;
+
+    const pointsTitle = page.getByText('Điểm Xanh', { exact: true }).first();
+    await pointsTitle.scrollIntoViewIfNeeded();
+    const pointsBlockText = (await pointsTitle.locator('xpath=..').innerText()).replace(/\s+/g, ' ').trim();
+    const pointsSubtext = pointsBlockText.replace(/^Điểm Xanh\s*/, '');
+
+    const consent = page.getByTestId('order-consent').first();
+    await consent.scrollIntoViewIfNeeded();
+    await consent.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const consentText = (await consent.innerText()).replace(/\s+/g, ' ').trim();
+    const consentBox = (await consent.boundingBox())!;
+    const button = page.getByRole('button', { name: /^Đặt hàng/ }).last();
+    const buttonBox = (await button.boundingBox())!;
+    const gap = buttonBox.y - (consentBox.y + consentBox.height);
+    if (process.env.PARITY_SHOT_DIR) await page.screenshot({ path: `${process.env.PARITY_SHOT_DIR}/checkout-form-${side}375.png` });
+
+    const got = {
+      notePlaceholder: await note.getAttribute('placeholder'),
+      noteCounterVisible,
+      vatLabel: (await vat.innerText()).trim(),
+      vatCheckboxOnRight,
+      pointsTitle: (await pointsTitle.innerText()).trim(),
+      pointsSubtext,
+      consentText,
+      consentAboveButton: gap >= 0,
+      consentGapToButton: gap <= 120 ? 'gần' : `xa ${Math.round(gap)}px`,
+    };
+    const file = testInfo.outputPath(`checkout-form-${side}.json`);
+    writeFileSync(file, `${JSON.stringify(got, null, 2)}\n`);
+    await testInfo.attach(`checkout-form-${side}`, { path: file, contentType: 'application/json' });
+    expect(got).toEqual(CHECKOUT_FORM_EXPECTED);
+  });
+});
