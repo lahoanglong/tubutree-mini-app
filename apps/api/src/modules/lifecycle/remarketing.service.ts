@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -60,7 +61,10 @@ export class RemarketingService {
           updatedAt: { lte: new Date(now - minH * 3600e3), gte: new Date(now - maxH * 3600e3) },
           // Giỏ chỉ còn hàng ngừng bán: nhắc thì khách mở giỏ chỉ thấy "đã ngừng bán".
           items: { some: { variation: SELLABLE_VARIATION_WHERE } },
+          // Lọc giỏ đã nhắc ngay trong truy vấn: lọc sau `take` thì 200 giỏ đã nhắc (còn nằm trong cửa sổ ~66 giờ vì claim đặt updatedAt) chiếm hết lô.
+          OR: [{ abandonRemindedAt: null }, { abandonRemindedAt: { lt: this.prisma.cart.fields.updatedAt } }],
         },
+        orderBy: { updatedAt: 'asc' },
         include: { items: { where: { variation: SELLABLE_VARIATION_WHERE }, include: { variation: { include: { product: true } } } } },
         take: 200,
       });
@@ -139,7 +143,10 @@ export class RemarketingService {
           usedCount: 0,
           endAt: { gte: now, lte: soon },
           remindedAt: null,
+          // Thiếu scopeMeta.userId thì vòng lặp bỏ qua nhưng vẫn chiếm chỗ trong lô 200.
+          scopeMeta: { path: ['userId'], not: Prisma.AnyNull },
         },
+        orderBy: { endAt: 'asc' },
         take: 200,
       });
 

@@ -264,6 +264,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
   'checkout.calculating': 'Đang tính…',
   'checkout.priceChangedHint': 'Giá ưu đãi đã thay đổi. Bạn xem lại giỏ hàng trước khi đặt nhé.',
+  'checkout.taxCodeInvalid': 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.',
   'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',
   'checkout.moreLines': 'Xem thêm {n} sản phẩm',
   'checkout.fewerLines': 'Thu gọn',
@@ -354,11 +355,14 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.loginForCombo': 'Đăng nhập để thêm combo vào giỏ nhé',
   'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
   'shop.tierBadge': 'CTV {name}',
+  'shop.tierHint': 'Huy hiệu chưa tải',
+  'shop.tierHintNext': 'Huy hiệu từ bậc {name}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
 export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
-  { pattern: /Nhãn hàng|theo dõi nhãn|nhãn này|Cùng nhà/i, use: 'Thương hiệu' },
+  // "nhãn" đứng một mình chỉ hợp lệ khi là nhãn dán/tem trên kiện hàng ("trên nhãn", "nhãn dán", "tem nhãn", "quét nhãn", "nhãn vận đơn", "hoa nhãn", "quả nhãn") hoặc "nhãn hiệu/nhãn mác" của văn bản pháp lý; còn lại nghĩa thương hiệu.
+  { pattern: /Nhãn hàng|theo dõi nhãn|nhãn này|Cùng nhà|(?<!(?<![\p{L}])(?:tem|trên|dán|long|quét|in|hoa|quả|trái|kỹ) )\bnhãn\b(?! (?:dán|hiệu|mác|lồng|sấy|vận|sản phẩm|giao hàng))/iu, use: 'Thương hiệu' },
   { pattern: /\bTop\b/, use: 'Bán chạy nhất' },
   { pattern: /Freeship/i, use: 'Miễn phí giao hàng' },
   { pattern: /voucher/i, use: 'Mã giảm giá' },

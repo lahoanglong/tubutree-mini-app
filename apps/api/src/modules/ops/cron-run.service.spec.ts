@@ -182,6 +182,10 @@ describe('describeCronError', () => {
     expect(describeCronError({ password: 'p' })).toBe('NonError: object');
     expect(describeCronError('chuỗi bí mật')).toBe('NonError: string');
   });
+  it('lỗi Prisma: câu lỗi thật thay cho dòng "Invalid ... invocation"', () => {
+    const err = new Error('\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column "id" does not exist`');
+    expect(describeCronError(err)).toBe('Error: Raw query failed. Code: `42703`. Message: `column "id" does not exist`');
+  });
   it('lớp lỗi tự đặt tên', () => {
     class BoomError extends Error {}
     expect(describeCronError(new BoomError('m'))).toBe('BoomError: m');

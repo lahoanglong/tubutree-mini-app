@@ -191,7 +191,7 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     await sheet.getByRole('button', { name: 'Lý do khác' }).click();
     await detail.fill('  hư ');
     await submit.click();
-    await expect(sheet.getByRole('alert')).toHaveText('Mô tả lý do (tối thiểu 5 ký tự).');
+    await expect(sheet.getByRole('alert')).toHaveText('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
     expect(api.callsTo('POST', '/orders/:code/return-request')).toHaveLength(0);
 
     await detail.fill('  Chai bị nứt, rò rỉ nước giặt  ');

@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { debitCommissionFromWallet, walletShareOfCommission } from './commission-wallet-reversal';
+import { debitCommissionFromWallet, lockCommissionsAndWallets, walletShareOfCommission } from './commission-wallet-reversal';
 import { applyWalletDelta } from './wallet-ledger.service';
 
 jest.mock('./wallet-ledger.service', () => ({
@@ -158,5 +158,23 @@ describe('debitCommissionFromWallet', () => {
     const res = await debitCommissionFromWallet(tx, input());
     expect(res).toEqual({ debited: false, reason: 'ANONYMIZED' });
     expect(ledger).not.toHaveBeenCalled();
+  });
+});
+
+describe('lockCommissionsAndWallets: khoá user theo thứ tự id', () => {
+  const run = async (rows: { affiliateUserId: string; status: string; payoutBatchId: string | null }[]) => {
+    const queryRaw = jest.fn().mockResolvedValueOnce(rows).mockResolvedValue([]);
+    await lockCommissionsAndWallets({ $queryRaw: queryRaw } as unknown as Prisma.TransactionClient, { id: 'o1', userId: 'userB' });
+    return queryRaw;
+  };
+
+  it('hoa hồng APPROVED chưa vào Ví vẫn khoá CTV cùng khách theo thứ tự id (revokeLostCtvMilestones khoá dòng CTV)', async () => {
+    const q = await run([{ affiliateUserId: 'userA', status: 'APPROVED', payoutBatchId: null }]);
+    expect(q).toHaveBeenCalledTimes(2);
+  });
+
+  it('hoa hồng PENDING chưa chốt: không cần khoá user', async () => {
+    const q = await run([{ affiliateUserId: 'userA', status: 'PENDING', payoutBatchId: null }]);
+    expect(q).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,7 +10,7 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { AllowStaff, COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
-import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
+import { FEED_POST_IMAGE, IsUploadedImage } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
@@ -26,7 +26,7 @@ export class CreatePostDto {
   @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsString() @MaxLength(160) title?: string;
   @IsString() @MinLength(1) @MaxLength(5000) body!: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(FEED_POST_IMAGE, { each: true }) images?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(200, { each: true }) productSlugs?: string[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MaxLength(100, { each: true }) tagSlugs?: string[];
   @IsOptional() @IsString() eventId?: string;
@@ -34,7 +34,7 @@ export class CreatePostDto {
 export class EditPostDto {
   @OptionalNotNull() @IsString() @MaxLength(160) title?: string;
   @OptionalNotNull() @IsString() @MaxLength(5000) body?: string;
-  @OptionalNotNull() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true }) images?: string[];
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(MAX_POST_IMAGES) @IsUploadedImage(FEED_POST_IMAGE, { each: true }) images?: string[];
 }
 class CommentDto {
   @IsString() @MinLength(1) @MaxLength(500) body!: string;

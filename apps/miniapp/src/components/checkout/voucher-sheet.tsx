@@ -3,6 +3,7 @@ import { Input } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { couponNotAppliedNotice } from '@tubutree/app-core/commerce/coupon-notice';
 import { getCoupons } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
@@ -96,7 +97,7 @@ export function VoucherSheet({
         heldOnly
           ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }
           : previewBlocked
-            ? { text: `Mã chưa được áp dụng cho đơn này: ${previewBlocked}`, type: 'warning', duration: 5000 }
+            ? { text: couponNotAppliedNotice(previewBlocked), type: 'warning', duration: 5000 }
             : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },
       );
       onCouponApplied?.();

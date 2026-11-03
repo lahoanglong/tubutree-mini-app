@@ -113,6 +113,7 @@ function mockAdmin(api: MockApi, tree: AdminCategoryList = baseTree()) {
       { key: 'productsMissingImage', count: countOf('missingImage=1') },
     ],
   });
+  api.get('/admin/ops/health', { generatedAt: '2026-11-01T03:00:00.000Z', problems: [], cronJobs: [] });
   api.get('/admin/dashboard/today', { orders: { today: 5, yesterday: 3, week: 20 }, revenue: { today: 1500000, yesterday: 2000000, week: 9000000 }, newUsers: { today: 2, yesterday: 2, week: 11 } });
   api.get('/admin/analytics/retention-daily', []);
   api.get('/admin/product-categories/products', ({ call }) => productsPage(call.query));

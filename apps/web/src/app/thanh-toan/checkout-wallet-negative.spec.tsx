@@ -48,7 +48,7 @@ describe('/thanh-toan — Ví đang âm', () => {
     const r = await mount();
     expect(r.container.textContent).toContain('Ví Tubu (-50.000đ)');
     expect(walletRadio(r)?.disabled).toBe(true);
-    expect(r.container.querySelector('#pay-blocked-WALLET')?.textContent).toMatch(/Ví đang âm 50\.000đ do thu hồi hoa hồng đơn trả hàng/);
+    expect(r.container.querySelector('#pay-blocked-WALLET')?.textContent).toMatch(/Số dư Ví Tubu đang âm 50\.000đ do thu hồi hoa hồng đơn trả hàng/);
   });
 
   it('Ví 0đ: không hiện dòng Ví (như cũ)', async () => {

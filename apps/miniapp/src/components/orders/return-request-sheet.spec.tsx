@@ -85,7 +85,7 @@ describe('ReturnRequestSheet (D3: trả theo dòng và số lượng)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Xịt khoáng Chai 100ml' }));
     fireEvent.click(screen.getByRole('button', { name: 'Lý do khác' }));
     fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mô tả lý do (tối thiểu 5 ký tự).');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
     expect(mocks.requestReturn).not.toHaveBeenCalled();
   });
 

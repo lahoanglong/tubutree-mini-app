@@ -44,6 +44,11 @@
         RemoteIPTrustedProxy 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
     </IfModule>
 
+    # Trần thân request ở rìa: 10 MB bằng trần lớn nhất của API (ảnh base64 đổi/trả, 6 ảnh × 1,5 triệu ký tự). API còn trần
+    # chặt hơn theo từng nhóm route (apps/api/src/common/body-limits.ts: 256 KB mặc định); trần này chỉ giữ Apache không
+    # chuyển cả thân khổng lồ vào Node. Vượt thì Apache trả 413 trang HTML.
+    LimitRequestBody 10485760
+
     ProxyPreserveHost On
     ProxyRequests Off
     RequestHeader set X-Forwarded-Proto "https"

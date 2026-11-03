@@ -364,7 +364,7 @@ function Dashboard() {
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
   const { affiliatePitWithhold: heroPit } = usePublicConfig();
-  const needsTaxId = needsTaxIdForAutoTransfer(head.big, heroPit, meQ.data?.personalTaxId);
+  const needsTaxId = needsTaxIdForAutoTransfer(head.big, heroPit, meQ.data?.personalTaxId, d?.withdrawTaxPreview);
   const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
   const copyWithToast = (text: string, okText: string, failText = 'Không sao chép được — hãy chọn và chép thủ công.') =>
     void copyText(text).then((ok) => openSnackbar(ok ? { text: okText, type: 'success' } : { text: failText, type: 'error' }));

@@ -19,11 +19,12 @@ interface SeasonPassTierConfig {
   premium: SeasonPassReward;
 }
 type Track = 'free' | 'premium';
+const PREMIUM_NEEDS_SUBSCRIPTION_MSG = 'Cần có gói định kỳ đã giao ít nhất một đơn để mở phần thưởng Cao cấp.';
 
 /**
  * Vườn Xanh — Season Pass (chặng mùa). Ladder bậc tích XP theo điểm danh mỗi ngày, gắn với
  * mùa (Season) đang diễn ra. Mỗi bậc có phần thưởng free + premium; premium mở khi user có gói
- * đăng ký định kỳ ACTIVE. Nhận thưởng idempotent/atomic (guard nhận-trùng trong $transaction).
+ * đăng ký định kỳ ACTIVE đã giao ít nhất một đơn. Nhận thưởng idempotent/atomic (guard nhận-trùng trong $transaction).
  * KHÔNG phụ thuộc GameEconomyService (tránh circular DI) — addXp là side-effect an toàn.
  */
 @Injectable()
@@ -35,6 +36,20 @@ export class SeasonPassService {
     private readonly config: SystemConfigService,
     private readonly rewards: RewardPointsService,
   ) {}
+
+  /**
+   * Cao cấp chỉ mở khi khách có gói định kỳ ACTIVE và gói đó đã có ít nhất một đơn DELIVERED: gói hẹn ngày chưa ra đơn, hay gói
+   * có đơn đầu bị huỷ, đều chưa tính (tạo gói rồi huỷ ngay sau khi nhận là cách lấy thưởng không mua gì).
+   */
+  private async hasPremiumSubscription(db: Pick<PrismaService, 'subscription' | 'order'>, userId: string): Promise<boolean> {
+    // Order.subscriptionId là cột chuỗi, không có quan hệ Prisma với Subscription.
+    const subs = await db.subscription.findMany({ where: { userId, status: 'ACTIVE' }, select: { id: true } });
+    if (subs.length === 0) return false;
+    const delivered = await db.order.count({
+      where: { userId, subscriptionId: { in: subs.map((x) => x.id) }, status: 'DELIVERED' },
+    });
+    return delivered > 0;
+  }
 
   /** Mùa đang diễn ra theo cửa sổ thời gian (khớp GameSeasonService.getActiveSeason). */
   private activeSeason() {
@@ -77,7 +92,7 @@ export class SeasonPassService {
     const xp = pass?.xp ?? 0;
     const claimedFree = pass?.claimedFree ?? [];
     const claimedPremium = pass?.claimedPremium ?? [];
-    const premiumEligible = (await this.prisma.subscription.count({ where: { userId, status: 'ACTIVE' } })) > 0;
+    const premiumEligible = await this.hasPremiumSubscription(this.prisma, userId);
     const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
     const pointsBlocked = pointsBlockedFor(owner);
 
@@ -135,11 +150,6 @@ export class SeasonPassService {
     const claimedArr = (track === 'free' ? pass?.claimedFree : pass?.claimedPremium) ?? [];
     if (claimedArr.includes(tier)) throw new BadRequestException('Đã nhận rồi.');
 
-    if (track === 'premium') {
-      const premiumEligible = (await this.prisma.subscription.count({ where: { userId, status: 'ACTIVE' } })) > 0;
-      if (!premiumEligible) throw new BadRequestException('Cần đăng ký định kỳ để mở Premium.');
-    }
-
     // Config đọc TRƯỚC tx: cache nguội mà đọc trong tx thì mỗi tx giữ 1 kết nối và xin thêm 1 nữa (cạn pool).
     const [tankCap, expiresAt, ecoImpact] = await Promise.all([
       reward.type === 'SEEDS' ? this.config.get<number>('game.tank_capacity', 500) : Promise.resolve(0),
@@ -148,6 +158,9 @@ export class SeasonPassService {
     ]);
 
     await this.prisma.$transaction(async (tx) => {
+      if (track === 'premium' && !(await this.hasPremiumSubscription(tx, userId))) {
+        throw new BadRequestException(PREMIUM_NEEDS_SUBSCRIPTION_MSG);
+      }
       // Guard double-claim ATOMIC bằng updateMany + filter mảng "chưa có tier" (Postgres list
       // filter `has`) — thay cho đọc-rồi-kiểm-tra-rồi-push cũ: 2 request claim() song song đều
       // có thể đọc mảng CHƯA có tier trước khi request đầu commit → array_append áp dụng trên

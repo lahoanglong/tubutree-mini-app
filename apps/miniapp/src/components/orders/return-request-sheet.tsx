@@ -19,12 +19,12 @@ import {
   canRefundToBank,
   destinationBody,
   remainingByLine,
-  returnFormError,
   type RefundBankInput,
   type RefundMethodChoice,
   type ReturnLineState,
   type ReturnReasonCode,
 } from '../../utils/refund-rules';
+import { returnFormError } from '../../utils/refund-form-rules';
 
 interface Props {
   open: boolean;
@@ -220,7 +220,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             maxLength={500}
-            placeholder={reasonCode === 'OTHER' ? 'Mô tả lý do (tối thiểu 5 ký tự)…' : 'Mô tả thêm (không bắt buộc)…'}
+            placeholder={reasonCode === 'OTHER' ? 'Mô tả lý do (ít nhất 5 ký tự)…' : 'Mô tả thêm (không bắt buộc)…'}
             rows={3}
             style={{
               width: '100%',

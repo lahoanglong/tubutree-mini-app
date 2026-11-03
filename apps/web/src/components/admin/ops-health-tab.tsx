@@ -51,6 +51,13 @@ function cronOutcomeLabel(j: OpsCronJob): string {
   return 'OK';
 }
 
+/** Tên dễ đọc của việc nền; chưa có trong bảng thì giữ tên kỹ thuật. */
+const cronTitle = (job: string) => CRON_JOB_LABELS[job] ?? job;
+
+/** Việc nền đang lỗi: lượt gần nhất lỗi (consecutiveFailures > 0). Banner xanh chỉ hiện khi không còn việc nào như vậy. */
+export const failingCronJobs = (h: Pick<OpsHealth, 'cronJobs'>): OpsCronJob[] =>
+  (h.cronJobs ?? []).filter((j) => j.consecutiveFailures > 0).sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.job.localeCompare(b.job));
+
 const OPS_HEALTH_KEY = ['admin-ops-health'] as const;
 
 const ago = (iso: string | null) => (iso ? formatDateTime(iso) : 'chưa có');
@@ -488,8 +495,28 @@ function HealthBody({
       </button>
     ) : null;
   const gomdonLoginError = newer(h.gomdon.connection?.lastErrorAt, h.gomdon.connection?.lastOkAt);
+  const failingCrons = failingCronJobs(h);
+  const znsProblem = h.problems.some((p) => p.key === 'zns.failed');
   return (
     <>
+      {failingCrons.length > 0 && (
+        <div role="alert" aria-label="Việc nền đang lỗi" className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
+          <p className="flex items-center gap-1.5 font-semibold">
+            <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0" />
+            {failingCrons.length} việc tự chạy nền đang lỗi
+          </p>
+          <ul className="mt-1 space-y-1.5">
+            {failingCrons.map((j) => (
+              <li key={j.job} className="min-w-0">
+                <b className="block">{cronTitle(j.job)}</b>
+                <span className="block break-words text-xs">
+                  {j.lastError ?? cronOutcomeLabel(j)} · {formatDateTime(j.lastErrorAt ?? j.lastFinishedAt)} · lỗi liên tiếp {j.consecutiveFailures}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {h.problems.length > 0 ? (
         <div role="alert" className="rounded-card border border-danger-fg bg-danger-bg px-4 py-3 text-sm text-danger-fg">
           <p className="flex items-center gap-1.5 font-semibold">
@@ -502,7 +529,7 @@ function HealthBody({
             ))}
           </ul>
         </div>
-      ) : (
+      ) : failingCrons.length > 0 ? null : (
         <p className="flex items-center gap-2 rounded-card border border-success-fg bg-success-bg px-4 py-3 text-sm text-success-fg">
           <CircleCheck aria-hidden="true" className="h-4 w-4 shrink-0" />
           Mọi chỉ số trong ngưỡng · kiểm lúc {formatDateTime(h.generatedAt)}
@@ -557,6 +584,14 @@ function HealthBody({
           <Row label="Báo động chưa đóng" value={h.gomdon.openAlerts} warn={h.gomdon.openAlerts > 0} />
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
         </Card>
+        {h.zns && (
+          <Card
+            title="Tin ZNS"
+            after={h.zns.topError && <p className="mt-1 break-words text-xs text-stone-500">Lỗi gặp nhiều nhất: {h.zns.topError}</p>}
+          >
+            <Row label="Tin gửi hỏng trong 24 giờ" value={h.zns.failed24h} warn={znsProblem} />
+          </Card>
+        )}
         {h.alertChannels?.email && <EmailChannelCard email={h.alertChannels.email} canTest={canTestEmail} />}
         {h.alertChannels?.webhook && <WebhookChannelCard webhook={h.alertChannels.webhook} />}
       </div>
@@ -598,7 +633,22 @@ function HealthBody({
       {h.cronJobs && h.cronJobs.length > 0 && (
         <section aria-label="Tác vụ nền" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
           <h3 className="font-display text-sm font-semibold text-stone-900">Việc tự chạy nền</h3>
-          <ScrollRegion label="Bảng tác vụ nền" className="mt-2">
+          <ul aria-label="Việc tự chạy nền (khổ hẹp)" data-testid="cron-cards" className="mt-2 divide-y divide-stone-100 text-sm sm:hidden">
+            {[...h.cronJobs]
+              .sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.job.localeCompare(b.job))
+              .map((j) => (
+                <li key={j.job} className="py-2">
+                  <b className="block text-stone-900">{cronTitle(j.job)}</b>
+                  <span className={`block text-xs ${j.lastOutcome === 'ERRORS' || j.lastOutcome === 'THREW' ? 'text-danger-fg' : 'text-stone-600'}`}>{cronOutcomeLabel(j)}</span>
+                  {j.lastError && (
+                    <span className={`block break-words text-xs ${j.consecutiveFailures > 0 ? 'text-danger-fg' : 'text-stone-500'}`}>
+                      {formatDateTime(j.lastErrorAt ?? j.lastFinishedAt)} · {j.lastError}
+                    </span>
+                  )}
+                </li>
+              ))}
+          </ul>
+          <ScrollRegion label="Bảng tác vụ nền" className="mt-2 max-sm:hidden">
             <table className="w-full text-left text-sm">
               <thead className="bg-stone-50 text-xs text-stone-500">
                 <tr>
