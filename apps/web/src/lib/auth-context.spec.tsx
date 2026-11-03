@@ -160,6 +160,7 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 3 } });
     markResume();
     markCtvTouched('u1', 'AN123');
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa chén']));
     function LogoutProbe() {
       const { logout } = useAuth();
       return (
@@ -190,6 +191,7 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(loadDraft()).toBeNull();
     expect(peekResume()).toBe(false);
     expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    expect(localStorage.getItem('tubu_recent_searches')).toBeNull();
     vi.unstubAllGlobals();
   });
 });

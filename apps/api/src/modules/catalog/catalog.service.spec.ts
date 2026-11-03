@@ -114,6 +114,19 @@ describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
   });
 });
 
+describe('CatalogService.suggest — theo thứ tự liên quan (KHAMPHA-02)', () => {
+  it('lấy 8 id đầu của textMatchSql và trả đúng thứ tự đó', async () => {
+    const ids = Array.from({ length: 12 }, (_, i) => ({ id: `p${i}` }));
+    const row = (id: string) => ({ id, slug: id, name: id, thumbnail: null, basePrice: 1, salePrice: null, variations: [] });
+    const findMany = jest.fn(async () => [row('p2'), row('p0'), row('p1')]);
+    const prisma = { product: { findMany }, $queryRaw: jest.fn().mockResolvedValue(ids) } as unknown as PrismaService;
+    const out = await new CatalogService(prisma).suggest('nuoc chen');
+    expect(out.map((r) => r.slug)).toEqual(['p0', 'p1', 'p2']);
+    const where = (findMany.mock.calls[0] as unknown as [{ where: { AND: { id: { in: string[] } }[] } }])[0].where;
+    expect(where.AND[0]!.id.in).toEqual(ids.slice(0, 8).map((r) => r.id));
+  });
+});
+
 describe('CatalogService.getBySlug — chỉ hiện SP APPROVED (P0 A2-03=A5-06=A6-04)', () => {
   const product = (approvalStatus: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED') => ({
     id: 'p1',
@@ -772,6 +785,31 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(LIKE_ESCAPE).toBe('!');
     expect(sql).toContain("ESCAPE '!'");
     expect(values).toEqual(expect.arrayContaining(['%nuoc_rua%', 'nước rửa']));
+  });
+
+  it('nhiều từ: mỗi từ một điều kiện LIKE nối AND (không cần liền, không cần đúng thứ tự), cả cụm và đầu tên chỉ để xếp hạng', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const { svc } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: 'Fuwa3e nước' });
+    const { sql, values } = sqlOf(queryRaw);
+    expect(sql).toMatch(/WHERE[^]*"nameSearch" LIKE \? ESCAPE '!' AND p\."nameSearch" LIKE \? ESCAPE '!'[^]*ORDER BY/);
+    expect(values).toEqual(expect.arrayContaining(['%fuwa3e%', '%nuoc%', 'fuwa3e_nuoc%', '%fuwa3e_nuoc%']));
+    expect(sql).toMatch(/ORDER BY \(p\."nameSearch" LIKE \?[^]*\) DESC,\s*\(p\."nameSearch" LIKE \?[^]*\) DESC,\s*p\."isFeatured" DESC/);
+  });
+
+  it('tab Liên quan (không sort) khi có q: thứ tự trang theo thứ tự SQL đã xếp, không theo isFeatured', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p3' }, { id: 'p1' }, { id: 'p2' }]);
+    const findMany = jest.fn(async (args: { select?: unknown; where: { AND?: { id?: { in: string[] } }[] } }) =>
+      args.select ? [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] : [card('p1'), card('p2'), card('p3')],
+    );
+    const prisma = {
+      product: { findMany, count: jest.fn() },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      $queryRaw: queryRaw,
+    } as unknown as PrismaService;
+    const out = await new CatalogService(prisma).list({ page: 1, limit: 20, q: 'nuoc chen' });
+    expect(out.data.map((c: { id: string }) => c.id)).toEqual(['p3', 'p1', 'p2']);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {

@@ -18,6 +18,7 @@ import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
 import { clearCtvTouched } from './storefront-context';
 import { readFirstTouchCookie } from './entry-source';
+import { clearRecentSearches } from './recent-searches';
 import { browserStorage } from './recently-viewed';
 
 export interface WebUser {
@@ -234,6 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearRecentCustomers();
     clearWizardStorage();
     clearCtvTouched();
+    clearRecentSearches();
   }, [qc]);
 
   const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => {

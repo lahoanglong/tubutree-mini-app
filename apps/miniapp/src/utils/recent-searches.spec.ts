@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RECENT_SEARCHES_KEY, clearRecentSearches, pushRecentSearch, readRecentSearches } from './recent-searches';
+import { RECENT_SEARCHES_KEY, RECENT_SEARCHES_OWNER_KEY, clearRecentSearches, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
 import type { StorageLike } from './recently-viewed';
 
 function memoryStorage(): StorageLike & { data: Record<string, string> } {
@@ -72,5 +72,46 @@ describe('recent-searches (giữ khoá cũ tubu_recent_searches)', () => {
     expect(readRecentSearches(null)).toEqual([]);
     expect(pushRecentSearch('nước rửa', null)).toEqual(['nước rửa']);
     expect(() => clearRecentSearches(null)).not.toThrow();
+  });
+});
+
+describe('scopeRecentSearchesToUser (KHAMPHA-15)', () => {
+  it('chưa biết ai (đang khôi phục phiên): không động vào gì', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser(undefined, s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBeUndefined();
+  });
+
+  it('lịch sử cũ chưa có chủ được tài khoản đầu tiên nhận, không xoá', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser('u1', s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('u1');
+  });
+
+  it('cùng tài khoản mở lại: giữ', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser('u1', s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+  });
+
+  it('đổi tài khoản trên cùng máy: xoá lịch sử của người trước, chủ mới ghi nhận', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser('u2', s)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('u2');
+  });
+
+  it('storage vắng hoặc ném: không ném', () => {
+    expect(scopeRecentSearchesToUser('u1', null)).toBe(false);
+    const bad = { getItem: () => { throw new Error('x'); }, setItem: () => undefined, removeItem: () => undefined };
+    expect(scopeRecentSearchesToUser('u1', bad)).toBe(false);
   });
 });

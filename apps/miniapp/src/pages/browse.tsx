@@ -28,13 +28,14 @@ import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-ca
 import { useNavigationType } from '../hooks/use-navigation-type';
 import { useScrollRestoration } from '../hooks/use-scroll-restoration';
 import { useSearchState } from '../hooks/use-search-state';
+import { useAuthStore } from '../store/auth';
 import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
-import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '../utils/recent-searches';
+import { clearRecentSearches, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from '../utils/recent-searches';
 import { uniqueById } from '../utils/unique-by-id';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
-  CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseHub, isBrowseRoot,
+  CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, MAX_QUERY_LENGTH, PAGE_LIMIT, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseHub, isBrowseRoot,
   serializeSearchState, toCatalogQuery, withListMode, type FilterDraft, type SearchState, type TitleScope,
 } from '../utils/search-state';
 
@@ -111,7 +112,14 @@ export default function BrowsePage() {
   }
   const [editing, setEditing] = useState(focusSearch);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [recent, setRecent] = useState<string[]>(() => readRecentSearches());
+  const userId = useAuthStore((s) => s.user?.id);
+  const [recent, setRecent] = useState<string[]>(() => {
+    scopeRecentSearchesToUser(userId);
+    return readRecentSearches();
+  });
+  useEffect(() => {
+    if (scopeRecentSearchesToUser(userId)) setRecent(readRecentSearches());
+  }, [userId]);
 
   // Ô tìm ở Trang chủ chỉ là vỏ dẫn sang đây (?focus=search): focus thẳng ô thật rồi bỏ cờ khỏi URL
   // — quay lại từ PDP sẽ không bật bàn phím lần nữa (plan 4b Ruling 7).
@@ -260,6 +268,7 @@ export default function BrowsePage() {
           label={vi.browse.searchLabel}
           clearLabel={vi.browse.clearSearch}
           placeholder={vi.browse.searchPlaceholder}
+          maxLength={MAX_QUERY_LENGTH}
         />
         {editing ? (
           <Button

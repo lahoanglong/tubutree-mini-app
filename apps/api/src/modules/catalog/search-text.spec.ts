@@ -6,6 +6,9 @@ import {
   escapePrismaLike,
   foldVietnamese,
   likeContainsPattern,
+  likePrefixPattern,
+  likeTermPatterns,
+  MAX_SEARCH_TERMS,
   SQL_WHITESPACE_RE,
 } from './search-text';
 
@@ -129,5 +132,21 @@ describe('SQL_WHITESPACE_RE', () => {
     }
     expect(SQL_WHITESPACE_RE.startsWith('[[:space:]')).toBe(true);
     expect(SQL_WHITESPACE_RE.endsWith(']+')).toBe(true);
+  });
+});
+
+describe('likeTermPatterns / likePrefixPattern (KHAMPHA-02: mỗi từ một điều kiện)', () => {
+  it('tách từ, gấp dấu, escape %/_, bỏ từ trùng', () => {
+    expect(likeTermPatterns('  Nước  chén ')).toEqual(['%nuoc%', '%chen%']);
+    expect(likeTermPatterns('50% 50% a_b')).toEqual(['%50!%%', '%a!_b%']);
+    expect(likeTermPatterns('Fuwa3e nước')).toEqual(['%fuwa3e%', '%nuoc%']);
+  });
+
+  it('trần số từ', () => {
+    expect(likeTermPatterns('a b c d e f g h')).toHaveLength(MAX_SEARCH_TERMS);
+  });
+
+  it('mẫu đầu tên', () => {
+    expect(likePrefixPattern('Nước rửa')).toBe('nuoc_rua%');
   });
 });
