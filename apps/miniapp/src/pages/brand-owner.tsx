@@ -35,7 +35,7 @@ import { Field } from '../components/ui/form';
 import { Text, Heading } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
 import { haptic } from '../utils/haptic';
-import { promoDateRangeInvalid, promoFormDates, promoWindow } from '../utils/brand-owner-promo';
+import { promoDateRangeError, promoFormDates, promoWindow } from '../utils/brand-owner-promo';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BrandSalesTab } from './brand-owner-sales';
@@ -126,7 +126,8 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   // báo lỗi (an toàn hơn tự sửa hộ dữ liệu người dùng nhập). Khi CHỈ có endAt (startAt để trống),
   // promoIso() mặc định startMs = Date.now() nên phải so endAt với hiện tại — nếu không, endAt là
   // ngày quá khứ vẫn lọt qua vì !!promo.startAt là false, tạo ra khuyến mãi chết ngay khi lưu.
-  const dateRangeInvalid = promoDateRangeInvalid(promo);
+  const dateRangeError = promoDateRangeError(promo);
+  const dateRangeInvalid = dateRangeError !== null;
   // startAt/endAt (yyyy-mm-dd từ input date) → ISO theo giờ VN; endAt mặc định = startAt + 30 ngày (xem vnPromoWindowIso).
   const promoIso = () => ({
     title: promo.title.trim(),
@@ -287,8 +288,8 @@ function Editor({ brand }: { brand: OwnedBrand }) {
                   />
                 </label>
               </div>
-              {dateRangeInvalid && (
-                <Text variant="caption" tone="danger" as="div">Ngày kết thúc phải sau ngày bắt đầu.</Text>
+              {dateRangeError && (
+                <Text variant="caption" tone="danger" as="div">{dateRangeError}</Text>
               )}
               {editingId ? (
                 <div style={{ display: 'flex', gap: 6 }}>

@@ -35,9 +35,9 @@ describe('promoPayload', () => {
     const p = promoPayload(form({ title: ' A ', couponCode: ' tubu20 ' }), NOW);
     expect(p).toMatchObject({ title: 'A', couponCode: 'TUBU20', subtitle: undefined });
   });
-  it('kết thúc mặc định là bắt đầu + 30 ngày kể cả khi bắt đầu ở xa', () => {
+  it('kết thúc mặc định là hết ngày VN thứ 30 tính cả ngày bắt đầu, kể cả khi bắt đầu ở xa', () => {
     const p = promoPayload(form({ startAt: '2027-03-01' }), NOW);
-    expect(Date.parse(p.endAt) - Date.parse(p.startAt)).toBe(30 * 864e5);
+    expect(p).toMatchObject({ startAt: '2027-02-28T17:00:00.000Z', endAt: '2027-03-30T16:59:59.000Z' });
   });
 });
 

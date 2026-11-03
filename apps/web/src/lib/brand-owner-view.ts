@@ -1,5 +1,5 @@
 import { errorStatus } from '@tubutree/app-core/api/error-status';
-import { vnDateRangeInvalid, vnDayKeyOfIso, vnPromoWindowIso } from '@tubutree/app-core/vn-day';
+import { vnDateRangeError, vnDateRangeInvalid, vnDayKeyOfIso, vnPromoWindowIso } from '@tubutree/app-core/vn-day';
 import { loadErrorText } from './error-text';
 import type { BrandSalesPeriod, OwnedPromotion } from '@tubutree/app-core/api/brand-owner';
 
@@ -37,6 +37,10 @@ export const EMPTY_PROMO: PromoForm = { title: '', subtitle: '', couponCode: '',
 // nếu không, khuyến mãi chết ngay khi lưu.
 export function promoDateRangeInvalid(f: PromoForm, now = Date.now()): boolean {
   return vnDateRangeInvalid(f.startAt, f.endAt, now);
+}
+
+export function promoDateRangeError(f: PromoForm, now = Date.now()): string | null {
+  return vnDateRangeError(f.startAt, f.endAt, now);
 }
 
 /** yyyy-mm-dd từ ô ngày → ISO theo giờ VN (đầu ngày / cuối ngày); kết thúc mặc định = bắt đầu + 30 ngày (không phải now + 30 ngày, kẻo chiến dịch bắt đầu muộn có endAt < startAt). */

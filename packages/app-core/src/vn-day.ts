@@ -19,23 +19,28 @@ export function vnDayKeyOfIso(iso: string | null | undefined): string {
 }
 
 /**
- * Khung ngày của khuyến mãi từ hai ô ngày: bắt đầu = đầu ngày VN (trống thì bây giờ), kết thúc = cuối ngày VN
- * (trống thì bắt đầu + 30 ngày, không phải now + 30 ngày, kẻo chiến dịch bắt đầu muộn có kết thúc trước bắt đầu).
+ * Khung ngày của khuyến mãi từ hai ô ngày: bắt đầu = đầu ngày VN (trống thì bây giờ), kết thúc = cuối ngày VN.
+ * Kết thúc trống = cuối ngày VN chứa mốc bắt đầu + 30 ngày − 1 giây (tính từ bắt đầu, không phải từ now, kẻo chiến dịch bắt đầu
+ * muộn có kết thúc trước bắt đầu). Luôn rơi vào 23:59:59 nên mở sửa (ô ngày đọc ra đúng ngày đó) rồi lưu lại không kéo dài thêm.
  */
 export function vnPromoWindowIso(startKey: string, endKey: string, now = Date.now()): { startAt: string; endAt: string } {
   const startMs = startKey ? Date.parse(vnDayStartIso(startKey)) : now;
   return {
     startAt: new Date(startMs).toISOString(),
-    endAt: endKey ? vnDayEndIso(endKey) : new Date(startMs + 30 * 864e5).toISOString(),
+    endAt: vnDayEndIso(endKey || vnDayKeyOfIso(new Date(startMs + 30 * 864e5 - 1000).toISOString())),
   };
 }
 
 /**
- * Sai khi kết thúc đứng trước bắt đầu theo NGÀY VN (cho phép cùng một ngày), hoặc chỉ có ngày kết thúc mà cuối ngày đó đã qua
- * (bắt đầu mặc định là bây giờ): nếu không, khuyến mãi chết ngay khi lưu.
+ * Câu lỗi khi kết thúc đứng trước bắt đầu theo NGÀY VN (cùng một ngày thì được), hoặc chỉ có ngày kết thúc mà cuối ngày đó đã qua
+ * (bắt đầu mặc định là bây giờ, khuyến mãi sẽ chết ngay khi lưu). Hợp lệ thì null.
  */
+export function vnDateRangeError(startKey: string, endKey: string, now = Date.now()): string | null {
+  if (!endKey || !DAY_KEY.test(endKey)) return null;
+  if (startKey) return endKey < startKey ? 'Ngày kết thúc không được trước ngày bắt đầu.' : null;
+  return Date.parse(vnDayEndIso(endKey)) < now ? 'Ngày kết thúc đã qua.' : null;
+}
+
 export function vnDateRangeInvalid(startKey: string, endKey: string, now = Date.now()): boolean {
-  if (!endKey || !DAY_KEY.test(endKey)) return false;
-  if (startKey) return endKey < startKey;
-  return Date.parse(vnDayEndIso(endKey)) < now;
+  return vnDateRangeError(startKey, endKey, now) !== null;
 }
