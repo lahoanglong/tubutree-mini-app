@@ -109,15 +109,19 @@ function GuestOverview({ items }: { items: readonly WasteItemDTO[] | undefined }
     <>
       <div className="space-y-1">
         <h2 className={skin.sectionTitle}>{wasteGuestCopy.introTitle}</h2>
-        <p className="text-sm text-stone-700">{intro.intro}</p>
+        {cfg.isLoaded ? <p className="text-sm text-stone-700">{intro.intro}</p> : <Skeleton height={40} rounded="rounded-card" />}
       </div>
       <section className="space-y-2">
         <h2 className={skin.sectionTitle}>{wasteGuestCopy.stepsTitle}</h2>
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-900">
-          {intro.steps.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ol>
+        {cfg.isLoaded ? (
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-900">
+            {intro.steps.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ol>
+        ) : (
+          <Skeleton height={64} rounded="rounded-card" />
+        )}
       </section>
       {items === undefined ? <Skeleton height={120} rounded="rounded-card" /> : <ItemList items={items} />}
       <div className={`${skin.plain}`}>

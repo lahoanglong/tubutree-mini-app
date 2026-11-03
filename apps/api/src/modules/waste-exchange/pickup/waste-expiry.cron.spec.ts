@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
-import { endOfVnDay } from '../../../common/vn-time';
+import { endOfVnDay, vnMonthKey } from '../../../common/vn-time';
 import { expiryCloseReason, WasteExpiryCron } from './waste-expiry.cron';
 
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: jest.fn().mockResolvedValue({ id: 'ev1' }) }));
@@ -92,7 +92,7 @@ function setup(
     }),
   };
   const cron = new WasteExpiryCron(prisma as never, config as never, notifier as never, shipLock as never, access as never);
-  return { cron, tx, findMany, remindFindMany, updateMany, orderFind, notifier: notifier as { requestExpired: jest.Mock; requestExpiring: jest.Mock }, shipLock, config, order, access };
+  return { cron, tx, findMany, remindFindMany, updateMany, orderFind, notifier: notifier as { requestExpired: jest.Mock; requestExpiring: jest.Mock }, shipLock, config, order, access, prisma };
 }
 
 beforeEach(() => (writeWasteEvent as jest.Mock).mockClear());
@@ -115,6 +115,27 @@ describe('WasteExpiryCron nhắc sắp hết hạn theo điểm nhận (DRV2-01)
     const { cron, notifier } = setup([], { remind, quota: { full: { quota: 1000, used: 1000 }, room: { quota: 1000, used: 999 } } });
     await cron.run(NOW);
     expect(notifier.requestExpiring.mock.calls.map((c) => (c[1] as { id: string }).id)).toEqual(['b']);
+  });
+});
+
+describe('WasteExpiryCron hạn mức theo tháng của hạn giữ chỗ (DRV2-01)', () => {
+  it('chỉ đọc hạn mức PARTNER của điểm còn dùng được, theo tháng VN hiện tại', async () => {
+    const remind = [remindRow('a', 30, { pointId: 'full' }), remindRow('b', 30, { pointId: 'paused' })];
+    const { cron, prisma } = setup([], { remind, unavailablePoints: ['paused'], quota: { full: { quota: 10, used: 10 } } });
+    await cron.run(NOW);
+    expect(prisma.wastePoint.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: ['full'] }, kind: 'PARTNER', monthlyQuotaPoints: { not: null } } }));
+    expect(prisma.wastePointUsage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { pointId: { in: ['full'] }, monthKey: vnMonthKey(NOW) } }));
+  });
+
+  it('ranh giới tháng: hạn rơi sang tháng sau thì hạn mức tháng này đầy không chặn tin nhắc', async () => {
+    const now = new Date('2026-10-30T20:30:00.000Z');
+    const remind = [
+      remindRow('a', 30, { pointId: 'full', expiresAt: new Date('2026-11-01T02:30:00.000Z') }),
+      remindRow('b', 30, { pointId: 'full', expiresAt: new Date('2026-10-31T16:00:00.000Z') }),
+    ];
+    const { cron, notifier } = setup([], { remind, quota: { full: { quota: 10, used: 10 } } });
+    await cron.run(now);
+    expect(notifier.requestExpiring.mock.calls.map((c) => (c[1] as { id: string }).id)).toEqual(['a']);
   });
 });
 

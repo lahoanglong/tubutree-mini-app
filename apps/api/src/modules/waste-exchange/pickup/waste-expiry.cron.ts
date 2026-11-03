@@ -141,10 +141,11 @@ export class WasteExpiryCron {
           orderBy: { id: 'asc' },
           take: PAGE,
         });
-        const unusable = await this.unusablePointIds(page.filter((r) => r.method === 'DROP_OFF').map((r) => r.pointId), now);
+        const dropOff = page.filter((r) => r.method === 'DROP_OFF' && r.expiresAt);
+        const unusable = await this.unusablePointIds(dropOff.map((r) => r.pointId), now, [...new Set(dropOff.filter((r) => vnMonthKey(r.expiresAt!) === vnMonthKey(now)).map((r) => r.pointId))]);
         for (const row of page) {
           if (!row.expiresAt || row.method === 'PICKUP') continue;
-          if (row.method === 'DROP_OFF' && unusable.has(row.pointId)) continue;
+          if (row.method === 'DROP_OFF' && (unusable.bad.has(row.pointId) || (unusable.quotaFull.has(row.pointId) && vnMonthKey(row.expiresAt) === vnMonthKey(now)))) continue;
           try {
             await this.notifier.requestExpiring(row.userId, { id: row.id, code: row.code }, row.method, row.expiresAt);
           } catch (err) {
@@ -159,24 +160,29 @@ export class WasteExpiryCron {
     }
   }
 
-  /** Điểm không nhận được lúc này: không ACTIVE hoặc mất chủ hợp lệ (availablePointIds), hoặc PARTNER đã dùng hết hạn mức tháng (cùng luật với lúc giữ chỗ). */
-  private async unusablePointIds(pointIds: string[], now: Date): Promise<Set<string>> {
+  /**
+   * `bad`: điểm không ACTIVE hoặc mất chủ hợp lệ (availablePointIds). `quotaFull`: PARTNER đã dùng hết hạn mức của tháng VN hiện tại, chỉ xét cho `quotaPointIds`
+   * (điểm có yêu cầu hết hạn ngay trong tháng này). Yêu cầu có hạn sang tháng sau thì hạn mức đã về 0 khi khách tới, nên không bị coi là hết hạn mức.
+   */
+  private async unusablePointIds(pointIds: string[], now: Date, quotaPointIds: string[]): Promise<{ bad: Set<string>; quotaFull: Set<string> }> {
     const ids = [...new Set(pointIds)];
-    if (ids.length === 0) return new Set();
+    const bad = new Set<string>();
+    const quotaFull = new Set<string>();
+    if (ids.length === 0) return { bad, quotaFull };
     const available = await this.access.availablePointIds(this.prisma, ids);
-    const bad = new Set(ids.filter((id) => !available.has(id)));
+    for (const id of ids) if (!available.has(id)) bad.add(id);
     const quotaPoints = await this.prisma.wastePoint.findMany({
-      where: { id: { in: ids.filter((id) => available.has(id)) }, kind: 'PARTNER', monthlyQuotaPoints: { not: null } },
+      where: { id: { in: quotaPointIds.filter((id) => available.has(id)) }, kind: 'PARTNER', monthlyQuotaPoints: { not: null } },
       select: { id: true, monthlyQuotaPoints: true },
     });
-    if (quotaPoints.length === 0) return bad;
+    if (quotaPoints.length === 0) return { bad, quotaFull };
     const usage = await this.prisma.wastePointUsage.findMany({
       where: { pointId: { in: quotaPoints.map((p) => p.id) }, monthKey: vnMonthKey(now) },
       select: { pointId: true, pointsUsed: true },
     });
     const used = new Map(usage.map((u) => [u.pointId, u.pointsUsed]));
-    for (const p of quotaPoints) if ((used.get(p.id) ?? 0) >= (p.monthlyQuotaPoints ?? 0)) bad.add(p.id);
-    return bad;
+    for (const p of quotaPoints) if ((used.get(p.id) ?? 0) >= (p.monthlyQuotaPoints ?? 0)) quotaFull.add(p.id);
+    return { bad, quotaFull };
   }
 
   /** Một transaction ngắn cho một dòng; không lấy khoá nào khác (rule 15). Trả lý do đóng khi dòng trúng điều kiện. */
