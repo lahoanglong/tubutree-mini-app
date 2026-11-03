@@ -19,6 +19,7 @@ const mount = (ui: Parameters<typeof render>[0]) => {
   return r;
 };
 afterEach(() => {
+  window.sessionStorage.clear();
   mounted.forEach((m) => m.unmount());
   mounted = [];
   vi.unstubAllGlobals();
@@ -209,6 +210,46 @@ describe('DealerCreditPanel — ERR-01 chống trừ nợ hai lần khi thử l�
     const keys = postKeys(api.calls);
     expect(keys).toHaveLength(3);
     expect(new Set(keys).size).toBe(3);
+  });
+
+  it('lỗi mạng, xoá rồi gõ lại đúng số cũ → cùng khoá; đổi số → khoá mới; gập dòng (unmount/mount lại) sau lỗi → cùng khoá', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
+    let posts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST' && (posts += 1) <= 2) {
+          api.calls.push({ url, init });
+          throw new TypeError('Failed to fetch');
+        }
+        return api.fn(url, init);
+      }),
+    );
+    const first = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(first.container, 'button', 'Công nợ đại lý'));
+    await flush();
+    const amountInput = (c: HTMLElement) => c.querySelector('input[aria-label="Số tiền đã nhận (đ)"]');
+    typeInto(amountInput(first.container), '2000000');
+    await pay(first.container);
+    typeInto(amountInput(first.container), '');
+    typeInto(amountInput(first.container), '2000000');
+    await pay(first.container);
+    first.unmount();
+    mounted = mounted.filter((m) => m !== first);
+
+    const second = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(second.container, 'button', 'Công nợ đại lý'));
+    await flush();
+    typeInto(amountInput(second.container), '2000000');
+    await pay(second.container);
+    typeInto(amountInput(second.container), '2500000');
+    await pay(second.container);
+
+    const keys = postKeys(api.calls);
+    expect(keys).toHaveLength(4);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
+    expect(keys[3]).not.toBe(keys[0]);
   });
 
   it('có mã GD vẫn gửi khoá riêng (không dùng mã GD làm khoá)', async () => {

@@ -43,6 +43,7 @@ function build(order: O | null, opts: { creditRow?: boolean; flipCount?: number 
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditRow ? { id: 'led1' } : null), findMany: jest.fn().mockResolvedValue([]) },
     orderStatusHistory: { create: historyCreate, findMany: jest.fn().mockResolvedValue([]) },
+    orderCustomerRefund: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
   prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));

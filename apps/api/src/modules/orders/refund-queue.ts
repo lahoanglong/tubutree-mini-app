@@ -1,5 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { CustomerRefundKind, CustomerRefundStatus, Order, Prisma, PrismaClient } from '@prisma/client';
+import { assertBankRefUnusedByOrder } from '../../common/bank-ref';
 import { notifyAdmins } from '../../common/notify-admins';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
@@ -297,13 +298,15 @@ const ADMIN_LATE_PREFIX = 'ADMIN:';
 export async function recordLatePaymentRefund(
   ctx: LateCtx,
   order: LateOrder,
-  input: { amount: number; source: LateSource; refKey: string; note?: string },
+  input: { amount: number; source: LateSource; refKey: string; note?: string; bankRef?: string },
 ): Promise<boolean> {
   if (!(input.amount > 0)) return false;
   if (order.paymentStatus !== 'UNPAID') return false;
   const viaAdmin = input.source === 'ADMIN';
   const refKey = `${input.source}:${viaAdmin ? ADMIN_LATE_PAYMENT_REF : input.refKey}`;
   const outcome = await ctx.prisma.$transaction(async (tx) => {
+    // Mã giao dịch của admin gõ tay: khoá + kiểm trùng cùng transaction với dòng hoàn, để một mã không vừa xác nhận đơn khác vừa sinh khoản chi tiền.
+    if (input.bankRef) await assertBankRefUnusedByOrder(tx, input.bankRef, order.id);
     await lockOrderRow(tx, order.id);
     const prior = await tx.orderCustomerRefund.findFirst({
       where: {
