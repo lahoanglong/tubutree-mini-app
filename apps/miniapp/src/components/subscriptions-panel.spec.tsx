@@ -60,6 +60,12 @@ describe('SubscriptionsPanel', () => {
     expect(screen.getByText('Đang giảm 14% cho đơn định kỳ')).toBeInTheDocument();
   });
 
+  it('TZ-01: nextRunAt = 00:00 VN (17:00Z hôm trước) hiện đúng ngày VN, không lùi một ngày', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, nextRunAt: '2026-11-10T17:00:00.000Z' }]);
+    renderPanel();
+    expect(await screen.findByText(/11\/11\/2026/)).toBeInTheDocument();
+  });
+
   // R2-ENGAGE-9
   it('giá mỗi kỳ là giá SAU giảm; giá gốc gạch ngang kèm nhãn tiết kiệm', async () => {
     mocks.getSubscriptions.mockResolvedValue([{ ...SUB, cycleSubtotal: 160000, cycleDiscount: 22400, cycleGoods: 137600 }]);
