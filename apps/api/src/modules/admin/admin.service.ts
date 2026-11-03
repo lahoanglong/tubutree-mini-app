@@ -11,7 +11,7 @@ import { paginated, skipTake } from '../../common/pagination';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
-import { assertReachedStatus } from '../orders/status-race';
+import { assertManualStatusChange, manualOutcome } from '../orders/status-race';
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, HELD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
@@ -1097,23 +1097,19 @@ export class AdminService {
     if (block) throw new BadRequestException(block.message);
 
     let updated;
+    const outcome = manualOutcome();
     try {
       updated = await this.orderStatus.setStatus(before.id, status, {
         note: note ? `Admin: ${note}` : undefined,
         customerReason: note,
         actorType: 'ADMIN',
         actorId: adminId,
+        outcome,
       });
     } catch (err) {
       toHttpBadRequest(err);
     }
-    if (updated.status !== status) {
-      // Bản setStatus trả về đọc trước lúc gắn cờ Pancake, nên đọc lại để câu báo nói đúng đơn đã vào "Cần xử lý Pancake" chưa.
-      assertReachedStatus(
-        await this.prisma.order.findUniqueOrThrow({ where: { id: updated.id }, select: { status: true, pancakeAttention: true } }),
-        status,
-      );
-    }
+    await assertManualStatusChange(this.prisma, before, status, outcome);
 
     this.logger.warn(`Admin ${adminId} cập nhật đơn ${before.code}: ${before.status} → ${status}`);
     return this.prisma.order.findUniqueOrThrow({
