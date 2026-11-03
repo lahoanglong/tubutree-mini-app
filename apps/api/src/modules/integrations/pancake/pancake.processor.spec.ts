@@ -22,6 +22,8 @@ function setup(
   alerts?: { alert: jest.Mock },
 ) {
   const orderFindFirst = jest.fn().mockResolvedValue(order);
+  const orderFindUnique = jest.fn().mockResolvedValue(order ?? null);
+  const historyFindFirst = jest.fn().mockResolvedValue(null);
   const orderFindUniqueOrThrow = jest.fn().mockResolvedValue(order);
   const orderUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
   const orderUpdate = jest.fn().mockResolvedValue({}); // onShippingUpdated gọi trực tiếp order.update
@@ -46,8 +48,8 @@ function setup(
   const orderCustomerRefund = { createMany: refundCreateMany, aggregate: refundAggregate, findFirst: jest.fn().mockResolvedValue(null) };
   const $transaction = jest.fn((cb: (tx: unknown) => Promise<unknown>) =>
     cb({
-      order: { updateMany: txUpdateMany, findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order?.userId }) },
-      orderStatusHistory: { create: historyCreate },
+      order: { updateMany: txUpdateMany, findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order?.userId }), findUnique: orderFindUnique },
+      orderStatusHistory: { create: historyCreate, findFirst: historyFindFirst },
       user: { update: txUserUpdate },
       coinTransaction: { create: txCoinCreate },
       returnRequest: { findMany: jest.fn().mockResolvedValue([]), count: txReturnRequestCount },
@@ -60,7 +62,7 @@ function setup(
     order: {
       findFirst: orderFindFirst,
       findUniqueOrThrow: orderFindUniqueOrThrow,
-      findUnique: jest.fn().mockResolvedValue(order ?? null),
+      findUnique: orderFindUnique,
       updateMany: orderUpdateMany,
       update: orderUpdate,
     },
@@ -74,7 +76,7 @@ function setup(
     externalOrder: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     orderCustomerRefund,
     returnRequest: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
-    orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null), create: historyCreate },
+    orderStatusHistory: { findFirst: historyFindFirst, create: historyCreate },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,

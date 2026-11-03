@@ -102,7 +102,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     const findFirst = jest.fn().mockResolvedValue({ id: 'r1' });
     const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: { findFirst }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } };
     await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow('Hoàn tiền khách');
-    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'RETURN', refKey: 'cod-return-unverified', status: 'UNVERIFIED' } }));
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'RETURN', refKey: { in: ['cod-return-unverified', 'pancake-partial-return-held'] }, status: 'UNVERIFIED' } }));
     expect(updateMany).not.toHaveBeenCalled();
 
     findFirst.mockResolvedValue(null);

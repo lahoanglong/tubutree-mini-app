@@ -73,7 +73,7 @@ describe('gỡ lý do khi ô đổi liên tục (mọi lần ghi có điều ki�
 
   it('removeAttentionReason (tx của Kế toán) ném lỗi để tx rollback, không để dòng COD kẹt lại sau khi đã chốt khoản', async () => {
     const db = stuckDb();
-    await expect(removeAttentionReason(db as never, 'o1', ATTENTION_COD_RETURN_UNVERIFIED)).rejects.toThrow('Cần xử lý Pancake');
+    await expect(removeAttentionReason(db as never, 'o1', ATTENTION_COD_RETURN_UNVERIFIED)).rejects.toThrow('Ô Cần xử lý vừa đổi, bạn bấm lại nhé');
     expect(db.order.updateMany).toHaveBeenCalledTimes(10);
   });
 

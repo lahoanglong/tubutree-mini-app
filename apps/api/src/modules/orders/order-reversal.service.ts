@@ -41,6 +41,12 @@ export interface ReversalOptions {
   /** Đơn COD đã giao nhưng chưa có bằng chứng tiền COD về tay Tubu (Pancake báo hàng hoàn về kho): không tự hoàn Ví, admin hoàn tay sau khi kiểm. */
   withholdCodRefund?: boolean;
   /**
+   * Đơn TRẢ TRƯỚC đã PAID (Ví/chuyển khoản/ZaloPay/VNPAY) mà nhân viên có thể đã hoàn tay phần bị trả (Pancake 15 rồi 5 khi Tubu không có
+   * yêu cầu trả): không chạy guard PAID → REFUNDED, không cộng Ví, không tạo khoản chuyển khoản. Phần giữ lại trả về ở `withheldRefund`
+   * để caller ghi khoản chờ Kế toán trong cùng tx. Đơn XU, đơn ghi công nợ đại lý, đơn không còn PAID hoặc không còn gì để hoàn thì đi đường thường.
+   */
+  withholdPrepaidRefund?: boolean;
+  /**
    * Hạn của Điểm Xanh thường hoàn lại (caller đọc cấu hình NGOÀI tx). Có giá trị thì phần điểm thường đã dùng cũng hoàn trong tx
    * này, cùng commit với lần lật trạng thái; bỏ trống thì phần đó do LoyaltyService.reverseOrderPoints hoàn sau commit (đường cũ).
    */
@@ -60,6 +66,8 @@ export interface ReversalResult {
   moneyRefunded: boolean;
   pointsRefunded: number;
   refund: RefundOutcome | null;
+  /** Số tiền trả trước bị giữ lại chờ Kế toán (withholdPrepaidRefund); 0 khi không giữ. */
+  withheldRefund: number;
   /** Tin báo người mời bị thu hồi thưởng giới thiệu: caller gửi SAU khi tx commit (sendReferralNotices). */
   referralNotices?: ReferralNotice[];
 }
@@ -184,14 +192,19 @@ export class OrderReversalService {
     // có gì để hoàn. Ngoại lệ: caller có thể tắt bằng `withholdCodRefund` khi DELIVERED chưa phải bằng chứng đã thu (Pancake
     // báo "Đã hoàn" cho đơn COD mà kho có thể đã bấm "Đã nhận" nhầm) — khi đó tiền hoàn chờ Kế toán đối soát.
     const isCodCollected = order.paymentMethod === 'COD' && order.status === 'DELIVERED' && !opts.withholdCodRefund;
-    const isRefundableChannel = isPrepaidRefundable || isCodCollected;
+    // Đọc paymentStatus dưới khoá dòng của lần lật: ảnh chụp của caller có thể cũ (tiền về hay hoàn chen giữa).
+    const withheldRefund =
+      opts.withholdPrepaidRefund && order.paymentMethod !== 'XU' && isPrepaidRefundable && refundable > 0 && (await this.isHeldPrepaid(tx, order))
+        ? refundable
+        : 0;
+    const isRefundableChannel = (isPrepaidRefundable && withheldRefund === 0) || isCodCollected;
 
     // Đơn có THỰC SỰ đang PAID ngay trước lần đảo không — guard thắng (count=1) là bằng chứng
     // trong CÙNG tx; ảnh chụp `order.paymentStatus` đọc trước đó có thể đã cũ. Dùng cho thu hồi
     // thưởng quý đại lý (đơn trả trước chỉ được tính doanh số khi đã PAID) — đơn đại lý luôn
     // BANK_TRANSFER, không bao giờ COD, nên nhánh COD dưới đây không ảnh hưởng gì tới nó. Phương
     // thức lạ (ngoài danh sách hoàn tự động) chỉ còn ảnh chụp để dựa vào.
-    let paidBeforeReversal = !isRefundableChannel && order.paymentStatus === 'PAID';
+    let paidBeforeReversal = !isRefundableChannel && (withheldRefund > 0 || order.paymentStatus === 'PAID');
     // true khi lần đảo NÀY thực sự cộng tiền (> 0đ) vào Ví của khách — caller (vd admin.reviewReturn) dùng
     // để quyết định có được báo khách "đã hoàn tiền vào Ví" hay không (A6-06 phần thông báo): không được
     // báo nếu guard dưới đây thua, hay đơn 0đ (guard vẫn thắng nhưng refundToWallet không có gì để cộng).
@@ -314,7 +327,13 @@ export class OrderReversalService {
     // Thưởng đánh giá cấp ngay khi giao: đơn trả cả đơn thì thu hồi thưởng của mọi đánh giá trên đơn (đánh giá của dòng đã
     // trả một phần trước đó đã thu hồi, bị bỏ qua).
     if (reviewable) await revokeReviewRewardsForReturn(tx, order.id, null);
-    return { moneyRefunded, pointsRefunded, refund, referralNotices };
+    return { moneyRefunded, pointsRefunded, refund, withheldRefund, referralNotices };
+  }
+
+  /** Đơn đang PAID (đọc trong tx) và không ghi công nợ đại lý: đúng loại đơn có tiền thật để giữ lại chờ Kế toán. */
+  private async isHeldPrepaid(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<boolean> {
+    const now = await tx.order.findUnique({ where: { id: order.id }, select: { paymentStatus: true } });
+    return now?.paymentStatus === 'PAID' && !(await hasDealerCreditDebit(tx, order));
   }
 
   /**

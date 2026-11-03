@@ -34,7 +34,11 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
 
 function build(order: Record<string, unknown>, over: { loyalty?: Record<string, jest.Mock>; affiliate?: Record<string, jest.Mock>; hooks?: Record<string, jest.Mock>; attention?: string | null } = {}) {
   const tx = {
-    order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }) },
+    order: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ userId: order.userId }),
+      findUnique: jest.fn().mockResolvedValue({ pancakeAttention: order.pancakeAttention ?? null }),
+    },
     orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },

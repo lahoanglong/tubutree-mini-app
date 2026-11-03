@@ -4,9 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
-import { formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
-import { COD_RETURN_UNVERIFIED_REF, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, isUnverifiedRefundRow } from './refund-queue';
-import { ATTENTION_COD_RETURN_UNVERIFIED, removeAttentionReason } from '../integrations/pancake/pancake-attention';
+import { canRefundToBank, formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
+import { OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
+import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD, removeAttentionReason } from '../integrations/pancake/pancake-attention';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
@@ -343,13 +343,16 @@ export class CustomerRefundsService {
       return `Khách đã chọn nhận khoản này về Ví Tubu${at} và đã được cộng ${formatVnd(now.amount)} — KHÔNG chuyển khoản. Nếu đã lỡ chuyển, liên hệ khách để thu hồi.`;
     }
     if (now.status === 'COMPLETED') return `Khoản này đã được xác nhận chuyển khoản${now.bankRef ? ` (mã GD ${now.bankRef})` : ''}.`;
-    const codReturn = now.kind === 'RETURN' && now.refKey === COD_RETURN_UNVERIFIED_REF;
+    const held = now.kind === 'RETURN' && isHeldReturnRef(now.refKey);
+    const codReturn = now.kind === 'RETURN' && !held;
     if (now.status === 'UNVERIFIED') {
+      if (held) return 'Khoản hoàn này đang chờ Kế toán trừ phần nhân viên đã hoàn tay — xác nhận số tiền còn phải hoàn trước khi chuyển khoản.';
       return codReturn
         ? 'Khoản hoàn COD này chưa được xác nhận là hãng đã thu tiền — đối chiếu với hãng vận chuyển rồi xác nhận trước khi chuyển khoản.'
         : 'Khoản này chưa được xác nhận là tiền khách trả dư — đối chiếu sao kê rồi bấm "Xác nhận tiền dư" trước khi chuyển khoản.';
     }
     if (now.status === 'DISMISSED') {
+      if (held) return 'Khoản hoàn này đã được bỏ qua (nhân viên đã hoàn tay) — KHÔNG chuyển khoản.';
       return codReturn
         ? 'Khoản hoàn COD này đã được bỏ qua (hãng chưa thu tiền) — KHÔNG chuyển khoản.'
         : 'Khoản này đã được đánh dấu "Không phải tiền dư" — KHÔNG chuyển khoản.';
@@ -374,16 +377,18 @@ export class CustomerRefundsService {
     if (!isUnverifiedRefundRow(row)) {
       throw new BadRequestException('Khoản này không còn chờ đối soát — bạn tải lại nhé.');
     }
-    const codReturn = row.kind === 'RETURN';
+    const heldReturn = row.kind === 'RETURN' && isHeldReturnRef(row.refKey);
+    const codReturn = row.kind === 'RETURN' && !heldReturn;
     const amount = input.amount ?? row.amount;
     if (!Number.isInteger(amount) || amount <= 0 || amount > row.amount) {
       throw new BadRequestException(
-        codReturn
+        codReturn || heldReturn
           ? `Số tiền hoàn phải từ 1đ đến ${formatVnd(row.amount)} (phần chưa hoàn của đơn).`
           : `Số tiền dư thực nhận phải từ 1đ đến ${formatVnd(row.amount)} (số Pancake báo dư).`,
       );
     }
     const note = input.note?.trim() || null;
+    let creditedToWallet = false;
     const won = await this.prisma.$transaction(async (tx) => {
       const res = await tx.orderCustomerRefund.updateMany({
         where: { id, kind: row.kind, status: 'UNVERIFIED' },
@@ -407,7 +412,9 @@ export class CustomerRefundsService {
               reason: row.reason,
               completedBy: adminId,
               completedAt: new Date(),
-              adminNote: codReturn
+              adminNote: heldReturn
+                ? `Phần nhân viên đã hoàn tay, không hoàn lại (xác nhận hoàn ${formatVnd(amount)}/${formatVnd(row.amount)}).`
+                : codReturn
                 ? `Phần COD không hoàn (xác nhận hoàn ${formatVnd(amount)}/${formatVnd(row.amount)}).`
                 : `Phần Pancake báo dư nhưng sao kê không có (xác nhận ${formatVnd(amount)}/${formatVnd(row.amount)}).`,
             },
@@ -420,20 +427,61 @@ export class CustomerRefundsService {
         tx,
         adminId,
         row.orderId,
-        codReturn
+        heldReturn
+          ? `Xác nhận hoàn ${formatVnd(amount)} cho đơn trả hàng${amount < row.amount ? ` (tối đa ${formatVnd(row.amount)})` : ''}: đã trừ phần nhân viên hoàn tay${note ? ` · ${note}` : ''}`
+          : codReturn
           ? `Xác nhận hoàn ${formatVnd(amount)} cho đơn COD trả hàng${amount < row.amount ? ` (tối đa ${formatVnd(row.amount)})` : ''}: hãng vận chuyển đã thu COD${note ? ` · ${note}` : ''}`
           : `Xác nhận tiền trả dư ${formatVnd(amount)}${partial} sau khi đối chiếu sao kê${note ? ` · ${note}` : ''}`,
       );
-      if (codReturn) await removeAttentionReason(tx, row.orderId, ATTENTION_COD_RETURN_UNVERIFIED);
+      if (codReturn) await this.settleCodReturn(tx, row.orderId);
+      if (heldReturn) {
+        await this.settleHeldReturn(tx, row.orderId);
+        // Đơn trả bằng Ví chỉ được hoàn về Ví (canRefundToBank): không để khách chọn ngân hàng như đơn chuyển khoản.
+        const paidBy = await tx.order.findUniqueOrThrow({ where: { id: row.orderId }, select: { paymentMethod: true } });
+        if (row.userId && !canRefundToBank(paidBy.paymentMethod)) {
+          await tx.orderCustomerRefund.update({
+            where: { id },
+            data: { method: 'WALLET', status: 'COMPLETED', customerUserId: row.userId, completedAt: new Date() },
+          });
+          await applyWalletDelta(tx, {
+            userId: row.userId,
+            delta: amount,
+            type: 'ORDER_REFUND',
+            refType: 'CUSTOMER_REFUND',
+            refId: id,
+            reason: `Hoàn tiền đơn ${row.orderCode}`,
+          });
+          creditedToWallet = true;
+        }
+      }
       return true;
     });
     if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, bạn tải lại nhé.');
+    if (creditedToWallet && row.userId) {
+      await this.notifications?.notifySafe(row.userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(amount) }, undefined, `order=${row.orderCode}`);
+    }
     this.logger.log(`Admin ${adminId} xác nhận tiền trả dư ${amount}đ đơn ${row.orderCode} (khoản ${id}).`);
-    // Khoản COD trả hàng chưa có mẫu tin riêng (mẫu "tiền dư" nói sai lý do): khách thấy khoản ở chi tiết đơn, Kế toán liên hệ khách.
-    if (row.userId && !codReturn) {
+    // Khoản trả hàng (COD, hoặc đơn trả trước bị giữ lại) chưa có mẫu tin riêng (mẫu "tiền dư" nói sai lý do): khách thấy khoản ở chi tiết đơn, Kế toán liên hệ khách.
+    if (row.userId && !codReturn && !heldReturn) {
       await this.notifications?.notifySafe(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) }, undefined, `order=${row.orderCode}`);
     }
     return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
+  }
+
+  /** Kế toán đã quyết khoản COD trả hàng: gỡ dòng COD, và dòng "hoàn tay" nếu đơn có (Pancake 15 rồi 5 trên đơn COD). */
+  private async settleCodReturn(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
+    await removeAttentionReason(tx, orderId, ATTENTION_COD_RETURN_UNVERIFIED);
+    await removeAttentionReason(tx, orderId, ATTENTION_PARTIAL_RETURN_HELD);
+  }
+
+  /**
+   * Kế toán đã quyết khoản đơn trả trước bị giữ lại sau Pancake 15: gỡ dòng "Cần xử lý" của nó, và đơn từ giờ có tiền đã hoàn (hoàn qua
+   * khoản này hoặc nhân viên đã hoàn tay) nên PAID → REFUNDED. Chỉ lật từ PAID: lúc bị giữ lại paymentStatus cố ý còn PAID để khách
+   * không thấy "Đã hoàn tiền" khi chưa ai xác nhận; khoản chuyển khoản còn Chờ/Đang chuyển thì đơn REFUNDED hiển thị "Đang hoàn tiền".
+   */
+  private async settleHeldReturn(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
+    await removeAttentionReason(tx, orderId, ATTENTION_PARTIAL_RETURN_HELD);
+    await tx.order.updateMany({ where: { id: orderId, paymentStatus: 'PAID' }, data: { paymentStatus: 'REFUNDED' } });
   }
 
   /** Không phải tiền khách trả dư (cùng một lần chuyển, nhân viên sửa đơn trên Pancake…): đóng khoản, không báo khách. */
@@ -445,10 +493,11 @@ export class CustomerRefundsService {
     if (!isUnverifiedRefundRow(row)) {
       throw new BadRequestException('Khoản này không còn chờ đối soát — bạn tải lại nhé.');
     }
-    const codReturn = row.kind === 'RETURN';
+    const heldReturn = row.kind === 'RETURN' && isHeldReturnRef(row.refKey);
+    const codReturn = row.kind === 'RETURN' && !heldReturn;
     if (reason.length < DISMISS_REASON_MIN) {
       throw new BadRequestException(
-        `Ghi lý do (ít nhất ${DISMISS_REASON_MIN} ký tự) vì sao ${codReturn ? 'không hoàn tiền đơn COD này' : 'đây không phải tiền khách trả dư'}.`,
+        `Ghi lý do (ít nhất ${DISMISS_REASON_MIN} ký tự) vì sao ${heldReturn ? 'không hoàn tiền đơn này' : codReturn ? 'không hoàn tiền đơn COD này' : 'đây không phải tiền khách trả dư'}.`,
       );
     }
     const won = await this.prisma.$transaction(async (tx) => {
@@ -461,11 +510,14 @@ export class CustomerRefundsService {
         tx,
         adminId,
         row.orderId,
-        codReturn
+        heldReturn
+          ? `Không hoàn ${formatVnd(row.amount)} đơn trả hàng (nhân viên đã hoàn tay ngoài hệ thống). Lý do: ${reason}`
+          : codReturn
           ? `Không hoàn ${formatVnd(row.amount)} đơn COD trả hàng (hãng chưa thu tiền). Lý do: ${reason}`
           : `Không phải tiền trả dư ${formatVnd(row.amount)} (Pancake báo). Lý do: ${reason}`,
       );
-      if (codReturn) await removeAttentionReason(tx, row.orderId, ATTENTION_COD_RETURN_UNVERIFIED);
+      if (codReturn) await this.settleCodReturn(tx, row.orderId);
+      if (heldReturn) await this.settleHeldReturn(tx, row.orderId);
       return true;
     });
     if (!won) throw new BadRequestException('Khoản này không còn chờ đối soát — admin khác vừa xử lý, bạn tải lại nhé.');

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { formatPoints } from '../../common/format-points';
-import type { Order } from '@prisma/client';
+import type { Order, Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type { OrderStatus } from '@tubutree/shared-types';
@@ -13,7 +13,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { partialReturnTotals } from './return-ledger';
-import { recordCodReturnUnverified } from './refund-queue';
+import { HELD_RETURN_UNVERIFIED_REF, recordCodReturnUnverified } from './refund-queue';
 import { refundNote } from './order-returns.service';
 import {
   assertPaidBeforeFulfilment,
@@ -34,14 +34,22 @@ import {
   PancakeUnreachableError,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
-import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
+import {
+  PANCAKE_PARTIAL_RETURN_MANUAL_PREFIX,
+  PANCAKE_PARTIAL_RETURN_PREFIX,
+  PANCAKE_RETURNING_PREFIX,
+  resolvePancakeStatus,
+} from '../integrations/pancake/pancake-status.map';
 import { PANCAKE_CANCEL } from '../integrations/pancake/pancake-order.service';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
   ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_PARTIAL_RETURN_HELD,
   ATTENTION_PARTIAL_RETURN_SETTLED,
+  ATTENTION_SEPARATOR,
   ATTENTION_UNDERPAID,
+  PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
   appendAttentionReason,
   clearPancakeAttention,
   flagPancakeAttention,
@@ -105,6 +113,14 @@ const HANDOVER_ASKER: Record<'CUSTOMER' | 'STAFF' | 'SYSTEM', string> = {
  * CLOSED: đơn đã huỷ/trả khi CHƯA nhận tiền — tiền về muộn phải hoàn, không "hồi sinh" đơn. NOT_PAYABLE: đã
  * REFUNDED/FAILED (kể cả đơn đã huỷ/trả: khoản tiền đó đã đi theo luồng hoàn của đơn).
  */
+/** Kết quả một lần setStatus mà người gọi cần ngoài đơn trả về (xem SetStatusOpts.outcome). */
+export interface SetStatusOutcome {
+  /** true khi chính lần gọi này thắng lần lật trạng thái. */
+  flipped: boolean;
+  /** Lý do chờ Kế toán lần lật này vừa ghi lên đơn (COD chưa thu, hoàn tay sau Pancake 15), để báo ADMIN đúng một lần. */
+  heldReasons: string[];
+}
+
 export type MarkPaidOutcome = 'PAID' | 'ALREADY_PAID' | 'CLOSED' | 'NOT_PAYABLE';
 
 /** Kết quả chạy việc sau giao: pointsCredited/commissionsLocked = lần chạy này có làm gì (false/0 khi đã làm từ trước). */
@@ -205,6 +221,14 @@ export class OrderStatusService {
        * và đưa đơn vào "Cần xử lý Pancake". Chỉ có tác dụng với COD đang DELIVERED → RETURNED.
        */
       withholdCodRefund?: boolean;
+      /**
+       * Pancake "Đã hoàn" (5) trên đơn đã giao: nếu trước đó Pancake báo "Hoàn một phần" (15) lúc Tubu không có yêu cầu trả (dấu vết trong lịch sử
+       * đơn, hoặc lời "hoàn tay" còn trong ô), nhân viên có thể đã hoàn tay nên tiền KHÔNG tự hoàn cho mọi phương thức: ghi khoản chờ Kế toán
+       * đối soát. Quyết định trong tx lật, dưới khoá dòng đơn, nên không cắt ngang một lần 15 vừa ghi dấu.
+       */
+      holdMoneyAfterManualPartialReturn?: boolean;
+      /** Điền khi người gọi cần biết lần gọi NÀY có thắng lần lật không (bên thua không được báo động lần nữa) và lý do chờ Kế toán vừa ghi. */
+      outcome?: SetStatusOutcome;
       /** Lý do người vận hành nhập khi huỷ/trả — khách đọc nguyên văn trong tin báo (ghi chú nội bộ ở `note`). */
       customerReason?: string;
     } = {},
@@ -293,6 +317,7 @@ export class OrderStatusService {
     // Atomic flip guard theo status hiện tại — 2 caller song song (vd admin + webhook)
     // chỉ 1 bên thắng (count===1), bên thua bail êm để không chạy side-effect 2 lần.
     let reversed: ReversalResult | null = null;
+    const heldReasons: string[] = [];
     // Pancake đã nhận lệnh huỷ trước lần lật này: lỗi/thua ở đây để đơn Tubu còn sống mà kho không còn đơn.
     const won = await this.prisma.$transaction(async (tx) => {
       const flip = await tx.order.updateMany({
@@ -357,8 +382,12 @@ export class OrderStatusService {
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
         const withholdCod = opts.withholdCodRefund === true && order.paymentMethod === 'COD' && from === 'DELIVERED' && targetStatus === 'RETURNED';
+        const manualPartial =
+          opts.holdMoneyAfterManualPartialReturn === true && from === 'DELIVERED' && targetStatus === 'RETURNED' && (await this.hasManualPartialReturn(tx, order.id));
+        const withholdPrepaid = manualPartial && order.paymentMethod !== 'COD';
         const reversalOpts = {
           ...(withholdCod ? { withholdCodRefund: true } : {}),
+          ...(withholdPrepaid ? { withholdPrepaidRefund: true } : {}),
           ...(standardPointsExpiresAt ? { standardPointsExpiresAt } : {}),
         };
         reversed =
@@ -366,19 +395,32 @@ export class OrderStatusService {
             ? await this.reversal.reverseFinancials(tx, order, reversalOpts)
             : await this.reversal.reverseFinancials(tx, order);
         // Cùng tx: ghi sau commit mà chết giữa chừng thì đơn đã RETURNED, không tiền hoàn, và không ai biết phải kiểm.
+        let unverified = 0;
         if (withholdCod) {
           const prior = await partialReturnTotals(tx, order.id);
-          const unverified = Math.max(0, order.total - prior.money);
           // Đã trả đủ bằng các lần trả một phần thì không còn gì để hoàn, không cần kiểm.
-          if (unverified > 0) {
-            await recordCodReturnUnverified(tx, order, unverified);
-            // Lý do "ĐANG HOÀN" tự xong khi hàng đã về; mọi lý do khác (vd lệch tổng tiền) còn cần cho người quyết số hoàn.
-            const kept = order.pancakeAttention?.startsWith(PANCAKE_RETURNING_PREFIX) ? null : order.pancakeAttention;
-            await tx.order.updateMany({
-              where: { id: order.id },
-              data: { pancakeAttention: appendAttentionReason(kept, ATTENTION_COD_RETURN_UNVERIFIED), pancakeAttentionAt: new Date() },
-            });
-          }
+          unverified = Math.max(0, order.total - prior.money);
+        } else if (withholdPrepaid) {
+          unverified = (reversed as ReversalResult).withheldRefund;
+        }
+        if (unverified > 0) {
+          await recordCodReturnUnverified(tx, order, unverified, withholdCod ? undefined : HELD_RETURN_UNVERIFIED_REF);
+          const added = [...(withholdCod ? [ATTENTION_COD_RETURN_UNVERIFIED] : []), ...(manualPartial ? [ATTENTION_PARTIAL_RETURN_HELD] : [])];
+          // Đọc lại ô dưới khoá dòng của lần lật: ảnh chụp ngoài tx có thể thiếu lời 15 vừa commit chen giữa, và ghi theo ảnh đó là đè mất nó.
+          const current = (await tx.order.findUnique({ where: { id: order.id }, select: { pancakeAttention: true } }))?.pancakeAttention ?? null;
+          // Lý do "ĐANG HOÀN" tự xong khi hàng đã về; lời "hoàn tay" của 15 được dòng chờ Kế toán thay; mọi lý do khác (vd lệch tổng
+          // tiền) còn cần cho người quyết số hoàn.
+          const kept = (current ? current.split(ATTENTION_SEPARATOR) : []).filter(
+            (part) => !part.startsWith(PANCAKE_RETURNING_PREFIX) && !(manualPartial && part.startsWith(PANCAKE_PARTIAL_RETURN_PREFIX)),
+          );
+          await tx.order.updateMany({
+            where: { id: order.id },
+            data: {
+              pancakeAttention: added.reduce<string | null>(appendAttentionReason, kept.join(ATTENTION_SEPARATOR) || null),
+              pancakeAttentionAt: new Date(),
+            },
+          });
+          heldReasons.push(...added);
         }
       }
       return true;
@@ -386,6 +428,10 @@ export class OrderStatusService {
       await this.flagPancakeCancelDivergence(order.id, pancakeDecision, `lần huỷ ở Tubu lỗi: ${err instanceof Error ? err.message : String(err)}`);
       throw err;
     });
+    if (opts.outcome) {
+      opts.outcome.flipped = won;
+      opts.outcome.heldReasons = heldReasons;
+    }
     if (!won) {
       this.logger.warn(`setStatus thua race: đơn ${order.code} đã đổi trạng thái bởi request khác.`);
       const current = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
@@ -431,7 +477,7 @@ export class OrderStatusService {
       const done = await this.reverseClosedOrderEffects(order);
       standardPointsBack = done.standardPointsBack;
       closedEffectsFailure = done.failure;
-      await this.settleClosedOrderAlerts(order);
+      if (!(await this.settleClosedOrderAlerts(order))) swallowedFailure = true;
     }
     // Tin huỷ mặc định (ORDER_CANCELLED) mang refund_note nên nói luôn khoản hoàn số tiền khách chuyển thiếu; mẫu tin khác
     // (tự huỷ quá hạn) không có chỗ đó nên khoản hoàn tự báo khách bằng tin riêng.
@@ -470,6 +516,8 @@ export class OrderStatusService {
       notifyData.refund_note =
         (reason ? ` Lý do: ${reason.replace(/[.\s]+$/, '')}.` : '') +
         refundNote(r?.refund ?? null, null, (r?.pointsRefunded ?? 0) + standardPointsBack) +
+        // Đơn trả trước bị giữ tiền chờ Kế toán: khách đã trả tiền nên không để im, nhưng chưa được nói "đã hoàn".
+        ((r?.withheldRefund ?? 0) > 0 ? ' Tubu đang đối soát khoản thanh toán của đơn này, nếu có tiền hoàn bạn sẽ được báo.' : '') +
         (noteCarriesRefund ? receivedRefundNote(receivedBack, order.placedForCustomer) : '');
     }
     if (targetStatus === 'DELIVERED') {
@@ -589,7 +637,7 @@ export class OrderStatusService {
         failure ??= new Error('Chưa xếp được lệnh huỷ Pancake');
       }
     }
-    await this.settleClosedOrderAlerts(order);
+    if (!(await this.settleClosedOrderAlerts(order))) failure ??= new Error('Chưa đóng được việc tồn trong hàng đợi "Cần xử lý"');
     if (failure !== null) {
       const error = failure instanceof Error ? failure.message : String(failure);
       this.logger.warn(`Đơn ${order.code}: chạy lại phần đảo sau huỷ/trả chưa xong — ${error}`);
@@ -871,9 +919,9 @@ export class OrderStatusService {
 
   /**
    * Đơn vừa huỷ/trả: việc "hàng đang/đã hoàn về kho — xử lý đơn với khách" (Gomdon) và "Pancake báo huỷ sau bàn giao /
-   * đang hoàn" (Pancake) đã có kết cục — đóng để hàng đợi chỉ còn việc thật. Best-effort: đơn đã đổi trạng thái xong.
+   * đang hoàn" (Pancake) đã có kết cục — đóng để hàng đợi chỉ còn việc thật. Đơn đã đổi trạng thái xong nên lỗi không ném mà trả false, để người gọi chưa ghi mốc.
    */
-  private async settleClosedOrderAlerts(order: Pick<Order, 'id' | 'code'>): Promise<void> {
+  private async settleClosedOrderAlerts(order: Pick<Order, 'id' | 'code'>): Promise<boolean> {
     try {
       await resolveGomdonAlertKinds(this.prisma, order.id, [GOMDON_ALERT_KIND.GOODS_RETURNED]);
       // Chỉ gỡ đúng các lý do đã có kết cục: hàng còn ghi thêm lý do khác (vd COD chờ Kế toán đối soát, vừa ghi cùng tx lật
@@ -884,11 +932,29 @@ export class OrderStatusService {
         PANCAKE_RETURNING_PREFIX,
       ]);
       // Lời "hoàn tay phần bị trả" của Pancake 15 hết hiệu lực khi đơn đóng (đã xử lý theo cả đơn): đổi thành cảnh báo, không xoá.
-      // Đặt ở đây chứ không ở processor để phủ cả admin/Gomdon đóng đơn, lần job thử lại và cron chạy lại.
+      // Đặt ở đây chứ không ở processor để phủ cả admin/Gomdon đóng đơn và cron chạy lại (resyncReversalEffects); lần gọi lại cùng trạng thái
+      // không đi qua đây. Trả false khi lỗi để người gọi chưa ghi mốc xong, cron chạy lại: ghi mốc rồi thì lời "hoàn tay" kẹt mãi.
       await replaceAttentionReasonsByPrefix(this.prisma, order.id, PANCAKE_PARTIAL_RETURN_PREFIX, ATTENTION_PARTIAL_RETURN_SETTLED);
+      return true;
     } catch (err) {
       this.logger.warn(`Không đóng được việc tồn của đơn ${order.code} sau khi huỷ/trả: ${err instanceof Error ? err.message : err}`);
+      return false;
     }
+  }
+
+  /**
+   * Pancake đã báo "Hoàn một phần" (15) lúc Tubu không có yêu cầu trả nào, và chưa có yêu cầu trả nào được duyệt: nhân viên có thể đã hoàn tay.
+   * Nhận bằng dấu vết trong lịch sử đơn (bền, ô "Cần xử lý" có thể bị bấm "Đã xử lý" xoá) hoặc lời "hoàn tay" còn trong ô (đơn ghi trước khi có dấu vết).
+   */
+  private async hasManualPartialReturn(tx: Prisma.TransactionClient, orderId: string): Promise<boolean> {
+    if ((await tx.returnRequest.count({ where: { orderId, status: 'APPROVED' } })) > 0) return false;
+    const marker = await tx.orderStatusHistory.findFirst({
+      where: { orderId, actorType: 'PANCAKE', note: { startsWith: PANCAKE_PARTIAL_RETURN_MANUAL_NOTE } },
+      select: { id: true },
+    });
+    if (marker) return true;
+    const row = await tx.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    return row?.pancakeAttention?.split(ATTENTION_SEPARATOR).some((part) => part.startsWith(PANCAKE_PARTIAL_RETURN_MANUAL_PREFIX)) ?? false;
   }
 
   /** Sau khi đơn đã huỷ ở Tubu bằng đường riêng (khách tự huỷ): ghi kết quả huỷ Pancake / xếp job huỷ. */
