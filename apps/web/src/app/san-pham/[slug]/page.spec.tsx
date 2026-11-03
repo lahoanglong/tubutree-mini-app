@@ -378,7 +378,7 @@ describe('/san-pham/[slug] — dòng "Vận chuyển ›" ngắn, lưu ý dài n
   it('điện thoại: ghi chú vận chuyển xếp order 4, trên chip phân loại (5) và Số lượng (6) để Số lượng sát phân loại', async () => {
     api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
     const c = await mount();
-    expect(c.querySelector('[data-section="pdp-notes"]')!.className).toContain('max-md:order-4');
+    expect(c.querySelector('[data-section="pdp-notes"]')!.className).toContain('tubu-pdp-order-4');
   });
 });
 
@@ -613,8 +613,8 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(after(add, certs)).toBe(true);
     expect(after(add, subscribe)).toBe(true);
     // Điện thoại giữ thứ tự như Mini App: chứng nhận (order 1) → Đặt định kỳ (2); khối mua tách phần Phân loại và Số lượng ra bằng `contents` (xem add-to-cart.spec).
-    expect(certs.className).toContain('max-md:order-1');
-    expect(subscribe.closest('.max-md\\:order-2')).not.toBeNull();
+    expect(certs.className).toContain('tubu-pdp-order-1');
+    expect(subscribe.closest('.tubu-pdp-order-2')).not.toBeNull();
     expect(add.parentElement!.className).toContain('max-md:contents');
   });
 
@@ -651,7 +651,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
       const c = await mount();
       await flush();
       const info = c.querySelector('[data-testid="pdp-info"]')!;
-      const order = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.closest('[class*="max-md:order-"]')?.className ?? '')?.[1] ?? 0);
+      const order = (el: Element) => Number(/tubu-pdp-order-(\d+)/.exec(el.closest('[class*="tubu-pdp-order-"]')?.className ?? '')?.[1] ?? 0);
       // sort ổn định: cùng order thì giữ thứ tự DOM, đúng như flex xếp.
       const visual = Array.from(info.querySelectorAll('[data-section]'))
         .map((el) => ({ id: el.getAttribute('data-section')!, order: order(el) }))

@@ -130,7 +130,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       {metaNode}
       {chipCode && <span style={{ display: 'block', ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span>}
       {footItems.length > 0 && (
-        <span data-testid="voucher-foot" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--p-space-2)', ...captionStyle }}>
+        <span data-testid="voucher-foot" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--p-space-1)', ...captionStyle }}>
           {footItems.map((item, i) => (
             <span key={item.key} style={{ whiteSpace: 'nowrap' }}>
               {item.node}
@@ -163,7 +163,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       )}
     </>
   );
-  const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, textAlign: 'left', padding: variant === 'ticket' ? '8px 10px 8px 12px' : '6px 0', ...(variant === 'ticket' ? { display: 'flex', flexDirection: 'column', justifyContent: 'center' } : null) };
+  const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, textAlign: 'left', padding: variant === 'ticket' ? '8px 4px 8px 12px' : '6px 0', ...(variant === 'ticket' ? { display: 'flex', flexDirection: 'column', justifyContent: 'center' } : null) };
   const bodyNode = onDetail ? (
     <button
       type="button"

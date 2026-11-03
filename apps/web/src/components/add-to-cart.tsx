@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuthPhase } from '@/lib/auth-phase';
+import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
@@ -83,6 +83,7 @@ export default function AddToCart({
   const router = useRouter();
   const qc = useQueryClient();
   const phase = useAuthPhase();
+  const restoring = useAuthRestoring();
   // Tồn kho trong HTML là bản ISR (tối đa 5 phút tuổi). Khi mở trang hỏi lại tồn kho thật; lỗi/chưa xong thì dùng bản ISR.
   const stockQ = useProductStock(slug);
   const variations = useMemo(
@@ -125,6 +126,11 @@ export default function AddToCart({
   const line = selected ? variationLinePreview(selected, flashWithAllowance, qty, inCartQuantity(cartLines, selected.id)) : null;
   // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
   const overLimitText = line ? lineNote(line, qty, true) : null;
+  // Giữ chỗ 2 dòng caption từ lần vẽ đầu khi khách đã đăng nhập đang xem Giờ vàng (dưới md): câu hết suất chỉ biết sau GET /flash-sales/me/allowance (về muộn 1–3 s) và không được đẩy phần dưới.
+  // Phiên đang khôi phục (cờ phiên còn, chưa biết kết quả) cũng giữ ngay: pha đăng nhập chỉ về sau khi refresh qua mạng xong, giữ lúc đó thì chèn một dải mới đẩy phần dưới.
+  // Khách chưa đăng nhập hoặc sản phẩm không có Giờ vàng thì không có số theo khách để chờ, không giữ dải trống.
+  // Chấp nhận một lần co lại: phiên hết hạn hoặc mất mạng khi khôi phục (guest, unavailable) thì dải giữ chỗ bỏ đi và phần dưới dịch lên một lần, hiếm và chỉ khi cờ phiên cũ còn.
+  const reserveFlashNote = (phase === 'authenticated' || restoring) && !!line?.pricing.isFlash;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,
@@ -314,7 +320,7 @@ export default function AddToCart({
 
   if (blockedReason) {
     return (
-      <div className={`mt-4 max-md:order-6 ${phoneBand}`}>
+      <div className={`mt-4 tubu-pdp-order-6 ${phoneBand}`}>
         <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
           Tạm thời chưa mua được
         </button>
@@ -353,7 +359,7 @@ export default function AddToCart({
           role="group"
           aria-labelledby="variation-label"
           data-section="pdp-variation-chips"
-          className={`max-md:order-5 ${phoneBandPad} max-md:pb-3`}
+          className={`tubu-pdp-order-5 ${phoneBandPad} max-md:pb-3`}
         >
           <div id="variation-label" className="text-sm font-semibold text-stone-900 max-md:sr-only">
             {fillCopy('pdp.variation')}
@@ -380,7 +386,7 @@ export default function AddToCart({
         <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">{stockText(selected!.stock)}</p>
       )}
 
-      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 max-md:order-6 max-md:justify-between ${phoneBand}`}>
+      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 tubu-pdp-order-6 max-md:justify-between ${phoneBand}`}>
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
@@ -389,9 +395,13 @@ export default function AddToCart({
         </button>
       </div>
       {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, các nút đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
-      <div role="status" data-section="pdp-flash-limit" className="max-md:order-6">
+      <div
+        role="status"
+        data-section="pdp-flash-limit"
+        className={`tubu-pdp-order-6 max-md:bg-[var(--color-bg-surface)] ${reserveFlashNote ? 'tubu-pdp-flash-note' : ''}`}
+      >
         {overLimitText && (
-          <p className={`mt-2 text-sm text-[var(--color-text-secondary)] ${phoneCaption} ${phoneBandPad} max-md:mt-0 max-md:pb-3`}>{overLimitText}</p>
+          <p className={`text-sm text-[var(--color-text-secondary)] md:pt-2 ${phoneCaption} ${phoneBandPad} max-md:pb-3`}>{overLimitText}</p>
         )}
       </div>
       <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>

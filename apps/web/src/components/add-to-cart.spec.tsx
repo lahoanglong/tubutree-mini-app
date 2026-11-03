@@ -480,7 +480,7 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
 });
 
 describe('AddToCart — khối mua xếp theo order cùng các khối khác của PDP ở điện thoại (như Mini App)', () => {
-  const order = (el: Element | null) => Number(/max-md:order-(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
+  const order = (el: Element | null) => Number(/tubu-pdp-order-(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
 
   it('gốc là `contents` để chip và Số lượng thành khối con của cột thông tin: chip 5 → Số lượng 6, không còn dòng "Phân loại ›"', async () => {
     const { container } = mount();
@@ -863,7 +863,7 @@ describe('AddToCart — Mua ngay', () => {
     const r = render(<AddToCart slug="dau-goi" variations={VARIATIONS} blockedReason="Tạm nghỉ." />);
     mounted.push(r);
     await flush();
-    expect(r.container.firstElementChild!.className).toContain('max-md:order-6');
+    expect(r.container.firstElementChild!.className).toContain('tubu-pdp-order-6');
   });
 
   describe('thanh CTA dính đáy (điện thoại)', () => {
@@ -1224,7 +1224,7 @@ describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn
 
   async function open(status = 'authenticated') {
     mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
-    mocks.auth = { status, initialized: true, user: status === 'authenticated' ? { id: 'u1' } : null };
+    mocks.auth = { status, initialized: status !== 'loading', user: status === 'authenticated' ? { id: 'u1' } : null };
     const r = mount();
     await flush();
     click(byText(r.container, 'button', /^500ml/));
@@ -1266,6 +1266,30 @@ describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
     expect(addButton(container).disabled).toBe(false);
     expect(container.textContent).not.toContain(SPENT);
+  });
+
+  it('giữ chỗ ghi chú từ lần vẽ đầu khi đã đăng nhập đang xem Giờ vàng (allowance chưa về); chưa đăng nhập thì không giữ dải trống', async () => {
+    mocks.getFlashAllowance.mockReturnValue(new Promise(() => {}));
+    const authed = await open();
+    expect(authed.container.querySelector('[data-section="pdp-flash-limit"]')!.className).toContain('tubu-pdp-flash-note');
+    expect(note(authed.container)).toBe('');
+    authed.unmount();
+    const guest = await open('idle');
+    expect(guest.container.querySelector('[data-section="pdp-flash-limit"]')!.className).not.toContain('tubu-pdp-flash-note');
+  });
+
+  it('phiên đang khôi phục (cờ phiên còn, chưa biết kết quả): giữ chỗ ngay để pha đăng nhập về không chèn thêm dải; không có cờ thì không giữ', async () => {
+    mocks.getFlashAllowance.mockReturnValue(new Promise(() => {}));
+    window.localStorage.setItem('tubu_web_session', '1');
+    try {
+      const restoring = await open('loading');
+      expect(restoring.container.querySelector('[data-section="pdp-flash-limit"]')!.className).toContain('tubu-pdp-flash-note');
+      restoring.unmount();
+    } finally {
+      window.localStorage.removeItem('tubu_web_session');
+    }
+    const noMarker = await open('loading');
+    expect(noMarker.container.querySelector('[data-section="pdp-flash-limit"]')!.className).not.toContain('tubu-pdp-flash-note');
   });
 
   it('khách chưa đăng nhập: không gọi endpoint, số như trước', async () => {
