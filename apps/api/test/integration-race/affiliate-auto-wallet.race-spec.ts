@@ -53,6 +53,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
       { id: 'nt-ctv-wallet-credited', code: CTV_NOTIFICATION.AUTO_WALLET, body: 'Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn{{tax_note}}.' },
       { id: 'nt-ctv-wallet-tax-only', code: CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, body: 'Đã xử lý {{amount}}: khấu trừ thuế {{tax}}, chưa có tiền vào Ví.' },
       { id: 'nt-ctv-commission-approved', code: CTV_NOTIFICATION.APPROVED, body: 'Đã duyệt hoa hồng của {{count}} đơn (tổng {{amount}}).' },
+      { id: 'nt-ctv-tax-id-needed', code: CTV_NOTIFICATION.TAX_ID_NEEDED, body: 'Hoa hồng {{amount}} chưa tự vào Ví: tháng {{month}} cần mã số thuế.' },
     ]) {
       await prisma.notificationTemplate.upsert({
         where: { id: t.id },
@@ -203,6 +204,32 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     await affiliate.requestPayout(u.id, 6_000_000, 'WALLET_BALANCE', undefined, undefined, MST);
     s = await state(u.id);
     expect(s.balance).toBe(5_400_000);
+  });
+
+  it('CTV-02: thuế cộng dồn tháng đòi MST (3tr rồi 2,5tr cùng tháng, chưa có MST): cron bỏ qua và báo CTV đúng một lần mỗi tháng', async () => {
+    const u = await ctv();
+    await commissionFor(u.id, 3_000_000);
+    expect((await affiliate.autoTransferApprovedToWallet()).has(u.id)).toBe(true);
+    expect(await tins(u.id, CTV_NOTIFICATION.TAX_ID_NEEDED)).toHaveLength(0);
+
+    await commissionFor(u.id, 2_500_000);
+    for (let i = 0; i < 3; i++) expect((await affiliate.autoTransferApprovedToWallet()).has(u.id)).toBe(false);
+    const logs = await tins(u.id, CTV_NOTIFICATION.TAX_ID_NEEDED);
+    expect(logs).toHaveLength(1);
+    expect((logs[0]!.payload as { body: string }).body).toMatch(/^Hoa hồng 2\.500\.000đ chưa tự vào Ví: tháng \d{2}\/\d{4} cần mã số thuế\.$/);
+    expect((await state(u.id)).commissions.filter((c) => c.status === 'APPROVED')).toHaveLength(1);
+  });
+
+  it('CTV-03: requestedAt, paidAt của lệnh chuyển và paidAt của hoa hồng cùng một mốc giờ', async () => {
+    const u = await ctv({ personalTaxId: MST });
+    await commissionFor(u.id, 40_000);
+    await commissionFor(u.id, 60_000);
+    await affiliate.requestPayout(u.id, 100_000, 'WALLET_BALANCE');
+    const s = await state(u.id);
+    const payout = s.payouts[0]!;
+    expect(payout.paidAt).not.toBeNull();
+    expect(payout.paidAt!.getTime()).toBe(payout.requestedAt.getTime());
+    for (const c of s.commissions) expect(c.paidAt!.getTime()).toBe(payout.requestedAt.getTime());
   });
 
   it('cờ tắt: cron không chuyển gì (hoa hồng giữ APPROVED, bấm tay vẫn chuyển được); bật lại thì cron chuyển nốt', async () => {
