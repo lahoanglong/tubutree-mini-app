@@ -550,7 +550,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     renderAt(`/browse?q=${'a'.repeat(100)}`);
     const heading = await screen.findByText((t) => t.startsWith('Không tìm thấy'));
     expect(heading.textContent).toContain('​');
-    expect(heading.textContent!.replace(/​/g, '')).toBe(`Không tìm thấy "${'a'.repeat(100)}"`);
+    expect(heading.textContent!.replace(/\u200b/g, '')).toBe(`Không tìm thấy "${'a'.repeat(100)}"`);
   });
 
   it('từ khoá dài toàn emoji ZWJ: điểm ngắt không chèn vào giữa một emoji gia đình', async () => {
