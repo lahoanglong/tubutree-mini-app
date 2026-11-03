@@ -1516,6 +1516,10 @@ export interface AdminCustomerRefund {
   kind: AdminCustomerRefundKind;
   /** Khoá chống trùng của API; khoản COD trả hàng chờ đối soát mang `cod-return-unverified`, khoản đơn đã trả hàng mà nhân viên có thể đã hoàn tay mang `pancake-partial-return-held` (thêm `:rest` ở phần không hoàn). API cũ chưa trả. */
   refKey?: string;
+  /** Cách khách đã trả đơn (API tra từ đơn); API cũ chưa trả. Khoản đơn trả bằng Ví hoàn thẳng về Ví khi Kế toán xác nhận. */
+  paymentMethod?: string | null;
+  /** Khoản COD chờ đối soát mà Pancake còn báo "Hoàn một phần" lúc Tubu không có yêu cầu trả: phải kiểm cả hãng đã thu COD lẫn phần nhân viên đã hoàn tay. */
+  handRefundPossible?: boolean;
   /** Chủ đơn (khách có tài khoản); null với khoản khách cuối đơn CTV lên hộ. */
   userId: string | null;
   /** Tài khoản nhận khách đã chọn; trống = khách chưa chọn nơi nhận, admin nhập tài khoản khách cung cấp khi xác nhận. */

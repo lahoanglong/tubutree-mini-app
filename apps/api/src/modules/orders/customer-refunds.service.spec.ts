@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CustomerRefundsService } from './customer-refunds.service';
+import { COD_HAND_REFUND_NOTE } from './refund-queue';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 
@@ -492,6 +493,34 @@ describe('CustomerRefundsService.list — bộ lọc "Đang mở"', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({ status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] }, kind: 'LATE_PAYMENT' });
     await service.list('COMPLETED', 1, 20);
     expect(findMany.mock.calls[1][0]).toMatchObject({ where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' } });
+  });
+});
+
+describe('CustomerRefundsService.list — khoản COD có cả "hoàn tay" và phương thức thanh toán', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'r1', orderId: 'o1', orderCode: 'T1', kind: 'RETURN', refKey: 'cod-return-unverified', status: 'UNVERIFIED', adminNote: null, claimedBy: null, completedBy: null, ...over,
+  });
+  function setup(items: unknown[]) {
+    const prisma = {
+      orderCustomerRefund: { findMany: jest.fn().mockResolvedValue(items), count: jest.fn().mockResolvedValue(items.length) },
+      order: { findMany: jest.fn().mockResolvedValue([{ id: 'o1', paymentMethod: 'COD' }]) },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    return new CustomerRefundsService(prisma as never);
+  }
+
+  it('khoản COD mang ghi chú "hoàn tay" thì handRefundPossible=true; COD thường, khoản đã quyết hay loại khác thì false; trả kèm paymentMethod', async () => {
+    const service = setup([
+      row({ adminNote: COD_HAND_REFUND_NOTE }),
+      row({ id: 'r2' }),
+      row({ id: 'r3', adminNote: COD_HAND_REFUND_NOTE, status: 'PENDING' }),
+      row({ id: 'r4', adminNote: COD_HAND_REFUND_NOTE, refKey: 'pancake-partial-return-held' }),
+    ]);
+    const page = await service.list('OPEN', 1, 20);
+    const rows = page.data as unknown as { id: string; handRefundPossible: boolean; paymentMethod: string | null }[];
+    expect(rows.map((r) => r.handRefundPossible)).toEqual([true, false, false, false]);
+    expect(rows[0]!.paymentMethod).toBe('COD');
   });
 });
 

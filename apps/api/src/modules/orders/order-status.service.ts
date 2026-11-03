@@ -13,7 +13,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { partialReturnTotals } from './return-ledger';
-import { HELD_RETURN_UNVERIFIED_REF, recordCodReturnUnverified } from './refund-queue';
+import { COD_HAND_REFUND_NOTE, HELD_RETURN_UNVERIFIED_REF, recordCodReturnUnverified } from './refund-queue';
 import { refundNote } from './order-returns.service';
 import {
   assertPaidBeforeFulfilment,
@@ -404,7 +404,13 @@ export class OrderStatusService {
           unverified = (reversed as ReversalResult).withheldRefund;
         }
         if (unverified > 0) {
-          await recordCodReturnUnverified(tx, order, unverified, withholdCod ? undefined : HELD_RETURN_UNVERIFIED_REF);
+          await recordCodReturnUnverified(
+            tx,
+            order,
+            unverified,
+            withholdCod ? undefined : HELD_RETURN_UNVERIFIED_REF,
+            withholdCod && manualPartial ? COD_HAND_REFUND_NOTE : undefined,
+          );
           const added = [...(withholdCod ? [ATTENTION_COD_RETURN_UNVERIFIED] : []), ...(manualPartial ? [ATTENTION_PARTIAL_RETURN_HELD] : [])];
           // Đọc lại ô dưới khoá dòng của lần lật: ảnh chụp ngoài tx có thể thiếu lời 15 vừa commit chen giữa, và ghi theo ảnh đó là đè mất nó.
           const current = (await tx.order.findUnique({ where: { id: order.id }, select: { pancakeAttention: true } }))?.pancakeAttention ?? null;

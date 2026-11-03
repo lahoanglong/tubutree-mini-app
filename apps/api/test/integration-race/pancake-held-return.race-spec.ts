@@ -18,6 +18,7 @@ import {
   ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
   ATTENTION_PARTIAL_RETURN_SETTLED,
 } from '../../src/modules/integrations/pancake/pancake-attention';
+import { COD_HAND_REFUND_NOTE } from '../../src/modules/orders/refund-queue';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
@@ -139,7 +140,7 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
     expect(await walletOf(user.id)).toBe(0);
     const rows = await rowsOf(order.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ refKey: 'cod-return-unverified', status: 'UNVERIFIED', amount: 300_000 });
+    expect(rows[0]).toMatchObject({ refKey: 'cod-return-unverified', status: 'UNVERIFIED', amount: 300_000, adminNote: COD_HAND_REFUND_NOTE });
   });
 
   it('lời 15 bị nhân viên bấm "Đã xử lý" xoá khỏi ô: dấu vết trong lịch sử đơn vẫn giữ tiền lại khi 5 tới', async () => {
@@ -349,6 +350,8 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       await refunds.verifyOverpayment(accountant.id, row.id, { amount: 300_000 });
 
       expect((await orderOf(order.id)).pancakeAttention).toBeNull();
+      const notes = (await prisma.orderStatusHistory.findMany({ where: { orderId: order.id, actorId: accountant.id } })).map((n) => n.note ?? '');
+      expect(notes.join(' ')).toContain('đã trừ phần nhân viên hoàn tay');
     });
 
     it('bất biến: ghi lý do khác không đè dòng chờ Kế toán, nối sau nó; Kế toán quyết xong chỉ gỡ dòng của mình', async () => {

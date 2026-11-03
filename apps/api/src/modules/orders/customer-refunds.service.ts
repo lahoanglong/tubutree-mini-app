@@ -6,7 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { anonymizedAtOf, creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { canRefundToBank, formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
-import { OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
+import { COD_HAND_REFUND_NOTE, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, isCodReturnRef, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
 import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD, removeAttentionReason } from '../integrations/pancake/pancake-attention';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
@@ -124,8 +124,15 @@ export class CustomerRefundsService {
       this.prisma.orderCustomerRefund.count({ where }),
     ]);
     const names = await this.adminNames(items.flatMap((r) => [r.claimedBy, r.completedBy]));
+    const orders = items.length
+      ? await this.prisma.order.findMany({ where: { id: { in: [...new Set(items.map((r) => r.orderId))] } }, select: { id: true, paymentMethod: true } })
+      : [];
+    const methodOf = new Map(orders.map((o) => [o.id, o.paymentMethod]));
     const named = items.map((r) => ({
       ...r,
+      // Màn admin nói đúng theo cách khách đã trả (Ví hoàn thẳng, đơn khác chờ khách chọn) và gộp hai việc kiểm khi khoản COD cũng có "hoàn tay".
+      paymentMethod: methodOf.get(r.orderId) ?? null,
+      handRefundPossible: r.status === 'UNVERIFIED' && r.kind === 'RETURN' && isCodReturnRef(r.refKey) && r.adminNote === COD_HAND_REFUND_NOTE,
       claimedByName: r.claimedBy ? (names.get(r.claimedBy) ?? null) : null,
       completedByName: r.completedBy ? (names.get(r.completedBy) ?? null) : null,
     }));
@@ -380,6 +387,7 @@ export class CustomerRefundsService {
     }
     const heldReturn = row.kind === 'RETURN' && isHeldReturnRef(row.refKey);
     const codReturn = row.kind === 'RETURN' && !heldReturn;
+    const codHand = codReturn && row.adminNote === COD_HAND_REFUND_NOTE;
     const amount = input.amount ?? row.amount;
     if (!Number.isInteger(amount) || amount <= 0 || amount > row.amount) {
       throw new BadRequestException(
@@ -415,6 +423,8 @@ export class CustomerRefundsService {
               completedAt: new Date(),
               adminNote: heldReturn
                 ? `Phần nhân viên đã hoàn tay, không hoàn lại (xác nhận hoàn ${formatVnd(amount)}/${formatVnd(row.amount)}).`
+                : codHand
+                ? `Phần nhân viên đã hoàn tay hoặc hãng chưa thu COD, không hoàn lại (xác nhận hoàn ${formatVnd(amount)}/${formatVnd(row.amount)}).`
                 : codReturn
                 ? `Phần COD không hoàn (xác nhận hoàn ${formatVnd(amount)}/${formatVnd(row.amount)}).`
                 : `Phần Pancake báo dư nhưng sao kê không có (xác nhận ${formatVnd(amount)}/${formatVnd(row.amount)}).`,
@@ -430,6 +440,8 @@ export class CustomerRefundsService {
         row.orderId,
         heldReturn
           ? `Xác nhận hoàn ${formatVnd(amount)} cho đơn trả hàng${amount < row.amount ? ` (tối đa ${formatVnd(row.amount)})` : ''}: đã trừ phần nhân viên hoàn tay${note ? ` · ${note}` : ''}`
+          : codHand
+          ? `Xác nhận hoàn ${formatVnd(amount)} cho đơn COD trả hàng${amount < row.amount ? ` (tối đa ${formatVnd(row.amount)})` : ''}: hãng vận chuyển đã thu COD, đã trừ phần nhân viên hoàn tay${note ? ` · ${note}` : ''}`
           : codReturn
           ? `Xác nhận hoàn ${formatVnd(amount)} cho đơn COD trả hàng${amount < row.amount ? ` (tối đa ${formatVnd(row.amount)})` : ''}: hãng vận chuyển đã thu COD${note ? ` · ${note}` : ''}`
           : `Xác nhận tiền trả dư ${formatVnd(amount)}${partial} sau khi đối chiếu sao kê${note ? ` · ${note}` : ''}`,
@@ -515,6 +527,7 @@ export class CustomerRefundsService {
     }
     const heldReturn = row.kind === 'RETURN' && isHeldReturnRef(row.refKey);
     const codReturn = row.kind === 'RETURN' && !heldReturn;
+    const codHand = codReturn && row.adminNote === COD_HAND_REFUND_NOTE;
     if (reason.length < DISMISS_REASON_MIN) {
       throw new BadRequestException(
         `Ghi lý do (ít nhất ${DISMISS_REASON_MIN} ký tự) vì sao ${heldReturn ? 'không hoàn tiền đơn này' : codReturn ? 'không hoàn tiền đơn COD này' : 'đây không phải tiền khách trả dư'}.`,
@@ -532,6 +545,8 @@ export class CustomerRefundsService {
         row.orderId,
         heldReturn
           ? `Không hoàn ${formatVnd(row.amount)} đơn trả hàng (nhân viên đã hoàn tay ngoài hệ thống). Lý do: ${reason}`
+          : codHand
+          ? `Không hoàn ${formatVnd(row.amount)} đơn COD trả hàng (hãng chưa thu tiền hoặc nhân viên đã hoàn tay đủ). Lý do: ${reason}`
           : codReturn
           ? `Không hoàn ${formatVnd(row.amount)} đơn COD trả hàng (hãng chưa thu tiền). Lý do: ${reason}`
           : `Không phải tiền trả dư ${formatVnd(row.amount)} (Pancake báo). Lý do: ${reason}`,

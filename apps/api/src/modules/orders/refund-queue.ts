@@ -63,6 +63,11 @@ export const COD_RETURN_UNVERIFIED_REF = 'cod-return-unverified';
  * nhân viên có thể đã hoàn tay phần bị trả. Riêng một refKey (không dùng chung COD) để chữ ở API/màn admin không nói "hãng đã thu COD".
  */
 export const HELD_RETURN_UNVERIFIED_REF = 'pancake-partial-return-held';
+/**
+ * Ghi chú trên khoản COD chờ đối soát khi đơn đó CŨNG đã được Pancake báo "Hoàn một phần" lúc Tubu không có yêu cầu trả: Kế toán phải kiểm hai
+ * việc (hãng có thu COD không, nhân viên đã hoàn tay bao nhiêu). Dùng cột adminNote (trống cho tới lúc Kế toán quyết) nên không cần migration.
+ */
+export const COD_HAND_REFUND_NOTE = 'Pancake báo hoàn một phần rồi hoàn cả đơn: nhân viên có thể đã hoàn tay phần bị trả.';
 
 /** Khoản hoàn COD trả hàng chờ đối soát (kể cả phần không hoàn `:rest` sau khi xác nhận một phần). */
 export const isCodReturnRef = (refKey: string): boolean => refKey === COD_RETURN_UNVERIFIED_REF || refKey.startsWith(`${COD_RETURN_UNVERIFIED_REF}:`);
@@ -96,6 +101,7 @@ export async function recordCodReturnUnverified(
   order: Pick<Order, 'id' | 'code'> & RefundOwnerFacts,
   amount: number,
   refKey: string = COD_RETURN_UNVERIFIED_REF,
+  adminNote?: string,
 ): Promise<void> {
   await tx.orderCustomerRefund.createMany({
     data: [
@@ -109,6 +115,7 @@ export async function recordCodReturnUnverified(
         method: 'MANUAL_TRANSFER',
         status: 'UNVERIFIED',
         reason: 'RETURNED',
+        ...(adminNote ? { adminNote } : {}),
       },
     ],
     skipDuplicates: true,

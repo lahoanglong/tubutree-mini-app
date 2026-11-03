@@ -69,6 +69,23 @@ const isCodReturn = (r: AdminCustomerRefund) =>
  */
 const isHeldReturn = (r: AdminCustomerRefund) => r.kind === 'RETURN' && r.refKey !== undefined && r.refKey.startsWith(HELD_RETURN_REF);
 
+/** Khoản COD chờ đối soát mà nhân viên cũng có thể đã hoàn tay (API handRefundPossible): hai việc kiểm gộp một chỗ, không chỉ "hãng đã thu COD". */
+const isCodHand = (r: AdminCustomerRefund) => isCodReturn(r) && r.handRefundPossible === true;
+
+/**
+ * Việc tiếp theo sau khi Kế toán xác nhận khoản đơn đã giao, theo cách khách đã trả: đơn Ví hoàn thẳng về Ví, đơn khác thành "Chờ chuyển khoản"
+ * và khách chưa được báo. API cũ chưa trả phương thức thì nói cả hai khả năng.
+ */
+const CHOOSE_LATER = 'khoản chuyển sang "Chờ chuyển khoản"; khách chưa được báo nên hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ngân hàng';
+const refundNextStep = (r: AdminCustomerRefund): string =>
+  r.userId === null
+    ? `đơn CTV lên hộ: ${COD_END_CUSTOMER_NEXT}`
+    : r.paymentMethod === 'WALLET'
+    ? 'đơn trả bằng Ví nên hoàn thẳng về Ví khách, khách được báo'
+    : r.paymentMethod === undefined
+    ? `đơn trả bằng Ví hoàn thẳng về Ví khách, đơn khác ${CHOOSE_LATER}`
+    : CHOOSE_LATER;
+
 /** Khách cuối của đơn CTV lên hộ không có tài khoản nên không có lựa chọn Ví Tubu: Tubu chuyển khoản tay theo SĐT. */
 const COD_END_CUSTOMER_NEXT = 'khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối';
 
@@ -76,6 +93,7 @@ const VERIFY_LABEL = 'Xác nhận tiền dư';
 const DISMISS_LABEL = 'Không phải tiền dư';
 const COD_VERIFY_LABEL = 'Xác nhận đã thu COD, hoàn cho khách';
 const COD_DISMISS_LABEL = 'Không hoàn';
+const COD_HAND_VERIFY_LABEL = 'Xác nhận đã thu COD, hoàn số còn lại';
 const COD_DISMISSED_STATUS_LABEL = 'Không hoàn (COD)';
 const HELD_VERIFY_LABEL = 'Xác nhận số còn phải hoàn';
 const HELD_DISMISS_LABEL = 'Không hoàn';
@@ -197,18 +215,10 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
       void invalidateInbox(qc);
       setFlash({
         tone: 'success',
-        text: isHeldReturn(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn ${r.orderCode}. ${
-              r.userId === null
-                ? 'Đơn CTV lên hộ: khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối'
-                : 'Đơn trả bằng Ví đã hoàn thẳng về Ví khách; đơn khác chuyển sang "Chờ chuyển khoản", khách chưa được báo nên hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ngân hàng'
-            }.`
+        text: isHeldReturn(r) || isCodHand(r)
+          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn ${r.orderCode}${isCodHand(r) ? ' (hãng đã thu COD, đã trừ phần nhân viên hoàn tay)' : ''}: ${refundNextStep(r)}.`
           : isCodReturn(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}. ${
-              r.userId === null
-                ? 'Đơn CTV lên hộ: khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối'
-                : 'Khách chưa được báo: liên hệ khách để chọn nhận về Ví Tubu hay tài khoản ngân hàng'
-            }; khoản chuyển sang "Chờ chuyển khoản".`
+          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}: ${refundNextStep(r)}.`
           : `Đã xác nhận tiền trả dư ${formatVnd(amount)} (đơn ${r.orderCode}). Khách được báo để chọn nhận về Ví Tubu hay tài khoản ngân hàng; khoản chuyển sang "Chờ chuyển khoản".`,
       });
     },
@@ -227,6 +237,8 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
         tone: 'success',
         text: isHeldReturn(r)
           ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn ${r.orderCode} (nhân viên đã hoàn tay). Khách không được báo.`
+          : isCodHand(r)
+          ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} (hãng chưa thu tiền hoặc nhân viên đã hoàn tay đủ). Khách không được báo.`
           : isCodReturn(r)
           ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} (hãng vận chuyển chưa thu tiền). Khách không được báo.`
           : `Đã đánh dấu khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) không phải tiền dư. Khách không được báo.`,
@@ -244,6 +256,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
     setFlash(null);
     const cod = isCodReturn(r);
     const held = isHeldReturn(r);
+    const codHand = isCodHand(r);
     const checkAmount = cod || held ? codAmountError : overpaidAmountError;
     const error = checkAmount(amount, r.amount);
     if (error || amount == null) {
@@ -251,16 +264,18 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
       return;
     }
     const ok = await confirm(
-      held
+      held || codHand
         ? {
             title: 'Xác nhận số còn phải hoàn',
             message:
-              `Đơn ${r.orderCode} đã trả hàng. Sau khi trừ phần nhân viên đã hoàn tay, Tubu còn phải hoàn ${formatVnd(amount)} cho khách?\n\n` +
-              (r.userId === null
-                ? 'Đơn CTV lên hộ nên khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối. '
-                : 'Đơn trả bằng Ví được hoàn thẳng về Ví khách; đơn khác chuyển sang "Chờ chuyển khoản", khách chưa được báo nên hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. ') +
-              'Phần còn lại được ghi là đã hoàn tay. Chỉ bấm khi đã đối chiếu với nhân viên.',
-            confirmLabel: HELD_VERIFY_LABEL,
+              (codHand
+                ? `Hãng vận chuyển đã thu COD của đơn ${r.orderCode}, và sau khi trừ phần nhân viên đã hoàn tay, Tubu còn phải hoàn ${formatVnd(amount)} cho khách?\n\n`
+                : `Đơn ${r.orderCode} đã trả hàng. Sau khi trừ phần nhân viên đã hoàn tay, Tubu còn phải hoàn ${formatVnd(amount)} cho khách?\n\n`) +
+              `${refundNextStep(r)}. ` +
+              (codHand
+                ? 'Phần còn lại được ghi là không hoàn (nhân viên đã hoàn tay hoặc hãng chưa thu). Chỉ bấm khi đã đối chiếu với hãng và nhân viên.'
+                : 'Phần còn lại được ghi là đã hoàn tay. Chỉ bấm khi đã đối chiếu với nhân viên.'),
+            confirmLabel: codHand ? COD_HAND_VERIFY_LABEL : HELD_VERIFY_LABEL,
             cancelLabel: 'Đóng',
           }
         : cod
@@ -268,9 +283,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
             title: 'Xác nhận đã thu COD',
             message:
               `Hãng vận chuyển đã thu COD của đơn ${r.orderCode} và khách đã trả hàng, nên hoàn ${formatVnd(amount)} cho khách?\n\n` +
-              (r.userId === null
-                ? 'Khoản chuyển sang "Chờ chuyển khoản"; đơn CTV lên hộ nên khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối. '
-                : 'Khoản chuyển sang "Chờ chuyển khoản"; khách chưa được báo, hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. ') +
+              `${refundNextStep(r)}. ` +
               'Chỉ bấm khi đã đối chiếu với hãng vận chuyển.',
             confirmLabel: COD_VERIFY_LABEL,
             cancelLabel: 'Đóng',
@@ -293,10 +306,14 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
     setFlash(null);
     const cod = isCodReturn(r);
     const held = isHeldReturn(r);
+    const codHand = isCodHand(r);
     const reason = await ask({
       title: held ? 'Không hoàn tiền đơn này' : cod ? 'Không hoàn tiền đơn COD' : DISMISS_LABEL,
       message: held
         ? `Không hoàn thêm ${formatVnd(r.amount)} cho đơn ${r.orderCode} vì nhân viên đã hoàn tay đủ cho khách?\n\n` +
+          'Khách sẽ không được báo và không nhận khoản này. Lý do được lưu vào khoản và lịch sử đơn.'
+        : codHand
+        ? `Không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} vì hãng vận chuyển chưa thu tiền hoặc nhân viên đã hoàn tay đủ cho khách?\n\n` +
           'Khách sẽ không được báo và không nhận khoản này. Lý do được lưu vào khoản và lịch sử đơn.'
         : cod
         ? `Không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} vì hãng vận chuyển chưa thu tiền của khách?\n\n` +
@@ -310,6 +327,8 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
         label: 'Lý do',
         placeholder: held
           ? 'Vd: Nhân viên đã chuyển khoản tay đủ cho khách'
+          : codHand
+          ? 'Vd: Hãng báo chưa thu COD, hoặc nhân viên đã hoàn tay đủ'
           : cod
           ? 'Vd: Hãng báo chưa thu tiền COD của đơn này'
           : 'Vd: Cùng một lần chuyển, sao kê chỉ có một khoản',
@@ -532,6 +551,7 @@ export function CustomerRefundRow({
   const undecided = view === 'UNVERIFIED' || view === 'DISMISSED';
   const codReturn = isCodReturn(r);
   const heldReturn = isHeldReturn(r);
+  const codHand = isCodHand(r);
   const manual = r.method === 'MANUAL_TRANSFER';
   const from = takeOverFrom(r, meId);
   const takeOverTag = from ? ' (tiếp quản)' : '';
@@ -552,7 +572,7 @@ export function CustomerRefundRow({
               </ToneBadge>
             </span>
             <ToneBadge tone="neutral">
-              {heldReturn ? HELD_KIND_LABEL : codReturn ? 'Trả hàng COD' : r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}
+              {heldReturn ? HELD_KIND_LABEL : codHand ? 'Trả hàng COD, có thể đã hoàn tay' : codReturn ? 'Trả hàng COD' : r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}
             </ToneBadge>
           </div>
           <div className="mt-1 text-sm text-stone-600">
@@ -598,10 +618,14 @@ export function CustomerRefundRow({
             <p className="text-xs text-warning-fg">
               Pancake báo hoàn một phần rồi hoàn cả đơn, trong khi Tubu không có yêu cầu trả hàng nào, nên nhân viên có thể đã hoàn tay một
               phần tiền. Hệ thống giữ lại cả khoản này; khách chưa thấy. Trừ phần nhân viên đã hoàn tay rồi nhập số còn phải hoàn (
-              {r.userId === null
-                ? `đơn CTV lên hộ: ${COD_END_CUSTOMER_NEXT}`
-                : 'đơn trả bằng Ví hoàn thẳng về Ví khách; đơn khác khách chưa được báo, liên hệ khách để chọn nhận về Ví hay ngân hàng'}
+              {refundNextStep(r)}
               ); đã hoàn đủ thì bấm &quot;{HELD_DISMISS_LABEL}&quot;.
+            </p>
+          ) : codHand ? (
+            <p className="text-xs text-warning-fg">
+              Đơn COD đã giao rồi bị hoàn, hệ thống chưa rõ hãng vận chuyển đã thu tiền chưa; Pancake còn báo hoàn một phần trong khi Tubu không có
+              yêu cầu trả hàng nào, nên nhân viên có thể đã hoàn tay một phần. Khách chưa thấy khoản này. Đối chiếu với hãng và nhân viên: đã thu COD thì
+              trừ phần đã hoàn tay rồi nhập số còn phải hoàn ({refundNextStep(r)}); hãng chưa thu hoặc đã hoàn tay đủ thì bấm &quot;{COD_DISMISS_LABEL}&quot;.
             </p>
           ) : codReturn ? (
             <p className="text-xs text-warning-fg">
@@ -639,7 +663,7 @@ export function CustomerRefundRow({
               <span className="shrink-0">đ</span>
             </label>
             <button type="button" className={BTN_WARNING} disabled={deciding} onClick={() => onVerify?.(overpaid)}>
-              {heldReturn ? HELD_VERIFY_LABEL : codReturn ? COD_VERIFY_LABEL : VERIFY_LABEL}
+              {heldReturn ? HELD_VERIFY_LABEL : codHand ? COD_HAND_VERIFY_LABEL : codReturn ? COD_VERIFY_LABEL : VERIFY_LABEL}
             </button>
             <button type="button" className={BTN_SECONDARY} disabled={deciding} onClick={onDismiss}>
               {heldReturn ? HELD_DISMISS_LABEL : codReturn ? COD_DISMISS_LABEL : DISMISS_LABEL}
