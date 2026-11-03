@@ -1,5 +1,5 @@
 import { test, expect } from './support/mock-api';
-import { anchorBelow, gate, readCls, trackLayoutShift } from './support/pdp-cls';
+import { anchorBelow, gate, readShiftBelow, trackLayoutShift } from './support/pdp-cls';
 import { mockPilotProduct, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
 
 /**
@@ -42,17 +42,23 @@ test.describe('Mini App PDP: ghi chú hết suất Giờ vàng về muộn khôn
       await page.goto(`/product/${PILOT_SLUG}`);
       await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
       const slot = page.locator('[data-section="pdp-flash-limit"]');
+      // Phông và các khối phía trên vùng ghi chú (tiêu đề, giá) chưa ổn định thì chúng tự đẩy cả vùng lẫn phần dưới đi cùng nhau: đó không phải do ghi chú.
+      // Chờ phông tải xong (Linux CI vẽ lần đầu bằng phông dự phòng rồi đổi, tiêu đề đổi số dòng), rồi đo khoảng cách TƯƠNG ĐỐI từ vùng ghi chú tới khối bên dưới.
+      await page.evaluate(() => document.fonts.ready.then(() => Promise.allSettled([...document.fonts].map((f) => f.load()))));
+      // Chỗ giữ cho ghi chú chỉ có sau khi đăng nhập khôi phục xong (máy chậm thì chậm hơn): đo trước đó là đo lần đổi pha đăng nhập, không phải ghi chú.
+      await expect.poll(async () => (await slot.boundingBox())?.height ?? 0, { timeout: 15_000 }).toBeGreaterThan(0);
       const anchor = await anchorBelow(slot);
       await expect(slot).toHaveText('');
-      const before = (await anchor.boundingBox())!;
-      const clsBefore = await readCls(page);
+      const gap = async () => (await anchor.boundingBox())!.y - (await slot.boundingBox())!.y;
+      const before = await gap();
+      const shiftBefore = await readShiftBelow(page, slot);
       g.release();
       if (perUserLeft === 0) await expect(slot).toHaveText(SPENT, { timeout: 10_000 });
       await page.waitForTimeout(500);
-      const after = (await anchor.boundingBox())!;
-      expect(Math.abs(after.y - before.y), `khối bên dưới dịch ${after.y - before.y}px`).toBeLessThanOrEqual(1);
-      const cls = (await readCls(page)) - clsBefore;
-      expect(cls, `CLS khi ghi chú hiện ${cls.toFixed(4)}`).toBe(0);
+      const after = await gap();
+      expect(Math.abs(after - before), `khối bên dưới dịch ${after - before}px so với vùng ghi chú`).toBeLessThanOrEqual(1);
+      const cls = (await readShiftBelow(page, slot)) - shiftBefore;
+      expect(cls, `CLS do ghi chú ${cls.toFixed(4)}`).toBe(0);
     });
   }
 

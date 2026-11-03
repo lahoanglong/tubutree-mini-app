@@ -7,13 +7,14 @@ import { expect, type Locator } from '@playwright/test';
 const DAY = 86_400_000;
 const inDays = (n: number) => new Date(Date.now() + n * DAY).toISOString();
 
+// Nhãn dài nhất của bộ ("Giảm 99%, tối đa 99k") phải còn dư chỗ trong cột nội dung: với "tối đa 999k" nhãn chỉ vừa khít 159,5px trên Mac và gãy dòng trên Linux CI (phiếu 120px), nên bắt nhầm phông chứ không bắt lỗi giao diện.
 export const WALLET_TICKETS = [
   { code: 'NHANSHIP', title: 'Miễn phí giao hàng đơn từ 99.000đ', type: 'FREESHIP', value: 0, minOrder: 99_000, maxDiscount: null, endAt: inDays(2) },
   { code: 'NHAN10', title: 'Giảm 10% tối đa 50.000đ', type: 'PERCENT', value: 10, minOrder: 300_000, maxDiscount: 50_000, endAt: inDays(12) },
   { code: 'NHANXANH20K', title: 'Giảm 20.000đ đơn từ 150.000đ', type: 'AMOUNT', value: 20_000, minOrder: 150_000, maxDiscount: null, endAt: inDays(6) },
   { code: 'BEPXANH15', title: 'Chương trình tri ân khách hàng thân thiết mùa thu', type: 'PERCENT', value: 15, minOrder: 250_000, maxDiscount: 45_000, endAt: inDays(30) },
   { code: 'QUAKHACHMOI', title: 'Quà khách mới', type: 'AMOUNT', value: 30_000, minOrder: 0, maxDiscount: null, endAt: inDays(20) },
-  { code: 'TUBU99', title: null, type: 'PERCENT', value: 99, minOrder: 999_000, maxDiscount: 999_000, endAt: inDays(40) },
+  { code: 'TUBU99', title: null, type: 'PERCENT', value: 99, minOrder: 999_000, maxDiscount: 99_000, endAt: inDays(40) },
   { code: 'GIAM20', title: 'Giảm 20k cho 3 đơn', type: 'AMOUNT', value: 20_000, minOrder: 100_000, maxDiscount: null, endAt: inDays(14) },
 ];
 
