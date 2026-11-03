@@ -587,10 +587,10 @@ export default function CheckoutPage() {
                           onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-60' : ''}`}
+                          className={`${miniRadio} ${miniRadioGutter} ${reason ? 'max-md:opacity-[0.45] md:opacity-60' : ''}`}
                         />
                         <span className="flex min-w-0 flex-col">
-                          <span className={reason ? 'opacity-60' : undefined}>{p.label}</span>
+                          <span className={reason ? 'max-md:opacity-[0.45] md:opacity-60' : undefined}>{p.label}</span>
                           {reason && (
                             <span id={`pay-blocked-${p.k}`} className="text-caption text-[color:var(--color-text-secondary)] md:hidden">
                               {reason}
@@ -779,8 +779,8 @@ export default function CheckoutPage() {
               </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="min-w-0 text-[color:var(--color-text-brand)]">
-                <span className={`block font-semibold max-md:text-[color:var(--color-text-primary)] ${partnerPoints.disabled ? 'max-md:opacity-60' : ''}`}>Điểm Xanh</span>
-                <span className={`block text-caption max-md:text-[color:var(--color-text-tertiary)] ${partnerPoints.disabled ? 'max-md:opacity-60' : ''}`}>
+                <span className={`block font-semibold max-md:text-[color:var(--color-text-primary)]`}>Điểm Xanh</span>
+                <span className={`block text-caption max-md:text-[color:var(--color-text-tertiary)]`}>
                   {partnerPoints.disabled
                     ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
