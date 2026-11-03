@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -933,6 +933,10 @@ describe('AddToCart — Mua ngay', () => {
 });
 
 describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () => {
+  // Bảng nạp bằng next/dynamic: lần nạp đầu phải biên dịch, trên máy chậm lâu hơn số nhịp flush(); nạp sẵn để mọi ca không phụ thuộc tốc độ máy.
+  beforeAll(async () => {
+    await import('./variation-sheet');
+  });
   const realMatchMedia = window.matchMedia;
   beforeEach(() => {
     window.matchMedia = ((q: string) => ({ matches: q.includes('max-width: 767px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
@@ -942,9 +946,9 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     window.matchMedia = realMatchMedia;
   });
   const sheet = () => document.body.querySelector('[role="dialog"]') as HTMLElement | null;
-  // Bảng nạp lười (next/dynamic): chờ tới khi hiện.
+  // Chờ theo thời gian thật (không theo số nhịp): nạp động chậm bao lâu cũng không làm ca đỏ giả.
   const sheetReady = async () => {
-    for (let n = 0; n < 40 && !sheet(); n++) await flush();
+    for (const end = Date.now() + 5000; !sheet() && Date.now() < end; ) await flush();
   };
 
   it('Thêm vào giỏ mở bảng chọn, chọn 500ml rồi xác nhận mới thêm giỏ', async () => {
