@@ -140,7 +140,8 @@ export class ZaloOaWebhookController {
       // Không băm lại thân đã parse: chữ ký khi đó chỉ khớp tình cờ. Thân JSON có timestamp thì parser webhook luôn giữ thân thô,
       // nên chỉ ghi lỗi ở trường hợp đó (cấu hình parser hỏng); thân dạng khác do người ngoài gửi thì 401 im lặng (route không giới
       // hạn tần suất).
-      if (/json/i.test(String(req?.headers?.['content-type'] ?? ''))) {
+      // So đúng loại media như parser json chọn request (tham số như `; x=json` không tính).
+      if ((String(req?.headers?.['content-type'] ?? '').split(';')[0] ?? '').trim().toLowerCase() === 'application/json') {
         this.logger.error('Webhook OA JSON có chữ ký nhưng không mang thân thô (req.rawBody): kiểm parser webhook ở common/body-limits.ts.');
       }
       return false;

@@ -148,13 +148,14 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     try {
       const { ctrl, create } = build(both);
-      const form = { headers: { 'content-type': 'application/x-www-form-urlencoded' } };
-      for (const req of [undefined, {}, { rawBody: Buffer.alloc(0) }, form]) {
+      const form = (ct: string) => ({ headers: { 'content-type': ct } });
+      const forms = ['application/x-www-form-urlencoded', 'application/x-www-form-urlencoded; x=json', 'text/plain; charset=utf-8; boundary=json', 'application/vnd.api+json'].map(form);
+      for (const req of [undefined, {}, { rawBody: Buffer.alloc(0) }, ...forms]) {
         await expect(ctrl.handle(signed, undefined, sign(), req)).rejects.toBeInstanceOf(UnauthorizedException);
       }
       // Người ngoài gửi form có timestamp (route không giới hạn tần suất): 401 im lặng, không làm tràn log lỗi.
       expect(error).not.toHaveBeenCalled();
-      await expect(ctrl.handle(signed, undefined, sign(), { headers: { 'content-type': 'application/json; charset=utf-8' } })).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(ctrl.handle(signed, undefined, sign(), form('Application/JSON; charset=utf-8'))).rejects.toBeInstanceOf(UnauthorizedException);
       expect(error).toHaveBeenCalledWith(expect.stringContaining('thân thô'));
       expect(create).not.toHaveBeenCalled();
       error.mockClear();
