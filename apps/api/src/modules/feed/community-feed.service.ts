@@ -568,12 +568,25 @@ export class CommunityFeedService {
       WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
         AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
     if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+    // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
     const [total] = await this.prisma.$queryRaw<{ bytes: bigint | number }[]>`
-      SELECT COALESCE(sum(octet_length(i)), 0)::bigint AS "bytes"
-      FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId", unnest(p."images") AS i
-      WHERE p."status" = 'PENDING' ${exclude} AND left(i, 5) = 'data:' AND NOT ${REAL_USER_SQL}`;
+      SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
+      FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
+      WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
     const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
     if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
+  }
+
+  /**
+   * Bài của khách vãng lai đã gỡ (REMOVED) không còn cần ảnh base64: dọn ngay để vòng tạo - xoá - tạo lại không ghi đĩa vô hạn
+   * mà trần chỉ đếm bài PENDING. Ảnh URL (Cloudinary) giữ nguyên; người dùng thật không bị đụng tới.
+   */
+  private async purgeGuestInlineImages(client: Pick<Prisma.TransactionClient, '$executeRaw'>, postId: string): Promise<void> {
+    await client.$executeRaw`
+      UPDATE "feed_posts" p
+      SET "images" = ARRAY(SELECT i FROM unnest(p."images") AS i WHERE left(i, 5) <> 'data:')
+      FROM "users" u
+      WHERE p."id" = ${postId} AND p."status" = 'REMOVED' AND u."id" = p."userId" AND NOT ${REAL_USER_SQL}`;
   }
 
   async createPost(userId: string, role: string, input: CreatePostInput): Promise<{ id: string; status: string }> {
@@ -762,6 +775,7 @@ export class CommunityFeedService {
       if (now?.status === 'PUBLISHED') throw this.alreadyPublished();
       return { ok: true };
     }
+    await this.purgeGuestInlineImages(this.prisma, postId);
     await this.revokeTrust(post.userId);
     await this.notifyPostRejected(postId, post, reason);
     return { ok: true };
@@ -1180,6 +1194,7 @@ export class CommunityFeedService {
       if ((await tx.feedPost.updateMany({ where: { id: postId, status: 'PENDING' }, data: gone })).count === 1) from = 'PENDING';
       else if ((await tx.feedPost.updateMany({ where: { id: postId, status: { not: 'REMOVED' } }, data: gone })).count === 1) from = 'PUBLISHED';
       if (!from) return null;
+      await this.purgeGuestInlineImages(tx, postId);
       await this.reverseReputationInTx(tx, post.userId, postId, 'REVERSE_POST', thresholds);
       if (moderated) await this.revokeTrust(post.userId, tx);
       return from;
