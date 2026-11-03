@@ -6,6 +6,8 @@ import { PDP_SLUG, homeCombos, mockPdpBundles, pdpAddon, pdpCombo } from './supp
 import { HOME_PUBLIC, mockMergedHome } from './support/home-merged';
 import { reply, type MockApi } from './support/mock-api';
 
+const PDP_BUNDLES_WAIT_MS = 300; // khớp apps/miniapp/src/components/product/use-product-bundles.ts
+
 /**
  * Zalo Mini App E2E — Combo ưu đãi, Mua kèm (trang sản phẩm) và Combo tiết kiệm (Trang chủ) không làm trang xê dịch (gói P15). Dự án Mini chạy WebKit,
  * không có PerformanceObserver 'layout-shift', nên spec này ép Chromium để đo CLS thật. API mock toàn bộ; không dùng waitForTimeout.
@@ -50,7 +52,16 @@ function auxiliaryBeforeProduct(api: MockApi): Promise<void> {
   serve('/flash-sales/active', []);
   serve('/products/:slug/reviews', { average: 0, count: 0, items: [] });
   api.get('/products/:slug', async ({ params }) => {
-    await auxReady;
+    // Hạn dự phòng tính từ lúc request sản phẩm tới (không phải lúc test bắt đầu): thiếu request phụ thì báo rõ thay vì để heading timeout.
+    let guard: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<void>((resolve) => {
+      guard = setTimeout(() => {
+        api.handlerErrors.push(`thiếu request phụ: ${['/config/public', '/flash-sales/active', '/products/:slug/reviews'].filter((p) => !served.has(p)).join(', ')}`);
+        resolve();
+      }, 5_000);
+    });
+    await Promise.race([auxReady, timedOut]);
+    clearTimeout(guard);
     markProductServed();
     return productDetail(params.slug!) ?? reply(404, { statusCode: 404, message: 'Không tìm thấy sản phẩm.' });
   });
@@ -79,8 +90,13 @@ test.describe('Trang sản phẩm Mini: CLS', () => {
     expect(cls, `CLS ${cls.toFixed(4)}`).toBeLessThanOrEqual(0.02);
   });
 
-  test('bộ về chậm hơn sản phẩm một chút (50ms, trong hạn chờ): khung chờ giữ tới khi bộ về, khối vào cùng lần vẽ đầu (CLS ≤ 0,02)', async ({ page, api }) => {
-    // Mốc 50ms tính từ lúc sản phẩm được trả, không phải từ lúc request bộ tới (hai request phát cùng lúc, mà sản phẩm bị giữ chờ dữ liệu phụ).
+  test('bộ về sau sản phẩm, trước khi hết PDP_BUNDLES_WAIT_MS (hạn kéo dài): khung chờ giữ tới khi bộ về, khối vào cùng lần vẽ đầu (CLS ≤ 0,02)', async ({ page, api }) => {
+    // Hạn chờ 300ms là đồng hồ thật nên máy chậm làm bộ "về trễ quá hạn" và CLS tăng dù mã đúng. Kéo hạn đó ra 20 lần chỉ trong trang này:
+    // tốc độ máy không còn quyết định, còn mã bỏ khung chờ vẫn đỏ vì khối chèn vào sau lần vẽ đầu. Hành vi "hết hạn thì thôi chờ" do vitest của hook phủ.
+    await page.addInitScript((waitMs) => {
+      const native = window.setTimeout.bind(window);
+      window.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => native(fn, ms === waitMs ? waitMs * 20 : ms, ...args)) as typeof window.setTimeout;
+    }, PDP_BUNDLES_WAIT_MS);
     mockPdpBundles(api, { combos: [pdpCombo()], addons: [pdpAddon()], hold: productServed, delayMs: 50 });
     await trackLayoutShift(page);
     await page.goto(`/product/${PDP_SLUG}`);
