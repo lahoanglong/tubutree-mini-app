@@ -105,21 +105,21 @@ export async function releaseVariationStock(
 }
 
 /**
- * Cộng lại kho hàng đã RỜI kho (đã giao, hoặc Pancake đã phản ánh đơn vào số tồn) khi hàng được trả về.
+ * Cộng lại kho hàng đã RỜI kho (đã giao qua Pancake) khi hàng được trả về. Trả số biến thể thật sự được cộng (0 hoặc 1).
  *
- * Biến thể có `pancakeStock` (Pancake là nguồn tồn) KHÔNG bị đụng tới `stock` lẫn `reservedStock`: phần giữ chỗ của đơn này đã
- * được nhả khi Pancake phản ánh đơn, nên `reservedStock` lúc này là của các đơn KHÁC (nhả nó làm `stock` phồng lên), còn số hàng
+ * Biến thể có `pancakeStock` (Pancake là nguồn tồn) KHÔNG bị đụng tới `stock` lẫn `reservedStock`: đơn đã giao thì giữ chỗ của nó
+ * đã được nhả khi Pancake phản ánh đơn, nên `reservedStock` lúc này là của các đơn KHÁC (nhả nó làm `stock` phồng lên), còn số hàng
  * nhập lại do Pancake báo về qua đồng bộ/webhook — Tubu tự cộng thì lần Pancake báo sau cộng trùng hoặc xoá mất. Chỉ biến thể tự
  * quản (`pancakeStock IS NULL`, không có nguồn nào khác báo tồn) mới cộng như `releaseVariationStock`. Đường huỷ trước khi giao
- * vẫn dùng `releaseVariationStock`.
+ * (hoặc đơn giao tay chưa lên Pancake) vẫn dùng `releaseVariationStock`.
  */
 export async function restockReturnedVariationStock(
   tx: StockExecutor,
   variationId: string,
   quantity: number,
-): Promise<void> {
-  if (!Number.isInteger(quantity) || quantity <= 0) return;
-  await tx.$executeRaw`
+): Promise<number> {
+  if (!Number.isInteger(quantity) || quantity <= 0) return 0;
+  return tx.$executeRaw`
     UPDATE "variations"
        SET "stock" = "stock" + ${quantity},
            "reservedStock" = GREATEST(0, "reservedStock" - ${quantity})

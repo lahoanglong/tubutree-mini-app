@@ -7,7 +7,7 @@ import { createDealer, createOrder, deleteItData, randCode, warmPool } from './h
 /**
  * TK-01 trên Postgres THẬT: hàng trả về SAU khi giao không được cộng vào `stock` của biến thể mà Pancake là nguồn tồn (pancakeStock
  * khác NULL), và không động tới `reservedStock` (giữ chỗ của đơn KHÁC). Biến thể tự quản (pancakeStock NULL) cộng như cũ. Huỷ đơn
- * trước khi giao vẫn nhả giữ chỗ.
+ * trước khi giao (kể cả đã đẩy Pancake) vẫn nhả giữ chỗ; đơn giao tay chưa lên Pancake cũng cộng như cũ.
  */
 describe('Cộng kho hàng trả về sau giao theo nguồn tồn (real Postgres)', () => {
   let prisma: PrismaService;
@@ -81,26 +81,48 @@ describe('Cộng kho hàng trả về sau giao theo nguồn tồn (real Postgres
     expect(await stockOf(v.id)).toEqual({ stock: 5, reservedStock: 2, pancakeStock: 7 });
   });
 
-  it('Pancake 5 trên đơn đã giao (DELIVERED): đảo cả đơn không cộng stock/reservedStock biến thể Pancake', async () => {
-    const { v, order } = await scenario({ stock: 2, reservedStock: 3, pancakeStock: 5 });
-    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, order));
-    expect(await stockOf(v.id)).toEqual({ stock: 2, reservedStock: 3, pancakeStock: 5 });
+  const pushed = (orderId: string) =>
+    prisma.order.update({
+      where: { id: orderId },
+      data: { pancakeOrderId: `ittk1-po-${randCode(6)}`, pancakePushStatus: 'SYNCED', pancakeLastAttemptAt: new Date('2026-11-04T08:00:00.000Z') },
+    });
+  const reload = (id: string) => prisma.order.findUniqueOrThrow({ where: { id }, include: { items: true } });
+
+  it('huỷ đơn CONFIRMED đã đẩy Pancake (kể cả đã có mốc đồng bộ tồn sau lúc đẩy): vẫn nhả giữ chỗ như mã gốc', async () => {
+    const s = await scenario({ stock: 2, reservedStock: 3, pancakeStock: 5 }, { status: 'CONFIRMED' });
+    await pushed(s.order.id);
+    await prisma.variation.update({ where: { id: s.v.id }, data: { pancakeStockSyncReadAt: new Date('2026-11-04T09:00:00.000Z') } });
+    const o = await reload(s.order.id);
+    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, o));
+    expect(await stockOf(s.v.id)).toMatchObject({ stock: 3, reservedStock: 2 });
   });
 
-  it('đơn đã lên Pancake và đã đồng bộ tồn sau lúc đẩy: huỷ không cộng; chưa đồng bộ thì nhả giữ chỗ', async () => {
-    const pushedAt = new Date('2026-11-04T08:00:00.000Z');
-    const synced = await scenario({ stock: 2, reservedStock: 3, pancakeStock: 5 }, { status: 'CONFIRMED' });
-    await prisma.order.update({ where: { id: synced.order.id }, data: { pancakeOrderId: `ittk1-po-${randCode(6)}`, pancakePushStatus: 'SYNCED', pancakeLastAttemptAt: pushedAt } });
-    await prisma.variation.update({ where: { id: synced.v.id }, data: { pancakeStockSyncReadAt: new Date('2026-11-04T09:00:00.000Z') } });
-    const o1 = await prisma.order.findUniqueOrThrow({ where: { id: synced.order.id }, include: { items: true } });
-    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, o1));
-    expect(await stockOf(synced.v.id)).toMatchObject({ stock: 2, reservedStock: 3 });
+  it('đơn SHIPPING đã đẩy Pancake bị huỷ: nhả giữ chỗ', async () => {
+    const s = await scenario({ stock: 2, reservedStock: 3, pancakeStock: 5 }, { status: 'SHIPPING' });
+    await pushed(s.order.id);
+    const o = await reload(s.order.id);
+    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, o));
+    expect(await stockOf(s.v.id)).toMatchObject({ stock: 3, reservedStock: 2 });
+  });
 
-    const notYet = await scenario({ stock: 2, reservedStock: 3, pancakeStock: 5 }, { status: 'CONFIRMED' });
-    await prisma.order.update({ where: { id: notYet.order.id }, data: { pancakeOrderId: `ittk1-po-${randCode(6)}`, pancakePushStatus: 'SYNCED', pancakeLastAttemptAt: pushedAt } });
-    await prisma.variation.update({ where: { id: notYet.v.id }, data: { pancakeStockSyncReadAt: new Date('2026-11-04T07:00:00.000Z') } });
-    const o2 = await prisma.order.findUniqueOrThrow({ where: { id: notYet.order.id }, include: { items: true } });
-    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, o2));
-    expect(await stockOf(notYet.v.id)).toMatchObject({ stock: 3, reservedStock: 2 });
+  it('đơn DELIVERED có pancakeOrderId, đảo cả đơn: không đụng stock/reservedStock biến thể Pancake', async () => {
+    const s = await scenario({ stock: 2, reservedStock: 3, pancakeStock: 5 });
+    await pushed(s.order.id);
+    const o = await reload(s.order.id);
+    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, o));
+    expect(await stockOf(s.v.id)).toEqual({ stock: 2, reservedStock: 3, pancakeStock: 5 });
+  });
+
+  it('đơn DELIVERED giao tay (pancakeOrderId null): cộng như cũ, nhả giữ chỗ của chính đơn', async () => {
+    const s = await scenario({ stock: 4, reservedStock: 1, pancakeStock: 5 });
+    await prisma.$transaction((tx) => reversal.reverseFinancials(tx, s.order));
+    expect(await stockOf(s.v.id)).toEqual({ stock: 5, reservedStock: 0, pancakeStock: 5 });
+  });
+
+  it('nhận hàng trả: restocked chỉ đếm biến thể thật sự được cộng', async () => {
+    const pk = await scenario({ stock: 0, reservedStock: 0, pancakeStock: 0 });
+    expect(await receive(pk.order)).toBe(0);
+    const own = await scenario({ stock: 4, reservedStock: 0, pancakeStock: null });
+    expect(await receive(own.order)).toBe(1);
   });
 });

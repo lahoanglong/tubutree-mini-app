@@ -561,7 +561,7 @@ export class PancakeProcessor extends WorkerHost {
         await removeAttentionReasonsByPrefix(tx, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
         return;
       }
-      const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để ghi nhận, rồi nhập kho trên Pancake: tồn kho lấy theo Pancake.`;
+      const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để ghi nhận, rồi kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake.`;
       await writePancakeAttention(tx, order.id, reason);
     });
     const note = `${ATTENTION_PARTIAL_RETURN_ACK} (Pancake #${order.pancakeOrderId ?? '?'})`;

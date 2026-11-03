@@ -2223,7 +2223,7 @@ function ReturnsTab({
         </div>
         <span className="text-xs text-stone-500">
           Khách trả theo dòng và số lượng. Duyệt: xem số tiền tính sẵn rồi xác nhận (hoàn tiền, đảo điểm/hoa hồng);
-          bấm &quot;Đã nhận hàng về&quot; khi hàng về kho (tồn kho hàng Pancake lấy theo Pancake, nhớ nhập kho trên Pancake).
+          bấm &quot;Đã nhận hàng về&quot; khi hàng về kho (kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake).
         </span>
       </div>
       {q.data && (

@@ -66,9 +66,15 @@ describe('variation-stock', () => {
   describe('restockReturnedVariationStock', () => {
     it('TK-01: chỉ cộng biến thể không có nguồn tồn Pancake (pancakeStock IS NULL), đúng id và số lượng', async () => {
       const { tx, $executeRaw } = mockTx();
-      await restockReturnedVariationStock(tx, 'v9', 2);
+      await expect(restockReturnedVariationStock(tx, 'v9', 2)).resolves.toBe(1);
       expect(sqlOf($executeRaw)).toContain('"pancakeStock" IS NULL');
       expect(argsOf($executeRaw)).toEqual([2, 2, 'v9']);
+    });
+
+    it('biến thể Pancake bị bỏ qua → trả 0 để caller không đếm vào số đã cộng', async () => {
+      const { tx, $executeRaw } = mockTx();
+      $executeRaw.mockResolvedValue(0);
+      await expect(restockReturnedVariationStock(tx, 'v9', 2)).resolves.toBe(0);
     });
 
     it('số lượng không dương → không chạm DB', async () => {

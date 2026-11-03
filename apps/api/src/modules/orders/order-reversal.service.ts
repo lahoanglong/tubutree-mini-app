@@ -364,7 +364,9 @@ export class OrderReversalService {
       await lockVariationsInIdOrder(tx, order.items.filter((i) => reservedQty(i) > 0).map((i) => i.variationId));
     }
 
-    const leftWarehouse = opts.restock !== false ? await this.variationsPastReservation(tx, order) : new Set<string>();
+    // Chỉ đơn đã giao VÀ đã lên Pancake mới là hàng Pancake đã trừ: mốc đồng bộ/webhook không chứng minh được Pancake đã tính đơn, nên
+    // huỷ trước giao luôn nhả giữ chỗ. Đơn giao tay chưa từng lên Pancake thì Pancake chưa trừ gì, giữ chỗ của nó vẫn còn.
+    const goodsLeftViaPancake = order.status === 'DELIVERED' && !!order.pancakeOrderId;
 
     for (const item of order.items) {
       // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
@@ -376,7 +378,7 @@ export class OrderReversalService {
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
       const reserved = reservedQty(item);
       if (opts.restock !== false && reserved > 0) {
-        if (leftWarehouse.has(item.variationId)) await restockReturnedVariationStock(tx, item.variationId, reserved);
+        if (goodsLeftViaPancake) await restockReturnedVariationStock(tx, item.variationId, reserved);
         else await releaseVariationStock(tx, item.variationId, reserved);
       }
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
@@ -389,27 +391,6 @@ export class OrderReversalService {
       tx,
       order.userId,
       order.items.map((item) => ({ flashSaleItemId: item.flashSaleItemId, quantity: item.quantity - (prior.approvedQty.get(item.id) ?? 0) })),
-    );
-  }
-
-  /**
-   * Biến thể của đơn mà hàng đã rời kho nên không còn giữ chỗ để nhả: đơn đã giao, hoặc đã lên Pancake và biến thể đã nhận số tồn
-   * Pancake (đồng bộ/webhook) sau lúc đẩy đơn — Pancake đã tính đơn vào số tồn đó và nhả giữ chỗ. Đường này cộng kho bằng
-   * `restockReturnedVariationStock` (biến thể Pancake không bị đụng tới stock/reservedStock) thay vì `releaseVariationStock`.
-   */
-  private async variationsPastReservation(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<Set<string>> {
-    const ids = [...new Set(order.items.map((i) => i.variationId))];
-    if (order.status === 'DELIVERED') return new Set(ids);
-    if (!order.pancakeOrderId || order.pancakePushStatus !== 'SYNCED' || !order.pancakeLastAttemptAt) return new Set();
-    const pushedAt = order.pancakeLastAttemptAt;
-    const rows = await tx.variation.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, pancakeStockSyncReadAt: true, pancakeStockWebhookReceivedAt: true },
-    });
-    return new Set(
-      rows
-        .filter((v) => (v.pancakeStockSyncReadAt && v.pancakeStockSyncReadAt > pushedAt) || (v.pancakeStockWebhookReceivedAt && v.pancakeStockWebhookReceivedAt > pushedAt))
-        .map((v) => v.id),
     );
   }
 
@@ -752,8 +733,7 @@ export class OrderReversalService {
     await lockVariationsInIdOrder(tx, plan.map((p) => p.variationId));
     let restocked = 0;
     for (const p of plan) {
-      await restockReturnedVariationStock(tx, p.variationId, p.qty);
-      restocked += p.qty;
+      if (await restockReturnedVariationStock(tx, p.variationId, p.qty)) restocked += p.qty;
     }
     return restocked;
   }
