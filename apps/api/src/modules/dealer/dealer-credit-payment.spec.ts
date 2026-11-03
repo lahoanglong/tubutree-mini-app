@@ -143,6 +143,8 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     dealer?: { id: string; role: string; fullName?: string | null; phone?: string | null } | null;
     debt?: number;
     existingClaim?: { delta: number } | null;
+    bankRefHistory?: Array<{ orderId: string; note: string }>;
+    bankRefOrder?: { code: string } | null;
     /** false: dòng báo cáo không còn REPORTED nên updateMany không đóng được dòng nào. */
     reportClosed?: boolean;
     report?: { status: string } | null;
