@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -66,7 +66,8 @@ import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
-import { ProductThumb } from '@/components/mini';
+import { Button, ProductThumb } from '@/components/mini';
+import { Sheet } from '@/components/ui/sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { clearSubmitted } from '@/lib/recycle-wizard';
 
@@ -99,6 +100,7 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const router = useRouter();
+  const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [note, setNote] = useState('');
@@ -723,7 +725,18 @@ export default function CheckoutPage() {
           {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] hidden md:block">{splitNote}</p>}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
-          <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
+          <div className="mb-2.5 hidden items-center justify-between max-md:flex">
+            <h2 className="font-ui text-sm font-semibold">Tóm tắt đơn hàng</h2>
+            <button
+              type="button"
+              onClick={() => setSummarySheetOpen(true)}
+              aria-haspopup="dialog"
+              className="inline-flex min-h-11 items-center gap-1 text-caption font-bold text-[color:var(--color-text-brand)]"
+            >
+              Chi tiết
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
           <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
@@ -741,6 +754,33 @@ export default function CheckoutPage() {
           />
           {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
+          <Sheet
+            open={summarySheetOpen}
+            onClose={() => setSummarySheetOpen(false)}
+            title="Chi tiết tính tiền đơn hàng"
+            footer={
+              <Button fullWidth onPress={() => setSummarySheetOpen(false)}>
+                Đã hiểu
+              </Button>
+            }
+          >
+            <div className="rounded-[var(--radius-card)] bg-[var(--color-bg-canvas)] p-3">
+              <Row label="Tạm tính tiền hàng" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
+              {(quote?.discount ?? 0) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote!.discount)}`} green />}
+              {(quote?.comboDiscount ?? 0) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
+              {(quote?.tierDiscount ?? 0) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />}
+              {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} green />}
+              <Row
+                label="Phí vận chuyển"
+                value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+              />
+              <div className="my-2 h-px bg-[var(--color-border-subtle)]" />
+              <div className="flex justify-between gap-2.5 py-1.5 font-bold text-[color:var(--color-text-primary)]">
+                <span className="text-sm">Tổng thanh toán</span>
+                <span className="text-base">{totalText}</span>
+              </div>
+            </div>
+          </Sheet>
           {cart && (
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
               <CouponBox

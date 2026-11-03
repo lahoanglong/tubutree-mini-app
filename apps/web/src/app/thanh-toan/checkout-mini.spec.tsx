@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Thanh toán ở khổ điện thoại phải là Mini App (apps/miniapp/src/pages/checkout.tsx): thứ tự khối, dải phẳng, thẻ địa chỉ,
 // khối "Sản phẩm", thẻ mã, thanh dính đáy một nút. jsdom không có media query nên kiểm bằng lớp `max-md:`.
@@ -168,5 +168,25 @@ describe('/thanh-toan — số giảm ở thẻ mã khi chưa có báo giá', ()
     expect(card.textContent).toContain('XANH10');
     expect(card.textContent).not.toMatch(/-\s?57\.800/);
     expect(card.textContent).not.toMatch(/-\d/);
+  });
+});
+
+describe('/thanh-toan — nút "Chi tiết" và sheet tính tiền như Mini App ở điện thoại', () => {
+  it('tiêu đề Tóm tắt có nút "Chi tiết" mở sheet "Chi tiết tính tiền đơn hàng" với nút "Đã hiểu", đóng lại được', async () => {
+    const c = await mount();
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    const btn = Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!;
+    expect(btn).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Chi tiết tính tiền đơn hàng');
+    click(btn);
+    await flush(3);
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dlg.textContent).toContain('Chi tiết tính tiền đơn hàng');
+    expect(dlg.textContent).toContain('Tạm tính tiền hàng');
+    expect(dlg.textContent).toContain('Phí vận chuyển');
+    expect(dlg.textContent).toContain('Tổng thanh toán');
+    click(Array.from(dlg.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Đã hiểu')!);
+    await flush(3);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });
