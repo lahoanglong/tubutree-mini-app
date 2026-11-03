@@ -1324,6 +1324,38 @@ describe('đăng xuất đang chạy dở (storage chậm): đường tạo phi�
     expect(revoked('refresh-g2')).toBe(false);
   });
 
+  it('restore() lúc đang đăng nhập, logout còn chờ storage, rồi mất mạng: status không kẹt loading', async () => {
+    const { read, loggingOut } = startSlowLogout();
+    useAuthStore.setState({ user: user().user, status: 'authenticated', error: undefined });
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockRejectedValue(httpFail());
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    read.resolve({});
+    await loggingOut;
+    expect(await settles(restoring)).toBe('done');
+    expect(useAuthStore.getState().status).not.toBe('loading');
+  });
+
+  it('đăng nhập mới xong trước khi lần ghi của đời cũ hết trần: không xoá access token của phiên mới', async () => {
+    const write = deferred<void>();
+    mockedGetStorage.mockResolvedValue({});
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValueOnce(user());
+    mockedSetStorage.mockReturnValueOnce(write.promise as never);
+    const first = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    mockedLoginZalo.mockResolvedValueOnce(loginResponse('u2', 'zalo-2'));
+    await useAuthStore.getState().login();
+    mockedSetAccessToken.mockClear();
+    write.resolve();
+    await first;
+    await flush();
+    expect(useAuthStore.getState().user?.id).toBe('u2');
+    expect(mockedSetAccessToken).not.toHaveBeenCalledWith(null);
+  });
+
   it('lần ghi refresh đáp sau logout: bỏ phiên, xoá token vừa ghi, thu hồi', async () => {
     const write = deferred<void>();
     mockedGetStorage.mockResolvedValue({});

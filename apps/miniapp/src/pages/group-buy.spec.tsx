@@ -176,6 +176,34 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
   });
 
+  it('chạm Tham gia lúc app còn khôi phục phiên: chờ phiên rồi tham gia đúng nhóm đó, một lần dù chạm nhiều', async () => {
+    mocks.auth.status = 'loading';
+    let done!: () => void;
+    mocks.login.mockReturnValue(new Promise<void>((r) => (done = r)));
+    renderPage();
+    const btn = (await screen.findAllByRole('button', { name: 'Đăng nhập để tham gia' }))[0]!;
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+    mocks.auth.status = 'authenticated';
+    done();
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1));
+    expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a');
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm Tham gia lúc khôi phục phiên mà phiên không ra: không tham gia', async () => {
+    mocks.auth.status = 'loading';
+    let done!: () => void;
+    mocks.login.mockReturnValue(new Promise<void>((r) => (done = r)));
+    renderPage();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Đăng nhập để tham gia' }))[0]!);
+    mocks.auth.status = 'idle';
+    done();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
   it('tài khoản bị khoá: bấm "Đăng nhập để tham gia" thì báo lời khoá của máy chủ, không gửi yêu cầu tham gia', async () => {
     mocks.auth.status = 'idle';
     mocks.auth.error = 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để được hỗ trợ.';

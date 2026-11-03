@@ -128,6 +128,9 @@ function revokeInBackground(refreshToken: string): void {
   });
 }
 
+/** Số thứ tự lần nhận phiên gần nhất: lần nhận cũ chỉ được xoá access token nếu chưa có lần nhận nào mới hơn. */
+let lastAdoptId = 0;
+
 /**
  * Nhận phiên máy chủ vừa trả. false = một lần logout() đã bắt đầu từ lúc `epoch` được chụp: không đặt token, không lưu refresh,
  * refresh token mới được thu hồi, người gọi không đổi user/status. Lưu refresh hỏng hay quá hạn thì vẫn vào phiên (token ở bộ nhớ).
@@ -137,6 +140,7 @@ async function adoptSession(res: LoginResponse, epoch: number): Promise<boolean>
     revokeInBackground(res.refreshToken);
     return false;
   }
+  const adoptId = ++lastAdoptId;
   setAccessToken(res.accessToken);
   let saved = true;
   try {
@@ -145,8 +149,8 @@ async function adoptSession(res: LoginResponse, epoch: number): Promise<boolean>
     saved = false;
   }
   if (epoch !== sessionEpoch) {
-    // Đăng xuất chen vào lúc đang ghi: lần ghi có thể đáp sau lần xoá của logout.
-    setAccessToken(null);
+    // Đăng xuất chen vào lúc đang ghi: lần ghi có thể đáp sau lần xoá của logout. Phiên mới đã nhận token sau đó thì để nguyên.
+    if (adoptId === lastAdoptId) setAccessToken(null);
     revokeInBackground(res.refreshToken);
     // Chỉ xoá khi máy còn đúng token vừa ghi: một đăng nhập mới có thể đã ghi token khác lên trên.
     void readRefresh({ limit: false })
@@ -367,7 +371,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Làm mới một phiên ĐANG đăng nhập (vd sau khi đặt hàng để cập nhật số dư): không nháy 'loading' và không bao giờ hạ
     // phiên xuống 'error' chỉ vì lần làm mới này gặp lỗi mạng — khách vẫn đang đăng nhập với token còn dùng được.
     const epoch = sessionEpoch;
-    const keepSession = get().status === 'authenticated' && get().user !== null;
+    let keepSession = get().status === 'authenticated' && get().user !== null;
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
       if (logoutInFlight) {
@@ -378,6 +382,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           restoreParked -= 1;
         }
         if (epoch !== sessionEpoch) return;
+        // Phiên đang đăng nhập lúc gọi đã bị logout bỏ: từ đây là khôi phục thường, lỗi tạm phải đặt được 'error'.
+        keepSession = false;
         set({ status: 'loading', error: undefined });
       }
       // Đăng nhập đang chạy (vd handler 401 vừa đưa phiên về 'error' giữa lúc đăng nhập): chờ nó. Ra phiên hay bị khoá ('idle'
