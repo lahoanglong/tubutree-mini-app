@@ -73,9 +73,9 @@ export function MemberCard() {
         >
           <div style={{ flex: 1, minWidth: 0 }}>
             <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
+              <span style={{ flexShrink: 0, maxWidth: '60%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
               {card.tierName && (
-                <span style={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {'\u00A0· '}
                   <Icon icon={Leaf} size="sm" tone="brand" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
                 </span>

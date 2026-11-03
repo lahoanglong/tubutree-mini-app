@@ -79,7 +79,7 @@ export function ShortcutGrid() {
   // Cờ Đổi rác chưa về thì chưa biết ô nào nằm trong 4 ô cố định: giữ khung trơn cùng chiều cao, không dựng ô rồi đổi chỗ dưới ngón tay.
   if (cfg.isPending) {
     return (
-      <div data-testid="shortcut-grid-pending" aria-hidden="true" className="lg:hidden">
+      <div data-testid="shortcut-grid-pending" aria-hidden="true" className="tubu-bleed max-md:px-2 lg:hidden">
         <Skeleton height={HOME_SETTLING_HEIGHTS.shortcuts} radius="var(--radius-card)" />
       </div>
     );

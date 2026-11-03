@@ -12,6 +12,7 @@ vi.mock('@/lib/use-check-in', () => ({
 }));
 
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 
 let mounted: Rendered | null = null;
 const mount = async (ui: React.ReactElement) => {
@@ -75,5 +76,30 @@ describe('MemberCard web — lời chào bằng tên gọi (P2 #7)', () => {
     mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     const c = await mount(<MemberCard />);
     expect(c.textContent).toContain('Chào bạn');
+  });
+});
+
+describe('MemberCard web — tên bậc dài và dải lỗi cấp trang', () => {
+  it('tên bậc dài không bóp lời chào: lời chào không co, tên bậc nhận phần còn lại', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.get.mockResolvedValue({ tier: { name: 'Đại Sứ Vườn Xanh Bậc Cao Nhất' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    const c = await mount(<MemberCard />);
+    const greeting = Array.from(c.querySelectorAll('span')).find((s) => s.textContent === 'Chào An')!;
+    expect(greeting.style.flexShrink).toBe('0');
+    const tier = Array.from(c.querySelectorAll('span')).find((s) => s.textContent?.includes('Đại Sứ') && s.children.length > 0)!;
+    expect(tier.style.flexGrow).toBe('1');
+  });
+
+  it('điểm lỗi: Trang chủ đã có dải lỗi cấp trang thì không còn nút Thử lại thứ hai', async () => {
+    mocks.get.mockRejectedValue(new Error('500'));
+    const c = await mount(<MemberCard />);
+    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(true);
+    mounted!.unmount();
+    const c2 = await mount(
+      <HomeBlockErrorSuppressed.Provider value>
+        <MemberCard />
+      </HomeBlockErrorSuppressed.Provider>,
+    );
+    expect(Array.from(c2.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(false);
   });
 });

@@ -63,6 +63,22 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
     expect(mocks.fetchCatalog.mock.calls[1]![0]).toEqual(mocks.fetchCatalog.mock.calls[0]![0]);
   });
 
+  it('quay lại từ PDP: trang 1 đã có trong cache thì dựng lưới ngay dù IntersectionObserver chưa báo gần màn (trang đủ cao để khôi phục cuộn)', async () => {
+    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} });
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      client.setQueryData(['products', 'home-suggest', '20261101', 'all'], { pages: [page(cards(1, 4))], pageParams: [1] });
+      render(
+        <QueryClientProvider client={client}>
+          <SuggestFeed exclude={new Set()} />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText('Sản phẩm 1')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('lưới ở cuối trang: chưa tới gần màn thì không gọi API (lần mở Trang chủ bớt một request), chỉ có tiêu đề và chip, chưa có khung chờ; cách màn một màn hình thì tải', async () => {
     mocks.authStatus = 'authenticated';
     const observers: { cb: IntersectionObserverCallback; margin?: string; els: Element[] }[] = [];

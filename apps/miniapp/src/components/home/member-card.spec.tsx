@@ -30,6 +30,15 @@ describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
     expect(screen.queryByText(/Nguyễn/)).toBeNull();
   });
 
+  it('tên bậc dài không bóp lời chào: lời chào không co, tên bậc nhận phần còn lại', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.loyalty.mockResolvedValue({ tier: { name: 'Đại Sứ Vườn Xanh Bậc Cao Nhất' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    render(<MemberCard />);
+    expect(screen.getByText('Chào An').style.flexShrink).toBe('0');
+    const tier = (await screen.findByText(/Đại Sứ/)).closest('span')!;
+    expect(tier.style.flexGrow).toBe('1');
+  });
+
   it('chưa có họ tên thì chào bạn', () => {
     mocks.fullName = null;
     render(<MemberCard />);

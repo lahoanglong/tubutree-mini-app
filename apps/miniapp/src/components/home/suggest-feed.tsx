@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HEADER_HEIGHT, mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
@@ -51,7 +51,11 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
   // Lưới nằm cuối Trang chủ: chỉ tải khi khối cách màn hình chưa tới một màn. Lần mở Trang chủ bớt một request so với khi tải ngay; web không có
   // request này vì trang 1 đã dựng sẵn ở server.
   const section = useRef<HTMLElement>(null);
-  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+  // Quay lại từ PDP: trang 1 đã có trong cache thì dựng lưới ngay (không chờ IntersectionObserver) để trang đủ cao cho hook khôi phục cuộn.
+  const queryClient = useQueryClient();
+  const [near, setNear] = useState(
+    () => typeof IntersectionObserver === 'undefined' || queryClient.getQueryData(['products', 'home-suggest', seed, 'all']) !== undefined,
+  );
   useEffect(() => {
     const el = section.current;
     if (near || !el) return;

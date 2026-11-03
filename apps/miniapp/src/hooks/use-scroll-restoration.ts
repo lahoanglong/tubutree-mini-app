@@ -4,6 +4,8 @@ import { useNavigationType } from './use-navigation-type';
 
 export const SCROLL_KEY_PREFIX = 'tubu_scroll:';
 const SAVE_DEBOUNCE_MS = 100;
+const RESTORE_RETRY_MS = 50;
+const RESTORE_MAX_MS = 1000;
 
 function scrollerOf(anchor: HTMLElement | null): HTMLElement | null {
   return (anchor?.closest('.zaui-page') as HTMLElement | null) ?? null;
@@ -105,10 +107,32 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
     if (eligibleKey.current !== key) return;
     const scroller = scrollerOf(anchorRef.current);
     const y = load(key);
-    if (scroller && y != null) {
+    if (!scroller || y == null) return;
+    scroller.scrollTop = y;
+    lastY.current = y;
+    // Trang còn ngắn hơn lúc rời đi (khối cuối, vd. lưới Gợi ý, vẽ sau lần khôi phục): trình duyệt kẹp scrollTop, nên thử lại tới khi đủ
+    // cao hoặc quá RESTORE_MAX_MS. Khách chạm/cuộn thì thôi, không giằng lại.
+    if (scroller.scrollTop >= y - 1) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
+    const stop = () => {
+      stopped = true;
+      clearTimeout(timer);
+      scroller.removeEventListener('touchstart', stop);
+      scroller.removeEventListener('wheel', stop);
+    };
+    scroller.addEventListener('touchstart', stop, { passive: true });
+    scroller.addEventListener('wheel', stop, { passive: true });
+    const tick = () => {
+      if (stopped) return;
       scroller.scrollTop = y;
-      lastY.current = y;
-    }
+      lastY.current = scroller.scrollTop;
+      if (scroller.scrollTop >= y - 1 || Date.now() - started >= RESTORE_MAX_MS) return stop();
+      timer = setTimeout(tick, RESTORE_RETRY_MS);
+    };
+    timer = setTimeout(tick, RESTORE_RETRY_MS);
+    return stop;
   }, [key, ready]);
 
   return { anchorRef };
