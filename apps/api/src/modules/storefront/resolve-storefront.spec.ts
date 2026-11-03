@@ -55,8 +55,8 @@ describe('resolvePublishedStorefront', () => {
   it('chuỗi là mã giới thiệu của một tài khoản → subdomain và tên miền chỉ tính khi thuộc đúng chủ mã', async () => {
     const { prisma, findFirst } = fake([null, null], { codeOwner: { id: 'victim' } });
     await resolvePublishedStorefront(prisma, VISIBILITY, 'linh');
-    expect(findFirst.mock.calls[1][0].where).toMatchObject({ subdomain: insensitive('linh'), ownerUserId: 'victim' });
-    expect(findFirst.mock.calls[2][0].where).toMatchObject({ customDomain: insensitive('linh'), ownerUserId: 'victim' });
+    expect(findFirst.mock.calls[1][0].where).toMatchObject({ subdomain: 'linh', ownerUserId: 'victim' });
+    expect(findFirst.mock.calls[2][0].where).toMatchObject({ customDomain: 'linh', ownerUserId: 'victim' });
   });
 
   it('gian hàng mẫu không bao giờ được ghi công', async () => {
@@ -84,5 +84,13 @@ describe('loadPublicVisibility', () => {
     const out = await loadPublicVisibility(config({ 'affiliate.commission_eligible_roles': ['AFFILIATE'], 'storefront.require_approval': true }));
     expect(out).toEqual({ eligibleRoles: ['AFFILIATE'], requireApproval: true });
     expect((await loadPublicVisibility(config({ 'storefront.require_approval': 'true' }))).requireApproval).toBe(false);
+  });
+});
+
+describe('resolvePublishedStorefront — ký tự đại diện', () => {
+  it.each(['%', '_', 'a%', 'a_b'])('chuỗi %p có ký tự đại diện của ILIKE → null, không chạm DB', async (wild) => {
+    const { prisma, findFirst } = fake([]);
+    expect(await resolvePublishedStorefront(prisma, VISIBILITY, wild)).toBeNull();
+    expect(findFirst).not.toHaveBeenCalled();
   });
 });

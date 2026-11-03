@@ -8,6 +8,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { TrackCron } from '../../common/cron-run/track-cron';
 
+const STORE_PAGE = 200;
+
 /**
  * Nhắc CTV thêm sản phẩm nổi bật họ chưa có trong gian hàng — giữ CTV quay lại cập nhật thay vì
  * tạo gian hàng 1 lần rồi quên. Mirror RemarketingService (lifecycle module): atomic-claim qua
@@ -20,8 +22,6 @@ import { TrackCron } from '../../common/cron-run/track-cron';
  * HOẠT ĐỘNG (đã publish + đã có ít nhất 1 sản phẩm — gian hàng trắng hoàn toàn đã có
  * TemplatePickerSheet/EmptyState mời tạo, nhắc thêm là thừa) mà còn thiếu sản phẩm isFeatured.
  */
-const STORE_PAGE = 200;
-
 @Injectable()
 export class StorefrontReminderService {
   private readonly logger = new Logger(StorefrontReminderService.name);

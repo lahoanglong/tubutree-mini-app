@@ -115,6 +115,7 @@ function build(
     user: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, tierId: opts.tierId ?? null }),
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
       updateMany,
     },
     // P0 A3-05: checkout.compute() tra MembershipTier.discountPct theo user.tierId để áp giảm giá
@@ -130,9 +131,9 @@ function build(
     ),
     address: { findUnique: jest.fn().mockResolvedValue(ADDRESS) },
     storefront: {
-      findFirst: jest.fn().mockImplementation(({ where }: { where: { OR: Array<Record<string, string>> } }) => {
+      findFirst: jest.fn().mockImplementation(({ where }: { where: { slug?: { equals: string }; subdomain?: string } }) => {
         const sf = opts.storefront;
-        const hit = sf && where.OR.some((c) => Object.values(c).some((v) => v === sf.slug || v === sf.subdomain));
+        const hit = sf && ((where.slug && where.slug.equals === sf.slug) || (where.subdomain && where.subdomain === sf.subdomain));
         return Promise.resolve(hit ? { id: sf.id, slug: sf.slug, type: sf.type, ownerUserId: sf.ownerUserId } : null);
       }),
       findMany: jest.fn().mockResolvedValue(opts.merchantStores ?? []),

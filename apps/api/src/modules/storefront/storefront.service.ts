@@ -27,6 +27,7 @@ const MAX_COLLECTIONS_PER_STORE = 30;
 const MAX_ITEMS_PER_COLLECTION = 100;
 // Trần hostname DNS (RFC 1035): dài hơn không thể là host thật.
 const HOST_MAX_LENGTH = 253;
+const PLATFORM_HOST_SUFFIX = '.tubutree.com';
 
 /** Lý do khách không thấy một món trong gian hàng (null = khách thấy) — cùng điều kiện lọc của getPublicBySlug. */
 export function buyerHiddenReason(item: {
@@ -413,6 +414,11 @@ export class StorefrontService {
     if (typeof host !== 'string' || !host || host.length > HOST_MAX_LENGTH) throw new BadRequestException('Host không hợp lệ.');
     const hostname = host.split(':')[0]!.toLowerCase();
     const parts = hostname.split('.');
+    // Tên miền riêng khớp trước: không thì CTV khác đặt subdomain trùng nhãn đầu (myshop của myshop.vn) là chiếm được trang.
+    if (!hostname.endsWith(PLATFORM_HOST_SUFFIX)) {
+      const byDomain = await this.prisma.storefront.findFirst({ where: { customDomain: hostname, isPublished: true }, select: { slug: true } });
+      if (byDomain) return this.getPublicBySlug(byDomain.slug);
+    }
     if (parts.length >= 2) {
       const sub = parts[0]!;
       if (sub !== 'www' && sub !== 'admin' && sub !== 'api') {
@@ -420,8 +426,6 @@ export class StorefrontService {
           this.prisma.storefront.findFirst({ where: { ...columnWhere, isPublished: true }, select: { slug: true }, orderBy: { createdAt: 'asc' } }),
         );
         if (found) return this.getPublicBySlug(found.slug);
-        const byDomain = await this.prisma.storefront.findFirst({ where: { customDomain: hostname, isPublished: true }, select: { slug: true } });
-        if (byDomain) return this.getPublicBySlug(byDomain.slug);
       }
     }
     return this.getPublicBySlug(hostname);

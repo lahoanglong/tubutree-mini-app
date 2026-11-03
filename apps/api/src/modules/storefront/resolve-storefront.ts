@@ -2,6 +2,8 @@ import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { publicStorefrontWhere, type PublicVisibilityOptions } from './storefront-visibility';
 
+const IDENTIFIER_CHARS_RE = /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$/;
+
 /** Gian hàng ghi công resolve phía server (SELLER-4/5). */
 export interface ResolvedStorefront {
   id: string;
@@ -22,6 +24,8 @@ export async function findByIdentifierPriority<T>(
   value: string,
   find: (columnWhere: Prisma.StorefrontWhereInput) => Promise<T | null>,
 ): Promise<T | null> {
+  // `equals` + insensitive là ILIKE nên % và _ thành ký tự đại diện; định danh hợp lệ chỉ có chữ, số, dấu chấm, gạch ngang.
+  if (!IDENTIFIER_CHARS_RE.test(value)) return null;
   const eq = { equals: value, mode: 'insensitive' } as const;
   const bySlug = await find({ slug: eq });
   if (bySlug) return bySlug;
@@ -29,7 +33,8 @@ export async function findByIdentifierPriority<T>(
   const codeOwner = await prisma.user.findFirst({ where: { referralCode: eq }, select: { id: true } });
   const ownerGuard: Prisma.StorefrontWhereInput = codeOwner ? { ownerUserId: codeOwner.id } : {};
   for (const column of ['subdomain', 'customDomain'] as const) {
-    const found = await find({ [column]: eq, ...ownerGuard });
+    // Hai cột này luôn lưu chữ thường (normalizeSubdomain/normalizeCustomDomain) nên so bằng, dùng được unique index.
+    const found = await find({ [column]: value.toLowerCase(), ...ownerGuard });
     if (found) return found;
   }
   return null;

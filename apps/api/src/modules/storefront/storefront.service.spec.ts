@@ -1138,14 +1138,15 @@ describe('StorefrontService.getPublicBySlug — không phân biệt hoa/thườn
     (prisma.storefront.findFirst as jest.Mock) = found;
     const svc = new StorefrontService(prisma, config, affiliate);
     await svc.getPublicBySlug('LINH123').catch(() => undefined);
-    // Mỗi cột phải so khớp không phân biệt hoa/thường, nếu không slug cũ vẫn chết; thứ tự slug (rồi hỏi lại slug bất kể hiển thị để
+    // Slug so khớp không phân biệt hoa/thường (slug cũ còn chữ hoa), subdomain và tên miền riêng luôn chữ thường nên so bằng; thứ tự slug (rồi hỏi lại slug bất kể hiển thị để
     // không rơi xuống subdomain của người khác), subdomain, tên miền riêng (DLSF-01).
     const columns = found.mock.calls.map((c) => Object.keys(c[0].where).find((k) => ['slug', 'subdomain', 'customDomain'].includes(k)));
     expect(columns).toEqual(['slug', 'slug', 'subdomain', 'customDomain']);
-    for (const call of found.mock.calls) {
-      const field = (call[0].where.slug ?? call[0].where.subdomain ?? call[0].where.customDomain) as { mode?: string };
-      expect(field.mode).toBe('insensitive');
+    for (const call of found.mock.calls.filter((c) => c[0].where.slug)) {
+      expect(call[0].where.slug).toEqual({ equals: 'linh123', mode: 'insensitive' });
     }
+    const exact = found.mock.calls.map((c) => c[0].where).filter((w) => w.subdomain || w.customDomain);
+    expect(exact.map((w) => w.subdomain ?? w.customDomain)).toEqual(['linh123', 'linh123']);
   });
 });
 

@@ -89,6 +89,55 @@ describe('Định danh gian hàng và mã giới thiệu (real Postgres)', () =>
     expect(mine.subdomain).not.toBe(victim.referralCode.toLowerCase());
   });
 
+  it('createStore: hậu tố đầu tiên trùng mã giới thiệu của người khác thì nhảy sang hậu tố kế', async () => {
+    const victim = await ctv();
+    const code = victim.referralCode.toLowerCase();
+    const squatter = await ctv();
+    await storefront.getOrCreateMine(squatter.id);
+    await prisma.storefront.updateMany({ where: { ownerUserId: squatter.id }, data: { subdomain: code } });
+    const other = await createUser(prisma, { role: 'AFFILIATE', referralCode: `${code}-1`.toUpperCase() });
+    userIds.push(other.id);
+    const mine = await merchant.getOrCreateStore(victim.id);
+    expect(mine.slug).toBe(code);
+    expect(mine.subdomain).toBe(`${code}-2`);
+  });
+
+  it('createStore: hậu tố trùng slug của gian hàng khác hoặc đang trong thời gian chờ nhả thì nhảy sang hậu tố kế', async () => {
+    const victim = await ctv();
+    const code = victim.referralCode.toLowerCase();
+    const squatter = await ctv();
+    const sq = await storefront.getOrCreateMine(squatter.id);
+    await prisma.storefront.update({ where: { id: sq.id }, data: { subdomain: code } });
+    const holder = await ctv();
+    const held = await storefront.getOrCreateMine(holder.id);
+    await prisma.storefront.update({ where: { id: held.id }, data: { subdomain: `${code}-1` } });
+    await prisma.releasedStorefrontIdentifier.create({ data: { value: `${code}-2`, storefrontId: sq.id, releasedAt: new Date() } });
+    const mine = await merchant.getOrCreateStore(victim.id);
+    expect(mine.subdomain).toBe(`${code}-3`);
+  });
+
+  it('tên miền riêng khớp trước nhãn đầu: subdomain của CTV khác trùng nhãn đầu không chiếm được trang tên miền riêng', async () => {
+    const owner = await ctv();
+    const other = await ctv();
+    const label = `dm${randCode(6).toLowerCase()}`;
+    const a = await storefront.getOrCreateMine(owner.id);
+    await prisma.storefront.update({ where: { id: a.id }, data: { customDomain: `${label}.vn`, isPublished: true, publishedAt: new Date() } });
+    const b = await storefront.getOrCreateMine(other.id);
+    await prisma.storefront.update({ where: { id: b.id }, data: { subdomain: label, isPublished: true, publishedAt: new Date() } });
+    const page = await storefront.getPublicByHost(`${label}.vn`);
+    expect(page.id).toBe(a.id);
+  });
+
+  it('ký tự đại diện của ILIKE không khớp gian hàng nào', async () => {
+    const owner = await ctv();
+    const s = await storefront.getOrCreateMine(owner.id);
+    await prisma.storefront.update({ where: { id: s.id }, data: { isPublished: true, publishedAt: new Date() } });
+    const vis = { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false } as const;
+    for (const wild of ['%', '_', 'a%', '%%%']) {
+      expect(await resolvePublishedStorefront(prisma, vis, wild)).toBeNull();
+    }
+  });
+
   it('dữ liệu cũ đã trùng: /s/<mã> và checkout về đúng chủ mã (slug thắng subdomain)', async () => {
     const victim = await ctv();
     const squatter = await ctv();

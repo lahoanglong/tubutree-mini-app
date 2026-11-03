@@ -346,6 +346,9 @@ export class MerchantService {
     }
 
     const ownerName = publicDisplayName(user.fullName, '');
+    const cooldownDays =
+      (await this.config?.get<number>('storefront.identifier_cooldown_days', DEFAULT_IDENTIFIER_COOLDOWN_DAYS)) ??
+      DEFAULT_IDENTIFIER_COOLDOWN_DAYS;
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     // 2 request đồng thời của cùng một user (double-tap "Mở gian hàng") có thể cùng đọc "chưa có store" rồi cùng create; @@unique([ownerUserId])
     // làm request thua ăn P2002. Cột subdomain có @unique nên request khác chiếm subdomain giữa lúc kiểm và lúc ghi
@@ -369,11 +372,18 @@ export class MerchantService {
               where: { OR: [{ slug: subdomain }, { subdomain }, { customDomain: subdomain }] },
               select: { id: true },
             });
-            const codeOfOther =
-              subdomain === baseSlug
-                ? null
-                : await tx.user.findFirst({ where: { referralCode: { equals: subdomain, mode: 'insensitive' }, NOT: { id: userId } }, select: { id: true } });
-            if (!taken && !codeOfOther) break;
+            // Hậu tố đi qua cùng bộ kiểm với đổi subdomain (mã người khác, tên thương hiệu, thời gian chờ nhả định danh).
+            const blocked =
+              !!taken ||
+              (subdomain !== baseSlug &&
+                (await assertIdentifierAvailable(tx, subdomain, '', cooldownDays, userId).then(
+                  () => false,
+                  (e: unknown) => {
+                    if (e instanceof BadRequestException) return true;
+                    throw e;
+                  },
+                )));
+            if (!blocked) break;
             subdomain = `${baseSlug}-${counter}`;
           }
           return tx.storefront.create({
