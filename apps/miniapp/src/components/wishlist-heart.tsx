@@ -66,16 +66,25 @@ export function WishlistHeart({
   // Nảy theo thao tác của khách chứ không theo `liked`: tải danh sách đã có sẵn tim đỏ không được nảy, bỏ thích cũng không.
   const [popping, setPopping] = useState(false);
 
-  const handle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    haptic('light');
-    if (!authed) return void login();
+  const toggle = () => {
     void qc.cancelQueries({ queryKey: IDS_KEY });
     const current = qc.getQueryData<string[]>(IDS_KEY) ?? [];
     const want = !current.includes(productId);
     setPopping(want);
     qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
     sendToggle(qc, productId, want);
+  };
+
+  const handle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    haptic('light');
+    if (authed) return toggle();
+    // Chạm lúc app còn đang khôi phục phiên: login() chờ khôi phục xong (không đăng nhập song song); ra phiên rồi thì làm đúng việc
+    // khách vừa chạm, thay vì nuốt lần chạm.
+    const wasRestoring = status === 'loading';
+    void login().then(() => {
+      if (wasRestoring && useAuthStore.getState().status === 'authenticated') toggle();
+    });
   };
 
   return (
