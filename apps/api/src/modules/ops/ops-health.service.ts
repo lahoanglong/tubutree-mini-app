@@ -70,6 +70,8 @@ const FAILED_SCAN = 200;
 const WEBHOOK_TIMEOUT_MS = 5000;
 /** Token OA còn dưới chừng này mà chưa được làm mới: cron làm mới (ngưỡng 13 giờ, mỗi 6 giờ) đã lỡ ít nhất một lượt. */
 const ZALO_TOKEN_WARN_MS = 3 * 3_600_000;
+/** Chu kỳ cron làm mới token là 6 giờ; thêm 1 giờ đệm trước khi coi "chưa có mốc hạn" là cron không chạy. */
+const ZALO_TOKEN_CRON_GRACE_MS = 7 * 3_600_000;
 /** Tên job trong sổ cron_runs của ZaloOaTokenCron.refresh (không đặt name ở @Cron nên là Lớp.phươngThức). */
 const ZALO_TOKEN_CRON_JOB = 'ZaloOaTokenCron.refresh';
 
@@ -269,8 +271,9 @@ export class OpsHealthService {
       const expiresAt = typeof expires?.value === 'string' ? Date.parse(expires.value) : NaN;
       if (!hasToken) return [];
       if (Number.isNaN(expiresAt)) {
-        // Vừa cấu hình token thì mốc hạn chỉ có sau lượt làm mới đầu của cron (tới 6 giờ): chỉ báo khi lượt gần nhất đã lỗi.
-        if (this.cronRuns && !(await this.zaloTokenCronFailed())) return [];
+        // Vừa cấu hình/khởi động thì mốc hạn chỉ có sau lượt làm mới đầu của cron (tới 6 giờ): trong ngần ấy thời gian chỉ báo khi lượt gần nhất
+        // đã lỗi. Quá hạn đó mà vẫn chưa có mốc thì cron không chạy được (tắt, mất lease), im lặng nữa là token hết hạn mà không ai biết.
+        if (this.cronRuns && process.uptime() * 1000 < ZALO_TOKEN_CRON_GRACE_MS && !(await this.zaloTokenCronFailed())) return [];
         return [
           {
             key: 'zalo.oa_token',

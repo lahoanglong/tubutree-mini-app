@@ -232,6 +232,21 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
       expect(await withCron([cronRow('SKIPPED')]).zaloTokenProblems(NOW)).toEqual([]);
     });
 
+    it('tiến trình chạy quá 7 giờ mà vẫn chưa có mốc hạn (cron không bao giờ chạy: tắt cron, mất lease leader) → vẫn báo, dù không có dòng cron nào', async () => {
+      const uptime = jest.spyOn(process, 'uptime').mockReturnValue(7 * 3600 + 60);
+      try {
+        for (const rows of [[], [cronRow('OK')], [cronRow('SKIPPED')]]) {
+          const out = await withCron(rows).zaloTokenProblems(NOW);
+          expect(out).toHaveLength(1);
+          expect(out[0]!.message).toContain('chưa từng được làm mới');
+        }
+        uptime.mockReturnValue(5 * 3600);
+        expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
+      } finally {
+        uptime.mockRestore();
+      }
+    });
+
     it('lượt cron gần nhất đã lỗi mà vẫn chưa có mốc hạn → báo "chưa từng được làm mới"', async () => {
       for (const outcome of ['ERRORS', 'THREW']) {
         const out = await withCron([cronRow(outcome)]).zaloTokenProblems(NOW);
