@@ -9,7 +9,9 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 const quoteFail = vi.hoisted(() => ({ error: null as Error | null }));
-const cartExtra = vi.hoisted(() => ({ coupon: null as string | null, discount: 0, second: false }));
+const cartExtra = vi.hoisted(() => ({ coupon: null as string | null, discount: 0, second: false, combo: 0, tier: 0 }));
+const addrMode = vi.hoisted(() => ({ none: false }));
+const quoteExtra = vi.hoisted(() => ({ pointsEarned: 0, shippingFee: 30000 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => ({
@@ -19,19 +21,19 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
         ? [{ id: 'i2', variationId: 'v2', productName: 'Xà phòng', variationName: '100g', slug: 'xa-phong', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000 }]
         : []),
     ],
-    couponCode: cartExtra.coupon, subtotal: 300000, discount: cartExtra.discount, freeship: false, freeshipThreshold: 500000, itemCount: 2,
+    couponCode: cartExtra.coupon, subtotal: 300000, discount: cartExtra.discount, comboDiscount: cartExtra.combo, tierDiscount: cartExtra.tier, freeship: false, freeshipThreshold: 500000, itemCount: 2,
   }),
   getMe: async () => ({ pointsBalance: 500, walletBalance: 0 }),
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
-  getAddresses: async () => [
+  getAddresses: async () => addrMode.none ? [] : [
     { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: '84_VNp', districtCode: '', wardCode: 'w', isDefault: true },
     { id: 'a2', recipient: 'Bình', phone: '0987654321', province: 'Huế', district: 'A', ward: 'B', street: '2 Lê Lợi', provinceCode: '46', districtCode: 'd', wardCode: '00', isDefault: false },
   ],
   checkoutQuote: async () => {
     if (quoteFail.error) throw quoteFail.error;
     return {
-    subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0,
+    subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: quoteExtra.shippingFee, total: 300000 + quoteExtra.shippingFee, pointsEarned: quoteExtra.pointsEarned,
     pointsBalance: 500, redeemablePoints: 500,
     };
   },
@@ -54,6 +56,11 @@ beforeEach(() => {
   cartExtra.coupon = null;
   cartExtra.discount = 0;
   cartExtra.second = false;
+  cartExtra.combo = 0;
+  cartExtra.tier = 0;
+  quoteExtra.pointsEarned = 0;
+  quoteExtra.shippingFee = 30000;
+  addrMode.none = false;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -188,5 +195,78 @@ describe('/thanh-toan — nút "Chi tiết" và sheet tính tiền như Mini App
     click(Array.from(dlg.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Đã hiểu')!);
     await flush(3);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
+
+describe('/thanh-toan — sheet chi tiết giống Mini', () => {
+  const openSheet = async (c: HTMLElement) => {
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    click(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!);
+    await flush(3);
+    return document.querySelector<HTMLElement>('[role="dialog"]')!;
+  };
+
+  it('có điểm thưởng: sheet ghi dòng "Nhận +N Điểm Xanh khi giao thành công"', async () => {
+    quoteExtra.pointsEarned = 1250;
+    const dlg = await openSheet(await mount());
+    expect(dlg.textContent).toContain('Nhận +1.250 Điểm Xanh khi giao thành công');
+  });
+
+  it('không có điểm thưởng: sheet không có dòng "Nhận +"', async () => {
+    const dlg = await openSheet(await mount());
+    expect(dlg.textContent).not.toContain('Nhận +');
+  });
+
+  it('phí ship 0: "Miễn phí" tông success ở cả thẻ tóm tắt và sheet', async () => {
+    quoteExtra.shippingFee = 0;
+    const c = await mount();
+    const inSummary = Array.from(c.querySelectorAll<HTMLElement>('[data-mini-block="summary"] span')).find((e) => e.textContent === 'Miễn phí')!;
+    expect(inSummary.className).toMatch(/text-success-fg/);
+    const dlg = await openSheet(c);
+    const inSheet = Array.from(dlg.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === 'Miễn phí')!;
+    expect(inSheet.className).toMatch(/text-success-fg/);
+  });
+});
+
+describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ giỏ như Mini', () => {
+  it('giỏ trọn có combo + hạng + mã: thẻ tóm tắt và sheet ghi số giảm', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    cartExtra.tier = 5000;
+    addrMode.none = true;
+    const c = await mount();
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    expect(summary.textContent).toContain('Giảm giá combo');
+    expect(summary.textContent).toContain('-15.000đ');
+    expect(summary.textContent).toContain('-20.000đ');
+    expect(summary.textContent).toContain('Ưu đãi hạng thành viên');
+    click(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!);
+    await flush(3);
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dlg.textContent).toContain('Giảm giá combo');
+    expect(dlg.textContent).toContain('-15.000đ');
+    expect(dlg.textContent).toContain('-20.000đ');
+    expect(dlg.textContent).toContain('-5.000đ');
+  });
+
+  it('mua một phần giỏ: không ghi số giảm của cả giỏ', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    cartExtra.second = true;
+    addrMode.none = true;
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
+    const c = await mount();
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    expect(summary.textContent).not.toContain('Giảm giá combo');
+    expect(summary.textContent).not.toContain('-15.000đ');
+  });
+
+  it('không có mã trong giỏ: không ghi dòng giảm giá dù discount > 0', async () => {
+    cartExtra.discount = 20000;
+    addrMode.none = true;
+    const c = await mount();
+    expect(c.querySelector('[data-mini-block="summary"]')!.textContent).not.toContain('-20.000đ');
   });
 });

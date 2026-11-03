@@ -68,7 +68,7 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button, ProductThumb } from '@/components/mini';
-import { Sheet } from '@/components/ui/sheet';
+import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { clearSubmitted } from '@/lib/recycle-wizard';
 
@@ -493,6 +493,12 @@ export default function CheckoutPage() {
   const placeCartNotice = place.error ? cartFixableNotice(place.error, placeErrorMessage) : null;
   const cartIssue = overStock ? overStockMessage(overStock.productName, overStock.stock) : placeCartNotice;
   const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
+  // Chưa có báo giá: xem trước khoản giảm từ giỏ như Mini. Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ; mua một phần thì máy chủ tính lại.
+  const earnedLabel = quote ? `Nhận +${formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công` : '';
+  const wholeCart = !itemIds || itemIds.length === (cart?.items.length ?? 0);
+  const previewCombo = !quote && wholeCart ? (cart?.comboDiscount ?? 0) : 0;
+  const previewDiscount = !quote && wholeCart && cart?.couponCode ? (cart.discount ?? 0) : 0;
+  const previewTier = !quote && wholeCart ? (cart?.tierDiscount ?? 0) : 0;
   const paymentMethods = [
     { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
     { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
@@ -590,10 +596,10 @@ export default function CheckoutPage() {
                           onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className={`${miniRadio} ${miniRadioGutter} ${reason ? 'max-md:opacity-[0.45] md:opacity-60' : ''}`}
+                          className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-[0.45] md:opacity-60' : ''}`}
                         />
                         <span className="flex min-w-0 flex-col">
-                          <span className={reason ? 'max-md:opacity-[0.45] md:opacity-60' : undefined}>{p.label}</span>
+                          <span className={reason ? 'opacity-[0.45] md:opacity-60' : undefined}>{p.label}</span>
                           {reason && (
                             <span id={`pay-blocked-${p.k}`} className="text-caption text-[color:var(--color-text-secondary)] md:hidden">
                               {reason}
@@ -731,6 +737,7 @@ export default function CheckoutPage() {
             <button
               type="button"
               onClick={() => setSummarySheetOpen(true)}
+              disabled={quoteQ.isError}
               aria-haspopup="dialog"
               className="inline-flex min-h-11 items-center gap-1 text-caption font-bold text-[color:var(--color-text-brand)]"
             >
@@ -746,16 +753,20 @@ export default function CheckoutPage() {
           {(quote?.tierDiscount ?? 0) > 0 && (
             <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
+          {previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} green />}
+          {previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} green />}
+          {previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} green />}
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${formatCount(quote!.pointsUsed)})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
           <Row
             label="Phí vận chuyển"
             value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+            valueGreen={quote?.shippingFee === 0}
           />
           {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
-          <Sheet
+          <BottomSheet
             open={summarySheetOpen}
             onClose={() => setSummarySheetOpen(false)}
             title="Chi tiết tính tiền đơn hàng"
@@ -767,21 +778,28 @@ export default function CheckoutPage() {
           >
             <div className="rounded-[var(--radius-card)] bg-[var(--color-bg-canvas)] p-3">
               <Row label="Tạm tính tiền hàng" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
-              {(quote?.discount ?? 0) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote!.discount)}`} green />}
-              {(quote?.comboDiscount ?? 0) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
-              {(quote?.tierDiscount ?? 0) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />}
+              {(quote ? quote.discount : previewDiscount) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote ? quote.discount : previewDiscount)}`} green />}
+              {(quote ? (quote.comboDiscount ?? 0) : previewCombo) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote ? quote.comboDiscount! : previewCombo)}`} green />}
+              {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} green />}
               {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} green />}
               <Row
                 label="Phí vận chuyển"
                 value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+                valueGreen={quote?.shippingFee === 0}
               />
               <div className="my-2 h-px bg-[var(--color-border-subtle)]" />
               <div className="flex justify-between gap-2.5 py-1.5 font-bold text-[color:var(--color-text-primary)]">
                 <span className="text-sm">Tổng thanh toán</span>
                 <span className="text-base">{totalText}</span>
               </div>
+              {quote && quote.pointsEarned > 0 && (
+                <p className="mt-1.5 flex items-center justify-end gap-1 text-caption text-success-fg">
+                  <Sprout size={13} aria-hidden="true" />
+                  {earnedLabel}
+                </p>
+              )}
             </div>
-          </Sheet>
+          </BottomSheet>
           {cart && (
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
               <CouponBox
@@ -808,7 +826,7 @@ export default function CheckoutPage() {
                 partnerPoints.disabled ? 'cursor-not-allowed md:opacity-60' : 'cursor-pointer'
               }`}
             >
-              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter} ${partnerPoints.disabled ? 'max-md:opacity-60' : ''}`}>
+              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter} ${partnerPoints.disabled ? 'opacity-60 md:opacity-100' : ''}`}>
                 <input
                   type="checkbox"
                   checked={usePoints && !partnerPoints.disabled}
@@ -820,8 +838,8 @@ export default function CheckoutPage() {
               </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="min-w-0 text-[color:var(--color-text-brand)]">
-                <span className={`block font-semibold max-md:text-[color:var(--color-text-primary)]`}>Điểm Xanh</span>
-                <span className={`block text-caption max-md:text-[color:var(--color-text-tertiary)]`}>
+                <span className="block font-semibold max-md:text-[color:var(--color-text-primary)]">Điểm Xanh</span>
+                <span className="block text-caption max-md:text-[color:var(--color-text-tertiary)]">
                   {partnerPoints.disabled
                     ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
@@ -858,7 +876,7 @@ export default function CheckoutPage() {
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
               <Sprout size={13} aria-hidden="true" />
-              Nhận +{formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công
+              {earnedLabel}
             </p>
           )}
           {quoteQ.isError && (
@@ -963,14 +981,14 @@ export default function CheckoutPage() {
 }
 
 // Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
-function Row({ label, value, green, ds }: { label: string; value: string; green?: boolean; ds?: string }) {
+function Row({ label, value, green, valueGreen, ds }: { label: string; value: string; green?: boolean; valueGreen?: boolean; ds?: string }) {
   return (
     <div
       data-ds={ds}
       className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
     >
       <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 ${green ? '' : 'text-[color:var(--color-text-secondary)]'}`}>{label}</span>
-      <span className="text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5">{value}</span>
+      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5 ${valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
     </div>
   );
 }
