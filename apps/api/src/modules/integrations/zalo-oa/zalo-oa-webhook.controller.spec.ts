@@ -130,6 +130,22 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     expect(create).toHaveBeenCalledTimes(1);
   });
 
+  it('chữ ký tính trên thân thô có ký tự thoát (\\/, \\u) → khớp nhờ rawBody; không có rawBody thì lệch → 401', async () => {
+    const { ctrl, create } = build(both);
+    const ts = String(Date.now());
+    const raw = `{"app_id":"${APP_ID}","event_name":"user_send_image","sender":{"id":"zalo-user-1"},"message":{"msg_id":"m1","url":"https:\\/\\/a.vn\\/x?a=1\\u0026b=2"},"timestamp":"${ts}"}`;
+    const parsed = JSON.parse(raw);
+    const sig = zaloOaEventSignature(APP_ID, raw, ts, OA_KEY);
+    await expect(ctrl.handle(parsed, undefined, sig)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(parsed, undefined, sig, { rawBody: Buffer.from(raw, 'utf8') })).resolves.toEqual({ received: true });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('header mang tiền tố mac= vẫn khớp', async () => {
+    const { ctrl } = build(both);
+    await expect(ctrl.handle(signed, undefined, `mac=${sign()}`)).resolves.toEqual({ received: true });
+  });
+
   it('chữ ký in hoa vẫn khớp; chữ ký sai/khác thân/khác khoá → 401, không lưu', async () => {
     const { ctrl, create } = build(both);
     await expect(ctrl.handle(signed, undefined, sign().toUpperCase())).resolves.toEqual({ received: true });

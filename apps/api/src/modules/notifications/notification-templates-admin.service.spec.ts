@@ -263,9 +263,9 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
 
 describe('NotificationTemplatesAdminService.list — nhắc hạ hạng gửi ZNS bằng khoá cấu hình riêng (NTF-01)', () => {
   const tier = { id: 'nt-tier', code: 'TIER_DROP_NOTICE', channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Hạng {{tier}} sắp hết hạn' };
-  const build = (znsKey: unknown) => {
+  const build = (znsKey: unknown, row: object = tier) => {
     const prisma = {
-      notificationTemplate: { findMany: jest.fn().mockResolvedValue([tier]) },
+      notificationTemplate: { findMany: jest.fn().mockResolvedValue([row]) },
       notificationLog: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
     const sys = { get: jest.fn(async (k: string, fb: unknown) => (k === 'loyalty.tier_drop_zns_template_id' ? znsKey : fb)) };
@@ -279,6 +279,13 @@ describe('NotificationTemplatesAdminService.list — nhắc hạ hạng gửi ZN
   it('nói rõ mã ZNS lấy từ khoá cấu hình nào; mẫu khác và khoá trống thì không', async () => {
     expect((await build('123456').list())[0]!.znsConfigKey).toBe('loyalty.tier_drop_zns_template_id');
     expect((await build('').list())[0]!.znsConfigKey).toBeNull();
+  });
+
+  it('mẫu ZNS đã có mã riêng: tin thật gửi bằng mã của mẫu, nên không chỉ sang khoá cấu hình', async () => {
+    const own = { ...tier, channel: 'ZNS', zaloTemplateId: '999' };
+    const row = (await build('123456', own).list())[0]!;
+    expect(row.znsConfigKey).toBeNull();
+    expect(row.delivery).toBe('ZNS');
   });
 
   it.each([[''], ['abc'], [undefined]])('khoá trống/sai (%p) → vẫn "Chỉ trong app"', async (key) => {

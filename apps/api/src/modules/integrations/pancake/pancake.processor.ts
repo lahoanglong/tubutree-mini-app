@@ -557,10 +557,7 @@ export class PancakeProcessor extends WorkerHost {
         return;
       }
       const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;
-      await tx.order.updateMany({
-        where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
-        data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-      });
+      await writePancakeAttention(tx, order.id, reason);
     });
     const note = `${ATTENTION_PARTIAL_RETURN_ACK} (Pancake #${order.pancakeOrderId ?? '?'})`;
     const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });

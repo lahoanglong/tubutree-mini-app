@@ -20,6 +20,8 @@ export interface AdminNotificationTemplate {
   zaloTemplateId: string | null;
   bodyTemplate: string;
   delivery: TemplateDelivery;
+  /** Khoá cấu hình cấp mã ZNS khi mẫu chưa có mã riêng (nhắc hạ hạng); null = mã nằm ở ô của mẫu. */
+  znsConfigKey: string | null;
   /** INAPP: mọi bản ghi trong app; ZNS: chỉ lượt Zalo xác nhận đã nhận (error === 0). */
   sent30d: { INAPP: number; ZNS: number };
   /** Lượt ZNS 30 ngày gần nhất bị từ chối/lỗi hẳn, kèm mã + lý do của lần gần nhất để admin biết phải sửa gì. */
@@ -112,12 +114,15 @@ export class NotificationTemplatesAdminService {
     // Nhắc hạ hạng gửi ZNS bằng mã lấy từ khoá cấu hình loyalty.* kể cả khi mẫu để kênh "Trong app" (NotificationsService.notify
     // dùng mã của nơi gọi khi mẫu chưa có mã riêng) — màn này phải hiện đúng điều đó.
     const tierDropZnsId = await this.tierDropZnsTemplateId();
+    // notify() ưu tiên mã riêng của mẫu ZNS; khoá cấu hình chỉ là mã dự phòng khi mẫu chưa có mã.
+    const usesTierDropKey = (t: { code: string; channel: string; zaloTemplateId: string | null }) =>
+      t.code === TIER_DROP_NOTICE_CODE && Boolean(tierDropZnsId) && !(t.channel === 'ZNS' && t.zaloTemplateId);
     const lastError = new Map(failures.map((f) => [f.templateCode, { text: f.error ?? 'Không rõ lý do', at: f.sentAt }]));
     return templates
       .map((t) => ({
         ...t,
-        delivery: t.code === TIER_DROP_NOTICE_CODE && tierDropZnsId ? ('ZNS' as const) : deliveryOf(t),
-        znsConfigKey: t.code === TIER_DROP_NOTICE_CODE && tierDropZnsId ? TIER_DROP_ZNS_TEMPLATE_KEY : null,
+        delivery: usesTierDropKey(t) ? ('ZNS' as const) : deliveryOf(t),
+        znsConfigKey: usesTierDropKey(t) ? TIER_DROP_ZNS_TEMPLATE_KEY : null,
         sent30d: sent.get(t.code) ?? { INAPP: 0, ZNS: 0 },
         znsFailed30d: failed.get(t.code) ?? 0,
         znsLastError: lastError.get(t.code) ?? null,

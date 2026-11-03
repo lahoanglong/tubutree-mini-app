@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
   Post,
+  Req,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -32,12 +33,13 @@ interface ZaloOaWebhookBody {
 }
 
 /**
- * `X-ZEvent-Signature` của webhook Zalo OA: sha256(appId + thân + timestamp + khoá bí mật của OA), hex thường. Chữ ký tính trên
- * thân thô; ở đây dùng thân đã parse rồi stringify lại (Zalo gửi JSON gọn, giữ thứ tự khoá), nên thân mang khác biệt hình thức
- * (vd ký tự thoát) sẽ lệch chữ ký và rơi về token tĩnh.
+ * `X-ZEvent-Signature` của webhook Zalo OA: sha256(appId + thân + timestamp + khoá bí mật của OA), hex thường (header có thể
+ * mang tiền tố `mac=`). Chữ ký tính trên THÂN THÔ: truyền `body` là chuỗi thô (`req.rawBody`) khi có. Truyền object thì băm
+ * JSON.stringify của nó, chỉ khớp khi Zalo gửi JSON gọn không ký tự thoát (`\/`, `\uXXXX`, `&`...), nên đó là đường lùi, không
+ * phải đường chính.
  */
 export function zaloOaEventSignature(appId: string, body: unknown, timestamp: string, oaSecretKey: string): string {
-  return createHash('sha256').update(appId + JSON.stringify(body) + timestamp + oaSecretKey).digest('hex');
+  return createHash('sha256').update(appId + (typeof body === 'string' ? body : JSON.stringify(body)) + timestamp + oaSecretKey).digest('hex');
 }
 
 /**
@@ -75,13 +77,14 @@ export class ZaloOaWebhookController {
     @Body() body: ZaloOaWebhookBody,
     @Headers('x-webhook-token') token?: string,
     @Headers('x-zevent-signature') signature?: string,
+    @Req() req?: { rawBody?: Buffer },
   ) {
     if (!this.secret && !this.oaSecretKey) {
       if (process.env.NODE_ENV === 'production') {
         throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
       }
       // Dev/test: bỏ qua cho dễ thử nghiệm.
-    } else if (this.signingReady ? !this.verifySignature(body, signature) : !this.verifyToken(token)) {
+    } else if (this.signingReady ? !this.verifySignature(body, signature, req?.rawBody) : !this.verifyToken(token)) {
       throw new UnauthorizedException('Chữ ký hoặc token webhook không hợp lệ.');
     }
 
@@ -126,13 +129,15 @@ export class ZaloOaWebhookController {
     return constantTimeEqual(token, this.secret);
   }
 
-  private verifySignature(body: ZaloOaWebhookBody, signature?: string): boolean {
+  private verifySignature(body: ZaloOaWebhookBody, signature?: string, rawBody?: Buffer): boolean {
     if (!this.oaSecretKey || !this.appId || !signature || !body || typeof body !== 'object') return false;
     const timestamp = body['timestamp'];
     if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return false;
     const ts = Number(timestamp);
     if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_EVENT_SKEW_MS) return false;
-    return constantTimeEqual(signature.trim().toLowerCase(), zaloOaEventSignature(this.appId, body, String(timestamp), this.oaSecretKey));
+    const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
+    const signed: unknown = rawBody && rawBody.length > 0 ? rawBody.toString('utf8') : body;
+    return constantTimeEqual(given, zaloOaEventSignature(this.appId, signed, String(timestamp), this.oaSecretKey));
   }
 }
 

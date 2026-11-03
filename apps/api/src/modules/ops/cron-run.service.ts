@@ -31,14 +31,14 @@ export function describeCronError(err: unknown): string {
   return `${name}: ${firstLine}`.slice(0, MAX_ERROR_LENGTH);
 }
 
+/** Dòng mốc do mã tự ghi vào cron_runs (không có @TrackCron nên không nằm trong danh sách job đăng ký) mà màn Sức khoẻ vẫn hiện. */
+export const CRON_MARKER_JOBS: ReadonlySet<string> = new Set([DAILY_WALLET_TRANSFER_JOB]);
+
 /**
  * Sổ lần chạy cuối của từng @Cron (bảng cron_runs, một dòng mỗi job, một upsert mỗi lần chạy). Chỉ leader chạy cron nên
  * chỉ leader ghi. Lần chạy hỏng = ném lỗi hoặc có log error (xem track-cron.ts). Báo admin qua OPS_CRON_FAILED khi số lần
  * hỏng liên tiếp đạt `alertAfter` của job (mặc định 1), tối đa một lần mỗi job mỗi 6 giờ.
  */
-/** Dòng mốc do mã tự ghi vào cron_runs (không có @TrackCron nên không nằm trong danh sách job đăng ký) mà màn Sức khoẻ vẫn hiện. */
-export const CRON_MARKER_JOBS: ReadonlySet<string> = new Set([DAILY_WALLET_TRANSFER_JOB]);
-
 @Injectable()
 export class CronRunService implements OnModuleInit, CronRunSink {
   private readonly logger = new Logger(CronRunService.name);
