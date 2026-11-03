@@ -63,7 +63,7 @@ const mount = async () => {
 };
 const placeButton = (r: Rendered) => byText(r.container, 'button', 'Đặt hàng') as HTMLButtonElement;
 const radio = (r: Rendered, label: string) =>
-  [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))?.querySelector('input') as HTMLInputElement | undefined;
+  [...r.container.querySelectorAll('label')].find((l) => l.textContent?.startsWith(label))?.querySelector('input') as HTMLInputElement | undefined;
 const checkbox = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input[type="checkbox"]') as HTMLInputElement;
 const field = (r: Rendered, label: string) =>
@@ -104,12 +104,15 @@ describe('/thanh-toan — Ví Tubu (R2-BUYERWEB-2)', () => {
     expect(r.container.querySelector(`#${wallet.getAttribute('aria-describedby')}`)!.textContent).toBe('Số dư chưa đủ — cần thêm 80.000đ');
   });
 
-  it('lý do thụt lề thẳng với chữ nhãn như Mini dưới md, không thụt từ md (K2)', async () => {
+  it('lý do nằm cùng cột chữ với nhãn dưới md (cạnh radio), bản dòng riêng chỉ hiện từ md (K2)', async () => {
     const r = await mount();
     const wallet = radio(r, 'Ví Tubu')!;
     const reason = r.container.querySelector<HTMLElement>(`#${wallet.getAttribute('aria-describedby')}`)!;
-    expect(reason.className).toMatch(/\bpl-9\b/);
-    expect(reason.className).toMatch(/\bmd:pl-0\b/);
+    expect(reason.className).toMatch(/\bmd:hidden\b/);
+    expect(reason.closest('label')).toBe(wallet.closest('label'));
+    const below = Array.from(r.container.querySelectorAll<HTMLElement>('p[aria-hidden="true"]')).find((p) => p.textContent === reason.textContent)!;
+    expect(below.className).toMatch(/\bhidden\b/);
+    expect(below.closest('label')).toBeNull();
   });
 
   it('đang chọn Ví mà tổng đơn tăng vượt số dư (bỏ dùng điểm) → tự về COD', async () => {

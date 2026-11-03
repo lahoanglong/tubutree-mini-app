@@ -183,7 +183,7 @@
   "apps/web/src/app/thanh-toan/checkout-skeleton.tsx": 2,
   "apps/web/src/app/thanh-toan/chuyen-khoan/[code]/page.tsx": 7,
   "apps/web/src/app/thanh-toan/invoice-section.tsx": 2,
-  "apps/web/src/app/thanh-toan/page.tsx": 69,
+  "apps/web/src/app/thanh-toan/page.tsx": 68,
   "apps/web/src/app/tu-van/page.tsx": 10,
   "apps/web/src/app/uu-dai/page.tsx": 1,
   "apps/web/src/app/vuon-xanh/page.tsx": 1,

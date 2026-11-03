@@ -98,7 +98,7 @@ export function maskDobInput(raw: string, prev?: string, inputType?: string): st
   return typed;
 }
 
-/** Trả `iso` khi ô có ngày hợp lệ; `error` nói rõ cần nhập lại gì. Ô trống không phải lỗi. `now` theo giờ máy khách. */
+/** Trả `iso` khi ô có ngày hợp lệ; `error` nói rõ cần nhập lại gì. Ô trống không phải lỗi. `now` đọc theo ngày Việt Nam. */
 export function validateDobVn(text: string, now: Date = new Date()): { iso: string | null; error: string | null } {
   if (text === '') return { iso: null, error: null };
   const m = /^(\d{2})[/.\-\s,](\d{2})[/.\-\s,](\d{4})$/.exec(text);
@@ -111,7 +111,8 @@ export function validateDobVn(text: string, now: Date = new Date()): { iso: stri
   if (y < MIN_YEAR) return { iso: null, error: DOB_ERRORS.tooOld };
   const iso = `${m[3]}-${m[2]}-${m[1]}`;
   const pad = (n: number) => String(n).padStart(2, '0');
-  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const vnNow = new Date(now.getTime() + 7 * 3_600_000);
+  const today = `${vnNow.getUTCFullYear()}-${pad(vnNow.getUTCMonth() + 1)}-${pad(vnNow.getUTCDate())}`;
   if (iso > today) return { iso: null, error: DOB_ERRORS.future };
   return { iso, error: null };
 }
