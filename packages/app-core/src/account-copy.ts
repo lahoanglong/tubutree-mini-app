@@ -15,6 +15,8 @@ function dobInWords(display: string): string {
 export const orderCopy = {
   /** `eta` là khoảng ngày đã ghép sẵn ("30/10 – 01/11"). */
   etaLine: (eta: string) => `Dự kiến giao ${eta}`,
+  /** Nút trả tiền đơn chuyển khoản còn chờ: thẻ đơn, thanh đáy chi tiết đơn. */
+  payNow: 'Thanh toán ngay',
 };
 
 /** Nhãn ngắn cho hàng trạng thái đơn ở Cá nhân: 5 ô trên màn 375px chỉ vừa một dòng; phần đọc cho trình đọc màn hình vẫn dùng nhãn đầy đủ. */

@@ -139,7 +139,7 @@ function OrdersPageBody() {
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Đơn hàng" backHref="/tai-khoan" backLabel="Tài khoản" />
-      <div className="max-md:px-3">{body}</div>
+      <div className="max-md:px-3 [--bleed-inset:0.75rem]">{body}</div>
       <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
     </main>
   );

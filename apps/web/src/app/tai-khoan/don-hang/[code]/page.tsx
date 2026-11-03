@@ -11,6 +11,7 @@ import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutr
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { useAuth } from '@/lib/auth-context';
+import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
@@ -23,6 +24,7 @@ import {
   discountRows,
   orderPaymentStatusLabel,
   isHandedToCarrier,
+  bankPaymentHref,
   orderDetailHref,
   orderPointsNote,
   orderStamp,
@@ -84,6 +86,8 @@ export default function OrderDetailPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const router = useRouter();
+  // Điện thoại theo Mini App: đơn chờ chuyển khoản chỉ có dải hạn + nút "Thanh toán ngay" sang trang QR; khung QR nhúng chỉ từ md.
+  const isPhone = useMediaQuery(MD_DOWN);
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: phase === 'authenticated' });
   const orderQ = useQuery({
     queryKey: ['order', code],
@@ -185,7 +189,7 @@ export default function OrderDetailPage() {
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
   const cancelClosed = !canCancelOrder(o, user?.id) && isHandedToCarrier(o);
-  const showPayPanel = canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice;
+  const showPayPanel = !isPhone && (canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice);
   const returnedQty = returnedByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
@@ -270,7 +274,7 @@ export default function OrderDetailPage() {
       <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} createdAt={o.createdAt} statusTimes={o.statusTimes} etaLabel={etaLabel} />
       {/* Điện thoại xếp khối theo thứ tự của Mini App (order-N); từ md giữ nút thao tác ngay dưới hành trình. */}
       <div className="max-md:order-11">
-        <OrderActions order={o} userId={user?.id} />
+        <OrderActions order={o} userId={user?.id} payHref={isPhone && canPayNow(o) ? bankPaymentHref(o.code) : null} />
       </div>
       <div className="max-md:order-6 max-md:px-4 max-md:empty:hidden">
         {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}

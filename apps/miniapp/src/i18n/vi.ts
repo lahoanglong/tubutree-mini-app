@@ -4,6 +4,7 @@
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
 import { BRAND_BADGE, ERROR_NETWORK, REQUIRED_FIELD, overStockMessage } from '@tubutree/app-core/client-copy';
+import { orderCopy } from '@tubutree/app-core/account-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
@@ -340,7 +341,7 @@ export const vi = {
     paymentLabel: 'Thanh toán',
     timeline: 'Hành trình đơn hàng',
     repurchase: 'Mua lại đơn này',
-    payNow: 'Thanh toán ngay',
+    payNow: orderCopy.payNow,
     payBy: (when: string) => `Hạn ${when}`,
     /** Đơn chờ tiền mà hàng đã bàn giao vận chuyển (API manualHandling): thay hạn thanh toán, nút trả tiền và nút huỷ. */
     manualHandling: 'Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.',

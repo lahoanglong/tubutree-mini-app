@@ -2,6 +2,7 @@
 
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
+import { orderCopy } from '@tubutree/app-core/account-copy';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -159,7 +160,7 @@ export function OrdersSection() {
                   <div className="mt-2 flex items-center justify-between gap-2">
                     {showsPaymentDeadline(o) ? <span className="text-xs text-stone-600">Hạn {formatDateTime(o.paymentDeadline)}</span> : <span />}
                     <Link href={bankPaymentHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={ui.btnPrimary}>
-                      Thanh toán ngay
+                      {orderCopy.payNow}
                     </Link>
                   </div>
                 )}
