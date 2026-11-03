@@ -584,7 +584,7 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     await open('Công nợ');
     expect(document.body.textContent).toContain('3.000.000đ');
     expect(document.body.textContent).toContain('Chưa có giao dịch công nợ');
-    const amount = document.querySelector<HTMLInputElement>('input[aria-label="Số tiền đã chuyển"]')!;
+    const amount = document.querySelector<HTMLInputElement>('input[placeholder="Nhập số tiền"]')!;
     typeInto(amount, '4000000');
     expect(button('Báo đã chuyển khoản').disabled).toBe(true);
     expect(document.body.textContent).toContain('Số tiền vượt dư nợ hiện tại (3.000.000đ).');
@@ -607,12 +607,12 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
       return { ok: true };
     };
     await open('Công nợ');
-    typeInto(document.querySelector('input[aria-label="Số tiền đã chuyển"]'), '1000000');
+    typeInto(document.querySelector('input[placeholder="Nhập số tiền"]'), '1000000');
     click(button('Báo đã chuyển khoản'));
     await flush();
     click(button('Báo đã chuyển khoản'));
     await flush();
-    typeInto(document.querySelector('input[aria-label="Số tiền đã chuyển"]'), '500000');
+    typeInto(document.querySelector('input[placeholder="Nhập số tiền"]'), '500000');
     click(button('Báo đã chuyển khoản'));
     await flush();
     const keys = posts('/dealer/credit-payment').map((p) => p.headers?.['Idempotency-Key']);

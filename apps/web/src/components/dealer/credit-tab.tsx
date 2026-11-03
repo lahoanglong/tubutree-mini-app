@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { AlertTriangle, Leaf } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DEALER_PAY_AMOUNT_LABEL, DEALER_PAY_AMOUNT_PLACEHOLDER } from '@tubutree/app-core/client-copy';
 import { payCredit } from '@tubutree/app-core/api/dealer';
 import { dealerCreditQuery, dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
@@ -12,6 +13,7 @@ import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { ErrorState } from '@/components/ui/error-state';
+import { Field } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
 
@@ -59,16 +61,19 @@ export function CreditTab() {
       <section aria-label="Dư nợ" className={`p-4 ${skin.card}`}>
         <div className="text-sm text-stone-600">Dư nợ hiện tại</div>
         <div className={`text-3xl font-bold tabular-nums ${balance > 0 ? 'text-danger-fg' : 'text-forest-700'}`}>{formatVnd(balance)}</div>
-        <div className="mt-3 flex gap-2">
-          <input
-            type="number"
-            inputMode="numeric"
-            aria-label="Số tiền đã chuyển"
-            placeholder="Số tiền đã chuyển"
-            className={ui.field}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
+        <div className="mt-3 flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Field label={DEALER_PAY_AMOUNT_LABEL}>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder={DEALER_PAY_AMOUNT_PLACEHOLDER}
+                className={ui.field}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </Field>
+          </div>
           <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}>
             {pay.isPending ? 'Đang gửi…' : 'Báo đã chuyển khoản'}
           </button>

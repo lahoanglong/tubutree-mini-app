@@ -1171,7 +1171,8 @@ describe('thống kê và hành trình gian hàng', () => {
     expect(labels).toEqual(['Đơn hàng', 'Doanh thu', 'Hoa hồng']);
     for (const b of stats.querySelectorAll('[data-testid="builder-stat"]')) {
       expect(b.lastElementChild!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
-      expect(b.firstElementChild!.className).toContain('text-[length:var(--type-body-md-size)]');
+      expect(b.firstElementChild!.className).toContain('whitespace-nowrap');
+      expect((b.firstElementChild as HTMLElement).style.fontSize).toContain('var(--type-body-md-size)');
     }
   });
 

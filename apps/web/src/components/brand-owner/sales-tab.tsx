@@ -17,13 +17,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 function Stat({ icon: Icon, label, value, wide }: { icon: LucideIcon; label: string; value: string; wide?: boolean }) {
   return (
-    <div className={`flex items-center gap-3 p-4 ${skin.card} ${wide ? 'col-span-2 lg:col-span-1' : ''}`}>
-      <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-forest-50 text-forest-600">
+    <div className={`${skin.card} p-3 md:p-4 lg:flex lg:items-center lg:gap-3 ${wide ? 'col-span-2 lg:col-span-1' : ''}`}>
+      <span className="flex h-5 w-5 flex-none items-center justify-center text-forest-600 lg:h-10 lg:w-10 lg:rounded-full lg:bg-forest-50">
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
-      <div className="min-w-0">
-        <div className="text-xs text-stone-600">{label}</div>
-        <div className="text-lg font-bold tabular-nums text-stone-900">{value}</div>
+      <div className="min-w-0 max-lg:contents lg:flex lg:flex-col-reverse">
+        <div className="mt-1 font-display text-[length:var(--type-title-lg-size)] font-semibold leading-[var(--type-title-lg-lh)] tabular-nums text-stone-900 lg:mt-0 lg:font-sans lg:text-lg lg:font-bold lg:leading-normal">{value}</div>
+        <div className="text-xs text-[var(--color-text-tertiary)] lg:text-stone-600">{label}</div>
       </div>
     </div>
   );
@@ -61,8 +61,8 @@ export function SalesTab() {
           <p className="text-xs text-stone-600">
             {d.delivered.orderCount} đơn đã giao · {formatVnd(d.delivered.revenue)}
           </p>
-          <section aria-label="Sản phẩm bán chạy" className={`p-4 ${skin.card}`}>
-            <h2 className="mb-2 text-base font-semibold text-stone-900">Sản phẩm bán chạy</h2>
+          <section aria-label="Sản phẩm bán chạy" className={`${skin.plain} p-0 md:p-4`}>
+            <h2 className="mb-2 mt-2 font-display md:mt-0 text-base font-semibold text-stone-900">Sản phẩm bán chạy</h2>
             <ol>
               {d.topProducts.map((p, i) => (
                 <li key={p.productId} className="flex min-h-11 items-center gap-3 border-b border-stone-200 py-2 last:border-b-0">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEALER_PRICE_LOADING, DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
+import { DEALER_PAY_AMOUNT_LABEL, DEALER_PAY_AMOUNT_PLACEHOLDER, DEALER_PRICE_LOADING, DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import {
@@ -932,13 +932,17 @@ function DealerCredit() {
         <Text variant="price-xl" tone={balance > 0 ? 'danger' : 'brand'} as="div">
           {formatVnd(balance)}
         </Text>
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <Input
-            type="number"
-            placeholder="Số tiền đã chuyển"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Field label={DEALER_PAY_AMOUNT_LABEL}>
+              <Input
+                type="number"
+                placeholder={DEALER_PAY_AMOUNT_PLACEHOLDER}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </Field>
+          </div>
           <Button
             disabled={payDisabled}
             loading={pay.isPending}

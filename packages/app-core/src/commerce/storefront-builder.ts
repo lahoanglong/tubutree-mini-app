@@ -241,6 +241,7 @@ export function questStripView(q: QuestStripInput, formatPoints: (n: number) => 
 
 /** Chữ màn dựng gian hàng dùng chung hai app (builder-only nên không nằm trong SHOP_COPY). */
 export const BUILDER_COPY = {
+  configTitle: 'Cài đặt gian hàng',
   sections: 'Bố cục gian hàng',
   sort: 'Sắp xếp',
   sortDone: 'Xong',

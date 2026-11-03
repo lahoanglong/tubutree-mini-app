@@ -1,5 +1,6 @@
 import { Button as ZmpButton, Text } from 'zmp-ui';
 import { TriangleAlert, type LucideIcon } from 'lucide-react';
+import { GO_HOME_LABEL } from '@tubutree/app-core/client-copy';
 import { vi } from '../../i18n/vi';
 import { SupportHotline } from '../support-hotline';
 import { Button } from './button';
@@ -180,7 +181,7 @@ export function ErrorState({
           borderColor: 'var(--color-action-secondary-border)',
         }}
       >
-        {onHome ? 'Về trang chủ' : 'Thử lại'}
+        {onHome ? GO_HOME_LABEL : 'Thử lại'}
       </ZmpButton>
       {(showSupport ?? !inline) && <SupportHotline />}
     </div>
