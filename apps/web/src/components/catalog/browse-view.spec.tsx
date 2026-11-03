@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { forgetRecentSearchesOfSignedOutUser } from '@/lib/recent-searches';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls, unlabeledFields } from '@/test-utils/a11y';
 
@@ -531,6 +532,19 @@ describe('BrowseView — gõ tìm kiếm', () => {
     click(buttonByName(container, 'Xoá lịch sử tìm'));
     expect(localStorage.getItem('tubu_recent_searches')).toBeNull();
     expect(container.querySelector('section[aria-label="Gợi ý tìm kiếm"]')).toBeNull();
+  });
+
+  it('phiên hết hạn xoá lịch sử sau khi BrowseView đã mount: bảng "Tìm gần đây" không còn hiện từ khoá của người trước', async () => {
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['thuốc X']));
+    localStorage.setItem('tubu_recent_searches_owner', 'user-a');
+    const { container } = mount();
+    await flush();
+    act(() => container.querySelector<HTMLInputElement>('input[type="search"]')!.focus());
+    expect(container.querySelector('[role="group"][aria-label="Tìm gần đây"]')).not.toBeNull();
+    act(() => {
+      forgetRecentSearchesOfSignedOutUser();
+    });
+    expect(container.querySelector('[role="group"][aria-label="Tìm gần đây"]')).toBeNull();
   });
 
   it('hub: chạm từ khoá gần đây ở bảng gợi ý là PUSH như chạm ô danh mục (Back về hub)', async () => {

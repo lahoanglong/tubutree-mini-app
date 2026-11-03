@@ -1,3 +1,5 @@
+import { clipQuery } from '@tubutree/app-core/browse/query';
+
 /** Giới hạn của GET /products?q= phía API (SEARCH_Q_MAX_LENGTH): dài hơn bị 400 và trang chủ hiện rỗng. */
 export const SEARCH_MAX_LENGTH = 100;
 
@@ -7,7 +9,7 @@ export function firstParam(v: string | string[] | null | undefined): string | un
 }
 
 export function normalizeSearchQuery(raw: string | string[] | null | undefined): string {
-  return (firstParam(raw) ?? '').replace(/\s+/g, ' ').trim().slice(0, SEARCH_MAX_LENGTH).trim();
+  return clipQuery((firstParam(raw) ?? '').replace(/\s+/g, ' ').trim(), SEARCH_MAX_LENGTH).trim();
 }
 
 /** Số trang tối đa nhận từ URL — chặn ?page=99999999 làm API tính offset khổng lồ. */

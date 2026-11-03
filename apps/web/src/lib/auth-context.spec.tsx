@@ -82,6 +82,36 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(document.cookie).not.toContain('tubu_home_hint');
   });
 
+  it('khôi phục ra tài khoản khác chủ lịch sử tìm: xoá lịch sử của người trước, chủ thành tài khoản mới', async () => {
+    setSessionMarker();
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['que thử thai']));
+    localStorage.setItem('tubu_recent_searches_owner', 'u0');
+    mocks.restoreSession.mockResolvedValueOnce({ kind: 'ok', data: { accessToken: 'at', user: USER } });
+    await mount();
+    expect(localStorage.getItem('tubu_recent_searches')).toBeNull();
+    expect(localStorage.getItem('tubu_recent_searches_owner')).toBe('u1');
+  });
+
+  it('phiên hết hạn (không còn tài khoản, không phải lỗi mạng): lịch sử tìm của người trước bị xoá', async () => {
+    setSessionMarker();
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['que thử thai']));
+    localStorage.setItem('tubu_recent_searches_owner', 'u1');
+    mocks.restoreSession.mockResolvedValueOnce({ kind: 'dead' });
+    await mount();
+    expect(text()).toBe('init|idle|-');
+    expect(localStorage.getItem('tubu_recent_searches')).toBeNull();
+    expect(localStorage.getItem('tubu_recent_searches_owner')).toBeNull();
+  });
+
+  it('mất kết nối lúc khôi phục (lỗi tạm): KHÔNG xoá lịch sử tìm', async () => {
+    setSessionMarker();
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa']));
+    localStorage.setItem('tubu_recent_searches_owner', 'u1');
+    mocks.restoreSession.mockResolvedValueOnce({ kind: 'transient' });
+    await mount();
+    expect(localStorage.getItem('tubu_recent_searches')).not.toBeNull();
+  });
+
   it('khôi phục đúng tài khoản đã lưu: giữ gợi ý và cookie', async () => {
     setSessionMarker();
     document.cookie = 'tubu_home_hint=returning-2; Path=/';
@@ -160,6 +190,8 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 3 } });
     markResume();
     markCtvTouched('u1', 'AN123');
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa chén']));
+    localStorage.setItem('tubu_recent_searches_owner', 'u1');
     function LogoutProbe() {
       const { logout } = useAuth();
       return (
@@ -190,6 +222,8 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(loadDraft()).toBeNull();
     expect(peekResume()).toBe(false);
     expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    expect(localStorage.getItem('tubu_recent_searches')).toBeNull();
+    expect(localStorage.getItem('tubu_recent_searches_owner')).toBeNull();
     vi.unstubAllGlobals();
   });
 });

@@ -7,7 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 import type { BrandProductsQuery } from './dto/brand-products-query.dto';
-import { foldVietnamese, likeContainsPattern } from './search-text';
+import { foldVietnamese, likeContainsPattern, likePrefixPattern, likeTermPatterns } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -70,12 +70,15 @@ export const SUGGEST_MIN_CHARS = 2;
  */
 export function textMatchSql(raw: string): Prisma.Sql {
   const tag = raw.toLowerCase();
+  const terms = likeTermPatterns(raw).map((t) => Prisma.sql`p."nameSearch" LIKE ${t} ESCAPE '!'`);
   return Prisma.sql`
     SELECT p.id FROM products p
     WHERE p."isActive" = true
       AND p."approvalStatus" = 'APPROVED'
-      AND (p."nameSearch" LIKE ${likeContainsPattern(raw)} ESCAPE '!' OR p.tags @> ARRAY[${tag}]::text[])
-    ORDER BY p."isFeatured" DESC, (p."soldExternal" + p."soldApp") DESC, p.id ASC
+      AND ((${Prisma.join(terms, ' AND ')}) OR p.tags @> ARRAY[${tag}]::text[])
+    ORDER BY (p."nameSearch" LIKE ${likePrefixPattern(raw)} ESCAPE '!') DESC,
+      (p."nameSearch" LIKE ${likeContainsPattern(raw)} ESCAPE '!') DESC,
+      p."isFeatured" DESC, (p."soldExternal" + p."soldApp") DESC, p.id ASC
     LIMIT ${TEXT_MATCH_LIMIT}`;
 }
 
@@ -187,16 +190,19 @@ export class CatalogService {
   ) {}
 
   async list(query: ProductQuery) {
-    return this.listPage(await this.listWhere(query), query);
+    const relevance: string[][] = [];
+    const where = await this.listWhere(query, relevance);
+    return this.listPage(where, query, relevance[0]);
   }
 
   /**
    * Trang sản phẩm công khai cho một điều kiện lọc có sẵn: `/products` (bộ lọc của query) và trang thương hiệu (theo nhãn) dùng chung
    * cách xếp, phân trang và dựng thẻ, không có đường thứ hai.
    */
-  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice' | 'q' | 'seed'>) {
+  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice' | 'q' | 'seed'>, relevance?: string[]) {
     const { page, limit, sort } = query;
     const price = priceRange(query.minPrice, query.maxPrice);
+    if (relevance && !sort) return this.listByRelevance(where, page, limit, relevance, price);
     // Seed ngày chỉ xoay thứ tự mặc định: khách đã chọn cách sắp hay đang tìm chữ thì giữ đúng thứ tự họ yêu cầu.
     if (query.seed && !sort && !query.q?.trim()) return this.listSeeded(where, page, limit, query.seed, price);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
@@ -233,6 +239,27 @@ export class CatalogService {
       Boolean(price),
       (rows) => seededOrder(rows, seed),
       `seed:${seed}`,
+    );
+  }
+
+  /**
+   * Tab "Liên quan" khi đang tìm chữ: thứ tự là thứ tự `textMatchSql` đã xếp (khớp đầu tên, khớp cả cụm, nổi bật, bán chạy). Dùng chung
+   * đường xếp hạng với Bán chạy; không cần giá nên không đọc phân loại (trừ khi có lọc giá).
+   */
+  private listByRelevance(where: Prisma.ProductWhereInput, page: number, limit: number, ids: string[], price?: PriceBounds) {
+    const pos = new Map(ids.map((id, i) => [id, i]));
+    return this.listRanked<{ id: string }>(
+      where,
+      page,
+      limit,
+      { id: true },
+      (x, y) => (pos.get(x.id) ?? 0) - (pos.get(y.id) ?? 0),
+      price,
+      undefined,
+      false,
+      undefined,
+      '',
+      false,
     );
   }
 
@@ -307,8 +334,9 @@ export class CatalogService {
     needsPrice = true,
     arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
     cacheTag = '',
+    cacheable = true,
   ) {
-    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag);
+    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag, cacheable);
     const { skip, take } = skipTake(page, limit);
     const pageIds = rankedIds.slice(skip, skip + take);
     if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
@@ -335,9 +363,10 @@ export class CatalogService {
     needsPrice: boolean,
     arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
     cacheTag = '',
+    allowCache = true,
   ): Promise<string[]> {
     // Thứ hạng phụ thuộc giá (xếp giá, lọc giá) đổi ngay khi Giờ vàng bắt đầu/hết hoặc giá sửa nên không nhớ.
-    const cacheable = !needsPrice && !price;
+    const cacheable = allowCache && !needsPrice && !price;
     const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag }) : '';
     const now = Date.now();
     const hit = cacheable && key.length <= 2000 ? this.rankCache.get(key) : undefined;
@@ -396,7 +425,7 @@ export class CatalogService {
    * công khai gác thêm approvalStatus, giữ isActive là cờ vòng đời riêng.
    * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
    */
-  private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
+  private async listWhere(query: ProductQuery, relevance?: string[][]): Promise<Prisma.ProductWhereInput> {
     const { brand, category, segment, inStock, minRating, slugs } = query;
     const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE };
     const and: Prisma.ProductWhereInput[] = [];
@@ -418,8 +447,9 @@ export class CatalogService {
       where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category };
     }
     if (segment) where.forSegment = { has: segment };
-    const text = await this.textWhere(query.q);
-    if (text) and.push(text);
+    const text = await this.textWhere(query.q, Boolean(relevance) && !query.sort, (query.page ?? 1) > 1);
+    if (text) and.push(text.where);
+    if (text?.ids) relevance?.push(text.ids);
     // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
     if (inStock) where.variations = { some: { isActive: true, stock: { gt: 0 } } };
     // ratingAvg mặc định 0 → SP chưa có đánh giá không lọt "Từ 4★" (đúng ý bộ lọc).
@@ -429,18 +459,45 @@ export class CatalogService {
   }
 
   /**
+   * Thứ tự khớp của một từ khoá được giữ MATCH_TTL_MS (khoá ngắn là chính từ khoá, tách khỏi rankCache): trang 2 của "Liên quan" xếp theo
+   * đúng thứ tự trang 1 dù số đã bán đổi giữa hai lượt tải, nên không sản phẩm nào nhảy trang rồi bị sót. Chỉ trang > 1 đọc lại bộ nhớ;
+   * trang 1 luôn chạy SQL rồi ghi đè, nên sản phẩm mới duyệt/đổi tên hiện ngay ở lượt tìm mới.
+   */
+  private readonly matchCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  private readonly MATCH_TTL_MS = 60_000;
+  private readonly MATCH_MAX_KEYS = 50;
+
+  private recallMatch(raw: string): string[] | undefined {
+    const hit = this.matchCache.get(raw.toLowerCase());
+    return hit && hit.expiresAt > Date.now() ? hit.ids : undefined;
+  }
+
+  private async rememberMatch(raw: string, remember: boolean): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
+    const ids = rows.map((r) => r.id);
+    if (remember) {
+      const key = raw.toLowerCase();
+      // Xoá trước khi ghi: Map giữ vị trí cũ của khoá có sẵn, nên khoá vừa làm mới sẽ bị coi là cũ nhất và bỏ đầu tiên.
+      this.matchCache.delete(key);
+      if (this.matchCache.size >= this.MATCH_MAX_KEYS) this.matchCache.delete(this.matchCache.keys().next().value as string);
+      this.matchCache.set(key, { ids, expiresAt: Date.now() + this.MATCH_TTL_MS });
+    }
+    return ids;
+  }
+
+  /**
    * Khớp từ khoá qua `textMatchSql`. SQL lỗi (vd DB chưa chạy migration cột nameSearch) → lùi về
    * `contains` cũ cho request đó, không tắt cờ vĩnh viễn (lỗi tạm thời không làm hỏng cả phiên).
    */
-  private async textWhere(q: string | undefined): Promise<Prisma.ProductWhereInput | undefined> {
+  private async textWhere(q: string | undefined, remember = false, reuse = false): Promise<{ where: Prisma.ProductWhereInput; ids?: string[] } | undefined> {
     const raw = (q ?? '').trim();
     if (!foldVietnamese(raw)) return undefined;
     try {
-      const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
-      return { id: { in: rows.map((r) => r.id) } };
+      const ids = (remember && reuse && this.recallMatch(raw)) || (await this.rememberMatch(raw, remember));
+      return { where: { id: { in: ids } }, ids };
     } catch (err) {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
-      return { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] };
+      return { where: { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] } };
     }
   }
 
@@ -772,14 +829,18 @@ export class CatalogService {
     if (foldVietnamese(q).length < SUGGEST_MIN_CHARS) return [];
     const text = await this.textWhere(q);
     if (!text) return [];
-    const rows = await this.prisma.product.findMany({
-      where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
+    // Theo thứ tự liên quan của textMatchSql: lấy 8 id đầu rồi xếp lại đúng thứ tự đó (findMany không giữ thứ tự của `in`).
+    const top = text.ids ? text.ids.slice(0, 8) : undefined;
+    const found = await this.prisma.product.findMany({
+      where: { ...PUBLIC_PRODUCT_WHERE, AND: [top ? { id: { in: top } } : text.where] },
       take: 8,
       select: {
         id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true,
         variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
       },
     });
+    const rank = new Map((top ?? []).map((id, i) => [id, i]));
+    const rows = top ? [...found].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)) : found;
     return rows.map(({ id, variations, ...r }) => ({
       ...r,
       ...cardPrices(r, variations),
