@@ -33,6 +33,15 @@ export class BankTransferService {
       throw new BadRequestException('Đơn đã huỷ/trả, không thể thanh toán.');
     }
 
+    // Đơn đại lý "Ghi công nợ" cũng mang BANK_TRANSFER nhưng thanh toán qua sổ công nợ; Pancake bỏ qua tiền chuyển vào nên QR sẽ không bao giờ đối soát.
+    if (order.type === 'DEALER') {
+      const debit = await this.prisma.dealerCreditLedger.findFirst({
+        where: { userId: order.userId, refType: 'ORDER', refId: order.id },
+        select: { id: true },
+      });
+      if (debit) throw new BadRequestException('Đơn ghi công nợ trả qua sổ công nợ.');
+    }
+
     // A2-01 = A5-02 = A6-03 (docs/audit-2026-09/00-MASTER-SUMMARY.md + 02/05/06 chi tiết): TRƯỚC
     // ĐÂY, đơn có `storefrontSlug` (gắn gian hàng CTV/đối tác) ưu tiên dùng bankBin/bankAccountNo
     // mà CHÍNH gian hàng đó tự khai trong trình dựng gian hàng (storefront-builder.tsx) — tiền

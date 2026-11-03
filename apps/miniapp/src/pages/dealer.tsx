@@ -448,17 +448,25 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
 
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần đặt đơn (double-tap/timeout mạng) →
   // BE không tạo đơn công nợ đôi; regenerate sau khi đặt thành công (đơn sau là đơn mới, mirror wallet.withdraw).
+  // Đổi khi giỏ/phương thức khác lần thử trước: cùng key thì máy chủ trả lại đơn cũ (có thể đã được tạo dù mạng báo lỗi),
+  // giỏ mới bị xoá mà chưa hề đặt và đơn công nợ bị mở màn chuyển khoản.
   const orderKey = useRef(newIdempotencyKey());
+  const lastAttempt = useRef<string | null>(null);
   const navigate = useNavigate();
   const place = useMutation({
-    mutationFn: (method: 'CREDIT' | 'PREPAID') =>
-      placeDealerOrder(
+    mutationFn: (method: 'CREDIT' | 'PREPAID') => {
+      const attempt = `${method}|${cart.map(([id, n]) => `${id}:${n}`).join(',')}`;
+      if (lastAttempt.current !== null && lastAttempt.current !== attempt) orderKey.current = newIdempotencyKey();
+      lastAttempt.current = attempt;
+      return placeDealerOrder(
         cart.map(([variationId, quantity]) => ({ variationId, quantity })),
         method,
         undefined,
         orderKey.current,
-      ),
+      );
+    },
     onSuccess: (order, method) => {
+      lastAttempt.current = null;
       haptic('medium');
       const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
       openSnackbar({
@@ -476,7 +484,10 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
       void qc.invalidateQueries({ queryKey: ['dealer-report'] });
       // Đơn "Trả trước" tạo ra ở trạng thái PENDING_PAYMENT / BANK_TRANSFER nhưng trước đây
       // không có đường nào tới màn QR — đại lý đặt xong không biết chuyển khoản vào đâu.
-      if (method === 'PREPAID') navigate(`/bank-payment/${order.code}`);
+      // Đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái: chỉ đơn còn chờ chuyển khoản mới có màn QR.
+      if (method === 'PREPAID' && order.paymentMethod === 'BANK_TRANSFER' && order.status === 'PENDING_PAYMENT') {
+        navigate(`/bank-payment/${order.code}`);
+      }
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
