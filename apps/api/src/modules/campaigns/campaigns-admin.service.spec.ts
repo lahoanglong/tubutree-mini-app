@@ -33,7 +33,7 @@ const input = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id: string }[]; coupons?: unknown[] } = {}) {
+function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id: string }[]; coupons?: unknown[]; productSlugs?: string[]; categorySlugs?: string[] } = {}) {
   const prisma = {
     campaign: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -47,7 +47,13 @@ function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id:
     },
     campaignProduct: { deleteMany: jest.fn().mockReturnValue('del-p'), createMany: jest.fn().mockReturnValue('add-p') },
     campaignCoupon: { deleteMany: jest.fn().mockReturnValue('del-c'), createMany: jest.fn().mockReturnValue('add-c') },
-    product: { findMany: jest.fn().mockResolvedValue(opts.products ?? []) },
+    product: {
+      findMany: jest.fn().mockResolvedValue(opts.products ?? []),
+      findFirst: jest.fn().mockImplementation(({ where }: { where: { slug: string } }) => Promise.resolve((opts.productSlugs ?? []).includes(where.slug) ? { id: 'p' } : null)),
+    },
+    category: {
+      findUnique: jest.fn().mockImplementation(({ where }: { where: { slug: string } }) => Promise.resolve((opts.categorySlugs ?? []).includes(where.slug) ? { id: 'k' } : null)),
+    },
     coupon: { findMany: jest.fn().mockResolvedValue(opts.coupons ?? []) },
     $queryRaw: jest.fn().mockReturnValue('lock'),
     $transaction: jest.fn().mockResolvedValue([]),
@@ -135,6 +141,32 @@ describe('CampaignsAdminService.create', () => {
   it('URL_INTERNAL ngoài app → 400', async () => {
     const { svc } = setup();
     await expect(svc.create(input({ linkType: 'URL_INTERNAL', linkValue: '//evil.com' }), NOW)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('CampaignsAdminService: đích banner phải tồn tại', () => {
+  it('PRODUCT với slug không có sản phẩm công khai: 400, không ghi', async () => {
+    const { svc, prisma } = setup({ productSlugs: ['sua-hat'] });
+    await expect(svc.create(input({ linkType: 'PRODUCT', linkValue: 'sua-hat-sai' }), NOW)).rejects.toThrow(/sản phẩm/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+    await svc.create(input({ linkType: 'PRODUCT', linkValue: 'sua-hat' }), NOW);
+    expect(prisma.product.findFirst.mock.calls[1][0].where).toMatchObject({ slug: 'sua-hat', isActive: true, approvalStatus: 'APPROVED' });
+    expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('CATEGORY với slug không có danh mục: 400', async () => {
+    const { svc, prisma } = setup({ categorySlugs: ['sua-hat'] });
+    await expect(svc.create(input({ linkType: 'CATEGORY', linkValue: 'khong-co' }), NOW)).rejects.toThrow(/danh mục/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+    await svc.create(input({ linkType: 'CATEGORY', linkValue: 'sua-hat' }), NOW);
+    expect(prisma.campaign.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('sửa: đổi đích sang slug sai bị chặn; lưu lại đúng đích cũ (kể cả sản phẩm đã ẩn) không bị kiểm lại', async () => {
+    const { svc, prisma } = setup({ existing: row({ linkType: 'PRODUCT', linkValue: 'da-an' }) });
+    await expect(svc.update('c1', { linkType: 'PRODUCT', linkValue: 'sai' }, NOW)).rejects.toBeInstanceOf(BadRequestException);
+    await svc.update('c1', { title: 'Mới', linkType: 'PRODUCT', linkValue: 'da-an' }, NOW);
+    expect(prisma.campaign.update).toHaveBeenCalledTimes(1);
   });
 });
 

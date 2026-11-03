@@ -16,7 +16,7 @@ interface Row {
 }
 
 /** Kho danh mục trong bộ nhớ: đủ để thử luật cây bằng hành vi thay vì đếm lời gọi mock. */
-function make(initial: Row[] = [], products: { categoryIds: string[] }[] = []) {
+function make(initial: Row[] = [], products: { categoryIds: string[] }[] = [], banners: { id: string; title: string; linkValue: string | null }[] = []) {
   const rows = initial.map((r) => ({ image: null, ...r }));
   let seq = 0;
   const order: string[] = [];
@@ -51,6 +51,7 @@ function make(initial: Row[] = [], products: { categoryIds: string[] }[] = []) {
       count: jest.fn(async ({ where }: { where: { categoryIds: { has: string } } }) => products.filter((p) => p.categoryIds.includes(where.categoryIds.has)).length),
       findMany: jest.fn(async () => products),
     },
+    campaign: { findMany: jest.fn(async ({ where }: { where: { linkValue: string } }) => banners.filter((b) => b.linkValue === where.linkValue)) },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown): Promise<unknown> => fn(self.current)),
   };
   self.current = prisma;
@@ -233,6 +234,14 @@ describe('CategoryAdminService.remove', () => {
     await expect(svc.remove('x', 'c')).resolves.toEqual({ id: 'c' });
     expect(rows.map((r) => r.id)).not.toContain('c');
     expect(catalog.invalidateCategoryCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('còn chiến dịch chưa kết thúc dùng danh mục làm đích banner thì chặn và nêu tên chiến dịch; không có thì xoá', async () => {
+    const { svc, prisma, rows } = make([root('a'), root('b', 1)], [], [{ id: 'k1', title: 'Giữa Thu', linkValue: 'a' }]);
+    await expect(svc.remove('x', 'a')).rejects.toThrow(CATEGORY_MSG.removeHasBanners('A', ['Giữa Thu']));
+    expect(prisma.campaign.findMany.mock.calls[0]![0].where).toMatchObject({ linkType: 'CATEGORY', linkValue: 'a', endAt: { gt: expect.any(Date) } });
+    expect(rows.map((r) => r.id)).toContain('a');
+    await expect(svc.remove('x', 'b')).resolves.toEqual({ id: 'b' });
   });
 
   it('mục không tồn tại là 404', async () => {

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, CouponScope } from '@prisma/client';
 import { publicImage } from '../../common/public-image';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
@@ -120,6 +121,7 @@ export class CampaignsAdminService {
     assertWindow(startAt, endAt);
     const linkType = dto.linkType ?? 'CAMPAIGN_PAGE';
     const linkValue = normalizeLink(linkType, dto.linkValue);
+    await this.assertLinkTarget(linkType, linkValue);
     const slug = dto.slug ?? slugFromTitle(dto.title);
     if (await this.prisma.campaign.findUnique({ where: { slug }, select: { id: true } })) {
       throw new ConflictException(`Đã có chiến dịch dùng slug "${slug}". Đổi tên hoặc nhập slug khác.`);
@@ -172,6 +174,8 @@ export class CampaignsAdminService {
       const linkType = dto.linkType ?? current.linkType;
       data.linkType = linkType;
       data.linkValue = normalizeLink(linkType, dto.linkValue !== undefined ? dto.linkValue : current.linkValue);
+      // Lưu lại đúng đích cũ không kiểm lại: sản phẩm đã ẩn không được chặn việc sửa tiêu đề hay giờ của banner.
+      if (linkType !== current.linkType || data.linkValue !== current.linkValue) await this.assertLinkTarget(linkType, data.linkValue);
     }
     const updated = await this.prisma.campaign.update({ where: { id }, data, include: DETAIL_INCLUDE });
     return toDetail(updated, now);
@@ -181,6 +185,18 @@ export class CampaignsAdminService {
     const { count } = await this.prisma.campaign.deleteMany({ where: { id } });
     if (count === 0) throw new NotFoundException('Không tìm thấy chiến dịch.');
     return { ok: true };
+  }
+
+  /** Banner kiểu sản phẩm/danh mục phải trỏ tới slug có thật (sản phẩm phải đang hiện công khai), nếu không khách bấm vào trang không tìm thấy. */
+  private async assertLinkTarget(linkType: CampaignLinkType, value: string | null): Promise<void> {
+    if (!value) return;
+    if (linkType === 'PRODUCT') {
+      const found = await this.prisma.product.findFirst({ where: { slug: value, ...PUBLIC_PRODUCT_WHERE }, select: { id: true } });
+      if (!found) throw new BadRequestException(`Không có sản phẩm đang bán với slug "${value}". Kiểm lại slug, hoặc sản phẩm đang ẩn hay chưa duyệt.`);
+    } else if (linkType === 'CATEGORY') {
+      const found = await this.prisma.category.findUnique({ where: { slug: value }, select: { id: true } });
+      if (!found) throw new BadRequestException(`Không có danh mục với slug "${value}". Kiểm lại slug danh mục.`);
+    }
   }
 
   private async assertExists(id: string): Promise<void> {
