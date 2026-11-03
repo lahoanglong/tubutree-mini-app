@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { assertBankRefUnusedByOrder } from '../../common/bank-ref';
 import { formatPoints } from '../../common/format-points';
 import type { Order, Prisma } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -779,6 +780,8 @@ export class OrderStatusService {
       actorType: StatusActor;
       actorId?: string;
       note?: string;
+      /** Mã giao dịch ngân hàng admin nhập: kiểm chưa dùng cho đơn/khoản nợ khác ngay trong transaction lật PAID (409 nếu đã dùng). */
+      bankRef?: string;
       /**
        * Người gọi tự xếp tạo vận đơn Gomdon sau (enqueueGomdonAfterPaid): webhook Pancake mang cả tiền lẫn "đã gửi
        * hàng" + vận đơn hãng khác phải ghi xong vận chuyển trước, kẻo job Gomdon thấy đơn còn trong kho và đặt bưu
@@ -796,6 +799,7 @@ export class OrderStatusService {
 
       const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
       const won = await this.prisma.$transaction(async (tx) => {
+        if (opts.bankRef) await assertBankRefUnusedByOrder(tx, opts.bankRef, order.id);
         // paidAt (cột) và occurredAt (event) dùng chung một mốc.
         const paidAt = new Date();
         const flip = await tx.order.updateMany({

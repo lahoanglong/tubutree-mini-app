@@ -6,6 +6,7 @@ import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { DealerAccountsAdminService } from '../../src/modules/dealer/dealer-accounts-admin.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import * as bankRefLib from '../../src/common/bank-ref';
 import { createOrder, createUser, deleteItData, randCode, summarize, warmPool } from './helpers';
 
 /**
@@ -157,12 +158,11 @@ describe('Công nợ và mã giao dịch đại lý (real Postgres)', () => {
       await addDebt(d.id, 9_000_000);
       const o = await prepaidOrder(d.id);
       const ref = `FT${randCode(8)}`;
-      const svc = dealer as unknown as { assertBankRefUnused: (tx: unknown, r: string, id: string) => Promise<void> };
-      const orig = svc.assertBankRefUnused.bind(dealer);
-      svc.assertBankRefUnused = async (tx, r, id) => {
+      const orig = bankRefLib.assertBankRefUnusedByOrder;
+      const spy = jest.spyOn(bankRefLib, 'assertBankRefUnusedByOrder').mockImplementation(async (tx, r, id) => {
         await orig(tx, r, id);
         await new Promise((res) => setTimeout(res, 400));
-      };
+      });
       try {
         const p1 = dealer.confirmDealerOrderPayment('ad1', o.id, { bankRef: ref });
         await new Promise((res) => setTimeout(res, 150));
@@ -172,7 +172,7 @@ describe('Công nợ và mã giao dịch đại lý (real Postgres)', () => {
         expect(results.rejected).toHaveLength(1);
         expect(results.errors[0]).toMatch(/đã dùng/);
       } finally {
-        svc.assertBankRefUnused = orig;
+        spy.mockRestore();
       }
       expect(await debtOf(d.id)).toBe(9_000_000);
       expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).paymentStatus).toBe('PAID');
