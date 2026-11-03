@@ -164,16 +164,17 @@ describe('C-038 — tìm không dấu có index (real Postgres)', () => {
 
   // KHAMPHA-02: trước đây từ khoá nhiều từ phải liền và đúng thứ tự mới có kết quả.
   it('nhiều từ khớp rời và đảo thứ tự ("nuoc chen", "Fuwa nuoc"); xếp khớp đầu tên rồi khớp cả cụm trước; gợi ý theo cùng thứ tự', async () => {
-    const tag = randCode(6).toLowerCase();
-    const loose = await createProduct(`Nước rửa chén sinh học Fuwa ${tag}`, [], { isFeatured: true, soldApp: 50 });
-    const phrase = await createProduct(`Bộ nước chén thủy tinh ${tag}`);
-    const prefix = await createProduct(`Nước chén dừa ${tag}`);
+    // Từ khoá riêng của lần chạy: suggest chỉ lấy 8 id đầu, SP của lần chạy trước (cùng tên) trên DB dùng lại sẽ chen vào top.
+    const t = `xq${randCode(6).toLowerCase()}`;
+    const loose = await createProduct(`${t} rửa chén sinh học Fuwa`, [], { isFeatured: true, soldApp: 50 });
+    const phrase = await createProduct(`Bộ ${t} chén thủy tinh`);
+    const prefix = await createProduct(`${t} chén dừa`);
     const mine = new Set([loose.id, phrase.id, prefix.id]);
     const ids = async (q: string) => (await catalog.list({ page: 1, limit: 100, q })).data.map((c) => c.id).filter((id) => mine.has(id));
-    expect(await ids('nuoc chen')).toEqual([prefix.id, phrase.id, loose.id]);
-    expect(await ids(`fuwa nuoc ${tag}`)).toEqual([loose.id]);
-    expect((await ids('chen nuoc')).sort()).toEqual([loose.id, phrase.id, prefix.id].sort());
-    const sug = (await catalog.suggest('nuoc chen')).map((s) => s.slug).filter((slug) => [prefix.slug, phrase.slug, loose.slug].includes(slug));
+    expect(await ids(`${t} chen`)).toEqual([prefix.id, phrase.id, loose.id]);
+    expect(await ids(`fuwa ${t}`)).toEqual([loose.id]);
+    expect((await ids(`chen ${t}`)).sort()).toEqual([loose.id, phrase.id, prefix.id].sort());
+    const sug = (await catalog.suggest(`${t} chen`)).map((s) => s.slug).filter((slug) => [prefix.slug, phrase.slug, loose.slug].includes(slug));
     expect(sug).toEqual([prefix.slug, phrase.slug, loose.slug]);
   });
 
