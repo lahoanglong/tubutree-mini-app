@@ -5,6 +5,7 @@ import type { JwtPayload } from '@tubutree/shared-types';
 import { Transform, Type } from 'class-transformer';
 import {
   Allow,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -263,16 +264,18 @@ export class UpdateCouponDto {
   /** null xoá tên hiển thị. */
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string | null;
 }
+/** Trần mảng `rows` của hai đường nhập hàng loạt; khớp trần mảng của bộ đọc thân request để lỗi nêu đúng trường. Client admin chỉ gửi csv. */
+const IMPORT_ROWS_MAX = 500;
 export class ImportDealerPricesDto {
   @IsString() @IsNotEmpty() @MaxLength(100) tierId!: string;
   // Dán trực tiếp 2 cột Excel "sku,giá" (mỗi dòng 1 SKU). Hoặc gửi rows JSON.
   @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
-  @IsOptional() @IsArray() rows?: { sku: string; price: number }[];
+  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) rows?: { sku: string; price: number }[];
 }
-class ImportSoldExternalDto {
+export class ImportSoldExternalDto {
   // Dán "sku,số-đã-bán" (mỗi dòng 1 SKU) — tổng đã bán gom từ sàn ngoài. Hoặc rows JSON.
   @IsOptional() @IsString() csv?: string;
-  @IsOptional() @IsArray() rows?: { sku: string; count: number }[];
+  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) rows?: { sku: string; count: number }[];
 }
 class UpdateOrderStatusDto {
   @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
