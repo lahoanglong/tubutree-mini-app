@@ -68,8 +68,32 @@ test.describe('Trình dựng CTV web 375px: hàng huy hiệu bậc không xê d�
         const hintCount = outcome.fail || outcome.tier === 'Tân binh' ? 1 : 0;
         await expect(page.getByTestId('tier-badge-hint')).toHaveCount(hintCount);
         if (outcome.fail) await expect(page.getByTestId('tier-badge-hint')).toHaveText('Huy hiệu chưa tải');
-        if (outcome.tier === 'Tân binh') await expect(page.getByTestId('tier-badge-hint')).toHaveText('Lên Đồng có huy hiệu');
+        if (outcome.tier === 'Tân binh') await expect(page.getByTestId('tier-badge-hint')).toHaveText('Huy hiệu từ bậc Đồng');
       });
     }
   }
+});
+
+test('khổ 320px, ctv đã duyệt + Tân binh: dòng gợi ý chung hàng với khung chờ, không xuống dòng khi bậc về', async ({ page, api }, testInfo) => {
+  test.skip(testInfo.project.name !== 'Web Customer', 'chỉ chạy ở project Web Customer');
+  await setBuilderSession(page);
+  await page.setViewportSize({ width: 320, height: 640 });
+  let release!: () => void;
+  const hold = new Promise<void>((r) => { release = r; });
+  mockBuilder(api, { approved: true });
+  const final = CTV_TIERS.allTiers.find((t) => t.name === 'Tân binh')!;
+  api.get('/affiliate/tiers', async () => {
+    await hold;
+    return { ...CTV_TIERS, tier: { name: final.name, emoji: final.emoji } };
+  });
+  await page.goto('/ctv/gian-hang');
+  await expect(page.getByTestId('tier-badge-skeleton')).toBeVisible({ timeout: 20_000 });
+  const skeletonRow = (await page.getByTestId('tier-badge-skeleton').boundingBox())!;
+  release();
+  const hint = page.getByTestId('tier-badge-hint');
+  await expect(hint).toBeVisible({ timeout: 15_000 });
+  const box = (await hint.boundingBox())!;
+  expect(Math.abs(box.y - skeletonRow.y), 'dòng gợi ý xuống dòng so với khung chờ').toBeLessThanOrEqual(2);
+  expect(box.height, 'dòng gợi ý cao hơn khung chờ').toBeLessThanOrEqual(skeletonRow.height + 2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });

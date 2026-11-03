@@ -41,7 +41,7 @@ export function TierBadgeSkeleton() {
 export function TierBadgeHint({ nextName }: { nextName?: string | null }) {
   return (
     <span data-testid="tier-badge-hint" style={{ display: 'inline-flex' }}>
-      <Badge tone="neutral" style={{ background: 'transparent', color: 'var(--color-text-secondary)', outline: 'thin dashed var(--color-border-subtle)' }}>
+      <Badge tone="neutral" style={{ background: 'transparent', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border-default)', padding: '2px 7px' }}>
         {nextName ? fillCopy('shop.tierHintNext', { name: nextName }) : fillCopy('shop.tierHint')}
       </Badge>
     </span>

@@ -62,7 +62,7 @@ for (const persona of PERSONAS) {
       expect(Math.abs(cardAfter - cardBefore), `khối đầu nhích ${cardAfter - cardBefore}px`).toBeLessThanOrEqual(1);
       await expect(page.getByTestId(outcome.fail || outcome.tier === 'Tân binh' ? 'tier-badge-hint' : 'tier-badge-skeleton')).toHaveCount(outcome.fail || outcome.tier === 'Tân binh' ? 1 : 0);
       if (outcome.fail) await expect(page.getByTestId('tier-badge-hint')).toHaveText('Huy hiệu chưa tải');
-      if (outcome.tier === 'Tân binh') await expect(page.getByTestId('tier-badge-hint')).toHaveText('Lên Đồng có huy hiệu');
+      if (outcome.tier === 'Tân binh') await expect(page.getByTestId('tier-badge-hint')).toHaveText('Huy hiệu từ bậc Đồng');
     });
   }
 }

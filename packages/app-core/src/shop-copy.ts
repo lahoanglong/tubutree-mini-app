@@ -355,7 +355,7 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
   'shop.tierBadge': 'CTV {name}',
   'shop.tierHint': 'Huy hiệu chưa tải',
-  'shop.tierHintNext': 'Lên {name} có huy hiệu',
+  'shop.tierHintNext': 'Huy hiệu từ bậc {name}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

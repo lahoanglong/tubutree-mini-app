@@ -1293,7 +1293,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
     expect(heading2(container)).toHaveLength(1);
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
-    expect(container.querySelector('[data-testid="tier-badge-hint"]')?.textContent).toBe('Lên Đồng có huy hiệu');
+    expect(container.querySelector('[data-testid="tier-badge-hint"]')?.textContent).toBe('Huy hiệu từ bậc Đồng');
   });
 
   it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {

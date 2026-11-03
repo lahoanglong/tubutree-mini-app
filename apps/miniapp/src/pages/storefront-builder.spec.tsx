@@ -696,7 +696,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
     await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
-    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Lên Đồng có huy hiệu');
+    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Huy hiệu từ bậc Đồng');
   });
 
   it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
