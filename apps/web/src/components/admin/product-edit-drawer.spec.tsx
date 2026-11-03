@@ -87,6 +87,36 @@ describe('ProductEditDrawer: không ghi đè bằng bản cache cũ', () => {
     await flush(8);
     expect(patches(m)).toEqual([{ description: 'Mô tả mới' }, { isFeatured: true }]);
   });
+
+  it('gõ tiếp trong lúc PATCH đang bay: bản gốc chỉ ghi nhận phần đã gửi, Lưu vẫn bật cho phần gõ thêm', async () => {
+    const server = product();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((res) => (release = res));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const sent: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'PATCH') {
+          sent.push(String(init.body));
+          await gate;
+          return new Response(JSON.stringify({ ...server, ...JSON.parse(String(init.body)) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify(server), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    mounted.push(render(<ProductEditDrawer id="p1" categories={CATS} onClose={vi.fn()} onSaved={vi.fn()} />, client));
+    await flush(6);
+    typeInto(textarea(), 'A');
+    click(saveBtn());
+    await flush(4);
+    typeInto(textarea(), 'AB');
+    release();
+    await flush(10);
+    expect(sent).toEqual(['{"description":"A"}']);
+    expect(textarea().value).toBe('AB');
+    expect(saveBtn().disabled).toBe(false);
+  });
 });
 
 describe('ProductEditDrawer: hỏi lại trước khi bỏ thay đổi chưa lưu', () => {

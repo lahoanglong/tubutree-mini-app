@@ -92,9 +92,9 @@ function Form({
   useEffect(() => onDirtyChange(changed), [changed, onDirtyChange]);
 
   const save = useMutation({
-    mutationFn: () => patchAdminProduct(product.id, patch),
-    onSuccess: () => {
-      setBase((b) => ({ ...b, ...patch }));
+    mutationFn: (sent: ProductPatch) => patchAdminProduct(product.id, sent),
+    onSuccess: (_saved, sent) => {
+      setBase((b) => ({ ...b, ...sent }));
       setMsg({ ok: true, text: 'Đã lưu.' });
       onSaved();
     },
@@ -109,7 +109,7 @@ function Form({
       className="space-y-4 p-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!save.isPending && changed) save.mutate();
+        if (!save.isPending && changed) save.mutate(patch);
       }}
     >
       <div className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm text-stone-700">
