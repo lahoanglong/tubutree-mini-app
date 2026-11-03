@@ -932,7 +932,7 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-waste-gift-cancelled', code: 'WASTE_GIFT_CANCELLED', channel: 'INAPP', bodyTemplate: 'Lượt đổi quà {{gift}} đã bị huỷ.{{points_note}}', createOnly: true },
   { id: 'nt-waste-perk-reviewed', code: 'WASTE_PERK_REVIEWED', channel: 'INAPP', bodyTemplate: 'Ưu đãi riêng của điểm nhận {{point}}: {{result}}.', createOnly: true },
   { id: 'nt-waste-gift-expired', code: 'WASTE_GIFT_EXPIRED', channel: 'INAPP', bodyTemplate: 'Quà {{gift_name}} đã quá hạn nhận nên Tubu Tree đã huỷ và hoàn {{points}} điểm vào tài khoản của bạn.', createOnly: true },
-  { id: 'nt-waste-request-expiring', code: 'WASTE_REQUEST_EXPIRING', channel: 'INAPP', bodyTemplate: 'Yêu cầu {{code}} sắp hết hạn giữ chỗ vào ngày {{until}}. Bạn nhớ {{next_step}} trước ngày đó nhé.', createOnly: true },
+  { id: 'nt-waste-request-expiring', code: 'WASTE_REQUEST_EXPIRING', channel: 'INAPP', bodyTemplate: 'Yêu cầu {{code}} sắp hết hạn giữ chỗ, hạn chót là hết ngày {{until}}. Bạn nhớ {{next_step}} đến hết ngày đó nhé.', createOnly: true },
 ];
 
 const QUIZZES = [

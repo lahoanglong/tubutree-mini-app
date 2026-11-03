@@ -249,7 +249,7 @@ describe('/doi-rac/yeu-cau/[id]: Gửi về kho (§4.5b)', () => {
     expect(c.textContent).toContain('Đã sao chép');
     expect(c.textContent).toContain('Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn');
     expect(c.textContent).toContain('Kho từ chối kiện còn cước phải trả khi nhận');
-    expect(c.textContent).toContain('Nhập mã vận đơn trước 25/10');
+    expect(c.textContent).toContain('Nhập mã vận đơn đến hết 25/10');
   });
 
   it.each([null, ''])('kho không có số điện thoại (%j): khối người nhận không có dòng trống, Sao chép bỏ dòng số', async (phone) => {
@@ -463,7 +463,7 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () =
   const step2 = (c: HTMLElement) => c.querySelector('[data-step="Mang tới điểm"]') as HTMLElement;
   it('Mang tới + OPEN: nhãn trạng thái, bước 2 ghi điểm nhận, địa chỉ và hạn; dòng "Ước tính"', async () => {
     const c = await mount();
-    expect(step2(c).textContent).toContain('Mang tới Đại lý Cô Ba trước 25/10');
+    expect(step2(c).textContent).toContain('Mang tới Đại lý Cô Ba đến hết 25/10');
     expect(step2(c).textContent).toContain('12 Lê Lợi');
     expect(c.textContent).toContain('Chờ bạn mang tới');
     expect(c.textContent).toContain('Ước tính 5.000 điểm');
