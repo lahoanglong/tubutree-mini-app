@@ -222,7 +222,7 @@ export class OrderStatusService {
        */
       withholdCodRefund?: boolean;
       /**
-       * Pancake "Đã hoàn" (5) trên đơn đã giao: nếu trước đó Pancake báo "Hoàn một phần" (15) lúc Tubu không có yêu cầu trả (dấu vết trong lịch sử
+       * Pancake "Đã hoàn" (5), đơn đã giao (→ RETURNED) hay chưa giao (→ CANCELLED): nếu trước đó Pancake báo "Hoàn một phần" (15) lúc Tubu không có yêu cầu trả (dấu vết trong lịch sử
        * đơn, hoặc lời "hoàn tay" còn trong ô), nhân viên có thể đã hoàn tay nên tiền KHÔNG tự hoàn cho mọi phương thức: ghi khoản chờ Kế toán
        * đối soát. Quyết định trong tx lật, dưới khoá dòng đơn, nên không cắt ngang một lần 15 vừa ghi dấu.
        */
@@ -383,7 +383,7 @@ export class OrderStatusService {
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
         const withholdCod = opts.withholdCodRefund === true && order.paymentMethod === 'COD' && from === 'DELIVERED' && targetStatus === 'RETURNED';
         const manualPartial =
-          opts.holdMoneyAfterManualPartialReturn === true && from === 'DELIVERED' && targetStatus === 'RETURNED' && (await this.hasManualPartialReturn(tx, order.id));
+          opts.holdMoneyAfterManualPartialReturn === true && opts.returnedToSender === true && (await this.hasManualPartialReturn(tx, order.id));
         const withholdPrepaid = manualPartial && order.paymentMethod !== 'COD';
         const reversalOpts = {
           ...(withholdCod ? { withholdCodRefund: true } : {}),

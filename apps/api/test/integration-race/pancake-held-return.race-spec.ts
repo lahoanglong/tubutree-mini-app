@@ -444,4 +444,65 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       expect((await orderOf(order.id)).pancakeAttention).toBe(cell);
     });
   });
+
+  describe('đơn CHƯA giao (SHIPPING) nhận 15 rồi 5: huỷ nhưng tiền vẫn chờ Kế toán', () => {
+    async function shippingOrder(paymentMethod: 'BANK_TRANSFER' | 'COD', total = 300_000) {
+      const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+      const order = await createOrder(prisma, {
+        userId: user.id,
+        status: 'SHIPPING',
+        paymentMethod,
+        paymentStatus: paymentMethod === 'COD' ? 'UNPAID' : 'PAID',
+        total,
+        subtotal: total,
+        pancakeOrderId: `pk-held-${randCode(8)}`,
+      });
+      return { user, order, event: (e: { status: number }) => ({ id: order.pancakeOrderId, ...e }) };
+    }
+
+    it('trả trước: 15→5 → CANCELLED, Ví 0, đúng MỘT khoản UNVERIFIED 300.000đ; 5 gửi lại + cron resync không thêm; Kế toán xác nhận một phần thì chỉ phần đó', async () => {
+      const accountant = await createUser(prisma, { role: 'ADMIN' });
+      const { user, order, event } = await shippingOrder('BANK_TRANSFER');
+
+      await processor.onStatusUpdated(event(PARTIAL));
+      await processor.onStatusUpdated(event(RETURNED));
+      await processor.onStatusUpdated(event(RETURNED));
+      await prisma.order.update({ where: { id: order.id }, data: { reversalEffectsAt: null } });
+      await orderStatus.resyncReversalEffects(order.id);
+
+      const after = await orderOf(order.id);
+      expect(after.status).toBe('CANCELLED');
+      expect(after.paymentStatus).toBe('PAID');
+      expect(await walletOf(user.id)).toBe(0);
+      const rows = await rowsOf(order.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ refKey: 'pancake-partial-return-held', status: 'UNVERIFIED', amount: 300_000 });
+      expect(after.pancakeAttention).toBe(ATTENTION_PARTIAL_RETURN_HELD);
+      expect(alert.mock.calls.filter(([, reason]) => reason === ATTENTION_PARTIAL_RETURN_HELD)).toHaveLength(1);
+
+      await refunds.verifyOverpayment(accountant.id, rows[0]!.id, { amount: 120_000 });
+      await refunds.chooseDestination(user.id, rows[0]!.id, { refundMethod: 'WALLET' });
+      expect(await walletOf(user.id)).toBe(120_000);
+      expect((await orderOf(order.id)).paymentStatus).toBe('REFUNDED');
+    });
+
+    it('COD chưa thu: không có tiền để giữ, đơn CANCELLED, không khoản nào', async () => {
+      const { user, order, event } = await shippingOrder('COD');
+      await processor.onStatusUpdated(event(PARTIAL));
+      await processor.onStatusUpdated(event(RETURNED));
+      expect((await orderOf(order.id)).status).toBe('CANCELLED');
+      expect(await rowsOf(order.id)).toHaveLength(0);
+      expect(await walletOf(user.id)).toBe(0);
+    });
+
+    it('báo ADMIN một lần dù bước gỡ "ĐANG HOÀN" sau đó ném lỗi (job thử lại không báo trùng)', async () => {
+      const { order, event } = await deliveredOrder('BANK_TRANSFER');
+      await processor.onStatusUpdated(event(PARTIAL));
+      jest.spyOn(attention, 'clearPancakeAttention').mockRejectedValueOnce(new Error('db'));
+
+      await expect(processor.onStatusUpdated(event(RETURNED))).rejects.toThrow('db');
+
+      expect(alert.mock.calls.filter(([code, reason]) => code === order.code && reason === ATTENTION_PARTIAL_RETURN_HELD)).toHaveLength(1);
+    });
+  });
 });

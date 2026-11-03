@@ -605,11 +605,11 @@ export class PancakeProcessor extends WorkerHost {
         returnedToSender,
         outcome,
         ...(withholdCodRefund ? { withholdCodRefund } : {}),
-        // Đơn đã giao nhận 5 sau một lần 15 không có yêu cầu trả: tiền chờ Kế toán, kể cả đơn trả trước (xem SetStatusOpts).
-        ...(returnedToSender && status === 'RETURNED' ? { holdMoneyAfterManualPartialReturn: true } : {}),
+        // Đơn (đã giao hay chưa) nhận 5 sau một lần 15 không có yêu cầu trả: tiền chờ Kế toán, kể cả đơn trả trước (xem SetStatusOpts).
+        ...(returnedToSender ? { holdMoneyAfterManualPartialReturn: true } : {}),
       });
       // Dòng "Cần xử lý" và khoản chờ Kế toán đối soát đã ghi cùng tx lật trạng thái; ở đây chỉ báo ADMIN, và chỉ bên thắng lần lật.
-      if (after.status === 'RETURNED') await this.alertHeldReturn(order, outcome);
+      await this.alertHeldReturn(order, outcome);
       // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
       if (order.status !== status && after.status === status && (status === 'CANCELLED' || status === 'RETURNED')) {
         await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);
@@ -648,6 +648,8 @@ export class PancakeProcessor extends WorkerHost {
     if (!outcome.flipped || outcome.heldReasons.length === 0) return;
     // Dòng "hoàn tay" nói đủ việc cho Kế toán nên một tin là đủ; chỉ COD thuần thì tin COD.
     const reason = outcome.heldReasons.includes(ATTENTION_PARTIAL_RETURN_HELD) ? ATTENTION_PARTIAL_RETURN_HELD : outcome.heldReasons[0]!;
+    // Đã báo một lần: nếu bước sau lỗi và catch ở người gọi báo lại thì không gửi trùng.
+    outcome.heldReasons = [];
     try {
       await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
     } catch (alertErr) {
