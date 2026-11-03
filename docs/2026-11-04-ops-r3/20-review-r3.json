@@ -1,0 +1,340 @@
+[
+ {
+  "package": "b",
+  "verdict": "APPROVE",
+  "findings": [
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/admin/admin.service.ts:599",
+    "problem": "RC-06 mới chặn được một chiều xen kẽ. setUserRole và revokeGrant vẫn đọc staffPermissions bằng findUnique không khoá dòng (admin.service.ts:585, rbac.service.ts:165), và chỉ gỡ nhóm khi bản đọc đó có nhóm (admin.service.ts:599/602, rbac.service.ts:193). setStaffPermissions không lấy lockAdminRoster. Vì vậy nếu lệnh updateMany có điều kiện role='STAFF' (admin.service.ts:685) commit trước lệnh user.update của setUserRole thì vẫn lọt.",
+    "scenario": "X là STAFF, staffPermissions=[] (nhân viên mới, ca hay gặp nhất). Admin B gọi setUserRole(X, CUSTOMER): lấy khoá roster, findUnique thấy [] nên droppedPerms=[], rồi chạy clearPartnerOnRoleLoss. Đúng lúc đó Admin A gọi setStaffPermissions(X, [KE_TOAN]): dòng users chưa bị B khoá, role vẫn STAFF, updateMany count=1 và commit. B chạy user.update chỉ với {role: CUSTOMER}. Kết quả: X là CUSTOMER mà vẫn mang [KE_TOAN]. Race spec ở admin-staff-permissions-vs-role.race-spec.ts:58 cho target bắt đầu với ['KHO'], nên droppedPerms luôn khác rỗng và setUserRole luôn ghi đè []. Spec vì thế không bắt được ca này.",
+    "fix": "Trong tx của setStaffPermissions: gọi lockAdminRoster(tx) trước updateMany, để tuần tự hoá với setUserRole/revokeGrant vốn khoá trước khi đọc. Hoặc trong setUserRole/revokeGrant, khi role !== 'STAFF' thì luôn ghi staffPermissions: [] (không phụ thuộc bản đọc), hoặc đọc lại users FOR NO KEY UPDATE trước khi tính droppedPerms. Thêm vòng race với target staffPermissions=[]."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/staff/rbac/rbac.service.ts:65",
+    "problem": "Phần dọn nhóm khi nâng lên STAFF chỉ có ở setUserRole (admin.service.ts:599). Khi nâng qua applyGrants (Thêm nhân sự /admin/staff/grant không chọn nhóm, hoặc lúc đăng nhập/refresh), invitedPerms=[] nên nhóm đang lưu được giữ nguyên. Nhóm sót lại từ race ở trên vẫn sống lại qua đường này. fix_note nói sẽ 'chặn mọi đường sống lại khác' nhưng đường này chưa được chặn.",
+    "scenario": "X là CUSTOMER còn sót [KE_TOAN] (do race ở trên). Admin bấm 'Thêm nhân sự' cho SĐT của X mà không chọn nhóm: web gửi body {phone, role: 'STAFF'} (staff-roster-tab.spec.tsx:77). addGrant chạy applyGrants, nâng CUSTOMER lên STAFF với data {role} (invitedPerms rỗng). X lập tức có quyền Kế toán mà không ai gán.",
+    "fix": "Trong applyGrants, khi best==='STAFF' và user.role khác STAFF thì luôn ghi staffPermissions = invitedPerms (kể cả khi rỗng), và ghi sổ STAFF_PERMISSIONS khi nhóm cũ khác rỗng."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/staff/rbac/rbac.service.ts:127",
+    "problem": "RC-05: request thua (createMany no-op) vẫn gọi applyGrants với biến `user` đọc trước khi bên thắng commit. Nó thấy grant của bên thắng nên nâng role thêm một lần và ghi thêm một dòng ROLE CUSTOMER→STAFF (và STAFF_PERMISSIONS) vào user_admin_events. Ngoài ra nhóm (perms) của bên thua bị bỏ âm thầm mà vẫn trả applied=true. Lỗi 500 đã hết, phần này chỉ làm bẩn lịch sử vai trò.",
+    "scenario": "X đã có User và đang là CUSTOMER. Admin A addGrant(STAFF, [KHO]) song song với Admin B addGrant(STAFF, [CSKH]). B chờ A commit rồi createMany count=0. applyGrants(user cũ là CUSTOMER) đọc grant của A, update role=STAFF, perms=[KHO] và ghi sổ lần hai. Lịch sử vai trò có 2 dòng 'Áp quyền cấp theo SĐT'. B thấy báo thành công nhưng X chỉ có KHO, không có CSKH. Race spec mới (admin-nhansu.race-spec.ts) không đếm số event và dùng cùng một bộ perms, nên không lộ ra.",
+    "fix": "Khi count===0 thì đọc lại user trong tx (hoặc FOR NO KEY UPDATE) trước khi gọi applyGrants. Nếu permissions của bên thua khác perms của grant hiện có thì đi theo nhánh update grant như khi existing có sẵn."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/staff/shifts/shifts.service.ts:100",
+    "problem": "count=0 cũng xảy ra khi ca vừa bị từ chối (REJECTED, reject:252), bị huỷ hoặc bị nhân viên xoá ở tab khác (deleteShift). Lời báo 'Ca vừa được duyệt' khi đó sai. Ngoài ra findFirst sau updateMany có thể trả null nếu ca bị xoá ngay sau đó (controller trả 200 với thân rỗng).",
+    "scenario": "Ca PENDING. Admin bấm Từ chối đúng lúc nhân viên lưu giờ mới: updateMany count=0, nhân viên đọc 'Ca vừa được duyệt, tải lại.' trong khi ca thực ra đã bị từ chối.",
+    "fix": "Dùng lời trung tính như 'Ca vừa đổi trạng thái (đã duyệt/từ chối/xoá), tải lại.', hoặc đọc lại status để báo đúng trạng thái."
+   }
+  ],
+  "checked": "Đã xem diff 779c82a48...ops/1104-b (admin.service.ts, rbac.service.ts, shifts.service.ts, spec và 2 race spec), so với đề bài RC-03, RC-05, RC-06 trong 10-audit-r3.json. Đã đọc mã xung quanh: setUserRole (admin.service.ts:566-650), setStaffPermissions (:671-693), applyGrants/addGrant/revokeGrant (rbac.service.ts:46-215), lockAdminRoster (common/admin-roster.ts), approve/reject/bulkApprove (shifts.service.ts:232-265), schema RoleGrant cùng partial unique index ở migration 20260902020100. ON CONFLICT DO NOTHING không chỉ định target vẫn áp được cho partial index, và bên thua chờ bên thắng commit rồi mới no-op, nên lỗi 25P02 đã hết. Điều kiện status='PENDING' ở updateShift khớp với approve/bulkApprove nhờ cơ chế đánh giá lại WHERE sau khi chờ khoá dòng (EvalPlanQual). Đã grep chỗ gọi addGrant trên web (staff-roster-tab gửi không kèm permissions). Đã chạy jest rbac.service.spec.ts và shifts.service.spec.ts: 62/62 xanh. Không chạy race spec. Không còn P0–P2. Phát hiện chính: bản sửa RC-06 vẫn hở khi nhân viên bắt đầu với nhóm rỗng (race spec không phủ ca này), và nhóm sót vẫn sống lại qua đường applyGrants.",
+  "label": "review:b#1"
+ },
+ {
+  "package": "a1",
+  "verdict": "APPROVE",
+  "findings": [
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/admin/dealer-credit-panel.tsx:168",
+    "problem": "Khoá Idempotency-Key bị xoá ở mọi lần gõ phím vào ô số tiền hay mã GD, kể cả khi giá trị cuối vẫn y như cũ. Khoá chỉ nằm trong useRef nên cũng mất khi panel unmount: dealer-accounts-tab.tsx:229 gập dòng, hoặc tải lại trang. Khi không có mã GD, chốt duy nhất còn lại ở máy chủ là amount ≤ dư nợ.",
+    "scenario": "Đại lý nợ 20tr. Kế toán nhập 5tr, không nhập mã GD, bấm xác nhận. Hết 20s thì panel báo 'chưa rõ đã xong chưa' và tải lại sổ, nhưng máy chủ còn đang chờ transaction Serializable nên sổ vẫn hiện 20tr. Kế toán xoá rồi gõ lại '5000000' (hoặc gập dòng rồi mở lại) và bấm lần nữa. Lần này đi với khoá mới, máy chủ ghi thêm một dòng -5tr, dư nợ còn 10tr. Cửa sổ lỗi rất hẹp: cần hết giờ khi máy chủ chưa commit và người dùng phải sửa ô.",
+    "fix": "Gắn khoá với bộ giá trị đã gửi, ví dụ idemKey = {key, amount, bankRef}. Chỉ tạo khoá mới khi amount/bankRef lúc bấm khác bộ đã lưu, không xoá khoá trong onChange. Có thể giữ bộ này trong sessionStorage theo userId để sống qua lúc unmount."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/admin/admin.service.ts:1178",
+    "problem": "Còn một đường lọt của RB-03: nhánh CLOSED (ghi nhận tiền về muộn cho đơn đã huỷ/trả) không kiểm mã GD. markPaid trả CLOSED trước khi mở transaction, nên assertBankRefUnusedByOrder không chạy. Mã GD chỉ được ghi vào ghi chú của khoản hoàn (orderCustomerRefund), không vào order_status_history, nên findOrderUsingBankRef cũng không thấy mã này về sau.",
+    "scenario": "ADMIN xác nhận đơn A với FT1, A lên PAID. Sau đó ADMIN nhầm, ghi nhận tiền về muộn cho đơn đã huỷ B cũng với FT1. Hệ thống tạo khoản hoàn LATE_PAYMENT cho B (khách chọn Ví thì nhận tiền ngay), Tubu chi tiền cho một khoản chuyển khoản không có thật. Chiều ngược lại cũng lọt: ghi muộn cho B trước với FT1 thì xác nhận A bằng FT1 vẫn qua. Chỉ ADMIN làm được (byStaff bị chặn) và phải gõ nhầm.",
+    "fix": "Ở nhánh CLOSED, khi có bankRef thì gọi lockBankRef và assertBankRefUnusedByOrder trong transaction của recordLatePaymentRefund (truyền bankRef vào). Đồng thời ghi 'Mã GD …' vào order_status_history của đơn đóng, để các lần kiểm sau thấy được."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/dealer/dealer.service.ts:584",
+    "problem": "Chặn tự ghi trả nợ chỉ so dealerUserId === adminId, không so canonicalUserId (mergedIntoId) như đề xuất gốc. Vì vậy sổ nợ nằm ở tài khoản cũ đã gộp vào tài khoản kế toán vẫn tự xoá được.",
+    "scenario": "Đại lý cũ U1 còn nợ 20tr. U1 được gộp vào U2 (mergedIntoId=U2), sổ công nợ vẫn nằm ở U1. Sau đó U2 thành STAFF và được gán KE_TOAN. U2 gọi POST /admin/dealers/U1/credit-payment {amount:20000000}: U1 ≠ U2 nên qua được, dư nợ về 0. Cần ADMIN tạo điều kiện nên rất hiếm.",
+    "fix": "Khi byStaff, so thêm canonicalUserId(prisma, dealerUserId) === canonicalUserId(prisma, adminId), giống external-claims-admin.service.ts:232."
+   }
+  ],
+  "checked": "Đã đọc diff 779c82a48...ops/1104-a1 và mã xung quanh ở HEAD ops/1104-r3; a1 đã gộp vào r3. Các file đã đọc: common/bank-ref.ts, OrderStatusService.markPaid, AdminService.confirmOrderPayment (cả nhánh CLOSED), recordLatePaymentRefund, DealerService.adminRecordCreditPayment, assertBankRefFreeForPayment, confirmDealerOrderPayment, customer-refunds markPaid/recordOrderNote, dealer-admin.controller, admin-client recordDealerCreditPayment, error-text/admin-error-text, các race spec đã đổi và race spec mới. Đã grep mọi lời gọi markPaid( / adminRecordCreditPayment / các hàm bank-ref / <DealerCreditPanel.\n\nKết luận chính:\n(1) Khoá advisory nằm đúng trong cùng transaction lật PAID. Ở markPaid, lệnh khoá chạy trước updateMany và history.create trong cùng $transaction, ở mức Read Committed nên sau khi chờ khoá sẽ đọc thấy dữ liệu đã commit. Đường đơn đại lý cũng khoá trong tx riêng. Hai đường dùng chung namespace 'dealer-bankref:', nên đơn lẻ, đơn đại lý và trả nợ xếp hàng chéo được với nhau.\n(2) markPaid có ba nơi gọi: admin truyền bankRef, Pancake processor không có bankRef, còn confirmDealerOrderPayment có tx riêng. Bỏ điều kiện type DEALER thì đường trả nợ và đơn đại lý sẽ chặn cả mã đã dùng ở đơn lẻ, đây là thay đổi có chủ đích.\n(3) Idempotency-Key ở panel: khoá giữ nguyên khi thử lại sau lỗi, đổi sau khi thành công hoặc khi sửa ô. Đường báo cáo vẫn an toàn khi dùng khoá UUID thay cho 'report:<id>', vì updateMany REPORTED→RECORDED chặn lần ghi thứ hai.\n(4) Test: unit test của panel đỏ trên mã cũ (khoá undefined khi không có mã GD). Unit RB-01 đỏ trên mã cũ. Race RB-03 (song song và tuần tự) đỏ trên mã cũ vì khi đó cả hai đơn đều lên PAID. Race spec ERR-01 (dealer-credit-payment-retry) không đỏ trên mã cũ vì API vốn đã chống trùng theo khoá. Spec này chỉ ghi lại hành vi sẵn có, đúng với fix_note là không cần race spec. spyOn trên export của bank-ref hoạt động vì ts-jest biên dịch ra CommonJS.\n\nĐã chạy và xanh: vitest dealer-credit-panel.spec.tsx 15/15, jest dealer-credit-payment.spec.ts 56/56. Không chạy race spec theo yêu cầu.\n\nKhông còn P0–P2, chỉ còn 3 mục P3.",
+  "label": "review:a1#2"
+ },
+ {
+  "package": "a1",
+  "verdict": "APPROVE",
+  "findings": [
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/admin/dealer-credit-panel.tsx:168",
+    "problem": "Gõ bất kỳ phím nào ở ô số tiền hay ô mã GD là xoá khoá, kể cả khi gõ lại đúng số cũ. Lần thử lại sau lỗi mạng vì thế mất chống trùng, đúng ở kịch bản ERR-01. Mở lại chi tiết đơn (component remount) cũng mất khoá.",
+    "scenario": "Đại lý nợ 20.000.000. Kế toán nhập 5.000.000, không có mã GD, bấm xác nhận. Máy chủ đã commit nhưng 4G rớt. Màn hình báo 'Chưa kết nối được tới Tubu Tree', sổ không tải lại được vì đang mất mạng, vẫn hiện 20.000.000. Kế toán nghĩ mình gõ nhầm, xoá rồi gõ lại 5000000 nên khoá bị đổi sang UUID mới. Bấm lại thì có thêm một dòng -5.000.000, dư nợ còn 10.000.000. Nếu giữ khoá cũ thì máy chủ trả lại kết quả lần trước (cùng số), hoặc báo 400 khi số khác.",
+    "fix": "Lưu kèm khoá giá trị {amt, bankRef.trim()} đã gửi với khoá đó. Trong mutationFn chỉ tạo khoá mới khi giá trị lúc gửi khác giá trị đã lưu, đừng xoá khoá trong onChange. Có thể thêm bước chặn: sau lỗi mạng, bắt sổ phải tải lại thành công thì mới cho bấm tiếp."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/orders/order-status.service.ts:798",
+    "problem": "Đường ghi tiền về muộn (đơn đã huỷ/trả) không kiểm trùng mã GD. markPaid trả CLOSED trước khi mở transaction có assertBankRefUnusedByOrder. Sau đó recordLatePaymentRefund (admin.service.ts:1184) chỉ ghi 'Mã GD X' vào adminNote của orderCustomerRefund. Bảng này findOrderUsingBankRef và isBankRefOnPayment đều không đọc. Đây là đường tiền RA (khách chọn Ví là nhận tiền ngay).",
+    "scenario": "Mã FT1 đã dùng để xác nhận đơn A (PAID). Admin ghi 'Đã nhận tiền' cho đơn B đã huỷ, nhập nhầm FT1. Kết quả là một khoản hoàn LATE_PAYMENT 300.000đ được tạo cho khách B, trong khi Tubu không nhận thêm đồng nào. Chiều ngược lại cũng lọt: FT1 đã ghi tiền về muộn cho B, sau đó dùng FT1 xác nhận đơn A vẫn qua.",
+    "fix": "Ở nhánh CLOSED của confirmOrderPayment, khi có bankRef: lấy khoá lockBankRef rồi kiểm findOrderUsingBankRef, isBankRefOnPayment và thêm tra adminNote của orderCustomerRefund, tất cả trong cùng transaction tạo khoản hoàn. Đường này chỉ ADMIN làm được nên để P3, cùng hạng với RB-03."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/lib/error-text.ts:5",
+    "problem": "Thao tác POST tiền bị lỗi mạng mà không phải hết giờ (TypeError Failed to fetch) thì hiện 'Chưa kết nối được tới Tubu Tree. Kiểm tra mạng rồi thử lại nhé.'. Câu này ngầm nói yêu cầu chưa tới máy chủ, trong khi máy chủ có thể đã ghi. Chỉ ca hết giờ mới có câu 'chưa rõ đã xong chưa'. Lời báo này làm tăng khả năng xảy ra kịch bản ở mục 1.",
+    "scenario": "Kết nối rớt giữa lúc máy chủ đang trả phản hồi: máy chủ đã commit dòng -5.000.000 nhưng kế toán đọc 'Chưa kết nối được', tin là chưa ghi.",
+    "fix": "Với actionErrorText, NetworkError không do hết giờ cũng nên dùng câu 'chưa rõ đã xong chưa, xem lại sổ trước khi bấm lại', ít nhất là ở các nút tiền."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/test/integration-race/dealer-credit-payment-retry.race-spec.ts:56",
+    "problem": "Race spec ERR-01 vẫn xanh trên mã API cũ: API cũ đã tra trùng theo idempotencyKey khi người gọi gửi khoá, mà spec luôn gửi khoá. Spec chỉ giữ cho hành vi API khỏi lùi, không chứng minh được lỗi. Thứ chứng minh bản sửa là unit test của panel (đỏ trên mã cũ vì khoá undefined). Spec RB-03 trong admin-confirm-payment.race-spec thì đỏ trên mã cũ thật.",
+    "scenario": "Đổi lại panel thành `const key = bankRef.trim() || undefined` thì race spec này vẫn xanh.",
+    "fix": "Ghi rõ trong mô tả spec rằng đây là guard phía API. Không cần sửa mã."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/dealer/dealer.service.ts:611",
+    "problem": "Nhánh câu báo `bankRef === idempotencyKey` ('Mã giao dịch X đã ghi nhận Yđ…') gần như thành mã chết vì web không còn dùng mã GD làm khoá. Hành vi báo cáo trùng mã cũng đổi: trước trả 200 kèm reportClosed=false, nay trả 409. Câu 'Mã giao dịch này đã có trong sổ…' ở panel và ở dealer-credit-reports.tsx:125 chỉ còn khớp với client cũ đang cache.",
+    "scenario": "Đại lý báo hai lần cùng một khoản. Kế toán ghi báo cáo 1 với FT1, rồi ghi báo cáo 2 với FT1. Trước: 200, báo cáo 2 vẫn mở, hiện câu hướng dẫn. Nay: 409 'đã dùng để ghi giảm công nợ'. Tiền vẫn đúng, chỉ khác lời báo.",
+    "fix": "Chấp nhận được. Có thể dọn nhánh câu báo cũ, hoặc thêm vào câu 409 lời nhắc đóng báo cáo trùng bằng 'Không thấy tiền'."
+   }
+  ],
+  "checked": "Đọc diff 779c82a48...ops/1104-a1 (bank-ref.ts, order-status.service markPaid, admin.service confirmOrderPayment, dealer.service adminRecordCreditPayment/assertBankRefFreeForPayment/confirmDealerOrderPayment, panel + spec, 3 race spec) và mã xung quanh. Đã xác nhận: assertBankRefUnusedByOrder (khoá pg_advisory_xact_lock + đọc) nằm trong CÙNG prisma.$transaction (Read Committed) với updateMany lật PAID ở markPaid:802, và trong transaction của confirmDealerOrderPayment:1401. Khoá dùng chung key 'dealer-bankref:<lower>' cho cả ba đường; đường trả nợ chạy Serializable thì đọc qua this.prisma sau khi giữ khoá. Grep mọi người gọi: markPaid chỉ có confirmOrderPayment truyền bankRef, pancake.processor:695 không truyền nên không đổi hành vi. Bấm lại cùng đơn đã PAID trả ALREADY_PAID trước transaction; hai admin cùng đơn cùng mã thì loại trừ chính đơn đó, flip 0 nên trả ALREADY_PAID. findOrderUsingBankRef bỏ lọc DEALER thì cũng thấy ghi chú 'Mã GD' của khoản hoàn ra (customer-refunds:353), nhưng mã giao dịch ra và vào khác nhau nên không thực tế. Report flow: khoá UUID thay cho report:<id> vẫn chặn trừ hai lần nhờ updateMany status REPORTED→RECORDED (replay). RB-01: chặn byStaff && dealerUserId===adminId trước mọi lần ghi, controller truyền byStaff = role!=='ADMIN'. Panel: khoá sinh trong mutationFn, giữ khi lỗi, xoá khi thành công hoặc khi sửa ô; onError dùng actionErrorText và invalidate sổ. Race spec RB-03 đỏ trên mã cũ (cả hai bên đều qua), race spec ERR-01 xanh trên API cũ. Đã chạy vitest dealer-credit-panel.spec.tsx (15/15 xanh) và jest dealer-credit-payment.spec.ts (56/56 xanh) trên HEAD ops/1104-r3 (đã chứa a1). Không chạy race spec. Không còn P0–P2.",
+  "label": "review:a1#1"
+ },
+ {
+  "package": "c",
+  "verdict": "CHANGES",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/orders/order-reversal.service.ts:400",
+    "problem": "Tiêu chí \"hàng đã rời kho\" của TK-01 (SYNCED + pancakeStockSyncReadAt/WebhookReceivedAt > pancakeLastAttemptAt) không chứng minh được Pancake đã trừ đơn này. Lượt quét đêm 03:37 (pancake-sync.service.ts:521) ghi pancakeStockSyncReadAt cho mọi biến thể, kể cả khi số không đổi. Vì thế mọi đơn đã đẩy trước 03:37 đều qua tiêu chí. Hai trường hợp gây hỏng: Pancake không tự trừ khi nhận đơn API, hoặc chỉ trừ lúc gửi hàng (sổ tay kho.md:52 và pilot-order-playbook.md:272 vẫn ghi \"cần xác nhận\"). Khi đó giữ chỗ của đơn bị huỷ trước giao không bao giờ được nhả. Ngoài ra pancakeLastAttemptAt là lúc nhận lượt đẩy (pancake-order.service.ts:249), trước khi Pancake xử lý. Một lượt đọc rơi vào khoảng hở đó cũng làm tiêu chí đúng sai.",
+    "scenario": "Biến thể V có pancakeStock=10, stock=10. Đại lý đặt 100? Ví dụ nhỏ: đặt 2, được stock=8, reserved=2, đơn SYNCED lúc 10:00. Lượt đêm 03:37 đọc remain=10 (Pancake chưa trừ), ghi syncReadAt=03:37, reserved vẫn 2. Sáng hôm sau CSKH huỷ đơn khi còn CONFIRMED. Dòng 379 gọi restockReturnedVariationStock, lệnh này bỏ qua biến thể Pancake. Kết quả stock=8, reserved=2 mãi mãi, mất 2 đơn vị bán được. Giữ chỗ ma chỉ hết khi có lần giảm ngoài app hoặc khi bấm forcePancakeStock. Mã cũ ra stock=10, đúng. Kể cả khi Pancake CÓ tự trừ vẫn hỏng: X(2) đã sync (P=8, R=0), đơn Y(3) đang chờ (stock=5, R=3), huỷ X thì bản mới không làm gì. Pancake cộng lại 2 cho X rồi trừ 3 cho Y, lượt sync thấy 8→7, chỉ nhả 1. Ra R=2, stock=5, trong khi đúng là 7. Mã cũ nhả 2 lúc huỷ, bù đúng phần Pancake cộng lại bị cấn trừ, ra 7.",
+    "fix": "Không dùng mốc sync/webhook làm bằng chứng. Với đường huỷ trước giao (đơn chưa DELIVERED), vẫn gọi releaseVariationStock như cũ. Chỉ dùng restockReturnedVariationStock ở hai chỗ: restockReturnedItems, và restoreStockAndFlash khi ảnh chụp đơn đã DELIVERED (hoặc Pancake đã báo Đã hoàn trên đơn đã gửi, nếu có chủ chốt). Trước khi chốt hướng, đọc số thật trên PROD (có hỏi chủ): so pancakeStock của vài biến thể trước và sau khi đẩy đơn để biết Pancake có tự trừ hay không. Bỏ ca 'đã đồng bộ tồn sau lúc đẩy: huỷ không cộng' trong return-restock-pancake-stock.race-spec.ts, vì ca này đóng băng đúng giả định sai."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/integrations/pancake/pancake.processor.ts:564",
+    "problem": "Lời nhắc KHO mới bảo \"nhập kho trên Pancake\" sau khi đã tạo phiếu Hoàn một phần hoặc phiếu trả hàng. Chỉ dẫn này còn ở order-returns.service.ts:827, return-request-row.tsx:113 và :349, admin/page.tsx:2226. Chưa ai kiểm phiếu hoàn của Pancake có tự nhập lại kho không (đề bài TK-01 dặn kiểm trước khi sửa). Nếu phiếu tự nhập, KHO làm đúng lời thì Pancake cộng hai lần. Tubu lấy số theo Pancake nên bán quá tồn, tức lại đúng lỗi TK-01 định chặn, chỉ dời sang Pancake.",
+    "scenario": "Biến thể V có Pancake=0. Khách trả 1 món, KHO tạo phiếu Hoàn một phần và phiếu tự nhập lại, Pancake=1. Theo lời nhắc, KHO nhập kho thêm 1, Pancake=2. Webhook hoặc sync đưa stock Tubu=2 trong khi kho thật có 1. Đơn thứ hai không có hàng để soạn.",
+    "fix": "Đổi lời thành điều kiện, ví dụ: \"Kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake.\" Tốt hơn nữa là xác nhận hành vi phiếu hoàn rồi viết một lời duy nhất. Sửa luôn sổ tay docs/launch/so-tay-van-hanh/kho.md:43, :57, :97, ba chỗ này vẫn ghi \"Tubu cộng tồn\"."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/orders/order-reversal.service.ts:402",
+    "problem": "Đơn DELIVERED nhưng chưa từng lên Pancake (pancakeOrderId null, giao tay khi đẩy lỗi) bị coi là đã rời kho. Pancake chưa bao giờ trừ đơn này nên giữ chỗ của nó vẫn còn. Khi trả hoặc lật đơn, giữ chỗ không được nhả.",
+    "scenario": "Đơn giao tay, V có R=1 của chính đơn đó, P=5, stock=4. Khách trả, hàng về: stock vẫn 4, R=1 mãi, dù kho thật có 5.",
+    "fix": "Chỉ coi DELIVERED là đã rời kho khi đơn có pancakeOrderId. Không có thì dùng releaseVariationStock."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/orders/order-reversal.service.ts:756",
+    "problem": "restocked += p.qty vẫn đếm cả biến thể Pancake mà lệnh UPDATE đã bỏ qua. Log ở order-returns.service.ts:717 ghi \"cộng kho N đơn vị\" là sai. Chú thích ở order-reversal.service.ts:372-373 vẫn viết \"markReceived cộng\".",
+    "scenario": "Nhận hàng trả 2 món của biến thể Pancake: log ghi \"cộng kho 2 đơn vị\" nhưng stock không đổi, người đối soát log hiểu sai.",
+    "fix": "Lấy số dòng bị ảnh hưởng từ $executeRaw (hoặc chỉ đếm biến thể có pancakeStock NULL) và sửa lời log. Cập nhật chú thích."
+   }
+  ],
+  "checked": "Đã đọc diff 779c82a48...ops/1104-c, gồm variation-stock.ts, order-reversal.service.ts, order-returns.service.ts, pancake.processor.ts, dealer-backorder.service.ts, chữ trên web và 2 race spec mới. Đã đọc thêm mã xung quanh: pancake-sync.service.ts (quét đêm ghi readAt cho mọi biến thể), pancake-order.service.ts:249 (lúc ghi pancakeLastAttemptAt), schema (OrderItem, @@map, variationId bắt buộc), sổ tay kho.md, pilot-order-playbook (Pancake có tự trừ hay không vẫn chưa xác nhận). Đã chạy jest variation-stock.spec.ts và dealer-backorder.service.spec.ts: 32/32 xanh. TK-02: $queryRaw đã tham số hoá (LIMIT là tham số), đúng bảng và cột, FIFO theo createdAt rồi id, lọc stock>0 trước LIMIT. Lỗi đói hàng hết, SQL chạy trên Postgres thật qua dealer-backorder-cancel-lock.race-spec, không thấy lỗi. TK-03: guard WRA<=receivedAt ở nhánh không có updated_at, và ở nhánh có updated_at khi mốc EventAt còn NULL. Lần thử lại của cùng sự kiện vẫn qua nhờ <=, R5-SYNC-3 giữ nguyên, lý do IGNORED khớp guard, không thấy lỗi. Đường huỷ trước giao CHƯA đồng bộ vẫn nhả giữ chỗ đúng. Đường đã đồng bộ thì hỏng, xem P2 đầu.",
+  "label": "review:c#1"
+ },
+ {
+  "package": "d",
+  "verdict": "CHANGES",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/api/test/integration-race/d1-cancel-handover.race-spec.ts:116",
+    "problem": "Câu mặc định của InvalidOrderTransitionError đã đổi (order-transition.ts:68) nhưng race spec D1 (c) vẫn so chuỗi cũ /CancelAfterHandoverError|Không thể chuyển đơn/. summarize() tạo chuỗi `${name}: ${message}`, nên chuỗi giờ là 'InvalidOrderTransitionError: Đơn vừa chuyển sang «Đã huỷ»…' và không khớp regex.",
+    "scenario": "Ở (c), 10 cặp chạy đồng thời admin CANCELLED và Pancake SHIPPING. Cặp nào lệnh huỷ thắng thì Pancake đọc thấy CANCELLED (assertTransition ở order-status.service.ts:274) hoặc thua race (dòng 464), và cả hai đường đều ném lỗi lớp gốc với câu mới. expect(e).toMatch sẽ đỏ, nên gate race đủ bộ đỏ. Trong 10 cặp gần như chắc chắn có cặp lệnh huỷ thắng.",
+    "fix": "Sửa regex trong race spec thành /CancelAfterHandoverError|InvalidOrderTransitionError/ (so theo tên lớp, không so câu chữ). Grep lại mọi spec còn so câu cũ."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/web/src/lib/admin-error-text.ts:13",
+    "problem": "adminOverride giữ mọi lời 5xx có dấu tiếng Việt, kể cả câu chung của PrismaExceptionFilter ('Đã có lỗi xảy ra, bạn thử lại sau nhé.' và 'Lỗi cơ sở dữ liệu.' ở prisma-exception.filter.ts:56/80). Các câu này không phải lời nghiệp vụ. payout-admin-tab.tsx:255 và merchant-fulfilment-tab.tsx:85 lại dựa vào `text === e.message` để biết máy chủ đã nói rõ kết quả, nên bây giờ coi 500 của Prisma là lời nghiệp vụ và bỏ câu nhắc tải lại, đúng trên đường tiền.",
+    "scenario": "Kế toán bấm 'Đã chi' (markPayoutPaid). Kết nối DB rớt lúc COMMIT, hoặc gặp mã Prisma lạ, nên máy chủ trả 500 {message:'Lỗi cơ sở dữ liệu.'}. Trước bc13cd6b1 màn hình hiện 'Máy chủ đang bận, thử lại nhé. Tải lại danh sách để xem lệnh đã sang \"Đã chi\" chưa trước khi chi lần nữa.' Bây giờ chỉ hiện 'Lỗi cơ sở dữ liệu.' (hoặc 'Đã có lỗi xảy ra, bạn thử lại sau nhé.' xúi bấm lại), không nhắc kiểm tra trước khi chuyển tiền lần nữa. Phiếu chi gian hàng đối tác cũng vậy. Spec chỉ thử 500 'Internal server error' tiếng Anh nên vẫn xanh.",
+    "fix": "Ở payout-admin-tab và merchant-fulfilment-tab, quyết định thêm câu nhắc theo `!(e instanceof ApiError) || e.status >= 500` thay vì so chữ. Hoặc trong adminOverride loại các câu chung của máy chủ (của Prisma filter, có thể đặt mã code riêng như 'INTERNAL'). Thêm test: 500 'Lỗi cơ sở dữ liệu.' vẫn có RELOAD_HINT."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/integrations/pancake/pancake-order.service.ts:362",
+    "problem": "Phép ba ngôi chỉ dịch BANK_TRANSFER và ZALOPAY, còn mọi phương thức trả trước khác đều thành 'ví Tubu'. VNPAY là phương thức của checkout (checkout-split.ts:319) và isPrepaidMethod coi là trả trước.",
+    "scenario": "Đơn VNPAY chưa thanh toán, admin bấm 'Đẩy lại Pancake' và nhận câu 'Đơn TB1 trả trước (ví Tubu) chưa thanh toán…', nhãn sai phương thức.",
+    "fix": "Dùng bảng nhãn phương thức (VNPAY: 'VNPay', WALLET: 'ví Tubu', XU: 'Xu'…), nếu không có thì để mã gốc."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/orders/order-transition.ts:68",
+    "problem": "Câu mặc định luôn nói 'Đơn vừa chuyển sang «X»', kể cả khi không có ai đổi chen giữa: merchant hoặc admin gửi trạng thái đích không hợp lệ qua merchant-fulfilment.service.ts:496 hay merchant.service.ts:1144, trong khi đơn đã ở X từ lâu.",
+    "scenario": "Đối tác gọi chuyển DELIVERED trên đơn đã CANCELLED từ hôm qua và nhận 'Đơn vừa chuyển sang «Đã huỷ»… Tải lại đơn', nghĩa không đúng nhưng vô hại.",
+    "fix": "Viết trung tính hơn: 'Đơn đang ở «X», không chuyển được sang «Y». Tải lại đơn để xem trạng thái mới.'"
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/dealer/dealer.service.ts:38",
+    "problem": "Hằng PAYMENT_STATUS_LABEL_VI nằm chen giữa các dòng import (sau nó còn import staff-own-order, bank-ref). Vẫn chạy được vì import được hoist, nhưng trái lệ import/first và dễ gây nhầm.",
+    "scenario": "Lint bật import/first sẽ báo lỗi. Người đọc tưởng import phía sau phụ thuộc vào hằng.",
+    "fix": "Dời hằng xuống dưới khối import."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/admin/support-chat/qr-modal.tsx:43",
+    "problem": "Vòng hỏi trạng thái QR là tải dữ liệu nhưng lại dùng actionErrorText.",
+    "scenario": "Lần hỏi bị hết giờ thì hiện 'Mạng chậm, chưa rõ đã xong chưa…' cho một lệnh GET, câu không hợp ngữ cảnh. Nên dùng 'Tải chậm quá, thử lại nhé.'",
+    "fix": "Đổi sang loadErrorText ở dòng 43 (giữ actionErrorText cho startSupportQr ở dòng 70)."
+   }
+  ],
+  "checked": "Đã đọc đề ERR-02/ERR-03 trong 10-audit-r3.json. Đọc diff 779c82a48...ops/1104-d (API: order-transition, pancake-order, dealer; web: khoảng 60 file admin) và bc13cd6b1 (admin-error-text + đổi import). Đọc error-text.ts, admin-error-text.ts, prisma-exception.filter.ts, roles.guard.ts (403 đã có lời tiếng Việt), order-status.service.ts setStatus (274, 464, 1085) và các nơi bắt InvalidOrderTransitionError (pancake.processor, gomdon-webhook: dùng from/to và tên lớp, không so câu chữ). Grep mọi spec còn so câu cũ: race d1-cancel-handover:116 hỏng, helpers.summarize ghép name+message. Rà các chỗ dựa vào `text === e.message`: payout-admin-tab:255, merchant-fulfilment-tab:85. Nhãn ORDER_STATUS_LABEL_VI khớp lib/order-view.ts của web. refresh của order-status-actions invalidate ['admin-orders'], và ngăn kéo lấy đơn từ q.data của khoá đó (page.tsx:1348), nên onError tải lại đúng. Không thấy import thừa hay thiếu, cũng không còn file admin nào import thẳng '@/lib/error-text'. friendlyPartnerRuleError và describeTestFailure vẫn chạy đúng. Đã chạy vitest order-status-actions.spec.tsx và admin-error-text.spec.ts: 46/46 xanh. Không chạy race spec theo lệnh, kết luận race đỏ là suy từ đọc mã.",
+  "label": "review:d#1"
+ },
+ {
+  "package": "e",
+  "verdict": "CHANGES",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/loyalty/loyalty-expiry.service.ts:559-568",
+    "problem": "TK-04: tin nhắc giờ chỉ báo số điểm của các lô cùng ngày với mốc sớm nhất, nhưng dedup vẫn chặn mọi tin POINTS_EXPIRING trong reminderDays (thực tế là 8 ngày, vì sentAt luôn muộn hơn mốc since vài ms). Lô hết hạn vào ngày khác trong cửa sổ không còn được cộng vào tin nào, và hết hạn trước lượt nhắc kế. Mã cũ ghi sai ngày nhưng vẫn có các lô này trong tổng; mã mới bỏ hẳn chúng. Mỗi lần tích điểm sinh một lô hết hạn sau N tháng (points-expiry-date.ts:19-20), nên khách mua nhiều lần sẽ có lô ở nhiều ngày khác nhau.",
+    "scenario": "Khách có 3 lô: 100 điểm hết hạn 10/11, 200 điểm hết hạn 12/11, 5.000 điểm hết hạn 15/11. Ngày 03/11 nhận tin '100 điểm hết hạn 10/11'. Lượt 10/11 08:00 bị dedup vì sentAt 03/11 08:00:0x lớn hơn hoặc bằng since. Ngày 11/11 nhận tin '200 điểm hết hạn 12/11' (mã cũ ghi '5.200'). Lượt kế được gửi sớm nhất là 19/11, lúc lô 5.000 điểm đã hết hạn ngày 15/11. Khách mất 5.000 Điểm Xanh mà không tin nào nhắc tới số điểm đó.",
+    "fix": "Dedup theo ngày hết hạn thay vì theo khoảng reminderDays, như fix_note đã nêu: bỏ qua nếu đã có POINTS_EXPIRING với payload.date bằng formatVnDate(next.expiresAt), nếu cần thì thêm một trần chống spam ngắn (ví dụ 1 ngày). Thêm unit test 3 lô ở 3 ngày như trên: sau lượt nhắc lô đầu, lượt kế vẫn nhắc lô thứ hai và lô thứ ba."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/subscriptions/subscriptions.service.ts:530-531",
+    "problem": "TZ-01 còn một đường lọt vì không có migration làm tròn nextRunAt. Gói cũ còn lưu giờ lẻ trong ngày hôm nay mà khách bật lại sau cron 03:00 thì giữ nguyên nextRunAt (chưa nhỏ hơn now). Cron hôm nay đã chạy, nên gói chỉ ra đơn ở cron 03:00 ngày mai, trễ một ngày so với 'Lần kế: hôm nay'.",
+    "scenario": "Gói cũ PAUSED, nextRunAt = 14:23 VN ngày 11/11 (từ lần claim kiểu cũ). Khách bật lại lúc 10:00 ngày 11/11, màn hình ghi 'Lần kế: 11/11', nhưng đơn ra lúc 03:00 ngày 12/11.",
+    "fix": "Trong setStatus, coi nextRunAt nhỏ hơn 0h VN ngày mai là đã lỡ nhịp hôm nay: so với tomorrowVn thay vì resumeNow, hoặc dời về tomorrowVn. Cách khác là chạy migration làm tròn nextRunAt về 0h VN như fix_note."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/admin/admin-order-items-export.ts:26",
+    "problem": "TK-06: fix_note chốt đổi nhãn cột 'Gian hàng' thành 'Gian hàng CTV' nhưng bản sửa chưa đổi. Nay có thêm cột 'Nơi giao: Gian hàng tự giao: <tên>' nên kế toán dễ nhầm hai cột. Ngoài ra, các yêu cầu trả APPROVED tạo trước khi có trả theo dòng (không có return_request_items) sẽ ra SL đã trả = 0 và tiền hoàn = 0.",
+    "scenario": "Đơn của CTV gắn gian hàng A, do gian hàng B tự giao. CSV có cột 'Gian hàng' = A và 'Nơi giao' = 'Gian hàng tự giao: B'. Kế toán lọc 'Gian hàng' = B thì không ra đơn này.",
+    "fix": "Đổi nhãn thành 'Gian hàng CTV'. Đổi nhãn không đổi vị trí nên bảng tính tham chiếu theo vị trí không lệch. Ghi chú trong runbook rằng các yêu cầu trả cũ không có dòng."
+   }
+  ],
+  "checked": "Đã đọc diff 779c82a48...ops/1104-e và mã xung quanh trên ops/1104-e: subscriptions.service.ts (create/placeFirstOrder, intervalPatch, setStatus, skipCycle, processDue, runCycle, retryOrSkipCycle, placeCycleOrder), vn-time.ts, format-date của web và Mini App, subscription-options.ts; loyalty-expiry.service.ts (computePointExpiry, nextPointExpiry, remindExpiringPoints, dedup), schema NotificationLog, points-expiry-date.ts; remarketing.service.ts và Coupon.startAt (không null); admin-order-items-export.ts, schema ReturnRequest/ReturnRequestItem (chỉ có REQUESTED/APPROVED/REJECTED), order-returns.service.ts (refundAmount từng dòng ghi lúc duyệt), FORMULA_START trong row(). Đã grep mọi chỗ ghi/đọc nextRunAt và mọi chỗ gọi processDue (chỉ có cron). Đã đọc các race spec subscription-* và admin-reports để xem có vỡ kỳ vọng không: các khoảng 27–29 ngày vẫn đúng, CSV dùng toContain nên không lệch. TZ-01: CAS so khớp đúng giá trị đã quét vẫn chặn double-claim; mốc cắt lt 0h VN ngày mai không lấy retryAt (0h ngày mai) hay gói hẹn ngày mai; tạo gói giao ngay quanh 03:00 không ra hai đơn vì nextRunAt được ghi trong cùng tx; idempotencyKey không trùng; không thấy đơn ra sớm hơn ngày khách thấy. Đã chạy jest subscriptions.service.spec.ts và loyalty-expiry.service.spec.ts: 209/209 xanh.",
+  "label": "review:e#1"
+ },
+ {
+  "package": "a2",
+  "verdict": "CHANGES",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/e2e/tests/admin-customer-refunds.spec.ts:113",
+    "problem": "RC-01 cho needsClaim luôn trả true (apps/web/src/lib/customer-refunds-admin.ts:82), nhưng spec Playwright chưa được sửa theo. Fixture mặc định refund() ở dòng 42-64 là dòng END_CUSTOMER, userId null, PENDING, và các ca vẫn chờ nút \"Đã chuyển khoản\" hiện thẳng trên hàng chờ (các dòng 113, 149, 188, 201, 222, 244). Spec này nằm trong testMatch của project admin (playwright.config.ts:118) và chạy trong .github/workflows/e2e.yml.",
+    "scenario": "CI e2e chạy trên nhánh r3: tab Hoàn tiền khách vẽ dòng r1 PENDING theo nhánh needsClaim, tức là ra nút \"Bắt đầu chuyển khoản\" (customer-refunds-tab.tsx:699). Lệnh expect(r1.getByRole('button',{name:'Đã chuyển khoản'})).toBeVisible() hết giờ chờ, nên khoảng 6 ca đỏ và chặn gate merge.",
+    "fix": "Sửa fixture e2e theo luật mới. Ca \"Đã chuyển khoản\" dùng dòng status PROCESSING, claimedBy là admin đang đăng nhập. Thêm một ca kiểm dòng END_CUSTOMER PENDING chỉ có nút \"Bắt đầu chuyển khoản\" và gọi đúng /claim."
+   },
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/orders/returns-admin.controller.ts:23",
+    "problem": "RB-05 sửa thiếu. forViewer chỉ xoá bankName, bankAccountNo, bankAccountName ở cấp ngoài cùng của dòng. withContext (order-returns.service.ts:876-879) vẫn gắn thêm `refund: { method, status, amount, bankName, bankAccountNo, completedAt }` lấy từ OrderCustomerRefund. Khoản hoàn RETURN về ngân hàng có bankAccountNo đầy đủ (refund-queue.ts:156, hoặc số admin gõ khi claim). Test returns-admin.controller.spec.ts chỉ mock dòng phẳng, không có trường refund, nên test xanh mà không chứng minh được là hết lộ.",
+    "scenario": "Nhân viên chỉ có nhóm KHO gọi GET /admin/return-requests?limit=100, hoặc ?status=TO_RECEIVE (màn chính của KHO), hoặc POST /admin/return-requests/:id/received. Phản hồi vẫn có data[i].refund.bankAccountNo = '0123456789' và refund.bankName = 'MB' của mọi khách chọn hoàn về ngân hàng. Đây đúng là kịch bản lộ dữ liệu của RB-05, chỉ thiếu tên chủ tài khoản.",
+    "fix": "Trong forViewer, xoá thêm refund.bankName và refund.bankAccountNo (copy lồng refund). Cách gọn hơn là truyền viewer vào withContext để không select hai cột này. Spec mock thêm `refund: { bankAccountNo, bankName }` và assert cả hai không còn trong list lẫn received."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/common/payout-paid-conflict.ts:21",
+    "problem": "Câu 409 dùng chung một khuôn \"Phiếu đã được X xác nhận chuyển… liên hệ người nhận để thu hồi khoản chuyển trùng\" cho mọi trường hợp. Lệnh rút CTV (affiliate.service.ts:2355) trên màn hình gọi là \"lệnh\", không phải \"phiếu\". Phiếu gian hàng âm (gian hàng nợ Tubu, nút \"Đã thu\") thì không có tiền chuyển đi, nên câu \"thu hồi khoản chuyển trùng\" sai nghĩa.",
+    "scenario": "Hai ADMIN cùng bấm \"Đã thu\" cho phiếu −3.000.000đ. Người sau đọc \"Phiếu đã được An xác nhận chuyển…, liên hệ người nhận để thu hồi khoản chuyển trùng\", dù Tubu là bên nhận tiền. Kế toán chi lệnh rút CTV thì đọc chữ \"Phiếu\".",
+    "fix": "Thêm tham số danh từ cho hàm (\"Lệnh rút\" hoặc \"Phiếu\"). Với payout.amount < 0 dùng câu \"đã được X xác nhận đã thu\" và bỏ vế thu hồi."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/admin/payout-admin-tab.tsx:255",
+    "problem": "RELOAD_HINT nói về \"Đã chi\" nhưng onError dùng chung cho cả ba thao tác approve, reject và markPaid. Duyệt hoặc từ chối mà gặp 5xx hay hết giờ thì vẫn hiện câu nhắc xem lệnh đã \"Đã chi\" chưa.",
+    "scenario": "ADMIN bấm Duyệt, máy chủ trả 500. Ô lỗi hiện \"Máy chủ đang bận, thử lại nhé. Tải lại danh sách để xem lệnh đã sang \"Đã chi\" chưa trước khi chi lần nữa.\", lệch với thao tác vừa làm.",
+    "fix": "Chỉ nối RELOAD_HINT khi action là markPaid (lấy từ biến mutate variables). Với approve/reject dùng câu nhắc riêng \"xem lệnh đã sang Đã duyệt/Từ chối chưa\"."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/admin/customer-refund-paid-dialog.tsx:201",
+    "problem": "Hộp \"Bắt đầu chuyển khoản\" giờ cũng mở cho dòng khách cuối đơn CTV, nhưng lời trong hộp vẫn chỉ viết cho khoản có chủ tài khoản: \"nơi nhận được khoá, khách không đổi sang Ví Tubu được nữa\". Khách cuối vốn không có Ví để đổi; với dòng này, mục đích khoá là để hai người không cùng chuyển. needsClaim giờ luôn true nên nhánh PENDING không claim ở tab (customer-refunds-tab.tsx:699) thành mã chết.",
+    "scenario": "Admin bấm \"Bắt đầu chuyển khoản\" cho khoản END_CUSTOMER 500.000đ và đọc câu về Ví Tubu, không đúng với dòng đang xử lý.",
+    "fix": "Khi needsBankAccount(refund) là false, đổi câu thành kiểu \"Khoá khoản này về bạn để người khác không chuyển trùng\". Bỏ tham số và nhánh chết của needsClaim."
+   }
+  ],
+  "checked": "Đọc diff 779c82a48...ops/1104-a2 (5 commit) và mã xung quanh ở worktree r3. customer-refunds.service: claim, claimGuard, assertStaffMayHandle, markPaid, notTransferableReason; markPaid từ PENDING bị chặn cho mọi MANUAL_TRANSFER, nhánh allowed chỉ còn PROCESSING + claimedBy. Web: customer-refunds-tab, customer-refund-paid-dialog (staffBlocked khớp với 403 claim của Kế toán), markPaidFailure, STALE_PATTERN. Tìm mọi chỗ gọi markCustomerRefundPaid: chỉ có dialog. merchant-fulfilment.markPayoutPaid và affiliate.markPayoutPaid cùng payout-paid-conflict: cùng người, cùng mã GD thử lại sau hết giờ vẫn thành công (web giữ bankRef khi lỗi; CTV không gửi mã thì !bankRef cũng ra thành công). Grep các race spec và unit spec gọi markPayoutPaid: không ca nào dựa vào việc người khác gọi lần hai được 200 hoặc 400; ca cancel/markPaid song song vẫn ra 'đã bị huỷ'. Web không bắt riêng status 400 hay 409 của mark-paid. RB-02: isStaffOwnOrder so cả endCustomerKey và shippingAddress.phone, khớp với endCustomerPayee mà refundEndCustomer dùng; đơn khách tự đặt kèm referrer đã có assertNotOwnReturn chặn; review() là đường duyệt duy nhất (một controller gọi). RB-05: withContext còn trả refund.bankAccountNo và refund.bankName, forViewer không xoá phần lồng này, áp cho cả list, TO_RECEIVE và received. Các endpoint KHO khác (admin orders, ops) không select bank*. RC-04: CAS thêm confirmedAt ≤ threshold rồi findUniqueOrThrow trong cùng tx sau UPDATE, nên đọc đúng dòng đã khoá. ERR-03: error-text.ts actionErrorText/loadErrorText. E2E: apps/e2e/tests/admin-customer-refunds.spec.ts chưa được cập nhật cho RC-01 và nằm trong testMatch admin của playwright.config.ts:118. Không chạy test nào; mọi kết luận đến từ đọc và lần theo mã.",
+  "label": "review:a2#2"
+ },
+ {
+  "package": "e",
+  "verdict": "CHANGES",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/loyalty/loyalty-expiry.service.ts:559",
+    "problem": "TK-04 làm hồi quy: tin nhắc giờ chỉ báo các lô cùng ngày VN với lô sớm nhất, nhưng dedup ở dòng 563-568 vẫn chặn mọi tin POINTS_EXPIRING trong reminderDays (7 ngày). Lô hết hạn sau đó trong cùng 7 ngày không bao giờ được nhắc. Bản cũ ít nhất còn cộng số điểm của lô đó vào tin.",
+    "scenario": "Khách có lô A 100 điểm hết hạn D+2 và lô B 5.000 điểm hết hạn D+5. Đây là chuyện thường với khách mua nhiều đơn cách nhau vài ngày. 08:00 ngày D, tin ghi '100 Điểm Xanh sắp hết hạn vào D+2'. Từ D+1 tới D+5, findFirst thấy tin đã gửi ngày D (vẫn trong 7 ngày) nên bỏ qua. Lô B mất 5.000 điểm mà khách không được nhắc lần nào. Bản cũ gửi '5.100 điểm ... D+2' nên khách còn biết có 5.000 điểm sắp mất.",
+    "fix": "Dedup theo ngày hết hạn thay vì theo khoảng 7 ngày. Ví dụ gọi notifySafe với opts.dedupeKey = `points-exp:${vnDateKey(next.expiresAt)}` (notifications.service.ts:116 đã có sẵn dedupeKey) rồi bỏ findFirst theo sentAt. Cũng có thể giữ chặn 1 tin/ngày nhưng cho gửi khi payload.data.date khác ngày đã nhắc. Thêm unit: hai lô D+2 và D+5, chạy cron ở D rồi D+3, kỳ vọng ở D+3 có tin '5.000 ... D+5'."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/admin/admin-order-items-export.ts:113",
+    "problem": "Cột 'SL đã trả' và 'Tiền đã hoàn cho dòng' chỉ cộng từ return_request_items APPROVED. Các đường hoàn cả đơn không qua yêu cầu trả thì không có dòng return_request_items nào, nên hai cột này ghi 0 dù tiền đã hoàn đủ. Ví dụ: Pancake trạng thái 'Đã hoàn' lật đơn sang RETURNED hoặc CANCELLED (pancake.processor.ts:504), hoặc huỷ một đơn đã thanh toán.",
+    "scenario": "Đơn DELIVERED 300.000đ được Pancake báo 'Đã hoàn', nên reverseFinancials hoàn đủ vào Ví. CSV dòng hàng ghi 'Đã trả hàng', 'Khách trả cho dòng' 300000, 'SL đã trả' 0, 'Tiền đã hoàn cho dòng' 0. Kế toán lấy 'Khách trả' trừ 'Tiền đã hoàn' sẽ ra dư 300.000đ.",
+    "fix": "Với đơn RETURNED hoặc CANCELLED đã hoàn mà không có return item, ghi số lượng và paidTotal của dòng, hoặc để trống và ghi rõ trong tên cột là 'theo yêu cầu trả hàng'. Thêm ca test cho đơn RETURNED do Pancake."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/admin/admin-order-items-export.ts:26",
+    "problem": "fix_note đã chốt đổi nhãn 'Gian hàng' thành 'Gian hàng CTV' để khỏi nhầm với cột mới 'Nơi giao', nhưng bản sửa chưa làm. Cũng có thể là cố ý, để bảng tính đang tham chiếu cột theo tên không bị gãy.",
+    "scenario": "Đơn gian hàng X tự giao mà CTV thuộc gian hàng Y: cột 'Gian hàng' ghi Y, còn 'Nơi giao' ghi 'Gian hàng tự giao: X'. Kế toán lọc theo cột 'Gian hàng' để đối soát hàng tự giao sẽ lọc sai.",
+    "fix": "Đổi nhãn theo fix_note. Nếu giữ nhãn cũ để không gãy bảng tính thì ghi lý do vào PROGRESS."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/subscriptions/subscriptions.service.ts:531",
+    "problem": "Bản sửa không có migration làm tròn nextRunAt. Gói PAUSED cũ còn lưu giờ lẻ trong ngày (ví dụ 23:00 VN ngày D) và được bật lại trong chính ngày D, sau cron 03:00, thì giữ nguyên nextRunAt (vì nextRunAt lớn hơn now). Gói đó chỉ được lấy ở cron D+1, tức trễ 1 ngày so với 'Lần kế: D'. Chỉ ảnh hưởng dữ liệu cũ, hẹp.",
+    "scenario": "Gói PAUSED có nextRunAt = 16:00Z ngày D (23:00 VN). Khách bấm bật lại lúc 10:00 VN ngày D. Màn hình ghi 'Lần kế: D', nhưng đơn ra lúc 03:00 ngày D+1.",
+    "fix": "Tuỳ chọn: so sánh với startOfVnDay(nextRunAt) khi bật lại, hoặc chạy migration làm tròn một lần như fix_note. Không chặn merge."
+   }
+  ],
+  "checked": "Đọc diff 779c82a48...ops/1104-e (5 commit) và mã xung quanh trong apps/api/src/modules/subscriptions/subscriptions.service.ts: create, parseStartDate, intervalPatch, setStatus, processDue, runCycle, retryOrSkipCycle, placeCycleOrder. Grep mọi chỗ dùng nextRunAt và processDue ở api/web/miniapp, đọc formatDate của web/Mini App (hiện theo giờ VN), và soi ngưỡng trong các race spec subscription-* (vẫn khớp neo 0h, không chạy). TZ-01: không thấy gói nào ra hai đơn trong một ngày. Gói vừa claim có nextRunAt = 0h VN của hôm nay + w tuần, luôn không nhỏ hơn dueBefore. retryAt = 0h VN ngày mai, bằng đúng dueBefore nên không bị quét lại ở trang sau. CAS đổi sang so bằng nextRunAt đã quét vẫn chặn được hai instance chạy song song. firstRunAt tương lai luôn ở 0h VN. Ở mốc 17:00Z, startOfVnDay vẫn đúng ngày. Không ra đơn sớm hơn ngày khách thấy. TK-04: so nextPointExpiry với computePointExpiry, rồi lần theo dedup NotificationLog, ra lỗi P2 ở trên. TK-05: startAt trong schema Coupon là NOT NULL nên điều kiện lte không làm mất mã nào. TK-06: ReturnStatus chỉ có REQUESTED/APPROVED/REJECTED. Lúc duyệt trả, return_request_items.refundAmount được ghi lại theo từng dòng, nên trả một phần nhiều lần cộng đúng. csvCell đã chặn chèn công thức, cột mới đặt cuối, groupBy chạy một lần cho mỗi lô. Đã chạy jest subscriptions.service.spec.ts và loyalty-expiry.service.spec.ts: 209/209 xanh.",
+  "label": "review:e#2"
+ },
+ {
+  "package": "a2",
+  "verdict": "CHANGES",
+  "findings": [
+   {
+    "severity": "P2",
+    "file": "apps/api/src/modules/orders/customer-refunds.service.spec.ts:612",
+    "problem": "RC-01 đổi luật (markPaid từ PENDING luôn bị chặn) nhưng không sửa 4 ca cũ vẫn khẳng định 'khoản không chủ tài khoản xác nhận thẳng từ hàng chờ' (:612 it.each LATE_PAYMENT/OVERPAYMENT/RETURN, :656). Cả nhánh ops/1104-a2 lẫn ops/1104-r3 đều đỏ, nên gói này chưa qua gate unit.",
+    "scenario": "npx jest src/modules/orders/customer-refunds.service.spec.ts: 4 failed / 75 passed. markPaid('a1','r1',{bankRef:'FT123'}) trên dòng userId null PENDING ném 400 'Bấm \"Bắt đầu chuyển khoản\"...' (customer-refunds.service.ts:325), còn ca test chờ updateMany với OR:[{status:'PENDING'}].",
+    "fix": "Viết lại 4 ca theo luật mới: PENDING thì markPaid ra 400 và không gọi updateMany; claim xong (PROCESSING, claimedBy a1) thì markPaid ghi với OR:[{status:'PROCESSING',claimedBy:'a1'}]. Ca :656 (không báo REFUND_BANK_COMPLETED) dựng dòng PROCESSING. Chạy lại file này."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/modules/orders/returns-admin.controller.ts:28",
+    "problem": "RB-05 sửa chưa hết: forViewer chỉ xoá bank* ở cấp ngoài. withContext gắn thêm `refund` lồng bên trong, có bankName và bankAccountNo (order-returns.service.ts:878), nên KHO vẫn nhận đủ số tài khoản nhận hoàn. Test controller xanh chỉ vì dòng mock không có `refund`.",
+    "scenario": "Nhân viên chỉ có nhóm KHO gọi GET /admin/return-requests (hoặc POST :id/received) cho yêu cầu trả đã duyệt hoàn về ngân hàng. Phản hồi có `refund: { method:'MANUAL_TRANSFER', bankName:'MB', bankAccountNo:'0123456789', ... }`, mở DevTools là thấy.",
+    "fix": "Trong forViewer, xoá luôn refund.bankName và refund.bankAccountNo (giữ method/status/amount), hoặc truyền viewer vào withContext để KHO không select hai cột đó. Thêm ca test có `refund` lồng."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/api/src/common/payout-paid-conflict.ts:21",
+    "problem": "Câu 409 dùng chung cho mọi trường hợp nên sai ngữ cảnh: (1) lệnh rút CTV (affiliate.service.ts:2355) bị gọi là 'Phiếu'. (2) Phiếu gian hàng âm ('Đã thu', Tubu thu tiền) lại dặn 'liên hệ người nhận để thu hồi khoản chuyển trùng'. (3) Cùng một admin gửi lại với mã GD khác, hoặc lần đầu không có bankRef mà lần sau có (affiliate cho phép bỏ trống), sẽ nhận 409 nói chính mình là người khác; nếu fullName rỗng thì câu thành 'một quản trị viên khác'.",
+    "scenario": "Hai ADMIN cùng bấm 'Đã thu' một phiếu gian hàng nợ Tubu -500.000đ: người sau đọc 'Nếu bạn đã chuyển tiền, liên hệ người nhận để thu hồi', trong khi không ai chuyển tiền ra. Kế toán A chi lệnh rút không nhập mã GD, hết giờ, bấm lại có nhập mã: nhận 409 'Phiếu đã được một quản trị viên khác xác nhận chuyển'.",
+    "fix": "Truyền danh từ ('Phiếu'/'Lệnh rút') và chiều tiền vào alreadyPaidConflict. Khi paidBy === adminId thì nói 'Bạn đã xác nhận lúc …, mã GD …' thay cho câu 'người khác'."
+   },
+   {
+    "severity": "P3",
+    "file": "apps/web/src/components/admin/payout-admin-tab.tsx:255",
+    "problem": "Sau khi gộp với bc13cd6b1 (admin-error-text giữ nguyên lời tiếng Việt của 5xx), phép kiểm `text === e.message` coi mọi 5xx có chữ tiếng Việt là lời nghiệp vụ đã rõ kết quả, nên bỏ mất lời nhắc tải lại. Lỗi giống hệt ở merchant-fulfilment-tab.tsx:85.",
+    "scenario": "Kế toán bấm chi lệnh rút, giao dịch Prisma lỗi giữa chừng. PrismaExceptionFilter trả 500 'Lỗi cơ sở dữ liệu.' hoặc 'Đã có lỗi xảy ra, bạn thử lại sau nhé.'. Ô lỗi chỉ hiện câu đó, không có 'Tải lại danh sách để xem lệnh đã sang \"Đã chi\" chưa trước khi chi lần nữa', dù chưa rõ lệnh đã được ghi hay chưa.",
+    "fix": "Xét theo mã lỗi thay vì so chuỗi: chỉ bỏ lời nhắc khi e là ApiError có status < 500; mọi 5xx, NetworkError và hết giờ đều thêm lời nhắc tải lại."
+   }
+  ],
+  "checked": "Đọc toàn bộ diff 779c82a48...ops/1104-a2 và mã xung quanh: customer-refunds.service claim/markPaid/claimGuard/notTransferableReason; mọi chỗ ghi COMPLETED cho orderCustomerRefund (không còn đường nào xác nhận thẳng từ PENDING); web needsClaim/needsBankAccount và tab hoàn tiền. merchant-fulfilment.markPayoutPaid, affiliate.markPayoutPaid và các nơi gọi chúng (controller, web). Các spec cũ chờ 400 khi count=0 vẫn khớp vì mock không phải PAID. Cùng người gọi lại không gửi tin lần hai. order-returns.review cùng isStaffOwnOrder, refundEndCustomer/endCustomerPayee (SĐT lấy từ endCustomerKey hoặc shippingAddress.phone, đã được phủ) và đường huỷ đơn của CSKH (hàng chưa giao, tiền là của chính người trả, không lỗ). jwt.strategy: role/staffPermissions đọc tươi từ DB. RB-05: RETURN_LIST_SELECT, withContext (nested refund bank), ORDER_LIST_REFUNDS (đã sạch). Cashback CAS: confirmedAt lte cộng đọc lại userReward trong tx sau khi khoá dòng là đúng. error-text, admin-error-text (gộp từ r3), markPaidFailure. Đã chạy: jest returns-admin.controller.spec.ts (pass) và customer-refunds.service.spec.ts (4 fail, ca cũ chưa sửa); vitest customer-refunds-tab.spec.tsx (93 pass). Không chạy race spec.",
+  "label": "review:a2#1"
+ }
+]
