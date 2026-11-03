@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
+import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
 import { getErrorMessage } from '../../services/api';
 import { fetchHasAnyOrder, getPublicConfig, type PublicConfig } from '../../services/shop-api';
@@ -134,7 +134,8 @@ export function NewCustomerGift() {
   return (
     <section aria-label={vi.home.newGift.title} style={{ padding: SECTION_PAD }}>
       <Card variant="flat" padding={0}>
-        <div style={{ minHeight: HOME_HERO_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 0 16px' }}>
+        <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '8px 12px 12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
             aria-expanded={expanded}
@@ -150,9 +151,6 @@ export function NewCustomerGift() {
             <span style={{ flex: 1, minWidth: 0 }}>
               <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {vi.home.newGift.title}
-              </Text>
-              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
-                {headline}
               </Text>
             </span>
             <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
@@ -181,6 +179,10 @@ export function NewCustomerGift() {
               {vi.home.newGift.cta}
             </Button>
           )}
+          </div>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {headline}
+          </Text>
         </div>
         {linking === 'failed' && (
           <Text variant="caption" tone="danger" as="p" style={{ margin: 0, padding: '0 16px 8px' }}>
@@ -240,7 +242,7 @@ export function NewCustomerGift() {
 function NewCustomerGiftSkeleton() {
   return (
     <div data-testid="new-customer-gift-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
-      <Skeleton height={HOME_HERO_HEIGHT} radius="var(--radius-card)" />
+      <Skeleton height={HOME_GIFT_HEIGHT} radius="var(--radius-card)" />
     </div>
   );
 }

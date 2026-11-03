@@ -8,6 +8,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
 
+import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
 import { NewCustomerGift } from './new-customer-gift';
 
 // Số cố ý KHÁC mọi mặc định trong mã: nếu khối còn viết cứng 30.000đ/199.000đ/10.000đ/12% thì test đỏ.
@@ -71,6 +72,15 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(text).toContain('Mỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1.000đ');
     expect(text).toContain('Đặt định kỳ giảm 17% mỗi đơn');
     expect(text).not.toMatch(/30\.000|199\.000|10\.000đ|12%/);
+  });
+
+  it('câu lợi ích chiếm cả bề ngang dưới hàng tiêu đề + nút (không bị bóp thành cột hẹp rồi cắt mất điều kiện), thẻ cao HOME_GIFT_HEIGHT', async () => {
+    const r = region(await mount())!;
+    const headline = Array.from(r.querySelectorAll<HTMLElement>('div')).find((d) => d.textContent === 'Mã 25.000đ · cho đơn từ 150.000đ')!;
+    const cta = Array.from(r.querySelectorAll('a')).find((a) => a.textContent?.includes('Chọn sản phẩm') || a.textContent?.includes('Nhận'))!;
+    expect(headline.style.getPropertyValue('-webkit-line-clamp') || headline.style.webkitLineClamp).toBe('2');
+    expect(cta.parentElement!.contains(headline)).toBe(false);
+    expect((r.querySelector('[style*="min-height"]') as HTMLElement).style.minHeight).toBe(`${HOME_GIFT_HEIGHT}px`);
   });
 
   it('dải gọn: tóm tắt mã chào mừng trên một dòng, chưa mở chi tiết', async () => {

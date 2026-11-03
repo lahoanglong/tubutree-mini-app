@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { shelf } from './merch/shelves';
 import {
-  clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
+  clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, rememberActiveOrder, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
@@ -514,5 +514,29 @@ describe('HOME_BEST_SELLER_LIMIT (F9 MINOR)', () => {
     const serverLimit = /export const HOME_BEST_SELLER_LIMIT = (\d+)/.exec(api)?.[1];
     expect(serverLimit).toBeTruthy();
     expect(HOME_BEST_SELLER_LIMIT).toBe(Number(serverLimit));
+  });
+});
+
+describe('rememberActiveOrder — đơn vừa đặt để Trang chủ lần sau giữ chỗ Việc cần làm', () => {
+  const store = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('chưa nhớ dòng nào thì ghi 1 dòng cho tài khoản này', () => {
+    const s = store();
+    rememberActiveOrder(s, 'u1');
+    expect(readTodoRows(s, 'u1')).toBe(1);
+  });
+  it('đã nhớ 2 dòng thì giữ nguyên, không hạ xuống 1', () => {
+    const s = store();
+    writeTodoRows(s, 'u1', 2);
+    rememberActiveOrder(s, 'u1');
+    expect(readTodoRows(s, 'u1')).toBe(2);
+  });
+  it('không có kho hoặc không có tài khoản thì không làm gì', () => {
+    expect(() => rememberActiveOrder(null, 'u1')).not.toThrow();
+    const s = store();
+    rememberActiveOrder(s, undefined);
+    expect(readLastTodoRows(s)).toBe(0);
   });
 });

@@ -312,6 +312,16 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(mocks.scrollRestoration.mock.calls.every(([key]) => key === 'home')).toBe(true);
   });
 
+  it('Danh mục còn tải thì khôi phục cuộn chưa sẵn sàng (trang còn ngắn thì vị trí bị kẹp); tải xong mới sẵn sàng', async () => {
+    let release!: (v: unknown[]) => void;
+    mocks.fetchCategories.mockImplementation(() => new Promise((r) => { release = r; }));
+    renderHome();
+    await waitFor(() => expect(mocks.scrollRestoration).toHaveBeenCalled());
+    expect(mocks.scrollRestoration.mock.calls.every(([, ready]) => ready === false)).toBe(true);
+    await act(async () => release([]));
+    await waitFor(() => expect(mocks.scrollRestoration).toHaveBeenLastCalledWith('home', true));
+  });
+
   describe('thứ tự khối không nhảy sau khung hình đầu (khách cũ mở lạnh)', () => {
     const storeKind = (value: unknown) => localStorage.setItem(HOME_KIND_KEY, typeof value === 'string' ? value : JSON.stringify(value));
     const deferred = <T,>() => {

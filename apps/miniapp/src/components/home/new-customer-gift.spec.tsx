@@ -26,6 +26,7 @@ vi.mock('../../store/auth', () => ({
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
 import { NewCustomerGift } from './new-customer-gift';
 import { HttpError } from '../../services/http';
 
@@ -76,6 +77,16 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region).toHaveTextContent('Mã 25.000đ · cho đơn từ 150.000đ');
     expect(region).not.toHaveTextContent('Dùng đến');
     expect(region).not.toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
+  });
+
+  it('câu lợi ích chiếm cả bề ngang dưới hàng tiêu đề + nút (không bị bóp thành cột hẹp rồi cắt mất điều kiện), thẻ cao HOME_GIFT_HEIGHT', async () => {
+    renderGift();
+    const region = await section();
+    const headline = Array.from(region.querySelectorAll<HTMLElement>('div')).find((d) => d.textContent === 'Mã 25.000đ · cho đơn từ 150.000đ')!;
+    const cta = Array.from(region.querySelectorAll('button')).find((b) => b.textContent?.includes('Chọn sản phẩm'))!;
+    expect(headline.style.getPropertyValue('-webkit-line-clamp') || headline.style.webkitLineClamp).toBe('2');
+    expect(cta.parentElement!.contains(headline)).toBe(false);
+    expect((region.querySelector('[style*="min-height"]') as HTMLElement).style.minHeight).toBe(`${HOME_GIFT_HEIGHT}px`);
   });
 
   it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và các lợi ích mua trực tiếp (không có định kỳ vì Mini App ẩn định kỳ), số đọc từ cấu hình', async () => {

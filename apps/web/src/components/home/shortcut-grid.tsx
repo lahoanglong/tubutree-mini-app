@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_SETTLING_HEIGHTS, HOME_SHORTCUT_SLOTS, SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -53,9 +54,9 @@ const cellStyle = {
  * còn lại nằm trong sheet "Tất cả". Mục có cờ tắt bị ẩn, mục kế lấp chỗ. Mục có route web chưa làm xong bị bỏ TRƯỚC khi chia ô cố định (nên ô cố định
  * luôn đủ 4 khi còn mục). "Tích điểm đơn sàn" chưa có trang web nên không bao giờ hiện. Từ lg thanh điều hướng website đã có các lối này nên khối ẩn.
  */
-export function ShortcutGrid() {
+export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
   const router = useRouter();
-  const cfg = usePublicConfig();
+  const cfg = usePublicConfig(initialConfig);
   const [earnOpen, setEarnOpen] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
   const authed = useAuthPhase() === 'authenticated';

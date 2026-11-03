@@ -38,6 +38,12 @@ const UNKNOWN: readonly HomeBlockId[] = [
 /** Chiều cao cố định của thẻ thành viên và dải quà khách mới (không tính đệm dưới): hai khối thay chỗ nhau không làm trang nhảy. */
 export const HOME_HERO_HEIGHT = 64;
 
+/**
+ * Dải quà khách mới (thu gọn): hàng tiêu đề + nút (44) rồi câu lợi ích chiếm cả bề ngang (một dòng ở 375px; câu dài hai dòng cao hơn khoảng 20).
+ * Nút nằm cùng hàng với tiêu đề nên câu không bị bóp thành cột 13 chữ rồi cắt mất điều kiện số tiền.
+ */
+export const HOME_GIFT_HEIGHT = 84;
+
 export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
   return kind === 'returning' ? RETURNING : kind === 'new' ? NEW : UNKNOWN;
 }
@@ -379,6 +385,15 @@ export function writeTodoRows(storage: MemoryStorage | null, userId: string, row
   } catch {
     /* hết quota / bị chặn: lần sau không có khung chờ, khối vẫn đúng */
   }
+}
+
+/**
+ * Khách vừa đặt đơn: lần mở Trang chủ sau (kể cả mở lạnh) chắc chắn có Việc cần làm, nhưng /me/summary chưa về thì chưa biết. Nhớ ít nhất 1 dòng
+ * để khung chờ giữ chỗ ngay từ khung hình đầu, thay vì chèn dải vào làm Danh mục và Bán chạy nhảy xuống. Không hạ số dòng đã nhớ.
+ */
+export function rememberActiveOrder(storage: MemoryStorage | null, userId: string | null | undefined): void {
+  if (!storage || !userId) return;
+  if (readTodoRows(storage, userId) === 0) writeTodoRows(storage, userId, 1);
 }
 
 /** Số dòng đã nhớ của tài khoản dùng gần nhất (bất kể là ai): để dựng khung chờ trong lúc còn khôi phục phiên. */

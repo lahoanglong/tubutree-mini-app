@@ -172,6 +172,12 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(body.referralCode).toBe('AB12CD34');
   });
 
+  it('đặt đơn xong: nhớ có Việc cần làm cho lần mở Trang chủ sau (khung chờ giữ chỗ từ khung hình đầu)', async () => {
+    renderPage();
+    await placeOrderClick();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_home_todo_rows') ?? 'null')).toEqual({ userId: 'u1', rows: 1 }));
+  });
+
   it('dòng đồng ý điều khoản nằm trong nội dung trang ngay trên thanh Đặt hàng (không làm thanh cao thêm), hai link mở popup Điều khoản và Chính sách đổi trả trong app, không có ô tick', async () => {
     renderPage();
     const line = await screen.findByTestId('order-consent');

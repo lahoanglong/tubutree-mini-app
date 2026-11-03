@@ -31,6 +31,8 @@ import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
+import { rememberActiveOrder } from '@tubutree/app-core/home-layout';
+import { browserStorage } from '../utils/recently-viewed';
 import {
   checkoutPoints,
   isInvoiceValid,
@@ -321,6 +323,7 @@ export default function CheckoutPage() {
       }
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
+      rememberActiveOrder(browserStorage(), user?.id);
       if (attachWaste && pickupReq) void queryClient.invalidateQueries({ queryKey: ['waste'] });
       // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
       // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.

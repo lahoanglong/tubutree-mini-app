@@ -25,8 +25,9 @@ export function resolvePublicConfig(data: PublicConfig | undefined): PublicConfi
 }
 
 /** `isLoaded` = số liệu đến từ server thật; màn nào hứa một con số cụ thể với khách nên chờ `isLoaded`. */
-export function usePublicConfig(): PublicConfig & { isLoaded: boolean; isPending: boolean } {
-  const q = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
+/** `initial`: bản dựng sẵn ở server, chỉ làm placeholder (không vào cache) để lần dựng đầu có cờ thật mà vẫn tải lại bản mới. */
+export function usePublicConfig(initial?: PublicConfig): PublicConfig & { isLoaded: boolean; isPending: boolean } {
+  const q = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, ...(initial ? { placeholderData: initial } : {}) });
   return { ...resolvePublicConfig(q.data), isLoaded: q.data != null, isPending: q.isPending };
 }
 

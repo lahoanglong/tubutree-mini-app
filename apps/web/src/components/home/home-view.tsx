@@ -157,7 +157,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       ) : null,
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,
-    shortcuts: <ShortcutGrid />,
+    shortcuts: <ShortcutGrid initialConfig={initial.publicConfig} />,
     purchased: <PurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (
       <FlashSale
