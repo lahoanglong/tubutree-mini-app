@@ -21,6 +21,7 @@ import {
 import { haptic } from '../../utils/haptic';
 import { getErrorMessage } from '../../services/api';
 import { isHttpError } from '../../services/http';
+import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
 import { vi } from '../../i18n/vi';
 import { formatDrops, formatPoints } from '../../utils/format';
 import { useLockedMutation } from './use-locked-mutation';
@@ -211,7 +212,12 @@ export function useGameActions({
       void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     },
-    onError,
+    onError: (e: unknown) => {
+      const message = getErrorMessage(e);
+      if (!isStaleQuizMessage(message)) return onError(e);
+      openSnackbar({ text: gameMoreCopy.quiz.staleSet, type: 'warning' });
+      void queryClient.invalidateQueries({ queryKey: ['game', 'quiz'] });
+    },
   }, ({ id }) => id);
 
   return {

@@ -54,7 +54,7 @@ export function SeasonPass({
       {!pass.premiumEligible && (
         <p className="mt-2 flex items-center gap-1.5 text-caption text-promo-fg">
           <Lock className="h-4 w-4 flex-none" aria-hidden="true" />
-          Cần đăng ký định kỳ để mở phần thưởng Cao cấp.
+          Cần có gói định kỳ đã giao ít nhất một đơn để mở phần thưởng Cao cấp.
         </p>
       )}
 

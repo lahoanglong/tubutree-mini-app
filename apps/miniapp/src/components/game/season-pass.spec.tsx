@@ -45,6 +45,7 @@ describe('SeasonPass — icon nét thay emoji (D7-6)', () => {
     const hint = screen.getByText(viText.game.seasonPass.premiumHint);
     expect(hint.querySelector('svg')).not.toBeNull();
     expect(hint.textContent).toBe(viText.game.seasonPass.premiumHint);
+    expect(hint.textContent).toContain('đã giao ít nhất một đơn');
   });
 });
 

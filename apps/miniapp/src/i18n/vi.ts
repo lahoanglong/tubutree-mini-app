@@ -893,7 +893,7 @@ export const vi = {
       claim: 'Nhận',
       claimed: 'Đã nhận',
       locked: 'Chưa mở',
-      premiumHint: 'Cần đăng ký định kỳ để mở phần thưởng Cao cấp.',
+      premiumHint: 'Cần có gói định kỳ đã giao ít nhất một đơn để mở phần thưởng Cao cấp.',
       reward: (r: { type: 'SEEDS' | 'POINTS'; amount: number }) =>
         r.type === 'SEEDS' ? formatDrops(r.amount) : formatPoints(r.amount),
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',
