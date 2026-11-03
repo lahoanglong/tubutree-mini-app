@@ -6,6 +6,10 @@ const RETRY_MS = 50;
 // Cuộn vô tận nạp từng trang: tới được độ sâu cũ cần vài vòng tải, máy chậm mất vài giây.
 const MAX_MS = 4000;
 const POP_WINDOW_MS = 2000;
+const SETTLE_MS = 300;
+// Sau một cú bấm, chuyển trang mềm co chiều cao trang và cuộn cửa sổ về đầu trước khi hook này gỡ: các cú cuộn đó không phải vị trí khách rời đi.
+// Vị trí lúc bấm được giữ; hết nhịp này mà vẫn ở lại trang (bấm chip, mở hộp thoại) thì lấy lại vị trí hiện tại.
+const CLICK_HOLD_MS = 1500;
 
 // Mốc popstate gần nhất (Back/Forward). Trang mount ngay sau đó là quay lại; mở mới bằng link không có popstate nên luôn từ đầu trang.
 let lastPopAt = 0;
@@ -19,7 +23,8 @@ function consumeBackForwardLoad(): boolean {
   docNavChecked = true;
   try {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    return nav?.type === 'back_forward';
+    // Tài liệu nạp bằng Back vào trang khác (vd. /dang-nhap) rồi chuyển mềm sang đây không phải Back về trang này.
+    return nav?.type === 'back_forward' && new URL(nav.name, location.href).pathname === location.pathname;
   } catch {
     return false;
   }
@@ -52,12 +57,25 @@ export function useWindowScrollRestore(key: string): void {
     let lastY = window.scrollY;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
     let restoring = false;
+    let clickY: number | null = null;
+    let holdTimer: ReturnType<typeof setTimeout> | undefined;
     const onScroll = () => {
-      // Cú cuộn do chính lần khôi phục gây ra (có thể đang bị kẹp) không ghi đè vị trí đã lưu.
-      if (restoring) return;
+      // Cú cuộn do chính lần khôi phục gây ra (có thể đang bị kẹp) hoặc do chuyển trang sau cú bấm không ghi đè vị trí đã lưu.
+      if (restoring || clickY != null) return;
       lastY = window.scrollY;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => write(key, lastY), SAVE_DEBOUNCE_MS);
+    };
+    const onClick = () => {
+      if (restoring) return;
+      clickY ??= window.scrollY;
+      clearTimeout(saveTimer);
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        clickY = null;
+        lastY = window.scrollY;
+        write(key, lastY);
+      }, CLICK_HOLD_MS);
     };
 
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -65,8 +83,10 @@ export function useWindowScrollRestore(key: string): void {
     const stop = () => {
       stopped = true;
       restoring = false;
+      lastY = window.scrollY;
       clearTimeout(retryTimer);
       window.removeEventListener('touchstart', stop);
+      window.removeEventListener('pointerdown', stop);
       window.removeEventListener('wheel', stop);
       window.removeEventListener('keydown', stop);
     };
@@ -76,28 +96,33 @@ export function useWindowScrollRestore(key: string): void {
       const started = Date.now();
       window.scrollTo(0, y);
       lastY = window.scrollY;
-      if (window.scrollY < y - 1) {
-        restoring = true;
-        window.addEventListener('touchstart', stop, { passive: true });
-        window.addEventListener('wheel', stop, { passive: true });
-        window.addEventListener('keydown', stop);
-        const tick = () => {
-          if (stopped) return;
-          window.scrollTo(0, y);
-          if (window.scrollY >= y - 1 || Date.now() - started >= MAX_MS) return stop();
-          retryTimer = setTimeout(tick, RETRY_MS);
-        };
+      restoring = true;
+      let stableMs = 0;
+      window.addEventListener('touchstart', stop, { passive: true });
+      window.addEventListener('pointerdown', stop, { passive: true });
+      window.addEventListener('wheel', stop, { passive: true });
+      window.addEventListener('keydown', stop);
+      const tick = () => {
+        if (stopped) return;
+        window.scrollTo(0, y);
+        // Tới đích chưa đủ: trình duyệt còn có thể tự khôi phục vị trí cũ của nó sau popstate và kéo ngược. Giữ thêm một nhịp ngắn.
+        stableMs = window.scrollY >= y - 1 ? stableMs + RETRY_MS : 0;
+        if (stableMs >= SETTLE_MS || Date.now() - started >= MAX_MS) return stop();
         retryTimer = setTimeout(tick, RETRY_MS);
-      }
+      };
+      retryTimer = setTimeout(tick, RETRY_MS);
     }
     window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('click', onClick, true);
     return () => {
       const interrupted = restoring;
       stop();
       clearTimeout(saveTimer);
+      clearTimeout(holdTimer);
       window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('click', onClick, true);
       // Rời trang giữa lúc đang khôi phục: giữ vị trí đã lưu, không ghi vị trí bị kẹp.
-      if (!interrupted) write(key, lastY);
+      if (!interrupted) write(key, clickY ?? lastY);
     };
   }, [key]);
 }
