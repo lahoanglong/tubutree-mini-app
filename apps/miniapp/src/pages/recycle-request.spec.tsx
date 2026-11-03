@@ -215,7 +215,7 @@ describe('/recycle/r/:id — Gửi về kho (§4.5b)', () => {
     expect(mocks.copyText).toHaveBeenCalledWith('Kho Tubu TP.HCM\n0281234567\n99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM');
     expect(screen.getByText('Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn')).toBeInTheDocument();
     expect(screen.getByText('Kho từ chối kiện còn cước phải trả khi nhận')).toBeInTheDocument();
-    expect(screen.getByText('Nhập mã vận đơn trước 25/10')).toBeInTheDocument();
+    expect(screen.getByText('Nhập mã vận đơn đến hết 25/10')).toBeInTheDocument();
   });
   it.each([null, ''])('kho không có số điện thoại (%j): khối người nhận không có dòng trống và Sao chép bỏ dòng số', async (phone) => {
     mocks.getWasteRequest.mockResolvedValue(MAIL({ point: makeWarehouseContact({ phone }) }));
@@ -354,7 +354,7 @@ describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)'
     renderPage();
     const tl = await screen.findByRole('list', { name: 'Tiến độ yêu cầu' });
     const step = within(tl).getByText('Mang tới điểm').closest('li') as HTMLElement;
-    expect(step).toHaveTextContent('Mang tới Đại lý Cô Ba trước 25/10');
+    expect(step).toHaveTextContent('Mang tới Đại lý Cô Ba đến hết 25/10');
     expect(step).toHaveTextContent('12 Lê Lợi');
     expect(screen.getByText('Chờ bạn mang tới')).toBeInTheDocument();
     expect(screen.getByText('Ước tính 5.000 điểm')).toBeInTheDocument();

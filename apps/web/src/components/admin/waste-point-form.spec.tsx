@@ -86,11 +86,13 @@ describe('WastePointForm', () => {
     expect(c.textContent).toContain('Đề xuất 100.000 điểm cho điểm mới, 300.000 cho điểm đã chạy ổn');
   });
 
-  it('đại lý không có ô trao quà; kho có ô trao quà, luôn Đang nhận, không hạn mức', async () => {
+  it('đại lý không có ô trao quà; kho không có ô trao quà hay danh sách món, luôn Đang nhận, không hạn mức', async () => {
     const partner = await mount();
     expect(q(partner.c, 'input[name="giftHandoverEnabled"]')).toBeNull();
     const wh = await mount({ point: wastePoint({ id: 'wh', kind: 'WAREHOUSE', name: 'Kho Tubu HCM', monthlyQuotaPoints: null, staff: [] }) });
-    expect(q(wh.c, 'input[name="giftHandoverEnabled"]')).not.toBeNull();
+    expect(q(wh.c, 'input[name="giftHandoverEnabled"]')).toBeNull();
+    expect(wh.c.textContent).not.toContain('Món điểm nhận');
+    expect(wh.c.textContent).toContain('Kho nhận mọi món đang nhận và luôn trao quà');
     const status = wh.c.querySelector<HTMLSelectElement>('select[name="status"]')!;
     expect(status.disabled).toBe(true);
     expect(status.value).toBe('ACTIVE');
@@ -280,14 +282,11 @@ describe('WastePointForm, món chỉ kho Tubu HCMC nhận', () => {
     expect(body(callsTo(api, '/admin/waste/points', 'POST')[0]!).itemIds).toEqual(['i1']);
   });
 
-  it('chọn loại kho thì ô mở ra, tick được và body gửi món đó; quay lại đại lý thì khoá và bỏ tick', async () => {
+  it('chọn loại kho thì ô món biến mất, quay lại đại lý thì hiện lại và món chỉ-kho bị khoá', async () => {
     const { api, c } = await mount({ items: ITEMS_WITH_MILK, warehouseExists: false });
     click(q(c, 'input[name="kind"][value="WAREHOUSE"]'));
     await flush();
-    expect(q(c, MILK_BOX)!.disabled).toBe(false);
-    expect(c.textContent).not.toContain(WHY);
-    click(q(c, MILK_BOX));
-    expect(q(c, MILK_BOX)!.checked).toBe(true);
+    expect(q(c, MILK_BOX)).toBeNull();
     click(q(c, 'input[name="kind"][value="PARTNER"]'));
     await flush();
     expect(q(c, MILK_BOX)!.disabled).toBe(true);
@@ -295,13 +294,18 @@ describe('WastePointForm, món chỉ kho Tubu HCMC nhận', () => {
     expect(callsTo(api, '/admin/waste/points', 'POST')).toHaveLength(0);
   });
 
-  it('sửa kho: món chỉ-kho đang tick vẫn tick và bấm bỏ tick được', async () => {
-    const { c } = await mount({
+  it('sửa kho: không có ô món, đổi tên chỉ gửi tên', async () => {
+    const { api, c } = await mount({
       items: ITEMS_WITH_MILK,
       point: wastePoint({ id: 'wh', kind: 'WAREHOUSE', name: 'Kho Tubu HCM', monthlyQuotaPoints: null, staff: [], acceptedItemIds: ['i1', 'i2'] }),
     });
-    expect(q(c, MILK_BOX)!.disabled).toBe(false);
-    expect(q(c, MILK_BOX)!.checked).toBe(true);
+    expect(q(c, MILK_BOX)).toBeNull();
+    typeInto(q(c, 'input[name="name"]'), 'Kho Tubu HCMC');
+    click(btn(c, 'Lưu điểm'));
+    await flush();
+    const patches = callsTo(api, '/admin/waste/points/wh', 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(body(patches[0]!)).toEqual({ name: 'Kho Tubu HCMC' });
   });
 
   it('sửa đại lý cũ đang dính món chỉ-kho: hiện bỏ tick, lưu gửi danh sách món đã bỏ món đó', async () => {
@@ -337,12 +341,11 @@ describe('WastePointForm, món nguy hại cho điểm đại lý', () => {
     expect(q(c, PIN_BOX)!.checked).toBe(true);
   });
 
-  it('kho thì tick pin không hỏi', async () => {
+  it('kho thì không có ô tick pin', async () => {
     const { c } = await mount({ items: [wasteItem(), PIN], warehouseExists: false });
     click(q(c, 'input[name="kind"][value="WAREHOUSE"]'));
-    click(q(c, PIN_BOX));
     await flush();
+    expect(q(c, PIN_BOX)).toBeNull();
     expect(dlg()).toBeNull();
-    expect(q(c, PIN_BOX)!.checked).toBe(true);
   });
 });

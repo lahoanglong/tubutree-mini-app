@@ -7,9 +7,7 @@ export const WAREHOUSE_ONLY_TEXT = 'Chỉ kho TP.HCM nhận';
 
 export const wasteGuestCopy = {
   introTitle: 'Đổi bao bì lấy Điểm Xanh',
-  intro: 'Mang bao bì sạch tới điểm nhận hoặc gửi về kho Tubu. Điểm Xanh dùng để đổi quà và mã giảm giá.',
   stepsTitle: 'Cách đổi',
-  steps: ['Chọn món và số lượng bạn có', 'Mang tới điểm nhận hoặc gửi về kho Tubu', 'Tubu đếm xong là cộng Điểm Xanh cho bạn'],
   itemsTitle: 'Tubu nhận những món này',
   rulesLink: 'Xem Thể lệ chương trình',
   whyPhone: 'Cần số điện thoại để cộng Điểm Xanh đúng tài khoản của bạn.',
@@ -18,6 +16,22 @@ export const wasteGuestCopy = {
   historyButton: 'Đăng nhập',
   historyBody: 'Đăng nhập để xem các yêu cầu đổi rác của bạn.',
 } as const;
+
+/**
+ * Chữ giới thiệu và ba bước của màn khách chưa đăng nhập, dựng theo cờ công khai để không hứa cách giao mà admin đã tắt.
+ * Cờ pickup không nêu ở đây: thu kèm đơn chỉ có khi khách đang mua hàng.
+ */
+export function wasteIntroCopy(flags: { dropoff: boolean; mailin: boolean }): { intro: string; steps: readonly [string, string, string] } {
+  const tail = 'Điểm Xanh dùng để đổi quà và mã giảm giá.';
+  const first = 'Chọn món và số lượng bạn có';
+  const last = 'Tubu đếm xong là cộng Điểm Xanh cho bạn';
+  if (flags.dropoff && flags.mailin) {
+    return { intro: `Mang bao bì sạch tới điểm nhận hoặc gửi về kho Tubu. ${tail}`, steps: [first, 'Mang tới điểm nhận hoặc gửi về kho Tubu', last] };
+  }
+  if (flags.dropoff) return { intro: `Mang bao bì sạch tới điểm nhận. ${tail}`, steps: [first, 'Mang tới điểm nhận', last] };
+  if (flags.mailin) return { intro: `Gửi bao bì sạch về kho Tubu. ${tail}`, steps: [first, 'Gửi về kho Tubu', last] };
+  return { intro: `Đổi bao bì sạch lấy Điểm Xanh. ${tail}`, steps: [first, 'Chọn cách giao đang mở khi tạo yêu cầu', last] };
+}
 
 export const wasteStepCopy = {
   items: 'Bước 1/2: Chọn món',

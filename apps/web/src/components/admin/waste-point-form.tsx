@@ -214,8 +214,6 @@ function diffBody(full: WastePointUpsertRequest, base: AdminWastePointDTO, f: Fo
   if (base.kind === 'PARTNER') {
     set('status', f.status !== base.status);
     set('monthlyQuotaPoints', full.monthlyQuotaPoints !== base.monthlyQuotaPoints);
-  } else {
-    set('giftHandoverEnabled', full.giftHandoverEnabled !== base.giftHandoverEnabled);
   }
   return out;
 }
@@ -262,8 +260,13 @@ export function WastePointForm({
     if (Object.keys(errors).length > 0) return;
     const full = toBody(f);
     full.itemIds = (full.itemIds ?? []).filter((id) => !warehouseOnlyIds.has(id));
+    if (warehouse) {
+      delete full.itemIds;
+      delete full.giftHandoverEnabled;
+    }
     if (point) {
       const body = diffBody(full, point, f, initial);
+      if (warehouse) delete body.itemIds;
       if (Object.keys(body).length === 0) return;
       update.mutate({ id: point.id, body });
       return;
@@ -381,15 +384,13 @@ export function WastePointForm({
             {errors.quota && touched.quota && <p className="mt-0.5 text-[11px] text-danger-fg">{errors.quota}</p>}
           </div>
         )}
-        {warehouse && (
-          <label className="flex items-center gap-1.5 text-sm text-stone-800">
-            <input type="checkbox" name="giftHandoverEnabled" checked={f.giftHandoverEnabled} onChange={(e) => set({ giftHandoverEnabled: e.target.checked })} />
-            Trao quà tại điểm này
-          </label>
-        )}
         <Field label="Ghi chú nội bộ"><input name="note" className={INPUT_CLASS} value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
       </div>
 
+      {warehouse ? (
+        // Kho nhận mọi món đang nhận và luôn trao quà (API coi vậy ở quầy, hold và danh sách khách), nên không có công tắc nào ở đây.
+        <p className="text-sm text-stone-700">Kho nhận mọi món đang nhận và luôn trao quà. Muốn dừng nhận một món thì đổi trạng thái món đó ở mục Món đổi rác.</p>
+      ) : (
       <fieldset className="space-y-1">
         <legend className="text-xs font-medium text-stone-700">Món điểm nhận</legend>
         <div className="grid gap-1 sm:grid-cols-2">
@@ -411,6 +412,7 @@ export function WastePointForm({
           })}
         </div>
       </fieldset>
+      )}
 
       <div className="flex gap-2">
         <button type="button" className={BTN_PRIMARY} disabled={busy || Object.keys(errors).length > 0} onClick={save}>

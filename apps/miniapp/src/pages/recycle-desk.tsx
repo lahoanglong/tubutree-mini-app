@@ -185,6 +185,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setLookup(res.type === 'REQUEST' ? res.request : null);
       setGift(res.type === 'GIFT' ? res.redemption : null);
       setLookedUpCode(c);
+      // Thẻ hạn mức vẽ theo tab đang chọn: tra yêu cầu của điểm khác thì chuyển tab để số hiện ra là của điểm của yêu cầu.
+      if (res.type === 'REQUEST' && points.some((p) => p.id === res.request.pointId)) setPointId(res.request.pointId);
       setDone(null);
       const initial = res.type === 'REQUEST' && !isReadOnly(res.request) ? deskInitialLines(res.request.lines, kindOfRequest(res.request)) : null;
       setReceived(initial?.received ?? {});

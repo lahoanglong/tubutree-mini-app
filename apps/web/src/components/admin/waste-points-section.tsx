@@ -103,7 +103,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                   </td>
                   <td className={TD}>
                     <div className="flex max-w-[200px] flex-wrap gap-1 [&_span]:min-w-0 [&_span]:whitespace-normal [&_span]:break-words">
-                      {acceptedNames(p).length === 0 ? '—' : acceptedNames(p).map((n) => <ToneBadge key={n} tone="neutral">{n}</ToneBadge>)}
+                      {p.kind === 'WAREHOUSE' ? <ToneBadge tone="neutral">Mọi món đang nhận</ToneBadge> : acceptedNames(p).length === 0 ? '—' : acceptedNames(p).map((n) => <ToneBadge key={n} tone="neutral">{n}</ToneBadge>)}
                     </div>
                   </td>
                   <td className={TD}>

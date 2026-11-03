@@ -3,11 +3,13 @@ import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { WasteShipLockService } from '../core/waste-ship-lock.service';
 import { GOMDON_DISPATCHED_STATUSES } from '../waste.constants';
+import { vnMonthKey } from '../../../common/vn-time';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
@@ -37,6 +39,7 @@ export class WasteExpiryCron {
     private readonly config: WasteConfigService,
     private readonly notifier: WasteNotifierService,
     private readonly shipLock: WasteShipLockService,
+    private readonly access: WasteAccessService,
   ) {}
 
   // @Cron không tự bắt lỗi: lỗi ném ra ngoài là unhandledRejection.
@@ -116,7 +119,8 @@ export class WasteExpiryCron {
    * Nhắc khách còn khoảng một đến hai ngày giữ chỗ. MAIL_IN đã nhập mã vận đơn chuyển sang IN_TRANSIT và không còn hạn nên không vào đây;
    * `trackingCode: null` giữ điều đó ngay cả khi trạng thái chưa kịp đổi. Tin trùng bị chặn bằng dedupeKey theo id yêu cầu.
    * Chỉ nhắc khi khách làm theo được: chương trình tắt thì quầy từ chối nhận mang tới, khách bị khoá thì kho không cộng điểm,
-   * và màn yêu cầu của họ đang nói "tạm dừng" (pausedNote). Hạn giữ chỗ vẫn chạy ở bước đóng, không phụ thuộc cờ.
+   * và màn yêu cầu của họ đang nói "tạm dừng" (pausedNote). Yêu cầu DROP_OFF mà điểm nhận đã tạm dừng, mất chủ hợp lệ hay hết hạn mức
+   * tháng cũng bị bỏ qua: tin bảo mang rác tới một quầy không nhận được là chuyến đi vô ích. Hạn giữ chỗ vẫn chạy ở bước đóng, không phụ thuộc cờ.
    */
   private async remindExpiring(now: Date, programmeEnabled: boolean): Promise<void> {
     if (!programmeEnabled) return;
@@ -131,14 +135,17 @@ export class WasteExpiryCron {
     try {
       let lastId: string | null = null;
       for (;;) {
-        const page: { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; expiresAt: Date | null }[] = await this.prisma.wasteRequest.findMany({
+        const page: { id: string; code: string; userId: string; pointId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; expiresAt: Date | null }[] = await this.prisma.wasteRequest.findMany({
           where: lastId === null ? base : { AND: [base, { id: { gt: lastId } }] },
-          select: { id: true, code: true, userId: true, method: true, expiresAt: true },
+          select: { id: true, code: true, userId: true, pointId: true, method: true, expiresAt: true },
           orderBy: { id: 'asc' },
           take: PAGE,
         });
+        const dropOff = page.filter((r) => r.method === 'DROP_OFF' && r.expiresAt);
+        const unusable = await this.unusablePointIds(dropOff.map((r) => r.pointId), now, [...new Set(dropOff.filter((r) => vnMonthKey(r.expiresAt!) === vnMonthKey(now)).map((r) => r.pointId))]);
         for (const row of page) {
           if (!row.expiresAt || row.method === 'PICKUP') continue;
+          if (row.method === 'DROP_OFF' && (unusable.bad.has(row.pointId) || (unusable.quotaFull.has(row.pointId) && vnMonthKey(row.expiresAt) === vnMonthKey(now)))) continue;
           try {
             await this.notifier.requestExpiring(row.userId, { id: row.id, code: row.code }, row.method, row.expiresAt);
           } catch (err) {
@@ -151,6 +158,31 @@ export class WasteExpiryCron {
     } catch (err) {
       this.logger.error(`Quét nhắc yêu cầu sắp hết hạn lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
     }
+  }
+
+  /**
+   * `bad`: điểm không ACTIVE hoặc mất chủ hợp lệ (availablePointIds). `quotaFull`: PARTNER đã dùng hết hạn mức của tháng VN hiện tại, chỉ xét cho `quotaPointIds`
+   * (điểm có yêu cầu hết hạn ngay trong tháng này). Yêu cầu có hạn sang tháng sau thì hạn mức đã về 0 khi khách tới, nên không bị coi là hết hạn mức.
+   */
+  private async unusablePointIds(pointIds: string[], now: Date, quotaPointIds: string[]): Promise<{ bad: Set<string>; quotaFull: Set<string> }> {
+    const ids = [...new Set(pointIds)];
+    const bad = new Set<string>();
+    const quotaFull = new Set<string>();
+    if (ids.length === 0) return { bad, quotaFull };
+    const available = await this.access.availablePointIds(this.prisma, ids);
+    for (const id of ids) if (!available.has(id)) bad.add(id);
+    const quotaPoints = await this.prisma.wastePoint.findMany({
+      where: { id: { in: quotaPointIds.filter((id) => available.has(id)) }, kind: 'PARTNER', monthlyQuotaPoints: { not: null } },
+      select: { id: true, monthlyQuotaPoints: true },
+    });
+    if (quotaPoints.length === 0) return { bad, quotaFull };
+    const usage = await this.prisma.wastePointUsage.findMany({
+      where: { pointId: { in: quotaPoints.map((p) => p.id) }, monthKey: vnMonthKey(now) },
+      select: { pointId: true, pointsUsed: true },
+    });
+    const used = new Map(usage.map((u) => [u.pointId, u.pointsUsed]));
+    for (const p of quotaPoints) if ((used.get(p.id) ?? 0) >= (p.monthlyQuotaPoints ?? 0)) quotaFull.add(p.id);
+    return { bad, quotaFull };
   }
 
   /** Một transaction ngắn cho một dòng; không lấy khoá nào khác (rule 15). Trả lý do đóng khi dòng trúng điều kiện. */

@@ -290,7 +290,9 @@ describe('WasteReverseService races (real Postgres)', () => {
       const { a } = await expiredLotCustomer();
       const preview = await previewTake(a.id);
       const result = await reverse.reverse(admin.id, a.id, reasonGiven);
-      expect(result.pointsTaken).toBe(preview!.expectedTake);
+      // Số dư còn 20.000 (lô cũ) + 30.000 (lô vừa hết hạn, cron chưa chạy): trừ đủ 30.000 điểm đã cộng, không thiếu.
+      expect(preview!.expectedTake).toBe(30_000);
+      expect(result).toMatchObject({ pointsTaken: 30_000, shortfallPoints: 0 });
     });
 
     it('with nothing left the preview says 0', async () => {
