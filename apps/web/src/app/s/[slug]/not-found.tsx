@@ -1,8 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { GO_HOME_LABEL, NOT_FOUND_TITLE, STOREFRONT_NOT_FOUND, STOREFRONT_PUBLIC_TITLE } from '@tubutree/app-core/client-copy';
-import { SuggestedRail } from '@/app/gio-hang/empty-cart';
+import { STOREFRONT_NOT_FOUND, STOREFRONT_PUBLIC_TITLE } from '@tubutree/app-core/client-copy';
+import { SuggestedRail } from '@/components/catalog/suggested-rail';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 
@@ -12,7 +12,7 @@ export default function StorefrontNotFound() {
   return (
     <main className="mx-auto max-w-3xl md:px-4 md:py-6">
       <PageHeader title={STOREFRONT_PUBLIC_TITLE} />
-      <ErrorState title={NOT_FOUND_TITLE} message={STOREFRONT_NOT_FOUND} retryLabel={GO_HOME_LABEL} onRetry={() => router.replace('/')} />
+      <ErrorState message={STOREFRONT_NOT_FOUND} onHome={() => router.replace('/')} />
       <SuggestedRail />
     </main>
   );

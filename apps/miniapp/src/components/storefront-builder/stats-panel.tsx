@@ -14,7 +14,7 @@ import { CARD_MARGIN } from './shared';
 function StatBox({ value, label, tone }: { value: string; label: string; tone?: 'brand' }) {
   return (
     <div data-testid="builder-stat" style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: '10px var(--p-space-2)', textAlign: 'center' }}>
-      <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: statValueFontSize(value) }}>{value}</Text>
+      <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: statValueFontSize(value) }}>{value}</Text>
       <Text variant="caption" tone="tertiary" as="div">{label}</Text>
     </div>
   );

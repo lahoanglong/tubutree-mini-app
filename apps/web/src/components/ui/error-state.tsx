@@ -1,7 +1,7 @@
 'use client';
 
 import { useContext } from 'react';
-import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
+import { ERROR_GENERIC, GO_HOME_LABEL, NOT_FOUND_TITLE } from '@tubutree/app-core/client-copy';
 import { QueryClientContext } from '@tanstack/react-query';
 import { TriangleAlert } from 'lucide-react';
 import { ui } from '@/lib/guest-ui';
@@ -42,11 +42,11 @@ export function ErrorState({
       <span aria-hidden="true" className={`flex items-center justify-center rounded-full bg-warning-bg text-warning-fg ${inline ? 'h-11 w-11' : 'h-14 w-14'}`}>
         <TriangleAlert className={inline ? 'h-[22px] w-[22px]' : 'h-7 w-7'} strokeWidth={1.75} />
       </span>
-      <p className="font-display text-lg font-semibold text-stone-900">{title ?? (onHome ? 'Không tìm thấy' : 'Chưa tải được trang này')}</p>
+      <p className="font-display text-lg font-semibold text-stone-900">{title ?? (onHome ? NOT_FOUND_TITLE : 'Chưa tải được trang này')}</p>
       <p data-testid="error-message" className="max-w-xs text-sm text-stone-700">{message}</p>
       {(onHome || onRetry) && (
         <button type="button" onClick={onHome ?? onRetry} className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:bg-forest-50 max-md:hover:bg-forest-100 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}>
-          {onHome ? 'Về trang chủ' : retryLabel}
+          {onHome ? GO_HOME_LABEL : retryLabel}
         </button>
       )}
       {(showSupport ?? !inline) && hasQuery && <SupportHotline />}
