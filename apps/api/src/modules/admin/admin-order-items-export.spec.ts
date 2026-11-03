@@ -111,7 +111,7 @@ describe('orderItemCsvChunks (D1-04a: CSV theo dòng hàng)', () => {
       'Mã đơn', 'Ngày đặt', 'Trạng thái đơn', 'Loại đơn', 'Nền tảng', 'Nguồn đơn', 'CTV giới thiệu', 'Gian hàng', 'SKU',
       'Sản phẩm', 'Phân loại', 'Số lượng', 'Đơn giá (VNĐ)', 'Thành tiền dòng (VNĐ)', 'Khách trả cho dòng (VNĐ)',
     ]);
-    expect(ORDER_ITEM_CSV_HEADERS.slice(15)).toEqual(['Nơi giao', 'SL đã trả', 'Tiền đã hoàn cho dòng (VNĐ)']);
+    expect(ORDER_ITEM_CSV_HEADERS.slice(15)).toEqual(['Nơi giao (kho/gian hàng tự giao)', 'SL đã trả', 'Tiền đã hoàn cho dòng (VNĐ)']);
   });
 
   it('TK-06: dòng trả một phần 2/3 ghi SL đã trả 2 và tiền đã hoàn; nơi giao theo fulfiller; một groupBy cho cả lô', async () => {
@@ -129,16 +129,33 @@ describe('orderItemCsvChunks (D1-04a: CSV theo dòng hàng)', () => {
     const r1 = lines[1]!.split(',');
     const r2 = lines[2]!.split(',');
     const r3 = lines[3]!.split(',');
-    expect(r1[col('Nơi giao')]).toBe('Gian hàng tự giao: Shop Giao');
+    expect(r1[col('Nơi giao (kho/gian hàng tự giao)')]).toBe('Gian hàng tự giao: Shop Giao');
     expect(r1[col('SL đã trả')]).toBe('2');
     expect(r1[col('Tiền đã hoàn cho dòng (VNĐ)')]).toBe('200000');
     expect(r2[col('SL đã trả')]).toBe('0');
     expect(r2[col('Tiền đã hoàn cho dòng (VNĐ)')]).toBe('0');
-    expect(r3[col('Nơi giao')]).toBe('Kho Tubu');
+    expect(r3[col('Nơi giao (kho/gian hàng tự giao)')]).toBe('Kho Tubu');
     expect(returnGroup).toHaveBeenCalledTimes(1);
     expect(returnGroup.mock.calls[0]![0]).toMatchObject({
       by: ['orderItemId'],
       where: { orderItemId: { in: ['it1', 'it2', 'it3'] }, returnRequest: { status: 'APPROVED' } },
     });
+  });
+
+  it('TK-06: đơn RETURNED cả đơn không qua yêu cầu trả → SL đã trả = cả dòng; tiền = paidTotal khi đã REFUNDED, trống khi chưa chắc', async () => {
+    const { prisma } = fakePrisma(
+      [
+        order(0, [item(1, { quantity: 3, total: 300_000, paidTotal: 300_000 })], { status: 'RETURNED', paymentStatus: 'REFUNDED' }),
+        order(1, [item(2, { paidTotal: null })], { status: 'RETURNED', paymentStatus: 'REFUNDED' }),
+        order(2, [item(3)], { status: 'RETURNED', paymentStatus: 'UNPAID' }),
+        order(3, [item(4)], { status: 'DELIVERED', paymentStatus: 'PAID' }),
+      ],
+      {},
+    );
+    const lines = (await collect(orderItemCsvChunks(prisma, {}))).trimEnd().split('\r\n');
+    const qty = ORDER_ITEM_CSV_HEADERS.indexOf('SL đã trả');
+    const money = ORDER_ITEM_CSV_HEADERS.indexOf('Tiền đã hoàn cho dòng (VNĐ)');
+    const cells = lines.slice(1).map((l) => [l.split(',')[qty], l.split(',')[money]]);
+    expect(cells).toEqual([['3', '300000'], ['2', ''], ['2', ''], ['0', '0']]);
   });
 });

@@ -32,7 +32,7 @@ export const ORDER_ITEM_CSV_HEADERS = [
   'Thành tiền dòng (VNĐ)',
   'Khách trả cho dòng (VNĐ)',
   // Cột mới đặt cuối để bảng tính tham chiếu theo vị trí không lệch.
-  'Nơi giao',
+  'Nơi giao (kho/gian hàng tự giao)',
   'SL đã trả',
   'Tiền đã hoàn cho dòng (VNĐ)',
 ];
@@ -42,6 +42,7 @@ const ORDER_SELECT = {
   code: true,
   createdAt: true,
   status: true,
+  paymentStatus: true,
   type: true,
   platform: true,
   source: true,
@@ -54,6 +55,21 @@ const ORDER_SELECT = {
     select: { id: true, productName: true, variationName: true, variationId: true, quantity: true, unitPrice: true, total: true, paidTotal: true },
   },
 } satisfies Prisma.OrderSelect;
+
+/**
+ * SL đã trả và tiền đã hoàn của một dòng. Có dòng yêu cầu trả đã duyệt thì lấy đúng số đó. Đơn lật RETURNED cả đơn mà không
+ * qua yêu cầu trả (Pancake "Đã hoàn", admin đổi trạng thái) không có dòng nào: số lượng là cả dòng; tiền chỉ ghi khi đơn đã
+ * chuyển REFUNDED (chính bước hoàn tiền đặt trạng thái này) và dòng có paidTotal, còn lại để trống thay vì đoán.
+ */
+function returnedCells(
+  order: { status: string; paymentStatus: string },
+  item: { quantity: number; paidTotal: number | null },
+  approved: { quantity: number | null; refundAmount: number | null } | undefined,
+): [number, number | string] {
+  if (approved) return [approved.quantity ?? 0, approved.refundAmount ?? 0];
+  if (order.status !== 'RETURNED') return [0, 0];
+  return [item.quantity, order.paymentStatus === 'REFUNDED' && item.paidTotal != null ? item.paidTotal : ''];
+}
 
 /**
  * Lần lượt từng lô đơn (cùng con trỏ và cùng bộ lọc với file CSV đơn: orderCsvChunks), mỗi lô tra SKU và CTV bằng một
@@ -109,8 +125,7 @@ export async function* orderItemCsvChunks(prisma: PrismaService, where: Prisma.O
             it.total,
             it.paidTotal ?? '',
             o.fulfiller === 'MERCHANT' ? `Gian hàng tự giao: ${o.fulfillerStorefront?.title ?? ''}` : 'Kho Tubu',
-            returnedOf.get(it.id)?.quantity ?? 0,
-            returnedOf.get(it.id)?.refundAmount ?? 0,
+            ...returnedCells(o, it, returnedOf.get(it.id)),
           ]),
         );
       })
