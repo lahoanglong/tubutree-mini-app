@@ -95,6 +95,16 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     expect(server.headersTimeout).toBe(HTTP_HEADERS_TIMEOUT_MS);
   });
 
+  it('CORS expose Content-Disposition để web (khác origin) đọc được tên file CSV (QTDON-04)', async () => {
+    const app = await bootstrap(rootModule(leaseTable().prisma(), { n: 0 }), { port: 0, exit: jest.fn(), logger: false });
+    opened.push(app!);
+    const { port } = app!.getHttpServer().address() as AddressInfo;
+    const res = await fetch(`http://127.0.0.1:${port}/`, { headers: { Origin: 'https://tubutree.com' } });
+    const exposed = (res.headers.get('access-control-expose-headers') ?? '').toLowerCase();
+    expect(exposed).toContain('content-disposition');
+    expect(exposed).toContain('retry-after');
+  });
+
   it('app đã init nhưng chưa giành lease (chưa listen xong) → cron không chạy lượt nào', async () => {
     const ticks = { n: 0 };
     const app = await NestFactory.create(rootModule(leaseTable().prisma(), ticks), { logger: false });

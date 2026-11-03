@@ -1090,6 +1090,17 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { isActive: false } });
   });
 
+  it('updateCoupon: đặt trần chạy trong transaction có hạn chờ khoá, thua tranh khoá thì 503', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', scope: 'PUBLIC', startAt: new Date('2026-01-01'), endAt: new Date('2026-12-31'), usedCount: 0 });
+    const update = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { findUnique, update }, couponRedemption: { count: jest.fn().mockResolvedValue(0) } });
+    await mkAdmin(prisma).updateCoupon('c1', { usageLimit: 10 });
+    const tx = prisma.$transaction as jest.Mock;
+    expect(tx.mock.calls[0]![1]).toEqual({ maxWait: 15_000, timeout: 60_000 });
+    tx.mockRejectedValueOnce(Object.assign(new Error('canceling statement due to lock timeout 55P03'), {}));
+    await expect(mkAdmin(prisma).updateCoupon('c1', { usageLimit: 10 })).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
   it('updateCoupon: endAt trước startAt → 400; usageLimit nhỏ hơn số lượt đã dùng → 400', async () => {
     const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2026-06-01'), endAt: new Date('2026-12-31'), usedCount: 5 });
     const update = jest.fn();
