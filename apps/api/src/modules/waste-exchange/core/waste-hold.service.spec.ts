@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { formatVnDate } from '../../../common/vn-time';
 import { WasteHoldService, type WasteCapUsage, type WasteHoldInput } from './waste-hold.service';
 
 const NOW = new Date('2026-10-17T03:00:00.000Z');
@@ -100,13 +101,25 @@ describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới �
 });
 
 describe('WasteHoldService.validateAndHold', () => {
-  it('CREATE DROP_OFF: snapshot lines, totals, VN cap keys, expiresAt = now + requestHoldDays', async () => {
+  it('CREATE DROP_OFF: snapshot lines, totals, VN cap keys, expiresAt = hết ngày VN của now + requestHoldDays', async () => {
     const { svc, tx } = setup();
     await expect(svc.validateAndHold(tx, input(), CFG)).resolves.toEqual({
-      pointId: 'p1', capDayKey: '2026-10-17', capMonthKey: '2026-10', expiresAt: new Date('2026-10-24T03:00:00.000Z'),
+      pointId: 'p1', capDayKey: '2026-10-17', capMonthKey: '2026-10', expiresAt: new Date('2026-10-24T16:59:59.999Z'),
       lines: [{ itemId: 'carton', itemCode: 'CARTON', itemName: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, gramsPerUnit: 300, declaredQty: 5, hazardous: false }],
       estimatedPoints: 5_000, estimatedDrops: 10,
     });
+  });
+  it('hạn giữ chỗ là hết ngày D giờ VN: tạo 01:00 ngày 01/11 với 7 ngày còn quét được tới 23:59 ngày 08/11, cron 03:30 ngày 09/11 đóng', async () => {
+    const { svc, tx } = setup();
+    const created = new Date('2026-10-31T18:00:00.000Z'); // 01:00 01/11 giờ VN
+    const { expiresAt } = await svc.validateAndHold(tx, input({ now: created }), CFG);
+    const at = (iso: string) => new Date(`${iso}+07:00`).getTime();
+    expect(expiresAt!.getTime()).toBeGreaterThanOrEqual(at('2026-11-08T23:59:00'));
+    expect(expiresAt!.getTime()).toBeLessThan(at('2026-11-09T00:00:00'));
+    expect(expiresAt!.getTime()).toBeLessThan(at('2026-11-09T03:30:00'));
+    expect(formatVnDate(expiresAt!)).toBe('08/11/2026');
+    const late = await svc.validateAndHold(tx, input({ now: new Date('2026-11-01T16:59:00.000Z') }), CFG); // 23:59 01/11 giờ VN
+    expect(formatVnDate(late.expiresAt!)).toBe('08/11/2026');
   });
   it('MAIL_IN and PICKUP resolve the warehouse; the body pointId is ignored', async () => {
     const { svc, tx } = setup();
