@@ -1092,6 +1092,7 @@ export class CommunityFeedService {
     });
     if (!post) throw new NotFoundException('Bài viết không tồn tại.');
     if (post.userId !== userId) throw new ForbiddenException('Chỉ chủ bài mới sửa được.');
+    if (post.status === 'REMOVED') throw new NotFoundException('Bài viết không tồn tại.');
     const data: Record<string, unknown> = { editedAt: new Date() };
     if (patch.body !== undefined) {
       const b = patch.body.trim();
@@ -1128,7 +1129,13 @@ export class CommunityFeedService {
       }
     }
 
-    await this.prisma.feedPost.update({ where: { id: postId }, data, select: { id: true } });
+    // Điều kiện status ở lệnh ghi đóng ca đua với deletePost/rejectPost: ảnh vừa được dọn thì
+    // không thể bị gắn lại vào dòng đã REMOVED.
+    const { count } = await this.prisma.feedPost.updateMany({
+      where: { id: postId, status: { not: 'REMOVED' } },
+      data,
+    });
+    if (count === 0) throw new NotFoundException('Bài viết không tồn tại.');
     return { ok: true };
   }
 

@@ -667,7 +667,7 @@ describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (
     const prisma = prismaFor(guest, GUEST_PENDING_IMAGE_POSTS_MAX, 0);
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'g1', status: 'PENDING', title: null, body: 'b' });
     await expect(makeSvc(prisma).editPost('g1', 'p1', { images: [PNG] }, 'CUSTOMER')).rejects.toThrow(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
-    expect(prisma.feedPost.update).not.toHaveBeenCalled();
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -1143,11 +1143,23 @@ describe('CommunityFeedService.editPost', () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author' });
     await makeSvc(prisma).editPost('author', 'p1', { body: '  nội dung mới  ' });
-    const arg = (prisma.feedPost.update as jest.Mock).mock.calls[0][0];
-    expect(arg.where).toEqual({ id: 'p1' });
+    const arg = (prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 'p1', status: { not: 'REMOVED' } });
     expect(arg.data.body).toBe('nội dung mới');
     expect(arg.data.editedAt).toBeInstanceOf(Date);
-    expect(arg.select).toEqual({ id: true });
+  });
+  it('bài đã REMOVED có ảnh data: → 404, không ghi (BAOMAT-02)', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'REMOVED' });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { images: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='] })).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.feedPost.updateMany).not.toHaveBeenCalled();
+    expect(prisma.feedPost.update).not.toHaveBeenCalled();
+  });
+  it('DELETE thắng giữa lúc đọc và lúc ghi (updateMany count 0) → 404', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PENDING' });
+    (prisma.feedPost.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+    await expect(makeSvc(prisma).editPost('author', 'p1', { body: 'x' })).rejects.toBeInstanceOf(NotFoundException);
   });
 
   // P1-4 (docs/2026-09-08-review-progress.md): bài của user CHƯA tin cậy đi qua kiểm duyệt
@@ -1160,14 +1172,14 @@ describe('CommunityFeedService.editPost', () => {
     (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ isTrusted: false });
     (prisma.order.findFirst as jest.Mock).mockResolvedValue(null); // chưa có đơn DELIVERED
     await makeSvc(prisma).editPost('author', 'p1', { body: 'nội dung đổi hoàn toàn' }, 'CUSTOMER');
-    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
   });
 
   it('sửa nội dung bài PUBLISHED của user TIN CẬY (vd STAFF) → giữ nguyên PUBLISHED', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED' });
     await makeSvc(prisma).editPost('author', 'p1', { body: 'sửa chính tả' }, 'STAFF');
-    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
   });
 
   // Bug fix (cùng logic với createPost): isTrusted chỉ phản ánh lịch sử tới lúc TẠO bài — tác
@@ -1177,14 +1189,14 @@ describe('CommunityFeedService.editPost', () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', title: null, body: 'nội dung cũ hiền lành' });
     await makeSvc(prisma).editPost('author', 'p1', { body: 'Group casino đổi thưởng, inbox ngay' }, 'STAFF');
-    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
   });
 
   it('sửa nội dung bài PUBLISHED của user TIN CẬY (STAFF) chỉ đổi TITLE thành vi phạm (giữ nguyên body) → vẫn quét ra PENDING', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'author', status: 'PUBLISHED', title: 'Tiêu đề cũ', body: 'nội dung hiền lành' });
     await makeSvc(prisma).editPost('author', 'p1', { title: 'Vay nong lãi thấp, inbox ngay' }, 'STAFF');
-    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.status).toBe('PENDING');
   });
 
   it('bài đang PENDING sẵn → sửa không đụng tới status (vẫn chờ duyệt)', async () => {
@@ -1193,7 +1205,7 @@ describe('CommunityFeedService.editPost', () => {
     (prisma.communityProfile.findUnique as jest.Mock).mockResolvedValue({ isTrusted: false });
     (prisma.order.findFirst as jest.Mock).mockResolvedValue(null);
     await makeSvc(prisma).editPost('author', 'p1', { body: 'bổ sung thêm' }, 'CUSTOMER');
-    expect((prisma.feedPost.update as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
+    expect((prisma.feedPost.updateMany as jest.Mock).mock.calls[0][0].data.status).toBeUndefined();
   });
 });
 
