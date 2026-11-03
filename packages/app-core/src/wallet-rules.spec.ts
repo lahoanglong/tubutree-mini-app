@@ -41,9 +41,9 @@ describe('walletTxLabel (sao kê Ví)', () => {
 });
 
 describe('formatWalletTxTime', () => {
-  it('dd/MM HH:mm theo giờ máy', () => {
-    const d = new Date(2026, 9, 5, 8, 7);
-    expect(formatWalletTxTime(d.toISOString())).toBe('05/10 08:07');
+  it('dd/MM HH:mm theo giờ Việt Nam, không theo múi giờ máy', () => {
+    expect(formatWalletTxTime('2026-10-05T01:07:00.000Z')).toBe('05/10 08:07');
+    expect(formatWalletTxTime('2026-10-05T17:30:00.000Z')).toBe('06/10 00:30');
   });
 });
 

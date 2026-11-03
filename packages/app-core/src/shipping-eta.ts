@@ -1,17 +1,18 @@
 import type { ShippingEta } from './api/config';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 /**
- * "02/10 – 04/10" từ khoảng ngày cấu hình (ngày lịch, chưa theo tỉnh). Tự ghép dd/MM từ ngày-tháng địa phương thay vì
+ * "02/10 – 04/10" từ khoảng ngày cấu hình (ngày lịch, chưa theo tỉnh). Tự ghép dd/MM từ ngày-tháng theo giờ Việt Nam (không theo múi giờ máy) thay vì
  * `toLocaleDateString('vi-VN')`: định dạng đó phụ thuộc ICU của từng trình duyệt/Node (có nơi ra "01-10"), còn màn này cần đúng "dd/MM".
  * Dùng chung cho web và Mini App.
  */
 export function shippingEtaLabel(eta: ShippingEta, now: Date = new Date()): string {
+  const vn = new Date(now.getTime() + VN_OFFSET_MS);
   const fmt = (days: number) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + days); // theo ngày lịch, không cộng mili-giây (an toàn khi lệch giờ mùa hè)
-    return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+    const d = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate() + days)); // theo ngày lịch
+    return `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
   };
   return eta.minDays === eta.maxDays ? fmt(eta.minDays) : `${fmt(eta.minDays)} – ${fmt(eta.maxDays)}`;
 }
@@ -41,7 +42,6 @@ export function placedOrderKinds(order: {
 }
 
 const ETA_STATUSES = new Set(['CONFIRMED', 'PACKED', 'SHIPPING']);
-const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 /**
  * Ngày giao dự kiến của một đơn đang xử lý: giờ đặt (cùng gốc với màn thanh toán) cộng khoảng ngày cấu hình, tính theo
