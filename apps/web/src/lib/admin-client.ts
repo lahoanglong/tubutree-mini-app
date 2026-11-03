@@ -2,6 +2,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import { apiDownload, apiFetch } from './client-api';
+import { vnDateKey } from './week';
 import type { GomdonAlertView } from './recycling';
 import type {
   AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
@@ -1151,6 +1152,8 @@ export interface AdminNotificationTemplate {
   /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
   znsFailed30d?: number;
   znsLastError?: { text: string; at: string } | null;
+  /** Khoá cấu hình cấp mã ZNS thay cho ô mã của mẫu (nhắc hạ hạng); null/thiếu = mã nằm ở chính mẫu. */
+  znsConfigKey?: string | null;
   /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
   staffEditable?: boolean;
   /** Biến mã thật sự điền cho mẫu này; null = mẫu ngoài danh sách (không kiểm được); thiếu = API cũ. */
@@ -1748,7 +1751,7 @@ function orderFilterParams(f: OrderExportFilter): URLSearchParams {
   for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
   return q;
 }
-const todayKey = () => new Date().toISOString().slice(0, 10);
+const todayKey = () => vnDateKey(new Date());
 export const downloadOrdersCsv = (f: OrderExportFilter) => {
   const qs = orderFilterParams(f).toString();
   return apiDownload(`/admin/orders/export${qs ? `?${qs}` : ''}`, `don-hang-${todayKey()}.csv`);

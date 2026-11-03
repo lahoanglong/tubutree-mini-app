@@ -9,7 +9,7 @@ import { SystemConfigService } from '../../system-config/system-config.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
-import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
+import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_COD_RETURN_UNVERIFIED,
@@ -18,6 +18,7 @@ import {
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   clearPancakeAttention,
+  writePancakeAttention,
 } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
 import {
@@ -417,19 +418,11 @@ export class PancakeProcessor extends WorkerHost {
     order: Pick<Order, 'id' | 'code'>,
     reason: string,
     onlyReplacingPrefix?: string,
+    onlyOpenOrder = false,
   ): Promise<boolean> {
-    const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
-    const r = await this.prisma.order.updateMany({
-      where: onlyReplacingPrefix
-        ? {
-            id: order.id,
-            AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }],
-          }
-        : { id: order.id, ...changed },
-      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-    });
-    if (r.count === 0) return false;
-    this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${reason}`);
+    const written = await writePancakeAttention(this.prisma, order.id, reason, onlyReplacingPrefix, onlyOpenOrder);
+    if (!written) return false;
+    this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${written}`);
     await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
     return true;
   }
@@ -463,7 +456,8 @@ export class PancakeProcessor extends WorkerHost {
       return;
     }
     if (action.kind === 'partialReturned') {
-      await this.onPartialReturned(order, action.reason);
+      // Cùng lẽ với nhánh attention: 15 tới trễ sau khi đơn đã huỷ/trả (tiền đã hoàn theo luồng đó) mà ghim "hoàn tay" thì nhân viên hoàn lần hai.
+      if (!isClosedOrder(order.status)) await this.onPartialReturned(order, action.reason);
       return;
     }
     // "Đã hoàn" tới đơn đã huỷ/trả: không còn gì để lật, nhưng đây có thể là lần BullMQ gửi lại sau khi lần đầu lật xong mà đảo
@@ -545,8 +539,10 @@ export class PancakeProcessor extends WorkerHost {
       await this.flagAttention(
         order,
         requests.length > 0
-          ? 'Pancake báo HOÀN MỘT PHẦN trong khi khách đang có yêu cầu đổi/trả chờ duyệt — duyệt yêu cầu trả trên Tubu (hệ thống tự hoàn tiền/điểm), KHÔNG hoàn tay.'
+          ? `${PANCAKE_PARTIAL_RETURN_PREFIX} trong khi khách đang có yêu cầu đổi/trả chờ duyệt — duyệt yêu cầu trả trên Tubu (hệ thống tự hoàn tiền/điểm), KHÔNG hoàn tay.`
           : manualReason,
+        undefined,
+        true,
       );
       return;
     }
@@ -561,10 +557,7 @@ export class PancakeProcessor extends WorkerHost {
         return;
       }
       const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;
-      await tx.order.updateMany({
-        where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
-        data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-      });
+      await writePancakeAttention(tx, order.id, reason);
     });
     const note = `${ATTENTION_PARTIAL_RETURN_ACK} (Pancake #${order.pancakeOrderId ?? '?'})`;
     const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });

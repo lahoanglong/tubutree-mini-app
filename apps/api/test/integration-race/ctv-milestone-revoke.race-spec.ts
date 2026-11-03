@@ -87,6 +87,11 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     return { buyer, order, commission };
   }
 
+  /** Giữa "tháng trước" theo giờ VN; lấy từ lịch VN, không trừ số ngày cố định (ngày 1-3 sẽ rơi về hai tháng trước). */
+  const prevMonthMid = () => {
+    const b = vnMonthBounds(new Date(), -1);
+    return new Date((b.start.getTime() + b.end.getTime()) / 2);
+  };
   const returned = (orderId: string) => prisma.order.update({ where: { id: orderId }, data: { status: 'RETURNED' } });
   const balance = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id }, select: { pointsBalance: true } })).pointsBalance;
   const revokeRows = (id: string) =>
@@ -143,7 +148,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     expect(rows[0]!.delta).toBe(-150_000);
     const notices = revokeNotices(ctv.id);
     expect(notices).toHaveLength(1);
-    expect(notices[0]![2].points).toBe((150_000).toLocaleString('vi-VN'));
+    expect(notices[0]![2].taken_note).toBe(`${(150_000).toLocaleString('vi-VN')} Điểm Xanh thưởng mốc đã được thu lại`);
   });
 
   it('câu "nhận lại được" chỉ có khi tháng bị thu là tháng VN hiện tại; tháng đã qua thì để trống', async () => {
@@ -153,7 +158,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     expect(revokeNotices(cur.ctv.id)[0]![2].reclaim_note).toMatch(/nhận lại/);
 
     const ctv = await createUser(prisma, { role: 'AFFILIATE' });
-    const prevMonth = new Date(Date.now() - 31 * 864e5);
+    const prevMonth = prevMonthMid();
     const a = await approved(ctv.id, 2_200_000, prevMonth);
     await approved(ctv.id, 8_000_000, prevMonth);
     const prevKey = vnMonthBounds(prevMonth).key;
@@ -174,7 +179,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     expect(notices).toHaveLength(1);
     expect(notices[0]![2].milestone).toMatch(/3/);
     expect(notices[0]![2].milestone).toMatch(/10/);
-    expect(notices[0]![2].points).toBe((250_000).toLocaleString('vi-VN'));
+    expect(notices[0]![2].taken_note).toContain((250_000).toLocaleString('vi-VN'));
     await affiliate.reverseCommissionsForOrder(first.order.id);
     expect(new Set(revokeNotices(ctv.id).map((c) => c[3]?.dedupeKey)).size).toBe(1);
   });
@@ -195,7 +200,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
 
   it('tháng đã qua còn nợ: tin không hứa "sẽ trừ khi bạn nhận lại mốc"', async () => {
     const ctv = await createUser(prisma, { role: 'AFFILIATE' });
-    const prevMonth = new Date(Date.now() - 31 * 864e5);
+    const prevMonth = prevMonthMid();
     const a = await approved(ctv.id, 2_200_000, prevMonth);
     await approved(ctv.id, 8_000_000, prevMonth);
     await affiliate.claimMilestone(ctv.id, 'milestone-10m', vnMonthBounds(prevMonth).key);
@@ -206,6 +211,20 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     expect(notices).toHaveLength(1);
     expect(notices[0]![2].debt_note).toMatch(/chưa thu hết/);
     expect(notices[0]![2].debt_note).not.toMatch(/nhận lại/);
+  });
+
+  it('thu được 0 điểm nhưng còn nợ: tin ghi "đã được ghi nợ", không báo "0 Điểm Xanh đã được thu lại"', async () => {
+    const { ctv, first } = await claimedCtv();
+    await prisma.$transaction((tx) => applyPointsDelta(tx, { userId: ctv.id, delta: -250_000, lot: 'STANDARD', reason: 'ORDER_REDEEM', refType: 'ORDER', refId: randCode() }));
+    await returned(first.order.id);
+    await affiliate.reverseCommissionsForOrder(first.order.id);
+    expect(await revokeRows(ctv.id)).toHaveLength(0);
+    expect(await debtRows(ctv.id)).toHaveLength(1);
+    const notices = revokeNotices(ctv.id);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]![2].taken_note).toBe('thưởng mốc đã được ghi nợ');
+    expect(notices[0]![2].taken_note).not.toMatch(/^0 /);
+    expect(notices[0]![2].debt_note).toMatch(/200\.000 điểm chưa thu được/);
   });
 
   it('(e) chạy lại lần đảo: không trừ lần hai, không báo lần hai', async () => {

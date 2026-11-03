@@ -4,6 +4,8 @@ import { buildAdminOrderWhere, recyclingAttentionWhere } from './admin-order-fil
 import type { PrismaService } from '../../prisma/prisma.service';
 import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 
+const noOpenCod = { findFirst: jest.fn().mockResolvedValue(null) };
+
 function mkAdmin(prisma: Record<string, unknown>) {
   const none = {} as never;
   return new AdminService(prisma as unknown as PrismaService, none, none, none, none, none, none, none, none, none);
@@ -33,7 +35,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     const order = { id: 'o1', code: 'TUBU1', status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const history = jest.fn().mockResolvedValue({});
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderStatusHistory: { create: history } };
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: history } };
     const res = await mkAdmin(prisma).resolvePancakeAttention('admin1', 'TUBU1', '  đã gọi khách  ');
     expect(history).toHaveBeenCalledWith({
       data: {
@@ -46,7 +48,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
       },
     });
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', pancakeAttentionAt: { not: null } },
+      where: { id: 'o1', pancakeAttentionAt: { not: null }, pancakeAttention: 'Pancake báo ĐANG HOÀN' },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
     expect(res).toEqual({ ok: true, message: expect.stringContaining('TUBU1') });
@@ -55,7 +57,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
   it('"Đã xử lý" không ghi chú thì dòng lịch sử chỉ có lý do cũ; ghi lịch sử lỗi không làm hỏng việc đã đóng', async () => {
     const order = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', pancakeAttention: 'Pancake báo đơn bị xoá', pancakeAttentionAt: new Date() };
     const history = jest.fn().mockRejectedValue(new Error('db down'));
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderStatusHistory: { create: history } };
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: history } };
     const admin = mkAdmin(prisma);
     jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
     await expect(admin.resolvePancakeAttention('admin1', 'TUBU1')).resolves.toMatchObject({ ok: true });
@@ -68,7 +70,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
       const order = { id: 'o1', code: 'TUBU1', status, reversalEffectsAt: null, pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
       const history = jest.fn().mockResolvedValue({});
       const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-      const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderStatusHistory: { create: history } };
+      const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: history } };
       const admin = mkAdmin(prisma);
       jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
       await expect(admin.resolvePancakeAttention('admin1', 'TUBU1', 'đã gọi khách')).resolves.toMatchObject({ ok: true });
@@ -80,7 +82,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
   it('đơn CANCELLED đã có mốc đảo sau huỷ/trả thì vẫn ghi dòng lịch sử như thường', async () => {
     const order = { id: 'o1', code: 'TUBU1', status: 'CANCELLED', reversalEffectsAt: new Date(), pancakeAttention: 'Pancake báo đơn bị xoá', pancakeAttentionAt: new Date() };
     const history = jest.fn().mockResolvedValue({});
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderStatusHistory: { create: history } };
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: history } };
     await mkAdmin(prisma).resolvePancakeAttention('admin1', 'TUBU1');
     expect(history).toHaveBeenCalledTimes(1);
     expect(history.mock.calls[0][0].data).toMatchObject({ fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actorType: 'ADMIN' });
@@ -89,7 +91,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
   it('đơn không còn trong hàng đợi (updateMany 0) thì không ghi lịch sử', async () => {
     const order = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', pancakeAttention: 'x', pancakeAttentionAt: new Date() };
     const history = jest.fn();
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderStatusHistory: { create: history } };
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: history } };
     await expect(mkAdmin(prisma).resolvePancakeAttention('a', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
     expect(history).not.toHaveBeenCalled();
   });
@@ -108,9 +110,37 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     expect(updateMany).toHaveBeenCalled();
   });
 
+  it('khoản COD chờ Kế toán còn mở mà ô Cần xử lý không còn chữ COD (bị ghi đè): vẫn chặn "Đã xử lý"', async () => {
+    const order = { id: 'o1', code: 'TUBU1', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findFirst = jest.fn().mockResolvedValue({ id: 'r1' });
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: { findFirst }, orderStatusHistory: { create: jest.fn() } };
+    await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow('Hoàn tiền khách');
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('ô đã đổi giữa lúc đọc và lúc xoá (webhook nối dòng COD): lệnh xoá khớp theo giá trị đã đọc nên không xoá dòng mới', async () => {
+    const order = { id: 'o1', code: 'TUBU1', status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: jest.fn() } };
+    await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(updateMany.mock.calls[0][0].where).toMatchObject({ pancakeAttention: 'Pancake báo ĐANG HOÀN' });
+  });
+
+  it('ô đổi giữa lúc đọc và lúc xoá mà đơn vẫn còn trong hàng đợi: báo "vừa thay đổi", không nói đã rời hàng đợi', async () => {
+    const before = { id: 'o1', code: 'TUBU1', status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+    const after = { pancakeAttentionAt: new Date() };
+    const findFirst = jest.fn().mockResolvedValueOnce(before).mockResolvedValueOnce(after);
+    const prisma = { order: { findFirst, updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: jest.fn() } };
+    await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow(/vừa thay đổi/);
+    const gone = jest.fn().mockResolvedValueOnce(before).mockResolvedValueOnce({ pancakeAttentionAt: null });
+    const prisma2 = { order: { findFirst: gone, updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod, orderStatusHistory: { create: jest.fn() } };
+    await expect(mkAdmin(prisma2).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow(/không còn trong hàng đợi/);
+  });
+
   it('đơn không còn trong hàng đợi → 400; đơn không tồn tại → 404', async () => {
     const free = { id: 'o1', code: 'TUBU1', pancakeAttention: null, pancakeAttentionAt: null };
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(free), updateMany: jest.fn().mockResolvedValue({ count: 0 }) } };
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(free), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderCustomerRefund: noOpenCod };
     await expect(mkAdmin(prisma).resolvePancakeAttention('a', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
     const missing = { order: { findFirst: jest.fn().mockResolvedValue(null), updateMany: jest.fn() } };
     await expect(mkAdmin(missing).resolvePancakeAttention('a', 'x')).rejects.toBeInstanceOf(NotFoundException);

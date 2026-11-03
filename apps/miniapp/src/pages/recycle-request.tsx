@@ -273,7 +273,7 @@ export default function RecycleRequestPage() {
         )}
         <Text variant="body-sm">Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn</Text>
         <Text variant="body-sm">Kho từ chối kiện còn cước phải trả khi nhận</Text>
-        <Text variant="body-sm" tone="secondary">{`Nhập mã vận đơn trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
+        <Text variant="body-sm" tone="secondary">{`Nhập mã vận đơn đến hết ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
         <TrackingForm id={id} initialCarrier={r.carrier ?? ''} initialCode={r.trackingCode ?? ''} />
       </section>
     ) : null;
@@ -315,7 +315,7 @@ export default function RecycleRequestPage() {
       ? {
           1: (
             <>
-              <Text variant="caption" tone="secondary" as="span">{`Mang tới ${r.point.name} trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
+              <Text variant="caption" tone="secondary" as="span">{`Mang tới ${r.point.name} đến hết ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
               <Text variant="caption" tone="secondary" as="span">{pointAddress(r.point)}</Text>
               <Text variant="caption" tone="secondary" as="span">{hoursLine}</Text>
             </>

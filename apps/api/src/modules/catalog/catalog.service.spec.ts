@@ -1,4 +1,4 @@
-import { Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
@@ -621,6 +621,30 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldExternal: 150 } });
     expect(update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldExternal: 7 } });
     expect(r.updated).toBe(2);
+  });
+
+  it('setSoldExternal: cùng một SKU hai dòng trong một lô → từ chối cả lô, nêu SKU lặp, không ghi gì', async () => {
+    const prisma = {
+      variation: { findMany: jest.fn().mockResolvedValue([{ sku: 'A', productId: 'p1' }, { sku: 'B', productId: 'p1' }]) },
+      product: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+    const err = await svc.setSoldExternal([{ sku: 'A', count: 100 }, { sku: 'B', count: 5 }, { sku: 'A', count: 100 }]).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.message).toContain('A');
+    expect(err.message).not.toContain('B,');
+    expect((prisma as any).product.update).not.toHaveBeenCalled();
+    expect((prisma as any).variation.findMany).not.toHaveBeenCalled();
+  });
+
+  it('setSoldExternal: SKU lặp nhưng một dòng không hợp lệ (count âm) thì dòng đó vốn bị bỏ qua, không coi là lặp', async () => {
+    const prisma = {
+      variation: { findMany: jest.fn().mockResolvedValue([{ sku: 'A', productId: 'p1' }]) },
+      product: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).setSoldExternal([{ sku: 'A', count: 10 }, { sku: 'A', count: -1 }])).resolves.toEqual({ updated: 1 });
   });
 
   it('setSoldExternal: bỏ qua sku không tồn tại / count âm', async () => {

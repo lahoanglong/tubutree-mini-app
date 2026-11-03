@@ -27,6 +27,16 @@ const TEMPLATES = [
     variables: [{ key: 'order_code', label: 'mã đơn hàng' }],
   },
   {
+    id: 'nt-shipped',
+    code: 'ORDER_SHIPPED',
+    channel: 'ZNS',
+    zaloTemplateId: '231570',
+    bodyTemplate: 'Đơn {{order_code}} đã giao vận.',
+    delivery: 'ZNS',
+    sent30d: { INAPP: 0, ZNS: 3 },
+    variables: [{ key: 'order_code', label: 'mã đơn hàng' }],
+  },
+  {
     id: 'nt-streak',
     code: 'GAME_STREAK_REMINDER',
     channel: 'INAPP',
@@ -119,6 +129,14 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     await flush();
     const [call] = api.patches();
     expect(JSON.parse(String(call!.init!.body))).toMatchObject({ channel: 'ZNS', zaloTemplateId: null, bodyTemplate: 'Đơn {{order_code}} đã xác nhận rồi.' });
+
+    const shipped = container.querySelector<HTMLElement>('[data-template="ORDER_SHIPPED"]')!;
+    const shippedSave = byText(shipped, 'button', 'Lưu') as HTMLButtonElement;
+    typeInto(shipped.querySelector('textarea[name="bodyTemplate"]'), 'Đơn {{order_code}} đã giao vận rồi.');
+    expect(shippedSave.disabled).toBe(false);
+    typeInto(shipped.querySelector('input[name="zaloTemplateId"]'), '');
+    expect(shippedSave.disabled).toBe(true);
+    expect(shipped.textContent).toContain('Kênh ZNS cần mã mẫu');
   });
 
   it('mẫu ZNS có lượt lỗi: admin thấy số lượt và mã + lý do Zalo trả về của lần gần nhất', async () => {
@@ -141,6 +159,25 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     expect(row.querySelector('[data-zns-failure]')?.textContent).toContain('3 lượt ZNS lỗi trong 30 ngày');
     expect(row.textContent).toContain('ZNS lỗi -118: user not exist');
     expect(container.querySelector('[data-template="ORDER_CONFIRMED"] [data-zns-failure]')).toBeNull();
+  });
+
+  it('NTF-01: nhắc hạ hạng ZNS bằng khoá cấu hình riêng → thẻ nói rõ mã lấy từ khoá nào, mẫu khác không có dòng đó', async () => {
+    const tier = {
+      id: 'nt-tier',
+      code: 'TIER_DROP_NOTICE',
+      channel: 'INAPP',
+      zaloTemplateId: null,
+      bodyTemplate: 'Hạng sắp hết hạn.',
+      delivery: 'ZNS',
+      sent30d: { INAPP: 0, ZNS: 0 },
+      znsConfigKey: 'loyalty.tier_drop_zns_template_id',
+    };
+    const m = mockFetch({ '/admin/notification-templates': { body: [tier, ...TEMPLATES] } });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    expect(container.querySelector('[data-template="TIER_DROP_NOTICE"]')?.textContent).toContain('loyalty.tier_drop_zns_template_id');
+    expect(container.querySelector('[data-template="ORDER_CONFIRMED"]')?.textContent).not.toContain('loyalty.tier_drop_zns_template_id');
   });
 
   it('nhân viên Marketing: chỉ thấy mẫu khuyến mãi, sửa nội dung được, không đổi kênh / mã mẫu ZNS', async () => {

@@ -448,7 +448,7 @@ describe('Vườn Xanh: Chặng Mùa theo SEASON_PASS_ENABLED', () => {
     expect(p.textContent).toContain('150 điểm kinh nghiệm');
     expect(p.textContent).toContain('200 điểm kinh nghiệm');
     expect(p.textContent).toContain('Cao cấp');
-    expect(p.textContent).toContain('Cần đăng ký định kỳ để mở phần thưởng Cao cấp.');
+    expect(p.textContent).toContain('Cần có gói định kỳ đã giao ít nhất một đơn để mở phần thưởng Cao cấp.');
     const buttons = Array.from(p.querySelectorAll<HTMLButtonElement>('button'));
     expect(buttons.map((b) => [b.textContent, b.disabled])).toEqual([
       ['Nhận', false],

@@ -508,7 +508,7 @@ export class FlashSaleService {
 
   /**
    * Sinh đợt rỗng cho các khung mặc định (`flashsale.slots`, giờ VN) trong `days` ngày kể từ hôm nay (admin). Mốc đã kết thúc bị bỏ;
-   * mốc đã có đợt cùng giờ bắt đầu (kể cả đợt tắt) bị bỏ qua nên bấm hai lần không tạo trùng. Món thêm sau bằng addItem như đợt tạo tay.
+   * mốc chồng giờ với một đợt đã có (kể cả đợt tắt, đợt tạo tay lệch giờ) bị bỏ qua nên bấm hai lần không tạo trùng. Món thêm sau bằng addItem như đợt tạo tay.
    */
   async generateSlots(adminId: string, days: number, now: Date = new Date()): Promise<{ created: number; skipped: number }> {
     if (!Number.isInteger(days) || days < 1 || days > 7) throw new BadRequestException('Số ngày tạo khung giờ phải từ 1 đến 7.');
@@ -518,11 +518,28 @@ export class FlashSaleService {
     return this.prisma.$transaction(async (tx) => {
       // Hai admin bấm cùng lúc: mỗi bên chỉ thấy bản chưa có đợt của bên kia nên cùng tạo; khoá để bên sau thấy đợt của bên trước.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'flash.generate_slots'}))`;
-      const existing = await tx.flashSale.findMany({ where: { startAt: { in: starts } }, select: { startAt: true } });
-      const taken = new Set(existing.map((e) => e.startAt.getTime()));
-      const fresh = starts.filter((s) => !taken.has(s.getTime()));
+      const lengthMs = FLASH_SLOT_MINUTES * 60e3;
+      const windows: { start: number; end: number }[] = [];
+      if (starts.length > 0) {
+        // Đợt chồng giờ với khung (kể cả đợt tạo tay lệch vài phút, đợt tắt) thì khung đó bị bỏ, không chỉ trùng giờ bắt đầu tuyệt đối.
+        const lo = Math.min(...starts.map((s) => s.getTime()));
+        const hi = Math.max(...starts.map((s) => s.getTime())) + lengthMs;
+        const existing = await tx.flashSale.findMany({
+          where: { startAt: { lt: new Date(hi) }, endAt: { gt: new Date(lo) } },
+          select: { startAt: true, endAt: true },
+        });
+        windows.push(...existing.map((e) => ({ start: e.startAt.getTime(), end: e.endAt.getTime() })));
+      }
+      const fresh: Date[] = [];
+      for (const s of starts) {
+        const start = s.getTime();
+        const end = start + lengthMs;
+        if (windows.some((w) => w.start < end && w.end > start)) continue;
+        windows.push({ start, end });
+        fresh.push(s);
+      }
       const rows = fresh.map((startAt) => {
-        const endAt = new Date(startAt.getTime() + FLASH_SLOT_MINUTES * 60e3);
+        const endAt = new Date(startAt.getTime() + lengthMs);
         assertSaleWindow(startAt, endAt, maxDays, false);
         return { title: `Giờ vàng ${vnClock(startAt)}`, startAt, endAt, createdBy: adminId };
       });

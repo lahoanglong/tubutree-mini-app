@@ -29,6 +29,7 @@ import { isGomdonRecyclingEnabled } from '../../src/modules/integrations/gomdon/
 import { PICKUP_PAUSED_MESSAGE, PICKUP_REQUEST_GONE_MESSAGE } from '../../src/modules/waste-exchange/pickup/waste-pickup-attach';
 import { WasteNotifierService } from '../../src/modules/waste-exchange/core/waste-notifier.service';
 import { WasteShipLockService } from '../../src/modules/waste-exchange/core/waste-ship-lock.service';
+import { WasteAccessService } from '../../src/modules/waste-exchange/core/waste-access.service';
 import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-config.service';
 import { WasteExpiryCron } from '../../src/modules/waste-exchange/pickup/waste-expiry.cron';
 import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
@@ -86,6 +87,7 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
         { provide: CashbackProviderRegistry, useValue: { all: () => [] } },
         WasteShipLockService,
         WasteConfigService,
+        WasteAccessService,
         WasteExpiryCron,
         { provide: WasteNotifierService, useValue: notifier },
       ],

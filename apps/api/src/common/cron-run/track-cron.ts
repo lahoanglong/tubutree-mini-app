@@ -76,6 +76,19 @@ const logger = new Logger('TrackCron');
 // Cùng khoá mà @Cron() của @nestjs/schedule ghi lên hàm; đọc lúc chạy (không phải lúc khai báo) vì @Cron nằm trên @TrackCron().
 const SCHEDULE_CRON_OPTIONS = 'SCHEDULE_CRON_OPTIONS';
 
+// Mọi hàm đã bọc bởi @TrackCron() trong tiến trình này (khoá = hàm đã bọc, giá trị = tên dự phòng Lớp.phươngThức).
+const registered = new Map<object, string>();
+
+/** Tên các job còn khai báo trong mã (cùng tên mà lần chạy ghi vào cron_runs). Rỗng khi chưa nạp lớp nào có @TrackCron(). */
+export function registeredCronJobNames(): Set<string> {
+  const names = new Set<string>();
+  for (const [fn, fallbackName] of registered) {
+    const opts = Reflect.getMetadata(SCHEDULE_CRON_OPTIONS, fn) as { name?: string } | undefined;
+    names.add(opts?.name || fallbackName);
+  }
+  return names;
+}
+
 /**
  * Đặt NGAY DƯỚI @Cron(...). Không thể ghi nhận ở một chỗ trung tâm (SchedulerRegistry): ScheduleExplorer đã bọc
  * mỗi handler trong try/catch nuốt lỗi, và `cron` bỏ promise của callback, nên từ bên ngoài không thấy lỗi nào.
@@ -106,6 +119,7 @@ export function TrackCron(options: TrackCronOptions = {}): MethodDecorator {
       }
     };
     Object.defineProperty(wrapped, 'name', { value: String(key) });
+    registered.set(wrapped, fallbackName);
     (descriptor as { value: unknown }).value = wrapped;
   };
 }

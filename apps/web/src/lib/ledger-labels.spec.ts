@@ -56,6 +56,8 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['REFERRAL_ORDER2_DEBT:u1:9', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 9 điểm'],
   ['REFERRAL_ORDER2_PARTIAL_DEBT:u1:req1:11', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 11 điểm'],
   ['REFERRAL_MILESTONE_DEBT:u1:3#1:12', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 12 điểm'],
+  ['AFFILIATE_MILESTONE_REVOKE:c1:1', 'Thu hồi thưởng mốc doanh số CTV', 'Thu hồi thưởng mốc doanh số CTV'],
+  ['AFFILIATE_MILESTONE_DEBT:c1:1:40000', 'Ghi nợ thu hồi thưởng mốc doanh số CTV', 'Ghi nợ thu hồi thưởng mốc doanh số CTV · nợ 40000 điểm'],
   ['COMMUNITY_POST:p1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],
   ['COMMUNITY_ANSWER:c1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],
   ['COMMUNITY_BEST:p1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],
@@ -135,6 +137,8 @@ describe('R6-ADMIN-1 — mỗi loại dòng giới thiệu một nhãn riêng, n
     expect(pointsDebtAmount('REFERRAL_ORDER2_DEBT:u1')).toBeNull();
     expect(pointsDebtAmount('REFERRAL_ORDER2_REVOKE:u1:5')).toBeNull();
     expect(pointsDebtAmount('MERGED:g1:REFERRAL_MILESTONE_DEBT:u1:3#0:7')).toBe(7);
+    expect(pointsDebtAmount('AFFILIATE_MILESTONE_DEBT:c1:2:40000')).toBe(40000);
+    expect(pointsDebtAmount('AFFILIATE_MILESTONE_REVOKE:c1:2')).toBeNull();
   });
 });
 

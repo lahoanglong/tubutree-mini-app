@@ -105,7 +105,24 @@ describe('flashSlotsProblem (luật ghi flashsale.slots)', () => {
   it('nhận 1 đến 6 mốc HH:MM tăng dần', () => {
     expect(flashSlotsProblem(['12:00', '20:00'])).toBeNull();
     expect(flashSlotsProblem(['09:30'])).toBeNull();
-    expect(flashSlotsProblem(['00:00', '04:00', '08:00', '12:00', '16:00', '23:59'])).toBeNull();
+    expect(flashSlotsProblem(['00:00', '04:00', '08:00', '12:00', '16:00', '22:00'])).toBeNull();
+  });
+
+  it('mốc cách nhau đúng 120 phút (kể cả vòng qua nửa đêm) thì nhận', () => {
+    expect(flashSlotsProblem(['10:00', '12:00'])).toBeNull();
+    expect(flashSlotsProblem(['00:00', '22:00'])).toBeNull();
+    expect(flashSlotsProblem(['01:00', '23:00'])).toBeNull();
+  });
+
+  it.each([
+    [['09:00', '10:00', '20:00']],
+    [['10:00', '11:59']],
+    [['00:00', '23:59']],
+    [['01:00', '23:00', '23:30']],
+    [['00:00', '16:00', '23:59']],
+    [['00:30', '22:31']],
+  ])('từ chối mốc chồng giờ %j', (value) => {
+    expect(flashSlotsProblem(value)).toMatch(/120 phút/);
   });
 
   it.each([

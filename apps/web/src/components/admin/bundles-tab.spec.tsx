@@ -179,6 +179,22 @@ describe('BundlesTab: bật tắt và xoá', () => {
     expect(mocks.update).toHaveBeenCalledWith('d', { isActive: true });
   });
 
+  it('đang mở form: Sửa và Tắt/Bật của mọi dòng bị khoá (Tắt rồi Lưu form sẽ bật lại, Sửa dòng khác làm mất bản nháp); đóng form thì mở lại', async () => {
+    mocks.list.mockResolvedValue([row('a'), row('b')]);
+    const c = await mount();
+    expect(btn(c, 'Tắt bộ Bộ a').disabled).toBe(false);
+    click(btn(c, 'Sửa bộ Bộ a'));
+    await flush(4);
+    for (const label of ['Sửa bộ Bộ a', 'Tắt bộ Bộ a', 'Sửa bộ Bộ b', 'Tắt bộ Bộ b']) expect(btn(c, label).disabled).toBe(true);
+    click(btn(c, 'Tắt bộ Bộ a'));
+    await flush(2);
+    expect(mocks.update).not.toHaveBeenCalled();
+    click(byText(c, 'button', 'Đóng'));
+    await flush(2);
+    expect(btn(c, 'Tắt bộ Bộ a').disabled).toBe(false);
+    expect(btn(c, 'Sửa bộ Bộ b').disabled).toBe(false);
+  });
+
   it('bật tắt lỗi: lời máy chủ hiện ngay tại dòng, danh sách còn nguyên', async () => {
     mocks.update.mockRejectedValue(new Error('Bộ này do quản trị viên tạo'));
     const c = await mount();

@@ -61,6 +61,8 @@ describe('pointsReasonLabel', () => {
     ['REVIEW_RETURN:r1', 'Thu hồi điểm đánh giá (trả hàng)'],
     ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['REFERRAL_MILESTONE_DEBT:u1:3', 'Ghi nợ thu hồi thưởng giới thiệu'],
+    ['AFFILIATE_MILESTONE_REVOKE:c1:1', 'Thu hồi thưởng mốc doanh số CTV'],
+    ['AFFILIATE_MILESTONE_DEBT:c1:1:40000', 'Ghi nợ thu hồi thưởng mốc doanh số CTV'],
     ['MERGED:guest-1:ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
     ['RECYCLE:TR-8K2M9', 'Đổi rác lấy quà'],
     ['RECYCLE_REVERSED:TR-8K2M9', 'Thu hồi điểm đổi rác'],

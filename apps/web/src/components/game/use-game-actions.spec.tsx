@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@/test-utils/render-hook';
 import { ApiError, NetworkError } from '@/lib/client-api';
 
-const api = vi.hoisted(() => ({ collectDew: vi.fn() }));
-vi.mock('@tubutree/app-core/api/game', async (orig) => ({ ...(await orig<typeof import('@tubutree/app-core/api/game')>()), collectDew: api.collectDew }));
+const api = vi.hoisted(() => ({ collectDew: vi.fn(), answerQuiz: vi.fn() }));
+vi.mock('@tubutree/app-core/api/game', async (orig) => ({ ...(await orig<typeof import('@tubutree/app-core/api/game')>()), collectDew: api.collectDew, answerQuiz: api.answerQuiz }));
 
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import { useGameActions } from './use-game-actions';
 
 function setup() {
@@ -30,6 +31,24 @@ describe('useGameActions: lỗi khi bấm nút', () => {
     const { notify, invalidate, hook } = setup();
     await act(async () => hook.result.current.dewM.mutate());
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Bạn đã hứng sương hôm nay rồi.', 'error'));
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('useGameActions: trả lời câu đố', () => {
+  it('câu không thuộc bộ hôm nay: tải lại bộ câu và báo ngắn', async () => {
+    api.answerQuiz.mockRejectedValue(new ApiError('Câu hỏi này không thuộc bộ câu hôm nay.', 400));
+    const { notify, invalidate, hook } = setup();
+    await act(async () => hook.result.current.answerM.mutate({ id: 'q1', choice: 0 }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(gameMoreCopy.quiz.staleSet, 'error'));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['game', 'quiz'] });
+  });
+
+  it('lỗi khác: báo lời máy chủ, không tải lại bộ câu', async () => {
+    api.answerQuiz.mockRejectedValue(new ApiError('Bạn đã trả lời câu này rồi.', 400));
+    const { notify, invalidate, hook } = setup();
+    await act(async () => hook.result.current.answerM.mutate({ id: 'q1', choice: 0 }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Bạn đã trả lời câu này rồi.', 'error'));
     expect(invalidate).not.toHaveBeenCalled();
   });
 });

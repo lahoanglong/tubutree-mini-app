@@ -27,7 +27,10 @@ function summary(b: AdminBundle): string {
     : `${KIND_LABELS.BUNDLE_PCT} · giảm ${b.pct ?? 0}% mỗi món · ${names}`;
 }
 
-function BundleRow({ row, locked, onEdit, onError }: { row: AdminBundle; locked: boolean; onEdit: () => void; onError: (id: string, text: string | null) => void }) {
+/** Form đang mở thì Sửa và Tắt/Bật của dòng bị khoá: Tắt rồi Lưu form sẽ bật lại bộ (form giữ giá trị lúc mở), Sửa dòng khác làm mất bản nháp. */
+const FORM_OPEN_HINT = 'Đóng form đang mở trước.';
+
+function BundleRow({ row, locked, formOpen, onEdit, onError }: { row: AdminBundle; locked: boolean; formOpen: boolean; onEdit: () => void; onError: (id: string, text: string | null) => void }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-bundles'] });
@@ -70,10 +73,10 @@ function BundleRow({ row, locked, onEdit, onError }: { row: AdminBundle; locked:
         {locked && <div className="text-xs text-stone-500">{STAFF_LOCK}</div>}
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        <button type="button" aria-label={`Sửa bộ ${row.title}`} disabled={locked} onClick={onEdit} className={BTN_SECONDARY}>
+        <button type="button" aria-label={`Sửa bộ ${row.title}`} disabled={locked || formOpen} title={formOpen ? FORM_OPEN_HINT : undefined} onClick={onEdit} className={BTN_SECONDARY}>
           Sửa
         </button>
-        <button type="button" aria-label={`${row.isActive ? 'Tắt' : 'Bật'} bộ ${row.title}`} disabled={locked || toggle.isPending} onClick={() => toggle.mutate()} className={BTN_SECONDARY}>
+        <button type="button" aria-label={`${row.isActive ? 'Tắt' : 'Bật'} bộ ${row.title}`} disabled={locked || formOpen || toggle.isPending} title={formOpen ? FORM_OPEN_HINT : undefined} onClick={() => toggle.mutate()} className={BTN_SECONDARY}>
           {row.isActive ? 'Tắt' : 'Bật'}
         </button>
         <button type="button" aria-label={`Xoá bộ ${row.title}`} disabled={locked || del.isPending} onClick={() => void askDelete()} className={BTN_LINK_DANGER}>
@@ -162,6 +165,7 @@ export function BundlesTab({ isAdmin }: { isAdmin: boolean }) {
             <BundleRow
               row={row}
               locked={!isAdmin && !row.createdByStaff}
+              formOpen={form !== null}
               onEdit={() => {
                 setNotice(null);
                 setForm({ mode: 'edit', id: row.id });

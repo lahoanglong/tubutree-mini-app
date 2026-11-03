@@ -123,6 +123,11 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
           />
         </label>
       </div>
+      {item.znsConfigKey ? (
+        <p className="mt-1 text-xs text-stone-500">
+          Mã ZNS đang lấy từ cấu hình <span className="font-mono">{item.znsConfigKey}</span>, không phải ô trên.
+        </p>
+      ) : null}
       <label className="mt-2 block text-xs text-stone-600">
         <span className="mb-1 block">Nội dung trong app</span>
         <textarea

@@ -27,6 +27,11 @@ describe('FlashSlotGenerator (nút Tạo khung giờ của tab Giờ vàng)', ()
     expect(generatedText({ created: 0, skipped: 4 })).toBe('Đã tạo 0 khung, bỏ qua 4.');
   });
 
+  it('chữ hướng dẫn nói rõ mốc chồng giờ với một đợt đã có (kể cả đợt dài tạo tay) thì bỏ qua', () => {
+    const { r } = mount({});
+    expect(r.container.textContent).toContain('Mốc chồng giờ với một đợt đã có (kể cả đợt dài tạo tay hoặc đang tắt) thì bỏ qua');
+  });
+
   it('bấm nút: POST generate-slots với days=2, báo "Đã tạo n khung, bỏ qua m" và nạp lại danh sách đợt', async () => {
     const { r, api, onDone, button } = mount({ '/admin/flash-sales/generate-slots': { body: { created: 4, skipped: 0 } } });
     expect(button().disabled).toBe(false);

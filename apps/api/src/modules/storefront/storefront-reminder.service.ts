@@ -1,9 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { loadPublicVisibility } from './public-visibility';
+import { publicStorefrontWhere } from './storefront-visibility';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { TrackCron } from '../../common/cron-run/track-cron';
+
+const STORE_PAGE = 200;
 
 /**
  * Nhắc CTV thêm sản phẩm nổi bật họ chưa có trong gian hàng — giữ CTV quay lại cập nhật thay vì
@@ -24,6 +29,7 @@ export class StorefrontReminderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly config: SystemConfigService,
   ) {}
 
   /**
@@ -44,54 +50,61 @@ export class StorefrontReminderService {
       if (trending.length === 0) return;
 
       const cooldown = new Date(Date.now() - 6 * 24 * 3600e3);
-      const stores = await this.prisma.storefront.findMany({
-        where: {
-          type: 'CTV',
-          isPublished: true,
-          OR: [{ lastReminderAt: null }, { lastReminderAt: { lt: cooldown } }],
-        },
-        select: {
-          id: true,
-          ownerUserId: true,
-          lastReminderAt: true,
-          collections: { select: { items: { select: { productId: true } } } },
-        },
-        take: 200,
-      });
-
+      // Cùng bộ lọc với trang công khai: chủ bị khoá, chủ đã mất vai trò CTV, gian hàng bị gỡ hay chưa duyệt không nhận nhắc.
+      const visible = publicStorefrontWhere(await loadPublicVisibility(this.config));
       let sent = 0;
-      for (const sf of stores) {
-        if (!sf.ownerUserId) continue;
-        const haveIds = new Set(sf.collections.flatMap((c) => c.items.map((i) => i.productId)));
-        if (haveIds.size === 0) continue; // gian hàng trắng — xem comment đầu file
-        const missing = trending.filter((p) => !haveIds.has(p.id));
-        if (missing.length === 0) continue;
-
-        // Atomic guard chống double-send khi cron chạy chồng (mirror remarketing.service.ts) —
-        // chỉ claim nếu vẫn còn trong điều kiện cooldown lúc đọc ở trên (chưa bị lượt khác nhắc).
-        const claimedAt = new Date();
-        const claimed = await this.prisma.storefront.updateMany({
-          where: { id: sf.id, OR: [{ lastReminderAt: null }, { lastReminderAt: { lt: cooldown } }] },
-          data: { lastReminderAt: claimedAt },
+      let cursor: string | undefined;
+      for (;;) {
+        // Phân trang theo id: gian hàng bị bỏ qua (trắng hoặc đã đủ SP) không đổi lastReminderAt nên một trang cố định sẽ chặn các trang sau.
+        const stores = await this.prisma.storefront.findMany({
+          where: {
+            AND: [visible, { type: 'CTV', OR: [{ lastReminderAt: null }, { lastReminderAt: { lt: cooldown } }] }],
+            ...(cursor ? { id: { gt: cursor } } : {}),
+          },
+          select: {
+            id: true,
+            ownerUserId: true,
+            lastReminderAt: true,
+            collections: { select: { items: { select: { productId: true } } } },
+          },
+          orderBy: { id: 'asc' },
+          take: STORE_PAGE,
         });
-        if (claimed.count === 0) continue;
+        for (const sf of stores) {
+          if (!sf.ownerUserId) continue;
+          const haveIds = new Set(sf.collections.flatMap((c) => c.items.map((i) => i.productId)));
+          if (haveIds.size === 0) continue; // gian hàng trắng — xem comment đầu file
+          const missing = trending.filter((p) => !haveIds.has(p.id));
+          if (missing.length === 0) continue;
 
-        try {
-          await this.notifications.notify(sf.ownerUserId, 'STOREFRONT_TRENDING_PRODUCTS', {
-            count: String(missing.length),
-            sample: missing[0]!.name,
+          // Atomic guard chống double-send khi cron chạy chồng (mirror remarketing.service.ts) —
+          // chỉ claim nếu vẫn còn trong điều kiện cooldown lúc đọc ở trên (chưa bị lượt khác nhắc).
+          const claimedAt = new Date();
+          const claimed = await this.prisma.storefront.updateMany({
+            where: { id: sf.id, OR: [{ lastReminderAt: null }, { lastReminderAt: { lt: cooldown } }] },
+            data: { lastReminderAt: claimedAt },
           });
-          sent++;
-        } catch (err) {
-          // Đã CLAIM trước khi gửi — nuốt lỗi ở đây là mất hẳn lần nhắc đó (guard cooldown chặn
-          // mọi lượt sau trong tuần). Trả lại mốc cũ để lượt sau thử lại, log để phát hiện lỗi.
-          this.logger.error(
-            `Nhắc SP nổi bật lỗi (storefront=${sf.id}): ${err instanceof Error ? err.message : err}`,
-          );
-          await this.prisma.storefront
-            .updateMany({ where: { id: sf.id, lastReminderAt: claimedAt }, data: { lastReminderAt: sf.lastReminderAt } })
-            .catch(() => undefined);
+          if (claimed.count === 0) continue;
+
+          try {
+            await this.notifications.notify(sf.ownerUserId, 'STOREFRONT_TRENDING_PRODUCTS', {
+              count: String(missing.length),
+              sample: missing[0]!.name,
+            });
+            sent++;
+          } catch (err) {
+            // Đã CLAIM trước khi gửi — nuốt lỗi ở đây là mất hẳn lần nhắc đó (guard cooldown chặn
+            // mọi lượt sau trong tuần). Trả lại mốc cũ để lượt sau thử lại, log để phát hiện lỗi.
+            this.logger.error(
+              `Nhắc SP nổi bật lỗi (storefront=${sf.id}): ${err instanceof Error ? err.message : err}`,
+            );
+            await this.prisma.storefront
+              .updateMany({ where: { id: sf.id, lastReminderAt: claimedAt }, data: { lastReminderAt: sf.lastReminderAt } })
+              .catch(() => undefined);
+          }
         }
+        if (stores.length < STORE_PAGE) break;
+        cursor = stores[stores.length - 1]!.id;
       }
       if (sent) this.logger.log(`Storefront trending-product reminders sent: ${sent}`);
     } catch (err) {

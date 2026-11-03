@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBlockedHint, createdTodayVn, dropOffDayLimitText, itemQtyMax, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
+import { createBlockedHint, createdTodayVn, dropOffDayLimitText, itemQtyMax, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteIntroCopy, wasteItemIconKey, writeLastPointId } from './waste-copy';
 
 describe('parseQtyInput', () => {
   it('chỉ giữ chữ số và kẹp vào khoảng', () => {
@@ -130,5 +130,27 @@ describe('itemQtyMax và dropOffDayLimitText', () => {
     const now = new Date('2026-10-27T18:30:00Z'); // 28/10 01:30 giờ VN
     expect(createdTodayVn('2026-10-27T17:05:00Z', now)).toBe(true); // 28/10 00:05 VN
     expect(createdTodayVn('2026-10-27T16:59:00Z', now)).toBe(false); // 27/10 23:59 VN
+  });
+});
+
+describe('wasteIntroCopy', () => {
+  it('cả hai đường mở: giữ lời hứa cũ', () => {
+    const c = wasteIntroCopy({ dropoff: true, mailin: true });
+    expect(c.intro).toContain('tới điểm nhận hoặc gửi về kho Tubu');
+    expect(c.steps[1]).toBe('Mang tới điểm nhận hoặc gửi về kho Tubu');
+  });
+  it('tắt gửi kho: không nhắc kho', () => {
+    const c = wasteIntroCopy({ dropoff: true, mailin: false });
+    expect(`${c.intro} ${c.steps.join(' ')}`).not.toMatch(/kho/);
+    expect(c.steps[1]).toBe('Mang tới điểm nhận');
+  });
+  it('tắt mang tới điểm: không nhắc điểm nhận', () => {
+    const c = wasteIntroCopy({ dropoff: false, mailin: true });
+    expect(`${c.intro} ${c.steps.join(' ')}`).not.toMatch(/điểm nhận/);
+    expect(c.steps[1]).toBe('Gửi về kho Tubu');
+  });
+  it('tắt cả hai: câu trung tính, không nhắc điểm nhận hay kho', () => {
+    const c = wasteIntroCopy({ dropoff: false, mailin: false });
+    expect(`${c.intro} ${c.steps.join(' ')}`).not.toMatch(/điểm nhận|kho/);
   });
 });

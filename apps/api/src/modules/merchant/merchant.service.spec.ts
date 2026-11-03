@@ -4,7 +4,11 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
 
 function makePrisma(overrides: Record<string, unknown> = {}): PrismaService {
-  return overrides as unknown as PrismaService;
+  const merged: Record<string, unknown> = { $executeRaw: jest.fn().mockResolvedValue(0), ...overrides };
+  // updateStore đổi định danh trong transaction: tx chính là prisma giả để các mock findFirst/update đặt sẵn vẫn dùng được.
+  merged.user = { findFirst: jest.fn().mockResolvedValue(null), ...(overrides.user as object) };
+  merged.$transaction ??= jest.fn((arg: unknown) => (typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(merged) : Promise.all(arg as unknown[])));
+  return merged as unknown as PrismaService;
 }
 
 // updateMerchantOrderStatus giờ ủy quyền cho OrderStatusService (transition guard + side-effect

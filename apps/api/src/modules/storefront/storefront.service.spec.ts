@@ -20,8 +20,10 @@ function makePrisma(over: Record<string, any> = {}) {
   const merged: Record<string, any> = {
     user: { findUniqueOrThrow: jest.fn() },
     storefront: { findFirst: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+    $executeRaw: jest.fn().mockResolvedValue(0),
     ...over,
   };
+  merged.user = { findFirst: jest.fn().mockResolvedValue(null), ...merged.user };
   // Việc 6: createCollection/addItem giờ bọc count()+create() trong $transaction (Serializable) —
   // mock mặc định hỗ trợ CẢ 2 dạng $transaction Prisma dùng trong service: callback (chạy với
   // chính `merged`, tức tx === prisma trong test, giữ nguyên mọi mock count/create đã set qua
@@ -1136,12 +1138,15 @@ describe('StorefrontService.getPublicBySlug — không phân biệt hoa/thườn
     (prisma.storefront.findFirst as jest.Mock) = found;
     const svc = new StorefrontService(prisma, config, affiliate);
     await svc.getPublicBySlug('LINH123').catch(() => undefined);
-    const where = found.mock.calls[0][0].where;
-    // Mỗi nhánh OR phải so khớp không phân biệt hoa/thường, nếu không slug cũ vẫn chết.
-    for (const branch of where.OR) {
-      const field = Object.values(branch)[0] as { mode?: string };
-      expect(field.mode).toBe('insensitive');
+    // Slug so khớp không phân biệt hoa/thường (slug cũ còn chữ hoa), subdomain và tên miền riêng luôn chữ thường nên so bằng; thứ tự slug (rồi hỏi lại slug bất kể hiển thị để
+    // không rơi xuống subdomain của người khác), subdomain, tên miền riêng (DLSF-01).
+    const columns = found.mock.calls.map((c) => Object.keys(c[0].where).find((k) => ['slug', 'subdomain', 'customDomain'].includes(k)));
+    expect(columns).toEqual(['slug', 'slug', 'subdomain', 'customDomain']);
+    for (const call of found.mock.calls.filter((c) => c[0].where.slug)) {
+      expect(call[0].where.slug).toEqual({ equals: 'linh123', mode: 'insensitive' });
     }
+    const exact = found.mock.calls.map((c) => c[0].where).filter((w) => w.subdomain || w.customDomain);
+    expect(exact.map((w) => w.subdomain ?? w.customDomain)).toEqual(['linh123', 'linh123']);
   });
 });
 

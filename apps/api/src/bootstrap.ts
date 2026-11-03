@@ -105,9 +105,9 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   });
   // CORS phải đứng đầu chuỗi middleware: option `cors` của NestFactory chỉ gắn lúc listen, sau các app.use bên dưới,
   // nên 413/400 do parser/guard trả sẽ thiếu Access-Control-Allow-Origin và trình duyệt chỉ thấy lỗi mạng.
-  // Retry-After không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
-  // (khác origin) không đọc được và phải đoán thời gian chờ khi bị 429.
-  app.enableCors({ origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After'] });
+  // Retry-After và Content-Disposition không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
+  // (khác origin) không đọc được thời gian chờ khi bị 429, và web admin không đọc được tên file CSV do máy chủ đặt.
+  app.enableCors({ origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After', 'Content-Disposition'] });
 
   // Graceful shutdown: dọn dẹp kết nối Prisma và queue khi container nhận SIGTERM/SIGINT.
   app.enableShutdownHooks();

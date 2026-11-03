@@ -26,6 +26,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { useLockedMutation } from './use-locked-mutation';
 import { NetworkError } from '@/lib/client-api';
+import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
 import { actionErrorText } from '@/lib/error-text';
 
 export type { HarvestReward };
@@ -248,7 +249,11 @@ export function useGameActions({
         void queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
         void queryClient.invalidateQueries({ queryKey: ['me'] });
       },
-      onError,
+      onError: (e: unknown) => {
+        if (!isStaleQuizMessage(errText(e))) return onError(e);
+        notify(gameMoreCopy.quiz.staleSet, 'error');
+        void queryClient.invalidateQueries({ queryKey: ['game', 'quiz'] });
+      },
     },
     ({ id }) => id,
   );

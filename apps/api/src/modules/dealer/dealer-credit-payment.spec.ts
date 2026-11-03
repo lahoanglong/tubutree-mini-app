@@ -143,6 +143,8 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     dealer?: { id: string; role: string; fullName?: string | null; phone?: string | null } | null;
     debt?: number;
     existingClaim?: { delta: number } | null;
+    bankRefHistory?: Array<{ orderId: string; note: string }>;
+    bankRefOrder?: { code: string } | null;
     /** false: dòng báo cáo không còn REPORTED nên updateMany không đóng được dòng nào. */
     reportClosed?: boolean;
     report?: { status: string } | null;
@@ -159,6 +161,9 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     const prisma: Record<string, unknown> = {
       dealerCreditPaymentReport: { updateMany: reportUpdateMany, findFirst: reportFindFirst },
       user: { findUnique: jest.fn().mockResolvedValue(dealer) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      orderStatusHistory: { findMany: jest.fn().mockResolvedValue(opts.bankRefHistory ?? []) },
+      order: { findFirst: jest.fn().mockResolvedValue(opts.bankRefOrder ?? null) },
       dealerCreditLedger: {
         findFirst,
         aggregate,
@@ -307,6 +312,41 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
       svc.adminRecordCreditPayment('admin1', 'd1', 70_000, { idempotencyKey: 'key-1' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('mã giao dịch đã ghi cho số tiền khác: báo rõ mã và số đã ghi, không nhắc Idempotency-Key', async () => {
+    const { svc } = build({ existingClaim: { delta: -5_000_000 } });
+    const err = await svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { idempotencyKey: 'FT9', bankRef: 'FT9' }).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toMatch(/Mã giao dịch FT9 đã ghi nhận 5\.000\.000/);
+    expect((err as Error).message).toMatch(/bỏ trống ô mã/);
+    expect((err as Error).message).not.toMatch(/Idempotency-Key|thử lại/);
+  });
+
+  it('mã giao dịch đã xác nhận một đơn trả trước: 409 nêu mã đơn, không ghi dòng sổ', async () => {
+    const { svc, ledgerCreate } = build({
+      debt: 9_000_000,
+      bankRefHistory: [{ orderId: 'o1', note: 'Admin xác nhận đã nhận chuyển khoản (UNPAID → PAID) · Mã GD FT7' }],
+      bankRefOrder: { code: 'TUBU77' },
+    });
+    await expect(svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { bankRef: 'ft7' })).rejects.toThrow(/Mã giao dịch ft7 đã dùng để xác nhận đơn TUBU77/);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('mã giao dịch đã ghi giảm nợ ở khoản khác (đại lý khác hoặc khác hoa thường): 409, không ghi dòng sổ', async () => {
+    const { svc, prisma, ledgerCreate } = build({ debt: 9_000_000 });
+    const ledger = (prisma as unknown as { dealerCreditLedger: { findMany: jest.Mock } }).dealerCreditLedger;
+    ledger.findMany.mockResolvedValue([{ userId: 'd2', refId: 'FT9', note: 'Admin kt xác nhận đã nhận chuyển khoản · Mã GD FT9' }]);
+    await expect(svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { bankRef: 'ft9', idempotencyKey: 'k1' })).rejects.toThrow(/Mã giao dịch ft9 đã dùng để ghi giảm công nợ/);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('dòng sổ có đúng khoá của lần ghi này không tính là mã đã dùng (replay song song)', async () => {
+    const { svc, prisma, ledgerCreate } = build({ debt: 9_000_000 });
+    const ledger = (prisma as unknown as { dealerCreditLedger: { findMany: jest.Mock } }).dealerCreditLedger;
+    ledger.findMany.mockResolvedValue([{ userId: 'd1', refId: 'FT9', note: 'Mã GD FT9' }]);
+    await svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { bankRef: 'FT9', idempotencyKey: 'FT9' });
+    expect(ledgerCreate).toHaveBeenCalledTimes(1);
   });
 
   it('race 2 admin duyệt CÙNG lúc cho CÙNG đại lý (P2034 serialization failure) → BadRequest thân thiện, không sập 500', async () => {

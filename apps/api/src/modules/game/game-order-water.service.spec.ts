@@ -5,10 +5,14 @@ import { startOfVnWeek, startOfNextVnWeek } from '../../common/vn-time';
 
 type Cfg = Record<string, unknown>;
 
-function make(opts: { cfg?: Cfg; order?: Record<string, unknown> | null; user?: Record<string, unknown>; used?: number; total?: number; existing?: boolean; noProfile?: boolean; checkoutGroup?: string | null; pending?: { id: string; createdAt: Date }[] } = {}) {
+function make(opts: { cfg?: Cfg; order?: Record<string, unknown> | null; user?: Record<string, unknown>; used?: number; total?: number; existing?: boolean; noProfile?: boolean; checkoutGroup?: string | null; pending?: { id: string; createdAt: Date; refId?: string }[]; statusInTx?: string; closedOrders?: number } = {}) {
   const cfg: Cfg = { 'game.order_seeds': 100, 'game.order_seeds_weekly_cap': 300, 'game.tank_capacity': 500, ...(opts.cfg ?? {}) };
   const tx = {
-    $queryRaw: jest.fn().mockImplementation(async () => (opts.noProfile ? [] : [{ userId: 'u1', totalSeeds: opts.total ?? 0 }])),
+    $queryRaw: jest.fn().mockImplementation(async (sql: TemplateStringsArray) => {
+      if (sql.join('').includes('"orders"')) return [{ status: opts.statusInTx ?? 'DELIVERED' }];
+      return opts.noProfile ? [] : [{ userId: 'u1', totalSeeds: opts.total ?? 0 }];
+    }),
+    order: { count: jest.fn().mockImplementation(async ({ where }: { where: { status?: unknown } }) => (where.status ? (opts.closedOrders ?? 0) : 1)) },
     gameWaterEvent: {
       findUnique: jest.fn().mockResolvedValue(opts.existing ? { id: 'e' } : null),
       aggregate: jest.fn().mockResolvedValue({ _sum: { delta: opts.used ?? 0 } }),
@@ -94,12 +98,20 @@ describe('GameOrderWaterService.grantForOrder', () => {
     }
   });
 
-  it('khoá users trước game_profiles', async () => {
+  it('khoá users, đọc lại trạng thái đơn, rồi mới khoá game_profiles', async () => {
     const { svc, tx } = make();
     await svc.grantForOrder('o1');
     const sql = tx.$queryRaw.mock.calls.map((c) => (c[0] as string[]).join(''));
     expect(sql[0]).toContain('"users"');
-    expect(sql[1]).toContain('"game_profiles"');
+    expect(sql[1]).toContain('"orders"');
+    expect(sql[2]).toContain('"game_profiles"');
+  });
+
+  it('đơn đã đổi sang RETURNED giữa lúc đọc ngoài tx và lúc vào tx: không ghi, không cộng', async () => {
+    const { svc, tx } = make({ statusInTx: 'RETURNED' });
+    await expect(svc.grantForOrder('o1')).resolves.toEqual({ granted: 0, skipped: 'NOT_DELIVERED' });
+    expect(tx.gameWaterEvent.create).not.toHaveBeenCalled();
+    expect(tx.gameProfile.update).not.toHaveBeenCalled();
   });
 
   it('công tắc 0 (số giọt hoặc trần tuần) tắt hẳn, không đụng DB', async () => {
@@ -134,6 +146,14 @@ describe('GameOrderWaterService.summary', () => {
 });
 
 describe('GameOrderWaterService.claimPending', () => {
+  it('dòng chờ của đơn đã trả/huỷ hết: tắt dòng, không cộng', async () => {
+    const now = new Date('2026-10-28T05:00:00Z');
+    const { svc, tx } = make({ pending: [{ id: 'e1', createdAt: new Date('2026-10-27T05:00:00Z'), refId: 'o1' }], closedOrders: 1 });
+    await expect(svc.claimPending('u1', now)).resolves.toBe(0);
+    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'e1' }, data: expect.objectContaining({ pending: false, delta: 0 }) });
+    expect(tx.gameProfile.update).not.toHaveBeenCalled();
+  });
+
   const now = new Date('2026-10-28T03:00:00Z'); // thứ Tư giờ VN
   const thisWeek = new Date('2026-10-27T03:00:00Z');
   const lastWeek = new Date('2026-10-20T03:00:00Z');

@@ -167,7 +167,7 @@ export default function GamePage() {
         <GardenHero
           eco={eco}
           totalSeeds={profile?.totalSeeds}
-          streakDays={profile?.streakDays}
+          streakDays={status?.streakDays ?? profile?.streakDays}
           harvestReady={profile?.harvestReady}
           tankCapacity={profile?.tankCapacity}
           wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}

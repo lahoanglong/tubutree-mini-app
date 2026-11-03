@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
 import { VARIATION_ORDER_BY, cardPriceWithFlash, cardPrices, sortVariationsByPrice, type FlashOffer } from './variation-order';
@@ -1020,7 +1020,16 @@ export class CatalogService {
     const valid = rows.filter((r) => r.sku && Number.isFinite(r.count) && r.count >= 0);
     if (valid.length === 0) return { updated: 0 };
 
-    const skus = [...new Set(valid.map((r) => r.sku))];
+    // Cùng một SKU hai dòng là nhập nhầm (dán đôi): cộng dồn sẽ nhân đôi số đã bán. Chỉ SKU khác nhau của cùng sản phẩm mới cộng dồn.
+    const seen = new Set<string>();
+    const repeated = new Set<string>();
+    for (const r of valid) (seen.has(r.sku) ? repeated : seen).add(r.sku);
+    if (repeated.size > 0) {
+      const shown = [...repeated].slice(0, 10).join(', ');
+      throw new BadRequestException(`SKU lặp trong cùng lô: ${shown}${repeated.size > 10 ? '…' : ''}. Mỗi SKU chỉ một dòng, kiểm lại rồi nhập lại.`);
+    }
+
+    const skus = [...seen];
     const variations = await this.prisma.variation.findMany({
       where: { sku: { in: skus } },
       select: { sku: true, productId: true },

@@ -132,6 +132,8 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     ORDER_CONFIRMED: ['refund_note'],
     ORDER_PACKED: ['refund_note'],
     ORDER_SHIPPING: ['refund_note'],
+    // Chỉ cho mẫu admin đã sửa tay từ chữ cũ còn {{points}}; mẫu mặc định dùng {{taken_note}}.
+    COMMISSION_MILESTONE_REVOKED: ['points'],
   };
 
   function sourceFiles(dir: string, out: string[] = []): string[] {

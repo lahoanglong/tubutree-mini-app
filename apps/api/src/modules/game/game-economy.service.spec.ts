@@ -207,15 +207,44 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
     expect(upd.brokenStreakAt).toBeNull();
   });
 
-  it('lỡ 1 ngày + có vé giữ lửa (cứu chuỗi) → xoá broken streak cũ nếu có', async () => {
+  it('lỡ 1 ngày + có vé giữ lửa: chuỗi dài vừa đứt còn trong cửa sổ hồi sinh thì giữ record, không phụ thuộc thứ tự bấm', async () => {
+    const brokenAt = new Date(Date.now() - 3600_000);
+    const p = prisma(prof({
+      streakDays: 1, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY),
+      brokenStreakDays: 7, brokenStreakAt: brokenAt,
+    }));
+    await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(upd.brokenStreakDays).toBe(7);
+    expect(upd.brokenStreakAt).toBe(brokenAt);
+  });
+
+  it('lỡ 1 ngày + có vé giữ lửa: record đã quá cửa sổ hồi sinh thì xoá', async () => {
     const p = prisma(prof({
       streakDays: 3, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY),
-      brokenStreakDays: 7, brokenStreakAt: new Date(),
+      brokenStreakDays: 7, brokenStreakAt: new Date(Date.now() - 100 * 3600_000),
     }));
     await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.brokenStreakDays).toBe(0);
     expect(upd.brokenStreakAt).toBeNull();
+  });
+});
+
+describe('GameEconomyService.checkIn — mốc thời gian do người gọi chốt (VX2-07)', () => {
+  it('mốc đã nguội quá lâu → BadRequest, không ghi', async () => {
+    const p = prisma(prof());
+    const svc = new GameEconomyService(p, cfg(), sp(), analytics);
+    await expect(svc.checkIn('u1', new Date(Date.now() - 10 * 60_000))).rejects.toBeInstanceOf(BadRequestException);
+    expect(p.gameProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('ghi lastCheckInAt đúng mốc người gọi truyền, CAS theo đầu ngày VN của mốc đó', async () => {
+    const p = prisma(prof());
+    const now = new Date(Date.now() - 1000);
+    await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1', now);
+    const call = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
+    expect(call.data.lastCheckInAt).toBe(now);
   });
 });
 
@@ -241,6 +270,25 @@ describe('GameEconomyService.repairStreak', () => {
     }));
     await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cooldown_days': 30 }), sp(), analytics).repairStreak('u1'))
       .rejects.toMatchObject({ message: 'Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿' });
+  });
+
+  it('đã lỡ thêm một ngày sau lần điểm danh làm đứt chuỗi (gap 2, hết vé) → không trừ 💧, báo rõ', async () => {
+    const p = prisma(prof({
+      brokenStreakDays: 10, brokenStreakAt: new Date(Date.now() - 46 * 3600 * 1000), streakDays: 1, streakFreezes: 0,
+      lastCheckInAt: new Date(Date.now() - 2 * DAY), totalSeeds: 500,
+    }));
+    await expect(new GameEconomyService(p, cfg(), sp(), analytics).repairStreak('u1'))
+      .rejects.toMatchObject({ message: expect.stringContaining('không hồi sinh') });
+    expect(p.gameProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('đã lỡ hai ngày nhưng còn vé giữ lửa → vẫn hồi sinh được (điểm danh kế dùng vé nối chuỗi)', async () => {
+    const brokenAt = new Date(Date.now() - 46 * 3600 * 1000);
+    const row = prof({ brokenStreakDays: 10, brokenStreakAt: brokenAt, streakDays: 1, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY), totalSeeds: 500 });
+    const p = prisma(row);
+    (p.gameProfile.findUnique as jest.Mock).mockResolvedValueOnce(row).mockResolvedValueOnce({ ...row, streakDays: 11, totalSeeds: 350 });
+    const r = await new GameEconomyService(p, cfg(), sp(), analytics).repairStreak('u1');
+    expect(r).toMatchObject({ repaired: true, streakDays: 11 });
   });
 
   it('không đủ 💧 (updateMany count=0) → BadRequest kèm giá tiền', async () => {

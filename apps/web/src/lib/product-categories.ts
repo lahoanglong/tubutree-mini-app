@@ -49,6 +49,8 @@ export interface AssignResult {
   requested: number;
   changed: number;
   unchanged: number;
+  /** Sản phẩm đã đủ số danh mục tối đa nên lệnh gán bỏ qua. */
+  overLimit?: { id: string; name: string }[];
   category: { id: string; name: string };
 }
 

@@ -255,7 +255,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         )}
         <p className="text-sm text-stone-800">Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn</p>
         <p className="text-sm text-stone-800">Kho từ chối kiện còn cước phải trả khi nhận</p>
-        <p className="text-sm text-stone-600">{`Nhập mã vận đơn trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</p>
+        <p className="text-sm text-stone-600">{`Nhập mã vận đơn đến hết ${dayMonth(r.expiresAt ?? r.createdAt)}`}</p>
         <TrackingForm
           id={id}
           initialCarrier={r.carrier ?? ''}
@@ -304,7 +304,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
       ? {
           1: (
             <>
-              <span className="text-xs text-stone-600">{`Mang tới ${r.point.name} trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</span>
+              <span className="text-xs text-stone-600">{`Mang tới ${r.point.name} đến hết ${dayMonth(r.expiresAt ?? r.createdAt)}`}</span>
               <span className="text-xs text-stone-600">{pointAddress(r.point)}</span>
               <span className="text-xs text-stone-600">{hoursLine}</span>
             </>
