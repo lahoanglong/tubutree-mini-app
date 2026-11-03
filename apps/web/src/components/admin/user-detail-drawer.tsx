@@ -20,6 +20,7 @@ import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/error-text';
 
 const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -295,7 +296,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
       setMsg({ tone: 'success', text: r.changed ? 'Đã lưu nhóm việc — có hiệu lực ở lần thao tác kế tiếp của nhân viên.' : 'Không có gì thay đổi.' });
       void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
     },
-    onError: (e) => setMsg({ tone: 'danger', text: e instanceof Error ? e.message : 'Không lưu được.' }),
+    onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
   return (
@@ -343,7 +344,7 @@ function WasteFlagsSection({ userId }: { userId: string }) {
       void qc.invalidateQueries({ queryKey: ['admin-waste-requests'] });
       void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
     },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không lưu được.'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
   const change = async (title: string, confirmLabel: string, locking: boolean, patch: FlagChange) => {
     const reason = await ask({

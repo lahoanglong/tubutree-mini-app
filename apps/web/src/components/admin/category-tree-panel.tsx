@@ -14,6 +14,7 @@ import {
 } from '@/lib/product-categories';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, LoadError, Notice } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 type Form = { kind: 'add'; parentId: string | null } | { kind: 'rename'; id: string };
 /** `at` = chỗ hiện lỗi: lỗi nằm cạnh mục hoặc ô nhập vừa thao tác, không dồn lên đầu danh sách. */
@@ -23,7 +24,7 @@ const NAME_MAX = 60;
 const ROOT_VALUE = '__root__';
 /** Admin bấm Huỷ ở hộp xác nhận giữa chừng: không phải lỗi, không báo gì. */
 class Declined extends Error {}
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Không lưu được danh mục.');
+const errText = (e: unknown) => (e instanceof Error ? actionErrorText(e) : 'Không lưu được danh mục.');
 const formKeyOf = (f: Form | null) => (!f ? '' : f.kind === 'add' ? `add:${f.parentId ?? 'root'}` : `rename:${f.id}`);
 
 // Nút ↑↓ ở đầu/cuối dùng aria-disabled (không `disabled`) để focus bàn phím không rơi mất sau khi đổi chỗ.

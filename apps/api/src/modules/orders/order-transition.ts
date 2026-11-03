@@ -45,13 +45,28 @@ export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ORDER_TRANSITIONS[from].includes(to);
 }
 
+/** Nhãn trạng thái đơn cho lời báo lỗi hiển thị trên trang Quản trị (cùng chữ với bảng đơn của web). */
+const ORDER_STATUS_LABEL_VI: Record<OrderStatus, string> = {
+  PENDING_PAYMENT: 'Chờ thanh toán',
+  CONFIRMED: 'Đã xác nhận',
+  PACKED: 'Đang đóng gói',
+  SHIPPING: 'Đang giao',
+  DELIVERED: 'Giao thành công',
+  RETURNED: 'Đã hoàn',
+  CANCELLED: 'Đã huỷ',
+};
+export const orderStatusLabelVi = (status: string): string => ORDER_STATUS_LABEL_VI[status as OrderStatus] ?? status;
+
 export class InvalidOrderTransitionError extends Error {
   constructor(
     public readonly from: OrderStatus,
     public readonly to: OrderStatus,
     message?: string,
   ) {
-    super(message ?? `Không thể chuyển đơn từ ${from} sang ${to}.`);
+    super(
+      message ??
+        `Đơn vừa chuyển sang «${orderStatusLabelVi(from)}», không thể chuyển sang «${orderStatusLabelVi(to)}». Tải lại đơn để xem trạng thái mới.`,
+    );
     this.name = 'InvalidOrderTransitionError';
   }
 }

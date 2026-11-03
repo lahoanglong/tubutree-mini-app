@@ -11,6 +11,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { WASTE_ITEM_STATUS_LABELS } from '@/lib/waste-labels';
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const DASH = '—';
 const STATUSES = Object.keys(WASTE_ITEM_STATUS_LABELS) as WasteItemStatus[];
@@ -103,7 +104,7 @@ export function WasteItemsSection() {
 
   const sorted = [...(items.data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const done = () => qc.invalidateQueries({ queryKey: ['admin-waste-items'] });
-  const onError = (e: unknown) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+  const onError = (e: unknown) => setErr(actionErrorText(e));
 
   const patch = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<WasteItemUpsertRequest> }) => updateWasteItem(id, body),

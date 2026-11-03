@@ -11,6 +11,7 @@ import {
 } from '@/lib/admin-reports-client';
 import { REVENUE_MAX_DAYS, rangeError } from '@/lib/admin-reports';
 import { BTN_SECONDARY, FIELD_XS, Notice } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const PAYOUT_STATUS_OPTIONS: { value: '' | PayoutExportStatus; label: string }[] = [
   { value: '', label: 'Mọi trạng thái' },
@@ -52,7 +53,7 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
             : await downloadRefundsCsv(range, refundStatus || undefined);
       setMsg({ ok: true, text: `Đã tải ${r.filename}.` });
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
+      setMsg({ ok: false, text: actionErrorText(e) });
     } finally {
       setBusy(null);
     }

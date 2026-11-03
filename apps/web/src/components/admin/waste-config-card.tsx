@@ -8,6 +8,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_PRIMARY, FIELD_CLASS, INPUT_CLASS, Notice } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 export type WasteConfigField = { key: string; label: string } & (
   | { kind: 'boolean'; fallback: boolean }
@@ -107,7 +108,7 @@ export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | und
       setMsg({ ok: true, text: `Đã lưu ${f.key}.` });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
   const askWrite = async (f: WasteConfigField, next: unknown) => {

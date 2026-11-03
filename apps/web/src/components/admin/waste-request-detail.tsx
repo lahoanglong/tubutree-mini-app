@@ -36,6 +36,7 @@ import {
 } from '@/lib/waste-labels';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, LoadError, Notice, ScrollRegion } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/error-text';
 
 const NOTE_MAX = 500;
 const WEIGHT_ERROR = 'Cân nặng là số nguyên từ 1 tới 100000 gram';
@@ -45,7 +46,7 @@ const TH = 'px-2 py-2 text-left text-xs font-medium text-stone-600';
 const TD = 'px-2 py-2 align-top text-sm text-stone-800';
 const PANEL = 'space-y-3 rounded-control border border-stone-200 bg-stone-0 p-3';
 
-const errText = (e: unknown) => (e instanceof Error ? e.message : 'Thao tác thất bại.');
+const errText = (e: unknown) => (actionErrorText(e));
 
 /** Hiển thị thôi: điểm thật do máy chủ tính khi xác nhận (spec 5.1). */
 export function wastePointsForLines(lines: { receivedQty: number; unitsPerPoint: number; pointsPerGroup: number }[]): number {

@@ -12,6 +12,7 @@ import { UserPicker } from './user-picker';
 import { VnDateInput } from './vn-date-input';
 import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
+import { loadErrorText } from '@/lib/error-text';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
 export function summarizePosCredits(rows: AdminPosCredit[]) {
@@ -79,7 +80,7 @@ export function PosCreditsTab() {
       </div>
 
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>{q.error instanceof Error ? q.error.message : 'Không tải được sổ tích điểm.'}</LoadError>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>{loadErrorText(q.error)}</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-600">

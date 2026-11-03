@@ -12,6 +12,7 @@ import {
 import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError } from './ui';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText } from '@/lib/error-text';
 
 const DELIVERY: Record<NotificationDelivery, { tone: Tone; label: string }> = {
   ZNS: { tone: 'success', label: 'Gửi ZNS + trong app' },
@@ -72,7 +73,7 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
       setMsg({ ok: true, text: 'Đã lưu.' });
       void qc.invalidateQueries({ queryKey: ['admin-notification-templates'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được mẫu thông báo.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const savedChannel = item.channel === 'ZNS' ? 'ZNS' : 'INAPP';
   const missingId = f.channel === 'ZNS' && !f.zaloTemplateId.trim();

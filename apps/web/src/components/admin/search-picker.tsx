@@ -4,6 +4,7 @@ import { Fragment, useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { PICKER_MIN_CHARS } from '@/lib/admin-client';
 import { INPUT_CLASS } from './ui';
+import { loadErrorText } from '@/lib/error-text';
 
 export interface PickerOption {
   id: string;
@@ -109,7 +110,7 @@ export function SearchPicker({
         {waiting && <p className="mt-1 text-xs text-stone-500">Đang tìm…</p>}
         {enabled && !waiting && q.isError && (
           <p role="alert" className="mt-1 text-xs text-danger-fg">
-            {(q.error as Error).message || 'Không tìm được, thử lại.'}
+            {loadErrorText(q.error) || 'Không tìm được, thử lại.'}
           </p>
         )}
         {enabled && !waiting && q.isSuccess && options.length === 0 && (

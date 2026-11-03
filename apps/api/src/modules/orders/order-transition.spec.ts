@@ -63,8 +63,8 @@ describe('order-transition', () => {
   });
 
   it('assertTransition ném lỗi có nêu rõ from → to', () => {
-    expect(() => assertTransition('DELIVERED', 'CONFIRMED')).toThrow(/DELIVERED/);
-    expect(() => assertTransition('DELIVERED', 'CONFIRMED')).toThrow(/CONFIRMED/);
+    expect(() => assertTransition('DELIVERED', 'CONFIRMED')).toThrow(/Giao thành công/);
+    expect(() => assertTransition('DELIVERED', 'CONFIRMED')).toThrow(/Đã xác nhận/);
     expect(() => assertTransition('CONFIRMED', 'PACKED')).not.toThrow();
   });
 
@@ -246,5 +246,22 @@ describe('allowedNextStatuses — không hiện Huỷ sau khi bàn giao (D1)', (
     expect(
       allowedNextStatuses({ ...paid, status: 'CONFIRMED', hasRecyclingPickup: true, gomdonPartnerCode: 'B1', shippingCode: 'B1', gomdonStatus: '3' }),
     ).not.toContain('CANCELLED');
+  });
+});
+
+describe('ERR-02 — câu lỗi chuyển trạng thái nói nhãn tiếng Việt', () => {
+  it('assertTransition(SHIPPING, PACKED) không chứa mã enum, nêu trạng thái hiện tại và bảo tải lại', () => {
+    let message = '';
+    try {
+      assertTransition('SHIPPING', 'PACKED');
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).not.toMatch(/[A-Z_]{5,}/);
+    expect(message).toBe('Đơn vừa chuyển sang «Đang giao», không thể chuyển sang «Đang đóng gói». Tải lại đơn để xem trạng thái mới.');
+  });
+
+  it('lớp con giữ câu riêng', () => {
+    expect(new UnpaidPrepaidTransitionError('TB1', 'BANK_TRANSFER', 'CONFIRMED', 'SHIPPING').message).not.toContain('Tải lại đơn');
   });
 });

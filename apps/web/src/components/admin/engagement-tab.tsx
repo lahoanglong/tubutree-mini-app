@@ -14,6 +14,7 @@ import {
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 import { SeasonAdmin } from './season-admin';
+import { actionErrorText } from '@/lib/error-text';
 
 // Tab Nhiệm vụ nằm trong First Load của /admin; màn Câu đố ít dùng nên nạp khi tab mở.
 const GameQuizAdmin = dynamic(() => import('./game-quiz-tab').then((m) => m.GameQuizAdmin), {
@@ -72,7 +73,7 @@ function NewMission() {
       setErr(null);
       void qc.invalidateQueries({ queryKey: ['admin-missions'] });
     },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không thêm được nhiệm vụ.'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
 
   if (!open) {
@@ -162,13 +163,13 @@ function MissionRow({ item }: { item: AdminMission }) {
       setMsg({ ok: true, text: 'Đã lưu.' });
       void qc.invalidateQueries({ queryKey: ['admin-missions'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được nhiệm vụ.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const toggle = useMutation({
     mutationFn: () => updateAdminMission(item.id, { disabled: !item.disabled }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-missions'] }),
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không đổi được trạng thái.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   return (

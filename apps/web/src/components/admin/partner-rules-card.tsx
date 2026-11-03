@@ -8,6 +8,7 @@ import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { buildPartnerRuleWrites, configValue, friendlyPartnerRuleError, PARTNER_RULE_FIELDS, readPartnerRuleForm, type PartnerRuleForm, type PartnerRuleWrite } from '@/lib/admin-config-forms';
 import { BTN_PRIMARY, Field, INPUT_CLASS, Notice } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/error-text';
 
 const shortLabel = (w: PartnerRuleWrite) => w.label.replace(/ \((?:%|giờ|ngày)\)$/, '');
 const isRate = (key: string) => key.startsWith('affiliate.');
@@ -77,7 +78,7 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
           await setConfig(w.key, w.value);
           saved.push(shortLabel(w));
         } catch (e) {
-          const reason = friendlyPartnerRuleError(e instanceof Error ? e.message : 'không lưu được');
+          const reason = friendlyPartnerRuleError(actionErrorText(e));
           const rest = changed.slice(saved.length).map(shortLabel).join(', ');
           const done = saved.length > 0 ? `Đã lưu: ${saved.join(', ')}. ` : '';
           if (mayHaveSaved(e)) {
@@ -95,7 +96,7 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
     onError: (e) => {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' });
+      setMsg({ ok: false, text: actionErrorText(e) });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
   });

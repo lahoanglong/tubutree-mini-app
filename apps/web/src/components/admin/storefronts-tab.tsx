@@ -17,12 +17,12 @@ import {
   type StorefrontTypeFilter,
 } from '@/lib/admin-storefronts-client';
 import { getOpsInbox, invalidateInbox, mergeQueuePages, nextPageParam } from '@/lib/admin-client';
-import { ApiError } from '@/lib/client-api';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
 import { USER_ROLE_LABELS } from './users-list';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const REASON_MAX = 300;
 
@@ -30,7 +30,7 @@ const CONTENT_CHANGED_TEXT = (at: string) => `Chủ đã đổi tên, lời gi�
 
 const CHANGED_AGAIN_TEXT = (at: string) => `Chủ vừa đổi thêm lúc ${formatDateTime(at)}. Xem lại rồi bấm "Đã xem".`;
 
-const errorText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : 'Không thực hiện được, thử lại sau.');
+const errorText = (e: unknown) => actionErrorText(e);
 
 function StatusBadges({ row }: { row: AdminStorefrontRow }) {
   return (
