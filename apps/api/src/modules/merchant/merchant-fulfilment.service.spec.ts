@@ -453,12 +453,13 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
       expect(notify).not.toHaveBeenCalled();
     });
 
-    it('cùng người nhưng mã GD khác → 409 nói là chính bạn, không dặn thu hồi', async () => {
+    it('cùng người nhưng mã GD khác → 409 nói là chính bạn, chỉ dặn thu hồi nếu đã chuyển thêm thật', async () => {
       const { svc } = paid();
       const err = await svc.markPayoutPaid('admin-1', 'p1', 'FT-OTHER').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ConflictException);
       expect((err as Error).message).toContain('Bạn đã xác nhận khoản này lúc 10:05 14/10/2026 với mã GD «FT-A»');
-      expect((err as Error).message).not.toContain('thu hồi');
+      expect((err as Error).message).toContain('Nếu bạn đã chuyển thêm một lần nữa');
+      expect((err as Error).message).not.toContain('đã được');
     });
 
     it('phiếu đã huỷ: câu nói "đã chuyển" với phiếu dương, "đã thu" với phiếu âm', async () => {

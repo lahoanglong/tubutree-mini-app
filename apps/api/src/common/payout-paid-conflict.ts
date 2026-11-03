@@ -17,7 +17,7 @@ export type PaidConflictContext = {
   noun: 'Lệnh rút' | 'Phiếu đối soát';
   /** Phiếu âm: gian hàng nộp tiền cho Tubu, không có khoản nào chuyển đi để thu hồi. */
   collected?: boolean;
-  /** Người đang gọi. Trùng người đã xác nhận (nhưng mã GD khác) thì không phải "người khác chuyển trùng", nên không dặn thu hồi. */
+  /** Người đang gọi. Trùng người đã xác nhận (nhưng mã GD khác) thì câu nói là chính bạn, chỉ dặn thu hồi có điều kiện. */
   actorId?: string;
 };
 
@@ -25,7 +25,10 @@ export async function alreadyPaidConflict(prisma: UserNames, row: PaidRow, ctx: 
   if (ctx.actorId && row.paidBy === ctx.actorId) {
     const when = row.paidAt ? ` lúc ${formatVnDateTime(row.paidAt)}` : '';
     const code = row.bankRef ? ` với mã GD «${row.bankRef}»` : '';
-    return new ConflictException(`Bạn đã xác nhận khoản này${when}${code}. Không ghi lần hai; nếu mã GD sai, báo quản trị viên sửa.`);
+    // Mã GD khác có thể là gõ nhầm lần đầu, cũng có thể là đã chuyển tiền thật lần hai, nên chỉ dặn thu hồi có điều kiện.
+    // Phiếu âm là tiền gian hàng nộp vào, không có khoản nào chuyển đi để thu hồi.
+    const recover = ctx.collected ? '' : ' Nếu bạn đã chuyển thêm một lần nữa, liên hệ người nhận để thu hồi khoản chuyển trùng.';
+    return new ConflictException(`Bạn đã xác nhận khoản này${when}${code}. Hệ thống không ghi lần hai.${recover}`);
   }
   const holder = row.paidBy
     ? ((await prisma.user.findUnique({ where: { id: row.paidBy }, select: { fullName: true } }))?.fullName?.trim() || 'một quản trị viên khác')

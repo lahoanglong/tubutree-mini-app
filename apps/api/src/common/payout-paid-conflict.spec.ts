@@ -24,15 +24,20 @@ describe('alreadyPaidConflict', () => {
     expect(e.message).not.toContain('chuyển');
   });
 
-  it('cùng người gửi lại với mã GD khác: 409 riêng, không dặn thu hồi, giờ theo giờ VN', async () => {
+  it('cùng người gửi lại với mã GD khác: 409 nói là chính bạn, giờ VN, chỉ dặn thu hồi khi đã chuyển thêm thật', async () => {
     const e = await alreadyPaidConflict(prisma, row, { noun: 'Lệnh rút', actorId: 'a1' });
-    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026 với mã GD «FT1». Không ghi lần hai; nếu mã GD sai, báo quản trị viên sửa.');
-    expect(e.message).not.toContain('thu hồi');
+    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026 với mã GD «FT1». Hệ thống không ghi lần hai. Nếu bạn đã chuyển thêm một lần nữa, liên hệ người nhận để thu hồi khoản chuyển trùng.');
+    expect(e.message).not.toContain('An xác nhận');
+  });
+
+  it('cùng người, phiếu âm (Tubu thu tiền): không dặn thu hồi', async () => {
+    const e = await alreadyPaidConflict(prisma, row, { noun: 'Phiếu đối soát', collected: true, actorId: 'a1' });
+    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026 với mã GD «FT1». Hệ thống không ghi lần hai.');
   });
 
   it('cùng người, lần đầu bỏ trống mã: bỏ phần mã GD', async () => {
     const e = await alreadyPaidConflict(prisma, { ...row, bankRef: null }, { noun: 'Phiếu đối soát', actorId: 'a1' });
-    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026. Không ghi lần hai; nếu mã GD sai, báo quản trị viên sửa.');
+    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026. Hệ thống không ghi lần hai. Nếu bạn đã chuyển thêm một lần nữa, liên hệ người nhận để thu hồi khoản chuyển trùng.');
   });
 
   it('người khác vẫn nhận câu dặn thu hồi dù có truyền actorId', async () => {
