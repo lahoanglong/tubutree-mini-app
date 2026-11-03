@@ -84,8 +84,8 @@ export function CheckInStreak({
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
       <div className="mt-3 border-t border-stone-200 pt-1">
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-sm text-stone-700">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-stone-700">
             <Snowflake className="h-4 w-4 text-stone-500" aria-hidden="true" />
             Vé giữ lửa: <span className="font-bold text-stone-900">{profile?.streakFreezes ?? 0}</span>
           </span>
@@ -93,7 +93,7 @@ export function CheckInStreak({
             type="button"
             disabled={freezePending}
             onClick={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
-            className={`${miniBtnSecondary} flex-none`}
+            className={`${miniBtnSecondary} min-h-11 flex-auto`}
           >
             {freezeShort > 0 ? gameMoreCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </button>

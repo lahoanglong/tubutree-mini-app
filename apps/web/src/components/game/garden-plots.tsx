@@ -37,7 +37,7 @@ export function GardenPlots({
     <GameCard title={`Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`} icon={Sprout}>
       {extraPlots.length === 0 && (
         <p className="text-caption text-stone-600">
-          Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho mã giảm giá, phần góp quỹ trồng cây & loài sưu tập riêng.
+          Mở thêm lô đất để trồng nhiều cây cùng lúc. Mỗi lần thu hoạch góp quỹ trồng cây và thêm loài sưu tập; mã giảm giá tính chung trần với cây nhà.
         </p>
       )}
       <div className="grid gap-2 md:grid-cols-2">

@@ -18,6 +18,8 @@ export const gameMoreCopy = {
     loading: 'Đang tải câu đố…',
     loadErrorTitle: 'Chưa tải được câu đố',
     loadErrorBody: 'Kiểm tra mạng rồi thử lại.',
+    /** Máy chủ từ chối câu không còn thuộc bộ câu hôm nay (qua nửa đêm hoặc admin đổi bộ câu). */
+    staleSet: 'Bộ câu đố đã đổi, đã tải câu mới cho bạn.',
   },
   missionsShowAll: (total: number) => `Xem tất cả (${total})`,
   missionsShowLess: 'Thu gọn',
@@ -36,3 +38,6 @@ export function collapseMissions<T extends { claimed?: boolean }>(missions: T[],
   const compact = open.slice(0, MISSIONS_COLLAPSED);
   return { items: showAll ? missions : compact, collapsible: compact.length < missions.length };
 }
+
+/** Lời máy chủ khi câu đố vừa trả lời không còn trong bộ câu hôm nay hoặc đã bị xoá (game-quiz.service.ts answerQuiz). */
+export const isStaleQuizMessage = (message: string): boolean => /không thuộc bộ câu hôm nay|Câu hỏi không tồn tại/.test(message);

@@ -111,8 +111,8 @@ export function CheckInStreak({
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
       <div style={{ marginTop: 12, paddingTop: 4, borderTop: '1px solid var(--color-border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
-          <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+          <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             <Icon icon={Snowflake} size="sm" tone="muted" />
             Vé giữ lửa: <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{profile?.streakFreezes ?? 0}</span>
           </Text>
@@ -121,7 +121,7 @@ export function CheckInStreak({
             disabled={freezePending}
             loading={freezePending}
             onPress={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
-            style={{ flexShrink: 0 }}
+            style={{ flexGrow: 1, flexShrink: 0 }}
           >
             {freezeShort > 0 ? gameMoreCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </Button>
