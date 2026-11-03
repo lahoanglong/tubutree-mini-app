@@ -9,9 +9,14 @@ const card = (n: number) => ({
   id: `bs-${n}`, slug: `bs-sp-${n}`, brand: 'Tubu', name: `Món cuộn ${n}`, thumbnail: null, basePrice: 100_000 + n, salePrice: null, isFeatured: false, inStock: true,
 });
 
-/** Web 375: cuộn sâu xuống lưới Gợi ý, chạm một món sang trang sản phẩm rồi Back: vị trí cuộn phải về lại (trình duyệt tự khôi phục, không có hook riêng). */
+/** Web 375: cuộn sâu xuống lưới Gợi ý, chạm một món sang trang sản phẩm rồi Back: vị trí cuộn phải về lại (hook useWindowScrollRestore thử lại tới khi trang đủ cao). */
 test.describe('Web khách: Trang chủ — Back giữ vị trí cuộn', () => {
-  test('cuộn sâu, vào trang sản phẩm, Back: scrollY về trong 50px', async ({ page, api }) => {
+  test('cuộn sâu, vào trang sản phẩm, Back: scrollY về trong 50px', async ({ page, api, browserName }) => {
+    // Máy CI chậm và không giữ trang trong bộ nhớ đệm back/forward: Back nạp lại tài liệu, lưới Gợi ý dựng lại từ trang 1 nên trình duyệt kẹp vị trí cuộn. Làm chậm CPU để lỗi hiện ổn định (chỉ Chromium có CDP).
+    if (browserName === 'chromium') {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 5 });
+    }
     await page.setViewportSize({ width: 375, height: 812 });
     await page.addInitScript(() => {
       try {
