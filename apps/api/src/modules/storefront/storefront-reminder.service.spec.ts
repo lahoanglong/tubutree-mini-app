@@ -1,6 +1,9 @@
 import { StorefrontReminderService } from './storefront-reminder.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+
+const configStub = { get: async (_k: string, fallback: unknown) => fallback } as unknown as SystemConfigService;
 
 function trendingRow(id: string, name: string) {
   return { id, name };
@@ -31,11 +34,32 @@ function setup(opts: {
   } as unknown as PrismaService;
   const notify = jest.fn(opts.notifyImpl ?? (() => Promise.resolve(undefined)));
   const notifications = { notify } as unknown as NotificationsService;
-  const svc = new StorefrontReminderService(prisma, notifications);
+  const svc = new StorefrontReminderService(prisma, notifications, configStub);
   return { svc, productFindMany, storefrontFindMany, storefrontUpdateMany, notify };
 }
 
 describe('StorefrontReminderService.remindTrendingProducts', () => {
+  it('lọc ở SQL: chủ bị khoá, mất vai trò CTV, gian hàng bị gỡ đều không được lấy (DLSF-07)', async () => {
+    const { svc, storefrontFindMany } = setup({});
+    await svc.remindTrendingProducts();
+    const where = JSON.stringify(storefrontFindMany.mock.calls[0]![0].where);
+    expect(where).toContain('"isBlocked":false');
+    expect(where).toContain('"takenDownAt":null');
+    expect(where).toContain('"role":{"in"');
+    expect(storefrontFindMany.mock.calls[0]![0].orderBy).toEqual({ id: 'asc' });
+  });
+
+  it('trên 200 gian hàng: duyệt hết các trang theo id, không dừng ở trang đầu toàn gian hàng trắng (DLSF-07)', async () => {
+    const blank = Array.from({ length: 200 }, (_, i) => storeRow({ id: `b${String(i).padStart(3, '0')}`, collections: [] }));
+    const active = storeRow({ id: 'z-active', collections: [{ items: [{ productId: 'p-have-1' }] }] });
+    const { svc, storefrontFindMany, notify } = setup({});
+    storefrontFindMany.mockResolvedValueOnce(blank).mockResolvedValueOnce([active]);
+    await svc.remindTrendingProducts();
+    expect(storefrontFindMany).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(storefrontFindMany.mock.calls[1]![0].where)).toContain('"id":{"gt":"b199"}');
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-05T00:00:00Z'));
   });
@@ -86,12 +110,11 @@ describe('StorefrontReminderService.remindTrendingProducts', () => {
     const { svc, storefrontFindMany } = setup({ stores: [] });
     await svc.remindTrendingProducts();
     const where = storefrontFindMany.mock.calls[0]?.[0].where;
-    expect(where.type).toBe('CTV');
-    expect(where.isPublished).toBe(true);
-    expect(where.OR).toEqual([
+    expect(where.AND[0].isPublished).toBe(true);
+    expect(where.AND).toContainEqual({ type: 'CTV', OR: [
       { lastReminderAt: null },
       { lastReminderAt: { lt: new Date('2026-06-29T00:00:00Z') } },
-    ]);
+    ] });
   });
 
   it('thua race claim (updateMany count=0) → bỏ qua, không notify', async () => {
@@ -122,7 +145,7 @@ describe('StorefrontReminderService.remindTrendingProducts', () => {
       product: { findMany: jest.fn().mockRejectedValue(new Error('DB down')) },
     } as unknown as PrismaService;
     const notifications = { notify: jest.fn() } as unknown as NotificationsService;
-    const svc = new StorefrontReminderService(prisma, notifications);
+    const svc = new StorefrontReminderService(prisma, notifications, configStub);
     await expect(svc.remindTrendingProducts()).resolves.toBeUndefined();
   });
 });

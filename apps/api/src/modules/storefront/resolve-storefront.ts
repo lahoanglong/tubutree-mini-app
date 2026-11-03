@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { publicStorefrontWhere, type PublicVisibilityOptions } from './storefront-visibility';
 
@@ -7,6 +8,24 @@ export interface ResolvedStorefront {
   slug: string;
   type: string;
   ownerUserId: string | null;
+}
+
+/**
+ * Một chuỗi khớp được nhiều cột (slug, subdomain, tên miền riêng) của các gian hàng khác nhau thì slug thắng: slug chính là mã giới
+ * thiệu của chủ, link /s/<mã> không được rơi vào gian hàng khác chỉ vì họ đặt subdomain trùng. Chạy tuần tự từng cột, lần lượt
+ * slug, subdomain, tên miền riêng, để không bao giờ phụ thuộc thứ tự dòng Postgres tự chọn.
+ */
+export async function findByIdentifierPriority<T>(
+  value: string,
+  find: (columnWhere: Prisma.StorefrontWhereInput) => Promise<T | null>,
+  insensitive = false,
+): Promise<T | null> {
+  const eq = (): string | { equals: string; mode: 'insensitive' } => (insensitive ? { equals: value, mode: 'insensitive' } : value);
+  for (const column of ['slug', 'subdomain', 'customDomain'] as const) {
+    const found = await find({ [column]: eq() });
+    if (found) return found;
+  }
+  return null;
 }
 
 /**
@@ -23,8 +42,10 @@ export async function resolvePublishedStorefront(
 ): Promise<ResolvedStorefront | null> {
   const value = identifier?.trim().toLowerCase();
   if (!value) return null;
-  return prisma.storefront.findFirst({
-    where: { ...publicStorefrontWhere(visibility), isSample: false, OR: [{ slug: value }, { subdomain: value }, { customDomain: value }] },
-    select: { id: true, slug: true, type: true, ownerUserId: true },
-  });
+  return findByIdentifierPriority(value, (columnWhere) =>
+    prisma.storefront.findFirst({
+      where: { ...publicStorefrontWhere(visibility), isSample: false, ...columnWhere },
+      select: { id: true, slug: true, type: true, ownerUserId: true },
+    }),
+  );
 }

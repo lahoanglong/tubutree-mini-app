@@ -17,9 +17,16 @@ describe('resolvePublishedStorefront', () => {
     const out = await resolvePublishedStorefront({ storefront: { findFirst } } as any, VISIBILITY, ' LINH ');
     expect(out).toEqual({ id: 's1', slug: 'linh', type: 'CTV', ownerUserId: 'u1' });
     expect(findFirst).toHaveBeenCalledWith({
-      where: { ...publicStorefrontWhere(VISIBILITY), isSample: false, OR: [{ slug: 'linh' }, { subdomain: 'linh' }, { customDomain: 'linh' }] },
+      where: { ...publicStorefrontWhere(VISIBILITY), isSample: false, slug: 'linh' },
       select: { id: true, slug: true, type: true, ownerUserId: true },
     });
+  });
+
+  it('slug thắng subdomain thắng tên miền riêng: chỉ hỏi cột sau khi cột trước không có (DLSF-01)', async () => {
+    const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 's3', slug: 'x', type: 'CTV', ownerUserId: null });
+    const out = await resolvePublishedStorefront({ storefront: { findFirst } } as any, VISIBILITY, 'linh');
+    expect(out?.id).toBe('s3');
+    expect(findFirst.mock.calls.map((c) => Object.keys(c[0].where).filter((k) => ['slug', 'subdomain', 'customDomain'].includes(k))[0])).toEqual(['slug', 'subdomain', 'customDomain']);
   });
 
   it('gian hàng mẫu không bao giờ được ghi công', async () => {

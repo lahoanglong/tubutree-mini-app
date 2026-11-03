@@ -20,6 +20,7 @@ function makePrisma(over: Record<string, any> = {}) {
   const merged: Record<string, any> = {
     user: { findUniqueOrThrow: jest.fn() },
     storefront: { findFirst: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+    $executeRaw: jest.fn().mockResolvedValue(0),
     ...over,
   };
   // Việc 6: createCollection/addItem giờ bọc count()+create() trong $transaction (Serializable) —
@@ -1136,10 +1137,11 @@ describe('StorefrontService.getPublicBySlug — không phân biệt hoa/thườn
     (prisma.storefront.findFirst as jest.Mock) = found;
     const svc = new StorefrontService(prisma, config, affiliate);
     await svc.getPublicBySlug('LINH123').catch(() => undefined);
-    const where = found.mock.calls[0][0].where;
-    // Mỗi nhánh OR phải so khớp không phân biệt hoa/thường, nếu không slug cũ vẫn chết.
-    for (const branch of where.OR) {
-      const field = Object.values(branch)[0] as { mode?: string };
+    // Mỗi cột phải so khớp không phân biệt hoa/thường, nếu không slug cũ vẫn chết; thứ tự slug, subdomain, tên miền riêng (DLSF-01).
+    const columns = found.mock.calls.map((c) => Object.keys(c[0].where).find((k) => ['slug', 'subdomain', 'customDomain'].includes(k)));
+    expect(columns).toEqual(['slug', 'subdomain', 'customDomain']);
+    for (const call of found.mock.calls) {
+      const field = (call[0].where.slug ?? call[0].where.subdomain ?? call[0].where.customDomain) as { mode?: string };
       expect(field.mode).toBe('insensitive');
     }
   });

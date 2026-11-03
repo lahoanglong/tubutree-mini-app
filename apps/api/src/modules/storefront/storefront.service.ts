@@ -6,7 +6,8 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
 import { hasAffiliateAccess } from '../affiliate/affiliate-access';
 import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
-import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers } from './identifier-validation';
+import { normalizeSubdomain, assertIdentifierAvailable, recordReleasedIdentifiers, lockStorefrontIdentifiers } from './identifier-validation';
+import { findByIdentifierPriority } from './resolve-storefront';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
@@ -201,10 +202,7 @@ export class StorefrontService {
     if (dto.subdomain && dto.subdomain.trim().toLowerCase() === sf.subdomain) dto.subdomain = undefined;
     if (dto.subdomain) {
       const sub = normalizeSubdomain(dto.subdomain);
-      // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
-      // với-subdomain, cho phép chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
-      // docs/2026-09-08-review-progress.md).
-      await assertIdentifierAvailable(this.prisma, sub, sf.id);
+      // Kiểm trùng chéo cột và mã giới thiệu nằm trong transaction ghi bên dưới, cùng khoá định danh.
       dto.subdomain = sub;
     }
     // Chỉ gian hàng đối tác tự giao mới có kho gửi hàng/hotline; CTV gửi lên thì bỏ qua (SELLER-8).
@@ -219,7 +217,13 @@ export class StorefrontService {
     // Gian hàng đã duyệt mà chủ đổi nội dung khách nhìn thấy trước tiên: chỉ đánh dấu để admin xem lại, không bắt duyệt lại.
     Object.assign(data, contentChangedPatch(sf, data));
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
-      await recordReleasedIdentifiers(this.prisma, sf.id, [sf.subdomain], [dto.subdomain]);
+      const sub = dto.subdomain;
+      return this.prisma.$transaction(async (tx) => {
+        await lockStorefrontIdentifiers(tx, [sub]);
+        await assertIdentifierAvailable(tx, sub, sf.id, undefined, sf.ownerUserId);
+        await recordReleasedIdentifiers(tx, sf.id, [sf.subdomain], [sub]);
+        return tx.storefront.update({ where: { id: sf.id }, data });
+      });
     }
     return this.prisma.storefront.update({ where: { id: sf.id }, data });
   }
@@ -279,17 +283,10 @@ export class StorefrontService {
   async getPublicBySlug(identifier: string) {
     const clean = identifier.trim().toLowerCase();
     const visible = publicStorefrontWhere(await this.visibilityOptions());
-    const sf = await this.prisma.storefront.findFirst({
-      where: {
-        // insensitive để gian hàng tạo TRƯỚC bản vá (slug in hoa) vẫn mở được mà không phải
-        // chờ chạy migration hạ chữ — link CTV đã phát cho khách không được chết thêm ngày nào.
-        OR: [
-          { slug: { equals: clean, mode: 'insensitive' } },
-          { subdomain: { equals: clean, mode: 'insensitive' } },
-          { customDomain: { equals: clean, mode: 'insensitive' } },
-        ],
-        ...visible,
-      },
+    // insensitive để gian hàng tạo TRƯỚC bản vá (slug in hoa) vẫn mở được mà không phải chờ chạy migration hạ chữ — link CTV đã
+    // phát cho khách không được chết thêm ngày nào. Slug thắng subdomain/tên miền khi cùng chuỗi (xem findByIdentifierPriority).
+    const sf = await findByIdentifierPriority(clean, (columnWhere) => this.prisma.storefront.findFirst({
+      where: { ...columnWhere, ...visible },
       include: {
         owner: { select: { referralCode: true } },
         collections: {
@@ -313,7 +310,7 @@ export class StorefrontService {
           },
         },
       },
-    });
+    }), true);
     if (!sf) throw new NotFoundException('Gian hàng không tồn tại hoặc chưa đăng.');
     // Cùng trần với combo.service.ts lúc tính tiền: dữ liệu ghi trước khi có trần mà vượt thì trang không được hứa hơn số thật được trừ.
     const maxComboPct = await this.config.get<number>('storefront.max_combo_pct', 30);
@@ -420,13 +417,13 @@ export class StorefrontService {
     if (parts.length >= 2) {
       const sub = parts[0]!;
       if (sub !== 'www' && sub !== 'admin' && sub !== 'api') {
-        const bySub = await this.prisma.storefront.findFirst({
-          where: {
-            OR: [{ subdomain: sub }, { slug: sub }, { customDomain: hostname }],
-            isPublished: true,
-          },
+        const bySlug = await this.prisma.storefront.findFirst({ where: { slug: sub, isPublished: true } });
+        if (bySlug) return this.getPublicBySlug(bySlug.slug);
+        const byOther = await this.prisma.storefront.findFirst({
+          where: { OR: [{ subdomain: sub }, { customDomain: hostname }], isPublished: true },
+          orderBy: { createdAt: 'asc' },
         });
-        if (bySub) return this.getPublicBySlug(bySub.slug);
+        if (byOther) return this.getPublicBySlug(byOther.slug);
       }
     }
     return this.getPublicBySlug(hostname);

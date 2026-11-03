@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from '../merchant/merchant-config';
 
@@ -62,11 +63,21 @@ export function normalizeCustomDomain(raw: string): string {
  * chặn CHÍNH cho P0-1 (subdomain trùng slug người khác) và P0-2 (đơn hàng lộ qua slug trùng).
  */
 export async function assertIdentifierAvailable(
-  prisma: Pick<PrismaService, 'storefront'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier' | 'brand'>>,
+  prisma: Pick<PrismaService, 'storefront'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier' | 'brand' | 'user'>>,
   value: string,
   excludeStorefrontId: string,
   cooldownDays: number = DEFAULT_IDENTIFIER_COOLDOWN_DAYS,
+  ownerUserId?: string | null,
 ): Promise<void> {
+  // Mã giới thiệu nằm trên mọi link ?ref= của chủ mã: gian hàng khác đặt subdomain trùng mã đó sẽ hứng khách và công đơn của link ấy.
+  // Chủ mã đặt đúng mã của mình thì được.
+  const codeOwner = await prisma.user?.findFirst?.({
+    where: { referralCode: { equals: value, mode: 'insensitive' }, ...(ownerUserId ? { NOT: { id: ownerUserId } } : {}) },
+    select: { id: true },
+  });
+  if (codeOwner) {
+    throw new BadRequestException(`"${value}" trùng mã giới thiệu của một tài khoản khác, bạn chọn tên khác nhé.`);
+  }
   const existing = await prisma.storefront.findFirst({
     where: {
       OR: [{ slug: value }, { subdomain: value }, { customDomain: value }],
@@ -99,6 +110,17 @@ export async function assertIdentifierAvailable(
     throw new BadRequestException(
       `"${value}" vừa được một gian hàng khác ngừng dùng, tạm thời chưa thể đăng ký lại. Bạn chọn tên khác nhé.`,
     );
+  }
+}
+
+/**
+ * Khoá tư vấn theo từng định danh (slug/subdomain/tên miền) cho mọi đường tạo hoặc đổi: kiểm trùng chéo cột rồi ghi nằm trong cùng
+ * transaction giữ khoá này, nên hai yêu cầu song song cùng một tên không cùng lọt. Khoá theo thứ tự chữ để không deadlock.
+ */
+export async function lockStorefrontIdentifiers(tx: Prisma.TransactionClient, values: Array<string | null | undefined>): Promise<void> {
+  const keys = [...new Set(values.filter((v): v is string => !!v).map((v) => v.toLowerCase()))].sort();
+  for (const key of keys) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`storefront-identifier:${key}`}))`;
   }
 }
 

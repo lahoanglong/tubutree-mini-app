@@ -11,6 +11,7 @@ import {
   normalizeSubdomain,
   normalizeCustomDomain,
   assertIdentifierAvailable,
+  lockStorefrontIdentifiers,
   recordReleasedIdentifiers,
 } from '../storefront/identifier-validation';
 import { assertStorefrontImagesAllowed } from '../storefront/storefront-images';
@@ -347,12 +348,6 @@ export class MerchantService {
 
     const ownerName = publicDisplayName(user.fullName, '');
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
-    let subdomain = baseSlug;
-    let counter = 1;
-    while (await this.prisma.storefront.findUnique({ where: { subdomain } })) {
-      subdomain = `${baseSlug}-${counter++}`;
-    }
-
     // Bug 1 (race condition): findFirst rồi create phía trên KHÔNG transaction/lock — 2 request
     // đồng thời (double-tap "Mở gian hàng") có thể cùng đọc "chưa có store" rồi cùng create.
     // Từ khi có @@unique([ownerUserId]) (schema.prisma), request thua sẽ ăn P2002. Bug 2 (TOCTOU):
@@ -372,6 +367,23 @@ export class MerchantService {
           const fresh = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
           if (fresh?.role !== 'AFFILIATE' && fresh?.role !== 'DEALER' && fresh?.role !== 'ADMIN') {
             throw new ForbiddenException('Chỉ tài khoản đối tác hoặc đại lý mới có quyền mở gian hàng.');
+          }
+          // Subdomain khởi tạo phải trống ở cả ba cột và không trùng mã giới thiệu của người khác; kiểm dưới khoá định danh để
+          // một yêu cầu đổi subdomain song song không chen vào giữa lúc kiểm và lúc ghi. Slug luôn là mã của chính chủ nên giữ
+          // nguyên: chỗ đọc ưu tiên slug nên link /s/<mã> luôn về đúng chủ.
+          let subdomain = baseSlug;
+          for (let counter = 1; ; counter++) {
+            await lockStorefrontIdentifiers(tx, [baseSlug, subdomain]);
+            const taken = await tx.storefront.findFirst({
+              where: { OR: [{ slug: subdomain }, { subdomain }, { customDomain: subdomain }] },
+              select: { id: true },
+            });
+            const codeOfOther =
+              subdomain === baseSlug
+                ? null
+                : await tx.user.findFirst({ where: { referralCode: { equals: subdomain, mode: 'insensitive' }, NOT: { id: userId } }, select: { id: true } });
+            if (!taken && !codeOfOther) break;
+            subdomain = `${baseSlug}-${counter}`;
           }
           return tx.storefront.create({
             data: {
@@ -404,10 +416,7 @@ export class MerchantService {
           if (existing) return existing;
 
           const target = Array.isArray(err.meta?.target) ? (err.meta?.target as string[]) : [];
-          if (target.includes('subdomain') && attempt < MAX_CREATE_STORE_RETRY) {
-            subdomain = `${baseSlug}-${counter++}`;
-            continue;
-          }
+          if (target.includes('subdomain') && attempt < MAX_CREATE_STORE_RETRY) continue;
         }
         throw err;
       }
@@ -473,15 +482,13 @@ export class MerchantService {
       updateData.publishedAt = null;
     }
 
+    // Kiểm trùng chéo cột + mã giới thiệu chạy trong transaction ghi bên dưới, dưới khoá định danh (xem assertIdentifierAvailable).
+    const identifiersToCheck: string[] = [];
     // Cổng gửi lại cả subdomain đang lưu mỗi lần bấm Lưu: giá trị không đổi thì không kiểm lại, kẻo gian hàng cũ có subdomain nay
     // thuộc từ khoá cấm không lưu nổi trường khác.
     if (dto.subdomain !== undefined && dto.subdomain.trim().toLowerCase() !== store.subdomain) {
       const cleanSub = normalizeSubdomain(dto.subdomain);
-      // Kiểm trùng CHÉO cả slug/subdomain/customDomain — trước đây chỉ kiểm trùng subdomain-
-      // với-subdomain, cho phép CTV chiếm subdomain trùng SLUG của gian hàng khác (P0-1,
-      // docs/2026-09-08-review-progress.md), từ đó lộ/giả mạo gian hàng qua các truy vấn OR
-      // ở tầng đọc (vd bank-transfer.service.ts tra QR ngân hàng theo storefrontSlug).
-      await assertIdentifierAvailable(this.prisma, cleanSub, store.id, cooldownDays);
+      identifiersToCheck.push(cleanSub);
       updateData.subdomain = cleanSub;
     }
 
@@ -493,20 +500,38 @@ export class MerchantService {
         // Trước đây KHÔNG có validate/kiểm trùng nào cho customDomain — ghi thẳng chuỗi bất kỳ,
         // kể cả trùng subdomain/slug của gian hàng khác (P0-1).
         const cleanDomain = normalizeCustomDomain(dto.customDomain);
-        await assertIdentifierAvailable(this.prisma, cleanDomain, store.id, cooldownDays);
+        identifiersToCheck.push(cleanDomain);
         updateData.customDomain = cleanDomain;
       }
     }
 
-    await recordReleasedIdentifiers(
-      this.prisma,
-      store.id,
-      [store.subdomain, store.customDomain],
-      [
-        updateData.subdomain === undefined ? store.subdomain : (updateData.subdomain as string | null),
-        updateData.customDomain === undefined ? store.customDomain : (updateData.customDomain as string | null),
-      ],
-    );
+    const releasedPrevious = [store.subdomain, store.customDomain];
+    const releasedNext = [
+      updateData.subdomain === undefined ? store.subdomain : (updateData.subdomain as string | null),
+      updateData.customDomain === undefined ? store.customDomain : (updateData.customDomain as string | null),
+    ];
+    if (identifiersToCheck.length > 0) {
+      const newTitleLocked = typeof updateData.title === 'string' ? updateData.title : null;
+      const whereLocked = { id: store.id, ...(dto.isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) };
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          await lockStorefrontIdentifiers(tx, identifiersToCheck);
+          for (const value of identifiersToCheck) {
+            await assertIdentifierAvailable(tx, value, store.id, cooldownDays, store.ownerUserId);
+          }
+          await recordReleasedIdentifiers(tx, store.id, releasedPrevious, releasedNext);
+          const updated = await tx.storefront.update({ where: whereLocked, data: updateData });
+          if (newTitleLocked && newTitleLocked !== store.title) {
+            await tx.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitleLocked } });
+          }
+          return updated;
+        });
+      } catch (err) {
+        if (dto.isPublished && isLostToTakeDown(err)) throw takenDownError(null);
+        throw err;
+      }
+    }
+    await recordReleasedIdentifiers(this.prisma, store.id, releasedPrevious, releasedNext);
 
     const newTitle = typeof updateData.title === 'string' ? updateData.title : null;
     const where = { id: store.id, ...(dto.isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) };
