@@ -8,7 +8,8 @@ import helmet from 'helmet';
 // tiếp của package này (đã thêm ở package.json). Trước đây chỉ resolve được nhờ hoist tình cờ
 // khi cài đặt TOÀN BỘ monorepo (dev/CI); Docker build chỉ copy apps/api + packages nên hoist
 // khác đi, và `require('express')` vỡ ở runtime với "Cannot find module 'express'".
-import { json, urlencoded } from 'express';
+import { json } from 'express';
+import { bodyParserErrorHandler, createBodyParsers, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
@@ -118,10 +119,11 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   // mọi request share 1 counter trong ThrottlerGuard → 60req/min cho toàn site, dễ DOS lẫn nhau.
   // Set trust proxy=1 để Express lấy IP thật từ X-Forwarded-For (1 hop = reverse proxy chuẩn).
   app.set('trust proxy', 1);
-  // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser 10MB (body đã parse thì parser sau bỏ qua).
+  // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser theo nhóm route (body đã parse thì parser sau bỏ qua).
   app.use('/api/events', json({ limit: '512kb' }));
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
+  // Trần theo nhóm route (mặc định 256kb; ảnh base64/CSV 10mb; webhook 1mb), rồi duyệt khoá/phần tử/NUL trước ValidationPipe.
+  app.use(...createBodyParsers(), bodyParserErrorHandler, requestInputGuard);
+  app.use(privateNoStoreForAuthenticated);
   app.use(helmet());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(createValidationPipe());
