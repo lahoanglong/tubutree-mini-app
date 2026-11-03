@@ -274,6 +274,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
     expect(toCtv(ctv.id)).toEqual([]);
     await expectCtvLockedOut(ctv.id, order.id, rows[0]!.id);
 
+    await refunds.claim(adminUser.id, rows[0]!.id);
     const done = await refunds.markPaid(adminUser.id, rows[0]!.id, { bankRef: 'FT-OVER-1' });
     expect(done).toMatchObject({ status: 'COMPLETED', bankRef: 'FT-OVER-1' });
   });

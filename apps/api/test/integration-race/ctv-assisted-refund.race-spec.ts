@@ -299,9 +299,10 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id } })).toBe(1);
   });
 
-  it('admin xác nhận đã chuyển khoản hoàn thủ công: 2 lần bấm đồng thời → 1 thắng, dòng COMPLETED có bankRef', async () => {
+  it('admin chuyển khoản hoàn thủ công: 2 admin cùng nhận → 1 giữ khoản; người giữ bấm xác nhận 2 lần đồng thời → 1 thắng, dòng COMPLETED có bankRef', async () => {
     const refunds = moduleRef.get(CustomerRefundsService);
     const adminUser = await createUser(prisma, { role: 'ADMIN' });
+    const otherAdmin = await createUser(prisma, { role: 'ADMIN' });
     const { order } = await assistedOrder({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
     await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN' });
     const pending = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
@@ -309,16 +310,26 @@ describe('Hoàn tiền đơn CTV lên hộ (real Postgres)', () => {
     const listed = await refunds.list('PENDING', 1, 100);
     expect(listed.data.map((r) => r.id)).toContain(pending.id);
 
+    // Hai admin cùng bấm "Bắt đầu chuyển khoản": chỉ một người giữ khoản, người kia bị chặn.
+    const claims = summarize(
+      await Promise.allSettled([refunds.claim(adminUser.id, pending.id), refunds.claim(otherAdmin.id, pending.id)]),
+    );
+    expect(claims.fulfilled.length).toBe(1);
+    expect(claims.rejected.length).toBe(1);
+    const holder = (await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: pending.id } })).claimedBy;
+    expect([adminUser.id, otherAdmin.id]).toContain(holder);
+    const winner = holder === adminUser.id ? adminUser : otherAdmin;
+
     const results = await Promise.allSettled([
-      refunds.markPaid(adminUser.id, pending.id, { bankRef: 'FT001' }),
-      refunds.markPaid(adminUser.id, pending.id, { bankRef: 'FT002' }),
+      refunds.markPaid(winner.id, pending.id, { bankRef: 'FT001' }),
+      refunds.markPaid(winner.id, pending.id, { bankRef: 'FT002' }),
     ]);
     const s = summarize(results);
     expect(s.fulfilled.length).toBe(1);
     expect(s.rejected.length).toBe(1);
     const done = await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: pending.id } });
     expect(done.status).toBe('COMPLETED');
-    expect(done.completedBy).toBe(adminUser.id);
+    expect(done.completedBy).toBe(winner.id);
     expect(['FT001', 'FT002']).toContain(done.bankRef);
   });
 
