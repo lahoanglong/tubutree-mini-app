@@ -94,6 +94,12 @@ interface RewardPeriod {
 }
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+/** `ref` đã viết thường: ghi chú lịch sử nối các phần bằng " · " nên khớp nguyên một phần, không khớp chuỗi con. */
+const noteHasBankRef = (note: string | null, ref: string) =>
+  (note ?? '')
+    .toLowerCase()
+    .split(' · ')
+    .some((part) => part.trim() === `mã gd ${ref}`);
 
 /**
  * Trần tổng 1 đơn đại lý: Order.total/OrderItem.total và DealerCreditLedger.delta là INT4, tổng vượt
@@ -633,6 +639,9 @@ export class DealerService {
           // Re-check TRONG transaction Serializable — dư nợ có thể đã đổi kể từ lúc admin xem màn
           // hình (đơn CREDIT mới / khoản báo khác vừa được duyệt). 2 admin duyệt đồng thời cho
           // cùng đại lý sẽ khiến 1 bên serialization-fail (P2034) thay vì cùng qua check.
+          // Cùng mã đã xác nhận một đơn trả trước thì tiền đó đã tính cho đơn, không giảm nợ thêm lần nữa.
+          const payRef = opts.bankRef?.trim();
+          if (payRef) await this.assertBankRefNotOnOrder(tx, payRef);
           const agg = await tx.dealerCreditLedger.aggregate({ where: { userId: dealerUserId }, _sum: { delta: true } });
           const debt = agg._sum.delta ?? 0;
           if (amount > debt) {
@@ -1326,31 +1335,37 @@ export class DealerService {
 
   // ── Admin: xác nhận đã nhận chuyển khoản cho đơn đại lý trả trước ──
 
-  /**
-   * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn trả
-   * trước khác hoặc ở một khoản trả nợ thì 409. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB; khoá advisory theo mã
-   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm.
-   */
-  private async assertBankRefUnused(tx: Prisma.TransactionClient, bankRef: string, orderId: string) {
+  /** Khoá advisory theo mã rồi kiểm mã đã ghi ở một đơn đại lý khác; `exceptOrderId` bỏ qua chính đơn đang xác nhận. */
+  private async assertBankRefNotOnOrder(tx: Prisma.TransactionClient, bankRef: string, exceptOrderId?: string) {
     const ref = bankRef.toLowerCase();
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${ref}`}))`;
-    const marker = `Mã GD ${bankRef}`;
-    const sameRef = (note: string | null) =>
-      (note ?? '')
-        .toLowerCase()
-        .split(' · ')
-        .some((part) => part.trim() === `mã gd ${ref}`);
     const history = await tx.orderStatusHistory.findMany({
-      where: { note: { contains: marker, mode: 'insensitive' }, actorType: 'ADMIN', orderId: { not: orderId } },
+      where: {
+        note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' },
+        actorType: 'ADMIN',
+        ...(exceptOrderId ? { orderId: { not: exceptOrderId } } : {}),
+      },
       select: { orderId: true, note: true },
     });
-    const usedIds = history.filter((h) => sameRef(h.note)).map((h) => h.orderId);
+    const usedIds = history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId);
     const usedOrder = usedIds.length
       ? await tx.order.findFirst({ where: { id: { in: usedIds }, type: 'DEALER' }, select: { code: true } })
       : null;
     if (usedOrder) {
       throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
     }
+  }
+
+  /**
+   * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn trả
+   * trước khác hoặc ở một khoản trả nợ thì 409. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB; khoá advisory theo mã
+   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm.
+   */
+  private async assertBankRefUnused(tx: Prisma.TransactionClient, bankRef: string, orderId: string) {
+    await this.assertBankRefNotOnOrder(tx, bankRef, orderId);
+    const ref = bankRef.toLowerCase();
+    const marker = `Mã GD ${bankRef}`;
+    const sameRef = (note: string | null) => noteHasBankRef(note, ref);
     const payments = await tx.dealerCreditLedger.findMany({
       where: {
         refType: 'PAYMENT',

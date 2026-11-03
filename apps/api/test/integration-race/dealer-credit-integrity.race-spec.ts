@@ -69,7 +69,7 @@ describe('Công nợ và mã giao dịch đại lý (real Postgres)', () => {
 
     it('người chưa từng là đại lý (không có sổ) vẫn bị từ chối', async () => {
       const u = await newDealer('CUSTOMER');
-      await expect(dealer.adminRecordCreditPayment('kt', u.id, 1_000, {})).rejects.toThrow(/vượt dư nợ|Không tìm thấy/);
+      await expect(dealer.adminRecordCreditPayment('kt', u.id, 1_000, {})).rejects.toThrow(/Không tìm thấy đại lý/);
     });
 
     it('danh sách đại lý còn hiện người đã hạ vai trò khi còn nợ, tính vào tổng dư nợ; hết nợ thì không hiện', async () => {
@@ -127,6 +127,29 @@ describe('Công nợ và mã giao dịch đại lý (real Postgres)', () => {
       await dealer.adminRecordCreditPayment('kt', d.id, 1_000_000, { bankRef: ref, idempotencyKey: ref });
       const o = await prepaidOrder(d.id);
       await expect(dealer.confirmDealerOrderPayment('ad1', o.id, { bankRef: ref })).rejects.toThrow(/đã dùng/);
+    });
+
+    it('mã đã xác nhận một đơn thì không ghi giảm nợ được nữa, kể cả chạy song song', async () => {
+      const d = await newDealer();
+      await addDebt(d.id, 9_000_000);
+      const o = await prepaidOrder(d.id);
+      const ref = `FT${randCode(8)}`;
+      await dealer.confirmDealerOrderPayment('ad1', o.id, { bankRef: ref });
+      await expect(dealer.adminRecordCreditPayment('kt', d.id, 5_000_000, { bankRef: ` ${ref.toLowerCase()}`.trim() })).rejects.toThrow(/đã dùng để xác nhận đơn/);
+      expect(await debtOf(d.id)).toBe(9_000_000);
+
+      const d2 = await newDealer();
+      await addDebt(d2.id, 9_000_000);
+      const o2 = await prepaidOrder(d2.id);
+      const ref2 = `FT${randCode(8)}`;
+      const results = summarize(
+        await Promise.allSettled([
+          dealer.confirmDealerOrderPayment('ad1', o2.id, { bankRef: ref2 }),
+          dealer.adminRecordCreditPayment('kt', d2.id, 5_000_000, { bankRef: ref2 }),
+        ]),
+      );
+      expect(results.fulfilled).toHaveLength(1);
+      expect(results.rejected).toHaveLength(1);
     });
 
     it('mã khác tiền tố và đơn không có mã vẫn xác nhận được', async () => {
