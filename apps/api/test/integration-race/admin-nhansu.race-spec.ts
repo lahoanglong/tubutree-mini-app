@@ -126,6 +126,25 @@ describe('Nhóm việc của lời mời + gian hàng đổi sau duyệt (real P
     });
   });
 
+  describe('cấp quyền đồng thời cho SĐT đã có tài khoản', () => {
+    it('RC-05: 3 addGrant song song → không lỗi, đúng một lời mời hiệu lực, user được nâng STAFF', async () => {
+      for (let round = 0; round < 5; round++) {
+        const a1 = await user({ role: 'ADMIN' });
+        const a2 = await user({ role: 'ADMIN' });
+        const phone = newPhone();
+        const target = await user({ phone });
+        const results = await Promise.allSettled([
+          rbac.addGrant(a1.id, phone, 'STAFF', ['KHO']),
+          rbac.addGrant(a2.id, phone, 'STAFF', ['KHO']),
+          rbac.addGrant(a1.id, phone, 'STAFF', ['KHO']),
+        ]);
+        expect(summarize(results).errors).toEqual([]);
+        expect(await prisma.roleGrant.count({ where: { phone, revokedAt: null } })).toBe(1);
+        expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).role).toBe('STAFF');
+      }
+    });
+  });
+
   describe('gian hàng đã duyệt đổi nội dung', () => {
     async function store(approved: boolean) {
       const owner = await user({ role: 'AFFILIATE' });
