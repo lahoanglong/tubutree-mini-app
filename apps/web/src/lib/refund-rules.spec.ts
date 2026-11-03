@@ -41,9 +41,9 @@ describe('bankDetailsError', () => {
     expect(bankDetailsError({ ...BANK, accountNumber: '0071.000-123' })).toBeNull();
   });
   it('báo lỗi tiếng Việt cho từng ô', () => {
-    expect(bankDetailsError({ ...BANK, bankName: '' })).toBe('Nhập tên ngân hàng.');
-    expect(bankDetailsError({ ...BANK, accountNumber: '12ab' })).toBe('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.');
-    expect(bankDetailsError({ ...BANK, accountName: ' ' })).toBe('Nhập tên chủ tài khoản.');
+    expect(bankDetailsError({ ...BANK, bankName: '' })).toBe('Nhập tên ngân hàng nhận tiền hoàn.');
+    expect(bankDetailsError({ ...BANK, accountNumber: '12ab' })).toBe('Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.');
+    expect(bankDetailsError({ ...BANK, accountName: ' ' })).toBe('Nhập tên chủ tài khoản nhận tiền hoàn.');
   });
 });
 
@@ -102,7 +102,7 @@ describe('remainingByLine + returnFormError (D3: trả theo dòng và số lư�
   it('chưa chọn dòng nào / chưa chọn lý do / "Lý do khác" thiếu mô tả', () => {
     expect(returnFormError({ ...base, lines: [line({ selected: false })] })).toBe('Chọn ít nhất một sản phẩm muốn trả.');
     expect(returnFormError({ ...base, reasonCode: null })).toBe('Chọn lý do đổi/trả.');
-    expect(returnFormError({ ...base, reasonCode: 'OTHER', reason: 'abc' })).toBe('Mô tả lý do (tối thiểu 5 ký tự).');
+    expect(returnFormError({ ...base, reasonCode: 'OTHER', reason: 'abc' })).toBe('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
   });
   it('chọn hoàn về ngân hàng thì kiểm tài khoản', () => {
     expect(returnFormError({ ...base, refundMethod: 'BANK', bank: { ...BANK, accountNumber: '1' } })).toMatch(/Số tài khoản/);

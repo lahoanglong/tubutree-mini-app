@@ -48,7 +48,7 @@ describe('Ví Tubu ở thanh toán', () => {
   });
   it('Ví âm → lời riêng nêu số âm, khoá Ví và chọn lại COD', () => {
     expect(walletUnavailableReason(-50000, 120000)).toBe(
-      'Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.',
+      'Số dư Ví Tubu đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.',
     );
     expect(pickPaymentMethod('WALLET', { total: 120000 }, -50000)).toBe('COD');
   });
