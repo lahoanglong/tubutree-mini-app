@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { returnWindowExpired } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { CheckCircle2, Clock, RotateCcw, XCircle } from 'lucide-react';
+import { orderCopy } from '@tubutree/app-core/account-copy';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelOrder,
@@ -17,6 +18,8 @@ import {
 import { canCancelOrder, isReorderable, returnWindowState } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { Sheet } from '@/components/ui/sheet';
+import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { invalidateBalances } from '@/lib/balances';
 import {
   EMPTY_BANK,
@@ -42,13 +45,26 @@ import { CancelReasonPicker } from './cancel-reason-picker';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { actionErrorText } from '@/lib/error-text';
 
+const CANCEL_TITLE = 'Bạn muốn huỷ đơn này?';
+const CANCEL_NOTE = 'Đơn đã huỷ không thể khôi phục lại.';
+
 /**
  * Việc khách tự làm được trên đơn: hủy (khi còn kịp, đơn đã trả tiền thì chọn nơi nhận tiền hoàn), mua lại (đơn đã kết thúc),
  * yêu cầu đổi/trả theo dòng và số lượng (đơn đã giao).
  * Quy tắc chỉ quyết định việc BÀY nút nào; BE vẫn kiểm lại và lời từ chối của BE (quá hạn đổi/trả, đã có yêu cầu…) hiện nguyên văn.
  */
-export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; userId: string | null | undefined }) {
+export function OrderActions({
+  order: o,
+  userId,
+  payHref = null,
+}: {
+  order: OrderDetailDTO;
+  userId: string | null | undefined;
+  /** Đường tới trang chuyển khoản của đơn: chỉ truyền ở điện thoại, nơi thanh đáy thay khung QR nhúng. */
+  payHref?: string | null;
+}) {
   const qc = useQueryClient();
+  const isPhone = useMediaQuery(MD_DOWN);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnKey, setReturnKey] = useState(0);
@@ -122,10 +138,76 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   }, [confirmCancel, cancel.isPending, cancel.isSuccess, cancel.isError]);
 
   const showsReturnButton = canRequestMore && returnWindow.open && !returnOpen && !returnSent;
-  const hasButtons = (canCancel && !cancel.isSuccess) || canReorder || showsReturnButton;
+  // Điện thoại như Mini App: "Yêu cầu đổi/trả" là nút phụ trong trang, thanh đáy chỉ giữ việc chính của đơn.
+  const returnInBar = showsReturnButton && !isPhone;
+  const hasButtons = (canCancel && !cancel.isSuccess) || !!payHref || canReorder || returnInBar;
   // Lời từ chối hủy của BE phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
-  const nothingToDo = !canCancel && !canReorder && !showsReturns && !cancel.isError;
+  const nothingToDo = !canCancel && !payHref && !canReorder && !showsReturns && !cancel.isError;
   if (nothingToDo) return null;
+
+  const cancelFields = (
+    <>
+      <CancelReasonPicker
+        code={cancelReason}
+        onCode={setCancelReason}
+        text={cancelReasonText}
+        onText={setCancelReasonText}
+        showError={cancelTouched}
+      />
+      {refundMode === 'choose' && (
+        <div className={isPhone ? 'mt-3' : 'mt-3 rounded-control bg-stone-0 p-3'}>
+          <RefundDestinationPicker
+            method={cancelMethod}
+            onMethod={setCancelMethod}
+            bank={cancelBank}
+            onBank={setCancelBank}
+            bankError={cancelTouched ? cancelBankError : null}
+            amountLabel={formatVnd(o.total)}
+          />
+        </div>
+      )}
+      {refundMode === 'wallet' && (
+        <p id="cancel-refund" className="mt-2 text-sm text-stone-700">{`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}</p>
+      )}
+      {refundMode === 'unpaidTransfer' && (
+        <p id="cancel-refund" role="note" className="mt-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
+          Nếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn được
+          hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.
+        </p>
+      )}
+    </>
+  );
+  const keepButton = (
+    <button ref={keepOrderRef} type="button" onClick={() => setConfirmCancel(false)} disabled={cancel.isPending} className={ui.btnPrimary}>
+      Giữ đơn
+    </button>
+  );
+  const confirmButton = (
+    <button
+      type="button"
+      onClick={() => {
+        setCancelTouched(true);
+        if (cancelReason && !cancelBankError) cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
+      }}
+      disabled={cancel.isPending}
+      className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
+    >
+      {cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn'}
+    </button>
+  );
+  const returnButton = (
+    <button
+      type="button"
+      onClick={() => {
+        setReturnKey((k) => k + 1);
+        setReturnOpen(true);
+      }}
+      className={isPhone ? 'inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-stone-700' : `${ui.btnSecondary} gap-2`}
+    >
+      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+      {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
+    </button>
+  );
 
   return (
     <section aria-label="Thao tác với đơn hàng" className={`mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mt-2 max-md:py-0 ${mini.band}`}>
@@ -140,7 +222,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
         </p>
       )}
 
-      {confirmCancel ? (
+      {confirmCancel && !isPhone ? (
         <div
           role="alertdialog"
           aria-labelledby="cancel-title"
@@ -148,54 +230,15 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           className="rounded-control border border-danger-fg bg-danger-bg p-3"
         >
           <p id="cancel-title" className="font-semibold text-stone-900">
-            Bạn muốn huỷ đơn này?
+            {CANCEL_TITLE}
           </p>
           <p id="cancel-note" className="mt-1 text-sm text-stone-700">
-            Đơn đã huỷ không thể khôi phục lại.
+            {CANCEL_NOTE}
           </p>
-          <CancelReasonPicker
-            code={cancelReason}
-            onCode={setCancelReason}
-            text={cancelReasonText}
-            onText={setCancelReasonText}
-            showError={cancelTouched}
-          />
-          {refundMode === 'choose' && (
-            <div className="mt-3 rounded-control bg-stone-0 p-3">
-              <RefundDestinationPicker
-                method={cancelMethod}
-                onMethod={setCancelMethod}
-                bank={cancelBank}
-                onBank={setCancelBank}
-                bankError={cancelTouched ? cancelBankError : null}
-                amountLabel={formatVnd(o.total)}
-              />
-            </div>
-          )}
-          {refundMode === 'wallet' && (
-            <p id="cancel-refund" className="mt-2 text-sm text-stone-700">{`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}</p>
-          )}
-          {refundMode === 'unpaidTransfer' && (
-            <p id="cancel-refund" role="note" className="mt-2 rounded-control border border-warning-fg bg-warning-bg p-3 text-sm text-warning-fg">
-              Nếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn được
-              hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.
-            </p>
-          )}
+          {cancelFields}
           <div className="mt-3 flex flex-wrap gap-2">
-            <button ref={keepOrderRef} type="button" onClick={() => setConfirmCancel(false)} disabled={cancel.isPending} className={ui.btnPrimary}>
-              Giữ đơn
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCancelTouched(true);
-                if (cancelReason && !cancelBankError) cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
-              }}
-              disabled={cancel.isPending}
-              className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
-            >
-              {cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn'}
-            </button>
+            {keepButton}
+            {confirmButton}
           </div>
         </div>
       ) : (
@@ -205,7 +248,9 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
             <button
               ref={cancelTriggerRef}
               type="button"
+              disabled={cancel.isPending}
               onClick={() => {
+                if (cancel.isPending) return;
                 cancel.reset();
                 setConfirmCancel(true);
               }}
@@ -214,26 +259,41 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
               Huỷ đơn
             </button>
           )}
+          {payHref && (
+            <Link href={payHref} className={`${ui.btnPrimary} flex-1`}>
+              {orderCopy.payNow}
+            </Link>
+          )}
           {canReorder && (
             <button type="button" onClick={() => setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }))} className={`${ui.btnPrimary} max-md:flex-1`}>
               Mua lại đơn này
             </button>
           )}
-          {showsReturnButton && (
-            <button
-              type="button"
-              onClick={() => {
-                setReturnKey((k) => k + 1);
-                setReturnOpen(true);
-              }}
-              className={`${ui.btnSecondary} gap-2 max-md:flex-1`}
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              {orderReturns.some((r) => r.status === 'APPROVED') ? 'Trả thêm sản phẩm' : 'Yêu cầu đổi/trả'}
-            </button>
-          )}
+          {returnInBar && returnButton}
         </ActionRow>
         )
+      )}
+
+      {isPhone && (
+        <Sheet
+          open={confirmCancel}
+          onClose={() => setConfirmCancel(false)}
+          title={CANCEL_TITLE}
+          role="alertdialog"
+          dismissible={!cancel.isPending}
+          describedBy={refundMode === 'wallet' || refundMode === 'unpaidTransfer' ? 'cancel-note cancel-refund' : 'cancel-note'}
+          footer={
+            <div className="flex flex-col gap-2">
+              {keepButton}
+              {confirmButton}
+            </div>
+          }
+        >
+          <p id="cancel-note" className="text-sm text-stone-600">
+            {CANCEL_NOTE}
+          </p>
+          {cancelFields}
+        </Sheet>
       )}
 
       {canRequestMore && !returnWindow.open && (
@@ -250,6 +310,8 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24 giờ.
         </p>
       )}
+
+      {isPhone && showsReturnButton && <div className="mt-2 text-center">{returnButton}</div>}
 
       {delivered && returnOpen && (
         <ReturnRequestForm
@@ -311,7 +373,7 @@ function ReturnStatus({
 
 /**
  * Hàng nút thao tác: từ md nằm trong thẻ như cũ; ở điện thoại dính đáy toàn chiều ngang như StickyActionBar của Mini App
- * (Hủy đơn / Mua lại đơn này / Yêu cầu đổi trả). Thanh fixed che đáy trang nên báo qua `has-sticky-bar` + `--sticky-bar-h`
+ * (Huỷ đơn / Thanh toán ngay / Mua lại đơn này; "Yêu cầu đổi/trả" là nút phụ nằm ngoài thanh). Thanh fixed che đáy trang nên báo qua `has-sticky-bar` + `--sticky-bar-h`
  * để body chừa chỗ và thanh tab ẩn đi, cùng cách StickyActionBar của web làm.
  */
 function ActionRow({ children }: { children: React.ReactNode }) {

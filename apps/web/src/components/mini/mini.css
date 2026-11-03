@@ -412,7 +412,7 @@
  * Đệm ngang bên trong (px-4...) vẫn do nơi dùng đặt để nội dung thẳng cột trang. Phải đứng SAU .scroll-x: cùng độ đặc hiệu,
  * luật sau thắng, nên hàng cuộn đã nới lề không bị `max-width: 100%` cắt lại. `.tubu-bleed` chỉ dưới md (đúng mốc của `max-md:`: từ md khối
  * nằm trong khung); `.tubu-bleed-rail` là kệ sản phẩm, từ md lùi đúng đệm của kệ (`--rail-pad-block`, token px 12px: cùng đơn vị với đệm đó)
- * để thẻ đầu thẳng tiêu đề.
+ * để thẻ đầu thẳng tiêu đề. Trang có đệm ngang khác 1rem đặt `--bleed-inset` bằng đệm của mình để kệ vẫn chạm mép mà không tràn.
  */
 @media not all and (min-width: 768px) {
   .tubu-bleed {
@@ -421,7 +421,7 @@
   }
 }
 .tubu-bleed-rail {
-  margin-inline: -1rem;
+  margin-inline: calc(var(--bleed-inset, 1rem) * -1);
   max-width: none;
 }
 @media (min-width: 768px) {

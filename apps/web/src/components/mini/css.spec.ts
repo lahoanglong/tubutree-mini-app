@@ -115,8 +115,8 @@ describe('mini.css: tràn mép dùng chung (.tubu-bleed, .tubu-bleed-rail)', () 
     expect(mediaBodies('(min-width: 768px)')).not.toMatch(/\.tubu-bleed(?![\w-])/);
   });
 
-  it('.tubu-bleed-rail lùi -1rem ở mọi khổ và đúng đệm 12px của kệ (--p-space-4) từ md', () => {
-    expect(outsideMedia).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*-1rem[^}]*max-width:\s*none/);
+  it('.tubu-bleed-rail lùi --bleed-inset (mặc định 1rem) ở mọi khổ và đúng đệm 12px của kệ (--p-space-4) từ md', () => {
+    expect(outsideMedia).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*calc\(var\(--bleed-inset,\s*1rem\)\s*\*\s*-1\)[^}]*max-width:\s*none/);
     expect(mediaBodies('(min-width: 768px)')).toMatch(/\.tubu-bleed-rail\s*\{[^}]*margin-inline:\s*calc\(var\(--p-space-4\)\s*\*\s*-1\)/);
   });
 

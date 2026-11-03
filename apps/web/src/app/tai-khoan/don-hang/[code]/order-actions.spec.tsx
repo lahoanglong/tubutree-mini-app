@@ -726,3 +726,115 @@ describe('chi tiết đơn — truy cập', () => {
     expect(smallTouchTargets(container)).toEqual([]);
   });
 });
+
+describe('chi tiết đơn — điện thoại (như Mini App)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const PENDING = { ...BASE, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: '2099-01-01T03:00:00Z' };
+  const bar = (c: HTMLElement) => c.querySelector('[data-testid="order-action-bar"]') as HTMLElement;
+
+  it('đơn chờ chuyển khoản: không nhúng khung QR, dải trạng thái có hạn, thanh đáy "Huỷ đơn | Thanh toán ngay" tới trang chuyển khoản', async () => {
+    mocks.order = { ...PENDING };
+    const { container } = await mount();
+    expect(container.querySelector('img[src*="vietqr"]')).toBeNull();
+    expect(container.textContent).not.toContain('Chuyển khoản trước');
+    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Thanh toán trước');
+    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('quá hạn đơn sẽ tự huỷ.');
+    const labels = Array.from(bar(container).querySelectorAll('button, a')).map((n) => n.textContent?.trim());
+    expect(labels).toEqual(['Huỷ đơn', 'Thanh toán ngay']);
+    expect(bar(container).querySelector('a')?.getAttribute('href')).toBe('/thanh-toan/chuyen-khoan/TB-9');
+  });
+
+  it('đơn chờ chuyển khoản đã quá hạn: không còn nút "Thanh toán ngay"', async () => {
+    mocks.order = { ...PENDING, paymentDeadline: '2020-01-01T03:00:00Z' };
+    const { container } = await mount();
+    expect(bar(container)?.querySelector('a')).toBeNull();
+  });
+
+  it('đơn đã giao: thanh đáy chỉ có "Mua lại đơn này", "Yêu cầu đổi/trả" là nút phụ ngoài thanh', async () => {
+    mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString() };
+    const { container } = await mount();
+    expect(Array.from(bar(container).querySelectorAll('button')).map((b) => b.textContent?.trim())).toEqual(['Mua lại đơn này']);
+    const ret = btn(container, 'Yêu cầu đổi/trả')!;
+    expect(bar(container).contains(ret)).toBe(false);
+  });
+
+  it('huỷ đơn mở Sheet đáy (dialog), focus vào "Giữ đơn", đóng thì focus về nút "Huỷ đơn" đã bấm', async () => {
+    mocks.order = { ...BASE };
+    const { container } = await mount();
+    const opener = btn(container, 'Huỷ đơn')!;
+    opener.focus();
+    click(opener);
+    await flush();
+    const dialog = document.querySelector('[role="alertdialog"][aria-modal="true"]')!;
+    expect(dialog.textContent).toContain('Bạn muốn huỷ đơn này?');
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.getElementById('cancel-note')?.textContent).toContain('không thể khôi phục');
+    expect(dialog.getAttribute('aria-describedby')).toContain('cancel-note');
+    expect(document.activeElement?.textContent).toBe('Giữ đơn');
+    click(Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Giữ đơn')!);
+    await flush();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(mocks.cancel).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận huỷ trong Sheet gọi API với lý do đã chọn', async () => {
+    mocks.order = { ...BASE };
+    const { container } = await mount();
+    click(btn(container, 'Huỷ đơn')!);
+    await flush();
+    const dialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    pickReason(dialog);
+    click(Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Huỷ đơn')!);
+    await flush(12);
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+  });
+  it('đang gửi huỷ: Sheet không đóng được (không nút X, Esc không đóng), nút "Huỷ đơn" ở thanh đáy khoá nên không gửi POST lần hai', async () => {
+    mocks.order = { ...BASE };
+    mocks.cancel.mockImplementation(() => new Promise(() => {}));
+    const { container } = await mount();
+    click(btn(container, 'Huỷ đơn')!);
+    await flush();
+    const dialog = document.querySelector('[role="alertdialog"]') as HTMLElement;
+    pickReason(dialog);
+    click(Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Huỷ đơn')!);
+    await flush(4);
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+    expect(dialog.querySelector('button[aria-label="Đóng"]')).toBeNull();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(btn(bar(container), 'Huỷ đơn')!.disabled).toBe(true);
+    click(btn(bar(container), 'Huỷ đơn')!);
+    await flush(4);
+    expect(mocks.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('đơn chờ chuyển khoản không huỷ được (canCancel=false): vẫn có thanh đáy với "Thanh toán ngay"', async () => {
+    mocks.order = { ...PENDING, canCancel: false };
+    const { container } = await mount();
+    const labels = Array.from(bar(container).querySelectorAll('button, a')).map((n) => n.textContent?.trim());
+    expect(labels).toEqual(['Thanh toán ngay']);
+  });
+
+  it('"Yêu cầu đổi/trả" nằm sau danh sách trạng thái yêu cầu đã có, như Mini App', async () => {
+    mocks.order = { ...BASE, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 864e5).toISOString() };
+    mocks.returns = [{ id: 'r0', orderId: 'o9', status: 'REJECTED', reason: 'DAMAGED', createdAt: '2026-10-02T03:00:00Z', items: [{ orderItemId: 'i1', quantity: 1 }] }];
+    const { container } = await mount();
+    const status = container.querySelector('[role="status"]')!;
+    const ret = btn(container, 'Yêu cầu đổi/trả')!;
+    expect(status.compareDocumentPosition(ret) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

@@ -106,6 +106,12 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 
+  it('khung trang đặt --bleed-inset bằng đệm 12px của nó để kệ "Mua lại" tràn mép đúng bằng đệm, không rộng hơn màn 375px', async () => {
+    const c = await mount();
+    const frame = c.querySelector('main > div.max-md\\:px-3') as HTMLElement;
+    expect(frame.className).toContain('[--bleed-inset:0.75rem]');
+  });
+
   it('tab "Tất cả" gửi GET /orders page=1 limit=20 không kèm bộ lọc; thẻ đơn dẫn tới chi tiết', async () => {
     const c = await mount();
     const q = sent('/orders')[0]!.query;
