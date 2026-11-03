@@ -475,8 +475,11 @@ export class CatalogService {
     const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
     const ids = rows.map((r) => r.id);
     if (remember) {
+      const key = raw.toLowerCase();
+      // Xoá trước khi ghi: Map giữ vị trí cũ của khoá có sẵn, nên khoá vừa làm mới sẽ bị coi là cũ nhất và bỏ đầu tiên.
+      this.matchCache.delete(key);
       if (this.matchCache.size >= this.MATCH_MAX_KEYS) this.matchCache.delete(this.matchCache.keys().next().value as string);
-      this.matchCache.set(raw.toLowerCase(), { ids, expiresAt: Date.now() + this.MATCH_TTL_MS });
+      this.matchCache.set(key, { ids, expiresAt: Date.now() + this.MATCH_TTL_MS });
     }
     return ids;
   }

@@ -109,6 +109,30 @@ describe('scopeRecentSearchesToUser (KHAMPHA-15)', () => {
     expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('u2');
   });
 
+  it('khách (guest) được gộp sang tài khoản thật: vẫn là một người, giữ lịch sử và đổi chủ', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('g1', s, true);
+    pushRecentSearch('sữa', s);
+    expect(scopeRecentSearchesToUser('g1', s, true)).toBe(false);
+    expect(scopeRecentSearchesToUser('z1', s, false)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['sữa']);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('z1');
+    expect(scopeRecentSearchesToUser('u2', s, false)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+  });
+
+  it('khách này sang khách khác, hoặc tài khoản thật sang khách: xoá', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('g1', s, true);
+    pushRecentSearch('sữa', s);
+    expect(scopeRecentSearchesToUser('g2', s, true)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    scopeRecentSearchesToUser('z1', s, false);
+    pushRecentSearch('sữa', s);
+    expect(scopeRecentSearchesToUser('g3', s, true)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+  });
+
   it('storage vắng hoặc ném: không ném', () => {
     expect(scopeRecentSearchesToUser('u1', null)).toBe(false);
     const bad = { getItem: () => { throw new Error('x'); }, setItem: () => undefined, removeItem: () => undefined };

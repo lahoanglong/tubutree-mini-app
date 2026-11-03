@@ -18,7 +18,7 @@ import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
 import { clearCtvTouched } from './storefront-context';
 import { readFirstTouchCookie } from './entry-source';
-import { clearRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
+import { forgetRecentSearchesOfSignedOutUser, scopeRecentSearchesToUser } from './recent-searches';
 import { browserStorage } from './recently-viewed';
 
 export interface WebUser {
@@ -134,7 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (userId && dropForeignHomeHints(browserStorage(), userId)) writeWebCookie(HOME_HINT_COOKIE, null);
     // Phiên hết hạn rồi tài khoản khác đăng nhập không đi qua logout(): lịch sử tìm của người trước cũng phải sạch.
     if (userId) scopeRecentSearchesToUser(userId);
-  }, [userId]);
+    // Phiên hết hạn (không còn tài khoản, không phải lỗi mạng) thì khách vãng lai kế tiếp không được thấy lịch sử của người trước.
+    else if (initialized && status === 'idle' && !sessionUnavailable) forgetRecentSearchesOfSignedOutUser();
+  }, [userId, initialized, status, sessionUnavailable]);
 
   const retrySession = useCallback(async () => {
     if (!hasSessionMarker()) {
@@ -237,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearRecentCustomers();
     clearWizardStorage();
     clearCtvTouched();
-    clearRecentSearches();
+    forgetRecentSearchesOfSignedOutUser();
   }, [qc]);
 
   const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => {

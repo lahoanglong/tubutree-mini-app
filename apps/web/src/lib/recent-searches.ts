@@ -57,16 +57,23 @@ export function clearRecentSearches(storage: StorageLike | null = browserStorage
 /**
  * Lịch sử chỉ thuộc về MỘT tài khoản: máy dùng chung đổi sang tài khoản khác thì xoá lịch sử của người trước. Chỉ so khi biết đang là ai
  * (lúc khôi phục phiên `userId` còn rỗng, so lúc đó sẽ xoá nhầm lịch sử của chính khách). Trả true nếu đã xoá.
+ * Khách (guest) được gộp sang tài khoản thật vẫn là một người: chủ ghi `guest:<id>` để nhận ra ca đó và giữ lịch sử.
  */
-export function scopeRecentSearchesToUser(userId: string | undefined, storage: StorageLike | null = browserStorage()): boolean {
+export function scopeRecentSearchesToUser(
+  userId: string | undefined,
+  storage: StorageLike | null = browserStorage(),
+  isGuest = false,
+): boolean {
   if (!userId) return false;
   try {
     const owner = storage?.getItem(RECENT_SEARCHES_OWNER_KEY);
-    if (owner === userId) return false;
+    const mine = isGuest ? `guest:${userId}` : userId;
+    if (owner === mine) return false;
     // Chưa có chủ (lịch sử cũ trước bản này, hoặc khách vừa tìm lúc chưa đăng nhập): nhận cho tài khoản đầu tiên, chỉ xoá khi đổi chủ.
-    if (owner != null) clearRecentSearches(storage);
-    storage?.setItem(RECENT_SEARCHES_OWNER_KEY, userId);
-    return owner != null;
+    const mergedFromGuest = !isGuest && owner != null && owner.startsWith('guest:');
+    if (owner != null && !mergedFromGuest) clearRecentSearches(storage);
+    storage?.setItem(RECENT_SEARCHES_OWNER_KEY, mine);
+    return owner != null && !mergedFromGuest;
   } catch {
     return false;
   }

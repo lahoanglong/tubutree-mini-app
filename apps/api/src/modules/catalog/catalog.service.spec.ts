@@ -829,6 +829,23 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect((svc as unknown as { rankCache: Map<string, unknown> }).rankCache.size).toBe(0);
   });
 
+  it('bộ nhớ khớp từ khoá: ghi lại khoá đã hết hạn thì không đẩy khoá khác ra, và khoá đó thành mới nhất', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
+    const { svc } = setup(queryRaw);
+    const cache = (svc as unknown as { matchCache: Map<string, { ids: string[]; expiresAt: number }> }).matchCache;
+    for (let i = 0; i < 50; i++) await svc.list({ page: 1, limit: 20, q: `tu khoa ${i}` });
+    expect(cache.size).toBe(50);
+    cache.get('tu khoa 5')!.expiresAt = Date.now() - 1;
+    await svc.list({ page: 1, limit: 20, q: 'tu khoa 5' });
+    expect(cache.size).toBe(50);
+    expect(cache.has('tu khoa 0')).toBe(true);
+    expect([...cache.keys()].pop()).toBe('tu khoa 5');
+    await svc.list({ page: 1, limit: 20, q: 'tu khoa moi' });
+    expect(cache.size).toBe(50);
+    expect(cache.has('tu khoa 0')).toBe(false);
+    expect(cache.has('tu khoa 5')).toBe(true);
+  });
+
   it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
     const queryRaw = jest.fn().mockResolvedValue([]);
     const { svc } = setup(queryRaw);

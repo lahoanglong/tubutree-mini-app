@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), fetchCatalog: vi.fn(), fetchBrands: vi.fn(), fetchCategories: vi.fn(), suggestProducts: vi.fn(), coreGet: vi.fn(),
   routerNavigate: undefined as undefined | ((to: string) => void),
   trackFilterApplied: vi.fn(), trackSearchPerformed: vi.fn(), trackSearchResultClicked: vi.fn(),
+  auth: { status: 'idle', user: null } as { status: string; user: null | { id: string; phone?: string | null; zaloId?: string | null } },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -23,7 +24,7 @@ vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../services/discovery-events', () => ({
   trackFilterApplied: mocks.trackFilterApplied, trackSearchPerformed: mocks.trackSearchPerformed, trackSearchResultClicked: mocks.trackSearchResultClicked,
 }));
-vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'idle' }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: typeof mocks.auth) => unknown) => sel(mocks.auth) }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -104,6 +105,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     forgetTrackedSearch();
     localStorage.clear();
     sessionStorage.clear();
+    mocks.auth = { status: 'idle', user: null };
     mocks.fetchCatalog.mockResolvedValue(pageOf([card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')]));
     mocks.fetchBrands.mockResolvedValue([{ brand: 'Tubu', count: 2 }]);
     mocks.fetchCategories.mockResolvedValue([]);
@@ -748,6 +750,53 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       await waitFor(() => expect(loc()).toBe('/browse?q=nuoc'));
       expect(screen.getByRole('searchbox')).toHaveValue('nuoc');
       expect(screen.queryByRole('button', { name: 'Huỷ' })).toBeNull();
+    });
+
+    describe('lịch sử tìm theo tài khoản (KHAMPHA-15)', () => {
+      const withUser = (id: string | null) => { mocks.auth = id ? { status: 'authenticated', user: { id, phone: '0900000000' } } : { status: 'idle', user: null }; };
+      const recentButtons = async () => {
+        fireEvent.focus(screen.getByRole('searchbox'));
+        const region = screen.queryByRole('region', { name: 'Gợi ý tìm kiếm' });
+        return region ? within(region).queryAllByRole('button').map((b) => b.textContent ?? '') : [];
+      };
+
+      it('đang đăng nhập A rồi phiên hết (idle, không user): xoá lịch sử của A và chủ', async () => {
+        localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa']));
+        localStorage.setItem('tubu_recent_searches_owner', 'u1');
+        withUser('u1');
+        const view = renderAt('/browse');
+        await hubVisible();
+        expect(await recentButtons()).not.toHaveLength(0);
+        withUser(null);
+        view.rerender(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/browse']} future={FUTURE}><BrowsePage /></MemoryRouter></QueryClientProvider>);
+        await waitFor(() => expect(localStorage.getItem('tubu_recent_searches')).toBeNull());
+        expect(localStorage.getItem('tubu_recent_searches_owner')).toBeNull();
+      });
+
+      it('A rồi B trên cùng máy (không qua đăng xuất): xoá lịch sử của A, chủ thành B', async () => {
+        localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa']));
+        localStorage.setItem('tubu_recent_searches_owner', 'u1');
+        withUser('u1');
+        const view = renderAt('/browse');
+        await hubVisible();
+        expect(localStorage.getItem('tubu_recent_searches')).not.toBeNull();
+        withUser('u2');
+        view.rerender(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/browse']} future={FUTURE}><BrowsePage /></MemoryRouter></QueryClientProvider>);
+        await waitFor(() => expect(localStorage.getItem('tubu_recent_searches')).toBeNull());
+        expect(localStorage.getItem('tubu_recent_searches_owner')).toBe('u2');
+      });
+
+      it('khách guest gộp sang tài khoản Zalo: giữ lịch sử', async () => {
+        localStorage.setItem('tubu_recent_searches', JSON.stringify(['sữa']));
+        mocks.auth = { status: 'authenticated', user: { id: 'g1', phone: null, zaloId: 'guest_abc' } };
+        const view = renderAt('/browse');
+        await hubVisible();
+        expect(localStorage.getItem('tubu_recent_searches_owner')).toBe('guest:g1');
+        withUser('z1');
+        view.rerender(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/browse']} future={FUTURE}><BrowsePage /></MemoryRouter></QueryClientProvider>);
+        await waitFor(() => expect(localStorage.getItem('tubu_recent_searches_owner')).toBe('z1'));
+        expect(JSON.parse(localStorage.getItem('tubu_recent_searches')!)).toEqual(['sữa']);
+      });
     });
 
     it('có lịch sử + ô trống → vẫn hiện lịch sử (thay nội dung hub)', async () => {

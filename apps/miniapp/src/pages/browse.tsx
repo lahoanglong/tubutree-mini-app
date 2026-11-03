@@ -29,6 +29,7 @@ import { useNavigationType } from '../hooks/use-navigation-type';
 import { useScrollRestoration } from '../hooks/use-scroll-restoration';
 import { useSearchState } from '../hooks/use-search-state';
 import { useAuthStore } from '../store/auth';
+import { isGuestUser } from '../utils/guest-user';
 import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
 import { clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from '../utils/recent-searches';
@@ -118,16 +119,17 @@ export default function BrowsePage() {
   const [editing, setEditing] = useState(focusSearch);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const userId = useAuthStore((s) => s.user?.id);
+  const isGuest = useAuthStore((s) => (s.user ? isGuestUser(s.user) : false));
   const signedOut = useAuthStore((s) => s.status === 'idle' && !s.user);
   const [recent, setRecent] = useState<string[]>(() => {
-    scopeRecentSearchesToUser(userId);
+    scopeRecentSearchesToUser(userId, undefined, isGuest);
     return readRecentSearches();
   });
   useEffect(() => {
-    if (scopeRecentSearchesToUser(userId)) setRecent(readRecentSearches());
+    if (scopeRecentSearchesToUser(userId, undefined, isGuest)) setRecent(readRecentSearches());
     // Khởi động ở 'loading' nên idle không có khách = đã đăng xuất (hay phiên hết hạn), không phải đang khôi phục.
     else if (!userId && signedOut && forgetRecentSearchesOfSignedOutUser()) setRecent([]);
-  }, [userId, signedOut]);
+  }, [userId, isGuest, signedOut]);
 
   // Ô tìm ở Trang chủ chỉ là vỏ dẫn sang đây (?focus=search): focus thẳng ô thật rồi bỏ cờ khỏi URL
   // — quay lại từ PDP sẽ không bật bàn phím lần nữa (plan 4b Ruling 7).
