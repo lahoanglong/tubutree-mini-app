@@ -1248,6 +1248,8 @@ export class AffiliateService {
               milestone: titles.join(' và '),
               // Thu được 0 điểm (số dư hết, toàn bộ thành nợ) thì không được báo "0 Điểm Xanh đã được thu lại".
               taken_note: taken > 0 ? `${taken.toLocaleString('vi-VN')} Điểm Xanh thưởng mốc đã được thu lại` : 'thưởng mốc đã được ghi nợ',
+              // Mẫu admin đã sửa tay từ chữ cũ (migration 20261103200000 không ghi đè) vẫn dùng {{points}}.
+              points: taken.toLocaleString('vi-VN'),
               // Chỉ tháng này và tháng trước nhận được mốc, và hoa hồng chỉ được duyệt vào tháng hiện tại: tháng đã qua thì doanh số
               // không tăng lại nên không hứa nhận lại.
               debt_note:
