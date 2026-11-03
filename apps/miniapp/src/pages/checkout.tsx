@@ -31,7 +31,7 @@ import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
-import { rememberActiveOrder } from '@tubutree/app-core/home-layout';
+import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
 import { browserStorage } from '../utils/recently-viewed';
 import {
   checkoutPoints,

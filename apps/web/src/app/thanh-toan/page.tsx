@@ -7,7 +7,7 @@ import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag, Sprout } from 
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
-import { rememberActiveOrder } from '@tubutree/app-core/home-layout';
+import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
 import { browserStorage } from '@/lib/recently-viewed';
 import { syncHomeHintCookie } from '@/components/home/use-home-customer-kind';
 import { useAuthPhase } from '@/lib/auth-phase';
