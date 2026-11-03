@@ -278,11 +278,24 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
   });
 });
 
+describe('WasteRequestDetail: hộp Thu hồi có số dư và số dự kiến trừ', () => {
+  it('API trả reversePreview thì hộp ghi số dư hiện tại và số điểm dự kiến trừ', async () => {
+    const { c } = await mount({
+      isAdmin: true,
+      detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000, reversePreview: { pointsBalance: 20_000, expectedTake: 17_000 } }),
+    });
+    click(btn(c, 'Thu hồi điểm'));
+    expect(document.body.textContent).toContain('Số dư hiện tại 20.000 điểm, dự kiến trừ 17.000 điểm.');
+  });
+});
+
 describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
   it('admin thu hồi điểm: hỏi lý do, báo số đã thu và số không thu được', async () => {
     const { c, api } = await mount({ isAdmin: true, detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000 }) });
     click(btn(c, 'Thu hồi điểm'));
-    expect(document.body.textContent).toContain('Chỉ thu được phần điểm khách chưa tiêu.');
+    expect(document.body.textContent).toContain('Trừ tối đa số điểm đã cộng, trong giới hạn số dư hiện có của khách (kể cả điểm của đơn còn trong hạn trả).');
+    expect(document.body.textContent).not.toContain('chưa tiêu');
+    expect(document.body.textContent).not.toContain('dự kiến trừ');
     expect(document.body.textContent).not.toContain('(10.3)');
     typeInto(dialogArea(), 'Khai khống');
     answerConfirm(true);

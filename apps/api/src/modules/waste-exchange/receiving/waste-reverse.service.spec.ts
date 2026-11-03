@@ -159,6 +159,15 @@ describe('WasteReverseService.reverse', () => {
     expect(tx.wasteRequest.updateMany).toHaveBeenCalledTimes(1);
   });
 
+  it('thu được 0 điểm (số dư 0, lô không còn thu hồi được, hoặc yêu cầu 0 điểm) thì không gửi tin cho khách nhưng vẫn chạy xét khoá', async () => {
+    for (const o of [{ balance: 0 }, { recoverable: 0 }, { row: row({ pointsAwarded: 0 }) }] as const) {
+      const { svc, notifier, shipLock } = setup(o);
+      await svc.reverse('a1', 'r1', BODY);
+      expect(notifier.pointsReversed).not.toHaveBeenCalled();
+      expect(shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
+    }
+  });
+
   it('falls back to the awarded points when the lot is not found in the ledger', async () => {
     const { svc } = setup({ recoverable: null });
     await expect(svc.reverse('a1', 'r1', BODY)).resolves.toMatchObject({ pointsTaken: 20_000, shortfallPoints: 0 });

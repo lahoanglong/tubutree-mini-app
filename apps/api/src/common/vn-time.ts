@@ -17,6 +17,12 @@ export function startOfVnDay(d: Date = new Date()): Date {
   return new Date(Date.UTC(year, month - 1, day) - VN_OFFSET_MS);
 }
 
+/** 23:59:59.999 giờ VN của ngày chứa `d`: mốc "hết ngày" mà `formatVnDate` vẫn in đúng ngày đó. */
+export function endOfVnDay(d: Date = new Date()): Date {
+  const { year, month, day } = vnDateParts(d);
+  return new Date(Date.UTC(year, month - 1, day + 1) - VN_OFFSET_MS - 1);
+}
+
 /** 00:00 giờ VN ngày 1 của tháng chứa `d`. */
 export function startOfVnMonth(d: Date = new Date()): Date {
   const { year, month } = vnDateParts(d);

@@ -4,7 +4,8 @@ import type { WasteReverseRequest, WasteReverseResultDTO } from '@tubutree/share
 import { assertActiveAdmin } from '../../../common/staff-access';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { applyPointsDelta } from '../../loyalty/points-ledger';
-import { loadPointExpiryTxns, lotRecoverable, recycleLotKey } from '../../loyalty/loyalty-expiry.service';
+import { loadPointExpiryTxns } from '../../loyalty/loyalty-expiry.service';
+import { reverseTake } from './waste-reverse-take';
 import { WasteConfigService } from '../core/waste-config.service';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
@@ -54,11 +55,7 @@ export class WasteReverseService {
         if (req.status !== 'COMPLETED') throw new ConflictException('Chỉ thu hồi được yêu cầu đã hoàn tất');
 
         const [u] = await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${req.userId} FOR UPDATE`;
-        let take = 0;
-        if (awarded > 0) {
-          const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, req.userId), recycleLotKey(id)) ?? awarded;
-          take = Math.min(awarded, recoverable, Math.max(0, u?.pointsBalance ?? 0));
-        }
+        const take = awarded > 0 ? reverseTake(awarded, await loadPointExpiryTxns(tx, req.userId), id, u?.pointsBalance ?? 0) : 0;
 
         const moved = await tx.wasteRequest.updateMany({
           where: { id, status: 'COMPLETED', ...(req.method === 'PICKUP' ? { orderId: req.orderId } : {}) },
@@ -116,10 +113,13 @@ export class WasteReverseService {
 
     if (done.replay) return done.result;
 
-    try {
-      await this.notifier.pointsReversed(done.userId, { id, code: done.code }, done.taken, body.reason);
-    } catch (e) {
-      this.logger.warn(`pointsReversed failed for ${id}: ${String(e)}`);
+    // Thu được 0 điểm thì tin "đã thu hồi 0 Điểm Xanh" vô nghĩa với khách: không gửi.
+    if (done.taken > 0) {
+      try {
+        await this.notifier.pointsReversed(done.userId, { id, code: done.code }, done.taken, body.reason);
+      } catch (e) {
+        this.logger.warn(`pointsReversed failed for ${id}: ${String(e)}`);
+      }
     }
     if (done.method === 'MAIL_IN' || done.method === 'PICKUP') {
       try {
