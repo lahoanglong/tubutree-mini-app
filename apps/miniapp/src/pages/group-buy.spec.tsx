@@ -192,6 +192,24 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(mocks.login).toHaveBeenCalledTimes(1);
   });
 
+  it('chạm nhóm thứ hai lúc nhóm đầu đang chờ phiên: login một lần, chỉ tham gia nhóm đầu', async () => {
+    mocks.auth.status = 'loading';
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('c')]);
+    let done!: () => void;
+    mocks.login.mockReturnValue(new Promise<void>((r) => (done = r)));
+    renderPage();
+    const btns = await screen.findAllByRole('button', { name: 'Đăng nhập để tham gia' });
+    fireEvent.click(btns[0]!);
+    fireEvent.click(btns[1]!);
+    mocks.auth.status = 'authenticated';
+    done();
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mocks.joinGroupBuy).toHaveBeenCalledTimes(1);
+    expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a');
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+  });
+
   it('chạm Tham gia lúc khôi phục phiên mà phiên không ra: không tham gia', async () => {
     mocks.auth.status = 'loading';
     let done!: () => void;
