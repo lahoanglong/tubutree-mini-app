@@ -1,5 +1,5 @@
-import type { Page } from '@playwright/test';
 import { test, expect } from './support/mock-api';
+import { anchorBelow, gate, readCls, trackLayoutShift } from './support/pdp-cls';
 import { mockPilotProduct, PILOT_PRODUCT, PILOT_PRODUCT_NAME, PILOT_SLUG } from './support/pilot-mocks';
 
 /**
@@ -12,7 +12,7 @@ const HOUR = 3_600_000;
 const SPENT = 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.';
 const VARIATIONS = [{ id: 'var-1', sku: 'KU-80', name: 'Gói 80 tờ', attributes: {}, retailPrice: 35_000, salePrice: null, stock: 245 }];
 
-function mockFlashPage(api: Parameters<typeof mockPilotProduct>[0], opts: { flash: boolean; delayMs?: number; perUserLeft?: number }) {
+function mockFlashPage(api: Parameters<typeof mockPilotProduct>[0], opts: { flash: boolean; hold?: Promise<void>; perUserLeft?: number }) {
   mockPilotProduct(api);
   api.get('/products/:slug', { ...PILOT_PRODUCT, variations: VARIATIONS });
   api.get('/flash-sales/active', () => {
@@ -27,38 +27,30 @@ function mockFlashPage(api: Parameters<typeof mockPilotProduct>[0], opts: { flas
     ];
   });
   api.get('/flash-sales/me/allowance', async () => {
-    if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+    await opts.hold;
     const left = opts.perUserLeft ?? 0;
     return { items: { 'fi-1': { perUserLeft: left, allowance: left } } };
   });
 }
 
-async function trackLayoutShift(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const w = window as unknown as { __cls: number };
-    w.__cls = 0;
-    new PerformanceObserver((list) => {
-      for (const e of list.getEntries() as unknown as { hadRecentInput: boolean; value: number }[]) if (!e.hadRecentInput) w.__cls += e.value;
-    }).observe({ type: 'layout-shift', buffered: true });
-  });
-}
-const readCls = (page: Page) => page.evaluate(() => new Promise<number>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve((window as unknown as { __cls: number }).__cls)))));
-
 test.describe('Mini App PDP: ghi chú hết suất Giờ vàng về muộn không làm trang xê dịch', () => {
-  for (const delayMs of [1_000, 3_000]) {
-    test(`allowance về sau ${delayMs}ms: phần bên dưới giữ nguyên chỗ, CLS do ghi chú bằng 0`, async ({ page, api }) => {
-      mockFlashPage(api, { flash: true, delayMs, perUserLeft: 0 });
+  for (const perUserLeft of [0, 3]) {
+    test(`allowance còn treo rồi mới về (perUserLeft ${perUserLeft}): khối bên dưới giữ nguyên chỗ, CLS do ghi chú bằng 0`, async ({ page, api }) => {
+      const g = gate();
+      mockFlashPage(api, { flash: true, hold: g.wait, perUserLeft });
       await trackLayoutShift(page);
       await page.goto(`/product/${PILOT_SLUG}`);
       await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 15_000 });
       const slot = page.locator('[data-section="pdp-flash-limit"]');
-      await expect(slot).toBeVisible();
-      const before = (await slot.boundingBox())!;
+      const anchor = await anchorBelow(slot);
+      await expect(slot).toHaveText('');
+      const before = (await anchor.boundingBox())!;
       const clsBefore = await readCls(page);
-      await expect(slot).toHaveText(SPENT, { timeout: delayMs + 10_000 });
-      const after = (await slot.boundingBox())!;
-      expect(Math.abs(after.y - before.y), 'vùng ghi chú dịch chỗ').toBeLessThanOrEqual(1);
-      expect(Math.abs(after.height - before.height), 'vùng ghi chú đổi chiều cao').toBeLessThanOrEqual(1);
+      g.release();
+      if (perUserLeft === 0) await expect(slot).toHaveText(SPENT, { timeout: 10_000 });
+      await page.waitForTimeout(500);
+      const after = (await anchor.boundingBox())!;
+      expect(Math.abs(after.y - before.y), `khối bên dưới dịch ${after.y - before.y}px`).toBeLessThanOrEqual(1);
       const cls = (await readCls(page)) - clsBefore;
       expect(cls, `CLS khi ghi chú hiện ${cls.toFixed(4)}`).toBe(0);
     });

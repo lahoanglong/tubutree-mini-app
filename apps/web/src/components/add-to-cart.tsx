@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuthPhase } from '@/lib/auth-phase';
+import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
@@ -83,6 +83,7 @@ export default function AddToCart({
   const router = useRouter();
   const qc = useQueryClient();
   const phase = useAuthPhase();
+  const restoring = useAuthRestoring();
   // Tồn kho trong HTML là bản ISR (tối đa 5 phút tuổi). Khi mở trang hỏi lại tồn kho thật; lỗi/chưa xong thì dùng bản ISR.
   const stockQ = useProductStock(slug);
   const variations = useMemo(
@@ -126,8 +127,9 @@ export default function AddToCart({
   // Một câu dưới ô Số lượng: mất giá Giờ vàng, hoặc giỏ đã có sẵn nên "Mua ngay" thanh toán cả dòng (nút ghi cả dòng, khách thấy số lớn hơn qty × đơn giá).
   const overLimitText = line ? lineNote(line, qty, true) : null;
   // Giữ chỗ 2 dòng caption từ lần vẽ đầu khi khách đã đăng nhập đang xem Giờ vàng (dưới md): câu hết suất chỉ biết sau GET /flash-sales/me/allowance (về muộn 1–3 s) và không được đẩy phần dưới.
+  // Phiên đang khôi phục (cờ phiên còn, chưa biết kết quả) cũng giữ ngay: pha đăng nhập chỉ về sau khi refresh qua mạng xong, giữ lúc đó thì chèn một dải mới đẩy phần dưới.
   // Khách chưa đăng nhập hoặc sản phẩm không có Giờ vàng thì không có số theo khách để chờ, không giữ dải trống.
-  const reserveFlashNote = phase === 'authenticated' && !!line?.pricing.isFlash;
+  const reserveFlashNote = (phase === 'authenticated' || restoring) && !!line?.pricing.isFlash;
   const available = (selected?.stock ?? 0) > 0;
   // Số lượng luôn giới hạn theo tồn kho của phân loại đang chọn (tối thiểu 1) — tránh
   // trường hợp chuyển sang phân loại còn ít/hết hàng nhưng vẫn giữ số lượng của phân loại cũ,

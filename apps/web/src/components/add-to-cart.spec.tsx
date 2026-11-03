@@ -1217,7 +1217,7 @@ describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn
 
   async function open(status = 'authenticated') {
     mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
-    mocks.auth = { status, initialized: true, user: status === 'authenticated' ? { id: 'u1' } : null };
+    mocks.auth = { status, initialized: status !== 'loading', user: status === 'authenticated' ? { id: 'u1' } : null };
     const r = mount();
     await flush();
     click(byText(r.container, 'button', /^500ml/));
@@ -1269,6 +1269,20 @@ describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn
     authed.unmount();
     const guest = await open('idle');
     expect(guest.container.querySelector('[data-section="pdp-flash-limit"]')!.className).not.toContain('tubu-pdp-flash-note');
+  });
+
+  it('phiên đang khôi phục (cờ phiên còn, chưa biết kết quả): giữ chỗ ngay để pha đăng nhập về không chèn thêm dải; không có cờ thì không giữ', async () => {
+    mocks.getFlashAllowance.mockReturnValue(new Promise(() => {}));
+    window.localStorage.setItem('tubu_web_session', '1');
+    try {
+      const restoring = await open('loading');
+      expect(restoring.container.querySelector('[data-section="pdp-flash-limit"]')!.className).toContain('tubu-pdp-flash-note');
+      restoring.unmount();
+    } finally {
+      window.localStorage.removeItem('tubu_web_session');
+    }
+    const noMarker = await open('loading');
+    expect(noMarker.container.querySelector('[data-section="pdp-flash-limit"]')!.className).not.toContain('tubu-pdp-flash-note');
   });
 
   it('khách chưa đăng nhập: không gọi endpoint, số như trước', async () => {

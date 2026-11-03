@@ -1,7 +1,7 @@
 import { test, expect } from './support/mock-api';
 import { mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
 import { mockCollectable, mockCouponHistory, mockWallet } from './support/voucher-mocks';
-import { COLLECT_TICKETS as COLLECT, LONG_NAME, WALLET_TICKETS as WALLET, expectButtonsStable, expectCompactTickets, expectNameVisibleWhole } from './support/voucher-ticket-checks';
+import { COLLECT_TICKETS as COLLECT, LONG_NAME, WALLET_TICKETS as WALLET, expectButtonsStable, expectCompactTickets, expectNameVisibleWhole, expectNarrowTickets } from './support/voucher-ticket-checks';
 
 /**
  * Zalo Mini App E2E — chiều cao phiếu mã giảm giá ở 375px (F10d, lỗi P1 #18; G1; M3): thiết kế ~88px, nhãn một dòng, điều kiện một hàng, tên admin hàng riêng dưới nhãn (trước điều kiện),
@@ -62,25 +62,8 @@ test.describe('Phiếu mã giảm giá ở 320px', () => {
     mockCouponHistory(api);
   });
 
-  test('Nhận mã: mã dài 15 ký tự nằm trọn trong phiếu, không bị cắt', async ({ page }) => {
+  test('Nhận mã: mã dài 15 ký tự không bị cắt, tên 40 ký tự không quá hai dòng và không đẩy nút ra ngoài phiếu (M3)', async ({ page }) => {
     await page.goto('/vouchers');
-    const code = page.getByTestId('voucher-code').filter({ hasText: 'NHANLOCXANH2026' });
-    await expect(code).toBeVisible({ timeout: 15_000 });
-    const fits = await code.evaluate((el) => {
-      const c = el.getBoundingClientRect();
-      const t = el.closest('[role="group"]')!.getBoundingClientRect();
-      return c.left >= t.left && c.right <= t.right && el.scrollWidth <= el.clientWidth + 1;
-    });
-    expect(fits, 'mã tràn ra ngoài phiếu').toBe(true);
-  });
-
-  test('Nhận mã: tên 40 ký tự không quá hai dòng và không đẩy nút ra ngoài phiếu (M3)', async ({ page }) => {
-    await page.goto('/vouchers');
-    const panel = page.getByRole('tabpanel', { name: 'Nhận mã' });
-    const groups = panel.getByRole('group');
-    await expect(groups).toHaveCount(COLLECT.length, { timeout: 15_000 });
-    const name = panel.getByTestId('voucher-name').filter({ hasText: LONG_NAME }).first();
-    expect((await name.boundingBox())!.height).toBeLessThanOrEqual(41);
-    await expectButtonsStable(groups);
+    await expectNarrowTickets(page.getByRole('tabpanel', { name: 'Nhận mã' }));
   });
 });

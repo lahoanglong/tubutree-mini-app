@@ -1,6 +1,6 @@
 import { expect, test } from './support/mock-api';
 import { mockCollectable, mockCollectableMine, mockCouponHistory, mockWallet } from './support/voucher-mocks';
-import { COLLECT_TICKETS, LONG_NAME, WALLET_TICKETS, expectButtonsStable, expectCompactTickets, expectNameVisibleWhole } from './support/voucher-ticket-checks';
+import { COLLECT_TICKETS, LONG_NAME, WALLET_TICKETS, expectButtonsStable, expectCompactTickets, expectNameVisibleWhole, expectNarrowTickets } from './support/voucher-ticket-checks';
 
 /**
  * Web khổ 375px, Mã giảm giá (/ma-giam-gia): phiếu cao đúng như Mini App (voucher-ticket-height.miniapp.spec.ts, cùng bộ mock): 88px phiếu trơn, 98px phiếu có tên ngắn, 138px phiếu tên 40 ký tự có hàng đáy gãy;
@@ -60,5 +60,31 @@ test.describe('Web khổ 375px: phiếu mã giảm giá cao như Mini App', () =
     const metaW = (await name.locator('xpath=following-sibling::*[@data-testid="voucher-meta"]').boundingBox())!.width;
     expect(box.width, `tên rộng ${box.width}px, điều kiện ${metaW}px`).toBeGreaterThan(140);
     await expectButtonsStable(groups);
+  });
+});
+
+test.describe('Web khổ 320px: phiếu mã giảm giá như Mini App', () => {
+  test.use({ viewport: { width: 320, height: 812 } });
+
+  test.beforeEach(async ({ page, api }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
+    api.get('/me', () => user);
+    mockCollectable(api, COLLECT_TICKETS as never);
+    mockCollectableMine(api, { claimed: [], newCustomerOnly: [] });
+    mockWallet(api, WALLET_TICKETS as never);
+    mockCouponHistory(api);
+    api.allowUnmocked('GET /affiliate/me', 'GET /me/wishlist/ids', 'GET /cart', 'POST /events', 'GET /notifications/unread-count');
+  });
+
+  test('Nhận mã: mã dài 15 ký tự không bị cắt, tên 40 ký tự không quá hai dòng và không đẩy nút ra ngoài phiếu', async ({ page }) => {
+    await page.goto('/ma-giam-gia');
+    await expectNarrowTickets(page.getByRole('tabpanel', { name: 'Nhận mã' }));
   });
 });

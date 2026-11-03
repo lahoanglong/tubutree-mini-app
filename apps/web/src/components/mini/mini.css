@@ -640,8 +640,8 @@
     color: var(--color-action-secondary-fg-disabled);
   }
 }
-/* Thứ tự các khối của cột thông tin trang sản phẩm khi xếp một cột (< md), như Mini App. Viết ở CSS thường thay cho `max-md:order-N` để bánh cóc `max-md` của PDP giảm; từ md không đặt `order` nên giữ bố cục máy tính. */
-@media (max-width: 767px) {
+/* Thứ tự các khối của cột thông tin trang sản phẩm khi xếp một cột (< md), như Mini App. Viết ở CSS thường (điều kiện `not all and (min-width: 768px)` giống hệt `max-md` của Tailwind v3, không hở ở 767–768px) thay cho `max-md:order-N` để bánh cóc `max-md` của PDP giảm; từ md không đặt `order` nên giữ bố cục máy tính. */
+@media not all and (min-width: 768px) {
   .tubu-pdp-order-1 { order: 1; }
   .tubu-pdp-order-2 { order: 2; }
   .tubu-pdp-order-3 { order: 3; }
@@ -656,7 +656,7 @@
 .tubu-pdp-flash-note {
   min-height: 1.75rem;
 }
-@media (max-width: 767px) {
+@media not all and (min-width: 768px) {
   .tubu-pdp-flash-note {
     min-height: calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card));
   }

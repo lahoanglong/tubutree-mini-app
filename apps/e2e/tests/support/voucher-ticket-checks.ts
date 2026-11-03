@@ -92,3 +92,19 @@ export async function expectNameVisibleWhole(groups: Locator) {
 }
 
 export const LONG_NAME = 'Quà tri ân khách hàng thân thiết mùa thu'; // 40 ký tự
+
+/** 320px (máy nhỏ nhất của Zalo): mã dài không bị cắt, tên không quá hai dòng và không đẩy nút ra ngoài phiếu. `panel` là khung "Nhận mã". */
+export async function expectNarrowTickets(panel: Locator) {
+  const code = panel.getByTestId('voucher-code').filter({ hasText: 'NHANLOCXANH2026' });
+  await expect(code).toBeVisible({ timeout: 15_000 });
+  const fits = await code.evaluate((el) => {
+    const c = el.getBoundingClientRect();
+    const t = el.closest('[role="group"]')!.getBoundingClientRect();
+    return c.left >= t.left && c.right <= t.right && el.scrollWidth <= el.clientWidth + 1;
+  });
+  expect(fits, 'mã tràn ra ngoài phiếu').toBe(true);
+  const groups = panel.getByRole('group');
+  const name = panel.getByTestId('voucher-name').filter({ hasText: LONG_NAME }).first();
+  expect((await name.boundingBox())!.height).toBeLessThanOrEqual(41);
+  await expectButtonsStable(groups);
+}
