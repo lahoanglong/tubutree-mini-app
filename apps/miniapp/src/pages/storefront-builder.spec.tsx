@@ -696,7 +696,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' });
     await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
-    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Huy hiệu bậc hiện từ bậc 2');
+    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Lên Đồng có huy hiệu');
   });
 
   it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
@@ -706,7 +706,7 @@ describe('Đầu xem trước như khách thấy (K6)', () => {
     expect(screen.getAllByRole('button', { name: 'Sửa hồ sơ' }).length).toBeGreaterThan(0);
     await waitFor(() => expect(mocks.getCtvTiers).toHaveBeenCalled());
     expect(screen.queryByText(/^CTV /)).not.toBeInTheDocument();
-    expect(await screen.findByTestId('tier-badge-hint')).toBeInTheDocument();
+    expect(await screen.findByTestId('tier-badge-hint')).toHaveTextContent('Huy hiệu chưa tải');
   });
 
   // M3: `/affiliate/tiers` treo không được giữ cả trình dựng. Chỉ chỗ huy hiệu bậc là khung chờ (cao bằng huy hiệu thật), còn lại vẽ ngay.

@@ -61,6 +61,8 @@ for (const persona of PERSONAS) {
       expect(clsAfter - clsBefore, `CLS lúc bậc về ${(clsAfter - clsBefore).toFixed(4)}`).toBeLessThanOrEqual(0.0001);
       expect(Math.abs(cardAfter - cardBefore), `khối đầu nhích ${cardAfter - cardBefore}px`).toBeLessThanOrEqual(1);
       await expect(page.getByTestId(outcome.fail || outcome.tier === 'Tân binh' ? 'tier-badge-hint' : 'tier-badge-skeleton')).toHaveCount(outcome.fail || outcome.tier === 'Tân binh' ? 1 : 0);
+      if (outcome.fail) await expect(page.getByTestId('tier-badge-hint')).toHaveText('Huy hiệu chưa tải');
+      if (outcome.tier === 'Tân binh') await expect(page.getByTestId('tier-badge-hint')).toHaveText('Lên Đồng có huy hiệu');
     });
   }
 }
@@ -71,4 +73,24 @@ test('bậc cao: huy hiệu và dòng gợi ý không cùng xuất hiện, tên 
   await expect(page.getByText('CTV Kim Cương')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('tier-badge-hint')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+});
+
+test('khổ 320px, ctv đã duyệt + Tân binh: dòng gợi ý chung hàng với "CTV tuyển chọn", không xuống dòng khi bậc về', async ({ page, api }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  let release!: () => void;
+  const hold = new Promise<void>((r) => { release = r; });
+  mockBuilder(api, { storefront: { approved: true }, tier: 'Tân binh' });
+  api.get('/affiliate/tiers', async () => {
+    await hold;
+    return { ...CTV_TIERS, tier: { name: 'Tân binh', emoji: CTV_TIERS.allTiers[0]!.emoji } };
+  });
+  await page.goto('/storefront');
+  await expect(page.getByTestId('tier-badge-skeleton')).toBeVisible({ timeout: 15_000 });
+  const skeletonRow = (await page.getByTestId('tier-badge-skeleton').boundingBox())!;
+  release();
+  const hint = page.getByTestId('tier-badge-hint');
+  await expect(hint).toBeVisible();
+  const box = (await hint.boundingBox())!;
+  expect(Math.abs(box.y - skeletonRow.y), 'dòng gợi ý xuống dòng so với khung chờ').toBeLessThanOrEqual(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });

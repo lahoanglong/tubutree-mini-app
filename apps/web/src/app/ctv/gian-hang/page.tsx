@@ -3,7 +3,7 @@
 import { Suspense, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ownerTierPending, ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
+import { nextTierName, ownerTierPending, ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { sectionIdFromSearch } from '@tubutree/app-core/commerce/storefront-builder';
 import { affiliateCtvTiersQuery } from '@tubutree/app-core/queries/affiliate';
 import { myStorefrontQuery } from '@tubutree/app-core/queries/storefront';
@@ -109,7 +109,7 @@ function CtvStorefront() {
   return (
     <Shell detail={detail} builder>
       <Suspense fallback={<Skeleton height={120} />}>
-        <StorefrontBuilder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} tierPending={sf.type === 'CTV' && ownerTierPending(tiersQ)} />
+        <StorefrontBuilder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} tierPending={sf.type === 'CTV' && ownerTierPending(tiersQ)} nextTier={nextTierName(tiersQ.data)} />
       </Suspense>
     </Shell>
   );

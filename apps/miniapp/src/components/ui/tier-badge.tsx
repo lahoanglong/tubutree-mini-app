@@ -33,12 +33,14 @@ export function TierBadgeSkeleton() {
 
 /**
  * Chỗ huy hiệu bậc của gian hàng CTV khi KHÔNG có huy hiệu để khoe (bậc thấp nhất, `/affiliate/tiers` lỗi, mất mạng hoặc hết hạn chờ): giữ đúng chiều cao hàng huy hiệu để lúc bậc về muộn
- * (khung chờ biến mất) hàng không thu lại và đẩy phần dưới lên, mà vẫn có chữ nói vì sao trang khách chưa có huy hiệu. Chỉ chủ shop thấy ở trình dựng, trang khách không vẽ.
+ * (khung chờ biến mất) hàng không thu lại và đẩy phần dưới lên, mà vẫn có chữ nói vì sao trang khách chưa có huy hiệu. Chỉ chủ shop thấy ở trình dựng, trang khách không vẽ: viền đứt, nền trong, chữ phụ để không giống một huy hiệu công khai.
  */
-export function TierBadgeHint() {
+export function TierBadgeHint({ nextName }: { nextName?: string | null }) {
   return (
     <span data-testid="tier-badge-hint" style={{ display: 'inline-flex' }}>
-      <Badge tone="neutral">{fillCopy('shop.tierHint')}</Badge>
+      <Badge tone="neutral" style={{ background: 'transparent', color: 'var(--color-text-secondary)', outline: 'thin dashed var(--color-border-subtle)' }}>
+        {nextName ? fillCopy('shop.tierHintNext', { name: nextName }) : fillCopy('shop.tierHint')}
+      </Badge>
     </span>
   );
 }

@@ -127,7 +127,7 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
 /** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
 export const BUILDER_HEAD_SLOT = 'builder-head-actions';
 
-export function StorefrontBuilder({ sf, tier, tierPending }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean }) {
+export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean; nextTier?: string | null }) {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -522,7 +522,7 @@ export function StorefrontBuilder({ sf, tier, tierPending }: { sf: StorefrontEdi
                           {trustLabel}
                         </TrustBadge>
                       )}
-                      {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : sf.type === 'CTV' ? <TierBadgeHint /> : null}
+                      {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : sf.type === 'CTV' ? <TierBadgeHint nextName={nextTier} /> : null}
                     </>
                   ) : undefined
                 }

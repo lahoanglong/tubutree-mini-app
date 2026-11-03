@@ -67,6 +67,8 @@ test.describe('Trình dựng CTV web 375px: hàng huy hiệu bậc không xê d�
         expect(Math.abs(headAfter - headBefore), `khối bên dưới nhích ${headAfter - headBefore}px`).toBeLessThanOrEqual(1);
         const hintCount = outcome.fail || outcome.tier === 'Tân binh' ? 1 : 0;
         await expect(page.getByTestId('tier-badge-hint')).toHaveCount(hintCount);
+        if (outcome.fail) await expect(page.getByTestId('tier-badge-hint')).toHaveText('Huy hiệu chưa tải');
+        if (outcome.tier === 'Tân binh') await expect(page.getByTestId('tier-badge-hint')).toHaveText('Lên Đồng có huy hiệu');
       });
     }
   }
