@@ -14,6 +14,7 @@ vi.mock('../services/api', async (importOriginal) => ({
   getAccessToken: () => (mocks.status === 'authenticated' ? 'tok' : null),
 }));
 // Khôi phục cuộn cần Router; spec này không dựng Router và không kiểm vị trí cuộn.
+vi.mock('../hooks/use-navigation-type', () => ({ useNavigationType: () => 'PUSH' }));
 vi.mock('../hooks/use-scroll-restoration', () => ({ useScrollRestoration: () => ({ anchorRef: { current: null } }) }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

@@ -11,6 +11,7 @@ vi.mock('@/lib/use-check-in', () => ({
   useCheckIn: () => ({ view: { canCheckIn: true, buttonLabel: 'Điểm danh' }, pending: false, checkIn: mocks.checkIn, message: null }),
 }));
 
+import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
 import { HomeBlockErrorSuppressed } from './home-block-error';
 
@@ -29,12 +30,12 @@ afterEach(() => {
 });
 
 describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
-  it('thẻ cao 64, nền bề mặt có viền, không có nền gradient; nút Điểm danh là điểm màu duy nhất', async () => {
+  it('thẻ cao bằng HOME_HERO_HEIGHT, nền bề mặt có viền, không có nền gradient; nút Điểm danh là điểm màu duy nhất', async () => {
     mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     const c = await mount(<MemberCard />);
     const section = c.querySelector('section[aria-label="Thẻ thành viên"]')!;
     const card = section.firstElementChild as HTMLElement;
-    expect(card.style.height).toBe('64px');
+    expect(card.style.height).toBe(`${HOME_HERO_HEIGHT}px`);
     expect(card.style.background).not.toContain('gradient');
     expect(card.style.border).not.toBe('');
     const checkIn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Điểm danh')!;
@@ -49,7 +50,7 @@ describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
     mounted!.unmount();
     const offline = await mount(<MemberCardUnavailable onRetry={() => undefined} />);
     const card = offline.querySelector('section')!.firstElementChild as HTMLElement;
-    expect(card.style.height).toBe('64px');
+    expect(card.style.height).toBe(`${HOME_HERO_HEIGHT}px`);
     expect(card.style.background).not.toContain('gradient');
   });
 });

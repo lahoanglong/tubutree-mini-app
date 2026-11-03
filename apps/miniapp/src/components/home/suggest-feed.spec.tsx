@@ -116,6 +116,21 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
     expect(await screen.findByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('mở mới bằng PUSH rồi Back: chip cũ của lần mở trước không sống lại, lưới ở "Tất cả"', async () => {
+    mocks.fetchCategories.mockResolvedValue([cat('sua', 'Sữa', 5)]);
+    const first = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sữa' }));
+    first.unmount();
+    mocks.navType = 'PUSH';
+    const second = mount();
+    expect(await screen.findByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
+    second.unmount();
+    mocks.navType = 'POP';
+    mount();
+    await screen.findByRole('button', { name: 'Sữa' });
+    expect(screen.getByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('lưới ở cuối trang: chưa tới gần màn thì không gọi API (lần mở Trang chủ bớt một request), chỉ có tiêu đề và chip, chưa có khung chờ; cách màn một màn hình thì tải', async () => {
     mocks.authStatus = 'authenticated';
     const observers: { cb: IntersectionObserverCallback; margin?: string; els: Element[] }[] = [];

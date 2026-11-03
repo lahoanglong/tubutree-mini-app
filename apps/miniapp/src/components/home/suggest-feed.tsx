@@ -67,7 +67,11 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
   // Chỉ lần mở bằng Back (POP) mới dựng lại như lúc rời đi: chip đã chọn cùng vị trí cuộn (vị trí cuộn là của lưới chip đó) và trang 1 từ cache.
   // Mở mới bằng PUSH/tab thì bắt đầu ở chip "Tất cả" và chờ khối gần màn mới tải.
   const [popped] = useState(() => navType === 'POP');
-  const [chipKey, setChipKey] = useState(() => (popped ? loadChip() : 'all'));
+  const [chipKey, setChipKey] = useState(() => {
+    // Lần mở mới xoá chip cũ: Back sau đó phải khôi phục chip của lần mở này, không phải chip của lần trước.
+    if (!popped) saveChip('all');
+    return popped ? loadChip() : 'all';
+  });
   const active = chips.find((c) => c.key === chipKey) ?? chips[0]!;
   const categoryId = active.categoryId;
 
@@ -77,7 +81,7 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
   // Back từ PDP: trang 1 đã có trong cache thì dựng lưới ngay (không chờ IntersectionObserver) để trang đủ cao cho hook khôi phục cuộn.
   const queryClient = useQueryClient();
   const [near, setNear] = useState(
-    () => typeof IntersectionObserver === 'undefined' || (popped && queryClient.getQueryData(['products', 'home-suggest', seed, 'all']) !== undefined),
+    () => typeof IntersectionObserver === 'undefined' || (popped && queryClient.getQueryData(['products', 'home-suggest', seed, categoryId ?? 'all']) !== undefined),
   );
   useEffect(() => {
     const el = section.current;
