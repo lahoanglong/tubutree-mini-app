@@ -1,5 +1,5 @@
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { getWasteCatalogue, getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
@@ -109,6 +109,8 @@ function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
 }
 
 function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | undefined; onRules: () => void }) {
+  const cfg = usePublicConfig();
+  const intro = wasteIntroCopy(cfg.waste);
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -116,7 +118,7 @@ function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | un
           {wasteGuestCopy.introTitle}
         </Heading>
         <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
-          {wasteGuestCopy.intro}
+          {intro.intro}
         </Text>
       </div>
       <section style={SECTION_STYLE}>
@@ -124,7 +126,7 @@ function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | un
           {wasteGuestCopy.stepsTitle}
         </Heading>
         <ol style={{ margin: 0, paddingLeft: 20, listStyle: 'decimal', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {wasteGuestCopy.steps.map((t) => (
+          {intro.steps.map((t) => (
             <li key={t}>
               <Text variant="body-sm" as="span">
                 {t}
