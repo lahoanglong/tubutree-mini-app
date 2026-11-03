@@ -9,8 +9,10 @@ export const AVATAR_READ_FAILED = 'Không tải được ảnh. Thử lại sau 
 export const loadMoreFailed = (what: string): string => `Không tải thêm được ${what}. Bạn thử lại nhé.`;
 
 export const REQUIRED_FIELD = 'Bạn điền giúp Tubu mục này nhé';
-export const BANK_NAME_REQUIRED = 'Nhập tên ngân hàng.';
-export const ACCOUNT_NAME_REQUIRED = 'Nhập tên chủ tài khoản.';
+export const BANK_NAME_REQUIRED = 'Nhập tên ngân hàng nhận tiền hoàn.';
+export const ACCOUNT_NUMBER_INVALID = 'Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.';
+export const ACCOUNT_NAME_REQUIRED = 'Nhập tên chủ tài khoản nhận tiền hoàn.';
+export const RETURN_REASON_REQUIRED = 'Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.';
 export const BANK_TX_FAILED = 'Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.';
 export const BANK_NOT_RECEIVED =
   'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển. Bạn kiểm tra lại sau ít phút nhé.';

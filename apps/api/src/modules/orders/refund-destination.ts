@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { PaymentMethod } from '@prisma/client';
+import { REFUND_ACCOUNT_NAME_REQUIRED, REFUND_ACCOUNT_NUMBER_INVALID, REFUND_BANK_NAME_REQUIRED } from './refund-notice';
 
 export interface BankDetails {
   bankName: string;
@@ -34,11 +35,11 @@ export function normalizeBankDetails(input: Partial<BankDetails>): BankDetails {
   const bankName = (input.bankName ?? '').trim().replace(/\s+/g, ' ');
   const accountNumber = (input.accountNumber ?? '').replace(/[\s.-]/g, '');
   const accountName = (input.accountName ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
-  if (bankName.length < 2) throw new BadRequestException('Nhập tên ngân hàng nhận tiền hoàn.');
+  if (bankName.length < 2) throw new BadRequestException(REFUND_BANK_NAME_REQUIRED);
   if (!/^\d{6,24}$/.test(accountNumber)) {
-    throw new BadRequestException('Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.');
+    throw new BadRequestException(REFUND_ACCOUNT_NUMBER_INVALID);
   }
-  if (accountName.length < 2) throw new BadRequestException('Nhập tên chủ tài khoản nhận tiền hoàn.');
+  if (accountName.length < 2) throw new BadRequestException(REFUND_ACCOUNT_NAME_REQUIRED);
   return { bankName, accountNumber, accountName };
 }
 

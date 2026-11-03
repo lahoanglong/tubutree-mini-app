@@ -122,7 +122,7 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     mocks.createSubscription.mockResolvedValue({ ...SUB, firstOrder: null });
     renderSheet();
     await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
-    const wallet = await screen.findByRole('radio', { name: /Ví đang âm 50\.000đ/ });
+    const wallet = await screen.findByRole('radio', { name: /Số dư Ví Tubu đang âm 50\.000đ/ });
     expect(wallet).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(wallet);
     expect(wallet).toHaveAttribute('aria-checked', 'false');
@@ -138,7 +138,7 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     fireEvent.click(screen.getByRole('radio', { name: /^Ví Tubu/ }));
     expect(screen.getByRole('radio', { name: /^Ví Tubu/ })).toHaveAttribute('aria-checked', 'true');
     resolveWallet({ walletBalance: -50000 });
-    await screen.findByRole('radio', { name: /Ví đang âm 50\.000đ/ });
+    await screen.findByRole('radio', { name: /Số dư Ví Tubu đang âm 50\.000đ/ });
     expect(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' })).toBeDisabled();
     expect(mocks.createSubscription).not.toHaveBeenCalled();
   });

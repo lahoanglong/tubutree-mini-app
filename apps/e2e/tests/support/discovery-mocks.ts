@@ -151,7 +151,7 @@ function suggestFor(q: string): ProductSuggestion[] {
   return f ? CATALOG.filter((x) => foldE2E(x.name).includes(f)).slice(0, 8).map((x) => ({ slug: x.slug, name: x.name, thumbnail: x.thumbnail, basePrice: x.basePrice })) : [];
 }
 
-function productDetail(slug: string): ProductDetail | undefined {
+export function productDetail(slug: string): ProductDetail | undefined {
   const x = CATALOG.find((c) => c.slug === slug);
   if (!x) return undefined;
   return {
