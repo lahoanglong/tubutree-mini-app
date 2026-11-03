@@ -214,7 +214,7 @@ export function ReturnRequestForm({
             maxLength={REASON_MAX}
             rows={3}
             placeholder={
-              reasonCode === 'OTHER' ? 'Mô tả lý do (tối thiểu 5 ký tự)…' : 'Không bắt buộc'
+              reasonCode === 'OTHER' ? 'Mô tả lý do (ít nhất 5 ký tự)…' : 'Không bắt buộc'
             }
             className={`${ui.field} mt-1 py-2`}
           />

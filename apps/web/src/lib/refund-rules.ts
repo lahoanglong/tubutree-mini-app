@@ -1,5 +1,5 @@
 import { formatVnd } from './shop-client';
-import { ACCOUNT_NAME_REQUIRED, BANK_NAME_REQUIRED } from '@tubutree/app-core/client-copy';
+import { ACCOUNT_NAME_REQUIRED, ACCOUNT_NUMBER_INVALID, BANK_NAME_REQUIRED, RETURN_REASON_REQUIRED } from '@tubutree/app-core/client-copy';
 import { formatDateTime } from './format-date';
 
 /** Web không dùng shared-types: trạng thái/phương thức là chuỗi API trả về. */
@@ -57,7 +57,7 @@ export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidT
 export function bankDetailsError(b: RefundBankInput): string | null {
   if (b.bankName.trim().length < 2) return BANK_NAME_REQUIRED;
   const digits = b.accountNumber.replace(/[\s.-]/g, '');
-  if (!/^\d{6,24}$/.test(digits)) return 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
+  if (!/^\d{6,24}$/.test(digits)) return ACCOUNT_NUMBER_INVALID;
   if (b.accountName.trim().length < 2) return ACCOUNT_NAME_REQUIRED;
   return null;
 }
@@ -138,7 +138,7 @@ export function returnFormError(input: {
     return 'Chọn ít nhất một sản phẩm muốn trả.';
   if (!input.reasonCode) return 'Chọn lý do đổi/trả.';
   if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5)
-    return 'Mô tả lý do (tối thiểu 5 ký tự).';
+    return RETURN_REASON_REQUIRED;
   if (input.refundMethod === 'BANK') return bankDetailsError(input.bank);
   return null;
 }

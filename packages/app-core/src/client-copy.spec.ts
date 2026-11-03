@@ -26,8 +26,8 @@ describe('client-copy: chữ dùng chung hai app', () => {
 
   it('nhập tài khoản nhận hoàn tiền và chuyển khoản', () => {
     expect(copy.REQUIRED_FIELD).toBe('Bạn điền giúp Tubu mục này nhé');
-    expect(copy.BANK_NAME_REQUIRED).toBe('Nhập tên ngân hàng.');
-    expect(copy.ACCOUNT_NAME_REQUIRED).toBe('Nhập tên chủ tài khoản.');
+    expect(copy.BANK_NAME_REQUIRED).toBe('Nhập tên ngân hàng nhận tiền hoàn.');
+    expect(copy.ACCOUNT_NAME_REQUIRED).toBe('Nhập tên chủ tài khoản nhận tiền hoàn.');
     expect(copy.BANK_TX_FAILED).toBe('Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.');
     expect(copy.bankCopyFailed('số tài khoản')).toBe('Không thể sao chép số tài khoản. Bạn chép thủ công nhé.');
     expect(copy.BANK_NOT_RECEIVED).toBe('Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển. Bạn kiểm tra lại sau ít phút nhé.');
