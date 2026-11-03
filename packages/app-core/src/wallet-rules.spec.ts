@@ -57,7 +57,7 @@ describe('Ví âm sau khi thu hồi hoa hồng đơn trả hàng', () => {
 
   it('lời khoá nút trả bằng Ví nói rõ số âm và việc khách làm tiếp', () => {
     expect(walletNegativeCheckoutReason('50.000đ')).toBe(
-      'Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.',
+      'Số dư Ví Tubu đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.',
     );
   });
 });

@@ -117,7 +117,7 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     await flush();
     const wallet = radio(/Ví Tubu/) as HTMLButtonElement;
     expect(wallet.disabled).toBe(true);
-    expect(wallet.textContent).toContain('Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được.');
+    expect(wallet.textContent).toContain('Số dư Ví Tubu đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng.');
     click(wallet);
     expect(wallet.getAttribute('aria-checked')).toBe('false');
     click(create());
@@ -134,7 +134,7 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     expect(radio(/^Ví Tubu/).getAttribute('aria-checked')).toBe('true');
     resolveWallet({ walletBalance: -50000 });
     await flush();
-    expect(radio(/Ví đang âm 50\.000đ/)).toBeTruthy();
+    expect(radio(/Số dư Ví Tubu đang âm 50\.000đ/)).toBeTruthy();
     expect(create().disabled).toBe(true);
     expect(mocks.http.post).not.toHaveBeenCalled();
   });

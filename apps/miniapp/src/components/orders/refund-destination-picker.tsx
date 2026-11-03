@@ -6,7 +6,8 @@ import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 import { rowKeyboardProps } from '../ui/row-keyboard';
 import { haptic } from '../../utils/haptic';
-import { bankFieldErrors, type RefundBankInput, type RefundMethodChoice } from '../../utils/refund-rules';
+import { type RefundBankInput, type RefundMethodChoice } from '../../utils/refund-rules';
+import { bankFieldErrors } from '../../utils/refund-form-rules';
 
 interface Props {
   method: RefundMethodChoice;
