@@ -10,11 +10,11 @@ import { formatPoints } from '../../common/format-points';
 import { startOfVnDay, vnDateParts } from '../../common/vn-time';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
-export const TIER_DROP_NOTICE_CODE = 'TIER_DROP_NOTICE';
+import { TIER_DROP_NOTICE_CODE, TIER_DROP_ZNS_TEMPLATE_KEY } from './tier-drop-notice.constants';
+
+export { TIER_DROP_NOTICE_CODE, TIER_DROP_ZNS_TEMPLATE_KEY };
 export const TIER_DROP_NOTICE_DAYS_KEY = 'loyalty.tier_drop_notice_days';
 export const TIER_DROP_NOTICE_DAYS_DEFAULT = 14;
-/** Mã mẫu ZNS Zalo đã duyệt cho tin này (biến tier, date, need). Trống = chỉ báo trong app. */
-export const TIER_DROP_ZNS_TEMPLATE_KEY = 'loyalty.tier_drop_zns_template_id';
 
 const DAY_MS = 864e5;
 const PAGE = 200;

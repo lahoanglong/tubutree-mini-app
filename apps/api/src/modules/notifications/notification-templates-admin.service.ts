@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { ConfigService } from '@nestjs/config';
 import { PHONE_LIKE_RUN } from '../../common/mask-pii';
 import { PrismaService } from '../../prisma/prisma.service';
-import { TIER_DROP_NOTICE_CODE, TIER_DROP_ZNS_TEMPLATE_KEY } from '../loyalty/tier-drop-notice.service';
+import { TIER_DROP_NOTICE_CODE, TIER_DROP_ZNS_TEMPLATE_KEY } from '../loyalty/tier-drop-notice.constants';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { UpdateNotificationTemplateDto } from './dto/update-notification-template.dto';
 import { templateVariableProblem, variablesOf, type TemplateVariable } from './notification-variables';
