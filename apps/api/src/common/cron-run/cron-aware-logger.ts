@@ -8,17 +8,27 @@ export function firstLogLine(message: unknown): string {
   return typeof message;
 }
 
-// Lỗi Prisma mở đầu bằng "Invalid `prisma.x()` invocation:" (ở dev kèm đường dẫn và khung mã); câu lỗi thật là dòng cuối của message.
+// Lỗi Prisma mở đầu bằng "Invalid `prisma.x()` invocation:"; ở dev có thêm đoạn khung mã ("12 ..." / "→ 12 ...", kèm cây tham số).
+// Câu lỗi thật là dòng đầu của đoạn kế tiếp (các đoạn cách nhau bằng dòng trống).
 const PRISMA_INVOCATION = /^Invalid `[^`]+` invocation\b/;
+const CODE_FRAME = /^(→\s*)?\d+(\s|$)/;
+// Postgres in giá trị của dòng/khoá vi phạm (SĐT, tên, zaloId...) sau các cụm này; dòng lỗi được lưu ở cron_runs và gửi admin nên cắt bỏ.
+const ROW_VALUES = /(DETAIL:|Failing row contains|Key \(|detail: Some\().*$/;
 
-/** Dòng đầu không rỗng; với lỗi Prisma thì nối phần trước dòng "Invalid ... invocation" với câu lỗi thật, bỏ stack. */
+/** Dòng đầu không rỗng, bỏ stack; lỗi Prisma thì lấy câu lỗi thật thay cho dòng "Invalid ... invocation". Cắt giá trị dòng/khoá. */
 export function firstNonEmptyLine(text: string): string {
-  const lines = text.split('\n').map((l) => l.trim()).filter((l) => l !== '');
-  const at = lines.findIndex((l) => PRISMA_INVOCATION.test(l));
-  if (at < 0) return lines[0] ?? '';
-  const stack = lines.findIndex((l, i) => i > at && l.startsWith('at '));
-  const last = (stack < 0 ? lines.length : stack) - 1;
-  return [...lines.slice(0, at), lines[last]!].join(' ');
+  const blocks = text
+    .split(/\n\s*\n/)
+    .map((b) => b.split('\n').map((l) => l.trim()).filter((l) => l !== ''))
+    .filter((b) => b.length > 0);
+  const first = blocks[0]?.[0] ?? '';
+  const at = blocks.findIndex((b) => b.some((l) => PRISMA_INVOCATION.test(l)));
+  let line = first;
+  if (at >= 0) {
+    const detail = blocks.slice(at + 1).find((b) => !CODE_FRAME.test(b[0]!))?.[0];
+    if (detail !== undefined) line = PRISMA_INVOCATION.test(first) ? detail : `${first} ${detail}`;
+  }
+  return line.replace(ROW_VALUES, '…');
 }
 
 /**

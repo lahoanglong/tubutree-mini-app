@@ -30,6 +30,7 @@ describe('Data retention cleanup (real Postgres)', () => {
       'retention.notification_logs_days',
       'retention.webhook_events_days',
       'retention.refresh_sessions_days',
+      'retention.support_chat_days',
     ]) {
       await prisma.systemConfig.deleteMany({ where: { key: k } });
     }
