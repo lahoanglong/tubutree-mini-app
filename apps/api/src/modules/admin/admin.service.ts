@@ -1167,6 +1167,7 @@ export class AdminService {
       actorType: 'ADMIN',
       actorId: adminId,
       note: [opts.byStaff ? 'Kế toán xác nhận' : 'Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+      ...(bankRef ? { bankRef } : {}),
     });
     if (outcome === 'CLOSED') {
       // Đơn bị huỷ/trả giữa chừng: nhân viên không tạo khoản hoàn.

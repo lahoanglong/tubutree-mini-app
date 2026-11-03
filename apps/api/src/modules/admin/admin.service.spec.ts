@@ -2411,6 +2411,7 @@ describe('AdminService.confirmOrderPayment', () => {
       actorType: 'ADMIN',
       actorId: 'admin-1',
       note: 'Admin xác nhận · Mã GD FT999 · khớp sao kê',
+      bankRef: 'FT999',
     });
     expect(res).toMatchObject({ ok: true, alreadyPaid: false });
     expect(res.order).toMatchObject({ id: 'o1', paymentStatus: 'PAID' });
@@ -2419,7 +2420,7 @@ describe('AdminService.confirmOrderPayment', () => {
   it('Kế toán xác nhận: ghi nhãn "Kế toán" vào lịch sử; đơn của chính mình bị chặn, không lật PAID', async () => {
     const { svc, orderStatus } = make(bankOrder({ userId: 'u-other' }));
     await svc.confirmOrderPayment('kt-1', 'TB-1', { bankRef: 'FT1' }, { byStaff: true });
-    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', { actorType: 'ADMIN', actorId: 'kt-1', note: 'Kế toán xác nhận · Mã GD FT1' });
+    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', { actorType: 'ADMIN', actorId: 'kt-1', note: 'Kế toán xác nhận · Mã GD FT1', bankRef: 'FT1' });
     const own = make(bankOrder({ userId: 'kt-1' }));
     await expect(own.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/của chính mình/);
     expect(own.orderStatus.markPaid).not.toHaveBeenCalled();

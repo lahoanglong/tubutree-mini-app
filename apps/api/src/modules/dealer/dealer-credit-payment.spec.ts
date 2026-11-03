@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -267,6 +267,18 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(note).toContain('FT123');
     expect(note).toContain('VCB');
     expect(notify).toHaveBeenCalledWith('d1', 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: '300.000' });
+  });
+
+  it('RB-01: kế toán tự ghi nhận trả nợ cho sổ công nợ của chính mình → 403, không tạo dòng sổ', async () => {
+    const { svc, ledgerCreate } = build({ dealer: { id: 'kt1', role: 'STAFF' }, existingClaim: { delta: 1 }, debt: 500_000 });
+    await expect(svc.adminRecordCreditPayment('kt1', 'kt1', 100_000, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('RB-01: quản trị viên (không byStaff) vẫn ghi nhận được cho sổ của chính mình', async () => {
+    const { svc, ledgerCreate } = build({ dealer: { id: 'ad1', role: 'DEALER' }, debt: 500_000 });
+    await svc.adminRecordCreditPayment('ad1', 'ad1', 100_000);
+    expect(ledgerCreate).toHaveBeenCalledTimes(1);
   });
 
   it('số tiền VƯỢT dư nợ HIỆN TẠI (re-check trong tx) → BadRequest, KHÔNG tạo dòng ledger nào', async () => {

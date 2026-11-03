@@ -12,7 +12,11 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/error-text';
 import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
+
+const newIdempotencyKey = () =>
+  globalThis.crypto?.randomUUID?.() ?? `dp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
 /**
  * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ NỢ
@@ -47,6 +51,8 @@ export function DealerCreditPanel({
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
+  // Khoá chống trừ nợ hai lần: một khoản nhập = một khoá, giữ nguyên khi thử lại sau lỗi mạng/hết giờ (máy chủ có thể đã ghi rồi), đổi khi sửa số/mã hoặc sau khi thành công.
+  const idemKey = useRef<string | null>(null);
   const { confirm, dialog } = useConfirm();
 
   const userId = order.user?.id;
@@ -61,7 +67,9 @@ export function DealerCreditPanel({
   const payMut = useMutation({
     mutationFn: () => {
       const amt = Math.trunc(Number(amount));
-      const key = bankRef.trim() || undefined; // mã giao dịch làm idempotency-key nếu có
+      // Mã giao dịch được máy chủ kiểm trùng riêng, không dùng làm khoá.
+      idemKey.current ??= newIdempotencyKey();
+      const key = idemKey.current;
       return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key).then((r) => ({ ...r, amount: amt }));
     },
     onSuccess: (r) => {
@@ -73,13 +81,18 @@ export function DealerCreditPanel({
             ? `Mã giao dịch này đã có trong sổ từ lần ghi trước nên không ghi thêm. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
             : `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.`,
       });
+      idemKey.current = null;
       setAmount('');
       setBankRef('');
       setNote('');
       void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
       onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed, alreadyRecorded: r.alreadyRecorded });
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thất bại.' }),
+    onError: (e: unknown) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      // Lỗi mạng/hết giờ: máy chủ có thể đã ghi khoản này, tải lại sổ để kế toán thấy dư nợ thật trước khi bấm lại.
+      void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
+    },
     onSettled: () => {
       inFlight.current = false;
     },
@@ -151,7 +164,10 @@ export function DealerCreditPanel({
                     min={1}
                     aria-label="Số tiền đã nhận (đ)"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => {
+                      idemKey.current = null;
+                      setAmount(e.target.value);
+                    }}
                     disabled={busy}
                     className={`${FIELD_XS} w-full`}
                   />
@@ -161,7 +177,10 @@ export function DealerCreditPanel({
                     type="text"
                     maxLength={DEALER_BANK_REF_MAX}
                     value={bankRef}
-                    onChange={(e) => setBankRef(e.target.value)}
+                    onChange={(e) => {
+                      idemKey.current = null;
+                      setBankRef(e.target.value);
+                    }}
                     disabled={busy}
                     className={`${FIELD_XS} w-full`}
                   />
