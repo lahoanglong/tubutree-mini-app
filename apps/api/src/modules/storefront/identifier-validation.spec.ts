@@ -45,15 +45,17 @@ describe('normalizeCustomDomain', () => {
   });
 });
 
+const noCodeOwner = { findFirst: jest.fn().mockResolvedValue(null) };
+
 describe('assertIdentifierAvailable', () => {
   it('không có gian hàng nào khác trùng → không throw', async () => {
-    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) } };
+    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) }, user: noCodeOwner };
     await expect(assertIdentifierAvailable(prisma as never, 'organic-tea', 's1')).resolves.toBeUndefined();
   });
 
   it('trùng slug của gian hàng KHÁC → throw (không chỉ kiểm trùng subdomain-với-subdomain)', async () => {
     const findFirst = jest.fn().mockResolvedValue({ id: 'other-store' });
-    const prisma = { storefront: { findFirst } };
+    const prisma = { storefront: { findFirst }, user: noCodeOwner };
     await expect(assertIdentifierAvailable(prisma as never, 'organic-tea', 's1')).rejects.toThrow(
       'đã được sử dụng bởi gian hàng khác',
     );
@@ -67,7 +69,7 @@ describe('assertIdentifierAvailable', () => {
   });
 
   it('trùng chính gian hàng của mình (NOT id) → không throw', async () => {
-    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) } };
+    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) }, user: noCodeOwner };
     await expect(assertIdentifierAvailable(prisma as never, 'organic-tea', 's1')).resolves.toBeUndefined();
   });
 });
@@ -99,7 +101,7 @@ describe('assertIdentifierAvailable — tên thương hiệu đang có', () => {
 
   it('trùng slug hoặc tên của một thương hiệu → chặn (gian hàng CTV không được mạo danh thương hiệu)', async () => {
     const findFirst = jest.fn().mockResolvedValue({ id: 'b1' });
-    const prisma = { storefront: noStorefront, brand: { findFirst } };
+    const prisma = { storefront: noStorefront, user: noCodeOwner, brand: { findFirst } };
     // Chữ khách đọc: "thương hiệu" (Q5), không "vui lòng" (ux-copy D2).
     const err = await assertIdentifierAvailable(prisma as never, 'lamy', 's1').catch((e: Error) => e);
     expect((err as Error).message).toBe('"lamy" trùng tên một thương hiệu của Tubu Tree. Bạn chọn tên khác nhé.');
@@ -113,7 +115,24 @@ describe('assertIdentifierAvailable — tên thương hiệu đang có', () => {
   });
 
   it('thương hiệu không trùng → qua; thương hiệu gắn với CHÍNH gian hàng này được loại khỏi phép kiểm (NOT storefront.id)', async () => {
-    const prisma = { storefront: noStorefront, brand: { findFirst: jest.fn().mockResolvedValue(null) } };
+    const prisma = { storefront: noStorefront, user: noCodeOwner, brand: { findFirst: jest.fn().mockResolvedValue(null) } };
     await expect(assertIdentifierAvailable(prisma as never, 'lamy', 's1')).resolves.toBeUndefined();
+  });
+});
+
+describe('assertIdentifierAvailable — mã giới thiệu của người khác (DLSF-01)', () => {
+  it('trùng mã giới thiệu của tài khoản khác (không phân biệt hoa thường) → chặn, loại chủ gian hàng ra khỏi phép kiểm', async () => {
+    const findFirst = jest.fn().mockResolvedValue({ id: 'victim' });
+    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) }, user: { findFirst } };
+    await expect(assertIdentifierAvailable(prisma as never, 'abc12345', 's1', undefined, 'attacker')).rejects.toThrow('trùng mã giới thiệu');
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { referralCode: { equals: 'abc12345', mode: 'insensitive' }, NOT: { id: 'attacker' } },
+      select: { id: true },
+    });
+  });
+
+  it('không có tài khoản khác mang mã đó (kể cả chính chủ) → qua', async () => {
+    const prisma = { storefront: { findFirst: jest.fn().mockResolvedValue(null) }, user: { findFirst: jest.fn().mockResolvedValue(null) } };
+    await expect(assertIdentifierAvailable(prisma as never, 'abc12345', 's1', undefined, 'owner')).resolves.toBeUndefined();
   });
 });

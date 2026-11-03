@@ -62,11 +62,21 @@ export function normalizeCustomDomain(raw: string): string {
  * chặn CHÍNH cho P0-1 (subdomain trùng slug người khác) và P0-2 (đơn hàng lộ qua slug trùng).
  */
 export async function assertIdentifierAvailable(
-  prisma: Pick<PrismaService, 'storefront'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier' | 'brand'>>,
+  prisma: Pick<PrismaService, 'storefront' | 'user'> & Partial<Pick<PrismaService, 'releasedStorefrontIdentifier' | 'brand'>>,
   value: string,
   excludeStorefrontId: string,
   cooldownDays: number = DEFAULT_IDENTIFIER_COOLDOWN_DAYS,
+  ownerUserId?: string | null,
 ): Promise<void> {
+  // Mã giới thiệu nằm trên mọi link ?ref= của chủ mã: gian hàng khác đặt subdomain trùng mã đó sẽ hứng khách và công đơn của link ấy.
+  // Chủ mã đặt đúng mã của mình thì được.
+  const codeOwner = await prisma.user.findFirst({
+    where: { referralCode: { equals: value, mode: 'insensitive' }, ...(ownerUserId ? { NOT: { id: ownerUserId } } : {}) },
+    select: { id: true },
+  });
+  if (codeOwner) {
+    throw new BadRequestException(`"${value}" trùng mã giới thiệu của một tài khoản khác, bạn chọn tên khác nhé.`);
+  }
   const existing = await prisma.storefront.findFirst({
     where: {
       OR: [{ slug: value }, { subdomain: value }, { customDomain: value }],
