@@ -186,6 +186,27 @@ function secretRow(group: string, id: string, title: string, key: string, env: E
   return pass(group, id, title, `${key} ${describeSecret(v)}`);
 }
 
+/** Khớp ZaloOaWebhookController: đủ ZALO_OA_SECRET_KEY + ZALO_APP_ID thì chữ ký là cửa duy nhất (token tĩnh bị bỏ qua), chưa đủ thì dùng token tĩnh. */
+function zaloOaWebhookRow(env: Env): CheckResult {
+  const title = 'Webhook OA Zalo (CSKH)';
+  const id = 'env.zalo.oa_webhook_secret';
+  const key = envValue(env, 'ZALO_OA_SECRET_KEY');
+  if (key && envValue(env, 'ZALO_APP_ID')) {
+    if (key.length < 16) {
+      return warn(G_ZALO, id, title, `ZALO_OA_SECRET_KEY ${describeSecret(key)}`, 'Khoá bí mật của OA lấy nguyên từ developers.zalo.me (mục webhook); ngắn bất thường thì kiểm lại đã dán đủ chưa.');
+    }
+    return pass(G_ZALO, id, title, `chế độ chữ ký X-ZEvent-Signature: ZALO_OA_SECRET_KEY ${describeSecret(key)}; token tĩnh không còn tác dụng`);
+  }
+  if (key) {
+    return warn(G_ZALO, id, title, 'ZALO_OA_SECRET_KEY đã đặt nhưng thiếu ZALO_APP_ID nên chữ ký chưa bật', 'Chữ ký cần cả ZALO_OA_SECRET_KEY và ZALO_APP_ID; đặt ZALO_APP_ID rồi deploy lại.');
+  }
+  const row = secretRow(G_ZALO, id, title, 'ZALO_OA_WEBHOOK_SECRET', env, {
+    status: 'WARN',
+    hint: 'Chỉ cần khi đã đăng ký webhook OA trên Zalo; để trống thì API từ chối mọi request tới webhook này ở production. Đặt ZALO_OA_SECRET_KEY (khoá bí mật của OA) để dùng chữ ký thay token.',
+  });
+  return row.status === 'PASS' ? { ...row, detail: `chế độ token tĩnh: ${row.detail} (chưa có chữ ký, nên đặt ZALO_OA_SECRET_KEY)` } : row;
+}
+
 function zaloOpenApiKeyRow(env: Env): CheckResult {
   const title = 'API Key webhook Mini App Zalo (rút đồng ý, xoá dữ liệu)';
   const v = envValue(env, 'ZALO_OPEN_API_KEY');
@@ -325,12 +346,7 @@ function zaloChecks(env: Env): CheckResult[] {
   } else {
     out.push(pass(G_ZALO, 'env.zalo.oa', zns, 'token truy cập, refresh và OA ID đã đặt'));
   }
-  out.push(
-    secretRow(G_ZALO, 'env.zalo.oa_webhook_secret', 'Token webhook OA Zalo (CSKH)', 'ZALO_OA_WEBHOOK_SECRET', env, {
-      status: 'WARN',
-      hint: 'Chỉ cần khi đã đăng ký webhook OA trên Zalo; để trống thì API từ chối mọi request tới webhook này ở production.',
-    }),
-  );
+  out.push(zaloOaWebhookRow(env));
   out.push(
     zaloOpenApiKeyRow(env),
   );
