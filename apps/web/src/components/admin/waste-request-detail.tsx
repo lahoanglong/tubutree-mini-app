@@ -415,7 +415,7 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
     mutationFn: (reason: string) => reverseWasteRequest(r.id, { reason }),
     onSuccess: (res) => {
       onFlash(
-        `Đã thu hồi ${formatCount(res.pointsTaken)} điểm.${res.shortfallPoints > 0 ? ` Còn ${formatCount(res.shortfallPoints)} điểm không thu được vì khách đã tiêu.` : ''}`,
+        `Đã thu hồi ${formatCount(res.pointsTaken)} điểm.${res.shortfallPoints > 0 ? ` Còn ${formatCount(res.shortfallPoints)} điểm không thu được (khách đã tiêu hoặc điểm đã hết hạn).` : ''}`,
       );
       refresh();
     },

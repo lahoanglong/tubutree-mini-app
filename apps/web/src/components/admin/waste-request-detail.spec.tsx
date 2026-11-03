@@ -301,7 +301,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     answerConfirm(true);
     await flush();
     expect(bodyOf(post(api, '/admin/waste/requests/r1/reverse')[0])).toEqual({ reason: 'Khai khống' });
-    expect(c.textContent).toContain('Đã thu hồi 12.000 điểm. Còn 5.000 điểm không thu được vì khách đã tiêu.');
+    expect(c.textContent).toContain('Đã thu hồi 12.000 điểm. Còn 5.000 điểm không thu được (khách đã tiêu hoặc điểm đã hết hạn).');
 
     const full = await mount({
       isAdmin: true,
@@ -335,7 +335,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     answerConfirm(true);
     await flush();
     await flush();
-    expect(c.textContent).toContain('Còn 5.000 điểm không thu được vì khách đã tiêu.');
+    expect(c.textContent).toContain('Còn 5.000 điểm không thu được (khách đã tiêu hoặc điểm đã hết hạn).');
     expect(c.textContent).toContain('12.000 điểm, không thu được 5.000 điểm');
     expect(btn(c, 'Thu hồi điểm')).toBeNull();
   });
