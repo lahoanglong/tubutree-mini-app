@@ -527,8 +527,14 @@ export class SubscriptionsService {
     const resumeNow = new Date();
     const tomorrowVn = new Date(startOfVnDay(resumeNow).getTime() + 864e5);
     const resumed = this.addWeeks(startOfVnDay(resumeNow), sub.intervalWeeks);
-    const nextRunAt =
-      status === 'ACTIVE' && sub.nextRunAt < resumeNow ? (resumed < tomorrowVn ? tomorrowVn : resumed) : sub.nextRunAt;
+    // Cron 03:00 nhận mọi gói có nextRunAt trước 0h VN ngày mai, nên giờ lẻ của một ngày tương lai vẫn ra đúng ngày đó. Riêng
+    // gói còn nextRunAt giờ lẻ ngay trong hôm nay (dữ liệu cũ) thì cron hôm nay đã/sắp chạy: dời về 0h ngày mai để ngày
+    // "Lần kế" khách thấy khớp ngày ra đơn, không ra hai lần trong ngày.
+    let nextRunAt = sub.nextRunAt;
+    if (status === 'ACTIVE') {
+      if (sub.nextRunAt < resumeNow) nextRunAt = resumed < tomorrowVn ? tomorrowVn : resumed;
+      else if (sub.nextRunAt < tomorrowVn) nextRunAt = tomorrowVn;
+    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt, retryCount: 0 } });
