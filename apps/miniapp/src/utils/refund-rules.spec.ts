@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  bankDetailsError,
-  bankFieldErrors,
   canPayOrderNow,
   cancelRefundMode,
   destinationBody,
@@ -11,12 +9,12 @@ import {
   remainingByLine,
   returnLinesText,
   returnStatusLabel,
-  returnFormError,
   showsPaymentDeadline,
   showsRefundPanel,
   type MyRefund,
   type ReturnLineState,
 } from './refund-rules';
+import { bankDetailsError, bankFieldErrors, returnFormError } from './refund-form-rules';
 
 const BANK = { bankName: 'Techcombank', accountNumber: '1903 1234 5678', accountName: 'Nguyen Van A' };
 

@@ -359,7 +359,7 @@ export const SHOP_COPY: Record<string, string> = {
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
 export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   // "nhãn" đứng một mình chỉ hợp lệ khi là nhãn dán/tem trên kiện hàng ("trên nhãn", "nhãn dán", "tem nhãn", "quét nhãn", "nhãn vận đơn", "hoa nhãn", "quả nhãn") hoặc "nhãn hiệu/nhãn mác" của văn bản pháp lý; còn lại nghĩa thương hiệu.
-  { pattern: /Nhãn hàng|theo dõi nhãn|nhãn này|Cùng nhà|(?<!tem |trên |dán |long |quét |in |hoa |quả |trái )\bnhãn\b(?! (?:dán|hiệu|mác|lồng|sấy|vận|giao))/i, use: 'Thương hiệu' },
+  { pattern: /Nhãn hàng|theo dõi nhãn|nhãn này|Cùng nhà|(?<!(?<![\p{L}])(?:tem|trên|dán|long|quét|in|hoa|quả|trái|kỹ) )\bnhãn\b(?! (?:dán|hiệu|mác|lồng|sấy|vận|sản phẩm|giao hàng))/iu, use: 'Thương hiệu' },
   { pattern: /\bTop\b/, use: 'Bán chạy nhất' },
   { pattern: /Freeship/i, use: 'Miễn phí giao hàng' },
   { pattern: /voucher/i, use: 'Mã giảm giá' },
