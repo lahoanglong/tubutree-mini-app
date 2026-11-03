@@ -10,6 +10,8 @@ const field = (root: ParentNode, label: string) =>
     .find((l) => l.querySelector('span')?.textContent === label)
     ?.querySelector('input') ?? null;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -88,7 +90,8 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
     const postCall = api.calls.find((c) => c.init?.method === 'POST');
     expect(postCall?.url).toContain('/admin/dealers/u-dealer-1/credit-payment');
     expect(JSON.parse(String(postCall?.init?.body))).toEqual({ amount: 2_000_000, bankRef: 'FT999' });
-    expect(postCall?.init?.headers).toMatchObject({ 'Idempotency-Key': 'FT999' });
+    expect((postCall?.init?.headers as Record<string, string>)['Idempotency-Key']).toMatch(UUID);
+    expect((postCall?.init?.headers as Record<string, string>)['Idempotency-Key']).not.toBe('FT999');
     expect(container.querySelector('[role="status"]')?.textContent).toContain('1.000.000');
   });
 
@@ -120,6 +123,106 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
     answerConfirm(true);
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
+  });
+});
+
+describe('DealerCreditPanel — ERR-01 chống trừ nợ hai lần khi thử lại', () => {
+  const postKeys = (calls: { url: string; init?: RequestInit }[]) =>
+    calls.filter((c) => c.init?.method === 'POST').map((c) => (c.init?.headers as Record<string, string>)['Idempotency-Key']);
+
+  async function pay(container: HTMLElement) {
+    click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+  }
+
+  it('lỗi mạng rồi bấm lại (không nhập mã GD) → cùng Idempotency-Key; báo "chưa rõ đã xong chưa" và tải lại sổ', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
+    let posts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST' && (posts += 1) === 1) {
+          api.calls.push({ url, init });
+          throw new TypeError('Failed to fetch');
+        }
+        return api.fn(url, init);
+      }),
+    );
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
+
+    await pay(container);
+    const ledgerGetsAfterFail = api.calls.filter((c) => c.url.includes('/credit-ledger')).length;
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(ledgerGetsAfterFail).toBeGreaterThanOrEqual(2);
+
+    await pay(container);
+    const keys = postKeys(api.calls);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toMatch(UUID);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('hết giờ (20s) → câu "chưa rõ đã xong chưa", không phải "thử lại sau ít phút"', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          return new Promise<Response>((_, reject) =>
+            init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))),
+          );
+        }
+        return api.fn(url, init);
+      }),
+    );
+    // Rút hạn 20s của apiFetch về 0 để chạy hết giờ thật mà không chờ.
+    const realSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...rest: unknown[]) =>
+      realSetTimeout(fn, ms === 20_000 ? 0 : ms, ...rest)) as typeof setTimeout);
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
+    await pay(container);
+    expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/chưa rõ đã xong chưa/);
+  });
+
+  it('thành công rồi nhập khoản mới → Idempotency-Key khác; đổi số tiền trước khi thử lại cũng đổi khoá', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    const amountInput = () => container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]');
+    typeInto(amountInput(), '1000000');
+    await pay(container);
+    typeInto(amountInput(), '1000000');
+    await pay(container);
+    typeInto(amountInput(), '1500000');
+    typeInto(amountInput(), '1200000');
+    await pay(container);
+    const keys = postKeys(api.calls);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('có mã GD vẫn gửi khoá riêng (không dùng mã GD làm khoá)', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '1000000');
+    typeInto(field(container, 'Mã giao dịch (tuỳ chọn)'), 'FT1');
+    await pay(container);
+    const post = api.calls.find((c) => c.init?.method === 'POST');
+    expect(JSON.parse(String(post?.init?.body))).toMatchObject({ bankRef: 'FT1' });
+    expect(postKeys(api.calls)[0]).toMatch(UUID);
   });
 });
 
