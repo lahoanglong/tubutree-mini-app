@@ -169,7 +169,8 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
     function txWith(revenue: number, claimCreate = jest.fn().mockResolvedValue({ id: 'claim-1' })) {
       return {
         commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { commissionableTotal: revenue } }) },
-        ctvMilestoneClaim: { create: claimCreate },
+        ctvMilestoneClaim: { create: claimCreate, findUnique: jest.fn().mockResolvedValue(null) },
+        $queryRaw: jest.fn().mockResolvedValue([{ pointsBalance: 0 }]),
         user: { update: jest.fn() },
       };
     }
@@ -264,6 +265,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         const myKeys: string[] = [];
         const pending = { points: 0, wallet: 0, ledger: [] as number[] };
         const tx = {
+          $queryRaw: async () => [{ pointsBalance: 0 }],
           commission: {
             aggregate: async () => {
               await tick(); // nhường lượt để 2 tx cùng qua bước kiểm tra doanh số
@@ -271,6 +273,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
             },
           },
           ctvMilestoneClaim: {
+            findUnique: async () => null,
             create: async ({ data }: { data: { userId: string; milestoneId: string; monthKey: string } }) => {
               const key = `${data.userId}|${data.milestoneId}|${data.monthKey}`;
               for (;;) {

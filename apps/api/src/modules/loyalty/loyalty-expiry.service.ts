@@ -168,6 +168,16 @@ const EXTERNAL_RULE: ReversalRule = {
     t.refType === 'EXTERNAL_ORDER' && t.refId && EXTERNAL_PREFIXES.some((p) => startsWith(t.reason, `${p}_REVERSED:`)) ? externalLotKey(t.refId) : null,
 };
 
+/**
+ * Thưởng mốc doanh số CTV (AffiliateService.claimMilestone) và thu hồi nó khi đảo hoa hồng (revokeLostCtvMilestones): cả hai mang
+ * refId = id claim, refType AFFILIATE_MILESTONE và AFFILIATE_MILESTONE_REVOKE. Thiếu luật này thì dòng thu hồi đi FIFO, lô thưởng
+ * còn nguyên trong sổ và tới hạn cron trừ lại đúng số điểm đã thu hồi.
+ */
+const CTV_MILESTONE_RULE: ReversalRule = {
+  lotKey: (t) => (t.refType === 'AFFILIATE_MILESTONE' && t.refId ? `CTV_MILESTONE:${t.refId}` : null),
+  reversedLotKey: (t) => (t.refType === 'AFFILIATE_MILESTONE_REVOKE' && t.refId ? `CTV_MILESTONE:${t.refId}` : null),
+};
+
 const REVERSAL_RULES: readonly ReversalRule[] = [
   ORDER_RULE,
   ORDER_PARTIAL_RETURN_RULE,
@@ -176,6 +186,7 @@ const REVERSAL_RULES: readonly ReversalRule[] = [
   REFERRAL_MILESTONE_RULE,
   EXTERNAL_RULE,
   RECYCLE_RULE,
+  CTV_MILESTONE_RULE,
 ];
 
 function firstKey(t: PointExpiryTxn, pick: (rule: ReversalRule) => (t: PointExpiryTxn) => string | null): string | null {
