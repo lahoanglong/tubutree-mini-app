@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MERCHANT_SELF_SHIP_USE_FULFIL_TAB, MerchantService } from './merchant.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
@@ -519,7 +519,28 @@ describe('MerchantService', () => {
       expect(orderStatus.setStatus).toHaveBeenCalledWith('ord-1', 'PACKED', {
         actorType: 'MERCHANT',
         actorId: expect.any(String),
+        outcome: expect.objectContaining({ flipped: true }),
       });
+    });
+
+    it('thua race (setStatus báo flipped=false, đơn đã sang trạng thái khác) → 409, đọc lại đơn sau lúc gắn cờ', async () => {
+      const store = { id: 's1', ownerUserId: 'u1', collections: [] };
+      const findUniqueOrThrow = jest.fn().mockResolvedValue({ status: 'CONFIRMED', pancakeAttention: 'Pancake đã huỷ' });
+      const prisma = makePrisma({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'ADMIN' }) },
+        storefront: { findFirst: jest.fn().mockResolvedValue(store) },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'var-1' }]) },
+        merchantPancakeLink: { findMany: jest.fn().mockResolvedValue([]) },
+        order: { findFirst: jest.fn().mockResolvedValue({ id: 'ord-1', status: 'PENDING_PAYMENT', pancakeAttention: null }), findUniqueOrThrow },
+      });
+      (orderStatus.setStatus as jest.Mock).mockImplementationOnce(async (_id: string, _s: string, opts: { outcome: { flipped: boolean } }) => {
+        opts.outcome.flipped = false;
+        return { id: 'ord-1', status: 'CONFIRMED', pancakeAttention: null };
+      });
+      const err = await new MerchantService(prisma, orderStatus).updateMerchantOrderStatus('u1', 'ord-1', 'CANCELLED').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toBe('Đơn vừa chuyển sang «Đã xác nhận» trong lúc bạn thao tác nên chưa đổi được. Tải lại đơn rồi thử lại. Đơn đã vào Cần xử lý Pancake.');
+      expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 'ord-1' }, select: { status: true, pancakeAttention: true } });
     });
 
     it('ném BadRequestException nếu trạng thái đơn hàng không hợp lệ', async () => {

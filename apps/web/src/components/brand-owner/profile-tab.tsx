@@ -12,7 +12,7 @@ import {
   type OwnedBrand,
 } from '@tubutree/app-core/api/brand-owner';
 import { coreHttp } from '@/lib/core-http';
-import { EMPTY_PROMO, ownerActionError, promoDateRangeInvalid, promoPayload, promoToForm, type PromoForm } from '@/lib/brand-owner-view';
+import { EMPTY_PROMO, ownerActionError, promoDateRangeError, promoPayload, promoToForm, type PromoForm } from '@/lib/brand-owner-view';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
@@ -50,7 +50,8 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
     setEditingId(null);
     setPromo(EMPTY_PROMO);
   };
-  const invalid = promoDateRangeInvalid(promo);
+  const dateError = promoDateRangeError(promo);
+  const invalid = dateError !== null;
   const addPromo = useMutation({
     mutationFn: () => createOwnedPromotion(coreHttp, promoPayload(promo)),
     onSuccess: () => {
@@ -178,7 +179,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
               <input type="date" className={dateClass} value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} />
             </Field>
           </div>
-          {invalid && <p className={ui.error}>Ngày kết thúc phải sau ngày bắt đầu.</p>}
+          {dateError && <p className={ui.error}>{dateError}</p>}
           {editingId ? (
             <div className="flex gap-2">
               <button type="button" className={`${skin.btnSecondary} flex-1`} disabled={!promo.title.trim() || invalid || updPromo.isPending} onClick={() => updPromo.mutate()}>

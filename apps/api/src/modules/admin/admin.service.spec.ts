@@ -1272,6 +1272,63 @@ describe('AdminService.updateOrderStatus', () => {
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o2');
   });
 
+  describe('thua race (L5-B01): bấm Huỷ cùng lúc Kế toán bấm "Đã nhận tiền"', () => {
+    const pending = {
+      id: 'o5', code: 'TB-105', userId: 'u5', status: 'PENDING_PAYMENT', total: 200000, note: null, items: [],
+      paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', fulfiller: 'TUBU', pancakeOrderId: null,
+    };
+    const paid = { ...pending, status: 'CONFIRMED', paymentStatus: 'PAID' };
+
+    it('đơn đã sang Đã xác nhận + PAID → 409 nói rõ trạng thái mới, không đảo điểm/hoa hồng', async () => {
+      const { prisma } = makeStatusPrisma(pending, { ...paid, pancakeAttention: null }, 0);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'CANCELLED', 'Khách đổi ý').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toBe('Đơn vừa chuyển sang «Đã xác nhận» trong lúc bạn thao tác nên chưa đổi được. Tải lại đơn rồi thử lại.');
+      expect(loyalty.reverseOrderPoints).not.toHaveBeenCalledWith('o5');
+      expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalledWith('o5');
+    });
+
+    it('Pancake đã huỷ nên đơn có cờ → câu báo thêm "Cần xử lý Pancake"', async () => {
+      const { prisma } = makeStatusPrisma(pending, { ...paid, pancakeAttention: 'Pancake đã huỷ nhưng đơn Tubu còn hiệu lực' }, 0);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'CANCELLED').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toContain('Đơn đã vào Cần xử lý Pancake.');
+    });
+
+    it('người khác đã huỷ trước (đơn đã ở đúng trạng thái đích) → trả đơn, không báo lỗi', async () => {
+      const { prisma } = makeStatusPrisma(pending, { ...pending, status: 'CANCELLED' }, 0);
+      await expect(mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'CANCELLED')).resolves.toMatchObject({ status: 'CANCELLED' });
+    });
+
+    it('thua race mà trạng thái chưa đổi (đổi thanh toán/vận chuyển chen vào) → 409 không nói "chuyển sang"', async () => {
+      const { prisma } = makeStatusPrisma(pending, { ...pending, paymentStatus: 'PAID' }, 0);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'CANCELLED').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toBe('Đơn vừa thay đổi thanh toán hoặc vận chuyển trong lúc bạn thao tác nên chưa đổi được. Tải lại đơn rồi thử lại.');
+    });
+
+    it('cờ Pancake có từ trước lần bấm → không nói lần bấm này đưa đơn vào Cần xử lý', async () => {
+      const flagged = { ...pending, pancakeAttention: 'Lệch tổng tiền' };
+      const { prisma } = makeStatusPrisma(flagged, { ...paid, pancakeAttention: 'Lệch tổng tiền' }, 0);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'CANCELLED').catch((e: unknown) => e);
+      expect((err as Error).message).not.toContain('Cần xử lý Pancake');
+    });
+
+    it('thắng lần lật mà webhook đã đẩy đơn đi tiếp trước lúc đọc lại → vẫn thành công, không 409', async () => {
+      const cod = { ...pending, status: 'CONFIRMED', paymentMethod: 'COD', pancakeOrderId: 'pk5' };
+      const { prisma } = makeStatusPrisma(cod, { ...cod, status: 'SHIPPING' });
+      await expect(mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'PACKED')).resolves.toMatchObject({ status: 'SHIPPING' });
+    });
+
+    it('đóng gói thua lần huỷ khác → 409 «Đã huỷ», không có câu Pancake vì đích không phải huỷ', async () => {
+      const cod = { ...pending, status: 'CONFIRMED', paymentMethod: 'COD' };
+      const { prisma } = makeStatusPrisma(cod, { ...cod, status: 'CANCELLED', pancakeAttention: 'x' }, 0);
+      const err = await mkAdmin(prisma).updateOrderStatus(ADMIN_ACTOR, 'o5', 'PACKED').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toBe('Đơn vừa chuyển sang «Đã huỷ» trong lúc bạn thao tác nên chưa đổi được. Tải lại đơn rồi thử lại.');
+    });
+  });
+
   it('chuyển DELIVERED → CONFIRMED (regression) → BadRequest, không chạy side-effect', async () => {
     const order = { id: 'o3', code: 'TB-102', userId: 'u3', status: 'DELIVERED', total: 100000, note: null, items: [] };
     const { prisma } = makeStatusPrisma(order, order);

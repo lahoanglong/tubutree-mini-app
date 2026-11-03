@@ -1,4 +1,5 @@
 import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { vnDateRangeError, vnDateRangeInvalid, vnDayKeyOfIso, vnPromoWindowIso } from '@tubutree/app-core/vn-day';
 import { loadErrorText } from './error-text';
 import type { BrandSalesPeriod, OwnedPromotion } from '@tubutree/app-core/api/brand-owner';
 
@@ -35,21 +36,20 @@ export const EMPTY_PROMO: PromoForm = { title: '', subtitle: '', couponCode: '',
 // Chặn khi cả hai ngày được nhập mà kết thúc < bắt đầu, hoặc chỉ có ngày kết thúc mà nó đã qua (bắt đầu mặc định là bây giờ):
 // nếu không, khuyến mãi chết ngay khi lưu.
 export function promoDateRangeInvalid(f: PromoForm, now = Date.now()): boolean {
-  if (!f.endAt) return false;
-  const end = new Date(f.endAt).getTime();
-  return f.startAt ? end < new Date(f.startAt).getTime() : end < now;
+  return vnDateRangeInvalid(f.startAt, f.endAt, now);
 }
 
-/** yyyy-mm-dd từ ô ngày → ISO; kết thúc mặc định = bắt đầu + 30 ngày (không phải now + 30 ngày, kẻo chiến dịch bắt đầu muộn có endAt < startAt). */
+export function promoDateRangeError(f: PromoForm, now = Date.now()): string | null {
+  return vnDateRangeError(f.startAt, f.endAt, now);
+}
+
+/** yyyy-mm-dd từ ô ngày → ISO theo giờ VN (đầu ngày / cuối ngày); kết thúc trống = hết ngày VN chứa (bắt đầu + 30 ngày − 1 giây), xem vnPromoWindowIso. */
 export function promoPayload(f: PromoForm, now = Date.now()) {
-  const startMs = f.startAt ? new Date(f.startAt).getTime() : now;
-  const endMs = f.endAt ? new Date(f.endAt).getTime() : startMs + 30 * 864e5;
   return {
     title: f.title.trim(),
     subtitle: f.subtitle.trim() || undefined,
     couponCode: f.couponCode.trim().toUpperCase() || undefined,
-    startAt: new Date(startMs).toISOString(),
-    endAt: new Date(endMs).toISOString(),
+    ...vnPromoWindowIso(f.startAt, f.endAt, now),
   };
 }
 
@@ -58,7 +58,7 @@ export function promoToForm(p: OwnedPromotion): PromoForm {
     title: p.title,
     subtitle: p.subtitle ?? '',
     couponCode: p.couponCode ?? '',
-    startAt: p.startAt ? new Date(p.startAt).toISOString().slice(0, 10) : '',
-    endAt: p.endAt ? new Date(p.endAt).toISOString().slice(0, 10) : '',
+    startAt: vnDayKeyOfIso(p.startAt),
+    endAt: vnDayKeyOfIso(p.endAt),
   };
 }
