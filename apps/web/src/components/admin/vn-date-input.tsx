@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CalendarDays } from 'lucide-react';
+import { vnDateKey } from '@/lib/week';
 
 /** "2026-10-03" -> "03/10/2026"; chuỗi rỗng hoặc sai dạng -> "". */
 export function isoToVn(iso: string): string {
@@ -266,19 +267,12 @@ export function VnMonthInput({
   );
 }
 
-/** "yyyy-mm-dd" theo ngày của máy admin (không dùng toISOString: nó cho ngày UTC, lệch một ngày trước 7 giờ sáng giờ VN). */
-export function localIso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Lối tắt khoảng ngày cho ô lọc: hôm nay, 7 ngày gần nhất (gồm hôm nay), từ đầu tháng tới hôm nay. */
+/** Lối tắt khoảng ngày cho ô lọc: hôm nay, 7 ngày gần nhất (gồm hôm nay), từ đầu tháng tới hôm nay. Tính theo giờ VN như API, không theo múi giờ máy admin. */
 export function datePresets(now: Date = new Date()): { key: 'today' | '7d' | 'month'; label: string; from: string; to: string }[] {
-  const today = localIso(now);
-  const week = new Date(now);
-  week.setDate(week.getDate() - 6);
+  const today = vnDateKey(now);
   return [
     { key: 'today', label: 'Hôm nay', from: today, to: today },
-    { key: '7d', label: '7 ngày', from: localIso(week), to: today },
-    { key: 'month', label: 'Tháng này', from: localIso(new Date(now.getFullYear(), now.getMonth(), 1)), to: today },
+    { key: '7d', label: '7 ngày', from: vnDateKey(new Date(now.getTime() - 6 * 86_400_000)), to: today },
+    { key: 'month', label: 'Tháng này', from: `${today.slice(0, 8)}01`, to: today },
   ];
 }

@@ -25,16 +25,17 @@ function mkAdmin(prisma: unknown) {
   );
 }
 
-function listPrisma(storefrontRow: { id: string } | null = null) {
+function listPrisma(storefrontRow: { id: string } | null = null, titleRows: { id: string }[] = []) {
   const findMany = jest.fn().mockResolvedValue([]);
   const count = jest.fn().mockResolvedValue(0);
   const storefrontFind = jest.fn().mockResolvedValue(storefrontRow);
+  const storefrontMany = jest.fn().mockResolvedValue(titleRows);
   const prisma = {
     order: { findMany, count },
-    storefront: { findFirst: storefrontFind },
+    storefront: { findFirst: storefrontFind, findMany: storefrontMany },
     $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
   };
-  return { prisma, findMany, count, storefrontFind };
+  return { prisma, findMany, count, storefrontFind, storefrontMany };
 }
 
 describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D1-17)', () => {
@@ -51,13 +52,13 @@ describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D
     };
     expect(findMany.mock.calls[0][0].where).toEqual(where);
     expect(count.mock.calls[0][0].where).toEqual(where);
-    expect(findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'desc' });
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
   });
 
   it('order=asc đổi thứ tự sắp xếp theo ngày đặt, count không đổi', async () => {
     const { prisma, findMany } = listPrisma();
     await mkAdmin(prisma).listOrders(2, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, { order: 'asc' });
-    expect(findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'asc' });
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ createdAt: 'asc' }, { id: 'asc' }]);
     expect(findMany.mock.calls[0][0].skip).toBe(20);
   });
 
@@ -70,6 +71,15 @@ describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D
     expect(storefrontFind).toHaveBeenCalledTimes(1);
     expect(storefrontFind.mock.calls[0][0].where).toEqual({ slug: { equals: 'tubu-hoa', mode: 'insensitive' } });
     expect(findMany.mock.calls[0][0].where).toEqual({ storefrontId: 'sf-1' });
+  });
+
+  it('storefront gõ theo tên (không khớp slug) → tìm title chứa chuỗi, lọc theo các id tìm được', async () => {
+    const { prisma, findMany, storefrontMany } = listPrisma(null, [{ id: 'sf-1' }, { id: 'sf-2' }]);
+    await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, {
+      storefront: ' Mẹ Bé Xanh ',
+    });
+    expect(storefrontMany.mock.calls[0][0].where).toEqual({ title: { contains: 'mẹ bé xanh', mode: 'insensitive' } });
+    expect(findMany.mock.calls[0][0].where).toEqual({ storefrontId: { in: ['sf-1', 'sf-2'] } });
   });
 
   it('storefront không tồn tại → danh sách rỗng, không bỏ lọc (không lộ mọi đơn)', async () => {

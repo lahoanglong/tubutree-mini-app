@@ -160,7 +160,7 @@ export interface AdminOrderFilter {
   /** Id khách đặt đơn (Order.userId): "Xem tất cả đơn" từ hồ sơ khách. */
   userId?: string;
   /** Id gian hàng được ghi công (Order.storefrontId); web gửi slug, AdminService.adminOrderWhere đổi sang id. */
-  storefrontId?: string;
+  storefrontId?: string | { in: string[] };
   /** Khoảng ngày đặt theo giờ VN, 'YYYY-MM-DD', tính cả hai đầu. */
   from?: string;
   to?: string;

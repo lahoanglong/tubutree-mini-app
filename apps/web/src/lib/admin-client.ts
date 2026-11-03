@@ -2,6 +2,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import { apiDownload, apiFetch } from './client-api';
+import { vnDateKey } from './week';
 import type { GomdonAlertView } from './recycling';
 import type {
   AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
@@ -1748,7 +1749,7 @@ function orderFilterParams(f: OrderExportFilter): URLSearchParams {
   for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
   return q;
 }
-const todayKey = () => new Date().toISOString().slice(0, 10);
+const todayKey = () => vnDateKey(new Date());
 export const downloadOrdersCsv = (f: OrderExportFilter) => {
   const qs = orderFilterParams(f).toString();
   return apiDownload(`/admin/orders/export${qs ? `?${qs}` : ''}`, `don-hang-${todayKey()}.csv`);

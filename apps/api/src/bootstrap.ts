@@ -105,9 +105,9 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   };
 
   const app = await NestFactory.create<NestExpressApplication>(rootModule, {
-    // Retry-After không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
-    // (khác origin) không đọc được và phải đoán thời gian chờ khi bị 429.
-    cors: { origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After'] },
+    // Retry-After và Content-Disposition không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
+    // (khác origin) không đọc được thời gian chờ khi bị 429, và web admin không đọc được tên file CSV do máy chủ đặt.
+    cors: { origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After', 'Content-Disposition'] },
     logger: opts.logger ?? new CronAwareLogger(),
   });
 

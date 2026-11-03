@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -1713,6 +1713,15 @@ describe('admin/page — tab Flash Sale', () => {
 });
 
 describe('admin/page — tab Flash Sale: giờ Việt Nam khi tạo và sửa (QTUI-05)', () => {
+  // Máy admin ở UTC-5: mã tính theo giờ máy sẽ lưu 08:00 thành 13:00Z, nên test đỏ cả khi máy chạy test đã ở giờ VN.
+  const realTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    if (realTz === undefined) delete process.env.TZ;
+    else process.env.TZ = realTz;
+  });
   it('tạo đợt: 08:00 trong ô là 08:00 giờ Việt Nam (01:00Z) dù máy admin đặt múi giờ nào; ô sửa đọc lại đúng giờ VN', async () => {
     const startAt = '2026-12-20T01:00:00.000Z';
     mocks.flashSales = [{ id: 'z1', title: 'Đợt VN', startAt, endAt: '2026-12-21T01:00:00.000Z', isActive: true, items: [] }];
@@ -4241,8 +4250,23 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
 
     click(chip(container, 'Đại lý chờ tiền'));
     await flush();
-    expect(lastArgs()[9]).toEqual({ order: 'asc' });
-    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT');
+    expect(lastArgs()[9]).toEqual({});
+    expect(lastArgs()[1]).toBeUndefined();
+    expect(window.location.search).toBe('?tab=orders');
+  });
+
+  it('QTDON-06: bật rồi tắt hàng đợi trả trạng thái và thứ tự về giá trị trước khi bật', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders&status=CONFIRMED');
+    const { container } = await mount();
+    expect(lastArgs()[1]).toBe('CONFIRMED');
+    click(chip(container, 'Chuyển khoản chờ tiền'));
+    await flush();
+    expect(lastArgs()[1]).toBe('PENDING_PAYMENT');
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc' });
+    click(chip(container, 'Chuyển khoản chờ tiền'));
+    await flush();
+    expect(lastArgs()[1]).toBe('CONFIRMED');
+    expect(lastArgs()[9]).toEqual({});
   });
 
   it('chi tiết đơn có tên và SĐT khách kèm nút "Xem hồ sơ"; mã đơn trong hồ sơ mở đúng đơn đó', async () => {

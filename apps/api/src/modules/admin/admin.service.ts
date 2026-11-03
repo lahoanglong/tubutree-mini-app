@@ -971,17 +971,24 @@ export class AdminService {
   }
 
   /**
-   * Slug hoặc subdomain gian hàng → id. Gõ không khớp gian hàng nào thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc
-   * sẽ hiện mọi đơn như thể đã lọc xong.
+   * Slug hoặc subdomain gian hàng → id; không khớp thì tìm theo tên (title chứa chuỗi gõ, không phân biệt hoa thường) vì ô lọc
+   * cho gõ "tên hoặc mã ngắn". Không khớp gì thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc sẽ hiện mọi đơn như thể đã
+   * lọc xong.
    */
-  private async findStorefrontId(raw?: string): Promise<string | undefined> {
+  private async findStorefrontId(raw?: string): Promise<string | { in: string[] } | undefined> {
     const s = raw?.trim().toLowerCase();
     if (!s) return undefined;
     const eq = { equals: s, mode: 'insensitive' } as const;
     const row =
       (await this.prisma.storefront.findFirst({ where: { slug: eq }, select: { id: true } })) ??
       (await this.prisma.storefront.findFirst({ where: { subdomain: eq }, select: { id: true } }));
-    return row?.id ?? NO_SUCH_STOREFRONT_ID;
+    if (row) return row.id;
+    const byTitle = await this.prisma.storefront.findMany({
+      where: { title: { contains: s, mode: 'insensitive' } },
+      select: { id: true },
+      take: 50,
+    });
+    return byTitle.length ? { in: byTitle.map((r) => r.id) } : NO_SUCH_STOREFRONT_ID;
   }
 
   /**
@@ -1007,7 +1014,7 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
-        orderBy: { createdAt: order },
+        orderBy: [{ createdAt: order }, { id: order }],
         ...skipTake(page, limit),
         include: {
           items: true,
@@ -1696,8 +1703,10 @@ export class AdminService {
               // redeemInTx chỉ tăng usedCount khi mã có trần, nên mã đang không giới hạn có usedCount = 0 dù đã có lượt dùng.
               // Khoá dòng mã (cùng dòng redeem tăng usedCount) rồi đếm lại redemption đang có và ghi usedCount = số đếm,
               // để chốt `usedCount < usageLimit` ở checkout đúng ngay từ lượt đầu sau khi đặt trần.
-              // Khe còn lại: giao dịch đặt đơn đã đọc mã lúc chưa có trần và đang bay thì không tăng usedCount; vài lượt
-              // đó có thể vượt trần, và usedCount tự đúng lại ở lần đổi trần kế tiếp.
+              // Khe còn lại (chấp nhận, chỉ lệch vài lượt, tự đúng ở lần đổi trần kế tiếp): (1) đặt đơn đã đọc mã lúc chưa có
+              // trần và đang bay thì không tăng usedCount, nên có thể vượt trần; (2) release đã đọc mã lúc chưa có trần thì
+              // không trừ usedCount, nó xoá redemption sau khi admin đếm nên usedCount cao hơn thực tế một lượt; (3) hạ trần
+              // mã đang có trần chỉ so với số redemption đếm được, đơn đang bay chưa kịp ghi redemption vẫn lọt qua.
               await tx.$queryRaw`SELECT "id" FROM "coupons" WHERE "id" = ${id} FOR UPDATE`;
               const redeemed = await tx.couponRedemption.count({ where: { couponId: id } });
               if (data.usageLimit! < redeemed) {
@@ -1706,7 +1715,7 @@ export class AdminService {
               patch.usedCount = redeemed;
             }
             return tx.coupon.update({ where: { id }, data: patch });
-          })
+          }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy)
         : await this.prisma.coupon.update({ where: { id }, data: patch });
     this.logger.warn(`${actorLabel(actor)} cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
     return updated;
