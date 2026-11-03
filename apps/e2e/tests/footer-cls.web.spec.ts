@@ -78,9 +78,13 @@ for (const r of ROUTES) {
     const real = r;
     const cap: { fn?: () => unknown } = {};
     real.mock({ get: (p: string, h: unknown) => { if (p === real.hold) cap.fn = typeof h === 'function' ? (h as () => unknown) : () => h; } } as unknown as MockApi);
-    api.get(r.hold, async () => { await hold; return cap.fn!(); });
+    let held = false;
+    api.get(r.hold, async () => { held = true; await hold; return cap.fn!(); });
     await page.goto(r.path);
-    await page.waitForTimeout(1500);
+    // Phiên đã xong (lời gọi chính đã bắt đầu) và khung chờ RIÊNG của trang đã hiện, không còn RouteSkeleton của bước khôi phục phiên.
+    await expect.poll(() => held, { timeout: 20_000 }).toBe(true);
+    await expect(page.locator('[aria-busy="true"]:not([role="status"])').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[role="status"][aria-busy="true"]')).toHaveCount(0);
     const footerHidden = await page.evaluate(() => { const f = document.querySelector('footer[data-compact-footer]'); return !f || getComputedStyle(f).display === 'none'; });
     release();
     await page.waitForLoadState('networkidle');

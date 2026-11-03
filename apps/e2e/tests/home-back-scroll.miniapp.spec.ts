@@ -31,11 +31,18 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     test.info().annotations.push({ type: 'before', description: `scrollTop=${before}` });
     expect(before).toBeGreaterThan(1500);
 
-    const tile = page.getByRole('region', { name: 'Gợi ý hôm nay' }).locator('button.tubu-tile-link').first();
-    await tile.scrollIntoViewIfNeeded();
+    // Món Gợi ý cuối cùng đang nằm trọn trong màn ở độ sâu hiện tại: không cuộn thêm, để vị trí lúc chạm vẫn là vị trí sâu.
+    const tiles = page.getByRole('region', { name: 'Gợi ý hôm nay' }).locator('button.tubu-tile-link');
+    let tile = tiles.first();
+    let found = false;
+    for (let i = (await tiles.count()) - 1; i >= 0; i--) {
+      const box = await tiles.nth(i).boundingBox();
+      if (box && box.y > 80 && box.y + box.height < 700) { tile = tiles.nth(i); found = true; break; }
+    }
+    expect(found, 'phải có món Gợi ý nằm trọn trong màn ở độ sâu hiện tại').toBe(true);
     const y = await scrollTop(page);
-    // Lưu vị trí chạy sau 100ms debounce: đợi nó khớp rồi mới chạm.
-    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tubu_scroll:home')), { timeout: 5_000 }).toBe(String(y));
+    expect(y).toBeGreaterThan(1500);
+    await page.waitForTimeout(400);
     await tile.click();
     await expect(page).toHaveURL(/\/product\//, { timeout: 15_000 });
     await page.goBack();

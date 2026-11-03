@@ -97,8 +97,8 @@ html {
   }
 
   /* Khung chờ của chính trang (aria-busy) thấp hơn nội dung thật: chân trang hở dưới nó rồi bị đẩy khỏi màn khi dữ liệu về (CLS 0,2-0,34).
-     Ẩn chân trang trong lúc chờ; nút/ô nhập đang bận không tính, khối chờ nằm trong sheet/hộp thoại cũng không (mở sheet không được làm chân trang biến mất). */
-  body:has(:is(div, section, ul, ol, main)[aria-busy='true']:not([role='dialog'] *)) footer[data-compact-footer] {
+     Ẩn chân trang trong lúc chờ; nút/ô nhập đang bận không tính, khối chờ nằm trong sheet/hộp thoại hay khối hidden cũng không (mở sheet không được làm chân trang biến mất). */
+  body:has(:is(div, section, ul, ol, main)[aria-busy='true']:not([role='dialog'] *):not([hidden]):not([hidden] *)) footer[data-compact-footer] {
     display: none;
   }
 }
