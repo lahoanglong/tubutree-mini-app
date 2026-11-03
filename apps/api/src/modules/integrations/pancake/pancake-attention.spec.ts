@@ -38,6 +38,15 @@ describe('writePancakeAttention — một ô nhiều lý do (PNK-02)', () => {
     expect(row().pancakeAttention).toBe(mixed);
   });
 
+  it('onlyReplacingPrefix: ô đã nối dòng COD sau tiền tố thì không bị ghi đè', async () => {
+    const mixed = `Tổng tiền lệch: A | ${ATTENTION_COD_RETURN_UNVERIFIED}`;
+    const { prisma, row } = fakeOrderDb([baseOrder({ pancakeAttention: mixed })]);
+    expect(await writePancakeAttention(prisma as never, 'o1', 'Tổng tiền lệch: B', 'Tổng tiền lệch')).toBeNull();
+    expect(row().pancakeAttention).toBe(mixed);
+    const plain = fakeOrderDb([baseOrder({ pancakeAttention: 'Tổng tiền lệch: A' })]);
+    expect(await writePancakeAttention(plain.prisma as never, 'o1', 'Tổng tiền lệch: B', 'Tổng tiền lệch')).toBe('Tổng tiền lệch: B');
+  });
+
   it('onlyOpenOrder: đơn đã huỷ/trả thì không ghi, đơn còn mở thì ghi', async () => {
     const closed = fakeOrderDb([baseOrder({ status: 'RETURNED', pancakeAttention: null })]);
     expect(await writePancakeAttention(closed.prisma as never, 'o1', 'A', undefined, true)).toBeNull();

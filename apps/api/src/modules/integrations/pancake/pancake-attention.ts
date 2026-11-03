@@ -64,7 +64,7 @@ export async function writePancakeAttention(
   const notCod = { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] };
   const first = await db.order.updateMany({
     where: onlyReplacingPrefix
-      ? { id: orderId, ...open, AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
+      ? { id: orderId, ...open, AND: [changed, notCod, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
       : { id: orderId, ...open, AND: [changed, notCod] },
     data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
   });
