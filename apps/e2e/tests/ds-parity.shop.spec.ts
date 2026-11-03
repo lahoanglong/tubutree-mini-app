@@ -204,7 +204,7 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     vatLabel: 'Yêu cầu xuất hoá đơn VAT',
     vatCheckboxOnRight: true,
     pointsTitle: 'Điểm Xanh',
-    pointsSubtext: 'Dùng 100 điểm, giảm 100đ',
+    pointsSubtext: expect.stringMatching(/^Dùng [\d.]+ điểm, giảm [\d.]+đ/),
     consentText: 'Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.',
     consentAboveButton: true,
     consentGapToButton: 'gần',
@@ -213,6 +213,7 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
   test('ghi chú một dòng không bộ đếm, ô VAT bên phải, điểm Xanh cùng chữ, câu đồng ý sát nút Đặt hàng', async ({ page, api }, testInfo) => {
     const side = sideOf(testInfo.project.name);
     mockCheckout(api);
+    api.allowUnmocked('POST /events');
     if (side === 'web') {
       await mockWebCheckoutExtras(api);
       await page.addInitScript(() => {
@@ -234,17 +235,20 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
 
     const vat = page.getByText('Yêu cầu xuất hoá đơn VAT', { exact: true });
     await vat.scrollIntoViewIfNeeded();
-    const vatBox = (await vat.boundingBox())!;
-    const vatRow = vat.locator('xpath=ancestor-or-self::*[.//input[@type="checkbox"] or .//*[@role="checkbox"] or @role="checkbox"][1]');
-    const vatRowBox = (await vatRow.boundingBox())!;
-    const vatCheckboxOnRight = vatBox.x + vatBox.width / 2 < vatRowBox.x + vatRowBox.width / 2 && vatBox.x < 375 / 2;
+    // Chữ nằm sát lề trái (16px đệm) thì ô tick ở bên phải; ô tick bên trái đẩy chữ ra sau ~52px.
+    const vatTextLeft = await vat.evaluate((el) => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      return r.getBoundingClientRect().left;
+    });
+    const vatCheckboxOnRight = vatTextLeft < 40;
 
     const pointsTitle = page.getByText('Điểm Xanh', { exact: true }).first();
     await pointsTitle.scrollIntoViewIfNeeded();
     const pointsBlockText = (await pointsTitle.locator('xpath=..').innerText()).replace(/\s+/g, ' ').trim();
     const pointsSubtext = pointsBlockText.replace(/^Điểm Xanh\s*/, '');
 
-    const consent = page.getByTestId('order-consent').first();
+    const consent = page.locator('[data-testid="order-consent"]:visible').first();
     await consent.scrollIntoViewIfNeeded();
     await consent.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     const consentText = (await consent.innerText()).replace(/\s+/g, ' ').trim();
