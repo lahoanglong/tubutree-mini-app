@@ -91,11 +91,18 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 
-  it('khoản khách cuối đơn CTV (không có tài khoản khách) → xác nhận thẳng từ hàng chờ được', async () => {
-    const { service, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
+  it('RC-01: khoản khách cuối đơn CTV PENDING → phải "Bắt đầu chuyển khoản" trước, không xác nhận thẳng', async () => {
+    const { service, prisma, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('RC-01: khoản khách cuối đơn CTV đã claim bởi chính mình → xác nhận được', async () => {
+    const { service, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null, status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PENDING' }] } }),
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PROCESSING', claimedBy: 'a1' }] } }),
     );
   });
 

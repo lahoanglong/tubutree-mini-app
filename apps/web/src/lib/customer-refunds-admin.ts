@@ -76,9 +76,9 @@ export const refundReasonLabel = (reason: string) => REASON_LABEL[reason] ?? rea
 /**
  * Khoản của khách có tài khoản: khách tự đổi được nơi nhận (sang Ví Tubu) tới khi admin bấm "Bắt đầu chuyển khoản".
  * Admin phải khoá trước khi chuyển tiền, rồi mới xác nhận "Đã chuyển khoản" (CustomerRefundsService.claim/markPaid).
- * Khoản khách cuối đơn CTV (không có tài khoản) không ai đổi được nên xác nhận thẳng.
+ * Khoản khách cuối đơn CTV cũng phải nhận trước để hai người không cùng chuyển tiền.
  */
-export const needsClaim = (r: Pick<AdminCustomerRefund, 'userId'>) => r.userId !== null;
+export const needsClaim = (_r?: Pick<AdminCustomerRefund, 'userId'>) => true;
 
 /** Lý do tiếp quản tối thiểu — khớp CustomerRefundsService.claimGuard. */
 export const TAKE_OVER_REASON_MIN = 5;
