@@ -198,7 +198,7 @@ describe('/gio-hang — thanh dính đáy', () => {
   it('hết hàng: lời báo trên thanh dính là thông báo cho trình đọc màn hình, gắn vào nút khoá bằng aria-describedby', async () => {
     state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const c = await mount();
-    const hint = bar(c)!.querySelector<HTMLElement>('[role="alert"]')!;
+    const hint = bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
     expect(hint.textContent).toContain('hết hàng');
     expect(hint.closest('[aria-hidden="true"]')).toBeNull();
     const btn = bar(c)!.querySelector('button')!;
@@ -219,7 +219,7 @@ describe('/gio-hang — thanh dính đáy', () => {
   it('mỗi lúc chỉ một bản lời báo lộ ra: bản trong khung tóm tắt nằm trong khối hidden (chỉ từ lg), thanh dính lg:hidden', async () => {
     state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const c = await mount();
-    const hints = Array.from(c.querySelectorAll<HTMLElement>('[role="alert"]')).filter((el) => el.textContent?.includes('hết hàng'));
+    const hints = Array.from(c.querySelectorAll<HTMLElement>('[role="status"]')).filter((el) => el.textContent?.includes('hết hàng'));
     const inCard = hints.find((el) => !bar(c)!.contains(el))!;
     expect(inCard.closest('.hidden')?.className).toMatch(/\blg:block\b/);
     expect(bar(c)!.className).toMatch(/\blg:hidden\b/);

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -71,6 +71,8 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button, ProductThumb } from '@/components/mini';
+import { EmptyState } from '@/components/mini/empty-state';
+import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { clearSubmitted } from '@/lib/recycle-wizard';
@@ -452,21 +454,7 @@ export default function CheckoutPage() {
   if (cartEmpty) {
     return (
       <Shell>
-        <div className="py-16 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-[var(--color-bg-subtle)] text-[color:var(--color-text-brand)] shadow-card">
-            <ShoppingBag className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
-          </div>
-          <h2 className="mt-4 font-display text-lg font-semibold text-[color:var(--color-text-primary)]">Giỏ hàng đang trống</h2>
-          <p className="mt-1 text-sm text-[color:var(--color-text-secondary)]">Chưa có sản phẩm nào để thanh toán. Chọn vài món xanh rồi quay lại nhé.</p>
-          <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <Link href="/" className={ui.btnPrimary}>
-              Khám phá sản phẩm
-            </Link>
-            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
-              Đơn của tôi
-            </Link>
-          </div>
-        </div>
+        <EmptyState art="basket" heading={CART_EMPTY.heading} body={CART_EMPTY.body} ctaLabel={CART_EMPTY.cta} onCta={() => router.replace('/san-pham')} />
       </Shell>
     );
   }

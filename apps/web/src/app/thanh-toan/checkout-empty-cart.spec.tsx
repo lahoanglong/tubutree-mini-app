@@ -13,10 +13,11 @@ const ADDR = {
 const m = vi.hoisted(() => ({
   items: [] as Record<string, unknown>[],
   quote: vi.fn(),
+  replace: vi.fn(),
   cartGate: Promise.resolve() as Promise<void>,
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: m.replace, push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -38,6 +39,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   m.items = [];
+  m.replace.mockReset();
   m.cartGate = Promise.resolve();
   m.quote.mockReset().mockResolvedValue({ subtotal: 0, discount: 0, shippingFee: 0, total: 0 });
 });
@@ -47,13 +49,15 @@ afterEach(() => {
 });
 
 describe('/thanh-toan — giỏ trống (R3-UI-2)', () => {
-  it('báo "Giỏ hàng đang trống" kèm nút về trang sản phẩm, không dựng form thanh toán, không gọi báo giá', async () => {
+  it('báo "Giỏ còn trống đấy" như Mini App kèm nút "Khám phá ngay" về trang sản phẩm, không dựng form thanh toán, không gọi báo giá', async () => {
     const r = render(<CheckoutPage />);
     mounted.push(r);
     await flush(8);
-    expect(r.container.textContent).toContain('Giỏ hàng đang trống');
-    const back = [...r.container.querySelectorAll('a')].find((a) => a.textContent?.includes('Khám phá sản phẩm'));
-    expect(back?.getAttribute('href')).toBe('/');
+    expect(r.container.textContent).toContain('Giỏ còn trống đấy');
+    expect(r.container.textContent).toContain('Khám phá sản phẩm Tubu chọn riêng cho bạn');
+    const back = [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Khám phá ngay');
+    back!.click();
+    expect(m.replace).toHaveBeenCalledWith('/san-pham');
     expect(r.container.textContent).not.toContain('Phương thức thanh toán');
     expect(r.container.textContent).not.toContain('Địa chỉ giao hàng');
     expect(r.container.querySelector('button')?.textContent ?? '').not.toContain('Đặt hàng');
@@ -70,7 +74,7 @@ describe('/thanh-toan — giỏ trống (R3-UI-2)', () => {
     expect(m.quote).not.toHaveBeenCalled();
     release();
     await flush(8);
-    expect(r.container.textContent).toContain('Giỏ hàng đang trống');
+    expect(r.container.textContent).toContain('Giỏ còn trống đấy');
     expect(m.quote).not.toHaveBeenCalled();
   });
 
@@ -99,7 +103,7 @@ describe('/thanh-toan — giỏ trống (R3-UI-2)', () => {
     mounted.push(r);
     await flush(8);
     expect(r.container.textContent).toContain('Phương thức thanh toán');
-    expect(r.container.textContent).not.toContain('Giỏ hàng đang trống');
+    expect(r.container.textContent).not.toContain('Giỏ còn trống đấy');
     expect(m.quote).toHaveBeenCalled();
   });
 });

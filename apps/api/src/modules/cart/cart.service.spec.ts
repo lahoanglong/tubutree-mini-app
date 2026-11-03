@@ -1010,6 +1010,15 @@ describe('CartService guard tồn kho', () => {
     });
   });
 
+  describe('getCart: thứ tự dòng ổn định (B01)', () => {
+    it('đọc dòng giỏ theo id tăng dần để đổi số lượng không làm dòng nhảy xuống cuối', async () => {
+      const findUnique = jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [] });
+      const prisma = { cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique, update: jest.fn() } } as any;
+      await new CartService(prisma, { validateAndCompute: jest.fn() } as any, config, { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any, analytics, combo).getCart('u1');
+      expect(findUnique.mock.calls[0][0].include.items.orderBy).toEqual({ id: 'asc' });
+    });
+  });
+
   describe('getCart: mã hợp lệ nhưng giảm 0đ (giỏ toàn hàng giờ vàng, mã không có đơn tối thiểu)', () => {
     const allFlashCart = (validateAndCompute: jest.Mock) => {
       const prisma = {

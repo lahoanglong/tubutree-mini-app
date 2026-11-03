@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { SuggestedRail } from '@/components/catalog/suggested-rail';
 import { EmptyState } from '@/components/mini/empty-state';
 
@@ -14,9 +15,9 @@ export default function EmptyCart() {
     <div className="max-md:-mx-3 max-md:-mt-2">
       <EmptyState
         art="basket"
-        heading="Giỏ còn trống đấy"
-        body="Khám phá sản phẩm Tubu chọn riêng cho bạn"
-        ctaLabel="Khám phá ngay"
+        heading={CART_EMPTY.heading}
+        body={CART_EMPTY.body}
+        ctaLabel={CART_EMPTY.cta}
         onCta={() => router.push('/san-pham')}
       />
       <SuggestedRail />

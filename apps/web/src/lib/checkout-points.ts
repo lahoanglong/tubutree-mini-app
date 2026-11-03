@@ -1,3 +1,4 @@
+import { heldPointsNote } from '@tubutree/app-core/cart-copy';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { convertedPointsNote, lockedPointsLabel as coreLockedPointsLabel, pointsSummary as coreSummary } from '@tubutree/app-core/points-lots';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -54,7 +55,7 @@ export function checkoutPointsOffer(
   return {
     usable: standardUsable + converted,
     converted,
-    lockNote: held > 0 ? `${group(held)} điểm từ đơn mới giao chưa dùng được vì còn trong hạn hoặc đang chờ xử lý đổi/trả; sẽ dùng được khi hết hạn đổi/trả` : null,
+    lockNote: held > 0 ? heldPointsNote(held) : null,
     convertedNote: converted > 0 ? `${convertedPointsNote(converted)}${CONVERTED_FULL_VALUE}` : null,
   };
 }

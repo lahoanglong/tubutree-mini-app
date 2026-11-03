@@ -222,6 +222,6 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     click(byText(r.container, 'button', 'Kiểm tra lại') as HTMLButtonElement);
     await flush(6);
     expect(r.container.textContent).not.toContain('Đơn của bạn có thể đã được tạo');
-    expect(r.container.textContent).toContain('Giỏ hàng đang trống');
+    expect(r.container.textContent).toContain('Giỏ còn trống đấy');
   });
 });
