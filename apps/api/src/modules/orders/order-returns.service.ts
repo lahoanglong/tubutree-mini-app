@@ -34,6 +34,7 @@ import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './
 import { decodeServedImage } from '../../common/served-image';
 import {
   ATTENTION_PARTIAL_RETURN_ACK,
+  ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
   ATTENTION_PARTIAL_RETURN_SETTLED,
   ATTENTION_RETURN_APPROVED,
   appendPancakeAttention,
@@ -545,9 +546,19 @@ export class OrderReturnsService {
         { orderCode: order.code, amount: money.amount },
       );
     }
-    // Lần duyệt trả cả đơn đã hoàn tiền/điểm theo cả đơn: lời "hoàn tay" của Pancake 15 hết hiệu lực (xem settleClosedOrderAlerts, đường này
-    // không đi qua setStatus). Đơn không có mã Pancake vẫn có thể mang lời đó (đơn đã bỏ liên kết).
-    if (shares.isFull) await replaceAttentionReasonsByPrefix(this.prisma, order.id, PANCAKE_PARTIAL_RETURN_PREFIX, ATTENTION_PARTIAL_RETURN_SETTLED);
+    // Lời "hoàn tay" của Pancake 15 hết hiệu lực khi đã duyệt trả trên Tubu (tiền hoàn lúc duyệt): trả cả đơn đã hoàn theo cả đơn (đường
+    // này không đi qua setStatus, xem settleClosedOrderAlerts), trả một phần đã hoàn đúng phần đó. Đơn không có mã Pancake vẫn có thể mang
+    // lời đó (đơn đã bỏ liên kết). Tiền đã commit nên lỗi ghi ô chỉ ghi log, không được cắt các tin báo phía sau.
+    try {
+      await replaceAttentionReasonsByPrefix(
+        this.prisma,
+        order.id,
+        PANCAKE_PARTIAL_RETURN_PREFIX,
+        shares.isFull ? ATTENTION_PARTIAL_RETURN_SETTLED : ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
+      );
+    } catch (err) {
+      this.logger.error(`Không thay được lời "hoàn tay" của Pancake 15 trên đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+    }
     await this.flagPancakeReturn(order, shares);
     // D4: hàng của đơn gian hàng tự giao trả về gian hàng — báo chủ gian hàng chờ nhận và xác nhận trong Cổng người bán.
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_RETURN_APPROVED', {

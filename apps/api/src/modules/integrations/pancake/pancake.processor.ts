@@ -19,6 +19,7 @@ import {
   ATTENTION_UNDERPAID,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
   clearPancakeAttention,
+  removeAttentionReasonsByPrefix,
   writePancakeAttention,
 } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
@@ -556,7 +557,8 @@ export class PancakeProcessor extends WorkerHost {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
       const waiting = await tx.returnRequest.count({ where: { orderId: order.id, status: 'APPROVED', receivedAt: null } });
       if (waiting === 0) {
-        await clearPancakeAttention(tx, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
+        // Theo dòng, không theo ô: ô đã nối nhiều lý do thì các lời nhắc này không còn ở đầu ô.
+        await removeAttentionReasonsByPrefix(tx, order.id, [...ATTENTION_RETURN_APPROVED, ATTENTION_PARTIAL_RETURN_ACK]);
         return;
       }
       const reason = `${ATTENTION_PARTIAL_RETURN_ACK}, KHÔNG hoàn tay. Khi hàng về kho, bấm "Đã nhận hàng về" ở yêu cầu trả (${waiting} yêu cầu) để cộng kho.`;

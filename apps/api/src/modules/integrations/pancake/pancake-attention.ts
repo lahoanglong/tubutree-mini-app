@@ -40,6 +40,9 @@ export const PANCAKE_PARTIAL_RETURN_MANUAL_NOTE = 'Pancake báo hoàn một ph�
 export const ATTENTION_PARTIAL_RETURN_SETTLED =
   'Đơn đã huỷ/trả sau khi Pancake báo HOÀN MỘT PHẦN: hệ thống đã xử lý tiền/điểm theo cả đơn (đơn đã thu tiền thì đã hoàn đủ cho khách, đơn COD chưa thu thì không có tiền để hoàn), KHÔNG hoàn tay phần bị trả nữa. ' +
   'Nếu trước đó đã hoàn tay thì báo Kế toán đối chiếu để thu lại phần hoàn trùng.';
+/** Admin duyệt trả MỘT PHẦN trên Tubu khi ô còn lời "hoàn tay" của Pancake 15: tiền đã hoàn lúc duyệt nên hoàn tay là hoàn hai lần. */
+export const ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU =
+  'Phần khách trả đã được duyệt và hoàn tiền trên Tubu: KHÔNG hoàn tay phần bị trả (Pancake đã báo hoàn một phần).';
 /** Lời nhắc tạo phiếu trả trên Pancake lúc duyệt trả (OrderReturnsService.flagPancakeReturn). */
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */

@@ -15,6 +15,7 @@ import * as attention from '../../src/modules/integrations/pancake/pancake-atten
 import {
   ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_PARTIAL_RETURN_HELD,
+  ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
   ATTENTION_PARTIAL_RETURN_SETTLED,
 } from '../../src/modules/integrations/pancake/pancake-attention';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
@@ -467,6 +468,74 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
         await returns.review(admin.id, req.id, { approve: true });
 
         expect((await orderOf(order.id)).pancakeAttention).toBe(ATTENTION_PARTIAL_RETURN_SETTLED);
+      });
+    });
+
+    describe('duyệt trả MỘT PHẦN khi ô còn lời 15 / lời nhắc nối nhiều dòng', () => {
+      const MANUAL = 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.';
+
+      async function partialOrder(extra: Record<string, unknown>, returnQty = 1) {
+        const admin = await createUser(prisma, { role: 'ADMIN' });
+        const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+        const tag = randCode(8);
+        const product = await prisma.product.create({
+          data: { pancakeId: `it-p-${tag}`, brand: 'IT', slug: `it-held-${tag.toLowerCase()}`, name: `DRIP ${tag}`, description: 'IT', basePrice: 38_000 },
+        });
+        const v = await prisma.variation.create({
+          data: { pancakeId: `it-v-${tag}`, productId: product.id, sku: `IT-${tag}`, name: 'Chai', attributes: {}, retailPrice: 38_000, stock: 10 },
+        });
+        const order = await createOrder(prisma, {
+          userId: user.id,
+          status: 'DELIVERED',
+          paymentMethod: 'WALLET',
+          paymentStatus: 'PAID',
+          subtotal: 114_000,
+          shippingFee: 0,
+          total: 114_000,
+          deliveredAt: new Date(),
+          pancakeOrderId: `pk-held-${randCode(8)}`,
+          items: { create: [{ variationId: v.id, productName: 'DRIP', variationName: 'Chai', unitPrice: 38_000, quantity: 3, total: 114_000 }] },
+          ...extra,
+        });
+        const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+        const req = await returns.request(user.id, order.code, { reasonCode: 'DEFECTIVE', reason: 'Chai bị rò rỉ', items: [{ orderItemId: item.id, quantity: returnQty }] });
+        return { admin, user, order, req };
+      }
+
+      it('duyệt MỘT PHẦN: lời "hoàn tay" của 15 đổi thành "đã hoàn trên Tubu, KHÔNG hoàn tay", không còn dòng hoàn tay cạnh dòng đã duyệt', async () => {
+        const { admin, order, req } = await partialOrder({ pancakeAttention: `${MANUAL} | Lý do khác`, pancakeAttentionAt: new Date() });
+
+        await returns.review(admin.id, req.id, { approve: true });
+
+        const after = await orderOf(order.id);
+        expect(after.status).toBe('DELIVERED');
+        const parts = after.pancakeAttention!.split(' | ');
+        expect(parts.some((part) => part.startsWith('Pancake báo HOÀN MỘT PHẦN'))).toBe(false);
+        expect(parts).toContain(ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU);
+        expect(parts).toContain('Lý do khác');
+        expect(parts.some((part) => part.startsWith('Khách trả một phần đơn'))).toBe(true);
+      });
+
+      it('thay ô lỗi sau khi tiền đã commit (trả cả đơn): admin không nhận 500, lời nhắc tạo phiếu Pancake và tin cho khách vẫn đi', async () => {
+        const { admin, order, req } = await partialOrder({ pancakeAttention: MANUAL, pancakeAttentionAt: new Date() }, 3);
+        jest.spyOn(attention, 'replaceAttentionReasonsByPrefix').mockRejectedValueOnce(new Error('P2024: hết kết nối trong pool'));
+
+        await expect(returns.review(admin.id, req.id, { approve: true })).resolves.toBeDefined();
+
+        expect((await orderOf(order.id)).pancakeAttention).toContain('Khách trả cả đơn');
+        expect(notify.mock.calls.some((c) => c[1] === 'RETURN_APPROVED_DETAIL')).toBe(true);
+      });
+
+      it('Pancake 15 tới sau khi hàng đã nhận, ô đã nối nhiều lý do (lời nhắc không ở đầu ô): lời nhắc tạo phiếu vẫn được gỡ', async () => {
+        const { admin, order, req } = await partialOrder({ pancakeAttentionAt: new Date() });
+        await returns.review(admin.id, req.id, { approve: true });
+        await returns.markReceived(admin.id, req.id);
+        const staleReminder = 'Khách trả một phần đơn (đã duyệt hoàn tiền): DRIP ×1. Tạo phiếu "Hoàn một phần" trên Pancake.';
+        await prisma.order.update({ where: { id: order.id }, data: { pancakeAttention: `Lý do khác | ${staleReminder}` } });
+
+        await processor.onStatusUpdated({ id: order.pancakeOrderId, status: 15 });
+
+        expect((await orderOf(order.id)).pancakeAttention).toBe('Lý do khác');
       });
     });
 
