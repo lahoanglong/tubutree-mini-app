@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Headers, Param, Post } from '@nestjs/common';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsInt,
@@ -31,9 +32,9 @@ class TemplateItemDto {
   @IsString() variationId!: string;
   @IsInt() @Min(1) quantity!: number;
 }
-class SaveTemplateDto {
-  @IsString() name!: string;
-  @IsArray() @ArrayNotEmpty() @ValidateNested({ each: true }) @Type(() => TemplateItemDto)
+export class SaveTemplateDto {
+  @IsString() @MaxLength(120) name!: string;
+  @IsArray() @ArrayNotEmpty() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => TemplateItemDto)
   items!: TemplateItemDto[];
 }
 

@@ -22,6 +22,13 @@ describe('ORDER_NOTE_MAX', () => {
 });
 
 describe('isInvoiceValid', () => {
+  it('MST sai định dạng bị chặn, MST có dấu cách/chấm hoặc chi nhánh 13 số liền được chấp nhận', () => {
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '12345' })).toBe(false);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: 'abcdefghij' })).toBe(false);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '0101 234 567' })).toBe(true);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '0101.234.567' })).toBe(true);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '0101234567001' })).toBe(true);
+  });
   it('không yêu cầu hoá đơn thì luôn hợp lệ', () => {
     expect(isInvoiceValid(false, { taxCode: '', companyName: '', address: '', email: '' })).toBe(true);
   });

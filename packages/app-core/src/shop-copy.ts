@@ -264,6 +264,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
   'checkout.calculating': 'Đang tính…',
   'checkout.priceChangedHint': 'Giá ưu đãi đã thay đổi. Bạn xem lại giỏ hàng trước khi đặt nhé.',
+  'checkout.taxCodeInvalid': 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.',
   'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',
   'checkout.moreLines': 'Xem thêm {n} sản phẩm',
   'checkout.fewerLines': 'Thu gọn',

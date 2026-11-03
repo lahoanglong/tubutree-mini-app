@@ -28,10 +28,35 @@ const STILL_RASTER_DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-
 export interface UploadedImageOptions {
   maxDataUrlLength?: number;
   allowGif?: boolean;
+  /** Giải mã phần đầu base64 và đối chiếu chữ ký tệp (PNG/JPEG/WebP/GIF) với loại ảnh khai trong data URL. */
+  verifySignature?: boolean;
 }
 
 /** Ảnh trong đánh giá và bài cộng đồng (hiện công khai). */
 export const PUBLIC_CONTENT_IMAGE: UploadedImageOptions = { maxDataUrlLength: PUBLIC_CONTENT_MAX_DATA_URL_LENGTH, allowGif: false };
+
+/** Ảnh trong bài cộng đồng: như PUBLIC_CONTENT_IMAGE, thêm kiểm chữ ký tệp để chuỗi base64 rác không lấp DB. */
+export const FEED_POST_IMAGE: UploadedImageOptions = { ...PUBLIC_CONTENT_IMAGE, verifySignature: true };
+
+const DATA_URL_HEAD_RE = /^data:image\/(png|jpe?g|webp|gif);base64,/;
+
+/** Chữ ký tệp trong 12 byte đầu (16 ký tự base64) khớp loại ảnh khai ở data URL. */
+export function hasImageSignature(dataUrl: string): boolean {
+  const head = DATA_URL_HEAD_RE.exec(dataUrl);
+  if (!head) return false;
+  const bytes = Buffer.from(dataUrl.slice(head[0].length, head[0].length + 16), 'base64');
+  switch (head[1]) {
+    case 'png':
+      return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    case 'jpg':
+    case 'jpeg':
+      return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    case 'webp':
+      return bytes.length >= 12 && bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP';
+    default:
+      return bytes.length >= 4 && bytes.subarray(0, 4).toString('latin1') === 'GIF8';
+  }
+}
 
 /** URL https trên host upload tin cậy (không user:pass). Dùng cho video đánh giá, vốn không có đường base64. */
 export function isUploadedMediaUrl(value: unknown): value is string {
@@ -50,9 +75,40 @@ export function isUploadedImage(value: unknown, options: UploadedImageOptions = 
   if (value.startsWith('data:')) {
     const max = options.maxDataUrlLength ?? DEFAULT_MAX_DATA_URL_LENGTH;
     const re = options.allowGif === false ? STILL_RASTER_DATA_URL_RE : RASTER_DATA_URL_RE;
-    return value.length <= max && re.test(value);
+    return value.length <= max && re.test(value) && (!options.verifySignature || hasImageSignature(value));
   }
   return isUploadedMediaUrl(value);
+}
+
+/** Ảnh đại diện Zalo trả về (s120-ava-talk.zadn.vn, ...): chỉ nhận https và đúng miền của Zalo. */
+const ZALO_AVATAR_HOST_RE = /(^|\.)(zadn\.vn|zdn\.vn|zalo\.me)$/i;
+
+/** Ảnh đại diện hồ sơ: https, không user:pass, host upload tin cậy (Cloudinary) hoặc CDN ảnh đại diện Zalo. */
+export function isAvatarUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_HTTPS_URL_LENGTH) return false;
+  if (isUploadedMediaUrl(value)) return true;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return url.protocol === 'https:' && !url.username && !url.password && ZALO_AVATAR_HOST_RE.test(url.hostname);
+}
+
+export function IsAvatarUrl(validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'isAvatarUrl',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate: (value: unknown) => isAvatarUrl(value),
+        defaultMessage: (args: ValidationArguments) => `${args.property} chỉ nhận ảnh đã tải lên (https://${UPLOAD_IMAGE_HOSTS.join(', ')}) hoặc ảnh đại diện Zalo.`,
+      },
+    });
+  };
 }
 
 const MAX_STOREFRONT_IMAGE_URL_LENGTH = 2_048;
