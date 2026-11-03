@@ -753,9 +753,9 @@ export default function CheckoutPage() {
           {(quote?.tierDiscount ?? 0) > 0 && (
             <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
-          {previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} green />}
-          {previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} green />}
-          {previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} green />}
+          {previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} valueGreen />}
+          {previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} valueGreen />}
+          {previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} valueGreen />}
           {(quote?.pointsDiscount ?? 0) > 0 && (
             <Row label={`Điểm Xanh (${formatCount(quote!.pointsUsed)})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
           )}
@@ -778,10 +778,10 @@ export default function CheckoutPage() {
           >
             <div className="rounded-[var(--radius-card)] bg-[var(--color-bg-canvas)] p-3">
               <Row label="Tạm tính tiền hàng" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
-              {(quote ? quote.discount : previewDiscount) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote ? quote.discount : previewDiscount)}`} green />}
-              {(quote ? (quote.comboDiscount ?? 0) : previewCombo) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote ? quote.comboDiscount! : previewCombo)}`} green />}
-              {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} green />}
-              {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} green />}
+              {(quote ? quote.discount : previewDiscount) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote ? quote.discount : previewDiscount)}`} valueGreen />}
+              {(quote ? (quote.comboDiscount ?? 0) : previewCombo) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote ? quote.comboDiscount! : previewCombo)}`} valueGreen />}
+              {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} valueGreen />}
+              {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} valueGreen />}
               <Row
                 label="Phí vận chuyển"
                 value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
@@ -789,7 +789,7 @@ export default function CheckoutPage() {
               />
               <div className="my-2 h-px bg-[var(--color-border-subtle)]" />
               <div className="flex justify-between gap-2.5 py-1.5 font-bold text-[color:var(--color-text-primary)]">
-                <span className="text-sm">Tổng thanh toán</span>
+                <span className="text-sm font-normal text-[color:var(--color-text-secondary)]">Tổng thanh toán</span>
                 <span className="text-base">{totalText}</span>
               </div>
               {quote && quote.pointsEarned > 0 && (
