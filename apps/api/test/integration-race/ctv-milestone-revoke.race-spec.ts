@@ -165,6 +165,49 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     expect(notices[0]![2].reclaim_note).toBe('');
   });
 
+  it('một lần đảo làm rơi cả mốc 3tr lẫn 10tr: CTV nhận đúng một tin nêu cả hai mốc và tổng điểm thu', async () => {
+    const { ctv, first } = await claimedCtv(9_000_000, 1_200_000);
+    await returned(first.order.id);
+    await affiliate.reverseCommissionsForOrder(first.order.id);
+    expect(await balance(ctv.id)).toBe(0);
+    const notices = revokeNotices(ctv.id);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]![2].milestone).toMatch(/3/);
+    expect(notices[0]![2].milestone).toMatch(/10/);
+    expect(notices[0]![2].points).toBe((250_000).toLocaleString('vi-VN'));
+    await affiliate.reverseCommissionsForOrder(first.order.id);
+    expect(new Set(revokeNotices(ctv.id).map((c) => c[3]?.dedupeKey)).size).toBe(1);
+  });
+
+  it('thu được 0 điểm (lô thưởng đã hết hạn hết) và không nợ: không báo CTV', async () => {
+    const { ctv, first } = await claimedCtv();
+    const claim = await prisma.ctvMilestoneClaim.findFirstOrThrow({ where: { userId: ctv.id, milestoneId: 'milestone-10m' } });
+    await prisma.pointsTransaction.updateMany({
+      where: { userId: ctv.id, refType: 'AFFILIATE_MILESTONE', refId: claim.id },
+      data: { expiresAt: new Date(Date.now() - 864e5) },
+    });
+    await prisma.$transaction((tx) => applyPointsDelta(tx, { userId: ctv.id, delta: -200_000, lot: 'STANDARD', reason: 'POINTS_EXPIRED', refType: 'EXPIRE' }));
+    await returned(first.order.id);
+    await affiliate.reverseCommissionsForOrder(first.order.id);
+    expect(await revokeRows(ctv.id)).toHaveLength(0);
+    expect(revokeNotices(ctv.id)).toHaveLength(0);
+  });
+
+  it('tháng đã qua còn nợ: tin không hứa "sẽ trừ khi bạn nhận lại mốc"', async () => {
+    const ctv = await createUser(prisma, { role: 'AFFILIATE' });
+    const prevMonth = new Date(Date.now() - 31 * 864e5);
+    const a = await approved(ctv.id, 2_200_000, prevMonth);
+    await approved(ctv.id, 8_000_000, prevMonth);
+    await affiliate.claimMilestone(ctv.id, 'milestone-10m', vnMonthBounds(prevMonth).key);
+    await prisma.$transaction((tx) => applyPointsDelta(tx, { userId: ctv.id, delta: -150_000, lot: 'STANDARD', reason: 'ORDER_REDEEM', refType: 'ORDER', refId: randCode() }));
+    await returned(a.order.id);
+    await affiliate.reverseCommissionsForOrder(a.order.id);
+    const notices = revokeNotices(ctv.id);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]![2].debt_note).toMatch(/chưa thu hết/);
+    expect(notices[0]![2].debt_note).not.toMatch(/nhận lại/);
+  });
+
   it('(e) chạy lại lần đảo: không trừ lần hai, không báo lần hai', async () => {
     const { ctv, first } = await claimedCtv();
     await returned(first.order.id);

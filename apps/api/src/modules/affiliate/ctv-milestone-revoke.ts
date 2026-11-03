@@ -1,16 +1,11 @@
 import type { Prisma } from '@prisma/client';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { loadPointExpiryTxns, lotRecoverable } from '../loyalty/loyalty-expiry.service';
+import { CTV_MILESTONE_REVOKE_REF_TYPE, ctvMilestoneLotKey } from './ctv-milestone-ref';
 import { REFERRAL_DEBT_REF_TYPE } from '../wallet/referral-reward';
 import { CONFIRMED_COMMISSION_STATUSES, CTV_MONTHLY_MILESTONES, vnMonthBounds, type VnMonth } from './ctv-milestones';
 
 type Db = Prisma.TransactionClient;
-
-/** refType của dòng thưởng mốc (claimMilestone) và của dòng thu hồi nó; cùng refId = id claim nên sổ lô ghép được hai dòng. */
-export const CTV_MILESTONE_REF_TYPE = 'AFFILIATE_MILESTONE';
-export const CTV_MILESTONE_REVOKE_REF_TYPE = 'AFFILIATE_MILESTONE_REVOKE';
-/** Khoá lô khớp CTV_MILESTONE_RULE ở loyalty-expiry.service.ts. */
-export const ctvMilestoneLotKey = (claimId: string): string => `CTV_MILESTONE:${claimId}`;
 
 /** Doanh số đã chốt của CTV trong tháng VN: tổng commissionableTotal của hoa hồng APPROVED/PAID có approvedAt trong tháng. */
 export async function confirmedMonthRevenue(db: Pick<Db, 'commission'>, userId: string, month: VnMonth): Promise<number> {
@@ -70,10 +65,12 @@ export async function revokeLostCtvMilestones(tx: Db, userId: string, approvedAt
 
   const ledger = await loadPointExpiryTxns(tx, userId);
   const out: CtvMilestoneRevoked[] = [];
+  // Chung một mốc giờ cho mọi claim của lần đảo này: báo CTV gộp theo (CTV, revokedAt).
+  const revokedAt = new Date();
   for (const claim of lost) {
     const marked = await tx.ctvMilestoneClaim.updateMany({
       where: { id: claim.id, revokedAt: null },
-      data: { revokedAt: new Date(), revokeCount: { increment: 1 } },
+      data: { revokedAt, revokeCount: { increment: 1 } },
     });
     if (marked.count !== 1) continue;
     const generation = claim.revokeCount + 1;

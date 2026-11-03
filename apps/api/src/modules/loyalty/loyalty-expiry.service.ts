@@ -15,6 +15,7 @@ import {
   REFERRAL_ORDER2_REVOKE_PREFIX,
 } from '../wallet/referral-reward';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { CTV_MILESTONE_REF_TYPE, CTV_MILESTONE_REVOKE_REF_TYPE, ctvMilestoneLotKey } from '../affiliate/ctv-milestone-ref';
 
 const DAY = 864e5;
 const BATCH = 500; // kích thước mỗi trang candidate.
@@ -174,8 +175,8 @@ const EXTERNAL_RULE: ReversalRule = {
  * còn nguyên trong sổ và tới hạn cron trừ lại đúng số điểm đã thu hồi.
  */
 const CTV_MILESTONE_RULE: ReversalRule = {
-  lotKey: (t) => (t.refType === 'AFFILIATE_MILESTONE' && t.refId ? `CTV_MILESTONE:${t.refId}` : null),
-  reversedLotKey: (t) => (t.refType === 'AFFILIATE_MILESTONE_REVOKE' && t.refId ? `CTV_MILESTONE:${t.refId}` : null),
+  lotKey: (t) => (t.refType === CTV_MILESTONE_REF_TYPE && t.refId ? ctvMilestoneLotKey(t.refId) : null),
+  reversedLotKey: (t) => (t.refType === CTV_MILESTONE_REVOKE_REF_TYPE && t.refId ? ctvMilestoneLotKey(t.refId) : null),
 };
 
 const REVERSAL_RULES: readonly ReversalRule[] = [

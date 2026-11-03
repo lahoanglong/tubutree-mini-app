@@ -44,9 +44,9 @@ import {
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CTV_NOTIFICATION } from './ctv-notification-codes';
+import { CTV_MILESTONE_REF_TYPE } from './ctv-milestone-ref';
 import {
   confirmedMonthRevenue,
-  CTV_MILESTONE_REF_TYPE,
   lockCtvForMilestones,
   revokeLostCtvMilestones,
 } from './ctv-milestone-revoke';
@@ -1213,7 +1213,7 @@ export class AffiliateService {
   }
 
   /**
-   * Báo CTV mốc doanh số bị thu hồi điểm (CTV-01): một tin cho mỗi lần thu hồi (dedupeKey theo claim + lần thu hồi). Quét các claim
+   * Báo CTV mốc doanh số bị thu hồi điểm (CTV-01): một tin cho mỗi lần đảo (dedupeKey theo CTV + revokedAt chung của các claim bị thu). Quét các claim
    * thu hồi gần đây thay vì nhận kết quả từ tx vì đường trả một phần commit ở orders; gọi sau commit và từ cron duyệt hoa hồng để
    * lần gửi lỗi được thử lại. Lỗi chỉ ghi log, không chặn việc đảo.
    */
@@ -1222,27 +1222,42 @@ export class AffiliateService {
     try {
       const claims = await this.prisma.ctvMilestoneClaim.findMany({
         where: { revokedAt: { gte: new Date(now.getTime() - MILESTONE_REVOKE_NOTICE_WINDOW_MS) } },
-        select: { id: true, userId: true, milestoneId: true, monthKey: true, rewardPoints: true, revokeCount: true, revokeDebt: true, revokeTaken: true },
+        select: { id: true, userId: true, milestoneId: true, monthKey: true, revokedAt: true, revokeDebt: true, revokeTaken: true },
       });
       const currentMonthKey = vnMonthBounds(now).key;
+      // Các claim thu trong cùng một lần đảo chung revokedAt: gộp thành một tin cho mỗi (CTV, lần đảo).
+      const batches = new Map<string, typeof claims>();
       for (const c of claims) {
-        const milestone = CTV_MONTHLY_MILESTONES.find((m) => m.id === c.milestoneId);
-        if (!milestone) continue;
+        if (c.revokedAt === null || !CTV_MONTHLY_MILESTONES.some((m) => m.id === c.milestoneId)) continue;
+        const key = `${c.userId}:${c.revokedAt.getTime()}`;
+        batches.set(key, [...(batches.get(key) ?? []), c]);
+      }
+      for (const [key, batch] of batches) {
+        const taken = batch.reduce((sum, c) => sum + c.revokeTaken, 0);
+        const debt = batch.reduce((sum, c) => sum + c.revokeDebt, 0);
+        if (taken === 0 && debt === 0) continue;
+        const first = batch[0]!;
+        const isCurrentMonth = first.monthKey === currentMonthKey;
+        const titles = batch.map((c) => CTV_MONTHLY_MILESTONES.find((m) => m.id === c.milestoneId)!.title);
         await this.notifications
           .notify(
-            c.userId,
+            first.userId,
             CTV_NOTIFICATION.MILESTONE_REVOKED,
             {
-              month: `${c.monthKey.slice(5, 7)}/${c.monthKey.slice(0, 4)}`,
-              milestone: milestone.title,
-              points: c.revokeTaken.toLocaleString('vi-VN'),
-              debt_note: c.revokeDebt > 0 ? ` (còn ${c.revokeDebt.toLocaleString('vi-VN')} điểm chưa thu hết vì số dư thiếu, sẽ trừ khi bạn nhận lại mốc)` : '',
-              // Chỉ tháng này và tháng trước nhận được mốc, và hoa hồng chỉ được duyệt vào tháng hiện tại: tháng đã qua thì doanh số không tăng lại.
-              reclaim_note: c.monthKey === currentMonthKey ? ' Doanh số lên lại ngưỡng thì bạn nhận lại được.' : '',
+              month: `${first.monthKey.slice(5, 7)}/${first.monthKey.slice(0, 4)}`,
+              milestone: titles.join(' và '),
+              points: taken.toLocaleString('vi-VN'),
+              // Chỉ tháng này và tháng trước nhận được mốc, và hoa hồng chỉ được duyệt vào tháng hiện tại: tháng đã qua thì doanh số
+              // không tăng lại nên không hứa nhận lại.
+              debt_note:
+                debt > 0
+                  ? ` (còn ${debt.toLocaleString('vi-VN')} điểm chưa thu hết vì số dư thiếu${isCurrentMonth ? ', sẽ trừ khi bạn nhận lại mốc' : ''})`
+                  : '',
+              reclaim_note: isCurrentMonth ? ' Doanh số lên lại ngưỡng thì bạn nhận lại được.' : '',
             },
-            { dedupeKey: `ctv-milestone-revoke:${c.id}:${c.revokeCount}` },
+            { dedupeKey: `ctv-milestone-revoke:${key}` },
           )
-          .catch((e: unknown) => this.logger.warn(`Báo thu hồi thưởng mốc ${c.id} lỗi: ${(e as Error).message}`));
+          .catch((e: unknown) => this.logger.warn(`Báo thu hồi thưởng mốc ${first.id} lỗi: ${(e as Error).message}`));
       }
     } catch (err) {
       this.logger.warn(`Quét báo thu hồi thưởng mốc lỗi: ${err instanceof Error ? err.message : err}`);
