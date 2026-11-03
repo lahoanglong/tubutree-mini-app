@@ -49,9 +49,9 @@ export const MAX_SUBSCRIPTION_QUANTITY = 999;
  */
 export const SUBSCRIPTION_COD_MAX = 5_000_000;
 
-/** Cron mỗi đêm quét tối đa PAGE gói/trang, tối đa MAX_PAGES trang (chặn vòng lặp vô hạn nếu dữ liệu bất thường). */
 /** Giờ VN cron processDue chạy mỗi ngày; setStatus dựa vào mốc này để biết bật lại có kịp đơn hôm nay không. */
 const SUBSCRIPTION_CRON_HOUR_VN = 3;
+/** Cron mỗi đêm quét tối đa PAGE gói/trang, tối đa MAX_PAGES trang (chặn vòng lặp vô hạn nếu dữ liệu bất thường). */
 const DUE_PAGE_SIZE = 200;
 const DUE_MAX_PAGES = 50;
 
@@ -527,10 +527,10 @@ export class SubscriptionsService {
     }
     // Bật lại: cron 03:00 VN nhận mọi gói có nextRunAt trước 0h VN ngày mai, nên chỉ cần biết cron hôm nay còn chạy không.
     // - Ngày hẹn từ mai trở đi: giữ nguyên (giờ lẻ của ngày đó vẫn ra đúng ngày).
-    // - Hẹn hôm nay và cron hôm nay chưa chạy: giữ nguyên, đơn ra sáng nay đúng ngày "Lần kế" khách thấy. nextRunAt đã neo
-    //   0h VN nên luôn nhỏ hơn giờ bấm; so với giờ bấm như trước thì gói bị coi là quá hạn và mất cả một chu kỳ.
+    // - Hẹn hôm nay và cron hôm nay chưa chạy: giữ nguyên, đơn ra sáng nay đúng ngày "Lần kế" khách thấy. Không so nextRunAt
+    //   với giờ bấm: nextRunAt neo 0h VN nên luôn nhỏ hơn giờ bấm, so vậy thì gói chưa lỡ kỳ nào cũng bị dời cả một chu kỳ.
     // - Hẹn hôm nay mà cron đã chạy (gói đang tạm dừng nên bị bỏ qua): nextRunAt còn ở tương lai (giờ lẻ của dữ liệu cũ) thì
-    //   dời sang 0h ngày mai; đã qua thì coi là quá hạn, dời một chu kỳ tính từ hôm nay như cũ.
+    //   dời sang 0h ngày mai; đã qua thì gói đã lỡ kỳ, dời một chu kỳ tính từ hôm nay để không ra đơn bù ngoài lịch.
     let nextRunAt = sub.nextRunAt;
     if (status === 'ACTIVE') {
       const resumeNow = new Date();

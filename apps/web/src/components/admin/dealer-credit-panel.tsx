@@ -79,7 +79,7 @@ export function DealerCreditPanel({
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
-  // Khoá chống trừ nợ hai lần gắn với bộ giá trị {số tiền, mã GD} đã gửi: sau lỗi mạng/hết giờ (máy chủ có thể đã ghi rồi) gõ lại đúng bộ đó vẫn dùng khoá cũ, kể cả sau khi gập dòng (sessionStorage); chỉ bộ khác hoặc thành công mới đổi khoá.
+  // Khoá chống trừ nợ hai lần gắn với bộ {số tiền, mã GD, báo cáo} đã gửi: sau lỗi mạng/hết giờ (máy chủ có thể đã ghi rồi) gõ lại đúng bộ đó trong 15 phút tính từ lần gửi đầu vẫn dùng khoá cũ, kể cả sau khi gập dòng (sessionStorage). Quá 15 phút thì coi là một khoản mới, vì kế toán đã kịp thấy sổ tải lại.
   const sent = useRef<SentSet | null>(null);
   const { confirm, dialog } = useConfirm();
 
@@ -110,7 +110,7 @@ export function DealerCreditPanel({
       setMsg({
         ok: true,
         text: r.replayed
-          ? `Khoản này đã được ghi ở lần bấm trước, sổ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
+          ? `Khoản này đã được ghi ở lần bấm trước, sổ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}. Nếu đây là một lần chuyển khác, nhập mã GD rồi ghi lại.`
           : r.alreadyRecorded
           ? `Báo cáo này đã được ghi nhận trước đó, lần này sổ công nợ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
           : r.reportClosed === false
