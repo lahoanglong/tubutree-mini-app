@@ -2,6 +2,12 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { CommunityFeedService, containsBannedContent, levelFromReputation, levelName, slugifyTag } from './community-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { feedImageVersion, MAX_FEED_IMAGES } from './feed-images';
+import {
+  GUEST_IMAGE_OWN_LIMIT_MESSAGE,
+  GUEST_IMAGE_TOTAL_LIMIT_MESSAGE,
+  GUEST_PENDING_IMAGE_BYTES_MAX,
+  GUEST_PENDING_IMAGE_POSTS_MAX,
+} from './community-limits';
 
 function makePrisma(over: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
@@ -611,6 +617,57 @@ describe('CommunityFeedService.createPost', () => {
     const prisma = makePrisma();
     await makeSvc(prisma).createPost('u1', 'STAFF', { body: 'Có ảnh', images: ['https://res.cloudinary.com/a.jpg'] });
     expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].select).toEqual({ id: true });
+  });
+});
+
+describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (BAOMAT-02)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+  const guest = { phone: null, zaloId: 'guest_abc' };
+  function prismaFor(user: unknown, own: number, bytes: number) {
+    const prisma = makePrisma();
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    (prisma.$queryRaw as jest.Mock).mockReset().mockResolvedValueOnce([{ n: own }]).mockResolvedValueOnce([{ bytes }]);
+    return prisma;
+  }
+
+  it('khách vãng lai chưa có bài ảnh chờ duyệt, tổng còn chỗ → được đăng (PENDING)', async () => {
+    const prisma = prismaFor(guest, 0, 1_000);
+    await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ status: 'PENDING', images: [PNG] });
+  });
+
+  it('đã có 2 bài ảnh chờ duyệt → từ chối bài thứ 3, không ghi', async () => {
+    const prisma = prismaFor(guest, GUEST_PENDING_IMAGE_POSTS_MAX, 0);
+    await expect(makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Thêm', images: [PNG] })).rejects.toThrow(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+  });
+
+  it('tổng ảnh chờ duyệt của mọi khách vãng lai chạm trần → từ chối bài ảnh, bài chữ vẫn đăng', async () => {
+    const prisma = prismaFor(guest, 0, GUEST_PENDING_IMAGE_BYTES_MAX);
+    await expect(makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Thêm', images: [PNG] })).rejects.toThrow(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+    await expect(makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Chỉ chữ' })).resolves.toBeDefined();
+  });
+
+  it('ảnh Cloudinary không tính vào trần', async () => {
+    const prisma = prismaFor(guest, GUEST_PENDING_IMAGE_POSTS_MAX, GUEST_PENDING_IMAGE_BYTES_MAX);
+    await expect(
+      makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Ảnh ngoài', images: ['https://res.cloudinary.com/a.jpg'] }),
+    ).resolves.toBeDefined();
+  });
+
+  it('người dùng thật (có SĐT hoặc Zalo thật) không bị trần này', async () => {
+    for (const user of [{ phone: '0900000001', zaloId: 'guest_x' }, { phone: null, zaloId: 'zalo_real' }]) {
+      const prisma = prismaFor(user, GUEST_PENDING_IMAGE_POSTS_MAX, GUEST_PENDING_IMAGE_BYTES_MAX);
+      await expect(makeSvc(prisma).createPost('u1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] })).resolves.toBeDefined();
+    }
+  });
+
+  it('sửa bài thêm ảnh: khách vãng lai chạm trần bị từ chối, trần không tính bài đang sửa', async () => {
+    const prisma = prismaFor(guest, GUEST_PENDING_IMAGE_POSTS_MAX, 0);
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ userId: 'g1', status: 'PENDING', title: null, body: 'b' });
+    await expect(makeSvc(prisma).editPost('g1', 'p1', { images: [PNG] }, 'CUSTOMER')).rejects.toThrow(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+    expect(prisma.feedPost.update).not.toHaveBeenCalled();
   });
 });
 

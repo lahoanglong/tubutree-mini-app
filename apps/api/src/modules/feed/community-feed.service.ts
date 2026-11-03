@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommunityRewardService } from './community-reward.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -12,7 +12,15 @@ import { publicDisplayName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
 import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
-import { EVENT_REWARD_MAX_POINTS, EVENT_REWARD_MIN_POINTS } from './community-limits';
+import {
+  EVENT_REWARD_MAX_POINTS,
+  EVENT_REWARD_MIN_POINTS,
+  GUEST_IMAGE_OWN_LIMIT_MESSAGE,
+  GUEST_IMAGE_TOTAL_LIMIT_MESSAGE,
+  GUEST_PENDING_IMAGE_BYTES_MAX,
+  GUEST_PENDING_IMAGE_POSTS_MAX,
+} from './community-limits';
+import { isRealUser, REAL_USER_SQL } from '../../common/real-user';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
 import { publicAuthorName, PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
@@ -545,6 +553,29 @@ export class CommunityFeedService {
     };
   }
 
+  /**
+   * Khách vãng lai gửi ảnh base64 vào hàng chờ duyệt: chặn khi họ đã có sẵn bài kèm ảnh chờ duyệt, hoặc khi tổng ảnh chờ duyệt
+   * của mọi khách vãng lai đã chạm trần (xem community-limits.ts). `excludePostId` = bài đang sửa, không tính vào chính nó.
+   */
+  private async assertGuestImageQuota(userId: string, images: string[], excludePostId?: string): Promise<void> {
+    const incoming = images.filter((u) => u.startsWith('data:'));
+    if (incoming.length === 0) return;
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!user || isRealUser(user)) return;
+    const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
+    const [own] = await this.prisma.$queryRaw<{ n: number }[]>`
+      SELECT count(*)::int AS "n" FROM "feed_posts" p
+      WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
+        AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
+    if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+    const [total] = await this.prisma.$queryRaw<{ bytes: bigint | number }[]>`
+      SELECT COALESCE(sum(octet_length(i)), 0)::bigint AS "bytes"
+      FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId", unnest(p."images") AS i
+      WHERE p."status" = 'PENDING' ${exclude} AND left(i, 5) = 'data:' AND NOT ${REAL_USER_SQL}`;
+    const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
+    if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
+  }
+
   async createPost(userId: string, role: string, input: CreatePostInput): Promise<{ id: string; status: string }> {
     const kind = input.kind ?? 'MANUAL';
     const body = (input.body ?? '').trim();
@@ -590,6 +621,7 @@ export class CommunityFeedService {
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
     const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
+    if (status === 'PENDING') await this.assertGuestImageQuota(userId, images);
 
     const post = await this.prisma.feedPost.create({
       data: {
@@ -1053,7 +1085,11 @@ export class CommunityFeedService {
       data.body = b;
     }
     if (patch.title !== undefined) data.title = patch.title.trim().slice(0, MAX_TITLE) || null;
-    if (patch.images !== undefined) data.images = patch.images.filter((u) => u?.trim()).slice(0, MAX_FEED_IMAGES);
+    if (patch.images !== undefined) {
+      const images = patch.images.filter((u) => u?.trim()).slice(0, MAX_FEED_IMAGES);
+      await this.assertGuestImageQuota(userId, images, postId);
+      data.images = images;
+    }
 
     // Đổi NỘI DUNG (body/title/ảnh) của bài ĐÃ ĐƯỢC DUYỆT, bởi tác giả chưa thuộc nhóm tin cậy
     // → trả về PENDING để kiểm duyệt lại. Không có bước này thì: bài hiền lành được duyệt (đồng

@@ -29,7 +29,7 @@ describe('PlaceOrderDto.note', () => {
 
 describe('CreatePostDto / EditPostDto.images', () => {
   const url = 'https://res.cloudinary.com/tubu/image/upload/v1/a.jpg';
-  const dataUrl = `data:image/jpeg;base64,${'A'.repeat(300_000)}`;
+  const dataUrl = `data:image/jpeg;base64,/9j/${'A'.repeat(300_000)}`;
   it('ảnh Cloudinary và ảnh nén base64 (đường dự phòng của MultiImageUpload) → hợp lệ', async () => {
     expect(await errorsFor(CreatePostDto, { body: 'Cây mới', images: [url, dataUrl] })).toEqual([]);
   });
