@@ -829,6 +829,17 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect((svc as unknown as { rankCache: Map<string, unknown> }).rankCache.size).toBe(0);
   });
 
+  it('Liên quan: trang 1 luôn chạy lại SQL (SP mới duyệt hiện ngay), chỉ trang sau dùng bộ nhớ khớp', async () => {
+    const queryRaw = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'p1' }]);
+    const { svc, findMany } = setup(queryRaw);
+    await svc.list({ page: 1, limit: 20, q: '%' });
+    await svc.list({ page: 1, limit: 20, q: '%' });
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(findMany.mock.calls.at(-1)![0].where)).toContain('"in":["p1"]');
+    await svc.list({ page: 2, limit: 20, q: '%' });
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+  });
+
   it('bộ nhớ khớp từ khoá: ghi lại khoá đã hết hạn thì không đẩy khoá khác ra, và khoá đó thành mới nhất', async () => {
     const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
     const { svc } = setup(queryRaw);

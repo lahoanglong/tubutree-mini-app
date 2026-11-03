@@ -553,6 +553,16 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(heading.textContent!.replace(/​/g, '')).toBe(`Không tìm thấy "${'a'.repeat(100)}"`);
   });
 
+  it('từ khoá dài toàn emoji ZWJ: điểm ngắt không chèn vào giữa một emoji gia đình', async () => {
+    const fam = '👨‍👩‍👧';
+    mocks.fetchCatalog.mockResolvedValue(pageOf([]));
+    renderAt(`/browse?q=${encodeURIComponent(fam.repeat(14))}`);
+    const heading = await screen.findByText((t) => t.startsWith('Không tìm thấy'));
+    expect(heading.textContent).toContain('\u200B');
+    expect(heading.textContent).not.toContain('\u200D\u200B');
+    expect(heading.textContent!.replace(/\u200B/g, '')).toBe(`Không tìm thấy "${fam.repeat(14)}"`);
+  });
+
   it('không có kết quả, chỉ còn bộ lọc → "Xoá tìm kiếm & bộ lọc" ra ?all=1 (danh sách, không về hub)', async () => {
     mocks.fetchCatalog.mockResolvedValue(pageOf([]));
     renderAt('/browse?inStock=1');

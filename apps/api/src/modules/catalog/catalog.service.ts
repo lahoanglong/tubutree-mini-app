@@ -447,7 +447,7 @@ export class CatalogService {
       where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category };
     }
     if (segment) where.forSegment = { has: segment };
-    const text = await this.textWhere(query.q, Boolean(relevance) && !query.sort);
+    const text = await this.textWhere(query.q, Boolean(relevance) && !query.sort, (query.page ?? 1) > 1);
     if (text) and.push(text.where);
     if (text?.ids) relevance?.push(text.ids);
     // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
@@ -460,7 +460,8 @@ export class CatalogService {
 
   /**
    * Thứ tự khớp của một từ khoá được giữ MATCH_TTL_MS (khoá ngắn là chính từ khoá, tách khỏi rankCache): trang 2 của "Liên quan" xếp theo
-   * đúng thứ tự trang 1 dù số đã bán đổi giữa hai lượt tải, nên không sản phẩm nào nhảy trang rồi bị sót.
+   * đúng thứ tự trang 1 dù số đã bán đổi giữa hai lượt tải, nên không sản phẩm nào nhảy trang rồi bị sót. Chỉ trang > 1 đọc lại bộ nhớ;
+   * trang 1 luôn chạy SQL rồi ghi đè, nên sản phẩm mới duyệt/đổi tên hiện ngay ở lượt tìm mới.
    */
   private readonly matchCache = new Map<string, { ids: string[]; expiresAt: number }>();
   private readonly MATCH_TTL_MS = 60_000;
@@ -488,11 +489,11 @@ export class CatalogService {
    * Khớp từ khoá qua `textMatchSql`. SQL lỗi (vd DB chưa chạy migration cột nameSearch) → lùi về
    * `contains` cũ cho request đó, không tắt cờ vĩnh viễn (lỗi tạm thời không làm hỏng cả phiên).
    */
-  private async textWhere(q: string | undefined, remember = false): Promise<{ where: Prisma.ProductWhereInput; ids?: string[] } | undefined> {
+  private async textWhere(q: string | undefined, remember = false, reuse = false): Promise<{ where: Prisma.ProductWhereInput; ids?: string[] } | undefined> {
     const raw = (q ?? '').trim();
     if (!foldVietnamese(raw)) return undefined;
     try {
-      const ids = (remember && this.recallMatch(raw)) || (await this.rememberMatch(raw, remember));
+      const ids = (remember && reuse && this.recallMatch(raw)) || (await this.rememberMatch(raw, remember));
       return { where: { id: { in: ids } }, ids };
     } catch (err) {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
