@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import type { Order, OrderItem } from '@prisma/client';
+import type { Order, OrderItem, PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import type { PancakeOrderDTO } from './pancake.types';
@@ -145,6 +145,16 @@ export function mayExistOnPancake(order: Pick<Order, 'pancakeOrderId' | 'pancake
  * mã đơn trước, có thì nhận đơn đó, không thì mới tạo. Pancake từ chối dứt khoát (4xx) thì chắc chắn chưa tạo → gỡ
  * mốc. Vì vậy enqueue lại bao nhiêu lần cũng an toàn (không còn phải giữ job completed làm "chốt chặn").
  */
+/** Nhãn phương thức thanh toán trong lời báo lỗi admin; Record đầy đủ theo enum để thêm phương thức mới thì tsc buộc điền. */
+const PAYMENT_METHOD_LABEL_VI: Record<PaymentMethod, string> = {
+  COD: 'COD',
+  ZALOPAY: 'ZaloPay',
+  VNPAY: 'VNPAY',
+  BANK_TRANSFER: 'chuyển khoản',
+  WALLET: 'ví Tubu',
+  XU: 'Xu',
+};
+
 @Injectable()
 export class PancakeOrderService {
   private readonly logger = new Logger(PancakeOrderService.name);
@@ -359,7 +369,7 @@ export class PancakeOrderService {
       throw new BadRequestException(`Đơn ${order.code} đã ở trạng thái «${orderStatusLabelVi(order.status)}» — không đẩy để tránh kho giao lần hai.`);
     }
     if (gate === 'WAIT_PAYMENT') {
-      throw new BadRequestException(`Đơn ${order.code} trả trước (${order.paymentMethod === 'BANK_TRANSFER' ? 'chuyển khoản' : order.paymentMethod === 'ZALOPAY' ? 'ZaloPay' : 'ví Tubu'}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`);
+      throw new BadRequestException(`Đơn ${order.code} trả trước (${PAYMENT_METHOD_LABEL_VI[order.paymentMethod] ?? order.paymentMethod}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`);
     }
     if (gate === 'WAIT_STOCK') {
       throw new BadRequestException(`Đơn ${order.code} còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.`);

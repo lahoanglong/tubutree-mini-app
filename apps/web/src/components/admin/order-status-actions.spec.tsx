@@ -438,7 +438,7 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
   });
 
   it('nút trạng thái gọi PUT /admin/orders/:id/status; lỗi 400 hiện nguyên văn', async () => {
-    const msg = 'Không thể chuyển đơn từ PENDING_PAYMENT sang PACKED.';
+    const msg = 'Đơn đang ở «Chờ thanh toán», không chuyển sang «Đang đóng gói» được. Tải lại đơn để xem trạng thái mới.';
     const api = mockFetch({ '/status': { status: 400, body: { statusCode: 400, message: msg } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<OrderStatusActions order={order()} />);

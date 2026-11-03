@@ -35,14 +35,15 @@ import {
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
 
+import { isStaffOwnOrder } from '../../common/staff-own-order';
+import { assertBankRefUnusedByOrder, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
+
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
   PAID: 'Đã thanh toán',
   REFUNDED: 'Đã hoàn tiền',
   FAILED: 'Thanh toán lỗi',
 };
-import { isStaffOwnOrder } from '../../common/staff-own-order';
-import { assertBankRefUnusedByOrder, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 
 interface BonusTier {
   min: number;

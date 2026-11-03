@@ -465,6 +465,19 @@ describe('PancakeOrderService.retryPushByAdmin (PANCAKE-9, ADMINOPS-4)', () => {
   });
 });
 
+describe('PancakeOrderService.retryPushByAdmin: nhãn phương thức trả trước', () => {
+  it.each([
+    ['VNPAY', 'VNPAY'],
+    ['XU', 'Xu'],
+    ['WALLET', 'ví Tubu'],
+    ['ZALOPAY', 'ZaloPay'],
+  ])('%s → nêu "%s", không gộp thành ví Tubu', async (paymentMethod, label) => {
+    const t = setup({ paymentMethod, status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' });
+    const err = await t.svc.retryPushByAdmin('admin1', 'o1').catch((e: unknown) => e);
+    expect((err as Error).message).toContain(`trả trước (${label}) chưa thanh toán`);
+  });
+});
+
 describe('PancakeOrderService.syncPayment', () => {
   it('đơn đã lên Pancake lúc chờ chuyển khoản, nay PAID → PUT transfer_money = tổng, cod = 0', async () => {
     const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
