@@ -11,7 +11,7 @@ vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: 
 const quoteFail = vi.hoisted(() => ({ error: null as Error | null }));
 const cartExtra = vi.hoisted(() => ({ coupon: null as string | null, discount: 0, second: false, combo: 0, tier: 0 }));
 const addrMode = vi.hoisted(() => ({ none: false }));
-const quoteExtra = vi.hoisted(() => ({ pointsEarned: 0, shippingFee: 30000 }));
+const quoteExtra = vi.hoisted(() => ({ pointsEarned: 0, shippingFee: 30000, discount: 0, hang: false }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => ({
@@ -32,8 +32,9 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ],
   checkoutQuote: async () => {
     if (quoteFail.error) throw quoteFail.error;
+    if (quoteExtra.hang) await new Promise(() => {});
     return {
-    subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: quoteExtra.shippingFee, total: 300000 + quoteExtra.shippingFee, pointsEarned: quoteExtra.pointsEarned,
+    subtotal: 300000, discount: quoteExtra.discount, pointsUsed: 0, pointsDiscount: 0, shippingFee: quoteExtra.shippingFee, total: 300000 + quoteExtra.shippingFee, pointsEarned: quoteExtra.pointsEarned,
     pointsBalance: 500, redeemablePoints: 500,
     };
   },
@@ -60,6 +61,8 @@ beforeEach(() => {
   cartExtra.tier = 0;
   quoteExtra.pointsEarned = 0;
   quoteExtra.shippingFee = 30000;
+  quoteExtra.discount = 0;
+  quoteExtra.hang = false;
   addrMode.none = false;
 });
 afterEach(() => {
@@ -261,6 +264,8 @@ describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ 
     const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
     expect(summary.textContent).not.toContain('Giảm giá combo');
     expect(summary.textContent).not.toContain('-15.000đ');
+    expect(summary.textContent).not.toContain('-20.000đ');
+    expect(summary.textContent).toContain('Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.');
   });
 
   it('không có mã trong giỏ: không ghi dòng giảm giá dù discount > 0', async () => {
@@ -268,5 +273,63 @@ describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ 
     addrMode.none = true;
     const c = await mount();
     expect(c.querySelector('[data-mini-block="summary"]')!.textContent).not.toContain('-20.000đ');
+  });
+});
+
+describe('/thanh-toan — thẻ tóm tắt khớp Mini ở 375 (nhãn trơn, chỉ giá trị xanh)', () => {
+  const summaryOf = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+
+  it('dòng Giảm giá của báo giá: nhãn không xanh dưới md, hậu tố mã chỉ từ md, giá trị xanh', async () => {
+    cartExtra.coupon = 'XANH10';
+    quoteExtra.discount = 20000;
+    const c = await mount();
+    const value = Array.from(summaryOf(c).querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === '-20.000đ')!;
+    expect(value.className).toMatch(/(^|\s)text-success-fg/);
+    const row = value.parentElement!;
+    expect(row.className).not.toMatch(/(^|\s)text-success-fg/);
+    const label = row.firstElementChild as HTMLElement;
+    expect(label.className).not.toMatch(/(^|\s)text-success-fg/);
+    const suffix = label.querySelector<HTMLElement>('span')!;
+    expect(suffix.textContent).toContain('XANH10');
+    expect(suffix.className).toMatch(/\bhidden\b/);
+    expect(suffix.className).toMatch(/\bmd:inline\b/);
+  });
+
+  it('chưa có báo giá: thứ tự combo, Giảm giá, Ưu đãi hạng như Mini', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    cartExtra.tier = 5000;
+    addrMode.none = true;
+    const t = summaryOf(await mount()).textContent!;
+    expect(t.indexOf('Giảm giá combo')).toBeGreaterThan(-1);
+    expect(t.indexOf('Giảm giá combo')).toBeLessThan(t.indexOf('-20.000đ'));
+    expect(t.indexOf('-20.000đ')).toBeLessThan(t.indexOf('Ưu đãi hạng thành viên'));
+  });
+
+  it('báo giá lỗi: không chen dòng giảm xem trước cạnh dòng lỗi; nút Chi tiết vẫn bấm được như Mini', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    quoteFail.error = new ApiError('Địa chỉ giao hàng chưa theo địa giới mới.', 400, 'ADDRESS_OUTDATED');
+    const c = await mount();
+    const s = summaryOf(c);
+    expect(s.textContent).not.toContain('-20.000đ');
+    expect(s.textContent).not.toContain('-15.000đ');
+    const btn = Array.from(s.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!;
+    expect(btn.disabled).toBe(false);
+  });
+
+  it('đang tải lại báo giá (bấm Dùng Điểm Xanh): không chen dòng giảm xem trước, không nhảy dòng', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    const c = await mount();
+    expect(summaryOf(c).textContent).not.toContain('Giảm giá combo');
+    quoteExtra.hang = true;
+    click(c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[type="checkbox"]')!);
+    await flush(4);
+    expect(c.textContent).not.toContain('Giảm giá combo');
+    expect(c.textContent).not.toContain('-15.000đ');
   });
 });

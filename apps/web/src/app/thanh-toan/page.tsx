@@ -496,9 +496,12 @@ export default function CheckoutPage() {
   // Chưa có báo giá: xem trước khoản giảm từ giỏ như Mini. Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ; mua một phần thì máy chủ tính lại.
   const earnedLabel = quote ? `Nhận +${formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công` : '';
   const wholeCart = !itemIds || itemIds.length === (cart?.items.length ?? 0);
-  const previewCombo = !quote && wholeCart ? (cart?.comboDiscount ?? 0) : 0;
-  const previewDiscount = !quote && wholeCart && cart?.couponCode ? (cart.discount ?? 0) : 0;
-  const previewTier = !quote && wholeCart ? (cart?.tierDiscount ?? 0) : 0;
+  const previewCombo = wholeCart ? (cart?.comboDiscount ?? 0) : 0;
+  const previewDiscount = wholeCart && cart?.couponCode ? (cart.discount ?? 0) : 0;
+  const previewTier = wholeCart ? (cart?.tierDiscount ?? 0) : 0;
+  // Như Mini: thẻ tóm tắt chỉ dùng xem trước khi báo giá không chạy (chưa có địa chỉ); đang tải hay lỗi thì không chen dòng giảm vào.
+  const cardPreview = !quote && !quoteQ.isLoading && !quoteQ.isError;
+  const previewRecalcNote = !wholeCart && (!!cart?.couponCode || (cart?.comboDiscount ?? 0) > 0 || (cart?.tierDiscount ?? 0) > 0);
   const paymentMethods = [
     { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
     { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
@@ -737,7 +740,6 @@ export default function CheckoutPage() {
             <button
               type="button"
               onClick={() => setSummarySheetOpen(true)}
-              disabled={quoteQ.isError}
               aria-haspopup="dialog"
               className="inline-flex min-h-11 items-center gap-1 text-caption font-bold text-[color:var(--color-text-brand)]"
             >
@@ -746,18 +748,29 @@ export default function CheckoutPage() {
             </button>
           </div>
           <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
+          {cardPreview && previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} green />}
+          {cardPreview && previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} green />}
+          {cardPreview && previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} green />}
+          {cardPreview && previewRecalcNote && (
+            <p className="py-1 text-caption text-[color:var(--color-text-secondary)]">Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.</p>
+          )}
           {(quote?.discount ?? 0) > 0 && (
-            <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
+            <Row
+              label={<>Giảm giá<span className="hidden md:inline">{cart?.couponCode ? ` (${cart.couponCode})` : ''}</span></>}
+              value={`-${formatVnd(quote!.discount)}`}
+              green
+            />
           )}
           {(quote?.comboDiscount ?? 0) > 0 && <Row label="Ưu đãi combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
           {(quote?.tierDiscount ?? 0) > 0 && (
             <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
-          {previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} valueGreen />}
-          {previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} valueGreen />}
-          {previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} valueGreen />}
           {(quote?.pointsDiscount ?? 0) > 0 && (
-            <Row label={`Điểm Xanh (${formatCount(quote!.pointsUsed)})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
+            <Row
+              label={<>Điểm Xanh<span className="hidden md:inline">{` (${formatCount(quote!.pointsUsed)})`}</span></>}
+              value={`-${formatVnd(quote!.pointsDiscount)}`}
+              green
+            />
           )}
           <Row
             label="Phí vận chuyển"
@@ -981,14 +994,14 @@ export default function CheckoutPage() {
 }
 
 // Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
-function Row({ label, value, green, valueGreen, ds }: { label: string; value: string; green?: boolean; valueGreen?: boolean; ds?: string }) {
+function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; value: string; green?: boolean; valueGreen?: boolean; ds?: string }) {
   return (
     <div
       data-ds={ds}
-      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
+      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-[color:var(--color-text-primary)] md:text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
     >
-      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 ${green ? '' : 'text-[color:var(--color-text-secondary)]'}`}>{label}</span>
-      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5 ${valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
+      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 text-[color:var(--color-text-secondary)] ${green ? 'md:text-inherit' : ''}`}>{label}</span>
+      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5 ${green || valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
     </div>
   );
 }
