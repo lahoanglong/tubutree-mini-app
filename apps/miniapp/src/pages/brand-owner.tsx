@@ -35,6 +35,7 @@ import { Field } from '../components/ui/form';
 import { Text, Heading } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
 import { haptic } from '../utils/haptic';
+import { promoDateRangeInvalid, promoFormDates, promoWindow } from '../utils/brand-owner-promo';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BrandSalesTab } from './brand-owner-sales';
@@ -125,22 +126,14 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   // báo lỗi (an toàn hơn tự sửa hộ dữ liệu người dùng nhập). Khi CHỈ có endAt (startAt để trống),
   // promoIso() mặc định startMs = Date.now() nên phải so endAt với hiện tại — nếu không, endAt là
   // ngày quá khứ vẫn lọt qua vì !!promo.startAt là false, tạo ra khuyến mãi chết ngay khi lưu.
-  const dateRangeInvalid =
-    (!!promo.startAt && !!promo.endAt && new Date(promo.endAt).getTime() < new Date(promo.startAt).getTime()) ||
-    (!promo.startAt && !!promo.endAt && new Date(promo.endAt).getTime() < Date.now());
-  // startAt/endAt (yyyy-mm-dd từ input date) → ISO. endAt mặc định = startAt + 30 ngày
-  // (KHÔNG phải now+30d — nếu chiến dịch bắt đầu >30 ngày sau thì endAt<startAt, KM không bao giờ hiện).
-  const promoIso = () => {
-    const startMs = promo.startAt ? new Date(promo.startAt).getTime() : Date.now();
-    const endMs = promo.endAt ? new Date(promo.endAt).getTime() : startMs + 30 * 864e5;
-    return {
-      title: promo.title.trim(),
-      subtitle: promo.subtitle.trim() || undefined,
-      couponCode: promo.couponCode.trim().toUpperCase() || undefined,
-      startAt: new Date(startMs).toISOString(),
-      endAt: new Date(endMs).toISOString(),
-    };
-  };
+  const dateRangeInvalid = promoDateRangeInvalid(promo);
+  // startAt/endAt (yyyy-mm-dd từ input date) → ISO theo giờ VN; endAt mặc định = startAt + 30 ngày (xem vnPromoWindowIso).
+  const promoIso = () => ({
+    title: promo.title.trim(),
+    subtitle: promo.subtitle.trim() || undefined,
+    couponCode: promo.couponCode.trim().toUpperCase() || undefined,
+    ...promoWindow(promo),
+  });
   const addPromo = useMutation({
     mutationFn: () => createOwnedPromotion(promoIso()),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã thêm khuyến mãi', type: 'success' }); void refresh(); },
@@ -166,8 +159,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
       title: p.title,
       subtitle: p.subtitle ?? '',
       couponCode: p.couponCode ?? '',
-      startAt: p.startAt ? new Date(p.startAt).toISOString().slice(0, 10) : '',
-      endAt: p.endAt ? new Date(p.endAt).toISOString().slice(0, 10) : '',
+      ...promoFormDates(p),
     });
   };
 

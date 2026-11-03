@@ -13,6 +13,23 @@ describe('promoDateRangeInvalid', () => {
   });
 });
 
+describe('khuyến mãi theo ngày giờ Việt Nam (TZ-02)', () => {
+  it('bắt đầu bằng kết thúc không bị chặn', () => expect(promoDateRangeInvalid(form({ startAt: '2026-11-20', endAt: '2026-11-20' }), NOW)).toBe(false));
+  it('chỉ có kết thúc là hôm nay (giờ VN) vẫn hợp lệ sau 07:00 sáng', () => {
+    expect(promoDateRangeInvalid(form({ endAt: '2026-11-20' }), Date.parse('2026-11-20T01:00:00Z'))).toBe(false);
+  });
+  it('promoPayload: đầu ngày bắt đầu, cuối ngày kết thúc theo +07:00', () => {
+    const p = promoPayload(form({ startAt: '2026-11-20', endAt: '2026-11-20' }), NOW);
+    expect(p.startAt).toBe('2026-11-19T17:00:00.000Z');
+    expect(p.endAt).toBe('2026-11-20T16:59:59.000Z');
+  });
+  it('promoToForm đổi ngược ra ngày VN, khứ hồi với khuyến mãi admin tạo', () => {
+    const f = promoToForm({ id: 'p', title: 'T', subtitle: null, couponCode: null, startAt: '2026-11-19T17:00:00.000Z', endAt: '2026-11-20T16:59:59.000Z', isActive: true });
+    expect(f.startAt).toBe('2026-11-20');
+    expect(f.endAt).toBe('2026-11-20');
+  });
+});
+
 describe('promoPayload', () => {
   it('cắt khoảng trắng, viết hoa mã, bỏ trường rỗng', () => {
     const p = promoPayload(form({ title: ' A ', couponCode: ' tubu20 ' }), NOW);
