@@ -7,7 +7,7 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 
 // Cùng quy tắc với form địa chỉ của miniapp/web (VN_PHONE) — địa chỉ đi thẳng sang Pancake và shipper.
 const VN_PHONE = /^(0|\+84)\d{9}$/;
-const NO_HTML = /^[^<>]*$/;
+export const NO_HTML = /^[^<>]*$/;
 const NEW_GEO = /^84_VN[0-9A-Za-z_]+$/;
 const PHONE_MSG = { message: 'Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0 hoặc +84).' };
 const NO_HTML_MSG = { message: 'Tên người nhận và địa chỉ không được chứa ký tự < hoặc >.' };

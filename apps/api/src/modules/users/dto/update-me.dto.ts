@@ -1,10 +1,13 @@
-import { IsEmail, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MaxLength } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
+import { IsAvatarUrl } from '../../../common/uploaded-image';
+import { NO_HTML } from './address.dto';
 
 export class UpdateMeDto {
   @OptionalNotNull()
   @IsString()
   @MaxLength(120)
+  @Matches(NO_HTML, { message: 'Tên không được chứa ký tự < hoặc >.' })
   fullName?: string;
 
   @OptionalNotNull()
@@ -12,8 +15,7 @@ export class UpdateMeDto {
   email?: string;
 
   @OptionalNotNull()
-  @IsUrl({ require_protocol: true })
-  @MaxLength(1000)
+  @IsAvatarUrl()
   avatarUrl?: string;
 
   /**

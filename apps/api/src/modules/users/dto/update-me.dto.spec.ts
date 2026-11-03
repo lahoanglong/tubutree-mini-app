@@ -11,6 +11,27 @@ describe('UpdateMeDto.avatarUrl', () => {
     expect(errorsOf({ avatarUrl: 'https://res.cloudinary.com/demo/image/upload/v1/a.jpg' })).toEqual([]);
   });
 
+  // BAOMAT-05: trước đây nhận mọi host (kể cả http://169.254.169.254/).
+  it.each([
+    'https://s120-ava-talk.zadn.vn/a/b/c/1234.jpg',
+    'https://zalo-api.zadn.vn/avatar.png',
+    'https://s75-ava-talk.zdn.vn/x.jpg',
+  ])('nhận ảnh đại diện Zalo %s', (avatarUrl) => {
+    expect(errorsOf({ avatarUrl })).toEqual([]);
+  });
+
+  it.each([
+    'https://evil.example/a.png',
+    'http://169.254.169.254/',
+    'http://res.cloudinary.com/demo/a.jpg',
+    'https://res.cloudinary.com.evil.example/a.jpg',
+    'https://evilzadn.vn/a.jpg',
+    'https://user:pass@res.cloudinary.com/a.jpg',
+    'https://zadn.vn.evil.example/a.jpg',
+  ])('từ chối host ngoài danh sách %s', (avatarUrl) => {
+    expect(errorsOf({ avatarUrl })).toEqual(['avatarUrl']);
+  });
+
   it.each([
     'data:image/jpeg;base64,/9j/4AAQSkZJRg==',
     'data:image/png;base64,iVBORw0KGgo=',
@@ -23,5 +44,15 @@ describe('UpdateMeDto.avatarUrl', () => {
 
   it('từ chối URL quá dài (trần 1000 ký tự)', () => {
     expect(errorsOf({ avatarUrl: `https://res.cloudinary.com/${'a'.repeat(1000)}.jpg` })).toEqual(['avatarUrl']);
+  });
+});
+
+// BAOMAT-09: tên người nhận ở địa chỉ từ chối < và >, hồ sơ phải cùng quy tắc.
+describe('UpdateMeDto.fullName', () => {
+  it('nhận tên có dấu, dấu nháy và dấu gạch', () => {
+    expect(errorsOf({ fullName: "Lã Hoàng Long O'Neil-Trần" })).toEqual([]);
+  });
+  it.each(['<img src=x onerror=alert(1)>', 'An <b>', 'a>b'])('từ chối %s', (fullName) => {
+    expect(errorsOf({ fullName })).toEqual(['fullName']);
   });
 });
