@@ -1246,12 +1246,15 @@ export class AffiliateService {
             {
               month: `${first.monthKey.slice(5, 7)}/${first.monthKey.slice(0, 4)}`,
               milestone: titles.join(' và '),
+              // Thu được 0 điểm (số dư hết, toàn bộ thành nợ) thì không được báo "0 Điểm Xanh đã được thu lại".
+              taken_note: taken > 0 ? `${taken.toLocaleString('vi-VN')} Điểm Xanh thưởng mốc đã được thu lại` : 'thưởng mốc đã được ghi nợ',
+              // Mẫu admin đã sửa tay từ chữ cũ (migration 20261103200000 không ghi đè) vẫn dùng {{points}}.
               points: taken.toLocaleString('vi-VN'),
               // Chỉ tháng này và tháng trước nhận được mốc, và hoa hồng chỉ được duyệt vào tháng hiện tại: tháng đã qua thì doanh số
               // không tăng lại nên không hứa nhận lại.
               debt_note:
                 debt > 0
-                  ? ` (còn ${debt.toLocaleString('vi-VN')} điểm chưa thu hết vì số dư thiếu${isCurrentMonth ? ', sẽ trừ khi bạn nhận lại mốc' : ''})`
+                  ? ` (${taken > 0 ? 'còn ' : ''}${debt.toLocaleString('vi-VN')} điểm ${taken > 0 ? 'chưa thu hết' : 'chưa thu được'} vì số dư thiếu${isCurrentMonth ? ', sẽ trừ khi bạn nhận lại mốc' : ''})`
                   : '',
               reclaim_note: isCurrentMonth ? ' Doanh số lên lại ngưỡng thì bạn nhận lại được.' : '',
             },

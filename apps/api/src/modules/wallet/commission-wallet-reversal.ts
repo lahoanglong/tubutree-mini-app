@@ -56,7 +56,7 @@ export interface CommissionManualNote {
 /**
  * Thứ tự khoá cho lần trả một phần: dòng hoa hồng của đơn trước (requestPayout khoá dòng hoa hồng rồi mới tới Ví CTV, nên đi ngược
  * lại là 40P01), rồi Ví của khách và của CTV theo thứ tự id (hai đơn có vai trò đảo nhau, khách A với CTV B và khách B với CTV A,
- * không giữ mỗi bên một dòng rồi chờ dòng kia). Chỉ khoá user khi có hoa hồng đã chốt (APPROVED/PAID: trừ Ví CTV hoặc thu điểm mốc doanh số) và hai bên là hai người.
+ * không giữ mỗi bên một dòng rồi chờ dòng kia). Chỉ khoá user khi có hoa hồng PAID đã vào Ví (trừ Ví CTV) hoặc APPROVED chưa chuyển (thu điểm mốc doanh số) và hai bên là hai người.
  */
 export async function lockCommissionsAndWallets(tx: Prisma.TransactionClient, order: { id: string; userId: string }): Promise<void> {
   const rows = await tx.$queryRaw<{ affiliateUserId: string; status: CommissionStatus; payoutBatchId: string | null }[]>`
