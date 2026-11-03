@@ -35,9 +35,19 @@ describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
     mocks.fullName = 'Trần Văn An';
     mocks.loyalty.mockResolvedValue({ tier: { name: 'Đại Sứ Vườn Xanh Bậc Cao Nhất' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     render(<MemberCard />);
-    expect(screen.getByText('Chào An').style.flexShrink).toBe('0');
     const tier = (await screen.findByText(/Đại Sứ/)).closest('span')!;
+    expect(screen.getByText('Chào An').style.flexShrink).toBe('0');
     expect(tier.style.flexGrow).toBe('1');
+  });
+
+  it('chưa có tên bậc (loyalty đang tải): lời chào dài một chữ vẫn co được để có "…", không tràn đè nút', () => {
+    mocks.fullName = 'Thanhthuy1990shopmyphamthiennhien';
+    mocks.loyalty.mockImplementation(() => new Promise(() => {}));
+    render(<MemberCard />);
+    const greeting = screen.getByText(/^Chào Thanhthuy/);
+    expect(greeting.style.flexShrink).not.toBe('0');
+    expect(greeting.style.overflow).toBe('hidden');
+    expect(greeting.style.minWidth).toBe('0px');
   });
 
   it('chưa có họ tên thì chào bạn', () => {

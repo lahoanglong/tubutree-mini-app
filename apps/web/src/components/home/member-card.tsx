@@ -73,7 +73,7 @@ export function MemberCard() {
         >
           <div style={{ flex: 1, minWidth: 0 }}>
             <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
-              <span style={{ flexShrink: 0, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', ...(card.tierName ? { maxWidth: '60%' } : {}) }}>{greeting}</span>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', ...(card.tierName ? { flexShrink: 0, maxWidth: '60%' } : {}) }}>{greeting}</span>
               {card.tierName && (
                 <span style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {'\u00A0· '}

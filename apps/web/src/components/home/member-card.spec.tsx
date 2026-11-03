@@ -91,6 +91,15 @@ describe('MemberCard web — tên bậc dài và dải lỗi cấp trang', () =>
     expect(tier.style.flexGrow).toBe('1');
   });
 
+  it('chưa có tên bậc (loyalty lỗi): lời chào dài một chữ vẫn co được để có "…", không tràn đè nút', async () => {
+    mocks.fullName = 'Thanhthuy1990shopmyphamthiennhien';
+    mocks.get.mockRejectedValue(new Error('500'));
+    const c = await mount(<MemberCard />);
+    const greeting = Array.from(c.querySelectorAll('span')).find((s) => s.textContent?.startsWith('Chào Thanhthuy'))!;
+    expect(greeting.style.flexShrink).not.toBe('0');
+    expect(greeting.style.overflow).toBe('hidden');
+  });
+
   it('điểm lỗi: Trang chủ đã có dải lỗi cấp trang thì không còn nút Thử lại thứ hai', async () => {
     mocks.get.mockRejectedValue(new Error('500'));
     const c = await mount(<MemberCard />);
