@@ -248,8 +248,15 @@ export const bodyParserErrorHandler: ErrorRequestHandler = (err: unknown, _req, 
   // urlencoded: quá 1000 tham số (parameterLimit) hoặc qs ném RangeError khi vượt trần → 400 như thân JSON quá phức tạp.
   if (e?.type === 'parameters.too.many') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   if (e?.type === 'querystring.parse.rangeError') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
-  if (status === 400 && typeof e?.type === 'string' && e.type.startsWith('entity.')) {
-    return reject(res, 400, 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.');
+  // Khách đóng kết nối giữa chừng: không còn ai nhận phản hồi, chỉ đóng.
+  if (e?.type === 'request.aborted') {
+    if (!res.headersSent) res.end();
+    return;
+  }
+  // Mọi lỗi 4xx khác của parser (JSON hỏng, thân gzip/deflate hỏng `Z_*` không có `type`...) là lỗi của request:
+  // trả JSON tại đây, không để Nest ghi stack cho mỗi request ẩn danh lặp lại và không lộ chữ của zlib.
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    return reject(res, status, 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.');
   }
   next(err);
 };

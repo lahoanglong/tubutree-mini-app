@@ -313,6 +313,14 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
     });
   });
 
+  it.each(['gzip', 'deflate'])('thân %s hỏng → 400 JSON, không lộ chữ của zlib', async (enc) => {
+    const res = await fetch(base + '/api/cart/coupon', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': enc }, body: 'khong-phai-du-lieu-nen' });
+    expect(res.status).toBe(400);
+    const body = await bodyOf(res);
+    expect(body).toMatchObject({ statusCode: 400, message: 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.' });
+    expect(JSON.stringify(body)).not.toMatch(/header check|zlib|Z_/i);
+  });
+
   it('Content-Encoding lạ → 415 JSON, không chuyển lỗi cho Nest', async () => {
     const res = await post('/api/cart/coupon', { a: 1 }, { 'content-encoding': 'br2' });
     expect(res.status).toBe(415);
