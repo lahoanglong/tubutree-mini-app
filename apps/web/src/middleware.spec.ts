@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
+import { LEGAL_SLUGS } from '@/lib/legal';
 import { middleware } from './middleware';
 
 const visit = (host: string, path = '/') => middleware(new NextRequest(`https://${host}${path}`, { headers: { host } }));
@@ -53,14 +54,34 @@ describe('middleware: Trang chủ cho khách đã có cookie phiên', () => {
 });
 
 describe('middleware: slug dài vô lý không vào cache trang theo [slug]', () => {
-  it('slug > 120 ký tự trả 404 không cache; slug thường đi thẳng', () => {
-    const long = 'a'.repeat(121);
-    for (const base of ['san-pham', 'brand', 'chinh-sach', 's', 'mua-chung', 'chien-dich', 'hoc-vien']) {
-      const res = visit('tubutree.com', `/${base}/${long}`);
-      expect(res.status, base).toBe(404);
-      expect(res.headers.get('cache-control'), base).toBe('no-store');
-      expect(visit('tubutree.com', `/${base}/${'a'.repeat(120)}`).status, base).toBe(200);
+  const notFoundOf = (res: Response) => res.status === 404 && res.headers.get('cache-control') === 'no-store' && !!rewriteOf(res);
+  // Slug dài nhất API sinh ra: tên 200 ký tự (tối đa merchant DTO) -> slugify + '-' + Date.now().toString(36).
+  const longestSlug = `${'a'.repeat(199)}-${Date.now().toString(36)}`;
+
+  it('slug thật dài nhất API sinh ra (~209 ký tự) vẫn đi thẳng ở san-pham, s, brand', () => {
+    expect(longestSlug.length).toBeGreaterThan(200);
+    for (const base of ['san-pham', 's', 'brand']) {
+      expect(visit('tubutree.com', `/${base}/${longestSlug}`).status, base).toBe(200);
     }
-    expect(visit('tubutree.com', `/ctv/${long}`).status).toBe(200);
+  });
+
+  it('slug quá trần của từng route hoặc sai ký tự trả 404 không cache, có khung site', () => {
+    for (const base of ['san-pham', 's', 'brand']) {
+      expect(notFoundOf(visit('tubutree.com', `/${base}/${'a'.repeat(257)}`)), base).toBe(true);
+      expect(notFoundOf(visit('tubutree.com', `/${base}/ten%20la`)), base).toBe(true);
+      expect(visit('tubutree.com', `/${base}/${'a'.repeat(256)}`).status, base).toBe(200);
+    }
+    expect(notFoundOf(visit('tubutree.com', `/chien-dich/${'a'.repeat(81)}`))).toBe(true);
+    expect(visit('tubutree.com', `/chien-dich/${'a'.repeat(80)}`).status).toBe(200);
+  });
+
+  it('chinh-sach chỉ nhận đúng các slug pháp lý', () => {
+    expect(notFoundOf(visit('tubutree.com', '/chinh-sach/khong-co-that'))).toBe(true);
+    expect(visit('tubutree.com', `/chinh-sach/${LEGAL_SLUGS[0]}`).status).toBe(200);
+  });
+
+  it('route khác đi thẳng', () => {
+    expect(visit('tubutree.com', `/ctv/${'a'.repeat(300)}`).status).toBe(200);
+    expect(visit('tubutree.com', `/mua-chung/${'a'.repeat(300)}`).status).toBe(200);
   });
 });

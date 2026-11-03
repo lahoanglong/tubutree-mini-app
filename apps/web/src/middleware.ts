@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
+import { isLegalSlug } from './lib/legal';
 import { tenantSubdomain } from './lib/tenant-subdomain';
 
-// Trang theo [slug] được Next giữ cache theo từng đường dẫn, kể cả 404: slug dài vô lý (bot dò) không được tạo thêm mục cache.
-const SLUG_ROUTE = /^\/(san-pham|brand|chinh-sach|s|mua-chung|chien-dich|hoc-vien)\/([^/]+)\/?$/;
-const MAX_SLUG_LENGTH = 120;
+// Trang ISR theo [slug] được Next ghi file cache theo từng đường dẫn lạ, kể cả 404 (~53 KB mỗi đường dẫn, không bao giờ xoá).
+// Chỉ cho vào những đường dẫn có thể là slug thật; còn lại 404 ngay ở middleware, không chạm cache.
+// Trần lấy theo slug dài nhất API sinh ra: tên SP đối tác tối đa 200 ký tự + '-' + Date.now().toString(36); slug Pancake và brand không có trần nên chừa dư.
+const SLUG_CHARS = /^[A-Za-z0-9_-]+$/;
+const SLUG_ROUTE = /^\/(san-pham|brand|chinh-sach|s|chien-dich)\/([^/]+)\/?$/;
+const SLUG_MAX: Record<string, number> = { 'san-pham': 256, brand: 256, s: 256, 'chien-dich': 80, 'chinh-sach': 80 };
+
+function isPlausibleSlug(route: string, slug: string): boolean {
+  if (slug.length > (SLUG_MAX[route] ?? 0) || !SLUG_CHARS.test(slug)) return false;
+  return route !== 'chinh-sach' || isLegalSlug(slug);
+}
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get('host') ?? '';
@@ -23,8 +32,9 @@ export function middleware(request: NextRequest) {
   }
 
   const slugRoute = SLUG_ROUTE.exec(pathname);
-  if (slugRoute && (slugRoute[2]?.length ?? 0) > MAX_SLUG_LENGTH) {
-    return new NextResponse('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
+  if (slugRoute && !isPlausibleSlug(slugRoute[1] ?? '', slugRoute[2] ?? '')) {
+    // Đường dẫn không tồn tại nên Next dựng not-found.tsx của site với mã 404.
+    return NextResponse.rewrite(new URL('/_slug-not-found', request.url), { status: 404, headers: { 'cache-control': 'no-store' } });
   }
 
   const subdomain = tenantSubdomain(host);
