@@ -49,6 +49,8 @@ interface BonusTier {
  */
 export const DEALER_SETTLED_STATUSES: readonly string[] = ['PACKED', 'SHIPPING', 'DELIVERED'];
 
+const KEY_IN_USE_MESSAGE = 'Idempotency-Key đã được sử dụng, bạn thử lại nhé.';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Giờ cron trả thưởng quý (dealer.cron.ts, 04:00 ngày 10 giờ VN) tính từ 00:00 ngày đó. */
 const PAYOUT_HOUR_MS = 4 * 60 * 60 * 1000;
@@ -254,7 +256,7 @@ export class DealerService {
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
       if (existing && existing.userId === userId) return this.orderForDealer(existing.id);
-      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
+      if (existing) throw new BadRequestException(KEY_IN_USE_MESSAGE);
     }
     if (dto.items.length === 0) throw new BadRequestException('Đơn trống.');
 
@@ -394,7 +396,10 @@ export class DealerService {
         if (!isSerializationFailure(first)) throw first;
         // Tx thua đã rollback hết. Cùng key mà bên thắng đã ghi đơn thì trả đơn đó; chưa có thì chạy lại cả tx một lần.
         const won = key ? await this.prisma.order.findUnique({ where: { idempotencyKey: key } }) : null;
-        if (won && won.userId === userId) return this.orderForDealer(won.id);
+        if (won) {
+          if (won.userId !== userId) throw new BadRequestException(KEY_IN_USE_MESSAGE);
+          return this.orderForDealer(won.id);
+        }
         order = await runTx();
       }
     } catch (err) {
@@ -403,7 +408,10 @@ export class DealerService {
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.orderForDealer(existing.id);
+        if (existing) {
+          if (existing.userId !== userId) throw new BadRequestException(KEY_IN_USE_MESSAGE);
+          return this.orderForDealer(existing.id);
+        }
       }
       throw err;
     }

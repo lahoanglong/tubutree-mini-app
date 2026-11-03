@@ -1,3 +1,4 @@
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { DealerService, SETTLE_VISIBILITY_MARGIN_MS } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -783,5 +784,104 @@ describe('DealerService.placeOrder — người nhận cho kho (SELLER-2)', () =
       where: { id: 'addr-of-other', userId: 'd1' },
     });
     expect(orderCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('DealerService.placeOrder — chạy lại khi thua tranh khoá / trùng key', () => {
+  const lost40001 = () => ({ code: 'P2010', meta: { code: '40001' }, message: 'could not serialize access' });
+  const dto = { items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'CREDIT' } as never;
+
+  function prismaForRetry(txResults: Array<'ok' | unknown>) {
+    const base: Record<string, unknown> = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: { dealerTierId: 't1' } }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', creditLimit: 1_000_000 }) },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', isActive: true, retailPrice: 20_000, dealerPrices: null, name: '500ml', product: { name: 'SP', slug: 'sp', isActive: true, approvalStatus: 'APPROVED' } },
+        ]),
+      },
+      order: {
+        create: jest.fn().mockResolvedValue({ id: 'o1' }),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findUniqueOrThrow: jest.fn().mockImplementation(async ({ where }: { where: { id: string } }) => ({ id: where.id, items: [] })),
+      },
+      dealerCreditLedger: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: 0 } }), create: jest.fn().mockResolvedValue({}) },
+      $queryRaw: fullReserveQueryRaw(),
+      ...dealerAddressBook(),
+    };
+    const queue = [...txResults];
+    base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => {
+      const next = queue.shift();
+      if (next === 'ok') return cb(base);
+      throw next;
+    });
+    const prisma = base as unknown as PrismaService;
+    // Lần dò key đầu (trước khi đặt) chưa có đơn; các lần sau (sau khi tx thua) mới thấy đơn của bên thắng.
+    const winnerAfterLoss = (winner: unknown) => {
+      let keyLookups = 0;
+      (prisma.order.findUnique as jest.Mock).mockImplementation(async ({ where }: { where: { idempotencyKey?: string } }) =>
+        where.idempotencyKey && ++keyLookups > 1 ? winner : null,
+      );
+    };
+    return { prisma, tx: base.$transaction as jest.Mock, winnerAfterLoss };
+  }
+
+  it('lần 1 thua 40001, lần 2 qua → chạy tx 2 lần, trả đơn, đẩy Pancake đúng 1 lần', async () => {
+    const { prisma, tx } = prismaForRetry([lost40001(), 'ok']);
+    const enqueuePush = jest.fn().mockResolvedValue(undefined);
+    const r = await new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder('d1', dto);
+    expect(tx).toHaveBeenCalledTimes(2);
+    expect((r as { id: string }).id).toBe('o1');
+    expect(enqueuePush).toHaveBeenCalledTimes(1);
+    expect(enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  it('cả hai lần đều thua 40001 → 503 ServiceUnavailable', async () => {
+    const { prisma, tx } = prismaForRetry([lost40001(), lost40001()]);
+    await expect(new DealerService(prisma, makeConfig()).placeOrder('d1', dto)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(tx).toHaveBeenCalledTimes(2);
+  });
+
+  it('có key, lần 1 thua 40001, đơn thắng của user khác → 400, không chạy lại, không lộ đơn', async () => {
+    const { prisma, tx, winnerAfterLoss } = prismaForRetry([lost40001(), 'ok']);
+    winnerAfterLoss({ id: 'o-other', userId: 'd2' });
+    const enqueuePush = jest.fn();
+    await expect(new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder('d1', dto, 'k1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx).toHaveBeenCalledTimes(1);
+    expect(prisma.order.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('có key, lần 1 thua 40001, đơn thắng cùng user → trả đơn đó, không chạy lại, không đẩy Pancake', async () => {
+    const { prisma, tx, winnerAfterLoss } = prismaForRetry([lost40001(), 'ok']);
+    winnerAfterLoss({ id: 'o-won', userId: 'd1' });
+    const enqueuePush = jest.fn();
+    const r = await new DealerService(prisma, makeConfig(), undefined, { enqueuePush } as never).placeOrder('d1', dto, 'k1');
+    expect((r as { id: string }).id).toBe('o-won');
+    expect(tx).toHaveBeenCalledTimes(1);
+    expect(enqueuePush).not.toHaveBeenCalled();
+  });
+
+  it('P2002 trên key: đơn của user khác → 400, đơn của chính mình → trả lại đơn đó', async () => {
+    const p2002 = () => ({ code: 'P2002', message: 'Unique constraint failed' });
+    const other = prismaForRetry([p2002()]);
+    other.winnerAfterLoss({ id: 'o-other', userId: 'd2' });
+    await expect(new DealerService(other.prisma, makeConfig()).placeOrder('d1', dto, 'k1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(other.prisma.order.findUniqueOrThrow).not.toHaveBeenCalled();
+
+    const mine = prismaForRetry([p2002()]);
+    mine.winnerAfterLoss({ id: 'o-mine', userId: 'd1' });
+    const r = await new DealerService(mine.prisma, makeConfig()).placeOrder('d1', dto, 'k1');
+    expect((r as { id: string }).id).toBe('o-mine');
+  });
+
+  it('HttpException ném trong tx (tên SP chứa 40001, ngừng bán) → giữ nguyên 400, không chạy lại', async () => {
+    const { prisma, tx } = prismaForRetry([new BadRequestException('Sản phẩm "Combo 40001" đã ngừng bán.')]);
+    const err = await new DealerService(prisma, makeConfig()).placeOrder('d1', dto).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err).not.toBeInstanceOf(ServiceUnavailableException);
+    expect(tx).toHaveBeenCalledTimes(1);
   });
 });

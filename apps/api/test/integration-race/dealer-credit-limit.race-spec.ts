@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -106,6 +106,29 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
     return tierId;
   };
 
+  it('hạn mức 120.000, đơn 80.000: 8 đơn CREDIT đồng thời → đúng 1 đơn, nợ ≤ hạn mức, mọi lỗi là 400 vượt hạn mức hoặc 503', async () => {
+    const d = await createDealer(prisma, { metadata: { dealerTierId: await creditTier(120_000) } });
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        dealer.placeOrder(d.id, { items: [{ variationId, quantity: 1 }], paymentMethod: 'CREDIT' } as never),
+      ),
+    );
+    const s = summarize(results);
+    const unexpected = s.rejected.filter(
+      (r) =>
+        !(r.reason instanceof ServiceUnavailableException) &&
+        !(r.reason instanceof BadRequestException && /Vượt hạn mức công nợ/.test(r.reason.message)),
+    );
+    const orders = await prisma.order.findMany({ where: { userId: d.id }, select: { total: true } });
+    const ledger = await prisma.dealerCreditLedger.aggregate({ where: { userId: d.id }, _sum: { delta: true } });
+    console.log('[c008] limit120k fulfilled=%d rejected=%d debt=%j', s.fulfilled.length, s.rejected.length, ledger._sum.delta);
+    expect(unexpected).toEqual([]);
+    expect(s.fulfilled.length).toBe(1);
+    expect(orders).toEqual([{ total: 80_000 }]);
+    expect(ledger._sum.delta ?? 0).toBeLessThanOrEqual(120_000);
+    expect(ledger._sum.delta ?? 0).toBe(80_000);
+  });
+
   it('6 đơn CREDIT đồng thời không key: chỉ 201 hoặc 503, không lỗi khác; công nợ khớp tổng đơn đã tạo', async () => {
     const d = await createDealer(prisma, { metadata: { dealerTierId: await creditTier(100_000_000) } });
     const results = await Promise.allSettled(
@@ -140,5 +163,30 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
     expect(orders.length).toBe(1);
     expect(new Set(s.fulfilled.map((r) => (r.value as { id: string }).id))).toEqual(new Set([orders[0]!.id]));
     expect(ledger._sum.delta ?? 0).toBe(orders[0]!.total);
+  });
+
+  it('2 đại lý khác nhau gửi cùng Idempotency-Key đồng thời: không ai nhận đơn của người kia', async () => {
+    const tierId = await creditTier(100_000_000);
+    const a = await createDealer(prisma, { metadata: { dealerTierId: tierId } });
+    const b = await createDealer(prisma, { metadata: { dealerTierId: tierId } });
+    const key = `it-key-${randCode(10)}`;
+    const place = (userId: string) =>
+      dealer.placeOrder(userId, { items: [{ variationId, quantity: 1 }], paymentMethod: 'CREDIT' } as never, key);
+    const results = await Promise.allSettled([place(a.id), place(b.id)]);
+    const owners = [a.id, b.id];
+    const orders = await prisma.order.findMany({ where: { idempotencyKey: key }, select: { id: true, userId: true } });
+    console.log('[c23] cross-user key outcomes=%j orders=%d', results.map((r) => r.status), orders.length);
+    expect(orders.length).toBe(1);
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        expect((r.value as { id: string }).id).toBe(orders[0]!.id);
+        expect(owners[i]).toBe(orders[0]!.userId);
+      } else {
+        expect(r.reason instanceof BadRequestException || r.reason instanceof ServiceUnavailableException).toBe(true);
+        expect(owners[i]).not.toBe(orders[0]!.userId);
+      }
+    });
+    const ledgers = await prisma.dealerCreditLedger.count({ where: { userId: { in: owners } } });
+    expect(ledgers).toBe(1);
   });
 });
