@@ -640,6 +640,15 @@ describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0�
     expect(mk(prisma).product.update.mock.calls[0][0].data).not.toHaveProperty('isActive');
   });
 
+  it('biến thể đã tắt bán (admin) hoặc bị Pancake xoá mà hạ giá → không báo giảm giá (PNK-03)', async () => {
+    await runWith({ ...prev, isActive: false }, variation('v-a', { retail_price: 50000, sale_price: undefined }));
+    expect(notifyPriceDrop).not.toHaveBeenCalled();
+    await runWith(prev, variation('v-a', { retail_price: 50000, sale_price: undefined, is_removed: true }));
+    expect(notifyPriceDrop).not.toHaveBeenCalled();
+    await runWith(prev, variation('v-a', { retail_price: 50000, sale_price: undefined }));
+    expect(notifyPriceDrop).toHaveBeenCalledTimes(1);
+  });
+
   it('thiếu giá không bị tính là giảm giá (không báo wishlist)', async () => {
     await runWith(prev, variation('v-a', { retail_price: 0 }));
     expect(notifyPriceDrop).not.toHaveBeenCalled();

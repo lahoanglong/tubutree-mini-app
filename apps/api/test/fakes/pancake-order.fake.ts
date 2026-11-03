@@ -18,6 +18,7 @@ function matchField(value: unknown, cond: unknown): boolean {
     if ('gt' in c) return typeof value === 'number' && value > (c.gt as number);
     if ('lt' in c) return value instanceof Date && value.getTime() < (c.lt as Date).getTime();
     if ('startsWith' in c) return typeof value === 'string' && value.startsWith(c.startsWith as string);
+    if ('contains' in c) return typeof value === 'string' && value.includes(c.contains as string);
     if ('in' in c) return (c.in as unknown[]).includes(value);
     throw new Error(`fake prisma: điều kiện chưa hỗ trợ ${JSON.stringify(c)}`);
   }

@@ -18,6 +18,7 @@ import {
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   clearPancakeAttention,
+  writePancakeAttention,
 } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
 import {
@@ -418,18 +419,9 @@ export class PancakeProcessor extends WorkerHost {
     reason: string,
     onlyReplacingPrefix?: string,
   ): Promise<boolean> {
-    const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
-    const r = await this.prisma.order.updateMany({
-      where: onlyReplacingPrefix
-        ? {
-            id: order.id,
-            AND: [changed, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }],
-          }
-        : { id: order.id, ...changed },
-      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-    });
-    if (r.count === 0) return false;
-    this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${reason}`);
+    const written = await writePancakeAttention(this.prisma, order.id, reason, onlyReplacingPrefix);
+    if (!written) return false;
+    this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${written}`);
     await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
     return true;
   }
@@ -463,7 +455,8 @@ export class PancakeProcessor extends WorkerHost {
       return;
     }
     if (action.kind === 'partialReturned') {
-      await this.onPartialReturned(order, action.reason);
+      // Cùng lẽ với nhánh attention: 15 tới trễ sau khi đơn đã huỷ/trả (tiền đã hoàn theo luồng đó) mà ghim "hoàn tay" thì nhân viên hoàn lần hai.
+      if (!isClosedOrder(order.status)) await this.onPartialReturned(order, action.reason);
       return;
     }
     // "Đã hoàn" tới đơn đã huỷ/trả: không còn gì để lật, nhưng đây có thể là lần BullMQ gửi lại sau khi lần đầu lật xong mà đảo
