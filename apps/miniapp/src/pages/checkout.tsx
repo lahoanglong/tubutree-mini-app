@@ -19,6 +19,7 @@ import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
+import { isTaxCodeValid, normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -281,7 +282,7 @@ export default function CheckoutPage() {
         ...(attachWaste && pickupReq ? { wasteRequestId: pickupReq.id } : {}),
         invoiceRequest: wantInvoice
           ? {
-              taxCode: invoice.taxCode.trim(),
+              taxCode: normalizeTaxCode(invoice.taxCode),
               companyName: invoice.companyName.trim(),
               address: invoice.address.trim(),
               email: invoice.email.trim(),
@@ -981,6 +982,8 @@ export default function CheckoutPage() {
             <Input
               label="Mã số thuế"
               value={invoice.taxCode}
+              status={invoice.taxCode.trim() && !isTaxCodeValid(invoice.taxCode) ? 'error' : undefined}
+              errorText={invoice.taxCode.trim() && !isTaxCodeValid(invoice.taxCode) ? fillCopy('checkout.taxCodeInvalid') : undefined}
               onChange={(e) => {
                 choiceRev.current += 1;
                 setInvoice((f) => ({ ...f, taxCode: e.target.value }));

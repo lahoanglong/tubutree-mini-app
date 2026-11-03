@@ -60,8 +60,13 @@ export function createBodyParsers(): RequestHandler[] {
 
 type Violation = 'complex' | 'nul';
 
+interface BodyShapeLimits { depth: number; keys: number; array: number }
+const DEFAULT_SHAPE: BodyShapeLimits = { depth: MAX_BODY_DEPTH, keys: MAX_KEYS_PER_OBJECT, array: MAX_ARRAY_LENGTH };
+/** Webhook do bên ngoài định dạng và body của nó không qua ValidationPipe: chỉ giữ trần tổng nút, để 1 đơn lớn không bị 400 rồi mất đồng bộ. */
+const WEBHOOK_SHAPE: BodyShapeLimits = { depth: 64, keys: MAX_WEBHOOK_BODY_NODES, array: MAX_WEBHOOK_BODY_NODES };
+
 /** Duyệt lặp (không đệ quy: thân lồng sâu không làm tràn stack). Trả vi phạm đầu tiên hoặc null. */
-export function inspectBody(body: unknown, maxNodes: number): Violation | null {
+export function inspectBody(body: unknown, maxNodes: number, limits: BodyShapeLimits = DEFAULT_SHAPE): Violation | null {
   if (body === null || typeof body !== 'object') return null;
   let nodes = 0;
   const stack: Array<{ value: unknown; depth: number }> = [{ value: body, depth: 1 }];
@@ -72,9 +77,9 @@ export function inspectBody(body: unknown, maxNodes: number): Violation | null {
       continue;
     }
     if (value === null || typeof value !== 'object') continue;
-    if (depth > MAX_BODY_DEPTH) return 'complex';
+    if (depth > limits.depth) return 'complex';
     if (Array.isArray(value)) {
-      if (value.length > MAX_ARRAY_LENGTH) return 'complex';
+      if (value.length > limits.array) return 'complex';
       nodes += value.length;
       if (nodes > maxNodes) return 'complex';
       for (const item of value) stack.push({ value: item, depth: depth + 1 });
@@ -82,7 +87,7 @@ export function inspectBody(body: unknown, maxNodes: number): Violation | null {
     }
     let keys = 0;
     for (const key in value as Record<string, unknown>) {
-      if (++keys > MAX_KEYS_PER_OBJECT) return 'complex';
+      if (++keys > limits.keys) return 'complex';
       if (key.includes('\u0000')) return 'nul';
       stack.push({ value: (value as Record<string, unknown>)[key], depth: depth + 1 });
     }
@@ -102,7 +107,9 @@ const NUL_IN_URL = /%00/i;
 /** Chặn NUL ở URL và thân, và thân quá nhiều khoá/phần tử/tầng lồng, trước ValidationPipe. */
 export const requestInputGuard: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
   if (NUL_IN_URL.test(req.url)) return reject(res, 400, NUL_CHAR_MESSAGE);
-  const violation = inspectBody(req.body, WEBHOOK_ROUTE.test(req.path) ? MAX_WEBHOOK_BODY_NODES : MAX_BODY_NODES);
+  const violation = WEBHOOK_ROUTE.test(req.path)
+    ? inspectBody(req.body, MAX_WEBHOOK_BODY_NODES, WEBHOOK_SHAPE)
+    : inspectBody(req.body, MAX_BODY_NODES);
   if (violation === 'nul') return reject(res, 400, NUL_CHAR_MESSAGE);
   if (violation === 'complex') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   next();

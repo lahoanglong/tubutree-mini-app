@@ -111,6 +111,14 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect((await post('/api/webhooks/pancake', { data: nested })).status).toBe(200);
       expect((await post('/api/cart/coupon', { data: nested })).status).toBe(400);
     });
+    it('webhook không bị trần khoá/mảng/tầng của route thường (chỉ trần tổng nút), tránh mất đơn do 400', async () => {
+      let deep: unknown = 1;
+      for (let i = 0; i < 30; i++) deep = { a: deep };
+      expect((await post('/api/webhooks/pancake', { order: deep })).status).toBe(200);
+      expect((await post('/api/webhooks/pancake', { order: keys(MAX_KEYS_PER_OBJECT + 50) })).status).toBe(200);
+      expect((await post('/api/webhooks/pancake', { items: Array.from({ length: MAX_ARRAY_LENGTH + 100 }, (_, i) => i) })).status).toBe(200);
+      expect((await post('/api/cart/coupon', { order: deep })).status).toBe(400);
+    });
   });
 
   describe('ký tự NUL', () => {

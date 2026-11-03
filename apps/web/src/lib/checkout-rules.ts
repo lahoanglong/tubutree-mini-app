@@ -1,3 +1,4 @@
+import { isTaxCodeValid } from '@tubutree/app-core/commerce/tax-code';
 import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
 import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatVnd } from './shop-client';
@@ -18,7 +19,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isInvoiceValid(wantInvoice: boolean, invoice: InvoiceInfo): boolean {
   if (!wantInvoice) return true;
   return (
-    invoice.taxCode.trim().length > 0 &&
+    isTaxCodeValid(invoice.taxCode) &&
     invoice.companyName.trim().length > 0 &&
     invoice.address.trim().length > 0 &&
     EMAIL_RE.test(invoice.email.trim())

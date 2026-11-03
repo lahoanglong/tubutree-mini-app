@@ -264,6 +264,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.shipNeedsAddress': 28,
   'checkout.calculating': 12,
   'checkout.priceChangedHint': null,
+  'checkout.taxCodeInvalid': null,
   'checkout.invoiceIncomplete': null,
   'checkout.moreLines': 24,
   'checkout.fewerLines': 10,
