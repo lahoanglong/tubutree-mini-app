@@ -64,7 +64,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
-import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -87,8 +87,6 @@ const addressOptionClass = (selected: boolean) =>
       : 'max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
   }`;
 // Ô ghi chú: dưới md cao một dòng và bo 8px như Input của Mini, từ md nhiều dòng với bo của ô nhập thường.
-// Bộ đếm chỉ hiện khi sắp chạm trần: ô ghi chú giống Mini App (không bộ đếm), nhưng gõ tới 500 mà bị cắt im lặng thì khách không biết vì sao.
-const ORDER_NOTE_COUNT_FROM = 450;
 const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:rounded-control');
 // Mỗi phần của trang thanh toán ở điện thoại là dải trắng phẳng tràn ngang cách nhau 8px (Box p=4 mt=2 của Mini App).
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
@@ -582,7 +580,7 @@ export default function CheckoutPage() {
                           onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className={miniRadio}
+                          className={`${miniRadio} ${miniRadioGutter}`}
                         />
                         {p.label}
                       </label>
@@ -614,15 +612,13 @@ export default function CheckoutPage() {
                 rows={2}
                 placeholder="Ví dụ: giao giờ hành chính…"
                 disabled={place.isPending}
-                aria-describedby={note.length >= ORDER_NOTE_COUNT_FROM ? 'order-note-count' : undefined}
+                aria-describedby="order-note-count"
                 className={`${NOTE_FIELD} mt-1 h-12 resize-none py-2 md:h-auto md:resize-y`}
               />
             </label>
-            {note.length >= ORDER_NOTE_COUNT_FROM && (
-              <p id="order-note-count" className="mt-1 text-caption text-[color:var(--color-text-secondary)]">
-                {note.length}/{ORDER_NOTE_MAX} ký tự
-              </p>
-            )}
+            <p id="order-note-count" className="mt-1 text-caption text-[color:var(--color-text-secondary)] max-md:sr-only">
+              {note.length}/{ORDER_NOTE_MAX} ký tự
+            </p>
           </section>
 
           {pickupReq !== undefined && (
@@ -757,7 +753,7 @@ export default function CheckoutPage() {
                 partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               }`}
             >
-              <span className={miniCheckboxWrap}>
+              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
                 <input
                   type="checkbox"
                   checked={usePoints && !partnerPoints.disabled}
@@ -784,7 +780,7 @@ export default function CheckoutPage() {
                 <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
                 <span className="block text-caption text-[color:var(--color-text-tertiary)]">{idlePointsLabel(quote ?? user)}</span>
               </span>
-              <span className={miniCheckboxWrap}>
+              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
                 <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
                 <CheckMark />
               </span>

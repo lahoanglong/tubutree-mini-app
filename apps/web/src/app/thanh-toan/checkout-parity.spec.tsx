@@ -318,19 +318,7 @@ describe('/thanh-toan — ghi chú (BUYERWEB-20)', () => {
     const r = await mount();
     const note = r.container.querySelector('textarea')!;
     expect(note.maxLength).toBe(500);
-  });
-
-  it('không bộ đếm như Mini App; chỉ hiện khi sắp chạm trần 500', async () => {
-    const r = await mount();
-    expect(r.container.textContent).not.toContain('ký tự');
-    expect(r.container.querySelector('#order-note-count')).toBeNull();
-    typeInto(r.container.querySelector('textarea'), 'a'.repeat(449));
-    await flush(2);
-    expect(r.container.textContent).not.toContain('ký tự');
-    typeInto(r.container.querySelector('textarea'), 'a'.repeat(450));
-    await flush(2);
-    expect(r.container.textContent).toContain('450/500 ký tự');
-    expect(r.container.querySelector('textarea')!.getAttribute('aria-describedby')).toBe('order-note-count');
+    expect(r.container.textContent).toContain('0/500 ký tự');
   });
 });
 

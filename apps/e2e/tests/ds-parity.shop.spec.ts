@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expect, makeUser, mockSession, test, type MockApi } from './support/mock-api';
-import { mockCheckout, mockWebCheckoutExtras } from './support/checkout-mocks';
+import { CHECKOUT_QUOTE, CHECKOUT_WALLET, mockCheckout, mockWebCheckoutExtras } from './support/checkout-mocks';
 import { CATALOG } from './support/discovery-mocks';
 import { diffMeasure, expectedFor, measure, probesFor, type Measure, type Side } from './support/ds-parity';
 import { mockFlashSlots, mockNoSession } from './support/flash-slot-mocks';
@@ -125,6 +125,13 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
+/** Web đọc ví từ /me và điểm từ báo giá, Mini đọc /me/wallet và /me/loyalty: đặt cùng số (ví 350.000đ, 50 điểm + 50 điểm quy đổi) để hai nền so được từng chữ. */
+async function mockWebCheckoutData(api: MockApi): Promise<void> {
+  await mockWebCheckoutExtras(api);
+  api.get('/me', { id: 'user-checkout', fullName: 'Nguyễn Văn A', email: null, avatarUrl: null, dob: null, onboarded: true, segments: [], walletBalance: CHECKOUT_WALLET.walletBalance });
+  api.post('/checkout/quote', { ...CHECKOUT_QUOTE, pointsBalance: 50, pointsConvertedBalance: 50 });
+}
+
 SCENARIOS.push({
   name: 'Thanh toán: thẻ địa chỉ, dòng tóm tắt, ghi chú',
   route: { miniapp: '/checkout', web: '/thanh-toan' },
@@ -136,7 +143,7 @@ SCENARIOS.push({
   async setup(api, side, page) {
     mockCheckout(api);
     if (side === 'web') {
-      await mockWebCheckoutExtras(api);
+      await mockWebCheckoutData(api);
       await page.addInitScript(() => {
         try {
           localStorage.setItem('tubu_web_session', '1');
@@ -204,18 +211,22 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     vatLabel: 'Yêu cầu xuất hoá đơn VAT',
     vatCheckboxOnRight: true,
     pointsTitle: 'Điểm Xanh',
-    pointsSubtext: expect.stringMatching(/^Dùng [\d.]+ điểm, giảm [\d.]+đ/),
+    pointsSubtext: 'Dùng 100 điểm, giảm 100đ trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng',
     consentText: 'Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.',
     consentAboveButton: true,
     consentGapToButton: 'gần',
+    walletLabel: 'Ví Tubu (350.000đ)',
   };
+  // Vị trí ngang (px CSS ở 375) của Mini làm chuẩn; web phải khớp ±2px.
+  const POS_TOLERANCE = 2;
+  const MINI_POS = { vatCheckboxRight: 339, pointsCheckboxRight: 339, payTextLeft: 70 };
 
-  test('ghi chú một dòng không bộ đếm, ô VAT bên phải, điểm Xanh cùng chữ, câu đồng ý sát nút Đặt hàng', async ({ page, api }, testInfo) => {
+  test('ghi chú một dòng không hiện bộ đếm, ô VAT bên phải, điểm Xanh cùng chữ, câu đồng ý sát nút Đặt hàng', async ({ page, api }, testInfo) => {
     const side = sideOf(testInfo.project.name);
     mockCheckout(api);
     api.allowUnmocked('POST /events');
     if (side === 'web') {
-      await mockWebCheckoutExtras(api);
+      await mockWebCheckoutData(api);
       await page.addInitScript(() => {
         try {
           localStorage.setItem('tubu_web_session', '1');
@@ -245,8 +256,36 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
 
     const pointsTitle = page.getByText('Điểm Xanh', { exact: true }).first();
     await pointsTitle.scrollIntoViewIfNeeded();
+    const rightOfCheckbox = (label: typeof vat) =>
+      label.evaluate((el) => {
+        let row: Element | null = el;
+        while (row && !row.querySelector('input[type=checkbox]')) row = row.parentElement;
+        const box = row?.querySelector('input[type=checkbox]')?.getBoundingClientRect();
+        return box ? Math.round(box.right) : -1;
+      });
+    const vatCheckboxRight = await rightOfCheckbox(vat);
+
     const pointsBlockText = (await pointsTitle.locator('xpath=..').innerText()).replace(/\s+/g, ' ').trim();
-    const pointsSubtext = pointsBlockText.replace(/^Điểm Xanh\s*/, '');
+    // Web đặt các dòng ghi chú điểm (phần không hết hạn, trần) ngay dưới ô; Mini để trong cùng khối chữ. Chữ khách đọc được thì giống nhau.
+    const notesBelow = await pointsTitle.evaluate((el) => {
+      const out: string[] = [];
+      for (let n = el.closest('label')?.nextElementSibling ?? null; n && n.tagName === 'P'; n = n.nextElementSibling) out.push((n as HTMLElement).innerText);
+      return out.join(' ');
+    });
+    const pointsSubtext = `${pointsBlockText.replace(/^Điểm Xanh\s*/, '')} ${notesBelow}`.replace(/\s+/g, ' ').trim();
+
+    const pointsCheckboxRight = await rightOfCheckbox(pointsTitle);
+
+    const walletText = page.getByText(/^Ví Tubu \(/).first();
+    await walletText.scrollIntoViewIfNeeded();
+    const payTextLeft = Math.round(
+      await walletText.evaluate((el) => {
+        const r = document.createRange();
+        const text = Array.from(el.childNodes).reverse().find((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim());
+        r.selectNodeContents(text ?? el);
+        return r.getBoundingClientRect().left;
+      }),
+    );
 
     const consent = page.locator('[data-testid="order-consent"]:visible').first();
     await consent.scrollIntoViewIfNeeded();
@@ -268,10 +307,16 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
       consentText,
       consentAboveButton: gap >= 0,
       consentGapToButton: gap <= 120 ? 'gần' : `xa ${Math.round(gap)}px`,
+      walletLabel: (await walletText.innerText()).trim(),
     };
+    const positions = { vatCheckboxRight, pointsCheckboxRight, payTextLeft };
     const file = testInfo.outputPath(`checkout-form-${side}.json`);
     writeFileSync(file, `${JSON.stringify(got, null, 2)}\n`);
+    writeFileSync(testInfo.outputPath(`checkout-pos-${side}.json`), `${JSON.stringify(positions)}\n`);
     await testInfo.attach(`checkout-form-${side}`, { path: file, contentType: 'application/json' });
     expect(got).toEqual(CHECKOUT_FORM_EXPECTED);
+    for (const k of Object.keys(MINI_POS) as (keyof typeof MINI_POS)[]) {
+      expect(Math.abs(positions[k] - MINI_POS[k]), `${k}: ${positions[k]} so với Mini ${MINI_POS[k]}`).toBeLessThanOrEqual(POS_TOLERANCE);
+    }
   });
 });
