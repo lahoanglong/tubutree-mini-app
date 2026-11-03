@@ -37,8 +37,9 @@ interface ZaloOaWebhookBody {
  * mang tiền tố `mac=`). `rawBody` là đúng byte Zalo gửi (`req.rawBody`, giữ ở `keepRawBody` của common/body-limits.ts): băm lại
  * JSON.stringify của thân đã parse làm mất `\/` và `\uXXXX` nên lệch.
  */
-export function zaloOaEventSignature(appId: string, rawBody: string, timestamp: string, oaSecretKey: string): string {
-  return createHash('sha256').update(appId + rawBody + timestamp + oaSecretKey).digest('hex');
+export function zaloOaEventSignature(appId: string, rawBody: Buffer | string, timestamp: string, oaSecretKey: string): string {
+  // Băm thẳng byte: toString('utf8') rồi mã hoá lại đổi byte UTF-8 lỗi thành EF BF BD, khác thứ Zalo đã ký.
+  return createHash('sha256').update(appId).update(rawBody).update(timestamp + oaSecretKey).digest('hex');
 }
 
 /**
@@ -76,14 +77,14 @@ export class ZaloOaWebhookController {
     @Body() body: ZaloOaWebhookBody,
     @Headers('x-webhook-token') token?: string,
     @Headers('x-zevent-signature') signature?: string,
-    @Req() req?: { rawBody?: Buffer },
+    @Req() req?: { rawBody?: Buffer; headers?: Record<string, string | string[] | undefined> },
   ) {
     if (!this.secret && !this.oaSecretKey) {
       if (process.env.NODE_ENV === 'production') {
         throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
       }
       // Dev/test: bỏ qua cho dễ thử nghiệm.
-    } else if (this.signingReady ? !this.verifySignature(body, signature, req?.rawBody) : !this.verifyToken(token)) {
+    } else if (this.signingReady ? !this.verifySignature(body, signature, req) : !this.verifyToken(token)) {
       throw new UnauthorizedException('Chữ ký hoặc token webhook không hợp lệ.');
     }
 
@@ -128,20 +129,26 @@ export class ZaloOaWebhookController {
     return constantTimeEqual(token, this.secret);
   }
 
-  private verifySignature(body: ZaloOaWebhookBody, signature?: string, rawBody?: Buffer): boolean {
+  private verifySignature(body: ZaloOaWebhookBody, signature: string | undefined, req?: { rawBody?: Buffer; headers?: Record<string, string | string[] | undefined> }): boolean {
     if (!this.oaSecretKey || !this.appId || !signature || !body || typeof body !== 'object') return false;
     const timestamp = body['timestamp'];
     if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return false;
     const ts = Number(timestamp);
     if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_EVENT_SKEW_MS) return false;
+    const rawBody = req?.rawBody;
     if (!rawBody || rawBody.length === 0) {
-      // Không băm lại thân đã parse: chữ ký khi đó chỉ khớp tình cờ, và đường lùi đó là chỗ để thân giả qua được kiểm tra.
-      this.logger.error('Webhook OA có chữ ký nhưng request không mang thân thô (req.rawBody): kiểm parser webhook ở common/body-limits.ts.');
+      // Không băm lại thân đã parse: chữ ký khi đó chỉ khớp tình cờ. Thân JSON có timestamp thì parser webhook luôn giữ thân thô,
+      // nên chỉ ghi lỗi ở trường hợp đó (cấu hình parser hỏng); thân dạng khác do người ngoài gửi thì 401 im lặng (route không giới
+      // hạn tần suất).
+      if (/json/i.test(String(req?.headers?.['content-type'] ?? ''))) {
+        this.logger.error('Webhook OA JSON có chữ ký nhưng không mang thân thô (req.rawBody): kiểm parser webhook ở common/body-limits.ts.');
+      }
       return false;
     }
     const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
-    return constantTimeEqual(given, zaloOaEventSignature(this.appId, rawBody.toString('utf8'), String(timestamp), this.oaSecretKey));
+    return constantTimeEqual(given, zaloOaEventSignature(this.appId, rawBody, String(timestamp), this.oaSecretKey));
   }
+
 }
 
 function constantTimeEqual(x: string, y: string): boolean {
