@@ -24,7 +24,10 @@ const STATUS: Record<AdminCampaignStatus, { label: string; tone: Tone }> = {
 };
 const msg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
-function CampaignRow({ row, onEdit, onError }: { row: AdminCampaignRow; onEdit: () => void; onError: (id: string, text: string | null) => void }) {
+/** Form đang mở thì Sửa và Tắt/Bật của dòng bị khoá: Tắt rồi Lưu form sẽ bật lại chiến dịch (form giữ giá trị lúc mở), Sửa dòng khác làm mất bản nháp. */
+const FORM_OPEN_HINT = 'Đóng form đang mở trước.';
+
+function CampaignRow({ row, formOpen, onEdit, onError }: { row: AdminCampaignRow; formOpen: boolean; onEdit: () => void; onError: (id: string, text: string | null) => void }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-campaigns'] });
@@ -73,10 +76,10 @@ function CampaignRow({ row, onEdit, onError }: { row: AdminCampaignRow; onEdit: 
         <div className="break-words text-xs text-stone-500">{meta}</div>
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        <button type="button" aria-label={`Sửa chiến dịch ${row.title}`} onClick={onEdit} className={BTN_SECONDARY}>
+        <button type="button" aria-label={`Sửa chiến dịch ${row.title}`} disabled={formOpen} title={formOpen ? FORM_OPEN_HINT : undefined} onClick={onEdit} className={BTN_SECONDARY}>
           Sửa
         </button>
-        <button type="button" aria-label={`${row.isActive ? 'Tắt' : 'Bật'} chiến dịch ${row.title}`} disabled={toggle.isPending} onClick={() => toggle.mutate()} className={BTN_SECONDARY}>
+        <button type="button" aria-label={`${row.isActive ? 'Tắt' : 'Bật'} chiến dịch ${row.title}`} disabled={formOpen || toggle.isPending} title={formOpen ? FORM_OPEN_HINT : undefined} onClick={() => toggle.mutate()} className={BTN_SECONDARY}>
           {row.isActive ? 'Tắt' : 'Bật'}
         </button>
         <button type="button" aria-label={`Xoá chiến dịch ${row.title}`} disabled={del.isPending} onClick={() => void askDelete()} className={BTN_LINK_DANGER}>
@@ -164,6 +167,7 @@ export function CampaignsTab() {
           <div key={row.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
             <CampaignRow
               row={row}
+              formOpen={form !== null}
               onEdit={() => {
                 setNotice(null);
                 setForm({ mode: 'edit', id: row.id });

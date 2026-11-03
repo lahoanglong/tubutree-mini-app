@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '@/lib/query-client';
 import AdminPage from './page';
 import { vnTodayKey } from '@/lib/admin-reports';
+import { isoToVnLocal } from '@/lib/admin-campaign-form';
 import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
@@ -1601,8 +1602,8 @@ describe('admin/page — tab Flash Sale', () => {
   const SALE = {
     id: 's1',
     title: 'Flash Sale cuối tuần',
-    startAt: '2026-10-17T01:00:00.000Z',
-    endAt: '2026-10-18T16:00:00.000Z',
+    startAt: new Date(Date.now() - 864e5).toISOString(),
+    endAt: new Date(Date.now() + 864e5).toISOString(),
     isActive: true,
     items: [{ id: 'i1', variationId: 'v1', flashPrice: 99000, quota: 20, soldCount: 3, perUserLimit: 2 }],
   };
@@ -1640,8 +1641,8 @@ describe('admin/page — tab Flash Sale', () => {
     await flush();
     expect(mocks.createFlashSale).toHaveBeenCalledWith({
       title: 'Đợt mới',
-      startAt: new Date('2026-10-20T08:00').toISOString(),
-      endAt: new Date('2026-10-21T08:00').toISOString(),
+      startAt: '2026-10-20T01:00:00.000Z',
+      endAt: '2026-10-21T01:00:00.000Z',
     });
     expect(para(container, 'Đã tạo đợt giờ vàng!').className).toContain('text-success-fg');
 
@@ -1655,12 +1656,13 @@ describe('admin/page — tab Flash Sale', () => {
   });
 
   it('hàng đợt: huy hiệu bật/tắt theo tông success/trung tính, nút Tắt gọi đúng API, cao 44px', async () => {
-    mocks.flashSales = [SALE, { ...SALE, id: 's2', title: 'Đợt cũ', isActive: false, items: [] }];
+    mocks.flashSales = [SALE, { ...SALE, id: 's2', title: 'Đợt tạm tắt', isActive: false, items: [] }];
     const { container } = await openSales();
-    const on = para(container, 'Đang bật');
+    const on = para(container, 'Đang chạy');
     expect(on.className).toContain('bg-success-bg');
+    click(btn(container, 'Tất cả'));
     const off = para(container, 'Đang tắt');
-    expect(off.className).toContain('bg-stone-100');
+    expect(off.className).toContain('bg-warning-bg');
     const toggle = btn(container, 'Tắt');
     expect(toggle.className).toContain('min-h-[44px]');
     expect(toggle.className).toContain('border-stone-450');
@@ -1710,6 +1712,85 @@ describe('admin/page — tab Flash Sale', () => {
   });
 });
 
+describe('admin/page — tab Flash Sale: giờ Việt Nam khi tạo và sửa (QTUI-05)', () => {
+  // Máy admin ở UTC-5: mã tính theo giờ máy sẽ lưu 08:00 thành 13:00Z, nên test đỏ cả khi máy chạy test đã ở giờ VN.
+  const realTz = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York';
+  });
+  afterAll(() => {
+    if (realTz === undefined) delete process.env.TZ;
+    else process.env.TZ = realTz;
+  });
+  it('tạo đợt: 08:00 trong ô là 08:00 giờ Việt Nam (01:00Z) dù máy admin đặt múi giờ nào; ô sửa đọc lại đúng giờ VN', async () => {
+    const startAt = '2026-12-20T01:00:00.000Z';
+    mocks.flashSales = [{ id: 'z1', title: 'Đợt VN', startAt, endAt: '2026-12-21T01:00:00.000Z', isActive: true, items: [] }];
+    window.history.replaceState(null, '', '/admin?tab=flashSales');
+    const { container } = await mount();
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-21T08:00');
+    typeInto(labelledInput(container, 'Tên đợt'), 'Đợt mới');
+    mocks.createFlashSale.mockResolvedValueOnce({});
+    click(btn(container, 'Tạo đợt'));
+    await flush();
+    expect(mocks.createFlashSale).toHaveBeenCalledWith({ title: 'Đợt mới', startAt: '2026-10-20T01:00:00.000Z', endAt: '2026-10-21T01:00:00.000Z' });
+    click(btn(container, 'Sửa đợt'));
+    expect(readDateTime(container, 'Giờ vàng bắt đầu lúc (sửa)')).toBe('2026-12-20T08:00');
+    expect(readDateTime(container, 'Giờ vàng kết thúc lúc (sửa)')).toBe('2026-12-21T08:00');
+  });
+});
+
+describe('admin/page — tab Flash Sale: trạng thái theo thời gian (QTUI-04)', () => {
+  const mk = (id: string, title: string, startOffsetH: number, endOffsetH: number, over: Record<string, unknown> = {}) => ({
+    id,
+    title,
+    startAt: new Date(Date.now() + startOffsetH * 3600e3).toISOString(),
+    endAt: new Date(Date.now() + endOffsetH * 3600e3).toISOString(),
+    isActive: true,
+    items: [],
+    ...over,
+  });
+  const openSales = async () => {
+    window.history.replaceState(null, '', '/admin?tab=flashSales');
+    return mount();
+  };
+
+  it('nhãn theo giờ; mặc định ẩn đợt đã kết thúc, chip "Đã kết thúc" mới hiện, đợt đã kết thúc không còn form thêm món', async () => {
+    mocks.flashSales = [
+      mk('a', 'Đợt chạy', -1, 1),
+      mk('b', 'Đợt sắp', 5, 8),
+      mk('c', 'Đợt tắt', 2, 4, { isActive: false }),
+      mk('d', 'Đợt xong', -30, -24),
+    ];
+    const { container } = await openSales();
+    const text = () => container.textContent ?? '';
+    expect(text()).toContain('Đợt chạy');
+    expect(text()).toContain('Đợt sắp');
+    expect(text()).toContain('Đợt tắt');
+    expect(text()).not.toContain('Đợt xong');
+    expect(para(container, 'Đang chạy')).toBeTruthy();
+    expect(para(container, 'Sắp chạy')).toBeTruthy();
+    expect(para(container, 'Đang tắt')).toBeTruthy();
+    expect(container.querySelectorAll('button[aria-pressed="true"]')[0]?.textContent).toBe('Chưa kết thúc');
+    expect([...container.querySelectorAll('button')].filter((b) => b.textContent === 'Thêm SP')).toHaveLength(3);
+
+    click(btn(container, 'Đã kết thúc'));
+    expect(text()).toContain('Đợt xong');
+    expect(text()).not.toContain('Đợt chạy');
+    expect(para(container, 'Đã kết thúc').className).toContain('bg-stone-100');
+    expect(text()).toContain('Đợt đã kết thúc, không thêm sản phẩm được nữa.');
+    expect([...container.querySelectorAll('button')].filter((b) => b.textContent === 'Thêm SP')).toHaveLength(0);
+  });
+
+  it('nhiều đợt: hiện 20 đợt đầu rồi "Xem thêm"', async () => {
+    mocks.flashSales = Array.from({ length: 25 }, (_, i) => mk(`s${i}`, `Đợt số ${i}`, 10 + i, 12 + i));
+    const { container } = await openSales();
+    expect(container.querySelectorAll('[data-flash-sale-row]')).toHaveLength(20);
+    click(btn(container, 'Xem thêm (5 đợt)'));
+    expect(container.querySelectorAll('[data-flash-sale-row]')).toHaveLength(25);
+  });
+});
+
 describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá đợt (R2-ENGAGE-13)', () => {
   const upcoming = (over: Record<string, unknown> = {}) => ({
     id: 's9',
@@ -1724,11 +1805,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     window.history.replaceState(null, '', '/admin?tab=flashSales');
     return mount();
   };
-  const localInput = (iso: string) => {
-    const d = new Date(iso);
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  };
+  const localInput = isoToVnLocal;
   const pickVariation = async (container: HTMLElement) => {
     mocks.productSearch = [
       { id: 'p1', name: 'Nước rửa chén', brand: 'Tubu', isActive: true, variations: [{ id: 'v1', name: 'Chai 500ml', sku: 'NRC-500', price: 80_000, stock: 50, isActive: true }] },
@@ -1792,7 +1869,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     mocks.updateFlashSale.mockResolvedValue({});
     click(btn(container, 'Lưu thay đổi'));
     await flush();
-    expect(mocks.updateFlashSale).toHaveBeenCalledWith('s9', { startAt: new Date('2031-01-02T08:30').toISOString() });
+    expect(mocks.updateFlashSale).toHaveBeenCalledWith('s9', { startAt: '2031-01-02T01:30:00.000Z' });
 
     click(btn(container, 'Sửa đợt'));
     click(btn(container, 'Huỷ sửa'));
@@ -4173,8 +4250,23 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
 
     click(chip(container, 'Đại lý chờ tiền'));
     await flush();
-    expect(lastArgs()[9]).toEqual({ order: 'asc' });
-    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT');
+    expect(lastArgs()[9]).toEqual({});
+    expect(lastArgs()[1]).toBeUndefined();
+    expect(window.location.search).toBe('?tab=orders');
+  });
+
+  it('QTDON-06: bật rồi tắt hàng đợi trả trạng thái và thứ tự về giá trị trước khi bật', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders&status=CONFIRMED');
+    const { container } = await mount();
+    expect(lastArgs()[1]).toBe('CONFIRMED');
+    click(chip(container, 'Chuyển khoản chờ tiền'));
+    await flush();
+    expect(lastArgs()[1]).toBe('PENDING_PAYMENT');
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc' });
+    click(chip(container, 'Chuyển khoản chờ tiền'));
+    await flush();
+    expect(lastArgs()[1]).toBe('CONFIRMED');
+    expect(lastArgs()[9]).toEqual({});
   });
 
   it('chi tiết đơn có tên và SĐT khách kèm nút "Xem hồ sơ"; mã đơn trong hồ sơ mở đúng đơn đó', async () => {
@@ -4348,8 +4440,8 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     await flush();
     expect(mocks.createFlashSale).toHaveBeenCalledWith({
       title: 'Đợt tối',
-      startAt: new Date('2026-10-20T20:00').toISOString(),
-      endAt: new Date('2026-10-20T23:45').toISOString(),
+      startAt: '2026-10-20T13:00:00.000Z',
+      endAt: '2026-10-20T16:45:00.000Z',
     });
   });
 

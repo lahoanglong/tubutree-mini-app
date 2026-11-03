@@ -32,6 +32,7 @@ import { countReferralSuccesses, readReferralSuccessRows, referralSuccessesSince
 import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
 import { GUEST_POINTS_MSG, isRealUser, pointsBlockedFor } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { canRepairStreak } from './checkin-streak';
 import { startOfVnDay, startOfVnMonth, vnDateKey, vnDaysBetween } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
@@ -147,6 +148,7 @@ export class GameService {
       !!profile.brokenStreakAt &&
       profile.brokenStreakDays > 0 &&
       Date.now() - new Date(profile.brokenStreakAt).getTime() <= windowH * 3600 * 1000 &&
+      canRepairStreak(profile) &&
       (!profile.lastStreakRepairAt || Date.now() - new Date(profile.lastStreakRepairAt).getTime() >= cooldownD * 86400 * 1000);
     return {
       ...profile,

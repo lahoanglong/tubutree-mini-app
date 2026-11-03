@@ -24,14 +24,6 @@ export const BANK_REFUND_IN_PROGRESS = {
 } satisfies Prisma.OrderCustomerRefundWhereInput;
 
 /**
- * Khoản còn mở mà CSV đơn admin cần để ghi "Đang hoàn tiền": chuyển khoản Tubu Chờ/Đang chuyển (đơn REFUNDED), hoặc tiền về
- * muộn/chuyển dư Chờ/Đang chuyển (đơn còn UNPAID). Luật chọn nhãn nằm ở exportPaymentStatus, cùng luật web (order-view.ts).
- */
-export const OPEN_REFUND_FOR_EXPORT = {
-  OR: [BANK_REFUND_IN_PROGRESS, { kind: { in: ['LATE_PAYMENT', 'OVERPAYMENT'] }, status: { in: ['PENDING', 'PROCESSING'] } }],
-} satisfies Prisma.OrderCustomerRefundWhereInput;
-
-/**
  * Khoản hoàn còn việc cho admin: chờ đối soát (UNVERIFIED), chờ chuyển khoản (PENDING), đang chuyển khoản (PROCESSING). Một
  * nguồn cho số trên thẻ "Hoàn tiền khách" (OpsInboxService), huy hiệu tab và bộ lọc "Đang mở" của hàng đợi.
  */
@@ -58,10 +50,37 @@ export function endCustomerPayee(order: Pick<Order, 'endCustomerKey' | 'shipping
  * đơn COD đã giao khi Tubu chưa có bằng chứng hãng thu COD). Loại RETURN nhưng không có yêu cầu trả hàng đứng sau.
  */
 export const COD_RETURN_UNVERIFIED_REF = 'cod-return-unverified';
+/**
+ * refKey của khoản hoàn đơn TRẢ TRƯỚC bị giữ lại chờ Kế toán: Pancake báo "Hoàn một phần" (15) lúc Tubu không có yêu cầu trả rồi "Đã hoàn" (5),
+ * nhân viên có thể đã hoàn tay phần bị trả. Riêng một refKey (không dùng chung COD) để chữ ở API/màn admin không nói "hãng đã thu COD".
+ */
+export const HELD_RETURN_UNVERIFIED_REF = 'pancake-partial-return-held';
+/**
+ * Ghi chú trên khoản COD chờ đối soát khi đơn đó CŨNG đã được Pancake báo "Hoàn một phần" lúc Tubu không có yêu cầu trả: Kế toán phải kiểm hai
+ * việc (hãng có thu COD không, nhân viên đã hoàn tay bao nhiêu). Dùng cột adminNote (trống cho tới lúc Kế toán quyết) nên không cần migration.
+ */
+export const COD_HAND_REFUND_NOTE = 'Pancake báo hoàn một phần rồi hoàn cả đơn: nhân viên có thể đã hoàn tay phần bị trả.';
+
+/** Khoản hoàn COD trả hàng chờ đối soát (kể cả phần không hoàn `:rest` sau khi xác nhận một phần). */
+export const isCodReturnRef = (refKey: string): boolean => refKey === COD_RETURN_UNVERIFIED_REF || refKey.startsWith(`${COD_RETURN_UNVERIFIED_REF}:`);
+/** Khoản hoàn đơn trả trước bị giữ chờ Kế toán (kể cả phần không hoàn `:rest`). */
+export const isHeldReturnRef = (refKey: string): boolean => refKey === HELD_RETURN_UNVERIFIED_REF || refKey.startsWith(`${HELD_RETURN_UNVERIFIED_REF}:`);
+
+/**
+ * Khoản còn mở mà CSV đơn admin cần để ghi "Đang hoàn tiền": chuyển khoản Tubu Chờ/Đang chuyển (đơn REFUNDED), hoặc tiền về
+ * muộn/chuyển dư Chờ/Đang chuyển (đơn còn UNPAID); thêm khoản đơn trả trước bị giữ chờ Kế toán (đơn còn PAID, nhãn "Chờ đối soát hoàn").
+ * Luật chọn nhãn nằm ở exportPaymentStatus, cùng luật web (order-view.ts).
+ */
+export const OPEN_REFUND_FOR_EXPORT = {
+  OR: [BANK_REFUND_IN_PROGRESS, { kind: { in: ['LATE_PAYMENT', 'OVERPAYMENT'] }, status: { in: ['PENDING', 'PROCESSING'] } },
+    { kind: 'RETURN', refKey: HELD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
+  ],
+} satisfies Prisma.OrderCustomerRefundWhereInput;
 
 /** Khoản chờ đối soát do Pancake báo (tiền khách trả dư) hoặc do hệ thống giữ lại (hoàn COD chưa rõ đã thu) — cùng đường xác nhận/bỏ qua. */
 export const isUnverifiedRefundRow = (row: { kind: CustomerRefundKind; status: CustomerRefundStatus; refKey: string }): boolean =>
-  row.status === 'UNVERIFIED' && (row.kind === 'OVERPAYMENT' || (row.kind === 'RETURN' && row.refKey === COD_RETURN_UNVERIFIED_REF));
+  row.status === 'UNVERIFIED' &&
+  (row.kind === 'OVERPAYMENT' || (row.kind === 'RETURN' && (row.refKey === COD_RETURN_UNVERIFIED_REF || row.refKey === HELD_RETURN_UNVERIFIED_REF)));
 
 type RefundOwnerFacts = Pick<Order, 'userId' | 'placedForCustomer' | 'endCustomerKey' | 'shippingAddress'>;
 
@@ -77,12 +96,16 @@ function refundOwner(order: RefundOwnerFacts): { userId: string | null; phone?: 
 /**
  * Đơn COD đã giao bị Pancake báo "Đã hoàn" mà chưa có bằng chứng hãng thu COD: ghi số tiền có thể phải hoàn thành khoản chờ đối
  * soát (UNVERIFIED) trong tx lật trạng thái. Khách không thấy, không được báo; Kế toán xác nhận (→ PENDING, khách chọn nơi nhận)
- * hoặc bỏ qua kèm lý do. Gọi lại cùng đơn không tạo khoản thứ hai (unique orderId+kind+refKey).
+ * hoặc bỏ qua kèm lý do. Gọi lại cùng đơn không tạo khoản thứ hai (unique orderId+kind+refKey). `refKey` mặc định là khoản COD;
+ * đơn trả trước bị giữ lại sau Pancake 15 dùng HELD_RETURN_UNVERIFIED_REF.
  */
 export async function recordCodReturnUnverified(
   tx: Prisma.TransactionClient,
   order: Pick<Order, 'id' | 'code'> & RefundOwnerFacts,
   amount: number,
+  refKey: string = COD_RETURN_UNVERIFIED_REF,
+  adminNote?: string,
+  reason: 'RETURNED' | 'CANCELLED' = 'RETURNED',
 ): Promise<void> {
   await tx.orderCustomerRefund.createMany({
     data: [
@@ -90,12 +113,13 @@ export async function recordCodReturnUnverified(
         orderId: order.id,
         orderCode: order.code,
         kind: 'RETURN',
-        refKey: COD_RETURN_UNVERIFIED_REF,
+        refKey,
         ...refundOwner(order),
         amount,
         method: 'MANUAL_TRANSFER',
         status: 'UNVERIFIED',
-        reason: 'RETURNED',
+        reason,
+        ...(adminNote ? { adminNote } : {}),
       },
     ],
     skipDuplicates: true,

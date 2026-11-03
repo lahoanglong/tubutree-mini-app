@@ -16,7 +16,10 @@ function makeConfig(o: Record<string, unknown> = {}): SystemConfigService {
 }
 
 function makePrisma(order: unknown) {
-  return { order: { findUnique: jest.fn().mockResolvedValue(order) } } as unknown as PrismaService;
+  return {
+    order: { findUnique: jest.fn().mockResolvedValue(order) },
+    dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+  } as unknown as PrismaService;
 }
 
 const ORDER = { id: 'o1', code: 'TUBU250625001', userId: 'u1', type: 'RETAIL', total: 250000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' };
@@ -30,6 +33,18 @@ describe('BankTransferService.getBankQr', () => {
   it('đơn không phải chuyển khoản → BadRequest', async () => {
     const prisma = makePrisma({ ...ORDER, paymentMethod: 'COD' });
     await expect(new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('đơn đại lý ghi công nợ → 400, không sinh QR; đơn đại lý trả trước vẫn có QR', async () => {
+    const debtOrder = { ...ORDER, type: 'DEALER', status: 'CONFIRMED' };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(debtOrder) },
+      dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue({ id: 'l1' }) },
+    } as unknown as PrismaService;
+    await expect(new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1')).rejects.toThrow('Đơn ghi công nợ trả qua sổ công nợ.');
+    (prisma as unknown as { dealerCreditLedger: { findFirst: jest.Mock } }).dealerCreditLedger.findFirst.mockResolvedValue(null);
+    const r = await new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.amount).toBe(250000);
   });
 
   it('chưa cấu hình TK ngân hàng → 503 (thử lại được), không phải 400', async () => {

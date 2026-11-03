@@ -478,7 +478,9 @@ export class PancakeSyncService implements OnModuleInit {
       });
       const { prices, noPrice } = this.variationPrices(v, prev);
       const hold = this.holdPatch(prev, v.is_removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
-      if (prev && prices.retailPrice != null) {
+      // Biến thể khách không mua được sau lượt này (Pancake xoá, hoặc admin đã tắt bán) hạ giá thì không báo "giảm giá".
+      const sellable = !v.is_removed && (hold.isActive ?? prev?.isActive) !== false;
+      if (prev && sellable && prices.retailPrice != null) {
         const newEff = prices.salePrice ?? prices.retailPrice;
         const oldEff = prev.salePrice ?? prev.retailPrice;
         if (newEff > 0 && newEff < oldEff && (!bestDrop || (oldEff - newEff) / oldEff > (bestDrop.oldPrice - bestDrop.newPrice) / bestDrop.oldPrice)) {

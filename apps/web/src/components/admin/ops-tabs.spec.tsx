@@ -413,6 +413,56 @@ describe('OpsHealthTab — tác vụ nền (cron_runs)', () => {
   });
 });
 
+describe('OpsHealthTab — việc nền lỗi không được báo xanh (QTUI-01)', () => {
+  const OK_JOB = { job: 'Foo.bar', lastStartedAt: '2026-10-24T03:00:00.000Z', lastFinishedAt: '2026-10-24T03:00:02.000Z', lastSuccessAt: '2026-10-24T03:00:02.000Z', lastErrorAt: null, lastError: null, consecutiveFailures: 0, lastDurationMs: 2000, lastOutcome: 'OK', lastErrorCount: 0 };
+  const BAD_JOB = { job: 'data-retention.cleanup', lastStartedAt: '2026-11-02T21:30:00.000Z', lastFinishedAt: '2026-11-02T21:30:05.000Z', lastSuccessAt: '2026-11-01T21:30:05.000Z', lastErrorAt: '2026-11-02T21:30:05.000Z', lastError: 'Dọn support_chat lỗi: 9', consecutiveFailures: 1, lastDurationMs: 5000, lastOutcome: 'ERRORS', lastErrorCount: 1 };
+  const clean = { ...HEALTH, problems: [] };
+
+  it('không có sự cố mà cron đang lỗi → không hiện "Mọi chỉ số trong ngưỡng", có cảnh báo tên dễ đọc, lỗi gần nhất và giờ, nằm trên các thẻ', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...clean, cronJobs: [OK_JOB, BAD_JOB] } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    expect(c.textContent).not.toContain('Mọi chỉ số trong ngưỡng');
+    const alert = c.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('1 việc tự chạy nền đang lỗi');
+    expect(alert.textContent).toContain('Dọn nhật ký và dữ liệu cũ quá thời hạn lưu');
+    expect(alert.textContent).toContain('Dọn support_chat lỗi: 9');
+    expect(alert.textContent).toContain(formatDateTime(BAD_JOB.lastErrorAt));
+    expect(alert.textContent).not.toContain('Foo.bar');
+    const firstCard = c.querySelector('section[aria-label="Pancake"]')!;
+    expect(alert.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('mọi việc nền OK và không sự cố → vẫn báo xanh', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...clean, cronJobs: [OK_JOB] } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    expect(c.textContent).toContain('Mọi chỉ số trong ngưỡng');
+    expect(c.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('khổ 375: bảng việc nền có dạng thẻ (tên, kết quả, lỗi gần nhất) chỉ hiện dưới sm, bảng ẩn dưới sm', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...clean, cronJobs: [OK_JOB, BAD_JOB] } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    const cards = c.querySelector('[data-testid="cron-cards"]')!;
+    expect(cards.className).toContain('sm:hidden');
+    const first = cards.querySelector('li')!;
+    expect(first.textContent).toContain('Dọn nhật ký và dữ liệu cũ quá thời hạn lưu');
+    expect(first.textContent).toContain('Lỗi 1 lần ghi log');
+    expect(first.textContent).toContain('Dọn support_chat lỗi: 9');
+    expect(c.querySelector('[role="region"][aria-label="Bảng tác vụ nền"]')!.className).toContain('max-sm:hidden');
+  });
+
+  it('thẻ Tin ZNS hiện số tin hỏng 24 giờ và lỗi gặp nhiều nhất; tô đỏ khi vượt ngưỡng', async () => {
+    const zns = { failed24h: 8, topError: 'ZNS lỗi -124: token hết hạn' };
+    const body = { ...HEALTH, zns, problems: [{ key: 'zns.failed', message: '8 tin ZNS gửi hỏng trong 24 giờ qua' }] };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    const card = c.querySelector('section[aria-label="Tin ZNS"]')!;
+    expect(card.textContent).toContain('Tin gửi hỏng trong 24 giờ8');
+    expect(card.textContent).toContain('ZNS lỗi -124: token hết hạn');
+    expect(card.querySelector('.text-danger-fg')).not.toBeNull();
+  });
+});
+
 describe('OpsHealthTab — kênh webhook báo động (R6-ADMIN-4)', () => {
   const EMAIL = { state: 'DISABLED', recipients: 0, issues: [], lastOkAt: null, lastErrorAt: null, lastError: null };
   const webhook = (over: Record<string, unknown> = {}) => ({

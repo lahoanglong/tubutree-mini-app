@@ -66,7 +66,6 @@ import { RefundDestinationPicker } from '../components/orders/refund-destination
 import { OrderRefunds } from '../components/orders/order-refunds';
 import {
   EMPTY_BANK,
-  bankDetailsError,
   canPayOrderNow,
   cancelRefundMode,
   destinationBody,
@@ -79,6 +78,7 @@ import {
   type RefundBankInput,
   type RefundMethodChoice,
 } from '../utils/refund-rules';
+import { bankDetailsError } from '../utils/refund-form-rules';
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();

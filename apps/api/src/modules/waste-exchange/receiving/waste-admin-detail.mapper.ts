@@ -1,6 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { AdminWasteEventDTO, WasteRequestAdminDetailDTO } from '@tubutree/shared-types';
+import { loadPointExpiryTxns } from '../../loyalty/loyalty-expiry.service';
+import { reverseTake } from './waste-reverse-take';
 import type { WasteAccessService } from '../core/waste-access.service';
 import { customerView } from '../core/waste-mask';
 import { WASTE_REQUEST_FULL_INCLUDE, toRequestDetail } from '../customer/waste-request.mapper';
@@ -69,5 +71,12 @@ export async function loadAdminRequestDetail(
       meta: (e.meta as Record<string, unknown> | null) ?? null,
     }));
   }
-  return toAdminRequestDetail(row, viewerIsAdmin, pointAvailable, events);
+  const dto = toAdminRequestDetail(row, viewerIsAdmin, pointAvailable, events);
+  if (viewerIsAdmin && row.status === 'COMPLETED') {
+    const user = await db.user.findUnique({ where: { id: row.userId }, select: { pointsBalance: true } });
+    const pointsBalance = user?.pointsBalance ?? 0;
+    const txns = await loadPointExpiryTxns(db, row.userId);
+    dto.reversePreview = { pointsBalance, expectedTake: reverseTake(row.pointsAwarded ?? 0, txns, row.id, pointsBalance) };
+  }
+  return dto;
 }

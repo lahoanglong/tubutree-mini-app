@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Thanh toán ở khổ điện thoại phải là Mini App (apps/miniapp/src/pages/checkout.tsx): thứ tự khối, dải phẳng, thẻ địa chỉ,
 // khối "Sản phẩm", thẻ mã, thanh dính đáy một nút. jsdom không có media query nên kiểm bằng lớp `max-md:`.
@@ -9,7 +9,9 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 const quoteFail = vi.hoisted(() => ({ error: null as Error | null }));
-const cartExtra = vi.hoisted(() => ({ coupon: null as string | null, discount: 0, second: false }));
+const cartExtra = vi.hoisted(() => ({ coupon: null as string | null, discount: 0, second: false, combo: 0, tier: 0 }));
+const addrMode = vi.hoisted(() => ({ none: false }));
+const quoteExtra = vi.hoisted(() => ({ pointsEarned: 0, shippingFee: 30000, discount: 0, hang: false }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => ({
@@ -19,19 +21,20 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
         ? [{ id: 'i2', variationId: 'v2', productName: 'Xà phòng', variationName: '100g', slug: 'xa-phong', thumbnail: null, unitPrice: 100000, quantity: 1, stock: 5, total: 100000 }]
         : []),
     ],
-    couponCode: cartExtra.coupon, subtotal: 300000, discount: cartExtra.discount, freeship: false, freeshipThreshold: 500000, itemCount: 2,
+    couponCode: cartExtra.coupon, subtotal: 300000, discount: cartExtra.discount, comboDiscount: cartExtra.combo, tierDiscount: cartExtra.tier, freeship: false, freeshipThreshold: 500000, itemCount: 2,
   }),
   getMe: async () => ({ pointsBalance: 500, walletBalance: 0 }),
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
-  getAddresses: async () => [
+  getAddresses: async () => addrMode.none ? [] : [
     { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: '84_VNp', districtCode: '', wardCode: 'w', isDefault: true },
     { id: 'a2', recipient: 'Bình', phone: '0987654321', province: 'Huế', district: 'A', ward: 'B', street: '2 Lê Lợi', provinceCode: '46', districtCode: 'd', wardCode: '00', isDefault: false },
   ],
   checkoutQuote: async () => {
     if (quoteFail.error) throw quoteFail.error;
+    if (quoteExtra.hang) await new Promise(() => {});
     return {
-    subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0,
+    subtotal: 300000, discount: quoteExtra.discount, pointsUsed: 0, pointsDiscount: 0, shippingFee: quoteExtra.shippingFee, total: 300000 + quoteExtra.shippingFee, pointsEarned: quoteExtra.pointsEarned,
     pointsBalance: 500, redeemablePoints: 500,
     };
   },
@@ -54,6 +57,13 @@ beforeEach(() => {
   cartExtra.coupon = null;
   cartExtra.discount = 0;
   cartExtra.second = false;
+  cartExtra.combo = 0;
+  cartExtra.tier = 0;
+  quoteExtra.pointsEarned = 0;
+  quoteExtra.shippingFee = 30000;
+  quoteExtra.discount = 0;
+  quoteExtra.hang = false;
+  addrMode.none = false;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -168,5 +178,158 @@ describe('/thanh-toan — số giảm ở thẻ mã khi chưa có báo giá', ()
     expect(card.textContent).toContain('XANH10');
     expect(card.textContent).not.toMatch(/-\s?57\.800/);
     expect(card.textContent).not.toMatch(/-\d/);
+  });
+});
+
+describe('/thanh-toan — nút "Chi tiết" và sheet tính tiền như Mini App ở điện thoại', () => {
+  it('tiêu đề Tóm tắt có nút "Chi tiết" mở sheet "Chi tiết tính tiền đơn hàng" với nút "Đã hiểu", đóng lại được', async () => {
+    const c = await mount();
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    const btn = Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!;
+    expect(btn).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Chi tiết tính tiền đơn hàng');
+    click(btn);
+    await flush(3);
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dlg.textContent).toContain('Chi tiết tính tiền đơn hàng');
+    expect(dlg.textContent).toContain('Tạm tính tiền hàng');
+    expect(dlg.textContent).toContain('Phí vận chuyển');
+    expect(dlg.textContent).toContain('Tổng thanh toán');
+    click(Array.from(dlg.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Đã hiểu')!);
+    await flush(3);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
+
+describe('/thanh-toan — sheet chi tiết giống Mini', () => {
+  const openSheet = async (c: HTMLElement) => {
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    click(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!);
+    await flush(3);
+    return document.querySelector<HTMLElement>('[role="dialog"]')!;
+  };
+
+  it('có điểm thưởng: sheet ghi dòng "Nhận +N Điểm Xanh khi giao thành công"', async () => {
+    quoteExtra.pointsEarned = 1250;
+    const dlg = await openSheet(await mount());
+    expect(dlg.textContent).toContain('Nhận +1.250 Điểm Xanh khi giao thành công');
+  });
+
+  it('không có điểm thưởng: sheet không có dòng "Nhận +"', async () => {
+    const dlg = await openSheet(await mount());
+    expect(dlg.textContent).not.toContain('Nhận +');
+  });
+
+  it('phí ship 0: "Miễn phí" tông success ở cả thẻ tóm tắt và sheet', async () => {
+    quoteExtra.shippingFee = 0;
+    const c = await mount();
+    const inSummary = Array.from(c.querySelectorAll<HTMLElement>('[data-mini-block="summary"] span')).find((e) => e.textContent === 'Miễn phí')!;
+    expect(inSummary.className).toMatch(/text-success-fg/);
+    const dlg = await openSheet(c);
+    const inSheet = Array.from(dlg.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === 'Miễn phí')!;
+    expect(inSheet.className).toMatch(/text-success-fg/);
+  });
+});
+
+describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ giỏ như Mini', () => {
+  it('giỏ trọn có combo + hạng + mã: thẻ tóm tắt và sheet ghi số giảm', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    cartExtra.tier = 5000;
+    addrMode.none = true;
+    const c = await mount();
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    expect(summary.textContent).toContain('Giảm giá combo');
+    expect(summary.textContent).toContain('-15.000đ');
+    expect(summary.textContent).toContain('-20.000đ');
+    expect(summary.textContent).toContain('Ưu đãi hạng thành viên');
+    click(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!);
+    await flush(3);
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dlg.textContent).toContain('Giảm giá combo');
+    expect(dlg.textContent).toContain('-15.000đ');
+    expect(dlg.textContent).toContain('-20.000đ');
+    expect(dlg.textContent).toContain('-5.000đ');
+  });
+
+  it('mua một phần giỏ: không ghi số giảm của cả giỏ', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    cartExtra.second = true;
+    addrMode.none = true;
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
+    const c = await mount();
+    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+    expect(summary.textContent).not.toContain('Giảm giá combo');
+    expect(summary.textContent).not.toContain('-15.000đ');
+    expect(summary.textContent).not.toContain('-20.000đ');
+    expect(summary.textContent).toContain('Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.');
+  });
+
+  it('không có mã trong giỏ: không ghi dòng giảm giá dù discount > 0', async () => {
+    cartExtra.discount = 20000;
+    addrMode.none = true;
+    const c = await mount();
+    expect(c.querySelector('[data-mini-block="summary"]')!.textContent).not.toContain('-20.000đ');
+  });
+});
+
+describe('/thanh-toan — thẻ tóm tắt khớp Mini ở 375 (nhãn trơn, chỉ giá trị xanh)', () => {
+  const summaryOf = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
+
+  it('dòng Giảm giá của báo giá: nhãn không xanh dưới md, hậu tố mã chỉ từ md, giá trị xanh', async () => {
+    cartExtra.coupon = 'XANH10';
+    quoteExtra.discount = 20000;
+    const c = await mount();
+    const value = Array.from(summaryOf(c).querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === '-20.000đ')!;
+    expect(value.className).toMatch(/(^|\s)text-success-fg/);
+    const row = value.parentElement!;
+    expect(row.className).not.toMatch(/(^|\s)text-success-fg/);
+    const label = row.firstElementChild as HTMLElement;
+    expect(label.className).not.toMatch(/(^|\s)text-success-fg/);
+    const suffix = label.querySelector<HTMLElement>('span')!;
+    expect(suffix.textContent).toContain('XANH10');
+    expect(suffix.className).toMatch(/\bhidden\b/);
+    expect(suffix.className).toMatch(/\bmd:inline\b/);
+  });
+
+  it('chưa có báo giá: thứ tự combo, Giảm giá, Ưu đãi hạng như Mini', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    cartExtra.tier = 5000;
+    addrMode.none = true;
+    const t = summaryOf(await mount()).textContent!;
+    expect(t.indexOf('Giảm giá combo')).toBeGreaterThan(-1);
+    expect(t.indexOf('Giảm giá combo')).toBeLessThan(t.indexOf('-20.000đ'));
+    expect(t.indexOf('-20.000đ')).toBeLessThan(t.indexOf('Ưu đãi hạng thành viên'));
+  });
+
+  it('báo giá lỗi: không chen dòng giảm xem trước cạnh dòng lỗi; nút Chi tiết vẫn bấm được như Mini', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    quoteFail.error = new ApiError('Địa chỉ giao hàng chưa theo địa giới mới.', 400, 'ADDRESS_OUTDATED');
+    const c = await mount();
+    const s = summaryOf(c);
+    expect(s.textContent).not.toContain('-20.000đ');
+    expect(s.textContent).not.toContain('-15.000đ');
+    const btn = Array.from(s.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!;
+    expect(btn.disabled).toBe(false);
+  });
+
+  it('đang tải lại báo giá (bấm Dùng Điểm Xanh): không chen dòng giảm xem trước, không nhảy dòng', async () => {
+    cartExtra.coupon = 'XANH10';
+    cartExtra.discount = 20000;
+    cartExtra.combo = 15000;
+    const c = await mount();
+    expect(summaryOf(c).textContent).not.toContain('Giảm giá combo');
+    quoteExtra.hang = true;
+    click(c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[type="checkbox"]')!);
+    await flush(4);
+    expect(c.textContent).not.toContain('Giảm giá combo');
+    expect(c.textContent).not.toContain('-15.000đ');
   });
 });

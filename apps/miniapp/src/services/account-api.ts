@@ -239,6 +239,8 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('COMMUNITY')) return 'Thưởng cộng đồng';
   if (reason.startsWith('STOREFRONT_QUEST')) return 'Thưởng nhiệm vụ gian hàng';
   if (reason.startsWith('CTV_MILESTONE')) return 'Thưởng mốc doanh số CTV';
+  if (reason.startsWith('AFFILIATE_MILESTONE_REVOKE')) return 'Thu hồi thưởng mốc doanh số CTV';
+  if (reason.startsWith('AFFILIATE_MILESTONE_DEBT')) return 'Ghi nợ thu hồi thưởng mốc doanh số CTV';
   if (reason.startsWith('GAME_BUY_TREE')) return 'Góp quỹ trồng cây';
   if (reason.startsWith('GAME_SPIN_COST')) return 'Quay vòng quay may mắn';
   if (reason.startsWith('GAME') || reason.startsWith('SEASONPASS')) return 'Phần thưởng Vườn Xanh';

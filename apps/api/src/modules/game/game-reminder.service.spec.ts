@@ -7,7 +7,8 @@ const config = {
   get: async <T>(_k: string, fb?: T): Promise<T> => fb as T,
 } as unknown as SystemConfigService;
 
-function setup(profiles: unknown[], remindedUserIds: string[] = []) {
+function setup(profiles: unknown[], remindedUserIds: string[] = [], plotWateredUserIds: string[] = []) {
+  const plotFindMany = jest.fn().mockResolvedValue(plotWateredUserIds.map((userId) => ({ userId })));
   // Trang 1 trả dữ liệu, trang 2 rỗng → vòng cursor dừng (xem pageProfiles).
   const rows = profiles.map((p, i) => ({ id: `gp${i}`, ...(p as object) }));
   const findMany = jest.fn().mockResolvedValueOnce(rows).mockResolvedValue([]);
@@ -15,6 +16,7 @@ function setup(profiles: unknown[], remindedUserIds: string[] = []) {
   const prisma = {
     gameProfile: { findMany },
     notificationLog: { findMany: logFindMany },
+    gardenPlot: { findMany: plotFindMany },
   } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
@@ -60,10 +62,27 @@ describe('GameReminderService.sendCheckInReminders', () => {
 
 describe('GameReminderService.sendThirstyTreeReminders', () => {
   it('cây sắp héo (chưa tưới lâu) nhưng chưa chết → nhắc tưới', async () => {
-    const { svc, notify } = setup([{ userId: 'u2', lastWateredAt: new Date() }]);
+    const { svc, notify } = setup([{ userId: 'u2', lastWateredAt: new Date(), ecoImpact: { progress: 120 } }]);
     const sent = await svc.sendThirstyTreeReminders();
     expect(sent).toBe(1);
     expect(notify).toHaveBeenCalledWith('u2', 'GAME_TREE_THIRSTY', {});
+  });
+
+  it('cây vừa thu hoạch (tiến độ 0) → không nhắc khát', async () => {
+    const { svc, notify } = setup([{ userId: 'u3', ecoImpact: { progress: 0 } }, { userId: 'u4', ecoImpact: {} }]);
+    expect(await svc.sendThirstyTreeReminders()).toBe(0);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('khách vừa tưới lô phụ trong cửa sổ cảnh báo → không nhắc, khách khác vẫn nhận', async () => {
+    const { svc, notify } = setup(
+      [{ userId: 'u5', ecoImpact: { progress: 50 } }, { userId: 'u6', ecoImpact: { progress: 50 } }],
+      [],
+      ['u5'],
+    );
+    expect(await svc.sendThirstyTreeReminders()).toBe(1);
+    expect(notify).toHaveBeenCalledWith('u6', 'GAME_TREE_THIRSTY', {});
+    expect(notify).not.toHaveBeenCalledWith('u5', 'GAME_TREE_THIRSTY', {});
   });
 
   it('lọc cửa sổ héo (đã từng tưới; quá wilt-1 ngày nhưng chưa quá death)', async () => {
@@ -106,7 +125,7 @@ describe('GameReminderService.sendDailyReminders (cron)', () => {
  */
 describe('GameReminderService — không nhắc lặp, không nạp vô hạn', () => {
   it('user đã được nhắc "cây khát" gần đây → bỏ qua', async () => {
-    const { svc, notify } = setup([{ userId: 'u1' }, { userId: 'u2' }], ['u1']);
+    const { svc, notify } = setup([{ userId: 'u1', ecoImpact: { progress: 10 } }, { userId: 'u2', ecoImpact: { progress: 10 } }], ['u1']);
     const sent = await svc.sendThirstyTreeReminders();
     expect(sent).toBe(1);
     expect(notify).toHaveBeenCalledWith('u2', 'GAME_TREE_THIRSTY', {});

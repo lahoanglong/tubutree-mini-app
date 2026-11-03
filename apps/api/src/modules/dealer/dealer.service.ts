@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -94,6 +94,12 @@ interface RewardPeriod {
 }
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+/** `ref` đã viết thường: ghi chú lịch sử nối các phần bằng " · " nên khớp nguyên một phần, không khớp chuỗi con. */
+const noteHasBankRef = (note: string | null, ref: string) =>
+  (note ?? '')
+    .toLowerCase()
+    .split(' · ')
+    .some((part) => part.trim() === `mã gd ${ref}`);
 
 /**
  * Trần tổng 1 đơn đại lý: Order.total/OrderItem.total và DealerCreditLedger.delta là INT4, tổng vượt
@@ -577,7 +583,12 @@ export class DealerService {
       where: { id: dealerUserId },
       select: { id: true, role: true, fullName: true, phone: true },
     });
-    if (!dealer || dealer.role !== 'DEALER') throw new NotFoundException('Không tìm thấy đại lý.');
+    if (!dealer) throw new NotFoundException('Không tìm thấy đại lý.');
+    // Đại lý bị thu hồi vai trò mà còn nợ vẫn phải ghi nhận được khoản họ trả; người chưa từng có sổ công nợ thì không phải đại lý.
+    if (dealer.role !== 'DEALER') {
+      const hasLedger = await this.prisma.dealerCreditLedger.findFirst({ where: { userId: dealerUserId }, select: { id: true } });
+      if (!hasLedger) throw new NotFoundException('Không tìm thấy đại lý.');
+    }
 
     // Ghi nhận từ một báo cáo của đại lý mà người gọi không gửi khoá: lấy chính báo cáo làm khoá, để unique
     // (userId, refType, refId) chặn trừ nợ hai lần cho cùng một báo cáo.
@@ -589,9 +600,12 @@ export class DealerService {
       });
       if (existing) {
         if (existing.delta !== -amount) {
+          const bankRef = opts.bankRef?.trim();
           throw new BadRequestException(
             opts.idempotencyKey?.trim()
-              ? 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.'
+              ? bankRef && bankRef === opts.idempotencyKey.trim()
+                ? `Mã giao dịch ${bankRef} đã ghi nhận ${vnd(-existing.delta)} cho đại lý này. Kiểm tra lại mã hoặc bỏ trống ô mã.`
+                : 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.'
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
         }
@@ -625,6 +639,9 @@ export class DealerService {
           // Re-check TRONG transaction Serializable — dư nợ có thể đã đổi kể từ lúc admin xem màn
           // hình (đơn CREDIT mới / khoản báo khác vừa được duyệt). 2 admin duyệt đồng thời cho
           // cùng đại lý sẽ khiến 1 bên serialization-fail (P2034) thay vì cùng qua check.
+          // Cùng mã đã xác nhận một đơn trả trước hoặc đã ghi giảm nợ (của đại lý nào cũng vậy) thì tiền đó đã được tính, không giảm nợ thêm lần nữa.
+          const payRef = opts.bankRef?.trim();
+          if (payRef) await this.assertBankRefFreeForPayment(tx, payRef, key ? { userId: dealerUserId, refId: key } : undefined);
           const agg = await tx.dealerCreditLedger.aggregate({ where: { userId: dealerUserId }, _sum: { delta: true } });
           const debt = agg._sum.delta ?? 0;
           if (amount > debt) {
@@ -1318,6 +1335,77 @@ export class DealerService {
 
   // ── Admin: xác nhận đã nhận chuyển khoản cho đơn đại lý trả trước ──
 
+  /** Khoá advisory theo mã giao dịch, tự nhả khi transaction kết thúc. */
+  private async lockBankRef(tx: Prisma.TransactionClient, bankRef: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${bankRef.toLowerCase()}`}))`;
+  }
+
+  /** Mã giao dịch đã ghi ở một đơn đại lý (khác `exceptOrderId`): trả mã đơn, không có thì null. */
+  private async findOrderUsingBankRef(db: Prisma.TransactionClient | PrismaService, bankRef: string, exceptOrderId?: string) {
+    const ref = bankRef.toLowerCase();
+    const history = await db.orderStatusHistory.findMany({
+      where: {
+        note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' },
+        actorType: 'ADMIN',
+        ...(exceptOrderId ? { orderId: { not: exceptOrderId } } : {}),
+      },
+      select: { orderId: true, note: true },
+    });
+    const usedIds = history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId);
+    return usedIds.length ? db.order.findFirst({ where: { id: { in: usedIds }, type: 'DEALER' }, select: { code: true } }) : null;
+  }
+
+  /** Mã giao dịch đã ghi giảm công nợ của bất kỳ đại lý nào (refId hoặc phần "Mã GD" trong ghi chú), trừ dòng có `own` (khoá của chính lần ghi này). */
+  private async isBankRefOnPayment(
+    db: Prisma.TransactionClient | PrismaService,
+    bankRef: string,
+    own?: { userId: string; refId: string },
+  ) {
+    const ref = bankRef.toLowerCase();
+    const payments = await db.dealerCreditLedger.findMany({
+      where: {
+        refType: 'PAYMENT',
+        OR: [{ refId: { equals: bankRef, mode: 'insensitive' } }, { note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' } }],
+      },
+      select: { userId: true, refId: true, note: true },
+    });
+    return payments.some(
+      (p) => !(own && p.userId === own.userId && p.refId === own.refId) && (p.refId?.toLowerCase() === ref || noteHasBankRef(p.note, ref)),
+    );
+  }
+
+  /**
+   * Đường ghi trả nợ chạy Serializable nên snapshot đã chụp trước lúc chờ khoá: kiểm bằng kết nối riêng (mỗi câu một snapshot mới)
+   * sau khi giữ khoá, để thấy dòng lịch sử mà bên xác nhận đơn vừa commit trước khi nhả khoá.
+   */
+  private async assertBankRefFreeForPayment(tx: Prisma.TransactionClient, bankRef: string, own?: { userId: string; refId: string }) {
+    await this.lockBankRef(tx, bankRef);
+    const usedOrder = await this.findOrderUsingBankRef(this.prisma, bankRef);
+    if (usedOrder) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+    if (await this.isBankRefOnPayment(this.prisma, bankRef, own)) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+  }
+
+  /**
+   * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn trả
+   * trước khác hoặc ở một khoản trả nợ thì 409. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB; khoá advisory theo mã
+   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm. Transaction này Read
+   * Committed nên mỗi câu đọc thấy dữ liệu mới nhất sau khi chờ khoá.
+   */
+  private async assertBankRefUnused(tx: Prisma.TransactionClient, bankRef: string, orderId: string) {
+    await this.lockBankRef(tx, bankRef);
+    const usedOrder = await this.findOrderUsingBankRef(tx, bankRef, orderId);
+    if (usedOrder) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+    if (await this.isBankRefOnPayment(tx, bankRef)) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+  }
+
   /**
    * Admin xác nhận đã nhận tiền chuyển khoản cho đơn đại lý TRẢ TRƯỚC: paymentStatus UNPAID → PAID
    * (PENDING_PAYMENT thì chuyển luôn CONFIRMED — y hệt webhook đối soát Pancake onPaymentReconcile).
@@ -1368,6 +1456,7 @@ export class DealerService {
     const adminNote = dto.note?.trim() || null;
     const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
     await this.prisma.$transaction(async (tx) => {
+      if (bankRef) await this.assertBankRefUnused(tx, bankRef, order.id);
       // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()` duy
       // nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
       const paidAt = new Date();

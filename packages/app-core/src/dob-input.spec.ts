@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DOB_ERRORS, maskDobInput, validateDobVn } from './dob-input';
 
-const NOW = new Date(2026, 10, 1, 9, 30);
+// 09:30 ngày 01/11/2026 giờ Việt Nam
+const NOW = new Date('2026-11-01T02:30:00.000Z');
 
 describe('maskDobInput', () => {
   it('thêm dấu / khi gõ số liền nhau', () => {
@@ -159,8 +160,11 @@ describe('validateDobVn', () => {
   it('năm quá xa (trước 1900) báo kiểm tra lại năm', () => {
     expect(validateDobVn('01/01/1850', NOW)).toEqual({ iso: null, error: DOB_ERRORS.tooOld });
   });
-  it('dùng ngày theo giờ máy, không lệch múi giờ khi khuya', () => {
-    const lateNight = new Date(2026, 10, 1, 23, 59);
+  it('dùng ngày Việt Nam, không lệch theo múi giờ máy', () => {
+    const lateNight = new Date('2026-11-01T16:59:00.000Z'); // 23:59 01/11 giờ VN
     expect(validateDobVn('01/11/2026', lateNight).iso).toBe('2026-11-01');
+    expect(validateDobVn('02/11/2026', lateNight).error).toBe(DOB_ERRORS.future);
+    const justAfterMidnight = new Date('2026-11-01T17:01:00.000Z'); // 00:01 02/11 giờ VN, máy ở New York vẫn là 01/11
+    expect(validateDobVn('02/11/2026', justAfterMidnight).iso).toBe('2026-11-02');
   });
 });

@@ -55,6 +55,8 @@ function mockGame(api: MockApi, profile: GameProfile = PROFILE) {
 test.describe('Vườn Xanh', () => {
   test('hiển thị trạng thái vườn từ API: tiến độ cây, giọt nước, chuỗi ngày và lô đất', async ({ page, api }) => {
     mockGame(api);
+    // Đầu trang lấy chuỗi từ trạng thái điểm danh trước, hồ sơ game chỉ là dự phòng khi chưa tải xong.
+    api.get('/me/daily-check-in', { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 5, currentCycleDay: 6, todayPoints: 0, todayWater: 10, rewards: [] });
     await page.goto('/game');
 
     await expect(page.getByText('Cây Sưa Đỏ').first()).toBeVisible({ timeout: 15_000 });

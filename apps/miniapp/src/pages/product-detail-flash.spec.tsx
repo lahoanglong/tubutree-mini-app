@@ -460,6 +460,20 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     expect(screen.queryByText(SPENT)).toBeNull();
   });
 
+  it('giữ chỗ ghi chú từ lần vẽ đầu khi đã đăng nhập đang xem Giờ vàng (allowance chưa về); chưa đăng nhập thì không giữ dải trống', async () => {
+    mocks.fetchFlashAllowance.mockReturnValue(new Promise(() => {}));
+    const view = renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    const slot = () => document.querySelector<HTMLElement>('[data-section="pdp-flash-limit"]')!;
+    expect(slot().style.minHeight).not.toBe('');
+    expect(slot().textContent).toBe('');
+    view.unmount();
+    mocks.authStatus = 'guest';
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    expect(slot().style.minHeight).toBe('');
+  });
+
   it('khách chưa đăng nhập: không gọi endpoint, số như trước', async () => {
     mocks.authStatus = 'guest';
     renderPdp();

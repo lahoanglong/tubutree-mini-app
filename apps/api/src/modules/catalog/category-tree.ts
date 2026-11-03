@@ -40,6 +40,8 @@ export const CATEGORY_MSG = {
   removeHasChildren: (name: string, n: number) => `Danh mục "${name}" còn ${n} mục con. Xoá hoặc chuyển các mục con trước.`,
   removeHasProducts: (name: string, n: number) =>
     `Danh mục "${name}" còn ${n} sản phẩm. Gỡ sản phẩm khỏi danh mục này trước khi xoá.`,
+  removeHasBanners: (name: string, titles: string[]) =>
+    `Danh mục "${name}" đang là đích của banner chiến dịch ${titles.map((t) => `"${t}"`).join(', ')}. Đổi đích hoặc kết thúc chiến dịch đó trước khi xoá.`,
   notLeaf: (name: string) => `Danh mục "${name}" có mục con. Chỉ gán sản phẩm vào danh mục lá: chọn một mục con.`,
   notFound: () => 'Danh mục không tồn tại (có thể vừa bị xoá). Tải lại danh sách danh mục.',
   staleOrder: () => 'Danh sách danh mục đã đổi. Tải lại rồi sắp xếp lại.',

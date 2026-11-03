@@ -77,4 +77,14 @@ describe('CheckInStreak', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
     expect(retry).toHaveBeenCalledTimes(1);
   });
+
+  it('hàng Vé giữ lửa: nhãn không xuống dòng, nút được xuống hàng riêng khi hẹp và co giãn đầy hàng', () => {
+    renderStreak(PROFILE, { status: STATUS(0, 0) });
+    const label = screen.getByText(/Vé giữ lửa:/);
+    expect(label).toHaveStyle({ whiteSpace: 'nowrap' });
+    expect(label.parentElement).toHaveStyle({ flexWrap: 'wrap' });
+    const btn = label.parentElement!.querySelector('button')!;
+    expect(btn.style.flexGrow).toBe('1');
+    expect(btn.style.flexShrink).toBe('0');
+  });
 });

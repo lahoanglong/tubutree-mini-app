@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { wasteCatalogueQuery, wasteMeQuery } from '@tubutree/app-core/queries/waste';
-import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -103,19 +103,25 @@ function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
 }
 
 function GuestOverview({ items }: { items: readonly WasteItemDTO[] | undefined }) {
+  const cfg = usePublicConfig();
+  const intro = wasteIntroCopy(cfg.waste);
   return (
     <>
       <div className="space-y-1">
         <h2 className={skin.sectionTitle}>{wasteGuestCopy.introTitle}</h2>
-        <p className="text-sm text-stone-700">{wasteGuestCopy.intro}</p>
+        {cfg.isLoaded ? <p className="text-sm text-stone-700">{intro.intro}</p> : <Skeleton height={40} rounded="rounded-card" />}
       </div>
       <section className="space-y-2">
         <h2 className={skin.sectionTitle}>{wasteGuestCopy.stepsTitle}</h2>
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-900">
-          {wasteGuestCopy.steps.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ol>
+        {cfg.isLoaded ? (
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-900">
+            {intro.steps.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ol>
+        ) : (
+          <Skeleton height={64} rounded="rounded-card" />
+        )}
       </section>
       {items === undefined ? <Skeleton height={120} rounded="rounded-card" /> : <ItemList items={items} />}
       <div className={`${skin.plain}`}>

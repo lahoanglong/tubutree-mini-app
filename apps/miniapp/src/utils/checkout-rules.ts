@@ -1,3 +1,4 @@
+import { isTaxCodeValid } from '@tubutree/app-core/commerce/tax-code';
 import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
 import { lockedPointsLabel } from '@tubutree/app-core/points-lots';
@@ -16,7 +17,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isInvoiceValid(wantInvoice: boolean, invoice: InvoiceInfo): boolean {
   if (!wantInvoice) return true;
   return (
-    invoice.taxCode.trim().length > 0 &&
+    isTaxCodeValid(invoice.taxCode) &&
     invoice.companyName.trim().length > 0 &&
     invoice.address.trim().length > 0 &&
     EMAIL_RE.test(invoice.email.trim())

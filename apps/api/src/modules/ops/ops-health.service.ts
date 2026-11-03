@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { CRON_TZ } from '../../common/cron-tz';
@@ -70,6 +70,10 @@ const FAILED_SCAN = 200;
 const WEBHOOK_TIMEOUT_MS = 5000;
 /** Token OA còn dưới chừng này mà chưa được làm mới: cron làm mới (ngưỡng 13 giờ, mỗi 6 giờ) đã lỡ ít nhất một lượt. */
 const ZALO_TOKEN_WARN_MS = 3 * 3_600_000;
+/** Chu kỳ cron làm mới token là 6 giờ; thêm 1 giờ đệm trước khi coi "chưa có mốc hạn" là cron không chạy. */
+const ZALO_TOKEN_CRON_GRACE_MS = 7 * 3_600_000;
+/** Tên job trong sổ cron_runs của ZaloOaTokenCron.refresh (không đặt name ở @Cron nên là Lớp.phươngThức). */
+const ZALO_TOKEN_CRON_JOB = 'ZaloOaTokenCron.refresh';
 
 const PANCAKE_STATUSES = Object.values(PANCAKE_EVENT_STATUS);
 const GOMDON_STATUSES = Object.values(GOMDON_EVENT_STATUS);
@@ -213,7 +217,7 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems, zns] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
@@ -222,6 +226,7 @@ export class OpsHealthService {
       this.webhookChannel(),
       this.cronJobs(),
       this.zaloTokenProblems(now),
+      this.znsHealth(now),
     ]);
     const problems = opsProblems(
       {
@@ -238,6 +243,7 @@ export class OpsHealthService {
           attentionRefs: refs(gomdon.attentionOrders, (o) => o.code),
         },
         queues,
+        zns,
         orders: {
           deliveredEffectsPending: orders.deliveredEffectsPending,
           deliveredEffectsRefs: refs(orders.deliveredEffectsOrders, (o) => o.code),
@@ -248,13 +254,12 @@ export class OpsHealthService {
       },
       t,
     ).concat(zaloProblems);
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, zns, problems };
   }
 
   /**
    * Hạn access token Zalo OA (SystemConfig, do ZaloOaTokenCron ghi): còn dưới 3 giờ hoặc đã quá hạn khi ZNS đã có token
-   * thì khách sắp (hoặc đang) không nhận được tin ZNS. Chưa cấu hình, hoặc chưa có mốc hạn (cron sẽ lấy mốc ở lượt đầu) thì
-   * không báo. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ.
+   * thì khách sắp (hoặc đang) không nhận được tin ZNS. Chưa cấu hình thì không báo; có token mà chưa có mốc hạn hợp lệ (chưa từng làm mới được) thì báo luôn. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ.
    */
   async zaloTokenProblems(now: Date): Promise<OpsProblem[]> {
     try {
@@ -264,7 +269,22 @@ export class OpsHealthService {
       ]);
       const hasToken = (typeof access?.value === 'string' && access.value !== '') || Boolean(this.config.get('ZALO_OA_ACCESS_TOKEN', { infer: true }));
       const expiresAt = typeof expires?.value === 'string' ? Date.parse(expires.value) : NaN;
-      if (!hasToken || Number.isNaN(expiresAt)) return [];
+      if (!hasToken) return [];
+      if (Number.isNaN(expiresAt)) {
+        // Vừa cấu hình/khởi động thì mốc hạn chỉ có sau lượt làm mới đầu của cron (tới 6 giờ): trong ngần ấy thời gian chỉ báo khi lượt gần nhất
+        // đã lỗi. Quá hạn đó mà vẫn chưa có mốc thì cron không chạy được (tắt, mất lease), im lặng nữa là token hết hạn mà không ai biết.
+        // Mốc tính: lúc token được nhập vào SystemConfig (updatedAt, bền qua deploy); token chỉ nằm trong env thì có từ lần khởi động.
+        const configuredAt = access?.updatedAt instanceof Date && typeof access.value === 'string' && access.value !== '' ? access.updatedAt.getTime() : null;
+        const waitedMs = configuredAt !== null ? now.getTime() - configuredAt : process.uptime() * 1000;
+        if (this.cronRuns && waitedMs < ZALO_TOKEN_CRON_GRACE_MS && !(await this.zaloTokenCronFailed())) return [];
+        return [
+          {
+            key: 'zalo.oa_token',
+            message:
+              'Token Zalo OA chưa từng được làm mới (thiếu refresh_token hoặc mốc hạn) — ZNS sẽ ngừng sau khoảng 25 giờ; xem log "Zalo OA refresh" hoặc cấp lại token ở developers.zalo.me',
+          },
+        ];
+      }
       const left = expiresAt - now.getTime();
       if (left >= ZALO_TOKEN_WARN_MS) return [];
       const state =
@@ -281,6 +301,11 @@ export class OpsHealthService {
       this.logger.warn(`Không đọc được hạn token Zalo OA: ${e instanceof Error ? e.message : String(e)}`);
       return [];
     }
+  }
+
+  private async zaloTokenCronFailed(): Promise<boolean> {
+    const job = (await this.cronJobs()).find((j) => j.job === ZALO_TOKEN_CRON_JOB);
+    return job?.lastOutcome === 'ERRORS' || job?.lastOutcome === 'THREW';
   }
 
   private webhookUrl(): string {
@@ -366,7 +391,7 @@ export class OpsHealthService {
           where: pancakeOpenEventWhere(now),
           orderBy: { receivedAt: 'asc' },
           take: STUCK_LIST,
-          select: { id: true, eventType: true, status: true, attempts: true, error: true, receivedAt: true, rawPayload: true },
+          select: { id: true, eventType: true, status: true, attempts: true, error: true, receivedAt: true },
         }),
         this.prisma.order.count({ where: pancakeUnsyncedWhere(now) }),
         this.prisma.order.count({ where: stuckWhere }),
@@ -395,6 +420,7 @@ export class OpsHealthService {
         this.prisma.opsHealthState.findUnique({ where: { key: CATALOG_STATE_KEY } }),
       ]);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
+    const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));
     const catalogRun: CatalogRun & { detail: unknown } = {
       lastOkAt: catalog?.lastOkAt?.toISOString() ?? null,
       lastErrorAt: catalog?.lastErrorAt?.toISOString() ?? null,
@@ -409,10 +435,10 @@ export class OpsHealthService {
       webhookFailed24h,
       webhookFailedOpen,
       webhookStuck,
-      failedEvents: failedEvents.map(({ rawPayload, error, ...e }) => ({
+      failedEvents: failedEvents.map(({ error, ...e }) => ({
         ...e,
         source: 'pancake' as const,
-        orderRef: pancakeEventRef(rawPayload),
+        orderRef: failedRefs.get(e.id) ?? null,
         error: error?.slice(0, 300) ?? null,
       })),
       unsynced,
@@ -422,6 +448,28 @@ export class OpsHealthService {
       attentionOrders,
       catalog: catalogRun,
     };
+  }
+
+  /**
+   * rawPayload là nguyên đơn Pancake (có thể vài trăm KB mỗi dòng); trang sức khoẻ chỉ cần nhãn đơn,
+   * nên chỉ kéo đúng các trường pancakeEventRef đọc, cùng quy tắc chọn data/top-level như pancakeEventData.
+   */
+  private async pancakeEventRefs(ids: string[]): Promise<Map<string, string | null>> {
+    if (!ids.length) return new Map();
+    const rows = await this.prisma.$queryRaw<{ id: string; slim: unknown }[]>`
+      SELECT id, jsonb_build_object(
+        'extension', jsonb_build_object('external_order_id', d->'extension'->'external_order_id'),
+        'note', d->'note',
+        'id', d->'id',
+        'order_id', d->'order_id'
+      ) AS slim
+      FROM (
+        SELECT id,
+          CASE WHEN jsonb_typeof("rawPayload"->'data') = 'object' THEN "rawPayload"->'data' ELSE "rawPayload" END AS d
+        FROM "pancake_webhook_events"
+        WHERE id IN (${Prisma.join(ids)})
+      ) t`;
+    return new Map(rows.map((r) => [r.id, pancakeEventRef(r.slim)]));
   }
 
   private async gomdonHealth(now: Date, t: OpsThresholds) {
@@ -499,6 +547,21 @@ export class OpsHealthService {
       backlog,
       backlogOrders,
     };
+  }
+
+  /** Tin ZNS FAILED 24 giờ qua. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ. */
+  private async znsHealth(now: Date): Promise<{ failed24h: number; topError: string | null }> {
+    const where = { channel: 'ZNS', status: 'FAILED', sentAt: { gte: new Date(now.getTime() - DAY_MS) } };
+    try {
+      const [failed24h, top] = await Promise.all([
+        this.prisma.notificationLog.count({ where }),
+        this.prisma.notificationLog.groupBy({ by: ['error'], where, _count: { _all: true }, orderBy: { _count: { error: 'desc' } }, take: 1 }),
+      ]);
+      return { failed24h, topError: top[0]?.error ? top[0].error.slice(0, 160) : null };
+    } catch (e) {
+      this.logger.warn(`Không đọc được số tin ZNS hỏng: ${e instanceof Error ? e.message : String(e)}`);
+      return { failed24h: 0, topError: null };
+    }
   }
 
   private async orderHealth(now: Date) {

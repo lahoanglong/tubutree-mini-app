@@ -13,8 +13,7 @@ import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
-import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
-import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
+import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, HELD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -327,6 +326,7 @@ export class AdminService {
       // (check status ở ngoài chỉ để trả lỗi rõ ràng, không đủ chống race: cả 2 request có thể
       // đọc PENDING trước khi bên nào ghi xong). Không guard → user.update DEALER chạy 2 lần
       // (idempotent nhưng có thể ghi đè dealerTierId của admin thắng race sau).
+      let applicantPhone: string | null = null;
       await this.prisma.$transaction(async (tx) => {
         // Duyệt đổi vai trò người nộp sang DEALER: người nộp là admin thì đây cũng là một lần hạ quyền admin.
         await lockAdminRoster(tx);
@@ -338,8 +338,8 @@ export class AdminService {
         // khoá, mà bên ghi hồ sơ rồi đợi users sẽ deadlock với ẩn danh tài khoản (giữ users rồi ghi hồ sơ).
         // NO KEY UPDATE (không phải FOR UPDATE): FOR UPDATE đợi FOR KEY SHARE của khoá ngoại (đơn người nộp đang đặt qua slug của mình
         // giữ KEY SHARE rồi đợi gian hàng mà ta đang giữ ⇒ 40P01), còn NO KEY UPDATE vẫn chặn ẩn danh và các ghi khác vào users.
-        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean; metadata: unknown }[]>`
-          SELECT "role"::text AS "role", "isBlocked", "metadata" FROM "users" WHERE "id" = ${app.userId} FOR NO KEY UPDATE`;
+        const [applicant] = await tx.$queryRaw<{ role: string; isBlocked: boolean; metadata: unknown; phone: string | null; staffPermissions: string[] | null }[]>`
+          SELECT "role"::text AS "role", "isBlocked", "metadata", "phone", "staffPermissions"::text[] AS "staffPermissions" FROM "users" WHERE "id" = ${app.userId} FOR NO KEY UPDATE`;
         if (!applicant || applicant.isBlocked) {
           throw new BadRequestException('Tài khoản người nộp đã bị khoá hoặc đã xoá — không thể duyệt hồ sơ đại lý.');
         }
@@ -349,6 +349,9 @@ export class AdminService {
           }
           await assertAnotherActiveAdmin(tx, app.userId, LAST_ADMIN_MESSAGE.dealer);
         }
+        applicantPhone = applicant.phone;
+        // Nhóm việc CSKH/KHO chỉ có nghĩa với STAFF: rời STAFF thì gỡ, như setUserRole.
+        const droppedPerms = applicant.staffPermissions ?? [];
         const flipped = await tx.dealerApplication.updateMany({
           where: { id, status: 'PENDING' },
           data: { status: 'APPROVED', reviewedBy: adminId, reviewedAt: new Date() },
@@ -359,15 +362,27 @@ export class AdminService {
           // Merge vào metadata đọc từ dòng đã khoá — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz, kể cả ghi chen vừa xong).
           data: {
             role: 'DEALER',
+            ...(droppedPerms.length ? { staffPermissions: [] } : {}),
             metadata: { ...((applicant.metadata as Record<string, unknown> | null) ?? {}), dealerTierId: tierId } as Prisma.InputJsonObject,
           },
         });
+        if (droppedPerms.length) {
+          await recordUserAdminEvent(tx, { userId: app.userId, kind: 'STAFF_PERMISSIONS', from: droppedPerms.join(','), to: '', actorId: adminId });
+        }
         await tx.storefront.updateMany({ where: { ownerUserId: app.userId, type: { not: 'BRAND' } }, data: { isPartner: true } });
         for (const store of ownerStores) {
           if (store.type === 'BRAND' || store.isPartner) continue;
           await recordUserAdminEvent(tx, { userId: app.userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: adminId });
         }
       }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+      // Như setUserRole: grant STAFF/ADMIN còn hiệu lực sẽ được applyGrants nâng lại ở lần refresh token kế tiếp (chỉ nâng, không hạ).
+      const revoked = applicantPhone
+        ? await this.rbac.revokeGrantsAbove(applicantPhone, 'DEALER').catch((err) => {
+            this.logger.error(`revokeGrantsAbove lỗi khi duyệt đại lý ${id}: ${err instanceof Error ? err.message : err}`);
+            return 0;
+          })
+        : 0;
+      if (revoked > 0) this.logger.warn(`Admin ${adminId} duyệt đại lý ${id} → thu hồi ${revoked} grant xếp hạng cao hơn DEALER.`);
     } else {
       const flipped = await this.prisma.dealerApplication.updateMany({
         where: { id, status: 'PENDING' },
@@ -793,7 +808,7 @@ export class AdminService {
                (COUNT(*) FILTER (WHERE o.status = 'RETURNED'))::int AS returned_orders,
                SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL}) AS collected,
                SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL}) AS gmv,
-               SUM(o.total) FILTER (WHERE o."paymentMethod" = 'COD' AND o."paymentStatus" = 'UNPAID' AND o.status IN ('CONFIRMED', 'PACKED', 'SHIPPING')) AS cod_pending
+               SUM(o.total) FILTER (WHERE o."paymentMethod" = 'COD' AND o."paymentStatus" = 'UNPAID' AND o.status IN ('CONFIRMED', 'PACKED', 'SHIPPING') AND o.fulfiller <> 'MERCHANT') AS cod_pending
         FROM orders o`,
       this.prisma.returnRequest.count({ where: { status: 'REQUESTED' } }),
       this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
@@ -955,17 +970,26 @@ export class AdminService {
   }
 
   /**
-   * Slug hoặc subdomain gian hàng → id. Gõ không khớp gian hàng nào thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc
-   * sẽ hiện mọi đơn như thể đã lọc xong.
+   * Slug hoặc subdomain gian hàng → id; không khớp thì tìm theo tên (title chứa chuỗi gõ, không phân biệt hoa thường) vì ô lọc
+   * cho gõ "tên hoặc mã ngắn". Không khớp gì thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc sẽ hiện mọi đơn như thể đã
+   * lọc xong.
    */
-  private async findStorefrontId(raw?: string): Promise<string | undefined> {
+  private async findStorefrontId(raw?: string): Promise<string | { in: string[] } | undefined> {
     const s = raw?.trim().toLowerCase();
     if (!s) return undefined;
-    const row = await this.prisma.storefront.findFirst({
-      where: { OR: [{ slug: { equals: s, mode: 'insensitive' } }, { subdomain: { equals: s, mode: 'insensitive' } }] },
+    // `equals`/`contains` + insensitive là ILIKE: "%" hay "_" admin gõ phải khớp đúng nghĩa đen, không thành ký tự đại diện.
+    const lit = escapePrismaLike(s);
+    const eq = { equals: lit, mode: 'insensitive' } as const;
+    const row =
+      (await this.prisma.storefront.findFirst({ where: { slug: eq }, select: { id: true } })) ??
+      (await this.prisma.storefront.findFirst({ where: { subdomain: eq }, select: { id: true } }));
+    if (row) return row.id;
+    const byTitle = await this.prisma.storefront.findMany({
+      where: { title: { contains: lit, mode: 'insensitive' } },
       select: { id: true },
+      take: 50,
     });
-    return row?.id ?? NO_SUCH_STOREFRONT_ID;
+    return byTitle.length ? { in: byTitle.map((r) => r.id) } : NO_SUCH_STOREFRONT_ID;
   }
 
   /**
@@ -991,7 +1015,7 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
-        orderBy: { createdAt: order },
+        orderBy: [{ createdAt: order }, { id: order }],
         ...skipTake(page, limit),
         include: {
           items: true,
@@ -1366,22 +1390,25 @@ export class AdminService {
       select: { id: true, code: true, status: true, reversalEffectsAt: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
-    // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không.
-    if (order.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
-      const open = await this.prisma.orderCustomerRefund.findFirst({
-        where: { orderId: order.id, kind: 'RETURN', refKey: COD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
-        select: { id: true },
-      });
-      if (open) {
-        throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn COD chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
-      }
+    // Việc hoàn tiền COD trả hàng (và đơn trả trước bị giữ sau Pancake 15) do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
+    // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không. Tra thẳng khoản chờ đối soát, không dựa vào chữ trong ô:
+    // các chỗ ghi cả ô (hoàn tiền tay, ACK) có thể đã đè mất dòng COD.
+    const open = await this.prisma.orderCustomerRefund.findFirst({
+      where: { orderId: order.id, kind: 'RETURN', refKey: { in: [COD_RETURN_UNVERIFIED_REF, HELD_RETURN_UNVERIFIED_REF] }, status: 'UNVERIFIED' },
+      select: { id: true },
+    });
+    if (open) {
+      throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn trả hàng chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
     }
     const r = await this.prisma.order.updateMany({
-      where: { id: order.id, pancakeAttentionAt: { not: null } },
+      where: { id: order.id, pancakeAttentionAt: { not: null }, pancakeAttention: order.pancakeAttention },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
-    if (r.count === 0) throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    if (r.count === 0) {
+      const now = await this.prisma.order.findFirst({ where: { id: order.id }, select: { pancakeAttentionAt: true } });
+      if (now?.pancakeAttentionAt) throw new BadRequestException(`Việc của đơn ${order.code} vừa thay đổi — tải lại rồi xử lý lại.`);
+      throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    }
     const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);
     this.logger.warn(
       `Admin ${adminId} đánh dấu đã xử lý việc Pancake của đơn ${order.code}: "${order.pancakeAttention ?? ''}"` +
@@ -1660,26 +1687,39 @@ export class AdminService {
     if (data.endAt !== undefined) {
       const endAt = new Date(data.endAt);
       if (endAt <= coupon.startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
+      if (endAt <= new Date()) {
+        throw new BadRequestException('Ngày kết thúc đã qua. Muốn dừng mã ngay thì tắt mã thay vì đặt hạn trong quá khứ.');
+      }
       patch.endAt = endAt;
     }
     if (data.usageLimit !== undefined) {
       assertClaimUsageLimit(coupon, data.usageLimit);
-      if (data.usageLimit !== null) {
-        const redeemed = await this.prisma.couponRedemption.count({ where: { couponId: id } });
-        if (data.usageLimit < redeemed) {
-          throw new BadRequestException(`Mã đã được dùng ${redeemed} lượt, tổng lượt không được nhỏ hơn số này.`);
-        }
-      }
       patch.usageLimit = data.usageLimit;
     }
     const by = actorUserId(actor);
     if (by) patch.updatedById = by;
+    const limitChanged = data.usageLimit !== undefined && data.usageLimit !== null;
     const updated =
-      staffCaps && raise > 0
+      (staffCaps && raise > 0) || limitChanged
         ? await this.prisma.$transaction(async (tx) => {
-            await assertStaffDailyBudget(tx, coupon.createdById!, coupon.createdAt, raise, staffCaps);
+            if (staffCaps && raise > 0) await assertStaffDailyBudget(tx, coupon.createdById!, coupon.createdAt, raise, staffCaps);
+            if (limitChanged) {
+              // redeemInTx chỉ tăng usedCount khi mã có trần, nên mã đang không giới hạn có usedCount = 0 dù đã có lượt dùng.
+              // Khoá dòng mã (cùng dòng redeem tăng usedCount) rồi đếm lại redemption đang có và ghi usedCount = số đếm,
+              // để chốt `usedCount < usageLimit` ở checkout đúng ngay từ lượt đầu sau khi đặt trần.
+              // Khe còn lại (chấp nhận, chỉ lệch vài lượt, tự đúng ở lần đổi trần kế tiếp): (1) đặt đơn đã đọc mã lúc chưa có
+              // trần và đang bay thì không tăng usedCount, nên có thể vượt trần; (2) release đã đọc mã lúc chưa có trần thì
+              // không trừ usedCount, nó xoá redemption sau khi admin đếm nên usedCount cao hơn thực tế một lượt; (3) hạ trần
+              // mã đang có trần chỉ so với số redemption đếm được, đơn đang bay chưa kịp ghi redemption vẫn lọt qua.
+              await tx.$queryRaw`SELECT "id" FROM "coupons" WHERE "id" = ${id} FOR UPDATE`;
+              const redeemed = await tx.couponRedemption.count({ where: { couponId: id } });
+              if (data.usageLimit! < redeemed) {
+                throw new BadRequestException(`Mã đã được dùng ${redeemed} lượt, tổng lượt không được nhỏ hơn số này.`);
+              }
+              patch.usedCount = redeemed;
+            }
             return tx.coupon.update({ where: { id }, data: patch });
-          })
+          }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy)
         : await this.prisma.coupon.update({ where: { id }, data: patch });
     this.logger.warn(`${actorLabel(actor)} cập nhật mã giảm giá ${coupon.code}: ${JSON.stringify(data)}`);
     return updated;

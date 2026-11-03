@@ -137,7 +137,7 @@ export function closedLabel(
     case 'CANCELLED':
       return { label: 'Đã huỷ', reason: r.closeReason === null ? 'Bạn đã huỷ yêu cầu này' : (CANCELLED_REASONS[r.closeReason] ?? null) };
     case 'REVERSED':
-      return { label: `Đã thu hồi ${formatPoints(r.reversedPoints ?? 0)}`, reason: r.reversalReason };
+      return { label: r.reversedPoints ? `Đã thu hồi ${formatPoints(r.reversedPoints)}` : 'Đã thu hồi điểm', reason: r.reversalReason };
     default:
       return null;
   }

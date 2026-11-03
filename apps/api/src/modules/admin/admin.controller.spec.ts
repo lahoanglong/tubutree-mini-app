@@ -8,6 +8,8 @@ import {
   AdminController,
   ConfirmOrderPaymentDto,
   CreateCouponDto,
+  ImportDealerPricesDto,
+  ImportSoldExternalDto,
   DealerAppsQuery,
   DealerPriceHistoryQuery,
   ExportOrdersQuery,
@@ -561,5 +563,22 @@ describe('POST /admin/products/sold-external — CSV đọc số chặt', () => 
     const { catalog, call } = run('A1,1250\nA2,12.5');
     await expect(Promise.resolve().then(call)).rejects.toThrow('dòng 2');
     expect(catalog.setSoldExternal).not.toHaveBeenCalled();
+  });
+});
+
+describe('trần mảng rows của nhập giá đại lý và đã bán ngoài', () => {
+  const soldRows = (n: number) => Array.from({ length: n }, (_, i) => ({ sku: `S${i}`, count: 1 }));
+  const priceRows = (n: number) => Array.from({ length: n }, (_, i) => ({ sku: `S${i}`, price: 1000 }));
+
+  it('sold-external: 500 dòng hợp lệ, 501 dòng bị từ chối ở rows', async () => {
+    expect(await validate(plainToInstance(ImportSoldExternalDto, { rows: soldRows(500) }))).toHaveLength(0);
+    const over = await validate(plainToInstance(ImportSoldExternalDto, { rows: soldRows(501) }));
+    expect(over.some((e) => e.property === 'rows')).toBe(true);
+  });
+
+  it('dealer-prices import (và preview): 500 dòng hợp lệ, 501 dòng bị từ chối ở rows', async () => {
+    expect(await validate(plainToInstance(ImportDealerPricesDto, { tierId: 't1', rows: priceRows(500) }))).toHaveLength(0);
+    const over = await validate(plainToInstance(ImportDealerPricesDto, { tierId: 't1', rows: priceRows(501) }));
+    expect(over.some((e) => e.property === 'rows')).toBe(true);
   });
 });

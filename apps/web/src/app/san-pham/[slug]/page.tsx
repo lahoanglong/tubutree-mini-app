@@ -30,6 +30,11 @@ import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
 
 export const revalidate = 300;
 
+// Không dựng sẵn trang nào lúc build; trang đầu tiên của mỗi đường dẫn dựng khi có người vào rồi giữ theo revalidate (ISR thay vì dựng mỗi lượt).
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -101,7 +106,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           }
           info={
-            // Điện thoại: mỗi khối là một dải trắng riêng cách nhau 8px trên nền canvas như Mini App; thứ tự các khối con do `max-md:order-N`
+            // Điện thoại: mỗi khối là một dải trắng riêng cách nhau 8px trên nền canvas như Mini App; thứ tự các khối con do lớp `tubu-pdp-order-N` (mini.css)
             // (bảng thứ tự ở comment dưới). Cột thông tin tự nó không tô nền.
             <div data-testid="pdp-info" className="flex min-w-0 flex-col">
               <div
@@ -151,7 +156,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               </div>
 
               {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; chip phân loại và Số lượng nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
-              <div data-section="pdp-offers" className={`mt-3 max-md:order-3 max-md:mt-2 ${phoneBandPad} max-md:empty:hidden`}>
+              <div data-section="pdp-offers" className={`mt-3 tubu-pdp-order-3 max-md:mt-2 ${phoneBandPad} max-md:empty:hidden`}>
                 <PdpCoupons productId={product.id} product={product} divider={Boolean(fulfillerText || !fromStore)} />
                 {(fulfillerText || !fromStore) && (
                   <PdpShippingRow pressable={!fromStore}>
@@ -172,7 +177,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   <div
                     data-testid="pdp-shipping-notes"
                     data-section="pdp-notes"
-                    className={`flex flex-col gap-1 py-2 max-md:order-4 ${phoneBandPad}`}
+                    className={`flex flex-col gap-1 py-2 tubu-pdp-order-4 ${phoneBandPad}`}
                   >
                     {unavailableText && (
                       <p
@@ -194,7 +199,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
-                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng `max-md:order-N` theo thứ tự của Mini App:
+                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng lớp `tubu-pdp-order-N` (mini.css) theo thứ tự của Mini App:
                 thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích), Ưu đãi + Vận chuyển 3, ghi chú vận chuyển 4,
                 chip phân loại 5, Số lượng 6, Combo/Mua kèm 8, Đánh giá nhanh 9, Mở nhóm mua chung + Nội dung bán hàng 11.
                 Chip và Số lượng là ruột của AddToCart (gốc `contents`). Không có dòng "Phân loại ›" (chip đã đủ).
@@ -213,7 +218,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <div
                   data-testid="pdp-certs"
                   data-section="pdp-certs"
-                  className={`mt-3 flex flex-wrap gap-2 max-md:order-1 max-md:mt-0 ${phoneBandPad} max-md:pb-4 max-md:pt-2.5`}
+                  className={`mt-3 flex flex-wrap gap-2 tubu-pdp-order-1 max-md:mt-0 ${phoneBandPad} max-md:pb-4 max-md:pt-2.5`}
                 >
                   {product.certifications.map((c) => (
                     <span
@@ -227,7 +232,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
               {!retailOnly && (
-                <div data-section="pdp-subscribe" className={`max-md:order-2 max-md:flex max-md:flex-col ${phoneBandPad} max-md:pb-4 max-md:empty:hidden`}>
+                <div data-section="pdp-subscribe" className={`tubu-pdp-order-2 max-md:flex max-md:flex-col ${phoneBandPad} max-md:pb-4 max-md:empty:hidden`}>
                   <PdpSubscribeRow slug={product.slug} variations={product.variations} />
                 </div>
               )}
@@ -235,15 +240,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/* Điện thoại: Combo/Mua kèm là hai dải trắng riêng như Mini App. Lớp dải đặt ở đây vì khối combo (pdp-bundles) tự nó chỉ có đệm dọc. */}
               <div
                 data-section="pdp-bundles"
-                className="max-md:order-8 max-md:[&>div]:mt-2 max-md:[&_section]:bg-[var(--color-bg-surface)] max-md:[&_section]:p-4"
+                className="tubu-pdp-order-8 max-md:[&>div]:mt-2 max-md:[&_section]:bg-[var(--color-bg-surface)] max-md:[&_section]:p-4"
               >
                 <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
               </div>
               {/* Q8: Đánh giá nhanh ngay sau Combo/Mua kèm, như Mini App; danh sách đầy đủ giữ chỗ cũ ở `below`. */}
-              <div className="max-md:order-9">
+              <div className="tubu-pdp-order-9">
                 <PdpQuickReviews slug={product.slug} />
               </div>
-              <div data-section="pdp-groupbuy" className="max-md:order-11">
+              <div data-section="pdp-groupbuy" className="tubu-pdp-order-11">
                 {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
                 <PdpContentKitRow slug={product.slug} />
               </div>

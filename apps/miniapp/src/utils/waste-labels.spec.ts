@@ -65,6 +65,7 @@ describe('nhãn trạng thái đóng (§4.6, §14.1)', () => {
     [{ status: 'CANCELLED', closeReason: 'ORDER_CANCELLED' }, 'Đã huỷ', 'Đơn mua đã bị huỷ'],
     [{ status: 'CANCELLED', closeReason: 'SHIP_LOCKED' }, 'Đã huỷ', 'Đường kho đang tạm dừng'],
     [{ status: 'REVERSED', reversedPoints: 4000, reversalReason: 'Kiểm tra lại số lượng' }, 'Đã thu hồi 4.000 điểm', 'Kiểm tra lại số lượng'],
+    [{ status: 'REVERSED', reversedPoints: 0, reversalReason: 'Khách đã tiêu hết' }, 'Đã thu hồi điểm', 'Khách đã tiêu hết'],
   ])('%o', (over, label, reason) => { expect(L.closedLabel({ ...base, ...over } as never)).toEqual({ label, reason }); });
   it('trạng thái chưa đóng → null', () => { expect(L.closedLabel({ ...base, status: 'OPEN' } as never)).toBeNull(); });
   it('hết hạn giữ chỗ của đường gửi kiện: chỉ lối đi tiếp (nhắn CSKH kèm mã vận đơn), đường khác thì không', () => {

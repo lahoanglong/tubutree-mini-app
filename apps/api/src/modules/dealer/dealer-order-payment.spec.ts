@@ -41,8 +41,9 @@ function build(order: O | null, opts: { creditRow?: boolean; flipCount?: number 
       updateMany,
       findUniqueOrThrow: jest.fn(async () => ({ ...order, paymentStatus: 'PAID' })),
     },
-    dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditRow ? { id: 'led1' } : null) },
-    orderStatusHistory: { create: historyCreate },
+    dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditRow ? { id: 'led1' } : null), findMany: jest.fn().mockResolvedValue([]) },
+    orderStatusHistory: { create: historyCreate, findMany: jest.fn().mockResolvedValue([]) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   prisma.$transaction = jest.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) };

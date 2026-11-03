@@ -1,5 +1,8 @@
 import 'reflect-metadata';
+import { Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
+import { firstLogLine } from '../../common/cron-run/cron-aware-logger';
 import { DataRetentionService, RETENTION_POLICY, resolveRetentionDays } from './data-retention.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -176,15 +179,24 @@ describe('DataRetentionService (C-046)', () => {
   it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
     const { svc, prisma } = make();
     const perTable: Record<string, number> = {};
+    // Đồng hồ ảo: mỗi lô của bảng tồn đọng tốn đúng 5 ms, nên kết quả không phụ thuộc máy chạy test nhanh hay chậm.
+    let clock = 1_000_000;
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => clock);
     prisma.$executeRaw.mockImplementation((async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const table = (values[0] as { strings?: string[] })?.strings?.[0] ?? '';
       perTable[table] = (perTable[table] ?? 0) + 1;
       if (table !== '"analytics_events"' && table !== '"refresh_tokens"') return 0;
-      await new Promise((r) => setTimeout(r, 5));
+      clock += 5;
       return 3;
     }) as never);
-    await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: 400 });
-    expect(perTable['"refresh_tokens"']).toBeGreaterThan(3);
+    try {
+      await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: 400 });
+    } finally {
+      now.mockRestore();
+    }
+    // analytics_events chỉ được 400/5 = 80 ms (16 lô); phần còn lại chia cho các bảng sau.
+    expect(perTable['"analytics_events"']).toBe(16);
+    expect(perTable['"refresh_tokens"']).toBeGreaterThan(16);
   });
 
   it('một bảng lỗi không chặn các bảng sau', async () => {
@@ -194,6 +206,41 @@ describe('DataRetentionService (C-046)', () => {
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 11);
     expect((res as { deleted: Record<string, number> }).deleted).not.toHaveProperty('analytics_events');
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty('refresh_tokens');
+  });
+
+  it('mỗi câu dọn chọn lô theo cột khoá duy nhất có thật trong schema (support_recall_tombstones khoá theo zaloMsgId, không có id)', async () => {
+    const { svc, prisma } = make();
+    await svc.runAll({ now: NOW, pauseMs: 0 });
+    const columnsOf = (table: string) => {
+      const model = Prisma.dmmf.datamodel.models.find((m) => (m.dbName ?? m.name) === table);
+      // Cột chọn lô phải là khoá duy nhất: cột trùng giá trị (vd conversationId) sẽ kéo theo cả dòng còn hạn.
+      return new Set((model?.fields ?? []).filter((f) => f.kind === 'scalar' && (f.isId || f.isUnique)).map((f) => f.dbName ?? f.name));
+    };
+    const seen: string[] = [];
+    for (const [strings, ...values] of prisma.$executeRaw.mock.calls as unknown as [TemplateStringsArray, ...unknown[]][]) {
+      const { sql } = Prisma.sql(strings, ...values);
+      const m = /^\s*(?:DELETE FROM|UPDATE) "(\w+)" .*?WHERE "(\w+)" IN \(SELECT "(\w+)" FROM "(\w+)"/s.exec(sql);
+      expect(m).not.toBeNull();
+      const [, table, key, innerKey, innerTable] = m!;
+      expect({ table, key }).toEqual({ table: innerTable, key: innerKey });
+      expect([...columnsOf(table!)]).toContain(key);
+      seen.push(`${table}.${key}`);
+    }
+    expect(seen).toContain('support_recall_tombstones.zaloMsgId');
+  });
+
+  it('log lỗi của một bảng ghi câu lỗi thật của Postgres, không chỉ dòng mở đầu của Prisma', async () => {
+    const { svc, prisma } = make();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    prisma.$executeRaw.mockRejectedValueOnce(
+      new Error('\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column "id" does not exist`'),
+    );
+    await svc.runAll({ now: NOW, pauseMs: 0 });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(firstLogLine(error.mock.calls[0]![0])).toBe(
+      'Dọn analytics_events lỗi: Raw query failed. Code: `42703`. Message: `column "id" does not exist`',
+    );
+    error.mockRestore();
   });
 
   it('handleCron không bao giờ ném lỗi ra ngoài', async () => {

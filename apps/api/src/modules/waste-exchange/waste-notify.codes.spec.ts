@@ -27,11 +27,13 @@ const EXPECTED: [code: string, id: string, placeholders: string[], body: string]
   ['WASTE_PERK_REVIEWED', 'nt-waste-perk-reviewed', ['point', 'result'], 'Ưu đãi riêng của điểm nhận {{point}}: {{result}}.'],
 ];
 // Mẫu thêm sau lần phát hành đầu: chèn bằng migration riêng, không nằm trong khối WASTE TEMPLATES của migration gốc.
-const EXPIRING = ['WASTE_REQUEST_EXPIRING', 'nt-waste-request-expiring', ['code', 'until', 'next_step'], 'Yêu cầu {{code}} sắp hết hạn giữ chỗ vào ngày {{until}}. Bạn nhớ {{next_step}} trước ngày đó nhé.'] as const;
+const EXPIRING = ['WASTE_REQUEST_EXPIRING', 'nt-waste-request-expiring', ['code', 'until', 'next_step'], 'Yêu cầu {{code}} sắp hết hạn giữ chỗ, hạn chót là hết ngày {{until}}. Bạn nhớ {{next_step}} đến hết ngày đó nhé.'] as const;
 const GIFT_EXPIRED = ['WASTE_GIFT_EXPIRED', 'nt-waste-gift-expired', ['gift_name', 'points'], 'Quà {{gift_name}} đã quá hạn nhận nên Tubu Tree đã huỷ và hoàn {{points}} điểm vào tài khoản của bạn.'] as const;
 const ALL = [...EXPECTED, [EXPIRING[0], EXPIRING[1], [...EXPIRING[2]], EXPIRING[3]] as (typeof EXPECTED)[number], [GIFT_EXPIRED[0], GIFT_EXPIRED[1], [...GIFT_EXPIRED[2]], GIFT_EXPIRED[3]] as (typeof EXPECTED)[number]];
 const GIFT_EXPIRED_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261030100000_waste_gift_expired_template/migration.sql'), 'utf-8');
 const EXPIRING_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261029010000_waste_request_expiring_template/migration.sql'), 'utf-8');
+const EXPIRING_OLD_BODY = 'Yêu cầu {{code}} sắp hết hạn giữ chỗ vào ngày {{until}}. Bạn nhớ {{next_step}} trước ngày đó nhé.';
+const EXPIRING_END_OF_DAY_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261103210000_waste_expiring_template_end_of_day/migration.sql'), 'utf-8');
 const render = (body: string, data: Record<string, string>) => body.replace(/\{\{(\w+)\}\}/g, (_m, k: string) => data[k] ?? '');
 
 describe('WASTE_TEMPLATE_CODES and the twelve templates', () => {
@@ -70,13 +72,19 @@ describe('WASTE_TEMPLATE_CODES and the twelve templates', () => {
       EXPECTED.map(([code, id, , body]) => ({ id, code, channel: 'INAPP', bodyTemplate: body })),
     );
   });
-  it('the expiring template migration inserts exactly that one row, equal to the seed word for word, and ON CONFLICT DO NOTHING', () => {
+  it('the expiring template migration inserts exactly that one row, and ON CONFLICT DO NOTHING', () => {
     expect(EXPIRING_SQL).toContain('INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") VALUES');
     expect(EXPIRING_SQL).toContain('ON CONFLICT DO NOTHING;');
     const tuples = [...EXPIRING_SQL.matchAll(/\('([^']+)', '([A-Z_]+)', '([A-Z]+)', '([^']*)'\)/g)];
     expect(tuples.map((m) => ({ id: m[1], code: m[2], channel: m[3], bodyTemplate: m[4] }))).toEqual([
-      { id: EXPIRING[1], code: EXPIRING[0], channel: 'INAPP', bodyTemplate: EXPIRING[3] },
+      { id: EXPIRING[1], code: EXPIRING[0], channel: 'INAPP', bodyTemplate: EXPIRING_OLD_BODY },
     ]);
+  });
+  it('the end-of-day migration rewrites only the old default body and lands on the seed text word for word', () => {
+    const m = EXPIRING_END_OF_DAY_SQL.match(/SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = 'WASTE_REQUEST_EXPIRING'\s+AND "bodyTemplate" = '([^']*)';/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toBe(EXPIRING[3]);
+    expect(m![2]).toBe(EXPIRING_OLD_BODY);
   });
   it('the gift-expired template migration inserts exactly that one row, equal to the seed word for word, and ON CONFLICT DO NOTHING', () => {
     expect(GIFT_EXPIRED_SQL).toContain('ON CONFLICT DO NOTHING;');
@@ -102,7 +110,7 @@ describe('WASTE_TEMPLATE_CODES and the twelve templates', () => {
       'Yêu cầu TR-A2C4E đã đếm xong. Tubu đã cộng 12.000 Điểm Xanh và 4 giọt nước.',
     );
     expect(render(ALL.find((e) => e[0] === 'WASTE_REQUEST_EXPIRING')![3], { code: 'TR-A2C4E', until: '03/11/2026', next_step: 'mang rác tới điểm nhận' })).toBe(
-      'Yêu cầu TR-A2C4E sắp hết hạn giữ chỗ vào ngày 03/11/2026. Bạn nhớ mang rác tới điểm nhận trước ngày đó nhé.',
+      'Yêu cầu TR-A2C4E sắp hết hạn giữ chỗ, hạn chót là hết ngày 03/11/2026. Bạn nhớ mang rác tới điểm nhận đến hết ngày đó nhé.',
     );
     expect(render(body('WASTE_GIFT_CANCELLED'), { gift: 'Túi vải Tubu', points_note: ' Tubu đã hoàn 20.000 Điểm Xanh vào tài khoản của bạn.' })).toBe(
       'Lượt đổi quà Túi vải Tubu đã bị huỷ. Tubu đã hoàn 20.000 Điểm Xanh vào tài khoản của bạn.',

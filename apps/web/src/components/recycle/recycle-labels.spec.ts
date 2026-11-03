@@ -57,6 +57,7 @@ describe('nhãn Đổi rác', () => {
     expect(closedLabel({ ...base, status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' })).toEqual({ label: 'Hết hạn giữ chỗ', reason: null });
     expect(closedLabel({ ...base, status: 'CANCELLED' })).toEqual({ label: 'Đã huỷ', reason: 'Bạn đã huỷ yêu cầu này' });
     expect(closedLabel({ ...base, status: 'REVERSED', reversedPoints: 4000, reversalReason: 'nhầm' })).toEqual({ label: 'Đã thu hồi 4.000 điểm', reason: 'nhầm' });
+    expect(closedLabel({ ...base, status: 'REVERSED', reversedPoints: 0, reversalReason: 'nhầm' })).toEqual({ label: 'Đã thu hồi điểm', reason: 'nhầm' });
     expect(closedLabel({ ...base, status: 'OPEN' })).toBeNull();
   });
   it('closedLabel: hết hạn giữ chỗ của đường gửi kiện chỉ lối đi tiếp (nhắn CSKH kèm mã vận đơn), đường khác thì không', () => {

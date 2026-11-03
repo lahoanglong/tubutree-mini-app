@@ -28,7 +28,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    subscription: { count: jest.fn().mockResolvedValue(0) },
+    subscription: { findMany: jest.fn().mockResolvedValue([]) },
+    order: { count: jest.fn().mockResolvedValue(0) },
     gameProfile: {
       findUnique: jest.fn().mockResolvedValue({ userId: 'u1', totalSeeds: 10 }),
       update: jest.fn().mockResolvedValue({}),
@@ -104,7 +105,8 @@ describe('SeasonPassService.getState', () => {
       userSeasonPass: {
         findUnique: jest.fn().mockResolvedValue({ xp: 80, claimedFree: [0], claimedPremium: [] }),
       },
-      subscription: { count: jest.fn().mockResolvedValue(1) },
+      subscription: { findMany: jest.fn().mockResolvedValue([{ id: 'sub1' }]) },
+      order: { count: jest.fn().mockResolvedValue(1) },
     });
     const { svc } = svcWith(p);
     const st = await svc.getState('u1');
@@ -184,11 +186,12 @@ describe('SeasonPassService.claim', () => {
   it('premium khi chưa đủ điều kiện → BadRequest', async () => {
     const p = makePrisma({
       userSeasonPass: { findUnique: jest.fn().mockResolvedValue({ xp: 100, claimedFree: [], claimedPremium: [] }) },
-      subscription: { count: jest.fn().mockResolvedValue(0) },
+      subscription: { findMany: jest.fn().mockResolvedValue([{ id: 'sub1' }]) },
+      order: { count: jest.fn().mockResolvedValue(0) },
     });
     const { svc } = svcWith(p);
     await expect(svc.claim('u1', 0, 'premium')).rejects.toMatchObject({
-      message: 'Cần đăng ký định kỳ để mở Premium.',
+      message: 'Cần có gói định kỳ đã giao ít nhất một đơn để mở phần thưởng Cao cấp.',
     });
   });
 
@@ -228,7 +231,8 @@ describe('SeasonPassService.claim', () => {
         findUnique: jest.fn().mockResolvedValue({ xp: 300, claimedFree: [], claimedPremium: [] }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      subscription: { count: jest.fn().mockResolvedValue(1) },
+      subscription: { findMany: jest.fn().mockResolvedValue([{ id: 'sub1' }]) },
+      order: { count: jest.fn().mockResolvedValue(1) },
     });
   }
 

@@ -1,5 +1,5 @@
 import { PancakeProcessor } from './pancake.processor';
-import { ATTENTION_TOTAL_MISMATCH, ATTENTION_UNDERPAID } from './pancake-attention';
+import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD_REASONS, ATTENTION_TOTAL_MISMATCH, ATTENTION_UNDERPAID } from './pancake-attention';
 import { PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 
 /** Payload "Đơn hàng" Pancake sau khi nhân viên THÊM một món 50.000 vào đơn TUBU20260001 (Tubu đẩy 269.000). */
@@ -132,6 +132,8 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
       id: 'o1',
       AND: [
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: write.data.pancakeAttention } }] },
+        { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] },
+        { OR: [{ pancakeAttention: null }, { NOT: { OR: ATTENTION_PARTIAL_RETURN_HELD_REASONS.map((held) => ({ pancakeAttention: { contains: held } })) } }] },
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] },
       ],
     });

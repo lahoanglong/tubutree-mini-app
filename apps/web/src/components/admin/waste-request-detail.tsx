@@ -415,7 +415,7 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
     mutationFn: (reason: string) => reverseWasteRequest(r.id, { reason }),
     onSuccess: (res) => {
       onFlash(
-        `Đã thu hồi ${formatCount(res.pointsTaken)} điểm.${res.shortfallPoints > 0 ? ` Còn ${formatCount(res.shortfallPoints)} điểm không thu được vì khách đã tiêu.` : ''}`,
+        `Đã thu hồi ${formatCount(res.pointsTaken)} điểm.${res.shortfallPoints > 0 ? ` Còn ${formatCount(res.shortfallPoints)} điểm không thu được (khách đã tiêu hoặc điểm đã hết hạn).` : ''}`,
       );
       refresh();
     },
@@ -462,6 +462,14 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
     reopen.mutate(body);
   };
 
+  const reverseMessage = (d: WasteRequestAdminDetailDTO) => {
+    const base = 'Trừ tối đa số điểm đã cộng, trong giới hạn số dư hiện có của khách (kể cả điểm của đơn còn trong hạn trả).';
+    const p = d.reversePreview;
+    return p
+      ? `${base} Số dư trừ được hiện tại ${formatCount(p.pointsBalance)} điểm (không gồm điểm quy đổi từ xu cũ), dự kiến trừ ${formatCount(p.expectedTake)} điểm.`
+      : base;
+  };
+
   const showCost = r.method !== 'DROP_OFF';
   if (!canReverse(r) && !canCloseLost(r) && !canReopen(r) && !showCost) return null;
 
@@ -474,7 +482,7 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
             type="button"
             className={BTN_SECONDARY}
             disabled={reverse.isPending}
-            onClick={() => void askReason('Thu hồi điểm', 'Chỉ thu được phần điểm khách chưa tiêu.', 'Thu hồi', reverse.mutate)}
+            onClick={() => void askReason('Thu hồi điểm', reverseMessage(r), 'Thu hồi', reverse.mutate)}
           >
             Thu hồi điểm
           </button>

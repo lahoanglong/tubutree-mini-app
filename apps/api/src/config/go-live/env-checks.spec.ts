@@ -269,6 +269,16 @@ describe('evaluateEnv', () => {
       expect(status({ ZALO_OA_WEBHOOK_SECRET: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
       expect(status({}, 'env.zalo.oa_webhook_secret')).toBe('PASS');
     });
+    it('webhook OA có khoá ký + ZALO_APP_ID: PASS (không cần token tĩnh), nói rõ chế độ chữ ký; thiếu ZALO_APP_ID hoặc khoá ngắn thì WARN', () => {
+      const signed = { ZALO_OA_SECRET_KEY: 'oa-secret-Hd6Fk3Jw9Sz2Bn5Vc8Xm1Lq4' };
+      expect(status({ ...signed, ZALO_OA_WEBHOOK_SECRET: '' }, 'env.zalo.oa_webhook_secret')).toBe('PASS');
+      expect(byId(evaluateEnv(envWith(signed)), 'env.zalo.oa_webhook_secret').detail).toContain('chữ ký');
+      expect(status({ ...signed, ZALO_APP_ID: '' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
+      expect(status({ ZALO_OA_SECRET_KEY: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
+    });
+    it('chỉ có token tĩnh: PASS và nói rõ đang dùng token (chưa có chữ ký)', () => {
+      expect(byId(evaluateEnv(envWith({})), 'env.zalo.oa_webhook_secret').detail).toContain('token');
+    });
     it('API Key webhook Mini App: trống WARN (gợi ý riêng, không phải sinh ngẫu nhiên), có giá trị PASS', () => {
       expect(status({ ZALO_OPEN_API_KEY: '' }, 'env.zalo.open_api_key')).toBe('WARN');
       expect(byId(evaluateEnv(envWith({ ZALO_OPEN_API_KEY: '' })), 'env.zalo.open_api_key').hint).not.toContain('openssl');

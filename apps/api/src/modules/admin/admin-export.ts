@@ -77,10 +77,12 @@ export function exportPaymentStatus(o: {
   status: string;
   paymentMethod: string;
   paymentStatus: string;
-  openRefunds?: readonly { method: string; kind: string }[];
+  openRefunds?: readonly { method: string; kind: string; status?: string }[];
 }): string {
   if (o.paymentMethod === 'COD' && o.status === 'DELIVERED' && o.paymentStatus === 'UNPAID') return 'Đã thu COD';
   const open = o.openRefunds ?? [];
+  // Đơn trả trước bị giữ chờ Kế toán (Pancake 15 rồi 5): còn PAID vì chưa ai xác nhận hoàn, nhưng không phải "Đã thanh toán" bình thường.
+  if (o.paymentStatus === 'PAID' && open.some((r) => r.kind === 'RETURN' && r.status === 'UNVERIFIED')) return 'Chờ đối soát hoàn';
   if (o.paymentStatus === 'REFUNDED' && open.some((r) => r.method === 'MANUAL_TRANSFER')) return 'Đang hoàn tiền';
   if (o.paymentStatus === 'UNPAID' && open.some((r) => r.kind === 'LATE_PAYMENT' || r.kind === 'OVERPAYMENT')) return 'Đang hoàn tiền';
   return PAYMENT_STATUS[o.paymentStatus] ?? o.paymentStatus;
@@ -148,7 +150,7 @@ const ORDER_SELECT = {
   user: { select: { fullName: true, phone: true } },
   fulfillerStorefront: { select: { title: true } },
   items: { select: { quantity: true } },
-  customerRefunds: { where: OPEN_REFUND_FOR_EXPORT, select: { method: true, kind: true } },
+  customerRefunds: { where: OPEN_REFUND_FOR_EXPORT, select: { method: true, kind: true, status: true } },
 } satisfies Prisma.OrderSelect;
 
 type ExportOrder = Prisma.OrderGetPayload<{ select: typeof ORDER_SELECT }>;

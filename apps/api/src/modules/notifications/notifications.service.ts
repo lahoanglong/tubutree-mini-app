@@ -301,7 +301,8 @@ export class NotificationsService {
     return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= 23 ? raw : fallback;
   }
 
-  private async quietDelayMs(): Promise<number> {
+  /** Số ms còn lại của giờ yên tĩnh ZNS (0 khi đang trong giờ gửi); processor dùng lại để dời cả lượt thử lại. */
+  async quietDelayMs(): Promise<number> {
     const [start, end] = await Promise.all([
       this.configHour(QUIET_START_KEY, DEFAULT_QUIET_START_HOUR),
       this.configHour(QUIET_END_KEY, DEFAULT_QUIET_END_HOUR),

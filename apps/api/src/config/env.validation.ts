@@ -39,12 +39,15 @@ export const envSchema = z.object({
   ZALO_OA_REFRESH_TOKEN: z.string().default(''), // bootstrap; sau đó token mới lưu DB (xoay vòng)
   ZALO_OA_ID: z.string().default(''),
   ZALO_OAUTH_BASE: z.string().default('https://oauth.zaloapp.com'),
-  // CSKH quick-reply/auto-reply: token tĩnh verify webhook OA (Zalo không ký HMAC, giống Pancake).
+  // CSKH quick-reply/auto-reply: token tĩnh verify webhook OA khi chưa bật chữ ký (thiếu ZALO_OA_SECRET_KEY hoặc ZALO_APP_ID);
+  // bật chữ ký thì token bị bỏ qua (xem ZALO_OA_SECRET_KEY bên dưới).
   // Không bắt buộc ở production qua superRefine (tính năng optional, chưa đăng ký webhook thì
-  // không set). LƯU Ý: khác PANCAKE_WEBHOOK_SECRET — nếu rỗng, ZaloOaWebhookController vẫn từ
-  // chối MỌI request bằng 401 khi NODE_ENV=production (không silently no-op) — xem
+  // không set). LƯU Ý: khác PANCAKE_WEBHOOK_SECRET — không có cả token lẫn chữ ký thì ZaloOaWebhookController
+  // từ chối MỌI request bằng 401 khi NODE_ENV=production (không silently no-op) — xem
   // zalo-oa-webhook.controller.ts. Chỉ để trống khi CHƯA đăng ký webhook này trên Zalo OA dashboard.
   ZALO_OA_WEBHOOK_SECRET: z.string().default(''),
+  // Khoá bí mật của OA (developers.zalo.me > Official Account > Webhook): Zalo ký webhook OA bằng header x-zevent-signature = sha256(appId + thân + timestamp + khoá này). Cần cùng ZALO_APP_ID. Rỗng = chỉ còn token tĩnh ở trên.
+  ZALO_OA_SECRET_KEY: z.string().default(''),
   // API Key Zalo tạo khi bấm Cập nhật ở Open APIs (mini.zalo.me/developers): ký webhook Mini App (rút đồng ý/xoá dữ liệu) trong header x-zevent-signature. Rỗng = webhook từ chối mọi request (401).
   ZALO_OPEN_API_KEY: z.string().default(''),
   // Cầu nối Zalo cá nhân (apps/zalo-bridge) cho chat CSKH. URL trống = chưa nối, mọi lệnh trả BRIDGE_NOT_CONFIGURED.

@@ -285,6 +285,14 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(screen.getByText('Đang chờ Tubu xem lại')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Đổi rác ngay' })).toBeNull();
   });
+  it('khách chưa đăng nhập, gửi kho đã tắt: giới thiệu không hứa gửi về kho Tubu', async () => {
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: false, pickup: false };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ eligibility: 'GUEST', balance: null, monthUsage: null }));
+    renderPage();
+    expect(await screen.findByText('Mang bao bì sạch tới điểm nhận. Điểm Xanh dùng để đổi quà và mã giảm giá.')).toBeInTheDocument();
+    expect(screen.getByText('Mang tới điểm nhận')).toBeInTheDocument();
+    expect(screen.queryByText(/gửi về kho Tubu/)).toBeNull();
+  });
   it.each(['GUEST', 'NEED_PHONE'] as const)('eligibility %s: xem chương trình trước, nút đăng nhập ở thanh dưới; xin được số → làm mới [waste]', async (eligibility) => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ eligibility, balance: null, monthUsage: null }));
     mocks.ensurePhone.mockResolvedValue('0901234567');

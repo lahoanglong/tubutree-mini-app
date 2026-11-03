@@ -185,6 +185,7 @@ function AccountRow({ row: r, month, onPaid }: { row: DealerAccountRow; month: s
           <div className="text-xs text-stone-500">{r.phone ?? 'Chưa có SĐT'}</div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {r.roleRevoked && <ToneBadge tone="warning">Đã thu hồi vai trò</ToneBadge>}
           {r.overLimit && <ToneBadge tone="danger">Vượt hạn mức</ToneBadge>}
           <ToneBadge tone={r.tier ? 'info' : 'neutral'} wrap>
             {r.tier ? (r.tier.name ?? r.tier.id) : 'Chưa gán bậc'}

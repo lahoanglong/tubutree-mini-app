@@ -278,17 +278,30 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
   });
 });
 
+describe('WasteRequestDetail: hộp Thu hồi có số dư và số dự kiến trừ', () => {
+  it('API trả reversePreview thì hộp ghi số dư hiện tại và số điểm dự kiến trừ', async () => {
+    const { c } = await mount({
+      isAdmin: true,
+      detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000, reversePreview: { pointsBalance: 20_000, expectedTake: 17_000 } }),
+    });
+    click(btn(c, 'Thu hồi điểm'));
+    expect(document.body.textContent).toContain('Số dư trừ được hiện tại 20.000 điểm (không gồm điểm quy đổi từ xu cũ), dự kiến trừ 17.000 điểm.');
+  });
+});
+
 describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
   it('admin thu hồi điểm: hỏi lý do, báo số đã thu và số không thu được', async () => {
     const { c, api } = await mount({ isAdmin: true, detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000 }) });
     click(btn(c, 'Thu hồi điểm'));
-    expect(document.body.textContent).toContain('Chỉ thu được phần điểm khách chưa tiêu.');
+    expect(document.body.textContent).toContain('Trừ tối đa số điểm đã cộng, trong giới hạn số dư hiện có của khách (kể cả điểm của đơn còn trong hạn trả).');
+    expect(document.body.textContent).not.toContain('chưa tiêu');
+    expect(document.body.textContent).not.toContain('dự kiến trừ');
     expect(document.body.textContent).not.toContain('(10.3)');
     typeInto(dialogArea(), 'Khai khống');
     answerConfirm(true);
     await flush();
     expect(bodyOf(post(api, '/admin/waste/requests/r1/reverse')[0])).toEqual({ reason: 'Khai khống' });
-    expect(c.textContent).toContain('Đã thu hồi 12.000 điểm. Còn 5.000 điểm không thu được vì khách đã tiêu.');
+    expect(c.textContent).toContain('Đã thu hồi 12.000 điểm. Còn 5.000 điểm không thu được (khách đã tiêu hoặc điểm đã hết hạn).');
 
     const full = await mount({
       isAdmin: true,
@@ -322,7 +335,7 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     answerConfirm(true);
     await flush();
     await flush();
-    expect(c.textContent).toContain('Còn 5.000 điểm không thu được vì khách đã tiêu.');
+    expect(c.textContent).toContain('Còn 5.000 điểm không thu được (khách đã tiêu hoặc điểm đã hết hạn).');
     expect(c.textContent).toContain('12.000 điểm, không thu được 5.000 điểm');
     expect(btn(c, 'Thu hồi điểm')).toBeNull();
   });

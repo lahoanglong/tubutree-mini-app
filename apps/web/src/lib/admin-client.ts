@@ -2,6 +2,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 import { apiDownload, apiFetch } from './client-api';
+import { vnDateKey } from './week';
 import type { GomdonAlertView } from './recycling';
 import type {
   AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
@@ -428,7 +429,7 @@ export const importDealerPrices = (tierId: string, csv: string) =>
     body: { tierId, csv },
   });
 export const importSoldExternal = (csv: string) =>
-  apiFetch<{ ok: boolean; updatedCount: number }>('/admin/products/sold-external', {
+  apiFetch<{ updated: number }>('/admin/products/sold-external', {
     method: 'POST',
     body: { csv },
   });
@@ -1151,6 +1152,8 @@ export interface AdminNotificationTemplate {
   /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
   znsFailed30d?: number;
   znsLastError?: { text: string; at: string } | null;
+  /** Khoá cấu hình cấp mã ZNS thay cho ô mã của mẫu (nhắc hạ hạng); null/thiếu = mã nằm ở chính mẫu. */
+  znsConfigKey?: string | null;
   /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
   staffEditable?: boolean;
   /** Biến mã thật sự điền cho mẫu này; null = mẫu ngoài danh sách (không kiểm được); thiếu = API cũ. */
@@ -1511,8 +1514,12 @@ export interface AdminCustomerRefund {
   adminNote: string | null;
   createdAt: string;
   kind: AdminCustomerRefundKind;
-  /** Khoá chống trùng của API; khoản COD trả hàng chờ đối soát mang `cod-return-unverified` (thêm `:rest` ở phần không hoàn). API cũ chưa trả. */
+  /** Khoá chống trùng của API; khoản COD trả hàng chờ đối soát mang `cod-return-unverified`, khoản đơn đã trả hàng mà nhân viên có thể đã hoàn tay mang `pancake-partial-return-held` (thêm `:rest` ở phần không hoàn). API cũ chưa trả. */
   refKey?: string;
+  /** Cách khách đã trả đơn (API tra từ đơn); API cũ chưa trả. Khoản đơn trả bằng Ví hoàn thẳng về Ví khi Kế toán xác nhận. */
+  paymentMethod?: string | null;
+  /** Khoản COD chờ đối soát mà Pancake còn báo "Hoàn một phần" lúc Tubu không có yêu cầu trả: phải kiểm cả hãng đã thu COD lẫn phần nhân viên đã hoàn tay. */
+  handRefundPossible?: boolean;
   /** Chủ đơn (khách có tài khoản); null với khoản khách cuối đơn CTV lên hộ. */
   userId: string | null;
   /** Tài khoản nhận khách đã chọn; trống = khách chưa chọn nơi nhận, admin nhập tài khoản khách cung cấp khi xác nhận. */
@@ -1748,7 +1755,7 @@ function orderFilterParams(f: OrderExportFilter): URLSearchParams {
   for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
   return q;
 }
-const todayKey = () => new Date().toISOString().slice(0, 10);
+const todayKey = () => vnDateKey(new Date());
 export const downloadOrdersCsv = (f: OrderExportFilter) => {
   const qs = orderFilterParams(f).toString();
   return apiDownload(`/admin/orders/export${qs ? `?${qs}` : ''}`, `don-hang-${todayKey()}.csv`);
@@ -2065,6 +2072,8 @@ export interface OpsHealth {
     deliveredEffectsStale: number;
     deliveredEffectsOrders: { id: string; code: string; deliveredAt: string | null }[];
   };
+  /** Tin ZNS ghi FAILED trong 24 giờ qua. Tuỳ chọn: API cũ chưa trả trường này. */
+  zns?: { failed24h: number; topError: string | null };
   /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
   alertChannels?: { email: OpsEmailChannel; webhook?: OpsWebhookChannel };
   /** Tác vụ nền đã chạy ít nhất một lần. Tuỳ chọn: API cũ chưa trả trường này. */

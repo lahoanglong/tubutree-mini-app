@@ -11,7 +11,7 @@ async function errorsFor<T extends object>(cls: new () => T, plain: Record<strin
 }
 
 describe('InvoiceRequestDto', () => {
-  const base = { taxCode: '123', companyName: 'Co', address: 'HN' };
+  const base = { taxCode: '0312345678', companyName: 'Co', address: 'HN' };
 
   it('email không hợp lệ → lỗi isEmail', async () => {
     const keys = await errorsFor(InvoiceRequestDto, { ...base, email: 'not-an-email' });
@@ -21,6 +21,23 @@ describe('InvoiceRequestDto', () => {
   it('email hợp lệ → không lỗi', async () => {
     const keys = await errorsFor(InvoiceRequestDto, { ...base, email: 'ke.toan@cong-ty.vn' });
     expect(keys).toHaveLength(0);
+  });
+
+  // GIOHANG-10: trước đây 'abc' vẫn tạo được đơn và các trường dài MB được ghi vào đơn.
+  const email = 'ke.toan@cong-ty.vn';
+  it.each(['0312345678', '0312345678-001', '001234567890'])('mã số thuế %s hợp lệ (10 số, chi nhánh -3 số, CCCD 12 số)', async (taxCode) => {
+    expect(await errorsFor(InvoiceRequestDto, { ...base, taxCode, email })).toHaveLength(0);
+  });
+  it.each(['abc', '123', '031234567', '03123456789', '0312345678-01', '0312345678-0011', '0312345678 ', '0312-345678', ''])(
+    'mã số thuế %j không hợp lệ',
+    async (taxCode) => {
+      expect(await errorsFor(InvoiceRequestDto, { ...base, taxCode, email })).toContain('matches');
+    },
+  );
+  it('tên công ty, địa chỉ, email quá dài → lỗi maxLength', async () => {
+    expect(await errorsFor(InvoiceRequestDto, { ...base, email, companyName: 'x'.repeat(256) })).toContain('maxLength');
+    expect(await errorsFor(InvoiceRequestDto, { ...base, email, address: 'x'.repeat(501) })).toContain('maxLength');
+    expect(await errorsFor(InvoiceRequestDto, { ...base, email: `${'a'.repeat(250)}@cong-ty.vn` })).toEqual(expect.arrayContaining(['maxLength']));
   });
 });
 

@@ -171,3 +171,16 @@ describe('chế độ hub / danh sách (tham số all)', () => {
     expect(activeFilterChips(lost, { categoryName: 'Danh mục' }, { titleScope: null }).map((c) => c.patch)).toEqual([{ category: undefined }]);
   });
 });
+
+describe('parseSearchState — KHAMPHA-07 và KHAMPHA-14', () => {
+  it('từ khoá dài cắt theo điểm mã: không để lại nửa emoji (encodeURIComponent không ném)', () => {
+    const q = parseSearchState(new URLSearchParams({ q: `${'a'.repeat(99)}🌵🌵` })).q;
+    expect(Array.from(q)).toHaveLength(100);
+    expect(() => encodeURIComponent(q)).not.toThrow();
+  });
+
+  it('minPrice > maxPrice qua URL: đổi chỗ như API', () => {
+    const s = parseSearchState(new URLSearchParams('minPrice=500000&maxPrice=100000'));
+    expect([s.minPrice, s.maxPrice]).toEqual([100000, 500000]);
+  });
+});

@@ -3,7 +3,7 @@ import type { PlacedOrder } from './api/checkout';
 import { checkoutEtaLabel, orderDeliveryEtaLabel, placedOrderKinds, shippingEtaLabel } from './shipping-eta';
 
 describe('shippingEtaLabel', () => {
-  const now = new Date(2026, 8, 30, 12, 0, 0);
+  const now = new Date('2026-09-30T05:00:00.000Z'); // 12:00 giờ VN
   it('khoảng ngày → "02/10 – 04/10"', () => {
     expect(shippingEtaLabel({ minDays: 2, maxDays: 4 }, now)).toBe('02/10 – 04/10');
   });
@@ -11,14 +11,18 @@ describe('shippingEtaLabel', () => {
     expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, now)).toBe('01/10');
   });
   it('cuối năm → sang tháng 1 (31/12 + 3 ngày = 03/01)', () => {
-    expect(shippingEtaLabel({ minDays: 1, maxDays: 4 }, new Date(2026, 11, 30, 12, 0, 0))).toBe('31/12 – 03/01');
+    expect(shippingEtaLabel({ minDays: 1, maxDays: 4 }, new Date('2026-12-30T05:00:00.000Z'))).toBe('31/12 – 03/01');
   });
   it('minDays 0 → hôm nay', () => {
     expect(shippingEtaLabel({ minDays: 0, maxDays: 2 }, now)).toBe('30/09 – 02/10');
     expect(shippingEtaLabel({ minDays: 0, maxDays: 0 }, now)).toBe('30/09');
   });
+  it('theo ngày Việt Nam: 23:30 giờ VN vẫn là ngày đó dù máy ở múi giờ khác, 00:30 giờ VN đã sang ngày sau', () => {
+    expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, new Date('2026-09-30T16:30:00.000Z'))).toBe('01/10');
+    expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, new Date('2026-09-30T17:30:00.000Z'))).toBe('02/10');
+  });
   it('cuối tháng: 31/01 + 1 ngày = 01/02 (không tràn sang tháng sai)', () => {
-    const jan31 = new Date(2026, 0, 31, 12, 0, 0);
+    const jan31 = new Date('2026-01-31T05:00:00.000Z');
     expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, jan31)).toBe('01/02');
     expect(shippingEtaLabel({ minDays: 1, maxDays: 30 }, jan31)).toBe('01/02 – 02/03');
   });

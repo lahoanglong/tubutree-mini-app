@@ -9,7 +9,12 @@ import { OrderReversalService } from '../../src/modules/orders/order-reversal.se
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
-import { ATTENTION_CANCEL_AFTER_HANDOVER, ATTENTION_COD_RETURN_UNVERIFIED } from '../../src/modules/integrations/pancake/pancake-attention';
+import {
+  ATTENTION_CANCEL_AFTER_HANDOVER,
+  ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_PARTIAL_RETURN_HELD,
+  ATTENTION_PARTIAL_RETURN_SETTLED,
+} from '../../src/modules/integrations/pancake/pancake-attention';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
@@ -224,5 +229,58 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
     await expect(processor.onStatusUpdated(event)).resolves.toBeUndefined();
     expect(alert).toHaveBeenCalledTimes(1);
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
+  });
+
+  // Lời của Pancake 15 khi Tubu không có yêu cầu trả: bảo nhân viên hoàn tay phần bị trả.
+  const PARTIAL_MANUAL = 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.';
+
+  it('Pancake 15 rồi admin lật "Đã trả hàng" bằng tay: lời "hoàn tay" đổi thành cảnh báo đã xử lý cả đơn, lý do khác còn nguyên', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'DELIVERED',
+      total: 0,
+      subtotal: 0,
+      pancakeAttention: `${PARTIAL_MANUAL} | Lý do khác`,
+      pancakeAttentionAt: new Date(),
+    });
+
+    await orderStatus.setStatus(order.id, 'RETURNED', { actorType: 'ADMIN' });
+
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.status).toBe('RETURNED');
+    expect(after.pancakeAttention).toBe(`${ATTENTION_PARTIAL_RETURN_SETTLED} | Lý do khác`);
+  });
+
+  it('Pancake 15 rồi 5 mà đảo điểm lỗi sau commit (job ném): lời "hoàn tay" đã được dòng chờ Kế toán thay ngay lần lật; job gửi lại và cron resyncReversalEffects 3 lần giữ nguyên ô, không báo lại', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'DELIVERED',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      total: 300_000,
+      subtotal: 300_000,
+      pancakeOrderId: `pk-it-${randCode(8)}`,
+      pancakeAttention: PARTIAL_MANUAL,
+      pancakeAttentionAt: new Date(),
+    });
+    jest.spyOn(loyalty, 'reverseOrderPoints').mockRejectedValueOnce(dbDown());
+    const event = { id: order.pancakeOrderId, status: 5 };
+
+    await expect(processor.onStatusUpdated(event)).rejects.toThrow('P2024');
+    const expected = `${ATTENTION_COD_RETURN_UNVERIFIED} | ${ATTENTION_PARTIAL_RETURN_HELD}`;
+    const cell = async () => (await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention;
+    expect(await cell()).toBe(expected);
+    const alertsAfterFlip = alert.mock.calls.length;
+
+    await expect(processor.onStatusUpdated(event)).resolves.toBeUndefined();
+    for (let i = 0; i < 3; i += 1) {
+      await prisma.order.update({ where: { id: order.id }, data: { reversalEffectsAt: null } });
+      await expect(orderStatus.resyncReversalEffects(order.id)).resolves.toMatchObject({ outcome: 'DONE' });
+    }
+
+    expect(await cell()).toBe(expected);
+    expect(alert).toHaveBeenCalledTimes(alertsAfterFlip);
   });
 });

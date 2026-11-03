@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
   Post,
+  Req,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,7 +14,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
@@ -21,6 +22,8 @@ import { QUEUE_ZALO_OA_EVENTS } from '../../../jobs/queues';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 
 const USER_SEND_PREFIX = 'user_send_';
+/** Chữ ký đúng mà timestamp lệch quá mức này (cũ hoặc tương lai) là tin gửi lại: Zalo thử lại trong vài phút, không hàng giờ. */
+const MAX_EVENT_SKEW_MS = 30 * 60 * 1000;
 
 interface ZaloOaWebhookBody {
   event_name?: string;
@@ -30,20 +33,32 @@ interface ZaloOaWebhookBody {
 }
 
 /**
+ * `X-ZEvent-Signature` của webhook Zalo OA: sha256(appId + thân + timestamp + khoá bí mật của OA), hex thường (header có thể
+ * mang tiền tố `mac=`). `rawBody` là đúng byte Zalo gửi (`req.rawBody`, giữ ở `keepRawBody` của common/body-limits.ts): băm lại
+ * JSON.stringify của thân đã parse làm mất `\/` và `\uXXXX` nên lệch.
+ */
+export function zaloOaEventSignature(appId: string, rawBody: Buffer | string, timestamp: string, oaSecretKey: string): string {
+  // Băm thẳng byte: toString('utf8') rồi mã hoá lại đổi byte UTF-8 lỗi thành EF BF BD, khác thứ Zalo đã ký.
+  return createHash('sha256').update(appId).update(rawBody).update(timestamp + oaSecretKey).digest('hex');
+}
+
+/**
  * Nhận webhook tin nhắn khách gửi vào Zalo OA (CSKH quick-reply/auto-reply). URL cấu hình
  * trong Zalo OA dashboard: https://api.tubutree.com/api/webhooks/zalo-oa (xem
  * docs/GO-LIVE-KEYS.md). Quy trình mirror `PancakeWebhookController`: verify token tĩnh →
  * lưu raw (RECEIVED) → enqueue → trả 200 ngay (auto-reply xử lý async ở `ZaloOaEventsProcessor`).
  *
- * TODO xác nhận cơ chế verify chính thức của Zalo OA webhook (có thể là HMAC ký payload thay
- * vì header token tĩnh) khi đăng ký webhook thật — tạm dùng token tĩnh như Pancake vì Zalo OA
- * cũng cho phép khai báo 1 giá trị xác thực tuỳ chỉnh lúc đăng ký webhook.
+ * Xác thực: có ZALO_OA_SECRET_KEY + ZALO_APP_ID thì BẮT BUỘC `X-ZEvent-Signature` đúng và còn mới (token tĩnh bị bỏ qua: nó
+ * nằm trong URL/cấu hình nên dễ lộ, để làm cửa thay thế thì chữ ký vô nghĩa). Chưa đủ hai khoá đó thì dùng token tĩnh
+ * `x-webhook-token` (ZALO_OA_WEBHOOK_SECRET). Production mà không khoá nào → 401.
  */
 @SkipThrottle()
 @Controller('webhooks/zalo-oa')
 export class ZaloOaWebhookController {
   private readonly logger = new Logger(ZaloOaWebhookController.name);
   private readonly secret: string;
+  private readonly oaSecretKey: string;
+  private readonly appId: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,19 +66,26 @@ export class ZaloOaWebhookController {
     @InjectQueue(QUEUE_ZALO_OA_EVENTS) private readonly queue: Queue,
   ) {
     this.secret = config.get('ZALO_OA_WEBHOOK_SECRET', { infer: true });
+    this.oaSecretKey = config.get('ZALO_OA_SECRET_KEY', { infer: true }) ?? '';
+    this.appId = config.get('ZALO_APP_ID', { infer: true }) ?? '';
   }
 
   @Public()
   @Post()
   @HttpCode(HttpStatus.OK)
-  async handle(@Body() body: ZaloOaWebhookBody, @Headers('x-webhook-token') token?: string) {
-    if (!this.secret) {
+  async handle(
+    @Body() body: ZaloOaWebhookBody,
+    @Headers('x-webhook-token') token?: string,
+    @Headers('x-zevent-signature') signature?: string,
+    @Req() req?: { rawBody?: Buffer; headers?: Record<string, string | string[] | undefined> },
+  ) {
+    if (!this.secret && !this.oaSecretKey) {
       if (process.env.NODE_ENV === 'production') {
         throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
       }
       // Dev/test: bỏ qua cho dễ thử nghiệm.
-    } else if (!this.verifyToken(token)) {
-      throw new UnauthorizedException('Token webhook không hợp lệ.');
+    } else if (this.signingReady ? !this.verifySignature(body, signature, req) : !this.verifyToken(token)) {
+      throw new UnauthorizedException('Chữ ký hoặc token webhook không hợp lệ.');
     }
 
     // Chỉ tin khách gửi vào OA (user_send_text/image/...): sự kiện OA tự gửi (oa_send_*) mang sender là chính OA nên nếu lưu
@@ -97,11 +119,41 @@ export class ZaloOaWebhookController {
     return { received: true };
   }
 
-  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). */
-  private verifyToken(token?: string): boolean {
-    if (!token) return false;
-    const a = Buffer.from(token, 'utf8');
-    const b = Buffer.from(this.secret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+  private get signingReady(): boolean {
+    return Boolean(this.oaSecretKey && this.appId);
   }
+
+  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). Chưa đặt token thì lớp này không bao giờ qua. */
+  private verifyToken(token?: string): boolean {
+    if (!this.secret || !token) return false;
+    return constantTimeEqual(token, this.secret);
+  }
+
+  private verifySignature(body: ZaloOaWebhookBody, signature: string | undefined, req?: { rawBody?: Buffer; headers?: Record<string, string | string[] | undefined> }): boolean {
+    if (!this.oaSecretKey || !this.appId || !signature || !body || typeof body !== 'object') return false;
+    const timestamp = body['timestamp'];
+    if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return false;
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_EVENT_SKEW_MS) return false;
+    const rawBody = req?.rawBody;
+    if (!rawBody || rawBody.length === 0) {
+      // Không băm lại thân đã parse: chữ ký khi đó chỉ khớp tình cờ. Thân JSON có timestamp thì parser webhook luôn giữ thân thô,
+      // nên chỉ ghi lỗi ở trường hợp đó (cấu hình parser hỏng); thân dạng khác do người ngoài gửi thì 401 im lặng (route không giới
+      // hạn tần suất).
+      // So đúng loại media như parser json chọn request (tham số như `; x=json` không tính).
+      if ((String(req?.headers?.['content-type'] ?? '').split(';')[0] ?? '').trim().toLowerCase() === 'application/json') {
+        this.logger.error('Webhook OA JSON có chữ ký nhưng không mang thân thô (req.rawBody): kiểm parser webhook ở common/body-limits.ts.');
+      }
+      return false;
+    }
+    const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
+    return constantTimeEqual(given, zaloOaEventSignature(this.appId, rawBody, String(timestamp), this.oaSecretKey));
+  }
+
+}
+
+function constantTimeEqual(x: string, y: string): boolean {
+  const a = Buffer.from(x, 'utf8');
+  const b = Buffer.from(y, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
 }

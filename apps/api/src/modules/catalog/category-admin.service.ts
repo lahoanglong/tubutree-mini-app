@@ -190,6 +190,14 @@ export class CategoryAdminService {
       if (children > 0) throw new BadRequestException(CATEGORY_MSG.removeHasChildren(row.name, children));
       const products = await tx.product.count({ where: { categoryIds: { has: id } } });
       if (products > 0) throw new BadRequestException(CATEGORY_MSG.removeHasProducts(row.name, products));
+      // Chặn thay vì chỉ cảnh báo, giống luật "còn sản phẩm": banner còn sống mà đích đã mất thì khách bấm vào trang không tìm thấy. Chiến dịch đã kết thúc thì không tính.
+      const banners = await tx.campaign.findMany({
+        where: { linkType: 'CATEGORY', linkValue: row.slug, endAt: { gt: new Date() } },
+        select: { title: true },
+        orderBy: { startAt: 'desc' },
+        take: 3,
+      });
+      if (banners.length > 0) throw new BadRequestException(CATEGORY_MSG.removeHasBanners(row.name, banners.map((b) => b.title)));
       await tx.category.delete({ where: { id } });
     });
     this.logger.warn(`Admin ${adminId} xoá danh mục ${id}.`);

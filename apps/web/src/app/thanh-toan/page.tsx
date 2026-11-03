@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -27,6 +27,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
+import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
@@ -64,9 +65,10 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
-import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
-import { ProductThumb } from '@/components/mini';
+import { Button, ProductThumb } from '@/components/mini';
+import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { clearSubmitted } from '@/lib/recycle-wizard';
 
@@ -99,6 +101,7 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const router = useRouter();
+  const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [note, setNote] = useState('');
@@ -220,6 +223,13 @@ export default function CheckoutPage() {
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote, usablePoints);
   const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
+  // Dưới md ghi chú nằm trong cột chữ cạnh ô tick như Mini; từ md trở lên giữ dòng riêng dưới ô. Hai bản chỉ khác nhau ở lớp hiển thị.
+  const pointNotes = (vis: 'md:hidden' | 'md:block') => {
+    const cls = vis === 'md:hidden' ? 'mt-0.5 block text-caption text-[color:var(--color-text-tertiary)] md:hidden' : 'mt-1 hidden text-caption text-[color:var(--color-text-secondary)] md:block';
+    const Tag = vis === 'md:hidden' ? 'span' : 'p';
+    const notes = [usablePoints > 0 && partnerPoints.capNote, usablePoints > 0 && partnerPoints.partnerNote, convertedLine, pointsOffer.lockNote];
+    return notes.map((n, i) => (n ? <Tag key={i} className={cls}>{n}</Tag> : null));
+  };
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -255,7 +265,7 @@ export default function CheckoutPage() {
         ...(wantInvoice
           ? {
               invoiceRequest: {
-                taxCode: invoice.taxCode.trim(),
+                taxCode: normalizeTaxCode(invoice.taxCode),
                 companyName: invoice.companyName.trim(),
                 address: invoice.address.trim(),
                 email: invoice.email.trim(),
@@ -483,6 +493,15 @@ export default function CheckoutPage() {
   const placeCartNotice = place.error ? cartFixableNotice(place.error, placeErrorMessage) : null;
   const cartIssue = overStock ? overStockMessage(overStock.productName, overStock.stock) : placeCartNotice;
   const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
+  // Chưa có báo giá: xem trước khoản giảm từ giỏ như Mini. Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ; mua một phần thì máy chủ tính lại.
+  const earnedLabel = quote ? `Nhận +${formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công` : '';
+  const wholeCart = !itemIds || itemIds.length === (cart?.items.length ?? 0);
+  const previewCombo = wholeCart ? (cart?.comboDiscount ?? 0) : 0;
+  const previewDiscount = wholeCart && cart?.couponCode ? (cart.discount ?? 0) : 0;
+  const previewTier = wholeCart ? (cart?.tierDiscount ?? 0) : 0;
+  // Như Mini: thẻ tóm tắt chỉ dùng xem trước khi báo giá không chạy (chưa có địa chỉ); đang tải hay lỗi thì không chen dòng giảm vào.
+  const cardPreview = !quote && !quoteQ.isLoading && !quoteQ.isError;
+  const previewRecalcNote = !wholeCart && (!!cart?.couponCode || (cart?.comboDiscount ?? 0) > 0 || (cart?.tierDiscount ?? 0) > 0);
   const paymentMethods = [
     { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
     { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
@@ -572,7 +591,7 @@ export default function CheckoutPage() {
                   const reason = p.hint;
                   return (
                     <div key={p.k}>
-                      <label className={`${payOptionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
+                      <label className={`${payOptionClass(payment === p.k)} ${reason ? 'cursor-not-allowed' : ''}`}>
                         <input
                           type="radio"
                           name="pay"
@@ -580,12 +599,19 @@ export default function CheckoutPage() {
                           onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className={miniRadio}
+                          className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-[0.45] md:opacity-60' : ''}`}
                         />
-                        {p.label}
+                        <span className="flex min-w-0 flex-col">
+                          <span className={reason ? 'opacity-[0.45] md:opacity-60' : undefined}>{p.label}</span>
+                          {reason && (
+                            <span id={`pay-blocked-${p.k}`} className="text-caption text-[color:var(--color-text-secondary)] md:hidden">
+                              {reason}
+                            </span>
+                          )}
+                        </span>
                       </label>
                       {reason && (
-                        <p id={`pay-blocked-${p.k}`} className="mt-1 pl-9 text-caption text-[color:var(--color-text-secondary)] md:pl-0">
+                        <p aria-hidden="true" className="mt-1 text-caption text-[color:var(--color-text-secondary)] hidden md:block">
                           {reason}
                         </p>
                       )}
@@ -706,27 +732,87 @@ export default function CheckoutPage() {
               </Link>
             </p>
           )}
-          {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] max-md:hidden">{splitNote}</p>}
+          {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] hidden md:block">{splitNote}</p>}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
-          <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
+          <div className="mb-2.5 hidden items-center justify-between max-md:flex">
+            <h2 className="font-ui text-sm font-semibold">Tóm tắt đơn hàng</h2>
+            <button
+              type="button"
+              onClick={() => setSummarySheetOpen(true)}
+              aria-haspopup="dialog"
+              className="inline-flex min-h-11 items-center gap-1 text-caption font-bold text-[color:var(--color-text-brand)]"
+            >
+              Chi tiết
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
           <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
+          {cardPreview && previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} green />}
+          {cardPreview && previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} green />}
+          {cardPreview && previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} green />}
+          {cardPreview && previewRecalcNote && (
+            <p className="py-1 text-caption text-[color:var(--color-text-secondary)]">Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.</p>
+          )}
           {(quote?.discount ?? 0) > 0 && (
-            <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
+            <Row
+              label={<>Giảm giá<span className="hidden md:inline">{cart?.couponCode ? ` (${cart.couponCode})` : ''}</span></>}
+              value={`-${formatVnd(quote!.discount)}`}
+              green
+            />
           )}
           {(quote?.comboDiscount ?? 0) > 0 && <Row label="Ưu đãi combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
           {(quote?.tierDiscount ?? 0) > 0 && (
             <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
           {(quote?.pointsDiscount ?? 0) > 0 && (
-            <Row label={`Điểm Xanh (${formatCount(quote!.pointsUsed)})`} value={`-${formatVnd(quote!.pointsDiscount)}`} green />
+            <Row
+              label={<>Điểm Xanh<span className="hidden md:inline">{` (${formatCount(quote!.pointsUsed)})`}</span></>}
+              value={`-${formatVnd(quote!.pointsDiscount)}`}
+              green
+            />
           )}
           <Row
             label="Phí vận chuyển"
             value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+            valueGreen={quote?.shippingFee === 0}
           />
           {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
+          <BottomSheet
+            open={summarySheetOpen}
+            onClose={() => setSummarySheetOpen(false)}
+            title="Chi tiết tính tiền đơn hàng"
+            footer={
+              <Button fullWidth onPress={() => setSummarySheetOpen(false)}>
+                Đã hiểu
+              </Button>
+            }
+          >
+            <div className="rounded-[var(--radius-card)] bg-[var(--color-bg-canvas)] p-3">
+              <Row label="Tạm tính tiền hàng" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
+              {(quote ? quote.discount : previewDiscount) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote ? quote.discount : previewDiscount)}`} valueGreen />}
+              {(quote ? (quote.comboDiscount ?? 0) : previewCombo) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote ? quote.comboDiscount! : previewCombo)}`} valueGreen />}
+              {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} valueGreen />}
+              {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} valueGreen />}
+              <Row
+                label="Phí vận chuyển"
+                value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
+                valueGreen={quote?.shippingFee === 0}
+              />
+              <div className="my-2 h-px bg-[var(--color-border-subtle)]" />
+              <div className="flex justify-between gap-2.5 py-1.5 font-bold text-[color:var(--color-text-primary)]">
+                <span className="text-sm font-normal text-[color:var(--color-text-secondary)]">Tổng thanh toán</span>
+                <span className="text-base">{totalText}</span>
+              </div>
+              {quote && quote.pointsEarned > 0 && (
+                <p className="mt-1.5 flex items-center justify-end gap-1 text-caption text-success-fg">
+                  <Sprout size={13} aria-hidden="true" />
+                  {earnedLabel}
+                </p>
+              )}
+            </div>
+          </BottomSheet>
           {cart && (
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
               <CouponBox
@@ -750,10 +836,10 @@ export default function CheckoutPage() {
           {usablePoints > 0 && (
             <label
               className={`relative mt-3 flex min-h-11 items-center gap-2 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3 text-sm max-md:mt-0 max-md:flex-row-reverse max-md:justify-between max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 ${
-                partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                partnerPoints.disabled ? 'cursor-not-allowed md:opacity-60' : 'cursor-pointer'
               }`}
             >
-              <span className={miniCheckboxWrap}>
+              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter} ${partnerPoints.disabled ? 'opacity-60 md:opacity-100' : ''}`}>
                 <input
                   type="checkbox"
                   checked={usePoints && !partnerPoints.disabled}
@@ -766,11 +852,12 @@ export default function CheckoutPage() {
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="min-w-0 text-[color:var(--color-text-brand)]">
                 <span className="block font-semibold max-md:text-[color:var(--color-text-primary)]">Điểm Xanh</span>
-                <span className="block text-caption max-md:text-[color:var(--color-text-secondary)]">
+                <span className="block text-caption max-md:text-[color:var(--color-text-tertiary)]">
                   {partnerPoints.disabled
                     ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
                 </span>
+                {pointNotes('md:hidden')}
               </span>
             </label>
           )}
@@ -779,17 +866,15 @@ export default function CheckoutPage() {
               <span className="min-w-0">
                 <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
                 <span className="block text-caption text-[color:var(--color-text-tertiary)]">{idlePointsLabel(quote ?? user)}</span>
+                {pointNotes('md:hidden')}
               </span>
-              <span className={miniCheckboxWrap}>
+              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
                 <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
                 <CheckMark />
               </span>
             </div>
           )}
-          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.capNote}</p>}
-          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{partnerPoints.partnerNote}</p>}
-          {convertedLine && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{convertedLine}</p>}
-          {pointsOffer.lockNote && <p className="mt-1 text-caption text-[color:var(--color-text-secondary)]">{pointsOffer.lockNote}</p>}
+          {pointNotes('md:block')}
           </div>
           <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
           <div
@@ -804,7 +889,7 @@ export default function CheckoutPage() {
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
               <Sprout size={13} aria-hidden="true" />
-              Nhận +{formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công
+              {earnedLabel}
             </p>
           )}
           {quoteQ.isError && (
@@ -909,14 +994,14 @@ export default function CheckoutPage() {
 }
 
 // Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
-function Row({ label, value, green, ds }: { label: string; value: string; green?: boolean; ds?: string }) {
+function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; value: string; green?: boolean; valueGreen?: boolean; ds?: string }) {
   return (
     <div
       data-ds={ds}
-      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
+      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-[color:var(--color-text-primary)] md:text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
     >
-      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 ${green ? '' : 'text-[color:var(--color-text-secondary)]'}`}>{label}</span>
-      <span className="text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5">{value}</span>
+      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 text-[color:var(--color-text-secondary)] ${green ? 'md:text-inherit' : ''}`}>{label}</span>
+      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] md:text-sm md:font-normal md:leading-5 ${green || valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
     </div>
   );
 }

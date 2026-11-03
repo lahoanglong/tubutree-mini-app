@@ -7,7 +7,7 @@ describe('RefundDestinationPicker: lỗi tài khoản nằm dưới đúng ô (R
 
   it('số tài khoản sai → lỗi dưới ô Số tài khoản, không dưới ô Chủ tài khoản', () => {
     render(<RefundDestinationPicker method="BANK" onMethod={vi.fn()} bank={bank} onBank={vi.fn()} showBankErrors />);
-    const msg = 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
+    const msg = 'Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.';
     expect(screen.getByLabelText('Số tài khoản')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText('Số tài khoản')).toHaveAccessibleDescription(expect.stringContaining(msg));
     expect(screen.getByLabelText('Chủ tài khoản')).not.toHaveAttribute('aria-invalid');
@@ -17,6 +17,6 @@ describe('RefundDestinationPicker: lỗi tài khoản nằm dưới đúng ô (R
 
   it('chưa bấm gửi thì chưa hiện lỗi', () => {
     render(<RefundDestinationPicker method="BANK" onMethod={vi.fn()} bank={bank} onBank={vi.fn()} />);
-    expect(screen.queryByText('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.')).toBeNull();
+    expect(screen.queryByText('Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.')).toBeNull();
   });
 });

@@ -18,6 +18,10 @@ const to = (status: OrderStatus): PancakeStatusAction => ({ kind: 'status', stat
 const RETURNED: PancakeStatusAction = { kind: 'returned' };
 /** Mở đầu lý do "ĐANG HOÀN" — gỡ khỏi hàng đợi khi Pancake báo "Đã hoàn" và đơn đã tự huỷ/trả. */
 export const PANCAKE_RETURNING_PREFIX = 'Pancake báo ĐANG HOÀN';
+/** Mở đầu lý do "Hoàn một phần" (15) — gỡ khi Pancake báo "Đã hoàn" và đơn đã tự huỷ/trả (đã hoàn đủ, hoàn tay nữa là hoàn hai lần). */
+export const PANCAKE_PARTIAL_RETURN_PREFIX = 'Pancake báo HOÀN MỘT PHẦN';
+/** Lời "hoàn tay" của 15 khi Tubu không có yêu cầu trả; lời khi đang có yêu cầu chờ duyệt không có dấu chấm sau tiền tố. */
+export const PANCAKE_PARTIAL_RETURN_MANUAL_PREFIX = `${PANCAKE_PARTIAL_RETURN_PREFIX}.`;
 const RETURNING: PancakeStatusAction = {
   kind: 'attention',
   reason: `${PANCAKE_RETURNING_PREFIX} (giao không thành, hàng đang quay về kho). Liên hệ khách; khi kho nhận lại hàng, Pancake báo "Đã hoàn" thì đơn tự huỷ và hoàn tiền.`,
@@ -43,7 +47,7 @@ const NUMERIC: Record<string, PancakeStatusAction | null> = {
   '4': RETURNING, // Đang hoàn
   '15': {
     kind: 'partialReturned',
-    reason: 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.',
+    reason: `${PANCAKE_PARTIAL_RETURN_MANUAL_PREFIX} Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.`,
   }, // Hoàn một phần
   '5': RETURNED, // Đã hoàn
   '6': to('CANCELLED'), // Đã huỷ

@@ -36,10 +36,10 @@ const TREE = {
 };
 const INBOX = { generatedAt: '2026-11-01T03:00:00.000Z', items: [{ key: 'productsUncategorized', count: 2 }, { key: 'productsMissingImage', count: 7 }] };
 
-function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean } = {}) {
+function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; assignBody?: unknown } = {}) {
   let tree = TREE;
   const m = mockFetch({
-    '/admin/product-categories/assign': { body: { requested: 2, changed: 1, unchanged: 1, category: { id: 'c2', name: 'Nhà bếp' } } },
+    '/admin/product-categories/assign': { body: props.assignBody ?? { requested: 2, changed: 1, unchanged: 1, category: { id: 'c2', name: 'Nhà bếp' } } },
     '/admin/product-categories/products': { body: PAGE },
     '/admin/pancake/categories': { body: [{ id: '865301', name: 'Bếp', path: 'Nhà > Bếp', mappedTo: 'c2' }] },
     '/admin/ops/inbox': { body: INBOX },
@@ -159,6 +159,23 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     const call = m.calls.find((c) => c.url.includes('/assign'))!;
     expect(JSON.parse(String(call.init?.body))).toEqual({ productIds: ['p1', 'p2'], categoryId: 'c2', mode: 'ADD' });
     expect(container.textContent).toContain('1 sản phẩm đổi, 1 không đổi');
+  });
+
+  it('sản phẩm bị trần danh mục chặn: kết quả nêu tên, không gộp vào "không đổi (đã đúng sẵn)"', async () => {
+    const { container } = setup({
+      assignBody: { requested: 2, changed: 1, unchanged: 0, overLimit: [{ id: 'p1', name: 'Nước rửa chén' }], category: { id: 'c2', name: 'Nhà bếp' } },
+    });
+    await flush();
+    click(container.querySelector('label input[type="checkbox"]'));
+    selectValue(container.querySelector('select[aria-label="Danh mục"]'), 'c2');
+    await flush();
+    click(byText(container, 'button', 'Gán danh mục'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.textContent).toContain('1 sản phẩm đổi.');
+    expect(container.textContent).not.toContain('đã đúng sẵn');
+    expect(container.textContent).toContain('1 sản phẩm đã đủ danh mục tối đa nên chưa gán được: "Nước rửa chén"');
   });
 
   it('huỷ xác nhận thì không gọi API', async () => {

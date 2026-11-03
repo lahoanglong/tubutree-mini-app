@@ -15,7 +15,7 @@ describe('thoát vì bận không được tính là thành công', () => {
   });
 
   it('WasteExpiryCron: khoá advisory đang do replica khác giữ', async () => {
-    const cron = new WasteExpiryCron(lockedByOther as never, { snapshot: async () => ({ shortfallLockPct: 1, shortfallLockStreak: 1 }) } as never, {} as never, {} as never);
+    const cron = new WasteExpiryCron(lockedByOther as never, { snapshot: async () => ({ shortfallLockPct: 1, shortfallLockStreak: 1 }) } as never, {} as never, {} as never, {} as never);
     await cron.handleCron();
     expect(reports[0]).toMatchObject({ outcome: 'SKIPPED' });
   });
@@ -38,7 +38,7 @@ describe('thoát vì bận không được tính là thành công', () => {
     const upsert = jest.fn(async ({ update }: { update: Record<string, unknown> }) => Object.assign(row, update));
     const svc = new CronRunService({ cronRun: { upsert } } as never);
     setCronRunSink(svc);
-    const cron = new WasteExpiryCron(lockedByOther as never, { snapshot: async () => ({ shortfallLockPct: 1, shortfallLockStreak: 1 }) } as never, {} as never, {} as never);
+    const cron = new WasteExpiryCron(lockedByOther as never, { snapshot: async () => ({ shortfallLockPct: 1, shortfallLockStreak: 1 }) } as never, {} as never, {} as never, {} as never);
     await cron.handleCron();
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(Object.keys(upsert.mock.calls[0]![0].update).sort()).toEqual(['lastFinishedAt', 'lastOutcome']);

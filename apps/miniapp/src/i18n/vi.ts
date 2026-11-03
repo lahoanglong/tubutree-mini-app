@@ -34,6 +34,7 @@ export const vi = {
     sessionExpired: 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.',
     loadFailed: 'Chưa tải được nội dung',
     sessionUnavailable: ERROR_NETWORK,
+    sessionStorage: 'Máy chưa đọc hay lưu được dữ liệu đăng nhập. Bạn mở lại ứng dụng rồi thử lại nhé.',
     sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau khoảng một phút nhé.',
     title: 'Chưa tải được trang này',
     notFoundTitle: 'Không tìm thấy',
@@ -738,6 +739,12 @@ export const vi = {
       `${lines} mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay.`,
     createdWithPreorder: 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.',
     created: 'Đã tạo đơn đại lý!',
+    createdEarlier: (code: string) =>
+      `Đơn ${code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt, kiểm tra mục Đơn hàng trước khi đặt lại.`,
+    createdEarlierMethod: (code: string, method: 'CREDIT' | 'PREPAID') =>
+      method === 'CREDIT'
+        ? `Đơn ${code} đã tạo ở lần trước theo hình thức Ghi công nợ, không cần chuyển khoản.`
+        : `Đơn ${code} đã tạo ở lần trước theo hình thức Trả trước, cần chuyển khoản để đơn được giao.`,
   },
 
   shareFallback: {
@@ -893,7 +900,7 @@ export const vi = {
       claim: 'Nhận',
       claimed: 'Đã nhận',
       locked: 'Chưa mở',
-      premiumHint: 'Cần đăng ký định kỳ để mở phần thưởng Cao cấp.',
+      premiumHint: 'Cần có gói định kỳ đã giao ít nhất một đơn để mở phần thưởng Cao cấp.',
       reward: (r: { type: 'SEEDS' | 'POINTS'; amount: number }) =>
         r.type === 'SEEDS' ? formatDrops(r.amount) : formatPoints(r.amount),
       claimOk: 'Đã nhận thưởng chặng mùa! 🎉',

@@ -5,9 +5,13 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { formatVndText as vnd } from '../../common/format-vnd';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
-import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { CreateAddressDto, NO_HTML, UpdateAddressDto } from './dto/address.dto';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
+
+/** Trần sổ địa chỉ mỗi khách: GET /me/addresses trả toàn bộ, và mỗi dòng đi theo đơn dưới dạng snapshot. */
+export const MAX_ADDRESSES_PER_USER = 20;
+export const ADDRESS_LIMIT_MESSAGE = `Bạn đã lưu đủ ${MAX_ADDRESSES_PER_USER} địa chỉ. Bạn xoá bớt địa chỉ cũ rồi thêm tiếp nhé.`;
 
 /** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
 export const ADDRESS_IN_USE_BY_SUBSCRIPTION = 'ADDRESS_IN_USE_BY_SUBSCRIPTION';
@@ -64,6 +68,10 @@ export class UsersService {
   async updateMe(userId: string, dto: UpdateMeDto) {
     // dob đến dạng "YYYY-MM-DD" → ép về Date (Prisma DateTime không nhận date-only string).
     const { dob, ...rest } = dto;
+    if (rest.fullName !== undefined && !NO_HTML.test(rest.fullName)) {
+      const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+      if (current?.fullName?.trim() !== rest.fullName.trim()) throw new BadRequestException('Tên không được chứa ký tự < hoặc >.');
+    }
     const data: { fullName?: string; email?: string; avatarUrl?: string } = { ...rest };
     if (dob !== undefined) {
       const parsed = new Date(dob);
@@ -120,6 +128,7 @@ export class UsersService {
         // đầu tiên đồng thời không thể cùng đọc count=0.
         await lockAddressBook(tx, userId);
         const count = await tx.address.count({ where: { userId } });
+        if (count >= MAX_ADDRESSES_PER_USER) throw new BadRequestException(ADDRESS_LIMIT_MESSAGE);
         const makeDefault = dto.isDefault ?? count === 0;
         if (makeDefault) {
           await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });

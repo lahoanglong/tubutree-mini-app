@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequestItem } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -10,6 +10,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { GameOrderWaterService } from '../game/game-order-water.service';
 import { isMoneyBackable, OrderReversalService, type PartialReversalResult, type RefundOutcome } from './order-reversal.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
@@ -23,6 +24,7 @@ import {
 } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund } from './refund-queue';
 import { partialReturnTotals } from './return-ledger';
+import { RETURN_REASON_REQUIRED } from './refund-notice';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
@@ -30,7 +32,15 @@ import { markReversalEffectsDone } from './reversal-effects';
 import { isPartnerStore, storeHasPayouts } from '../merchant/partner-store';
 import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
 import { decodeServedImage } from '../../common/served-image';
-import { ATTENTION_PARTIAL_RETURN_ACK } from '../integrations/pancake/pancake-attention';
+import {
+  ATTENTION_PARTIAL_RETURN_ACK,
+  ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
+  ATTENTION_PARTIAL_RETURN_SETTLED,
+  ATTENTION_RETURN_APPROVED,
+  appendPancakeAttention,
+  replaceAttentionReasonsByPrefix,
+} from '../integrations/pancake/pancake-attention';
+import { PANCAKE_PARTIAL_RETURN_PREFIX } from '../integrations/pancake/pancake-status.map';
 
 /** Bộ lọc admin "Chờ nhận hàng về": đã duyệt, chưa bấm "Đã nhận hàng về". */
 export const RETURNS_TO_RECEIVE = 'TO_RECEIVE';
@@ -189,6 +199,7 @@ export class OrderReturnsService {
     private readonly loyalty: LoyaltyService,
     private readonly affiliate: AffiliateService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly gameWater?: GameOrderWaterService,
   ) {}
 
   // ── Khách ──
@@ -210,7 +221,7 @@ export class OrderReturnsService {
     const reasonCode = dto.reasonCode ?? null;
     const text = dto.reason?.trim() ?? '';
     if ((!reasonCode || reasonCode === 'OTHER') && text.length < 5) {
-      throw new BadRequestException('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
+      throw new BadRequestException(RETURN_REASON_REQUIRED);
     }
     const reason = text || RETURN_REASONS[reasonCode as ReturnReasonCode].label;
 
@@ -508,6 +519,12 @@ export class OrderReturnsService {
         reversalFailure ??= err;
         this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
       }
+      try {
+        await this.gameWater?.reverseForOrder(order.id);
+      } catch (err) {
+        reversalFailure ??= err;
+        this.logger.error(`Đảo nước game của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
+      }
     } else {
       // Phần cắt của hoa hồng đã vào Ví đã trừ Ví CTV trong commit; kế toán cần biết khi khoản đó đã kê là thu nhập, Ví CTV âm hoặc phần không tự trừ được.
       await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, {
@@ -528,6 +545,19 @@ export class OrderReturnsService {
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         { orderCode: order.code, amount: money.amount },
       );
+    }
+    // Lời "hoàn tay" của Pancake 15 hết hiệu lực khi đã duyệt trả trên Tubu (tiền hoàn lúc duyệt): trả cả đơn đã hoàn theo cả đơn (đường
+    // này không đi qua setStatus, xem settleClosedOrderAlerts), trả một phần đã hoàn đúng phần đó. Đơn không có mã Pancake vẫn có thể mang
+    // lời đó (đơn đã bỏ liên kết). Tiền đã commit nên lỗi ghi ô chỉ ghi log, không được cắt các tin báo phía sau.
+    try {
+      await replaceAttentionReasonsByPrefix(
+        this.prisma,
+        order.id,
+        PANCAKE_PARTIAL_RETURN_PREFIX,
+        shares.isFull ? ATTENTION_PARTIAL_RETURN_SETTLED : ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
+      );
+    } catch (err) {
+      this.logger.error(`Không thay được lời "hoàn tay" của Pancake 15 trên đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
     }
     await this.flagPancakeReturn(order, shares);
     // D4: hàng của đơn gian hàng tự giao trả về gian hàng — báo chủ gian hàng chờ nhận và xác nhận trong Cổng người bán.
@@ -784,10 +814,8 @@ export class OrderReturnsService {
       .join(', ');
     const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
     try {
-      await this.prisma.order.updateMany({
-        where: { id: order.id },
-        data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-      });
+      // Nối vào ô, không đè: lý do khác (lệch tổng, COD chờ Kế toán, lời đã xử lý của Pancake 15) còn việc. Chỉ thay lời "tạo phiếu trả" cũ.
+      await appendPancakeAttention(this.prisma, order.id, reason, ATTENTION_RETURN_APPROVED);
       await notifyAdmins(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         { template: PANCAKE_ALERT_TEMPLATE, subject: `trả hàng đơn ${order.code} trên Pancake`, data: () => ({ order_code: order.code, message: reason }) },

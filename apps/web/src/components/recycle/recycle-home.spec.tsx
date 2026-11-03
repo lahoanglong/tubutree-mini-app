@@ -359,6 +359,22 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(c.textContent).not.toContain('Chương trình đang tạm dừng');
   });
 
+  it('khách chưa đăng nhập, gửi kho đã tắt: giới thiệu không hứa gửi về kho Tubu (XANH-02)', async () => {
+    state.phase = 'guest';
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: false, pickup: false } };
+    const c = await mount();
+    expect(c.textContent).toContain('Mang bao bì sạch tới điểm nhận. Điểm Xanh dùng để đổi quà và mã giảm giá.');
+    expect(c.textContent).not.toContain('gửi về kho Tubu');
+  });
+
+  it('khách chưa đăng nhập + cấu hình chưa tải: không hiện câu giới thiệu theo cờ mặc định', async () => {
+    state.phase = 'guest';
+    state.config = { isLoaded: false, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } };
+    const c = await mount();
+    expect(c.textContent).not.toContain('Đổi bao bì sạch lấy Điểm Xanh');
+    expect(c.textContent).not.toContain('Chọn cách giao đang mở khi tạo yêu cầu');
+  });
+
   it('đang khôi phục phiên → "Đang tải…", không kẹt', async () => {
     state.phase = 'loading';
     const c = await mount();

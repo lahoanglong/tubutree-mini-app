@@ -26,7 +26,14 @@ function prisma(over: Record<string, unknown> = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
   };
-  return { ...base, ...over } as unknown as PrismaService;
+  return withTx({ ...base, ...over });
+}
+
+/** $transaction chạy callback với chính db; khoá advisory là no-op trong mock. */
+function withTx(db: Record<string, unknown>): PrismaService {
+  db.$executeRaw = jest.fn().mockResolvedValue(1);
+  db.$transaction = jest.fn(async (fn: (t: unknown) => unknown) => fn(db));
+  return db as unknown as PrismaService;
 }
 
 describe('GameQuizService', () => {
@@ -107,6 +114,13 @@ describe('GameQuizService', () => {
     expect((p.gameProfile.upsert as jest.Mock)).not.toHaveBeenCalled();
   });
 
+  it('quizId ngoài bộ câu hôm nay → BadRequest rõ ràng, không ghi gì', async () => {
+    const p = prisma({ gameQuiz: { findUnique: jest.fn().mockResolvedValue({ ...QUIZ, id: 'q-out' }), findMany: jest.fn().mockResolvedValue([QUIZ]), count: jest.fn().mockResolvedValue(9) } });
+    await expect(new GameQuizService(p, cfg()).answerQuiz('u1', 'q-out', 1)).rejects.toThrow('Câu hỏi này không thuộc bộ câu hôm nay.');
+    expect((p.gameQuizAttempt.create as jest.Mock)).not.toHaveBeenCalled();
+    expect((p.$transaction as jest.Mock)).not.toHaveBeenCalled();
+  });
+
   it('còn dưới trần → vẫn trả lời được bình thường', async () => {
     const p = prisma({ gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(4) } });
     const r = await new GameQuizService(p, cfg({ 'game.quiz_daily_count': 5 })).answerQuiz('u1', 'q1', 1);
@@ -117,7 +131,7 @@ describe('GameQuizService', () => {
 // C1: user mới chưa có gameProfile → ensure() tự tạo, không P2025/500.
 describe('GameQuizService.ensureProfile (C1)', () => {
   function prismaNoProfile() {
-    return {
+    return withTx({
       gameProfile: {
         // Lần đầu: chưa có profile. Lần thứ hai (sau ensure → trong nhánh isCorrect): đã có.
         findUnique: jest.fn()
@@ -134,7 +148,7 @@ describe('GameQuizService.ensureProfile (C1)', () => {
         create: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(0),
       },
-    } as unknown as PrismaService;
+    });
   }
 
   it('answerQuiz cho user chưa có gameProfile → không crash, upsert tạo profile và cộng nước', async () => {

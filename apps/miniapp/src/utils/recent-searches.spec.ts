@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RECENT_SEARCHES_KEY, clearRecentSearches, pushRecentSearch, readRecentSearches } from './recent-searches';
+import { RECENT_SEARCHES_KEY, RECENT_SEARCHES_OWNER_KEY, clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
 import type { StorageLike } from './recently-viewed';
 
 function memoryStorage(): StorageLike & { data: Record<string, string> } {
@@ -72,5 +72,88 @@ describe('recent-searches (giữ khoá cũ tubu_recent_searches)', () => {
     expect(readRecentSearches(null)).toEqual([]);
     expect(pushRecentSearch('nước rửa', null)).toEqual(['nước rửa']);
     expect(() => clearRecentSearches(null)).not.toThrow();
+  });
+});
+
+describe('scopeRecentSearchesToUser (KHAMPHA-15)', () => {
+  it('chưa biết ai (đang khôi phục phiên): không động vào gì', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser(undefined, s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBeUndefined();
+  });
+
+  it('lịch sử cũ chưa có chủ được tài khoản đầu tiên nhận, không xoá', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser('u1', s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('u1');
+  });
+
+  it('cùng tài khoản mở lại: giữ', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser('u1', s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
+  });
+
+  it('đổi tài khoản trên cùng máy: xoá lịch sử của người trước, chủ mới ghi nhận', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('nước rửa', s);
+    expect(scopeRecentSearchesToUser('u2', s)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('u2');
+  });
+
+  it('khách (guest) được gộp sang tài khoản thật: vẫn là một người, giữ lịch sử và đổi chủ', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('g1', s, true);
+    pushRecentSearch('sữa', s);
+    expect(scopeRecentSearchesToUser('g1', s, true)).toBe(false);
+    expect(scopeRecentSearchesToUser('z1', s, false)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['sữa']);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBe('z1');
+    expect(scopeRecentSearchesToUser('u2', s, false)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+  });
+
+  it('khách này sang khách khác, hoặc tài khoản thật sang khách: xoá', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('g1', s, true);
+    pushRecentSearch('sữa', s);
+    expect(scopeRecentSearchesToUser('g2', s, true)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    scopeRecentSearchesToUser('z1', s, false);
+    pushRecentSearch('sữa', s);
+    expect(scopeRecentSearchesToUser('g3', s, true)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+  });
+
+  it('storage vắng hoặc ném: không ném', () => {
+    expect(scopeRecentSearchesToUser('u1', null)).toBe(false);
+    const bad = { getItem: () => { throw new Error('x'); }, setItem: () => undefined, removeItem: () => undefined };
+    expect(scopeRecentSearchesToUser('u1', bad)).toBe(false);
+  });
+});
+
+describe('forgetRecentSearchesOfSignedOutUser (KHAMPHA-15, đăng xuất)', () => {
+  it('có chủ mà đã đăng xuất: xoá lịch sử và chủ, trả true', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('kem chống hăm', s);
+    expect(forgetRecentSearchesOfSignedOutUser(s)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBeUndefined();
+  });
+
+  it('chưa có chủ (khách chưa từng đăng nhập): giữ nguyên', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(forgetRecentSearchesOfSignedOutUser(s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
   });
 });

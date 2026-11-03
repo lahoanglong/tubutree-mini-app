@@ -1,5 +1,5 @@
 import { CronRunService, describeCronError } from './cron-run.service';
-import { setCronRunSink } from '../../common/cron-run/track-cron';
+import { setCronRunSink, TrackCron } from '../../common/cron-run/track-cron';
 
 interface Row {
   job: string;
@@ -164,6 +164,30 @@ describe('CronRunService.record', () => {
 });
 
 describe('CronRunService.list', () => {
+  // Khai báo job như mã thật: list() chỉ liệt kê job còn @TrackCron() trong mã.
+  class A {
+    @TrackCron()
+    async x() {}
+    @TrackCron()
+    async y() {}
+  }
+  void A;
+
+  it('job đã đổi tên/gỡ khỏi mã (còn dòng lỗi cũ trong cron_runs) không được liệt kê, để banner lỗi tắt được', async () => {
+    const { svc } = build();
+    await svc.record(threw('A.x', 0));
+    await svc.record(threw('Cu.daBiGo', 0));
+    await svc.record(ok('A.y', 0));
+    expect((await svc.list()).map((r) => r.job)).toEqual(['A.x', 'A.y']);
+  });
+
+  it('dòng mốc do mã tự ghi (dailyWalletTransfer, không có @TrackCron) vẫn được liệt kê', async () => {
+    const { svc } = build();
+    await svc.record(ok('A.x', 0));
+    await svc.record(ok('AffiliateService.dailyWalletTransfer', 0));
+    expect((await svc.list()).map((r) => r.job)).toEqual(['A.x', 'AffiliateService.dailyWalletTransfer']);
+  });
+
   it('trả các dòng ở dạng chuỗi ISO cho màn admin', async () => {
     const { svc } = build();
     await svc.record(threw('A.x', 0));
@@ -181,6 +205,10 @@ describe('describeCronError', () => {
   it('lỗi không phải Error: chỉ ghi kiểu, không in giá trị', () => {
     expect(describeCronError({ password: 'p' })).toBe('NonError: object');
     expect(describeCronError('chuỗi bí mật')).toBe('NonError: string');
+  });
+  it('lỗi Prisma: câu lỗi thật thay cho dòng "Invalid ... invocation"', () => {
+    const err = new Error('\nInvalid `prisma.$executeRaw()` invocation:\n\n\nRaw query failed. Code: `42703`. Message: `column "id" does not exist`');
+    expect(describeCronError(err)).toBe('Error: Raw query failed. Code: `42703`. Message: `column "id" does not exist`');
   });
   it('lớp lỗi tự đặt tên', () => {
     class BoomError extends Error {}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { OrderKind, OrderListExtra, OrderListPlatform, OrderPaymentFilter } from '@/lib/admin-client';
 import { paymentStatusLabel } from '@/lib/order-view';
 import { BTN_SECONDARY, FIELD_CLASS, TOUCH_H } from './ui';
@@ -34,9 +34,22 @@ const without = (v: OrderListExtra, key: keyof OrderListExtra): OrderListExtra =
  * Bộ lọc thêm của tab Đơn hàng (D1-17): loại đơn, tình trạng thanh toán, nền tảng, CTV hoặc gian hàng giới thiệu và thứ tự theo ngày
  * đặt. Cha giữ `value` (đúng tham số API) nên danh sách và nút "Xuất CSV" dùng chung một bộ lọc.
  */
-export function OrderExtraFilters({ value, onChange, userLabel }: { value: OrderListExtra; onChange: (v: OrderListExtra) => void; userLabel?: string }) {
-  const [picked, setPicked] = useState<PickedItem | null>(null);
+export function OrderExtraFilters({
+  value,
+  onChange,
+  userLabel,
+  referrerLabel,
+}: {
+  value: OrderListExtra;
+  /** `referrerLabel` đi kèm khi vừa chọn một CTV: cha giữ để ô CTV vẫn hiện tên khi component gắn lại (ngăn kéo điện thoại). */
+  onChange: (v: OrderListExtra, referrerLabel?: string) => void;
+  userLabel?: string;
+  referrerLabel?: string;
+}) {
   const [storeInput, setStoreInput] = useState(value.storefront ?? '');
+  // Ô gõ chỉ là bản nháp: theo giá trị đang áp mỗi khi cha đổi nó (bỏ lọc, "Xem tất cả đơn" từ hồ sơ khách).
+  useEffect(() => setStoreInput(value.storefront ?? ''), [value.storefront]);
+  const picked: PickedItem | null = value.referrerUserId ? { id: value.referrerUserId, label: referrerLabel || 'CTV đang lọc' } : null;
   const set = <K extends keyof OrderListExtra>(key: K, v: OrderListExtra[K] | '') => onChange(v ? { ...value, [key]: v } : without(value, key));
   const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.referrerUserId || value.userId || value.storefront);
   const kindHint = ORDER_KIND_OPTIONS.find((o) => o.k === value.kind)?.hint;
@@ -101,7 +114,6 @@ export function OrderExtraFilters({ value, onChange, userLabel }: { value: Order
           <button
             type="button"
             onClick={() => {
-              setPicked(null);
               setStoreInput('');
               onChange(value.order ? { order: value.order } : {});
             }}
@@ -123,10 +135,7 @@ export function OrderExtraFilters({ value, onChange, userLabel }: { value: Order
           <UserPicker
             label="Lọc đơn theo CTV giới thiệu"
             value={picked}
-            onChange={(p) => {
-              setPicked(p);
-              set('referrerUserId', p?.id ?? '');
-            }}
+            onChange={(p) => onChange(p ? { ...value, referrerUserId: p.id } : without(value, 'referrerUserId'), p?.label)}
           />
         </div>
         <form onSubmit={submitStore} className="flex min-w-[240px] flex-1 items-center gap-2">

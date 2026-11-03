@@ -10,6 +10,8 @@ function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   } as unknown as SystemConfigService;
 }
 
+const CART_FIELDS = { updatedAt: { ref: 'cart.updatedAt' } };
+
 // ============================================================
 // Feature A: Cart-abandonment reminder
 // ============================================================
@@ -31,7 +33,7 @@ function cartRow(over: Record<string, unknown> = {}) {
 function setupCart(rows: unknown[], claimedCount = 1) {
   const findMany = jest.fn().mockResolvedValue(rows);
   const updateMany = jest.fn().mockResolvedValue({ count: claimedCount });
-  const prisma = { cart: { findMany, updateMany } } as unknown as PrismaService;
+  const prisma = { cart: { findMany, updateMany, fields: CART_FIELDS } } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify } as unknown as NotificationsService;
   const config = makeConfig();
@@ -100,6 +102,15 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('OPS-04: giỏ đã nhắc bị lọc ngay trong truy vấn (không chiếm lô 200) và lô có thứ tự ổn định', async () => {
+    const { svc, findMany } = setupCart([]);
+    await svc.sendCartAbandonReminders();
+    const arg = findMany.mock.calls[0][0];
+    expect(arg.where.OR).toEqual([{ abandonRemindedAt: null }, { abandonRemindedAt: { lt: CART_FIELDS.updatedAt } }]);
+    expect(arg.orderBy).toEqual({ updatedAt: 'asc' });
+    expect(arg.take).toBe(200);
+  });
+
   it('không có giỏ nào tới hạn → không làm gì', async () => {
     const { svc, notify, updateMany } = setupCart([]);
     await svc.sendCartAbandonReminders();
@@ -110,7 +121,7 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
 
   it('dùng ngưỡng min/max giờ từ SystemConfig để tính khung updatedAt truy vấn', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { cart: { findMany, updateMany: jest.fn() } } as unknown as PrismaService;
+    const prisma = { cart: { findMany, updateMany: jest.fn(), fields: CART_FIELDS } } as unknown as PrismaService;
     const notifications = { notify: jest.fn() } as unknown as NotificationsService;
     const config = makeConfig({
       'remarketing.cart_abandon_min_hours': 6,
@@ -128,7 +139,7 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
   // R4-ADMIN-8: dữ liệu cũ có min ≥ max (trước khi chặn lúc ghi) → khoảng rỗng, cron không nhắc giỏ nào mà không ai biết.
   it('min ≥ max trong SystemConfig → không truy vấn, ghi cảnh báo nêu hai khoá cần sửa', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { cart: { findMany, updateMany: jest.fn() } } as unknown as PrismaService;
+    const prisma = { cart: { findMany, updateMany: jest.fn(), fields: CART_FIELDS } } as unknown as PrismaService;
     const notifications = { notify: jest.fn() } as unknown as NotificationsService;
     const config = makeConfig({
       'remarketing.cart_abandon_min_hours': 72,
@@ -150,7 +161,7 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
     const cart = cartRow();
     const findMany = jest.fn().mockResolvedValue([cart]);
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const prisma = { cart: { findMany, updateMany } } as unknown as PrismaService;
+    const prisma = { cart: { findMany, updateMany, fields: CART_FIELDS } } as unknown as PrismaService;
     const notify = jest.fn().mockRejectedValue(new Error('DB timeout khi ghi notificationLog'));
     const notifications = { notify } as unknown as NotificationsService;
     const svc = new RemarketingService(prisma, makeConfig(), notifications);
@@ -209,6 +220,14 @@ describe('RemarketingService.sendVoucherExpiryReminders', () => {
       code: 'WELCOME-U1',
       expires: expect.any(String),
     });
+  });
+
+  it('OPS-04: coupon thiếu scopeMeta.userId bị lọc ngay trong truy vấn, lô có thứ tự ổn định', async () => {
+    const { svc, findMany } = setupVoucher([]);
+    await svc.sendVoucherExpiryReminders();
+    const arg = findMany.mock.calls[0][0];
+    expect(arg.where.scopeMeta).toEqual({ path: ['userId'], not: expect.anything() });
+    expect(arg.orderBy).toEqual({ endAt: 'asc' });
   });
 
   it('coupon không có scopeMeta.userId (dữ liệu bất thường) → bỏ qua, không notify', async () => {

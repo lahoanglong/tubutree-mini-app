@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -480,7 +480,7 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
 });
 
 describe('AddToCart — khối mua xếp theo order cùng các khối khác của PDP ở điện thoại (như Mini App)', () => {
-  const order = (el: Element | null) => Number(/max-md:order-(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
+  const order = (el: Element | null) => Number(/tubu-pdp-order-(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
 
   it('gốc là `contents` để chip và Số lượng thành khối con của cột thông tin: chip 5 → Số lượng 6, không còn dòng "Phân loại ›"', async () => {
     const { container } = mount();
@@ -863,7 +863,7 @@ describe('AddToCart — Mua ngay', () => {
     const r = render(<AddToCart slug="dau-goi" variations={VARIATIONS} blockedReason="Tạm nghỉ." />);
     mounted.push(r);
     await flush();
-    expect(r.container.firstElementChild!.className).toContain('max-md:order-6');
+    expect(r.container.firstElementChild!.className).toContain('tubu-pdp-order-6');
   });
 
   describe('thanh CTA dính đáy (điện thoại)', () => {
@@ -933,6 +933,10 @@ describe('AddToCart — Mua ngay', () => {
 });
 
 describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () => {
+  // Bảng nạp bằng next/dynamic: lần nạp đầu phải biên dịch, trên máy chậm lâu hơn số nhịp flush(); nạp sẵn để mọi ca không phụ thuộc tốc độ máy.
+  beforeAll(async () => {
+    await import('./variation-sheet');
+  });
   const realMatchMedia = window.matchMedia;
   beforeEach(() => {
     window.matchMedia = ((q: string) => ({ matches: q.includes('max-width: 767px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
@@ -942,9 +946,9 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     window.matchMedia = realMatchMedia;
   });
   const sheet = () => document.body.querySelector('[role="dialog"]') as HTMLElement | null;
-  // Bảng nạp lười (next/dynamic): chờ tới khi hiện.
+  // Chờ theo thời gian thật (không theo số nhịp): nạp động chậm bao lâu cũng không làm ca đỏ giả.
   const sheetReady = async () => {
-    for (let n = 0; n < 40 && !sheet(); n++) await flush();
+    for (const end = Date.now() + 5000; !sheet() && Date.now() < end; ) await flush();
   };
 
   it('Thêm vào giỏ mở bảng chọn, chọn 500ml rồi xác nhận mới thêm giỏ', async () => {
@@ -1023,6 +1027,9 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
 });
 
 describe('AddToCart — bảng chọn Phân loại và hết giờ Giờ vàng (P8)', () => {
+  beforeAll(async () => {
+    await import('./variation-sheet');
+  });
   const rowButton = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.startsWith('Phân loại')) ?? null;
 
   it('nhiều phân loại: không có dòng "Phân loại ›" (chip đủ tên, giá, hết hàng); bảng chọn vẫn mở khi bấm Thêm vào giỏ ở điện thoại', async () => {
@@ -1035,7 +1042,7 @@ describe('AddToCart — bảng chọn Phân loại và hết giờ Giờ vàng (
       expect(rowButton(container)).toBeNull();
       expect(container.querySelector('[data-section="pdp-variation"]')).toBeNull();
       click(addButton(container));
-      await flush();
+      for (const end = Date.now() + 5000; mocks.sheetProps === null && Date.now() < end; ) await flush();
       expect(mocks.sheetProps).not.toBeNull();
     } finally {
       window.matchMedia = realMatchMedia;
@@ -1217,7 +1224,7 @@ describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn
 
   async function open(status = 'authenticated') {
     mocks.getActiveFlashSales.mockResolvedValue([LIMITED]);
-    mocks.auth = { status, initialized: true, user: status === 'authenticated' ? { id: 'u1' } : null };
+    mocks.auth = { status, initialized: status !== 'loading', user: status === 'authenticated' ? { id: 'u1' } : null };
     const r = mount();
     await flush();
     click(byText(r.container, 'button', /^500ml/));
@@ -1259,6 +1266,30 @@ describe('AddToCart — số suất Giờ vàng khách đã dùng ở các đơn
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 240.000đ');
     expect(addButton(container).disabled).toBe(false);
     expect(container.textContent).not.toContain(SPENT);
+  });
+
+  it('giữ chỗ ghi chú từ lần vẽ đầu khi đã đăng nhập đang xem Giờ vàng (allowance chưa về); chưa đăng nhập thì không giữ dải trống', async () => {
+    mocks.getFlashAllowance.mockReturnValue(new Promise(() => {}));
+    const authed = await open();
+    expect(authed.container.querySelector('[data-section="pdp-flash-limit"]')!.className).toContain('tubu-pdp-flash-note');
+    expect(note(authed.container)).toBe('');
+    authed.unmount();
+    const guest = await open('idle');
+    expect(guest.container.querySelector('[data-section="pdp-flash-limit"]')!.className).not.toContain('tubu-pdp-flash-note');
+  });
+
+  it('phiên đang khôi phục (cờ phiên còn, chưa biết kết quả): giữ chỗ ngay để pha đăng nhập về không chèn thêm dải; không có cờ thì không giữ', async () => {
+    mocks.getFlashAllowance.mockReturnValue(new Promise(() => {}));
+    window.localStorage.setItem('tubu_web_session', '1');
+    try {
+      const restoring = await open('loading');
+      expect(restoring.container.querySelector('[data-section="pdp-flash-limit"]')!.className).toContain('tubu-pdp-flash-note');
+      restoring.unmount();
+    } finally {
+      window.localStorage.removeItem('tubu_web_session');
+    }
+    const noMarker = await open('loading');
+    expect(noMarker.container.querySelector('[data-section="pdp-flash-limit"]')!.className).not.toContain('tubu-pdp-flash-note');
   });
 
   it('khách chưa đăng nhập: không gọi endpoint, số như trước', async () => {

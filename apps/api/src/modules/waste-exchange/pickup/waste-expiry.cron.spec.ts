@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
+import { endOfVnDay, vnMonthKey } from '../../../common/vn-time';
 import { expiryCloseReason, WasteExpiryCron } from './waste-expiry.cron';
 
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: jest.fn().mockResolvedValue({ id: 'ev1' }) }));
@@ -13,12 +14,12 @@ const transitRow = (id: string, userId = 'u1'): Row => ({ id, code: `TR-${id.toU
 
 type RemindUser = { isBlocked: boolean; mergedIntoId: string | null; wasteFlags: { blockedAt: Date | null } | null };
 type RemindRow = {
-  id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; status: string; orderId: string | null; trackingCode: string | null; expiresAt: Date | null;
+  id: string; code: string; userId: string; pointId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; status: string; orderId: string | null; trackingCode: string | null; expiresAt: Date | null;
   user: RemindUser;
 };
 const HOUR = 3_600_000;
 const remindRow = (id: string, hoursLeft: number | null, o: Partial<RemindRow> = {}): RemindRow => ({
-  id, code: `TR-${id.toUpperCase().padEnd(5, '4')}`, userId: 'u1', method: 'DROP_OFF', status: 'OPEN', orderId: null, trackingCode: null,
+  id, code: `TR-${id.toUpperCase().padEnd(5, '4')}`, userId: 'u1', pointId: 'p1', method: 'DROP_OFF', status: 'OPEN', orderId: null, trackingCode: null,
   expiresAt: hoursLeft === null ? null : new Date(NOW.getTime() + hoursLeft * HOUR), user: { isBlocked: false, mergedIntoId: null, wasteFlags: null }, ...o,
 });
 const USER_OK = { isBlocked: false, mergedIntoId: null, OR: [{ wasteFlags: null }, { wasteFlags: { blockedAt: null } }] };
@@ -48,7 +49,8 @@ function matches(r: RemindRow, w: Where): boolean {
 
 function setup(
   rows: Row[],
-  o: { locked?: boolean; counts?: Record<string, number>; gomdon?: Record<string, string | null>; failIds?: string[]; remind?: RemindRow[]; notifier?: unknown; enabled?: boolean } = {},
+  o: { locked?: boolean; counts?: Record<string, number>; gomdon?: Record<string, string | null>; failIds?: string[]; remind?: RemindRow[]; notifier?: unknown; enabled?: boolean;
+    unavailablePoints?: string[]; quota?: Record<string, { quota: number; used: number }> } = {},
 ) {
   const findMany = jest.fn().mockResolvedValueOnce(rows).mockResolvedValue([]);
   // Bước nhắc dùng cùng wasteRequest.findMany nhưng lọc theo cửa sổ expiresAt [gte, lt); bước đóng hạn giữ mock riêng ở trên.
@@ -65,8 +67,16 @@ function setup(
   const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: o.locked ?? true }]), wasteRequest: { updateMany }, order: { findUnique: orderFind } };
   // The outer try-lock transaction ends after the per-row ones, so the first 'tx end' belongs to the first row transaction.
   const order: string[] = [];
+  const access = { availablePointIds: jest.fn(async (_db: unknown, ids: string[]) => new Set(ids.filter((id) => !o.unavailablePoints?.includes(id)))) };
+  const quotaOf = o.quota ?? {};
   const prisma = {
     wasteRequest: { findMany: dispatch },
+    wastePoint: {
+      findMany: jest.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.filter((id) => quotaOf[id]).map((id) => ({ id, monthlyQuotaPoints: quotaOf[id]!.quota })),
+      ),
+    },
+    wastePointUsage: { findMany: jest.fn(async () => Object.entries(quotaOf).map(([pointId, v]) => ({ pointId, pointsUsed: v.used }))) },
     $transaction: jest.fn(async (cb: (t: unknown) => unknown) => {
       const r = await cb(tx);
       order.push('tx end');
@@ -81,11 +91,53 @@ function setup(
       return { locked: false, shipLockedAt: null, cancelledRequestIds: [] };
     }),
   };
-  const cron = new WasteExpiryCron(prisma as never, config as never, notifier as never, shipLock as never);
-  return { cron, tx, findMany, remindFindMany, updateMany, orderFind, notifier: notifier as { requestExpired: jest.Mock; requestExpiring: jest.Mock }, shipLock, config, order };
+  const cron = new WasteExpiryCron(prisma as never, config as never, notifier as never, shipLock as never, access as never);
+  return { cron, tx, findMany, remindFindMany, updateMany, orderFind, notifier: notifier as { requestExpired: jest.Mock; requestExpiring: jest.Mock }, shipLock, config, order, access, prisma };
 }
 
 beforeEach(() => (writeWasteEvent as jest.Mock).mockClear());
+
+describe('WasteExpiryCron nhắc sắp hết hạn theo điểm nhận (DRV2-01)', () => {
+  it('bỏ qua DROP_OFF tại điểm tạm dừng hoặc mất chủ, vẫn nhắc điểm dùng được và MAIL_IN', async () => {
+    const remind = [
+      remindRow('a', 30, { pointId: 'ok' }),
+      remindRow('b', 30, { pointId: 'paused' }),
+      remindRow('c', 30, { pointId: 'noowner' }),
+      remindRow('d', 30, { pointId: 'paused', method: 'MAIL_IN' }),
+    ];
+    const { cron, notifier } = setup([], { remind, unavailablePoints: ['paused', 'noowner'] });
+    await cron.run(NOW);
+    expect(notifier.requestExpiring.mock.calls.map((c) => (c[0] as string) + (c[1] as { id: string }).id)).toEqual(['u1a', 'u1d']);
+  });
+
+  it('bỏ qua điểm PARTNER đã dùng hết hạn mức tháng, còn hạn mức thì vẫn nhắc', async () => {
+    const remind = [remindRow('a', 30, { pointId: 'full' }), remindRow('b', 30, { pointId: 'room' })];
+    const { cron, notifier } = setup([], { remind, quota: { full: { quota: 1000, used: 1000 }, room: { quota: 1000, used: 999 } } });
+    await cron.run(NOW);
+    expect(notifier.requestExpiring.mock.calls.map((c) => (c[1] as { id: string }).id)).toEqual(['b']);
+  });
+});
+
+describe('WasteExpiryCron hạn mức theo tháng của hạn giữ chỗ (DRV2-01)', () => {
+  it('chỉ đọc hạn mức PARTNER của điểm còn dùng được, theo tháng VN hiện tại', async () => {
+    const remind = [remindRow('a', 30, { pointId: 'full' }), remindRow('b', 30, { pointId: 'paused' })];
+    const { cron, prisma } = setup([], { remind, unavailablePoints: ['paused'], quota: { full: { quota: 10, used: 10 } } });
+    await cron.run(NOW);
+    expect(prisma.wastePoint.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: ['full'] }, kind: 'PARTNER', monthlyQuotaPoints: { not: null } } }));
+    expect(prisma.wastePointUsage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { pointId: { in: ['full'] }, monthKey: vnMonthKey(NOW) } }));
+  });
+
+  it('ranh giới tháng: hạn rơi sang tháng sau thì hạn mức tháng này đầy không chặn tin nhắc', async () => {
+    const now = new Date('2026-10-30T20:30:00.000Z');
+    const remind = [
+      remindRow('a', 30, { pointId: 'full', expiresAt: new Date('2026-11-01T02:30:00.000Z') }),
+      remindRow('b', 30, { pointId: 'full', expiresAt: new Date('2026-10-31T16:00:00.000Z') }),
+    ];
+    const { cron, notifier } = setup([], { remind, quota: { full: { quota: 10, used: 10 } } });
+    await cron.run(now);
+    expect(notifier.requestExpiring.mock.calls.map((c) => (c[1] as { id: string }).id)).toEqual(['a']);
+  });
+});
 
 describe('expiryCloseReason (§12.2 bước 4)', () => {
   it('OPEN → HOLD_EXPIRED', () => expect(expiryCloseReason({ status: 'OPEN', gomdonStatus: '7' })).toBe('HOLD_EXPIRED'));
@@ -235,7 +287,7 @@ describe('WasteExpiryCron: nhắc trước hạn', () => {
     await cron.run(NOW);
     expect(remindFindMany).toHaveBeenCalledWith({
       where: { status: 'OPEN', orderId: null, trackingCode: null, method: { in: ['DROP_OFF', 'MAIL_IN'] }, user: USER_OK, expiresAt: { gte: day(1), lt: day(2) } },
-      select: { id: true, code: true, userId: true, method: true, expiresAt: true },
+      select: { id: true, code: true, userId: true, pointId: true, method: true, expiresAt: true },
       orderBy: { id: 'asc' },
       take: 200,
     });
@@ -318,5 +370,37 @@ describe('WasteExpiryCron: nhắc trước hạn', () => {
     const { cron, remindFindMany } = setup([], { locked: false, remind: [remindRow('a', 30)] });
     await cron.run(NOW);
     expect(remindFindMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('WasteExpiryCron: hạn giữ chỗ hết ngày D giờ VN', () => {
+  // Tạo 01:00 ngày 01/11 giờ VN, giữ 7 ngày: hạn = 23:59:59.999 ngày 08/11.
+  const created = new Date('2026-10-31T18:00:00.000Z');
+  const expiresAt = endOfVnDay(new Date(created.getTime() + 7 * 86_400_000));
+  const vn = (iso: string) => new Date(`${iso}+07:00`);
+  const row = remindRow('r1', null, { expiresAt });
+
+  function run(now: Date) {
+    const s = setup([], { remind: [row] });
+    s.findMany.mockReset();
+    s.findMany.mockImplementation(async ({ where }: { where: Where }) => (!where.AND && row.expiresAt! < (where.expiresAt!.lt as Date) ? [openRow('r1', 'DROP_OFF')] : []));
+    return s.cron.run(now).then((res) => ({ res, notifier: s.notifier }));
+  }
+
+  it('03:30 ngày 08/11 chưa đóng và không nhắc (đã nhắc ở lượt 07/11); 03:30 ngày 09/11 đóng', async () => {
+    const open = await run(vn('2026-11-08T03:30:00'));
+    expect(open.res.expired).toBe(0);
+    expect(open.notifier.requestExpiring).not.toHaveBeenCalled();
+    const closed = await run(vn('2026-11-09T03:30:00'));
+    expect(closed.res.expired).toBe(1);
+  });
+
+  it('đúng một lượt nhắc: 03:30 ngày 07/11', async () => {
+    const hits: string[] = [];
+    for (const day of ['05', '06', '07', '08']) {
+      const { notifier } = await run(vn(`2026-11-${day}T03:30:00`));
+      if (notifier.requestExpiring.mock.calls.length > 0) hits.push(day);
+    }
+    expect(hits).toEqual(['07']);
   });
 });

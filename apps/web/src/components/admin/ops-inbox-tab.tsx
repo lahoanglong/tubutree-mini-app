@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type OpsInbox, type TodaySummary } from '@/lib/admin-client';
+import { AlertTriangle, ChevronRight, CircleCheck } from 'lucide-react';
+import { getOpsHealth, getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type OpsInbox, type TodaySummary } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { summarizeNs1 } from './ns1-card';
 import { formatDateTime } from '@/lib/format-date';
 import { seedDealerClaimFilter } from './dealer-claims-tab';
 import { seedPayoutFilter } from './payout-admin-tab';
+import { failingCronJobs } from './ops-health-tab';
 import { LoadError } from './ui';
 
 export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
@@ -98,8 +99,36 @@ export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boo
 /** Số bán hàng trong ngày bấm được: mỗi số mở đúng màn xem chi tiết của nó. */
 export type TodayStatKey = 'orders' | 'revenue' | 'newUsers';
 
+/**
+ * Thẻ dẫn sang Sức khoẻ hệ thống khi có sự cố vượt ngưỡng hoặc việc nền đang lỗi. Dùng cùng truy vấn với màn Sức khoẻ (chung
+ * bộ nhớ đệm), chỉ ADMIN (API chỉ mở cho ADMIN); lỗi tải thì im lặng, không kéo sập trang Hôm nay.
+ */
+function HealthNotice({ onOpen }: { onOpen: () => void }) {
+  const q = useQuery({ queryKey: ['admin-ops-health'], queryFn: getOpsHealth, refetchInterval: 5 * 60_000, staleTime: 60_000 });
+  if (!q.data) return null;
+  const problems = q.data.problems.length;
+  const crons = failingCronJobs(q.data).length;
+  if (problems + crons === 0) return null;
+  const parts = [problems > 0 ? `${problems} sự cố vượt ngưỡng` : '', crons > 0 ? `${crons} việc nền đang lỗi` : ''].filter(Boolean);
+  return (
+    <button
+      type="button"
+      data-inbox-health
+      onClick={onOpen}
+      className="flex min-h-[44px] w-full items-center gap-3 rounded-card border border-danger-fg bg-danger-bg p-4 text-left text-danger-fg shadow-card"
+    >
+      <AlertTriangle aria-hidden="true" className="h-5 w-5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium">Hệ thống cần xem: {parts.join(', ')}</span>
+        <span className="block text-xs">Mở Sức khoẻ hệ thống để xem chi tiết</span>
+      </span>
+      <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0" />
+    </button>
+  );
+}
+
 /** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
-export function OpsInboxTab({ onOpen: openTab, onOpenStat, isAdmin = false }: { onOpen: (key: InboxKey) => void; onOpenStat?: (stat: TodayStatKey) => void; isAdmin?: boolean }) {
+export function OpsInboxTab({ onOpen: openTab, onOpenStat, onOpenHealth, isAdmin = false }: { onOpen: (key: InboxKey) => void; onOpenStat?: (stat: TodayStatKey) => void; onOpenHealth?: () => void; isAdmin?: boolean }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
     seedDealerClaimFilter(CLAIM_FILTER[key] ?? null);
@@ -120,6 +149,7 @@ export function OpsInboxTab({ onOpen: openTab, onOpenStat, isAdmin = false }: { 
         <h2 className="font-display text-lg font-semibold text-stone-900">Hôm nay</h2>
         <span className="text-xs text-stone-500">Cập nhật {formatDateTime(q.data.generatedAt)} · tự làm mới mỗi phút</span>
       </div>
+      {isAdmin && onOpenHealth && <HealthNotice onOpen={onOpenHealth} />}
       {isAdmin && <TodayStats onOpenStat={onOpenStat} />}
       <h3 className="text-sm font-semibold text-stone-900">Việc đang chờ{open.length > 0 ? ` (${open.length})` : ''}</h3>
       {open.length === 0 && (

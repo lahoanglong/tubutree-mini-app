@@ -54,6 +54,15 @@ export function projectCheckIn(p: CheckInStreakInput | null, today: string = vnD
   return { doneToday: false, gapDays, streakDays: 1, usesFreeze: false, aliveStreak: 0 };
 }
 
+/**
+ * Còn hồi sinh được chuỗi vừa mất không: lần điểm danh kế tiếp phải nối được chuỗi (đã điểm danh hôm nay, hôm qua, hoặc cách hai ngày
+ * mà còn vé giữ lửa). Nếu không, điểm danh kế sẽ đưa chuỗi vừa hồi sinh về 1 và khách mất 💧 vô ích.
+ */
+export function canRepairStreak(p: CheckInStreakInput | null, today: string = vnDateKey()): boolean {
+  const proj = projectCheckIn(p, today);
+  return proj.gapDays === null || proj.doneToday || proj.gapDays === 1 || proj.usesFreeze;
+}
+
 export interface CheckInSeedPlan {
   /** Tổng giọt nước vào bình (đã gồm mọi khoản thưởng). */
   seeds: number;

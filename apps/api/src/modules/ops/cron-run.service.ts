@@ -1,7 +1,9 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { notifyAdmins } from '../../common/notify-admins';
-import { setCronRunSink, type CronRunReport, type CronRunSink } from '../../common/cron-run/track-cron';
+import { registeredCronJobNames, setCronRunSink, type CronRunReport, type CronRunSink } from '../../common/cron-run/track-cron';
+import { firstNonEmptyLine } from '../../common/cron-run/cron-aware-logger';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DAILY_WALLET_TRANSFER_JOB } from '../affiliate/affiliate-auto-transfer-config';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const ALERT_EVERY_MS = 6 * 3_600_000;
@@ -24,10 +26,13 @@ export interface CronRunRow {
 /** Tên lớp lỗi + dòng đầu thông điệp. Không stack; lỗi không phải Error chỉ ghi kiểu vì giá trị có thể là dữ liệu request. */
 export function describeCronError(err: unknown): string {
   if (!(err instanceof Error)) return `NonError: ${typeof err}`;
-  const firstLine = err.message.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
+  const firstLine = firstNonEmptyLine(err.message);
   const name = err.constructor?.name && err.constructor.name !== 'Object' ? err.constructor.name : err.name;
   return `${name}: ${firstLine}`.slice(0, MAX_ERROR_LENGTH);
 }
+
+/** Dòng mốc do mã tự ghi vào cron_runs (không có @TrackCron nên không nằm trong danh sách job đăng ký) mà màn Sức khoẻ vẫn hiện. */
+export const CRON_MARKER_JOBS: ReadonlySet<string> = new Set([DAILY_WALLET_TRANSFER_JOB]);
 
 /**
  * Sổ lần chạy cuối của từng @Cron (bảng cron_runs, một dòng mỗi job, một upsert mỗi lần chạy). Chỉ leader chạy cron nên
@@ -112,7 +117,10 @@ export class CronRunService implements OnModuleInit, CronRunSink {
   }
 
   async list(): Promise<CronRunRow[]> {
-    const rows = await this.prisma.cronRun.findMany({ orderBy: { job: 'asc' } });
+    const all = await this.prisma.cronRun.findMany({ orderBy: { job: 'asc' } });
+    // Job đã đổi tên hoặc gỡ khỏi mã không bao giờ chạy lại, nên dòng lỗi cuối của nó làm banner lỗi không tắt: chỉ liệt kê job còn khai báo.
+    const live = registeredCronJobNames();
+    const rows = live.size === 0 ? all : all.filter((r) => live.has(r.job) || CRON_MARKER_JOBS.has(r.job));
     const iso = (d: Date | null) => (d ? d.toISOString() : null);
     return rows.map((r) => ({
       job: r.job,

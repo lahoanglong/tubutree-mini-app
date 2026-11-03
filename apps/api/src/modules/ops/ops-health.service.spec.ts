@@ -208,14 +208,101 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
     expect(await svc.zaloTokenProblems(NOW)).toEqual([]);
   });
 
-  it('chưa có mốc hạn hoặc mốc hỏng → không cảnh báo (cron làm mới sẽ lo)', async () => {
-    expect(await build(configured).svc.zaloTokenProblems(NOW)).toEqual([]);
-    expect(await build({ ...configured, 'zalo.oa_token_expires_at': 'không-phải-ngày' }).svc.zaloTokenProblems(NOW)).toEqual([]);
+  it('OPS-01: có token mà chưa có mốc hạn hợp lệ → 1 problem zalo.oa_token (chưa từng làm mới được)', async () => {
+    for (const store of [configured, { ...configured, 'zalo.oa_token_expires_at': 'không-phải-ngày' }]) {
+      const out = await build(store).svc.zaloTokenProblems(NOW);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.key).toBe('zalo.oa_token');
+      expect(out[0]!.message).toContain('chưa từng được làm mới');
+    }
+    expect(await build({}, { ZALO_OA_ACCESS_TOKEN: 'env-acc' }).svc.zaloTokenProblems(NOW)).toHaveLength(1);
+    expect(await build({}).svc.zaloTokenProblems(NOW)).toEqual([]);
+  });
+
+  describe('vừa cấu hình token, chưa tới lượt cron đầu (báo động giả tối đa 6 giờ)', () => {
+    const cronRow = (lastOutcome: string) => ({ job: 'ZaloOaTokenCron.refresh', lastOutcome });
+    function withCron(rows: unknown[], store: Record<string, string> = configured) {
+      const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key in store ? { value: store[key] } : null)) } };
+      return new OpsHealthService(prisma as never, { get: () => '' } as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => rows } as never);
+    }
+
+    it('chưa có dòng cron nào hoặc lượt gần nhất OK → chưa báo', async () => {
+      expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
+      expect(await withCron([cronRow('OK')]).zaloTokenProblems(NOW)).toEqual([]);
+      expect(await withCron([cronRow('SKIPPED')]).zaloTokenProblems(NOW)).toEqual([]);
+    });
+
+    it('tiến trình chạy quá 7 giờ mà vẫn chưa có mốc hạn (cron không bao giờ chạy: tắt cron, mất lease leader) → vẫn báo, dù không có dòng cron nào', async () => {
+      const uptime = jest.spyOn(process, 'uptime').mockReturnValue(7 * 3600 + 60);
+      try {
+        for (const rows of [[], [cronRow('OK')], [cronRow('SKIPPED')]]) {
+          const out = await withCron(rows).zaloTokenProblems(NOW);
+          expect(out).toHaveLength(1);
+          expect(out[0]!.message).toContain('chưa từng được làm mới');
+        }
+        uptime.mockReturnValue(5 * 3600);
+        expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
+      } finally {
+        uptime.mockRestore();
+      }
+    });
+
+    it('mốc chờ tính từ lúc token được nhập vào SystemConfig, không phải từ lúc tiến trình khởi động lại', async () => {
+      const withRow = (updatedAt: Date) => {
+        const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key === 'zalo.oa_access_token' ? { value: 'acc', updatedAt } : null)) } };
+        return new OpsHealthService(prisma as never, { get: () => '' } as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => [cronRow('OK')] } as never);
+      };
+      const uptime = jest.spyOn(process, 'uptime');
+      try {
+        uptime.mockReturnValue(60);
+        const stale = await withRow(new Date(NOW.getTime() - 8 * H)).zaloTokenProblems(NOW);
+        expect(stale).toHaveLength(1);
+        uptime.mockReturnValue(20 * 3600);
+        expect(await withRow(new Date(NOW.getTime() - 1 * H)).zaloTokenProblems(NOW)).toEqual([]);
+      } finally {
+        uptime.mockRestore();
+      }
+    });
+
+    it('lượt cron gần nhất đã lỗi mà vẫn chưa có mốc hạn → báo "chưa từng được làm mới"', async () => {
+      for (const outcome of ['ERRORS', 'THREW']) {
+        const out = await withCron([cronRow(outcome)]).zaloTokenProblems(NOW);
+        expect(out).toHaveLength(1);
+        expect(out[0]!.message).toContain('chưa từng được làm mới');
+      }
+    });
+
+    it('đã có mốc hạn thì cách xét hạn như cũ, không phụ thuộc cron', async () => {
+      const out = await withCron([cronRow('OK')], { ...configured, 'zalo.oa_token_expires_at': iso(2 * H) }).zaloTokenProblems(NOW);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.message).toContain('2 giờ');
+    });
   });
 
   it('đọc DB lỗi → không làm hỏng màn sức khoẻ, trả rỗng', async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const svc = new OpsHealthService({ systemConfig: { findUnique: async () => Promise.reject(new Error('db down')) } } as never, { get: () => '' } as never, []);
     await expect(svc.zaloTokenProblems(NOW)).resolves.toEqual([]);
+  });
+});
+
+describe('OpsHealthService.znsHealth (tin ZNS hỏng 24 giờ)', () => {
+  const NOW = new Date('2026-11-03T03:00:00Z');
+  const call = (svc: OpsHealthService) => (svc as unknown as { znsHealth(n: Date): Promise<{ failed24h: number; topError: string | null }> }).znsHealth(NOW);
+
+  it('đếm FAILED kênh ZNS 24 giờ gần nhất và lấy lỗi gặp nhiều nhất', async () => {
+    const count = jest.fn().mockResolvedValue(7);
+    const groupBy = jest.fn().mockResolvedValue([{ error: 'ZNS lỗi -124: token hết hạn', _count: { _all: 6 } }]);
+    const svc = new OpsHealthService({ notificationLog: { count, groupBy } } as never, { get: () => '' } as never, []);
+    expect(await call(svc)).toEqual({ failed24h: 7, topError: 'ZNS lỗi -124: token hết hạn' });
+    const where = count.mock.calls[0][0].where;
+    expect(where).toMatchObject({ channel: 'ZNS', status: 'FAILED' });
+    expect(where.sentAt.gte).toEqual(new Date(NOW.getTime() - 24 * 3_600_000));
+  });
+
+  it('đọc DB lỗi → trả 0, không làm hỏng màn sức khoẻ', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const svc = new OpsHealthService({ notificationLog: { count: async () => Promise.reject(new Error('db')), groupBy: async () => [] } } as never, { get: () => '' } as never, []);
+    expect(await call(svc)).toEqual({ failed24h: 0, topError: null });
   });
 });

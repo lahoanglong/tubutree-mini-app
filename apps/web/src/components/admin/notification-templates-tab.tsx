@@ -74,7 +74,10 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được mẫu thông báo.' }),
   });
-  const needsId = f.channel === 'ZNS' && !f.zaloTemplateId.trim();
+  const savedChannel = item.channel === 'ZNS' ? 'ZNS' : 'INAPP';
+  const missingId = f.channel === 'ZNS' && !f.zaloTemplateId.trim();
+  // API chỉ chặn khi lần lưu đổi kênh hoặc mã mẫu: sửa chữ của mẫu ZNS đang thiếu mã sẵn thì vẫn lưu được.
+  const needsId = missingId && (f.channel !== savedChannel || f.zaloTemplateId.trim() !== (item.zaloTemplateId ?? ''));
   const bodyProblem = templateVariableProblem(item.variables, f.bodyTemplate);
   const dirty =
     f.channel !== (item.channel === 'ZNS' ? 'ZNS' : 'INAPP') ||
@@ -120,6 +123,11 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
           />
         </label>
       </div>
+      {item.znsConfigKey ? (
+        <p className="mt-1 text-xs text-stone-500">
+          Mã ZNS đang lấy từ cấu hình <span className="font-mono">{item.znsConfigKey}</span>, không phải ô trên.
+        </p>
+      ) : null}
       <label className="mt-2 block text-xs text-stone-600">
         <span className="mb-1 block">Nội dung trong app</span>
         <textarea
@@ -160,7 +168,7 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
           {bodyProblem}
         </p>
       )}
-      {needsId && <p className="mt-1 text-xs text-warning-fg">Kênh ZNS cần mã mẫu Zalo đã duyệt.</p>}
+      {missingId && <p className="mt-1 text-xs text-warning-fg">Kênh ZNS cần mã mẫu Zalo đã duyệt.</p>}
       {failed > 0 && (
         <div data-zns-failure className="mt-2">
           <Notice tone="danger" role="status">

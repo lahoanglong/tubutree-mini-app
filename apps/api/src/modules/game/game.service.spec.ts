@@ -987,6 +987,18 @@ describe('GameService.getProfile — streak repair (hồi sinh chuỗi đã mấ
     expect(r.streakRepairable).toBe(true);
   });
 
+  it('đã lỡ thêm một ngày sau lần điểm danh làm đứt chuỗi (gap 2, hết vé) → streakRepairable=false', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({
+        brokenStreakDays: 5, brokenStreakAt: new Date(Date.now() - 46 * 3600 * 1000), streakDays: 1, streakFreezes: 0,
+        lastCheckInAt: new Date(Date.now() - 2 * DAYMS),
+      }),
+    );
+    const r = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as { streakRepairable: boolean };
+    expect(r.streakRepairable).toBe(false);
+  });
+
   it('không có brokenStreakAt → streakRepairable=false', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(

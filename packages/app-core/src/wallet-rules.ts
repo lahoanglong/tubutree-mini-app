@@ -32,14 +32,17 @@ export function walletNegativeNote(balance: number): string | null {
   return 'Ví đang âm vì hoa hồng của đơn trả hàng đã được thu hồi. Hoa hồng mới về Ví sẽ bù vào số âm này. Trong lúc đó chưa dùng Ví để trả đơn được.';
 }
 
-/** Lý do nút trả đơn bằng Ví bị khoá khi Ví đang âm; `owed` là số âm đã định dạng tiền (vd "50.000đ"). */
+/**
+ * Lý do nút trả đơn bằng Ví bị khoá khi Ví đang âm; `owed` là số âm đã định dạng tiền (vd "50.000đ").
+ * Từng chữ bằng câu máy chủ từ chối lúc đặt (`walletNegativeMessage` của API), để khách thấy một câu dù chặn ở màn hay ở máy chủ.
+ */
 export function walletNegativeCheckoutReason(owed: string): string {
-  return `Ví đang âm ${owed} do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.`;
+  return `Số dư Ví Tubu đang âm ${owed} do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.`;
 }
 
-/** dd/MM HH:mm theo giờ máy — không dùng toLocale* vì ICU mới đổi định dạng ngày "vi-VN". */
+/** dd/MM HH:mm theo giờ Việt Nam (UTC+7 quanh năm), không theo múi giờ máy. Không dùng toLocale* vì ICU mới đổi định dạng ngày "vi-VN". */
 export function formatWalletTxTime(iso: string): string {
-  const d = new Date(iso);
+  const d = new Date(new Date(iso).getTime() + 7 * 3_600_000);
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }

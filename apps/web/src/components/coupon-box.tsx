@@ -12,6 +12,7 @@ import {
   type CouponPreviewParams,
 } from '@/lib/shop-client';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { couponNotAppliedNotice } from '@tubutree/app-core/commerce/coupon-notice';
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
@@ -199,7 +200,7 @@ export function CouponBox({
       const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship && pv?.eligible !== true;
       showApplyWarning(
         !heldOnly && pv && !pv.eligible && pv.reason && cart.discount === 0
-          ? `Mã chưa được áp dụng cho đơn này: ${pv.reason}`
+          ? couponNotAppliedNotice(pv.reason)
           : null,
       );
       afterChange(cart);

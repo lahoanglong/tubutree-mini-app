@@ -14,10 +14,10 @@ const lifecycle = {} as unknown as LifecycleService;
 // 13:00 giờ VN ngày 1/11/2026
 const NOW = new Date('2026-11-01T06:00:00Z');
 
-function setup(existing: Date[] = []) {
+function setup(existing: Date[] = [], lengthMin = 120) {
   const prisma = {
     flashSale: {
-      findMany: jest.fn().mockResolvedValue(existing.map((startAt) => ({ startAt }))),
+      findMany: jest.fn().mockResolvedValue(existing.map((startAt) => ({ startAt, endAt: new Date(startAt.getTime() + lengthMin * 60e3) }))),
       createMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -72,6 +72,27 @@ describe('FlashSaleService.generateSlots (khung mặc định flashsale.slots)',
     const { prisma, svc } = setup();
     await expect(svc().generateSlots('a1', 1, new Date('2026-11-01T07:00:00Z'))).resolves.toEqual({ created: 1, skipped: 0 });
     expect(createdRows(prisma).map((r) => r.startAt.toISOString())).toEqual(['2026-11-01T13:00:00.000Z']);
+  });
+
+  it('đợt tạo tay lệch vài phút (11:59-13:59 VN) chồng khung 12:00 nên khung đó bị bỏ qua, khung 20:00 vẫn tạo', async () => {
+    const early = new Date('2026-10-31T22:00:00Z');
+    const { prisma, svc } = setup([new Date('2026-11-01T04:59:00Z')]);
+    await expect(svc().generateSlots('a1', 1, early)).resolves.toEqual({ created: 1, skipped: 1 });
+    expect(createdRows(prisma).map((r) => r.title)).toEqual(['Giờ vàng 20:00']);
+  });
+
+  it('đợt có sẵn kết thúc đúng lúc khung bắt đầu thì không chồng', async () => {
+    const early = new Date('2026-10-31T22:00:00Z');
+    const { prisma, svc } = setup([new Date('2026-11-01T03:00:00Z')]);
+    await expect(svc().generateSlots('a1', 1, early)).resolves.toEqual({ created: 2, skipped: 0 });
+    expect(createdRows(prisma).map((r) => r.title)).toEqual(['Giờ vàng 12:00', 'Giờ vàng 20:00']);
+  });
+
+  it('cấu hình cũ đã lưu có mốc chồng nhau: khung sau bị bỏ, không sinh hai khung chồng giờ', async () => {
+    const early = new Date('2026-10-31T22:00:00Z');
+    const { prisma, svc } = setup();
+    await expect(svc(cfg({ 'flashsale.slots': ['09:00', '10:00', '20:00'] })).generateSlots('a1', 1, early)).resolves.toEqual({ created: 2, skipped: 1 });
+    expect(createdRows(prisma).map((r) => r.title)).toEqual(['Giờ vàng 09:00', 'Giờ vàng 20:00']);
   });
 
   it('chạy lần hai: mốc đã có đợt cùng giờ bắt đầu được bỏ qua, không tạo trùng', async () => {
