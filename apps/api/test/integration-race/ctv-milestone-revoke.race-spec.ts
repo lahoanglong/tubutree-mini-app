@@ -16,6 +16,7 @@ import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.servic
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../../src/modules/affiliate/affiliate-auto-transfer-config';
 import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
+import { vnMonthBounds } from '../../src/modules/affiliate/ctv-milestones';
 import { createOrder, createUser, pinConfig, randCode, setConfig, warmPool } from './helpers';
 
 /**
@@ -67,7 +68,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
   beforeEach(() => notify.mockClear());
 
   /** Hoa hồng đã chốt (APPROVED, duyệt tháng này) của một đơn đã giao; nền doanh số = tiền đơn. */
-  async function approved(ctvId: string, base: number) {
+  async function approved(ctvId: string, base: number, approvedAt: Date = new Date()) {
     const buyer = await createUser(prisma);
     const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', deliveredAt: new Date(), referrerUserId: ctvId, subtotal: base, total: base });
     const commission = await prisma.commission.create({
@@ -80,7 +81,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
         amount: Math.round(base / 10),
         status: 'APPROVED',
         lockedAt: new Date(Date.now() - 30 * 864e5),
-        approvedAt: new Date(),
+        approvedAt,
       },
     });
     return { buyer, order, commission };
@@ -122,6 +123,46 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     const m = await affiliate.getMilestones(ctv.id);
     expect(m.milestones.find((x) => x.id === 'milestone-3m')).toMatchObject({ claimed: true });
     expect(m.milestones.find((x) => x.id === 'milestone-10m')).toMatchObject({ claimed: false, canClaim: false });
+  });
+
+  const revokeNotices = (ctvId: string) => notify.mock.calls.filter((c) => c[0] === ctvId && c[1] === 'COMMISSION_MILESTONE_REVOKED');
+
+  it('tin thu hồi nêu số điểm thực thu: lô thưởng đã hết hạn 50.000 thì thu 150.000, không báo 200.000', async () => {
+    const { ctv, first } = await claimedCtv();
+    const claim = await prisma.ctvMilestoneClaim.findFirstOrThrow({ where: { userId: ctv.id, milestoneId: 'milestone-10m' } });
+    await prisma.pointsTransaction.updateMany({
+      where: { userId: ctv.id, refType: 'AFFILIATE_MILESTONE', refId: claim.id },
+      data: { expiresAt: new Date(Date.now() - 864e5) },
+    });
+    await prisma.$transaction((tx) => applyPointsDelta(tx, { userId: ctv.id, delta: -50_000, lot: 'STANDARD', reason: 'POINTS_EXPIRED', refType: 'EXPIRE' }));
+    await returned(first.order.id);
+    await affiliate.reverseCommissionsForOrder(first.order.id);
+
+    const rows = await revokeRows(ctv.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.delta).toBe(-150_000);
+    const notices = revokeNotices(ctv.id);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]![2].points).toBe((150_000).toLocaleString('vi-VN'));
+  });
+
+  it('câu "nhận lại được" chỉ có khi tháng bị thu là tháng VN hiện tại; tháng đã qua thì để trống', async () => {
+    const cur = await claimedCtv();
+    await returned(cur.first.order.id);
+    await affiliate.reverseCommissionsForOrder(cur.first.order.id);
+    expect(revokeNotices(cur.ctv.id)[0]![2].reclaim_note).toMatch(/nhận lại/);
+
+    const ctv = await createUser(prisma, { role: 'AFFILIATE' });
+    const prevMonth = new Date(Date.now() - 31 * 864e5);
+    const a = await approved(ctv.id, 2_200_000, prevMonth);
+    await approved(ctv.id, 8_000_000, prevMonth);
+    const prevKey = vnMonthBounds(prevMonth).key;
+    await affiliate.claimMilestone(ctv.id, 'milestone-10m', prevKey);
+    await returned(a.order.id);
+    await affiliate.reverseCommissionsForOrder(a.order.id);
+    const notices = revokeNotices(ctv.id);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]![2].reclaim_note).toBe('');
   });
 
   it('(e) chạy lại lần đảo: không trừ lần hai, không báo lần hai', async () => {
@@ -199,6 +240,26 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
     // Nhận trước thì đảo thu lại; đảo trước thì nhận bị từ chối. Cả hai đều không để 200.000 điểm nằm lại.
     expect(await balance(ctv.id)).toBe(0);
     if (claim) expect(await revokeRows(ctv.id)).toHaveLength(1);
+    await ledgerMatchesBalance(ctv.id);
+  });
+
+  it('admin từ chối lệnh rút NH cũ có hoa hồng của đơn đã trả: doanh số còn dưới ngưỡng thì thu hồi mốc 10tr', async () => {
+    const { ctv, first } = await claimedCtv();
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const payout = await prisma.payout.create({
+      data: { userId: ctv.id, amount: 220_000, grossAmount: 220_000, method: 'BANK', status: 'REQUESTED' },
+    });
+    await prisma.commission.update({ where: { id: first.commission.id }, data: { payoutBatchId: payout.id } });
+    await returned(first.order.id);
+    await prisma.commission.update({ where: { id: first.commission.id }, data: { status: 'APPROVED' } });
+    expect(await balance(ctv.id)).toBe(250_000);
+
+    await affiliate.rejectPayout(admin.id, payout.id, 'IT từ chối');
+
+    expect(await prisma.commission.findUniqueOrThrow({ where: { id: first.commission.id } })).toMatchObject({ status: 'REJECTED' });
+    expect(await balance(ctv.id)).toBe(50_000);
+    expect(await revokeRows(ctv.id)).toHaveLength(1);
+    expect(revokeNotices(ctv.id)).toHaveLength(1);
     await ledgerMatchesBalance(ctv.id);
   });
 

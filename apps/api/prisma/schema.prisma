@@ -1689,6 +1689,7 @@ model CtvMilestoneClaim {
   revokedAt    DateTime?
   revokeCount  Int      @default(0)
   revokeDebt   Int      @default(0)
+  revokeTaken  Int      @default(0) // điểm thực trừ khỏi số dư ở lần thu hồi gần nhất
 
   @@unique([userId, milestoneId, monthKey])
   @@map("ctv_milestone_claims")

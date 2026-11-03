@@ -106,7 +106,7 @@ export async function revokeLostCtvMilestones(tx: Db, userId: string, approvedAt
         },
       });
     }
-    await tx.ctvMilestoneClaim.update({ where: { id: claim.id }, data: { revokeDebt: debt } });
+    await tx.ctvMilestoneClaim.update({ where: { id: claim.id }, data: { revokeDebt: debt, revokeTaken: taken } });
     out.push({ claimId: claim.id, userId, taken, debt });
   }
   return out;
