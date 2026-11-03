@@ -34,17 +34,19 @@ import {
   PancakeUnreachableError,
   type PancakeCancelDecision,
 } from '../integrations/pancake/pancake-sync-hooks';
-import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
+import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus } from '../integrations/pancake/pancake-status.map';
 import { PANCAKE_CANCEL } from '../integrations/pancake/pancake-order.service';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
   ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_PARTIAL_RETURN_SETTLED,
   ATTENTION_UNDERPAID,
   appendAttentionReason,
   clearPancakeAttention,
   flagPancakeAttention,
   removeAttentionReasonsByPrefix,
+  replaceAttentionReasonsByPrefix,
 } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
@@ -881,6 +883,9 @@ export class OrderStatusService {
         ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
         PANCAKE_RETURNING_PREFIX,
       ]);
+      // Lời "hoàn tay phần bị trả" của Pancake 15 hết hiệu lực khi đơn đóng (đã xử lý theo cả đơn): đổi thành cảnh báo, không xoá.
+      // Đặt ở đây chứ không ở processor để phủ cả admin/Gomdon đóng đơn, lần job thử lại và cron chạy lại.
+      await replaceAttentionReasonsByPrefix(this.prisma, order.id, PANCAKE_PARTIAL_RETURN_PREFIX, ATTENTION_PARTIAL_RETURN_SETTLED);
     } catch (err) {
       this.logger.warn(`Không đóng được việc tồn của đơn ${order.code} sau khi huỷ/trả: ${err instanceof Error ? err.message : err}`);
     }

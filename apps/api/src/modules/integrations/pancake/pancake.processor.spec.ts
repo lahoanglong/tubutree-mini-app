@@ -1111,28 +1111,6 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     });
   });
 
-  it('"Hoàn một phần" (15) rồi "Đã hoàn" (5): đơn đã trả và hoàn đủ thì gỡ lời "hoàn tay", giữ lý do khác (không hoàn hai lần)', async () => {
-    const partial = 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.';
-    const cell = `${partial} | Lý do khác`;
-    const order = { ...base, total: 0, status: 'DELIVERED', pancakeAttention: cell };
-    const { proc, prisma, orderUpdateMany } = setup(order);
-    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...order, status: 'RETURNED' });
-    await proc.onStatusUpdated({ id: 'p1', status: 5 });
-    expect(orderUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', pancakeAttention: cell },
-      data: { pancakeAttention: 'Lý do khác' },
-    });
-  });
-
-  it('"Đã hoàn" (5) bị chặn (đơn không đổi trạng thái) thì giữ nguyên lời "Hoàn một phần"', async () => {
-    const partial = 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.';
-    const order = { ...base, total: 0, status: 'DELIVERED', pancakeAttention: partial };
-    const { proc, prisma, orderUpdateMany } = setup(order);
-    (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...order });
-    await proc.onStatusUpdated({ id: 'p1', status: 5 });
-    expect(orderUpdateMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'o1', pancakeAttention: partial } }));
-  });
-
   it('"Đã hoàn" (5) khi đơn ĐÃ GIAO → RETURNED', async () => {
     // total 0: phần hoàn tiền của RETURNED đã có spec riêng (order-reversal) — ở đây chỉ kiểm đích trạng thái.
     const { proc, txUpdateMany } = setup({ ...base, total: 0, status: 'DELIVERED' });

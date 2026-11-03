@@ -1,4 +1,11 @@
-import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_ACK, flagPancakeAttention, writePancakeAttention } from './pancake-attention';
+import {
+  ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_PARTIAL_RETURN_ACK,
+  flagPancakeAttention,
+  removeAttentionReason,
+  removeAttentionReasonsByPrefix,
+  writePancakeAttention,
+} from './pancake-attention';
 import { baseOrder, fakeOrderDb } from '../../../../test/fakes/pancake-order.fake';
 import type { PrismaService } from '../../../prisma/prisma.service';
 
@@ -55,3 +62,24 @@ describe('writePancakeAttention — một ô nhiều lý do (PNK-02)', () => {
     expect(await writePancakeAttention(open.prisma as never, 'o1', 'A', undefined, true)).toBe('A');
   });
 });
+
+describe('gỡ lý do khi ô đổi liên tục (mọi lần ghi có điều kiện đều thua)', () => {
+  const stuckDb = () => ({
+    order: {
+      findUnique: jest.fn().mockResolvedValue({ pancakeAttention: `${ATTENTION_COD_RETURN_UNVERIFIED} | X` }),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+  });
+
+  it('removeAttentionReason (tx của Kế toán) ném lỗi để tx rollback, không để dòng COD kẹt lại sau khi đã chốt khoản', async () => {
+    const db = stuckDb();
+    await expect(removeAttentionReason(db as never, 'o1', ATTENTION_COD_RETURN_UNVERIFIED)).rejects.toThrow('Cần xử lý Pancake');
+    expect(db.order.updateMany).toHaveBeenCalledTimes(10);
+  });
+
+  it('removeAttentionReasonsByPrefix (dọn việc best-effort sau khi đóng đơn) chỉ ghi log, không ném', async () => {
+    const db = stuckDb();
+    await expect(removeAttentionReasonsByPrefix(db as never, 'o1', ['X'])).resolves.toBeUndefined();
+  });
+});
+

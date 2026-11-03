@@ -18,7 +18,6 @@ import {
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   clearPancakeAttention,
-  removeAttentionReasonsByPrefix,
   writePancakeAttention,
 } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
@@ -579,11 +578,9 @@ export class PancakeProcessor extends WorkerHost {
         // Dòng "Cần xử lý" và khoản chờ Kế toán đối soát đã ghi cùng tx lật trạng thái; ở đây chỉ báo ADMIN.
         await this.alerts.alert(order.code, ATTENTION_COD_RETURN_UNVERIFIED, PANCAKE_ALERT_TEMPLATE);
       }
-      // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong. Lời "Hoàn một phần … hoàn tay" (15 tới trước)
-      // cũng hết hiệu lực: lần lật này đã hoàn cả đơn (hoặc chuyển Kế toán với COD), làm theo nó là hoàn hai lần.
+      // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
       if (order.status !== status && after.status === status && (status === 'CANCELLED' || status === 'RETURNED')) {
         await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);
-        await removeAttentionReasonsByPrefix(this.prisma, order.id, [PANCAKE_PARTIAL_RETURN_PREFIX]);
       }
     } catch (err) {
       if (!(err instanceof InvalidOrderTransitionError)) {
