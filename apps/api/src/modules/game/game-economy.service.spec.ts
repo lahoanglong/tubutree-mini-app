@@ -219,6 +219,15 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
   });
 });
 
+describe('GameEconomyService.checkIn — mốc ngày do người gọi chốt (VX2-07)', () => {
+  it('ngày đã đổi so với mốc người gọi truyền vào → BadRequest, không ghi, không áp luật lỡ ngày', async () => {
+    const p = prisma(prof());
+    const svc = new GameEconomyService(p, cfg(), sp(), analytics);
+    await expect(svc.checkIn('u1', '2000-01-01')).rejects.toBeInstanceOf(BadRequestException);
+    expect(p.gameProfile.updateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('GameEconomyService.repairStreak', () => {
   it('không có chuỗi đã mất → BadRequest', async () => {
     const p = prisma(prof({ brokenStreakDays: 0, brokenStreakAt: null }));
@@ -241,6 +250,25 @@ describe('GameEconomyService.repairStreak', () => {
     }));
     await expect(new GameEconomyService(p, cfg({ 'game.streak_repair_cooldown_days': 30 }), sp(), analytics).repairStreak('u1'))
       .rejects.toMatchObject({ message: 'Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿' });
+  });
+
+  it('đã lỡ thêm một ngày sau lần điểm danh làm đứt chuỗi (gap 2, hết vé) → không trừ 💧, báo rõ', async () => {
+    const p = prisma(prof({
+      brokenStreakDays: 10, brokenStreakAt: new Date(Date.now() - 46 * 3600 * 1000), streakDays: 1, streakFreezes: 0,
+      lastCheckInAt: new Date(Date.now() - 2 * DAY), totalSeeds: 500,
+    }));
+    await expect(new GameEconomyService(p, cfg(), sp(), analytics).repairStreak('u1'))
+      .rejects.toMatchObject({ message: expect.stringContaining('không hồi sinh') });
+    expect(p.gameProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('đã lỡ hai ngày nhưng còn vé giữ lửa → vẫn hồi sinh được (điểm danh kế dùng vé nối chuỗi)', async () => {
+    const brokenAt = new Date(Date.now() - 46 * 3600 * 1000);
+    const row = prof({ brokenStreakDays: 10, brokenStreakAt: brokenAt, streakDays: 1, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY), totalSeeds: 500 });
+    const p = prisma(row);
+    (p.gameProfile.findUnique as jest.Mock).mockResolvedValueOnce(row).mockResolvedValueOnce({ ...row, streakDays: 11, totalSeeds: 350 });
+    const r = await new GameEconomyService(p, cfg(), sp(), analytics).repairStreak('u1');
+    expect(r).toMatchObject({ repaired: true, streakDays: 11 });
   });
 
   it('không đủ 💧 (updateMany count=0) → BadRequest kèm giá tiền', async () => {

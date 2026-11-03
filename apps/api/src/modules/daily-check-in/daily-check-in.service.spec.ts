@@ -44,6 +44,12 @@ describe('DailyCheckInService.run', () => {
     expect(economy.checkIn).toHaveBeenCalledTimes(1);
   });
 
+  it('chốt một mốc ngày VN cho cả lượt và truyền cho phần nước', async () => {
+    const { svc, economy } = build();
+    await svc.run('u1');
+    expect(economy.checkIn).toHaveBeenCalledWith('u1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+  });
+
   it('đã xong Điểm Xanh: chỉ gọi giọt nước', async () => {
     const { svc, loyalty, economy } = build({ pointsDone: true });
     const r = await svc.run('u1');

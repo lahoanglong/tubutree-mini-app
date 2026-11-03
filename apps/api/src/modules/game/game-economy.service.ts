@@ -6,7 +6,7 @@ import { clampTankKeepingOverflow, ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { vnDateKey } from '../../common/vn-time';
 import { DEW_SEEDS_DEFAULT, configInt } from './game.constants';
-import { planCheckInSeeds, projectCheckIn } from './checkin-streak';
+import { canRepairStreak, planCheckInSeeds, projectCheckIn } from './checkin-streak';
 
 @Injectable()
 export class GameEconomyService {
@@ -31,9 +31,13 @@ export class GameEconomyService {
   /** Số lần đọc lại hồ sơ khi thao tác song song (mua vé, hồi sinh) đổi chuỗi giữa lúc đọc và lúc ghi. */
   private static readonly STREAK_CAS_ATTEMPTS = 4;
 
-  async checkIn(userId: string) {
+  /**
+   * `today` là mốc ngày VN do người gọi chốt một lần cho cả lượt điểm danh gộp. Qua 00:00 giữa chừng thì từ chối để khách bấm lại:
+   * tính theo ngày mới sẽ coi như lỡ một ngày và đứt chuỗi dù khách đã bấm đúng ngày.
+   */
+  async checkIn(userId: string, today: string = vnDateKey()) {
     for (let attempt = 0; attempt < GameEconomyService.STREAK_CAS_ATTEMPTS; attempt++) {
-      const done = await this.tryCheckIn(userId);
+      const done = await this.tryCheckIn(userId, today);
       if (done) {
         const { p, seeds, streakDays, streakFrozeUsed, bonusNote, bonuses } = done;
         // Task 9: sự kiện engagement — best-effort (không transaction bao quanh checkIn).
@@ -67,9 +71,10 @@ export class GameEconomyService {
    * Một lượt đọc-tính-ghi. Trả null khi ghi hụt vì hồ sơ vừa đổi (streakDays/streakFreezes/brokenStreakAt) — người gọi
    * đọc lại và tính lại; đã điểm danh hôm nay thì ném lỗi ngay ở lần đọc sau.
    */
-  private async tryCheckIn(userId: string) {
+  private async tryCheckIn(userId: string, callerToday: string) {
     const p = await this.ensure(userId);
     const today = vnDateKey();
+    if (today !== callerToday) throw new BadRequestException('Vừa qua nửa đêm, bạn bấm điểm danh lại nhé 🌿');
     if (p.lastCheckInAt && vnDateKey(p.lastCheckInAt) === today) {
       throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
     }
@@ -165,6 +170,9 @@ export class GameEconomyService {
       }
       if (p.lastStreakRepairAt && Date.now() - p.lastStreakRepairAt.getTime() < cooldownD * 86400 * 1000) {
         throw new BadRequestException('Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿');
+      }
+      if (!canRepairStreak(p)) {
+        throw new BadRequestException('Chuỗi đã lỡ thêm một ngày nên không hồi sinh được nữa. Điểm danh để bắt đầu chuỗi mới 🌿');
       }
       const newStreak = p.brokenStreakDays + 1;
       // newStreak và longestStreak suy ra từ lần đọc: điểm danh chen vào (đổi streakDays/brokenStreakAt) thì ghi hụt

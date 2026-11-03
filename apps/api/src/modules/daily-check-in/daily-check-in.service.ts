@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { GameEconomyService } from '../game/game-economy.service';
+import { vnDateKey } from '../../common/vn-time';
 import { planCheckInSeeds, projectCheckIn } from '../game/checkin-streak';
 
 type PointsResult = Awaited<ReturnType<LoyaltyService['dailyCheckIn']>>;
@@ -73,8 +74,10 @@ export class DailyCheckInService {
   }
 
   async run(userId: string): Promise<DailyCheckInResult> {
+    // Một mốc ngày cho cả lượt: bấm sát 00:00 thì phần nước không được tự tính sang ngày mới.
+    const today = vnDateKey();
     const points = await this.part(() => this.loyalty.dailyCheckIn(userId), () => this.pointsDoneToday(userId));
-    const water = await this.part(() => this.economy.checkIn(userId), () => this.waterDoneToday(userId));
+    const water = await this.part(() => this.economy.checkIn(userId, today), () => this.waterDoneToday(userId));
 
     const pending: Array<'points' | 'water'> = [];
     if (points.error) pending.push('points');
