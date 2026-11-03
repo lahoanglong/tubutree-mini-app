@@ -207,10 +207,22 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
     expect(upd.brokenStreakAt).toBeNull();
   });
 
-  it('lỡ 1 ngày + có vé giữ lửa (cứu chuỗi) → xoá broken streak cũ nếu có', async () => {
+  it('lỡ 1 ngày + có vé giữ lửa: chuỗi dài vừa đứt còn trong cửa sổ hồi sinh thì giữ record, không phụ thuộc thứ tự bấm', async () => {
+    const brokenAt = new Date(Date.now() - 3600_000);
+    const p = prisma(prof({
+      streakDays: 1, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY),
+      brokenStreakDays: 7, brokenStreakAt: brokenAt,
+    }));
+    await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
+    const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
+    expect(upd.brokenStreakDays).toBe(7);
+    expect(upd.brokenStreakAt).toBe(brokenAt);
+  });
+
+  it('lỡ 1 ngày + có vé giữ lửa: record đã quá cửa sổ hồi sinh thì xoá', async () => {
     const p = prisma(prof({
       streakDays: 3, streakFreezes: 1, lastCheckInAt: new Date(Date.now() - 2 * DAY),
-      brokenStreakDays: 7, brokenStreakAt: new Date(),
+      brokenStreakDays: 7, brokenStreakAt: new Date(Date.now() - 100 * 3600_000),
     }));
     await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1');
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
@@ -219,12 +231,20 @@ describe('GameEconomyService.checkIn — ghi nhận chuỗi đã mất (streak r
   });
 });
 
-describe('GameEconomyService.checkIn — mốc ngày do người gọi chốt (VX2-07)', () => {
-  it('ngày đã đổi so với mốc người gọi truyền vào → BadRequest, không ghi, không áp luật lỡ ngày', async () => {
+describe('GameEconomyService.checkIn — mốc thời gian do người gọi chốt (VX2-07)', () => {
+  it('mốc đã nguội quá lâu → BadRequest, không ghi', async () => {
     const p = prisma(prof());
     const svc = new GameEconomyService(p, cfg(), sp(), analytics);
-    await expect(svc.checkIn('u1', '2000-01-01')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.checkIn('u1', new Date(Date.now() - 10 * 60_000))).rejects.toBeInstanceOf(BadRequestException);
     expect(p.gameProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('ghi lastCheckInAt đúng mốc người gọi truyền, CAS theo đầu ngày VN của mốc đó', async () => {
+    const p = prisma(prof());
+    const now = new Date(Date.now() - 1000);
+    await new GameEconomyService(p, cfg(), sp(), analytics).checkIn('u1', now);
+    const call = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0];
+    expect(call.data.lastCheckInAt).toBe(now);
   });
 });
 

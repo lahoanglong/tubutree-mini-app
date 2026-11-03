@@ -1384,8 +1384,7 @@ export class LoyaltyService {
   }
 
   /** Trạng thái điểm danh chuỗi 7 ngày (chỉ ĐỌC). `streakDay` = ngày 1..7 của chuỗi chung. */
-  async getDailyCheckInStatus(userId: string) {
-    const now = new Date();
+  async getDailyCheckInStatus(userId: string, now: Date = new Date()) {
     const today = vnDateKey(now);
     const [table, doneRow, streak, owner] = await Promise.all([
       this.getCheckInPointsTable(),
@@ -1430,8 +1429,7 @@ export class LoyaltyService {
    * deviceId mới tạo được vô hạn tài khoản guest, điểm danh được điểm rồi gộp vào tài khoản thật sẽ thành máy in điểm.
    * Điểm của những ngày đã điểm danh khi còn là khách không được cộng bù sau khi đăng nhập Zalo.
    */
-  async dailyCheckIn(userId: string) {
-    const now = new Date();
+  async dailyCheckIn(userId: string, now: Date = new Date()) {
     const today = vnDateKey(now);
     if (await this.todayCheckIn(userId, today)) {
       throw new BadRequestException(CHECKIN_ALREADY_MESSAGE);

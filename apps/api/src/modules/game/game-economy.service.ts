@@ -31,13 +31,17 @@ export class GameEconomyService {
   /** Số lần đọc lại hồ sơ khi thao tác song song (mua vé, hồi sinh) đổi chuỗi giữa lúc đọc và lúc ghi. */
   private static readonly STREAK_CAS_ATTEMPTS = 4;
 
+  /** Mốc `now` do người gọi chốt cũ hơn mức này thì coi là lượt bấm đã nguội, không ghi theo mốc đó. */
+  private static readonly MAX_NOW_SKEW_MS = 5 * 60_000;
+
   /**
-   * `today` là mốc ngày VN do người gọi chốt một lần cho cả lượt điểm danh gộp. Qua 00:00 giữa chừng thì từ chối để khách bấm lại:
-   * tính theo ngày mới sẽ coi như lỡ một ngày và đứt chuỗi dù khách đã bấm đúng ngày.
+   * `now` là mốc thời gian người gọi chốt một lần cho cả lượt điểm danh gộp: ngày VN, điều kiện CAS và `lastCheckInAt` đều theo mốc
+   * này. Khách bấm 23:59:59 mà phần nước chạy sau 00:00 vẫn được ghi đúng ngày đã bấm, cùng ngày với phần Điểm Xanh; tính theo
+   * ngày mới sẽ coi như lỡ một ngày và đứt chuỗi.
    */
-  async checkIn(userId: string, today: string = vnDateKey()) {
+  async checkIn(userId: string, now: Date = new Date()) {
     for (let attempt = 0; attempt < GameEconomyService.STREAK_CAS_ATTEMPTS; attempt++) {
-      const done = await this.tryCheckIn(userId, today);
+      const done = await this.tryCheckIn(userId, now);
       if (done) {
         const { p, seeds, streakDays, streakFrozeUsed, bonusNote, bonuses } = done;
         // Task 9: sự kiện engagement — best-effort (không transaction bao quanh checkIn).
@@ -71,10 +75,12 @@ export class GameEconomyService {
    * Một lượt đọc-tính-ghi. Trả null khi ghi hụt vì hồ sơ vừa đổi (streakDays/streakFreezes/brokenStreakAt) — người gọi
    * đọc lại và tính lại; đã điểm danh hôm nay thì ném lỗi ngay ở lần đọc sau.
    */
-  private async tryCheckIn(userId: string, callerToday: string) {
+  private async tryCheckIn(userId: string, now: Date) {
+    if (Date.now() - now.getTime() > GameEconomyService.MAX_NOW_SKEW_MS) {
+      throw new BadRequestException('Điểm danh chưa xong, bạn thử lại nhé 🌿');
+    }
     const p = await this.ensure(userId);
-    const today = vnDateKey();
-    if (today !== callerToday) throw new BadRequestException('Vừa qua nửa đêm, bạn bấm điểm danh lại nhé 🌿');
+    const today = vnDateKey(now);
     if (p.lastCheckInAt && vnDateKey(p.lastCheckInAt) === today) {
       throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
     }
@@ -86,13 +92,22 @@ export class GameEconomyService {
     // §streak-repair: ghi nhận chuỗi vừa mất (để cho phép hồi sinh), hoặc xoá record cũ khi chuỗi được giữ.
     let brokenStreakDays = p.brokenStreakDays;
     let brokenStreakAt = p.brokenStreakAt;
-    if (gapDays === 1 || streakFrozeUsed) {
+    if (gapDays === 1) {
       brokenStreakDays = 0;
-      brokenStreakAt = null; // chuỗi tiếp tục (hoặc vé giữ lửa cứu) → xoá record cũ (nếu có)
+      brokenStreakAt = null; // chuỗi tiếp tục → xoá record cũ (nếu có)
+    } else if (streakFrozeUsed) {
+      // Vé giữ lửa chỉ nối chuỗi ngắn đang chạy: chuỗi dài vừa đứt vẫn còn cửa hồi sinh trong cửa sổ, đừng xoá khi khách điểm
+      // danh trước hồi sinh (hồi sinh trước hay sau cũng không làm khách mất cơ hội đó).
+      const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
+      const stale = !p.brokenStreakAt || now.getTime() - p.brokenStreakAt.getTime() > windowH * 3600 * 1000;
+      if (stale) {
+        brokenStreakDays = 0;
+        brokenStreakAt = null;
+      }
     } else if (p.streakDays > 1) {
       // reset: vừa mất một chuỗi thực sự (>1) thì ghi lại để cho hồi sinh
       brokenStreakDays = p.streakDays;
-      brokenStreakAt = new Date();
+      brokenStreakAt = now;
     }
 
     const plan = await planCheckInSeeds(this.config, { first: p.lastCheckInAt === null, gapDays, streakDays });
@@ -108,7 +123,7 @@ export class GameEconomyService {
     const res = await this.prisma.gameProfile.updateMany({
       where: {
         userId,
-        OR: [{ lastCheckInAt: null }, { lastCheckInAt: { lt: this.startOfDay(new Date()) } }],
+        OR: [{ lastCheckInAt: null }, { lastCheckInAt: { lt: this.startOfDay(now) } }],
         streakDays: p.streakDays,
         streakFreezes: p.streakFreezes,
         brokenStreakAt: p.brokenStreakAt,
@@ -118,10 +133,10 @@ export class GameEconomyService {
         streakDays,
         streakFreezes,
         longestStreak: Math.max(p.longestStreak, streakDays),
-        lastCheckInAt: new Date(),
+        lastCheckInAt: now,
         brokenStreakDays,
         brokenStreakAt,
-        ...(streakFrozeUsed ? { lastStreakFreezeAt: new Date() } : {}),
+        ...(streakFrozeUsed ? { lastStreakFreezeAt: now } : {}),
       },
     });
     if (res.count === 0) return null;

@@ -44,10 +44,13 @@ describe('DailyCheckInService.run', () => {
     expect(economy.checkIn).toHaveBeenCalledTimes(1);
   });
 
-  it('chốt một mốc ngày VN cho cả lượt và truyền cho phần nước', async () => {
-    const { svc, economy } = build();
+  it('chốt một mốc thời gian cho cả lượt và truyền đúng mốc đó cho cả hai phần', async () => {
+    const { svc, loyalty, economy } = build();
     await svc.run('u1');
-    expect(economy.checkIn).toHaveBeenCalledWith('u1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    const pointsNow = (loyalty.dailyCheckIn.mock.calls[0] as unknown[])[1];
+    const waterNow = (economy.checkIn.mock.calls[0] as unknown[])[1];
+    expect(pointsNow).toBeInstanceOf(Date);
+    expect(waterNow).toBe(pointsNow);
   });
 
   it('đã xong Điểm Xanh: chỉ gọi giọt nước', async () => {

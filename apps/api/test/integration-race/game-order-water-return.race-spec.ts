@@ -120,4 +120,48 @@ describe('Duyệt trả cả đơn đảo nước thưởng đơn giao (real Pos
     expect(await seedsOf(buyer.id)).toBe(0);
     expect(await prisma.gameWaterEvent.findMany({ where: { userId: buyer.id, pending: true } })).toHaveLength(0);
   });
+
+  it('dòng chờ của đơn đã trả từ trước (không còn đường đảo chạy lại): mở game không cộng nước của đơn đó', async () => {
+    const buyer = await createUser(prisma, { zaloId: `z_${randCode(10)}`, walletBalance: 0 });
+    const { order } = await deliveredOrder(buyer.id);
+    await expect(water.grantForOrder(order.id)).resolves.toEqual({ granted: 0, pending: true });
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'RETURNED' } });
+
+    await prisma.gameProfile.create({ data: { userId: buyer.id, totalSeeds: 0 } });
+    await expect(water.claimPending(buyer.id)).resolves.toBe(0);
+
+    expect(await seedsOf(buyer.id)).toBe(0);
+    expect(await prisma.gameWaterEvent.findMany({ where: { userId: buyer.id, pending: true } })).toHaveLength(0);
+  });
+
+  it('dòng chờ của nhóm thanh toán còn một kiện đang giao: vẫn cộng khi mở game', async () => {
+    const buyer = await createUser(prisma, { zaloId: `z_${randCode(10)}`, walletBalance: 0 });
+    const group = `grp-${randCode(8)}`;
+    const a = await deliveredOrder(buyer.id);
+    const b = await deliveredOrder(buyer.id);
+    await prisma.order.updateMany({ where: { id: { in: [a.order.id, b.order.id] } }, data: { checkoutGroup: group } });
+    await expect(water.grantForOrder(a.order.id)).resolves.toEqual({ granted: 0, pending: true });
+    await prisma.order.update({ where: { id: a.order.id }, data: { status: 'RETURNED' } });
+
+    await prisma.gameProfile.create({ data: { userId: buyer.id, totalSeeds: 0 } });
+    await expect(water.claimPending(buyer.id)).resolves.toBe(100);
+  });
+
+  it('lần cộng đọc đơn là DELIVERED ở ngoài tx rồi đơn bị trả cả đơn trước khi vào tx: không cộng', async () => {
+    const buyer = await createUser(prisma, { zaloId: `z_${randCode(10)}`, walletBalance: 0 });
+    await prisma.gameProfile.create({ data: { userId: buyer.id, totalSeeds: 0 } });
+    const { order } = await deliveredOrder(buyer.id);
+    const snapshot = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { id: true, userId: true, status: true, placedForCustomer: true, checkoutGroup: true, deliveredAt: true },
+    });
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'RETURNED' } });
+    const spy = jest.spyOn(prisma.order, 'findUnique').mockResolvedValueOnce(snapshot as never);
+
+    await expect(water.grantForOrder(order.id)).resolves.toEqual({ granted: 0, skipped: 'NOT_DELIVERED' });
+    spy.mockRestore();
+
+    expect(await seedsOf(buyer.id)).toBe(0);
+    expect(await prisma.gameWaterEvent.findMany({ where: { userId: buyer.id, reason: 'ORDER_DELIVERED' } })).toHaveLength(0);
+  });
 });
