@@ -4,10 +4,11 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpError } from '../../services/http';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
+import type * as GameApi from '../../services/game-api';
 
 const mocks = vi.hoisted(() => ({ answerQuiz: vi.fn(), openSnackbar: vi.fn() }));
 vi.mock('zmp-ui', () => ({ useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
-vi.mock('../../services/game-api', async (orig) => ({ ...(await orig<typeof import('../../services/game-api')>()), answerQuiz: mocks.answerQuiz }));
+vi.mock('../../services/game-api', async (orig) => ({ ...(await orig<typeof GameApi>()), answerQuiz: mocks.answerQuiz }));
 
 import { useGameActions } from './use-game-actions';
 
