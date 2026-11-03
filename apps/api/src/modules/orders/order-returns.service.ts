@@ -812,7 +812,7 @@ export class OrderReturnsService {
     const what = shares.lines
       .map((l) => `${byId.get(l.orderItemId)?.productName ?? l.orderItemId} ×${l.quantity}`)
       .join(', ');
-    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho.`;
+    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho (nhập kho trên Pancake: tồn kho lấy theo Pancake).`;
     try {
       // Nối vào ô, không đè: lý do khác (lệch tổng, COD chờ Kế toán, lời đã xử lý của Pancake 15) còn việc. Chỉ thay lời "tạo phiếu trả" cũ.
       await appendPancakeAttention(this.prisma, order.id, reason, ATTENTION_RETURN_APPROVED);

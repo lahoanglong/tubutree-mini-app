@@ -4,7 +4,7 @@ import { Prisma, type Order, type OrderItem } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
-import { lockVariationsInIdOrder, releaseVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, releaseVariationStock, restockReturnedVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
 import type { ReferralNotice } from '../wallet/referral-notify';
 import type { WalletDeltaInput } from '../wallet/wallet-ledger.service';
@@ -364,6 +364,8 @@ export class OrderReversalService {
       await lockVariationsInIdOrder(tx, order.items.filter((i) => reservedQty(i) > 0).map((i) => i.variationId));
     }
 
+    const leftWarehouse = opts.restock !== false ? await this.variationsPastReservation(tx, order) : new Set<string>();
+
     for (const item of order.items) {
       // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
       // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
@@ -373,7 +375,10 @@ export class OrderReversalService {
       // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
       const reserved = reservedQty(item);
-      if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
+      if (opts.restock !== false && reserved > 0) {
+        if (leftWarehouse.has(item.variationId)) await restockReturnedVariationStock(tx, item.variationId, reserved);
+        else await releaseVariationStock(tx, item.variationId, reserved);
+      }
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
       // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
       if (backordered > 0) {
@@ -384,6 +389,27 @@ export class OrderReversalService {
       tx,
       order.userId,
       order.items.map((item) => ({ flashSaleItemId: item.flashSaleItemId, quantity: item.quantity - (prior.approvedQty.get(item.id) ?? 0) })),
+    );
+  }
+
+  /**
+   * Biến thể của đơn mà hàng đã rời kho nên không còn giữ chỗ để nhả: đơn đã giao, hoặc đã lên Pancake và biến thể đã nhận số tồn
+   * Pancake (đồng bộ/webhook) sau lúc đẩy đơn — Pancake đã tính đơn vào số tồn đó và nhả giữ chỗ. Đường này cộng kho bằng
+   * `restockReturnedVariationStock` (biến thể Pancake không bị đụng tới stock/reservedStock) thay vì `releaseVariationStock`.
+   */
+  private async variationsPastReservation(tx: Prisma.TransactionClient, order: OrderWithItems): Promise<Set<string>> {
+    const ids = [...new Set(order.items.map((i) => i.variationId))];
+    if (order.status === 'DELIVERED') return new Set(ids);
+    if (!order.pancakeOrderId || order.pancakePushStatus !== 'SYNCED' || !order.pancakeLastAttemptAt) return new Set();
+    const pushedAt = order.pancakeLastAttemptAt;
+    const rows = await tx.variation.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, pancakeStockSyncReadAt: true, pancakeStockWebhookReceivedAt: true },
+    });
+    return new Set(
+      rows
+        .filter((v) => (v.pancakeStockSyncReadAt && v.pancakeStockSyncReadAt > pushedAt) || (v.pancakeStockWebhookReceivedAt && v.pancakeStockWebhookReceivedAt > pushedAt))
+        .map((v) => v.id),
     );
   }
 
@@ -726,7 +752,7 @@ export class OrderReversalService {
     await lockVariationsInIdOrder(tx, plan.map((p) => p.variationId));
     let restocked = 0;
     for (const p of plan) {
-      await releaseVariationStock(tx, p.variationId, p.qty);
+      await restockReturnedVariationStock(tx, p.variationId, p.qty);
       restocked += p.qty;
     }
     return restocked;

@@ -3,6 +3,7 @@ import {
   applyPancakeStock,
   forcePancakeStock,
   releaseVariationStock,
+  restockReturnedVariationStock,
   reserveAvailableVariationStock,
   reserveVariationStock,
 } from './variation-stock';
@@ -58,6 +59,22 @@ describe('variation-stock', () => {
       for (const q of [-5, 0, 1.5, NaN]) {
         await expect(reserveVariationStock(tx, 'v1', q)).resolves.toBe(false);
       }
+      expect($executeRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('restockReturnedVariationStock', () => {
+    it('TK-01: chỉ cộng biến thể không có nguồn tồn Pancake (pancakeStock IS NULL), đúng id và số lượng', async () => {
+      const { tx, $executeRaw } = mockTx();
+      await restockReturnedVariationStock(tx, 'v9', 2);
+      expect(sqlOf($executeRaw)).toContain('"pancakeStock" IS NULL');
+      expect(argsOf($executeRaw)).toEqual([2, 2, 'v9']);
+    });
+
+    it('số lượng không dương → không chạm DB', async () => {
+      const { tx, $executeRaw } = mockTx();
+      await restockReturnedVariationStock(tx, 'v9', 0);
+      await restockReturnedVariationStock(tx, 'v9', -1);
       expect($executeRaw).not.toHaveBeenCalled();
     });
   });
