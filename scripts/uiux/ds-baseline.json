@@ -216,7 +216,7 @@
   "apps/web/src/components/home/suggest-feed.tsx": 5,
   "apps/web/src/components/layouts/listing-layout.tsx": 2,
   "apps/web/src/components/loyalty/mini-surface.tsx": 13,
-  "apps/web/src/components/order-mobile/mobile-ui.tsx": 39,
+  "apps/web/src/components/order-mobile/mobile-ui.tsx": 37,
   "apps/web/src/components/orders/order-card.tsx": 4,
   "apps/web/src/components/orders/subscriptions-panel.tsx": 1,
   "apps/web/src/components/pro-shared/mini-skin.ts": 19,

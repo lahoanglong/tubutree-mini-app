@@ -64,7 +64,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
-import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, miniRadioHintIndent, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -585,7 +585,7 @@ export default function CheckoutPage() {
                         {p.label}
                       </label>
                       {reason && (
-                        <p id={`pay-blocked-${p.k}`} className="mt-1 pl-9 text-caption text-[color:var(--color-text-secondary)] md:pl-0">
+                        <p id={`pay-blocked-${p.k}`} className={`mt-1 ${miniRadioHintIndent} text-caption text-[color:var(--color-text-secondary)]`}>
                           {reason}
                         </p>
                       )}

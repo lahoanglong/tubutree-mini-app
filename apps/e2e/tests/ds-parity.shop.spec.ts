@@ -320,3 +320,41 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     }
   });
 });
+
+test.describe('ds-parity: thanh toán 375px, câu lý do ví không đủ tiền thẳng cột chữ nhãn (R-23)', () => {
+  test('ví 50.000đ, đơn 149.000đ: câu lý do bắt đầu cùng x với chữ "Ví Tubu" và cùng x Mini (±2px)', async ({ page, api }, testInfo) => {
+    const side = sideOf(testInfo.project.name);
+    mockCheckout(api);
+    if (side === 'web') {
+      await mockWebCheckoutData(api);
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem('tubu_web_session', '1');
+        } catch {
+          // không có localStorage: trang vẫn mở, chỉ không khôi phục phiên
+        }
+      });
+      api.get('/me', { id: 'user-checkout', fullName: 'Nguyễn Văn A', email: null, avatarUrl: null, dob: null, onboarded: true, segments: [], walletBalance: 50000 });
+    }
+    api.get('/me/wallet', { ...CHECKOUT_WALLET, walletBalance: 50000 });
+    await page.goto(side === 'web' ? '/thanh-toan' : '/checkout');
+    await expect(page.locator('[data-ds="checkout-summary-total"]').first()).toBeVisible({ timeout: 20_000 });
+    await page.evaluate(() => document.fonts.ready);
+
+    const walletText = page.getByText(/^Ví Tubu \(/).first();
+    await walletText.scrollIntoViewIfNeeded();
+    const hint = page.locator(side === 'web' ? '#pay-blocked-WALLET' : '#pay-hint-WALLET');
+    await expect(hint).toBeVisible();
+    const textLeft = (el: Element) => {
+      const r = document.createRange();
+      const text = Array.from(el.childNodes).reverse().find((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim());
+      r.selectNodeContents(text ?? el);
+      return Math.round(r.getBoundingClientRect().left);
+    };
+    const labelLeft = await walletText.evaluate(textLeft);
+    const hintLeft = await hint.evaluate(textLeft);
+    if (process.env.PARITY_SHOT_DIR) await page.screenshot({ path: `${process.env.PARITY_SHOT_DIR}/checkout-wallet-blocked-${side}375.png` });
+    expect(Math.abs(hintLeft - labelLeft), `câu lý do ${hintLeft} so với nhãn ${labelLeft}`).toBeLessThanOrEqual(2);
+    expect(Math.abs(hintLeft - 70), `câu lý do ${hintLeft} so với Mini 70`).toBeLessThanOrEqual(2);
+  });
+});
