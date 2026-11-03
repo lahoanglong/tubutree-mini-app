@@ -26,6 +26,14 @@ function forViewer<T>(row: T, viewer: JwtPayload | undefined): T {
   if (sees || !row || typeof row !== 'object') return row;
   const copy = { ...(row as Record<string, unknown>) };
   for (const f of BANK_FIELDS) delete copy[f];
+  // withContext gắn thêm khoản hoàn thật (OrderCustomerRefund) lồng trong dòng, có cả số tài khoản nhận.
+  const refund = copy.refund;
+  if (refund && typeof refund === 'object') {
+    const nested = { ...(refund as Record<string, unknown>) };
+    delete nested.bankName;
+    delete nested.bankAccountNo;
+    copy.refund = nested;
+  }
   return copy as T;
 }
 
