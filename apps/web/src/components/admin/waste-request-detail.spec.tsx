@@ -285,7 +285,7 @@ describe('WasteRequestDetail: hộp Thu hồi có số dư và số dự kiến 
       detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000, reversePreview: { pointsBalance: 20_000, expectedTake: 17_000 } }),
     });
     click(btn(c, 'Thu hồi điểm'));
-    expect(document.body.textContent).toContain('Số dư hiện tại 20.000 điểm, dự kiến trừ 17.000 điểm.');
+    expect(document.body.textContent).toContain('Số dư trừ được hiện tại 20.000 điểm (không gồm điểm quy đổi từ xu cũ), dự kiến trừ 17.000 điểm.');
   });
 });
 

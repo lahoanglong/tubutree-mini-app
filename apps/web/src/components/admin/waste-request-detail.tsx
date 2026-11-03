@@ -465,7 +465,9 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
   const reverseMessage = (d: WasteRequestAdminDetailDTO) => {
     const base = 'Trừ tối đa số điểm đã cộng, trong giới hạn số dư hiện có của khách (kể cả điểm của đơn còn trong hạn trả).';
     const p = d.reversePreview;
-    return p ? `${base} Số dư hiện tại ${formatCount(p.pointsBalance)} điểm, dự kiến trừ ${formatCount(p.expectedTake)} điểm.` : base;
+    return p
+      ? `${base} Số dư trừ được hiện tại ${formatCount(p.pointsBalance)} điểm (không gồm điểm quy đổi từ xu cũ), dự kiến trừ ${formatCount(p.expectedTake)} điểm.`
+      : base;
   };
 
   const showCost = r.method !== 'DROP_OFF';

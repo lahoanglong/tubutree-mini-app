@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 const READS_STANDARD_LOT_ON_PURPOSE: Record<string, string> = {
   'lib/checkout-points.ts': 'pointsSummary và checkoutPointsOffer: nơi cộng hai lô',
   'lib/export-csv.ts': 'CSV người dùng: truyền cả hai lô vào pointsSummary',
+  'components/admin/waste-request-detail.tsx': 'hộp Thu hồi: Thu hồi chỉ trừ lô thường, câu ghi rõ không gồm lô quy đổi',
 };
 
 function walk(dir: string): string[] {
