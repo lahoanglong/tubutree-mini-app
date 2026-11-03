@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
@@ -15,6 +15,7 @@ import { haptic } from '../../utils/haptic';
 import { browserStorage } from '../../utils/recently-viewed';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { isEndpointMissing } from '../home/home-blocks';
+import { HomeBlockErrorSuppressed } from '../home/home-block-error';
 import { useBlockQuery } from '../home/use-block-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -90,6 +91,8 @@ export interface PurchasedRailProps {
 export function PurchasedRail({ source, restoring = false, excludeVariations }: PurchasedRailProps) {
   const navigate = useNavigate();
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
+  // Trang chủ đã hiện một dải lỗi cấp trang với một "Thử lại": kệ không thêm nút giống hệt.
+  const pageErrorShown = useContext(HomeBlockErrorSuppressed);
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   // Đã mở sheet mua lại một lần thì giữ nó dựng: ZaUI Sheet còn trượt xuống ~200ms sau khi target về null.
@@ -143,7 +146,7 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
     );
   }
   // Chưa có món nào: lỗi thật (không phải API cũ 404) vẫn hiện khối lỗi kèm "Thử lại", khách cũ không thấy kệ biến mất im lặng.
-  if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error))) return null;
+  if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error) && !pageErrorShown)) return null;
 
   return (
     <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: onHome ? 0 : RAIL_PADDING_BOTTOM }}>

@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutGrid } from 'lucide-react';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_SHORTCUT_SLOTS, SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
+import { HOME_SETTLING_HEIGHTS, HOME_SHORTCUT_SLOTS, SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { Icon, Text } from '@/components/mini';
+import { Icon, Skeleton, Text } from '@/components/mini';
 import { EarnSheet } from './earn-sheet';
 import { SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visuals';
 import { ShortcutsSheet } from './shortcuts-sheet';
@@ -48,14 +49,16 @@ const cellStyle = {
   cursor: 'pointer',
 } as const;
 
+const GRID_BLEED = 'tubu-bleed max-md:px-2 lg:hidden';
+
 /**
  * Lối tắt Trang chủ (Q7), bản web của `shortcut-grid.tsx` ở Mini App: 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần
  * còn lại nằm trong sheet "Tất cả". Mục có cờ tắt bị ẩn, mục kế lấp chỗ. Mục có route web chưa làm xong bị bỏ TRƯỚC khi chia ô cố định (nên ô cố định
  * luôn đủ 4 khi còn mục). "Tích điểm đơn sàn" chưa có trang web nên không bao giờ hiện. Từ lg thanh điều hướng website đã có các lối này nên khối ẩn.
  */
-export function ShortcutGrid() {
+export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
   const router = useRouter();
-  const cfg = usePublicConfig();
+  const cfg = usePublicConfig(initialConfig);
   const [earnOpen, setEarnOpen] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
   const authed = useAuthPhase() === 'authenticated';
@@ -76,8 +79,17 @@ export function ShortcutGrid() {
     else setEarnOpen(true);
   };
 
+  // Cờ Đổi rác chưa về thì chưa biết ô nào nằm trong 4 ô cố định: giữ khung trơn cùng chiều cao, không dựng ô rồi đổi chỗ dưới ngón tay.
+  if (cfg.isPending) {
+    return (
+      <div data-testid="shortcut-grid-pending" aria-hidden="true" className={GRID_BLEED}>
+        <Skeleton height={HOME_SETTLING_HEIGHTS.shortcuts} radius="var(--radius-card)" />
+      </div>
+    );
+  }
+
   return (
-    <section aria-label={homeCopy.shortcuts.title} className="tubu-bleed max-md:px-2 lg:hidden">
+    <section aria-label={homeCopy.shortcuts.title} className={GRID_BLEED}>
       <div data-testid="shortcut-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
         {pinned.map((s) => {
           const tint = SHORTCUT_TINT_VARS[s.tint];

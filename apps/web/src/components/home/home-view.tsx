@@ -2,6 +2,7 @@
 
 import { Fragment, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { useWindowScrollRestore } from '@/lib/use-window-scroll-restore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import type { BundleDTO } from '@tubutree/app-core/api/bundle';
@@ -88,6 +89,7 @@ export default function HomeView({ initial = {}, restoreHint = null }: { initial
 function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const qc = useQueryClient();
   const router = useRouter();
+  useWindowScrollRestore('home');
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const restoring = useAuthRestoring();
@@ -155,7 +157,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       ) : null,
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,
-    shortcuts: <ShortcutGrid />,
+    shortcuts: <ShortcutGrid initialConfig={initial.publicConfig} />,
     purchased: <PurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (
       <FlashSale

@@ -12,7 +12,7 @@ async function home(f) {
 async function jobs(f) {
   const J = [
     ['Mua hàng (nút Chọn sản phẩm)', async () => f.tap('Chọn sản phẩm')],
-    ['Mua hàng (ô tìm kiếm)', async () => f.tap('Bạn đang tìm gì hôm nay?')],
+    ['Mua hàng (ô tìm kiếm)', async () => f.tap('Bạn tìm gì hôm nay?')],
     ['Mua hàng (tab Danh mục)', async () => f.tap('Danh mục')],
     ['Theo dõi đơn', async () => { await f.tap(/^Cá nhân/); await f.tap('Xem tất cả đơn hàng'); }],
     ['Điểm Xanh và ưu đãi (tab Ưu đãi)', async () => f.tap(/^Ưu đãi/)],

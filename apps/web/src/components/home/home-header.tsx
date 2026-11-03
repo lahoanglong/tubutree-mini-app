@@ -17,6 +17,7 @@ const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-ful
 // Chỉ lấy dấu logo (khối vuông có lá) ở mép trái ảnh: chữ "Tubu Tree" đi kèm sẽ chiếm chỗ của ô tìm ở 375px (giống Mini App). Dấu hết ở
 // cột 58/249 của ảnh, chữ bắt đầu ở cột 63: 20px (= cột 60) cắt đúng khe trống; rộng hơn sẽ lộ một dải chữ "T"/"S" bên phải.
 const LOGO_MARK_WIDTH = 20;
+const LOGO_MARK_HEIGHT = 30;
 
 /**
  * Đầu Trang chủ ở điện thoại, như `HomeHeader` của Mini App: MỘT hàng cao 56px gồm dấu logo (tên trang cho trình đọc màn hình), ô tìm, chuông
@@ -30,8 +31,10 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   const count = cartQ.data?.itemCount ?? 0;
   return (
     <div data-testid="home-header" className="flex h-14 items-center gap-2 md:hidden">
-      <Link href="/" aria-label="Tubu Tree — trang chủ" className="block h-[30px] flex-none overflow-hidden" style={{ width: LOGO_MARK_WIDTH }}>
-        <Image src={tubuLogo} alt="Tubu Tree" width={83} height={30} priority className="block h-[30px] w-[83px] max-w-none object-contain" />
+      <Link href="/" aria-label="Tubu Tree — trang chủ" className="relative block flex-none after:absolute after:-inset-y-2 after:-left-4 after:-right-2 after:content-['']" style={{ width: LOGO_MARK_WIDTH, height: LOGO_MARK_HEIGHT }}>
+        <span className="block overflow-hidden" style={{ width: LOGO_MARK_WIDTH, height: LOGO_MARK_HEIGHT }}>
+          <Image src={tubuLogo} alt="Tubu Tree" width={83} height={30} priority className="block h-[30px] w-[83px] max-w-none object-contain" />
+        </span>
       </Link>
       <Link
         href="/san-pham?focus=search"

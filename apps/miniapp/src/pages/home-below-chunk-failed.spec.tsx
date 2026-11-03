@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Lỗi tải chunk thật (mạng/CDN): dựng lại không cứu được, nên "Thử lại" phải tải lại cả app.
+// Khôi phục cuộn cần Router; spec này không dựng Router và không kiểm vị trí cuộn.
+vi.mock('../hooks/use-scroll-restoration', () => ({ useScrollRestoration: () => ({ anchorRef: { current: null } }) }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,

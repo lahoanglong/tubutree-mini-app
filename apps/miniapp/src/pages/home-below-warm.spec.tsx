@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   getNotifications: vi.fn(),
   auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'error', user: { id: 'u1' } as { id: string } | null },
 }));
+// Khôi phục cuộn cần Router; spec này không dựng Router và không kiểm vị trí cuộn.
+vi.mock('../hooks/use-scroll-restoration', () => ({ useScrollRestoration: () => ({ anchorRef: { current: null } }) }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -52,7 +54,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { BrandJourney: () => null, CommunityPreview: () => null, SuggestFeed: () => null };
+  return { BrandJourney: () => null, CommunityPreview: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
 });
 
 import HomePage from './home';

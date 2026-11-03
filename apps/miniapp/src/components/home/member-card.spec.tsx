@@ -17,7 +17,9 @@ vi.mock('../../hooks/use-check-in', () => ({
 }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 
 const render = (ui: ReactElement) => rtlRender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
 
@@ -27,6 +29,25 @@ describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
     render(<MemberCard />);
     expect(screen.getByText('Chào Lại')).toBeInTheDocument();
     expect(screen.queryByText(/Nguyễn/)).toBeNull();
+  });
+
+  it('tên bậc dài không bóp lời chào: lời chào không co, tên bậc nhận phần còn lại', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.loyalty.mockResolvedValue({ tier: { name: 'Đại Sứ Vườn Xanh Bậc Cao Nhất' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    render(<MemberCard />);
+    const tier = (await screen.findByText(/Đại Sứ/)).closest('span')!;
+    expect(screen.getByText('Chào An').style.flexShrink).toBe('0');
+    expect(tier.style.flexGrow).toBe('1');
+  });
+
+  it('chưa có tên bậc (loyalty đang tải): lời chào dài một chữ vẫn co được để có "…", không tràn đè nút', () => {
+    mocks.fullName = 'Thanhthuy1990shopmyphamthiennhien';
+    mocks.loyalty.mockImplementation(() => new Promise(() => {}));
+    render(<MemberCard />);
+    const greeting = screen.getByText(/^Chào Thanhthuy/);
+    expect(greeting.style.flexShrink).not.toBe('0');
+    expect(greeting.style.overflow).toBe('hidden');
+    expect(greeting.style.minWidth).toBe('0px');
   });
 
   it('chưa có họ tên thì chào bạn', () => {
@@ -62,11 +83,31 @@ describe('thẻ thành viên nền sáng (HM-05)', () => {
     expect(card.style.background).not.toContain('gradient');
     expect(card.style.background).toContain('--color-bg-surface');
     expect(card.style.border).toContain('--color-border-subtle');
-    expect(card).toHaveStyle({ height: '64px' });
+    expect(card).toHaveStyle({ height: `${HOME_GIFT_HEIGHT}px` });
   });
 
   it('khung chờ không có đệm dưới (vỏ khối giữ khoảng cách)', () => {
     render(<MemberCardSkeleton />);
     expect(screen.getByTestId('member-card-loading').style.padding).toBe('0px 16px');
+  });
+});
+
+describe('MemberCard — dải lỗi cấp trang (một Thử lại cho cả trang)', () => {
+  it('điểm lỗi: bình thường có dòng lỗi + Thử lại; khi Trang chủ đã có dải lỗi cấp trang thì chỉ còn số điểm, không nút Thử lại thứ hai', async () => {
+    mocks.fullName = 'Nguyễn Thị Quay Lại';
+    mocks.loyalty.mockRejectedValue(new Error('500'));
+    const first = render(<MemberCard />);
+    expect(await screen.findByRole('button', { name: homeCopy.member.retry })).toBeInTheDocument();
+    first.unmount();
+    render(
+      <HomeBlockErrorSuppressed.Provider value>
+        <MemberCard />
+      </HomeBlockErrorSuppressed.Provider>,
+    );
+    await screen.findByText('Chào Lại');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('button', { name: homeCopy.member.retry })).toBeNull();
+    expect(screen.queryByText(homeCopy.member.tierFailed)).toBeNull();
+    mocks.loyalty.mockImplementation(() => new Promise(() => {}));
   });
 });

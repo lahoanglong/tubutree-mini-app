@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   recycleOpen: false,
   recycleArgs: [] as unknown[],
+  cfgArgs: [] as unknown[],
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/use-recycle-open-requests', () => ({
@@ -21,15 +22,19 @@ vi.mock('@/lib/use-recycle-open-requests', () => ({
   },
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
-vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
+vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: (...a: unknown[]) => {
+    mocks.cfgArgs = a;
+    return mocks.cfg;
+  },
+}));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !mocks.pending.has(p) }));
 vi.mock('./earn-sheet', () => ({ EarnSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Kiếm tiền cùng Tubu" /> : null) }));
 
 import { ShortcutGrid } from './shortcut-grid';
 
 let mounted: Rendered | null = null;
-const mount = () => {
-  mounted = render(<ShortcutGrid />);
+const mount = (initialConfig?: Record<string, unknown>) => {
+  mounted = render(<ShortcutGrid initialConfig={initialConfig as never} />);
   return mounted.container;
 };
 const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent?.trim());
@@ -157,5 +162,26 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(cls).toContain('tubu-bleed');
     expect(cls).toContain('max-md:px-2');
     expect(cls).toContain('lg:hidden');
+  });
+
+  it('cấu hình công khai chưa về: khung trơn cao 84px thay lưới, không ô bấm được; lỗi (hết chờ) thì dựng lưới với cờ tắt', () => {
+    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
+    const c = mount();
+    expect(c.querySelectorAll('button')).toHaveLength(0);
+    expect(c.querySelector<HTMLElement>('[data-testid="shortcut-grid-pending"] [aria-hidden]')).not.toBeNull();
+    mounted?.unmount();
+    mocks.cfg = { isLoaded: false, isPending: false, waste: { enabled: false } };
+    expect(mount().querySelectorAll('button')).toHaveLength(5);
+  });
+
+  it('có cấu hình dựng sẵn từ server: truyền cho usePublicConfig để lưới dựng đúng ngay từ khung đầu, và khung trơn có cùng lề với lưới thật', () => {
+    const initial = { waste: { enabled: false } };
+    mocks.cfg = { isLoaded: true, isPending: false, waste: { enabled: false } };
+    mount(initial);
+    expect(mocks.cfgArgs[0]).toBe(initial);
+    mounted?.unmount();
+    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
+    const c = mount();
+    expect(c.querySelector('[data-testid="shortcut-grid-pending"]')!.className).toContain('tubu-bleed');
   });
 });

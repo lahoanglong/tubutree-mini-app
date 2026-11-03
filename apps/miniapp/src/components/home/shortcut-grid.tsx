@@ -2,12 +2,13 @@ import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { SHORTCUT_TINT_VARS, homeShortcutSlots, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
+import { HOME_SETTLING_HEIGHTS, SHORTCUT_TINT_VARS, homeShortcutSlots, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
+import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visuals';
 
@@ -79,51 +80,58 @@ export function ShortcutGrid() {
   };
 
   return (
-    <section aria-label={homeCopy.shortcuts.title} style={{ padding: '0 8px' }}>
-      <div data-testid="shortcut-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
-        {pinned.map((s) => {
-          const tint = SHORTCUT_TINT_VARS[s.tint];
-          return (
-            <button
-              key={s.id}
-              type="button"
-              aria-label={s.ariaLabel}
-              className="tubu-press"
-              onClick={() => {
-                haptic('light');
-                open(s);
-              }}
-              style={cellStyle}
-            >
-              <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}>
-                <Icon icon={SHORTCUT_ICONS[s.id]} size="md" tone="current" />
-              </span>
-              <Text variant="caption" style={labelStyle}>
-                {s.label}
-              </Text>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          aria-label={homeCopy.shortcuts.allAria}
-          aria-haspopup="dialog"
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            setAllUsed(true);
-            setAllOpen(true);
-          }}
-          style={cellStyle}
-        >
-          <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
-            <Icon icon={LayoutGrid} size="md" tone="current" />
-          </span>
-          <Text variant="caption" style={labelStyle}>
-            {homeCopy.shortcuts.all}
-          </Text>
-        </button>
-      </div>
+    <section aria-label={homeCopy.shortcuts.title} aria-busy={cfg.isPending || undefined} style={{ padding: '0 8px' }}>
+      {/* Cờ Đổi rác chưa về thì chưa biết ô nào nằm trong 4 ô cố định: giữ khung trơn cùng chiều cao, không dựng ô rồi đổi chỗ dưới ngón tay. */}
+      {cfg.isPending ? (
+        <div data-testid="shortcut-grid-pending" aria-hidden="true">
+          <Skeleton height={HOME_SETTLING_HEIGHTS.shortcuts} radius="var(--radius-card)" />
+        </div>
+      ) : (
+        <div data-testid="shortcut-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
+          {pinned.map((s) => {
+            const tint = SHORTCUT_TINT_VARS[s.tint];
+            return (
+              <button
+                key={s.id}
+                type="button"
+                aria-label={s.ariaLabel}
+                className="tubu-press"
+                onClick={() => {
+                  haptic('light');
+                  open(s);
+                }}
+                style={cellStyle}
+              >
+                <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}>
+                  <Icon icon={SHORTCUT_ICONS[s.id]} size="md" tone="current" />
+                </span>
+                <Text variant="caption" style={labelStyle}>
+                  {s.label}
+                </Text>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            aria-label={homeCopy.shortcuts.allAria}
+            aria-haspopup="dialog"
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              setAllUsed(true);
+              setAllOpen(true);
+            }}
+            style={cellStyle}
+          >
+            <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
+              <Icon icon={LayoutGrid} size="md" tone="current" />
+            </span>
+            <Text variant="caption" style={labelStyle}>
+              {homeCopy.shortcuts.all}
+            </Text>
+          </button>
+        </div>
+      )}
       {allUsed && (
         <Suspense fallback={null}>
           <ShortcutsSheet

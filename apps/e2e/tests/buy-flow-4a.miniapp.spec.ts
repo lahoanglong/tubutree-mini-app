@@ -30,7 +30,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
     const [searchBox, railBox, categoriesBox] = await Promise.all([
-      page.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' }).boundingBox(),
+      page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).boundingBox(),
       rail.boundingBox(),
       page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox(),
     ]);
@@ -256,7 +256,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page).toHaveURL(/\/$/);
     // Trang Đơn hàng có thể còn mount trong lúc chuyển cảnh — chờ nó biến mất rồi mới kiểm trang chủ.
     await expect(page.getByRole('heading', { name: 'Đơn hàng' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' })).toBeVisible();
   });
 
   test('Analytics: reorder_clicked bắn đúng 1 lần MỖI chạm {source:home_rail, variationId}, không bắn lại khi re-render', async ({ page, api }) => {

@@ -11,7 +11,9 @@ vi.mock('@/lib/use-check-in', () => ({
   useCheckIn: () => ({ view: { canCheckIn: true, buttonLabel: 'Điểm danh' }, pending: false, checkIn: mocks.checkIn, message: null }),
 }));
 
+import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 
 let mounted: Rendered | null = null;
 const mount = async (ui: React.ReactElement) => {
@@ -28,12 +30,12 @@ afterEach(() => {
 });
 
 describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
-  it('thẻ cao 64, nền bề mặt có viền, không có nền gradient; nút Điểm danh là điểm màu duy nhất', async () => {
+  it('thẻ cao bằng HOME_HERO_HEIGHT, nền bề mặt có viền, không có nền gradient; nút Điểm danh là điểm màu duy nhất', async () => {
     mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     const c = await mount(<MemberCard />);
     const section = c.querySelector('section[aria-label="Thẻ thành viên"]')!;
     const card = section.firstElementChild as HTMLElement;
-    expect(card.style.height).toBe('64px');
+    expect(card.style.height).toBe(`${HOME_HERO_HEIGHT}px`);
     expect(card.style.background).not.toContain('gradient');
     expect(card.style.border).not.toBe('');
     const checkIn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Điểm danh')!;
@@ -48,7 +50,7 @@ describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
     mounted!.unmount();
     const offline = await mount(<MemberCardUnavailable onRetry={() => undefined} />);
     const card = offline.querySelector('section')!.firstElementChild as HTMLElement;
-    expect(card.style.height).toBe('64px');
+    expect(card.style.height).toBe(`${HOME_HERO_HEIGHT}px`);
     expect(card.style.background).not.toContain('gradient');
   });
 });
@@ -75,5 +77,39 @@ describe('MemberCard web — lời chào bằng tên gọi (P2 #7)', () => {
     mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     const c = await mount(<MemberCard />);
     expect(c.textContent).toContain('Chào bạn');
+  });
+});
+
+describe('MemberCard web — tên bậc dài và dải lỗi cấp trang', () => {
+  it('tên bậc dài không bóp lời chào: lời chào không co, tên bậc nhận phần còn lại', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.get.mockResolvedValue({ tier: { name: 'Đại Sứ Vườn Xanh Bậc Cao Nhất' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    const c = await mount(<MemberCard />);
+    const greeting = Array.from(c.querySelectorAll('span')).find((s) => s.textContent === 'Chào An')!;
+    expect(greeting.style.flexShrink).toBe('0');
+    const tier = Array.from(c.querySelectorAll('span')).find((s) => s.textContent?.includes('Đại Sứ') && s.children.length > 0)!;
+    expect(tier.style.flexGrow).toBe('1');
+  });
+
+  it('chưa có tên bậc (loyalty lỗi): lời chào dài một chữ vẫn co được để có "…", không tràn đè nút', async () => {
+    mocks.fullName = 'Thanhthuy1990shopmyphamthiennhien';
+    mocks.get.mockRejectedValue(new Error('500'));
+    const c = await mount(<MemberCard />);
+    const greeting = Array.from(c.querySelectorAll('span')).find((s) => s.textContent?.startsWith('Chào Thanhthuy'))!;
+    expect(greeting.style.flexShrink).not.toBe('0');
+    expect(greeting.style.overflow).toBe('hidden');
+  });
+
+  it('điểm lỗi: Trang chủ đã có dải lỗi cấp trang thì không còn nút Thử lại thứ hai', async () => {
+    mocks.get.mockRejectedValue(new Error('500'));
+    const c = await mount(<MemberCard />);
+    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(true);
+    mounted!.unmount();
+    const c2 = await mount(
+      <HomeBlockErrorSuppressed.Provider value>
+        <MemberCard />
+      </HomeBlockErrorSuppressed.Provider>,
+    );
+    expect(Array.from(c2.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(false);
   });
 });

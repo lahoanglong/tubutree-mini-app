@@ -213,7 +213,7 @@ describe('HomeView — nội dung các khối', () => {
 
   it('ô tìm là vỏ: dẫn sang /san-pham?focus=search; chạm danh mục sang /san-pham lọc theo danh mục', async () => {
     const c = await mount();
-    const search = c.querySelector('a[aria-label="Bạn đang tìm gì hôm nay?"]');
+    const search = c.querySelector('a[aria-label="Bạn tìm gì hôm nay?"]');
     expect(search?.getAttribute('href')).toBe('/san-pham?focus=search');
     // D7-31: từ md thanh đầu website đã có ô tìm, ô này chỉ còn ở điện thoại.
     expect(search?.parentElement?.className).toMatch(/\bmd:hidden\b/);

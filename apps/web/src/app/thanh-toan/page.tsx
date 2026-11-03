@@ -7,6 +7,9 @@ import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, ShoppingBag, 
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
+import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
+import { browserStorage } from '@/lib/recently-viewed';
+import { syncHomeHintCookie } from '@/lib/home-hint-cookie';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
 import { OrderConsent } from '@/components/order-consent';
@@ -307,6 +310,8 @@ export default function CheckoutPage() {
       forgetAutoCoupon(userId);
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
+      rememberActiveOrder(browserStorage(), userId);
+      syncHomeHintCookie();
       if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);

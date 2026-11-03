@@ -114,7 +114,7 @@ export default function LoyaltyPage() {
   if (loyaltyQ.isLoading) {
     return (
       <LedgerShell title={TITLE} wide>
-        <div className="space-y-3">
+        <div className="space-y-3" aria-busy="true">
           <Skeleton height={180} />
           <Skeleton height={80} />
         </div>

@@ -81,6 +81,8 @@ describe('/tai-khoan/thong-bao: khung trang', () => {
     const loading = await mount();
     expect(Array.from(loading.container.querySelectorAll('h1')).map((h) => h.textContent)).toEqual(['Thông báo']);
     expect(loading.container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(0);
+    // Dấu để CSS ẩn chân trang gọn khi khung chờ thấp hơn nội dung (HIEUNANG-04).
+    expect(loading.container.querySelector('[aria-busy="true"] [data-skeleton]')).not.toBeNull();
 
     mocks.get.mockResolvedValue([ORDER_UNREAD]);
     const list = await mount();

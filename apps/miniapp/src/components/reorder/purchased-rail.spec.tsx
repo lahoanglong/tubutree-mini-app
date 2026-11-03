@@ -26,6 +26,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 import { PURCHASED_HINT_KEY, purchasedSkeletonHeight } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { PurchasedRail } from './purchased-rail';
+import { HomeBlockErrorSuppressed } from '../home/home-block-error';
 import { useHomeShelves } from '../home/use-home-shelves';
 
 const ITEM = {
@@ -147,6 +148,21 @@ describe('PurchasedRail', () => {
       fireEvent.click(within(after).getByRole('button', { name: 'Thử lại Mua lại' }));
       await waitFor(() => expect(screen.queryByText('Có chút trục trặc, thử lại nhé')).toBeNull());
       expect(screen.getByRole('region', { name: 'Mua lại' })).toHaveTextContent('Nước rửa chén');
+    });
+
+    it('lỗi ở lần tải đầu khi Trang chủ đã có dải lỗi cấp trang: kệ không thêm khối lỗi và nút Thử lại giống hệt', async () => {
+      mocks.fetchPurchasedItems.mockRejectedValue(new Error('boom'));
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { container } = render(
+        <QueryClientProvider client={qc}>
+          <HomeBlockErrorSuppressed.Provider value>
+            <PurchasedRail source="home_rail" />
+          </HomeBlockErrorSuppressed.Provider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(qc.getQueryState(RAIL_KEY)?.status).toBe('error'));
+      expect(screen.queryByRole('button', { name: 'Thử lại Mua lại' })).toBeNull();
+      expect(container.querySelector('section')).toBeNull();
     });
 
     it('lỗi ở lần tải đầu (chưa có gì để giữ): hiện khối lỗi "Thử lại" thay vì ẩn im lặng; tải lại sau lỗi không chớp khung chờ', async () => {

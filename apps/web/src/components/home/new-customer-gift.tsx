@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
+import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
 import type { NewCustomerOffer } from '@tubutree/app-core/api/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
@@ -98,7 +98,8 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
   return (
     <section aria-label={homeText.newGift.title}>
       <Card variant="flat" padding={0}>
-        <div style={{ minHeight: HOME_HERO_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 0 16px' }}>
+        <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 12px 0 16px', paddingBlock: '0.5rem 0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
             aria-expanded={expanded}
@@ -112,9 +113,6 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
               <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {homeText.newGift.title}
               </Text>
-              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                {headline}
-              </Text>
             </span>
             <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
           </button>
@@ -127,6 +125,10 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
               <span>{homeText.newGift.cta}</span>
             </Link>
           )}
+          </div>
+          <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {headline}
+          </Text>
         </div>
         {expanded && (
           <div style={{ padding: '0 16px 16px' }}>
@@ -179,7 +181,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
 function NewCustomerGiftSkeleton() {
   return (
     <div data-testid="new-customer-gift-loading" aria-hidden="true">
-      <Skeleton height={HOME_HERO_HEIGHT} radius="var(--radius-card)" />
+      <Skeleton height={HOME_GIFT_HEIGHT} radius="var(--radius-card)" />
     </div>
   );
 }

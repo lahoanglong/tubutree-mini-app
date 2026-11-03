@@ -82,7 +82,7 @@ test.describe('Web khách (smoke)', () => {
     // Điện thoại như Mini App: ô tìm dạng viên ở trang chủ mở trang danh mục có ô tìm; máy tính dùng ô tìm ở thanh đầu.
     let input = page.locator('#site-search-q');
     if (isPhone(page)) {
-      await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
+      await page.getByRole('link', { name: 'Bạn tìm gì hôm nay?' }).click();
       input = page.locator('#browse-q');
     }
     // Gõ ngay, có thể trước lúc hydrate xong: chữ gõ vào khung chờ của HTML server phải được giữ khi ô thật thay vào (R-179).

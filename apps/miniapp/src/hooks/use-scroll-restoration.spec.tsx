@@ -185,6 +185,58 @@ describe('useScrollRestoration — khôi phục chỉ khi quay lại (Back/forwa
     expect(scroller().scrollTop).toBe(480);
   });
 
+  it('trang còn ngắn lúc khôi phục (trình duyệt kẹp scrollTop) → thử lại tới khi đủ cao, rồi dừng', () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem(`${SCROLL_KEY_PREFIX}q=a`, '4529');
+    let maxTop = 2200;
+    const values = new WeakMap<Element, number>();
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) { return this.isConnected ? values.get(this) ?? 0 : 0; },
+      set(this: Element, v: number) { values.set(this, Math.min(v, maxTop)); },
+    });
+    render(<MemoryRouter future={FUTURE}><Harness k="q=a" ready /></MemoryRouter>);
+    expect(scroller().scrollTop).toBe(2200);
+    maxTop = 6000;
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(scroller().scrollTop).toBe(4529);
+  });
+
+  it('lần gán đầu bị <Page> cuộn về 0 ngay sau đó (hook nằm trong con của Page) → kiểm lại sau một nhịp và gán lại', () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem(`${SCROLL_KEY_PREFIX}q=a`, '4529');
+    const values = new WeakMap<Element, number>();
+    let sets = 0;
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) { return this.isConnected ? values.get(this) ?? 0 : 0; },
+      set(this: Element, v: number) { sets += 1; values.set(this, sets === 1 ? v : v); if (sets === 1) queueMicrotask(() => values.set(this, 0)); },
+    });
+    render(<MemoryRouter future={FUTURE}><Harness k="q=a" ready /></MemoryRouter>);
+    return Promise.resolve().then(() => {
+      expect(scroller().scrollTop).toBe(0);
+      act(() => { vi.advanceTimersByTime(100); });
+      expect(scroller().scrollTop).toBe(4529);
+    });
+  });
+
+  it('thử lại khôi phục dừng khi khách chạm vào trang (không giằng lại)', () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem(`${SCROLL_KEY_PREFIX}q=a`, '4529');
+    let maxTop = 2200;
+    const values = new WeakMap<Element, number>();
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) { return this.isConnected ? values.get(this) ?? 0 : 0; },
+      set(this: Element, v: number) { values.set(this, Math.min(v, maxTop)); },
+    });
+    render(<MemoryRouter future={FUTURE}><Harness k="q=a" ready /></MemoryRouter>);
+    scroller().dispatchEvent(new Event('touchstart'));
+    maxTop = 6000;
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(scroller().scrollTop).toBe(2200);
+  });
+
   it('chỉ khôi phục MỘT lần cho mỗi khoá (khách cuộn tiếp không bị kéo về)', () => {
     sessionStorage.setItem(`${SCROLL_KEY_PREFIX}q=a`, '200');
     const ui = (ready: boolean) => (

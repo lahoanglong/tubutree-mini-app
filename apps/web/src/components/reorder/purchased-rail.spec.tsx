@@ -16,6 +16,7 @@ vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
 import { PurchasedRail } from './purchased-rail';
+import { HomeBlockErrorSuppressed } from '@/components/home/home-block-error';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
@@ -295,5 +296,18 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
     try { localStorage.clear(); } catch { /* không có kho */ }
     await home();
     expect(localStorage.getItem('tubu_home_purchased')).toBe('one');
+  });
+
+  it('lỗi ở lần tải đầu khi Trang chủ đã có dải lỗi cấp trang: kệ không thêm khối lỗi và nút Thử lại', async () => {
+    rail = async () => {
+      throw new ApiError('Máy chủ đang bận', 503);
+    };
+    mounted = render(
+      <HomeBlockErrorSuppressed.Provider value>
+        <PurchasedRail source="home_rail" />
+      </HomeBlockErrorSuppressed.Provider>,
+    );
+    await flush(8);
+    expect(byText(mounted.container, 'button', 'Thử lại')).toBeNull();
   });
 });

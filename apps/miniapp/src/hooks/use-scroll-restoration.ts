@@ -4,6 +4,8 @@ import { useNavigationType } from './use-navigation-type';
 
 export const SCROLL_KEY_PREFIX = 'tubu_scroll:';
 const SAVE_DEBOUNCE_MS = 100;
+const RESTORE_RETRY_MS = 50;
+const RESTORE_MAX_MS = 1000;
 
 function scrollerOf(anchor: HTMLElement | null): HTMLElement | null {
   return (anchor?.closest('.zaui-page') as HTMLElement | null) ?? null;
@@ -105,10 +107,31 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
     if (eligibleKey.current !== key) return;
     const scroller = scrollerOf(anchorRef.current);
     const y = load(key);
-    if (scroller && y != null) {
+    if (!scroller || y == null) return;
+    scroller.scrollTop = y;
+    lastY.current = y;
+    // Kiểm lại sau một nhịp và thử lại tới khi đạt hoặc quá RESTORE_MAX_MS: trang còn ngắn hơn lúc rời đi (lưới Gợi ý vẽ sau) làm trình duyệt kẹp
+    // scrollTop, và <Page> của zmp tự cuộn về 0 ở layout effect của nó (chạy sau hook này khi hook nằm trong con của Page). Khách chạm/cuộn thì thôi.
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
+    const stop = () => {
+      stopped = true;
+      clearTimeout(timer);
+      scroller.removeEventListener('touchstart', stop);
+      scroller.removeEventListener('wheel', stop);
+    };
+    scroller.addEventListener('touchstart', stop, { passive: true });
+    scroller.addEventListener('wheel', stop, { passive: true });
+    const tick = () => {
+      if (stopped) return;
       scroller.scrollTop = y;
-      lastY.current = y;
-    }
+      lastY.current = scroller.scrollTop;
+      if (scroller.scrollTop >= y - 1 || Date.now() - started >= RESTORE_MAX_MS) return stop();
+      timer = setTimeout(tick, RESTORE_RETRY_MS);
+    };
+    timer = setTimeout(tick, RESTORE_RETRY_MS);
+    return stop;
   }, [key, ready]);
 
   return { anchorRef };

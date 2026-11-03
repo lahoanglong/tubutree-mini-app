@@ -126,4 +126,17 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
       expect(button).toHaveStyle({ minHeight: '44px' });
     }
   });
+
+  it('cấu hình công khai chưa về: khung trơn cao 84px, không ô bấm được (không dựng ô rồi đổi chỗ khi cờ Đổi rác về)', () => {
+    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
+    render(<ShortcutGrid />);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByTestId('shortcut-grid-pending').querySelector('.tubu-skeleton')).toHaveStyle({ height: '84px' });
+  });
+
+  it('cấu hình công khai lỗi (hết chờ, không có dữ liệu): vẫn dựng lưới với cờ tắt', () => {
+    mocks.cfg = { isLoaded: false, isPending: false, waste: { enabled: false } };
+    render(<ShortcutGrid />);
+    expect(screen.getAllByRole('button')).toHaveLength(5);
+  });
 });

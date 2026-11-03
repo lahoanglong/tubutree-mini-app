@@ -113,9 +113,11 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   if (restoring) return lastRows > 0 ? <TodoSkeleton rows={lastRows} /> : null;
   if (!authed) return null;
 
-  // Khung chờ chỉ khi lần mở trước có việc thật (chắc chắn sẽ có dòng); không thì chờ im lặng, khối hiện khi có việc.
+  // Khung chờ khi lần mở trước có việc thật, hoặc khi tổng quan báo có đơn đang xử lý mà máy chưa nhớ số dòng (máy mới, đơn đầu tiên): giữ chỗ một dòng
+  // thay vì chèn dải vào làm cả Trang chủ nhảy xuống. Không thì chờ im lặng, khối hiện khi có việc.
   if (loading) {
-    return rememberedRows > 0 ? <TodoSkeleton rows={rememberedRows} /> : null;
+    const pending = rememberedRows > 0 ? rememberedRows : enabled ? 1 : 0;
+    return pending > 0 ? <TodoSkeleton rows={pending} /> : null;
   }
   if (rows === 0) return null;
 

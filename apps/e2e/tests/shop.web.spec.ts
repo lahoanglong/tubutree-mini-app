@@ -245,11 +245,11 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page).toHaveURL(/\/san-pham\?category=c-goi$/);
     await page.goBack();
     if (phone) {
-      await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
+      await page.getByRole('link', { name: 'Bạn tìm gì hôm nay?' }).click();
       await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
     } else {
       // Máy tính chỉ giữ ô tìm của thanh đầu website; ô vỏ ở trang chủ chỉ có ở điện thoại.
-      await expect(page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Bạn tìm gì hôm nay?' })).toHaveCount(0);
     }
   });
 

@@ -26,7 +26,7 @@ describe('HomeHeader web — một hàng dính 56px như Mini App (HM-01)', () =
 
   it('dấu logo, ô tìm, chuông và giỏ cùng một hàng; ô tìm mở /san-pham?focus=search', () => {
     const c = mount();
-    const search = c.querySelector('a[aria-label="Bạn đang tìm gì hôm nay?"]')!;
+    const search = c.querySelector('a[aria-label="Bạn tìm gì hôm nay?"]')!;
     expect(search.getAttribute('href')).toBe('/san-pham?focus=search');
     expect(c.querySelector('a[aria-label="Thông báo"]')).not.toBeNull();
     expect(c.querySelector('a[aria-label="Giỏ hàng"]')).not.toBeNull();

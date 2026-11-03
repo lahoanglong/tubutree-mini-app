@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HEADER_HEIGHT, mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import { SUGGEST_MAX, suggestChips, vnDateSeed } from '@tubutree/app-core/home-suggest';
 import { useCategories } from '../../hooks/use-categories';
+import { useNavigationType } from '../../hooks/use-navigation-type';
 import { fetchCatalog, fetchForYou } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
@@ -27,6 +28,24 @@ const CHIPS_STYLE = {
   background: 'var(--color-bg-canvas)',
 } as const;
 
+const CHIP_KEY = 'tubu_home_chip';
+
+function loadChip(): string {
+  try {
+    return sessionStorage.getItem(CHIP_KEY) || 'all';
+  } catch {
+    return 'all';
+  }
+}
+
+function saveChip(key: string): void {
+  try {
+    sessionStorage.setItem(CHIP_KEY, key);
+  } catch {
+    /* storage bị chặn: chỉ mất việc nhớ chip */
+  }
+}
+
 export interface SuggestFeedProps {
   /** Slug món đã nằm ở các kệ hàng phía trên: lưới không lặp lại chúng. */
   exclude: ReadonlySet<string>;
@@ -39,19 +58,31 @@ export interface SuggestFeedProps {
  */
 export function SuggestFeed({ exclude }: SuggestFeedProps) {
   const navigate = useNavigate();
+  const navType = useNavigationType();
   const authed = useAuthStore((s) => s.status === 'authenticated');
   // Chốt một lần mỗi lần mở: qua nửa đêm giữa chừng không đổi thứ tự dưới chân khách.
   const seed = useMemo(() => vnDateSeed(serverNow()), []);
   const { categories } = useCategories();
   const chips = useMemo(() => suggestChips(categories.filter((c) => !c.parentId)), [categories]);
-  const [chipKey, setChipKey] = useState('all');
+  // Chỉ lần mở bằng Back (POP) mới dựng lại như lúc rời đi: chip đã chọn cùng vị trí cuộn (vị trí cuộn là của lưới chip đó) và trang 1 từ cache.
+  // Mở mới bằng PUSH/tab thì bắt đầu ở chip "Tất cả" và chờ khối gần màn mới tải.
+  const [popped] = useState(() => navType === 'POP');
+  const [chipKey, setChipKey] = useState(() => {
+    // Lần mở mới xoá chip cũ: Back sau đó phải khôi phục chip của lần mở này, không phải chip của lần trước.
+    if (!popped) saveChip('all');
+    return popped ? loadChip() : 'all';
+  });
   const active = chips.find((c) => c.key === chipKey) ?? chips[0]!;
   const categoryId = active.categoryId;
 
   // Lưới nằm cuối Trang chủ: chỉ tải khi khối cách màn hình chưa tới một màn. Lần mở Trang chủ bớt một request so với khi tải ngay; web không có
   // request này vì trang 1 đã dựng sẵn ở server.
   const section = useRef<HTMLElement>(null);
-  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+  // Back từ PDP: trang 1 đã có trong cache thì dựng lưới ngay (không chờ IntersectionObserver) để trang đủ cao cho hook khôi phục cuộn.
+  const queryClient = useQueryClient();
+  const [near, setNear] = useState(
+    () => typeof IntersectionObserver === 'undefined' || (popped && queryClient.getQueryData(['products', 'home-suggest', seed, categoryId ?? 'all']) !== undefined),
+  );
   useEffect(() => {
     const el = section.current;
     if (near || !el) return;
@@ -112,6 +143,7 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
             onPress={() => {
               haptic('light');
               setChipKey(c.key);
+              saveChip(c.key);
             }}
           >
             {c.label}

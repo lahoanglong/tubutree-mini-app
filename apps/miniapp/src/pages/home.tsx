@@ -18,6 +18,7 @@ import {
   HomeNewCustomerGift,
   HomePurchasedRail,
   HomeSuggestFeed,
+  HomeScrollRestoration,
   loadHomeBelow,
   useHomeBelow,
   retryHomeBelow,
@@ -90,6 +91,9 @@ export default function HomePage() {
     sessionFailed,
   );
 
+  // Quay lại từ PDP/danh mục về đúng chỗ đã cuộn (zmp Page gỡ trang cũ nên không tự giữ). Chỉ khôi phục khi các khối cao đã có dữ liệu thật, nếu không trang còn ngắn và vị trí bị kẹp.
+  const scrollReady = !settling && !restoring && !categories.isLoading && !shelves.bestSellerQuery.isLoading;
+
   // API sập hẳn: kệ Bán chạy nhất (mọi loại khách đều thấy) lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi.
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
 
@@ -161,7 +165,9 @@ export default function HomePage() {
 
   return (
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
+    // resetScroll tắt: Page tự cuộn về 0 ở layout effect chạy sau hook khôi phục nên khung đầu sau Back vẽ ở đầu trang; hook tự cuộn về 0 khi PUSH.
+    <Page className="page" resetScroll={false} style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
+      <HomeScrollRestoration ready={scrollReady} />
       <PullToRefresh onRefresh={refreshAll} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         {homeRenderOrder(kind, settling).map((id) => (

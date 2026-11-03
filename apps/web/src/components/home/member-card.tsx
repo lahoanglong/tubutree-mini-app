@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useContext, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Leaf } from 'lucide-react';
@@ -15,6 +15,7 @@ import { pointsSummary } from '@/lib/checkout-points';
 import { useCheckIn } from '@/lib/use-check-in';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { Text, Icon, Skeleton } from '@/components/mini';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 
 // Nền sáng, viền nhẹ, chữ rừng: thẻ thành viên là thông tin tài khoản nên không nặng hơn các khối hàng; nút "Điểm danh" là điểm màu duy nhất (HM-05).
 const CARD_STYLE: CSSProperties = {
@@ -49,6 +50,8 @@ export function MemberCard() {
   const cfg = usePublicConfig();
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const { view: checkInView, pending, checkIn, message } = useCheckIn(authed);
+  // Trang chủ đang hiện dải lỗi cấp trang (một "Thử lại" cho cả trang): thẻ chỉ giữ số điểm từ hồ sơ, không dòng lỗi cắt chữ và nút thứ hai.
+  const pageErrorShown = useContext(HomeBlockErrorSuppressed);
   if (!authed || !user) return null;
 
   const card = memberCardView({
@@ -57,7 +60,7 @@ export function MemberCard() {
     vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem,
   });
   const greeting = homeCopy.member.greeting(givenName(user.fullName) ?? homeCopy.member.greetingFallback);
-  const loyaltyFailed = loyaltyQ.isError && !loyaltyQ.data;
+  const loyaltyFailed = loyaltyQ.isError && !loyaltyQ.data && !pageErrorShown;
 
   return (
     <section aria-label={homeCopy.member.cardLabel}>
@@ -70,9 +73,9 @@ export function MemberCard() {
         >
           <div style={{ flex: 1, minWidth: 0 }}>
             <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', ...(card.tierName ? { flexShrink: 0, maxWidth: '60%' } : {}) }}>{greeting}</span>
               {card.tierName && (
-                <span style={{ flex: '0 0 auto' }}>
+                <span style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {'\u00A0· '}
                   <Icon icon={Leaf} size="sm" tone="brand" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
                 </span>

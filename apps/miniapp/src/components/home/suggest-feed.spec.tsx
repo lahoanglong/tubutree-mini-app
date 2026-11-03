@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type * as ZmpUi from 'zmp-ui';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   navigate: vi.fn(),
   authStatus: 'guest' as string,
+  navType: 'POP' as string,
   // 08:00 ngày 01/11/2026 giờ Việt Nam.
   now: Date.parse('2026-11-01T01:00:00.000Z'),
 }));
@@ -22,6 +23,7 @@ vi.mock('../../services/shop-api', () => ({
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }),
 }));
+vi.mock('../../hooks/use-navigation-type', () => ({ useNavigationType: () => mocks.navType }));
 vi.mock('../../utils/server-clock', () => ({ serverNow: () => mocks.now }));
 vi.mock('../wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -46,6 +48,8 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
+    mocks.navType = 'POP';
     mocks.authStatus = 'guest';
     mocks.fetchForYou.mockResolvedValue([]);
     mocks.fetchCategories.mockResolvedValue([]);
@@ -61,6 +65,70 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
     mount();
     await waitFor(() => expect(mocks.fetchCatalog).toHaveBeenCalledTimes(2));
     expect(mocks.fetchCatalog.mock.calls[1]![0]).toEqual(mocks.fetchCatalog.mock.calls[0]![0]);
+  });
+
+  it('quay lại từ PDP: trang 1 đã có trong cache thì dựng lưới ngay dù IntersectionObserver chưa báo gần màn (trang đủ cao để khôi phục cuộn)', async () => {
+    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} });
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      client.setQueryData(['products', 'home-suggest', '20261101', 'all'], { pages: [page(cards(1, 4))], pageParams: [1] });
+      render(
+        <QueryClientProvider client={client}>
+          <SuggestFeed exclude={new Set()} />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText('Sản phẩm 1')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('mở mới bằng PUSH (không phải Back): cache trang 1 không làm lưới tải ngay, vẫn chờ khối gần màn', async () => {
+    mocks.navType = 'PUSH';
+    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} });
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      client.setQueryData(['products', 'home-suggest', '20261101', 'all'], { pages: [page(cards(1, 4))], pageParams: [1] });
+      render(
+        <QueryClientProvider client={client}>
+          <SuggestFeed exclude={new Set()} />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByRole('heading', { level: 2, name: 'Gợi ý hôm nay' })).toBeInTheDocument();
+      await new Promise((r) => setTimeout(r, 30));
+      expect(screen.queryByText('Sản phẩm 1')).toBeNull();
+      expect(mocks.fetchCatalog).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('Back: chip đã chọn lúc rời đi được dựng lại (vị trí cuộn là của lưới chip đó); mở mới bằng PUSH thì về "Tất cả"', async () => {
+    mocks.fetchCategories.mockResolvedValue([cat('sua', 'Sữa', 5)]);
+    const first = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sữa' }));
+    first.unmount();
+    mount();
+    expect(await screen.findByRole('button', { name: 'Sữa' })).toHaveAttribute('aria-pressed', 'true');
+    cleanup();
+    mocks.navType = 'PUSH';
+    mount();
+    expect(await screen.findByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('mở mới bằng PUSH rồi Back: chip cũ của lần mở trước không sống lại, lưới ở "Tất cả"', async () => {
+    mocks.fetchCategories.mockResolvedValue([cat('sua', 'Sữa', 5)]);
+    const first = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sữa' }));
+    first.unmount();
+    mocks.navType = 'PUSH';
+    const second = mount();
+    expect(await screen.findByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
+    second.unmount();
+    mocks.navType = 'POP';
+    mount();
+    await screen.findByRole('button', { name: 'Sữa' });
+    expect(screen.getByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('lưới ở cuối trang: chưa tới gần màn thì không gọi API (lần mở Trang chủ bớt một request), chỉ có tiêu đề và chip, chưa có khung chờ; cách màn một màn hình thì tải', async () => {
