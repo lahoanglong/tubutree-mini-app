@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { FORBIDDEN_TERMS } from '../../../../../packages/app-core/src/shop-copy';
+
 
 /**
  * XANH-03: quyền lợi hạng nằm trong dữ liệu (membership_tiers.perks) nên máy quét chữ ở màn khách không thấy. DESIGN.md cấm
  * "Freeship" ở chữ khách đọc, dùng "Miễn phí giao hàng". Đọc thẳng seed.ts (import sẽ chạy main() cần DB) và migration đổi chữ.
  */
 const SEED = readFileSync(join(__dirname, '../../../prisma/seed.ts'), 'utf8');
-const MIGRATION = readFileSync(join(__dirname, '../../../prisma/migrations/20261103140000_tier_perks_free_shipping_wording/migration.sql'), 'utf8');
+const MIGRATION = readFileSync(join(__dirname, '../../../prisma/migrations/20261103220000_tier_perks_free_shipping_wording/migration.sql'), 'utf8');
 
 const tiersBlock = SEED.slice(SEED.indexOf('export const TIERS = ['), SEED.indexOf('export const DEALER_TIERS'));
 const seedPerks = [...tiersBlock.matchAll(/perks: \[(.*)\],/g)].map((m) => [...m[1]!.matchAll(/'([^']*)'/g)].map((x) => x[1]!));
@@ -15,6 +17,11 @@ describe('quyền lợi hạng (membership_tiers.perks)', () => {
   it('seed có đủ 3 hạng có quyền lợi và không phần tử nào còn "Freeship"', () => {
     expect(seedPerks.length).toBeGreaterThanOrEqual(3);
     expect(seedPerks.flat().filter((p) => /freeship/i.test(p))).toEqual([]);
+  });
+
+  it('không perk nào của seed dính chữ cấm trong bảng thuật ngữ khách đọc (FORBIDDEN_TERMS)', () => {
+    const hits = seedPerks.flat().flatMap((perk) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(perk)).map((t) => `${perk} -> ${t.use}`));
+    expect(hits).toEqual([]);
   });
 
   it('migration đổi đúng ba chuỗi cũ sang đúng chữ seed, chỉ khớp khi phần tử còn nguyên chuỗi cũ', () => {
