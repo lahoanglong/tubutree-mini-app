@@ -6,6 +6,7 @@ import { getAdminProduct, patchAdminProduct, type CategoryOption, type ProductDe
 import { formatVnd } from '@/lib/format-vnd';
 import { ImageUrlField } from './image-url-field';
 import { SideDrawer } from './side-drawer';
+import { useDiscardGuard } from './use-discard-guard';
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, chipClass } from './ui';
 
 const MAX_IMAGES = 8;
@@ -27,16 +28,43 @@ export function ProductEditDrawer({
   onSaved: () => void;
 }) {
   const q = useQuery({ queryKey: ['admin-product', id], queryFn: () => getAdminProduct(id) });
+  const [dirty, setDirty] = useState(false);
+  const { guard, dialog } = useDiscardGuard(dirty);
+  const close = () => guard(onClose);
+  // Mở lại từ cache cũ thì react-query trả bản cũ ngay rồi tải lại nền: chờ bản tải xong mới dựng form, nếu không form giữ chữ/danh mục cũ.
+  // Đã dựng thì giữ nguyên dù về sau có lần tải lại nền (sau khi lưu), để không mất chữ đang gõ.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (q.data && !q.isFetching) setReady(true);
+  }, [q.data, q.isFetching]);
   return (
-    <SideDrawer title={q.data?.name ?? 'Sản phẩm'} onClose={onClose}>
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <Notice tone="danger" role="alert">{errText(q.error, 'Không tải được sản phẩm.')}</Notice>}
-      {q.data && <Form product={q.data} categories={categories} onClose={onClose} onSaved={onSaved} />}
-    </SideDrawer>
+    <>
+      <SideDrawer title={q.data?.name ?? 'Sản phẩm'} onClose={close}>
+        {(q.isLoading || (q.data && !ready)) && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {q.isError && <Notice tone="danger" role="alert">{errText(q.error, 'Không tải được sản phẩm.')}</Notice>}
+        {q.data && ready && <Form product={q.data} categories={categories} onClose={close} onSaved={onSaved} onDirtyChange={setDirty} />}
+      </SideDrawer>
+      {dialog}
+    </>
   );
 }
 
-function Form({ product, categories, onClose, onSaved }: { product: ProductDetail; categories: CategoryOption[]; onClose: () => void; onSaved: () => void }) {
+function Form({
+  product: live,
+  categories,
+  onClose,
+  onSaved,
+  onDirtyChange,
+}: {
+  product: ProductDetail;
+  categories: CategoryOption[];
+  onClose: () => void;
+  onSaved: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  // Bản gốc của các trường sửa được, chốt lúc dựng form và chỉ đổi khi lưu thành công. So với `live` thì lần tải lại nền (mutation nào cũng làm cũ
+  // khoá admin) làm mọi trường khác nhau và Lưu ghi đè lại những gì người khác vừa đổi mà admin không đụng tới.
+  const [product, setBase] = useState<ProductDetail>(live);
   const [images, setImages] = useState<string[]>(product.images);
   const [description, setDescription] = useState(product.description);
   const [shortDesc, setShortDesc] = useState(product.shortDesc ?? '');
@@ -61,10 +89,12 @@ function Form({ product, categories, onClose, onSaved }: { product: ProductDetai
   if (isFeatured !== product.isFeatured) patch.isFeatured = isFeatured;
   if (JSON.stringify([...categoryIds].sort()) !== JSON.stringify([...product.categoryIds].sort())) patch.categoryIds = categoryIds;
   const changed = Object.keys(patch).length > 0;
+  useEffect(() => onDirtyChange(changed), [changed, onDirtyChange]);
 
   const save = useMutation({
     mutationFn: () => patchAdminProduct(product.id, patch),
     onSuccess: () => {
+      setBase((b) => ({ ...b, ...patch }));
       setMsg({ ok: true, text: 'Đã lưu.' });
       onSaved();
     },
