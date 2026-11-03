@@ -85,12 +85,31 @@ export function escapePrismaLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** Trần số từ khớp riêng lẻ: từ khoá dài hơn thì phần đuôi chỉ còn tác dụng qua mẫu cả cụm (xếp hạng). */
+export const MAX_SEARCH_TERMS = 6;
+
 /**
  * Mẫu "chứa" cho `... LIKE <mẫu> ESCAPE '!'`. Khoảng trắng giữa các từ của từ khoá khớp ĐÚNG MỘT ký tự bất kỳ (`_`) chứ không
  * chỉ dấu cách: tên có dấu câu ("Mật ong BH.Nong", "Xà-phòng") thì khách gõ tự nhiên "bh nong" vẫn thấy. Cột `nameSearch` chỉ
  * gấp dấu và khoảng trắng, không bỏ dấu câu, nên phía từ khoá phải tự nới chỗ này. Mẫu vẫn dùng được index trigram.
+ * Dùng để XẾP HẠNG khớp nguyên cụm; điều kiện lọc là từng từ (`likeTermPatterns`).
  */
 export function likeContainsPattern(q: string): string {
   const words = foldVietnamese(q).split(' ').map(escapeLike);
   return `%${words.join('_')}%`;
+}
+
+/** Mẫu "bắt đầu bằng" cả cụm, để xếp trước SP có tên mở đầu bằng từ khoá. */
+export function likePrefixPattern(q: string): string {
+  const words = foldVietnamese(q).split(' ').map(escapeLike);
+  return `${words.join('_')}%`;
+}
+
+/**
+ * Mỗi từ của từ khoá một mẫu `%từ%` (đã gấp dấu, escape), bỏ từ trùng, tối đa MAX_SEARCH_TERMS: SP khớp khi tên chứa MỌI từ,
+ * theo thứ tự nào cũng được ("nước chén" ra "Nước rửa chén", "Fuwa3e nước" ra "Nước rửa chén Fuwa3e").
+ */
+export function likeTermPatterns(q: string): string[] {
+  const words = foldVietnamese(q).split(' ').filter(Boolean);
+  return [...new Set(words)].slice(0, MAX_SEARCH_TERMS).map((w) => `%${escapeLike(w)}%`);
 }

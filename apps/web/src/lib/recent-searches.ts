@@ -3,6 +3,18 @@ import { browserStorage, type StorageLike } from './recently-viewed';
 /** Từ khoá đã tìm (chuyển từ pages/browse.tsx, GIỮ khoá cũ để khách không mất lịch sử). */
 export const RECENT_SEARCHES_KEY = 'tubu_recent_searches';
 export const RECENT_SEARCHES_MAX = 8;
+/** Chủ của lịch sử đang lưu (mã khách đăng nhập gần nhất). */
+export const RECENT_SEARCHES_OWNER_KEY = 'tubu_recent_searches_owner';
+/** Phát khi lịch sử bị xoá vì đổi/mất chủ, để màn đang mở (BrowseView) đọc lại thay vì giữ danh sách cũ trong state. */
+export const RECENT_SEARCHES_CHANGED_EVENT = 'tubu:recent-searches';
+
+function announceRecentSearchesChanged(): void {
+  try {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(RECENT_SEARCHES_CHANGED_EVENT));
+  } catch {
+    /* bỏ qua */
+  }
+}
 
 /**
  * Định dạng lưu = mảng JSON các chuỗi, mới nhất trước (giống bản cũ trong browse.tsx). Dữ liệu hỏng/lạ
@@ -49,5 +61,47 @@ export function clearRecentSearches(storage: StorageLike | null = browserStorage
     storage?.removeItem(RECENT_SEARCHES_KEY);
   } catch {
     /* bỏ qua */
+  }
+}
+
+/**
+ * Lịch sử chỉ thuộc về MỘT tài khoản: máy dùng chung đổi sang tài khoản khác thì xoá lịch sử của người trước. Chỉ so khi biết đang là ai
+ * (lúc khôi phục phiên `userId` còn rỗng, so lúc đó sẽ xoá nhầm lịch sử của chính khách). Trả true nếu đã xoá.
+ * Khách (guest) được gộp sang tài khoản thật vẫn là một người: chủ ghi `guest:<id>` để nhận ra ca đó và giữ lịch sử.
+ */
+export function scopeRecentSearchesToUser(
+  userId: string | undefined,
+  storage: StorageLike | null = browserStorage(),
+  isGuest = false,
+): boolean {
+  if (!userId) return false;
+  try {
+    const owner = storage?.getItem(RECENT_SEARCHES_OWNER_KEY);
+    const mine = isGuest ? `guest:${userId}` : userId;
+    if (owner === mine) return false;
+    // Chưa có chủ (lịch sử cũ trước bản này, hoặc khách vừa tìm lúc chưa đăng nhập): nhận cho tài khoản đầu tiên, chỉ xoá khi đổi chủ.
+    const mergedFromGuest = !isGuest && owner != null && owner.startsWith('guest:');
+    if (owner != null && !mergedFromGuest) clearRecentSearches(storage);
+    storage?.setItem(RECENT_SEARCHES_OWNER_KEY, mine);
+    const cleared = owner != null && !mergedFromGuest;
+    if (cleared) announceRecentSearchesChanged();
+    return cleared;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Đã đăng xuất (không còn tài khoản): lịch sử của người trước không được hiện cho người kế tiếp dùng máy. Chỉ xoá khi có chủ; trả true nếu đã xoá.
+ */
+export function forgetRecentSearchesOfSignedOutUser(storage: StorageLike | null = browserStorage()): boolean {
+  try {
+    if (storage?.getItem(RECENT_SEARCHES_OWNER_KEY) == null) return false;
+    clearRecentSearches(storage);
+    storage.removeItem(RECENT_SEARCHES_OWNER_KEY);
+    announceRecentSearchesChanged();
+    return true;
+  } catch {
+    return false;
   }
 }

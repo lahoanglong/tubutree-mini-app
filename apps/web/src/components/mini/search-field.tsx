@@ -17,6 +17,7 @@ export interface SearchFieldProps {
   label: string;
   clearLabel: string;
   placeholder: string;
+  maxLength?: number;
 }
 
 /**
@@ -30,7 +31,7 @@ export interface SearchFieldProps {
  * trong tokens.css (trùng nút xoá của DS); vòng focus của khung cũng nằm ở đó (.tubu-search-field).
  */
 export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(function SearchField(
-  { value, onChange, onSubmit, onFocus, onClear, label, clearLabel, placeholder },
+  { value, onChange, onSubmit, onFocus, onClear, label, clearLabel, placeholder, maxLength },
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +68,7 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
           enterKeyHint="search"
           aria-label={label}
           placeholder={placeholder}
+          maxLength={maxLength}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={onFocus}

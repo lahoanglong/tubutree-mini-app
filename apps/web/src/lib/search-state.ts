@@ -1,5 +1,6 @@
 import type { CatalogQuery, CatalogSort } from '@tubutree/app-core/api/catalog';
 import { BROWSE_PAGE_LIMIT, browseMode } from '@tubutree/app-core/browse/mode';
+import { MAX_QUERY_LENGTH as QUERY_LIMIT, clipQuery, orderedPriceBounds } from '@tubutree/app-core/browse/query';
 import { browseText, formatVndShort } from './browse-text';
 
 export type FilterType = 'price' | 'in_stock' | 'brand' | 'rating';
@@ -56,7 +57,7 @@ export const PRICE_RANGES: readonly PriceRange[] = [
 export const MIN_RATING_OPTION = 4;
 
 /** Độ dài tối đa của từ khoá tìm trong URL (API không giới hạn; chặn link dài bất thường). */
-export const MAX_QUERY_LENGTH = 100;
+export const MAX_QUERY_LENGTH = QUERY_LIMIT;
 
 /**
  * Các khoá URL mà `parseSearchState`/`serializeSearchState` sở hữu. Mọi khoá khác (utm, ref…) là
@@ -74,13 +75,12 @@ export function parseSearchState(params: URLSearchParams): SearchState {
   const sort = params.get('sort');
   const rating = intParam(params.get('rating'));
   return {
-    q: (params.get('q') ?? '').trim().slice(0, MAX_QUERY_LENGTH).trimEnd(),
+    q: clipQuery((params.get('q') ?? '').trim(), MAX_QUERY_LENGTH).trimEnd(),
     sort: sort && (CATALOG_SORTS as readonly string[]).includes(sort) ? (sort as CatalogSort) : undefined,
     category: params.get('category') || undefined,
     segment: params.get('segment') || undefined,
     brands: [...new Set((params.get('brand') ?? '').split(',').map((s) => s.trim()).filter(Boolean))],
-    minPrice: intParam(params.get('minPrice')),
-    maxPrice: intParam(params.get('maxPrice')),
+    ...orderedPriceBounds(intParam(params.get('minPrice')), intParam(params.get('maxPrice'))),
     inStock: params.get('inStock') === '1',
     minRating: rating != null && rating >= 1 && rating <= 5 ? rating : undefined,
     all: params.get('all') === '1' ? true : undefined,
