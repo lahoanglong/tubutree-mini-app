@@ -36,12 +36,23 @@ export async function findOrderUsingBankRef(db: Db, bankRef: string, exceptOrder
     },
     select: { orderId: true, adminNote: true },
   });
-  const usedIds = [
-    ...history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId),
-    ...lateRefunds.filter((r) => noteHasBankRef(r.adminNote, ref)).map((r) => r.orderId),
-  ];
-  return usedIds.length ? db.order.findFirst({ where: { id: { in: usedIds } }, select: { code: true } }) : null;
+  const historyIds = history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId);
+  const lateIds = lateRefunds.filter((r) => noteHasBankRef(r.adminNote, ref)).map((r) => r.orderId);
+  // `late`: mã chỉ nằm ở khoản hoàn tiền về muộn của đơn đã đóng, đơn đó chưa từng được xác nhận thanh toán bằng mã này; ưu tiên báo đơn đã xác nhận.
+  if (historyIds.length) {
+    const confirmed = await db.order.findFirst({ where: { id: { in: historyIds } }, select: { code: true } });
+    if (confirmed) return { code: confirmed.code, late: false };
+  }
+  if (!lateIds.length) return null;
+  const closed = await db.order.findFirst({ where: { id: { in: lateIds } }, select: { code: true } });
+  return closed ? { code: closed.code, late: true } : null;
 }
+
+/** Câu 409 khi mã đã gắn với một đơn: nói đúng việc mã đã làm, để người đối soát không tưởng đơn đã đóng được xác nhận thanh toán. */
+export const bankRefUsedByOrderMessage = (bankRef: string, used: { code: string; late: boolean }) =>
+  used.late
+    ? `Mã giao dịch ${bankRef} đã ghi cho khoản tiền về muộn của đơn ${used.code} (đơn đã đóng). Kiểm tra lại mã hoặc bỏ trống ô mã.`
+    : `Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${used.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`;
 
 /** Mã giao dịch đã ghi giảm công nợ của bất kỳ đại lý nào (refId hoặc phần "Mã GD" trong ghi chú), trừ dòng có `own` (khoá của chính lần ghi này). */
 export async function isBankRefOnPayment(db: Db, bankRef: string, own?: { userId: string; refId: string }) {
@@ -68,7 +79,7 @@ export async function assertBankRefUnusedByOrder(tx: Prisma.TransactionClient, b
   await lockBankRef(tx, bankRef);
   const usedOrder = await findOrderUsingBankRef(tx, bankRef, orderId);
   if (usedOrder) {
-    throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    throw new ConflictException(bankRefUsedByOrderMessage(bankRef, usedOrder));
   }
   if (await isBankRefOnPayment(tx, bankRef)) {
     throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã hoặc bỏ trống ô mã.`);

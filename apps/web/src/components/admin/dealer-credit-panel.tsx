@@ -18,12 +18,21 @@ import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 const newIdempotencyKey = () =>
   globalThis.crypto?.randomUUID?.() ?? `dp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
-type SentSet = { key: string; amount: number; bankRef: string };
+type SentSet = { key: string; amount: number; bankRef: string; reportId: string | null; sentAt: number };
+// Quá hạn này thì coi lần gửi trước đã xong hoặc hỏng hẳn: dùng lại khoá sẽ trả bản ghi cũ và nuốt khoản thật mới cùng số tiền.
+const SENT_TTL_MS = 15 * 60 * 1000;
 const sentStorageKey = (userId: string) => `dealer-credit-idem:${userId}`;
 const readSent = (userId: string): SentSet | null => {
   try {
     const v = JSON.parse(window.sessionStorage.getItem(sentStorageKey(userId)) ?? 'null');
-    return v && typeof v.key === 'string' && typeof v.amount === 'number' && typeof v.bankRef === 'string' ? v : null;
+    return v &&
+      typeof v.key === 'string' &&
+      typeof v.amount === 'number' &&
+      typeof v.bankRef === 'string' &&
+      (v.reportId === null || typeof v.reportId === 'string') &&
+      typeof v.sentAt === 'number'
+      ? v
+      : null;
   } catch {
     return null;
   }
@@ -61,7 +70,7 @@ export function DealerCreditPanel({
   /** Ghi nhận cho một báo cáo chuyển khoản của đại lý: gửi kèm để báo cáo đóng cùng lúc ghi sổ. */
   reportId?: string;
   /** Gọi sau khi ghi nhận thành công, để nơi chứa panel (danh sách đại lý) tải lại số liệu và báo đúng số kế toán đã nhập. */
-  onPaid?: (result: { amount: number; balance: number; reportClosed?: boolean; alreadyRecorded?: boolean }) => void;
+  onPaid?: (result: { amount: number; balance: number; reportClosed?: boolean; alreadyRecorded?: boolean; replayed?: boolean }) => void;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
@@ -89,7 +98,9 @@ export function DealerCreditPanel({
       // Mã giao dịch được máy chủ kiểm trùng riêng, không dùng làm khoá.
       const ref = bankRef.trim();
       const stored = sent.current ?? readSent(userId as string);
-      const set: SentSet = stored && stored.amount === amt && stored.bankRef === ref ? stored : { key: newIdempotencyKey(), amount: amt, bankRef: ref };
+      const rid = reportId ?? null;
+      const reusable = !!stored && stored.amount === amt && stored.bankRef === ref && stored.reportId === rid && Date.now() - stored.sentAt <= SENT_TTL_MS;
+      const set: SentSet = reusable ? (stored as SentSet) : { key: newIdempotencyKey(), amount: amt, bankRef: ref, reportId: rid, sentAt: Date.now() };
       sent.current = set;
       writeSent(userId as string, set);
       const key = set.key;
@@ -98,7 +109,9 @@ export function DealerCreditPanel({
     onSuccess: (r) => {
       setMsg({
         ok: true,
-        text: r.alreadyRecorded
+        text: r.replayed
+          ? `Khoản này đã được ghi ở lần bấm trước, sổ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
+          : r.alreadyRecorded
           ? `Báo cáo này đã được ghi nhận trước đó, lần này sổ công nợ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
           : r.reportClosed === false
             ? `Mã giao dịch này đã có trong sổ từ lần ghi trước nên không ghi thêm. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
@@ -110,7 +123,7 @@ export function DealerCreditPanel({
       setBankRef('');
       setNote('');
       void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
-      onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed, alreadyRecorded: r.alreadyRecorded });
+      onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed, alreadyRecorded: r.alreadyRecorded, replayed: r.replayed });
     },
     onError: (e: unknown) => {
       setMsg({ ok: false, text: actionErrorText(e) });

@@ -175,6 +175,26 @@ describe('DealerAccountsTab — đại lý báo đã chuyển khoản (E-25)', (
     expect(block.querySelectorAll('[data-dealer-credit-report]')).toHaveLength(1);
   });
 
+  it('khoá cũ được máy chủ phát lại (replayed, báo cáo vẫn mở): nói khoản đã ghi ở lần bấm trước, KHÔNG đẩy kế toán đóng báo cáo bằng "Không thấy tiền"', async () => {
+    stub(page(ROWS), [REPORT], { balance: 4_000_000, entries: [], reportClosed: false, replayed: true });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-credit-reports]')!;
+    click(byText(block, 'button', 'Ghi nhận'));
+    await flush();
+    click(byText(block, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    const flash = container.querySelector<HTMLElement>('[data-dealer-credit-reports] [role="status"]')!;
+    expect(flash.textContent).toContain('đã được ghi ở lần bấm trước');
+    expect(flash.textContent).toContain('vẫn mở');
+    expect(flash.textContent).toContain('chưa vội đóng bằng "Không thấy tiền"');
+    expect(flash.textContent).not.toContain('đóng bằng "Không thấy tiền" kèm lý do');
+    expect(flash.textContent).not.toContain('Báo cáo đã đóng');
+  });
+
   it('báo cáo đã được kế toán khác ghi nhận (API trả alreadyRecorded): không nói vừa ghi số mình nhập, nói sổ công nợ lần này không đổi', async () => {
     stub(page(ROWS), [REPORT], { balance: 2_000_000, entries: [], reportClosed: true, alreadyRecorded: true });
     const { container } = mount(<DealerAccountsTab />);

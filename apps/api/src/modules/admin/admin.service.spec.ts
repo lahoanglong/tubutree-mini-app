@@ -2515,9 +2515,11 @@ describe('AdminService.confirmOrderPayment', () => {
 
   it('đơn đã có khoản tiền về muộn (webhook Pancake ghi trước) → admin bấm không tạo khoản thứ hai (R2-ADMINOPS-3)', async () => {
     const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
-    const refunds = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock; findFirst: jest.Mock } }).orderCustomerRefund;
-    refunds.findFirst.mockResolvedValue({ id: 'r-pancake' });
+    const refunds = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock; findFirst: jest.Mock; update: jest.Mock } }).orderCustomerRefund;
+    refunds.findFirst.mockResolvedValue({ id: 'r-pancake', adminNote: null });
+    refunds.update = jest.fn().mockResolvedValue({});
     const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT-KHAC' });
+    expect(refunds.update).toHaveBeenCalledWith({ where: { id: 'r-pancake' }, data: { adminNote: 'Mã GD FT-KHAC' } });
     expect(res).toMatchObject({ ok: true, latePayment: true });
     expect(res.message).toContain('đã được ghi trước đó');
     expect(refunds.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'LATE_PAYMENT', refKey: undefined } }));

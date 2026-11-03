@@ -235,6 +235,24 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       expect(rows[0]).toMatchObject({ amount: 300_000, adminNote: expect.stringContaining('FT1') });
     });
 
+    it('khoản tiền về muộn đã có từ webhook: mã GD admin vừa gõ được gắn vào khoản đó, nên không dùng lại được cho đơn khác', async () => {
+      const order = await cancelledUnpaid();
+      expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p55:300000' })).toBe(true);
+      const ref = `FT-EXIST-${RUN}`;
+
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: ref });
+      // Gõ lại cùng mã không nối thêm lần nữa.
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: ref.toLowerCase() });
+
+      const rows = await lateRefunds(order.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].adminNote).toBe(`Mã GD ${ref}`);
+
+      const other = await bankTransferOrder();
+      await expect(admin.confirmOrderPayment('admin-b', other.order.id, { bankRef: ref })).rejects.toThrow(new RegExp(`tiền về muộn của đơn ${order.code}`));
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: other.order.id } })).paymentStatus).toBe('UNPAID');
+    });
+
     it('2 admin (mã GD khác nhau) + webhook Pancake cùng lúc → đúng 1 khoản hoàn', async () => {
       const orders = await Promise.all(Array.from({ length: 5 }, () => cancelledUnpaid(250_000)));
       const results = await Promise.allSettled(

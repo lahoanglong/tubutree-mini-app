@@ -84,6 +84,22 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
     }, undefined, 'order=TB100');
   });
 
+  it('khoản LATE_PAYMENT đang chuyển: ghi chú gõ thêm được NỐI vào adminNote cũ (giữ mã GD tiền vào), không ghi đè', async () => {
+    const { service, tx } = setup(pending({ kind: 'LATE_PAYMENT', status: 'PROCESSING', claimedBy: 'a1', adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT777' }));
+    Object.assign(tx, { $queryRaw: jest.fn().mockResolvedValue([]) });
+    Object.assign(tx.orderCustomerRefund, { findUnique: jest.fn().mockResolvedValue({ adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT777' }) });
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123', note: 'Đã chuyển lúc 10h' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT777 · Đã chuyển lúc 10h' }) }),
+    );
+  });
+
+  it('khoản không phải LATE_PAYMENT: ghi chú gõ vào vẫn là adminNote như trước', async () => {
+    const { service, tx } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123', note: 'Đã chuyển lúc 10h' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ adminNote: 'Đã chuyển lúc 10h' }) }));
+  });
+
   it('khoản chưa khoá bằng "Bắt đầu chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
     const { service, prisma, notifications } = setup();
     await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
