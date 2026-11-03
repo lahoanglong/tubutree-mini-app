@@ -82,7 +82,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
   };
   const onError = (e: unknown) => {
     const text = actionErrorText(e);
-    // Theo loại lỗi chứ không so chữ: 5xx vẫn mang lời tiếng Việt của máy chủ nhưng chưa chắc thao tác đã ghi hay chưa.
+    // Chữ của máy chủ không cho biết thao tác đã ghi hay chưa (5xx vẫn có thể mang lời tiếng Việt), nên khi lỗi không phải 4xx thì nhắc tải lại.
     const unsure = !(e instanceof ApiError) || e.status >= 500;
     setError(unsure ? `${text} Tải lại trang để xem trạng thái hiện tại.` : text);
   };

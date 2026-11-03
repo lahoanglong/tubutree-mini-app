@@ -1138,9 +1138,9 @@ export class MerchantFulfilmentService {
     if (flipped.count === 0) {
       if (payout.status === 'PAID') {
         if (isSameConfirmation(payout, adminId, ref)) return payout;
-        throw await alreadyPaidConflict(this.prisma, payout, { noun: 'Phiếu đối soát', collected: payout.amount < 0 });
+        throw await alreadyPaidConflict(this.prisma, payout, { noun: 'Phiếu đối soát', collected: payout.amount < 0, actorId: adminId });
       }
-      throw new ConflictException('Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
+      throw new ConflictException(payout.amount < 0 ? 'Phiếu đã bị huỷ, không đánh dấu đã thu được.' : 'Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
     }
     await this.notifyOwner(payout.storefront.ownerUserId, 'MERCHANT_PAYOUT_PAID', {
       amount: Math.abs(payout.amount).toLocaleString('vi-VN'),

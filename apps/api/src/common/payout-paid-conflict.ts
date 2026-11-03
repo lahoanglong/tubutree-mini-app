@@ -17,9 +17,16 @@ export type PaidConflictContext = {
   noun: 'Lệnh rút' | 'Phiếu đối soát';
   /** Phiếu âm: gian hàng nộp tiền cho Tubu, không có khoản nào chuyển đi để thu hồi. */
   collected?: boolean;
+  /** Người đang gọi. Trùng người đã xác nhận (nhưng mã GD khác) thì không phải "người khác chuyển trùng", nên không dặn thu hồi. */
+  actorId?: string;
 };
 
 export async function alreadyPaidConflict(prisma: UserNames, row: PaidRow, ctx: PaidConflictContext): Promise<ConflictException> {
+  if (ctx.actorId && row.paidBy === ctx.actorId) {
+    const when = row.paidAt ? ` lúc ${formatVnDateTime(row.paidAt)}` : '';
+    const code = row.bankRef ? ` với mã GD «${row.bankRef}»` : '';
+    return new ConflictException(`Bạn đã xác nhận khoản này${when}${code}. Không ghi lần hai; nếu mã GD sai, báo quản trị viên sửa.`);
+  }
   const holder = row.paidBy
     ? ((await prisma.user.findUnique({ where: { id: row.paidBy }, select: { fullName: true } }))?.fullName?.trim() || 'một quản trị viên khác')
     : 'một quản trị viên khác';

@@ -402,6 +402,22 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
   });
 
   it('ERR-03: 5xx mang lời tiếng Việt của máy chủ vẫn nhắc tải lại', async () => {
+    setup({ '/admin/merchant-fulfilment/payouts/mp1/paid': { status: 500, body: { statusCode: 500, message: 'Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.' } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    typeInto(root.querySelector('input')!, 'FT555');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const alert = root.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.');
+    expect(alert).toContain('Tải lại');
+  });
+
+  it("ERR-03: 5xx câu chung 'Lỗi cơ sở dữ liệu.' hiện câu chung của web và vẫn nhắc tải lại", async () => {
     setup({ '/admin/merchant-fulfilment/payouts/mp1/paid': { status: 500, body: { statusCode: 500, message: 'Lỗi cơ sở dữ liệu.' } } });
     const r = render(<MerchantFulfilmentTab />);
     mounted.push(r);
@@ -413,7 +429,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     answerConfirm(true);
     await flush();
     const alert = root.querySelector('[role="alert"]')?.textContent ?? '';
-    expect(alert).toContain('Lỗi cơ sở dữ liệu.');
+    expect(alert).toContain('Máy chủ đang bận, thử lại nhé.');
     expect(alert).toContain('Tải lại');
   });
 

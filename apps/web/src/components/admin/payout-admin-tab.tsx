@@ -253,8 +253,8 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
     },
     onError: (e, a) => {
       const text = actionErrorText(e);
-      // Theo loại lỗi chứ không so chữ: 5xx vẫn mang lời tiếng Việt của máy chủ nhưng chưa chắc thao tác đã ghi hay chưa;
-      // 4xx là lời nghiệp vụ đã nói rõ kết quả.
+      // Chữ của máy chủ không cho biết thao tác đã ghi hay chưa (5xx vẫn có thể mang lời tiếng Việt), nên cần nhắc tải lại khi
+      // lỗi không phải 4xx; 4xx là lời nghiệp vụ đã nói rõ kết quả.
       const unsure = !(e instanceof ApiError) || e.status >= 500;
       setErr(unsure ? `${text} ${a === 'markPaid' ? PAID_RELOAD_HINT : RELOAD_HINT}` : text);
       // Trạng thái có thể vừa bị admin khác đổi — tải lại để thấy trạng thái thật.

@@ -113,6 +113,19 @@ describe('PayoutRow — ERR-03: lỗi khi chi tiền', () => {
   });
 
   it('5xx mang lời tiếng Việt của máy chủ vẫn nhắc tải lại để xem lệnh đã sang "Đã chi" chưa', async () => {
+    const api = mockFetch({ '/mark-paid': { status: 500, body: { statusCode: 500, message: 'Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.' } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.');
+    expect(text).toContain('Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa');
+  });
+
+  it('5xx câu chung "Lỗi cơ sở dữ liệu." hiện câu chung của web và vẫn nhắc tải lại để xem lệnh đã sang "Đã chi" chưa', async () => {
     const api = mockFetch({ '/mark-paid': { status: 500, body: { statusCode: 500, message: 'Lỗi cơ sở dữ liệu.' } }, ...LIST });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
@@ -121,7 +134,7 @@ describe('PayoutRow — ERR-03: lỗi khi chi tiền', () => {
     answerConfirm(true);
     await flush();
     const text = container.textContent ?? '';
-    expect(text).toContain('Lỗi cơ sở dữ liệu.');
+    expect(text).toContain('Máy chủ đang bận, thử lại nhé.');
     expect(text).toContain('Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa');
   });
 
@@ -134,7 +147,7 @@ describe('PayoutRow — ERR-03: lỗi khi chi tiền', () => {
     answerConfirm(true);
     await flush();
     const text = container.textContent ?? '';
-    expect(text).toContain('Lỗi cơ sở dữ liệu.');
+    expect(text).toContain('Máy chủ đang bận, thử lại nhé.');
     expect(text).toContain('Tải lại danh sách để xem trạng thái hiện tại');
     expect(text).not.toContain('Đã chi');
   });

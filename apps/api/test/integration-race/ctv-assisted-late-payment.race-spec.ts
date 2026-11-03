@@ -174,7 +174,8 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
     const queue = await refunds.list('OPEN', 1, 100);
     expect(queue.data.map((r) => r.id)).toContain(rows[0]!.id);
 
-    // Admin xác nhận đã chuyển khoản theo SĐT khách cuối: không cần "Bắt đầu chuyển khoản", không cần tài khoản gõ sẵn.
+    // Khoản chuyển khoản tay nào cũng phải "Bắt đầu chuyển khoản" (claim) trước khi xác nhận đã chuyển (RC-01); riêng khoản của khách cuối
+    // không cần tài khoản gõ sẵn vì chuyển theo SĐT.
     const claimed = await refunds.claim(adminUser.id, rows[0]!.id);
     expect(claimed.status).toBe('PROCESSING');
     const done = await refunds.markPaid(adminUser.id, rows[0]!.id, { bankRef: 'FT-LATE-1' });

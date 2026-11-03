@@ -2352,7 +2352,7 @@ export class AffiliateService {
       const current = await this.prisma.payout.findUnique({ where: { id } });
       if (current?.status === 'PAID') {
         if (isSameConfirmation(current, adminId, opts.bankRef?.trim())) return current;
-        throw await alreadyPaidConflict(this.prisma, current, { noun: 'Lệnh rút' });
+        throw await alreadyPaidConflict(this.prisma, current, { noun: 'Lệnh rút', actorId: adminId });
       }
       const stale = opts.expectedAmount != null ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
       if (stale) throw stale;
