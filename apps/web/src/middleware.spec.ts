@@ -51,3 +51,16 @@ describe('middleware: Trang chủ cho khách đã có cookie phiên', () => {
     expect(rewriteOf(withCookie('tubu_web_session=1', '/san-pham'))).toBeNull();
   });
 });
+
+describe('middleware: slug dài vô lý không vào cache trang theo [slug]', () => {
+  it('slug > 120 ký tự trả 404 không cache; slug thường đi thẳng', () => {
+    const long = 'a'.repeat(121);
+    for (const base of ['san-pham', 'brand', 'chinh-sach', 's', 'mua-chung', 'chien-dich', 'hoc-vien']) {
+      const res = visit('tubutree.com', `/${base}/${long}`);
+      expect(res.status, base).toBe(404);
+      expect(res.headers.get('cache-control'), base).toBe('no-store');
+      expect(visit('tubutree.com', `/${base}/${'a'.repeat(120)}`).status, base).toBe(200);
+    }
+    expect(visit('tubutree.com', `/ctv/${long}`).status).toBe(200);
+  });
+});

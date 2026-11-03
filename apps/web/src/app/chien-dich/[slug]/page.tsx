@@ -9,6 +9,11 @@ import { CampaignBody } from '@/components/campaign/campaign-body';
 // Admin tắt chiến dịch không làm mới được trang này, nên hạn ngắn để chiến dịch đã tắt không còn hiện lâu; vẫn dựng phía server cho SEO.
 export const revalidate = 60;
 
+// Không dựng sẵn trang nào lúc build; trang đầu tiên của mỗi đường dẫn dựng khi có người vào rồi giữ theo revalidate (ISR thay vì dựng mỗi lượt).
+export function generateStaticParams() {
+  return [];
+}
+
 /** null chỉ khi API nói 404 (hết hạn, chưa mở, không có). API tạm lỗi thì ném: Next giữ bản đã render thay vì báo "đã kết thúc" nhầm. */
 async function loadCampaign(slug: string): Promise<CampaignDetail | null> {
   try {

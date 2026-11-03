@@ -3,6 +3,10 @@ import type { NextRequest } from 'next/server';
 import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
 import { tenantSubdomain } from './lib/tenant-subdomain';
 
+// Trang theo [slug] được Next giữ cache theo từng đường dẫn, kể cả 404: slug dài vô lý (bot dò) không được tạo thêm mục cache.
+const SLUG_ROUTE = /^\/(san-pham|brand|chinh-sach|s|mua-chung|chien-dich|hoc-vien)\/([^/]+)\/?$/;
+const MAX_SLUG_LENGTH = 120;
+
 export function middleware(request: NextRequest) {
   const host = request.headers.get('host') ?? '';
   const url = request.nextUrl;
@@ -16,6 +20,11 @@ export function middleware(request: NextRequest) {
     pathname.includes('.')
   ) {
     return NextResponse.next();
+  }
+
+  const slugRoute = SLUG_ROUTE.exec(pathname);
+  if (slugRoute && (slugRoute[2]?.length ?? 0) > MAX_SLUG_LENGTH) {
+    return new NextResponse('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
   }
 
   const subdomain = tenantSubdomain(host);
