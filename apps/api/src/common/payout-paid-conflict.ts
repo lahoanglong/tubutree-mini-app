@@ -17,7 +17,7 @@ export type PaidConflictContext = {
   noun: 'Lệnh rút' | 'Phiếu đối soát';
   /** Phiếu âm: gian hàng nộp tiền cho Tubu, không có khoản nào chuyển đi để thu hồi. */
   collected?: boolean;
-  /** Người đang gọi. Trùng người đã xác nhận (nhưng mã GD khác) thì không phải "người khác chuyển trùng", nên không dặn thu hồi. */
+  /** Người đang gọi. Trùng người đã xác nhận (nhưng mã GD khác) thì câu nói là chính bạn, chỉ dặn thu hồi có điều kiện. */
   actorId?: string;
 };
 
