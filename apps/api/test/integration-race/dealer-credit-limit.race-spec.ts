@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -95,5 +96,49 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
     expect(ledger._sum.delta ?? 0).toBeLessThanOrEqual(160_000);
     expect(s.fulfilled.length).toBeLessThanOrEqual(2);
     expect(s.fulfilled.length).toBeGreaterThanOrEqual(1);
+  });
+
+  const creditTier = async (creditLimit: number) => {
+    const tierId = `it-tier-${randCode(6)}`;
+    await prisma.dealerTier.create({
+      data: { id: tierId, name: 'IT', minOrderVolume: 0, discountRules: { default: 0.2 }, creditLimit },
+    });
+    return tierId;
+  };
+
+  it('6 đơn CREDIT đồng thời không key: chỉ 201 hoặc 503, không lỗi khác; công nợ khớp tổng đơn đã tạo', async () => {
+    const d = await createDealer(prisma, { metadata: { dealerTierId: await creditTier(100_000_000) } });
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, () =>
+        dealer.placeOrder(d.id, { items: [{ variationId, quantity: 1 }], paymentMethod: 'CREDIT' } as never),
+      ),
+    );
+    const s = summarize(results);
+    const unexpected = s.rejected.filter((r) => !(r.reason instanceof ServiceUnavailableException));
+    const orders = await prisma.order.findMany({ where: { userId: d.id }, select: { total: true } });
+    const ledger = await prisma.dealerCreditLedger.aggregate({ where: { userId: d.id }, _sum: { delta: true } });
+    console.log('[c23] fulfilled=%d busy=%d errors=%j', s.fulfilled.length, s.rejected.length, s.errors);
+    expect(unexpected).toEqual([]);
+    expect(s.fulfilled.length).toBeGreaterThanOrEqual(1);
+    expect(orders.length).toBe(s.fulfilled.length);
+    expect(ledger._sum.delta ?? 0).toBe(orders.reduce((sum, o) => sum + o.total, 0));
+  });
+
+  it('cùng Idempotency-Key gửi đồng thời 3 lần: đúng 1 đơn, mọi lần thành công trả cùng order id, không lần nào lỗi', async () => {
+    const d = await createDealer(prisma, { metadata: { dealerTierId: await creditTier(100_000_000) } });
+    const key = `it-key-${randCode(10)}`;
+    const results = await Promise.allSettled(
+      Array.from({ length: 3 }, () =>
+        dealer.placeOrder(d.id, { items: [{ variationId, quantity: 1 }], paymentMethod: 'CREDIT' } as never, key),
+      ),
+    );
+    const s = summarize(results);
+    const orders = await prisma.order.findMany({ where: { userId: d.id }, select: { id: true, total: true } });
+    const ledger = await prisma.dealerCreditLedger.aggregate({ where: { userId: d.id }, _sum: { delta: true } });
+    console.log('[c23] key fulfilled=%d rejected=%d errors=%j', s.fulfilled.length, s.rejected.length, s.errors);
+    expect(s.errors).toEqual([]);
+    expect(orders.length).toBe(1);
+    expect(new Set(s.fulfilled.map((r) => (r.value as { id: string }).id))).toEqual(new Set([orders[0]!.id]));
+    expect(ledger._sum.delta ?? 0).toBe(orders[0]!.total);
   });
 });
