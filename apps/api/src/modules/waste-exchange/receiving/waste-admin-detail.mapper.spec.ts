@@ -1,5 +1,12 @@
 import { NotFoundException } from '@nestjs/common';
+import { lotRecoverable } from '../../loyalty/loyalty-expiry.service';
 import { loadAdminRequestDetail, toAdminRequestDetail, type WasteAdminDetailRow } from './waste-admin-detail.mapper';
+
+jest.mock('../../loyalty/loyalty-expiry.service', () => ({
+  ...jest.requireActual('../../loyalty/loyalty-expiry.service'),
+  loadPointExpiryTxns: jest.fn().mockResolvedValue([]),
+  lotRecoverable: jest.fn(),
+}));
 
 const D = (s: string) => new Date(s);
 const row = (o: Record<string, unknown> = {}) =>
@@ -61,8 +68,11 @@ describe('toAdminRequestDetail lines', () => {
 });
 
 describe('loadAdminRequestDetail', () => {
+  let balance = 50_000;
+  beforeEach(() => { balance = 50_000; (lotRecoverable as jest.Mock).mockReturnValue(null); });
   const dbOf = (r: unknown) => ({
     wasteRequest: { findUnique: jest.fn(async () => r) },
+    user: { findUnique: jest.fn(async () => ({ pointsBalance: balance })) },
     wasteEvent: {
       findMany: jest.fn(async () => [{ id: 'e1', createdAt: D('2026-10-20T02:00:00Z'), kind: 'REQUEST_CONFIRMED', actorUserId: 's1', actorRole: 'STAFF', requestId: 'r1', pointId: 'wh', giftRedemptionId: null, meta: null }]),
     },
@@ -84,5 +94,23 @@ describe('loadAdminRequestDetail', () => {
     const staff = await loadAdminRequestDetail(staffDb as never, access as never, 'r1', false);
     expect(staff).not.toHaveProperty('events');
     expect(staffDb.wasteEvent.findMany).not.toHaveBeenCalled();
+  });
+
+  it('admin xem yêu cầu COMPLETED: reversePreview = số dư hiện tại và số điểm server sẽ trừ (min của đã cộng, lô còn thu hồi, số dư)', async () => {
+    (lotRecoverable as jest.Mock).mockReturnValue(6_000);
+    balance = 7_000;
+    const dto = await loadAdminRequestDetail(dbOf(row({ pointsAwarded: 8_000, reversedAt: null })) as never, access as never, 'r1', true);
+    expect(dto.reversePreview).toEqual({ pointsBalance: 7_000, expectedTake: 6_000 });
+    (lotRecoverable as jest.Mock).mockReturnValue(null);
+    balance = 3_000;
+    const low = await loadAdminRequestDetail(dbOf(row({ pointsAwarded: 8_000 })) as never, access as never, 'r1', true);
+    expect(low.reversePreview).toEqual({ pointsBalance: 3_000, expectedTake: 3_000 });
+  });
+
+  it('không có reversePreview cho nhân viên hoặc yêu cầu chưa COMPLETED', async () => {
+    const staff = await loadAdminRequestDetail(dbOf(row()) as never, access as never, 'r1', false);
+    expect(staff).not.toHaveProperty('reversePreview');
+    const open = await loadAdminRequestDetail(dbOf(row({ status: 'OPEN' })) as never, access as never, 'r1', true);
+    expect(open).not.toHaveProperty('reversePreview');
   });
 });

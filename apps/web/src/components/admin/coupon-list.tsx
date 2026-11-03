@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
+import { COUPON_END_PAST_MESSAGE, vnTodayKey } from '@/lib/admin-reports';
 import { useConfirm } from './confirm-dialog';
 import { CouponListing } from './coupon-listing';
 import { VnDateInput } from './vn-date-input';
@@ -44,23 +45,25 @@ function EndDateForm({
 }: {
   coupon: AdminCoupon;
   pending: boolean;
-  onCommit: (c: AdminCoupon, dayKey: string, onDone: () => void) => void;
+  onCommit: (c: AdminCoupon, dayKey: string, onDone: () => void) => void | Promise<void>;
 }) {
   const [day, setDay] = useState('');
   const [partial, setPartial] = useState(false);
+  const today = vnTodayKey();
+  const past = !!day && day < today;
   return (
     <form
       className="flex flex-wrap items-center gap-1 text-xs text-stone-600"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!pending && !partial) onCommit(c, day, () => setDay(''));
+        if (!pending && !partial && !past) onCommit(c, day, () => setDay(''));
       }}
     >
       <label className="flex items-center gap-1">
         Đổi hạn đến
-        <VnDateInput ariaLabel={`Đổi ngày hết hạn mã ${c.code}`} className={FIELD_XS} value={day} disabled={pending} onChange={setDay} onPendingChange={setPartial} />
+        <VnDateInput ariaLabel={`Đổi ngày hết hạn mã ${c.code}`} className={FIELD_XS} value={day} min={today} rangeMessage={COUPON_END_PAST_MESSAGE} disabled={pending} onChange={setDay} onPendingChange={setPartial} />
       </label>
-      <button type="submit" className={BTN_XS_SECONDARY} disabled={pending || partial || !day}>
+      <button type="submit" className={BTN_XS_SECONDARY} disabled={pending || partial || past || !day}>
         Lưu hạn
       </button>
     </form>
@@ -105,10 +108,19 @@ export function CouponList() {
     patch.mutate({ id: c.id, body: { isActive: !c.isActive }, done: c.isActive ? `Đã tắt mã ${c.code}.` : `Đã bật lại mã ${c.code}.` });
   };
 
-  const extend = (c: AdminCoupon, dayKey: string, onDone: () => void) => {
+  const extend = async (c: AdminCoupon, dayKey: string, onDone: () => void) => {
     if (!dayKey) return;
     setMsg(null);
     const endAt = new Date(`${dayKey}T23:59:59+07:00`).toISOString();
+    if (endAt < c.endAt) {
+      const ok = await confirm({
+        title: `Rút ngắn hạn mã ${c.code}`,
+        message: `Rút ngắn hạn: mã hết hạn sớm với cả khách đã nhận. Hạn mới đến hết ${formatDate(endAt)}.`,
+        confirmLabel: 'Rút ngắn hạn',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     patch.mutate({ id: c.id, body: { endAt }, done: `Đã đổi hạn mã ${c.code} đến hết ${formatDate(endAt)}.` }, { onSuccess: onDone });
   };
 

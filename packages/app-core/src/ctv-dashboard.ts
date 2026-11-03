@@ -79,15 +79,18 @@ export function transferHeroNote(auto = true, needsTaxId = false): string {
 }
 
 /**
- * Lượt tự chuyển bỏ qua CTV bị khấu trừ thuế TNCN mà chưa khai MST (máy chủ đòi MST ở lần bấm tay đầu). Ước tính riêng lần chuyển này
- * (máy chủ còn cộng dồn theo tháng); chưa tải được cấu hình thuế thì coi như không cần để màn không nói sai.
+ * Lượt tự chuyển bỏ qua CTV bị khấu trừ thuế TNCN mà chưa khai MST (máy chủ đòi MST ở lần bấm tay đầu). Máy chủ cộng dồn thuế theo
+ * tháng nên dùng `withdrawTaxPreview` của dashboard khi có; chỉ khi API cũ chưa trả số này mới ước tính riêng lần chuyển này từ
+ * cấu hình thuế (chưa tải được cấu hình thì coi như không cần để màn không nói sai).
  */
 export function needsTaxIdForAutoTransfer(
   transferable: number,
   pit: { pct: number; threshold: number } | undefined,
   taxIdOnFile: string | null | undefined,
+  withdrawTaxPreview?: number,
 ): boolean {
-  return payoutTax(transferable, pit) > 0 && !taxIdOnFile;
+  const tax = withdrawTaxPreview ?? payoutTax(transferable, pit);
+  return tax > 0 && !taxIdOnFile;
 }
 
 /** Thẻ "Việc đầu tiên" chỉ hiện cho CTV chưa có đơn nào: có chuyển đổi hoặc bất kỳ khoản hoa hồng nào là đã có đơn đầu. */

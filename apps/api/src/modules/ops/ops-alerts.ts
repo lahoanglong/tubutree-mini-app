@@ -19,6 +19,13 @@ export const OPS_THRESHOLD_KEYS: Record<keyof OpsThresholds, { key: string; fall
   gomdonBacklogMinutes: { key: 'ops.alert_gomdon_backlog_minutes', fallback: 15 },
 };
 
+/**
+ * Số tin ZNS FAILED trong 24 giờ để báo. Lỗi lẻ (số điện thoại sai, khách chặn OA) có hằng ngày nên không thể là 1; từ 5 tin
+ * trở lên thường là một nguyên nhân chung (token hết hạn, mẫu bị gỡ, hết hạn mức). Hằng số, không phải khoá `ops.*`, để
+ * không thêm khoá cấu hình mới; đổi ở đây nếu số khách thực tế khiến 5 là quá nhạy.
+ */
+export const ZNS_FAILED_24H_ALERT = 5;
+
 export interface CatalogRun {
   lastOkAt: string | null;
   lastErrorAt: string | null;
@@ -53,6 +60,8 @@ export interface ProblemInput {
     attentionRefs: string[];
   };
   queues: { ok: true; items: { name: string; failedLastHour: number }[] } | { ok: false; error: string };
+  /** Tin ZNS ghi FAILED trong 24 giờ qua (hết lượt thử hoặc lỗi vĩnh viễn) và lỗi gặp nhiều nhất. */
+  zns?: { failed24h: number; topError: string | null };
   orders: {
     /** Đơn đã giao quá thời gian chờ mà việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) chưa xong. */
     deliveredEffectsPending: number;
@@ -161,6 +170,12 @@ export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
         `${o.deliveredEffectsPending} đơn đã giao chưa xong việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) ` +
         `quá ${o.graceMinutes} phút${refList(o.deliveredEffectsRefs, o.deliveredEffectsPending)} — ${how.join('; ')}`,
       items: { count: o.deliveredEffectsPending, refs: o.deliveredEffectsRefs },
+    });
+  }
+  if (s.zns && s.zns.failed24h >= ZNS_FAILED_24H_ALERT) {
+    out.push({
+      key: 'zns.failed',
+      message: `${s.zns.failed24h} tin ZNS gửi hỏng trong 24 giờ qua${s.zns.topError ? ` — lỗi gặp nhiều nhất: ${s.zns.topError}` : ''}`,
     });
   }
   if (!s.queues.ok) {

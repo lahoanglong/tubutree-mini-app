@@ -44,11 +44,16 @@ import {
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CTV_NOTIFICATION } from './ctv-notification-codes';
+import { CTV_MILESTONE_REF_TYPE } from './ctv-milestone-ref';
+import {
+  confirmedMonthRevenue,
+  lockCtvForMilestones,
+  revokeLostCtvMilestones,
+} from './ctv-milestone-revoke';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { paginated, skipTake } from '../../common/pagination';
 import { normalizeZaloPhone, parseTypedVnPhone, TYPED_VN_PHONE_MESSAGE } from '../../common/phone';
 import {
-  CONFIRMED_COMMISSION_STATUSES,
   CTV_MONTHLY_MILESTONES,
   CTV_TIERS,
   PENDING_COMMISSION_STATUSES,
@@ -118,6 +123,8 @@ export const AFFILIATE_REAL_USER_REQUIRED_MSG =
   'Cần liên kết Zalo hoặc số điện thoại để đăng ký CTV. Bạn bấm Đăng ký lại và cho phép dùng số điện thoại nhé.';
 export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
 const PIT_MONTH_LOCK = 'affiliate.pit_month';
+/** Tin thu hồi mốc chỉ quét các lần thu hồi trong khoảng này (dedupeKey chặn gửi lặp). */
+const MILESTONE_REVOKE_NOTICE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 /** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
@@ -442,16 +449,8 @@ export class AffiliateService {
    * có approvedAt trong tháng. Định nghĩa DUY NHẤT cho dashboard/getMe/bậc/mốc/claim — UI không
    * bao giờ hiện "nhận được" mà claim lại từ chối (hoặc ngược lại). Nhận `db` để claim đọc CÙNG tx.
    */
-  private async confirmedRevenue(db: Db, userId: string, month: VnMonth): Promise<number> {
-    const agg = await db.commission.aggregate({
-      where: {
-        affiliateUserId: userId,
-        status: { in: [...CONFIRMED_COMMISSION_STATUSES] },
-        approvedAt: { gte: month.start, lt: month.end },
-      },
-      _sum: { commissionableTotal: true },
-    });
-    return agg._sum.commissionableTotal ?? 0;
+  private confirmedRevenue(db: Db, userId: string, month: VnMonth): Promise<number> {
+    return confirmedMonthRevenue(db, userId, month);
   }
 
   /**
@@ -1206,10 +1205,63 @@ export class AffiliateService {
         .notify(uid, CTV_NOTIFICATION.REVERSED, { amount: vnd(amount) })
         .catch((e: unknown) => this.logger.warn(`Báo thu hồi hoa hồng đơn ${orderId} lỗi: ${(e as Error).message}`));
     }
+    await this.notifyMilestoneRevokes();
     await this.alertPaidCommissionOfReversedOrder(orderId, order.code, {
       debited: outcomes.flatMap(({ kind, ...note }) => (kind === 'DEBITED' ? [note as CommissionDebitNote] : [])),
       manual: outcomes.flatMap((o) => (o.kind === 'MANUAL' ? [{ affiliateUserId: o.affiliateUserId, amount: o.amount, reason: o.reason }] : [])),
     });
+  }
+
+  /**
+   * Báo CTV mốc doanh số bị thu hồi điểm (CTV-01): một tin cho mỗi lần đảo (dedupeKey theo CTV + revokedAt chung của các claim bị thu). Quét các claim
+   * thu hồi gần đây thay vì nhận kết quả từ tx vì đường trả một phần commit ở orders; gọi sau commit và từ cron duyệt hoa hồng để
+   * lần gửi lỗi được thử lại. Lỗi chỉ ghi log, không chặn việc đảo.
+   */
+  async notifyMilestoneRevokes(now: Date = new Date()): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const claims = await this.prisma.ctvMilestoneClaim.findMany({
+        where: { revokedAt: { gte: new Date(now.getTime() - MILESTONE_REVOKE_NOTICE_WINDOW_MS) } },
+        select: { id: true, userId: true, milestoneId: true, monthKey: true, revokedAt: true, revokeDebt: true, revokeTaken: true },
+      });
+      const currentMonthKey = vnMonthBounds(now).key;
+      // Các claim thu trong cùng một lần đảo chung revokedAt: gộp thành một tin cho mỗi (CTV, lần đảo).
+      const batches = new Map<string, typeof claims>();
+      for (const c of claims) {
+        if (c.revokedAt === null || !CTV_MONTHLY_MILESTONES.some((m) => m.id === c.milestoneId)) continue;
+        const key = `${c.userId}:${c.revokedAt.getTime()}`;
+        batches.set(key, [...(batches.get(key) ?? []), c]);
+      }
+      for (const [key, batch] of batches) {
+        const taken = batch.reduce((sum, c) => sum + c.revokeTaken, 0);
+        const debt = batch.reduce((sum, c) => sum + c.revokeDebt, 0);
+        if (taken === 0 && debt === 0) continue;
+        const first = batch[0]!;
+        const isCurrentMonth = first.monthKey === currentMonthKey;
+        const titles = batch.map((c) => CTV_MONTHLY_MILESTONES.find((m) => m.id === c.milestoneId)!.title);
+        await this.notifications
+          .notify(
+            first.userId,
+            CTV_NOTIFICATION.MILESTONE_REVOKED,
+            {
+              month: `${first.monthKey.slice(5, 7)}/${first.monthKey.slice(0, 4)}`,
+              milestone: titles.join(' và '),
+              points: taken.toLocaleString('vi-VN'),
+              // Chỉ tháng này và tháng trước nhận được mốc, và hoa hồng chỉ được duyệt vào tháng hiện tại: tháng đã qua thì doanh số
+              // không tăng lại nên không hứa nhận lại.
+              debt_note:
+                debt > 0
+                  ? ` (còn ${debt.toLocaleString('vi-VN')} điểm chưa thu hết vì số dư thiếu${isCurrentMonth ? ', sẽ trừ khi bạn nhận lại mốc' : ''})`
+                  : '',
+              reclaim_note: isCurrentMonth ? ' Doanh số lên lại ngưỡng thì bạn nhận lại được.' : '',
+            },
+            { dedupeKey: `ctv-milestone-revoke:${key}` },
+          )
+          .catch((e: unknown) => this.logger.warn(`Báo thu hồi thưởng mốc ${first.id} lỗi: ${(e as Error).message}`));
+      }
+    } catch (err) {
+      this.logger.warn(`Quét báo thu hồi thưởng mốc lỗi: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   private reverseCommission(commissionId: string, orderCode: string, cause: 'huỷ đơn' | 'trả hàng'): Promise<CommissionReversal> {
@@ -1218,9 +1270,9 @@ export class AffiliateService {
       // bên tuần tự: hoặc ta thấy APPROVED chưa chuyển (đổi REJECTED, requestPayout sau đó báo "dữ liệu đã thay đổi" và thử lại),
       // hoặc ta thấy PAID đã kèm dòng cộng Ví.
       const [row] = await tx.$queryRaw<
-        { affiliateUserId: string; amount: number; status: CommissionStatus; payoutBatchId: string | null; walletPayoutId: string | null; paidAt: Date | null }[]
+        { affiliateUserId: string; amount: number; status: CommissionStatus; payoutBatchId: string | null; walletPayoutId: string | null; paidAt: Date | null; approvedAt: Date | null }[]
       >`
-        SELECT "affiliateUserId", "amount", "status", "payoutBatchId", "walletPayoutId", "paidAt" FROM "commissions" WHERE "id" = ${commissionId} FOR NO KEY UPDATE`;
+        SELECT "affiliateUserId", "amount", "status", "payoutBatchId", "walletPayoutId", "paidAt", "approvedAt" FROM "commissions" WHERE "id" = ${commissionId} FOR NO KEY UPDATE`;
       if (!row) return { kind: 'NONE' };
       const holding = commissionHolding(row);
       if (holding === 'REJECTED') return { kind: 'NONE' };
@@ -1234,9 +1286,12 @@ export class AffiliateService {
         });
         if (!debit.debited) return { kind: 'MANUAL', affiliateUserId: row.affiliateUserId, amount: row.amount, reason: debit.reason };
         await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
+        await revokeLostCtvMilestones(tx, row.affiliateUserId, row.approvedAt);
         return { kind: 'DEBITED', ...debit.note };
       }
       await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
+      // Chỉ hoa hồng đã chốt (có approvedAt) nằm trong doanh số tháng; PENDING/LOCKED rời đi thì doanh số không đổi.
+      await revokeLostCtvMilestones(tx, row.affiliateUserId, row.approvedAt);
       return { kind: 'REJECTED', affiliateUserId: row.affiliateUserId, amount: row.amount };
     });
   }
@@ -1257,6 +1312,8 @@ export class AffiliateService {
     orderCode: string,
     opts: { returnRequestId?: string; debited?: CommissionDebitNote[]; manual?: CommissionManualNote[] } = {},
   ): Promise<void> {
+    // Đường trả một phần cắt hoa hồng (và thu hồi mốc) trong commit của orders; đường này chạy sau commit nên báo CTV mốc bị thu ở đây.
+    if (opts.returnRequestId) await this.notifyMilestoneRevokes();
     try {
       const debited = opts.debited ?? [];
       const manual = opts.manual ?? [];
@@ -1382,7 +1439,7 @@ export class AffiliateService {
     let result: { credited: number; count: number };
     try {
       result = await this.prisma.$transaction(async (tx) => {
-        // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
+        // Một mốc giờ cho khoá, khung tháng cộng dồn, requestedAt và paidAt (báo cáo thuế gom theo paidAt): lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
         const now = new Date();
         await this.lockPitMonth(tx, userId, now);
         // Khoá dòng khi đọc: lần trả một phần cắt amount của hoa hồng APPROVED giữ khoá tới lúc commit. Đọc không khoá thì thấy amount
@@ -1402,7 +1459,7 @@ export class AffiliateService {
         const payoutId = randomUUID();
         const marked = await tx.commission.updateMany({
           where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-          data: { status: 'PAID', paidAt: new Date(), walletPayoutId: payoutId },
+          data: { status: 'PAID', paidAt: now, walletPayoutId: payoutId },
         });
         if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
         // marked.count !== rows.length nghĩa là 1 phần row đã bị thay đổi (status/payoutBatchId)
@@ -1425,7 +1482,7 @@ export class AffiliateService {
             method,
             status: 'PAID',
             requestedAt: now,
-            paidAt: new Date(),
+            paidAt: now,
             idempotencyKey: key,
           },
         });
@@ -1506,6 +1563,7 @@ export class AffiliateService {
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },
       );
+      await this.notifyMilestoneRevokes(now);
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -1619,8 +1677,10 @@ export class AffiliateService {
         } catch (err) {
           const code = (err as { response?: { code?: string } }).response?.code;
           const msg = err instanceof Error ? err.message : String(err);
-          if (code === PIT_TAX_ID_REQUIRED) this.logger.log(`Chưa tự chuyển hoa hồng của ${userId} vào Ví: cần mã số thuế, chờ CTV bấm Chuyển vào Ví.`);
-          else {
+          if (code === PIT_TAX_ID_REQUIRED) {
+            this.logger.log(`Chưa tự chuyển hoa hồng của ${userId} vào Ví: cần mã số thuế, chờ CTV bấm Chuyển vào Ví.`);
+            await this.notifyTaxIdNeeded(userId, total);
+          } else {
             // Từ chối nghiệp vụ (đã bị bấm tay trước, dữ liệu vừa đổi) là ca bỏ qua có chủ ý; còn lại (DB chập...) là lỗi thật.
             // Log error chỉ cho lỗi thật: CronAwareLogger đếm log error để báo admin, nên từ chối nghiệp vụ chỉ warn.
             if (err instanceof HttpException) this.logger.warn(`Tự chuyển hoa hồng của ${userId} vào Ví bị từ chối: ${msg}`);
@@ -1641,6 +1701,22 @@ export class AffiliateService {
       return { credited, ok: false };
     }
     return { credited, ok: true };
+  }
+
+  /** Lượt 8:00 bỏ qua CTV vì thuế cộng dồn tháng cần MST: báo một lần mỗi tháng VN (dedupeKey theo CTV + tháng), không báo mỗi ngày. */
+  private async notifyTaxIdNeeded(userId: string, amount: number): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const month = vnMonthBounds(new Date()).key;
+      await this.notifications.notify(
+        userId,
+        CTV_NOTIFICATION.TAX_ID_NEEDED,
+        { amount: vnd(amount), month: `${month.slice(5, 7)}/${month.slice(0, 4)}` },
+        { dedupeKey: `commission-tax-id:${userId}:${month}` },
+      );
+    } catch (err) {
+      this.logger.warn(`Báo CTV ${userId} cần mã số thuế lỗi: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   /** Tiền đã vào Ví xong: thông báo hỏng không được làm hỏng vòng chuyển của CTV khác (chỉ log). */
@@ -1923,18 +1999,24 @@ export class AffiliateService {
       }),
       this.prisma.ctvMilestoneClaim.findMany({
         where: { userId, monthKey: { in: [cur.key, prev.key] } },
-        select: { milestoneId: true, monthKey: true },
+        select: { milestoneId: true, monthKey: true, revokedAt: true, revokeDebt: true, rewardPoints: true },
       }),
       this.effectiveHoldDays(),
     ]);
 
-    const claimed = new Set(claims.map((c) => `${c.milestoneId}:${c.monthKey}`));
+    // Mốc đã bị thu hồi điểm (CTV-01) không còn là "đã nhận": doanh số lên lại thì nhận lại được.
+    const claimed = new Set(claims.filter((c) => !c.revokedAt).map((c) => `${c.milestoneId}:${c.monthKey}`));
+    // Nhận lại chỉ được phần chưa bị nợ trừ (claimMilestone), nên màn hiện đúng số đó thay vì số đầy đủ của mốc.
+    const reclaimPoints = new Map<string, number>(
+      claims.filter((c) => c.revokedAt && c.revokeDebt > 0).map((c): [string, number] => [`${c.milestoneId}:${c.monthKey}`, Math.max(0, c.rewardPoints - c.revokeDebt)]),
+    );
     const build = (monthKey: string, revenue: number) =>
       CTV_MONTHLY_MILESTONES.map((m) => {
         const achieved = revenue >= m.threshold;
         const isClaimed = claimed.has(`${m.id}:${monthKey}`);
         return {
           ...m,
+          rewardPoints: reclaimPoints.get(`${m.id}:${monthKey}`) ?? m.rewardPoints,
           achieved,
           claimed: isClaimed,
           canClaim: achieved && !isClaimed,
@@ -1986,11 +2068,49 @@ export class AffiliateService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        // Khoá CTV trước khi đọc doanh số: lần đảo hoa hồng chạy song song commit sau khi ta đọc doanh số cũ sẽ không thấy claim
+        // chưa commit này và không thu lại được thưởng (xem revokeLostCtvMilestones).
+        await lockCtvForMilestones(tx, userId);
         const revenue = await this.confirmedRevenue(tx, userId, month);
         if (revenue < milestone.threshold) {
           throw new BadRequestException(
             `Doanh số đã chốt tháng ${month.key} (${revenue.toLocaleString('vi-VN')}đ) chưa đạt ngưỡng ${milestone.threshold.toLocaleString('vi-VN')}đ.`,
           );
+        }
+
+        // Mốc đã nhận nhưng bị thu hồi điểm (CTV-01): nhận lại trên cùng dòng claim, trừ phần nợ chưa thu hết lần trước.
+        const existing = await tx.ctvMilestoneClaim.findUnique({
+          where: { userId_milestoneId_monthKey: { userId, milestoneId: milestone.id, monthKey: month.key } },
+          select: { id: true, revokedAt: true, revokeCount: true, revokeDebt: true, rewardPoints: true },
+        });
+        if (existing) {
+          if (!existing.revokedAt) throw new BadRequestException('Bạn đã nhận thưởng mốc này rồi.');
+          const reopened = await tx.ctvMilestoneClaim.updateMany({
+            where: { id: existing.id, revokedAt: { not: null } },
+            data: { revokedAt: null, revokeDebt: 0, revenue },
+          });
+          if (reopened.count !== 1) throw new BadRequestException('Bạn đã nhận thưởng mốc này rồi.');
+          const points = Math.max(0, existing.rewardPoints - existing.revokeDebt);
+          if (points > 0) {
+            await this.rewards.grant(
+              userId,
+              points,
+              `${reason}#${existing.revokeCount}`,
+              CTV_MILESTONE_REF_TYPE,
+              existing.id,
+              tx,
+              expiresAt,
+            );
+          }
+          return {
+            success: true,
+            message:
+              existing.revokeDebt > 0
+                ? `Bạn nhận lại ${points.toLocaleString('vi-VN')} Điểm Xanh từ ${milestone.title} (đã trừ ${existing.revokeDebt.toLocaleString('vi-VN')} điểm chưa thu hết lần trước).`
+                : `Chúc mừng bạn đã nhận lại ${points.toLocaleString('vi-VN')} Điểm Xanh từ ${milestone.title}!`,
+            rewardPoints: points,
+            monthKey: month.key,
+          };
         }
 
         // Insert claim TRƯỚC khi cấp điểm: grant nuốt trùng khoá của chính nó (trả false) nên không
@@ -2005,7 +2125,7 @@ export class AffiliateService {
             revenue,
           },
         });
-        await this.rewards.grant(userId, milestone.rewardPoints, reason, 'AFFILIATE_MILESTONE', claim.id, tx, expiresAt);
+        await this.rewards.grant(userId, milestone.rewardPoints, reason, CTV_MILESTONE_REF_TYPE, claim.id, tx, expiresAt);
 
         return {
           success: true,
@@ -2112,7 +2232,7 @@ export class AffiliateService {
     const why = reason?.trim();
     if (!why) throw new BadRequestException('Nhập lý do từ chối.');
 
-    let revoked: { id: string; affiliateUserId: string; amount: number }[] = [];
+    let revoked: { id: string; affiliateUserId: string; amount: number; approvedAt: Date | null }[] = [];
     const rejected = await this.prisma.$transaction(async (tx) => {
       // userId/requestedAt không đổi sau khi tạo lệnh nên đọc trước được. Lệnh rút hoa hồng lấy khoá (CTV, tháng) TRƯỚC khi ghi
       // gì, cùng thứ tự với requestPayout, để từ chối và rút mới cùng tháng không giành khoá ngược nhau.
@@ -2132,7 +2252,7 @@ export class AffiliateService {
 
       const linkedCommissions = await tx.commission.findMany({
         where: { payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
-        select: { id: true, orderId: true, affiliateUserId: true, amount: true },
+        select: { id: true, orderId: true, affiliateUserId: true, amount: true, approvedAt: true },
       });
       if (linkedCommissions.length > 0) {
         // Nguồn 2 (requestPayout nhánh BANK): trả các commission liên quan về APPROVED, gỡ batch
@@ -2160,6 +2280,9 @@ export class AffiliateService {
             where: { id: { in: revoked.map((c) => c.id) }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
             data: { status: 'REJECTED', payoutBatchId: null, paidAt: null },
           });
+          // Hoa hồng đã chốt rời doanh số tháng: mốc đã nhận mà doanh số nay dưới ngưỡng bị thu (CTV-01).
+          const months = new Map(revoked.filter((c) => c.approvedAt).map((c) => [`${c.affiliateUserId}:${vnMonthBounds(c.approvedAt!).key}`, c]));
+          for (const c of months.values()) await revokeLostCtvMilestones(tx, c.affiliateUserId, c.approvedAt);
         }
       } else {
         // Nguồn 1 (wallet.service.ts:withdraw): hoàn GROSS đã bị trừ — Payout.amount lưu NET
@@ -2187,6 +2310,7 @@ export class AffiliateService {
       await this.notifications
         ?.notify(rejected.userId, CTV_NOTIFICATION.REVERSED, { amount: vnd(revokedTotal) })
         .catch((e: unknown) => this.logger.warn(`Báo thu hồi hoa hồng của lệnh rút ${id} lỗi: ${(e as Error).message}`));
+      await this.notifyMilestoneRevokes();
     }
     return rejected;
   }

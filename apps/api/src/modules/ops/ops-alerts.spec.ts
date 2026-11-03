@@ -28,6 +28,24 @@ const healthy: ProblemInput = {
   orders: { deliveredEffectsPending: 0, deliveredEffectsRefs: [], deliveredEffectsStale: 0, graceMinutes: 10, windowDays: 14 },
 };
 
+describe('opsProblems: tin ZNS hỏng 24 giờ', () => {
+  it('dưới ngưỡng 5 → không báo; từ 5 → problem zns.failed kèm lỗi gặp nhiều nhất', () => {
+    expect(opsProblems({ ...healthy, zns: { failed24h: 4, topError: 'x' } }, T)).toEqual([]);
+    const [p] = opsProblems({ ...healthy, zns: { failed24h: 9, topError: 'ZNS lỗi -124: token hết hạn' } }, T);
+    expect(p!.key).toBe('zns.failed');
+    expect(p!.message).toContain('9 tin ZNS');
+    expect(p!.message).toContain('-124');
+  });
+
+  it('số tin hỏng tăng giữa hai lượt không báo dồn: chỉ nhắc lại sau repeatHours', () => {
+    const t0 = new Date('2026-11-03T00:00:00Z');
+    const first = decideAlert(null, opsProblems({ ...healthy, zns: { failed24h: 5, topError: null } }, T), t0, 6);
+    expect(first.send).toBe('ALERT');
+    const next = decideAlert(first.next, opsProblems({ ...healthy, zns: { failed24h: 40, topError: null } }, T), new Date(t0.getTime() + 600_000), 6);
+    expect(next.send).toBeNull();
+  });
+});
+
 describe('opsProblems (PLATFORM-5)', () => {
   it('mọi thứ bình thường → không có sự cố', () => {
     expect(opsProblems(healthy, T)).toEqual([]);
