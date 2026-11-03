@@ -3,6 +3,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { registeredCronJobNames, setCronRunSink, type CronRunReport, type CronRunSink } from '../../common/cron-run/track-cron';
 import { firstNonEmptyLine } from '../../common/cron-run/cron-aware-logger';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DAILY_WALLET_TRANSFER_JOB } from '../affiliate/affiliate-auto-transfer-config';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const ALERT_EVERY_MS = 6 * 3_600_000;
@@ -35,6 +36,9 @@ export function describeCronError(err: unknown): string {
  * chỉ leader ghi. Lần chạy hỏng = ném lỗi hoặc có log error (xem track-cron.ts). Báo admin qua OPS_CRON_FAILED khi số lần
  * hỏng liên tiếp đạt `alertAfter` của job (mặc định 1), tối đa một lần mỗi job mỗi 6 giờ.
  */
+/** Dòng mốc do mã tự ghi vào cron_runs (không có @TrackCron nên không nằm trong danh sách job đăng ký) mà màn Sức khoẻ vẫn hiện. */
+export const CRON_MARKER_JOBS: ReadonlySet<string> = new Set([DAILY_WALLET_TRANSFER_JOB]);
+
 @Injectable()
 export class CronRunService implements OnModuleInit, CronRunSink {
   private readonly logger = new Logger(CronRunService.name);
@@ -116,7 +120,7 @@ export class CronRunService implements OnModuleInit, CronRunSink {
     const all = await this.prisma.cronRun.findMany({ orderBy: { job: 'asc' } });
     // Job đã đổi tên hoặc gỡ khỏi mã không bao giờ chạy lại, nên dòng lỗi cuối của nó làm banner lỗi không tắt: chỉ liệt kê job còn khai báo.
     const live = registeredCronJobNames();
-    const rows = live.size === 0 ? all : all.filter((r) => live.has(r.job));
+    const rows = live.size === 0 ? all : all.filter((r) => live.has(r.job) || CRON_MARKER_JOBS.has(r.job));
     const iso = (d: Date | null) => (d ? d.toISOString() : null);
     return rows.map((r) => ({
       job: r.job,

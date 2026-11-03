@@ -181,6 +181,13 @@ describe('CronRunService.list', () => {
     expect((await svc.list()).map((r) => r.job)).toEqual(['A.x', 'A.y']);
   });
 
+  it('dòng mốc do mã tự ghi (dailyWalletTransfer, không có @TrackCron) vẫn được liệt kê', async () => {
+    const { svc } = build();
+    await svc.record(ok('A.x', 0));
+    await svc.record(ok('AffiliateService.dailyWalletTransfer', 0));
+    expect((await svc.list()).map((r) => r.job)).toEqual(['A.x', 'AffiliateService.dailyWalletTransfer']);
+  });
+
   it('trả các dòng ở dạng chuỗi ISO cho màn admin', async () => {
     const { svc } = build();
     await svc.record(threw('A.x', 0));
