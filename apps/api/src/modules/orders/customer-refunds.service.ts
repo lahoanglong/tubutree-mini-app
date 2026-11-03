@@ -4,8 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { anonymizedAtOf, creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { canRefundToBank, formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
-import { OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
+import { OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
 import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD, removeAttentionReason } from '../integrations/pancake/pancake-attention';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
@@ -437,13 +438,21 @@ export class CustomerRefundsService {
       if (heldReturn) {
         await this.settleHeldReturn(tx, row.orderId);
         // Đơn trả bằng Ví chỉ được hoàn về Ví (canRefundToBank): không để khách chọn ngân hàng như đơn chuyển khoản.
-        const paidBy = await tx.order.findUniqueOrThrow({ where: { id: row.orderId }, select: { paymentMethod: true } });
-        if (row.userId && !canRefundToBank(paidBy.paymentMethod)) {
+        const paidBy = await tx.order.findUniqueOrThrow({
+          where: { id: row.orderId },
+          select: { paymentMethod: true, endCustomerKey: true, shippingAddress: true },
+        });
+        // Tài khoản đã xoá: Ví đã về 0 và không ai đăng nhập được để chọn nơi nhận, tiền cộng vào là mất. Khoản ở lại PENDING cho Kế toán
+        // chuyển tay, không chủ tài khoản (như holdRefundForDeletedAccount), SĐT lấy từ đơn.
+        const detachFromDeletedAccount = async () => {
+          const { phone, recipientName } = endCustomerPayee(paidBy);
           await tx.orderCustomerRefund.update({
             where: { id },
-            data: { method: 'WALLET', status: 'COMPLETED', customerUserId: row.userId, completedAt: new Date() },
+            data: { userId: null, customerUserId: null, phone: phone || row.phone, recipientName: recipientName || row.recipientName, method: 'MANUAL_TRANSFER' },
           });
-          await applyWalletDelta(tx, {
+        };
+        if (row.userId && !canRefundToBank(paidBy.paymentMethod)) {
+          const credit = await creditWalletUnlessAnonymized(tx, {
             userId: row.userId,
             delta: amount,
             type: 'ORDER_REFUND',
@@ -451,7 +460,18 @@ export class CustomerRefundsService {
             refId: id,
             reason: `Hoàn tiền đơn ${row.orderCode}`,
           });
-          creditedToWallet = true;
+          if (credit.credited) {
+            await tx.orderCustomerRefund.update({
+              where: { id },
+              data: { method: 'WALLET', status: 'COMPLETED', customerUserId: row.userId, completedAt: new Date() },
+            });
+            creditedToWallet = true;
+          } else {
+            await detachFromDeletedAccount();
+          }
+        } else if (row.userId) {
+          const owner = await tx.user.findUnique({ where: { id: row.userId }, select: { metadata: true } });
+          if (anonymizedAtOf(owner?.metadata)) await detachFromDeletedAccount();
         }
       }
       return true;

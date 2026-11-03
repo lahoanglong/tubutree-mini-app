@@ -327,7 +327,11 @@ export class AccountDeletionService {
         _count: { _all: true },
       }),
       db.orderCustomerRefund.findMany({
-        where: { status: { in: ['PENDING', 'PROCESSING'] }, OR: [{ customerUserId: { in: ids } }, { order: { userId: { in: ids } } }] },
+        where: {
+          // UNVERIFIED trả hàng (COD, hoặc đơn trả trước bị giữ chờ Kế toán) là tiền khách còn có thể được hoàn: xoá ẩn danh lúc này làm khoản mất chủ.
+          OR: [{ status: { in: ['PENDING', 'PROCESSING'] } }, { status: 'UNVERIFIED', kind: 'RETURN' }],
+          AND: [{ OR: [{ customerUserId: { in: ids } }, { order: { userId: { in: ids } } }] }],
+        },
         select: { customerUserId: true, order: { select: { userId: true } } },
       }),
       db.subscription.groupBy({

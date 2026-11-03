@@ -517,7 +517,7 @@ export class OrderStatusService {
         (reason ? ` Lý do: ${reason.replace(/[.\s]+$/, '')}.` : '') +
         refundNote(r?.refund ?? null, null, (r?.pointsRefunded ?? 0) + standardPointsBack) +
         // Đơn trả trước bị giữ tiền chờ Kế toán: khách đã trả tiền nên không để im, nhưng chưa được nói "đã hoàn".
-        ((r?.withheldRefund ?? 0) > 0 ? ' Tubu đang đối soát khoản thanh toán của đơn này, nếu có tiền hoàn bạn sẽ được báo.' : '') +
+        ((r?.withheldRefund ?? 0) > 0 ? ' Tubu đang đối soát khoản thanh toán của đơn này, nếu có tiền hoàn, khoản đó sẽ hiện ở chi tiết đơn để bạn chọn nơi nhận.' : '') +
         (noteCarriesRefund ? receivedRefundNote(receivedBack, order.placedForCustomer) : '');
     }
     if (targetStatus === 'DELIVERED') {

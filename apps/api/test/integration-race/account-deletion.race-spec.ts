@@ -356,6 +356,15 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     await expectBlocked(b.request.id, b.user.id, /hoàn tiền/i);
   });
 
+  it('chặn khi còn khoản trả hàng chờ Kế toán đối soát (UNVERIFIED), kể cả khoản đơn trả trước bị giữ', async () => {
+    const { user, request } = await customerWithRequest({});
+    const order = await createOrder(prisma, { userId: user.id, status: 'RETURNED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 100_000 });
+    await prisma.orderCustomerRefund.create({
+      data: { orderId: order.id, orderCode: order.code, kind: 'RETURN', refKey: 'pancake-partial-return-held', userId: user.id, amount: 100_000, method: 'MANUAL_TRANSFER', status: 'UNVERIFIED', reason: 'RETURNED' },
+    });
+    await expectBlocked(request.id, user.id, /hoàn tiền/i);
+  });
+
   it('PD-3: chặn khi còn Điểm Xanh quy đổi (không hết hạn, không quy ra tiền) chưa dùng', async () => {
     const { user, request } = await customerWithRequest({ pointsConvertedBalance: 3 });
     const body = await expectBlocked(request.id, user.id, /còn 3 Điểm Xanh không hết hạn chưa dùng/);

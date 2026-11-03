@@ -121,6 +121,9 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
     const data = notify.mock.calls.map((c) => c[2] as Record<string, string>).find((d) => d.order_code === order.code)!;
     expect(data.refund_note).toContain('đối soát');
     expect(data.refund_note).not.toContain('Đã hoàn');
+    // Lời hứa phải đúng thật: khi Kế toán xác nhận, khoản hiện ở chi tiết đơn để khách chọn nơi nhận (không có tin riêng).
+    expect(data.refund_note).toContain('chi tiết đơn');
+    expect(data.refund_note).not.toContain('sẽ được báo');
   });
 
   it('đơn COD: 15 rồi 5 → Ví không đổi, khoản COD chờ Kế toán đủ tiền, ô có cả dòng COD và dòng mới', async () => {
@@ -280,6 +283,41 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       expect((await orderOf(order.id)).paymentStatus).toBe('REFUNDED');
       await expect(refunds.verifyOverpayment(accountant.id, row.id, {})).rejects.toThrow('không còn chờ đối soát');
       expect(await walletOf(user.id)).toBe(250_000);
+    });
+
+    it('tài khoản chủ đơn đã xoá (ẩn danh) trước khi Kế toán xác nhận: đơn trả bằng Ví KHÔNG cộng vào Ví ẩn danh, khoản ở PENDING chuyển tay không chủ tài khoản', async () => {
+      const accountant = await createUser(prisma, { role: 'ADMIN' });
+      const { user, order, event } = await deliveredOrder('WALLET', 300_000, { endCustomerKey: '0900000111' });
+      await processor.onStatusUpdated(event(PARTIAL));
+      await processor.onStatusUpdated(event(RETURNED));
+      const row = (await rowsOf(order.id))[0]!;
+      await prisma.user.update({ where: { id: user.id }, data: { metadata: { anonymizedAt: new Date().toISOString() } } });
+
+      await refunds.verifyOverpayment(accountant.id, row.id, { amount: 250_000 });
+
+      expect(await walletOf(user.id)).toBe(0);
+      expect(await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({
+        status: 'PENDING',
+        method: 'MANUAL_TRANSFER',
+        userId: null,
+        customerUserId: null,
+        phone: '0900000111',
+        amount: 250_000,
+      });
+      expect(notify.mock.calls.some((c) => c[1] === 'REFUND_WALLET_CREDITED')).toBe(false);
+    });
+
+    it('tài khoản chủ đơn đã xoá, đơn chuyển khoản: khoản xác nhận cũng bỏ chủ tài khoản (khách không còn để chọn nơi nhận)', async () => {
+      const accountant = await createUser(prisma, { role: 'ADMIN' });
+      const { user, order, event } = await deliveredOrder('BANK_TRANSFER');
+      await processor.onStatusUpdated(event(PARTIAL));
+      await processor.onStatusUpdated(event(RETURNED));
+      const row = (await rowsOf(order.id))[0]!;
+      await prisma.user.update({ where: { id: user.id }, data: { metadata: { anonymizedAt: new Date().toISOString() } } });
+
+      await refunds.verifyOverpayment(accountant.id, row.id, {});
+
+      expect(await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ status: 'PENDING', userId: null, customerUserId: null });
     });
 
     it('bỏ qua (nhân viên đã hoàn tay đủ): không khoản PENDING, Ví 0, ô sạch, paymentStatus REFUNDED; chữ lịch sử đơn không nói hãng/COD', async () => {
