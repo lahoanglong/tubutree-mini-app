@@ -99,7 +99,6 @@ export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boo
 /** Số bán hàng trong ngày bấm được: mỗi số mở đúng màn xem chi tiết của nó. */
 export type TodayStatKey = 'orders' | 'revenue' | 'newUsers';
 
-/** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
 /**
  * Thẻ dẫn sang Sức khoẻ hệ thống khi có sự cố vượt ngưỡng hoặc việc nền đang lỗi. Dùng cùng truy vấn với màn Sức khoẻ (chung
  * bộ nhớ đệm), chỉ ADMIN (API chỉ mở cho ADMIN); lỗi tải thì im lặng, không kéo sập trang Hôm nay.
@@ -128,6 +127,7 @@ function HealthNotice({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+/** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
 export function OpsInboxTab({ onOpen: openTab, onOpenStat, onOpenHealth, isAdmin = false }: { onOpen: (key: InboxKey) => void; onOpenStat?: (stat: TodayStatKey) => void; onOpenHealth?: () => void; isAdmin?: boolean }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);

@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { OrderStatus, Prisma } from '@prisma/client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import { PANCAKE_ALERT_TEMPLATE, type GomdonAlertService } from '../gomdon/gomdon-alert.service';
 
@@ -39,13 +39,52 @@ export async function flagPancakeAttention(
   reason: string,
   logger?: Logger,
 ): Promise<void> {
-  const r = await prisma.order.updateMany({
-    where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
+  const written = await writePancakeAttention(prisma, order.id, reason);
+  if (!written) return;
+  logger?.warn(`Đơn ${order.code} cần xử lý (Pancake): ${written}`);
+  if (alerts) await alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
+}
+
+/**
+ * Ghi lý do lên ô "Cần xử lý Pancake" (một ô cho mọi lý do). Dòng "COD chờ Kế toán" không bị ghi đè: nó chỉ gỡ khi Kế toán quyết,
+ * nên lý do mới được nối sau nó. Đọc rồi ghi có điều kiện theo giá trị đã đọc (lý do vừa chen giữa không bị đè; thua thì đọc lại).
+ * Trả chuỗi vừa ghi, hoặc null khi không đổi gì.
+ */
+export async function writePancakeAttention(
+  db: Pick<Prisma.TransactionClient, 'order'>,
+  orderId: string,
+  reason: string,
+  onlyReplacingPrefix?: string,
+  /** Chỉ ghi khi đơn còn mở: lệnh ghi không được thắng một lần huỷ/trả vừa commit sau lúc đọc trạng thái. */
+  onlyOpenOrder = false,
+): Promise<string | null> {
+  const open = onlyOpenOrder ? { status: { notIn: ['CANCELLED', 'RETURNED'] as OrderStatus[] } } : {};
+  const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
+  // NOT (NULL LIKE ..) ra NULL trong SQL: ô trống phải được nêu riêng, không thì dòng không khớp.
+  const notCod = { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] };
+  const first = await db.order.updateMany({
+    where: onlyReplacingPrefix
+      ? { id: orderId, ...open, AND: [changed, notCod, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
+      : { id: orderId, ...open, AND: [changed, notCod] },
     data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
   });
-  if (r.count === 0) return;
-  logger?.warn(`Đơn ${order.code} cần xử lý (Pancake): ${reason}`);
-  if (alerts) await alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
+  if (first.count === 1) return reason;
+  if (onlyReplacingPrefix) return null;
+  // Không khớp: hoặc cùng lý do đang chờ, hoặc ô đang giữ dòng COD chờ Kế toán — trường hợp sau nối lý do mới vào sau dòng đó.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    const current = row?.pancakeAttention ?? null;
+    if (current === null || !current.split(ATTENTION_SEPARATOR).includes(ATTENTION_COD_RETURN_UNVERIFIED)) return null;
+    // Lý do đã nằm trong ô (ở bất kỳ vị trí nào, vd 'X | COD' do order-status nối) thì không đổi và không báo lại.
+    if (current.split(ATTENTION_SEPARATOR).includes(reason)) return null;
+    const next = `${current}${ATTENTION_SEPARATOR}${reason}`;
+    const r = await db.order.updateMany({
+      where: { id: orderId, ...open, pancakeAttention: current },
+      data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
+    });
+    if (r.count === 1) return next;
+  }
+  return null;
 }
 
 /** Đơn đã huỷ xong trên Pancake (hoặc chưa từng lên): việc đẩy/huỷ/báo thanh toán còn treo không còn ý nghĩa. */

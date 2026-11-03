@@ -18,17 +18,29 @@ function matchField(value: unknown, cond: unknown): boolean {
     if ('gt' in c) return typeof value === 'number' && value > (c.gt as number);
     if ('lt' in c) return value instanceof Date && value.getTime() < (c.lt as Date).getTime();
     if ('startsWith' in c) return typeof value === 'string' && value.startsWith(c.startsWith as string);
+    if ('contains' in c) return typeof value === 'string' && value.includes(c.contains as string);
     if ('in' in c) return (c.in as unknown[]).includes(value);
+    if ('notIn' in c) return value !== null && value !== undefined && !(c.notIn as unknown[]).includes(value);
     throw new Error(`fake prisma: điều kiện chưa hỗ trợ ${JSON.stringify(c)}`);
   }
   return value === cond;
+}
+
+/** SQL: NOT (cột NULL LIKE ...) ra NULL chứ không ra true, nên dòng không khớp. */
+function touchesNullText(row: Row, where: Where): boolean {
+  return Object.entries(where).some(([k, cond]) => {
+    if (k === 'OR' || k === 'AND') return (cond as Where[]).some((w) => touchesNullText(row, w));
+    if (k === 'NOT') return touchesNullText(row, cond as Where);
+    const v = row[k];
+    return (v === null || v === undefined) && typeof cond === 'object' && cond !== null && ('contains' in cond || 'startsWith' in cond);
+  });
 }
 
 export function matchWhere(row: Row, where: Where = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
     if (k === 'OR') return (cond as Where[]).some((w) => matchWhere(row, w));
     if (k === 'AND') return (cond as Where[]).every((w) => matchWhere(row, w));
-    if (k === 'NOT') return !matchWhere(row, cond as Where);
+    if (k === 'NOT') return !matchWhere(row, cond as Where) && !touchesNullText(row, cond as Where);
     return matchField(row[k], cond);
   });
 }

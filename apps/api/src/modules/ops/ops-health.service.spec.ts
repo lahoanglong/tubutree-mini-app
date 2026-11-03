@@ -219,6 +219,66 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
     expect(await build({}).svc.zaloTokenProblems(NOW)).toEqual([]);
   });
 
+  describe('vừa cấu hình token, chưa tới lượt cron đầu (báo động giả tối đa 6 giờ)', () => {
+    const cronRow = (lastOutcome: string) => ({ job: 'ZaloOaTokenCron.refresh', lastOutcome });
+    function withCron(rows: unknown[], store: Record<string, string> = configured) {
+      const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key in store ? { value: store[key] } : null)) } };
+      return new OpsHealthService(prisma as never, { get: () => '' } as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => rows } as never);
+    }
+
+    it('chưa có dòng cron nào hoặc lượt gần nhất OK → chưa báo', async () => {
+      expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
+      expect(await withCron([cronRow('OK')]).zaloTokenProblems(NOW)).toEqual([]);
+      expect(await withCron([cronRow('SKIPPED')]).zaloTokenProblems(NOW)).toEqual([]);
+    });
+
+    it('tiến trình chạy quá 7 giờ mà vẫn chưa có mốc hạn (cron không bao giờ chạy: tắt cron, mất lease leader) → vẫn báo, dù không có dòng cron nào', async () => {
+      const uptime = jest.spyOn(process, 'uptime').mockReturnValue(7 * 3600 + 60);
+      try {
+        for (const rows of [[], [cronRow('OK')], [cronRow('SKIPPED')]]) {
+          const out = await withCron(rows).zaloTokenProblems(NOW);
+          expect(out).toHaveLength(1);
+          expect(out[0]!.message).toContain('chưa từng được làm mới');
+        }
+        uptime.mockReturnValue(5 * 3600);
+        expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
+      } finally {
+        uptime.mockRestore();
+      }
+    });
+
+    it('mốc chờ tính từ lúc token được nhập vào SystemConfig, không phải từ lúc tiến trình khởi động lại', async () => {
+      const withRow = (updatedAt: Date) => {
+        const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key === 'zalo.oa_access_token' ? { value: 'acc', updatedAt } : null)) } };
+        return new OpsHealthService(prisma as never, { get: () => '' } as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => [cronRow('OK')] } as never);
+      };
+      const uptime = jest.spyOn(process, 'uptime');
+      try {
+        uptime.mockReturnValue(60);
+        const stale = await withRow(new Date(NOW.getTime() - 8 * H)).zaloTokenProblems(NOW);
+        expect(stale).toHaveLength(1);
+        uptime.mockReturnValue(20 * 3600);
+        expect(await withRow(new Date(NOW.getTime() - 1 * H)).zaloTokenProblems(NOW)).toEqual([]);
+      } finally {
+        uptime.mockRestore();
+      }
+    });
+
+    it('lượt cron gần nhất đã lỗi mà vẫn chưa có mốc hạn → báo "chưa từng được làm mới"', async () => {
+      for (const outcome of ['ERRORS', 'THREW']) {
+        const out = await withCron([cronRow(outcome)]).zaloTokenProblems(NOW);
+        expect(out).toHaveLength(1);
+        expect(out[0]!.message).toContain('chưa từng được làm mới');
+      }
+    });
+
+    it('đã có mốc hạn thì cách xét hạn như cũ, không phụ thuộc cron', async () => {
+      const out = await withCron([cronRow('OK')], { ...configured, 'zalo.oa_token_expires_at': iso(2 * H) }).zaloTokenProblems(NOW);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.message).toContain('2 giờ');
+    });
+  });
+
   it('đọc DB lỗi → không làm hỏng màn sức khoẻ, trả rỗng', async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const svc = new OpsHealthService({ systemConfig: { findUnique: async () => Promise.reject(new Error('db down')) } } as never, { get: () => '' } as never, []);

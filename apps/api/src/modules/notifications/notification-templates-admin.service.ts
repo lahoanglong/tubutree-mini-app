@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { ConfigService } from '@nestjs/config';
 import { PHONE_LIKE_RUN } from '../../common/mask-pii';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TIER_DROP_NOTICE_CODE, TIER_DROP_ZNS_TEMPLATE_KEY } from '../loyalty/tier-drop-notice.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { UpdateNotificationTemplateDto } from './dto/update-notification-template.dto';
 import { templateVariableProblem, variablesOf, type TemplateVariable } from './notification-variables';
@@ -19,6 +20,8 @@ export interface AdminNotificationTemplate {
   zaloTemplateId: string | null;
   bodyTemplate: string;
   delivery: TemplateDelivery;
+  /** Khoá cấu hình cấp mã ZNS khi mẫu chưa có mã riêng (nhắc hạ hạng); null = mã nằm ở ô của mẫu. */
+  znsConfigKey: string | null;
   /** INAPP: mọi bản ghi trong app; ZNS: chỉ lượt Zalo xác nhận đã nhận (error === 0). */
   sent30d: { INAPP: number; ZNS: number };
   /** Lượt ZNS 30 ngày gần nhất bị từ chối/lỗi hẳn, kèm mã + lý do của lần gần nhất để admin biết phải sửa gì. */
@@ -108,11 +111,18 @@ export class NotificationTemplatesAdminService {
       if (c.channel === 'ZNS' && c.status === 'SENT') row.ZNS += n;
       sent.set(c.templateCode, row);
     }
+    // Nhắc hạ hạng gửi ZNS bằng mã lấy từ khoá cấu hình loyalty.* kể cả khi mẫu để kênh "Trong app" (NotificationsService.notify
+    // dùng mã của nơi gọi khi mẫu chưa có mã riêng) — màn này phải hiện đúng điều đó.
+    const tierDropZnsId = await this.tierDropZnsTemplateId();
+    // notify() ưu tiên mã riêng của mẫu ZNS; khoá cấu hình chỉ là mã dự phòng khi mẫu chưa có mã.
+    const usesTierDropKey = (t: { code: string; channel: string; zaloTemplateId: string | null }) =>
+      t.code === TIER_DROP_NOTICE_CODE && Boolean(tierDropZnsId) && !(t.channel === 'ZNS' && t.zaloTemplateId);
     const lastError = new Map(failures.map((f) => [f.templateCode, { text: f.error ?? 'Không rõ lý do', at: f.sentAt }]));
     return templates
       .map((t) => ({
         ...t,
-        delivery: deliveryOf(t),
+        delivery: usesTierDropKey(t) ? ('ZNS' as const) : deliveryOf(t),
+        znsConfigKey: usesTierDropKey(t) ? TIER_DROP_ZNS_TEMPLATE_KEY : null,
         sent30d: sent.get(t.code) ?? { INAPP: 0, ZNS: 0 },
         znsFailed30d: failed.get(t.code) ?? 0,
         znsLastError: lastError.get(t.code) ?? null,
@@ -126,6 +136,11 @@ export class NotificationTemplatesAdminService {
           b.sent30d.INAPP + b.sent30d.ZNS - (a.sent30d.INAPP + a.sent30d.ZNS) ||
           a.code.localeCompare(b.code),
       );
+  }
+
+  private async tierDropZnsTemplateId(): Promise<string | null> {
+    const raw = await this.config?.get<unknown>(TIER_DROP_ZNS_TEMPLATE_KEY, '');
+    return typeof raw === 'string' && /^\d{1,20}$/.test(raw.trim()) ? raw.trim() : null;
   }
 
   async update(code: string, dto: UpdateNotificationTemplateDto, actor: { id: string; staff: boolean } = { id: 'system', staff: false }) {

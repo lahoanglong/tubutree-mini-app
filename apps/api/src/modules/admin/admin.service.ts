@@ -14,7 +14,6 @@ import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.ser
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
 import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
-import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -1390,21 +1389,24 @@ export class AdminService {
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
-    // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không.
-    if (order.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
-      const open = await this.prisma.orderCustomerRefund.findFirst({
-        where: { orderId: order.id, kind: 'RETURN', refKey: COD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
-        select: { id: true },
-      });
-      if (open) {
-        throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn COD chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
-      }
+    // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không. Tra thẳng khoản chờ đối soát, không dựa vào chữ trong ô:
+    // các chỗ ghi cả ô (hoàn tiền tay, ACK) có thể đã đè mất dòng COD.
+    const open = await this.prisma.orderCustomerRefund.findFirst({
+      where: { orderId: order.id, kind: 'RETURN', refKey: COD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
+      select: { id: true },
+    });
+    if (open) {
+      throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn COD chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
     }
     const r = await this.prisma.order.updateMany({
-      where: { id: order.id, pancakeAttentionAt: { not: null } },
+      where: { id: order.id, pancakeAttentionAt: { not: null }, pancakeAttention: order.pancakeAttention },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
-    if (r.count === 0) throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    if (r.count === 0) {
+      const now = await this.prisma.order.findFirst({ where: { id: order.id }, select: { pancakeAttentionAt: true } });
+      if (now?.pancakeAttentionAt) throw new BadRequestException(`Việc của đơn ${order.code} vừa thay đổi — tải lại rồi xử lý lại.`);
+      throw new BadRequestException(`Đơn ${order.code} không còn trong hàng đợi cần xử lý Pancake.`);
+    }
     const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);
     this.logger.warn(
       `Admin ${adminId} đánh dấu đã xử lý việc Pancake của đơn ${order.code}: "${order.pancakeAttention ?? ''}"` +

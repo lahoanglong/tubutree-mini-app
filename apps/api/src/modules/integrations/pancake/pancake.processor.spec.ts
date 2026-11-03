@@ -1281,6 +1281,17 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     }
   });
 
+  it('"Hoàn một phần" (15) tới trễ cho đơn đã huỷ/trả → không ghim lời "hoàn tay", không báo động (PNK-01)', async () => {
+    for (const status of ['RETURNED', 'CANCELLED']) {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, txUpdateMany, orderUpdateMany } = setup({ ...base, status }, undefined, alerts);
+      await proc.onStatusUpdated({ id: 'p1', status: 15 });
+      expect(attentionFlags(txUpdateMany)).toHaveLength(0);
+      expect(orderUpdateMany).not.toHaveBeenCalled();
+      expect(alerts.alert).not.toHaveBeenCalled();
+    }
+  });
+
   // R3-MONEY-2: "Hoàn một phần" (15) là bước kế tiếp đúng quy trình sau khi admin duyệt trả một phần (đã hoàn tiền).
   describe('"Hoàn một phần" (15) cho đơn đã duyệt trả trên Tubu (R3-MONEY-2)', () => {
     const delivered = {

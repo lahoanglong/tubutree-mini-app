@@ -1152,6 +1152,8 @@ export interface AdminNotificationTemplate {
   /** Lượt ZNS bị Zalo từ chối/lỗi hẳn trong 30 ngày + lý do (mã + lời Zalo) của lần gần nhất. */
   znsFailed30d?: number;
   znsLastError?: { text: string; at: string } | null;
+  /** Khoá cấu hình cấp mã ZNS thay cho ô mã của mẫu (nhắc hạ hạng); null/thiếu = mã nằm ở chính mẫu. */
+  znsConfigKey?: string | null;
   /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
   staffEditable?: boolean;
   /** Biến mã thật sự điền cho mẫu này; null = mẫu ngoài danh sách (không kiểm được); thiếu = API cũ. */
