@@ -190,7 +190,7 @@ GET /cart → 200
 GET /me/wishlist/ids → 200
 --- lệnh zmp-sdk app đã gọi: ["login","getAccessToken"]
 --- request bị chặn: []
---- chữ đầu trang: "3\nBạn đang tìm gì hôm nay?\nMua lại\nFuwa3e\nNước rửa chén sinh học Fuwa3e · Can 5L\n★ Mới\n430.000đ\n480.000đ\nMua lại\n…Ưu đãi giờ vàng\nCòn 143h 43m…"
+--- chữ đầu trang: "3\nBạn tìm gì hôm nay?\nMua lại\nFuwa3e\nNước rửa chén sinh học Fuwa3e · Can 5L\n★ Mới\n430.000đ\n480.000đ\nMua lại\n…Ưu đãi giờ vàng\nCòn 143h 43m…"
 ```
 Kiểm chứng thêm:
 - WebKit, sau reload: `POST /auth/refresh → 200 | GET /home → 200 | GET /me → 200 | GET /home/me?purchasedLimit=10 → 200 | GET /cart → 200 | GET /me/wishlist/ids → 200`.

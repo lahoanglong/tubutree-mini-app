@@ -165,7 +165,8 @@ export default function HomePage() {
 
   return (
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
+    // resetScroll tắt: Page tự cuộn về 0 ở layout effect chạy sau hook khôi phục nên khung đầu sau Back vẽ ở đầu trang; hook tự cuộn về 0 khi PUSH.
+    <Page className="page" resetScroll={false} style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <HomeScrollRestoration ready={scrollReady} />
       <PullToRefresh onRefresh={refreshAll} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>

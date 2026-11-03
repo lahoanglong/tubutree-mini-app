@@ -17,6 +17,7 @@ vi.mock('../../hooks/use-check-in', () => ({
 }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
 import { HomeBlockErrorSuppressed } from './home-block-error';
 
@@ -72,7 +73,7 @@ describe('thẻ thành viên nền sáng (HM-05)', () => {
     expect(card.style.background).not.toContain('gradient');
     expect(card.style.background).toContain('--color-bg-surface');
     expect(card.style.border).toContain('--color-border-subtle');
-    expect(card).toHaveStyle({ height: '64px' });
+    expect(card).toHaveStyle({ height: `${HOME_GIFT_HEIGHT}px` });
   });
 
   it('khung chờ không có đệm dưới (vỏ khối giữ khoảng cách)', () => {

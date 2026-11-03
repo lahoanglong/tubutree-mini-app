@@ -11,7 +11,7 @@ sql(`delete from cart_items where "cartId" in (select id from carts where "userI
 const F = await startFlow({ flow: '2-tim-mua', persona: 'webret' });
 const p = F.page;
 await F.firstLoad('Mở trang chủ (đã đăng nhập, Lộc Biếc)');
-await F.tap('Chạm ô tìm kiếm "Bạn đang tìm gì hôm nay?"', F.text('Bạn đang tìm gì hôm nay?'));
+await F.tap('Chạm ô tìm kiếm "Bạn tìm gì hôm nay?"', F.text('Bạn tìm gì hôm nay?'));
 await F.fill('Gõ "nước rửa chén"', p.locator('input:visible').first(), 'nước rửa chén', { note: 'chưa có gợi ý, chữ báo "nhấn Tìm để xem kết quả"' });
 await F.press('Bấm Enter (Tìm trên bàn phím)', 'Enter', { note: 'trang không có nút Tìm' });
 await F.tap('Mở "Nước rửa chén sinh học Fuwa3e"', F.text('Nước rửa chén sinh học Fuwa3e'));

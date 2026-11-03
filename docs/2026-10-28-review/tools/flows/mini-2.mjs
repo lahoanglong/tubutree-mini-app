@@ -11,7 +11,7 @@ const f = await Flow.start('2-tim-va-mua', 'returning');
 await run(f, async () => {
   const p = f.page;
   await f.step('Trang chủ (khách quay lại)', null);
-  await f.step('Chạm ô tìm kiếm', () => f.tap('Bạn đang tìm gì hôm nay?'));
+  await f.step('Chạm ô tìm kiếm', () => f.tap('Bạn tìm gì hôm nay?'));
   await f.step('Gõ từ khoá "nước rửa chén"', () => f.fill(p.getByPlaceholder('Tìm sản phẩm'), 'nước rửa chén', 'tìm kiếm'));
   await f.step('Xem kết quả tìm kiếm', null);
   await f.step('Mở sản phẩm từ kết quả', () => f.tap(/^Nước rửa chén sinh học Fuwa3e/));

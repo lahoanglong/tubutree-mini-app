@@ -20,7 +20,7 @@ export const HOME_HEADER_HEIGHT = 56;
 
 // "Việc cần làm" có ở cả hai thứ tự: khách chưa có đơn đã giao vẫn có thể đang giữ một đơn chờ chuyển khoản, và khối tự rỗng khi không có việc.
 // Màn đầu gọn: header dính, thẻ thành viên (hoặc dải quà) một dòng, banner (tự ẩn khi không có chiến dịch), lối tắt, rồi tới món hàng:
-// Giờ vàng đứng TRƯỚC Mua lại để deal nằm trong màn đầu cả với khách cũ (Q6). Thẻ thành viên và dải quà cao bằng nhau (`HOME_HERO_HEIGHT`)
+// Giờ vàng đứng TRƯỚC Mua lại để deal nằm trong màn đầu cả với khách cũ (Q6). Thẻ thành viên và dải quà cao bằng nhau (`HOME_HERO_HEIGHT` = `HOME_GIFT_HEIGHT`)
 // nên đổi loại khách không làm các khối dưới nhảy. `banner` và `combos` tự ẩn, không giữ chỗ, tới khi P11/P15 có dữ liệu.
 const RETURNING: readonly HomeBlockId[] = [
   'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
@@ -35,14 +35,14 @@ const UNKNOWN: readonly HomeBlockId[] = [
   'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
 ];
 
-/** Chiều cao cố định của thẻ thành viên và dải quà khách mới (không tính đệm dưới): hai khối thay chỗ nhau không làm trang nhảy. */
-export const HOME_HERO_HEIGHT = 64;
-
 /**
  * Dải quà khách mới (thu gọn): hàng tiêu đề + nút (44) rồi câu lợi ích chiếm cả bề ngang (một dòng ở 375px; câu dài hai dòng cao hơn khoảng 20).
  * Nút nằm cùng hàng với tiêu đề nên câu không bị bóp thành cột 13 chữ rồi cắt mất điều kiện số tiền.
  */
 export const HOME_GIFT_HEIGHT = 84;
+
+/** Chiều cao cố định của thẻ thành viên và khung chờ của nó: bằng dải quà khách mới để hai khối thay chỗ nhau (unknown sang new, new sang returning) không làm trang nhảy. */
+export const HOME_HERO_HEIGHT = HOME_GIFT_HEIGHT;
 
 export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
   return kind === 'returning' ? RETURNING : kind === 'new' ? NEW : UNKNOWN;

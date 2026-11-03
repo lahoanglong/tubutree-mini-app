@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { shelf } from './merch/shelves';
 import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
-  visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS,
+  visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, categoryGridScrolls, CATEGORY_CELL_HEIGHT, CATEGORY_SCROLL_COLUMNS,
@@ -127,6 +127,10 @@ describe('chiều cao khối Danh mục theo số ô', () => {
 });
 
 describe('số đo khối Trang chủ mới', () => {
+  it('thẻ thành viên (và khung chờ) cao bằng dải Quà khách mới: đổi loại khách không làm các khối dưới nhảy', () => {
+    expect(HOME_HERO_HEIGHT).toBe(HOME_GIFT_HEIGHT);
+  });
+
   it('header dính 56px; Việc cần làm mỗi dòng 64px', () => {
     expect(HOME_HEADER_HEIGHT).toBe(56);
     expect(todoSkeletonHeight(1)).toBe(64);
