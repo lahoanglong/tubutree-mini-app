@@ -703,7 +703,7 @@ export default function AdminPage() {
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
-          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} onOpenStat={openStat} isAdmin={isAdmin} />}
+          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} onOpenStat={openStat} onOpenHealth={() => setTab('opsHealth')} isAdmin={isAdmin} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} onOpenOrder={openOrderByCode} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab canReview={isAdmin} />}

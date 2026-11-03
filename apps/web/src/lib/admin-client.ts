@@ -2065,6 +2065,8 @@ export interface OpsHealth {
     deliveredEffectsStale: number;
     deliveredEffectsOrders: { id: string; code: string; deliveredAt: string | null }[];
   };
+  /** Tin ZNS ghi FAILED trong 24 giờ qua. Tuỳ chọn: API cũ chưa trả trường này. */
+  zns?: { failed24h: number; topError: string | null };
   /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
   alertChannels?: { email: OpsEmailChannel; webhook?: OpsWebhookChannel };
   /** Tác vụ nền đã chạy ít nhất một lần. Tuỳ chọn: API cũ chưa trả trường này. */

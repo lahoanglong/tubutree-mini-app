@@ -213,7 +213,7 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems, zns] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
@@ -222,6 +222,7 @@ export class OpsHealthService {
       this.webhookChannel(),
       this.cronJobs(),
       this.zaloTokenProblems(now),
+      this.znsHealth(now),
     ]);
     const problems = opsProblems(
       {
@@ -238,6 +239,7 @@ export class OpsHealthService {
           attentionRefs: refs(gomdon.attentionOrders, (o) => o.code),
         },
         queues,
+        zns,
         orders: {
           deliveredEffectsPending: orders.deliveredEffectsPending,
           deliveredEffectsRefs: refs(orders.deliveredEffectsOrders, (o) => o.code),
@@ -248,13 +250,12 @@ export class OpsHealthService {
       },
       t,
     ).concat(zaloProblems);
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, zns, problems };
   }
 
   /**
    * Hạn access token Zalo OA (SystemConfig, do ZaloOaTokenCron ghi): còn dưới 3 giờ hoặc đã quá hạn khi ZNS đã có token
-   * thì khách sắp (hoặc đang) không nhận được tin ZNS. Chưa cấu hình, hoặc chưa có mốc hạn (cron sẽ lấy mốc ở lượt đầu) thì
-   * không báo. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ.
+   * thì khách sắp (hoặc đang) không nhận được tin ZNS. Chưa cấu hình thì không báo; có token mà chưa có mốc hạn hợp lệ (chưa từng làm mới được) thì báo luôn. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ.
    */
   async zaloTokenProblems(now: Date): Promise<OpsProblem[]> {
     try {
@@ -264,7 +265,16 @@ export class OpsHealthService {
       ]);
       const hasToken = (typeof access?.value === 'string' && access.value !== '') || Boolean(this.config.get('ZALO_OA_ACCESS_TOKEN', { infer: true }));
       const expiresAt = typeof expires?.value === 'string' ? Date.parse(expires.value) : NaN;
-      if (!hasToken || Number.isNaN(expiresAt)) return [];
+      if (!hasToken) return [];
+      if (Number.isNaN(expiresAt)) {
+        return [
+          {
+            key: 'zalo.oa_token',
+            message:
+              'Token Zalo OA chưa từng được làm mới (thiếu refresh_token hoặc mốc hạn) — ZNS sẽ ngừng sau khoảng 25 giờ; xem log "Zalo OA refresh" hoặc cấp lại token ở developers.zalo.me',
+          },
+        ];
+      }
       const left = expiresAt - now.getTime();
       if (left >= ZALO_TOKEN_WARN_MS) return [];
       const state =
@@ -499,6 +509,21 @@ export class OpsHealthService {
       backlog,
       backlogOrders,
     };
+  }
+
+  /** Tin ZNS FAILED 24 giờ qua. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ. */
+  private async znsHealth(now: Date): Promise<{ failed24h: number; topError: string | null }> {
+    const where = { channel: 'ZNS', status: 'FAILED', sentAt: { gte: new Date(now.getTime() - DAY_MS) } };
+    try {
+      const [failed24h, top] = await Promise.all([
+        this.prisma.notificationLog.count({ where }),
+        this.prisma.notificationLog.groupBy({ by: ['error'], where, _count: { _all: true }, orderBy: { _count: { error: 'desc' } }, take: 1 }),
+      ]);
+      return { failed24h, topError: top[0]?.error ? top[0].error.slice(0, 160) : null };
+    } catch (e) {
+      this.logger.warn(`Không đọc được số tin ZNS hỏng: ${e instanceof Error ? e.message : String(e)}`);
+      return { failed24h: 0, topError: null };
+    }
   }
 
   private async orderHealth(now: Date) {
