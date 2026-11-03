@@ -110,9 +110,8 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
     if (!scroller || y == null) return;
     scroller.scrollTop = y;
     lastY.current = y;
-    // Trang còn ngắn hơn lúc rời đi (khối cuối, vd. lưới Gợi ý, vẽ sau lần khôi phục): trình duyệt kẹp scrollTop, nên thử lại tới khi đủ
-    // cao hoặc quá RESTORE_MAX_MS. Khách chạm/cuộn thì thôi, không giằng lại.
-    if (scroller.scrollTop >= y - 1) return;
+    // Kiểm lại sau một nhịp và thử lại tới khi đạt hoặc quá RESTORE_MAX_MS: trang còn ngắn hơn lúc rời đi (lưới Gợi ý vẽ sau) làm trình duyệt kẹp
+    // scrollTop, và <Page> của zmp tự cuộn về 0 ở layout effect của nó (chạy sau hook này khi hook nằm trong con của Page). Khách chạm/cuộn thì thôi.
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();

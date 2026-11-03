@@ -98,7 +98,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
   return (
     <section aria-label={homeText.newGift.title}>
       <Card variant="flat" padding={0}>
-        <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '8px 12px 12px 16px' }}>
+        <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 12px 0 16px', paddingBlock: '0.5rem 0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             type="button"
@@ -126,7 +126,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
             </Link>
           )}
           </div>
-          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {headline}
           </Text>
         </div>

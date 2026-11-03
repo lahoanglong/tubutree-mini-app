@@ -49,6 +49,8 @@ const cellStyle = {
   cursor: 'pointer',
 } as const;
 
+const GRID_BLEED = 'tubu-bleed max-md:px-2 lg:hidden';
+
 /**
  * Lối tắt Trang chủ (Q7), bản web của `shortcut-grid.tsx` ở Mini App: 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần
  * còn lại nằm trong sheet "Tất cả". Mục có cờ tắt bị ẩn, mục kế lấp chỗ. Mục có route web chưa làm xong bị bỏ TRƯỚC khi chia ô cố định (nên ô cố định
@@ -80,14 +82,14 @@ export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig }
   // Cờ Đổi rác chưa về thì chưa biết ô nào nằm trong 4 ô cố định: giữ khung trơn cùng chiều cao, không dựng ô rồi đổi chỗ dưới ngón tay.
   if (cfg.isPending) {
     return (
-      <div data-testid="shortcut-grid-pending" aria-hidden="true" className="tubu-bleed max-md:px-2 lg:hidden">
+      <div data-testid="shortcut-grid-pending" aria-hidden="true" className={GRID_BLEED}>
         <Skeleton height={HOME_SETTLING_HEIGHTS.shortcuts} radius="var(--radius-card)" />
       </div>
     );
   }
 
   return (
-    <section aria-label={homeCopy.shortcuts.title} className="tubu-bleed max-md:px-2 lg:hidden">
+    <section aria-label={homeCopy.shortcuts.title} className={GRID_BLEED}>
       <div data-testid="shortcut-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
         {pinned.map((s) => {
           const tint = SHORTCUT_TINT_VARS[s.tint];

@@ -51,7 +51,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
 });
 
 import HomePage from './home';

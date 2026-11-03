@@ -202,6 +202,24 @@ describe('useScrollRestoration — khôi phục chỉ khi quay lại (Back/forwa
     expect(scroller().scrollTop).toBe(4529);
   });
 
+  it('lần gán đầu bị <Page> cuộn về 0 ngay sau đó (hook nằm trong con của Page) → kiểm lại sau một nhịp và gán lại', () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem(`${SCROLL_KEY_PREFIX}q=a`, '4529');
+    const values = new WeakMap<Element, number>();
+    let sets = 0;
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) { return this.isConnected ? values.get(this) ?? 0 : 0; },
+      set(this: Element, v: number) { sets += 1; values.set(this, sets === 1 ? v : v); if (sets === 1) queueMicrotask(() => values.set(this, 0)); },
+    });
+    render(<MemoryRouter future={FUTURE}><Harness k="q=a" ready /></MemoryRouter>);
+    return Promise.resolve().then(() => {
+      expect(scroller().scrollTop).toBe(0);
+      act(() => { vi.advanceTimersByTime(100); });
+      expect(scroller().scrollTop).toBe(4529);
+    });
+  });
+
   it('thử lại khôi phục dừng khi khách chạm vào trang (không giằng lại)', () => {
     vi.useFakeTimers();
     sessionStorage.setItem(`${SCROLL_KEY_PREFIX}q=a`, '4529');
