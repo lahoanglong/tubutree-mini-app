@@ -21,6 +21,7 @@ import {
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText } from '@/lib/error-text';
 
 /** Badge ở dòng danh sách đơn: có thu gom / cần xử lý thu gom. */
 export function RecyclingBadge({ order }: { order: AdminOrder }) {
@@ -62,7 +63,7 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
     void qc.invalidateQueries({ queryKey: ['admin-orders'] });
     void qc.invalidateQueries({ queryKey: ['admin-recycling-count'] });
   };
-  const onFail = (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Thao tác thất bại.' });
+  const onFail = (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) });
 
   const actions = gomdonAdminActions(order);
   const retry = useMutation({

@@ -10,6 +10,7 @@ import { BTN_PRIMARY, BTN_XS_SECONDARY, chipClass, Notice, ScrollRegion, ToneBad
 import type { WasteSeed } from './waste-tab';
 import { WastePointDetail } from './waste-point-detail';
 import { WastePointForm } from './waste-point-form';
+import { actionErrorText } from '@/lib/error-text';
 
 type Filter = 'all' | 'pending' | 'perk';
 
@@ -57,7 +58,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
   const reactivate = useMutation({
     mutationFn: (id: string) => updateWastePoint(id, { status: 'ACTIVE' }),
     onSuccess: () => { setErr(null); return refresh(); },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
 
   return (

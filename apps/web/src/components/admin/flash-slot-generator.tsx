@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { generateFlashSlots } from '@/lib/admin-client';
 import { BTN_SECONDARY } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 export const SLOT_GENERATE_DAYS = 2;
 
@@ -24,7 +25,7 @@ export function FlashSlotGenerator({ onDone }: { onDone: () => void }) {
       setMsg({ ok: true, text: generatedText(r) });
       onDone();
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tạo được khung giờ' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   return (

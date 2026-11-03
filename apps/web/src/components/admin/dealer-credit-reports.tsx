@@ -14,6 +14,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { DealerCreditPanel } from './dealer-credit-panel';
 import { useConfirm } from './confirm-dialog';
 import { BTN_SMALL, BTN_XS_DANGER, LoadError } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 /**
  * Đại lý bấm "Báo đã chuyển khoản" trả nợ nhưng sổ công nợ chỉ giảm khi kế toán ghi nhận. Khối này giữ các báo cáo chưa xử lý, cũ nhất
@@ -72,7 +73,7 @@ function ReportRow({ report: r, onDone }: { report: DealerCreditReport; onDone: 
           ? `Báo cáo ${formatVnd(r.amount)} của ${who} đã được xử lý trước đó, lần này sổ công nợ không đổi.`
           : `Đã đóng báo cáo ${formatVnd(r.amount)} của ${who}: không thấy tiền. Sổ công nợ không đổi.`,
       ),
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
 
   const onDismiss = async () => {

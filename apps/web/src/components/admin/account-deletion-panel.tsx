@@ -9,6 +9,7 @@ import { BTN_DANGER_OUTLINE, BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass
 import { useConfirm } from './confirm-dialog';
 import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText } from '@/lib/error-text';
 
 export type DeletionStatusFilter = 'PENDING' | 'RESOLVED' | 'ALL';
 
@@ -158,7 +159,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       void invalidateInbox(qc);
     },
     onError: (e) => {
-      setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+      setErr(actionErrorText(e));
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       void invalidateInbox(qc);
     },

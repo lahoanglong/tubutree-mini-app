@@ -15,6 +15,7 @@ import { safeEvidenceImage } from './evidence-images';
 import { PageNav } from './page-nav';
 import { BTN_LINK, Notice, ToneBadge, chipClass, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const PAGE_SIZE = 20;
 const VISIBILITY_CHIPS: { k: ReviewVisibilityFilter | ''; label: string }[] = [
@@ -75,7 +76,7 @@ export function ReviewsTab() {
 
       {q.isError && (
         <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>
-          {(q.error as Error).message || 'Không tải được danh sách đánh giá.'}
+          {loadErrorText(q.error) || 'Không tải được danh sách đánh giá.'}
         </LoadError>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải đánh giá…</p>}
@@ -193,7 +194,7 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
         </button>
         {mut.isError && (
           <span role="alert" className="text-xs text-danger-fg">
-            {(mut.error as Error).message || 'Không đổi được trạng thái đánh giá.'}
+            {actionErrorText(mut.error) || 'Không đổi được trạng thái đánh giá.'}
           </span>
         )}
       </div>

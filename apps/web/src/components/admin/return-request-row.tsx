@@ -16,6 +16,7 @@ import { PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { EvidenceImages } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H, Field } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const REJECT_NOTE_MIN = 3;
 
@@ -36,7 +37,7 @@ function destinationText(d: AdminReturnPreview['destination']) {
 }
 
 function errorText(e: unknown, fallback: string) {
-  return e instanceof Error && e.message ? e.message : fallback;
+  return e instanceof Error ? actionErrorText(e) : fallback;
 }
 
 /**

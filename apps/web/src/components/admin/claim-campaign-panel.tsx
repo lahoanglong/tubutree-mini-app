@@ -19,6 +19,7 @@ import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { VnDateInput } from './vn-date-input';
 import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const BATCH_MAX = 2000;
 type CouponType = 'PERCENT' | 'AMOUNT' | 'FREESHIP';
@@ -124,7 +125,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
       setMsg({ ok: true, text: `Đã tạo ${res.created} mã lô ${res.batch} và tải file CSV để in QR.` });
       void qc.invalidateQueries({ queryKey: ['admin-coupon-batches'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tạo được lô mã.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const createShared = useMutation({
@@ -137,7 +138,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
       });
       void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tạo được mã.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const exportBatch = useMutation({
@@ -147,7 +148,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
       downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`);
       if (!res.link) setMsg({ ok: true, text: `Lô ${res.batch} tạo trước khi lưu link: file CSV dùng link mở trang chủ (/?claim=), không có nguồn và đợt thẻ.` });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tải được file mã.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const toggleBatch = useMutation({
@@ -156,7 +157,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
       setMsg({ ok: true, text: v.isActive ? `Đã bật lại ${res.updated} mã lô ${res.batch}.` : `Đã tắt ${res.updated} mã lô ${res.batch}.` });
       void qc.invalidateQueries({ queryKey: ['admin-coupon-batches'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không đổi được trạng thái lô.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const askToggle = async (b: CouponBatchSummary) => {

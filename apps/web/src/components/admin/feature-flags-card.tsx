@@ -7,6 +7,7 @@ import { configValue } from '@/lib/admin-config-forms';
 import { DEFAULT_OFF_WARNING, FEATURE_FLAGS, type FeatureFlag } from '@/lib/admin-feature-flags';
 import { useConfirm } from './confirm-dialog';
 import { Notice, ToneBadge } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 /** Khoá nào chưa có dòng trong DB vẫn lưu được: API tự tạo dòng cho các khoá có luật ghi riêng. */
 export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[] | undefined; onOpenSupportChat?: () => void }) {
@@ -27,7 +28,7 @@ export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[
     },
     onError: (e, { flag }) => {
       setSavedKey(null);
-      setFailure({ key: flag.key, text: e instanceof Error ? e.message : 'Không lưu được, thử lại sau.' });
+      setFailure({ key: flag.key, text: actionErrorText(e) });
     },
   });
   // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.

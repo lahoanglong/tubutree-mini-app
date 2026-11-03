@@ -468,6 +468,15 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Máy chủ đang bận, thử lại nhé.');
   });
+
+  it('ERR-03: 429 của bộ giới hạn tốc độ hiện câu tiếng Việt, không phải ThrottlerException', async () => {
+    const api = mockFetch({ '/status': { status: 429, body: { statusCode: 429, message: 'ThrottlerException: Too Many Requests' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} />);
+    click(byText(container, 'button', 'Đã đóng gói'));
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.');
+  });
 });
 
 describe('admin-client — setUserRole gửi tierId khi cấp DEALER (C-008)', () => {

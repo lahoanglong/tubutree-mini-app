@@ -21,6 +21,7 @@ import {
 } from '@/lib/admin-config-forms';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, Field, INPUT_CLASS, LoadError, Notice } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 /** Hằng (không phải `{}` mới mỗi render) — useEffect bên dưới so sánh theo tham chiếu. */
 const NO_CONFIG: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;
@@ -96,7 +97,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       setMsg({ ok: true, text: on ? 'Đã BẬT công tắc kỹ thuật Gomdon.' : 'Đã TẮT công tắc kỹ thuật Gomdon.' });
       refresh();
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const saveWarehouse = useMutation({
@@ -109,7 +110,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       setMsg({ ok: true, text: 'Đã lưu kho lấy hàng & cân nặng mặc định.' });
       refresh();
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const checkConnection = useMutation({
@@ -118,7 +119,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       setCheckMsg({ ok: r.ok, text: r.ok ? r.message : `Không đăng nhập được Gomdon: ${r.message}` });
       void qc.invalidateQueries({ queryKey: ['admin-gomdon-status'] });
     },
-    onError: (e) => setCheckMsg({ ok: false, text: e instanceof Error ? e.message : 'Không kiểm tra được kết nối.' }),
+    onError: (e) => setCheckMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const st = statusQ.data;

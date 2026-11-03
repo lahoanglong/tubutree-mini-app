@@ -22,6 +22,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, Field, INPUT_CLASS, LoadError, Notice, TOUCH_H } from './ui';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 type Mode = { kind: 'create' } | { kind: 'edit'; id: string; baseline: TierValues };
 interface SaveInput {
@@ -100,7 +101,7 @@ export function DealerTiersSection() {
         void qc.invalidateQueries({ queryKey: ['admin-dealer-tiers'] });
         return;
       }
-      setErrors([e instanceof Error ? e.message : 'Lưu bậc thất bại.']);
+      setErrors([actionErrorText(e)]);
     },
     onSettled: () => {
       inFlight.current = false;
@@ -152,7 +153,7 @@ export function DealerTiersSection() {
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải bậc đại lý…</p>}
       {q.isError && (
         <p role="alert" className="text-sm text-danger-fg">
-          Không tải được bậc đại lý{q.error instanceof Error && q.error.message ? ` (${q.error.message})` : ''}.{' '}
+          Không tải được bậc đại lý{q.error ? ` (${loadErrorText(q.error)})` : ''}.{' '}
           <button type="button" className={`${BTN_LINK} text-sm`} onClick={() => void q.refetch()}>
             Thử lại
           </button>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { updateFlashItemOrder } from '@/lib/admin-client';
 import { BTN_XS_SECONDARY, FIELD_CLASS, TOUCH_H } from './ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const ORDER_MIN = -1000;
 const ORDER_MAX = 1000;
@@ -30,7 +31,7 @@ export function FlashItemOrder({ itemId, sortOrder, label, onSaved }: { itemId: 
       setErr(null);
       onSaved();
     },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không lưu được thứ tự'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
   const invalid = value.trim() !== '' && parsed === null;
 

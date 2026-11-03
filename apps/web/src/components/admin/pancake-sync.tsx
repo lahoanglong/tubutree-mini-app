@@ -9,6 +9,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, ToneBadge } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { PANCAKE_ATTENTION_COUNT_KEY } from './pancake-attention';
+import { actionErrorText } from '@/lib/error-text';
 
 /** Trạng thái đơn Tubu còn trong kho — chỉ những đơn này được "Đẩy lại Pancake" (API chặn lần nữa). */
 const IN_WAREHOUSE = new Set(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED']);
@@ -99,7 +100,7 @@ export function PancakeSyncPanel({ order }: { order: AdminOrder }) {
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void qc.invalidateQueries({ queryKey: PANCAKE_ATTENTION_COUNT_KEY });
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không đẩy lại được.' }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
     onSettled: () => {
       inFlight.current = false;
     },

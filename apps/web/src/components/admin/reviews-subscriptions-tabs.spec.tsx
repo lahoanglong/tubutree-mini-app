@@ -143,7 +143,7 @@ describe('ReviewsTab', () => {
     stub(() => ({ status: 500, body: { message: 'Lỗi máy chủ' } }));
     const b = mount(<ReviewsTab />);
     await flush();
-    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Lỗi máy chủ');
+    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
   });
 });
 
@@ -194,7 +194,7 @@ describe('SubscriptionsTab', () => {
     stub(() => ({ status: 500, body: { message: 'Lỗi máy chủ' } }));
     const b = mount(<SubscriptionsTab />);
     await flush();
-    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Lỗi máy chủ');
+    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
   });
 });
 
