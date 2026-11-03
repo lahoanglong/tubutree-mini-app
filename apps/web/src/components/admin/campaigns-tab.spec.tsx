@@ -146,6 +146,25 @@ describe('CampaignsTab: bật tắt và xoá', () => {
     expect(mocks.update).toHaveBeenCalledWith('d', { isActive: true });
   });
 
+  it('đang mở form: Sửa và Tắt/Bật của mọi dòng bị khoá (Tắt rồi Lưu form sẽ bật lại, Sửa dòng khác làm mất bản nháp); đóng form thì mở lại', async () => {
+    mocks.list.mockResolvedValue([row('a'), row('b')]);
+    const c = await mount();
+    const at = (label: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    expect(at('Tắt chiến dịch Chiến dịch a').disabled).toBe(false);
+    click(at('Sửa chiến dịch Chiến dịch a'));
+    await flush(4);
+    for (const label of ['Sửa chiến dịch Chiến dịch a', 'Tắt chiến dịch Chiến dịch a', 'Sửa chiến dịch Chiến dịch b', 'Tắt chiến dịch Chiến dịch b']) {
+      expect(at(label).disabled).toBe(true);
+    }
+    click(at('Tắt chiến dịch Chiến dịch a'));
+    await flush(2);
+    expect(mocks.update).not.toHaveBeenCalled();
+    click(byText(c, 'button', 'Đóng'));
+    await flush(2);
+    expect(at('Tắt chiến dịch Chiến dịch a').disabled).toBe(false);
+    expect(at('Sửa chiến dịch Chiến dịch b').disabled).toBe(false);
+  });
+
   it('bật tắt lỗi: báo lỗi ngay tại dòng, không mất danh sách', async () => {
     mocks.update.mockRejectedValue(new Error('Chiến dịch không tồn tại'));
     const c = await mount();
