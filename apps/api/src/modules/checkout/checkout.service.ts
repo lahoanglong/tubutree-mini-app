@@ -89,6 +89,7 @@ import { DEFAULT_MERCHANT_COMMISSION_PCT, DEFAULT_MERCHANT_SHIPPING_FEE } from '
 import { isPartnerStore } from '../merchant/partner-store';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from './total-changed';
+import { WALLET_SHORT_MESSAGE, walletNegativeMessage } from './wallet-notice';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
@@ -415,8 +416,8 @@ export class CheckoutService {
     if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
       throw new BadRequestException(
         user.walletBalance < 0
-          ? `Số dư Ví Tubu đang âm ${formatVndText(-user.walletBalance)} do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.`
-          : 'Số dư Ví Tubu không đủ.',
+          ? walletNegativeMessage(formatVndText(-user.walletBalance))
+          : WALLET_SHORT_MESSAGE,
       );
     }
     // Bưu tá thu gom vỏ đi cùng kiện kho Tubu (vận đơn Gomdon đổi hàng) — không có kiện Tubu thì không ai đi thu.
@@ -637,7 +638,7 @@ export class CheckoutService {
               refType: 'ORDER',
               refId: order.id,
               reason: `Thanh toán đơn ${codes[i]}`,
-              insufficientMessage: 'Số dư Ví Tubu không đủ.',
+              insufficientMessage: WALLET_SHORT_MESSAGE,
             });
           }
         }

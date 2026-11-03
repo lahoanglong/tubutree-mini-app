@@ -258,7 +258,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     confirmWithReason(container);
     await flush();
     expect(mocks.cancel).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.');
+    expect(container.textContent).toContain('Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.');
     typeInto(field(container, 'Số tài khoản'), '1903 1234 5678');
     confirmWithReason(container);
     await flush(8);
@@ -565,7 +565,7 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     typeInto(field(container, 'Mô tả thêm'), 'ab');
     click(btn(container, 'Gửi yêu cầu')!);
     await flush();
-    expect(container.querySelector('form [role="alert"]')?.textContent).toBe('Mô tả lý do (tối thiểu 5 ký tự).');
+    expect(container.querySelector('form [role="alert"]')?.textContent).toBe('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
     typeInto(field(container, 'Mô tả thêm'), '  Bao bì bị rách khi nhận  ');
     click(btn(container, 'Gửi yêu cầu')!);
     await flush(8);
