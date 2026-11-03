@@ -106,9 +106,9 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
       messages: await prisma.supportMessage.count({ where: { conversationId: convId } }),
       forwards: await prisma.supportForward.count({ where: { conversationId: convId } }),
     });
-    const job = (conversationId: string): any => ({ data: { conversationId }, attemptsMade: 0, opts: { attempts: 5 } });
-    const config: any = { get: async () => 'g-it' };
-    const chat: any = { scheduleForward: async () => undefined };
+    const job = (conversationId: string) => ({ data: { conversationId }, attemptsMade: 0, opts: { attempts: 5 } }) as never;
+    const config = { get: async () => 'g-it' } as never;
+    const chat = { scheduleForward: async () => undefined } as never;
 
     it('xoá chen vào giữa lúc nhận tin và lúc gửi: forward không ném, không gửi, không còn hàng mồ côi', async () => {
       const { request, conv } = await seed();
@@ -120,14 +120,14 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
       const slowPrisma = new Proxy(prisma, {
         get(target, prop) {
           if (prop === 'user') {
-            return { findUnique: async (...a: unknown[]) => { reachedBuild(); await gate; return (target.user.findUnique as any)(...a); } };
+            return { findUnique: async (...a: unknown[]) => { reachedBuild(); await gate; return (target.user.findUnique as unknown as (...args: unknown[]) => Promise<unknown>)(...a); } };
           }
           const v = Reflect.get(target, prop, target);
           return typeof v === 'function' ? v.bind(target) : v;
         },
       }) as PrismaService;
       const send = jest.fn().mockResolvedValue({ ok: true, msgId: 'zr-x' });
-      const processor = new SupportChatForwardProcessor(slowPrisma, config, { send } as any, chat);
+      const processor = new SupportChatForwardProcessor(slowPrisma, config, { send } as never, chat);
 
       const run = processor.process(job(conv.id));
       await reached;
@@ -144,7 +144,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
       for (let i = 0; i < 5; i++) {
         const { request, conv } = await seed();
         const send = jest.fn().mockImplementation(async () => { await new Promise((r) => setTimeout(r, 20)); return { ok: true, msgId: `zr-${randCode(8)}` }; });
-        const processor = new SupportChatForwardProcessor(prisma, config, { send } as any, chat);
+        const processor = new SupportChatForwardProcessor(prisma, config, { send } as never, chat);
         const [, del] = await Promise.allSettled([processor.process(job(conv.id)), svc.process(request.id, admin.id)]);
         expect(del.status).toBe('fulfilled');
         const results = await Promise.allSettled([processor.process(job(conv.id))]);
@@ -354,6 +354,16 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
   it('chặn khi còn hoàn tiền đang chờ', async () => {
     const b = await customerWithRequest({ cashbackPending: 3000 });
     await expectBlocked(b.request.id, b.user.id, /hoàn tiền/i);
+  });
+
+  it('chặn khi còn khoản trả hàng chờ Kế toán đối soát (UNVERIFIED), kể cả khoản đơn trả trước bị giữ', async () => {
+    const { user, request } = await customerWithRequest({});
+    const order = await createOrder(prisma, { userId: user.id, status: 'RETURNED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 100_000 });
+    await prisma.orderCustomerRefund.create({
+      data: { orderId: order.id, orderCode: order.code, kind: 'RETURN', refKey: 'pancake-partial-return-held', userId: user.id, amount: 100_000, method: 'MANUAL_TRANSFER', status: 'UNVERIFIED', reason: 'RETURNED' },
+    });
+    const body = await expectBlocked(request.id, user.id, /chờ Kế toán đối soát/);
+    expect(body.blockers.map((b) => b.code)).toEqual(['CUSTOMER_REFUND_UNVERIFIED']);
   });
 
   it('PD-3: chặn khi còn Điểm Xanh quy đổi (không hết hạn, không quy ra tiền) chưa dùng', async () => {

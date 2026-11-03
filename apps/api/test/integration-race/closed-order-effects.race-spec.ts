@@ -12,6 +12,7 @@ import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_PARTIAL_RETURN_HELD,
   ATTENTION_PARTIAL_RETURN_SETTLED,
 } from '../../src/modules/integrations/pancake/pancake-attention';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
@@ -251,7 +252,7 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
     expect(after.pancakeAttention).toBe(`${ATTENTION_PARTIAL_RETURN_SETTLED} | Lý do khác`);
   });
 
-  it('Pancake 15 rồi 5 mà đảo điểm lỗi sau commit (job ném): lời "hoàn tay" đã đổi ngay lần lật, dòng COD còn nguyên, lần gửi lại không đổi gì', async () => {
+  it('Pancake 15 rồi 5 mà đảo điểm lỗi sau commit (job ném): lời "hoàn tay" đã được dòng chờ Kế toán thay ngay lần lật; job gửi lại và cron resyncReversalEffects 3 lần giữ nguyên ô, không báo lại', async () => {
     const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
     const order = await createOrder(prisma, {
       userId: user.id,
@@ -268,10 +269,18 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
     const event = { id: order.pancakeOrderId, status: 5 };
 
     await expect(processor.onStatusUpdated(event)).rejects.toThrow('P2024');
-    const expected = `${ATTENTION_PARTIAL_RETURN_SETTLED} | ${ATTENTION_COD_RETURN_UNVERIFIED}`;
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBe(expected);
+    const expected = `${ATTENTION_COD_RETURN_UNVERIFIED} | ${ATTENTION_PARTIAL_RETURN_HELD}`;
+    const cell = async () => (await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention;
+    expect(await cell()).toBe(expected);
+    const alertsAfterFlip = alert.mock.calls.length;
 
     await expect(processor.onStatusUpdated(event)).resolves.toBeUndefined();
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBe(expected);
+    for (let i = 0; i < 3; i += 1) {
+      await prisma.order.update({ where: { id: order.id }, data: { reversalEffectsAt: null } });
+      await expect(orderStatus.resyncReversalEffects(order.id)).resolves.toMatchObject({ outcome: 'DONE' });
+    }
+
+    expect(await cell()).toBe(expected);
+    expect(alert).toHaveBeenCalledTimes(alertsAfterFlip);
   });
 });

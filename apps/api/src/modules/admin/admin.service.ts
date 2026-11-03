@@ -13,7 +13,7 @@ import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
-import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
+import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, HELD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -1390,15 +1390,15 @@ export class AdminService {
       select: { id: true, code: true, status: true, reversalEffectsAt: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
+    // Việc hoàn tiền COD trả hàng (và đơn trả trước bị giữ sau Pancake 15) do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
     // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không. Tra thẳng khoản chờ đối soát, không dựa vào chữ trong ô:
     // các chỗ ghi cả ô (hoàn tiền tay, ACK) có thể đã đè mất dòng COD.
     const open = await this.prisma.orderCustomerRefund.findFirst({
-      where: { orderId: order.id, kind: 'RETURN', refKey: COD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
+      where: { orderId: order.id, kind: 'RETURN', refKey: { in: [COD_RETURN_UNVERIFIED_REF, HELD_RETURN_UNVERIFIED_REF] }, status: 'UNVERIFIED' },
       select: { id: true },
     });
     if (open) {
-      throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn COD chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
+      throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn trả hàng chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
     }
     const r = await this.prisma.order.updateMany({
       where: { id: order.id, pancakeAttentionAt: { not: null }, pancakeAttention: order.pancakeAttention },

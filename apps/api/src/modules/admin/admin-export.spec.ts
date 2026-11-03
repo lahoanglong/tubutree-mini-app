@@ -170,11 +170,23 @@ describe('cột Trạng thái TT trong CSV đơn hàng (R3-UI-3)', () => {
     const { prisma, findMany } = cursorPrisma(fakeOrders(1), 'order');
     await collect(orderCsvChunks(prisma, {}));
     const select = (findMany.mock.calls[0]![0] as unknown as { select: { customerRefunds: unknown } }).select;
-    expect(select.customerRefunds).toEqual({ where: OPEN_REFUND_FOR_EXPORT, select: { method: true, kind: true } });
+    expect(select.customerRefunds).toEqual({ where: OPEN_REFUND_FOR_EXPORT, select: { method: true, kind: true, status: true } });
     expect(BANK_REFUND_IN_PROGRESS).toEqual({ method: 'MANUAL_TRANSFER', status: { in: ['PENDING', 'PROCESSING'] } });
     expect(OPEN_REFUND_FOR_EXPORT).toEqual({
-      OR: [BANK_REFUND_IN_PROGRESS, { kind: { in: ['LATE_PAYMENT', 'OVERPAYMENT'] }, status: { in: ['PENDING', 'PROCESSING'] } }],
+      OR: [
+        BANK_REFUND_IN_PROGRESS,
+        { kind: { in: ['LATE_PAYMENT', 'OVERPAYMENT'] }, status: { in: ['PENDING', 'PROCESSING'] } },
+        { kind: 'RETURN', refKey: 'pancake-partial-return-held', status: 'UNVERIFIED' },
+      ],
     });
+  });
+
+  it('đơn trả/huỷ còn PAID mà khoản giữ chờ Kế toán còn UNVERIFIED: "Chờ đối soát hoàn", không phải "Đã thanh toán"; xác nhận xong (REFUNDED) thì hết', async () => {
+    const held = { method: 'MANUAL_TRANSFER', kind: 'RETURN', status: 'UNVERIFIED' };
+    expect(await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'RETURNED', paymentStatus: 'PAID', customerRefunds: [held] })).toBe('Chờ đối soát hoàn');
+    expect(await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'CANCELLED', paymentStatus: 'PAID', customerRefunds: [held] })).toBe('Chờ đối soát hoàn');
+    expect(await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'RETURNED', paymentStatus: 'PAID', customerRefunds: [] })).toBe('Đã thanh toán');
+    expect(await statusCell({ paymentMethod: 'BANK_TRANSFER', status: 'RETURNED', paymentStatus: 'REFUNDED', customerRefunds: [] })).toBe('Đã hoàn tiền');
   });
 });
 

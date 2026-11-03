@@ -460,8 +460,10 @@ describe('OrderStatusService', () => {
 
   describe('withholdCodRefund (D12-01): COD đã giao nhận "Đã hoàn" từ Pancake', () => {
     const COD_REASON = 'KHÔNG tự hoàn';
-    function codTx(partial: { refundAmount: number; shippingRefund: number }[] = []) {
+    // `cell`: ô "Cần xử lý" mà lần lật đọc lại dưới khoá dòng (tx.order.findUnique), không phải ảnh chụp của đơn đọc ngoài tx.
+    function codTx(partial: { refundAmount: number; shippingRefund: number }[] = [], cell: string | null = null) {
       const tx = mockTx() as unknown as Record<string, any>;
+      tx.order.findUnique = jest.fn().mockResolvedValue({ pancakeAttention: cell });
       tx.orderCustomerRefund = { createMany: jest.fn().mockResolvedValue({ count: 1 }) };
       tx.returnRequest = { findMany: jest.fn().mockResolvedValue(partial.map((r) => ({ ...r, items: [] }))) };
       return tx;
@@ -548,7 +550,7 @@ describe('OrderStatusService', () => {
       const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000, pancakeAttention: mismatch });
       prisma.order.findFirst.mockResolvedValue(order);
       prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
-      const tx = codTx();
+      const tx = codTx([], mismatch);
       await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
       const merged = attentionWrites(tx)[0].data.pancakeAttention as string;
       expect(merged).toContain(mismatch);
@@ -557,7 +559,7 @@ describe('OrderStatusService', () => {
       const returning = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000, pancakeAttention: `${PANCAKE_RETURNING_PREFIX} — chờ hàng về` });
       prisma.order.findFirst.mockResolvedValue(returning);
       prisma.order.findUniqueOrThrow.mockResolvedValue({ ...returning, status: 'RETURNED' });
-      const tx2 = codTx();
+      const tx2 = codTx([], `${PANCAKE_RETURNING_PREFIX} — chờ hàng về`);
       await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
       const replaced = attentionWrites(tx2)[0].data.pancakeAttention as string;
       expect(replaced).not.toContain(PANCAKE_RETURNING_PREFIX);
