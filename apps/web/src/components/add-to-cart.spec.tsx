@@ -1027,6 +1027,9 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
 });
 
 describe('AddToCart — bảng chọn Phân loại và hết giờ Giờ vàng (P8)', () => {
+  beforeAll(async () => {
+    await import('./variation-sheet');
+  });
   const rowButton = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.startsWith('Phân loại')) ?? null;
 
   it('nhiều phân loại: không có dòng "Phân loại ›" (chip đủ tên, giá, hết hàng); bảng chọn vẫn mở khi bấm Thêm vào giỏ ở điện thoại', async () => {
@@ -1039,7 +1042,7 @@ describe('AddToCart — bảng chọn Phân loại và hết giờ Giờ vàng (
       expect(rowButton(container)).toBeNull();
       expect(container.querySelector('[data-section="pdp-variation"]')).toBeNull();
       click(addButton(container));
-      await flush();
+      for (const end = Date.now() + 5000; mocks.sheetProps === null && Date.now() < end; ) await flush();
       expect(mocks.sheetProps).not.toBeNull();
     } finally {
       window.matchMedia = realMatchMedia;

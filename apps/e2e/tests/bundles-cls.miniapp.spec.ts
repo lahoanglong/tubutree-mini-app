@@ -4,7 +4,7 @@ import { CATALOG, NRC, XA_PHONG, mockDiscovery, productDetail, toCard } from './
 import { publicConfig } from './support/checkout-mocks';
 import { PDP_SLUG, homeCombos, mockPdpBundles, pdpAddon, pdpCombo } from './support/bundle-mocks';
 import { HOME_PUBLIC, mockMergedHome } from './support/home-merged';
-import type { MockApi } from './support/mock-api';
+import { reply, type MockApi } from './support/mock-api';
 
 /**
  * Zalo Mini App E2E — Combo ưu đãi, Mua kèm (trang sản phẩm) và Combo tiết kiệm (Trang chủ) không làm trang xê dịch (gói P15). Dự án Mini chạy WebKit,
@@ -31,7 +31,9 @@ test.beforeEach(async ({ page }) => {
  * trên máy chậm chúng về sau sản phẩm nên trang xê dịch ~76px, không liên quan tới Combo/Mua kèm mà spec này đo. Cho chúng về trước thì CLS
  * chỉ còn phần do khối bộ gây ra, không phụ thuộc tốc độ máy.
  */
-function auxiliaryBeforeProduct(api: MockApi): void {
+function auxiliaryBeforeProduct(api: MockApi): Promise<void> {
+  let markProductServed!: () => void;
+  const productServed = new Promise<void>((resolve) => (markProductServed = resolve));
   const served = new Set<string>();
   let release!: () => void;
   const auxReady = new Promise<void>((resolve) => (release = resolve));
@@ -49,8 +51,10 @@ function auxiliaryBeforeProduct(api: MockApi): void {
   serve('/products/:slug/reviews', { average: 0, count: 0, items: [] });
   api.get('/products/:slug', async ({ params }) => {
     await auxReady;
-    return productDetail(params.slug!);
+    markProductServed();
+    return productDetail(params.slug!) ?? reply(404, { statusCode: 404, message: 'Không tìm thấy sản phẩm.' });
   });
+  return productServed;
 }
 
 const readCls = async (page: Page): Promise<number> => {
@@ -60,9 +64,10 @@ const readCls = async (page: Page): Promise<number> => {
 };
 
 test.describe('Trang sản phẩm Mini: CLS', () => {
+  let productServed: Promise<void>;
   test.beforeEach(({ api }) => {
     mockDiscovery(api);
-    auxiliaryBeforeProduct(api);
+    productServed = auxiliaryBeforeProduct(api);
   });
 
   test('không có bộ nào: không có khối, CLS 0 (nền để so)', async ({ page }) => {
@@ -75,7 +80,8 @@ test.describe('Trang sản phẩm Mini: CLS', () => {
   });
 
   test('bộ về chậm hơn sản phẩm một chút (50ms, trong hạn chờ): khung chờ giữ tới khi bộ về, khối vào cùng lần vẽ đầu (CLS ≤ 0,02)', async ({ page, api }) => {
-    mockPdpBundles(api, { combos: [pdpCombo()], addons: [pdpAddon()], delayMs: 50 });
+    // Mốc 50ms tính từ lúc sản phẩm được trả, không phải từ lúc request bộ tới (hai request phát cùng lúc, mà sản phẩm bị giữ chờ dữ liệu phụ).
+    mockPdpBundles(api, { combos: [pdpCombo()], addons: [pdpAddon()], hold: productServed, delayMs: 50 });
     await trackLayoutShift(page);
     await page.goto(`/product/${PDP_SLUG}`);
     await expect(page.getByRole('heading', { level: 1, name: NRC.name })).toBeVisible({ timeout: 15_000 });
