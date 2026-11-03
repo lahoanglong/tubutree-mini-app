@@ -60,9 +60,13 @@ export class RbacService {
     // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì không đụng nhóm hiện có của user.
     const invitedPerms =
       best === 'STAFF' ? normalizePermissions(grants.filter((g) => g.role === 'STAFF').flatMap((g) => g.staffPermissions ?? [])) : [];
+    // Từ vai trò khác lên STAFF thì nhóm luôn bị đặt lại theo lời mời (cùng luật setUserRole): nhóm sót lại từ vai trò cũ
+    // không được sống lại thành quyền mà không ai gán. Người đã là STAFF không đi vào nhánh này (RANK không nâng).
+    const resetPerms = best === 'STAFF';
+    const oldPerms = user.staffPermissions ?? [];
     const updated = await db.user.update({
       where: { id: user.id },
-      data: { role: best, ...(invitedPerms.length ? { staffPermissions: invitedPerms } : {}) },
+      data: { role: best, ...(resetPerms ? { staffPermissions: invitedPerms } : {}) },
     });
     await recordUserAdminEvent(db, {
       userId: user.id,
@@ -72,13 +76,13 @@ export class RbacService {
       reason: 'Áp quyền cấp theo SĐT',
       actorId,
     });
-    if (invitedPerms.length) {
+    if (resetPerms && (invitedPerms.length || oldPerms.length)) {
       await recordUserAdminEvent(db, {
         userId: user.id,
         kind: 'STAFF_PERMISSIONS',
-        from: (user.staffPermissions ?? []).join(','),
+        from: oldPerms.join(','),
         to: invitedPerms.join(','),
-        reason: 'Áp nhóm việc của lời mời',
+        reason: invitedPerms.length ? 'Áp nhóm việc của lời mời' : 'Bỏ nhóm cũ khi nâng lên nhân viên',
         actorId,
       });
     }
@@ -124,8 +128,10 @@ export class RbacService {
       let applied = false;
       let permissionsChanged = false;
       if (user) {
-        const updated = await this.applyGrants(user, tx, adminId);
-        applied = updated.role !== user.role;
+        // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
+        const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
+        const updated = await this.applyGrants(fresh, tx, adminId);
+        applied = updated.role !== fresh.role;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
           await tx.user.update({ where: { id: user.id }, data: { staffPermissions: perms } });
