@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
@@ -80,12 +80,21 @@ export default function GroupBuyPage() {
   // Tài khoản khách (chưa có số điện thoại hay Zalo thật) bị máy chủ từ chối tham gia: liên kết trước, xong mới gửi. Khoá đồng bộ để
   // chạm đúp không mở hai lần hộp xin số điện thoại.
   const linking = useRef(false);
-  const join = async (id: string) => {
-    if (!authed) {
-      void login();
-      return;
-    }
-    if (user && isGuestUser(user)) {
+  // Chạm Tham gia lúc app còn đang khôi phục phiên: chờ phiên rồi tham gia tiếp đúng nhóm đó (một lần dù chạm nhiều), thay vì nuốt lần chạm.
+  const pendingJoin = useRef<string | null>(null);
+  const [waitingJoinId, setWaitingJoinId] = useState<string | null>(null);
+  // Rời trang trước khi khôi phục xong thì bỏ ý định.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // Đọc user mới nhất từ store: lần chạy tiếp sau khi chờ phiên không được dùng user của lần render cũ.
+  const joinSignedIn = async (id: string) => {
+    const current = useAuthStore.getState().user;
+    if (current && isGuestUser(current)) {
       if (linking.current) return;
       linking.current = true;
       let phone: string | null = null;
@@ -102,6 +111,25 @@ export default function GroupBuyPage() {
       }
     }
     joinM.mutate(id);
+  };
+  const join = async (id: string) => {
+    if (!authed) {
+      if (useAuthStore.getState().status === 'loading') {
+        if (pendingJoin.current) return;
+        pendingJoin.current = id;
+        setWaitingJoinId(id);
+        void login().finally(() => {
+          pendingJoin.current = null;
+          if (!mounted.current) return;
+          setWaitingJoinId(null);
+          if (useAuthStore.getState().status === 'authenticated') void joinSignedIn(id);
+        });
+        return;
+      }
+      void login();
+      return;
+    }
+    await joinSignedIn(id);
   };
 
   const share = (g: GroupBuy) =>
@@ -128,7 +156,7 @@ export default function GroupBuyPage() {
       onBuy={() => navigate(`/product/${g.product.slug}`, { state: { variationId: g.variationId, applyCoupon: g.couponCode } })}
       onJoin={() => void join(g.id)}
       onShare={() => share(g)}
-      joining={joinM.isPending && joinM.variables === g.id}
+      joining={(joinM.isPending && joinM.variables === g.id) || waitingJoinId === g.id}
     />
   );
 
