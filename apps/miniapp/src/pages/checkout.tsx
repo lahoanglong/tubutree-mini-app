@@ -19,7 +19,7 @@ import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
-import { flashLimitNotice } from '@tubutree/app-core/commerce/flash-limit';
+import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
@@ -1338,11 +1338,6 @@ function CheckoutSkeleton() {
       </Box>
     </Shell>
   );
-}
-
-/** Lỗi đặt đơn mà khách chỉ sửa được bằng cách đổi số lượng trong giỏ. */
-function isCartFixableError(message: string): boolean {
-  return /không đủ tồn kho/.test(message) || message === 'Vượt giới hạn mua ưu đãi.' || message === 'Hết suất ưu đãi.';
 }
 
 /** Liên kết nằm giữa câu: chữ có gạch chân, giữ nguyên dòng chữ xung quanh (vùng chạm là cả dòng cao 16px + khoảng đệm của thanh). */

@@ -4,7 +4,14 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { countdownText } from './commerce/countdown';
-import { FORBIDDEN_TERMS } from './shop-copy';
+import { couponNotAppliedNotice } from './commerce/coupon-notice';
+import { FLASH_OVER_LIMIT_MESSAGE, FLASH_SOLD_OUT_MESSAGE, isCartFixableError } from './commerce/flash-limit';
+import { fillCopy, FORBIDDEN_TERMS } from './shop-copy';
+import { walletNegativeCheckoutReason } from './wallet-rules';
+import { ACCOUNT_NAME_REQUIRED, ACCOUNT_NUMBER_INVALID, BANK_NAME_REQUIRED, RETURN_REASON_REQUIRED } from './client-copy';
+import { REFUND_ACCOUNT_NAME_REQUIRED, REFUND_ACCOUNT_NUMBER_INVALID, REFUND_BANK_NAME_REQUIRED, RETURN_REASON_REQUIRED as API_RETURN_REASON_REQUIRED } from '../../../apps/api/src/modules/orders/refund-notice';
+import { flashOverLimitMessage, FLASH_OVER_LIMIT_MSG, FLASH_SOLD_OUT_MSG } from '../../../apps/api/src/modules/flash-sale/flash-sale-notice';
+import { WALLET_SHORT_MESSAGE, walletNegativeMessage } from '../../../apps/api/src/modules/checkout/wallet-notice';
 
 /**
  * Thuật ngữ cấm (`FORBIDDEN_TERMS`, nguồn review/ux-copy.md mục D2 và thiết kế §4 Q5) quét trên chữ hiển thị của Mini App và web khách.
@@ -267,6 +274,9 @@ describe('findHits: ca vi phạm cố ý', () => {
     ['Nhãn hàng của bạn', 'Thương hiệu'],
     ['Theo dõi nhãn này', 'Thương hiệu'],
     ['Cùng nhà', 'Thương hiệu'],
+    ['Xem trang nhãn', 'Thương hiệu'],
+    ['Nhãn Cocoon', 'Thương hiệu'],
+    ['Bạn chưa được cấp quyền quản lý nhãn nào', 'Thương hiệu'],
     ['Top bán chạy', 'Bán chạy nhất'],
     ['Freeship cho đơn từ 299k', 'Miễn phí giao hàng'],
     ['Kho voucher của bạn', 'Mã giảm giá'],
@@ -307,6 +317,18 @@ describe('findHits: ca vi phạm cố ý', () => {
     'Nhận mã giảm giá 15% cho đơn sau',
     'mã giảm giá của shop',
     'Thương hiệu',
+    'Quét mã trên nhãn dán ngoài hộp',
+    'Bạn nhập hoặc quét lại mã trên nhãn nhé.',
+    'Chụp ảnh sản phẩm, bao bì và tem nhãn',
+    'Nhãn hiệu thuộc Tubu Tree',
+    'Dán nhãn lên hộp trước khi gửi',
+    'Long nhãn sấy',
+    'Quét nhãn ngoài hộp',
+    'In nhãn vận đơn',
+    'Mật ong hoa nhãn',
+    'Quả nhãn Hưng Yên',
+    'Nhãn giao hàng',
+    'Nhãn lồng Hưng Yên',
     'Gian hàng',
     'Miễn phí giao hàng',
     'Hạn dùng 12/2026',
@@ -514,6 +536,132 @@ describe('chữ "Vui lòng" và "chúng tôi" trong toàn bộ API (M2)', () => 
       expect(files.has(e.file), `${e.file} không nằm trong cây quét`).toBe(true);
       expect(hits.filter((h) => h.file === e.file).length, `${e.file}: max phải bằng số chỗ hiện có`).toBe(e.max);
     }
+  });
+});
+
+// Câu client lặp câu API: khách thấy một câu dù lỗi chặn ở màn hay do máy chủ từ chối, nên hai bên phải bằng nhau từng chữ.
+// Giới hạn của tầng quét (2): chỉ bắt khi 6 chữ đầu giống và chỉ lấy câu từ file chữ khách đọc của API; câu lệch ngay từ đầu (vd "Ví đang âm" so "Số dư Ví Tubu đang âm") hoặc nằm ở orders.service/checkout-split phải ghim trực tiếp như Ví.
+// Hai tầng: (1) ghim giá trị với câu API (file API thuần chữ, import thẳng); (2) quét: câu client mở đầu giống một câu của file chữ khách đọc của API
+// (`isApiCopyFile`) mà phần còn lại khác thì đỏ, trừ khi nằm trong `CLIENT_API_DRIFT_OK` kèm lý do (client cố ý nói ngắn hơn hoặc nói thêm).
+describe('câu client lặp câu API phải bằng câu API (gl-1103 chu)', () => {
+  it('Ví âm: câu khoá nút trả bằng Ví của client bằng câu máy chủ từ chối lúc đặt', () => {
+    for (const owed of ['1đ', '50.000đ', '1.250.000đ']) expect(walletNegativeCheckoutReason(owed)).toBe(walletNegativeMessage(owed));
+  });
+
+  it('Giờ vàng: câu vượt giới hạn của client bằng câu máy chủ, hai câu cũ client còn so khớp bằng đúng chữ của máy chủ', () => {
+    for (const n of [1, 2, 10]) expect(fillCopy('flash.overLimitError', { n })).toBe(flashOverLimitMessage(n));
+    expect(FLASH_SOLD_OUT_MESSAGE).toBe(FLASH_SOLD_OUT_MSG);
+    expect(FLASH_OVER_LIMIT_MESSAGE).toBe(FLASH_OVER_LIMIT_MSG);
+  });
+
+  it('nhận tiền hoàn và lý do đổi/trả: câu lỗi form của client bằng câu máy chủ (order-actions, return sheet, hai app)', () => {
+    expect(BANK_NAME_REQUIRED).toBe(REFUND_BANK_NAME_REQUIRED);
+    expect(ACCOUNT_NUMBER_INVALID).toBe(REFUND_ACCOUNT_NUMBER_INVALID);
+    expect(ACCOUNT_NAME_REQUIRED).toBe(REFUND_ACCOUNT_NAME_REQUIRED);
+    expect(RETURN_REASON_REQUIRED).toBe(API_RETURN_REASON_REQUIRED);
+  });
+
+  it('lỗi sửa được ở giỏ: nhận câu cũ và câu mới của máy chủ, không nhận lỗi khác', () => {
+    expect(isCartFixableError(FLASH_SOLD_OUT_MSG)).toBe(true);
+    expect(isCartFixableError(FLASH_OVER_LIMIT_MSG)).toBe(true);
+    expect(isCartFixableError('Sản phẩm "Dầu gội" không đủ tồn kho.')).toBe(true);
+    expect(isCartFixableError(flashOverLimitMessage(2))).toBe(false);
+    expect(isCartFixableError(WALLET_SHORT_MESSAGE)).toBe(false);
+    expect(isCartFixableError('Địa chỉ giao hàng không hợp lệ.')).toBe(false);
+  });
+
+  it('mã chưa áp dụng: đầu câu của client bằng đầu câu của API khi giỏ không có hàng Giờ vàng hay combo', () => {
+    const api = readFileSync(join(REPO, API_ROOT, 'coupons/coupon-notice.ts'), 'utf8');
+    const m = /`(Mã chưa được áp dụng cho đơn này)\$\{why\}: \$\{reason\}`/.exec(api);
+    expect(m, 'API đổi câu "Mã chưa được áp dụng": cập nhật couponNotAppliedNotice của client').not.toBeNull();
+    expect(couponNotAppliedNotice('Đơn tối thiểu 150.000đ.')).toBe(`${m![1]}: Đơn tối thiểu 150.000đ.`);
+  });
+
+  const norm = (s: string) => s.replace(/\$\{[^}]*\}|\{[^}]*\}/g, '§').replace(/\s+/g, ' ').trim();
+  const opening = (s: string) => s.split(' ').slice(0, 6).join(' ');
+  // Câu tiếng Việt từ chuỗi trong mã (chuỗi thường, template, JSX): tách ở dấu chấm câu, bỏ câu ngắn (nhãn, tiêu đề) vì không đủ dài để coi là lặp lại.
+  function sentencesOf(text: string, file: string): { sentence: string; line: number }[] {
+    return displayStringsRaw(text, file).flatMap(({ text: t, line }) =>
+      norm(t)
+        .split(/(?<=[.!?])\s+/)
+        .map((x) => x.trim())
+        .filter((x) => x.split(' ').length >= 6 && VI_LETTER.test(x))
+        .map((sentence) => ({ sentence, line })),
+    );
+  }
+  // Chuỗi nguyên văn (template ghép cả đoạn, `${…}` thành §) để so cả câu có chỗ trống, không bị cắt ở biểu thức như `displayStrings`.
+  function displayStringsRaw(source: string, fileName: string): { line: number; text: string }[] {
+    const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    const out: { line: number; text: string }[] = [];
+    const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+    const visit = (n: ts.Node) => {
+      if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isLiteralTypeNode(n)) return;
+      if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) out.push({ line: lineOf(n), text: n.text });
+      else if (ts.isTemplateExpression(n)) out.push({ line: lineOf(n), text: n.head.text + n.templateSpans.map((sp) => '${}' + sp.literal.text).join('') });
+      else if (ts.isJsxText(n) && n.text.trim() !== '') out.push({ line: lineOf(n), text: n.text });
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    return out;
+  }
+
+  /** Câu client cố ý khác câu API cùng mở đầu: `file` + `sentence` (đã chuẩn hoá) + lý do. */
+  const CLIENT_API_DRIFT_OK: { file: string; sentence: string; reason: string }[] = [
+    {
+      file: 'packages/app-core/src/commerce/coupon-notice.ts',
+      sentence: 'Mã chưa được áp dụng cho đơn này: §',
+      reason: 'API chèn "(hàng Giờ vàng ... không được tính vào điều kiện của mã)" trước dấu hai chấm khi giỏ có hàng Giờ vàng hay combo; xem trước theo từng mã không có phần đó. Ca "mã chưa áp dụng" ở trên ghim phần đầu',
+    },
+  ];
+
+  const all = loadSources();
+  const apiSentences = all.filter((s) => s.file.startsWith('apps/api/')).flatMap((s) => sentencesOf(s.text, s.file).map((x) => x.sentence));
+  const apiByOpening = new Map<string, Set<string>>();
+  for (const sentence of apiSentences) (apiByOpening.get(opening(sentence)) ?? apiByOpening.set(opening(sentence), new Set()).get(opening(sentence))!).add(sentence);
+
+  // Câu API mà client so khớp từng chữ nằm MỘT chỗ ở app-core (ghim ở trên); bản chép riêng trong Mini hoặc web sẽ lệch âm thầm khi API đổi chữ.
+  it('câu lỗi Giờ vàng, Ví âm và nhận tiền hoàn của API không bị chép lại ngoài app-core (Mini và web)', () => {
+    const literal = /^(?:Hết suất ưu đãi\.|Vượt giới hạn mua ưu đãi\.)$|do thu hồi hoa hồng đơn trả hàng|chỉ gồm chữ số, từ 6 đến 24 số|\(ít nhất 5 ký tự\) nhé/;
+    const copied = all
+      .filter((s) => !s.file.startsWith('apps/api/') && !s.file.startsWith('packages/app-core/'))
+      .flatMap((s) => displayStringsRaw(s.text, s.file).filter((x) => literal.test(x.text.trim())).map((x) => `${s.file}:${x.line}`));
+    expect(copied).toEqual([]);
+    expect(displayStringsRaw("const m = 'Hết suất ưu đãi.';", 'apps/web/src/x.ts').some((x) => literal.test(x.text.trim()))).toBe(true);
+  });
+
+  it('quét được câu của file chữ khách đọc của API (không quét rỗng)', () => {
+    expect(apiSentences.length).toBeGreaterThan(20);
+    expect(apiSentences).toContain(norm(walletNegativeMessage('${x}')).split(/(?<=[.!?])\s+/)[0]!.replace('${x}', '§'));
+  });
+
+  it('câu client mở đầu giống câu API thì bằng câu API', () => {
+    const drift: string[] = [];
+    for (const s of all) {
+      if (s.file.startsWith('apps/api/')) continue;
+      for (const { sentence, line } of sentencesOf(s.text, s.file)) {
+        const same = apiByOpening.get(opening(sentence));
+        if (!same || same.has(sentence)) continue;
+        if (CLIENT_API_DRIFT_OK.some((e) => e.file === s.file && e.sentence === sentence)) continue;
+        drift.push(`${s.file}:${line}: "${sentence}" khác API: "${[...same][0]}"`);
+      }
+    }
+    expect(drift).toEqual([]);
+  });
+
+  it('mỗi ngoại lệ có lý do và còn đúng là câu có thật trong file', () => {
+    for (const e of CLIENT_API_DRIFT_OK) {
+      expect(e.reason.trim().length, `${e.file} thiếu lý do`).toBeGreaterThan(10);
+      const src = all.find((s) => s.file === e.file);
+      expect(src && sentencesOf(src.text, src.file).some((x) => x.sentence === e.sentence), `${e.file}: ngoại lệ không còn khớp câu nào`).toBe(true);
+    }
+  });
+
+  it('đối chứng: câu mở đầu giống nhưng cuối khác bị bắt, câu bằng hoặc mở đầu khác thì không', () => {
+    const api = new Set(sentencesOf("export const a = 'Số dư Ví Tubu không đủ để thanh toán đơn định kỳ này.';", 'x-notice.ts').map((x) => x.sentence));
+    const same = (t: string) => sentencesOf(`export const b = '${t}';`, 'b.ts').filter((x) => api.has(x.sentence) || [...api].some((a) => opening(a) === opening(x.sentence) && a !== x.sentence)).map((x) => api.has(x.sentence));
+    expect(same('Số dư Ví Tubu không đủ để thanh toán đơn định kỳ này.')).toEqual([true]);
+    expect(same('Số dư Ví Tubu không đủ để thanh toán đơn đầu tiên, hãy nạp thêm.')).toEqual([false]);
+    expect(same('Ví của bạn chưa đủ để thanh toán đơn định kỳ này nhé.')).toEqual([]);
   });
 });
 

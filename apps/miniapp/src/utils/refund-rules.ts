@@ -1,5 +1,5 @@
 import type { OrderStatus, PaymentMethod, PaymentStatus } from '@tubutree/shared-types';
-import { ACCOUNT_NAME_REQUIRED, BANK_NAME_REQUIRED } from '@tubutree/app-core/client-copy';
+import { ACCOUNT_NAME_REQUIRED, ACCOUNT_NUMBER_INVALID, BANK_NAME_REQUIRED, RETURN_REASON_REQUIRED } from '@tubutree/app-core/client-copy';
 import { formatDateTime, formatVnd } from './format';
 
 /** Lý do đổi/trả chọn sẵn — cùng mã với API (return-reasons.ts). "Lý do khác" bắt buộc mô tả. */
@@ -48,7 +48,7 @@ export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidT
 export function bankFieldErrors(b: RefundBankInput): Partial<Record<keyof RefundBankInput, string>> {
   const errors: Partial<Record<keyof RefundBankInput, string>> = {};
   if (b.bankName.trim().length < 2) errors.bankName = BANK_NAME_REQUIRED;
-  if (!/^\d{6,24}$/.test(b.accountNumber.replace(/[\s.-]/g, ''))) errors.accountNumber = 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
+  if (!/^\d{6,24}$/.test(b.accountNumber.replace(/[\s.-]/g, ''))) errors.accountNumber = ACCOUNT_NUMBER_INVALID;
   if (b.accountName.trim().length < 2) errors.accountName = ACCOUNT_NAME_REQUIRED;
   return errors;
 }
@@ -110,7 +110,7 @@ export function returnFormError(input: {
 }): string | null {
   if (!input.lines.some((l) => l.selected && l.quantity > 0)) return 'Chọn ít nhất một sản phẩm muốn trả.';
   if (!input.reasonCode) return 'Chọn lý do đổi/trả.';
-  if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5) return 'Mô tả lý do (tối thiểu 5 ký tự).';
+  if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5) return RETURN_REASON_REQUIRED;
   if (input.refundMethod === 'BANK') return bankDetailsError(input.bank);
   return null;
 }

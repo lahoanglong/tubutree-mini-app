@@ -23,6 +23,7 @@ import {
 } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund } from './refund-queue';
 import { partialReturnTotals } from './return-ledger';
+import { RETURN_REASON_REQUIRED } from './refund-notice';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
@@ -210,7 +211,7 @@ export class OrderReturnsService {
     const reasonCode = dto.reasonCode ?? null;
     const text = dto.reason?.trim() ?? '';
     if ((!reasonCode || reasonCode === 'OTHER') && text.length < 5) {
-      throw new BadRequestException('Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.');
+      throw new BadRequestException(RETURN_REASON_REQUIRED);
     }
     const reason = text || RETURN_REASONS[reasonCode as ReturnReasonCode].label;
 
