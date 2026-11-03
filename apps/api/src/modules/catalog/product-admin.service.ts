@@ -143,10 +143,12 @@ export class ProductAdminService {
     const stored = await tx.product.findUnique({ where: { id: productId }, select: { categoryIds: true } });
     if (!stored) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const had = new Set(stored.categoryIds);
-    const alive = new Set(ids.length > 0 ? (await tx.category.findMany({ where: { id: { in: ids } }, select: { id: true } })).map((c) => c.id) : []);
+    const lookup = [...new Set([...ids, ...stored.categoryIds])];
+    const alive = new Set(lookup.length > 0 ? (await tx.category.findMany({ where: { id: { in: lookup } }, select: { id: true } })).map((c) => c.id) : []);
     if (ids.some((c) => !alive.has(c) && !had.has(c))) throw new BadRequestException('Có danh mục không còn tồn tại, tải lại danh sách danh mục.');
     const kept = ids.filter((c) => alive.has(c));
-    if (kept.length > PRODUCT_CATEGORIES_MAX && kept.length > stored.categoryIds.length) {
+    const liveBefore = stored.categoryIds.filter((c) => alive.has(c)).length;
+    if (kept.length > PRODUCT_CATEGORIES_MAX && kept.length > liveBefore) {
       throw new BadRequestException(`Tối đa ${PRODUCT_CATEGORIES_MAX} danh mục cho một sản phẩm.`);
     }
     // Chỉ hỏi các id mới thêm: sản phẩm đã gán vào một danh mục từ trước khi nó có mục con vẫn sửa được các trường khác.

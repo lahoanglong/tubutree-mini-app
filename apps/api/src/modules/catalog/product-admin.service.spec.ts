@@ -158,6 +158,14 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     expect(up.update).not.toHaveBeenCalled();
   });
 
+  it('trần 10 tính trên danh mục còn sống đã có, không tính danh mục ma: 10 sống + 3 ma, thêm 2 mới thì bị chặn', async () => {
+    const live = Array.from({ length: 10 }, (_, i) => `c${i}`);
+    const stored = [...live, 'g1', 'g2', 'g3'];
+    const { svc, update } = setup(row({ categoryIds: stored }), [...live, 'n1', 'n2']);
+    await expect(svc.update('a1', 'p1', { categoryIds: [...stored, 'n1', 'n2'] })).rejects.toThrow(/Tối đa 10 danh mục/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('ẩn sản phẩm luôn được; bật lại bị chặn khi Pancake đang giữ hoặc chưa duyệt', async () => {
     const held = setup(row({ isActive: false, pancakeHold: 'NO_PRICE' }));
     await expect(held.svc.update('a1', 'p1', { isActive: true })).rejects.toBeInstanceOf(ConflictException);
