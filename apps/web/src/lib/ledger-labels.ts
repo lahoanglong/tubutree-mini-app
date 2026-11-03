@@ -8,6 +8,8 @@ interface ReasonRule {
   label: string;
   /** Phần sau mã có nghĩa với người đọc: mã đơn (ORDER_*, RETURN_*) hoặc ngày thứ mấy của chuỗi điểm danh. */
   ref?: ReasonRef;
+  /** Dòng ghi nợ (delta 0): số điểm còn thiếu nằm ở đoạn cuối reason. */
+  debt?: boolean;
 }
 
 const AFTER_REDEEM_ORDER: ReasonRule = { label: 'Dùng điểm khi thanh toán', ref: 'order' };
@@ -20,7 +22,9 @@ const REFERRAL_MILESTONE_REWARD: ReasonRule = { label: 'Thưởng mốc giới t
 const REFERRAL_REVOKED: ReasonRule = { label: 'Thu hồi toàn bộ thưởng giới thiệu' };
 const REFERRAL_PARTIAL_REVOKED: ReasonRule = { label: 'Thu hồi một phần thưởng giới thiệu' };
 const REFERRAL_MILESTONE_REVOKED: ReasonRule = { label: 'Thu hồi thưởng mốc giới thiệu' };
-const REFERRAL_DEBT: ReasonRule = { label: 'Ghi nợ thu hồi thưởng giới thiệu' };
+const REFERRAL_DEBT: ReasonRule = { label: 'Ghi nợ thu hồi thưởng giới thiệu', debt: true };
+const CTV_MILESTONE_REVOKED: ReasonRule = { label: 'Thu hồi thưởng mốc doanh số CTV' };
+const CTV_MILESTONE_DEBT: ReasonRule = { label: 'Ghi nợ thu hồi thưởng mốc doanh số CTV', debt: true };
 const COMMUNITY_REWARD: ReasonRule = { label: 'Thưởng cộng đồng' };
 const GARDEN_REWARD: ReasonRule = { label: 'Phần thưởng Vườn Xanh' };
 
@@ -58,6 +62,8 @@ const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   COMMUNITY_EVENT_WIN: COMMUNITY_REWARD,
   STOREFRONT_QUEST: { label: 'Thưởng nhiệm vụ gian hàng' },
   CTV_MILESTONE: { label: 'Thưởng mốc doanh số CTV' },
+  AFFILIATE_MILESTONE_REVOKE: CTV_MILESTONE_REVOKED,
+  AFFILIATE_MILESTONE_DEBT: CTV_MILESTONE_DEBT,
   GAME_BUY_TREE: { label: 'Góp quỹ trồng cây' },
   GAME_SPIN_COST: { label: 'Quay vòng quay may mắn' },
   GAME_SPIN_WIN: GARDEN_REWARD,
@@ -110,7 +116,7 @@ export function pointsReasonLabel(reason: string): string {
 /** Dòng ghi nợ thu hồi (delta 0): API ghi số điểm còn thiếu ở đoạn cuối reason `MÃ:<tham chiếu>:<số điểm thiếu>`. */
 export function pointsDebtAmount(reason: string): number | null {
   const { rule, ref } = parsePointsReason(reason);
-  if (rule !== REFERRAL_DEBT) return null;
+  if (!rule?.debt) return null;
   const sep = ref.lastIndexOf(':');
   if (sep < 0) return null;
   const tail = ref.slice(sep + 1);
