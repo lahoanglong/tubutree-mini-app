@@ -247,6 +247,45 @@ describe('AdminService.reviewDealerApplication', () => {
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
+  // QTAPI-02: applyGrants (mỗi lần cấp token) chỉ nâng role, nên grant STAFF/ADMIN còn hiệu lực sẽ kéo người vừa duyệt đại lý về lại.
+  it('duyệt người đang là STAFF có nhóm việc → thu hồi grant cao hơn DEALER và gỡ staffPermissions trong cùng transaction', async () => {
+    const { $transaction, userUpdate, queryRaw } = makeApproveTx({ applicantRole: 'STAFF' });
+    queryRaw.mockReset().mockResolvedValueOnce([]).mockResolvedValue([
+      { role: 'STAFF', isBlocked: false, metadata: null, phone: '0899625240', staffPermissions: ['CSKH', 'KHO'] },
+    ]);
+    const prisma = makePrisma({
+      dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }) },
+      $transaction,
+    });
+    (rbac.revokeGrantsAbove as jest.Mock).mockClear();
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
+    expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'DEALER');
+    expect((userUpdate.mock.calls[0][0] as { data: { staffPermissions?: string[] } }).data.staffPermissions).toEqual([]);
+  });
+
+  it('duyệt người đang là ADMIN (còn admin khác) → thu hồi grant cao hơn DEALER', async () => {
+    const { $transaction, queryRaw } = makeApproveTx({ applicantRole: 'ADMIN', otherActiveAdmins: 2 });
+    queryRaw.mockReset().mockResolvedValueOnce([]).mockResolvedValue([
+      { role: 'ADMIN', isBlocked: false, metadata: null, phone: '0899625241', staffPermissions: [] },
+    ]);
+    const prisma = makePrisma({
+      dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }) },
+      $transaction,
+    });
+    (rbac.revokeGrantsAbove as jest.Mock).mockClear();
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
+    expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625241', 'DEALER');
+  });
+
+  it('từ chối hồ sơ → không đụng RoleGrant', async () => {
+    const prisma = makePrisma({
+      dealerApplication: { findUnique: jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' }), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    });
+    (rbac.revokeGrantsAbove as jest.Mock).mockClear();
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', false, undefined, 'thiếu giấy tờ');
+    expect(rbac.revokeGrantsAbove).not.toHaveBeenCalled();
+  });
+
   it('metadata null → vẫn set dealerTierId', async () => {
     const { $transaction, userUpdate } = makeApproveTx({});
     const prisma = makePrisma({
@@ -1085,6 +1124,25 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usageLimit: null } });
   });
 
+  it('updateCoupon: đổi Tổng lượt → khoá dòng mã, đếm lại redemption và ghi usedCount = số đếm cùng lúc với usageLimit (QTAPI-01)', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2026-01-01'), endAt: new Date('2099-12-31'), usageLimit: null, usedCount: 0 });
+    const update = jest.fn().mockResolvedValue({ id: 'c1' });
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'c1' }]);
+    const prisma = makePrisma({ coupon: { findUnique, update }, couponRedemption: { count: jest.fn().mockResolvedValue(7) }, $queryRaw });
+    await mkAdmin(prisma).updateCoupon('c1', { usageLimit: 7 });
+    expect($queryRaw).toHaveBeenCalledTimes(1);
+    expect(($queryRaw.mock.calls[0] as unknown[])[0]).toEqual(expect.arrayContaining([expect.stringMatching(/FOR UPDATE/)]));
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usageLimit: 7, usedCount: 7 } });
+  });
+
+  it('updateCoupon: endAt đã qua → 400 gợi ý tắt mã (QTUI-03)', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', code: 'SALE10', startAt: new Date('2020-01-01'), endAt: new Date('2099-12-31'), usedCount: 0 });
+    const update = jest.fn();
+    const prisma = makePrisma({ coupon: { findUnique, update } });
+    await expect(mkAdmin(prisma).updateCoupon('c1', { endAt: '2021-01-01T00:00:00.000Z' })).rejects.toThrow(/tắt mã/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('updateCoupon: mã không tồn tại → 404', async () => {
     const prisma = makePrisma({ coupon: { findUnique: jest.fn().mockResolvedValue(null) } });
     await expect(mkAdmin(prisma).updateCoupon('nope', { isActive: false })).rejects.toThrow('Không tìm thấy mã giảm giá.');
@@ -1127,6 +1185,8 @@ describe('AdminService.getDashboardStats (D9-06: một lượt quét bảng orde
     expect(order.count).not.toHaveBeenCalled();
     expect(order.aggregate).not.toHaveBeenCalled();
     expect($queryRaw.mock.calls.filter(([q]) => /FROM orders o\b(?![\s\S]*return_requests)/.test(sqlText(q)) && !sqlText(q).includes('return_requests'))).toHaveLength(1);
+    const kpiSql = sqlText($queryRaw.mock.calls.map(([q]) => q).find((q) => sqlText(q).includes('cod_pending')));
+    expect(kpiSql).toMatch(/FILTER \(WHERE o\."paymentMethod" = 'COD'.*fulfiller <> 'MERCHANT'\) AS cod_pending/);
     expect(stats).toMatchObject({
       totalOrders: 15, pendingOrders: 3, shippingOrders: 2, deliveredOrders: 6, cancelledOrders: 2, returnedOrders: 1,
       totalRevenue: 1500000 - 200000, gmv: 2200000, codPendingValue: 190000, returnRefundTotal: 300000, dealerDebtOutstanding: 40000,
@@ -2736,7 +2796,8 @@ describe('AdminService coupon — nhân viên Marketing (D1-05)', () => {
           const { update, prisma, p } = raising(data, 1_000_000_000);
           await p;
           expect(update).toHaveBeenCalled();
-          expect(prisma.$queryRaw).not.toHaveBeenCalled();
+          expect(values(prisma.$executeRaw!)).not.toContain('coupon.staff_budget:s2');
+          expect(values(prisma.$queryRaw!)).not.toContain('s2');
         }
       });
     });

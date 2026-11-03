@@ -170,6 +170,8 @@ import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
+import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
+import { FLASH_SALE_PAGE_SIZE, filterFlashSales, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import type { WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
@@ -3159,12 +3161,14 @@ function FlashSalesTab() {
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saleFilter, setSaleFilter] = useState<FlashSaleFilter>('open');
+  const [shown, setShown] = useState(FLASH_SALE_PAGE_SIZE);
   const create = useMutation({
     mutationFn: () =>
       createFlashSale({
         title: f.title.trim(),
-        startAt: new Date(f.startAt).toISOString(),
-        endAt: new Date(f.endAt).toISOString(),
+        startAt: vnLocalToIso(f.startAt) ?? invalidVnTime(),
+        endAt: vnLocalToIso(f.endAt) ?? invalidVnTime(),
       }),
     onSuccess: () => {
       setF({ title: '', startAt: '', endAt: '' });
@@ -3174,6 +3178,7 @@ function FlashSalesTab() {
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt giờ vàng' }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
+  const visibleSales = filterFlashSales(q.data ?? [], saleFilter);
 
   return (
     <div className="space-y-4">
@@ -3214,20 +3219,49 @@ function FlashSalesTab() {
 
       <div className="space-y-3">
         {q.isError && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
-        {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
+        {q.data && q.data.length > 0 && (
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc đợt giờ vàng">
+            {FLASH_SALE_FILTERS.map((x) => (
+              <button
+                key={x.k}
+                type="button"
+                aria-pressed={saleFilter === x.k}
+                onClick={() => { setSaleFilter(x.k); setShown(FLASH_SALE_PAGE_SIZE); }}
+                className={chipClass(saleFilter === x.k)}
+              >
+                {x.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {visibleSales.slice(0, shown).map((s) => <FlashSaleRow key={s.id} sale={s} />)}
+        {visibleSales.length > shown && (
+          <button type="button" onClick={() => setShown((n) => n + FLASH_SALE_PAGE_SIZE)} className={BTN_SECONDARY}>
+            Xem thêm ({visibleSales.length - shown} đợt)
+          </button>
+        )}
         {q.data?.length === 0 && <Empty>Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.</Empty>}
+        {q.data && q.data.length > 0 && visibleSales.length === 0 && <Empty>{saleFilter === 'ended' ? 'Chưa có đợt nào đã kết thúc.' : 'Không có đợt nào chưa kết thúc. Tạo đợt mới ở trên.'}</Empty>}
       </div>
     </div>
   );
 }
 
-/** Giá trị cho VnDateTimeInput "yyyy-mm-ddTHH:mm" (giờ máy admin), cùng cách đọc với lúc tạo đợt: `new Date(value)`. */
-function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const p2 = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
-}
+const invalidVnTime = (): never => {
+  throw new Error('Giờ nhập chưa hợp lệ.');
+};
+
+const FLASH_SALE_FILTERS: { k: FlashSaleFilter; label: string }[] = [
+  { k: 'open', label: 'Chưa kết thúc' },
+  { k: 'ended', label: 'Đã kết thúc' },
+  { k: 'all', label: 'Tất cả' },
+];
+const FLASH_SALE_STATE: Record<FlashSaleState, { label: string; tone: 'success' | 'info' | 'neutral' | 'warning' }> = {
+  live: { label: 'Đang chạy', tone: 'success' },
+  scheduled: { label: 'Sắp chạy', tone: 'info' },
+  ended: { label: 'Đã kết thúc', tone: 'neutral' },
+  off: { label: 'Đang tắt', tone: 'warning' },
+};
 
 const EMPTY_ITEM = { variationId: '', flashPrice: '', quota: '', perUserLimit: '' };
 
@@ -3247,6 +3281,8 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
   });
   const notStarted = new Date(sale.startAt).getTime() > Date.now();
+  const state = flashSaleState(sale);
+  const ended = state === 'ended';
   const delSale = useMutation({
     mutationFn: () => deleteFlashSale(sale.id),
     onSuccess: () => { setRowErr(null); refresh(); },
@@ -3282,18 +3318,18 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const [draftStartPending, setDraftStartPending] = useState(false);
   const [draftEndPending, setDraftEndPending] = useState(false);
   const startEdit = () => {
-    setDraft({ title: sale.title, startAt: toDatetimeLocal(sale.startAt), endAt: toDatetimeLocal(sale.endAt) });
+    setDraft({ title: sale.title, startAt: isoToVnLocal(sale.startAt), endAt: isoToVnLocal(sale.endAt) });
     setRowErr(null);
     setEditing(true);
   };
-  const original = { title: sale.title, startAt: toDatetimeLocal(sale.startAt), endAt: toDatetimeLocal(sale.endAt) };
+  const original = { title: sale.title, startAt: isoToVnLocal(sale.startAt), endAt: isoToVnLocal(sale.endAt) };
   const changed = draft.title !== original.title || draft.startAt !== original.startAt || draft.endAt !== original.endAt;
   const saveEdit = useMutation({
     mutationFn: () =>
       updateFlashSale(sale.id, {
         ...(draft.title !== original.title ? { title: draft.title.trim() } : {}),
-        ...(draft.startAt !== original.startAt ? { startAt: new Date(draft.startAt).toISOString() } : {}),
-        ...(draft.endAt !== original.endAt ? { endAt: new Date(draft.endAt).toISOString() } : {}),
+        ...(draft.startAt !== original.startAt ? { startAt: vnLocalToIso(draft.startAt) ?? invalidVnTime() } : {}),
+        ...(draft.endAt !== original.endAt ? { endAt: vnLocalToIso(draft.endAt) ?? invalidVnTime() } : {}),
       }),
     onSuccess: () => { setRowErr(null); setEditing(false); refresh(); },
     onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
@@ -3325,12 +3361,12 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
-    <div className={CARD_CLASS}>
+    <div className={CARD_CLASS} data-flash-sale-row>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 font-medium text-stone-900">
             {sale.title}
-            <ToneBadge tone={sale.isActive ? 'success' : 'neutral'}>{sale.isActive ? 'Đang bật' : 'Đang tắt'}</ToneBadge>
+            <ToneBadge tone={FLASH_SALE_STATE[state].tone}>{FLASH_SALE_STATE[state].label}</ToneBadge>
           </div>
           <div className="break-words text-xs text-stone-500">{fmt(sale.startAt)} → {fmt(sale.endAt)}</div>
         </div>
@@ -3415,6 +3451,10 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
+        {ended ? (
+          <p className="mt-2 text-xs text-stone-500">Đợt đã kết thúc, không thêm sản phẩm được nữa.</p>
+        ) : (
+          <>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <ProductPicker
             mode="variation"
@@ -3446,6 +3486,8 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           </button>
         </div>
         <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
+          </>
+        )}
         {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
       </div>
       {dialog}

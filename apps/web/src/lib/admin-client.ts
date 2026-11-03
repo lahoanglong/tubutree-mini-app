@@ -428,7 +428,7 @@ export const importDealerPrices = (tierId: string, csv: string) =>
     body: { tierId, csv },
   });
 export const importSoldExternal = (csv: string) =>
-  apiFetch<{ ok: boolean; updatedCount: number }>('/admin/products/sold-external', {
+  apiFetch<{ updated: number }>('/admin/products/sold-external', {
     method: 'POST',
     body: { csv },
   });
