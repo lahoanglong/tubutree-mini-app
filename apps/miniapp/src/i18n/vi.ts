@@ -64,7 +64,7 @@ export const vi = {
     tagline: 'Sống xanh An Lành',
     greeting: (name: string) => `Chào ${name}`,
     pointsChip: (n: number) => `${formatNumber(n)} Điểm Xanh`,
-    searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
+    searchPlaceholder: 'Bạn tìm gì hôm nay?',
     featured: 'Tubu chọn cho bạn',
     forYou: 'Dành cho bạn',
     newArrivals: 'Mới về vườn',

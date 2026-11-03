@@ -5,7 +5,7 @@ const numberFormat = new Intl.NumberFormat('vi-VN');
 /** Chữ của Trang chủ, giữ y như `vi.home`, `vi.flashSale`, `vi.reorder` và dải tăng điểm của Mini App. */
 export const homeText = {
   seoTitle: 'Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiết',
-  searchPlaceholder: 'Bạn đang tìm gì hôm nay?',
+  searchPlaceholder: 'Bạn tìm gì hôm nay?',
   featured: 'Tubu chọn cho bạn',
   forYou: 'Dành cho bạn',
   newArrivals: 'Mới về vườn',

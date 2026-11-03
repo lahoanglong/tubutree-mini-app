@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, Card, PriceTag, ProductThumb, SectionHeader, Skeleton, Text } from '@/components/mini';
 import { homeErrorMessage } from '@/components/home/home-block-error';
 import { isEndpointMissing } from '@/components/home/home-blocks';
+import { HomeBlockErrorSuppressed } from '@/components/home/home-block-error';
 import { useBlockQuery } from '@/components/home/use-block-query';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
@@ -198,6 +199,8 @@ function RebuyLine({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
  */
 export function PurchasedRail({ source = 'orders_tab', restoring = false, excludeVariations }: PurchasedRailProps) {
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
+  // Trang chủ đã hiện một dải lỗi cấp trang với một "Thử lại": kệ không thêm nút giống hệt.
+  const pageErrorShown = useContext(HomeBlockErrorSuppressed);
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -233,7 +236,7 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
     );
   }
   // Chưa có món nào: lỗi thật (không phải API cũ 404) vẫn hiện khối lỗi kèm "Thử lại", khách cũ không thấy kệ biến mất im lặng.
-  if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error))) return null;
+  if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error) && !pageErrorShown)) return null;
 
   return (
     <section aria-label={reorderText.railTitle} style={{ paddingBottom: onHome ? 0 : 12 }}>
