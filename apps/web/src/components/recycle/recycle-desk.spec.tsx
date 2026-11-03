@@ -367,6 +367,14 @@ describe('/doi-rac/quay: món chỉ kho HCMC nhận', () => {
     expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 6.000 điểm');
   });
+  it('tra yêu cầu của điểm khác tab đang chọn: tự chuyển sang tab của điểm đó để thẻ hạn mức khớp yêu cầu', async () => {
+    state.points = [makeDeskPoint(), WAREHOUSE_DESK];
+    lookupReq({ method: 'MAIL_IN', pointId: 'wh-1', lines: [LINE0] });
+    const c = await mount();
+    expect(byText(c, '[role="tab"]', 'Đại lý Cô Ba')!.getAttribute('aria-selected')).toBe('true');
+    await lookUp(c);
+    expect(byText(c, '[role="tab"]', 'Kho Tubu TP.HCM')!.getAttribute('aria-selected')).toBe('true');
+  });
   it('đang ở tab đối tác nhưng tra kiện về kho: theo luật của kho, không khoá dòng', async () => {
     state.points = [makeDeskPoint(), WAREHOUSE_DESK];
     lookupReq({ method: 'MAIL_IN', pointId: 'wh-1', lines: [LINE0, MILK_ONLY] });
@@ -579,7 +587,7 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     await flush(10);
     expect(calls('/waste/desk/requests/req-1/reject')[0]!.body).toEqual({ rejectionReason: 'WET', match: { parcelCode: 'TR-8K2M9' } });
   });
-  it('bưu kiện về kho tra khi đang ở tab đối tác: vẫn gửi match, hạn mức mới ghi vào điểm của yêu cầu', async () => {
+  it('bưu kiện về kho tra khi đang ở tab đối tác: vẫn gửi match, thẻ xong nói số của kho chứ không phải của tab cũ', async () => {
     state.points = [makeDeskPoint(), WAREHOUSE_DESK];
     lookupReq({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointId: 'wh-1', lines: [LINE0] });
     state.confirm = () => ({ ...CONFIRMED, quota: null, staffDailyCapRemaining: 145_000 });
@@ -588,8 +596,9 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect((calls('/waste/desk/requests/req-1/confirm')[0]!.body as { match: unknown }).match).toEqual({ parcelCode: 'TR-8K2M9' });
-    expect(c.textContent).toContain('Còn lại 380.000 điểm');
-    expect(c.textContent).not.toContain('Không giới hạn theo tháng');
+    expect(byText(c, '[role="tab"]', 'Kho Tubu TP.HCM')!.getAttribute('aria-selected')).toBe('true');
+    expect(c.textContent).toContain('Còn được xác nhận hôm nay: 145.000 điểm');
+    expect(c.textContent).not.toContain('Còn lại 380.000 điểm');
   });
   it('kho + kiện đã RECEIVED: không gửi match', async () => {
     state.points = [WAREHOUSE_DESK];

@@ -323,6 +323,14 @@ describe('/recycle/desk — món chỉ kho HCMC nhận', () => {
     expect(within(line('Vỏ chai Tubu')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
     expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 6.000 điểm')).toBeInTheDocument();
   });
+  it('tra yêu cầu của điểm khác tab đang chọn: tự chuyển sang tab của điểm đó để thẻ hạn mức khớp yêu cầu', async () => {
+    mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
+    lookupReq({ method: 'MAIL_IN', pointId: 'wh-1', lines: [LINE0] });
+    renderPage();
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    expect(screen.getByRole('tab', { name: 'Kho Tubu TP.HCM' })).toHaveAttribute('aria-selected', 'true');
+  });
   it('đang ở tab đối tác nhưng tra kiện về kho: theo luật của kho, không khoá dòng', async () => {
     mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
     lookupReq({ method: 'MAIL_IN', pointId: 'wh-1', lines: [LINE0, MILK_ONLY] });
@@ -424,8 +432,8 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
     await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }], match: { parcelCode: 'TR-8K2M9' } }));
     await waitFor(() => expect(screen.queryByText('Ng*** A')).toBeNull());
-    expect(screen.getByText('Còn lại 380.000 điểm')).toBeInTheDocument();
-    expect(screen.queryByText('Không giới hạn hạn mức tháng')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Kho Tubu TP.HCM' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByText('Còn lại 380.000 điểm')).toBeNull();
   });
   it('kho + kiện đã RECEIVED: không gửi match', async () => {
     mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
