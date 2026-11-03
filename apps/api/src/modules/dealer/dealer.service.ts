@@ -34,6 +34,13 @@ import {
 } from './dealer-config';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
+
+const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
+  UNPAID: 'Chưa thanh toán',
+  PAID: 'Đã thanh toán',
+  REFUNDED: 'Đã hoàn tiền',
+  FAILED: 'Thanh toán lỗi',
+};
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 
 interface BonusTier {
@@ -1440,7 +1447,7 @@ export class DealerService {
       );
     }
     if (order.paymentStatus !== 'UNPAID') {
-      throw new BadRequestException(`Đơn ${order.code} đang ở trạng thái thanh toán ${order.paymentStatus} — không thể xác nhận.`);
+      throw new BadRequestException(`Đơn ${order.code} đang ở trạng thái thanh toán «${PAYMENT_STATUS_LABEL_VI[order.paymentStatus] ?? order.paymentStatus}» — không thể xác nhận.`);
     }
     const debit = await this.prisma.dealerCreditLedger.findFirst({
       where: { userId: order.userId, refType: 'ORDER', refId: order.id },

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { OrderStatusActions, orderStatusActions } from './order-status-actions';
-import { useQuery } from '@tanstack/react-query';
+import { QueryClient, useQuery } from '@tanstack/react-query';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { getOpsInbox, OPS_INBOX_QUERY_KEY, type AdminOrder } from '@/lib/admin-client';
 
@@ -448,6 +448,25 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(api.calls[0]!.init?.method).toBe('PUT');
     expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ status: 'PACKED' });
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
+  });
+
+  it('ERR-02: lỗi 400 khi đổi trạng thái thì tải lại danh sách đơn (ngăn kéo không giữ nút cũ)', async () => {
+    const api = mockFetch({ '/status': { status: 400, body: { statusCode: 400, message: 'Đơn vừa chuyển sang «Đang giao».' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    const { container } = mount(<OrderStatusActions order={order()} />);
+    click(byText(container, 'button', 'Đã đóng gói'));
+    await flush();
+    expect(spy.mock.calls.some(([f]) => JSON.stringify((f as { queryKey?: unknown })?.queryKey) === '["admin-orders"]')).toBe(true);
+  });
+
+  it('ERR-03: 500 "Internal server error" hiện câu tiếng Việt', async () => {
+    const api = mockFetch({ '/status': { status: 500, body: { statusCode: 500, message: 'Internal server error' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} />);
+    click(byText(container, 'button', 'Đã đóng gói'));
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Máy chủ đang bận, thử lại nhé.');
   });
 });
 
