@@ -1,4 +1,4 @@
-import type { Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import type { OrderStatus, Prisma } from '@prisma/client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import { PANCAKE_ALERT_TEMPLATE, type GomdonAlertService } from '../gomdon/gomdon-alert.service';
@@ -45,6 +45,10 @@ export async function flagPancakeAttention(
   if (alerts) await alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
 }
 
+const attentionLogger = new Logger('PancakeAttention');
+/** Số lượt đọc-rồi-ghi có điều kiện khi ô bị ghi chen: đủ cho vài instance/job cùng ghi một đơn. */
+const ATTENTION_WRITE_ATTEMPTS = 10;
+
 /**
  * Ghi lý do lên ô "Cần xử lý Pancake" (một ô cho mọi lý do). Dòng "COD chờ Kế toán" không bị ghi đè: nó chỉ gỡ khi Kế toán quyết,
  * nên lý do mới được nối sau nó. Đọc rồi ghi có điều kiện theo giá trị đã đọc (lý do vừa chen giữa không bị đè; thua thì đọc lại).
@@ -70,20 +74,24 @@ export async function writePancakeAttention(
   });
   if (first.count === 1) return reason;
   if (onlyReplacingPrefix) return null;
-  // Không khớp: hoặc cùng lý do đang chờ, hoặc ô đang giữ dòng COD chờ Kế toán — trường hợp sau nối lý do mới vào sau dòng đó.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
-    const current = row?.pancakeAttention ?? null;
-    if (current === null || !current.split(ATTENTION_SEPARATOR).includes(ATTENTION_COD_RETURN_UNVERIFIED)) return null;
+  // Không khớp: cùng lý do đang chờ, đơn đã đóng (onlyOpenOrder), hoặc ô đang giữ dòng COD chờ Kế toán — trường hợp sau nối lý do
+  // mới vào sau dòng đó. Ô có thể đổi tiếp giữa các bước (Kế toán gỡ COD, instance khác nối), nên mỗi lượt ghi theo đúng giá trị vừa đọc.
+  for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, status: true } });
+    if (!row) return null;
+    if (onlyOpenOrder && (row.status === 'CANCELLED' || row.status === 'RETURNED')) return null;
+    const current = row.pancakeAttention ?? null;
     // Lý do đã nằm trong ô (ở bất kỳ vị trí nào, vd 'X | COD' do order-status nối) thì không đổi và không báo lại.
-    if (current.split(ATTENTION_SEPARATOR).includes(reason)) return null;
-    const next = `${current}${ATTENTION_SEPARATOR}${reason}`;
+    if (current?.split(ATTENTION_SEPARATOR).includes(reason)) return null;
+    // Cùng phép thử với notCod của lệnh ghi đầu: còn dòng COD thì nối sau nó; COD vừa được Kế toán gỡ thì ghi như lệnh đầu.
+    const next = current?.includes(ATTENTION_COD_RETURN_UNVERIFIED) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
     const r = await db.order.updateMany({
       where: { id: orderId, ...open, pancakeAttention: current },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
     });
     if (r.count === 1) return next;
   }
+  attentionLogger.error(`Không ghi được lý do "Cần xử lý Pancake" cho đơn ${orderId} sau ${ATTENTION_WRITE_ATTEMPTS} lượt (ô đổi liên tục): ${reason}`);
   return null;
 }
 
@@ -105,17 +113,12 @@ const ATTENTION_SEPARATOR = ' | ';
 export const appendAttentionReason = (current: string | null | undefined, reason: string): string =>
   current && !current.split(ATTENTION_SEPARATOR).includes(reason) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
 
-/** Gỡ đúng một lý do khỏi hàng cần xử lý (khi việc đó đã có người quyết); hết lý do thì đơn rời hàng đợi. */
+/**
+ * Gỡ đúng một lý do khỏi hàng cần xử lý (khi việc đó đã có người quyết); hết lý do thì đơn rời hàng đợi. Ghi có điều kiện theo giá trị
+ * đã đọc như removeAttentionReasonsByPrefix: lý do webhook vừa nối chen giữa không bị xoá theo.
+ */
 export async function removeAttentionReason(tx: Pick<Prisma.TransactionClient, 'order'>, orderId: string, reason: string): Promise<void> {
-  const row = await tx.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
-  if (!row?.pancakeAttention) return;
-  const all = row.pancakeAttention.split(ATTENTION_SEPARATOR);
-  const rest = all.filter((part) => part !== reason);
-  if (rest.length === all.length) return;
-  await tx.order.updateMany({
-    where: { id: orderId },
-    data: rest.length > 0 ? { pancakeAttention: rest.join(ATTENTION_SEPARATOR) } : { pancakeAttention: null, pancakeAttentionAt: null },
-  });
+  await removeAttentionReasonsWhere(tx, orderId, (part) => part === reason);
 }
 
 /**
@@ -127,11 +130,19 @@ export async function removeAttentionReasonsByPrefix(
   orderId: string,
   prefixes: string[],
 ): Promise<void> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  await removeAttentionReasonsWhere(db, orderId, (part) => prefixes.some((prefix) => part.startsWith(prefix)));
+}
+
+async function removeAttentionReasonsWhere(
+  db: Pick<Prisma.TransactionClient, 'order'>,
+  orderId: string,
+  drop: (part: string) => boolean,
+): Promise<void> {
+  for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
     const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
     if (!row?.pancakeAttention) return;
     const all = row.pancakeAttention.split(ATTENTION_SEPARATOR);
-    const rest = all.filter((part) => !prefixes.some((prefix) => part.startsWith(prefix)));
+    const rest = all.filter((part) => !drop(part));
     if (rest.length === all.length) return;
     const r = await db.order.updateMany({
       where: { id: orderId, pancakeAttention: row.pancakeAttention },
@@ -139,4 +150,5 @@ export async function removeAttentionReasonsByPrefix(
     });
     if (r.count === 1) return;
   }
+  attentionLogger.error(`Không gỡ được lý do "Cần xử lý Pancake" của đơn ${orderId} sau ${ATTENTION_WRITE_ATTEMPTS} lượt (ô đổi liên tục).`);
 }

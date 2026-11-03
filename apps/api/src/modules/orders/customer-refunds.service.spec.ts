@@ -380,7 +380,11 @@ describe('CustomerRefundsService — khoản hoàn COD trả hàng chờ kế to
     expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('COD') }),
     });
-    expect(order.updateMany).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
+    // Ghi có điều kiện theo giá trị đã đọc: lý do webhook vừa nối chen giữa không bị xoá theo.
+    expect(order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED },
+      data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
     expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'REFUND_OVERPAYMENT')).toHaveLength(0);
     expect(applyWalletDelta).not.toHaveBeenCalled();
   });

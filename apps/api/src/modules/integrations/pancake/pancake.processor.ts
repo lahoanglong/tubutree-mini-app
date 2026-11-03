@@ -9,7 +9,7 @@ import { SystemConfigService } from '../../system-config/system-config.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
-import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
+import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_COD_RETURN_UNVERIFIED,
@@ -18,6 +18,7 @@ import {
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   clearPancakeAttention,
+  removeAttentionReasonsByPrefix,
   writePancakeAttention,
 } from './pancake-attention';
 import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid } from './pancake-payment.util';
@@ -539,7 +540,7 @@ export class PancakeProcessor extends WorkerHost {
       await this.flagAttention(
         order,
         requests.length > 0
-          ? 'Pancake báo HOÀN MỘT PHẦN trong khi khách đang có yêu cầu đổi/trả chờ duyệt — duyệt yêu cầu trả trên Tubu (hệ thống tự hoàn tiền/điểm), KHÔNG hoàn tay.'
+          ? `${PANCAKE_PARTIAL_RETURN_PREFIX} trong khi khách đang có yêu cầu đổi/trả chờ duyệt — duyệt yêu cầu trả trên Tubu (hệ thống tự hoàn tiền/điểm), KHÔNG hoàn tay.`
           : manualReason,
         undefined,
         true,
@@ -578,9 +579,11 @@ export class PancakeProcessor extends WorkerHost {
         // Dòng "Cần xử lý" và khoản chờ Kế toán đối soát đã ghi cùng tx lật trạng thái; ở đây chỉ báo ADMIN.
         await this.alerts.alert(order.code, ATTENTION_COD_RETURN_UNVERIFIED, PANCAKE_ALERT_TEMPLATE);
       }
-      // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
+      // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong. Lời "Hoàn một phần … hoàn tay" (15 tới trước)
+      // cũng hết hiệu lực: lần lật này đã hoàn cả đơn (hoặc chuyển Kế toán với COD), làm theo nó là hoàn hai lần.
       if (order.status !== status && after.status === status && (status === 'CANCELLED' || status === 'RETURNED')) {
         await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);
+        await removeAttentionReasonsByPrefix(this.prisma, order.id, [PANCAKE_PARTIAL_RETURN_PREFIX]);
       }
     } catch (err) {
       if (!(err instanceof InvalidOrderTransitionError)) {
