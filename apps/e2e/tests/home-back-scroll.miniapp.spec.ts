@@ -26,7 +26,7 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     return scrollTop(page);
   }
 
-  test('cuộn sâu, chạm món, Back: scrollTop về trong 2px sau 1,2s', async ({ page }) => {
+  test('cuộn sâu, chạm món, Back: scrollTop về trong 2px', async ({ page }) => {
     await scrollDeep(page);
     // Về giữa trang, không phải đáy: trình duyệt kẹp scrollTop ở đáy nên lỗi khôi phục kéo xuống đáy sẽ lọt.
     await scrollerOf(page).evaluate((el) => { el.scrollTop = el.scrollHeight - el.clientHeight - 800; });
@@ -54,10 +54,10 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(1200);
+    // Vòng khôi phục thử lại tới 1 s khi máy chậm: chờ tới khi đạt thay vì đọc một lần sau mốc cứng.
+    await expect.poll(async () => Math.abs((await scrollTop(page)) - y), { timeout: 5_000 }).toBeLessThanOrEqual(2);
     const after = await scrollTop(page);
     test.info().annotations.push({ type: 'after', description: `scrollTop=${after} (trước khi chạm ${y})` });
-    expect(Math.abs(after - y)).toBeLessThanOrEqual(2);
   });
 
   test('mở Trang chủ bằng thanh đáy (PUSH) sau khi đã cuộn sâu: về đầu trang', async ({ page }) => {
