@@ -33,15 +33,19 @@ export class DealerBackorderService {
     // thoát ra khỏi hàm cron — Node 20 coi unhandledRejection là lỗi chết tiến trình, và job này
     // chạy lại mỗi 15 phút nên bỏ qua 1 lượt là an toàn hơn nhiều so với sập cả API.
     try {
-      const items = await this.prisma.orderItem.findMany({
-        where: {
-          backorderedQty: { gt: 0 },
-          order: { status: { notIn: ['CANCELLED', 'RETURNED'] } },
-        },
-        select: { id: true, orderId: true, variationId: true, backorderedQty: true },
-        orderBy: { order: { createdAt: 'asc' } }, // FIFO: đơn đặt trước cũ nhất được lấp trước
-        take: DealerBackorderService.MAX_ITEMS_PER_RUN,
-      });
+      // Lọc biến thể còn tồn NGAY trong truy vấn: dòng của SKU hết hàng trả 0 và giữ nguyên backorderedQty nên lượt sau lại đứng
+      // đầu danh sách; lọc sau khi đã LIMIT thì 200 dòng kẹt như vậy chặn mãi mọi dòng phía sau. OrderItem không có quan hệ Prisma
+      // tới Variation nên phải JOIN bằng SQL.
+      const items = await this.prisma.$queryRaw<{ id: string; orderId: string; variationId: string; backorderedQty: number }[]>`
+        SELECT oi."id", oi."orderId", oi."variationId", oi."backorderedQty"
+          FROM "order_items" oi
+          JOIN "orders" o ON o."id" = oi."orderId"
+          JOIN "variations" v ON v."id" = oi."variationId"
+         WHERE oi."backorderedQty" > 0
+           AND o."status" NOT IN ('CANCELLED', 'RETURNED')
+           AND v."stock" > 0
+         ORDER BY o."createdAt" ASC, oi."id" ASC
+         LIMIT ${DealerBackorderService.MAX_ITEMS_PER_RUN}`; // FIFO: đơn đặt trước cũ nhất được lấp trước
       if (items.length === 0) return 0;
 
       let filled = 0;
