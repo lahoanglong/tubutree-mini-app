@@ -257,6 +257,9 @@ export class CatalogService {
       price,
       undefined,
       false,
+      undefined,
+      '',
+      false,
     );
   }
 
@@ -331,8 +334,9 @@ export class CatalogService {
     needsPrice = true,
     arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
     cacheTag = '',
+    cacheable = true,
   ) {
-    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag);
+    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag, cacheable);
     const { skip, take } = skipTake(page, limit);
     const pageIds = rankedIds.slice(skip, skip + take);
     if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
@@ -359,9 +363,10 @@ export class CatalogService {
     needsPrice: boolean,
     arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
     cacheTag = '',
+    allowCache = true,
   ): Promise<string[]> {
     // Thứ hạng phụ thuộc giá (xếp giá, lọc giá) đổi ngay khi Giờ vàng bắt đầu/hết hoặc giá sửa nên không nhớ.
-    const cacheable = !needsPrice && !price;
+    const cacheable = allowCache && !needsPrice && !price;
     const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag }) : '';
     const now = Date.now();
     const hit = cacheable && key.length <= 2000 ? this.rankCache.get(key) : undefined;
@@ -442,7 +447,7 @@ export class CatalogService {
       where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category };
     }
     if (segment) where.forSegment = { has: segment };
-    const text = await this.textWhere(query.q);
+    const text = await this.textWhere(query.q, Boolean(relevance) && !query.sort);
     if (text) and.push(text.where);
     if (text?.ids) relevance?.push(text.ids);
     // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
@@ -454,15 +459,37 @@ export class CatalogService {
   }
 
   /**
+   * Thứ tự khớp của một từ khoá được giữ MATCH_TTL_MS (khoá ngắn là chính từ khoá, tách khỏi rankCache): trang 2 của "Liên quan" xếp theo
+   * đúng thứ tự trang 1 dù số đã bán đổi giữa hai lượt tải, nên không sản phẩm nào nhảy trang rồi bị sót.
+   */
+  private readonly matchCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  private readonly MATCH_TTL_MS = 60_000;
+  private readonly MATCH_MAX_KEYS = 50;
+
+  private recallMatch(raw: string): string[] | undefined {
+    const hit = this.matchCache.get(raw.toLowerCase());
+    return hit && hit.expiresAt > Date.now() ? hit.ids : undefined;
+  }
+
+  private async rememberMatch(raw: string, remember: boolean): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
+    const ids = rows.map((r) => r.id);
+    if (remember) {
+      if (this.matchCache.size >= this.MATCH_MAX_KEYS) this.matchCache.delete(this.matchCache.keys().next().value as string);
+      this.matchCache.set(raw.toLowerCase(), { ids, expiresAt: Date.now() + this.MATCH_TTL_MS });
+    }
+    return ids;
+  }
+
+  /**
    * Khớp từ khoá qua `textMatchSql`. SQL lỗi (vd DB chưa chạy migration cột nameSearch) → lùi về
    * `contains` cũ cho request đó, không tắt cờ vĩnh viễn (lỗi tạm thời không làm hỏng cả phiên).
    */
-  private async textWhere(q: string | undefined): Promise<{ where: Prisma.ProductWhereInput; ids?: string[] } | undefined> {
+  private async textWhere(q: string | undefined, remember = false): Promise<{ where: Prisma.ProductWhereInput; ids?: string[] } | undefined> {
     const raw = (q ?? '').trim();
     if (!foldVietnamese(raw)) return undefined;
     try {
-      const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
-      const ids = rows.map((r) => r.id);
+      const ids = (remember && this.recallMatch(raw)) || (await this.rememberMatch(raw, remember));
       return { where: { id: { in: ids } }, ids };
     } catch (err) {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);

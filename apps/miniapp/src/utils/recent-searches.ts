@@ -71,3 +71,17 @@ export function scopeRecentSearchesToUser(userId: string | undefined, storage: S
     return false;
   }
 }
+
+/**
+ * Đã đăng xuất (không còn tài khoản): lịch sử của người trước không được hiện cho người kế tiếp dùng máy. Chỉ xoá khi có chủ; trả true nếu đã xoá.
+ */
+export function forgetRecentSearchesOfSignedOutUser(storage: StorageLike | null = browserStorage()): boolean {
+  try {
+    if (storage?.getItem(RECENT_SEARCHES_OWNER_KEY) == null) return false;
+    clearRecentSearches(storage);
+    storage.removeItem(RECENT_SEARCHES_OWNER_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}

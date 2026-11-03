@@ -543,6 +543,14 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     await waitFor(() => expect(loc()).toBe('/browse?sort=newest'));
   });
 
+  it('không có kết quả, từ khoá một dải dài không dấu cách: tiêu đề có điểm ngắt để không tràn 375px (KHAMPHA-05)', async () => {
+    mocks.fetchCatalog.mockResolvedValue(pageOf([]));
+    renderAt(`/browse?q=${'a'.repeat(100)}`);
+    const heading = await screen.findByText((t) => t.startsWith('Không tìm thấy'));
+    expect(heading.textContent).toContain('​');
+    expect(heading.textContent!.replace(/​/g, '')).toBe(`Không tìm thấy "${'a'.repeat(100)}"`);
+  });
+
   it('không có kết quả, chỉ còn bộ lọc → "Xoá tìm kiếm & bộ lọc" ra ?all=1 (danh sách, không về hub)', async () => {
     mocks.fetchCatalog.mockResolvedValue(pageOf([]));
     renderAt('/browse?inStock=1');

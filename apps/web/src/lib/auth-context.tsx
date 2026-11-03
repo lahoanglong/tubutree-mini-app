@@ -18,7 +18,7 @@ import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
 import { clearCtvTouched } from './storefront-context';
 import { readFirstTouchCookie } from './entry-source';
-import { clearRecentSearches } from './recent-searches';
+import { clearRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
 import { browserStorage } from './recently-viewed';
 
 export interface WebUser {
@@ -132,6 +132,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userId = user?.id;
   useEffect(() => {
     if (userId && dropForeignHomeHints(browserStorage(), userId)) writeWebCookie(HOME_HINT_COOKIE, null);
+    // Phiên hết hạn rồi tài khoản khác đăng nhập không đi qua logout(): lịch sử tìm của người trước cũng phải sạch.
+    if (userId) scopeRecentSearchesToUser(userId);
   }, [userId]);
 
   const retrySession = useCallback(async () => {

@@ -31,7 +31,7 @@ import { useSearchState } from '../hooks/use-search-state';
 import { useAuthStore } from '../store/auth';
 import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
-import { clearRecentSearches, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from '../utils/recent-searches';
+import { clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from '../utils/recent-searches';
 import { uniqueById } from '../utils/unique-by-id';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
@@ -76,6 +76,11 @@ const browseHref = (patch: Partial<SearchState>) => `/browse?${serializeSearchSt
  * thì MỌI trang đã tải vẫn hiện ngay nên khôi phục đủ sâu; hết cache thì chỉ có trang 1 và trình duyệt kẹp vị trí về cuối trang 1 —
  * chấp nhận (không tải ngầm hàng loạt trang chỉ để cuộn).
  */
+/** Từ khoá một dải dài không dấu cách (tối đa 100 ký tự) tràn khung 375px ở tiêu đề "Không tìm thấy": chèn điểm ngắt vô hình để xuống dòng được. */
+function softBreakLongWords(q: string): string {
+  return q.replace(/\S{14,}/g, (w) => w.replace(/(.{12})/gu, '$1\u200B'));
+}
+
 export default function BrowsePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -113,13 +118,16 @@ export default function BrowsePage() {
   const [editing, setEditing] = useState(focusSearch);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const userId = useAuthStore((s) => s.user?.id);
+  const signedOut = useAuthStore((s) => s.status === 'idle' && !s.user);
   const [recent, setRecent] = useState<string[]>(() => {
     scopeRecentSearchesToUser(userId);
     return readRecentSearches();
   });
   useEffect(() => {
     if (scopeRecentSearchesToUser(userId)) setRecent(readRecentSearches());
-  }, [userId]);
+    // Khởi động ở 'loading' nên idle không có khách = đã đăng xuất (hay phiên hết hạn), không phải đang khôi phục.
+    else if (!userId && signedOut && forgetRecentSearchesOfSignedOutUser()) setRecent([]);
+  }, [userId, signedOut]);
 
   // Ô tìm ở Trang chủ chỉ là vỏ dẫn sang đây (?focus=search): focus thẳng ô thật rồi bỏ cờ khỏi URL
   // — quay lại từ PDP sẽ không bật bàn phím lần nữa (plan 4b Ruling 7).
@@ -373,7 +381,7 @@ export default function BrowsePage() {
             ) : list.length === 0 ? (
               <EmptyState
                 art={state.q ? 'search' : 'leaf'}
-                heading={state.q ? vi.browse.noResultHeading(state.q) : root ? vi.browse.emptyHeading : vi.browse.noResultFiltered}
+                heading={state.q ? vi.browse.noResultHeading(softBreakLongWords(state.q)) : root ? vi.browse.emptyHeading : vi.browse.noResultFiltered}
                 body={root ? vi.browse.emptyBody : vi.browse.noResultBody}
                 ctaLabel={root ? undefined : vi.browse.clearAll}
                 onCta={root ? undefined : () => updateList(CLEAR_SEARCH_PATCH)}

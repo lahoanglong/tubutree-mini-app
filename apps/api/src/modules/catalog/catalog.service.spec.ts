@@ -812,6 +812,23 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 
+  it('Liên quan: trang 2 giữ thứ tự của trang 1 dù số đã bán đổi giữa hai lượt tải, và không ghi vào rankCache', async () => {
+    const first = [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }];
+    const queryRaw = jest.fn().mockResolvedValueOnce(first).mockResolvedValueOnce([{ id: 'p3' }, { id: 'p1' }, { id: 'p2' }]);
+    const findMany = jest.fn(async (args: { select?: unknown }) => (args.select ? [{ id: 'p3' }, { id: 'p2' }, { id: 'p1' }] : [card('p1'), card('p2'), card('p3')]));
+    const prisma = {
+      product: { findMany, count: jest.fn() },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      $queryRaw: queryRaw,
+    } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+    const page1 = await svc.list({ page: 1, limit: 2, q: 'nuoc' });
+    const page2 = await svc.list({ page: 2, limit: 2, q: 'nuoc' });
+    expect([...page1.data, ...page2.data].map((c: { id: string }) => c.id)).toEqual(['p1', 'p2', 'p3']);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect((svc as unknown as { rankCache: Map<string, unknown> }).rankCache.size).toBe(0);
+  });
+
   it('từ khoá chỉ đi vào SQL qua tham số ràng buộc, không nối chuỗi vào câu lệnh', async () => {
     const queryRaw = jest.fn().mockResolvedValue([]);
     const { svc } = setup(queryRaw);

@@ -88,7 +88,7 @@ export function EmptyState({ art, heading, body, ctaLabel, onCta, ctaLoading, va
       }}
     >
       {ART[art]}
-      <Text bold style={{ fontSize: 17, marginTop: 10, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+      <Text bold style={{ fontSize: 17, marginTop: 10 }}>
         {heading}
       </Text>
       {body && (

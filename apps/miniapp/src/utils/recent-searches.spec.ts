@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RECENT_SEARCHES_KEY, RECENT_SEARCHES_OWNER_KEY, clearRecentSearches, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
+import { RECENT_SEARCHES_KEY, RECENT_SEARCHES_OWNER_KEY, clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from './recent-searches';
 import type { StorageLike } from './recently-viewed';
 
 function memoryStorage(): StorageLike & { data: Record<string, string> } {
@@ -113,5 +113,23 @@ describe('scopeRecentSearchesToUser (KHAMPHA-15)', () => {
     expect(scopeRecentSearchesToUser('u1', null)).toBe(false);
     const bad = { getItem: () => { throw new Error('x'); }, setItem: () => undefined, removeItem: () => undefined };
     expect(scopeRecentSearchesToUser('u1', bad)).toBe(false);
+  });
+});
+
+describe('forgetRecentSearchesOfSignedOutUser (KHAMPHA-15, đăng xuất)', () => {
+  it('có chủ mà đã đăng xuất: xoá lịch sử và chủ, trả true', () => {
+    const s = memoryStorage();
+    scopeRecentSearchesToUser('u1', s);
+    pushRecentSearch('kem chống hăm', s);
+    expect(forgetRecentSearchesOfSignedOutUser(s)).toBe(true);
+    expect(readRecentSearches(s)).toEqual([]);
+    expect(s.data[RECENT_SEARCHES_OWNER_KEY]).toBeUndefined();
+  });
+
+  it('chưa có chủ (khách chưa từng đăng nhập): giữ nguyên', () => {
+    const s = memoryStorage();
+    pushRecentSearch('nước rửa', s);
+    expect(forgetRecentSearchesOfSignedOutUser(s)).toBe(false);
+    expect(readRecentSearches(s)).toEqual(['nước rửa']);
   });
 });
