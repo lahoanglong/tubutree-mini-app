@@ -94,7 +94,7 @@ describe('OrderRefunds (D2: khách thấy và chọn nơi nhận khoản hoàn)'
     fireEvent.click(await screen.findByRole('button', { name: 'Chọn nơi nhận tiền' }));
     fireEvent.click(await screen.findByRole('radio', { name: /Tài khoản ngân hàng/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận' }));
-    expect(await screen.findByText('Nhập tên ngân hàng.')).toBeInTheDocument();
+    expect(await screen.findByText('Nhập tên ngân hàng nhận tiền hoàn.')).toBeInTheDocument();
     expect(mocks.chooseRefundDestination).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { notifyAdmins } from '../../common/notify-admins';
 import { setCronRunSink, type CronRunReport, type CronRunSink } from '../../common/cron-run/track-cron';
+import { firstNonEmptyLine } from '../../common/cron-run/cron-aware-logger';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -24,7 +25,7 @@ export interface CronRunRow {
 /** Tên lớp lỗi + dòng đầu thông điệp. Không stack; lỗi không phải Error chỉ ghi kiểu vì giá trị có thể là dữ liệu request. */
 export function describeCronError(err: unknown): string {
   if (!(err instanceof Error)) return `NonError: ${typeof err}`;
-  const firstLine = err.message.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
+  const firstLine = firstNonEmptyLine(err.message);
   const name = err.constructor?.name && err.constructor.name !== 'Object' ? err.constructor.name : err.name;
   return `${name}: ${firstLine}`.slice(0, MAX_ERROR_LENGTH);
 }

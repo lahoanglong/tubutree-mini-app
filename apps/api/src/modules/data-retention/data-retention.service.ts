@@ -32,8 +32,11 @@ export function resolveRetentionDays(target: RetentionTargetKey, raw: unknown): 
   return Math.max(minDays, Math.floor(raw));
 }
 
-/** `set`: thay vì xoá dòng thì ghi đè cột (xoá thông tin cá nhân nhưng giữ dòng). */
-type Cleanup = { table: string; where: Prisma.Sql; set?: Prisma.Sql; label?: string };
+/**
+ * `set`: thay vì xoá dòng thì ghi đè cột (xoá thông tin cá nhân nhưng giữ dòng).
+ * `key`: cột khoá chính để chọn lô, mặc định `id`; bảng khoá theo cột khác phải khai ở đây.
+ */
+type Cleanup = { table: string; where: Prisma.Sql; set?: Prisma.Sql; label?: string; key?: string };
 type RunOpts = { now?: Date; batchSize?: number; pauseMs?: number; maxRunMs?: number };
 export type RetentionResult =
   | { skipped: 'RUNNING' | 'LOCKED' }
@@ -199,7 +202,11 @@ export class DataRetentionService {
           { table: 'support_messages', where: Prisma.sql`"createdAt" < ${cutoff}` },
           { table: 'support_forwards', where: Prisma.sql`"createdAt" < ${cutoff}` },
           // Tombstone thu hồi chỉ cần vài ngày, không theo số ngày lưu tin cấu hình.
-          { table: 'support_recall_tombstones', where: Prisma.sql`"createdAt" < ${new Date(now.getTime() - RECALL_TOMBSTONE_TTL_MS)}` },
+          {
+            table: 'support_recall_tombstones',
+            key: 'zaloMsgId',
+            where: Prisma.sql`"createdAt" < ${new Date(now.getTime() - RECALL_TOMBSTONE_TTL_MS)}`,
+          },
         ];
     }
   }
@@ -210,15 +217,16 @@ export class DataRetentionService {
     pauseMs: number,
     deadline: number,
   ): Promise<{ count: number; truncated: boolean }> {
-    // Tên bảng lấy từ danh sách cố định ở cleanups(), không bao giờ từ input ngoài.
+    // Tên bảng và cột lấy từ danh sách cố định ở cleanups(), không bao giờ từ input ngoài.
     const table = Prisma.raw(`"${c.table}"`);
+    const key = Prisma.raw(`"${c.key ?? 'id'}"`);
     let count = 0;
     for (;;) {
       const n = c.set
         ? await this.prisma.$executeRaw`
-            UPDATE ${table} SET ${c.set} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`
+            UPDATE ${table} SET ${c.set} WHERE ${key} IN (SELECT ${key} FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`
         : await this.prisma.$executeRaw`
-            DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`;
+            DELETE FROM ${table} WHERE ${key} IN (SELECT ${key} FROM ${table} WHERE ${c.where} LIMIT ${batchSize})`;
       count += n;
       if (n < batchSize) return { count, truncated: false };
       if (Date.now() >= deadline) return { count, truncated: true };
