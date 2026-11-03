@@ -129,6 +129,15 @@ export function ownerTierPreview(
   return { name: r.tier.name, emoji: r.tier.emoji, publicBadge: lowest !== undefined && r.tier.name !== lowest.name };
 }
 
+/** Tên bậc kế tiếp khi chủ shop đang ở bậc thấp nhất (bậc chưa được khoe), để dòng gợi ý nói rõ lên bậc nào thì có huy hiệu; còn lại không biết thì null. */
+export function nextTierName(
+  r: { tier: { name: string }; allTiers: readonly { name: string }[] } | null | undefined,
+): string | null {
+  if (!r) return null;
+  const [lowest, next] = r.allTiers;
+  return lowest !== undefined && next !== undefined && r.tier.name === lowest.name ? next.name : null;
+}
+
 /**
  * Chỗ huy hiệu bậc ở đầu xem trước của trình dựng còn chờ bậc không: còn thì vẽ khung chờ cao bằng huy hiệu (chỉ chỗ đó chờ, trình dựng vẽ ngay), hết hy vọng thì bỏ huy hiệu. TanStack v5 giữ `status: 'pending'`
  * khi mất mạng (`fetchStatus: 'paused'`) nên chờ theo `isPending` thì khung chờ treo mãi: `paused` coi như xong, không huy hiệu; có mạng lại thì bậc về và huy hiệu hiện.

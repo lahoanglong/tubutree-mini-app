@@ -264,6 +264,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
   'checkout.calculating': 'Đang tính…',
   'checkout.priceChangedHint': 'Giá ưu đãi đã thay đổi. Bạn xem lại giỏ hàng trước khi đặt nhé.',
+  'checkout.taxCodeInvalid': 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.',
   'checkout.invoiceIncomplete': 'Bạn điền đủ MST, tên công ty, địa chỉ và email hợp lệ nhé.',
   'checkout.moreLines': 'Xem thêm {n} sản phẩm',
   'checkout.fewerLines': 'Thu gọn',
@@ -354,6 +355,8 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.loginForCombo': 'Đăng nhập để thêm combo vào giỏ nhé',
   'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
   'shop.tierBadge': 'CTV {name}',
+  'shop.tierHint': 'Huy hiệu chưa tải',
+  'shop.tierHintNext': 'Huy hiệu từ bậc {name}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

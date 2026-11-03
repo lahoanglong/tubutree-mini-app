@@ -25,6 +25,13 @@ const validInvoice: InvoiceInfo = {
 };
 
 describe('isInvoiceValid', () => {
+  it('MST sai định dạng bị chặn, MST có dấu cách/chấm hoặc chi nhánh 13 số liền được chấp nhận', () => {
+    expect(isInvoiceValid(true, { ...validInvoice, taxCode: '12345' })).toBe(false);
+    expect(isInvoiceValid(true, { ...validInvoice, taxCode: 'abcdefghij' })).toBe(false);
+    expect(isInvoiceValid(true, { ...validInvoice, taxCode: '0101 234 567' })).toBe(true);
+    expect(isInvoiceValid(true, { ...validInvoice, taxCode: '0101.234.567' })).toBe(true);
+    expect(isInvoiceValid(true, { ...validInvoice, taxCode: '0101234567001' })).toBe(true);
+  });
   it('không yêu cầu xuất hoá đơn → luôn hợp lệ dù các trường rỗng', () => {
     expect(isInvoiceValid(false, emptyInvoice)).toBe(true);
   });

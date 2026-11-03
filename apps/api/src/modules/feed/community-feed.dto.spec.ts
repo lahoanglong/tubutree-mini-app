@@ -9,7 +9,7 @@ const asCreate = (value: Record<string, unknown>) =>
 const asEdit = (value: Record<string, unknown>) =>
   pipe.transform(value, { type: 'body', metatype: EditPostDto, data: undefined });
 
-const JPEG_DATA_URL = `data:image/jpeg;base64,${'A'.repeat(300_000)}==`;
+const JPEG_DATA_URL = `data:image/jpeg;base64,/9j/${'A'.repeat(300_000)}==`;
 
 // ENGAGE-7: images chỉ @IsString nên một bài nhận được bất kỳ chuỗi nào (tới 10MB/body): feed nặng hàng MB, và
 // chuỗi "javascript:" cũng được lưu để hiển thị lại cho người khác.
@@ -39,5 +39,25 @@ describe('CreatePostDto/EditPostDto.images (ENGAGE-7)', () => {
     await expect(asCreate({ body: 'Chia sẻ', images: [huge] })).rejects.toThrow();
     await expect(asEdit({ images: [huge] })).rejects.toThrow();
     await expect(asCreate({ body: 'Chia sẻ', images: Array(7).fill(JPEG_DATA_URL) })).rejects.toThrow();
+  });
+});
+
+// BAOMAT-02: chuỗi base64 rác (không phải tệp ảnh) không được lưu vào bài.
+describe('CreatePostDto/EditPostDto.images chữ ký tệp (BAOMAT-02)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+  const WEBP = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAw';
+  it('nhận ảnh có chữ ký PNG, JPEG, WebP đúng loại khai', async () => {
+    await expect(asCreate({ body: 'Chia sẻ', images: [PNG, WEBP, JPEG_DATA_URL] })).resolves.toBeDefined();
+    await expect(asEdit({ images: [PNG] })).resolves.toBeDefined();
+  });
+  it.each([
+    ['toàn chữ A (mẫu feed1.mjs)', `data:image/png;base64,${'A'.repeat(600_000)}`],
+    ['JPEG khai là PNG', 'data:image/png;base64,/9j/4AAQSkZJRgABAQ=='],
+    ['PNG khai là JPEG', 'data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUg=='],
+    ['WebP thiếu nhãn WEBP', 'data:image/webp;base64,UklGRiQAAABBQUFBVlA4IBgAAAAw'],
+    ['chữ thường base64', `data:image/jpeg;base64,${Buffer.from('hello world, not an image').toString('base64')}`],
+  ])('từ chối %s (tạo và sửa bài)', async (_label, img) => {
+    await expect(asCreate({ body: 'Chia sẻ', images: [img] })).rejects.toThrow();
+    await expect(asEdit({ images: [img] })).rejects.toThrow();
   });
 });

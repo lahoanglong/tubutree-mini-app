@@ -12,7 +12,7 @@ import {
   reorderCollections, reorderItems, getQuests,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
-import { ownerTierPending, ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
+import { nextTierName, ownerTierPending, ownerTierPreview, publicTier } from '@tubutree/app-core/commerce/shop-page';
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
@@ -33,7 +33,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ShopHeader } from '../components/ui/shop-header';
 import { Skeleton } from '../components/ui/skeleton';
-import { TierBadge, TierBadgeSkeleton } from '../components/ui/tier-badge';
+import { TierBadge, TierBadgeHint, TierBadgeSkeleton } from '../components/ui/tier-badge';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { MoveButtons } from '../components/ui/move-buttons';
@@ -99,7 +99,7 @@ export default function StorefrontBuilderPage() {
   // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
   wizardRef.current ??= shouldStartSignupWizard(sf);
   if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) {
-    return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} tierPending={sf.type === 'CTV' && ownerTierPending(tiersQ)} />;
+    return <Builder sf={sf} tier={publicTier(ownerTierPreview(tiersQ.data))} tierPending={sf.type === 'CTV' && ownerTierPending(tiersQ)} nextTier={nextTierName(tiersQ.data)} />;
   }
   return (
     <BuilderShell>
@@ -136,7 +136,7 @@ function ActionMenu({ open, title, actions, onClose }: { open: boolean; title: s
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
 
-function Builder({ sf, tier, tierPending }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean }) {
+function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean; nextTier: string | null }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -640,12 +640,12 @@ function Builder({ sf, tier, tierPending }: { sf: StorefrontEdit; tier: { name: 
         verified={Boolean(trustLabel)}
         note={sf.headerNote}
         badges={
-          trustLabel || tier || tierPending ? (
+          trustLabel || tier || tierPending || sf.type === 'CTV' ? (
             <>
               {trustLabel && (
                 <Badge tone="verified" icon={Sparkles}>{trustLabel}</Badge>
               )}
-              {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : null}
+              {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : sf.type === 'CTV' ? <TierBadgeHint nextName={nextTier} /> : null}
             </>
           ) : undefined
         }
