@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './support/mock-api';
-import { CATALOG, NRC, XA_PHONG, mockDiscovery, toCard } from './support/discovery-mocks';
+import { CATALOG, NRC, XA_PHONG, mockDiscovery, productDetail, toCard } from './support/discovery-mocks';
+import { publicConfig } from './support/checkout-mocks';
 import { PDP_SLUG, homeCombos, mockPdpBundles, pdpAddon, pdpCombo } from './support/bundle-mocks';
 import { HOME_PUBLIC, mockMergedHome } from './support/home-merged';
 import type { MockApi } from './support/mock-api';
@@ -20,6 +21,38 @@ async function trackLayoutShift(page: Page): Promise<void> {
     }).observe({ type: 'layout-shift', buffered: true });
   });
 }
+test.beforeEach(async ({ page }) => {
+  const rate = Number(process.env.E2E_CPU_THROTTLE ?? 1);
+  if (rate > 1) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate });
+});
+
+/**
+ * Sản phẩm trả sau cấu hình công khai, Giờ vàng và đánh giá. Trang chèn dòng Vận chuyển (ngưỡng freeship) và các dòng phụ khi những dữ liệu ấy về;
+ * trên máy chậm chúng về sau sản phẩm nên trang xê dịch ~76px, không liên quan tới Combo/Mua kèm mà spec này đo. Cho chúng về trước thì CLS
+ * chỉ còn phần do khối bộ gây ra, không phụ thuộc tốc độ máy.
+ */
+function auxiliaryBeforeProduct(api: MockApi): void {
+  const served = new Set<string>();
+  let release!: () => void;
+  const auxReady = new Promise<void>((resolve) => (release = resolve));
+  const serve = (pattern: string, data: unknown): void => {
+    api.get(pattern, () => {
+      setTimeout(() => {
+        served.add(pattern);
+        if (served.size === 3) setTimeout(release, 50);
+      }, 0);
+      return data;
+    });
+  };
+  serve('/config/public', publicConfig());
+  serve('/flash-sales/active', []);
+  serve('/products/:slug/reviews', { average: 0, count: 0, items: [] });
+  api.get('/products/:slug', async ({ params }) => {
+    await auxReady;
+    return productDetail(params.slug!);
+  });
+}
+
 const readCls = async (page: Page): Promise<number> => {
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
@@ -27,7 +60,10 @@ const readCls = async (page: Page): Promise<number> => {
 };
 
 test.describe('Trang sản phẩm Mini: CLS', () => {
-  test.beforeEach(({ api }) => mockDiscovery(api));
+  test.beforeEach(({ api }) => {
+    mockDiscovery(api);
+    auxiliaryBeforeProduct(api);
+  });
 
   test('không có bộ nào: không có khối, CLS 0 (nền để so)', async ({ page }) => {
     await trackLayoutShift(page);
