@@ -31,6 +31,7 @@ function build(opts: { role?: string; store?: Record<string, unknown>; pancakeRo
     user: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: opts.role ?? 'DEALER' }),
       findMany: jest.fn().mockResolvedValue([{ id: 'admin-1' }]),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
     storefront: { findFirst: jest.fn().mockResolvedValue(opts.store ?? MERCHANT_STORE), update: jest.fn() },
     variation: { findFirst: jest.fn().mockResolvedValue(opts.pancakeRow === undefined ? PANCAKE_ROW : opts.pancakeRow) },
@@ -408,6 +409,7 @@ describe('SELLER-5: định danh gian hàng vừa nhả có thời gian cách ly
   const recent = new Date(Date.now() - 5 * 86_400_000);
   const prisma = (released: unknown) => ({
     storefront: { findFirst: jest.fn().mockResolvedValue(null) },
+    user: { findFirst: jest.fn().mockResolvedValue(null) },
     releasedStorefrontIdentifier: { findUnique: jest.fn().mockResolvedValue(released) },
   });
 
@@ -433,7 +435,7 @@ describe('SELLER-5: định danh gian hàng vừa nhả có thời gian cách ly
   it('đổi subdomain → ghi tên cũ vào danh sách cách ly', async () => {
     const upsert = jest.fn().mockResolvedValue({});
     const p = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }) },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }), findFirst: jest.fn().mockResolvedValue(null) },
       storefront: {
         findFirst: jest.fn().mockResolvedValueOnce(MERCHANT_STORE).mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),

@@ -977,10 +977,10 @@ export class AdminService {
   private async findStorefrontId(raw?: string): Promise<string | undefined> {
     const s = raw?.trim().toLowerCase();
     if (!s) return undefined;
-    const row = await this.prisma.storefront.findFirst({
-      where: { OR: [{ slug: { equals: s, mode: 'insensitive' } }, { subdomain: { equals: s, mode: 'insensitive' } }] },
-      select: { id: true },
-    });
+    const eq = { equals: s, mode: 'insensitive' } as const;
+    const row =
+      (await this.prisma.storefront.findFirst({ where: { slug: eq }, select: { id: true } })) ??
+      (await this.prisma.storefront.findFirst({ where: { subdomain: eq }, select: { id: true } }));
     return row?.id ?? NO_SUCH_STOREFRONT_ID;
   }
 

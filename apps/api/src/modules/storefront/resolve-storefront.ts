@@ -11,18 +11,25 @@ export interface ResolvedStorefront {
 }
 
 /**
- * Một chuỗi khớp được nhiều cột (slug, subdomain, tên miền riêng) của các gian hàng khác nhau thì slug thắng: slug chính là mã giới
- * thiệu của chủ, link /s/<mã> không được rơi vào gian hàng khác chỉ vì họ đặt subdomain trùng. Chạy tuần tự từng cột, lần lượt
- * slug, subdomain, tên miền riêng, để không bao giờ phụ thuộc thứ tự dòng Postgres tự chọn.
+ * Một chuỗi khớp được nhiều cột (slug, subdomain, tên miền riêng) thì slug thắng: slug chính là mã giới thiệu của chủ, link
+ * /s/<mã> không được rơi vào gian hàng khác chỉ vì họ đặt subdomain trùng. Có dòng mang slug đó (không phân biệt hoa thường) mà
+ * đang ẩn với khách thì trả null, không rơi xuống subdomain của người khác. Chuỗi trùng mã giới thiệu của một tài khoản thì
+ * subdomain/tên miền chỉ tính khi thuộc đúng chủ mã (dữ liệu cũ đã trùng và chủ mã chưa mở gian hàng). Chạy tuần tự từng cột để
+ * không phụ thuộc thứ tự dòng Postgres tự chọn.
  */
 export async function findByIdentifierPriority<T>(
+  prisma: Pick<PrismaService, 'storefront' | 'user'>,
   value: string,
   find: (columnWhere: Prisma.StorefrontWhereInput) => Promise<T | null>,
-  insensitive = false,
 ): Promise<T | null> {
-  const eq = (): string | { equals: string; mode: 'insensitive' } => (insensitive ? { equals: value, mode: 'insensitive' } : value);
-  for (const column of ['slug', 'subdomain', 'customDomain'] as const) {
-    const found = await find({ [column]: eq() });
+  const eq = { equals: value, mode: 'insensitive' } as const;
+  const bySlug = await find({ slug: eq });
+  if (bySlug) return bySlug;
+  if (await prisma.storefront.findFirst({ where: { slug: eq }, select: { id: true } })) return null;
+  const codeOwner = await prisma.user.findFirst({ where: { referralCode: eq }, select: { id: true } });
+  const ownerGuard: Prisma.StorefrontWhereInput = codeOwner ? { ownerUserId: codeOwner.id } : {};
+  for (const column of ['subdomain', 'customDomain'] as const) {
+    const found = await find({ [column]: eq, ...ownerGuard });
     if (found) return found;
   }
   return null;
@@ -36,13 +43,13 @@ export async function findByIdentifierPriority<T>(
  * để cùng một chuỗi khách gửi cho ra cùng một gian hàng (và cùng combo).
  */
 export async function resolvePublishedStorefront(
-  prisma: Pick<PrismaService, 'storefront'>,
+  prisma: Pick<PrismaService, 'storefront' | 'user'>,
   visibility: PublicVisibilityOptions,
   identifier: string | null | undefined,
 ): Promise<ResolvedStorefront | null> {
   const value = identifier?.trim().toLowerCase();
   if (!value) return null;
-  return findByIdentifierPriority(value, (columnWhere) =>
+  return findByIdentifierPriority(prisma, value, (columnWhere) =>
     prisma.storefront.findFirst({
       where: { ...publicStorefrontWhere(visibility), isSample: false, ...columnWhere },
       select: { id: true, slug: true, type: true, ownerUserId: true },

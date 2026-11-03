@@ -64,7 +64,7 @@ describe('Định danh gian hàng và mã giới thiệu (real Postgres)', () =>
     await expect(merchant.updateStore(attacker.id, { subdomain: victim.referralCode.toLowerCase() } as never)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('hai CTV song song cùng đặt một subdomain: đúng một người được', async () => {
+  it('hồi quy: hai CTV song song cùng đặt một subdomain, đúng một người được (cột subdomain @unique giữ, không do mã mới)', async () => {
     const a = await ctv();
     const b = await ctv();
     await Promise.all([storefront.getOrCreateMine(a.id), storefront.getOrCreateMine(b.id)]);
@@ -104,5 +104,43 @@ describe('Định danh gian hàng và mã giới thiệu (real Postgres)', () =>
     expect(resolved?.id).toBe(own.id);
     const byHost = await storefront.getPublicByHost(`${code}.tubutree.com`);
     expect(byHost.id).toBe(own.id);
+  });
+
+  async function squatCode(victimCode: string) {
+    const squatter = await ctv();
+    const squat = await storefront.getOrCreateMine(squatter.id);
+    await prisma.storefront.update({ where: { id: squat.id }, data: { subdomain: victimCode, isPublished: true, publishedAt: new Date() } });
+    return squat;
+  }
+
+  it('dữ liệu cũ đã trùng, gian hàng của chủ mã đang bị gỡ: /s/<mã> và checkout không rơi về kẻ chiếm', async () => {
+    const victim = await ctv();
+    const code = victim.referralCode.toLowerCase();
+    const squat = await squatCode(code);
+    const own = await storefront.getOrCreateMine(victim.id);
+    await prisma.storefront.update({ where: { id: own.id }, data: { isPublished: true, publishedAt: new Date(), takenDownAt: new Date() } });
+    await expect(storefront.getPublicBySlug(code)).rejects.toMatchObject({ status: 404 });
+    await expect(storefront.getPublicByHost(`${code}.tubutree.com`)).rejects.toMatchObject({ status: 404 });
+    expect(await resolvePublishedStorefront(prisma, { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false }, code)).toBeNull();
+    expect(squat.id).not.toBe(own.id);
+  });
+
+  it('dữ liệu cũ đã trùng, chủ mã chưa mở gian hàng: /s/<mã> và checkout không ra trang của kẻ chiếm', async () => {
+    const victim = await ctv();
+    const code = victim.referralCode.toLowerCase();
+    await squatCode(code);
+    await expect(storefront.getPublicBySlug(code)).rejects.toMatchObject({ status: 404 });
+    await expect(storefront.getPublicByHost(`${code}.tubutree.com`)).rejects.toMatchObject({ status: 404 });
+    expect(await resolvePublishedStorefront(prisma, { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false }, code)).toBeNull();
+  });
+
+  it('slug cũ viết hoa vẫn thắng subdomain chữ thường của kẻ chiếm ở bước checkout', async () => {
+    const victim = await ctv();
+    const code = victim.referralCode.toLowerCase();
+    await squatCode(code);
+    const own = await storefront.getOrCreateMine(victim.id);
+    await prisma.storefront.update({ where: { id: own.id }, data: { slug: code.toUpperCase(), isPublished: true, publishedAt: new Date() } });
+    const resolved = await resolvePublishedStorefront(prisma, { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false }, code);
+    expect(resolved?.id).toBe(own.id);
   });
 });

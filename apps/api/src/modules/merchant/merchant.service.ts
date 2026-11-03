@@ -11,7 +11,6 @@ import {
   normalizeSubdomain,
   normalizeCustomDomain,
   assertIdentifierAvailable,
-  lockStorefrontIdentifiers,
   recordReleasedIdentifiers,
 } from '../storefront/identifier-validation';
 import { assertStorefrontImagesAllowed } from '../storefront/storefront-images';
@@ -348,16 +347,10 @@ export class MerchantService {
 
     const ownerName = publicDisplayName(user.fullName, '');
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
-    // Bug 1 (race condition): findFirst rồi create phía trên KHÔNG transaction/lock — 2 request
-    // đồng thời (double-tap "Mở gian hàng") có thể cùng đọc "chưa có store" rồi cùng create.
-    // Từ khi có @@unique([ownerUserId]) (schema.prisma), request thua sẽ ăn P2002. Bug 2 (TOCTOU):
-    // vòng lặp kiểm subdomain ở trên (findUnique rồi dùng ngay bên dưới) cũng có thể bị request
-    // khác chiếm mất subdomain giữa lúc kiểm và lúc tạo, ăn P2002 trên cột subdomain.
-    // Xử lý chung: bắt P2002, ưu tiên kiểm user đã có store chưa (dù P2002 rơi vào cột nào —
-    // 2 request của CÙNG 1 user race nhau sẽ trùng CẢ 3 cột slug/subdomain/ownerUserId vì cùng
-    // suy ra từ 1 baseSlug) — nếu có, đọc lại và trả về store request thắng vừa tạo thay vì throw.
-    // Nếu không phải chính user này (bug 2: đụng subdomain của gian hàng KHÁC), đổi subdomain rồi
-    // thử tạo lại thay vì để lỗi 409 chung chung.
+    // 2 request đồng thời của cùng một user (double-tap "Mở gian hàng") có thể cùng đọc "chưa có store" rồi cùng create; @@unique([ownerUserId])
+    // làm request thua ăn P2002. Cột subdomain có @unique nên request khác chiếm subdomain giữa lúc kiểm và lúc ghi
+    // cũng ăn P2002. Bắt P2002: user đã có store (dù rơi vào cột nào, 2 request cùng user trùng cả slug/subdomain/ownerUserId
+    // vì cùng suy ra từ baseSlug) thì đọc lại và trả store request thắng vừa tạo; không phải thì chạy lại cả transaction (subdomain tính lại từ đầu).
     for (let attempt = 0; attempt <= MAX_CREATE_STORE_RETRY; attempt++) {
       try {
         // Mỗi lần thử một transaction (P2002 làm hỏng transaction của nó). Khoá tư vấn theo chủ rồi đọc lại vai trò: thu hồi đại lý
@@ -368,12 +361,10 @@ export class MerchantService {
           if (fresh?.role !== 'AFFILIATE' && fresh?.role !== 'DEALER' && fresh?.role !== 'ADMIN') {
             throw new ForbiddenException('Chỉ tài khoản đối tác hoặc đại lý mới có quyền mở gian hàng.');
           }
-          // Subdomain khởi tạo phải trống ở cả ba cột và không trùng mã giới thiệu của người khác; kiểm dưới khoá định danh để
-          // một yêu cầu đổi subdomain song song không chen vào giữa lúc kiểm và lúc ghi. Slug luôn là mã của chính chủ nên giữ
+          // Subdomain khởi tạo phải trống ở cả ba cột và không trùng mã giới thiệu của người khác. Slug luôn là mã của chính chủ nên giữ
           // nguyên: chỗ đọc ưu tiên slug nên link /s/<mã> luôn về đúng chủ.
           let subdomain = baseSlug;
           for (let counter = 1; ; counter++) {
-            await lockStorefrontIdentifiers(tx, [baseSlug, subdomain]);
             const taken = await tx.storefront.findFirst({
               where: { OR: [{ slug: subdomain }, { subdomain }, { customDomain: subdomain }] },
               select: { id: true },
@@ -482,7 +473,7 @@ export class MerchantService {
       updateData.publishedAt = null;
     }
 
-    // Kiểm trùng chéo cột + mã giới thiệu chạy trong transaction ghi bên dưới, dưới khoá định danh (xem assertIdentifierAvailable).
+    // Kiểm trùng chéo cột + mã giới thiệu chạy trong transaction ghi bên dưới (xem assertIdentifierAvailable).
     const identifiersToCheck: string[] = [];
     // Cổng gửi lại cả subdomain đang lưu mỗi lần bấm Lưu: giá trị không đổi thì không kiểm lại, kẻo gian hàng cũ có subdomain nay
     // thuộc từ khoá cấm không lưu nổi trường khác.
@@ -515,7 +506,6 @@ export class MerchantService {
       const whereLocked = { id: store.id, ...(dto.isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) };
       try {
         return await this.prisma.$transaction(async (tx) => {
-          await lockStorefrontIdentifiers(tx, identifiersToCheck);
           for (const value of identifiersToCheck) {
             await assertIdentifierAvailable(tx, value, store.id, cooldownDays, store.ownerUserId);
           }

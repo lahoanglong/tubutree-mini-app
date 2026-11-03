@@ -66,12 +66,9 @@ describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D
     await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, {
       storefront: '  Tubu-Hoa ',
     });
-    expect(storefrontFind.mock.calls[0][0].where).toEqual({
-      OR: [
-        { slug: { equals: 'tubu-hoa', mode: 'insensitive' } },
-        { subdomain: { equals: 'tubu-hoa', mode: 'insensitive' } },
-      ],
-    });
+    // Slug tra trước, trúng thì không hỏi subdomain: dữ liệu cũ trùng thì mã của chủ thắng subdomain của người khác.
+    expect(storefrontFind).toHaveBeenCalledTimes(1);
+    expect(storefrontFind.mock.calls[0][0].where).toEqual({ slug: { equals: 'tubu-hoa', mode: 'insensitive' } });
     expect(findMany.mock.calls[0][0].where).toEqual({ storefrontId: 'sf-1' });
   });
 
