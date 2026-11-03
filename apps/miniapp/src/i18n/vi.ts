@@ -738,6 +738,12 @@ export const vi = {
       `${lines} mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay.`,
     createdWithPreorder: 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.',
     created: 'Đã tạo đơn đại lý!',
+    createdEarlier: (code: string) =>
+      `Đơn ${code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt, kiểm tra mục Đơn hàng trước khi đặt lại.`,
+    createdEarlierMethod: (code: string, method: 'CREDIT' | 'PREPAID') =>
+      method === 'CREDIT'
+        ? `Đơn ${code} đã tạo ở lần trước theo hình thức Ghi công nợ, không cần chuyển khoản.`
+        : `Đơn ${code} đã tạo ở lần trước theo hình thức Trả trước, cần chuyển khoản để đơn được giao.`,
   },
 
   shareFallback: {

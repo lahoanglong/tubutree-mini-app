@@ -313,7 +313,7 @@ describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
   });
 
   it('Trả trước đặt đơn PREPAID rồi chuyển tới màn thanh toán QR', async () => {
-    mocks.placeDealerOrder.mockResolvedValue({ code: 'TUBU3', items: [{ backorderedQty: 0, quantity: 1 }] });
+    mocks.placeDealerOrder.mockResolvedValue({ code: 'TUBU3', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', items: [{ backorderedQty: 0, quantity: 1 }] });
     renderPage();
     await screen.findByText(/tồn 9/);
     fireEvent.click(plus());
@@ -321,6 +321,67 @@ describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
     await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1));
     expect(mocks.placeDealerOrder.mock.calls[0]![1]).toBe('PREPAID');
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU3'));
+  });
+
+  it('đơn trả về đã CONFIRMED (đơn công nợ của lần thử trước) thì không mở màn QR dù bấm Trả trước', async () => {
+    mocks.placeDealerOrder.mockResolvedValue({ code: 'TUBU4', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', items: [{ backorderedQty: 0, quantity: 1 }] });
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    fireEvent.click(await screen.findByRole('button', { name: 'Trả trước' }));
+    await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/bank-payment/TUBU4');
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error', text: expect.stringMatching(/TUBU4.*lần trước.*Ghi công nợ.*không cần chuyển khoản/) });
+  });
+
+  it('bấm Ghi công nợ mà máy chủ trả đơn Trả trước còn chờ chuyển khoản (lần trước): báo đúng hình thức và mở màn QR', async () => {
+    mocks.placeDealerOrder.mockResolvedValue({ code: 'TUBU6', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', items: [{ backorderedQty: 0, quantity: 1 }] });
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    fireEvent.click(await screen.findByRole('button', { name: 'Ghi công nợ' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error', text: expect.stringMatching(/TUBU6.*lần trước.*Trả trước.*chuyển khoản/) });
+    expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU6');
+  });
+
+  it('lỗi mạng rồi đổi giỏ hoặc đổi phương thức thì vẫn giữ Idempotency-Key (máy chủ có thể đã tạo đơn)', async () => {
+    mocks.placeDealerOrder.mockRejectedValue(new Error('network'));
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    fireEvent.click(await screen.findByRole('button', { name: 'Ghi công nợ' }));
+    await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Trả trước' }));
+    await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(2));
+    fireEvent.click(plus());
+    fireEvent.click(screen.getByRole('button', { name: 'Ghi công nợ' }));
+    await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(3));
+    const keys = mocks.placeDealerOrder.mock.calls.map((c) => c[3]);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
+  });
+
+  it('máy chủ trả đơn của lần đặt trước (giỏ khác giỏ hiện tại): giữ giỏ, đổi khoá, báo giỏ chưa đặt, không mở QR', async () => {
+    mocks.placeDealerOrder.mockResolvedValue({
+      code: 'TUBU5', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER',
+      items: [{ variationId: 'v1', quantity: 5, backorderedQty: 0 }],
+    });
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    fireEvent.click(await screen.findByRole('button', { name: 'Trả trước' }));
+    await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar.mock.calls[0]![0]).toMatchObject({ type: 'error', text: expect.stringContaining('TUBU5') });
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Trả trước' }));
+    await waitFor(() => expect(mocks.placeDealerOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeDealerOrder.mock.calls[1]![0]).toEqual([{ variationId: 'v1', quantity: 1 }]);
+    expect(mocks.placeDealerOrder.mock.calls[1]![3]).not.toBe(mocks.placeDealerOrder.mock.calls[0]![3]);
   });
 
   it('vượt hạn mức: chặn Ghi công nợ, vẫn cho Trả trước, cảnh báo bằng chữ', async () => {

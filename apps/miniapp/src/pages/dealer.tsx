@@ -446,8 +446,9 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
     return cart.filter(([id, n]) => preorderQty(n, stockOf.get(id) ?? 0) > 0).length;
   }, [cart, priceQ.data]);
 
-  // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lần đặt đơn (double-tap/timeout mạng) →
-  // BE không tạo đơn công nợ đôi; regenerate sau khi đặt thành công (đơn sau là đơn mới, mirror wallet.withdraw).
+  // Idempotency-Key giữ nguyên qua mọi lần bấm lại tới khi đặt thành công (double-tap, timeout mạng, đổi giỏ hay phương thức):
+  // máy chủ có thể đã tạo đơn dù mạng báo lỗi, nên đổi khoá giữa chừng sẽ tạo đơn công nợ thứ hai. Cùng khoá thì máy chủ trả
+  // lại đơn cũ không đối chiếu nội dung, nên onSuccess so dòng hàng trả về với giỏ đã gửi.
   const orderKey = useRef(newIdempotencyKey());
   const navigate = useNavigate();
   const place = useMutation({
@@ -459,12 +460,28 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
         orderKey.current,
       ),
     onSuccess: (order, method) => {
+      const lineKey = (rows: Array<[string, number]>) => rows.map(([id, n]) => `${id}:${n}`).sort().join(',');
+      const lines = order.items ?? [];
+      const got = lines.every((it) => it.variationId) ? lineKey(lines.map((it): [string, number] => [it.variationId, it.quantity])) : '';
+      if (got !== '' && lineKey(cart) !== got) {
+        orderKey.current = newIdempotencyKey();
+        void qc.invalidateQueries({ queryKey: ['dealer-orders'] });
+        void qc.invalidateQueries({ queryKey: ['dealer-me'] });
+        void qc.invalidateQueries({ queryKey: ['dealer-credit'] });
+        openSnackbar({ text: vi.dealerOrder.createdEarlier(order.code), type: 'error' });
+        return;
+      }
       haptic('medium');
+      // Cùng giỏ nhưng khác hình thức so với nút vừa bấm: đơn là của lần trước (mạng lỗi), báo hình thức thật của đơn.
+      const waitingTransfer = order.status === 'PENDING_PAYMENT';
+      const earlier: 'CREDIT' | 'PREPAID' | null =
+        method === 'PREPAID' && order.status && !waitingTransfer ? 'CREDIT' : method === 'CREDIT' && waitingTransfer ? 'PREPAID' : null;
       const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
-      openSnackbar({
-        text: hasPreorder ? vi.dealerOrder.createdWithPreorder : vi.dealerOrder.created,
-        type: 'success',
-      });
+      openSnackbar(
+        earlier
+          ? { text: vi.dealerOrder.createdEarlierMethod(order.code, earlier), type: 'error' }
+          : { text: hasPreorder ? vi.dealerOrder.createdWithPreorder : vi.dealerOrder.created, type: 'success' },
+      );
       orderKey.current = newIdempotencyKey();
       setQty({});
       void qc.invalidateQueries({ queryKey: ['dealer-orders'] });
@@ -476,7 +493,10 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
       void qc.invalidateQueries({ queryKey: ['dealer-report'] });
       // Đơn "Trả trước" tạo ra ở trạng thái PENDING_PAYMENT / BANK_TRANSFER nhưng trước đây
       // không có đường nào tới màn QR — đại lý đặt xong không biết chuyển khoản vào đâu.
-      if (method === 'PREPAID') navigate(`/bank-payment/${order.code}`);
+      // Đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái: chỉ đơn còn chờ chuyển khoản mới có màn QR.
+      if (waitingTransfer && order.paymentMethod === 'BANK_TRANSFER') {
+        navigate(`/bank-payment/${order.code}`);
+      }
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
