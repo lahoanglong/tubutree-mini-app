@@ -36,7 +36,7 @@ import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
 import { ShopHeader } from '@/components/mini/shop-header';
-import { TierBadge, TierBadgeSkeleton } from '@/components/mini/tier-badge';
+import { TierBadge, TierBadgeHint, TierBadgeSkeleton } from '@/components/mini/tier-badge';
 import { QuestStrip } from '@/components/mini/quest-strip';
 import { SectionCard } from '@/components/mini/section-card';
 import { StorefrontNewSection } from './storefront-new-section';
@@ -515,14 +515,14 @@ export function StorefrontBuilder({ sf, tier, tierPending }: { sf: StorefrontEdi
                 verified={Boolean(trustLabel)}
                 note={sf.headerNote}
                 badges={
-                  trustLabel || tier || tierPending ? (
+                  trustLabel || tier || tierPending || sf.type === 'CTV' ? (
                     <>
                       {trustLabel && (
                         <TrustBadge tone="verified" icon={Sparkles}>
                           {trustLabel}
                         </TrustBadge>
                       )}
-                      {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : null}
+                      {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : sf.type === 'CTV' ? <TierBadgeHint /> : null}
                     </>
                   ) : undefined
                 }

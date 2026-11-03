@@ -33,7 +33,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ShopHeader } from '../components/ui/shop-header';
 import { Skeleton } from '../components/ui/skeleton';
-import { TierBadge, TierBadgeSkeleton } from '../components/ui/tier-badge';
+import { TierBadge, TierBadgeHint, TierBadgeSkeleton } from '../components/ui/tier-badge';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { MoveButtons } from '../components/ui/move-buttons';
@@ -640,12 +640,12 @@ function Builder({ sf, tier, tierPending }: { sf: StorefrontEdit; tier: { name: 
         verified={Boolean(trustLabel)}
         note={sf.headerNote}
         badges={
-          trustLabel || tier || tierPending ? (
+          trustLabel || tier || tierPending || sf.type === 'CTV' ? (
             <>
               {trustLabel && (
                 <Badge tone="verified" icon={Sparkles}>{trustLabel}</Badge>
               )}
-              {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : null}
+              {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : sf.type === 'CTV' ? <TierBadgeHint /> : null}
             </>
           ) : undefined
         }

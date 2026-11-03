@@ -1287,12 +1287,13 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(container.querySelectorAll('h1')).toHaveLength(1);
   });
 
-  it('bậc 1 (Tân binh): không huy hiệu, như trang khách', async () => {
+  it('bậc 1 (Tân binh): không huy hiệu như trang khách, chỗ huy hiệu giữ bằng dòng gợi ý (hàng không thu lại)', async () => {
     const { container } = mount();
     await flush();
     expect(calls('get', '/affiliate/tiers')).toHaveLength(1);
     expect(heading2(container)).toHaveLength(1);
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+    expect(container.querySelector('[data-testid="tier-badge-hint"]')?.textContent).toBe('Huy hiệu bậc hiện từ bậc 2');
   });
 
   it('tải bậc lỗi: vẫn vẽ tên shop và nút "Sửa hồ sơ", không huy hiệu', async () => {
@@ -1302,6 +1303,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(heading2(container)).toHaveLength(1);
     expect(hasBtn('Sửa hồ sơ')).toBe(true);
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
+    expect(container.querySelector('[data-testid="tier-badge-hint"]')).not.toBeNull();
   });
 
   // M3: `/affiliate/tiers` treo không được giữ cả trình dựng. Chỉ chỗ huy hiệu bậc là khung chờ (cao bằng huy hiệu thật), còn lại vẽ ngay.
@@ -1349,13 +1351,14 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     release();
     await flush();
     expect(skeleton(container)).toHaveLength(0);
+    expect(container.querySelector('[data-testid="tier-badge-hint"]')).not.toBeNull();
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(heading2(container)).toHaveLength(1);
     expect(hasBtn('Sửa hồ sơ')).toBe(true);
   });
 
-  it('bậc thấp nhất (không khoe) về sau: không huy hiệu, khung chờ biến mất và không để lại hàng huy hiệu rỗng dưới tên shop', async () => {
+  it('bậc thấp nhất (không khoe) về sau: không huy hiệu, khung chờ được thay bằng dòng gợi ý nên hàng huy hiệu không thu lại', async () => {
     let release!: () => void;
     state.gates.set('get /affiliate/tiers', new Promise<void>((r) => { release = r; }));
     const { container } = mount();
@@ -1365,7 +1368,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     release();
     await flush();
     expect(skeleton(container)).toHaveLength(0);
-    expect(title.nextElementSibling?.querySelector('[data-testid="shop-note"]')).not.toBeNull();
+    expect(title.nextElementSibling?.querySelector('[data-testid="tier-badge-hint"]')).not.toBeNull();
   });
 
   it('điện thoại: bìa liền ngay dưới thanh tiêu đề như Mini (khung nội dung bỏ mt-4), chữ "Thêm ảnh bìa" thang caption', async () => {
@@ -1424,6 +1427,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
       expect(hasBtn('Sửa hồ sơ')).toBe(true);
       expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
       expect(skeleton(container)).toHaveLength(0);
+      expect(container.querySelector('[data-testid="tier-badge-hint"]')).not.toBeNull();
       expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
     });
 
@@ -1447,6 +1451,7 @@ describe('đầu xem trước như khách thấy (K6)', () => {
     expect(heading2(container)).toHaveLength(1);
     expect(calls('get', '/affiliate/tiers')).toHaveLength(0);
     expect(skeleton(container)).toHaveLength(0);
+    expect(container.querySelector('[data-testid="tier-badge-hint"]')).toBeNull();
     expect(text()).not.toMatch(/CTV (Tân binh|Đồng)/);
   });
 
