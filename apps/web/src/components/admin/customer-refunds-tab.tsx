@@ -77,14 +77,16 @@ const isCodHand = (r: AdminCustomerRefund) => isCodReturn(r) && r.handRefundPoss
  * và khách chưa được báo. API cũ chưa trả phương thức thì nói cả hai khả năng.
  */
 const CHOOSE_LATER = 'khoản chuyển sang "Chờ chuyển khoản"; khách chưa được báo nên hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ngân hàng';
-const refundNextStep = (r: AdminCustomerRefund): string =>
-  r.userId === null
-    ? `đơn CTV lên hộ: ${COD_END_CUSTOMER_NEXT}`
-    : r.paymentMethod === 'WALLET'
-    ? 'đơn trả bằng Ví nên hoàn thẳng về Ví khách, khách được báo'
-    : r.paymentMethod === undefined
-    ? `đơn trả bằng Ví hoàn thẳng về Ví khách, đơn khác ${CHOOSE_LATER}`
-    : CHOOSE_LATER;
+const refundNextStep = (r: AdminCustomerRefund, after?: Pick<AdminCustomerRefund, 'status' | 'method' | 'userId'>): string => {
+  // Sau xác nhận: nói theo khoản API trả về (đơn Ví của tài khoản đã xoá không cộng Ví được nên ở lại Chờ chuyển khoản, không chủ tài khoản).
+  if (after?.status === 'COMPLETED' && after.method === 'WALLET') return 'đơn trả bằng Ví nên đã hoàn thẳng về Ví khách, khách được báo';
+  if (after?.status === 'PENDING' && (after.userId !== undefined ? after.userId : r.userId) === null) return `khoản chuyển sang "Chờ chuyển khoản": ${COD_END_CUSTOMER_NEXT}`;
+  if (after?.status === 'PENDING') return CHOOSE_LATER;
+  if (r.userId === null) return `đơn CTV lên hộ: ${COD_END_CUSTOMER_NEXT}`;
+  if (r.paymentMethod === 'WALLET') return 'đơn trả bằng Ví nên hoàn thẳng về Ví khách, khách được báo';
+  if (r.paymentMethod === undefined) return `đơn trả bằng Ví hoàn thẳng về Ví khách, đơn khác ${CHOOSE_LATER}`;
+  return CHOOSE_LATER;
+};
 
 /** Khách cuối của đơn CTV lên hộ không có tài khoản nên không có lựa chọn Ví Tubu: Tubu chuyển khoản tay theo SĐT. */
 const COD_END_CUSTOMER_NEXT = 'khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối';
@@ -99,6 +101,7 @@ const HELD_VERIFY_LABEL = 'Xác nhận số còn phải hoàn';
 const HELD_DISMISS_LABEL = 'Không hoàn';
 const HELD_DISMISSED_STATUS_LABEL = 'Không hoàn (đã hoàn tay)';
 const HELD_KIND_LABEL = 'Trả hàng, có thể đã hoàn tay';
+const HELD_CANCEL_KIND_LABEL = 'Huỷ đơn, có thể đã hoàn tay';
 
 function codAmountError(n: number | null, max: number): string | null {
   if (n == null || n <= 0) return 'Nhập số tiền hoàn cho khách (lớn hơn 0đ).';
@@ -210,15 +213,15 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
 
   const verify = useMutation({
     mutationFn: ({ refund: r, amount }: { refund: AdminCustomerRefund; amount: number }) => verifyCustomerRefund(r.id, { amount }),
-    onSuccess: (_d, { refund: r, amount }) => {
+    onSuccess: (after, { refund: r, amount }) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
       void invalidateInbox(qc);
       setFlash({
         tone: 'success',
         text: isHeldReturn(r) || isCodHand(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn ${r.orderCode}${isCodHand(r) ? ' (hãng đã thu COD, đã trừ phần nhân viên hoàn tay)' : ''}: ${refundNextStep(r)}.`
+          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn ${r.orderCode}${isCodHand(r) ? ' (hãng đã thu COD, đã trừ phần nhân viên hoàn tay)' : ''}: ${refundNextStep(r, after)}.`
           : isCodReturn(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}: ${refundNextStep(r)}.`
+          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}: ${refundNextStep(r, after)}.`
           : `Đã xác nhận tiền trả dư ${formatVnd(amount)} (đơn ${r.orderCode}). Khách được báo để chọn nhận về Ví Tubu hay tài khoản ngân hàng; khoản chuyển sang "Chờ chuyển khoản".`,
       });
     },
@@ -270,7 +273,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
             message:
               (codHand
                 ? `Hãng vận chuyển đã thu COD của đơn ${r.orderCode}, và sau khi trừ phần nhân viên đã hoàn tay, Tubu còn phải hoàn ${formatVnd(amount)} cho khách?\n\n`
-                : `Đơn ${r.orderCode} đã trả hàng. Sau khi trừ phần nhân viên đã hoàn tay, Tubu còn phải hoàn ${formatVnd(amount)} cho khách?\n\n`) +
+                : `Đơn ${r.orderCode} ${r.reason === 'CANCELLED' ? 'đã huỷ' : 'đã trả hàng'}. Sau khi trừ phần nhân viên đã hoàn tay, Tubu còn phải hoàn ${formatVnd(amount)} cho khách?\n\n`) +
               `${refundNextStep(r)}. ` +
               (codHand
                 ? 'Phần còn lại được ghi là không hoàn (nhân viên đã hoàn tay hoặc hãng chưa thu). Chỉ bấm khi đã đối chiếu với hãng và nhân viên.'
@@ -572,7 +575,7 @@ export function CustomerRefundRow({
               </ToneBadge>
             </span>
             <ToneBadge tone="neutral">
-              {heldReturn ? HELD_KIND_LABEL : codHand ? 'Trả hàng COD, có thể đã hoàn tay' : codReturn ? 'Trả hàng COD' : r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}
+              {heldReturn ? (r.reason === 'CANCELLED' ? HELD_CANCEL_KIND_LABEL : HELD_KIND_LABEL) : codHand ? 'Trả hàng COD, có thể đã hoàn tay' : codReturn ? 'Trả hàng COD' : r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}
             </ToneBadge>
           </div>
           <div className="mt-1 text-sm text-stone-600">

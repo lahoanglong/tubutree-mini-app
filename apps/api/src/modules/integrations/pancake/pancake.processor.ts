@@ -13,7 +13,7 @@ import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancake
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_PARTIAL_RETURN_ACK,
-  ATTENTION_PARTIAL_RETURN_HELD,
+  ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
@@ -649,7 +649,7 @@ export class PancakeProcessor extends WorkerHost {
   private async alertHeldReturn(order: Order, outcome: SetStatusOutcome): Promise<void> {
     if (!outcome.flipped || outcome.heldReasons.length === 0) return;
     // Dòng "hoàn tay" nói đủ việc cho Kế toán nên một tin là đủ; chỉ COD thuần thì tin COD.
-    const reason = outcome.heldReasons.includes(ATTENTION_PARTIAL_RETURN_HELD) ? ATTENTION_PARTIAL_RETURN_HELD : outcome.heldReasons[0]!;
+    const reason = outcome.heldReasons.find((r) => ATTENTION_PARTIAL_RETURN_HELD_REASONS.includes(r)) ?? outcome.heldReasons[0]!;
     // Đã báo một lần: nếu bước sau lỗi và catch ở người gọi báo lại thì không gửi trùng.
     outcome.heldReasons = [];
     try {

@@ -362,7 +362,8 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     await prisma.orderCustomerRefund.create({
       data: { orderId: order.id, orderCode: order.code, kind: 'RETURN', refKey: 'pancake-partial-return-held', userId: user.id, amount: 100_000, method: 'MANUAL_TRANSFER', status: 'UNVERIFIED', reason: 'RETURNED' },
     });
-    await expectBlocked(request.id, user.id, /hoàn tiền/i);
+    const body = await expectBlocked(request.id, user.id, /chờ Kế toán đối soát/);
+    expect(body.blockers.map((b) => b.code)).toEqual(['CUSTOMER_REFUND_UNVERIFIED']);
   });
 
   it('PD-3: chặn khi còn Điểm Xanh quy đổi (không hết hạn, không quy ra tiền) chưa dùng', async () => {

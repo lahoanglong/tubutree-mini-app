@@ -45,7 +45,7 @@ import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
   ATTENTION_COD_RETURN_UNVERIFIED,
-  ATTENTION_PARTIAL_RETURN_HELD,
+  partialReturnHeldReason,
   ATTENTION_PARTIAL_RETURN_SETTLED,
   ATTENTION_SEPARATOR,
   ATTENTION_UNDERPAID,
@@ -146,6 +146,17 @@ export type ReversalEffectsResult =
  * restock/hoàn tiền khi hủy (P0-4), và merchant có thể đổi trạng thái mà không cộng/
  * đảo điểm-hoa hồng (P1-1). Xem docs/2026-09-08-review-progress.md.
  */
+/**
+ * Câu cho khách khi đơn trả trước bị giữ tiền chờ Kế toán: nói đúng nơi tiền sẽ về nếu có hoàn, theo cách khách đã trả (đơn CTV lên hộ trả cho người
+ * nhận hàng, đơn Ví về Ví, còn lại khách chọn ở chi tiết đơn).
+ */
+function withheldRefundNote(order: Pick<Order, 'placedForCustomer' | 'paymentMethod'>): string {
+  const lead = ' Tubu đang đối soát khoản thanh toán của đơn này, nếu có tiền hoàn,';
+  if (order.placedForCustomer) return `${lead} khoản đó sẽ được trả cho người nhận hàng.`;
+  if (order.paymentMethod === 'WALLET') return `${lead} khoản đó sẽ được hoàn về Ví Tubu.`;
+  return `${lead} khoản đó sẽ hiện ở chi tiết đơn để bạn chọn nơi nhận.`;
+}
+
 @Injectable()
 export class OrderStatusService {
   private readonly logger = new Logger(OrderStatusService.name);
@@ -410,8 +421,9 @@ export class OrderStatusService {
             unverified,
             withholdCod ? undefined : HELD_RETURN_UNVERIFIED_REF,
             withholdCod && manualPartial ? COD_HAND_REFUND_NOTE : undefined,
+            targetStatus === 'CANCELLED' ? 'CANCELLED' : 'RETURNED',
           );
-          const added = [...(withholdCod ? [ATTENTION_COD_RETURN_UNVERIFIED] : []), ...(manualPartial ? [ATTENTION_PARTIAL_RETURN_HELD] : [])];
+          const added = [...(withholdCod ? [ATTENTION_COD_RETURN_UNVERIFIED] : []), ...(manualPartial ? [partialReturnHeldReason(targetStatus)] : [])];
           // Đọc lại ô dưới khoá dòng của lần lật: ảnh chụp ngoài tx có thể thiếu lời 15 vừa commit chen giữa, và ghi theo ảnh đó là đè mất nó.
           const current = (await tx.order.findUnique({ where: { id: order.id }, select: { pancakeAttention: true } }))?.pancakeAttention ?? null;
           // Lý do "ĐANG HOÀN" tự xong khi hàng đã về; lời "hoàn tay" của 15 được dòng chờ Kế toán thay; mọi lý do khác (vd lệch tổng
@@ -523,7 +535,7 @@ export class OrderStatusService {
         (reason ? ` Lý do: ${reason.replace(/[.\s]+$/, '')}.` : '') +
         refundNote(r?.refund ?? null, null, (r?.pointsRefunded ?? 0) + standardPointsBack) +
         // Đơn trả trước bị giữ tiền chờ Kế toán: khách đã trả tiền nên không để im, nhưng chưa được nói "đã hoàn".
-        ((r?.withheldRefund ?? 0) > 0 ? ' Tubu đang đối soát khoản thanh toán của đơn này, nếu có tiền hoàn, khoản đó sẽ hiện ở chi tiết đơn để bạn chọn nơi nhận.' : '') +
+        ((r?.withheldRefund ?? 0) > 0 ? withheldRefundNote(order) : '') +
         (noteCarriesRefund ? receivedRefundNote(receivedBack, order.placedForCustomer) : '');
     }
     if (targetStatus === 'DELIVERED') {

@@ -15,6 +15,7 @@ import * as attention from '../../src/modules/integrations/pancake/pancake-atten
 import {
   ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_PARTIAL_RETURN_HELD,
+  ATTENTION_PARTIAL_RETURN_HELD_CANCELLED,
   ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
   ATTENTION_PARTIAL_RETURN_SETTLED,
 } from '../../src/modules/integrations/pancake/pancake-attention';
@@ -126,6 +127,19 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
     // Lời hứa phải đúng thật: khi Kế toán xác nhận, khoản hiện ở chi tiết đơn để khách chọn nơi nhận (không có tin riêng).
     expect(data.refund_note).toContain('chi tiết đơn');
     expect(data.refund_note).not.toContain('sẽ được báo');
+  });
+
+  it.each([
+    ['BANK_TRANSFER', {}, 'chi tiết đơn để bạn chọn nơi nhận'],
+    ['WALLET', {}, 'hoàn về Ví Tubu'],
+    ['BANK_TRANSFER', { placedForCustomer: true, endCustomerKey: '0900000222' }, 'trả cho người nhận hàng'],
+  ] as const)('câu báo khách khi giữ tiền theo đơn: %s %j → "%s"', async (method, extra, expected) => {
+    const { order, event } = await deliveredOrder(method, 300_000, extra);
+    await processor.onStatusUpdated(event(PARTIAL));
+    await processor.onStatusUpdated(event(RETURNED));
+    const data = notify.mock.calls.map((c) => c[2] as Record<string, string>).find((d) => d.order_code === order.code)!;
+    expect(data.refund_note).toContain(expected);
+    if (expected !== 'chi tiết đơn để bạn chọn nơi nhận') expect(data.refund_note).not.toContain('chi tiết đơn');
   });
 
   it('đơn COD: 15 rồi 5 → Ví không đổi, khoản COD chờ Kế toán đủ tiền, ô có cả dòng COD và dòng mới', async () => {
@@ -537,6 +551,7 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
         const parts = after.pancakeAttention!.split(' | ');
         expect(parts.some((part) => part.startsWith('Pancake báo HOÀN MỘT PHẦN'))).toBe(false);
         expect(parts).toContain(ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU);
+        expect(ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU).toContain('thu lại phần hoàn trùng');
         expect(parts).toContain('Lý do khác');
         expect(parts.some((part) => part.startsWith('Khách trả một phần đơn'))).toBe(true);
       });
@@ -629,11 +644,18 @@ describe('Pancake 15 rồi 5 không có yêu cầu trả: tiền chờ Kế toá
       expect(await walletOf(user.id)).toBe(0);
       const rows = await rowsOf(order.id);
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ refKey: 'pancake-partial-return-held', status: 'UNVERIFIED', amount: 300_000 });
-      expect(after.pancakeAttention).toBe(ATTENTION_PARTIAL_RETURN_HELD);
-      expect(alert.mock.calls.filter(([, reason]) => reason === ATTENTION_PARTIAL_RETURN_HELD)).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ kind: 'RETURN', refKey: 'pancake-partial-return-held', status: 'UNVERIFIED', amount: 300_000, reason: 'CANCELLED' });
+      // Đơn huỷ: chữ trong ô nói "Đã huỷ", không nói "Đã trả hàng".
+      expect(after.pancakeAttention).toBe(ATTENTION_PARTIAL_RETURN_HELD_CANCELLED);
+      expect(after.pancakeAttention).not.toContain('Đã trả hàng');
+      expect(alert.mock.calls.filter(([, reason]) => reason === ATTENTION_PARTIAL_RETURN_HELD_CANCELLED)).toHaveLength(1);
 
       await refunds.verifyOverpayment(accountant.id, rows[0]!.id, { amount: 120_000 });
+      // Khách đọc "Hoàn tiền huỷ đơn" (nhãn phía khách theo kind), khoản chờ Kế toán không lộ lý do nội bộ.
+      const mine = (await refunds.listMine(user.id, order.id))[0] as unknown as Record<string, unknown>;
+      expect(mine.kind).toBe('CANCEL');
+      expect(mine.reason).toBeUndefined();
+      expect((await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id, refKey: 'pancake-partial-return-held:rest' } }))[0]).toMatchObject({ reason: 'CANCELLED' });
       await refunds.chooseDestination(user.id, rows[0]!.id, { refundMethod: 'WALLET' });
       expect(await walletOf(user.id)).toBe(120_000);
       expect((await orderOf(order.id)).paymentStatus).toBe('REFUNDED');

@@ -7,7 +7,7 @@ import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { anonymizedAtOf, creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { canRefundToBank, formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
 import { COD_HAND_REFUND_NOTE, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, isCodReturnRef, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
-import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD, removeAttentionReason } from '../integrations/pancake/pancake-attention';
+import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD_REASONS, removeAttentionReason } from '../integrations/pancake/pancake-attention';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
@@ -54,12 +54,26 @@ const NO_BANK_FOR_STAFF = 'Khách chưa chọn tài khoản nhận — nhờ qu�
 const typedAnyBank = (o: { bankName?: string; accountNumber?: string; accountName?: string }) =>
   [o.bankName, o.accountNumber, o.accountName].some((v) => !!v?.trim());
 
+/**
+ * Khoản giữ chờ Kế toán của đơn CHƯA giao (Pancake huỷ đơn) mang kind RETURN để dùng chung đường đối soát, nhưng khách phải đọc "Hoàn tiền huỷ
+ * đơn": nhãn phía khách theo kind nên đổi kind ở lớp xem, không ở dữ liệu. Không đưa `reason` ra ngoài.
+ */
+const toMyView = <T extends { kind: CustomerRefundKind; reason: string; method: string; status: string }>(r: T) => {
+  const { reason, ...rest } = r;
+  return {
+    ...rest,
+    kind: r.kind === 'RETURN' && reason === 'CANCELLED' ? ('CANCEL' as CustomerRefundKind) : r.kind,
+    canChooseDestination: r.method === 'MANUAL_TRANSFER' && r.status === 'PENDING',
+  };
+};
+
 const MINE_SELECT = {
   id: true,
   orderId: true,
   orderCode: true,
   kind: true,
   refKey: true,
+  reason: true,
   amount: true,
   method: true,
   status: true,
@@ -503,7 +517,7 @@ export class CustomerRefundsService {
   /** Kế toán đã quyết khoản COD trả hàng: gỡ dòng COD, và dòng "hoàn tay" nếu đơn có (Pancake 15 rồi 5 trên đơn COD). */
   private async settleCodReturn(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
     await removeAttentionReason(tx, orderId, ATTENTION_COD_RETURN_UNVERIFIED);
-    await removeAttentionReason(tx, orderId, ATTENTION_PARTIAL_RETURN_HELD);
+    for (const held of ATTENTION_PARTIAL_RETURN_HELD_REASONS) await removeAttentionReason(tx, orderId, held);
   }
 
   /**
@@ -512,7 +526,7 @@ export class CustomerRefundsService {
    * không thấy "Đã hoàn tiền" khi chưa ai xác nhận; khoản chuyển khoản còn Chờ/Đang chuyển thì đơn REFUNDED hiển thị "Đang hoàn tiền".
    */
   private async settleHeldReturn(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
-    await removeAttentionReason(tx, orderId, ATTENTION_PARTIAL_RETURN_HELD);
+    for (const held of ATTENTION_PARTIAL_RETURN_HELD_REASONS) await removeAttentionReason(tx, orderId, held);
     await tx.order.updateMany({ where: { id: orderId, paymentStatus: 'PAID' }, data: { paymentStatus: 'REFUNDED' } });
   }
 
@@ -568,10 +582,7 @@ export class CustomerRefundsService {
       take: 50,
       select: MINE_SELECT,
     });
-    return rows.map((r) => ({
-      ...r,
-      canChooseDestination: r.method === 'MANUAL_TRANSFER' && r.status === 'PENDING',
-    }));
+    return rows.map(toMyView);
   }
 
   /** Tài khoản khách dùng gần nhất (khoản hoàn, yêu cầu trả, lệnh rút Ví) — để khách chọn lại thay vì gõ lại. */
@@ -663,7 +674,7 @@ export class CustomerRefundsService {
       );
     }
     const fresh = await this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id }, select: MINE_SELECT });
-    return { ...fresh, canChooseDestination: fresh.method === 'MANUAL_TRANSFER' && fresh.status === 'PENDING' };
+    return toMyView(fresh);
   }
 
   private async customerLostReason(id: string): Promise<string> {

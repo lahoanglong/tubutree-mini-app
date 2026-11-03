@@ -105,6 +105,7 @@ export async function recordCodReturnUnverified(
   amount: number,
   refKey: string = COD_RETURN_UNVERIFIED_REF,
   adminNote?: string,
+  reason: 'RETURNED' | 'CANCELLED' = 'RETURNED',
 ): Promise<void> {
   await tx.orderCustomerRefund.createMany({
     data: [
@@ -117,7 +118,7 @@ export async function recordCodReturnUnverified(
         amount,
         method: 'MANUAL_TRANSFER',
         status: 'UNVERIFIED',
-        reason: 'RETURNED',
+        reason,
         ...(adminNote ? { adminNote } : {}),
       },
     ],

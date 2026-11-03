@@ -24,6 +24,7 @@ export type DeletionBlockerCode =
   | 'PAYOUT_PENDING'
   | 'RETURN_PENDING'
   | 'CUSTOMER_REFUND_PENDING'
+  | 'CUSTOMER_REFUND_UNVERIFIED'
   | 'SUBSCRIPTION_ACTIVE'
   | 'COMMISSION_UNPAID'
   | 'DEALER_CREDIT'
@@ -332,7 +333,7 @@ export class AccountDeletionService {
           OR: [{ status: { in: ['PENDING', 'PROCESSING'] } }, { status: 'UNVERIFIED', kind: 'RETURN' }],
           AND: [{ OR: [{ customerUserId: { in: ids } }, { order: { userId: { in: ids } } }] }],
         },
-        select: { customerUserId: true, order: { select: { userId: true } } },
+        select: { status: true, customerUserId: true, order: { select: { userId: true } } },
       }),
       db.subscription.groupBy({
         by: ['userId'],
@@ -390,9 +391,11 @@ export class AccountDeletionService {
     const wasteReview = new Set(wasteFlags.map((f) => f.userId));
     const creditSum = new Map(dealerCredit.map((r) => [r.userId, r._sum.delta ?? 0]));
     const refundN = new Map<string, number>();
+    const unverifiedN = new Map<string, number>();
     for (const r of refunds) {
+      const into = r.status === 'UNVERIFIED' ? unverifiedN : refundN;
       for (const uid of new Set([r.customerUserId, r.order.userId])) {
-        if (uid && ids.includes(uid)) refundN.set(uid, (refundN.get(uid) ?? 0) + 1);
+        if (uid && ids.includes(uid)) into.set(uid, (into.get(uid) ?? 0) + 1);
       }
     }
 
@@ -433,6 +436,8 @@ export class AccountDeletionService {
       if (n(payoutN) > 0) add('PAYOUT_PENDING', `còn ${n(payoutN)} yêu cầu rút tiền chờ xử lý`);
       if (n(returnN) > 0) add('RETURN_PENDING', `còn ${n(returnN)} yêu cầu đổi trả chờ duyệt`);
       if (n(refundN) > 0) add('CUSTOMER_REFUND_PENDING', `còn ${n(refundN)} khoản hoàn tiền đơn chưa chuyển`);
+      // Người đọc là admin xử lý yêu cầu xoá: việc của Kế toán ở mục "Hoàn tiền khách", không phải khoản đã sẵn sàng chuyển.
+      if (n(unverifiedN) > 0) add('CUSTOMER_REFUND_UNVERIFIED', `còn ${n(unverifiedN)} khoản hoàn tiền trả hàng đang chờ Kế toán đối soát (mục "Hoàn tiền khách": xác nhận số hoàn hoặc bỏ qua), quyết xong mới xoá được`);
       if (n(subN) > 0) add('SUBSCRIPTION_ACTIVE', `còn ${n(subN)} gói giao định kỳ đang chạy hoặc tạm dừng`);
       if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước (khoản đang chờ duyệt thì đợi duyệt xong)`);
       if (n(wasteOpenN) > 0) add('WASTE_REQUEST_OPEN', `còn ${n(wasteOpenN)} yêu cầu Đổi rác chưa xong (đang chờ mang tới, đang gửi hoặc đang chờ đếm)`);

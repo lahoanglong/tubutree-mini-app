@@ -1630,13 +1630,13 @@ describe('CustomerRefundsTab — khoản đơn trả hàng bị giữ lại ch�
   const held = (over: Partial<AdminCustomerRefund> = {}) =>
     refund({ kind: 'RETURN', refKey: HELD_REF, status: 'UNVERIFIED', userId: 'u1', reason: 'RETURNED', amount: 300_000, recipientName: null, phone: null, ...over });
 
-  function stub(list: () => AdminCustomerRefund[]) {
+  function stub(list: () => AdminCustomerRefund[], verifyResult: Record<string, unknown> = { id: 'r1', status: 'PENDING' }) {
     const calls: { url: string; init?: RequestInit }[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         calls.push({ url, init });
-        if (url.includes('/verify')) return json({ id: 'r1', status: 'PENDING' });
+        if (url.includes('/verify')) return json(verifyResult);
         if (url.includes('/dismiss')) return json({ id: 'r1', status: 'DISMISSED' });
         return json(page(list()));
       }),
@@ -1685,10 +1685,10 @@ describe('CustomerRefundsTab — khoản đơn trả hàng bị giữ lại ch�
   });
 
   it.each([
-    ['WALLET', /hoàn thẳng về Ví khách/, /Chờ chuyển khoản/],
-    ['BANK_TRANSFER', /Chờ chuyển khoản/, /hoàn thẳng về Ví khách/],
-  ])('đơn trả bằng %s: hộp hỏi và thông báo sau khi xác nhận nói đúng việc tiếp theo, không nói cả hai khả năng', async (paymentMethod, expected, unexpected) => {
-    stub(() => [held({ paymentMethod })]);
+    ['WALLET', { id: 'r1', status: 'COMPLETED', method: 'WALLET', userId: 'u1' }, /hoàn thẳng về Ví khách/, /Chờ chuyển khoản/],
+    ['BANK_TRANSFER', { id: 'r1', status: 'PENDING', method: 'MANUAL_TRANSFER', userId: 'u1' }, /Chờ chuyển khoản/, /hoàn thẳng về Ví khách/],
+  ])('đơn trả bằng %s: hộp hỏi và thông báo sau khi xác nhận nói đúng việc tiếp theo, không nói cả hai khả năng', async (paymentMethod, result, expected, unexpected) => {
+    stub(() => [held({ paymentMethod })], result);
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const card = await open(container);
@@ -1702,6 +1702,33 @@ describe('CustomerRefundsTab — khoản đơn trả hàng bị giữ lại ch�
     const flash = container.querySelector('[role="status"]')?.textContent ?? '';
     expect(flash).toMatch(expected);
     expect(flash).not.toMatch(unexpected);
+  });
+
+  it('đơn Ví của tài khoản đã xoá: API để khoản Chờ chuyển khoản không chủ tài khoản → thông báo nói chuyển tay theo SĐT, không nói hoàn thẳng về Ví', async () => {
+    stub(() => [held({ paymentMethod: 'WALLET' })], { id: 'r1', status: 'PENDING', method: 'MANUAL_TRANSFER', userId: null });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    click(byText(card, 'button', 'Xác nhận số còn phải hoàn'));
+    await flush(1);
+    click(confirmDialog()!.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    const flash = container.querySelector('[role="status"]')?.textContent ?? '';
+    expect(flash).toMatch(/Chờ chuyển khoản.*chuyển khoản tay theo SĐT/);
+    expect(flash).not.toContain('hoàn thẳng về Ví');
+  });
+
+  it('khoản giữ của đơn huỷ (reason CANCELLED): nhãn "Huỷ đơn, có thể đã hoàn tay", hộp hỏi nói đơn đã huỷ', async () => {
+    stub(() => [held({ reason: 'CANCELLED' })]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    expect(card.textContent).toContain('Huỷ đơn, có thể đã hoàn tay');
+    expect(card.textContent).not.toContain('Trả hàng, có thể');
+    click(byText(card, 'button', 'Xác nhận số còn phải hoàn'));
+    await flush(1);
+    expect(confirmDialog()!.textContent).toContain('đã huỷ');
+    expect(confirmDialog()!.textContent).not.toContain('đã trả hàng');
   });
 
   it('khoản COD có cả "hoàn tay" (handRefundPossible): chữ gộp hai việc kiểm, nút nói số còn lại, hộp hỏi nhắc cả hãng lẫn phần hoàn tay', async () => {

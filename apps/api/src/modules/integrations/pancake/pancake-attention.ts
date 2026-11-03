@@ -26,9 +26,16 @@ export const ATTENTION_COD_RETURN_UNVERIFIED =
  * hoàn vì nhân viên có thể đã hoàn tay phần bị trả. Khoản hoàn chờ Kế toán đối soát nằm ở mục "Hoàn tiền khách". Không mở đầu bằng
  * PANCAKE_PARTIAL_RETURN_PREFIX nên việc đóng đơn không thay nó bằng lời "đã xử lý".
  */
-export const ATTENTION_PARTIAL_RETURN_HELD =
-  'Pancake đã báo hoàn một phần rồi hoàn cả đơn, mà Tubu không có yêu cầu trả hàng nào: nhân viên có thể đã hoàn tay phần bị trả. Đơn đã chuyển "Đã trả hàng", điểm/hoa hồng/kho đã đảo, nhưng hệ thống KHÔNG tự hoàn tiền cho khách. ' +
-  'Kế toán trừ phần đã hoàn tay, rồi xác nhận phần còn lại ở mục "Hoàn tiền khách" (khoản "Trả hàng" chờ đối soát của đơn này).';
+const heldReasonFor = (closed: string, queueName: string) =>
+  `Pancake đã báo hoàn một phần rồi hoàn cả đơn, mà Tubu không có yêu cầu trả hàng nào: nhân viên có thể đã hoàn tay phần bị trả. Đơn đã chuyển "${closed}", điểm/hoa hồng/kho đã đảo, nhưng hệ thống KHÔNG tự hoàn tiền cho khách. ` +
+  `Kế toán trừ phần đã hoàn tay, rồi xác nhận phần còn lại ở mục "Hoàn tiền khách" (khoản "${queueName}" chờ đối soát của đơn này).`;
+export const ATTENTION_PARTIAL_RETURN_HELD = heldReasonFor('Đã trả hàng', 'Trả hàng');
+/** Cùng việc cho đơn CHƯA giao: Pancake "Đã hoàn" huỷ đơn (CANCELLED), khoản mang lý do huỷ chứ không phải trả hàng. */
+export const ATTENTION_PARTIAL_RETURN_HELD_CANCELLED = heldReasonFor('Đã huỷ', 'Hoàn tiền huỷ đơn');
+export const ATTENTION_PARTIAL_RETURN_HELD_REASONS = [ATTENTION_PARTIAL_RETURN_HELD, ATTENTION_PARTIAL_RETURN_HELD_CANCELLED];
+/** Lý do chờ Kế toán theo trạng thái đích của lần lật. */
+export const partialReturnHeldReason = (target: 'CANCELLED' | 'RETURNED'): string =>
+  target === 'CANCELLED' ? ATTENTION_PARTIAL_RETURN_HELD_CANCELLED : ATTENTION_PARTIAL_RETURN_HELD;
 /** Dấu vết bền trong lịch sử đơn: Pancake báo 15 lúc Tubu không có yêu cầu trả (ô "Cần xử lý" có thể bị bấm "Đã xử lý" xoá). */
 export const PANCAKE_PARTIAL_RETURN_MANUAL_NOTE = 'Pancake báo hoàn một phần, Tubu không có yêu cầu trả';
 /**
@@ -42,7 +49,8 @@ export const ATTENTION_PARTIAL_RETURN_SETTLED =
   'Nếu trước đó đã hoàn tay thì báo Kế toán đối chiếu để thu lại phần hoàn trùng.';
 /** Admin duyệt trả MỘT PHẦN trên Tubu khi ô còn lời "hoàn tay" của Pancake 15: tiền đã hoàn lúc duyệt nên hoàn tay là hoàn hai lần. */
 export const ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU =
-  'Phần khách trả đã được duyệt và hoàn tiền trên Tubu: KHÔNG hoàn tay phần bị trả (Pancake đã báo hoàn một phần).';
+  'Phần khách trả đã được duyệt và hoàn tiền trên Tubu: KHÔNG hoàn tay phần bị trả (Pancake đã báo hoàn một phần). ' +
+  'Nếu trước đó đã hoàn tay thì báo Kế toán đối chiếu để thu lại phần hoàn trùng.';
 /** Lời nhắc tạo phiếu trả trên Pancake lúc duyệt trả (OrderReturnsService.flagPancakeReturn). */
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
@@ -69,7 +77,7 @@ export async function flagPancakeAttention(
 
 const attentionLogger = new Logger('PancakeAttention');
 /** Hai dòng chỉ gỡ khi Kế toán quyết khoản chờ đối soát: lý do khác được nối sau, không đè. */
-const ACCOUNTANT_OWNED_REASONS = [ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD];
+const ACCOUNTANT_OWNED_REASONS = [ATTENTION_COD_RETURN_UNVERIFIED, ...ATTENTION_PARTIAL_RETURN_HELD_REASONS];
 /** Số lượt đọc-rồi-ghi có điều kiện khi ô bị ghi chen: đủ cho vài instance/job cùng ghi một đơn. */
 const ATTENTION_WRITE_ATTEMPTS = 10;
 
@@ -90,7 +98,9 @@ export async function writePancakeAttention(
   const changed = { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] };
   // NOT (NULL LIKE ..) ra NULL trong SQL: ô trống phải được nêu riêng, không thì dòng không khớp.
   const notCod = { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] };
-  const notHeld = { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_PARTIAL_RETURN_HELD } } }] };
+  const notHeld = {
+    OR: [{ pancakeAttention: null }, { NOT: { OR: ATTENTION_PARTIAL_RETURN_HELD_REASONS.map((held) => ({ pancakeAttention: { contains: held } })) } }],
+  };
   const first = await db.order.updateMany({
     where: onlyReplacingPrefix
       ? { id: orderId, ...open, AND: [changed, notCod, notHeld, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
