@@ -67,7 +67,7 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, buyPe
       variant="flash"
       aria-label={slotBuyLabel(item.productName)}
       loading={buyPending}
-      aria-disabled={item.soldOut || undefined}
+      aria-disabled={item.soldOut || buyPending || undefined}
       style={item.soldOut ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
         if (item.soldOut) return;

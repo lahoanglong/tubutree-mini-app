@@ -296,6 +296,8 @@ function refreshSession(): Promise<LoginResponse | null> {
  */
 let restoreInFlight: Promise<void> | null = null;
 let loginInFlight: Promise<void> | null = null;
+/** Số restore() đang đỗ chờ logout: login() không chờ chúng (chúng chờ login), kể cả khi logout vừa xong. */
+let restoreParked = 0;
 
 /**
  * Nâng cấp NGẦM một phiên khách sang Zalo thật khi Zalo giờ đã khả dụng (A7-01) — chạy NỀN sau
@@ -330,14 +332,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Chụp ngay lúc gọi, trước mọi await. Lúc logout còn chờ thì không chờ restore nào: restore bắt đầu trong khe đó đang chờ chính
     // login này (xem restore), chờ lại nhau là treo mãi.
     const logoutPending = logoutInFlight !== null;
-    const restoreAtStart = logoutPending ? null : restoreInFlight;
+    const restoreAtStart = logoutPending || restoreParked > 0 ? null : restoreInFlight;
     const run = (async () => {
       if (logoutPending) await afterLogout();
       // Bấm đăng nhập lúc app còn đang khôi phục phiên: chờ khôi phục xong. Khôi phục ra phiên rồi thì thôi, vì đăng nhập
       // lại từ đầu song song sẽ ghi đè phiên vừa khôi phục (có khi bằng phiên Khách) và hai bên xoay refresh token dẫm lên nhau.
       if (restoreAtStart) {
         await restoreAtStart.catch(() => undefined);
-        if (get().status === 'authenticated') return;
+        const { status, error } = get();
+        // Khôi phục hỏng vì storage: máy còn refresh token mà chưa đọc được, đăng nhập lại từ đầu sẽ đổi khách quen sang tài khoản khác.
+        if (status === 'authenticated' || (status === 'error' && error === vi.errors.sessionStorage)) return;
       }
       if (epoch !== sessionEpoch) return;
       set({ status: 'loading', error: undefined });
@@ -367,7 +371,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
       if (logoutInFlight) {
-        await afterLogout();
+        restoreParked += 1;
+        try {
+          await afterLogout();
+        } finally {
+          restoreParked -= 1;
+        }
         if (epoch !== sessionEpoch) return;
         set({ status: 'loading', error: undefined });
       }

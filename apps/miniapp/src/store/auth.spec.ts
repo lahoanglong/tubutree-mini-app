@@ -1455,6 +1455,34 @@ describe('đăng xuất đang chạy dở (storage chậm): đường tạo phi�
     expect(useAuthStore.getState().status).toBe('authenticated');
   });
 
+  it('restore đỗ sau logout, login() gọi đúng lúc logout vừa xong: cả hai xong, không chờ nhau mãi', async () => {
+    const { read, loggingOut } = startSlowLogout();
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockResolvedValue(loginResponse('g6'));
+    let logging: Promise<void> = Promise.resolve();
+    const chained = loggingOut.then(() => {
+      logging = useAuthStore.getState().login();
+    });
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    read.resolve({});
+    await chained;
+    expect(await settles(Promise.all([logging, restoring]))).toBe('done');
+    expect(useAuthStore.getState().status).toBe('authenticated');
+  });
+
+  it('restore về error vì storage hỏng: login() chạm lúc loading không đăng nhập lại từ đầu', async () => {
+    mockedGetStorage.mockRejectedValue(new Error('zmp storage broke'));
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(user());
+    useAuthStore.setState({ user: null, status: 'loading', error: undefined });
+    const restoring = useAuthStore.getState().restore();
+    const logging = useAuthStore.getState().login();
+    await Promise.all([restoring, logging]);
+    expect(mockedLoginZalo).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('error');
+  });
+
   it('refresh token chưa ghi được (chỉ ở bộ nhớ): logout thu hồi đúng token đó trên máy chủ', async () => {
     mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
     mockedLoginZalo.mockResolvedValue(user());
