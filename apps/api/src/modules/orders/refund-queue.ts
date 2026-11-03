@@ -1,6 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { CustomerRefundKind, CustomerRefundStatus, Order, Prisma, PrismaClient } from '@prisma/client';
-import { assertBankRefUnusedByOrder } from '../../common/bank-ref';
+import { assertBankRefUnusedByOrder, noteHasBankRef } from '../../common/bank-ref';
 import { notifyAdmins } from '../../common/notify-admins';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
@@ -314,8 +314,15 @@ export async function recordLatePaymentRefund(
         kind: 'LATE_PAYMENT',
         refKey: viaAdmin ? undefined : { startsWith: ADMIN_LATE_PREFIX },
       },
-      select: { id: true },
+      select: { id: true, adminNote: true },
     });
+    if (prior && viaAdmin && input.bankRef && !noteHasBankRef(prior.adminNote, input.bankRef.toLowerCase())) {
+      // Khoản đã có (webhook ghi trước) không mang mã admin vừa gõ: gắn vào đó, nếu không mã này vẫn dùng lại được cho đơn khác vì tra mã chỉ thấy ghi chú của khoản.
+      await tx.orderCustomerRefund.update({
+        where: { id: prior.id },
+        data: { adminNote: [prior.adminNote, `Mã GD ${input.bankRef}`].filter(Boolean).join(' · ') },
+      });
+    }
     if (prior) return viaAdmin ? ('EXISTS' as const) : ('ADMIN_RECORDED' as const);
     const created = await tx.orderCustomerRefund.createMany({
       data: [lateRow(order, refKey, input.amount, input.note)],
@@ -536,7 +543,7 @@ async function announceUnverifiedOverpayment(ctx: LateCtx, order: OverOrder, raw
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
 }
 
-async function lockOrderRow(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
+export async function lockOrderRow(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
   await tx.$queryRaw`SELECT 1 FROM "orders" WHERE "id" = ${orderId} FOR NO KEY UPDATE`;
 }
 

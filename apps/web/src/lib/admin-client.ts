@@ -695,6 +695,8 @@ export interface RecordDealerCreditPaymentResult {
   reportClosed?: boolean;
   /** Báo cáo đã được ghi nhận từ trước (người khác ghi trước, hoặc bấm đúp): lần gọi này không ghi gì vào sổ. */
   alreadyRecorded?: boolean;
+  /** Khoá Idempotency-Key đã có trong sổ: máy chủ trả lại bản ghi cũ, lần gọi này không ghi gì. */
+  replayed?: boolean;
 }
 /**
  * POST /admin/dealers/:userId/credit-payment — GHI GIẢM sổ công nợ, trần theo dư nợ TẠI LÚC DUYỆT

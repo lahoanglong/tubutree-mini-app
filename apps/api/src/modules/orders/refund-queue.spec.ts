@@ -37,6 +37,7 @@ function setup(opts: { recordedAmount?: number | null } = {}) {
       findFirst: jest.fn().mockResolvedValue(null),
       aggregate: jest.fn().mockResolvedValue({ _sum: { amount: opts.recordedAmount ?? null } }),
       createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockResolvedValue({}),
     },
   };
   const prisma = {
@@ -103,6 +104,26 @@ describe('MONEY-1: tiền về muộn của đơn CTV lên hộ là khoản củ
     const { ctx, createdRow } = setup();
     await recordLatePaymentRefund(ctx, assistedOrder() as never, { amount: 50_000, source: 'ADMIN', refKey: ADMIN_LATE_PAYMENT_REF, note: 'Mã GD FT1' });
     expect(createdRow()).toMatchObject({ refKey: `ADMIN:${ADMIN_LATE_PAYMENT_REF}`, userId: null, phone: '0912345678', adminNote: 'Mã GD FT1' });
+  });
+
+  it('admin ghi tay mà đơn đã có khoản tiền về muộn (EXISTS): mã GD vừa gõ được nối vào adminNote của khoản đó; mã đã có thì không nối lại', async () => {
+    const { ctx, tx } = setup();
+    Object.assign(tx, {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    Object.assign(tx.orderCustomerRefund, { findMany: jest.fn().mockResolvedValue([]) });
+    tx.orderCustomerRefund.findFirst.mockResolvedValue({ id: 'r9', adminNote: null });
+    const input = { amount: 300_000, source: 'ADMIN' as const, refKey: ADMIN_LATE_PAYMENT_REF, bankRef: 'FT55' };
+
+    expect(await recordLatePaymentRefund(ctx, regularOrder() as never, input)).toBe(false);
+    expect(tx.orderCustomerRefund.update).toHaveBeenCalledWith({ where: { id: 'r9' }, data: { adminNote: 'Mã GD FT55' } });
+
+    tx.orderCustomerRefund.update.mockClear();
+    tx.orderCustomerRefund.findFirst.mockResolvedValue({ id: 'r9', adminNote: 'Pancake báo · Mã GD ft55' });
+    await recordLatePaymentRefund(ctx, regularOrder() as never, input);
+    expect(tx.orderCustomerRefund.update).not.toHaveBeenCalled();
   });
 
   it('CTV không được báo REFUND_LATE_PAYMENT; admin được báo kèm SĐT che và lời "không phải của CTV"', async () => {

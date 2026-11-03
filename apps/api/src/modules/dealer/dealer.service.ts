@@ -36,7 +36,7 @@ import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE 
 import { forBuyer } from '../orders/buyer-order-fields';
 import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
-import { assertBankRefUnusedByOrder, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
+import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
@@ -616,7 +616,7 @@ export class DealerService {
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
         }
-        return this.creditLedgerWithReport(dealerUserId, reportId);
+        return this.creditLedgerWithReport(dealerUserId, reportId, true);
       }
     }
 
@@ -682,7 +682,7 @@ export class DealerService {
       // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như
       // replay của cùng 1 lần xác nhận, trả kết quả hiện tại thay vì lỗi 500.
       if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.creditLedgerWithReport(dealerUserId, reportId);
+        return this.creditLedgerWithReport(dealerUserId, reportId, true);
       }
       throw err;
     }
@@ -709,8 +709,9 @@ export class DealerService {
    * RECORDED mà lần gọi này không ghi gì (người khác ghi trước, hoặc bấm đúp) thì thêm `alreadyRecorded`: số vừa nhập chưa
    * chắc là số đã vào sổ.
    */
-  private async creditLedgerWithReport(userId: string, reportId?: string) {
-    const ledger = await this.creditLedger(userId);
+  private async creditLedgerWithReport(userId: string, reportId?: string, replayed = false) {
+    // Dòng sổ không lưu reportId (chỉ refId = khoá), nên không phân biệt được khoá cũ thuộc báo cáo nào; `replayed` để màn hình biết lần này không ghi gì mới.
+    const ledger = replayed ? { ...(await this.creditLedger(userId)), replayed: true as const } : await this.creditLedger(userId);
     if (!reportId) return ledger;
     const report = await this.prisma.dealerCreditPaymentReport.findFirst({ where: { id: reportId, userId }, select: { status: true } });
     const recorded = report?.status === 'RECORDED';
@@ -1350,7 +1351,7 @@ export class DealerService {
     await lockBankRef(tx, bankRef);
     const usedOrder = await findOrderUsingBankRef(this.prisma, bankRef);
     if (usedOrder) {
-      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+      throw new ConflictException(bankRefUsedByOrderMessage(bankRef, usedOrder));
     }
     if (await isBankRefOnPayment(this.prisma, bankRef, own)) {
       throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ. Kiểm tra lại mã hoặc bỏ trống ô mã.`);

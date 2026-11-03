@@ -252,6 +252,59 @@ describe('DealerCreditPanel — ERR-01 chống trừ nợ hai lần khi thử l�
     expect(keys[3]).not.toBe(keys[0]);
   });
 
+  describe('khoá đã lưu cũ hoặc của báo cáo khác', () => {
+    const seed = (over: Record<string, unknown>) =>
+      window.sessionStorage.setItem(
+        'dealer-credit-idem:u-dealer-1',
+        JSON.stringify({ key: 'OLD-KEY', amount: 2_000_000, bankRef: '', reportId: null, sentAt: Date.now(), ...over }),
+      );
+    const run = async (props: { reportId?: string } = {}) => {
+      const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<DealerCreditPanel order={dealerOrder()} {...props} />);
+      click(byText(container, 'button', 'Công nợ đại lý'));
+      await flush();
+      typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
+      await pay(container);
+      return postKeys(api.calls);
+    };
+
+    it('bộ còn trong 15 phút, cùng số tiền, mã, báo cáo: dùng lại khoá cũ', async () => {
+      seed({ sentAt: Date.now() - 14 * 60_000 });
+      expect(await run()).toEqual(['OLD-KEY']);
+    });
+
+    it('bộ đã quá 15 phút: khoá mới', async () => {
+      seed({ sentAt: Date.now() - 16 * 60_000 });
+      const keys = await run();
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).not.toBe('OLD-KEY');
+    });
+
+    it('bộ của báo cáo khác (hoặc ghi tay): khoá mới', async () => {
+      seed({ reportId: 'rp-other' });
+      const keys = await run({ reportId: 'rp1' });
+      expect(keys[0]).not.toBe('OLD-KEY');
+    });
+  });
+
+  it('máy chủ trả replayed: báo "đã được ghi ở lần bấm trước", không nói "đã ghi giảm", xoá bộ đã lưu', async () => {
+    window.sessionStorage.setItem(
+      'dealer-credit-idem:u-dealer-1',
+      JSON.stringify({ key: 'OLD-KEY', amount: 2_000_000, bankRef: '', reportId: null, sentAt: Date.now() }),
+    );
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 3_000_000, replayed: true } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} />);
+    click(byText(container, 'button', 'Công nợ đại lý'));
+    await flush();
+    typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
+    await pay(container);
+    expect(container.textContent).toContain('Khoản này đã được ghi ở lần bấm trước, sổ không đổi.');
+    expect(container.textContent).not.toContain('Đã ghi giảm công nợ');
+    expect(window.sessionStorage.getItem('dealer-credit-idem:u-dealer-1')).toBeNull();
+  });
+
   it('có mã GD vẫn gửi khoá riêng (không dùng mã GD làm khoá)', async () => {
     const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 1_000_000 } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
