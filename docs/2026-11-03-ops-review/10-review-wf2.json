@@ -1,0 +1,880 @@
+[
+ {
+  "area": "admin-orders",
+  "coverage": "Đã đọc: apps/web/src/app/admin/page.tsx OrdersTab + OrderDetailBody (1236-2150); order-status-actions.tsx, order-payment-summary.tsx, order-detail-extras.tsx, order-extra-filters.tsx, invoice-filter-chips.tsx, customer-refund-paid-dialog.tsx, return-request-row.tsx, đầu customer-refunds-tab.tsx; lib/admin-client (orderExtraFilters, downloadOrdersCsv), client-api apiDownload, vn-date-input datePresets. API: admin.controller (DTO + endpoint đơn, vai trò), admin.service (listOrders, adminOrderWhere, orderStatusCounts, orderCsv, updateOrderStatus, confirmOrderPayment, issueOrderInvoice, orderStatusHistory, mask), admin-order-filter.ts, order-actor-transitions.ts, admin-export.ts, admin-order-items-export.ts, admin-reports.controller (order-items export), order-transition.ts, phần setStatus của order-status.service, customer-refunds-admin.controller + customer-refunds.service (claim/release/markPaid/verify/dismiss), refund-allocation.ts, return-ledger.ts, đoạn duyệt trả của order-returns.service, merchant-fulfilment.service (accept/pack/ship/deliver, SLA), dealer confirmDealerOrderPayment, bootstrap CORS. Kiểm chốt chặn: máy trạng thái + D1 + khoá trả trước, guard updateMany của markPaid/claim/verify/dismiss, staff tự xử lý đơn của mình, che SĐT cho Kế toán, chặn công thức CSV — không thấy lỗi vượt quyền hay hoàn tiền hai lần. Chưa rà sâu: reverseFinancials/reversePartialReturn (toán hoa hồng/điểm một phần), phần dưới customer-refunds-tab.tsx, DealerPaymentPanel/DealerCreditPanel, Pancake/Gomdon panel; không chạy test. Không thấy lỗi P0/P1 trong vùng này; hai lỗi đáng làm là P2.",
+  "missed": "Không thấy thêm lỗi P0/P1 nào trong lúc kiểm vùng Quản trị đơn hàng, hoàn tiền và trả hàng.",
+  "findings": [
+   {
+    "id": "QTDON-01",
+    "severity": "P2",
+    "kind": "bug",
+    "title": "Đơn gian hàng tự giao (MERCHANT): admin bấm một lần \"Giao vận\" là đơn kẹt — đối tác không nhập được mã vận đơn, không huỷ được, mất SLA",
+    "files": [
+     "apps/api/src/modules/admin/order-actor-transitions.ts:53",
+     "apps/web/src/components/admin/order-status-actions.tsx:37",
+     "apps/web/src/components/admin/order-status-actions.tsx:104",
+     "apps/api/src/modules/merchant/merchant-fulfilment.service.ts:525",
+     "apps/api/src/modules/merchant/merchant-fulfilment.service.ts:136",
+     "apps/api/src/modules/orders/order-transition.ts:161",
+     "apps/api/src/modules/orders/order-reversal.service.ts:90"
+    ],
+    "evidence": "actorTransitionBlock chỉ chặn SHIPPING/DELIVERED tay khi `fulfiller !== 'MERCHANT' && !pancakeOrderId`, nên với đơn MERCHANT thì ADMIN thấy đủ nút Đã đóng gói/Giao vận/Đã giao hàng, còn KHO thấy Đã đóng gói. Nút SHIPPING có `confirm: false` (bấm là gửi ngay). setStatus không ghi shippedAt/shippingCode (không có patch). Sau đó MerchantFulfilmentService.ship từ chối vì status không còn CONFIRMED/PACKED ('Chỉ đơn chưa gửi đi mới nhập được mã vận đơn'). slaStateOf chỉ báo DELIVER_OVERDUE khi `SHIPPING && shippedAt`. cancelHandover coi SHIPPING là đã bàn giao nên không ai huỷ được. Hộp xác nhận DELIVERED chỉ nói 'Điểm Xanh & hoa hồng CTV' trong khi isMoneyBackable coi COD + DELIVERED là đã thu tiền.",
+    "failure_scenario": "Đơn COD của gian hàng X đang CONFIRMED, đối tác chưa gửi hàng. Admin bấm nhầm 'Giao vận' (không có hộp hỏi) → đơn thành SHIPPING mà không có vận đơn. Đối tác bấm nhập mã vận đơn thì bị 400, khách không có link theo dõi, thẻ 'quá hạn giao' không bao giờ bật, CSKH/khách/đối tác đều không huỷ được (D1). Nếu admin bấm 'Đã giao hàng' thì đơn COD được coi là đã thu tiền: khách xin trả hàng, duyệt xong được hoàn tiền COD vào Ví dù chưa ai thu đồng nào, đơn còn vào quyết toán cho đối tác.",
+    "fix": "Với đơn fulfiller=MERCHANT: bỏ SHIPPING khỏi allowedTransitions của admin (đối tác tự nhập vận đơn qua ship), hoặc bắt nhập hãng + mã vận đơn rồi gửi kèm patch shippedAt. Bỏ PACKED khỏi quyền KHO. Mọi đơn đều phải hỏi xác nhận trước khi Giao vận. Hộp xác nhận DELIVERED của đơn COD/MERCHANT phải nói rõ hệ thống sẽ coi như đã thu tiền COD và tính vào quyết toán đối tác.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-01",
+     "verdict": "REFUTED",
+     "severity": "P3",
+     "reason": "Ý chính 'đơn kẹt, không ai huỷ được' sai. Đơn MERCHANT ở SHIPPING vẫn có lối ra: đối tác bấm 'Đã giao' (merchant-fulfilment.service.ts:544) hoặc 'Giao thất bại' (merchant-fulfilment.service.ts:552). Lệnh 'Giao thất bại' gọi cancelBySeller với returnedToSender=true nên qua được chốt D1 (order-status.service.ts:254,275,391). Giao diện đối tác hiện cả hai nút khi đơn SHIPPING (apps/web/src/app/merchant/fulfil-orders-tab.tsx:251-256). Việc admin bấm DELIVERED tay là thiết kế có chủ ý: chỉ ADMIN được bấm, comment đã nêu rõ rủi ro COD (order-actor-transitions.ts:10-12), và có hộp xác nhận (order-status-actions.tsx:37,104). Phần còn đúng nhưng nhỏ: nếu admin bấm nhầm 'Giao vận' (không có hộp hỏi) thì đơn không có mã vận đơn, ship() từ chối nhập sau đó (merchant-fulfilment.service.ts:525), và slaStateOf không báo DELIVER_OVERDUE vì shippedAt null (merchant-fulfilment.service.ts:136). Phần này chỉ đáng P3."
+    }
+   },
+   {
+    "id": "QTDON-02",
+    "severity": "P2",
+    "kind": "ux-ui",
+    "title": "Ô \"Lọc gian hàng\" ghi là tìm theo tên nhưng API chỉ khớp đúng slug/subdomain: gõ tên thì ra danh sách rỗng mà không báo lỗi",
+    "files": [
+     "apps/web/src/components/admin/order-extra-filters.tsx:135",
+     "apps/api/src/modules/admin/admin.service.ts:961"
+    ],
+    "evidence": "aria-label là 'Lọc đơn theo gian hàng (tên hoặc mã ngắn của gian hàng)', placeholder là 'Tìm theo gian hàng'. findStorefrontId chỉ tìm `slug equals` hoặc `subdomain equals` (không phân biệt hoa thường). Không khớp thì trả NO_SUCH_STOREFRONT_ID nên danh sách rỗng, số trên chip về 0, nút Xuất CSV bị khoá.",
+    "failure_scenario": "Kế toán gõ tên gian hàng 'Mẹ Bé Xanh' rồi bấm 'Lọc gian hàng' → 'Không tìm thấy đơn hàng nào phù hợp.', mọi chip trạng thái (0). Người dùng tưởng gian hàng chưa có đơn nào, trong khi gõ slug 'me-be-xanh' thì ra đơn.",
+    "fix": "Hai cách. (a) API tìm thêm theo title (contains, không phân biệt hoa thường; nhiều kết quả thì lấy tập id). (b) Đổi ô nhập thành ô chọn gian hàng như UserPicker, gửi id. Chưa làm được ngay thì sửa nhãn thành 'mã ngắn (slug) của gian hàng', và hiện 'Không có gian hàng mã …' khi không khớp.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-02",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Đúng như mô tả. Nhãn ô ghi 'tên hoặc mã ngắn của gian hàng' (order-extra-filters.tsx:135), còn findStorefrontId chỉ so equals với slug/subdomain và không khớp thì trả NO_SUCH_STOREFRONT_ID (admin.service.ts:961-968). Gõ title thì danh sách rỗng mà không báo vì sao. Hạ xuống P3: ô này chỉ dùng thỉnh thoảng, trên PROD còn ít gian hàng, và nhập slug vẫn ra đơn."
+    }
+   },
+   {
+    "id": "QTDON-03",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Danh sách đơn admin chỉ sắp theo createdAt, không có id làm mốc phụ: đơn trùng giờ tạo có thể lặp hoặc mất khi sang trang",
+    "files": [
+     "apps/api/src/modules/admin/admin.service.ts:994",
+     "apps/api/src/modules/checkout/checkout.service.ts:498"
+    ],
+    "evidence": "listOrders dùng `orderBy: { createdAt: order }` kèm skip/take. File CSV đã sắp theo `[{createdAt},{id}]` nhưng danh sách thì chưa. Checkout tách giỏ thành nhiều đơn trong một transaction (tx.order.create nối nhau), nên hai đơn có thể cùng một mili giây.",
+    "failure_scenario": "Hai đơn tách từ cùng một lần checkout có cùng createdAt và rơi đúng vị trí 20/21. Postgres không bảo đảm thứ tự giữa các dòng bằng nhau qua hai câu OFFSET, nên một đơn hiện ở cả trang 1 lẫn trang 2, đơn kia không hiện ở trang nào. Người làm hàng đợi chuyển khoản sẽ sót đơn.",
+    "fix": "orderBy: [{ createdAt: order }, { id: order }] (index createdAt hiện có vẫn dùng được).",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-03",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "listOrders chỉ sắp theo createdAt (admin.service.ts:994), trong khi các đường xuất CSV đều có id làm mốc phụ (admin-export.ts:217,265; admin-order-items-export.ts:62). Checkout tách giỏ thành nhiều đơn bằng các lần tx.order.create nối nhau (checkout.service.ts:493-498), nên hai đơn có thể trùng createdAt. Khi đó phân trang OFFSET có thể lặp hoặc sót đơn ở ranh giới trang. Muốn hỏng thì phải đúng chỗ trùng giờ rơi vào ranh giới trang, nên giữ P3."
+    }
+   },
+   {
+    "id": "QTDON-04",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Tên file CSV tải về bị lùi một ngày từ 0h đến 7h giờ VN: trình duyệt không đọc được Content-Disposition, web dùng ngày UTC",
+    "files": [
+     "apps/api/src/bootstrap.ts:110",
+     "apps/web/src/lib/client-api.ts:323",
+     "apps/web/src/lib/admin-client.ts:1751"
+    ],
+    "evidence": "CORS chỉ có `exposedHeaders: ['Retry-After']`. Content-Disposition không nằm trong nhóm header trình duyệt cho đọc mặc định, nên khi web và API khác origin (tubutree.com và api.tubutree.com), apiDownload luôn rơi về fallbackName. Fallback của file đơn là `don-hang-${new Date().toISOString().slice(0,10)}` (ngày UTC), còn máy chủ đặt tên theo vnDateKey().",
+    "failure_scenario": "Kế toán xuất CSV lúc 06:30 ngày 03/11 giờ VN → file tên don-hang-2026-11-02.csv, câu báo 'Đã tải don-hang-2026-11-02.csv'. Lưu đè lên file của hôm trước, đối soát nhầm ngày.",
+    "fix": "Thêm 'Content-Disposition' vào exposedHeaders. Fallback todayKey dùng ngày giờ VN (cùng hàm vnDateKey phía client).",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-04",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "CORS chỉ expose 'Retry-After' (bootstrap.ts:110). PROD gọi API khác origin, NEXT_PUBLIC_API_BASE_URL=https://api.${WEB_DOMAIN}/api (docker-compose.vietnix.yml:112). Content-Disposition không thuộc nhóm header trình duyệt cho đọc mặc định, nên client-api.ts:338-339 luôn rơi về fallbackName. Fallback lại dùng toISOString, tức ngày UTC (admin-client.ts:1751), nên xuất trước 7h sáng giờ VN thì tên file lùi một ngày. Không tìm thấy chỗ nào khác (Caddy/infra) thêm Access-Control-Expose-Headers."
+    }
+   },
+   {
+    "id": "QTDON-05",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Nút nhanh 'Hôm nay / 7 ngày / Tháng này' tính theo múi giờ của máy, không theo giờ VN",
+    "files": [
+     "apps/web/src/components/admin/vn-date-input.tsx:270",
+     "apps/web/src/components/admin/vn-date-input.tsx:275"
+    ],
+    "evidence": "localIso dùng getFullYear/getMonth/getDate theo giờ của trình duyệt. API thì hiểu from/to là ngày VN (vnDayRange, lệch +7h).",
+    "failure_scenario": "Admin mở bằng máy để múi giờ UTC (laptop đi công tác, máy ảo) lúc 05:00 ngày 03/11 giờ VN, bấm 'Hôm nay' → from=to=2026-11-02 → danh sách và CSV ra đơn của ngày hôm qua (giờ VN) mà nhãn vẫn là Hôm nay.",
+    "fix": "Tính 'hôm nay' theo Asia/Ho_Chi_Minh (Intl.DateTimeFormat với timeZone, hoặc now + 7h dùng getUTC*).",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-05",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "localIso và datePresets tính theo múi giờ của máy (vn-date-input.tsx:270-283), còn API hiểu from/to là ngày VN. Lỗi chỉ xảy ra khi máy admin không để múi giờ VN. Comment cho thấy đây là chọn có chủ ý để tránh lệch UTC, nhưng không xét trường hợp máy lệch múi giờ. Ảnh hưởng hẹp, P3."
+    }
+   },
+   {
+    "id": "QTDON-06",
+    "severity": "P3",
+    "kind": "ux-ui",
+    "title": "Bộ lọc thêm hiện sai: ô CTV/gian hàng còn chữ cũ khi lọc đã bị bỏ, hoặc trống khi lọc vẫn đang áp; tắt hàng đợi chuyển khoản vẫn giữ lọc 'Chờ thanh toán' + 'Cũ nhất trước'",
+    "files": [
+     "apps/web/src/components/admin/order-extra-filters.tsx:41",
+     "apps/web/src/app/admin/page.tsx:1421",
+     "apps/web/src/app/admin/page.tsx:1455"
+    ],
+    "evidence": "`picked` và `storeInput` là state riêng của OrderExtraFilters, chỉ khởi tạo một lần. showOrders() làm extra = { userId } nhưng không đặt lại hai state đó (máy tính: component vẫn gắn). Trên điện thoại ngăn kéo gắn lại thì picked=null dù extra.referrerUserId còn. toggleQueue khi tắt chỉ bỏ `queue`, giữ status='PENDING_PAYMENT' và order='asc' mà nó đã đặt lúc bật.",
+    "failure_scenario": "(1) Máy tính: chọn CTV A trong ô lọc, mở hồ sơ khách, bấm 'Xem tất cả đơn' → ô CTV vẫn hiện A nhưng danh sách đã không lọc theo A. (2) Điện thoại: lọc CTV A, đóng rồi mở lại ngăn kéo Lọc → ô CTV trống mà danh sách vẫn chỉ có đơn của A. (3) Bật rồi tắt 'Chuyển khoản chờ tiền' → danh sách vẫn chỉ có đơn Chờ thanh toán, cũ nhất trước, người dùng tưởng đang xem mọi đơn.",
+    "fix": "Lấy giá trị hiển thị từ `value` (truyền nhãn CTV đã chọn lên cha, đặt key theo value để gắn lại). Khi tắt hàng đợi thì trả status và order về giá trị trước khi bật.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-06",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "picked và storeInput là state riêng của OrderExtraFilters, chỉ khởi tạo một lần (order-extra-filters.tsx:41-42). (1) Trên máy tính, extraFiltersEl luôn gắn (page.tsx:1719-1721) và hồ sơ khách là lớp phủ (page.tsx:1956), nên sau khi showOrders đặt lại extra (page.tsx:1479) ô CTV vẫn hiện tên cũ. (2) Trên điện thoại, ngăn kéo chỉ gắn khi filterOpen (page.tsx:1927-1933), mở lại thì picked=null dù extra.referrerUserId vẫn còn. (3) toggleQueue khi tắt chỉ bỏ queue, giữ status='PENDING_PAYMENT' và order='asc' (page.tsx:1440-1448). Chip trạng thái vẫn hiện 'Chờ thanh toán' nên nhầm lẫn có giảm phần nào. P3."
+    }
+   },
+   {
+    "id": "QTDON-07",
+    "severity": "P3",
+    "kind": "copy",
+    "title": "CSV đơn và nhãn phương thức thanh toán thiếu VNPAY: cột 'Phương thức TT' ghi mã thô 'VNPAY'",
+    "files": [
+     "apps/api/src/modules/admin/admin-export.ts:55",
+     "apps/web/src/lib/export-csv.ts:40"
+    ],
+    "evidence": "PAYMENT_METHOD (API) và PAYMENT_METHOD_LABELS (web) chỉ có COD/ZALOPAY/BANK_TRANSFER/WALLET/XU. Checkout có 'VNPAY' (checkout-split.ts:319), PREPAID_METHOD cũng có VNPAY.",
+    "failure_scenario": "Đơn trả bằng VNPAY → CSV kế toán ghi 'VNPAY', danh sách và chi tiết đơn admin hiện 'VNPAY' thay vì nhãn tiếng Việt như các phương thức khác.",
+    "fix": "Thêm VNPAY: 'VNPay' vào cả hai bảng. Nên đổi sang Record<PaymentMethod, string> để tsc bắt thiếu khi có phương thức mới.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "QTDON-07",
+     "verdict": "REFUTED",
+     "severity": "P3",
+     "reason": "Không có đường nào tạo ra đơn VNPAY. PlaceOrderDto chỉ nhận ['COD','BANK_TRANSFER','WALLET','ZALOPAY'] (checkout/dto/checkout.dto.ts:41,47), comment nói rõ VNPAY bị chặn vì chưa nối cổng. Gói định kỳ cũng không nhận VNPAY (subscriptions.controller.ts:22,28). Không còn DTO nào khác nhận enum PaymentMethod. Vì vậy CSV và nhãn không bao giờ gặp giá trị 'VNPAY' trên PROD. Thiếu nhãn VNPAY chỉ là trau chuốt phòng xa."
+    }
+   }
+  ]
+ },
+ {
+  "area": "admin-catalog",
+  "coverage": "Đã đọc hết: API bundles-admin.service.ts, bundle-admin-rules.ts, bundle.dto.ts, bundles-admin.controller.ts, bundle-read.ts (trần %), campaigns-admin.service.ts / controller / dto / campaign-admin-rules.ts, campaigns.service.ts (phía công khai, để kiểm xem đã lọc chưa), product-admin.service.ts + controller, category-admin.service.ts, product-category-admin.service.ts, flash-sale-admin.controller.ts, flash-slots.ts, flash-sale.service.ts (generateSlots, updateSale, addItem), pricing.service.ts, common/uploaded-image.ts, image-resize.service.ts (chặn SSRF), pancake-category-map.ts, cascade trong schema. Web: product-edit-drawer, bundle-form, bundles-tab, bundle-addon-picker, admin-bundle-form.ts, campaign-form, campaigns-tab, flash-slot-generator, flash-item-order, image-url-field, category-tree-panel (phần thao tác), product-categories-tab (đoạn gọi drawer và assign), side-drawer, query-client.ts (staleTime admin 30 giây, mọi mutation làm cũ khoá admin-*).\n\nKhông thấy lỗi nghiêm trọng (P0/P1) ở đường tiền của combo:\n- Giá kèm không được âm, cũng không được >= giá tham chiếu.\n- Trần % đọc từ cấu hình; trần nhân viên tính theo phân loại đắt nhất và theo refPrice.\n- Hàng đối tác bị chặn khỏi combo.\n- Bộ đổi giữa lúc báo giá và lúc đặt thì TOTAL_CHANGED chặn.\n- Chiến dịch không tác động giá (chỉ gắn mã PUBLIC/CLAIM và trưng sản phẩm, phía công khai có lọc PUBLIC_PRODUCT_WHERE).\n- Ảnh URL lạ không thành SSRF: /img chỉ tải URL có trong registry, chặn IP nội bộ, không theo chuyển hướng.\n- Xoá danh mục còn sản phẩm hay còn mục con bị chặn dưới khoá cây.\n- Giờ VN: form ghép +07:00 đúng.\n- Giờ vàng trên hàng đối tác là luật đã chốt (\"Giá giờ vàng do admin đặt thì giữ\" ở partner-goods.ts), nên không báo.\n\nChưa rà sâu: bundle-rules.ts (phân bổ giảm trong giỏ), phần còn lại của category-tree-panel (giao diện đổi chỗ), product-picker và search-picker. Không chạy test nào: mọi kết luận truy từ mã.",
+  "missed": "Không thấy thêm lỗi P0/P1 nào trong phạm vi mã đã đọc (product-edit-drawer.tsx, bundles-tab.tsx, bundle-form.tsx, admin-bundle-form.ts, campaigns-tab.tsx, campaign-form.tsx, side-drawer.tsx, product-admin.service.ts, product-category-admin.service.ts, category-admin.service.ts, flash-slots.ts, flash-sale.service.ts:490-560).",
+  "findings": [
+   {
+    "id": "SPCD-01",
+    "severity": "P2",
+    "kind": "bug",
+    "title": "Ngăn kéo sửa sản phẩm lấy trạng thái từ cache cũ nhưng so khác với bản mới tải, nên lưu thì lặng lẽ ghi đè danh mục hoặc mô tả",
+    "files": [
+     "apps/web/src/components/admin/product-edit-drawer.tsx:29",
+     "apps/web/src/components/admin/product-edit-drawer.tsx:34",
+     "apps/web/src/components/admin/product-edit-drawer.tsx:40-45",
+     "apps/web/src/components/admin/product-edit-drawer.tsx:54-62",
+     "apps/web/src/lib/query-client.ts:61-63",
+     "apps/web/src/components/admin/product-categories-tab.tsx:274-279"
+    ],
+    "evidence": "`{q.data && <Form product={q.data} …/>}` không có `key`. Form khởi state bằng `useState(product.categoryIds/description/…)` đúng một lần lúc mount. Khi mở lại sản phẩm, react-query trả ngay bản cache cũ (gcTime 5 phút) và tải lại nền nếu bản đó đã cũ (mutation bất kỳ làm cũ mọi khoá admin-*; staleTime 30 giây). Sau đó `product` đổi sang bản mới nhưng state vẫn giữ bản cũ. `patch` lại so state với `product` mới (dòng 56-62), nên mọi trường khác nhau bị gửi lên dù admin không đụng tới.",
+    "failure_scenario": "Admin mở ngăn kéo sản phẩm P (danh mục [A]) rồi đóng. Ở danh sách, admin gán hàng loạt danh mục B cho P (assign ADD, P thành [A,B]; mutation làm cũ ['admin-product',P]). Mở lại P: Form dựng từ cache [A], bản tải lại [A,B] chỉ đổi `product`. Admin chỉ sửa mô tả rồi bấm Lưu: patch có cả categoryIds [A], nên B bị gỡ khỏi P mà không báo gì. Tương tự, đồng bộ Pancake vừa cập nhật mô tả hay ảnh thì lần lưu này ghi đè lại bản cũ, đúng điều chú thích dòng 53 muốn tránh. Nút Lưu cũng sáng sẵn dù admin chưa sửa gì.",
+    "fix": "Chỉ dựng Form khi `!q.isFetching`, hoặc đặt `key={q.dataUpdatedAt}`. Hay hơn: lưu một bản gốc (baseline) lúc khởi state và tính patch so với bản gốc đó, không so với `product` hiện tại.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-01",
+     "verdict": "CONFIRMED",
+     "severity": "P2",
+     "reason": "Lỗi có thật, mình truy lại được từng bước. product-categories-tab.tsx:273 chỉ dựng drawer khi `editing` có giá trị, nên mỗi lần mở là mount mới. useQuery(['admin-product',id]) ở product-edit-drawer.tsx:29 trả ngay bản cache: gcTime mặc định 5 phút, và isLoading=false nên Form mount luôn ở dòng 34, không có `key`. Khoá này bị làm cũ vì đã quá staleTime 30s, hoặc vì MutationCache.onSettled làm cũ mọi khoá 'admin-*' (query-client.ts:61-64), trong đó có mutation assignCategory ở tab:90. Mount thì query tải lại nền. Bản mới chỉ đổi prop `product`, còn useState ở dòng 40-45 giữ bản cũ. Dòng 56-62 so state cũ với `product` mới, nên patch.categoryIds=[A] được gửi đi. ProductAdminService.update (product-admin.service.ts:116-129) ghi đè cả mảng, không kiểm gì, nên B bị gỡ. Nút Lưu cũng sáng sẵn (changed=true) dù admin chưa sửa gì. Mô tả hay ảnh vừa được Pancake đồng bộ cũng bị ghi đè y như vậy. Không tìm thấy chốt chặn nào ở server. Không trùng mục nào trong backlog."
+    }
+   },
+   {
+    "id": "SPCD-02",
+    "severity": "P2",
+    "kind": "bug",
+    "title": "Bấm Tắt ở dòng trong lúc form sửa của chính bộ combo hay chiến dịch đó đang mở, rồi Lưu form, thì bộ hoặc chiến dịch bật lại",
+    "files": [
+     "apps/web/src/components/admin/bundles-tab.tsx:34-36",
+     "apps/web/src/components/admin/bundles-tab.tsx:103",
+     "apps/web/src/components/admin/bundle-form.tsx:50",
+     "apps/web/src/lib/admin-bundle-form.ts:125",
+     "apps/web/src/components/admin/campaigns-tab.tsx:30-32",
+     "apps/web/src/components/admin/campaigns-tab.tsx:106",
+     "apps/web/src/components/admin/campaign-form.tsx:65",
+     "apps/web/src/components/admin/campaign-form.tsx:95-107"
+    ],
+    "evidence": "Form sửa nằm trên danh sách và các nút Tắt/Bật của từng dòng vẫn bấm được. Nút Tắt gọi updateAdminBundle/updateAdminCampaign({isActive:false}). Mutation làm `['admin-bundle',id]` tải lại, nhưng form chỉ có `key={q.data.id}` nên draft giữ `isActive: true` từ lúc mở. Lúc lưu, bundle gửi `common` có `isActive: d.isActive` (admin-bundle-form.ts:125), campaign gửi `isActive` (campaign-form.tsx:106), nên PATCH đè lại trạng thái vừa tắt.",
+    "failure_scenario": "Bộ mua kèm đang chạy, đặt nhầm giá kèm 0đ. Admin bấm Sửa, thấy lỗi, bấm Tắt ở dòng để chặn ngay (dòng hiện 'Đang tắt'). Admin định để tắt và sửa tiêu đề hay giờ cho đợt sau, bấm 'Lưu bộ'. PATCH gửi isActive:true, bộ chạy lại ngay với khách. Chiến dịch cũng vậy: banner đã tắt hiện lại ở Trang chủ.",
+    "fix": "Chỉ gửi isActive khi khác giá trị lúc mở form (diff so với initial), hoặc đặt key theo dataUpdatedAt để form nhận bản mới. Một cách khác: khoá nút Tắt/Bật và Sửa của các dòng khi đang có form mở.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-02",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Cơ chế đúng như mô tả. Nút Tắt ở dòng (bundles-tab.tsx:34-35, campaigns-tab.tsx:31-32) vẫn bấm được khi form đang mở. EditForm dựng form với key={q.data.id} (bundles-tab.tsx:103, campaigns-tab.tsx:106), nên query tải lại không làm form dựng lại. Draft giữ isActive=true, và lúc lưu gửi `common.isActive` (admin-bundle-form.ts:125) hoặc `isActive` (campaign-form.tsx:106), nên bộ hoặc chiến dịch bật lại. Mình hạ xuống P3 vì không lặng lẽ: form có ô 'Đang bật' hiện rõ đang tích (bundle-form.tsx:152, campaign-form.tsx:244). Kịch bản cũng cần chính admin đó làm hai việc trái nhau trên cùng một bộ."
+    }
+   },
+   {
+    "id": "SPCD-03",
+    "severity": "P2",
+    "kind": "bug",
+    "title": "Nút sinh khung Giờ vàng tạo được các đợt chồng giờ: luật flashsale.slots không bắt các mốc cách nhau ít nhất 120 phút",
+    "files": [
+     "apps/api/src/modules/flash-sale/flash-slots.ts:42-52",
+     "apps/api/src/modules/flash-sale/flash-slots.ts:59-69",
+     "apps/api/src/modules/flash-sale/flash-sale.service.ts:521-527",
+     "apps/api/src/modules/flash-sale/flash-slots.spec.ts:108"
+    ],
+    "evidence": "flashSlotsProblem chỉ đòi 1–6 mốc HH:MM tăng dần, còn generateSlots luôn đặt endAt = startAt + FLASH_SLOT_MINUTES (120). Test còn chấp nhận ['00:00',…,'16:00','23:59']. Bước khử trùng chỉ so `startAt` bằng nhau tuyệt đối (`startAt: { in: starts }`), không so chồng khung.",
+    "failure_scenario": "Chủ đặt flashsale.slots = [\"09:00\",\"10:00\",\"20:00\"] và hệ thống nhận. Bấm 'Tạo khung giờ 2 ngày tới' sinh ra 09:00–11:00 và 10:00–12:00 mỗi ngày. Hoặc với cấu hình có '23:59' và '00:00': 23:59–01:59 chồng lên 00:00–02:00 hôm sau. Trang Giờ vàng hiện hai khung 'Đang diễn ra' cùng lúc. addItem chặn cùng SKU ở hai đợt trùng giờ, nên admin không đưa được món sang khung kế bên và báo lỗi khó hiểu. Đợt tạo tay lệch vài phút (vd 11:59) với mốc mặc định cũng không bị bỏ qua.",
+    "fix": "Thêm vào flashSlotsProblem: hai mốc liền nhau (kể cả mốc cuối ngày với mốc đầu ngày hôm sau) cách nhau >= FLASH_SLOT_MINUTES. Trong generateSlots, bỏ mốc nào chồng với đợt đang có (startAt < end && endAt > start) thay vì chỉ so startAt bằng nhau.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-03",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "flashSlotsProblem (flash-slots.ts:42-52) đúng là không đòi các mốc cách nhau 120 phút. generateSlots (flash-sale.service.ts:521-529) chỉ bỏ qua khi startAt trùng khít. Mình hạ xuống P3 vì hai lẽ. Một: hệ thống vốn cho phép các đợt chồng giờ, vì createSale (dòng 502-507) không kiểm chồng giữa các đợt, chỉ addItem/assertNoItemClash chặn cùng một SKU. Vậy khung chồng không phá bất biến nào, việc addItem bị chặn là đúng luật. Hai: kịch bản cần chủ tự cấu hình mốc sát nhau (khoá system-config chỉ admin sửa), hoặc có đợt tạo tay lệch vài phút. Nên đây chỉ là thiếu chốt chặn cấu hình, không làm sai tiền hay điểm."
+    }
+   },
+   {
+    "id": "SPCD-04",
+    "severity": "P3",
+    "kind": "ux-ui",
+    "title": "Ngăn kéo sửa sản phẩm đóng khi bấm nền hay Esc mà không hỏi lại; bấm Sửa dòng khác ở tab Combo hay Chiến dịch thì mất bản đang sửa",
+    "files": [
+     "apps/web/src/components/admin/side-drawer.tsx:29",
+     "apps/web/src/lib/use-modal-a11y.ts:50",
+     "apps/web/src/components/admin/product-edit-drawer.tsx:31",
+     "apps/web/src/components/admin/bundles-tab.tsx:165-168",
+     "apps/web/src/components/admin/campaigns-tab.tsx:166-169"
+    ],
+    "evidence": "SideDrawer gọi onClose ngay khi bấm nền hoặc nhấn Escape, không kiểm form có thay đổi chưa. Ở BundlesTab và CampaignsTab, nút 'Sửa' của mọi dòng vẫn bật khi form đang mở; `setForm({mode:'edit', id})` thay form (key đổi) và bỏ draft cũ.",
+    "failure_scenario": "Admin gõ mô tả 3.000 chữ và tải lên 3 ảnh mới (base64) trong ngăn kéo. Bấm trượt ra nền xám hoặc lỡ tay nhấn Esc: ngăn kéo đóng, toàn bộ bị mất. Ở tab Combo, admin đang sửa bộ X dở dang, bấm 'Sửa' bộ Y để xem: X mất hết thay đổi, không cảnh báo.",
+    "fix": "Thêm cờ dirty (so draft với bản gốc). Khi dirty thì hỏi 'Bỏ thay đổi chưa lưu?' trước khi đóng ngăn kéo hay đổi form. Hoặc khoá nút Sửa ở các dòng khác khi đang có form.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-04",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Đúng như mô tả. SideDrawer gọi onClose khi bấm nền (side-drawer.tsx:29) và khi nhấn Esc (use-modal-a11y.ts:50-52), không có cờ dirty. Ở BundlesTab và CampaignsTab, nút Sửa của dòng khác vẫn bật. setForm({mode:'edit',id}) (bundles-tab.tsx:165-168) làm EditForm đổi id và key, nên bản đang sửa bị bỏ mà không báo. Còn một đường hỏng nữa: bôi đen chữ trong textarea rồi thả chuột ra nền thì sự kiện click rơi vào backdrop là tổ tiên chung, nên ngăn kéo cũng đóng. Mình giữ P3 vì chỉ mất bản nháp, không sai dữ liệu đã lưu."
+    }
+   },
+   {
+    "id": "SPCD-05",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Lưu danh mục ở ngăn kéo sản phẩm ghi đè cả mảng và không giữ khoá cây, nên có thể để lại id danh mục ma làm sản phẩm không sửa được danh mục nữa",
+    "files": [
+     "apps/api/src/modules/catalog/product-admin.service.ts:116-130",
+     "apps/api/src/modules/catalog/product-admin.service.ts:134",
+     "apps/api/src/modules/catalog/category-admin.service.ts:185-194",
+     "apps/api/src/modules/catalog/product-category-admin.service.ts:101-111",
+     "apps/web/src/components/admin/product-edit-drawer.tsx:62",
+     "apps/web/src/components/admin/product-edit-drawer.tsx:147-162"
+    ],
+    "evidence": "ProductAdminService.update kiểm `category.count` và `children: {some}` ngoài giao dịch, không lấy pg_advisory_xact_lock(CATEGORY_TREE_LOCK), rồi `product.update({categoryIds: ids})` ghi đè cả mảng. Đường gán hàng loạt ADD và lệnh xoá danh mục đều giữ khoá này. Ngăn kéo chỉ vẽ chip cho danh mục có trong options, nhưng vẫn gửi nguyên state categoryIds.",
+    "failure_scenario": "Admin A bấm Lưu ở ngăn kéo với categoryIds [C], cùng lúc admin B xoá danh mục C (trống). A kiểm thấy C còn; B đếm 0 sản phẩm rồi xoá; A ghi [C]. Sản phẩm mang id ma. Từ đó mọi lần đổi danh mục ở ngăn kéo đều gửi kèm id ma, server trả 400 'Có danh mục không còn tồn tại, tải lại danh sách' mãi. Tải lại không giúp vì chip của id ma không hiện nên không gỡ được. Gán hàng loạt ADD trong lúc ngăn kéo mở cũng bị ghi đè mất.",
+    "fix": "Ghi categoryIds trong $transaction có lấy khoá cây, kiểm tồn tại và lá dưới khoá. Phía server bỏ qua id không còn tồn tại khi admin đang gỡ, hoặc phía client lọc categoryIds theo options trước khi gửi.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-05",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Đúng mã nguồn. product-admin.service.ts:119-129 kiểm category.count và children ngoài transaction, không lấy CATEGORY_TREE_LOCK, rồi ghi đè cả mảng ở dòng 134. Còn category-admin.service.ts:185-194 (remove) giữ khoá và đếm sản phẩm. Hai bên đan xen thì có thể sinh id ma. Khi có id ma, các lần lưu sau có kèm categoryIds đều bị chặn ở dòng 121, vì drawer không vẽ chip cho id ma (product-edit-drawer.tsx:147) nên admin không gỡ được. category-tree.race-spec.ts không có ca nào cho đường này. Mình giữ P3 vì cửa sổ race chỉ vài mili giây, cần hai admin cùng lúc, và danh mục phải trống. Phần 'ghi đè gán hàng loạt' thực chất là SPCD-01."
+    }
+   },
+   {
+    "id": "SPCD-06",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Gán danh mục hàng loạt bỏ qua trần 10 danh mục mỗi sản phẩm, sau đó ngăn kéo không gỡ bớt được",
+    "files": [
+     "apps/api/src/modules/catalog/product-category-admin.service.ts:101-111",
+     "apps/api/src/modules/catalog/product-admin.service.ts:117-118"
+    ],
+    "evidence": "addToLeaf dùng array_append, không kiểm cardinality <= PRODUCT_CATEGORIES_MAX. ProductAdminService.update từ chối mọi mảng có `ids.length > 10`, kể cả khi admin đang giảm số danh mục.",
+    "failure_scenario": "Cây có 8 gốc × tối đa 8 con. Admin gán hàng loạt để sản phẩm P có 12 danh mục. Mở ngăn kéo, bỏ 1 chip (còn 11), bấm Lưu: 400 'Tối đa 10 danh mục cho một sản phẩm'. Lúc này chỉ gỡ được bằng thao tác REMOVE hàng loạt từng danh mục.",
+    "fix": "Trong UPDATE của addToLeaf thêm điều kiện `cardinality(categoryIds) < 10` và báo số sản phẩm bị bỏ qua. Ở ProductAdminService chỉ chặn khi số danh mục tăng lên, không chặn khi giảm.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-06",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "addToLeaf (product-category-admin.service.ts:108-110) dùng array_append và không kiểm cardinality. ProductAdminService.update (product-admin.service.ts:118) chặn mọi mảng dài hơn 10, kể cả khi admin đang giảm, còn DTO cho tới 15 phần tử. Vậy sản phẩm đã có trên 10 danh mục (qua gán hàng loạt) thì bỏ chip ở drawer sẽ bị 400. Sửa các trường khác vẫn được, vì khi danh mục không đổi thì patch không gửi categoryIds. Muốn gỡ bớt danh mục thì vẫn còn đường REMOVE hàng loạt. Ít khả năng xảy ra, P3."
+    }
+   },
+   {
+    "id": "SPCD-07",
+    "severity": "P3",
+    "kind": "ux-ui",
+    "title": "Đích banner kiểu sản phẩm hay danh mục nhận slug gõ tay mà không kiểm có tồn tại; xoá danh mục cũng không cảnh báo banner đang trỏ vào",
+    "files": [
+     "apps/api/src/modules/campaigns/campaign-admin-rules.ts:37-40",
+     "apps/api/src/modules/campaigns/campaign-public.ts:41-42",
+     "apps/web/src/components/admin/campaign-form.tsx:214-223",
+     "apps/api/src/modules/catalog/category-admin.service.ts:185-194"
+    ],
+    "evidence": "normalizeLink chỉ kiểm định dạng ENTITY_SLUG_RE, không tra Product hay Category. listLiveBanners trả linkValue nguyên văn. Lệnh xoá danh mục chỉ kiểm mục con và sản phẩm, không kiểm campaign.linkType='CATEGORY'. Form là ô chữ tự do, không có ô chọn.",
+    "failure_scenario": "Admin gõ slug sản phẩm sai một ký tự, hoặc trỏ tới sản phẩm đang ẩn, rồi lưu thành công. Banner đầu Trang chủ dẫn khách tới trang 'không tìm thấy'. Hoặc chiến dịch đang chạy trỏ danh mục 'sua-hat', admin xoá danh mục đó (đã trống): banner còn sống nhưng bấm vào là trang lỗi.",
+    "fix": "Khi lưu với PRODUCT hoặc CATEGORY thì tra tồn tại (sản phẩm phải công khai), báo 400 nếu không có. Ở form dùng ProductPicker hoặc ô chọn danh mục thay cho ô gõ slug. Khi xoá danh mục thì liệt kê các chiến dịch đang trỏ tới và chặn hoặc cảnh báo.",
+    "effort": "M",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "SPCD-07",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "normalizeLink (campaign-admin-rules.ts:37-40) chỉ kiểm ENTITY_SLUG_RE, không tra Product hay Category. Form là ô chữ tự do (campaign-form.tsx:214-223). category-admin.service.ts:185-194 khi xoá danh mục chỉ kiểm mục con và sản phẩm, không kiểm campaign. Vậy banner trỏ tới slug sai, hoặc tới danh mục vừa xoá, vẫn lưu và chạy được. Không trùng mục nào trong backlog. Hậu quả là khách gặp trang không tìm thấy, không sai tiền, nên P3."
+    }
+   }
+  ]
+ },
+ {
+  "area": "recycle-points",
+  "coverage": "Đã đọc hết các file API: waste-access.service.ts, waste-config.service.ts (đối chiếu WASTE_RANGES/WASTE_JSON_RULES trong system-config), waste-desk.service.ts và controller, waste-confirm.service.ts, waste-receive.service.ts, waste-quota.ts, waste-confirm-lines.ts, waste-hold.service.ts (check, capUsage), waste-caps.ts, waste-admin-points.service.ts và DTO controller, pickup/* (hooks, sweep, attach, expiry cron), customer/waste-requests.service.ts, waste-preview.service.ts, waste-request.mapper.ts, waste-catalogue.listPoints, fulfilAtDesk/markFulfilled trong waste-gift-redemptions, reopen/closeLost trong admin-requests, waste-mask. Đã xem thêm danh sách race spec (25 file waste-*, có waste-quota, waste-confirm, waste-warehouse-only, waste-admin-point-staff), nên không báo lại các vấn đề tranh chấp đã có chốt chặn. Phía web đã đọc: waste-point-form, waste-point-detail, waste-points-section, waste-config-card, phần mutation của waste-requests-section, grep waste-items-section, recycling-panel (chỉ là khối Gomdon), recycle-desk.tsx, recycle-desk-perk.tsx, các phần hạn/điểm của recycle-edit/recycle-request, waste-point-picker. Phía Mini: so recycle-desk.tsx với bản web (logic giống nhau). pos-screen.tsx và app/admin/pos không có phần đổi rác. Không chạy test, không đo giao diện 375 thật (chỉ đọc class).\n\nCác nghi vấn đã kiểm và thấy đúng:\n- Nhân viên điểm A không tra, xác nhận hay từ chối được yêu cầu của điểm B: findRequest lọc theo pointId, confirm/reject gọi assertPointAccess(req.pointId) cả trước và trong tx.\n- Đại lý không nhận được quà vì API ép giftHandoverEnabled=false.\n- Món chỉ kho nhận bị chặn ở 4 lớp: assertItemsFitKind, hold POINT_MISSING_ITEMS (cả khi sửa giữ nguyên điểm), confirm 409, danh mục khách lọc warehouseOnly.\n- Hạn mức tháng của điểm tăng bằng upsert có điều kiện. Trần nhân viên khoá advisory. Trần khách khoá theo khách.\n- Đổi tỷ lệ quy đổi không làm yêu cầu đang mở tính lại: xác nhận dùng snapshot trên dòng. Khi khách sửa yêu cầu thì tính lại theo giá mới, và màn sửa có ghi chú việc này.\n- Tra mã ở quầy đã che tên và số. Mã hết hạn trả 404 đúng theo spec 15.3.\n- Thiếu hạn mức điểm lúc đem tới quầy là luật đã chốt ở spec §19 mục 4.\n\nKhông tìm thấy lỗi P0 hay P1 nào trong vùng này.",
+  "missed": "Không thấy thêm lỗi P0/P1 nào trong vùng đã kiểm: cron nhắc và đóng yêu cầu hết hạn, CRUD điểm nhận ở admin, desk lookup/confirm/gift, danh sách điểm cho khách.",
+  "findings": [
+   {
+    "id": "DRV2-01",
+    "severity": "P2",
+    "kind": "bug",
+    "title": "Tin nhắc sắp hết hạn vẫn bảo khách mang rác tới điểm đã tạm dừng, mất chủ điểm hoặc hết hạn mức",
+    "files": [
+     "apps/api/src/modules/waste-exchange/pickup/waste-expiry.cron.ts:121",
+     "apps/api/src/modules/waste-exchange/pickup/waste-expiry.cron.ts:128",
+     "apps/api/src/modules/waste-exchange/pickup/waste-expiry.cron.ts:143",
+     "apps/api/src/modules/waste-exchange/core/waste-notifier.service.ts:38"
+    ],
+    "evidence": "Điều kiện chọn yêu cầu để nhắc (base where ở remindExpiring) chỉ lọc status OPEN, orderId null, trackingCode null, method và trạng thái khoá của user. Không xét điểm nhận của yêu cầu còn ACTIVE, còn đúng 1 OWNER hợp lệ (availablePointIds) hay còn hạn mức. Nội dung next_step của DROP_OFF là 'mang rác tới điểm nhận'. Comment ở hàm ghi 'Chỉ nhắc khi khách làm theo được', nhưng không áp cho điểm nhận. waste-expiry.cron.spec.ts không có ca nào về điểm.",
+    "failure_scenario": "Ngày 1 khách tạo DROP_OFF tại đại lý P (hạn 7 ngày). Ngày 3 admin chuyển P sang PAUSED, gỡ chủ điểm, hoặc P hết hạn mức tháng. Ngày 5 cron 03:30 gửi tin 'Yêu cầu TR-xxx còn tới …, hãy mang rác tới điểm nhận'. Khách mang rác tới P. Quầy P không thấy điểm (listOperablePoints lọc ACTIVE/available), hoặc xác nhận bị 403 POINT_INACTIVE hay 409 hết hạn mức. Khách đi một chuyến vô ích dù màn chi tiết đã ghi điểm tạm dừng.",
+    "fix": "Trong remindExpiring, với DROP_OFF thì lấy pointId rồi gọi access.availablePointIds cho cả trang và tính quotaFull từ waste_point_usage. Điểm không dùng được thì bỏ qua tin này, hoặc gửi mẫu khác kiểu 'Điểm nhận đang tạm dừng, hãy đổi điểm trong yêu cầu'. Thêm ca test cho điểm PAUSED, mất chủ và hết hạn mức.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DRV2-01",
+     "verdict": "CONFIRMED",
+     "severity": "P2",
+     "reason": "Đúng như báo cáo. Bộ lọc `base` trong remindExpiring (waste-expiry.cron.ts:121-128) không xét `pointId`, `availablePointIds` hay hạn mức. Ở dòng 143 tin gửi với next_step DROP_OFF = 'mang rác tới điểm nhận' (waste-notifier.service.ts:38-41, mẫu ở seed.ts:933). Khi admin chuyển điểm đại lý sang PAUSED (waste-admin-points.service.ts:240-250 cho phép, không báo khách và không đóng yêu cầu đang mở), hoặc điểm mất OWNER hợp lệ, thì quầy bị chặn: assertPointAccess ném POINT_INACTIVE hoặc POINT_OWNER_INVALID (waste-access.service.ts:98, 114), còn waste-confirm.service.ts:407 gọi đúng hàm này. Trong khi đó màn chi tiết của khách đã có cờ `pointAvailable` (waste-requests.service.ts:317) mà cron không dùng. Không thấy guard nào khác chặn, và không có mục backlog hay quyết định nào trùng. Giữ P2, không nâng: chỉ xảy ra ở ca biên (điểm bị dừng hoặc mất chủ trong lúc yêu cầu còn mở), và trên PROD cờ waste.enabled đang tắt nên hiện chưa gửi tin nào (dòng 121, khớp E-22 trong 21-quyet-dinh.md). Nhánh 'hết hạn mức' tôi chưa truy hết đến chỗ chặn khi xác nhận. Nhánh PAUSED và mất chủ đã chứng minh được."
+    }
+   },
+   {
+    "id": "DRV2-02",
+    "severity": "P2",
+    "kind": "ux-ui",
+    "title": "Form Kho Tubu có ô 'Trao quà tại điểm này' và danh sách 'Món điểm nhận' không có tác dụng gì",
+    "files": [
+     "apps/web/src/components/admin/waste-point-form.tsx:386",
+     "apps/web/src/components/admin/waste-point-form.tsx:394",
+     "apps/api/src/modules/waste-exchange/catalog/waste-admin-points.service.ts:210",
+     "apps/api/src/modules/waste-exchange/catalog/waste-admin-points.service.ts:131",
+     "apps/api/src/modules/waste-exchange/customer/waste-catalogue.service.ts:133",
+     "apps/api/src/modules/waste-exchange/core/waste-hold.service.ts:245",
+     "apps/api/src/modules/waste-exchange/receiving/waste-desk.service.ts:113"
+    ],
+    "evidence": "Ô trao quà: create luôn ghi giftHandoverEnabled:false (dòng 210) nên tick khi tạo bị bỏ qua. Mọi chỗ đọc đều coi kho là trao được quà: desk toDtos ép true (dòng 113), findGift dùng `p.kind === 'WAREHOUSE' ||`, fulfilAtDesk chỉ chặn PARTNER. Danh sách món: khách luôn thấy kho nhận mọi món ACTIVE (`p.kind === 'WAREHOUSE' ? activeIds`), hold chỉ kiểm liên kết món với PARTNER, nhưng bảng admin hiện acceptedItemIds của kho theo các liên kết đã lưu (dòng 131).",
+    "failure_scenario": "Trường hợp 1: admin bỏ tick 'Pin' ở Kho Tubu để tạm ngừng nhận pin. Bảng 'Hàng nhận' của admin không còn Pin, nhưng khách vẫn thấy kho nhận pin và tạo được yêu cầu pin tới kho. Trường hợp 2: admin bỏ tick 'Trao quà tại điểm này' ở kho để tạm dừng trao quà. Quầy kho vẫn hiện nút 'Trao quà' và API vẫn cho trao. Ngược lại, tick ô này khi tạo kho thì mở ra lại thấy bỏ tick.",
+    "fix": "Với kho: ẩn ô trao quà và danh sách món, thay bằng dòng chữ 'Kho nhận mọi món đang nhận và luôn trao quà'. API từ chối giftHandoverEnabled/itemIds khi kind=WAREHOUSE, và toAdminPointDTO trả acceptedItemIds = mọi món ACTIVE cho kho để khớp màn khách. Nếu chủ muốn kho tắt được trao quà hay từng món thì phải nối cờ vào findGift, fulfil và hold (cần chủ quyết).",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DRV2-02",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Trên mã thì đúng. Khi tạo, kho luôn được ghi giftHandoverEnabled:false (waste-admin-points.service.ts:210), còn khi sửa thì nhánh WAREHOUSE (dòng 241-243) cho ghi cờ này. Nhưng mọi chỗ đọc đều coi kho luôn trao được quà: waste-desk.service.ts:113 ép true, findGift ở dòng 176 có `p.kind === 'WAREHOUSE' ||`, và fulfilAtDesk (waste-gift-redemptions.service.ts:48) chỉ chặn PARTNER. Danh sách món cũng tương tự: khách được trả `activeIds` cho kho (waste-catalogue.service.ts:133), hold chỉ kiểm liên kết món khi điểm là PARTNER (waste-hold.service.ts:245), trong khi admin thấy `acceptedItemIds` lấy từ liên kết đã lưu (waste-admin-points.service.ts:131). Form hiện cả hai ô cho kho (waste-point-form.tsx:384-389, 391-411). Spec có ghi rõ 'WAREHOUSE nhận mọi món đang ACTIVE, không cần dòng liên kết' (spec dòng 267) và 'kho luôn được' trao quà (dòng 566). Vậy đây là hai nút trên form không có tác dụng, chứ không phải lỗi nghiệp vụ. Hạ xuống P3 vì cấu hình kho là việc làm một lần, không phải việc hằng ngày. Kho không có hạn mức, không ảnh hưởng tiền hay điểm. Muốn dừng nhận một món thì đã có cách đúng là đổi trạng thái món."
+    }
+   },
+   {
+    "id": "DRV2-03",
+    "severity": "P3",
+    "kind": "ux-ui",
+    "title": "Quầy có nhiều điểm: thẻ hạn mức hiện điểm đang chọn ở tab, không phải điểm của yêu cầu vừa tra",
+    "files": [
+     "apps/web/src/components/recycle/recycle-desk.tsx:352",
+     "apps/web/src/components/recycle/recycle-desk.tsx:215",
+     "apps/miniapp/src/pages/recycle-desk.tsx:325"
+    ],
+    "evidence": "Luật nhận đã theo điểm của yêu cầu (kindOfRequest), và onSuccess cập nhật hạn mức cho req.pointId. Nhưng QuotaCard luôn render `point` của tab đang chọn. Thẻ yêu cầu không ghi tên điểm, còn thẻ 'xong' chỉ ghi 'Hạn mức còn lại: N' mà không nói của điểm nào.",
+    "failure_scenario": "Một người là nhân viên của đại lý A và B, đang để tab A (còn 50.000). Khách của B đưa mã TR-, nhân viên xác nhận 8.000 điểm. Hạn mức của B bị trừ, nhưng màn vẫn hiện 'Còn lại 50.000' của A, kèm thẻ xong 'Hạn mức còn lại: 12.000'. Nhân viên dễ hiểu sai là A còn 12.000, hoặc tưởng đã trừ nhầm điểm.",
+    "fix": "Khi tra ra yêu cầu thuộc điểm khác tab thì tự chuyển tab sang req.pointId (setPointId), hoặc ghi 'Yêu cầu của <tên điểm>' trên thẻ yêu cầu và thẻ xong. Sửa cả web và Mini.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": true,
+    "verify": {
+     "id": "DRV2-03",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Đúng. Một người ở nhiều điểm được (schema chỉ có @@unique([pointId,userId]), xem schema.prisma:3750). findRequest trả yêu cầu của bất kỳ điểm nào người đó có quyền (waste-desk.service.ts:154). Ở web, QuotaCard luôn lấy `point` của tab đang chọn (recycle-desk.tsx:213, 352). onSuccess cập nhật hạn mức cho req.pointId (dòng 261-263). Thẻ 'xong' chỉ ghi 'Hạn mức còn lại: N' mà không nói của điểm nào (dòng 270-271, 365), và thẻ yêu cầu không ghi tên điểm (dòng 382-388). Mini App giống hệt (recycle-desk.tsx:249-260, 325). Số liệu đúng, chỉ dễ đọc nhầm, nên giữ P3."
+    }
+   }
+  ]
+ },
+ {
+  "area": "dealer-storefront",
+  "coverage": "Đã đọc kỹ: dealer.service.ts (apply, getMe, pricelist, placeOrder có kiểm hạn mức Serializable, assertNoOverdueCredit, report và adminRecordCreditPayment, dismiss, claimReward, approve/reject/reopen/markPaid, confirmDealerOrderPayment, payoutQuarterlyBonuses, unitPrice, dealerContext), dealer-backorder.service.ts, dealer.cron.ts, dealer-accounts-admin.service.ts, dealer-tier-input.ts, dealer.controller.ts và dealer-admin.controller.ts (route, quyền), dto/dealer.dto.ts, admin/dealer-price-import.ts cùng importDealerPrices trong admin.service.ts, setUserRole (admin.service.ts:551), order-reversal reverseDealerCredit, chặn trả một phần đơn đại lý ở order-returns, pending-payment-expiry, pancake.processor onPaymentReconcile, bank-transfer.service getBankQr. Gian hàng: storefront.service.ts (getOrCreateMine, getMine, updateMine, publishMine, getPublicBySlug, getPublicByHost, getStats), identifier-validation.ts, storefront-visibility.ts, public-visibility.ts, resolve-storefront.ts, checkout/attribution.ts, storefront-admin.service.ts, storefront-quest.service.ts, storefront-reminder.service.ts, phần đầu combo.service.ts, affiliate/storefront-sales.ts, affiliate-access.ts, các hàm findEligibleReferrer/isCommissionEligible, nhánh tạo gian hàng của merchant.service. Web admin: dealer-credit-panel, dealer-credit-reports, dealer-payment-panel, dealer-accounts-tab, dealer-tiers-section (phần đầu), storefronts-tab (phần chi tiết), payout-admin (ma trận hành động). Màn khách: web s/[slug]/page.tsx, miniapp dealer.tsx (đặt đơn, idempotency), web components/dealer/price-tab.tsx, miniapp storefront-view.tsx (ghi công), bank-payment.tsx và canPayOrderNow. Đã đối chiếu tên các race spec dealer*/storefront* (chặn vượt hạn mức khi đặt song song đã có dealer-credit-limit.race-spec; ghi nhận trả nợ hai lần đã có chặn unique, khoá theo báo cáo và Serializable). Chưa rà: dealer-claims-tab.tsx và dealer-price-history-tab.tsx chi tiết; dealerVolume/settledAt và nhánh thu hồi/trả bù thưởng quý (đã có nhiều race spec); combo.service phần sau; merchant.service ngoài nhánh tạo gian hàng. Không chạy test nào: mọi phát hiện truy từ mã. Không còn PR mở cho mục nào dưới đây. Các mục đã đóng hoặc đang làm (APPROVED payout không từ chối được: D7-01 + bỏ rút ngân hàng) đã loại.",
+  "missed": "Không thấy thêm lỗi P0/P1 nào khác. Có một điểm cùng gốc với DLSF-01, nên gộp vào bản sửa đó: merchant.service.ts:351-354 (createStore) chỉ dò trùng subdomain-với-subdomain rồi ghi slug=baseSlug mà không chạy assertIdentifierAvailable. Hệ quả là gian hàng mới có thể mang slug trùng subdomain của gian hàng khác.",
+  "findings": [
+   {
+    "id": "DLSF-01",
+    "severity": "P1",
+    "kind": "security",
+    "title": "CTV chiếm trước subdomain bằng mã giới thiệu của người khác: link /s/<mã> của nạn nhân mở gian hàng kẻ chiếm và ghi công đơn cho kẻ chiếm",
+    "files": [
+     "apps/api/src/modules/storefront/storefront.service.ts:90",
+     "apps/api/src/modules/storefront/storefront.service.ts:207",
+     "apps/api/src/modules/storefront/identifier-validation.ts:66-72",
+     "apps/api/src/modules/merchant/merchant.service.ts:349",
+     "apps/api/src/modules/storefront/resolve-storefront.ts:26-27",
+     "apps/api/src/modules/storefront/storefront.service.ts:282-291",
+     "apps/api/src/modules/storefront/storefront.service.ts:425",
+     "apps/web/src/app/s/[slug]/page.tsx:142"
+    ],
+    "evidence": "Slug gian hàng CTV = user.referralCode.toLowerCase() (8 ký tự hex, khớp SUBDOMAIN_RE). Lúc tạo (storefront.service.ts:90, merchant.service.ts:349) không gọi assertIdentifierAvailable, chỉ có unique trên riêng cột slug. assertIdentifierAvailable (khi đặt subdomain) chỉ dò storefront/brand/released, không dò User.referralCode. Ba nơi đọc (getPublicBySlug, resolvePublishedStorefront, getPublicByHost) dùng findFirst với OR slug/subdomain/customDomain và không có orderBy. Trang /s trả referralCode = sf.owner.referralCode, rồi StorefrontTracker ghi mã đó.",
+    "failure_scenario": "Khách B có mã A1B2C3D4 (mã hiện trên mọi link ?ref= B chia sẻ) và chưa mở gian hàng. CTV X PATCH /storefront/me {subdomain:'a1b2c3d4'}: qua mọi kiểm tra. Sau đó B lên CTV, POST /storefront tạo slug 'a1b2c3d4' thành công vì cột slug khác cột subdomain. Từ đây /s/a1b2c3d4 và checkout có storefrontSlug=a1b2c3d4 khớp HAI dòng. Postgres trả dòng tuỳ ý, thường là dòng cũ hơn (của X). Khách mở link B chia sẻ thì thấy gian hàng X, tracker ghi ref=mã X, combo và hoa hồng đi về X. Chính B mở link cũng không thấy mình là chủ.",
+    "fix": "(1) assertIdentifierAvailable: chặn thêm khi value trùng User.referralCode hạ chữ của bất kỳ ai (hoặc chặn mọi subdomain có dạng ^[0-9a-f]{8,10}$). (2) Lúc tạo gian hàng ở getOrCreateMine và merchant.createStore, kiểm chéo slug với subdomain/customDomain của gian hàng khác; nếu trùng thì đổi slug (thêm hậu tố) hoặc báo admin. (3) Ba nơi đọc ưu tiên khớp slug trước, rồi mới tới subdomain, rồi customDomain (hai truy vấn, hoặc orderBy có CASE), để không bao giờ ra kết quả tuỳ ý. (4) Viết migration dò các cặp trùng đang có trên PROD.",
+    "effort": "M",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DLSF-01",
+     "verdict": "CONFIRMED",
+     "severity": "P1",
+     "reason": "Đọc lại mã thấy đúng. referralCode gồm 8 ký tự hex in hoa (auth.service.ts:1078), nên khi hạ chữ vẫn khớp SUBDOMAIN_RE. assertIdentifierAvailable (identifier-validation.ts:66-90) chỉ dò storefront slug/subdomain/customDomain, brand và released, không dò User.referralCode. Lúc tạo gian hàng, getOrCreateMine (storefront.service.ts:89) ghi thẳng slug, không kiểm chéo. merchant.createStore (merchant.service.ts:349-354) chỉ dò cột subdomain, nên B nhận subdomain 'a1b2c3d4-1' nhưng slug vẫn là 'a1b2c3d4'. Không tìm thấy trigger hay ràng buộc DB nào kiểm chéo giữa các cột. Ba chỗ đọc (getPublicBySlug, resolvePublishedStorefront ở resolve-storefront.ts:26-29, getPublicByHost) đều dùng findFirst với OR và không có orderBy, nên sẽ khớp hai dòng và trả dòng nào là tuỳ ý. Ý 'thường là dòng cũ hơn' trong phát hiện chưa chứng minh được, nhưng kết quả không xác định cũng đủ để gian hàng và công đơn rơi về X. Điều kiện để xảy ra: X biết trước mã của B (mã có trên mọi link ?ref=) và B chưa mở gian hàng. Đây là tấn công có chủ đích, nên giữ P1, không nâng P0."
+    }
+   },
+   {
+    "id": "DLSF-02",
+    "severity": "P1",
+    "kind": "money-points",
+    "title": "Hạ vai trò đại lý còn nợ thì khoản nợ biến khỏi màn admin và không ghi nhận trả nợ được nữa",
+    "files": [
+     "apps/api/src/modules/admin/admin.service.ts:551-600",
+     "apps/api/src/modules/dealer/dealer.service.ts:580",
+     "apps/api/src/modules/dealer/dealer-accounts-admin.service.ts:222",
+     "apps/web/src/components/admin/dealer-credit-reports.tsx:118-125"
+    ],
+    "evidence": "setUserRole không kiểm dư nợ DealerCreditLedger trước khi đổi role từ DEALER sang CUSTOMER/AFFILIATE (chỉ xử lý gian hàng đối tác). Sau khi đổi: adminRecordCreditPayment ném NotFound 'Không tìm thấy đại lý.' vì dealer.role !== 'DEALER'. listAccounts lọc u.role = 'DEALER' nên đại lý cũ không còn trong danh sách, cũng không vào 'tổng dư nợ' và 'số đại lý còn nợ'. Báo cáo chuyển khoản còn mở của người đó vẫn hiện ở DealerCreditReportsSection, nhưng bấm 'Ghi nhận' sẽ 404.",
+    "failure_scenario": "Đại lý D nợ 30.000.000đ (đơn ghi công nợ đã giao). Admin bấm Thu hồi vai trò D (vd vì D chậm trả). Tab Đại lý: tổng dư nợ giảm 30tr, D không còn trong danh sách. Hôm sau D chuyển khoản 30tr và đã báo trước đó. Kế toán bấm 'Ghi nhận' thì lỗi 'Không tìm thấy đại lý.' Sổ công nợ giữ 30tr nợ, không có đường ghi giảm trên app. Muốn ghi phải cấp lại vai trò DEALER (lại cho phép đặt đơn công nợ) hoặc sửa DB.",
+    "fix": "Chọn một trong hai. (a) setUserRole từ DEALER sang vai trò khác khi SUM(delta) > 0: trả 409 kèm số nợ, hoặc bắt admin tick 'vẫn hạ, giữ công nợ'. (b) adminRecordCreditPayment và listAccounts nhận cả người có dòng sổ công nợ (EXISTS dealer_credit_ledgers) dù role đã đổi, gắn nhãn 'Đã thu hồi vai trò'; trần ghi nhận vẫn theo dư nợ. Nên làm cả (b) để không mất khoản phải thu.",
+    "effort": "M",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DLSF-02",
+     "verdict": "CONFIRMED",
+     "severity": "P1",
+     "reason": "Mã đúng như mô tả. setUserRole (admin.service.ts:551-605) chỉ xử lý gian hàng đối tác, không đọc dealerCreditLedger. adminRecordCreditPayment ném NotFound khi role !== 'DEALER' (dealer.service.ts:580). listAccounts lọc u.role='DEALER' (dealer-accounts-admin.service.ts:222). Ngoài PAYMENT và QUARTER_BONUS (cả hai chỉ chạy cho DEALER) không có đường nào khác ghi giảm sổ. Muốn ghi nhận khoản trả thì phải cấp lại DEALER, mà làm vậy lại mở quyền đặt đơn công nợ. Tổng dư nợ admin thấy bị sai."
+    }
+   },
+   {
+    "id": "DLSF-03",
+    "severity": "P2",
+    "kind": "money-points",
+    "title": "Mini App đặt đơn đại lý: lần đặt trước lỗi mạng, sau đó đổi giỏ hoặc đổi sang Trả trước thì app báo thành công giả, xoá giỏ và mở QR chuyển khoản cho đơn công nợ",
+    "files": [
+     "apps/miniapp/src/pages/dealer.tsx:449-481",
+     "apps/api/src/modules/dealer/dealer.service.ts:247-251",
+     "apps/api/src/modules/integrations/payment/bank-transfer.service.ts:21-34",
+     "apps/api/src/modules/integrations/pancake/pancake.processor.ts:654"
+    ],
+    "evidence": "Mini giữ orderKey qua lỗi (onError chỉ hiện snackbar) và cũng không đổi khoá khi giỏ hay phương thức đổi. Máy chủ trả lại đơn cũ cho cùng khoá mà không đối chiếu nội dung (dealer.service.ts:249-250). onSuccess thì luôn báo 'đã tạo', setQty({}), và nếu method === 'PREPAID' thì navigate tới /bank-payment/<code> mà không xét order.status. Web đã sửa đúng ca này ở price-tab.tsx (commit 69fd04fd7). getBankQr không chặn đơn có dòng ghi nợ ORDER, nên trả QR thật. onPaymentReconcile bỏ qua đơn công nợ, nên tiền chuyển vào không được ghi ở đâu.",
+    "failure_scenario": "Đại lý bấm 'Ghi công nợ' cho giỏ G1 (10tr). Máy chủ tạo đơn CONFIRMED và ghi nợ 10tr, nhưng mạng timeout nên app báo lỗi. Đại lý sửa giỏ thành G2 rồi bấm 'Trả trước'. App gửi cùng khoá, máy chủ trả đơn G1. App báo 'Đã tạo đơn', xoá G2 (G2 chưa được đặt) rồi mở QR 10tr cho đơn G1. Đại lý chuyển 10tr: Pancake bỏ qua vì là đơn công nợ, sổ nợ vẫn 10tr. Đại lý mất tiền tới khi kế toán đối soát tay.",
+    "fix": "Mini làm như web: đổi khoá khi giỏ hoặc phương thức khác lần thử lỗi; so dòng đơn trả về với giỏ đã gửi, khác thì báo 'đơn đã tạo ở lần trước' và giữ giỏ; chỉ mở QR khi order.status === 'PENDING_PAYMENT'. API: getBankQr trả 400 cho đơn DEALER có dòng ghi nợ ORDER (hasDealerCreditDebit), câu 'Đơn ghi công nợ trả qua sổ công nợ'.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": true,
+    "verify": {
+     "id": "DLSF-03",
+     "verdict": "CONFIRMED",
+     "severity": "P2",
+     "reason": "Ở dealer.tsx:451-481, orderKey chỉ được đổi trong onSuccess. Lỗi xảy ra thì khoá vẫn giữ, và khoá không đổi khi giỏ hoặc phương thức đổi. onSuccess luôn gọi setQty({}) và mở /bank-payment khi method==='PREPAID' mà không xét order.status. Máy chủ trả lại đơn cũ theo khoá mà không đối chiếu nội dung (dealer.service.ts:247-251). Đơn công nợ cũng mang paymentMethod BANK_TRANSFER, status CONFIRMED (dealer.service.ts:361,366), nên getBankQr không chặn và vẫn sinh QR thật. onPaymentReconcile bỏ qua đơn có dòng ghi nợ ORDER (pancake.processor.ts:654). Tiền không mất hẳn vì vào tài khoản Tubu và kế toán ghi tay qua sổ công nợ được, nên P2 là hợp lý. Đây là màn khách Mini App."
+    }
+   },
+   {
+    "id": "DLSF-04",
+    "severity": "P2",
+    "kind": "money-points",
+    "title": "Giá đại lý có thể cao hơn giá khách lẻ đang trả (bỏ qua salePrice; giá sỉ nhập tay không kẹp lại khi giá lẻ giảm)",
+    "files": [
+     "apps/api/src/modules/dealer/dealer.service.ts:1995-1997",
+     "apps/api/src/modules/admin/dealer-price-import.ts:185",
+     "apps/api/src/modules/integrations/pancake/pancake-sync.service.ts:391"
+    ],
+    "evidence": "unitPrice: có giá sỉ nhập tay (>0) thì dùng nguyên, không thì tính retailPrice*(1-d). Khách lẻ trả salePrice ?? retailPrice (cart.service.ts:195). Bước nhập giá chỉ chặn giá sỉ > retailPrice tại lúc nhập. Pancake sync cập nhật retailPrice và salePrice về sau, nhưng unitPrice không kẹp lại theo giá đang bán.",
+    "failure_scenario": "(a) Biến thể có giá lẻ 200.000, salePrice 140.000. Bậc chiết khấu 20% cho giá sỉ 160.000: đại lý mua sỉ đắt hơn khách lẻ 20.000/món. Bảng giá còn hiện 'giá lẻ 200.000 / tiết kiệm 20%'. (b) Admin nhập giá sỉ 180.000 khi giá lẻ 200.000. Sau đó Pancake hạ giá lẻ còn 150.000: đại lý vẫn bị tính 180.000.",
+    "fix": "Chủ quyết luật. Đề xuất unitPrice = min(giá sỉ theo bậc, salePrice ?? retailPrice) và bảng giá hiện so với giá đang bán. Thêm cảnh báo trong hộp việc khi có giá sỉ nhập tay > giá đang bán sau mỗi lần đồng bộ.",
+    "effort": "S",
+    "owner_decision": true,
+    "customer_ui": true,
+    "verify": {
+     "id": "DLSF-04",
+     "verdict": "UNCERTAIN",
+     "severity": "P3",
+     "reason": "Phần mô tả mã là đúng: unitPrice (dealer.service.ts:1990-1997) tính theo retailPrice, bỏ qua salePrice. Bước nhập giá chỉ chặn giá sỉ > retailPrice ở thời điểm nhập (dealer-price-import.ts:185). Nhưng cả hai ý đều là luật giá: chiết khấu bậc tính trên giá niêm yết là cách làm B2B thông thường, và comment ở 1987-1988 nói rõ giá B2B cố định là có chủ đích. Không tìm thấy quyết định nào của chủ về việc đối chiếu với salePrice. Vì vậy đây không phải lỗi mã mà là việc chủ cần chốt, hạ xuống P3."
+    }
+   },
+   {
+    "id": "DLSF-05",
+    "severity": "P2",
+    "kind": "money-points",
+    "title": "Xác nhận đơn đại lý trả trước không kiểm trùng mã giao dịch: một khoản chuyển xác nhận được nhiều đơn",
+    "files": [
+     "apps/api/src/modules/dealer/dealer.service.ts:1367-1395",
+     "apps/web/src/components/admin/dealer-payment-panel.tsx:47",
+     "apps/web/src/components/admin/dealer-credit-panel.tsx:64"
+    ],
+    "evidence": "confirmDealerOrderPayment chỉ ghi bankRef vào ghi chú orderStatusHistory, không kiểm mã đó đã dùng cho đơn khác hay cho sổ công nợ chưa. Khối công nợ dùng bankRef làm khoá chống trùng, nhưng khoá chỉ trong (userId, PAYMENT). Hai đường không chặn chéo nhau.",
+    "failure_scenario": "Đại lý có 2 đơn trả trước, mỗi đơn 5tr, nhưng chỉ chuyển 1 lần 5tr với mã FT123. Kế toán xác nhận đơn 1 bằng FT123, rồi nhầm xác nhận đơn 2 cũng bằng FT123. Cả hai lên PAID, được đẩy kho, tính vào doanh số thưởng. Thiếu 5tr mà không có cảnh báo. Tương tự: FT123 đã ghi giảm nợ ở khối công nợ vẫn dùng lại được để xác nhận một đơn trả trước.",
+    "fix": "Trước khi lật PAID, tìm bankRef (đã trim, so không phân biệt hoa thường) trong orderStatusHistory của đơn DEALER khác và trong dealerCreditLedger PAYMENT. Có thì trả 409 nêu đơn hoặc khoản đã dùng, admin xác nhận lại bằng cờ force. Tốt hơn là lưu bankRef vào cột riêng có index.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DLSF-05",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Đúng là confirmDealerOrderPayment (dealer.service.ts:1366-1405) chỉ ghi bankRef vào ghi chú lịch sử, không kiểm trùng chéo. Tuy vậy bankRef là ô tuỳ chọn (dto.bankRef?.trim() || null), hộp xác nhận ở dealer-payment-panel.tsx đã nhắc 'chỉ bấm khi đã thấy tiền về', và lỗi chỉ xảy ra khi kế toán tự nhập nhầm. Kiểm trùng chỉ có tác dụng khi kế toán có nhập mã. Đây là chốt chặn nên có thêm, không phải lỗi luồng, hạ xuống P3."
+    }
+   },
+   {
+    "id": "DLSF-06",
+    "severity": "P3",
+    "kind": "copy",
+    "title": "Ghi nhận trả nợ với mã giao dịch đã dùng cho số tiền khác báo 'Idempotency-Key ... bạn thử lại nhé' cho kế toán",
+    "files": [
+     "apps/web/src/components/admin/dealer-credit-panel.tsx:64",
+     "apps/api/src/modules/dealer/dealer.service.ts:592-596"
+    ],
+    "evidence": "Panel gửi bankRef làm Idempotency-Key. API gặp khoá trùng mà khác số tiền thì trả câu kỹ thuật 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.' Thử lại không bao giờ qua.",
+    "failure_scenario": "Kế toán ghi 5.000.000 với mã FT9. Sau đó ghi tiếp 2.000.000 cho cùng đại lý, dán nhầm FT9 (hoặc ngân hàng gộp mã). Panel hiện 'Idempotency-Key đã được sử dụng…, bạn thử lại nhé'. Kế toán bấm lại mãi mà không biết phải đổi mã giao dịch.",
+    "fix": "Khi khoá đến từ bankRef (panel), trả câu 'Mã giao dịch FT9 đã ghi nhận 5.000.000đ cho đại lý này. Kiểm tra lại mã hoặc bỏ trống ô mã.' Nên gửi khoá riêng (UUID mỗi lần mở form) và kiểm trùng bankRef như một cảnh báo riêng.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DLSF-06",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "dealer-credit-panel.tsx:64 dùng bankRef làm Idempotency-Key. API trả câu 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.' (dealer.service.ts:592-596). onError hiện nguyên e.message, phía client không có chỗ nào đổi câu này. Kế toán bấm thử lại bao nhiêu lần cũng không qua."
+    }
+   },
+   {
+    "id": "DLSF-07",
+    "severity": "P3",
+    "kind": "ops",
+    "title": "Cron nhắc SP nổi bật gửi cho chủ bị khoá hoặc mất vai trò CTV, và có thể bỏ sót gian hàng vì take 200 không orderBy",
+    "files": [
+     "apps/api/src/modules/storefront/storefront-reminder.service.ts:45-56",
+     "apps/api/src/modules/storefront/storefront-reminder.service.ts:61-64"
+    ],
+    "evidence": "where chỉ có type/isPublished/lastReminderAt, không dùng publicStorefrontWhere: không loại chủ isBlocked, chủ đã hạ về CUSTOMER, gian hàng chờ duyệt. Lượt chạy lấy 200 dòng không orderBy. Gian hàng trắng hoặc đã có đủ SP nổi bật không được cập nhật lastReminderAt nên lần nào cũng bị lấy lại.",
+    "failure_scenario": "CTV bị khoá vẫn nhận Zalo 'thêm N sản phẩm nổi bật' mỗi thứ Hai cho gian hàng khách không thấy. Khi có trên 200 gian hàng đã đăng và 200 dòng Postgres trả về toàn là gian hàng trắng, các gian hàng còn lại không bao giờ được nhắc.",
+    "fix": "Dùng publicStorefrontWhere(await loadPublicVisibility(config)) trong where; orderBy lastReminderAt asc nulls first, id; khi bỏ qua gian hàng (trắng hoặc đủ) cũng cập nhật lastReminderAt.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "DLSF-07",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Điều kiện where ở storefront-reminder.service.ts:45-56 chỉ có type, isPublished và lastReminderAt. Không loại chủ bị khoá hoặc đã mất vai trò, và notifications cũng không kiểm isBlocked. Truy vấn take 200 không có orderBy. Gian hàng trắng hoặc đã đủ SP nổi bật bị bỏ qua mà không cập nhật lastReminderAt, nên lần sau vẫn bị lấy lại. Ca bỏ sót gian hàng chỉ xảy ra khi có trên 200 gian hàng đã đăng, PROD hiện chưa tới mức đó. Giữ P3."
+    }
+   }
+  ]
+ },
+ {
+  "area": "garden-ui",
+  "coverage": "Đã đọc kỹ phía API: game-garden.service.ts, game-order-water.service.ts (cùng các chỗ gọi grant/reverse/claimPending ở order-status.service.ts, order-returns.service.ts, orders.service.ts, reversal-effects-resync.cron.ts), game-gift, game-economy, game-collection, game-community, game-season, harvest-coupon-count.ts, checkin-streak.ts, game.constants.ts, game-profile.ts, game-reminder.service.ts, game.controller.ts, cùng các phần waterTree/spin/getProfile/missions/leaderboard/grantCoupon của game.service.ts. Cũng đã đọc daily-check-in (service, controller), loyalty: tier-policy, tier-drop-notice, loyalty-expiry, points-reconcile, recalcTier/spending12m/tierPoints/tierKeepGap/getOverview/dailyCheckIn/credit/reverseOrderPoints, loyalty.cron, và cashback (service, controller, provider AccessTrade).\nPhía màn khách, đã đọc ở Mini App: pages/game.tsx, các component game (garden-plots, order-water-card, water-tank, garden-hero, checkin-streak, missions-card, streak-repair, use-game-actions) và phần đầu pages/loyalty.tsx. Ở app-core đã đọc daily-check-in-copy, loyalty-tier-copy, tierProgressPercent. Màn web chỉ đối chiếu theo grep (garden-plots, vuon-xanh/page.tsx, missions-card).\nĐã đối chiếu backlog 20-backlog.md và 21-quyet-dinh.md. Không báo lại ân hạn hạng sau khi trả đơn: điều khoản đã ghi nhận. Không báo tặng nước: Mini App đã bỏ, web ẩn bằng cờ theo E-66.\nCó 2 phần chưa rà: season-pass và quiz (VX-01/VX-02 đang sửa), và chưa đọc từng dòng web/vuon-xanh. Không chạy test nào. Mọi phát hiện đều truy từ mã.\nKết luận: phát hiện nặng nhất là luồng duyệt trả cả đơn không thu lại nước theo đơn (P1). Không thấy lỗi cộng hai lần khi chạy song song: đã kiểm Serializable/FOR UPDATE/unique ở waterTree, waterPlot, unlockPlot, grantForOrder, claimPending, dailyCheckIn, mở lô. Cũng không thấy lỗi tiền ở cashback, hết hạn điểm hay xét hạng.",
+  "missed": "Không thấy thêm lỗi P0/P1 nào trong lúc kiểm.",
+  "findings": [
+   {
+    "id": "VX2-01",
+    "severity": "P1",
+    "kind": "money-points",
+    "title": "Duyệt trả cả đơn qua yêu cầu đổi/trả không thu lại nước theo đơn, và đơn chờ vẫn cộng được nước sau khi đã trả",
+    "files": [
+     "apps/api/src/modules/orders/order-returns.service.ts:434",
+     "apps/api/src/modules/orders/order-returns.service.ts:497-510",
+     "apps/api/src/modules/orders/order-returns.service.ts:546",
+     "apps/api/src/modules/orders/order-status.service.ts:510",
+     "apps/api/src/modules/game/game-order-water.service.ts:187-226"
+    ],
+    "evidence": "Hiện chỉ có một chỗ gọi `gameWater.reverseForOrder`, là reverseClosedOrderEffects ở order-status.service.ts:510. OrderReturnsService.approve lật đơn DELIVERED→RETURNED ngay trong tx (:434). Sau đó nhánh `shares.isFull` chỉ gọi reverseOrderPoints và reverseCommissionsForOrder (:497-510), không đảo nước, rồi ghi mốc reversalEffectsAt (:546). Vì đã có mốc, ReversalEffectsResyncCron không bao giờ quét lại đơn đó. Thêm nữa, claimPending (:196-226) cộng mọi dòng ORDER_DELIVERED còn pending mà không xem đơn còn DELIVERED hay không. Chỉ reverseForOrder mới tắt dòng pending (:160-163), nên đơn trả theo đường này giữ nguyên dòng pending.",
+    "failure_scenario": "Ca 1: khách đã có hồ sơ game. Đơn giao xong, khách được +100💧 (dòng ORDER_DELIVERED delta 100). Khách bấm 'Yêu cầu đổi/trả' trả hết hàng, admin duyệt. Đơn chuyển RETURNED, điểm và hoa hồng bị thu, nhưng 100💧 không bị thu (không có dòng ORDER_REVERSED). Khách dùng số nước này tưới tới thu hoạch, nhận mã 30.000đ. Ca 2: khách chưa mở game. Đơn giao xong, ghi dòng pending. Đơn bị trả qua luồng trên. Trong 30 ngày, lần đầu khách mở Vườn Xanh, claimPending vẫn cộng +100💧 cho đơn đã trả.",
+    "fix": "Trong OrderReturnsService, inject @Optional() GameOrderWaterService và gọi `reverseForOrder(order.id)` trong nhánh `shares.isFull`, cùng kiểu gom lỗi reversalFailure như hai việc kia. Tốt hơn nữa: gom ba việc đảo vào một hàm dùng chung với OrderStatusService.reverseClosedOrderEffects để không lệch nhau lần nữa. Trong claimPending, bỏ qua và đánh dấu hết hạn các dòng pending có đơn (hoặc mọi kiện của checkoutGroup) đã RETURNED/CANCELLED. Sau đó chạy một lượt rà các đơn RETURNED có ReturnRequest fullReturn APPROVED kể từ e55563485 để đảo bù. Thêm race/integration spec cho luồng duyệt trả.",
+    "effort": "M",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "VX2-01",
+     "verdict": "CONFIRMED",
+     "severity": "P2",
+     "reason": "Đúng như mô tả. Trong src chỉ có một chỗ gọi reverseForOrder là order-status.service.ts:510, nằm trong reverseClosedOrderEffects. Hàm này được gọi ở :228, :429 và :569, đều trong OrderStatusService. OrderReturnsService.approve lật đơn DELIVERED→RETURNED ở order-returns.service.ts:434. Nhánh shares.isFull ở :497-510 chỉ gọi loyalty.reverseOrderPoints và affiliate.reverseCommissionsForOrder, rồi markReversalEffectsDone ở :546 ghi mốc. ReversalEffectsResyncCron chỉ quét đơn có reversalEffectsAt IS NULL (reversal-effects-resync.cron.ts:82), nên không bao giờ làm bù. Ở game-order-water.service.ts:196-226, claimPending cộng mọi dòng pending mà không xem trạng thái đơn. Chỉ reverseForOrder tắt dòng pending (:160-163). Không thấy backlog hay quyết định nào nói tới chuyện này. Hạ xuống P2: đây là nước game, không phải Điểm Xanh hay tiền; mỗi đơn chỉ 100💧, trần 300💧/tuần, cần 600💧 mới ra mã 30.000đ; mỗi lần trả phải có admin duyệt. Dù vậy, đây là lỗ hổng có thật, lệch với luật đảo nước chủ đã làm ở e55563485."
+    }
+   },
+   {
+    "id": "VX2-02",
+    "severity": "P2",
+    "kind": "bug",
+    "title": "Hồi sinh chuỗi sau khi đã lỡ thêm một ngày: mất 150💧 và chuỗi vừa hồi sinh đứt ngay ở lần điểm danh kế tiếp",
+    "files": [
+     "apps/api/src/modules/game/game-economy.service.ts:154-192",
+     "apps/api/src/modules/game/game-economy.service.ts:84-91",
+     "apps/api/src/modules/game/checkin-streak.ts:49-54",
+     "apps/api/src/modules/game/game.service.ts:146-150",
+     "apps/miniapp/src/pages/game.tsx:187-196"
+    ],
+    "evidence": "repairStreak chỉ xét brokenStreakAt có còn trong 48 giờ và thời gian chờ giữa hai lần hồi sinh, rồi ghi streakDays = brokenStreakDays+1. Hàm không đụng tới lastCheckInAt và không kiểm khoảng cách từ lần điểm danh cuối tới hôm nay. Cờ streakRepairable ở getProfile cũng chỉ dùng hai điều kiện đó. Khi điểm danh, tryCheckIn tính gapDays từ lastCheckInAt. Nếu gap là 2 và không còn vé giữ lửa thì chuỗi về 1, và vì p.streakDays > 1 nên ghi lại brokenStreakDays bằng chuỗi vừa hồi sinh. Khách không hồi sinh lại được vì đang trong 30 ngày chờ.",
+    "failure_scenario": "Chuỗi đang 10 ngày. Khách lỡ vài ngày, rồi điểm danh lúc 10:00 ngày X: chuỗi về 1, broken=10. Khách không vào ngày X+1. Lúc 08:00 ngày X+2 (46 giờ sau, vẫn trong 48 giờ), khối 'Bạn vừa mất chuỗi 10 ngày' nằm phía trên nút điểm danh. Khách bấm 'Hồi sinh (150💧)': bị trừ 150💧, chuỗi thành 11. Khách bấm điểm danh: gap từ X tới X+2 là 2, chuỗi về 1, broken=11, và không hồi sinh được trong 30 ngày. Nếu khách bấm điểm danh trước rồi mới hồi sinh thì lại giữ được chuỗi 11. Kết quả phụ thuộc vào thứ tự bấm.",
+    "fix": "Trong repairStreak và streakRepairable, chỉ cho hồi sinh khi projectCheckIn(p) có doneToday, hoặc gapDays là 1, hoặc gapDays là 2 mà còn vé. Nếu không, ẩn khối hồi sinh và trả 400 với câu rõ nghĩa. Cách khác: khi hồi sinh thì đặt lastCheckInAt về cuối ngày hôm qua để lần điểm danh kế tiếp nối tiếp chuỗi.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": true,
+    "verify": {
+     "id": "VX2-02",
+     "verdict": "CONFIRMED",
+     "severity": "P2",
+     "reason": "Truy được từ mã. repairStreak (game-economy.service.ts:154-192) chỉ xét brokenStreakAt nằm trong 48 giờ và thời gian chờ, ghi streakDays = brokenStreakDays+1, không đụng lastCheckInAt. Cờ streakRepairable ở game.service.ts:146-150 dùng cùng hai điều kiện. Khi điểm danh, tryCheckIn tính projectCheckIn (checkin-streak.ts:49-54): gap 2 mà không còn vé thì chuỗi về 1; vì p.streakDays=11>1 nên ghi lại broken=11 (game-economy.service.ts:84-91), và lastStreakRepairAt chặn hồi sinh lại trong 30 ngày. Theo thứ tự ngược lại (điểm danh trước khi hồi sinh): p.streakDays=1 không >1 nên giữ broken=10, hồi sinh lên 11, và lastCheckInAt là hôm nay nên chuỗi nối được. Như vậy kết quả đúng là phụ thuộc thứ tự bấm. Cửa sổ lỗi hẹp (chỉ ngày X+2, trước mốc 48 giờ), nhưng khách mất 150💧 cùng chuỗi đã trả tiền hồi sinh."
+    }
+   },
+   {
+    "id": "VX2-03",
+    "severity": "P2",
+    "kind": "copy",
+    "title": "Chữ mời mở lô đất hứa mỗi lô cho mã giảm giá riêng, nhưng mã thu hoạch dùng chung trần ngày/tháng với cây nhà",
+    "files": [
+     "apps/miniapp/src/components/game/garden-plots.tsx:40",
+     "apps/web/src/components/game/garden-plots.tsx:40",
+     "apps/api/src/modules/game/game-garden.service.ts:214-217",
+     "apps/api/src/modules/game/game.constants.ts:76-77"
+    ],
+    "evidence": "Chữ hiện: 'Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho mã giảm giá, phần góp quỹ trồng cây & loài sưu tập riêng.' Trong khi đó waterPlot đếm mã HARVEST lẫn GARDEN chung một trần qua countHarvestCoupons: mặc định 1 mã/ngày và 4 mã/tháng, giống waterTree. Mở lô tốn 100/200/300/400💧 (seedBase×slot), mỗi lô cần 600💧 mới thu hoạch.",
+    "failure_scenario": "Khách đã nhận mã thu hoạch hôm nay ở cây nhà, đọc chữ trên rồi bỏ 100💧 mở lô 1 và 600💧 tưới tới thu hoạch. Hộp thu hoạch báo 'Hôm nay bạn đã nhận mã giảm giá', không có mã. Mở đủ 4 lô (1.000💧) cũng không thêm được mã nào so với chỉ chơi cây nhà, trái với chữ 'mã giảm giá … riêng'.",
+    "fix": "Đổi chữ để nói rõ trần mã dùng chung, ví dụ: 'Mở thêm lô để trồng nhiều cây cùng lúc. Mỗi lần thu hoạch góp quỹ trồng cây và sưu tập loài; mã giảm giá tính chung trần với cây nhà (tối đa N mã/ngày, M mã/tháng)'. Lấy N, M từ cấu hình.",
+    "effort": "S",
+    "owner_decision": true,
+    "customer_ui": true,
+    "verify": {
+     "id": "VX2-03",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Chữ ở apps/miniapp/src/components/game/garden-plots.tsx:40 và apps/web/src/components/game/garden-plots.tsx:40 đúng như trích. waterPlot đếm countHarvestCoupons chung trần với lô nhà (game-garden.service.ts:214-219). Mặc định trần là 1 mã/ngày, 4 mã/tháng (game.constants.ts:76-77). Câu chữ có thể đọc là chữ 'riêng' chỉ gắn với 'loài sưu tập', và mỗi lô vẫn cho cây, quỹ và loài, nên không phải nói sai hẳn. Hạ xuống P3: chỉ là chữ gây kỳ vọng sai, không có sai lệch dữ liệu."
+    }
+   },
+   {
+    "id": "VX2-04",
+    "severity": "P3",
+    "kind": "ux-ui",
+    "title": "Đầu trang Vườn Xanh hiện chuỗi cũ đã đứt, lệch với thẻ điểm danh ngay bên dưới",
+    "files": [
+     "apps/miniapp/src/pages/game.tsx:170",
+     "apps/web/src/app/vuon-xanh/page.tsx:186",
+     "apps/miniapp/src/components/game/checkin-streak.tsx:40",
+     "apps/api/src/modules/game/checkin-streak.ts:29-30"
+    ],
+    "evidence": "GardenHero nhận `profile?.streakDays`, là giá trị đã lưu, chỉ đặt lại ở lần điểm danh kế tiếp. CheckInStreak dùng `status?.streakDays`, là aliveStreak (đứt thì bằng 0).",
+    "failure_scenario": "Chuỗi 10 ngày, khách lỡ 2 ngày rồi mở Vườn Xanh. Đầu trang hiện '🔥 Chuỗi 10 ngày', còn thẻ điểm danh hiện 'Chuỗi 0 ngày'. Khách tưởng chuỗi vẫn còn, bấm điểm danh thì chuỗi về 1.",
+    "fix": "Truyền `status?.streakDays ?? profile?.streakDays` cho GardenHero ở cả Mini App và web. Cách khác: getProfile trả thêm aliveStreak từ projectCheckIn.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": true,
+    "verify": {
+     "id": "VX2-04",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Trên Mini App, GardenHero nhận profile?.streakDays (apps/miniapp/src/pages/game.tsx:170) và hiện ở garden-hero.tsx:72. Bản web làm giống vậy (garden-hero.tsx:51). CheckInStreak dùng status?.streakDays (checkin-streak.tsx:40). Giá trị này là aliveStreak từ loyalty.getDailyCheckInStatus (loyalty.service.ts:1403), và bằng 0 khi gap ≥3 hoặc gap 2 mà hết vé (checkin-streak.ts:54). Hai con số lệch nhau đúng như kịch bản."
+    }
+   },
+   {
+    "id": "VX2-05",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Nhắc 'cây khát' gửi cho khách vừa tưới lô phụ hoặc cây vừa thu hoạch chưa có tiến độ",
+    "files": [
+     "apps/api/src/modules/game/game-reminder.service.ts:131-139",
+     "apps/api/src/modules/game/game-garden.service.ts:256-259",
+     "apps/api/src/modules/game/game.service.ts:183"
+    ],
+    "evidence": "sendThirstyTreeReminders chỉ lọc theo gameProfile.lastWateredAt, là mốc tưới cây nhà. waterPlot chỉ cập nhật gardenPlot.lastWateredAt. Ngoài ra treeHealth coi progress ≤ 0 là HEALTHY, nhưng truy vấn nhắc không xét progress.",
+    "failure_scenario": "Khách thu hoạch cây nhà (progress về 0) rồi mỗi ngày chỉ tưới lô phụ. Sau wilt_days−1 ngày, cron 11:00 gửi 'Cây đang khát, ghé tưới nhé!' trong khi màn Vườn hiện cây khoẻ và khách vừa tưới hôm nay. Tin lặp lại mỗi 3 ngày, tới 7 ngày.",
+    "fix": "Bỏ hồ sơ có ecoImpact.progress ≤ 0 khỏi truy vấn nhắc. Coi lần tưới gần nhất là max(lastWateredAt hồ sơ, lastWateredAt các lô): khi tưới lô phụ thì cập nhật luôn gameProfile.lastWateredAt, hoặc lọc thêm theo gardenPlot.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "VX2-05",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "sendThirstyTreeReminders chỉ lọc gameProfile.lastWateredAt (game-reminder.service.ts:131-133), pageProfiles không lọc thêm gì (:88-99). waterPlot chỉ cập nhật gardenPlot.lastWateredAt (game-garden.service.ts:258). Trong khi đó treeHealth coi progress ≤ 0 là HEALTHY (game.service.ts:183). Vì vậy khách vừa thu hoạch đúng ngưỡng (progress 0), hoặc chỉ tưới lô phụ, vẫn nhận 'cây khát'. Tin bị chặn lặp bằng THIRSTY_COOLDOWN_DAYS và chỉ gửi trong 7 ngày, nên chỉ là phiền nhẹ."
+    }
+   },
+   {
+    "id": "VX2-06",
+    "severity": "P3",
+    "kind": "money-points",
+    "title": "Đơn đại lý (DEALER) vẫn được cộng nước 'mua hàng', khác luật Điểm Xanh và xét hạng chỉ tính đơn lẻ tự mua",
+    "files": [
+     "apps/api/src/modules/game/game-order-water.service.ts:73-79",
+     "apps/api/src/modules/orders/own-retail-spend.ts:9"
+    ],
+    "evidence": "grantForOrder chỉ loại đơn placedForCustomer và khách không thật. Hàm không lọc `type: 'RETAIL'`, trong khi OWN_RETAIL_SPEND_WHERE (xét hạng) yêu cầu `type: 'RETAIL', placedForCustomer: false`.",
+    "failure_scenario": "Đại lý đặt 3 đơn sỉ (type DEALER) trong tuần. Cả 3 đơn giao xong thì đại lý được 300💧, đủ trần tuần, rồi đổi số nước này ra mã thu hoạch 30.000đ dành cho khách lẻ.",
+    "fix": "Nếu chủ muốn nước chỉ thưởng cho mua lẻ: thêm điều kiện `order.type === 'RETAIL'` (dùng chung OWN_RETAIL_SPEND_WHERE) và trả NOT_ELIGIBLE với đơn khác.",
+    "effort": "S",
+    "owner_decision": true,
+    "customer_ui": false,
+    "verify": {
+     "id": "VX2-06",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "grantForOrder (game-order-water.service.ts:73-79) chỉ loại đơn placedForCustomer và người dùng không thật, không lọc theo type. OWN_RETAIL_SPEND_WHERE (own-retail-spend.ts:9) loại DEALER khi xét hạng. Đơn DEALER do dealer.service.ts:360 tạo không mang pointsEarned. Đơn sỉ giao xong vì thế vẫn được 100💧/lần, tối đa 300💧/tuần. Đây là chuyện chính sách kinh tế game, cần chủ quyết, nên giữ P3."
+    }
+   },
+   {
+    "id": "VX2-07",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Bấm điểm danh sát nửa đêm: phần Điểm Xanh ghi ngày D, phần nước ghi ngày D+1, nên chuỗi bị đứt hoặc mất vé giữ lửa",
+    "files": [
+     "apps/api/src/modules/daily-check-in/daily-check-in.service.ts:75-77",
+     "apps/api/src/modules/loyalty/loyalty.service.ts:1434-1435",
+     "apps/api/src/modules/game/game-economy.service.ts:71-78"
+    ],
+    "evidence": "run() gọi lần lượt loyalty.dailyCheckIn rồi economy.checkIn. Mỗi bên tự lấy `vnDateKey()` ở thời điểm của mình, không dùng chung một 'hôm nay'. Phần Điểm Xanh tính cycleDay theo dự báo chuỗi của ngày D. Phần nước chạy sau 00:00 nên tính gap từ lastCheckInAt (D−1) tới D+1, ra gap 2.",
+    "failure_scenario": "Chuỗi 6 ngày, lần cuối D−1. Khách bấm lúc 23:59:59.9 ngày D. Điểm Xanh ghi ngày D (ô ngày 7). Phần nước chạy lúc 00:00:00.1 ngày D+1, thấy gap 2: dùng mất 1 vé giữ lửa, hoặc nếu không còn vé thì chuỗi về 1 và ghi broken=6. Khách đã điểm danh đúng ngày D mà vẫn bị đứt chuỗi.",
+    "fix": "Tính `today` một lần ở DailyCheckInService.run và truyền vào cả hai phần. Phần nước nhận `today` để tính projectCheckIn và CAS, nên lần ghi tính theo ngày khách bấm. Nếu ngày đã đổi thì trả pending để khách bấm lại, không áp luật lỡ ngày.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "VX2-07",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "DailyCheckInService.run gọi loyalty.dailyCheckIn rồi mới gọi economy.checkIn (daily-check-in.service.ts:75-77). Phần Điểm Xanh lấy today=vnDateKey(now) ở loyalty.service.ts:1434-1435. Phần nước tự lấy vnDateKey() riêng ở game-economy.service.ts:71. Nếu lời gọi thứ hai chạy sau 00:00 thì projectCheckIn ra gap 2: mất vé hoặc đứt chuỗi, trong khi loyaltyCheckIn đã ghi ngày D. Cửa sổ lỗi chỉ vài chục ms quanh nửa đêm, rất hiếm, nên giữ P3."
+    }
+   }
+  ]
+ },
+ {
+  "area": "pancake-notify",
+  "coverage": "Đã đọc kỹ: pancake-sync.service.ts (variationPrices/holdPatch/NO_PRICE/REMOVED, deactivateMissing, khoá lease, stockReadAt), catalog/variation-stock.ts (applyPancakeStock/forcePancakeStock, mốc webhook/sync), pancake.processor.ts (claim, handle, onStatusUpdated, onPartialReturned, setStatusFromPancake, onPaymentReconcile, flagUnderpaid, reconcileTotal, onShippingUpdated, onStockChanged), pancake-status.map.ts, pancake-attention.ts, pancake-webhook.controller.ts, pancake-webhook-dedupe.ts, pancake-events-reconcile.service.ts, pancake-push-reconcile.service.ts (retryCancels/retryPayments), pancake-order.service.ts (gate, syncPayment, cancelOnPancake), pancake-order-body.ts, pancake-total.ts, pancake-category-map.ts, pancake.controller.ts; merchant-pancake-link.ts (chuyển biến thể Pancake sang gian hàng); notification-variables.ts + spec đối chiếu chỗ gọi, notification-templates-admin.service.ts/controller, notifications.service.ts (notify/render/dispatchZns); system-config.service.ts (RANGES, JSON_RULES, set, cache), admin-config-rules.ts, config-redaction.ts, admin.service getConfig/setConfig/resolvePancakeAttention, ops-webhook-events.service.ts, ops-health pancake stuck. Web admin: pancake-sync.tsx, pancake-attention.tsx, notification-templates-tab.tsx, config-item.tsx, feature-flags-card.tsx, loyalty-config-card.tsx, partner-rules-card.tsx, shop-info-card.tsx, gomdon-config-card.tsx (phần đầu). Kiểm thêm các chỗ dựng giá thẻ SP (cardPrices) đều lọc isActive, nên biến thể retail_price 0 (NO_PRICE, đã tắt) không hiện 0đ và không bán được (cart/sellable.ts kiểm isActive). Kết quả tổng: KHÔNG thấy lỗi P0. Đường giá 0, tồn kho lùi, lộ bí mật cấu hình (GET /admin/config chỉ ADMIN, có che), cấu hình ngoài khoảng (RANGES/JSON_RULES phủ rộng, có spec buộc) và biến mẫu ({{x}} thiếu thì render ra chuỗi rỗng, không lộ nguyên chữ) đều đã có chốt chặn. Không có màn \"xem trước mẫu\" nên không có lệch giữa bản xem trước và bản gửi. Chưa rà: ngữ nghĩa thật của payload Pancake (updated_since, sale_price, webhook tồn kho chưa từng nhận thật trên PROD); geo.service; phần dưới của gomdon-config-card. Không chạy test nào. Mọi kết luận đi từ việc lần theo mã.",
+  "missed": "Không thấy thêm lỗi P0/P1 nào trong các đoạn đã kiểm: pancake.processor.ts onStatusUpdated/onPartialReturned/flagAttention/waybill, pancake-attention.ts, admin.service.ts resolvePancakeAttention, pancake-sync.service.ts upsertProduct, lifecycle.service.ts notifyWishlistPriceDrop, notifications.service.ts notify. Có một ghi chú gắn với PNK-01. Cùng gốc lỗi đó, một lần 15 tới trễ (pancake.processor.ts:465 → 548-553) cũng xoá mất dòng ATTENTION_COD_RETURN_UNVERIFIED. Khi đó resolvePancakeAttention (admin.service.ts:1371) bỏ luôn bước tra khoản UNVERIFIED, nên PNK-01 và PNK-02 nên sửa chung một lần: cho flagAttention nối lý do thay vì ghi đè, và cho chốt resolve tra bảng orderCustomerRefund không phụ thuộc chữ trong ô attention.",
+  "findings": [
+   {
+    "id": "PNK-01",
+    "severity": "P2",
+    "kind": "money-points",
+    "title": "Webhook \"Hoàn một phần\" (15) tới trễ cho đơn đã huỷ/trả vẫn ghim lời \"hoàn tiền/điểm bằng tay\"",
+    "files": [
+     "apps/api/src/modules/integrations/pancake/pancake.processor.ts:460-468",
+     "apps/api/src/modules/integrations/pancake/pancake.processor.ts:538-554",
+     "apps/api/src/modules/integrations/pancake/pancake-status.map.ts:44-47"
+    ],
+    "evidence": "Nhánh attention (4 \"Đang hoàn\", 7 \"Đã xoá\") có chặn đơn đã đóng ở dòng 462 `if (!isClosedOrder(order.status)) await this.flagAttention(...)`, kèm comment nói rõ sự kiện tới trễ sau khi huỷ/trả thì không được ghim. Nhánh partialReturned ở dòng 465 gọi thẳng onPartialReturned, không kiểm isClosedOrder. Khi Tubu không có yêu cầu trả nào (approved.length === 0, requests rỗng), hàm ghi manualReason 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.' qua flagAttention. Lệnh này ghi đè cả ô lý do. onStatusUpdated không so updated_at, và BullMQ/cron cứu (pancake-events-reconcile) không giữ thứ tự sự kiện, nên 15 có thể được xử lý sau 5. Spec status 15 (pancake.processor.spec.ts:1268-1370) chỉ thử với đơn SHIPPING/DELIVERED.",
+    "failure_scenario": "Đơn trả trước PAID, đang DELIVERED, Tubu không có yêu cầu trả. Kho bấm \"Hoàn một phần\" (15) rồi \"Đã hoàn\" (5) trên Pancake. Job 15 lỗi tạm thời, còn 5 xử lý trước: đơn sang RETURNED và đã hoàn đủ tiền vào Ví (đơn COD thì sang RETURNED, kèm khoản chờ Kế toán và dòng ATTENTION_COD_RETURN_UNVERIFIED). Lượt thử lại của 15 chạy sau đó, đơn quay lại hàng \"Cần xử lý Pancake\" với lời dặn hoàn tiền/điểm bằng tay. Nhân viên làm theo thì khách được hoàn hai lần. Với đơn COD, dòng chờ Kế toán bị ghi đè mất.",
+    "fix": "Ở dòng 465, bỏ qua (chỉ log) khi isClosedOrder(order.status), giống nhánh attention. Hoặc ít nhất không dùng manualReason \"hoàn tay\" cho đơn đã CANCELLED/RETURNED. Thêm spec: status 15 tới đơn RETURNED/CANCELLED thì không ghi attention.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "PNK-01",
+     "verdict": "CONFIRMED",
+     "severity": "P2",
+     "reason": "Đọc lại pancake.processor.ts:458-468. Nhánh attention có chặn isClosedOrder (dòng 462), còn nhánh partialReturned (dòng 464-466) gọi thẳng onPartialReturned mà không kiểm. Khi đơn sang RETURNED qua lệnh 5, order-status.service.ts:355-380 KHÔNG tạo returnRequest, nên trong onPartialReturned (dòng 538-554) mảng approved rỗng, requests rỗng, và hàm ghi manualReason 'hoàn tiền/điểm ... bằng tay' (pancake-status.map.ts:44-47) qua flagAttention. flagAttention không có onlyReplacingPrefix nên ghi đè cả ô (dòng 416-428), mất luôn dòng ATTENTION_COD_RETURN_UNVERIFIED mà order-status.service.ts:373-377 vừa nối vào. Thứ tự sự kiện không được giữ: chính comment ở dòng 496 xác nhận 'Queue KHÔNG đảm bảo thứ tự per-order', và onStatusUpdated không so updated_at (chỉ phần vận chuyển ở dòng 764 và phần tồn kho ở 879 có so). Hai job chạy song song cũng đủ gây lỗi: job 15 đọc đơn khi còn DELIVERED, rồi ghi sau khi job 5 đã commit. Không tìm thấy chốt chặn nào khác, và mục này không có trong 20-backlog hay 21-quyet-dinh. Giữ P2: muốn hoàn hai lần thì còn cần nhân viên làm theo lời nhắc, và ca này hiếm (thứ tự 15 rồi 5 bị đảo)."
+    }
+   },
+   {
+    "id": "PNK-02",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Hàng \"Cần xử lý Pancake\" chỉ có một ô: cờ mới ghi đè lý do COD chờ Kế toán, KHO bấm \"Đã xử lý\" qua được chốt",
+    "files": [
+     "apps/api/src/modules/integrations/pancake/pancake.processor.ts:416-428",
+     "apps/api/src/modules/integrations/pancake/pancake.processor.ts:811-816",
+     "apps/api/src/modules/integrations/pancake/pancake-attention.ts:35-45",
+     "apps/api/src/modules/orders/order-status.service.ts:373-377",
+     "apps/api/src/modules/admin/admin.service.ts:1371-1383"
+    ],
+    "evidence": "order-status.service.ts:377 dùng appendAttentionReason để nối ATTENTION_COD_RETURN_UNVERIFIED vào lý do đang có. Nhưng flagAttention (processor) và flagPancakeAttention đều `updateMany data: { pancakeAttention: reason }`, tức ghi đè cả chuỗi \"A | B\". Chỉ reconcileTotal có tự tránh ghi đè (dòng 311-313). resolvePancakeAttention chặn KHO khi chuỗi hiện tại `includes(ATTENTION_COD_RETURN_UNVERIFIED)` (dòng 1371). Mất chuỗi đó thì không còn chặn, và lệnh xoá ở dòng 1381 không điều kiện theo nội dung đã đọc.",
+    "failure_scenario": "Đơn COD được Pancake báo \"Đã hoàn\" nên sang RETURNED, attention mang dòng chờ Kế toán đối soát COD. Sau đó Pancake gửi cập nhật vận chuyển với mã vận đơn hoàn mới. Lệnh flagWaybillOnClosedOrder ghi đè cả ô bằng lời \"vận đơn cho đơn đã trả\". Nhân viên kho bấm \"Đã xử lý\" và qua được, vì chốt COD không còn thấy chữ cần tìm. Đơn rời hàng đợi, dù việc quyết hoàn COD chưa xong (khoản UNVERIFIED vẫn nằm ở mục Kế toán).",
+    "fix": "Cho flagPancakeAttention/flagAttention nối lý do bằng appendAttentionReason (có điều kiện theo giá trị đã đọc như removeAttentionReasonsByPrefix), hoặc giữ lại phần ATTENTION_COD_RETURN_UNVERIFIED khi ghi đè. Ở resolvePancakeAttention, kiểm khoản COD UNVERIFIED theo bảng orderCustomerRefund, không theo chữ trong attention.",
+    "effort": "M",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "PNK-02",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Hai hàm flagAttention (processor:416-428) và flagPancakeAttention (pancake-attention.ts:35-45) đều ghi `pancakeAttention: reason` đè lên cả chuỗi. flagWaybillOnClosedOrder (dòng 757 và 807, rồi 811-816) gọi flagAttention không kèm prefix, nên ghi đè được dòng COD chờ Kế toán của đơn RETURNED. Trong resolvePancakeAttention (admin.service.ts:1369-1378), bảng orderCustomerRefund UNVERIFIED chỉ được tra khi chuỗi attention có `includes(ATTENTION_COD_RETURN_UNVERIFIED)`. Mất chuỗi đó thì bỏ qua bước tra, và lệnh xoá ở dòng 1379-1382 chạy không điều kiện. Chốt này không xét vai trò, nên 'KHO' trong tiêu đề hiểu là bất kỳ admin nào. Giữ P3 vì khoản UNVERIFIED vẫn còn ở mục 'Hoàn tiền khách' của Kế toán. Không mất tiền, chỉ mất dấu ở hàng đợi kho/CSKH."
+    }
+   },
+   {
+    "id": "PNK-03",
+    "severity": "P3",
+    "kind": "bug",
+    "title": "Báo \"giảm giá\" cho khách yêu thích dựa cả vào biến thể đã tắt/đã xoá",
+    "files": [
+     "apps/api/src/modules/integrations/pancake/pancake-sync.service.ts:473-487",
+     "apps/api/src/modules/lifecycle/lifecycle.service.ts:235-239"
+    ],
+    "evidence": "Vòng lặp dòng 473 lấy bestDrop từ mọi biến thể Pancake trả về, có giá hợp lệ, kể cả `v.is_removed` hay biến thể admin đã tắt (prev.isActive=false). Dòng 481-486 không kiểm isActive/hold. notifyWishlistPriceDrop chỉ kiểm sản phẩm còn bán (isPublicProduct), không kiểm biến thể giảm giá có mua được không.",
+    "failure_scenario": "Sản phẩm đang bán có biến thể A 100.000đ (đang bán) và B 200.000đ (admin đã tắt bán trên Tubu). Pancake hạ B xuống 150.000đ để xả kho tại quầy. Lượt đồng bộ gửi PRICE_DROP_ALERT \"từ 200.000đ xuống 150.000đ\" cho mọi khách đã yêu thích. Khách mở ra chỉ mua được A 100.000đ, giá không đổi.",
+    "fix": "Chỉ xét bestDrop khi biến thể sau cập nhật vẫn bán được: !v.is_removed, không có hold, và prev.isActive (hoặc hold patch không tắt nó).",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "PNK-03",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Ở pancake-sync.service.ts:473-487, bestDrop được tính cho mọi biến thể có prev và có giá. Vòng này không xét v.is_removed, prev.isActive hay hold, dù select đã lấy isActive và pancakeHold mà không dùng. variationPrices (dòng 386-398) vẫn trả giá cho biến thể is_removed. notifyWishlistPriceDrop (lifecycle.service.ts:221-260) chỉ kiểm isPublicProduct của SẢN PHẨM. Vậy biến thể đã tắt hay đã xoá mà giảm giá vẫn kích hoạt PRICE_DROP_ALERT kèm giá cũ và mới của biến thể đó. Kịch bản truy được từ mã. Không mất tiền, nên P3."
+    }
+   },
+   {
+    "id": "NTF-01",
+    "severity": "P3",
+    "kind": "ux-ui",
+    "title": "Màn Mẫu thông báo ghi TIER_DROP_NOTICE \"Chỉ trong app\" trong khi ZNS vẫn gửi qua khoá cấu hình riêng",
+    "files": [
+     "apps/api/src/modules/notifications/notifications.service.ts:176",
+     "apps/api/src/modules/notifications/notification-templates-admin.service.ts:276-279",
+     "apps/api/src/modules/loyalty/tier-drop-notice.service.ts:62-65",
+     "apps/api/src/modules/loyalty/tier-drop-notice.service.ts:133"
+    ],
+    "evidence": "notify() chọn `znsTemplateId = (tpl.channel==='ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId`. Tier-drop truyền opts.znsTemplateId lấy từ `loyalty.tier_drop_zns_template_id` (21-quyet-dinh.md:59 hướng dẫn chủ điền khoá này). deliveryOf() chỉ nhìn channel/zaloTemplateId của bản ghi mẫu (seed INAPP), nên luôn hiện \"Chỉ trong app\". Chuyển kênh mẫu sang \"Trong app\" cũng không tắt được ZNS.",
+    "failure_scenario": "Chủ điền loyalty.tier_drop_zns_template_id=123456. Tab Mẫu thông báo vẫn hiện TIER_DROP_NOTICE \"Chỉ trong app\" (xếp cuối danh sách), trong khi mỗi đợt nhắc hạ hạng đều gửi ZNS có tính phí. Admin muốn ngừng ZNS bằng cách để kênh \"Trong app\" thì không có tác dụng, phải tìm ra khoá loyalty.* trong danh sách JSON.",
+    "fix": "Bỏ khoá riêng, dùng zaloTemplateId của mẫu (migration chép giá trị sang). Hoặc cho deliveryOf/list đọc cả khoá dự phòng và hiện \"ZNS (mã từ cấu hình loyalty)\", và để kênh INAPP chặn luôn opts.znsTemplateId.",
+    "effort": "S",
+    "owner_decision": false,
+    "customer_ui": false,
+    "verify": {
+     "id": "NTF-01",
+     "verdict": "CONFIRMED",
+     "severity": "P3",
+     "reason": "Ở notifications.service.ts:176, mã ZNS lấy theo `(tpl.channel==='ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId`. Mẫu ở kênh INAPP vẫn gửi ZNS khi nơi gọi truyền opts.znsTemplateId. tier-drop-notice.service.ts:62-65 và :133 truyền mã từ khoá loyalty.tier_drop_zns_template_id. deliveryOf (notification-templates-admin.service.ts:276-279) chỉ nhìn channel và zaloTemplateId, nên màn quản trị hiện 'Chỉ trong app'. 21-quyet-dinh.md:59 chỉ ghi cho chủ biết là nên điền khoá, chưa quyết gì về cách màn hình hiển thị. Hiện chỉ xảy ra sau khi chủ điền khoá (lúc này khoá còn trống thì chưa có ZNS). Đây là UX gây nhầm và không tắt được ZNS từ màn mẫu, nên P3."
+    }
+   }
+  ]
+ }
+]
