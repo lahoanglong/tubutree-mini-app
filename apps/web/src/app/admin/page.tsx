@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1286,6 +1286,8 @@ function OrdersTab({
   const [to, setTo] = useState(initialTo ?? '');
   const [extra, setExtra] = useState<OrderListExtra>(initialExtra ?? {});
   const [userLabel, setUserLabel] = useState(initialUserLabel ?? '');
+  const [referrerPick, setReferrerPick] = useState<{ id: string; label: string } | null>(null);
+  const queueBefore = useRef<{ status: string; order?: 'asc' | 'desc' } | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   // Dòng báo sau khi xác nhận tiền: đơn vừa ghi nhận rời hàng đợi nên câu báo trong chi tiết đơn biến mất cùng nó.
   const [paidNote, setPaidNote] = useState<PaidNoteState | null>(null);
@@ -1425,10 +1427,12 @@ function OrdersTab({
     <OrderExtraFilters
       value={extra}
       userLabel={userLabel}
-      onChange={(v) => {
+      referrerLabel={referrerPick?.id === extra.referrerUserId ? referrerPick?.label : undefined}
+      onChange={(v, label) => {
         setPage(1);
         setExpandedId(null);
         setExtra(v);
+        if (label !== undefined && v.referrerUserId) setReferrerPick({ id: v.referrerUserId, label });
       }}
     />
   );
@@ -1441,10 +1445,15 @@ function OrdersTab({
   const toggleQueue = (queue: OrderQueue) => {
     resetPaging();
     if (extra.queue === queue) {
-      const { queue: _queue, ...rest } = extra;
-      setExtra(rest);
+      // Bật hàng đợi đã đặt 'Chờ thanh toán' + 'Cũ nhất trước': tắt thì trả về như trước khi bật (vào bằng link thì về "tất cả").
+      const { queue: _queue, order: _order, ...rest } = extra;
+      const before = queueBefore.current;
+      queueBefore.current = null;
+      setStatus(before?.status ?? '');
+      setExtra(before?.order ? { ...rest, order: before.order } : rest);
       return;
     }
+    if (!extra.queue) queueBefore.current = { status, ...(extra.order ? { order: extra.order } : {}) };
     setStatus('PENDING_PAYMENT');
     setExtra({ ...extra, queue, order: 'asc' });
   };

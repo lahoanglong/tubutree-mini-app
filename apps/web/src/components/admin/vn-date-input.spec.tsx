@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { act } from 'react';
 import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { VnDateInput, VnDateTimeInput, VnMonthInput, isoToVn, maskVnDate, vnToIso } from './vn-date-input';
+import { VnDateInput, VnDateTimeInput, VnMonthInput, datePresets, isoToVn, maskVnDate, vnToIso } from './vn-date-input';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -287,5 +287,27 @@ describe('VnDateTimeInput', () => {
     typeInto(date(r.container), '23102026');
     await flush();
     expect(onValue).toHaveBeenLastCalledWith('2026-10-23T08:30');
+  });
+});
+
+describe('datePresets: lối tắt ngày theo giờ Việt Nam (QTDON-05)', () => {
+  const realTz = process.env.TZ;
+  afterEach(() => {
+    if (realTz === undefined) delete process.env.TZ;
+    else process.env.TZ = realTz;
+  });
+
+  it.each(['UTC', 'America/New_York', 'Asia/Ho_Chi_Minh'])('05:00 ngày 03/11 giờ VN, máy đặt %s: Hôm nay = 2026-11-03', (tz) => {
+    process.env.TZ = tz;
+    const [today, week, month] = datePresets(new Date('2026-11-02T22:00:00.000Z'));
+    expect(today).toMatchObject({ key: 'today', from: '2026-11-03', to: '2026-11-03' });
+    expect(week).toMatchObject({ key: '7d', from: '2026-10-28', to: '2026-11-03' });
+    expect(month).toMatchObject({ key: 'month', from: '2026-11-01', to: '2026-11-03' });
+  });
+
+  it('đầu tháng giờ VN nhưng còn cuối tháng theo UTC: Tháng này bắt đầu đúng tháng VN', () => {
+    process.env.TZ = 'UTC';
+    const [, , month] = datePresets(new Date('2026-10-31T18:00:00.000Z'));
+    expect(month).toMatchObject({ from: '2026-11-01', to: '2026-11-01' });
   });
 });

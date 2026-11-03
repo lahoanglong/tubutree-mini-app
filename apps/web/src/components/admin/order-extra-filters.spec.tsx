@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OrderExtraFilters } from './order-extra-filters';
 import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { listOrders, downloadOrdersCsv } from '@/lib/admin-client';
+import { listOrders, downloadOrdersCsv, type OrderListExtra } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -77,7 +77,7 @@ describe('OrderExtraFilters (D1-17)', () => {
     await flush();
     expect(api.calls.some((c) => c.url.includes('/admin/users') && c.url.includes('search=0911'))).toBe(true);
     click(container.querySelector('[role="option"]'));
-    expect(onChange).toHaveBeenLastCalledWith({ kind: 'ctv', referrerUserId: 'u-ctv' });
+    expect(onChange).toHaveBeenLastCalledWith({ kind: 'ctv', referrerUserId: 'u-ctv' }, expect.stringContaining('Chị Hoa'));
   });
 
   it('"Xoá bộ lọc" chỉ hiện khi có lọc, bỏ mọi lọc nhưng GIỮ thứ tự sắp xếp', () => {
@@ -146,5 +146,43 @@ describe('admin-client — truyền bộ lọc mới xuống API', () => {
     expect(urls[0]).toContain('/admin/orders/export');
     expect(urls[0]).toMatch(/kind=dealer/);
     expect(urls[0]).toMatch(/storefront=a/);
+  });
+
+  it('QTDON-04: tên file CSV dự phòng theo ngày giờ Việt Nam (6:30 sáng 03/11 giờ VN vẫn là 2026-11-03)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-02T23:30:00.000Z'));
+    try {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('x', { status: 200, headers: { 'content-type': 'text/csv' } })));
+      URL.createObjectURL = vi.fn(() => 'blob:x');
+      URL.revokeObjectURL = vi.fn();
+      const out = await downloadOrdersCsv({});
+      expect(out.filename).toBe('don-hang-2026-11-03.csv');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('QTDON-06: ô gian hàng theo bộ lọc đang áp, không giữ chữ cũ khi cha bỏ lọc (vd. Xem tất cả đơn từ hồ sơ khách)', () => {
+    const storeLabel = 'input[aria-label="Lọc đơn theo gian hàng (tên hoặc mã ngắn của gian hàng)"]';
+    function Harness() {
+      const [v, setV] = useState<OrderListExtra>({ storefront: 'shop-a' });
+      return (
+        <>
+          <OrderExtraFilters value={v} onChange={setV} />
+          <button type="button" onClick={() => setV({ userId: 'u9', order: 'desc' })}>
+            Xem đơn khách
+          </button>
+        </>
+      );
+    }
+    const { container } = mount(<Harness />);
+    expect(container.querySelector<HTMLInputElement>(storeLabel)!.value).toBe('shop-a');
+    click(byText(container, 'button', 'Xem đơn khách'));
+    expect(container.querySelector<HTMLInputElement>(storeLabel)!.value).toBe('');
+  });
+
+  it('QTDON-06: có referrerUserId mà component gắn lại (ngăn kéo điện thoại) thì ô CTV vẫn hiện nhãn cha giữ', () => {
+    const { container } = mount(<OrderExtraFilters value={{ referrerUserId: 'u1' }} referrerLabel="CTV Lan" onChange={vi.fn()} />);
+    expect(container.textContent).toContain('CTV Lan');
   });
 });
