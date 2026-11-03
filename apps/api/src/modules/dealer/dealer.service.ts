@@ -579,6 +579,10 @@ export class DealerService {
     opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean; reportId?: string } = {},
   ) {
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
+    // Người đã mất vai trò đại lý mà còn nợ vẫn ghi nhận được (bên dưới), nên kế toán vốn là đại lý cũ có thể tự xoá nợ của mình.
+    if (opts.byStaff && dealerUserId === adminId) {
+      throw new ForbiddenException('Không ghi nhận trả nợ cho sổ công nợ của chính mình — nhờ quản trị viên.');
+    }
     const dealer = await this.prisma.user.findUnique({
       where: { id: dealerUserId },
       select: { id: true, role: true, fullName: true, phone: true },
