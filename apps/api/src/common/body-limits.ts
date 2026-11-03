@@ -101,6 +101,7 @@ export function scanRawJson(buf: Buffer, maxNodes: number, maxDepth: number): bo
 }
 
 export const CHARSET_UNSUPPORTED_MESSAGE = 'Dữ liệu gửi lên phải dùng mã hoá UTF-8.';
+export const ENCODING_UNSUPPORTED_MESSAGE = 'Dữ liệu gửi lên dùng kiểu nén không hỗ trợ.';
 
 /**
  * body-parser nhận mọi charset bắt đầu bằng `utf-` (utf-7, utf-16le...) và giải mã đồng bộ bằng iconv SAU verify;
@@ -241,6 +242,8 @@ export const bodyParserErrorHandler: ErrorRequestHandler = (err: unknown, _req, 
   const status = e?.status ?? e?.statusCode;
   if (e?.type === 'entity.too.large') return reject(res, 413, BODY_TOO_LARGE_MESSAGE);
   if (e?.type === 'charset.unsupported') return reject(res, 415, CHARSET_UNSUPPORTED_MESSAGE);
+  // Content-Encoding lạ (vd br2): trả 415 tại đây, không để Nest ghi stack cho mỗi request ẩn danh lặp lại.
+  if (e?.type === 'encoding.unsupported') return reject(res, 415, ENCODING_UNSUPPORTED_MESSAGE);
   if (e?.type === 'entity.complex') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   // urlencoded: quá 1000 tham số (parameterLimit) hoặc qs ném RangeError khi vượt trần → 400 như thân JSON quá phức tạp.
   if (e?.type === 'parameters.too.many') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);

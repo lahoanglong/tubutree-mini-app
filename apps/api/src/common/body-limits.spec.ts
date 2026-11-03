@@ -8,7 +8,7 @@ import {
   createBodyParsers,
   eventsBodyParser,
   scanRawJson,
-  CHARSET_UNSUPPORTED_MESSAGE,
+  CHARSET_UNSUPPORTED_MESSAGE, ENCODING_UNSUPPORTED_MESSAGE,
   inspectBody,
   MAX_ARRAY_LENGTH,
   MAX_BODY_DEPTH,
@@ -311,6 +311,12 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect(((await bodyOf(await post('/api/cart/coupon', exact))) as { raw: string | null }).raw).toBeNull();
       expect(((await bodyOf(await post('/api/webhooks/pancake', exact))) as { raw: string | null }).raw).toBeNull();
     });
+  });
+
+  it('Content-Encoding lạ → 415 JSON, không chuyển lỗi cho Nest', async () => {
+    const res = await post('/api/cart/coupon', { a: 1 }, { 'content-encoding': 'br2' });
+    expect(res.status).toBe(415);
+    expect(await bodyOf(res)).toMatchObject({ statusCode: 415, message: ENCODING_UNSUPPORTED_MESSAGE });
   });
 
   describe('ký tự NUL', () => {
