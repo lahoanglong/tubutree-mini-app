@@ -92,4 +92,18 @@ describe('WishlistHeart — chạm lúc app đang khôi phục phiên', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(api.removeWishlist).not.toHaveBeenCalled();
   });
+
+  it('login() ném lỗi: cờ chờ được gỡ, lần chạm sau vẫn chạy', async () => {
+    const real = useAuthStore.getState().login;
+    const failing = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined);
+    useAuthStore.setState({ login: failing });
+    renderHeart();
+    const heart = screen.getByRole('button', { name: 'Thêm yêu thích' });
+    fireEvent.click(heart);
+    await waitFor(() => expect(failing).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 10));
+    fireEvent.click(heart);
+    await waitFor(() => expect(failing).toHaveBeenCalledTimes(2));
+    useAuthStore.setState({ login: real });
+  });
 });

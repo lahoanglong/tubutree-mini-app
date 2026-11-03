@@ -276,6 +276,8 @@ function refreshSession(): Promise<LoginResponse | null> {
   if (refreshInFlight) return refreshInFlight;
   const p = (async () => {
     await afterLogout();
+    // Hết trần mà logout vẫn chưa xong: token cũ còn trên máy, đọc ra xoay là dựng lại phiên của người vừa thoát.
+    if (logoutInFlight) throw new StorageTimeoutError('logout chưa xong');
     const token = unpersistedRefresh ?? (await readRefresh());
     if (!token) return null;
     return refreshTokens(token);
@@ -325,12 +327,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: () => {
     if (loginInFlight) return loginInFlight;
     const epoch = sessionEpoch;
+    // Chụp ngay lúc gọi, trước mọi await. Lúc logout còn chờ thì không chờ restore nào: restore bắt đầu trong khe đó đang chờ chính
+    // login này (xem restore), chờ lại nhau là treo mãi.
+    const logoutPending = logoutInFlight !== null;
+    const restoreAtStart = logoutPending ? null : restoreInFlight;
     const run = (async () => {
-      await afterLogout();
+      if (logoutPending) await afterLogout();
       // Bấm đăng nhập lúc app còn đang khôi phục phiên: chờ khôi phục xong. Khôi phục ra phiên rồi thì thôi, vì đăng nhập
       // lại từ đầu song song sẽ ghi đè phiên vừa khôi phục (có khi bằng phiên Khách) và hai bên xoay refresh token dẫm lên nhau.
-      if (restoreInFlight) {
-        await restoreInFlight.catch(() => undefined);
+      if (restoreAtStart) {
+        await restoreAtStart.catch(() => undefined);
         if (get().status === 'authenticated') return;
       }
       if (epoch !== sessionEpoch) return;
@@ -459,6 +465,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       restoreInFlight = null;
       loginInFlight = null;
       setAuthReady(null);
+      const memToken = unpersistedRefresh;
       unpersistedRefresh = null;
       // Không đặt trần ở đây: trên máy dùng chung, đăng xuất phải chắc đã đọc được token để thu hồi và đã xoá nó. Storage treo thì
       // đăng xuất treo theo (khách thấy chưa xong), còn hơn báo đã đăng xuất mà token vẫn nằm trên máy cho người sau mở lại.
@@ -481,6 +488,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       onLogoutCleanup?.();
       // Không chờ: đăng xuất trên máy không phụ thuộc mạng. Token còn sống trên máy chủ chỉ là lỗi dọn dẹp, tự hết hạn.
       if (refreshToken) revokeInBackground(refreshToken);
+      if (memToken && memToken !== refreshToken) revokeInBackground(memToken);
     })();
     logoutInFlight = p;
     const clear = () => {

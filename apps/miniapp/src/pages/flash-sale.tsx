@@ -206,13 +206,25 @@ export default function FlashSalePage() {
 
   // Mua ngay chạm lúc app còn đang khôi phục phiên: chờ phiên rồi mua tiếp đúng món đó (một lần dù chạm nhiều), thay vì nuốt lần chạm.
   const pendingBuy = useRef<string | null>(null);
+  const [waitingBuyId, setWaitingBuyId] = useState<string | null>(null);
+  // Rời trang trước khi khôi phục xong thì bỏ ý định: không tự kéo khách từ màn khác sang Thanh toán.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const onBuy = (item: FlashSlotItemData) => {
     if (!authed) {
       if (authStatus === 'loading') {
         if (pendingBuy.current) return;
         pendingBuy.current = item.itemId;
+        setWaitingBuyId(item.itemId);
         void loginWithNotice().finally(() => {
           pendingBuy.current = null;
+          if (!mounted.current) return;
+          setWaitingBuyId(null);
           if (useAuthStore.getState().status === 'authenticated' && !buyMut.isPending) buyMut.mutate(item);
         });
         return;
@@ -262,6 +274,7 @@ export default function FlashSalePage() {
                 slotStatus={activeTab.status}
                 reminded={reminded.has(item.itemId)}
                 remindPending={remindMut.isPending && remindMut.variables?.itemId === item.itemId}
+                buyPending={waitingBuyId === item.itemId}
                 onBuy={() => onBuy(item)}
                 onToggleRemind={() => onToggleRemind(item)}
               />

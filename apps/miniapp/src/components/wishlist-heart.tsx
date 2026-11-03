@@ -86,10 +86,12 @@ export function WishlistHeart({
     // Chạm nhiều lần lúc chờ vẫn là một ý định (thích), không xếp nhiều lần đảo: ra phiên thì thêm rồi bỏ là sai ý khách.
     if (wasRestoring && pendingLike.current) return;
     if (wasRestoring) pendingLike.current = true;
-    void login().then(() => {
-      pendingLike.current = false;
-      if (wasRestoring && useAuthStore.getState().status === 'authenticated') toggle();
-    });
+    void login()
+      .catch(() => undefined)
+      .then(() => {
+        pendingLike.current = false;
+        if (wasRestoring && useAuthStore.getState().status === 'authenticated') toggle();
+      });
   };
 
   return (
