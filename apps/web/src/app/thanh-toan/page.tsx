@@ -764,10 +764,10 @@ export default function CheckoutPage() {
           {usablePoints > 0 && (
             <label
               className={`relative mt-3 flex min-h-11 items-center gap-2 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3 text-sm max-md:mt-0 max-md:flex-row-reverse max-md:justify-between max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 ${
-                partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                partnerPoints.disabled ? 'cursor-not-allowed md:opacity-60' : 'cursor-pointer'
               }`}
             >
-              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
+              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter} ${partnerPoints.disabled ? 'max-md:opacity-60' : ''}`}>
                 <input
                   type="checkbox"
                   checked={usePoints && !partnerPoints.disabled}
@@ -779,8 +779,8 @@ export default function CheckoutPage() {
               </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="min-w-0 text-[color:var(--color-text-brand)]">
-                <span className="block font-semibold max-md:text-[color:var(--color-text-primary)]">Điểm Xanh</span>
-                <span className="block text-caption max-md:text-[color:var(--color-text-tertiary)]">
+                <span className={`block font-semibold max-md:text-[color:var(--color-text-primary)] ${partnerPoints.disabled ? 'max-md:opacity-60' : ''}`}>Điểm Xanh</span>
+                <span className={`block text-caption max-md:text-[color:var(--color-text-tertiary)] ${partnerPoints.disabled ? 'max-md:opacity-60' : ''}`}>
                   {partnerPoints.disabled
                     ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}

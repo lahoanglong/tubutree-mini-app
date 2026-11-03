@@ -97,6 +97,22 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     expect(box.closest('label')!.textContent).toContain('Dùng 12 điểm, giảm 12.000đ');
   });
 
+  it('R-23: ô Điểm Xanh khoá (giỏ chỉ hàng đối tác, trần 0): câu lý do ở 375 không nằm dưới tổ tiên mờ opacity-60', async () => {
+    calls.extra = { pointsMax: 0, pointsPartnerNote: NOTE };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    const notes = [...r.container.querySelectorAll<HTMLElement>('span.md\\:hidden')].filter((e) => (e.textContent ?? '').includes(NOTE));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const note of notes) {
+      for (let el: HTMLElement | null = note; el && el !== r.container; el = el.parentElement) {
+        const tokens = el.className.split(/\s+/);
+        expect(tokens, el.className).not.toContain('opacity-60');
+        expect(tokens, el.className).not.toContain('max-md:opacity-60');
+      }
+    }
+  });
+
   it('trần 0 mà không có câu đối tác: ô khoá ghi số dư như Mini ("Bạn đang có"), không lặp "Dùng được" cạnh câu chưa dùng được', async () => {
     calls.extra = { pointsMax: 0, pointsPartnerNote: null };
     const r = render(<CheckoutPage />);
