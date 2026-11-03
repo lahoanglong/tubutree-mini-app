@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequestItem } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { notifyAdmins } from '../../common/notify-admins';
 import { isDeadlock } from '../../common/lock-busy';
 import { findSearchUserIds, normalizeAdminOrderSearch, orderCodeVariants } from '../admin/admin-order-filter';
@@ -390,10 +391,21 @@ export class OrderReturnsService {
     adminId: string,
     id: string,
     input: { approve: boolean; note?: string; shopFault?: boolean; expectedRefund?: number },
+    opts: { byStaff?: boolean } = {},
   ) {
     const req = await this.prisma.returnRequest.findUnique({ where: { id }, include: { items: true } });
     if (!req) throw new NotFoundException('Không tìm thấy yêu cầu đổi/trả.');
     assertNotOwnReturn(adminId, req);
+    // Đơn CTV đặt hộ bằng SĐT của nhân viên: tiền hoàn tự vào Ví người trùng SĐT, nên nhân viên không tự duyệt.
+    if (input.approve && opts.byStaff) {
+      const own = await this.prisma.order.findUnique({
+        where: { id: req.orderId },
+        select: { id: true, userId: true, endCustomerKey: true, shippingAddress: true },
+      });
+      if (own && (await isStaffOwnOrder(this.prisma, adminId, own))) {
+        throw new ForbiddenException('Không duyệt trả hàng cho đơn của chính mình (kể cả đơn đặt hộ bằng SĐT của bạn) — nhờ quản trị viên.');
+      }
+    }
     const note = input.note?.trim() || undefined;
 
     if (!input.approve) {

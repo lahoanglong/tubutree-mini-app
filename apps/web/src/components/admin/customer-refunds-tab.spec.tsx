@@ -5,6 +5,8 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from './customer-refunds-tab';
 import { byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminCustomerRefund } from '@/lib/admin-client';
+import { ApiError } from '@/lib/client-api';
+import { markPaidFailure } from '@/lib/customer-refunds-admin';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -28,7 +30,9 @@ const refund = (over: Partial<AdminCustomerRefund> = {}): AdminCustomerRefund =>
   recipientName: 'Trần Thị B',
   customerUserId: null,
   method: 'MANUAL_TRANSFER',
-  status: 'PENDING',
+  status: 'PROCESSING',
+  claimedBy: 'a1',
+  claimedAt: '2026-10-14T03:00:00.000Z',
   reason: 'CANCELLED',
   completedAt: null,
   completedBy: null,
@@ -68,7 +72,7 @@ describe('CustomerRefundsTab — danh sách', () => {
   });
 
   it('dòng chờ chuyển khoản: mã đơn, tên, SĐT, số tiền, lý do, ngày tạo, nút chép SĐT', async () => {
-    const api = mockFetch(LIST([refund()]));
+    const api = mockFetch(LIST([refund({ status: 'PENDING', claimedBy: null, claimedAt: null })]));
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
@@ -83,7 +87,8 @@ describe('CustomerRefundsTab — danh sách', () => {
     expect(container.querySelector('[data-refund-status="PENDING"]')?.textContent).toContain('Chờ chuyển khoản');
     const copy = container.querySelector('button[aria-label*="0912345678"]');
     expect(copy).not.toBeNull();
-    expect(byText(container, 'button', 'Đã chuyển khoản')).not.toBeNull();
+    expect(byText(container, 'button', 'Bắt đầu chuyển khoản')).not.toBeNull();
+    expect(byText(container, 'button', 'Đã chuyển khoản')).toBeNull();
   });
 
   it('lý do RETURNED hiển thị "Đơn trả hàng"; lý do lạ hiển thị nguyên văn, không rỗng', async () => {
@@ -630,7 +635,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   it('D2: khoản huỷ đơn khách đã chọn ngân hàng → dòng hiện đủ tài khoản nhận, có nút chép số tài khoản; chưa khoá thì không có nút "Đã chuyển khoản"', async () => {
     const api = stub({
       list: () => [
-        refund({ kind: 'CANCEL', userId: 'u1', phone: null, recipientName: null, bankName: 'Vietcombank', bankAccountNo: '0071000123456', bankAccountName: 'LE VAN C' }),
+        refund({ status: 'PENDING', claimedBy: null, claimedAt: null, kind: 'CANCEL', userId: 'u1', phone: null, recipientName: null, bankName: 'Vietcombank', bankAccountNo: '0071000123456', bankAccountName: 'LE VAN C' }),
       ],
     });
     const { container } = mount(<CustomerRefundsTab />);
@@ -649,7 +654,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   // R2-LIFECYCLE-2: khách còn đổi sang Ví được tới khi admin khoá — phải khoá TRƯỚC khi chuyển tiền.
   it('R2-LIFECYCLE-2: "Bắt đầu chuyển khoản" mở hộp khoá nơi nhận (không hỏi mã GD), POST /claim, báo thành công và chuyển sang bộ lọc "Đang chuyển khoản"', async () => {
     const api = stub({
-      list: () => [refund({ kind: 'CANCEL', userId: 'u1', bankName: 'Vietcombank', bankAccountNo: '0071000123456', bankAccountName: 'LE VAN C' })],
+      list: () => [refund({ status: 'PENDING', claimedBy: null, claimedAt: null, kind: 'CANCEL', userId: 'u1', bankName: 'Vietcombank', bankAccountNo: '0071000123456', bankAccountName: 'LE VAN C' })],
     });
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
@@ -672,7 +677,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   it('R2-LIFECYCLE-2: khách vừa chọn Ví trước khi admin khoá → đóng hộp, hiện nguyên câu API (KHÔNG chuyển khoản), tải lại', async () => {
     const WALLET_MSG = 'Khách đã chọn nhận khoản này về Ví Tubu lúc 10:05 14/10/2026 và đã được cộng 19.500đ — KHÔNG chuyển khoản. Nếu đã lỡ chuyển, liên hệ khách để thu hồi.';
     const api = stub({
-      list: () => [refund({ kind: 'RETURN', userId: 'u1', bankName: 'MB Bank', bankAccountNo: '0123456789', bankAccountName: 'A' })],
+      list: () => [refund({ status: 'PENDING', claimedBy: null, claimedAt: null, kind: 'RETURN', userId: 'u1', bankName: 'MB Bank', bankAccountNo: '0123456789', bankAccountName: 'A' })],
       claim: () => json({ statusCode: 400, message: WALLET_MSG }, 400),
     });
     const { container } = mount(<CustomerRefundsTab />);
@@ -684,6 +689,24 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(confirmDialog()).toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('KHÔNG chuyển khoản');
     expect(api.lists().length).toBeGreaterThan(1);
+  });
+
+  it('ERR-03: markPaidFailure với 404/409 tiếng Anh của framework → câu tiếng Việt; lời nghiệp vụ giữ nguyên', () => {
+    expect(markPaidFailure(new ApiError('Cannot POST /api/admin/customer-refunds/r1/claim', 404), 'claim').message).not.toContain('Cannot POST');
+    expect(markPaidFailure(new ApiError('Conflict', 409), 'paid').message).not.toBe('Conflict');
+    const business = 'Khoản này đã được Admin An xác nhận chuyển khoản.';
+    expect(markPaidFailure(new ApiError(business, 409), 'paid').message).toBe(business);
+  });
+
+  it('ERR-03: tải danh sách lỗi 500 → báo lý do bằng tiếng Việt, không lộ "Internal server error"', async () => {
+    const api = mockFetch({ '/admin/customer-refunds': { status: 500, body: { statusCode: 500, message: 'Internal server error' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const text = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(text).toContain('Không tải được danh sách hoàn tiền');
+    expect(text).toContain('Máy chủ đang bận');
+    expect(text).not.toContain('Internal server error');
   });
 
   it('R2-LIFECYCLE-2: dòng "Đang chuyển khoản" có "Đã chuyển khoản" (gửi mã GD) và "Trả về hàng chờ"', async () => {
@@ -714,7 +737,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   });
 
   it('nhân viên Kế toán: khoản khách chưa có tài khoản → không có ô nhập tài khoản, nhờ quản trị viên nhập, không gửi', async () => {
-    const api = stub({ list: () => [refund({ kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED' })] });
+    const api = stub({ list: () => [refund({ status: 'PENDING', claimedBy: null, claimedAt: null, kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED' })] });
     const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
     await flush();
     click(byText(container, 'button', 'Bắt đầu chuyển khoản'));
@@ -728,6 +751,14 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(api.claims()).toHaveLength(0);
   });
 
+  it('RC-01: khoản khách cuối đơn CTV chờ chuyển khoản → chỉ có "Bắt đầu chuyển khoản", chưa có "Đã chuyển khoản"', async () => {
+    stub({ list: () => [refund({ kind: 'END_CUSTOMER', userId: null, status: 'PENDING', claimedBy: null, claimedAt: null })] });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    expect(byText(container, 'button', 'Bắt đầu chuyển khoản')).not.toBeNull();
+    expect(byText(container, 'button', 'Đã chuyển khoản')).toBeNull();
+  });
+
   it('nhân viên Kế toán: khoản khách cuối đơn CTV chưa có tài khoản → không xác nhận được, nhờ quản trị viên', async () => {
     const api = stub({ list: () => [refund({ kind: 'END_CUSTOMER', userId: null })] });
     const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
@@ -739,7 +770,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   });
 
   it('BUYERMINI-7: tiền về muộn chưa có tài khoản → hộp "Bắt đầu chuyển khoản" yêu cầu nhập tài khoản khách cung cấp và gửi kèm', async () => {
-    const api = stub({ list: () => [refund({ kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED', phone: null, recipientName: null })] });
+    const api = stub({ list: () => [refund({ status: 'PENDING', claimedBy: null, claimedAt: null, kind: 'LATE_PAYMENT', userId: 'u1', reason: 'CANCELLED', phone: null, recipientName: null })] });
     const { container } = mount(<CustomerRefundsTab />);
     await flush();
     const card = container.querySelector('[data-refund-id="r1"]') as HTMLElement;
@@ -764,7 +795,7 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
   });
 
   it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'] as const)(
-    'MONEY-1: %s của khách cuối đơn CTV lên hộ (userId null) → hiện người nhận + SĐT, không bảo "khách chưa chọn nơi nhận", xác nhận thẳng không cần khoá',
+    'MONEY-1: %s của khách cuối đơn CTV lên hộ (userId null) → hiện người nhận + SĐT, không bảo "khách chưa chọn nơi nhận", đã khoá thì xác nhận được',
     async (kind) => {
       stub({ list: () => [refund({ kind, userId: null, reason: 'CANCELLED' })] });
       const { container } = mount(<CustomerRefundsTab />);

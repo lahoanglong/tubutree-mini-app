@@ -325,21 +325,23 @@ export class CashbackService {
         take: CashbackService.SETTLE_BATCH,
       });
       for (const tx of due) {
-        const settled = await this.prisma.$transaction(async (t) => {
+        const { outcome: settled, reward } = await this.prisma.$transaction(async (t) => {
           const marked = await t.cashbackTransaction.updateMany({
-            where: { id: tx.id, status: 'CONFIRMED' },
+            where: { id: tx.id, status: 'CONFIRMED', confirmedAt: { lte: threshold } },
             data: { status: 'PAID', paidAt: new Date() },
           });
-          if (marked.count === 0) return 'none' as const;
+          if (marked.count === 0) return { outcome: 'none' as const, reward: 0 };
+          // Dòng đã bị CAS khoá: số userReward đọc trước vòng lặp có thể đã đổi (REJECT rồi CONFIRMED lại với số mới).
+          const { userReward } = await t.cashbackTransaction.findUniqueOrThrow({ where: { id: tx.id }, select: { userReward: true } });
           await t.user.update({
             where: { id: tx.userId },
-            data: { cashbackPending: { decrement: tx.userReward } },
+            data: { cashbackPending: { decrement: userReward } },
           });
-          let credited = tx.userReward > 0;
-          if (tx.userReward > 0) {
+          let credited = userReward > 0;
+          if (userReward > 0) {
             const res = await creditWalletUnlessAnonymized(t, {
               userId: tx.userId,
-              delta: tx.userReward,
+              delta: userReward,
               type: 'CASHBACK',
               refType: 'CASHBACK',
               refId: tx.id,
@@ -349,16 +351,16 @@ export class CashbackService {
             if (!res.credited) {
               credited = false;
               this.logger.error(
-                `Cashback ${tx.id} ${tx.userReward}đ: tài khoản ${tx.userId} đã ẩn danh từ ${res.anonymizedAt}, KHÔNG cộng Ví, kế toán xử lý tay.`,
+                `Cashback ${tx.id} ${userReward}đ: tài khoản ${tx.userId} đã ẩn danh từ ${res.anonymizedAt}, KHÔNG cộng Ví, kế toán xử lý tay.`,
               );
             }
           }
-          return credited ? ('credited' as const) : ('skipped' as const);
+          return { outcome: credited ? ('credited' as const) : ('skipped' as const), reward: userReward };
         });
         // Không có tiền vào Ví thì không báo "Hoàn tiền 0đ".
         if (settled === 'credited') {
           await this.notifications
-            .notify(tx.userId, 'CASHBACK_PAID', { amount: tx.userReward.toLocaleString('vi-VN') })
+            .notify(tx.userId, 'CASHBACK_PAID', { amount: reward.toLocaleString('vi-VN') })
             .catch((err) => this.logger.error(`Notify CASHBACK_PAID lỗi: ${err instanceof Error ? err.message : err}`));
         }
       }

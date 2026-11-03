@@ -271,11 +271,15 @@ describe('CashbackService.ingest', () => {
 });
 
 describe('CashbackService.settleConfirmed', () => {
-  function settlePrisma(due: Record<string, unknown>[], markCount = 1) {
+  function settlePrisma(due: Record<string, unknown>[], markCount = 1, lockedReward?: number) {
     const updateMany = jest.fn().mockResolvedValue({ count: markCount });
     const userUpdate = jest.fn().mockResolvedValue({});
     const prisma = {
-      cashbackTransaction: { findMany: jest.fn().mockResolvedValue(due), updateMany },
+      cashbackTransaction: {
+        findMany: jest.fn().mockResolvedValue(due),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ userReward: lockedReward ?? due[0]?.userReward }),
+        updateMany,
+      },
       user: { update: userUpdate },
       $queryRaw: jest.fn().mockResolvedValue([{ metadata: null }]),
     } as unknown as PrismaService;
@@ -298,7 +302,7 @@ describe('CashbackService.settleConfirmed', () => {
   it('CONFIRMED quá hold → set PAID atomic + chuyển pending→Ví + bắn CASHBACK_PAID', async () => {
     const { prisma, updateMany, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);
     await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
-    expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED' });
+    expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'CONFIRMED', confirmedAt: { lte: expect.any(Date) } });
     expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { cashbackPending: { decrement: 35000 } } }));
     expect(ledger).toHaveBeenCalledWith(prisma, {
       userId: 'u1',
@@ -309,6 +313,23 @@ describe('CashbackService.settleConfirmed', () => {
       reason: expect.any(String),
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'CASHBACK_PAID', { amount: '35.000' });
+  });
+
+  it('RC-04: giao dịch bị REJECT rồi CONFIRMED lại với số mới giữa lúc cron lặp → trừ pending và cộng Ví theo số trên dòng đã khoá', async () => {
+    const { prisma, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 70000 }], 1, 30000);
+    ledger.mockClear();
+    (notifications.notify as jest.Mock).mockClear();
+    await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
+    expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { cashbackPending: { decrement: 30000 } } }));
+    expect(ledger).toHaveBeenCalledWith(prisma, expect.objectContaining({ delta: 30000 }));
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'CASHBACK_PAID', { amount: '30.000' });
+  });
+
+  it('RC-04: mốc giữ chỉ tính tới hạn lúc chốt — CAS mang confirmedAt ≤ mốc đã dùng để chọn dòng', async () => {
+    const { prisma, updateMany } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);
+    await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
+    const picked = (prisma.cashbackTransaction.findMany as jest.Mock).mock.calls[0][0].where.confirmedAt.lte as Date;
+    expect(updateMany.mock.calls[0][0].where.confirmedAt.lte).toEqual(picked);
   });
 
   it('userReward = 0 → vẫn chốt PAID nhưng KHÔNG cộng ví và KHÔNG bắn "Hoàn tiền 0đ" (D5-07)', async () => {

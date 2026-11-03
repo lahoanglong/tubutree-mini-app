@@ -319,21 +319,16 @@ export class CustomerRefundsService {
     if (!isEndCustomerRow(row) && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi xác nhận.');
     }
-    // Khách tự đổi được nơi nhận (khoản có chủ tài khoản) thì chỉ xác nhận được khoản đã khoá bằng "Bắt đầu chuyển khoản":
-    // xác nhận thẳng từ hàng chờ là chuyển tiền trong lúc khách vẫn có thể rút về Ví — hoàn hai lần.
-    const lockable = row.userId !== null;
-    if (lockable && row.method === 'MANUAL_TRANSFER' && row.status === 'PENDING') {
+    // Mọi khoản chuyển khoản tay phải khoá bằng "Bắt đầu chuyển khoản" trước khi chuyển tiền: khoản có chủ tài khoản để khách
+    // không rút về Ví giữa chừng; khoản khách cuối đơn CTV để hai người không cùng chuyển một khoản.
+    if (row.method === 'MANUAL_TRANSFER' && row.status === 'PENDING') {
       throw new BadRequestException('Bấm "Bắt đầu chuyển khoản" để khoá nơi nhận trước khi chuyển tiền, rồi mới xác nhận đã chuyển.');
     }
     const guard = await this.claimGuard(adminId, row, 'paid', { confirm: opts.takeOver, reason: opts.takeOverReason });
     // Đang chuyển khoản: chỉ khớp đúng người giữ khoản lúc đọc (chính mình, hoặc người được tiếp quản) — ai đó trả về hàng
-    // chờ hay nhận lại chen giữa thì câu ghi trượt. Khoản khách cuối đơn CTV (không ai đổi nơi nhận) xác nhận thẳng từ hàng chờ.
+    // chờ hay nhận lại chen giữa thì câu ghi trượt.
     const allowed: Prisma.OrderCustomerRefundWhereInput[] =
-      row.status === 'PROCESSING'
-        ? [{ status: 'PROCESSING', claimedBy: guard.claimedBy }]
-        : lockable
-          ? []
-          : [{ status: 'PENDING' }];
+      row.status === 'PROCESSING' ? [{ status: 'PROCESSING', claimedBy: guard.claimedBy }] : [];
     const won = await this.prisma.$transaction(async (tx) => {
       if (allowed.length === 0) return false;
       const res = await tx.orderCustomerRefund.updateMany({

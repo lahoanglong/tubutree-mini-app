@@ -152,6 +152,7 @@ describe('AffiliateService.markPayoutPaid (C-029: đã rút)', () => {
       payout: {
         updateMany: jest.fn().mockResolvedValue({ count }),
         findUniqueOrThrow: jest.fn().mockResolvedValue(row),
+        findUnique: jest.fn().mockResolvedValue(row),
       },
       commission: { updateMany: jest.fn().mockResolvedValue({ count: 2 }) },
       $transaction: jest.fn(),
@@ -175,6 +176,31 @@ describe('AffiliateService.markPayoutPaid (C-029: đã rút)', () => {
     const { svc } = build(p);
     await expect(svc.markPayoutPaid('admin1', 'p1')).rejects.toThrow();
     expect(p.commission.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('RC-02: lệnh đã PAID', () => {
+    const paidRow = payoutRow({ status: 'PAID', paidBy: 'admin1', paidAt: new Date('2026-10-14T03:05:00Z'), bankRef: 'FT-A' });
+    const already = () => {
+      const p = prismaForPayout(0, paidRow);
+      (p as Record<string, unknown>).user = { findUnique: jest.fn().mockResolvedValue({ fullName: 'Admin An' }) };
+      return p;
+    };
+
+    it('người khác bấm sau → 409 nêu người đã xác nhận, giờ VN và mã GD', async () => {
+      const { svc, notify } = build(already());
+      await expect(svc.markPayoutPaid('admin2', 'p1', { bankRef: 'FT-B' })).rejects.toThrow(
+        'Phiếu đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A',
+      );
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('cùng người, cùng mã GD gọi lại → thành công, không báo CTV lần hai', async () => {
+      const p = already();
+      const { svc, notify } = build(p);
+      await expect(svc.markPayoutPaid('admin1', 'p1', { bankRef: 'FT-A' })).resolves.toMatchObject({ id: 'p1' });
+      expect(notify).not.toHaveBeenCalled();
+      expect(p.commission.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   it('chuyển khoản xong → báo CTV số tiền thực nhận kèm mã giao dịch', async () => {
