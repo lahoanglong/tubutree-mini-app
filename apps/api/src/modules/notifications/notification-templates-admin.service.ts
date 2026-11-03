@@ -117,6 +117,7 @@ export class NotificationTemplatesAdminService {
       .map((t) => ({
         ...t,
         delivery: t.code === TIER_DROP_NOTICE_CODE && tierDropZnsId ? ('ZNS' as const) : deliveryOf(t),
+        znsConfigKey: t.code === TIER_DROP_NOTICE_CODE && tierDropZnsId ? TIER_DROP_ZNS_TEMPLATE_KEY : null,
         sent30d: sent.get(t.code) ?? { INAPP: 0, ZNS: 0 },
         znsFailed30d: failed.get(t.code) ?? 0,
         znsLastError: lastError.get(t.code) ?? null,

@@ -143,6 +143,25 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     expect(container.querySelector('[data-template="ORDER_CONFIRMED"] [data-zns-failure]')).toBeNull();
   });
 
+  it('NTF-01: nhắc hạ hạng ZNS bằng khoá cấu hình riêng → thẻ nói rõ mã lấy từ khoá nào, mẫu khác không có dòng đó', async () => {
+    const tier = {
+      id: 'nt-tier',
+      code: 'TIER_DROP_NOTICE',
+      channel: 'INAPP',
+      zaloTemplateId: null,
+      bodyTemplate: 'Hạng sắp hết hạn.',
+      delivery: 'ZNS',
+      sent30d: { INAPP: 0, ZNS: 0 },
+      znsConfigKey: 'loyalty.tier_drop_zns_template_id',
+    };
+    const m = mockFetch({ '/admin/notification-templates': { body: [tier, ...TEMPLATES] } });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    expect(container.querySelector('[data-template="TIER_DROP_NOTICE"]')?.textContent).toContain('loyalty.tier_drop_zns_template_id');
+    expect(container.querySelector('[data-template="ORDER_CONFIRMED"]')?.textContent).not.toContain('loyalty.tier_drop_zns_template_id');
+  });
+
   it('nhân viên Marketing: chỉ thấy mẫu khuyến mãi, sửa nội dung được, không đổi kênh / mã mẫu ZNS', async () => {
     const promo = {
       id: 'nt-flash',

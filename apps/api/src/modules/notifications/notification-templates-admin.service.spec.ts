@@ -276,6 +276,11 @@ describe('NotificationTemplatesAdminService.list — nhắc hạ hạng gửi ZN
     expect((await build('123456').list())[0]!.delivery).toBe('ZNS');
   });
 
+  it('nói rõ mã ZNS lấy từ khoá cấu hình nào; mẫu khác và khoá trống thì không', async () => {
+    expect((await build('123456').list())[0]!.znsConfigKey).toBe('loyalty.tier_drop_zns_template_id');
+    expect((await build('').list())[0]!.znsConfigKey).toBeNull();
+  });
+
   it.each([[''], ['abc'], [undefined]])('khoá trống/sai (%p) → vẫn "Chỉ trong app"', async (key) => {
     expect((await build(key).list())[0]!.delivery).toBe('INAPP');
   });
