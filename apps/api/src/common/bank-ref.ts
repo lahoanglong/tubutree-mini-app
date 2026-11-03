@@ -16,7 +16,7 @@ export async function lockBankRef(tx: Prisma.TransactionClient, bankRef: string)
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${bankRef.toLowerCase()}`}))`;
 }
 
-/** Mã giao dịch đã ghi ở một đơn bất kỳ (đơn lẻ hay đơn đại lý, khác `exceptOrderId`): trả mã đơn, không có thì null. */
+/** Mã giao dịch đã ghi ở một đơn bất kỳ (xác nhận đơn lẻ/đại lý hoặc khoản hoàn tiền về muộn; khác `exceptOrderId`): trả mã đơn, không có thì null. */
 export async function findOrderUsingBankRef(db: Db, bankRef: string, exceptOrderId?: string) {
   const ref = bankRef.toLowerCase();
   const history = await db.orderStatusHistory.findMany({
@@ -27,7 +27,19 @@ export async function findOrderUsingBankRef(db: Db, bankRef: string, exceptOrder
     },
     select: { orderId: true, note: true },
   });
-  const usedIds = history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId);
+  // Khoản hoàn tiền về muộn chỉ giữ mã trong adminNote, không có dòng lịch sử đơn: tra thêm để cùng một mã không vừa xác nhận đơn vừa sinh khoản hoàn.
+  const lateRefunds = await db.orderCustomerRefund.findMany({
+    where: {
+      kind: 'LATE_PAYMENT',
+      adminNote: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' },
+      ...(exceptOrderId ? { orderId: { not: exceptOrderId } } : {}),
+    },
+    select: { orderId: true, adminNote: true },
+  });
+  const usedIds = [
+    ...history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId),
+    ...lateRefunds.filter((r) => noteHasBankRef(r.adminNote, ref)).map((r) => r.orderId),
+  ];
   return usedIds.length ? db.order.findFirst({ where: { id: { in: usedIds } }, select: { code: true } }) : null;
 }
 

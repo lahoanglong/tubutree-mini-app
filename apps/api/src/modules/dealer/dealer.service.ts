@@ -41,6 +41,7 @@ const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   REFUNDED: 'Đã hoàn tiền',
   FAILED: 'Thanh toán lỗi',
 };
+import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { assertBankRefUnusedByOrder, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 
@@ -581,7 +582,8 @@ export class DealerService {
   ) {
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
     // Người đã mất vai trò đại lý mà còn nợ vẫn ghi nhận được (bên dưới), nên kế toán vốn là đại lý cũ có thể tự xoá nợ của mình.
-    if (opts.byStaff && dealerUserId === adminId) {
+    // So cả tài khoản gốc sau gộp (mergedIntoId): sổ nợ nằm ở tài khoản cũ đã gộp vào kế toán vẫn là sổ của chính họ.
+    if (opts.byStaff && (dealerUserId === adminId || (await canonicalUserId(this.prisma, dealerUserId)) === (await canonicalUserId(this.prisma, adminId)))) {
       throw new ForbiddenException('Không ghi nhận trả nợ cho sổ công nợ của chính mình — nhờ quản trị viên.');
     }
     const dealer = await this.prisma.user.findUnique({

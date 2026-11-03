@@ -163,6 +163,7 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
       user: { findUnique: jest.fn().mockResolvedValue(dealer) },
       $executeRaw: jest.fn().mockResolvedValue(1),
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue(opts.bankRefHistory ?? []) },
+      orderCustomerRefund: { findMany: jest.fn().mockResolvedValue([]) },
       order: { findFirst: jest.fn().mockResolvedValue(opts.bankRefOrder ?? null) },
       dealerCreditLedger: {
         findFirst,
@@ -272,6 +273,14 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
   it('RB-01: kế toán tự ghi nhận trả nợ cho sổ công nợ của chính mình → 403, không tạo dòng sổ', async () => {
     const { svc, ledgerCreate } = build({ dealer: { id: 'kt1', role: 'STAFF' }, existingClaim: { delta: 1 }, debt: 500_000 });
     await expect(svc.adminRecordCreditPayment('kt1', 'kt1', 100_000, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('RB-01: sổ nợ ở tài khoản cũ đã gộp vào chính kế toán (mergedIntoId) → 403, không tạo dòng sổ', async () => {
+    const { svc, prisma, ledgerCreate } = build({ dealer: { id: 'u1', role: 'DEALER' }, debt: 500_000 });
+    const merged: Record<string, { mergedIntoId: string | null }> = { u1: { mergedIntoId: 'kt1' }, kt1: { mergedIntoId: null } };
+    (prisma.user as { findUnique: jest.Mock }).findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => merged[where.id] ?? null);
+    await expect(svc.adminRecordCreditPayment('kt1', 'u1', 100_000, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
     expect(ledgerCreate).not.toHaveBeenCalled();
   });
 

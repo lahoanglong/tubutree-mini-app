@@ -11,7 +11,7 @@ import { createUser, deleteItData, randCode, summarize, warmPool } from './helpe
  * ERR-01: ghi giảm công nợ đại lý KHÔNG kèm mã giao dịch vẫn phải chống trừ hai lần khi kế toán thử lại sau lỗi mạng. Web gửi
  * Idempotency-Key riêng cho mỗi khoản nhập; cùng khoá gọi lại (tuần tự hay song song) chỉ ra đúng một dòng PAYMENT.
  */
-describe('Ghi giảm công nợ thử lại cùng khoá (real Postgres)', () => {
+describe('Chốt phía API: ghi giảm công nợ thử lại cùng khoá (real Postgres; không chứng minh panel gửi đúng khoá, việc đó do dealer-credit-panel.spec.tsx)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let dealer: DealerService;

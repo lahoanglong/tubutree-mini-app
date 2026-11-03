@@ -319,4 +319,37 @@ describe('Admin confirm-payment race (real Postgres)', () => {
     await expect(admin.confirmOrderPayment('admin-a', o2.order.id, { bankRef: ref })).rejects.toThrow(new RegExp(`đơn ${o1.order.code}`));
     expect((await prisma.order.findUniqueOrThrow({ where: { id: o2.order.id } })).paymentStatus).toBe('UNPAID');
   });
+
+  it('RB-03 (đường ghi muộn): FT1 đã xác nhận đơn A → ghi tiền về muộn cho đơn huỷ B với cùng FT1 → 409, không có khoản hoàn', async () => {
+    const [a, b] = await Promise.all([bankTransferOrder(), bankTransferOrder(300_000)]);
+    await prisma.order.update({ where: { id: b.order.id }, data: { status: 'CANCELLED' } });
+    const ref = `FT-RB03L-${Date.now()}`;
+    await admin.confirmOrderPayment('admin-a', a.order.id, { bankRef: ref });
+    await expect(admin.confirmOrderPayment('admin-a', b.order.code, { bankRef: ref.toLowerCase() })).rejects.toThrow(new RegExp(`đơn ${a.order.code}`));
+    expect(await prisma.orderCustomerRefund.count({ where: { orderId: b.order.id } })).toBe(0);
+  });
+
+  it('RB-03 (chiều ngược): FT1 đã ghi tiền về muộn cho đơn huỷ B → xác nhận đơn A với FT1 → 409, A vẫn chưa trả', async () => {
+    const [a, b] = await Promise.all([bankTransferOrder(), bankTransferOrder(300_000)]);
+    await prisma.order.update({ where: { id: b.order.id }, data: { status: 'CANCELLED' } });
+    const ref = `FT-RB03R-${Date.now()}`;
+    await admin.confirmOrderPayment('admin-a', b.order.code, { bankRef: ref });
+    await expect(admin.confirmOrderPayment('admin-a', a.order.id, { bankRef: ref })).rejects.toThrow(new RegExp(`đơn ${b.order.code}`));
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: a.order.id } })).paymentStatus).toBe('UNPAID');
+  });
+
+  it('RB-03 (song song): cùng FT1 xác nhận đơn A và ghi muộn cho đơn huỷ B cùng lúc → đúng một bên thành công', async () => {
+    const [a, b] = await Promise.all([bankTransferOrder(), bankTransferOrder(300_000)]);
+    await prisma.order.update({ where: { id: b.order.id }, data: { status: 'CANCELLED' } });
+    const ref = `FT-RB03P-${Date.now()}`;
+    const results = await Promise.allSettled([
+      admin.confirmOrderPayment('admin-a', a.order.id, { bankRef: ref }),
+      admin.confirmOrderPayment('admin-b', b.order.code, { bankRef: ref }),
+    ]);
+    const s = summarize(results);
+    expect(s.fulfilled).toHaveLength(1);
+    expect(s.rejected).toHaveLength(1);
+    const paid = (await prisma.order.count({ where: { id: a.order.id, paymentStatus: 'PAID' } })) + (await prisma.orderCustomerRefund.count({ where: { orderId: b.order.id } }));
+    expect(paid).toBe(1);
+  });
 });

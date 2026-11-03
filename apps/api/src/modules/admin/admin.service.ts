@@ -1188,6 +1188,7 @@ export class AdminService {
           amount: received,
           source: 'ADMIN',
           refKey: ADMIN_LATE_PAYMENT_REF,
+          ...(bankRef ? { bankRef } : {}),
           note: [`${opts.byStaff ? 'Kế toán' : 'Admin'} ghi nhận tiền về muộn`, bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
         },
       );
