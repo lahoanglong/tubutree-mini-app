@@ -18,6 +18,25 @@ import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 const newIdempotencyKey = () =>
   globalThis.crypto?.randomUUID?.() ?? `dp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
+type SentSet = { key: string; amount: number; bankRef: string };
+const sentStorageKey = (userId: string) => `dealer-credit-idem:${userId}`;
+const readSent = (userId: string): SentSet | null => {
+  try {
+    const v = JSON.parse(window.sessionStorage.getItem(sentStorageKey(userId)) ?? 'null');
+    return v && typeof v.key === 'string' && typeof v.amount === 'number' && typeof v.bankRef === 'string' ? v : null;
+  } catch {
+    return null;
+  }
+};
+const writeSent = (userId: string, v: SentSet | null) => {
+  try {
+    if (v) window.sessionStorage.setItem(sentStorageKey(userId), JSON.stringify(v));
+    else window.sessionStorage.removeItem(sentStorageKey(userId));
+  } catch {
+    // Trình duyệt chặn lưu trữ: chỉ mất khả năng giữ khoá qua lúc gập dòng.
+  }
+};
+
 /**
  * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ NỢ
  * NGAY LẬP TỨC, không admin nào kiểm tra sao kê thật, không chặn số tiền vượt dư nợ — đại lý có thể
@@ -51,8 +70,8 @@ export function DealerCreditPanel({
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
-  // Khoá chống trừ nợ hai lần: một khoản nhập = một khoá, giữ nguyên khi thử lại sau lỗi mạng/hết giờ (máy chủ có thể đã ghi rồi), đổi khi sửa số/mã hoặc sau khi thành công.
-  const idemKey = useRef<string | null>(null);
+  // Khoá chống trừ nợ hai lần gắn với bộ giá trị {số tiền, mã GD} đã gửi: sau lỗi mạng/hết giờ (máy chủ có thể đã ghi rồi) gõ lại đúng bộ đó vẫn dùng khoá cũ, kể cả sau khi gập dòng (sessionStorage); chỉ bộ khác hoặc thành công mới đổi khoá.
+  const sent = useRef<SentSet | null>(null);
   const { confirm, dialog } = useConfirm();
 
   const userId = order.user?.id;
@@ -68,8 +87,12 @@ export function DealerCreditPanel({
     mutationFn: () => {
       const amt = Math.trunc(Number(amount));
       // Mã giao dịch được máy chủ kiểm trùng riêng, không dùng làm khoá.
-      idemKey.current ??= newIdempotencyKey();
-      const key = idemKey.current;
+      const ref = bankRef.trim();
+      const stored = sent.current ?? readSent(userId as string);
+      const set: SentSet = stored && stored.amount === amt && stored.bankRef === ref ? stored : { key: newIdempotencyKey(), amount: amt, bankRef: ref };
+      sent.current = set;
+      writeSent(userId as string, set);
+      const key = set.key;
       return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key).then((r) => ({ ...r, amount: amt }));
     },
     onSuccess: (r) => {
@@ -81,7 +104,8 @@ export function DealerCreditPanel({
             ? `Mã giao dịch này đã có trong sổ từ lần ghi trước nên không ghi thêm. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
             : `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.`,
       });
-      idemKey.current = null;
+      sent.current = null;
+      writeSent(userId as string, null);
       setAmount('');
       setBankRef('');
       setNote('');
@@ -164,10 +188,7 @@ export function DealerCreditPanel({
                     min={1}
                     aria-label="Số tiền đã nhận (đ)"
                     value={amount}
-                    onChange={(e) => {
-                      idemKey.current = null;
-                      setAmount(e.target.value);
-                    }}
+                    onChange={(e) => setAmount(e.target.value)}
                     disabled={busy}
                     className={`${FIELD_XS} w-full`}
                   />
@@ -177,10 +198,7 @@ export function DealerCreditPanel({
                     type="text"
                     maxLength={DEALER_BANK_REF_MAX}
                     value={bankRef}
-                    onChange={(e) => {
-                      idemKey.current = null;
-                      setBankRef(e.target.value);
-                    }}
+                    onChange={(e) => setBankRef(e.target.value)}
                     disabled={busy}
                     className={`${FIELD_XS} w-full`}
                   />
