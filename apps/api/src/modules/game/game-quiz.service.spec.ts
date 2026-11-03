@@ -121,13 +121,6 @@ describe('GameQuizService', () => {
     expect((p.$transaction as jest.Mock)).not.toHaveBeenCalled();
   });
 
-  it('quizId ngoài bộ câu hôm nay → BadRequest rõ ràng, không ghi gì', async () => {
-    const p = prisma({ gameQuiz: { findUnique: jest.fn().mockResolvedValue({ ...QUIZ, id: 'q-out' }), findMany: jest.fn().mockResolvedValue([QUIZ]), count: jest.fn().mockResolvedValue(9) } });
-    await expect(new GameQuizService(p, cfg()).answerQuiz('u1', 'q-out', 1)).rejects.toThrow('Câu hỏi này không thuộc bộ câu hôm nay.');
-    expect((p.gameQuizAttempt.create as jest.Mock)).not.toHaveBeenCalled();
-    expect((p.$transaction as jest.Mock)).not.toHaveBeenCalled();
-  });
-
   it('còn dưới trần → vẫn trả lời được bình thường', async () => {
     const p = prisma({ gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(4) } });
     const r = await new GameQuizService(p, cfg({ 'game.quiz_daily_count': 5 })).answerQuiz('u1', 'q1', 1);

@@ -6,10 +6,7 @@ import { RewardPointsService } from '../../src/modules/wallet/reward-points.serv
 import { SeasonPassService } from '../../src/modules/game/season-pass.service';
 import { createOrder, createRealUser, randCode, setConfig } from './helpers';
 
-/**
- * VX-01: phần thưởng Cao cấp chỉ mở khi khách có gói định kỳ ACTIVE đã giao ít nhất một đơn định kỳ (DELIVERED).
- * Trước đó chỉ cần một gói ACTIVE: hẹn ngày xa (chưa ra đơn) hoặc tự huỷ đơn đầu rồi huỷ gói vẫn nhận được.
- */
+/** Phần thưởng Cao cấp chỉ mở khi khách có gói định kỳ ACTIVE đã giao ít nhất một đơn định kỳ (DELIVERED). */
 describe('SeasonPassService Cao cấp theo gói đã giao (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;

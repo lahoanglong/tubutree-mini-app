@@ -127,8 +127,9 @@ export class GameQuizService {
     const dayKey = vnDateKey();
     const dayStart = this.startOfDay(new Date());
 
-    // Đếm + ghi + cộng nước trong một tx giữ khoá theo user: các câu KHÁC nhau gửi song song phải xếp hàng,
-    // nếu không đếm-rồi-ghi cho lọt nhiều hơn trần. Unique (userId, quizId, dayKey) vẫn chặn trả lời trùng cùng câu.
+    // Trong một ngày, bộ câu hôm nay (≤ trần) cộng unique (userId, quizId, dayKey) đã đủ chặn. Khoá theo user chỉ là lớp phụ cho lúc
+    // bộ câu đổi giữa ngày (admin lưu thêm câu hoặc đổi số câu/ngày): khi đó câu chưa trả lời có thể nhiều hơn phần trần còn lại,
+    // và đếm-rồi-ghi không khoá sẽ cho các câu khác nhau gửi song song lọt quá trần.
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`game-quiz:${userId}`}, 0))`;
       const answeredToday = await tx.gameQuizAttempt.count({ where: { userId, attemptedAt: { gte: dayStart } } });

@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { GameEconomyService } from '../game/game-economy.service';
+import { vnDateKey } from '../../common/vn-time';
 import { planCheckInSeeds, projectCheckIn } from '../game/checkin-streak';
 
 type PointsResult = Awaited<ReturnType<LoyaltyService['dailyCheckIn']>>;
@@ -34,21 +35,21 @@ export class DailyCheckInService {
     private readonly economy: GameEconomyService,
   ) {}
 
-  private async waterToday(userId: string) {
+  private async waterToday(userId: string, today: string = vnDateKey()) {
     const p = await this.prisma.gameProfile.findUnique({
       where: { userId },
       select: { lastCheckInAt: true, totalSeeds: true, streakDays: true, streakFreezes: true },
     });
-    const proj = projectCheckIn(p);
+    const proj = projectCheckIn(p, today);
     return { done: proj.doneToday, totalSeeds: p?.totalSeeds ?? 0, first: !p?.lastCheckInAt, proj };
   }
 
-  private async waterDoneToday(userId: string): Promise<boolean> {
-    return (await this.waterToday(userId)).done;
+  private async waterDoneToday(userId: string, now: Date): Promise<boolean> {
+    return (await this.waterToday(userId, vnDateKey(now))).done;
   }
 
-  private async pointsDoneToday(userId: string): Promise<boolean> {
-    return (await this.loyalty.getDailyCheckInStatus(userId)).checkedInToday;
+  private async pointsDoneToday(userId: string, now: Date): Promise<boolean> {
+    return (await this.loyalty.getDailyCheckInStatus(userId, now)).checkedInToday;
   }
 
   /**
@@ -73,8 +74,10 @@ export class DailyCheckInService {
   }
 
   async run(userId: string): Promise<DailyCheckInResult> {
-    const points = await this.part(() => this.loyalty.dailyCheckIn(userId), () => this.pointsDoneToday(userId));
-    const water = await this.part(() => this.economy.checkIn(userId), () => this.waterDoneToday(userId));
+    // Một mốc thời gian cho cả lượt: bấm sát 00:00 thì Điểm Xanh và giọt nước vẫn cùng một ngày VN, dù phần nào chạy sau nửa đêm.
+    const now = new Date();
+    const points = await this.part(() => this.loyalty.dailyCheckIn(userId, now), () => this.pointsDoneToday(userId, now));
+    const water = await this.part(() => this.economy.checkIn(userId, now), () => this.waterDoneToday(userId, now));
 
     const pending: Array<'points' | 'water'> = [];
     if (points.error) pending.push('points');

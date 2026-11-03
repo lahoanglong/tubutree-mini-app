@@ -87,6 +87,10 @@ export class GameOrderWaterService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`;
+        // Trạng thái đọc ngoài tx có thể cũ: duyệt trả cả đơn commit giữa chừng rồi reverseForOrder thấy chưa cộng gì. Đọc lại sau
+        // khi giữ khoá users (reverseForOrder cũng khoá users trước) thì hoặc thấy đơn đã trả, hoặc lần đảo chờ lần cộng này.
+        const [fresh] = await tx.$queryRaw<{ status: string }[]>`SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
+        if (!fresh || fresh.status !== 'DELIVERED') return { granted: 0, skipped: 'NOT_DELIVERED' as const };
         const profile = await tx.$queryRaw<{ userId: string }[]>`
           SELECT "userId" FROM "game_profiles" WHERE "userId" = ${order.userId} FOR UPDATE`;
         const existing = await tx.gameWaterEvent.findUnique({
@@ -196,7 +200,7 @@ export class GameOrderWaterService {
       const pending = await tx.gameWaterEvent.findMany({
         where: { userId, reason: ORDER_WATER_REASON, pending: true },
         orderBy: { createdAt: 'asc' },
-        select: { id: true, createdAt: true },
+        select: { id: true, createdAt: true, refId: true },
       });
       const weekLeft = new Map<number, number>();
       const leftOf = async (weekStart: Date) => {
@@ -213,6 +217,12 @@ export class GameOrderWaterService {
       };
       let total = 0;
       for (const ev of pending) {
+        // Đơn (hoặc cả nhóm thanh toán) đã trả/huỷ hết mà dòng chờ vẫn còn: lần đảo đã chạy trước đó mà không tắt được dòng này
+        // (vd. duyệt trả cả đơn từ trước khi có đường đảo nước). Tắt dòng, không cộng.
+        if (ev.refId && !(await this.hasLiveOrder(tx, ev.refId))) {
+          await tx.gameWaterEvent.update({ where: { id: ev.id }, data: { pending: false, delta: 0, expiredAt: now } });
+          continue;
+        }
         if (perOrder <= 0 || ev.createdAt < oldest) {
           await tx.gameWaterEvent.update({ where: { id: ev.id }, data: { pending: false, delta: 0, expiredAt: now } });
           continue;
@@ -227,5 +237,15 @@ export class GameOrderWaterService {
       if (total > 0) await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: { increment: total } } });
       return total;
     });
+  }
+
+  /** Còn đơn nào của lần thanh toán `refId` (id đơn, hoặc `grp:<checkoutGroup>`) chưa trả/huỷ. Không thấy đơn nào thì coi là còn: không đoán. */
+  private async hasLiveOrder(tx: Prisma.TransactionClient, refId: string): Promise<boolean> {
+    const where = refId.startsWith('grp:') ? { checkoutGroup: refId.slice(4) } : { id: refId };
+    const [total, closed] = await Promise.all([
+      tx.order.count({ where }),
+      tx.order.count({ where: { ...where, status: { in: ['RETURNED', 'CANCELLED'] } } }),
+    ]);
+    return total === 0 || closed < total;
   }
 }
