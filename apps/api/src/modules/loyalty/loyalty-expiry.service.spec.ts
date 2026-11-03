@@ -18,6 +18,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import { milestoneGrantReason } from '../wallet/referral-reward';
+import { formatVnDate } from '../../common/vn-time';
 
 const DAY = 864e5;
 const NOW = new Date('2026-07-05T00:00:00.000Z');
@@ -1368,6 +1369,20 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     expect(code).toBe('POINTS_EXPIRING');
     expect(vars.points).toBe('40');
     expect(typeof vars.date).toBe('string');
+  });
+
+  it('TK-04: hai lô trong cửa sổ khác ngày VN → tin ghi số điểm của lô sớm nhất cùng ngày với nó, khớp trang Điểm Xanh', async () => {
+    const early = new Date(Date.now() + 2 * DAY);
+    const later = new Date(Date.now() + 6 * DAY);
+    const { svc, notify } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 100, '2025-08-01', early.toISOString()), tx('b', 5000, '2025-08-02', later.toISOString())],
+      recentLog: null,
+    });
+    await svc.remindExpiringPoints();
+    const [, , vars] = notify.mock.calls[0];
+    expect(vars.points).toBe('100');
+    expect(vars.date).toBe(formatVnDate(early));
   });
 
   it('đã nhắc trong kỳ (NotificationLog gần đây) → bỏ qua, KHÔNG notify (dedup)', async () => {
