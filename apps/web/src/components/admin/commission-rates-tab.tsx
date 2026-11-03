@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { importDealerPrices, listDealerTiers, previewDealerPrices, type DealerPriceImportStatus, type DealerPricePreview } from '@/lib/admin-client';
 import {
@@ -63,8 +63,34 @@ function RateList() {
   const tiers = useQuery({ queryKey: ['admin-dealer-tiers'], queryFn: listDealerTiers, staleTime: 60_000 });
   const tierNames = useMemo(() => new Map((tiers.data ?? []).map((t) => [t.id, t.name])), [tiers.data]);
   const first = list.data?.pages[0];
-  const products = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const products = useMemo(() => list.data?.pages.flatMap((p) => p.items) ?? [], [list.data]);
   const maxRate = first?.maxRate ?? 50;
+  // Sản phẩm vừa lưu đủ % rơi khỏi bộ lọc "chưa có %" sau khi tải lại; giữ thẻ (bản đã cập nhật) tại chỗ với dấu "Đã đủ %"
+  // tới khi đổi bộ lọc hoặc tải lại trang.
+  const [kept, setKept] = useState<Map<string, CommissionProduct>>(new Map());
+  const prevIds = useRef<string[]>([]);
+  const resetKept = () => {
+    prevIds.current = [];
+    setKept(new Map());
+  };
+  const shownProducts = useMemo(() => {
+    const fresh = new Map(products.map((p) => [p.id, p]));
+    const out: { product: CommissionProduct; done: boolean }[] = [];
+    const placed = new Set<string>();
+    for (const id of prevIds.current) {
+      const cur = fresh.get(id);
+      if (cur) out.push({ product: cur, done: false });
+      else if (kept.has(id)) out.push({ product: kept.get(id)!, done: true });
+      else continue;
+      placed.add(id);
+    }
+    for (const p of products) if (!placed.has(p.id)) out.push({ product: p, done: false });
+    return out;
+  }, [products, kept]);
+  useEffect(() => {
+    prevIds.current = shownProducts.map((x) => x.product.id);
+  }, [shownProducts]);
+  const onSaved = (p: CommissionProduct) => setKept((m) => new Map(m).set(p.id, p));
 
   return (
     <section aria-label="% hoa hồng theo sản phẩm" className="space-y-3">
@@ -88,10 +114,16 @@ function RateList() {
           placeholder="Tìm tên sản phẩm hoặc SKU"
           maxLength={64}
           value={typed}
-          onChange={(e) => setTyped(e.target.value)}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            resetKept();
+          }}
           className={`${FIELD_XS} w-full sm:w-72`}
         />
-        <button type="button" aria-pressed={missingOnly} onClick={() => setMissingOnly((v) => !v)} className={chipClass(missingOnly)}>
+        <button type="button" aria-pressed={missingOnly} onClick={() => {
+            setMissingOnly((v) => !v);
+            resetKept();
+          }} className={chipClass(missingOnly)}>
           Chỉ SP còn biến thể chưa có %
         </button>
       </div>
@@ -105,14 +137,14 @@ function RateList() {
           </button>
         </p>
       )}
-      {list.isSuccess && products.length === 0 && (
+      {list.isSuccess && shownProducts.length === 0 && (
         <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
           {q ? `Không có sản phẩm nào khớp "${q}".` : missingOnly ? 'Không còn sản phẩm nào thiếu % hoa hồng.' : 'Chưa có sản phẩm nào.'}
         </p>
       )}
       <ul className="space-y-3">
-        {products.map((p) => (
-          <ProductCard key={p.id} product={p} maxRate={maxRate} defaultRate={first?.defaultRate ?? 8} tierNames={tierNames} />
+        {shownProducts.map(({ product, done }) => (
+          <ProductCard key={product.id} product={product} done={done} onSaved={onSaved} maxRate={maxRate} defaultRate={first?.defaultRate ?? 8} tierNames={tierNames} />
         ))}
       </ul>
       {list.hasNextPage && (
@@ -189,11 +221,15 @@ function FillMissing({ missingTubu, maxRate }: { missingTubu: number; maxRate: n
 
 function ProductCard({
   product: p,
+  done,
+  onSaved,
   maxRate,
   defaultRate,
   tierNames,
 }: {
   product: CommissionProduct;
+  done: boolean;
+  onSaved: (p: CommissionProduct) => void;
   maxRate: number;
   defaultRate: number;
   tierNames: Map<string, string>;
@@ -208,6 +244,7 @@ function ProductCard({
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đặt ${formatRate(r.affiliateRate)} cho ${r.updated} biến thể đang bán.` });
       setText('');
+      onSaved({ ...p, variations: p.variations.map((v) => (v.isActive ? { ...v, affiliateRate: r.affiliateRate } : v)) });
       void qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không đặt được %.') }),
@@ -229,6 +266,7 @@ function ProductCard({
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-0 break-words text-sm font-semibold text-stone-900">{p.name}</span>
         {!p.isActive && <ToneBadge tone="neutral">Ngừng bán</ToneBadge>}
+        {done && <ToneBadge tone="success">Đã đủ %</ToneBadge>}
         {p.isPartner && <ToneBadge tone="info">Gian hàng đối tác</ToneBadge>}
         {p.approvalStatus !== 'APPROVED' && <ToneBadge tone="warning">Chưa duyệt</ToneBadge>}
         {p.affiliateBlocked && (
@@ -261,7 +299,7 @@ function ProductCard({
       )}
       <ul className="mt-2 divide-y divide-stone-200 border-t border-stone-200">
         {p.variations.map((v) => (
-          <VariationRow key={v.id} v={v} blocked={p.affiliateBlocked} partner={p.isPartner} maxRate={maxRate} defaultRate={defaultRate} tierNames={tierNames} />
+          <VariationRow key={v.id} v={v} onRateSaved={(rate) => onSaved({ ...p, variations: p.variations.map((x) => (x.id === v.id ? { ...x, affiliateRate: rate } : x)) })} blocked={p.affiliateBlocked} partner={p.isPartner} maxRate={maxRate} defaultRate={defaultRate} tierNames={tierNames} />
         ))}
       </ul>
       {dialog}
@@ -271,6 +309,7 @@ function ProductCard({
 
 function VariationRow({
   v,
+  onRateSaved,
   blocked,
   partner,
   maxRate,
@@ -278,6 +317,7 @@ function VariationRow({
   tierNames,
 }: {
   v: CommissionVariation;
+  onRateSaved: (rate: number | null) => void;
   blocked: boolean;
   partner: boolean;
   maxRate: number;
@@ -299,6 +339,7 @@ function VariationRow({
     mutationFn: (rate: number | null) => setVariationRate(v.id, rate),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.affiliateRate === null ? 'Đã về mức mặc định.' : `Đã lưu ${formatRate(r.affiliateRate)}.` });
+      onRateSaved(r.affiliateRate);
       void qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không lưu được %.') }),

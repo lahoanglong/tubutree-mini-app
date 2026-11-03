@@ -8,6 +8,7 @@ import {
   followerStat,
   nextShopSort,
   ownerTierPending,
+  nextTierName,
   ownerTierPreview,
   pageWindow,
   planShopSections,
@@ -153,6 +154,14 @@ describe('ownerTierPreview', () => {
     expect(ownerTierPreview(null)).toBeNull();
     expect(ownerTierPreview(undefined)).toBeNull();
     expect(ownerTierPreview({ tier: ALL[1]!, allTiers: [] })).toEqual({ name: 'Đồng', emoji: '🌿', publicBadge: false });
+  });
+
+  it('nextTierName: chỉ có tên khi chủ shop đang ở bậc thấp nhất và còn bậc kế', () => {
+    expect(nextTierName({ tier: ALL[0]!, allTiers: ALL })).toBe('Đồng');
+    expect(nextTierName({ tier: ALL[1]!, allTiers: ALL })).toBeNull();
+    expect(nextTierName({ tier: ALL[0]!, allTiers: [ALL[0]!] })).toBeNull();
+    expect(nextTierName({ tier: ALL[0]!, allTiers: [] })).toBeNull();
+    expect(nextTierName(null)).toBeNull();
   });
 
   it('ghép với publicTier ra đúng cái khách thấy trên /s/:slug', () => {

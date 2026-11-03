@@ -124,6 +124,53 @@ function prismaForAddress(opts: {
 
 const GEO = { provinceCode: '84_VN01', wardCode: '84_VN01_00004' };
 
+describe('UsersService.updateMe: tên có < > (BAOMAT-09)', () => {
+  function svcWithName(stored: string) {
+    const update = jest.fn().mockResolvedValue(fakeUser);
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findUnique = jest.fn().mockResolvedValue({ fullName: stored });
+    const prisma = { user: { update, updateMany, findUnique } } as unknown as PrismaService;
+    return { svc: new UsersService(prisma), update };
+  }
+  it('tên đang lưu "A", gửi "<b>x" → 400, không ghi', async () => {
+    const { svc, update } = svcWithName('A');
+    await expect(svc.updateMe('u1', { fullName: '<b>x' })).rejects.toThrow('Tên không được chứa ký tự < hoặc >.');
+    expect(update).not.toHaveBeenCalled();
+  });
+  it('tên đang lưu "Hoa <3", gửi lại "Hoa <3" kèm dob → ghi được', async () => {
+    const { svc, update } = svcWithName('Hoa <3');
+    await svc.updateMe('u1', { fullName: 'Hoa <3', dob: '1995-03-20' });
+    expect(update).toHaveBeenCalled();
+  });
+  it('tên đang lưu " Hoa <3" (khoảng trắng thừa từ Zalo), client gửi đã trim → ghi được', async () => {
+    const { svc, update } = svcWithName(' Hoa <3 ');
+    await svc.updateMe('u1', { fullName: 'Hoa <3' });
+    expect(update).toHaveBeenCalled();
+  });
+  it('tên đang lưu "Hoa <3", gửi "Hoa <4" → 400', async () => {
+    const { svc, update } = svcWithName('Hoa <3');
+    await expect(svc.updateMe('u1', { fullName: 'Hoa <4' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('UsersService.createAddress: trần số địa chỉ (BAOMAT-07)', () => {
+  it('đã đủ 20 địa chỉ → từ chối với câu rõ, không ghi', async () => {
+    const { prisma, create, updateMany } = prismaForAddress({ count: 20 });
+    await expect(new UsersService(prisma).createAddress('u1', { line1: 'A', ...GEO } as never)).rejects.toThrow(
+      'Bạn đã lưu đủ 20 địa chỉ. Bạn xoá bớt địa chỉ cũ rồi thêm tiếp nhé.',
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('còn 19 địa chỉ → thêm được cái thứ 20', async () => {
+    const { prisma, create } = prismaForAddress({ count: 19 });
+    await new UsersService(prisma).createAddress('u1', { line1: 'A', ...GEO } as never);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('UsersService.createAddress', () => {
   it('địa chỉ ĐẦU TIÊN (count=0) → luôn isDefault=true dù dto không gửi, KHÔNG cần updateMany reset (chưa có địa chỉ khác)', async () => {
     const { prisma, updateMany, create } = prismaForAddress({ count: 0 });

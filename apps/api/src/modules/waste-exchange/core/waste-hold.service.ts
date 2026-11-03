@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { WasteLineInput, WasteMethod, WastePreviewBlockDTO } from '@tubutree/shared-types';
-import { vnDateKey, vnMonthKey } from '../../../common/vn-time';
+import { endOfVnDay, vnDateKey, vnMonthKey } from '../../../common/vn-time';
 import { requestTotals, type WasteRateSnapshot } from '../waste-points';
 import { WASTE_CAP_STATUSES, WASTE_OPEN_STATUSES, WASTE_REQUEST_POINTS_MAX } from '../waste.constants';
 import { checkCaps } from './waste-caps';
@@ -39,7 +39,7 @@ export interface WasteHoldResult {
   pointId: string;
   capDayKey: string;
   capMonthKey: string;
-  /** CREATE only (now + requestHoldDays); null for EDIT and REOPEN: callers never write it on those paths. */
+  /** CREATE only (hết ngày VN của now + requestHoldDays); null for EDIT and REOPEN: callers never write it on those paths. */
   expiresAt: Date | null;
   lines: WasteLineSnapshot[];
   estimatedPoints: number;
@@ -69,7 +69,7 @@ export class WasteHoldService {
 
   async validateAndHold(tx: Prisma.TransactionClient, input: WasteHoldInput, cfg: WasteHoldConfig): Promise<WasteHoldResult> {
     const { result } = await this.check(tx, input, cfg, 'THROW');
-    const expiresAt = input.path === 'CREATE' ? new Date(input.now.getTime() + cfg.requestHoldDays * DAY_MS) : null;
+    const expiresAt = input.path === 'CREATE' ? endOfVnDay(new Date(input.now.getTime() + cfg.requestHoldDays * DAY_MS)) : null;
     return { ...result, expiresAt };
   }
 

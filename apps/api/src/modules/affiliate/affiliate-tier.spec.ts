@@ -114,7 +114,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       current: number;
       previous?: number;
       pending?: number;
-      claims?: { milestoneId: string; monthKey: string }[];
+      claims?: { milestoneId: string; monthKey: string; revokedAt?: Date | null; revokeDebt?: number; rewardPoints?: number }[];
     }) {
       const cur = vnMonthBounds(NOW_SEP);
       const aggregate = jest.fn(async (args: { where: { status: unknown; approvedAt?: { gte: Date } } }) => {
@@ -151,6 +151,17 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       expect(res.previousMonth).toBeNull();
     });
 
+    it('mốc đã thu hồi còn nợ: rewardPoints trả về là số thực nhận lại (đã trừ nợ), khớp câu nhận lại', async () => {
+      const { prisma } = prismaFor({
+        current: 12_000_000,
+        claims: [{ milestoneId: 'milestone-10m', monthKey: '2026-09', revokedAt: new Date(), revokeDebt: 190_000, rewardPoints: 200_000 }],
+      });
+      const res = await makeService(prisma).getMilestones('ctv-1', NOW_SEP);
+      const m10 = res.milestones.find((m) => m.id === 'milestone-10m')!;
+      expect(m10).toMatchObject({ claimed: false, canClaim: true, rewardPoints: 10_000 });
+      expect(res.milestones.find((m) => m.id === 'milestone-3m')!.rewardPoints).toBe(50_000);
+    });
+
     it('tháng trước còn mốc đạt mà chưa nhận → trả previousMonth để CTV nhận nốt (không mất thưởng khi qua tháng)', async () => {
       const { prisma } = prismaFor({
         current: 0,
@@ -169,7 +180,8 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
     function txWith(revenue: number, claimCreate = jest.fn().mockResolvedValue({ id: 'claim-1' })) {
       return {
         commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { commissionableTotal: revenue } }) },
-        ctvMilestoneClaim: { create: claimCreate },
+        ctvMilestoneClaim: { create: claimCreate, findUnique: jest.fn().mockResolvedValue(null) },
+        $queryRaw: jest.fn().mockResolvedValue([{ pointsBalance: 0 }]),
         user: { update: jest.fn() },
       };
     }
@@ -264,6 +276,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         const myKeys: string[] = [];
         const pending = { points: 0, wallet: 0, ledger: [] as number[] };
         const tx = {
+          $queryRaw: async () => [{ pointsBalance: 0 }],
           commission: {
             aggregate: async () => {
               await tick(); // nhường lượt để 2 tx cùng qua bước kiểm tra doanh số
@@ -271,6 +284,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
             },
           },
           ctvMilestoneClaim: {
+            findUnique: async () => null,
             create: async ({ data }: { data: { userId: string; milestoneId: string; monthKey: string } }) => {
               const key = `${data.userId}|${data.milestoneId}|${data.monthKey}`;
               for (;;) {

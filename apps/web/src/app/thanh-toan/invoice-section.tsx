@@ -5,6 +5,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ui } from '@/lib/guest-ui';
 import { CheckMark, mini, miniCheckbox, miniCheckboxGutter, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import type { InvoiceInfo } from '@/lib/checkout-rules';
+import { shouldShowTaxCodeError } from '@tubutree/app-core/commerce/tax-code';
 
 /** Yêu cầu xuất hoá đơn VAT (doanh nghiệp): bật thì cần đủ MST, tên công ty, địa chỉ và email — API validate IsEmail. */
 export function InvoiceSection({
@@ -52,8 +53,13 @@ export function InvoiceSection({
                 onChange={(e) => set({ [f.key]: e.target.value })}
                 autoComplete={f.autoComplete}
                 disabled={disabled}
+                aria-invalid={f.key === 'taxCode' && shouldShowTaxCodeError(invoice.taxCode) ? true : undefined}
+                aria-describedby={f.key === 'taxCode' && shouldShowTaxCodeError(invoice.taxCode) ? `${id}-taxCode-err` : undefined}
                 className={`${ui.field} mt-1`}
               />
+              {f.key === 'taxCode' && shouldShowTaxCodeError(invoice.taxCode) && (
+                <span id={`${id}-taxCode-err`} className="mt-1 block text-xs text-danger-fg">{fillCopy('checkout.taxCodeInvalid')}</span>
+              )}
             </label>
           ))}
           {!valid && (

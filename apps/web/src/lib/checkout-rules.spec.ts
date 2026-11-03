@@ -22,6 +22,13 @@ describe('ORDER_NOTE_MAX', () => {
 });
 
 describe('isInvoiceValid', () => {
+  it('MST sai định dạng bị chặn, MST có dấu cách/chấm hoặc chi nhánh 13 số liền được chấp nhận', () => {
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '12345' })).toBe(false);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: 'abcdefghij' })).toBe(false);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '0101 234 567' })).toBe(true);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '0101.234.567' })).toBe(true);
+    expect(isInvoiceValid(true, { ...FULL, taxCode: '0101234567001' })).toBe(true);
+  });
   it('không yêu cầu hoá đơn thì luôn hợp lệ', () => {
     expect(isInvoiceValid(false, { taxCode: '', companyName: '', address: '', email: '' })).toBe(true);
   });
@@ -41,7 +48,7 @@ describe('Ví Tubu ở thanh toán', () => {
   });
   it('Ví âm → lời riêng nêu số âm, khoá Ví và chọn lại COD', () => {
     expect(walletUnavailableReason(-50000, 120000)).toBe(
-      'Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.',
+      'Số dư Ví Tubu đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.',
     );
     expect(pickPaymentMethod('WALLET', { total: 120000 }, -50000)).toBe('COD');
   });

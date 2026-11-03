@@ -1,5 +1,5 @@
 import type { AddressInfo } from 'node:net';
-import { Injectable, Module, type INestApplication, type Type } from '@nestjs/common';
+import { Body, Controller, Get, Injectable, Module, Post, type INestApplication, type Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Cron, ScheduleModule } from '@nestjs/schedule';
 import { bootstrap } from './bootstrap';
@@ -29,7 +29,7 @@ function leaseTable() {
 }
 
 /** Module gốc tối giản: một @Cron chạy mỗi giây đếm số lượt, CronLeaderService thật trên bảng lease giả. */
-function rootModule(prisma: object, ticks: { n: number }): Type<unknown> {
+function rootModule(prisma: object, ticks: { n: number }, controllers: Type<unknown>[] = []): Type<unknown> {
   @Injectable()
   class Ticker {
     @Cron('* * * * * *')
@@ -39,6 +39,7 @@ function rootModule(prisma: object, ticks: { n: number }): Type<unknown> {
   }
   @Module({
     imports: [ScheduleModule.forRoot()],
+    controllers,
     providers: [
       Ticker,
       CronLeaderService,
@@ -103,4 +104,27 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     await sleep(1_500);
     expect(ticks.n).toBe(0);
   }, 10_000);
+
+  it('thân request bị chặn trước ValidationPipe: trần theo route, quá nhiều khoá, NUL, Cache-Control (BAOMAT-01/03/08)', async () => {
+    @Controller()
+    class Echo {
+      @Post('auth/guest') guest(@Body() b: object) { return { n: Object.keys(b).length }; }
+      @Post('feed') feed(@Body() b: object) { return { n: Object.keys(b).length }; }
+      @Get('products') list() { return []; }
+    }
+    const app = await bootstrap(rootModule(leaseTable().prisma(), { n: 0 }, [Echo]), { port: 0, exit: jest.fn(), logger: false });
+    opened.push(app!);
+    const base = `http://127.0.0.1:${(app!.getHttpServer().address() as AddressInfo).port}/api`;
+    const post = (path: string, body: unknown) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const big = { note: 'x'.repeat(300_000) };
+
+    const tooBig = await fetch(`${base}/auth/guest`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://h5.zdn.vn' }, body: JSON.stringify(big) });
+    expect(tooBig.status).toBe(413);
+    expect(tooBig.headers.get('access-control-allow-origin')).toBe('https://h5.zdn.vn');
+    expect((await post('/feed', big)).status).toBe(201);
+    const manyKeys = await post('/auth/guest', Object.fromEntries(Array.from({ length: 20_000 }, (_, i) => [`k${i}`, 1])));
+    expect(manyKeys.status).toBe(400);
+    expect((await fetch(`${base}/products?q=a%00`)).status).toBe(400);
+    expect((await fetch(`${base}/products`, { headers: { authorization: 'Bearer x' } })).headers.get('cache-control')).toBe('private, no-store');
+  });
 });

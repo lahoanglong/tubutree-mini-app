@@ -1,5 +1,4 @@
 import type { OrderStatus, PaymentMethod, PaymentStatus } from '@tubutree/shared-types';
-import { ACCOUNT_NAME_REQUIRED, BANK_NAME_REQUIRED } from '@tubutree/app-core/client-copy';
 import { formatDateTime, formatVnd } from './format';
 
 /** Lý do đổi/trả chọn sẵn — cùng mã với API (return-reasons.ts). "Lý do khác" bắt buộc mô tả. */
@@ -44,21 +43,6 @@ export function cancelRefundMode(o: CancelOrder): 'choose' | 'wallet' | 'unpaidT
   return 'none';
 }
 
-/** Kiểm tài khoản nhận hoàn tiền giống API (refund-destination.ts), lỗi theo từng ô để hiện dưới đúng ô sai. */
-export function bankFieldErrors(b: RefundBankInput): Partial<Record<keyof RefundBankInput, string>> {
-  const errors: Partial<Record<keyof RefundBankInput, string>> = {};
-  if (b.bankName.trim().length < 2) errors.bankName = BANK_NAME_REQUIRED;
-  if (!/^\d{6,24}$/.test(b.accountNumber.replace(/[\s.-]/g, ''))) errors.accountNumber = 'Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.';
-  if (b.accountName.trim().length < 2) errors.accountName = ACCOUNT_NAME_REQUIRED;
-  return errors;
-}
-
-/** Lỗi đầu tiên của tài khoản nhận hoàn tiền, null khi hợp lệ. */
-export function bankDetailsError(b: RefundBankInput): string | null {
-  const e = bankFieldErrors(b);
-  return e.bankName ?? e.accountNumber ?? e.accountName ?? null;
-}
-
 /** Body nơi nhận tiền hoàn gửi API: chọn Ví thì không gửi tài khoản. */
 export function destinationBody(method: RefundMethodChoice, bank: RefundBankInput) {
   return method === 'BANK'
@@ -98,21 +82,6 @@ export function remainingByLine(
     for (const it of r.items ?? []) taken.set(it.orderItemId, (taken.get(it.orderItemId) ?? 0) + it.quantity);
   }
   return new Map(items.map((i) => [i.id, Math.max(0, i.quantity - (taken.get(i.id) ?? 0))]));
-}
-
-/** Kiểm form đổi/trả trước khi gửi. Trả câu lỗi đầu tiên, hoặc null khi hợp lệ. */
-export function returnFormError(input: {
-  lines: ReturnLineState[];
-  reasonCode: ReturnReasonCode | null;
-  reason: string;
-  refundMethod: RefundMethodChoice;
-  bank: RefundBankInput;
-}): string | null {
-  if (!input.lines.some((l) => l.selected && l.quantity > 0)) return 'Chọn ít nhất một sản phẩm muốn trả.';
-  if (!input.reasonCode) return 'Chọn lý do đổi/trả.';
-  if (input.reasonCode === 'OTHER' && input.reason.trim().length < 5) return 'Mô tả lý do (tối thiểu 5 ký tự).';
-  if (input.refundMethod === 'BANK') return bankDetailsError(input.bank);
-  return null;
 }
 
 export interface MyRefund {

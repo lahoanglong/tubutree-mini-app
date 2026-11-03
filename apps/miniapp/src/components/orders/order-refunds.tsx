@@ -13,13 +13,13 @@ import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import {
   EMPTY_BANK,
-  bankDetailsError,
   destinationBody,
   refundStatusText,
   type MyRefund,
   type RefundBankInput,
   type RefundMethodChoice,
 } from '../../utils/refund-rules';
+import { bankDetailsError } from '../../utils/refund-form-rules';
 
 const TONE_ICON = { success: CheckCircle2, warning: TriangleAlert, muted: Clock } as const;
 const TONE_TEXT = { success: 'success', warning: 'warning', muted: 'secondary' } as const;

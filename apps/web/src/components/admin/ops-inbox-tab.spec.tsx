@@ -15,6 +15,41 @@ const stubInbox = (items: { key: string; count: number }[]) => {
   vi.stubGlobal('fetch', vi.fn(api.fn));
 };
 
+describe('OpsInboxTab — thẻ dẫn sang Sức khoẻ hệ thống (QTUI-01)', () => {
+  const health = (over: Record<string, unknown>) => ({ problems: [], cronJobs: [], ...over });
+  const stub = (h: unknown) =>
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/inbox': { body: { generatedAt: '2026-10-14T03:00:00.000Z', items: [] } }, '/admin/ops/health': { body: h }, '/admin/analytics/retention': { body: [] } }).fn));
+  const mount = async (onOpenHealth: () => void, isAdmin = true) => {
+    const r = render(<OpsInboxTab onOpen={vi.fn()} onOpenHealth={onOpenHealth} isAdmin={isAdmin} />);
+    mounted.push(r);
+    await flush();
+    return r.container;
+  };
+
+  it('có việc nền lỗi → thẻ hiện số việc và bấm mở Sức khoẻ', async () => {
+    stub(health({ cronJobs: [{ job: 'a', consecutiveFailures: 2 }] }));
+    const open = vi.fn();
+    const c = await mount(open);
+    const card = c.querySelector<HTMLButtonElement>('[data-inbox-health]')!;
+    expect(card.textContent).toContain('1 việc nền đang lỗi');
+    click(card);
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('có sự cố vượt ngưỡng → thẻ hiện số sự cố', async () => {
+    stub(health({ problems: [{ key: 'k', message: 'm' }] }));
+    const c = await mount(vi.fn());
+    expect(c.querySelector('[data-inbox-health]')!.textContent).toContain('1 sự cố vượt ngưỡng');
+  });
+
+  it('mọi thứ ổn, hoặc không phải ADMIN → không có thẻ', async () => {
+    stub(health({ cronJobs: [{ job: 'a', consecutiveFailures: 0 }] }));
+    expect((await mount(vi.fn())).querySelector('[data-inbox-health]')).toBeNull();
+    stub(health({ problems: [{ key: 'k', message: 'm' }] }));
+    expect((await mount(vi.fn(), false)).querySelector('[data-inbox-health]')).toBeNull();
+  });
+});
+
 describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
   it('có thẻ riêng cho liên kết ký gửi chờ xác nhận, khoản chờ lập phiếu và phiếu chờ chuyển/thu; bấm thẻ mở đúng khoá', async () => {
     stubInbox([

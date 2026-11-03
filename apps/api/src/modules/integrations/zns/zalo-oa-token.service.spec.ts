@@ -64,6 +64,28 @@ describe('ZaloOaTokenService.refresh', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('OPS-01: đã có access token mà thiếu refresh_token → logger.error có "Zalo OA" (cron thành ERRORS), không gọi Zalo', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const { prisma } = makePrisma();
+    const svc = new ZaloOaTokenService(prisma, makeConfig({ ZALO_OA_REFRESH_TOKEN: '' }));
+    expect(await svc.refresh(NOW)).toBe(false);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('Zalo OA refresh'));
+    expect(post).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('OPS-01: chưa cấu hình ZNS (không access token, không refresh) → chỉ warn, không error', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const { prisma } = makePrisma();
+    const svc = new ZaloOaTokenService(prisma, makeConfig({ ZALO_OA_REFRESH_TOKEN: '', ZALO_OA_ACCESS_TOKEN: '' }));
+    expect(await svc.refresh(NOW)).toBe(false);
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    error.mockRestore();
+    warn.mockRestore();
+  });
+
   it('refresh thành công → LƯU access + refresh MỚI (xoay vòng) + hạn', async () => {
     post.mockResolvedValue({ data: { access_token: 'new-acc', refresh_token: 'new-ref', expires_in: 90000 } });
     const { prisma, store } = makePrisma();

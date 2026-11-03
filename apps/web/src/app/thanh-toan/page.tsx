@@ -27,6 +27,7 @@ import {
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
+import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
@@ -264,7 +265,7 @@ export default function CheckoutPage() {
         ...(wantInvoice
           ? {
               invoiceRequest: {
-                taxCode: invoice.taxCode.trim(),
+                taxCode: normalizeTaxCode(invoice.taxCode),
                 companyName: invoice.companyName.trim(),
                 address: invoice.address.trim(),
                 email: invoice.email.trim(),

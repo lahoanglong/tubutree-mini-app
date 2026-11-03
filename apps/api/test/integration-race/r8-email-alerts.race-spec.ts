@@ -94,6 +94,8 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
     for (const k of Object.keys(env)) delete env[k];
     Object.assign(env, EMAIL_ENV, { OPS_ALERT_WEBHOOK_URL: HOOK });
     await prisma.opsHealthState.deleteMany({});
+    // Tin ZNS hỏng do spec khác để lại trong DB dùng chung đủ chạm ngưỡng zns.failed, thành thêm một sự cố.
+    await prisma.notificationLog.deleteMany({ where: { channel: 'ZNS', status: 'FAILED' } });
     await prisma.pancakeWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
     await prisma.gomdonWebhookEvent.updateMany({ where: { dismissedAt: null }, data: { dismissedAt: new Date() } });
     await prisma.order.updateMany({ where: { id: { in: created } }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
