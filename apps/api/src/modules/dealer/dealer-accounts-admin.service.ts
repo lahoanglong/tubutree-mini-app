@@ -219,7 +219,11 @@ export class DealerAccountsAdminService {
    */
   async listAccounts(q: AccountsQuery, now = new Date()) {
     const search = q.search?.trim();
-    const filters: Prisma.Sql[] = [Prisma.sql`u."role" = 'DEALER'`];
+    // Đại lý bị thu hồi vai trò mà còn nợ vẫn nằm trong danh sách (khoản phải thu không được biến mất), hết nợ thì rời đi.
+    const filters: Prisma.Sql[] = [
+      Prisma.sql`(u."role" = 'DEALER' OR u."id" IN (
+        SELECT l0."userId" FROM "dealer_credit_ledgers" l0 GROUP BY l0."userId" HAVING SUM(l0."delta") > 0))`,
+    ];
     if (search) {
       const like = `%${escapePrismaLike(search)}%`;
       filters.push(Prisma.sql`(u."fullName" ILIKE ${like} OR u."phone" LIKE ${like})`);
@@ -234,7 +238,7 @@ export class DealerAccountsAdminService {
       SELECT 1 FROM "dealer_credit_ledgers" c WHERE c."userId" = o."userId" AND c."refType" = 'ORDER' AND c."refId" = o."id")))`;
     const base = Prisma.sql`
       WITH d AS (
-        SELECT u."id", u."fullName", u."phone", u."metadata"->>'dealerTierId' AS "tierId"
+        SELECT u."id", u."fullName", u."phone", u."metadata"->>'dealerTierId' AS "tierId", (u."role" <> 'DEALER') AS "roleRevoked"
           FROM "users" u WHERE ${Prisma.join(filters, ' AND ')}
       ), b AS (
         SELECT l."userId", SUM(l."delta")::bigint AS "debt"
@@ -250,7 +254,7 @@ export class DealerAccountsAdminService {
            AND o."status" NOT IN ('CANCELLED', 'RETURNED') AND o."paymentStatus" NOT IN ('REFUNDED', 'FAILED')
          GROUP BY o."userId"
       ), x AS (
-        SELECT d."id", d."fullName", d."phone", d."tierId", t."name" AS "tierName", COALESCE(t."creditLimit", 0) AS "creditLimit",
+        SELECT d."id", d."fullName", d."phone", d."tierId", d."roleRevoked", t."name" AS "tierName", COALESCE(t."creditLimit", 0) AS "creditLimit",
                COALESCE(b."debt", 0) AS "debt", COALESCE(s."settled", 0) AS "monthSales", COALESCE(s."pending", 0) AS "monthPending",
                COALESCE(s."orders", 0) AS "monthOrders"
           FROM d LEFT JOIN b ON b."userId" = d."id" LEFT JOIN s ON s."userId" = d."id" LEFT JOIN "dealer_tiers" t ON t."id" = d."tierId"
@@ -268,6 +272,7 @@ export class DealerAccountsAdminService {
       monthSales: bigint;
       monthPending: bigint;
       monthOrders: number;
+      roleRevoked: boolean;
     };
     const [rows, [agg]] = await Promise.all([
       this.prisma.$queryRaw<Row[]>`${base}
@@ -288,6 +293,7 @@ export class DealerAccountsAdminService {
         monthSales: Number(r.monthSales),
         monthPending: Number(r.monthPending),
         monthOrders: r.monthOrders,
+        roleRevoked: r.roleRevoked,
       };
     });
     return {

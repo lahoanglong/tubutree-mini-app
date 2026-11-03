@@ -309,6 +309,15 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(ledgerCreate).not.toHaveBeenCalled();
   });
 
+  it('mã giao dịch đã ghi cho số tiền khác: báo rõ mã và số đã ghi, không nhắc Idempotency-Key', async () => {
+    const { svc } = build({ existingClaim: { delta: -5_000_000 } });
+    const err = await svc.adminRecordCreditPayment('admin1', 'd1', 2_000_000, { idempotencyKey: 'FT9', bankRef: 'FT9' }).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toMatch(/Mã giao dịch FT9 đã ghi nhận 5\.000\.000/);
+    expect((err as Error).message).toMatch(/bỏ trống ô mã/);
+    expect((err as Error).message).not.toMatch(/Idempotency-Key|thử lại/);
+  });
+
   it('race 2 admin duyệt CÙNG lúc cho CÙNG đại lý (P2034 serialization failure) → BadRequest thân thiện, không sập 500', async () => {
     const { svc, prisma } = build({ debt: 500_000 });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(

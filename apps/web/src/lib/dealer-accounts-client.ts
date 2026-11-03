@@ -16,6 +16,8 @@ export interface DealerAccountRow {
   monthSales: number;
   monthPending: number;
   monthOrders: number;
+  /** Đã bị thu hồi vai trò đại lý nhưng còn nợ: vẫn ghi nhận được khoản trả. */
+  roleRevoked?: boolean;
 }
 export interface DealerAccountsPage {
   data: DealerAccountRow[];

@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -577,7 +577,12 @@ export class DealerService {
       where: { id: dealerUserId },
       select: { id: true, role: true, fullName: true, phone: true },
     });
-    if (!dealer || dealer.role !== 'DEALER') throw new NotFoundException('Không tìm thấy đại lý.');
+    if (!dealer) throw new NotFoundException('Không tìm thấy đại lý.');
+    // Đại lý bị thu hồi vai trò mà còn nợ vẫn phải ghi nhận được khoản họ trả; người chưa từng có sổ công nợ thì không phải đại lý.
+    if (dealer.role !== 'DEALER') {
+      const hasLedger = await this.prisma.dealerCreditLedger.findFirst({ where: { userId: dealerUserId }, select: { id: true } });
+      if (!hasLedger) throw new NotFoundException('Không tìm thấy đại lý.');
+    }
 
     // Ghi nhận từ một báo cáo của đại lý mà người gọi không gửi khoá: lấy chính báo cáo làm khoá, để unique
     // (userId, refType, refId) chặn trừ nợ hai lần cho cùng một báo cáo.
@@ -589,9 +594,12 @@ export class DealerService {
       });
       if (existing) {
         if (existing.delta !== -amount) {
+          const bankRef = opts.bankRef?.trim();
           throw new BadRequestException(
             opts.idempotencyKey?.trim()
-              ? 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.'
+              ? bankRef && bankRef === opts.idempotencyKey.trim()
+                ? `Mã giao dịch ${bankRef} đã ghi nhận ${vnd(-existing.delta)} cho đại lý này. Kiểm tra lại mã hoặc bỏ trống ô mã.`
+                : 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.'
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
         }
@@ -1319,6 +1327,43 @@ export class DealerService {
   // ── Admin: xác nhận đã nhận chuyển khoản cho đơn đại lý trả trước ──
 
   /**
+   * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn trả
+   * trước khác hoặc ở một khoản trả nợ thì 409. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB; khoá advisory theo mã
+   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm.
+   */
+  private async assertBankRefUnused(tx: Prisma.TransactionClient, bankRef: string, orderId: string) {
+    const ref = bankRef.toLowerCase();
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${ref}`}))`;
+    const marker = `Mã GD ${bankRef}`;
+    const sameRef = (note: string | null) =>
+      (note ?? '')
+        .toLowerCase()
+        .split(' · ')
+        .some((part) => part.trim() === `mã gd ${ref}`);
+    const history = await tx.orderStatusHistory.findMany({
+      where: { note: { contains: marker, mode: 'insensitive' }, actorType: 'ADMIN', orderId: { not: orderId } },
+      select: { orderId: true, note: true },
+    });
+    const usedIds = history.filter((h) => sameRef(h.note)).map((h) => h.orderId);
+    const usedOrder = usedIds.length
+      ? await tx.order.findFirst({ where: { id: { in: usedIds }, type: 'DEALER' }, select: { code: true } })
+      : null;
+    if (usedOrder) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+    const payments = await tx.dealerCreditLedger.findMany({
+      where: {
+        refType: 'PAYMENT',
+        OR: [{ refId: { equals: bankRef, mode: 'insensitive' } }, { note: { contains: marker, mode: 'insensitive' } }],
+      },
+      select: { refId: true, note: true },
+    });
+    if (payments.some((p) => p.refId?.toLowerCase() === ref || sameRef(p.note))) {
+      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+  }
+
+  /**
    * Admin xác nhận đã nhận tiền chuyển khoản cho đơn đại lý TRẢ TRƯỚC: paymentStatus UNPAID → PAID
    * (PENDING_PAYMENT thì chuyển luôn CONFIRMED — y hệt webhook đối soát Pancake onPaymentReconcile).
    * Trước đây chỉ webhook Pancake lật được PAID, nên Pancake chưa cấu hình/đối soát trượt là đơn
@@ -1368,6 +1413,7 @@ export class DealerService {
     const adminNote = dto.note?.trim() || null;
     const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
     await this.prisma.$transaction(async (tx) => {
+      if (bankRef) await this.assertBankRefUnused(tx, bankRef, order.id);
       // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()` duy
       // nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
       const paidAt = new Date();
