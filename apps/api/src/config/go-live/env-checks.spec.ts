@@ -269,11 +269,10 @@ describe('evaluateEnv', () => {
       expect(status({ ZALO_OA_WEBHOOK_SECRET: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
       expect(status({}, 'env.zalo.oa_webhook_secret')).toBe('PASS');
     });
-    it('webhook OA có khoá ký: WARN chừng nào bootstrap chưa giữ thân thô (chữ ký chạy đường lùi dễ lệch), nói rõ chế độ; thiếu ZALO_APP_ID thì WARN', () => {
+    it('webhook OA có khoá ký + ZALO_APP_ID: PASS (không cần token tĩnh), nói rõ chế độ chữ ký; thiếu ZALO_APP_ID hoặc khoá ngắn thì WARN', () => {
       const signed = { ZALO_OA_SECRET_KEY: 'oa-secret-Hd6Fk3Jw9Sz2Bn5Vc8Xm1Lq4' };
-      expect(status({ ...signed, ZALO_OA_WEBHOOK_SECRET: '' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
+      expect(status({ ...signed, ZALO_OA_WEBHOOK_SECRET: '' }, 'env.zalo.oa_webhook_secret')).toBe('PASS');
       expect(byId(evaluateEnv(envWith(signed)), 'env.zalo.oa_webhook_secret').detail).toContain('chữ ký');
-      expect(byId(evaluateEnv(envWith(signed)), 'env.zalo.oa_webhook_secret').hint).toContain('thân thô');
       expect(status({ ...signed, ZALO_APP_ID: '' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
       expect(status({ ZALO_OA_SECRET_KEY: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
     });

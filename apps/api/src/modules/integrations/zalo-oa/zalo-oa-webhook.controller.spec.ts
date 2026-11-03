@@ -114,7 +114,9 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
   const APP_ID = '1234567890';
   const OA_KEY = 'oa-secret-key';
   const signed = { ...body, app_id: APP_ID, timestamp: String(Date.now()) };
-  const sign = (b: object = signed, key = OA_KEY) => zaloOaEventSignature(APP_ID, b, String((b as { timestamp: string }).timestamp), key);
+  const sign = (b: object = signed, key = OA_KEY) => zaloOaEventSignature(APP_ID, JSON.stringify(b), String((b as { timestamp: string }).timestamp), key);
+  /** Thân thô như parser webhook giữ ở req.rawBody. */
+  const raw = (b: object = signed) => ({ rawBody: Buffer.from(JSON.stringify(b), 'utf8') });
   function build(env: Record<string, string>) {
     const create = jest.fn().mockResolvedValue({ id: 'evt1' });
     const add = jest.fn().mockResolvedValue(undefined);
@@ -126,11 +128,11 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
 
   it('chữ ký đúng (không có token) → lưu', async () => {
     const { ctrl, create } = build(both);
-    await expect(ctrl.handle(signed, undefined, sign())).resolves.toEqual({ received: true });
+    await expect(ctrl.handle(signed, undefined, sign(), raw())).resolves.toEqual({ received: true });
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it('chữ ký tính trên thân thô có ký tự thoát (\\/, \\u) → khớp nhờ rawBody; không có rawBody thì lệch → 401', async () => {
+  it('chữ ký tính trên thân thô có ký tự thoát (\\/, \\u) → khớp nhờ rawBody; không có rawBody → 401', async () => {
     const { ctrl, create } = build(both);
     const ts = String(Date.now());
     const raw = `{"app_id":"${APP_ID}","event_name":"user_send_image","sender":{"id":"zalo-user-1"},"message":{"msg_id":"m1","url":"https:\\/\\/a.vn\\/x?a=1\\u0026b=2"},"timestamp":"${ts}"}`;
@@ -141,31 +143,41 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it('chữ ký lệch mà không có thân thô → ghi cảnh báo để lỗi không im lặng; có thân thô thì không nhắc chuyện thân thô', async () => {
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  it('không có thân thô (hoặc rỗng) → 401 dù chữ ký khớp JSON đã parse, không lưu, ghi lỗi; có thân thô thì không nhắc chuyện thân thô', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     try {
-      const { ctrl } = build(both);
-      await expect(ctrl.handle(signed, undefined, 'sai')).rejects.toBeInstanceOf(UnauthorizedException);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('thân thô'));
-      warn.mockClear();
-      await expect(ctrl.handle(signed, undefined, 'sai', { rawBody: Buffer.from(JSON.stringify(signed)) })).rejects.toBeInstanceOf(UnauthorizedException);
-      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('thân thô'));
+      const { ctrl, create } = build(both);
+      for (const req of [undefined, {}, { rawBody: Buffer.alloc(0) }]) {
+        await expect(ctrl.handle(signed, undefined, sign(), req)).rejects.toBeInstanceOf(UnauthorizedException);
+      }
+      expect(create).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('thân thô'));
+      error.mockClear();
+      await expect(ctrl.handle(signed, undefined, 'sai', raw())).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(error).not.toHaveBeenCalled();
     } finally {
-      warn.mockRestore();
+      error.mockRestore();
     }
+  });
+
+  it('thân thô khác thân đã parse (thân giả, chữ ký của thân thật) → 401', async () => {
+    const { ctrl, create } = build(both);
+    const forged = { ...signed, sender: { id: 'ke-gia' } };
+    await expect(ctrl.handle(forged, undefined, sign(forged), raw())).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('header mang tiền tố mac= vẫn khớp', async () => {
     const { ctrl } = build(both);
-    await expect(ctrl.handle(signed, undefined, `mac=${sign()}`)).resolves.toEqual({ received: true });
+    await expect(ctrl.handle(signed, undefined, `mac=${sign()}`, raw())).resolves.toEqual({ received: true });
   });
 
   it('chữ ký in hoa vẫn khớp; chữ ký sai/khác thân/khác khoá → 401, không lưu', async () => {
     const { ctrl, create } = build(both);
-    await expect(ctrl.handle(signed, undefined, sign().toUpperCase())).resolves.toEqual({ received: true });
+    await expect(ctrl.handle(signed, undefined, sign().toUpperCase(), raw())).resolves.toEqual({ received: true });
     create.mockClear();
     for (const sig of [sign(signed, 'khoa-khac'), sign({ ...signed, message: { text: 'giả' } }), 'abc', '']) {
-      await expect(ctrl.handle(signed, undefined, sig)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(ctrl.handle(signed, undefined, sig, raw())).rejects.toBeInstanceOf(UnauthorizedException);
     }
     expect(create).not.toHaveBeenCalled();
   });
@@ -173,17 +185,17 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
   it('thân thiếu timestamp hoặc chưa có ZALO_APP_ID → chữ ký không qua được', async () => {
     const { ctrl } = build(both);
     const { timestamp: _t, ...noTs } = signed;
-    await expect(ctrl.handle(noTs, undefined, sign())).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(noTs, undefined, sign(), raw(noTs))).rejects.toBeInstanceOf(UnauthorizedException);
     const noApp = build({ ZALO_OA_SECRET_KEY: OA_KEY });
-    await expect(noApp.ctrl.handle(signed, undefined, sign())).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(noApp.ctrl.handle(signed, undefined, sign(), raw())).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('đã có khoá ký: token tĩnh (dù đúng/lộ) không thay được chữ ký; chỉ chữ ký đúng mới qua', async () => {
     const { ctrl, create } = build(both);
-    await expect(ctrl.handle(signed, SECRET, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(ctrl.handle(signed, SECRET, 'sai')).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, SECRET, undefined, raw())).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, SECRET, 'sai', raw())).rejects.toBeInstanceOf(UnauthorizedException);
     expect(create).not.toHaveBeenCalled();
-    await expect(ctrl.handle(signed, undefined, sign())).resolves.toEqual({ received: true });
+    await expect(ctrl.handle(signed, undefined, sign(), raw())).resolves.toEqual({ received: true });
   });
 
   it('chưa đủ khoá ký (thiếu ZALO_APP_ID) mà có token tĩnh: token là cửa duy nhất', async () => {
@@ -196,15 +208,15 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     const { ctrl, create } = build(both);
     for (const ts of [String(Date.now() - 3 * 3600_000), String(Date.now() + 3 * 3600_000), 'không-phải-số']) {
       const b = { ...signed, timestamp: ts };
-      await expect(ctrl.handle(b, undefined, sign(b))).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(ctrl.handle(b, undefined, sign(b), raw(b))).rejects.toBeInstanceOf(UnauthorizedException);
     }
     expect(create).not.toHaveBeenCalled();
   });
 
   it('chỉ có khoá ký (không đặt token tĩnh): thiếu chữ ký → 401; token rỗng không bao giờ khớp', async () => {
     const { ctrl } = build({ ZALO_OA_SECRET_KEY: OA_KEY, ZALO_APP_ID: APP_ID });
-    await expect(ctrl.handle(signed, undefined, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
-    await expect(ctrl.handle(signed, '', undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, undefined, undefined, raw())).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(ctrl.handle(signed, '', undefined, raw())).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('production mà thiếu cả hai khoá → 401 (fail-closed)', async () => {
@@ -212,7 +224,7 @@ describe('ZaloOaWebhookController.handle (X-ZEvent-Signature, BAOMAT-06)', () =>
     process.env.NODE_ENV = 'production';
     try {
       const { ctrl, create } = build({});
-      await expect(ctrl.handle(signed, 'x', sign())).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(ctrl.handle(signed, 'x', sign(), raw())).rejects.toBeInstanceOf(UnauthorizedException);
       expect(create).not.toHaveBeenCalled();
     } finally {
       process.env.NODE_ENV = prev;

@@ -1,7 +1,6 @@
 import { envSchema } from '../env.validation';
 import { isAdvisorEnabled, providerConfigured, resolveProviderOrder } from '../../modules/ai-advisor/advisor-config';
 import { resolveOpsEmailConfig } from '../ops-email-config';
-import { ZALO_OA_RAW_BODY_CAPTURED } from '../../modules/integrations/zalo-oa/zalo-oa-raw-body';
 import { describeSecret, envValue, looksLikePlaceholder } from './secrets';
 import { fail, pass, warn, type CheckResult, type Env } from './types';
 
@@ -196,11 +195,7 @@ function zaloOaWebhookRow(env: Env): CheckResult {
     if (key.length < 16) {
       return warn(G_ZALO, id, title, `ZALO_OA_SECRET_KEY ${describeSecret(key)}`, 'Khoá bí mật của OA lấy nguyên từ developers.zalo.me (mục webhook); ngắn bất thường thì kiểm lại đã dán đủ chưa.');
     }
-    const detail = `chế độ chữ ký X-ZEvent-Signature: ZALO_OA_SECRET_KEY ${describeSecret(key)}; token tĩnh không còn tác dụng`;
-    if (!ZALO_OA_RAW_BODY_CAPTURED) {
-      return warn(G_ZALO, id, title, detail, 'API chưa giữ thân thô cho webhook OA nên chữ ký băm lại từ JSON đã parse và lệch khi Zalo gửi ký tự thoát (tin ảnh có URL): thử bằng một sự kiện thật trước khi dựa vào chữ ký, hoặc bỏ ZALO_OA_SECRET_KEY để dùng token tĩnh.');
-    }
-    return pass(G_ZALO, id, title, detail);
+    return pass(G_ZALO, id, title, `chế độ chữ ký X-ZEvent-Signature: ZALO_OA_SECRET_KEY ${describeSecret(key)}; token tĩnh không còn tác dụng`);
   }
   if (key) {
     return warn(G_ZALO, id, title, 'ZALO_OA_SECRET_KEY đã đặt nhưng thiếu ZALO_APP_ID nên chữ ký chưa bật', 'Chữ ký cần cả ZALO_OA_SECRET_KEY và ZALO_APP_ID; đặt ZALO_APP_ID rồi deploy lại.');

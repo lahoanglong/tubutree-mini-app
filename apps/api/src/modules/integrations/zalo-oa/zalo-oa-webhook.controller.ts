@@ -34,12 +34,11 @@ interface ZaloOaWebhookBody {
 
 /**
  * `X-ZEvent-Signature` của webhook Zalo OA: sha256(appId + thân + timestamp + khoá bí mật của OA), hex thường (header có thể
- * mang tiền tố `mac=`). Chữ ký tính trên THÂN THÔ: truyền `body` là chuỗi thô (`req.rawBody`) khi có. Truyền object thì băm
- * JSON.stringify của nó, chỉ khớp khi Zalo gửi JSON gọn không ký tự thoát (`\/`, `\uXXXX`, `&`...), nên đó là đường lùi, không
- * phải đường chính.
+ * mang tiền tố `mac=`). `rawBody` là đúng byte Zalo gửi (`req.rawBody`, giữ ở `keepRawBody` của common/body-limits.ts): băm lại
+ * JSON.stringify của thân đã parse làm mất `\/` và `\uXXXX` nên lệch.
  */
-export function zaloOaEventSignature(appId: string, body: unknown, timestamp: string, oaSecretKey: string): string {
-  return createHash('sha256').update(appId + (typeof body === 'string' ? body : JSON.stringify(body)) + timestamp + oaSecretKey).digest('hex');
+export function zaloOaEventSignature(appId: string, rawBody: string, timestamp: string, oaSecretKey: string): string {
+  return createHash('sha256').update(appId + rawBody + timestamp + oaSecretKey).digest('hex');
 }
 
 /**
@@ -135,14 +134,13 @@ export class ZaloOaWebhookController {
     if (typeof timestamp !== 'string' && typeof timestamp !== 'number') return false;
     const ts = Number(timestamp);
     if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > MAX_EVENT_SKEW_MS) return false;
-    const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
-    const hasRaw = Boolean(rawBody && rawBody.length > 0);
-    const signed: unknown = hasRaw ? rawBody!.toString('utf8') : body;
-    const ok = constantTimeEqual(given, zaloOaEventSignature(this.appId, signed, String(timestamp), this.oaSecretKey));
-    if (!ok && !hasRaw) {
-      this.logger.warn('Chữ ký webhook OA lệch và request không có thân thô (bootstrap chưa giữ): chữ ký đang băm lại từ JSON đã parse nên lệch khi Zalo gửi ký tự thoát.');
+    if (!rawBody || rawBody.length === 0) {
+      // Không băm lại thân đã parse: chữ ký khi đó chỉ khớp tình cờ, và đường lùi đó là chỗ để thân giả qua được kiểm tra.
+      this.logger.error('Webhook OA có chữ ký nhưng request không mang thân thô (req.rawBody): kiểm parser webhook ở common/body-limits.ts.');
+      return false;
     }
-    return ok;
+    const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
+    return constantTimeEqual(given, zaloOaEventSignature(this.appId, rawBody.toString('utf8'), String(timestamp), this.oaSecretKey));
   }
 }
 
