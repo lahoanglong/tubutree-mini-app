@@ -555,8 +555,9 @@ export class LoyaltyExpiryService {
     reminderDays: number,
   ): Promise<boolean> {
     const txns = await this.loadTxns(userId);
-    const { expiringSoon } = computePointExpiry(txns, now, windowMs);
-    if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) return false;
+    // Cùng luật với trang Điểm Xanh (nextPointExpiry): số điểm là các lô cùng ngày VN với mốc sớm nhất, để tin và trang không báo hai số.
+    const next = nextPointExpiry(txns, now);
+    if (!next || next.amount <= 0 || next.expiresAt.getTime() > now.getTime() + windowMs) return false;
 
     // Dedup: đã nhắc trong kỳ (POINTS_EXPIRING trong ≤ reminderDays) → bỏ qua (chống spam).
     const since = new Date(now.getTime() - reminderDays * DAY);
@@ -568,8 +569,8 @@ export class LoyaltyExpiryService {
 
     await this.notifications
       .notifySafe(userId, 'POINTS_EXPIRING', {
-        points: formatPoints(expiringSoon.amount),
-        date: formatVnDate(expiringSoon.earliestExpiresAt),
+        points: formatPoints(next.amount),
+        date: formatVnDate(next.expiresAt),
       }); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;
   }

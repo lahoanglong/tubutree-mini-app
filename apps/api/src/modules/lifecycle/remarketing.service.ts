@@ -140,6 +140,9 @@ export class RemarketingService {
       const coupons = await this.prisma.coupon.findMany({
         where: {
           scope: 'USER_GROUP',
+          // Mã admin đã tắt hoặc chưa tới ngày dùng thì checkout từ chối, nhắc "dùng ngay" sẽ sai.
+          isActive: true,
+          startAt: { lte: now },
           usedCount: 0,
           endAt: { gte: now, lte: soon },
           remindedAt: null,

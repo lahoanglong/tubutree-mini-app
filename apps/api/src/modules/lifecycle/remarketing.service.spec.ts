@@ -154,6 +154,14 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/cart_abandon_min_hours.*cart_abandon_max_hours/));
   });
 
+  it('TK-05: chỉ nhắc mã đang bật và đã tới ngày dùng (isActive, startAt <= now)', async () => {
+    const { svc, findMany } = setupVoucher([]);
+    await svc.sendVoucherExpiryReminders();
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.isActive).toBe(true);
+    expect(where.startAt).toEqual({ lte: new Date('2026-07-05T00:00:00Z') });
+  });
+
   it('claim rồi gửi lỗi thật (không phải ZNS graceful-fail) → trả cờ về null để lượt sau thử lại', async () => {
     // Claim (updateMany) xảy ra TRƯỚC notify — nếu notify ném lỗi thật (không phải ZNS fail
     // graceful, cái đó notify() đã tự nuốt và luôn resolve) mà không trả cờ lại thì
