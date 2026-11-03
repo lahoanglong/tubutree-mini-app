@@ -5,7 +5,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { formatVndText as vnd } from '../../common/format-vnd';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
-import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import { CreateAddressDto, NO_HTML, UpdateAddressDto } from './dto/address.dto';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 
@@ -67,6 +67,10 @@ export class UsersService {
   async updateMe(userId: string, dto: UpdateMeDto) {
     // dob đến dạng "YYYY-MM-DD" → ép về Date (Prisma DateTime không nhận date-only string).
     const { dob, ...rest } = dto;
+    if (rest.fullName !== undefined && !NO_HTML.test(rest.fullName)) {
+      const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
+      if (current?.fullName !== rest.fullName) throw new BadRequestException('Tên không được chứa ký tự < hoặc >.');
+    }
     const data: { fullName?: string; email?: string; avatarUrl?: string } = { ...rest };
     if (dob !== undefined) {
       const parsed = new Date(dob);

@@ -44,6 +44,30 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
+  describe('quét thô trước JSON.parse (route 10 MB không cần token)', () => {
+    const manyKeys = (n: number) => `{${Array.from({ length: n }, (_, i) => `"k${i}":1`).join(',')}}`;
+    it.each(['/api/admin/x', '/api/feed', '/api/webhooks/pancake'])('%s: thân hàng trăm nghìn khoá bị loại mà JSON.parse không chạy trên thân đó', async (path) => {
+      const raw = manyKeys(path.includes('webhooks') ? 60_000 : 300_000);
+      const spy = jest.spyOn(JSON, 'parse');
+      try {
+        const res = await post(path, raw);
+        expect(res.status).toBe(400);
+        expect(await bodyOf(res)).toMatchObject({ message: BODY_TOO_COMPLEX_MESSAGE });
+        expect(spy.mock.calls.some(([arg]) => typeof arg === 'string' && arg.length > 100_000)).toBe(false);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    it('thân lồng quá sâu bị loại khi quét thô; dấu ngoặc trong chuỗi không bị tính', async () => {
+      expect((await post('/api/admin/x', '['.repeat(40) + ']'.repeat(40))).status).toBe(400);
+      expect((await post('/api/admin/x', { s: '{'.repeat(5000) + '[[[[[[[[[[[[[[[[[\\"' })).status).toBe(200);
+    });
+    it('thân hợp lệ lớn nhất (500 dòng × 5 trường) vẫn qua', async () => {
+      const items = Array.from({ length: 500 }, (_, i) => ({ a: i, b: 'x', c: 1, d: true, e: null }));
+      expect((await post('/api/admin/x', { items })).status).toBe(200);
+    });
+  });
+
   describe('trần dung lượng theo nhóm route', () => {
     const big = { note: 'x'.repeat(300_000) };
     it('route thường: thân 300 KB → 413 JSON', async () => {

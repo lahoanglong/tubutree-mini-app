@@ -118,7 +118,9 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     const post = (path: string, body: unknown) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const big = { note: 'x'.repeat(300_000) };
 
-    expect((await post('/auth/guest', big)).status).toBe(413);
+    const tooBig = await fetch(`${base}/auth/guest`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://h5.zdn.vn' }, body: JSON.stringify(big) });
+    expect(tooBig.status).toBe(413);
+    expect(tooBig.headers.get('access-control-allow-origin')).toBe('https://h5.zdn.vn');
     expect((await post('/feed', big)).status).toBe(201);
     const manyKeys = await post('/auth/guest', Object.fromEntries(Array.from({ length: 20_000 }, (_, i) => [`k${i}`, 1])));
     expect(manyKeys.status).toBe(400);

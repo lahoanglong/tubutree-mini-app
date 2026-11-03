@@ -627,6 +627,8 @@ describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (
     const prisma = makePrisma();
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
     (prisma.$queryRaw as jest.Mock).mockReset().mockResolvedValueOnce([{ n: own }]).mockResolvedValueOnce([{ bytes }]);
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
+    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = jest.fn().mockResolvedValue(1);
     return prisma;
   }
 
@@ -634,6 +636,23 @@ describe('CommunityFeedService.createPost: trần ảnh của khách vãng lai (
     const prisma = prismaFor(guest, 0, 1_000);
     await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
     expect((prisma.feedPost.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ status: 'PENDING', images: [PNG] });
+  });
+
+  it('kiểm trần và ghi bài chung một giao dịch có khoá advisory (nhiều khách song song không cùng đọc tổng còn chỗ)', async () => {
+    const prisma = prismaFor(guest, 0, 0);
+    await makeSvc(prisma).createPost('g1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    const raw = prisma as unknown as { $transaction: jest.Mock; $executeRaw: jest.Mock };
+    expect(raw.$transaction).toHaveBeenCalledTimes(1);
+    const lockCall = raw.$executeRaw.mock.calls[0];
+    expect(lockCall[0].join('?')).toContain('pg_advisory_xact_lock');
+    expect(lockCall[1]).toBe('guest-feed-images');
+    expect(raw.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan((prisma.$queryRaw as jest.Mock).mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it('người dùng thật hoặc bài không ảnh base64: không mở giao dịch, không khoá', async () => {
+    const prisma = prismaFor({ phone: '0900000000', zaloId: null }, 0, 0);
+    await makeSvc(prisma).createPost('u1', 'CUSTOMER', { body: 'Có ảnh', images: [PNG] });
+    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
   });
 
   it('đã có 2 bài ảnh chờ duyệt → từ chối bài thứ 3, không ghi', async () => {

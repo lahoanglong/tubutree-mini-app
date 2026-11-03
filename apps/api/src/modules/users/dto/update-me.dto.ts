@@ -1,13 +1,13 @@
 import { IsEmail, IsString, Matches, MaxLength } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { IsAvatarUrl } from '../../../common/uploaded-image';
-import { NO_HTML } from './address.dto';
 
 export class UpdateMeDto {
   @OptionalNotNull()
   @IsString()
   @MaxLength(120)
-  @Matches(NO_HTML, { message: 'Tên không được chứa ký tự < hoặc >.' })
+  // `<` `>` kiểm ở UsersService.updateMe, chỉ khi tên thực sự đổi: tên Zalo được ghi đè mỗi lần đăng nhập mà không qua DTO
+  // và client luôn gửi lại fullName, nên chặn ở đây sẽ khoá khách có tên như "Hoa <3" khỏi sửa hồ sơ.
   fullName?: string;
 
   @OptionalNotNull()

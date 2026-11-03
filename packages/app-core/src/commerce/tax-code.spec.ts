@@ -20,7 +20,12 @@ describe('tax-code', () => {
   it('không báo lỗi khi mới gõ vài số, báo khi đủ 10 số mà sai hoặc có chữ', () => {
     expect(shouldShowTaxCodeError('0')).toBe(false);
     expect(shouldShowTaxCodeError('010123')).toBe(false);
-    expect(shouldShowTaxCodeError('0101234567-0')).toBe(true);
+    expect(shouldShowTaxCodeError('0101234567-0012')).toBe(true);
+    expect(shouldShowTaxCodeError('01012345678')).toBe(false);
+    expect(shouldShowTaxCodeError('0101234567-')).toBe(false);
+    expect(shouldShowTaxCodeError('0101234567-0')).toBe(false);
+    expect(shouldShowTaxCodeError('0101234567-00')).toBe(false);
+    expect(shouldShowTaxCodeError('0101234567-00a')).toBe(true);
     expect(shouldShowTaxCodeError('01a')).toBe(true);
     expect(shouldShowTaxCodeError('0101234567')).toBe(false);
   });

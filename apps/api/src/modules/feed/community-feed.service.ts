@@ -85,6 +85,7 @@ function previewTitle(title: string | null, body: string): string {
 type FeedPostKind = 'MANUAL' | 'HARVEST' | 'MILESTONE' | 'SPECIES' | 'QUESTION' | 'SHOWCASE' | 'TIP';
 
 const MAX_TITLE = 160;
+const GUEST_FEED_IMAGES_LOCK = 'guest-feed-images';
 const MAX_BODY = 5000;
 const MAX_PRODUCT_TAGS = 5;
 const MAX_TAGS = 5;
@@ -555,26 +556,37 @@ export class CommunityFeedService {
 
   /**
    * Khách vãng lai gửi ảnh base64 vào hàng chờ duyệt: chặn khi họ đã có sẵn bài kèm ảnh chờ duyệt, hoặc khi tổng ảnh chờ duyệt
-   * của mọi khách vãng lai đã chạm trần (xem community-limits.ts). `excludePostId` = bài đang sửa, không tính vào chính nó.
+   * của mọi khách vãng lai đã chạm trần (xem community-limits.ts). `excludePostId` = bài đang sửa, không tính vào chính nó. Kiểm và ghi chung một giao dịch có khoá.
    */
-  private async assertGuestImageQuota(userId: string, images: string[], excludePostId?: string): Promise<void> {
+  private async writeWithGuestImageQuota<T>(
+    userId: string,
+    images: string[],
+    excludePostId: string | undefined,
+    write: (db: PrismaService | Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
     const incoming = images.filter((u) => u.startsWith('data:'));
-    if (incoming.length === 0) return;
+    if (incoming.length === 0) return write(this.prisma);
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!user || isRealUser(user)) return;
-    const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
-    const [own] = await this.prisma.$queryRaw<{ n: number }[]>`
-      SELECT count(*)::int AS "n" FROM "feed_posts" p
-      WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
-        AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
-    if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
-    // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
-    const [total] = await this.prisma.$queryRaw<{ bytes: bigint | number }[]>`
-      SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
-      FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
-      WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
-    const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
-    if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
+    if (!user || isRealUser(user)) return write(this.prisma);
+    // Kiểm rồi ghi cùng một khoá advisory toàn cục: nhiều khách vãng lai bắn song song không cùng đọc thấy tổng còn chỗ.
+    // Người dùng thật không đi vào nhánh này nên không bị khoá.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${GUEST_FEED_IMAGES_LOCK}))`;
+      const exclude = excludePostId ? Prisma.sql`AND p."id" <> ${excludePostId}` : Prisma.empty;
+      const [own] = await tx.$queryRaw<{ n: number }[]>`
+        SELECT count(*)::int AS "n" FROM "feed_posts" p
+        WHERE p."userId" = ${userId} AND p."status" = 'PENDING' ${exclude}
+          AND EXISTS (SELECT 1 FROM unnest(p."images") AS i WHERE left(i, 5) = 'data:')`;
+      if ((own?.n ?? 0) >= GUEST_PENDING_IMAGE_POSTS_MAX) throw new BadRequestException(GUEST_IMAGE_OWN_LIMIT_MESSAGE);
+      // pg_column_size đọc kích thước đã lưu mà không giải nén mảng (có thể tới 100 MB); ngưỡng 4 KB loại mảng chỉ có URL Cloudinary.
+      const [total] = await tx.$queryRaw<{ bytes: bigint | number }[]>`
+        SELECT COALESCE(sum(pg_column_size(p."images")), 0)::bigint AS "bytes"
+        FROM "feed_posts" p JOIN "users" u ON u."id" = p."userId"
+        WHERE p."status" = 'PENDING' ${exclude} AND pg_column_size(p."images") > 4096 AND NOT ${REAL_USER_SQL}`;
+      const incomingBytes = incoming.reduce((sum, u) => sum + u.length, 0);
+      if (Number(total?.bytes ?? 0) + incomingBytes > GUEST_PENDING_IMAGE_BYTES_MAX) throw new BadRequestException(GUEST_IMAGE_TOTAL_LIMIT_MESSAGE);
+      return write(tx);
+    });
   }
 
   /**
@@ -634,15 +646,15 @@ export class CommunityFeedService {
     // qua nhánh auto-PUBLISHED) thay vì chặn hẳn, để admin còn duyệt tay nếu là báo động giả.
     const flagged = containsBannedContent(`${title ?? ''}\n${body}`, await this.bannedKeywords());
     const status = trusted && !flagged ? 'PUBLISHED' : 'PENDING';
-    if (status === 'PENDING') await this.assertGuestImageQuota(userId, images);
-
-    const post = await this.prisma.feedPost.create({
-      data: {
-        userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
-        ...(input.eventId ? { meta: { eventId: input.eventId } } : {}),
-      },
-      select: { id: true },
-    });
+    const post = await this.writeWithGuestImageQuota(userId, status === 'PENDING' ? images : [], undefined, (db) =>
+      db.feedPost.create({
+        data: {
+          userId, kind, status, body, title, images, categoryId: input.categoryId ?? null,
+          ...(input.eventId ? { meta: { eventId: input.eventId } } : {}),
+        },
+        select: { id: true },
+      }),
+    );
 
     if (slugs.length) {
       const products = await this.prisma.product.findMany({
@@ -1102,7 +1114,6 @@ export class CommunityFeedService {
     if (patch.title !== undefined) data.title = patch.title.trim().slice(0, MAX_TITLE) || null;
     if (patch.images !== undefined) {
       const images = patch.images.filter((u) => u?.trim()).slice(0, MAX_FEED_IMAGES);
-      await this.assertGuestImageQuota(userId, images, postId);
       data.images = images;
     }
 
@@ -1131,10 +1142,12 @@ export class CommunityFeedService {
 
     // Điều kiện status ở lệnh ghi đóng ca đua với deletePost/rejectPost: ảnh vừa được dọn thì
     // không thể bị gắn lại vào dòng đã REMOVED.
-    const { count } = await this.prisma.feedPost.updateMany({
-      where: { id: postId, status: { not: 'REMOVED' } },
-      data,
-    });
+    const { count } = await this.writeWithGuestImageQuota(userId, patch.images !== undefined ? (data.images as string[]) : [], postId, (db) =>
+      db.feedPost.updateMany({
+        where: { id: postId, status: { not: 'REMOVED' } },
+        data,
+      }),
+    );
     if (count === 0) throw new NotFoundException('Bài viết không tồn tại.');
     return { ok: true };
   }

@@ -48,11 +48,60 @@ function limitFor(path: string): string {
   return DEFAULT_BODY_LIMIT;
 }
 
+/**
+ * Quét thô buffer JSON TRƯỚC JSON.parse: parser chạy trước auth/throttle nên thân 10 MB hàng trăm nghìn khoá của kẻ ẩn danh
+ * làm JSON.parse chặn event loop ~1,6 s dù inspectBody sau đó loại nó. Quét O(n) một lượt, bỏ qua nội dung chuỗi, đếm
+ * khoá (':'), phần tử mảng (',' trong mảng + '[') và độ sâu; vượt trần thì ném lỗi 400 ngay.
+ */
+export function scanRawJson(buf: Buffer, maxNodes: number, maxDepth: number): boolean {
+  let nodes = 0;
+  let depth = 0;
+  // Ngăn xếp loại container, chỉ cần biết đỉnh là mảng hay object; độ sâu thật không vượt maxDepth + 1 nên mảng bit nhỏ là đủ.
+  const isArray: boolean[] = [];
+  let inString = false;
+  for (let i = 0; i < buf.length; i++) {
+    const c = buf[i];
+    if (inString) {
+      if (c === 0x5c) i++;
+      else if (c === 0x22) inString = false;
+      continue;
+    }
+    switch (c) {
+      case 0x22: inString = true; break;
+      case 0x7b:
+      case 0x5b:
+        if (++depth > maxDepth) return false;
+        isArray[depth] = c === 0x5b;
+        break;
+      case 0x7d:
+      case 0x5d:
+        if (depth > 0) depth--;
+        break;
+      case 0x3a:
+        if (++nodes > maxNodes) return false;
+        break;
+      case 0x2c:
+        if (depth > 0 && isArray[depth] && ++nodes > maxNodes) return false;
+        break;
+    }
+  }
+  return true;
+}
+
+function rawGuard(maxNodes: number, maxDepth: number) {
+  return (_req: unknown, _res: unknown, buf: Buffer): void => {
+    if (buf.length > 1024 && !scanRawJson(buf, maxNodes, maxDepth)) {
+      throw Object.assign(new Error('body too complex'), { status: 400, type: 'entity.complex' });
+    }
+  };
+}
+
 /** json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần. */
 export function createBodyParsers(): RequestHandler[] {
   const tiers = new Map<string, { json: RequestHandler; urlencoded: RequestHandler }>();
   for (const limit of [DEFAULT_BODY_LIMIT, WEBHOOK_BODY_LIMIT, LARGE_BODY_LIMIT]) {
-    tiers.set(limit, { json: json({ limit }), urlencoded: urlencoded({ limit, extended: true }) });
+    const verify = limit === WEBHOOK_BODY_LIMIT ? rawGuard(MAX_WEBHOOK_BODY_NODES, WEBHOOK_SHAPE.depth) : rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH);
+    tiers.set(limit, { json: json({ limit, verify }), urlencoded: urlencoded({ limit, extended: true }) });
   }
   const pick = (kind: 'json' | 'urlencoded'): RequestHandler => (req, res, next) => tiers.get(limitFor(req.path))![kind](req, res, next);
   return [pick('json'), pick('urlencoded')];
@@ -120,6 +169,7 @@ export const bodyParserErrorHandler: ErrorRequestHandler = (err: unknown, _req, 
   const e = err as { type?: string; status?: number; statusCode?: number } | undefined;
   const status = e?.status ?? e?.statusCode;
   if (e?.type === 'entity.too.large') return reject(res, 413, BODY_TOO_LARGE_MESSAGE);
+  if (e?.type === 'entity.complex') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   if (status === 400 && typeof e?.type === 'string' && e.type.startsWith('entity.')) {
     return reject(res, 400, 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.');
   }

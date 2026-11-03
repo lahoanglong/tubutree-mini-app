@@ -19,6 +19,8 @@ export function isTaxCodeValid(raw: string): boolean {
 /** Chỉ báo lỗi khi khách đã gõ tới độ dài đáng kể (>= 10 chữ số) hoặc có ký tự lạ, để không đỏ ô từ phím đầu tiên. */
 export function shouldShowTaxCodeError(raw: string): boolean {
   if (!raw.trim() || isTaxCodeValid(raw)) return false;
+  // Còn là tiền tố của mã hợp lệ (CCCD 12 số, MST chi nhánh 10-3): khách đang gõ dở, chưa báo đỏ.
+  if (/^(\d{11}|\d{10}-\d{0,2})$/.test(raw.replace(/[\s.]/g, ''))) return false;
   const digits = raw.replace(/\D/g, '').length;
   return digits >= 10 || /[^\d\s.\-]/.test(raw);
 }

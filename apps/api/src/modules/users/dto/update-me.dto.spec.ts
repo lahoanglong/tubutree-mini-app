@@ -47,12 +47,13 @@ describe('UpdateMeDto.avatarUrl', () => {
   });
 });
 
-// BAOMAT-09: tên người nhận ở địa chỉ từ chối < và >, hồ sơ phải cùng quy tắc.
+// BAOMAT-09: `<` `>` được kiểm ở UsersService.updateMe (chỉ khi tên đổi), xem users.service.spec.ts.
 describe('UpdateMeDto.fullName', () => {
-  it('nhận tên có dấu, dấu nháy và dấu gạch', () => {
+  it('nhận tên có dấu, dấu nháy và dấu gạch; vẫn nhận tên Zalo có < để service so với tên đang lưu', () => {
     expect(errorsOf({ fullName: "Lã Hoàng Long O'Neil-Trần" })).toEqual([]);
+    expect(errorsOf({ fullName: 'Hoa <3' })).toEqual([]);
   });
-  it.each(['<img src=x onerror=alert(1)>', 'An <b>', 'a>b'])('từ chối %s', (fullName) => {
-    expect(errorsOf({ fullName })).toEqual(['fullName']);
+  it('từ chối tên quá 120 ký tự', () => {
+    expect(errorsOf({ fullName: 'a'.repeat(121) })).toEqual(['fullName']);
   });
 });
