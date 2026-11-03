@@ -17,6 +17,7 @@ import { formatVnd } from '@/lib/shop-client';
 import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { ApiError } from '@/lib/client-api';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass, LoadError } from './ui';
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
@@ -81,8 +82,9 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
   };
   const onError = (e: unknown) => {
     const text = actionErrorText(e);
-    // Lời nghiệp vụ của máy chủ đã nói rõ kết quả; các lỗi còn lại (5xx, mạng, hết giờ) chưa chắc thao tác đã ghi hay chưa.
-    setError(e instanceof Error && text === e.message ? text : `${text} Tải lại trang để xem trạng thái hiện tại.`);
+    // Theo loại lỗi chứ không so chữ: 5xx vẫn mang lời tiếng Việt của máy chủ nhưng chưa chắc thao tác đã ghi hay chưa.
+    const unsure = !(e instanceof ApiError) || e.status >= 500;
+    setError(unsure ? `${text} Tải lại trang để xem trạng thái hiện tại.` : text);
   };
   const createMut = useMutation({
     mutationFn: (s: { storefrontId: string; settleableAmount: number }) => createAdminMerchantPayout(s.storefrontId, s.settleableAmount),

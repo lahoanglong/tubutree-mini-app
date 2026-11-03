@@ -189,7 +189,7 @@ describe('AffiliateService.markPayoutPaid (C-029: đã rút)', () => {
     it('người khác bấm sau → 409 nêu người đã xác nhận, giờ VN và mã GD', async () => {
       const { svc, notify } = build(already());
       await expect(svc.markPayoutPaid('admin2', 'p1', { bankRef: 'FT-B' })).rejects.toThrow(
-        'Phiếu đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A',
+        'Lệnh rút đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A',
       );
       expect(notify).not.toHaveBeenCalled();
     });

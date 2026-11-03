@@ -1138,7 +1138,7 @@ export class MerchantFulfilmentService {
     if (flipped.count === 0) {
       if (payout.status === 'PAID') {
         if (isSameConfirmation(payout, adminId, ref)) return payout;
-        throw await alreadyPaidConflict(this.prisma, payout);
+        throw await alreadyPaidConflict(this.prisma, payout, { noun: 'Phiếu đối soát', collected: payout.amount < 0 });
       }
       throw new ConflictException('Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
     }

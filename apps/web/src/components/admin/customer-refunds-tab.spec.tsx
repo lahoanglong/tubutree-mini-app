@@ -759,6 +759,17 @@ describe('CustomerRefundsTab — Đã chuyển khoản', () => {
     expect(byText(container, 'button', 'Đã chuyển khoản')).toBeNull();
   });
 
+  it('khoản khách cuối đơn CTV: hộp "Bắt đầu chuyển khoản" nói khoá về mình để không chuyển trùng, không nhắc Ví Tubu', async () => {
+    stub({ list: () => [refund({ kind: 'END_CUSTOMER', userId: null, status: 'PENDING', claimedBy: null, claimedAt: null })] });
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    click(byText(container, 'button', 'Bắt đầu chuyển khoản'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d.textContent).toContain('người khác không chuyển trùng');
+    expect(d.textContent).not.toContain('Ví Tubu');
+  });
+
   it('nhân viên Kế toán: khoản khách cuối đơn CTV chưa có tài khoản → không xác nhận được, nhờ quản trị viên', async () => {
     const api = stub({ list: () => [refund({ kind: 'END_CUSTOMER', userId: null })] });
     const { container } = mount(<CustomerRefundsTab isAdmin={false} />);
