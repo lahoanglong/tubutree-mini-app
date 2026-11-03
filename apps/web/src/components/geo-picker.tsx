@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getProvinces, getCommunes } from '@/lib/geo-client';
@@ -30,6 +31,8 @@ export function GeoPicker({
   errorProvince?: string;
   errorWard?: string;
 }) {
+  const provinceId = useId();
+  const wardId = useId();
   const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity });
   const communesQ = useQuery({
     queryKey: ['geo-communes', value.provinceCode],
@@ -41,8 +44,11 @@ export function GeoPicker({
   return (
     <>
       <div>
+        <label htmlFor={provinceId} className="mb-1 block text-xs font-medium text-stone-700">
+          Tỉnh/Thành phố
+        </label>
         <select
-          aria-label="Tỉnh/thành"
+          id={provinceId}
           aria-invalid={errorProvince ? true : undefined}
           value={value.provinceCode}
           onChange={(e) => {
@@ -71,8 +77,11 @@ export function GeoPicker({
       </div>
 
       <div>
+        <label htmlFor={wardId} className="mb-1 block text-xs font-medium text-stone-700">
+          Phường/Xã
+        </label>
         <select
-          aria-label="Phường/xã"
+          id={wardId}
           aria-invalid={errorWard ? true : undefined}
           value={value.wardCode}
           disabled={!value.provinceCode}

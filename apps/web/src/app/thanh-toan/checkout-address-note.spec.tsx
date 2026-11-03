@@ -156,7 +156,7 @@ describe('/thanh-toan — sửa địa chỉ ngay tại chỗ (BUYERWEB-14)', ()
     const phone = Array.from(c.querySelectorAll('form label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input')!;
     expect(phone.value).toBe('0912345678');
     typeInto(phone, '0911 222 333');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(8);
     expect(mocks.updateAddress).toHaveBeenCalledTimes(1);
     expect(mocks.updateAddress.mock.calls[0]![0]).toBe('a1');
@@ -171,7 +171,7 @@ describe('/thanh-toan — sửa địa chỉ ngay tại chỗ (BUYERWEB-14)', ()
     await flush(4);
     const phone = Array.from(c.querySelectorAll('form label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input')!;
     typeInto(phone, '091');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(4);
     expect(mocks.updateAddress).not.toHaveBeenCalled();
     expect(phone.getAttribute('aria-invalid')).toBe('true');

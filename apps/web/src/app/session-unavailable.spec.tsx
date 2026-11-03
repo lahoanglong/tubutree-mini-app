@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
     logout: vi.fn(),
   } as Record<string, unknown>,
 }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ ...mocks.auth, retrySession: mocks.retrySession }) }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ ...mocks.auth, retrySession: mocks.retrySession }), useOptionalAuth: () => null }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/tai-khoan/don-hang',

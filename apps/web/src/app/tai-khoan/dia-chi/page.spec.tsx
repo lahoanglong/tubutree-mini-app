@@ -106,7 +106,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     const phone = Array.from(c.querySelectorAll('label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input')!;
     expect(phone.value).toBe('0987654321');
     typeInto(phone, '0911222333');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(6);
     expect(mocks.update).toHaveBeenCalledTimes(1);
     expect(mocks.update.mock.calls[0]![0]).toBe('a2');
@@ -119,7 +119,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     click(btn(c, 'Sửa địa chỉ của Trần Bình')!);
     await flush(4);
     typeInto(Array.from(c.querySelectorAll('label')).find((l) => l.textContent?.includes('Số điện thoại'))!.querySelector('input'), '123');
-    click(btn(c, 'Lưu thay đổi')!);
+    click(btn(c, 'Lưu')!);
     await flush(4);
     expect(mocks.update).not.toHaveBeenCalled();
     expect(c.textContent).toContain('Số điện thoại chưa đúng');
@@ -223,7 +223,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     const c = await mount();
     click(btn(c, 'Thêm địa chỉ mới')!);
     await flush(2);
-    expect(c.querySelector('form[aria-label="Thêm địa chỉ mới"]')).not.toBeNull();
+    expect(c.querySelector('form[aria-label="Thêm địa chỉ"]')).not.toBeNull();
     click(btn(c, 'Huỷ')!);
     expect(c.querySelector('form')).toBeNull();
   });

@@ -267,6 +267,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Như useAuth nhưng trả null khi không có AuthProvider (thành phần dùng chung được dựng riêng trong test). */
+export function useOptionalAuth(): AuthState | null {
+  return useContext(AuthContext);
+}
+
 export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
