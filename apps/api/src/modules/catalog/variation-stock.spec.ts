@@ -124,7 +124,8 @@ describe('variation-stock', () => {
       expect(sql).not.toContain('"pancakeStockSyncReadAt" =');
       const args = argsOf($executeRaw);
       expect(args.filter((a: unknown) => a === at)).toHaveLength(2);
-      expect(args.filter((a: unknown) => a === receivedAt)).toHaveLength(2);
+      expect(args.filter((a: unknown) => a === receivedAt)).toHaveLength(3);
+      expect(sql).toContain('("pancakeStockEventAt" IS NOT NULL OR "pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ?)');
     });
 
     it('webhook không có updated_at → không so mốc Pancake, vẫn không áp nếu nhận trước lúc đồng bộ đọc', async () => {
@@ -134,7 +135,8 @@ describe('variation-stock', () => {
       const sql = sqlOf($executeRaw);
       expect(sql).not.toContain('pancakeStockEventAt');
       expect(sql).toContain('("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ?)');
-      expect(argsOf($executeRaw).filter((a: unknown) => a === receivedAt)).toHaveLength(2);
+      expect(sql).toContain('("pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ?)');
+      expect(argsOf($executeRaw).filter((a: unknown) => a === receivedAt)).toHaveLength(3);
     });
 
     it('lượt đồng bộ → chỉ so lúc đọc với giờ máy chủ (lúc nhận webhook đã áp, lúc đọc của lượt trước), không so với updated_at Pancake', async () => {

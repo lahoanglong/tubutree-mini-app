@@ -141,12 +141,18 @@ function stockOriginSql(origin: PancakeStockOrigin | undefined): { set: Prisma.S
       ? Prisma.sql`, "pancakeStockEventAt" = ${eventAt},
            "pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ${receivedAt})`
       : Prisma.sql`, "pancakeStockWebhookReceivedAt" = GREATEST("pancakeStockWebhookReceivedAt", ${receivedAt})`,
+    // Webhook không mang updated_at thì không còn mốc Pancake nào để so; mốc nhận (giờ máy chủ) là thứ duy nhất phân biệt sự kiện cũ
+    // được BullMQ thử lại sau một sự kiện mới hơn. Cùng sự kiện thử lại mang cùng receivedAt nên vẫn qua (<=). Có updated_at thì
+    // mốc đó quyết định (webhook gửi muộn nhưng updated_at mới hơn phải được áp, R5-SYNC-3); chỉ khi chưa có mốc updated_at nào
+    // thì mới so lúc nhận.
     guard: eventAt
       ? Prisma.sql`
        AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})
-       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})`
+       AND ("pancakeStockEventAt" IS NULL OR "pancakeStockEventAt" <= ${eventAt})
+       AND ("pancakeStockEventAt" IS NOT NULL OR "pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ${receivedAt})`
       : Prisma.sql`
-       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})`,
+       AND ("pancakeStockSyncReadAt" IS NULL OR "pancakeStockSyncReadAt" < ${receivedAt})
+       AND ("pancakeStockWebhookReceivedAt" IS NULL OR "pancakeStockWebhookReceivedAt" <= ${receivedAt})`,
   };
 }
 
