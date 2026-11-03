@@ -77,7 +77,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
     capturePrismaError(exception, route);
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Lỗi cơ sở dữ liệu.',
+      message: 'Đã có lỗi xảy ra, bạn thử lại sau nhé.',
       code: exception.code,
     });
   }

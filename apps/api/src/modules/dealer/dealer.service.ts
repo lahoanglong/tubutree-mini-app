@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -15,6 +15,7 @@ import {
   SELLABLE_PANCAKE_VARIATION_WHERE,
 } from '../cart/sellable';
 import { generateUniqueOrderCode } from '../../common/order-code';
+import { isSerializationFailure, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -332,8 +333,8 @@ export class DealerService {
 
     const code = await generateUniqueOrderCode(this.prisma, 'DEALER');
     let order: Awaited<ReturnType<typeof this.prisma.order.create>> & { hasBackorder: boolean };
-    try {
-      order = await this.prisma.$transaction(
+    const runTx = () =>
+      this.prisma.$transaction(
         async (tx) => {
           // Kiểm tra hạn mức công nợ TRONG transaction Serializable: 2 đơn CREDIT
           // đồng thời không thể cùng vượt trần (một trong hai sẽ serialization-fail).
@@ -386,11 +387,18 @@ export class DealerService {
         },
         onCredit ? { isolationLevel: 'Serializable' } : undefined,
       );
-    } catch (err) {
-      // P2034: serialization failure — 2 đơn CREDIT chạm nhau. Báo thử lại thay vì 500.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý đơn công nợ, bạn thử lại nhé.');
+    try {
+      try {
+        order = await runTx();
+      } catch (first) {
+        if (!isSerializationFailure(first)) throw first;
+        // Tx thua đã rollback hết. Cùng key mà bên thắng đã ghi đơn thì trả đơn đó; chưa có thì chạy lại cả tx một lần.
+        const won = key ? await this.prisma.order.findUnique({ where: { idempotencyKey: key } }) : null;
+        if (won && won.userId === userId) return this.orderForDealer(won.id);
+        order = await runTx();
       }
+    } catch (err) {
+      if (isSerializationFailure(err)) throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
       // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
