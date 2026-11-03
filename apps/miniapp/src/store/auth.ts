@@ -35,20 +35,24 @@ const INVOICE_KEY = 'tubu_invoice';
  * refresh token, không rơi xuống tài khoản Khách.
  */
 const AUTH_STORAGE_TIMEOUT_MS = 3000;
-class StorageTimeoutError extends Error {}
-function withStorageTimeout<T>(p: Promise<T>): Promise<T> {
+/** Storage của ZMP ném lỗi hay không trả lời: lỗi của máy, không phải của mạng hay tài khoản. */
+class StorageFailure extends Error {}
+class StorageTimeoutError extends StorageFailure {}
+function withStorageTimeout<T>(call: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new StorageTimeoutError('ZMP storage timeout')), AUTH_STORAGE_TIMEOUT_MS);
-    p.then(
-      (v) => {
+    const fail = (e: unknown) => {
+      clearTimeout(t);
+      reject(new StorageFailure(e instanceof Error ? e.message : 'ZMP storage error'));
+    };
+    try {
+      call().then((v) => {
         clearTimeout(t);
         resolve(v);
-      },
-      (e: unknown) => {
-        clearTimeout(t);
-        reject(e);
-      },
-    );
+      }, fail);
+    } catch (e) {
+      fail(e);
+    }
   });
 }
 
@@ -58,12 +62,12 @@ let unsavedDeviceId: string | null = null;
 /** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
 export async function getDeviceId(): Promise<string> {
   // Không đọc được thì ném, không sinh id mới: id mới là một tài khoản Khách khác.
-  const res = await withStorageTimeout(getStorage({ keys: [DEVICE_KEY] }));
+  const res = await withStorageTimeout(() => getStorage({ keys: [DEVICE_KEY] }));
   const existing = (res as Record<string, unknown>)[DEVICE_KEY];
   if (typeof existing === 'string' && existing.length > 0) return existing;
   // deviceId là thứ DUY NHẤT xác thực tài khoản khách — phải sinh bằng crypto (xem newDeviceId).
   const id = (unsavedDeviceId ??= newDeviceId());
-  await withStorageTimeout(setStorage({ data: { [DEVICE_KEY]: id } }));
+  await withStorageTimeout(() => setStorage({ data: { [DEVICE_KEY]: id } }));
   unsavedDeviceId = null;
   return id;
 }
@@ -88,20 +92,63 @@ interface AuthState {
 }
 
 async function persistRefresh(token: string): Promise<void> {
-  await withStorageTimeout(setStorage({ data: { [REFRESH_KEY]: token } }));
+  await withStorageTimeout(() => setStorage({ data: { [REFRESH_KEY]: token } }));
 }
 async function readRefresh({ limit = true }: { limit?: boolean } = {}): Promise<string | null> {
-  const read = getStorage({ keys: [REFRESH_KEY] });
-  const res = await (limit ? withStorageTimeout(read) : read);
+  const read = () => getStorage({ keys: [REFRESH_KEY] });
+  const res = await (limit ? withStorageTimeout(read) : read());
   const val = (res as Record<string, unknown>)[REFRESH_KEY];
   return typeof val === 'string' && val.length > 0 ? val : null;
 }
 async function clearRefresh(): Promise<void> {
-  // Xoá treo thì bỏ qua: chỉ gọi khi máy chủ đã từ chối token này (khoá, hết hạn, đã xoay) nên token còn lại cũng bị từ chối
-  // ở lần refresh sau, còn chờ thì treo cả báo khoá. Đăng xuất không dùng hàm này (xem logout).
-  await withStorageTimeout(removeStorage({ keys: [REFRESH_KEY] })).catch((e: unknown) => {
-    if (!(e instanceof StorageTimeoutError)) throw e;
+  unpersistedRefresh = null;
+  // Xoá treo hay hỏng thì bỏ qua: chỉ gọi khi máy chủ đã từ chối token này (khoá, hết hạn, đã xoay) nên token còn lại cũng bị từ chối
+  // ở lần refresh sau, còn chờ hay ném thì kẹt cả báo khoá. Đăng xuất không dùng hàm này (xem logout).
+  await withStorageTimeout(() => removeStorage({ keys: [REFRESH_KEY] })).catch((e: unknown) => {
+    if (!(e instanceof StorageFailure)) throw e;
   });
+}
+
+/**
+ * Mỗi lần logout() bắt đầu là sang một đời mới. Đường tạo phiên (khôi phục, handler 401, đăng nhập, liên kết SĐT, nâng cấp khách) chụp
+ * đời lúc bắt đầu; máy chủ trả lời sau một lần đăng xuất thì kết quả bị bỏ, kẻo máy dùng chung tự đăng nhập lại người vừa thoát.
+ */
+let sessionEpoch = 0;
+
+/** Refresh token mới mà storage không ghi được: giữ trong bộ nhớ để refresh của phiên này vẫn chạy, khỏi đá khách ra. */
+let unpersistedRefresh: string | null = null;
+
+function revokeInBackground(refreshToken: string): void {
+  void api.post('/auth/logout', { refreshToken }).catch((err: unknown) => {
+    console.warn('[auth] Chưa thu hồi được refresh token trên máy chủ:', err);
+  });
+}
+
+/**
+ * Nhận phiên máy chủ vừa trả. false = một lần logout() đã bắt đầu từ lúc `epoch` được chụp: không đặt token, không lưu refresh,
+ * refresh token mới được thu hồi, người gọi không đổi user/status. Lưu refresh hỏng hay quá hạn thì vẫn vào phiên (token ở bộ nhớ).
+ */
+async function adoptSession(res: LoginResponse, epoch: number): Promise<boolean> {
+  if (epoch !== sessionEpoch) {
+    revokeInBackground(res.refreshToken);
+    return false;
+  }
+  setAccessToken(res.accessToken);
+  let saved = true;
+  try {
+    await persistRefresh(res.refreshToken);
+  } catch {
+    saved = false;
+  }
+  if (epoch !== sessionEpoch) {
+    // Đăng xuất chen vào lúc đang ghi: lần ghi có thể đáp sau lần xoá của logout.
+    setAccessToken(null);
+    revokeInBackground(res.refreshToken);
+    void removeStorage({ keys: [REFRESH_KEY] }).catch(() => undefined);
+    return false;
+  }
+  unpersistedRefresh = saved ? null : res.refreshToken;
+  return true;
 }
 
 /**
@@ -124,7 +171,7 @@ function isAccountBlocked(err: unknown): boolean {
  * đẩy họ sang tài khoản Khách (mất điểm, giỏ, đơn đang hiện); app giữ phiên cũ và thử lại (hooks/use-auth-phase.ts).
  */
 function isTransientSessionError(err: unknown): boolean {
-  if (err instanceof StorageTimeoutError) return true;
+  if (err instanceof StorageFailure) return true;
   if (!isHttpError(err)) return false;
   const status = err.response?.status;
   return !status || status === 408 || status === 429 || status >= 500;
@@ -132,6 +179,7 @@ function isTransientSessionError(err: unknown): boolean {
 
 /** Lời cho khách khi chưa vào được phiên vì lỗi tạm: bị giới hạn tốc độ thì nói đúng vậy (mạng vẫn ổn), còn lại là mất kết nối. */
 function sessionErrorText(err: unknown): string {
+  if (err instanceof StorageFailure) return vi.errors.sessionStorage;
   return isHttpError(err) && err.response?.status === 429 ? vi.errors.sessionRateLimited : vi.errors.sessionUnavailable;
 }
 
@@ -153,7 +201,12 @@ type ZaloAttempt = { kind: 'ok'; res: LoginResponse } | { kind: 'guest' } | { ki
  * 'guest' để rơi xuống tài khoản Khách. Máy chủ đã trả lời lỗi tạm hoặc khoá thì 'stop' (trạng thái đã đặt xong): đăng nhập
  * khách lúc đó sẽ lặng lẽ đổi khách quen sang tài khoản Khách trống. `keepSession` = đang đăng nhập sẵn, không hạ xuống lỗi.
  */
-async function tryZaloLogin(ref: string | undefined, firstTouch: Awaited<ReturnType<typeof loadFirstTouch>>, keepSession: boolean): Promise<ZaloAttempt> {
+async function tryZaloLogin(
+  ref: string | undefined,
+  firstTouch: Awaited<ReturnType<typeof loadFirstTouch>>,
+  keepSession: boolean,
+  epoch: number,
+): Promise<ZaloAttempt> {
   let creds: Awaited<ReturnType<typeof getZaloAccessToken>>;
   try {
     creds = await getZaloAccessToken();
@@ -162,10 +215,9 @@ async function tryZaloLogin(ref: string | undefined, firstTouch: Awaited<ReturnT
   }
   try {
     const res = await loginZaloMiniApp(creds.code, creds.accessToken, undefined, ref, firstTouch);
-    setAccessToken(res.accessToken);
-    await persistRefresh(res.refreshToken);
-    return { kind: 'ok', res };
+    return (await adoptSession(res, epoch)) ? { kind: 'ok', res } : { kind: 'stop' };
   } catch (err) {
+    if (epoch !== sessionEpoch) return { kind: 'stop' };
     // Khoá là kết luận chắc chắn, không phải lỗi tạm: kể cả khi đang đăng nhập sẵn cũng phải bỏ phiên và báo khách.
     if (isAccountBlocked(err)) {
       await applyBlocked(err);
@@ -185,10 +237,11 @@ async function tryZaloLogin(ref: string | undefined, firstTouch: Awaited<ReturnT
  * (app vẫn dùng được đầy đủ). Lỗi mạng/máy chủ ở cả hai bước là 'error' với câu tiếng Việt để UI báo "thử lại" thay vì im lặng,
  * trừ khi đang giữ một phiên đăng nhập sẵn (`keepSession`); khoá thì luôn báo.
  */
-async function silentLogin(keepSession: boolean): Promise<void> {
+async function silentLogin(keepSession: boolean, epoch: number): Promise<void> {
   const ref = getLaunchReferral();
   const firstTouch = await loadFirstTouch();
-  const zalo = await tryZaloLogin(ref, firstTouch, keepSession);
+  if (epoch !== sessionEpoch) return;
+  const zalo = await tryZaloLogin(ref, firstTouch, keepSession, epoch);
   if (zalo.kind === 'ok') {
     useAuthStore.setState({ user: zalo.res.user, status: 'authenticated' });
     return;
@@ -196,10 +249,10 @@ async function silentLogin(keepSession: boolean): Promise<void> {
   if (zalo.kind === 'stop') return;
   try {
     const res = await loginGuest(await getDeviceId(), ref, firstTouch);
-    setAccessToken(res.accessToken);
-    await persistRefresh(res.refreshToken);
+    if (!(await adoptSession(res, epoch))) return;
     useAuthStore.setState({ user: res.user, status: 'authenticated' });
   } catch (err) {
+    if (epoch !== sessionEpoch) return;
     if (isAccountBlocked(err)) await applyBlocked(err);
     else if (!keepSession) useAuthStore.setState({ status: 'error', error: sessionErrorText(err) });
   }
@@ -213,14 +266,18 @@ async function silentLogin(keepSession: boolean): Promise<void> {
  */
 let refreshInFlight: Promise<LoginResponse | null> | null = null;
 function refreshSession(): Promise<LoginResponse | null> {
-  refreshInFlight ??= (async () => {
-    const token = await readRefresh();
+  if (refreshInFlight) return refreshInFlight;
+  const p = (async () => {
+    const token = unpersistedRefresh ?? (await readRefresh());
     if (!token) return null;
     return refreshTokens(token);
-  })().finally(() => {
-    refreshInFlight = null;
-  });
-  return refreshInFlight;
+  })();
+  refreshInFlight = p;
+  const clear = () => {
+    if (refreshInFlight === p) refreshInFlight = null;
+  };
+  p.then(clear, clear);
+  return p;
 }
 
 /**
@@ -239,12 +296,12 @@ let loginInFlight: Promise<void> | null = null;
  * nguyên phiên khách hiện tại, không ảnh hưởng trải nghiệm, thử lại ở lần mở app kế tiếp.
  */
 function upgradeGuestSilently(): Promise<void> {
+  const epoch = sessionEpoch;
   return (async () => {
     try {
       const { code, accessToken } = await getZaloAccessToken();
       const res = await ensurePhoneApi(code, accessToken);
-      setAccessToken(res.accessToken);
-      await persistRefresh(res.refreshToken);
+      if (!(await adoptSession(res, epoch))) return;
       useAuthStore.setState({ user: res.user, status: 'authenticated' });
     } catch {
       /* Zalo vẫn chưa khả dụng / lỗi khác — giữ nguyên phiên khách, thử lại ở lần mở app sau. */
@@ -258,19 +315,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'loading',
 
   login: () => {
-    loginInFlight ??= (async () => {
+    if (loginInFlight) return loginInFlight;
+    const epoch = sessionEpoch;
+    const run = (async () => {
       // Bấm đăng nhập lúc app còn đang khôi phục phiên: chờ khôi phục xong. Khôi phục ra phiên rồi thì thôi, vì đăng nhập
       // lại từ đầu song song sẽ ghi đè phiên vừa khôi phục (có khi bằng phiên Khách) và hai bên xoay refresh token dẫm lên nhau.
       if (restoreInFlight) {
         await restoreInFlight.catch(() => undefined);
         if (get().status === 'authenticated') return;
       }
+      if (epoch !== sessionEpoch) return;
       set({ status: 'loading', error: undefined });
-      await silentLogin(false);
-    })().finally(() => {
-      loginInFlight = null;
+      await silentLogin(false, epoch);
+    })();
+    const tracked = run.finally(() => {
+      if (loginInFlight === tracked) loginInFlight = null;
     });
-    return loginInFlight;
+    loginInFlight = tracked;
+    return tracked;
   },
 
   /**
@@ -285,6 +347,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (restoreInFlight) return restoreInFlight;
     // Làm mới một phiên ĐANG đăng nhập (vd sau khi đặt hàng để cập nhật số dư): không nháy 'loading' và không bao giờ hạ
     // phiên xuống 'error' chỉ vì lần làm mới này gặp lỗi mạng — khách vẫn đang đăng nhập với token còn dùng được.
+    const epoch = sessionEpoch;
     const keepSession = get().status === 'authenticated' && get().user !== null;
     if (!keepSession) set({ status: 'loading', error: undefined });
     const done = (async () => {
@@ -296,11 +359,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const after = get().status;
         if (after === 'authenticated' || after === 'idle') return;
       }
+      if (epoch !== sessionEpoch) return;
       try {
         const res = await refreshSession();
         if (res) {
-          setAccessToken(res.accessToken);
-          await persistRefresh(res.refreshToken);
+          if (!(await adoptSession(res, epoch))) return;
           set({ user: res.user, status: 'authenticated' });
           // A7-01 (audit 2026-09): trước đây restore() ưu tiên refresh token khách đã lưu và
           // KHÔNG BAO GIỜ thử lại Zalo một khi đã có phiên khách hợp lệ (nhánh dưới "đăng nhập
@@ -312,6 +375,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           return;
         }
       } catch (err) {
+        if (epoch !== sessionEpoch) return;
         if (isRefreshRejected(err)) {
           await clearRefresh();
         } else if (isTransientSessionError(err)) {
@@ -322,12 +386,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
       // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo, không có thì Khách (im lặng, không sheet SĐT).
-      await silentLogin(keepSession);
+      if (epoch !== sessionEpoch) return;
+      await silentLogin(keepSession, epoch);
     })();
     setAuthReady(done);
     const tracked = done.finally(() => {
-      setAuthReady(null);
-      if (restoreInFlight === tracked) restoreInFlight = null;
+      if (restoreInFlight === tracked) {
+        setAuthReady(null);
+        restoreInFlight = null;
+      }
     });
     restoreInFlight = tracked;
     return tracked;
@@ -343,6 +410,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   ensurePhoneOrThrow: async (): Promise<string | null> => {
+    const epoch = sessionEpoch;
     const current = get().user;
     if (current?.phone) return current.phone;
     // Chưa có phiên (đăng nhập lỗi/đang khoá): không mở sheet xin SĐT cho một lời gọi chắc chắn bị từ chối.
@@ -363,13 +431,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
     // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
     const res = await ensurePhoneApi(creds.code, creds.accessToken, phoneToken);
-    setAccessToken(res.accessToken);
-    await persistRefresh(res.refreshToken);
+    if (!(await adoptSession(res, epoch))) return null;
     set({ user: res.user, status: 'authenticated' });
     return res.user.phone ?? null;
   },
 
   logout: async () => {
+    // Đồng bộ, trước mọi await: từ đây mọi phiên đang chờ máy chủ bị bỏ, và đăng nhập bắt đầu sau đó là một lần mới
+    // (không gộp vào lần đang chạy của đời trước).
+    sessionEpoch += 1;
+    refreshInFlight = null;
+    restoreInFlight = null;
+    loginInFlight = null;
+    setAuthReady(null);
+    unpersistedRefresh = null;
     // Không đặt trần ở đây: trên máy dùng chung, đăng xuất phải chắc đã đọc được token để thu hồi và đã xoá nó. Storage treo thì
     // đăng xuất treo theo (khách thấy chưa xong), còn hơn báo đã đăng xuất mà token vẫn nằm trên máy cho người sau mở lại.
     // Đọc trước khi xoá: sau đó không còn token để thu hồi trên máy chủ.
@@ -390,11 +465,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // tránh import vòng (store/auth.ts <-> components/app.tsx).
     onLogoutCleanup?.();
     // Không chờ: đăng xuất trên máy không phụ thuộc mạng. Token còn sống trên máy chủ chỉ là lỗi dọn dẹp, tự hết hạn.
-    if (refreshToken) {
-      void api.post('/auth/logout', { refreshToken }).catch((err: unknown) => {
-        console.warn('[auth] Chưa thu hồi được refresh token trên máy chủ:', err);
-      });
-    }
+    if (refreshToken) revokeInBackground(refreshToken);
   },
 }));
 
@@ -419,14 +490,15 @@ export function setLogoutCleanup(fn: () => void): void {
 
 // Khi API gặp 401 → tự refresh bằng token đã lưu, trả access token mới cho interceptor.
 setUnauthorizedHandler(async () => {
+  const epoch = sessionEpoch;
   try {
     const res = await refreshSession();
     if (!res) return null;
-    setAccessToken(res.accessToken);
-    await persistRefresh(res.refreshToken);
+    if (!(await adoptSession(res, epoch))) return null;
     useAuthStore.setState({ user: res.user, status: 'authenticated' });
     return res.accessToken;
   } catch (err) {
+    if (epoch !== sessionEpoch) return null;
     if (isRefreshRejected(err)) {
       await clearRefresh();
       useAuthStore.setState({ user: null, status: 'idle', error: isAccountBlocked(err) ? getErrorMessage(err) : undefined });

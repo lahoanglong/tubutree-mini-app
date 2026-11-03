@@ -28,7 +28,7 @@ vi.mock('../services/first-touch', () => ({ loadFirstTouch: vi.fn(async () => un
 
 import { getStorage, setStorage, removeStorage } from 'zmp-sdk/apis';
 import { loadFirstTouch } from '../services/first-touch';
-import { api, loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler, ensurePhoneApi } from '../services/api';
+import { api, loginGuest, loginZaloMiniApp, refreshTokens, setUnauthorizedHandler, ensurePhoneApi, setAccessToken } from '../services/api';
 import { HttpError } from '../services/http';
 import { createQueryClient } from '../services/query-client';
 import type { QueryClient } from '@tanstack/react-query';
@@ -300,7 +300,7 @@ describe('useAuthStore — restore() và login() chồng nhau', () => {
     expect(useAuthStore.getState().error).toBe('Tài khoản đã bị khoá.');
   });
 
-  it('restore() gọi lúc login() đang chạy mà login() ném ra ngoài (phiên còn kẹt loading): restore() vẫn khôi phục tiếp', async () => {
+  it('restore() gọi lúc login() đang chạy mà ra khoá và xoá token ném lỗi: vẫn báo khoá, restore() không đăng nhập lại', async () => {
     useAuthStore.setState({ user: null, status: 'idle', error: undefined });
     mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
     // Khoá rồi xoá token ném lỗi: applyBlocked ném trước khi đặt 'idle', login() reject khi phiên vẫn 'loading'.
@@ -311,7 +311,6 @@ describe('useAuthStore — restore() và login() chồng nhau', () => {
         fail = reject;
       }),
     );
-    mockedLoginGuest.mockResolvedValueOnce(loginResponse('guest-1'));
 
     const loggingIn = useAuthStore.getState().login();
     await flush();
@@ -320,9 +319,11 @@ describe('useAuthStore — restore() và login() chồng nhau', () => {
     fail(blocked());
     const [login] = await Promise.allSettled([loggingIn, restoring]);
 
-    expect(login.status).toBe('rejected');
-    expect(mockedLoginGuest).toHaveBeenCalledTimes(2);
-    expect(useAuthStore.getState().status).toBe('authenticated');
+    // Xoá token hỏng là việc dọn best-effort: không được làm login() ném và để phiên kẹt 'loading'.
+    expect(login.status).toBe('fulfilled');
+    expect(mockedLoginGuest).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBe('Tài khoản đã bị khoá.');
   });
 
   it('restore() gọi lúc login() đang chạy: chờ login() xong, ra phiên rồi thì không đăng nhập lại', async () => {
@@ -1000,13 +1001,13 @@ describe('useAuthStore — storage ZMP không trả lời', () => {
     await restoring;
 
     expect(useAuthStore.getState().status).toBe('error');
-    expect(useAuthStore.getState().error).toBe(copy.errors.sessionUnavailable);
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionStorage);
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
     expect(mockedLoginZalo).not.toHaveBeenCalled();
     expect(mockedLoginGuest).not.toHaveBeenCalled();
   });
 
-  it('Zalo đăng nhập được nhưng lưu token treo: báo lỗi tạm, không rơi xuống tài khoản Khách', async () => {
+  it('Zalo đăng nhập được nhưng lưu token treo: vẫn vào phiên Zalo, không rơi xuống tài khoản Khách', async () => {
     useAuthStore.setState({ user: null, status: 'idle', error: undefined });
     mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'z' } as never);
     mockedLoginZalo.mockResolvedValue(loginResponse('u1', 'zalo-1'));
@@ -1017,7 +1018,8 @@ describe('useAuthStore — storage ZMP không trả lời', () => {
     await loggingIn;
 
     expect(mockedLoginGuest).not.toHaveBeenCalled();
-    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('u1');
   });
 
   it('lưu id thiết bị treo (ngoài Zalo): login() báo lỗi tạm sau 3 giây, lần bấm sau chạy lại được', async () => {
@@ -1050,5 +1052,253 @@ describe('useAuthStore — storage ZMP không trả lời', () => {
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().user?.id).toBe('u1');
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
+  });
+});
+
+describe('đăng xuất khi máy chủ còn chưa trả lời: phiên về sau bị bỏ', () => {
+  const user = () => loginResponse('u1', 'zalo-1');
+  const mockedSetAccessToken = vi.mocked(setAccessToken);
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+  const refreshWritten = () => mockedSetStorage.mock.calls.filter((c) => 'tubu_refresh_token' in ((c[0] as { data: object }).data));
+  const revoked = (token: string) => mockedApiPost.mock.calls.some((c) => c[0] === '/auth/logout' && (c[1] as { refreshToken: string }).refreshToken === token);
+
+  function expectDiscarded(token: string) {
+    expect(mockedSetAccessToken).not.toHaveBeenCalledWith(`access-${token.replace('refresh-', '')}`);
+    expect(refreshWritten()).toHaveLength(0);
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(revoked(token)).toBe(true);
+  }
+
+  beforeEach(() => {
+    mockedApiPost.mockResolvedValue({} as never);
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'old-refresh' });
+  });
+
+  it('restore(): refresh về sau logout → không đặt token, không lưu refresh, thu hồi refresh mới', async () => {
+    const d = deferred<LoginResponse>();
+    mockedRefresh.mockReturnValue(d.promise);
+    const restoring = useAuthStore.getState().restore();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.resolve(user());
+    await restoring;
+    await flush();
+    expectDiscarded('refresh-u1');
+  });
+
+  it('handler 401: refresh về sau logout → trả null, không đặt token, thu hồi refresh mới', async () => {
+    const d = deferred<LoginResponse>();
+    mockedRefresh.mockReturnValue(d.promise);
+    const handled = unauthorizedHandler!();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.resolve(user());
+    expect(await handled).toBeNull();
+    await flush();
+    expectDiscarded('refresh-u1');
+  });
+
+  it('handler 401: refresh bị từ chối sau logout → không đổi trạng thái đã đăng xuất', async () => {
+    const d = deferred<LoginResponse>();
+    mockedRefresh.mockReturnValue(d.promise);
+    useAuthStore.setState({ user: user().user, status: 'authenticated' });
+    const handled = unauthorizedHandler!();
+    await flush();
+    await useAuthStore.getState().logout();
+    useAuthStore.setState({ error: undefined });
+    d.reject(httpFail(503));
+    expect(await handled).toBeNull();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBeUndefined();
+  });
+
+  it('login() Zalo: đăng nhập về sau logout → bỏ, thu hồi', async () => {
+    const d = deferred<LoginResponse>();
+    mockedGetStorage.mockResolvedValue({});
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockReturnValue(d.promise);
+    const logging = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.resolve(user());
+    await logging;
+    await flush();
+    expectDiscarded('refresh-u1');
+  });
+
+  it('login() khách: đăng nhập về sau logout → bỏ, thu hồi', async () => {
+    const d = deferred<LoginResponse>();
+    mockedGetStorage.mockResolvedValue({});
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockReturnValue(d.promise);
+    const logging = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.resolve(loginResponse('g1'));
+    await logging;
+    await flush();
+    expectDiscarded('refresh-g1');
+  });
+
+  it('ensurePhoneOrThrow(): liên kết về sau logout → null, không đặt phiên', async () => {
+    const d = deferred<LoginResponse>();
+    useAuthStore.setState({ user: loginResponse('g1').user, status: 'authenticated' });
+    mockedRequestZaloPhoneToken.mockResolvedValue('pt');
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedEnsurePhoneApi.mockReturnValue(d.promise);
+    const linking = useAuthStore.getState().ensurePhoneOrThrow();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.resolve(user());
+    expect(await linking).toBeNull();
+    await flush();
+    expectDiscarded('refresh-u1');
+  });
+
+  it('nâng cấp khách ngầm: trả về sau logout → bỏ', async () => {
+    const d = deferred<LoginResponse>();
+    mockedRefresh.mockResolvedValue({ ...loginResponse('g1', 'guest_abc') });
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedEnsurePhoneApi.mockReturnValue(d.promise);
+    await useAuthStore.getState().restore();
+    await flush();
+    await useAuthStore.getState().logout();
+    d.resolve(user());
+    await flush();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(revoked('refresh-u1')).toBe(true);
+    expect(refreshWritten().some((c) => (c[0] as { data: Record<string, string> }).data.tubu_refresh_token === 'refresh-u1')).toBe(false);
+  });
+
+  it('đăng nhập bắt đầu SAU logout vẫn chạy bình thường (không gộp vào lần cũ đang treo)', async () => {
+    const old = deferred<LoginResponse>();
+    mockedGetStorage.mockResolvedValue({});
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockReturnValueOnce(old.promise);
+    const first = useAuthStore.getState().login();
+    await flush();
+    await useAuthStore.getState().logout();
+    mockedLoginGuest.mockResolvedValueOnce(loginResponse('g2'));
+    await useAuthStore.getState().login();
+    expect(useAuthStore.getState().user?.id).toBe('g2');
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    old.resolve(loginResponse('g1'));
+    await first;
+    await flush();
+    expect(useAuthStore.getState().user?.id).toBe('g2');
+    expect(revoked('refresh-g1')).toBe(true);
+    expect(revoked('refresh-g2')).toBe(false);
+  });
+});
+
+describe('storage ZMP ném lỗi hoặc treo ở đường đăng nhập', () => {
+  const boom = () => new Error('zmp storage broke');
+
+  beforeEach(async () => {
+    // Bộ nhớ refresh chưa ghi được của ca trước không được rò sang ca này.
+    await useAuthStore.getState().logout();
+    vi.clearAllMocks();
+    mockedSetStorage.mockResolvedValue(undefined as never);
+    mockedRemoveStorage.mockResolvedValue(undefined as never);
+    mockedGetStorage.mockResolvedValue({});
+    useAuthStore.setState({ user: null, status: 'loading', error: undefined });
+  });
+
+  it('Zalo đăng nhập được, ghi refresh ném lỗi → vẫn vào phiên Zalo, không loginGuest', async () => {
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(loginResponse('u1', 'z1'));
+    mockedSetStorage.mockRejectedValue(boom());
+    await useAuthStore.getState().login();
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('authenticated');
+    expect(useAuthStore.getState().user?.id).toBe('u1');
+  });
+
+  it('ghi refresh hỏng: refresh của phiên này dùng token trong bộ nhớ (storage đọc ra token cũ đã xoay)', async () => {
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockResolvedValue(loginResponse('u1', 'z1'));
+    mockedSetStorage.mockRejectedValue(boom());
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stale' });
+    await useAuthStore.getState().login();
+    mockedRefresh.mockResolvedValue(loginResponse('u1', 'z1'));
+    await unauthorizedHandler!();
+    expect(mockedRefresh).toHaveBeenCalledWith('refresh-u1');
+  });
+
+  it('đọc refresh token ném lỗi: restore() về error, câu lỗi máy, không loginGuest/loginZalo, không xoá token', async () => {
+    mockedGetStorage.mockRejectedValue(boom());
+    await useAuthStore.getState().restore();
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionStorage);
+    expect(useAuthStore.getState().error).not.toBe(copy.errors.sessionUnavailable);
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    expect(mockedLoginZalo).not.toHaveBeenCalled();
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
+  });
+
+  it('getStorage ném đồng bộ: cũng là lỗi máy, không đổi sang Khách', async () => {
+    mockedGetStorage.mockImplementation(() => {
+      throw boom();
+    });
+    await useAuthStore.getState().restore();
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+  });
+
+  it('lỗi do storage rồi restore() lại được khi storage hồi (useSessionRecovery gọi lại)', async () => {
+    mockedGetStorage.mockRejectedValueOnce(boom());
+    await useAuthStore.getState().restore();
+    expect(useAuthStore.getState().status).toBe('error');
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'r' });
+    mockedRefresh.mockResolvedValue(loginResponse('u1', 'z1'));
+    await useAuthStore.getState().restore();
+    expect(useAuthStore.getState().status).toBe('authenticated');
+  });
+
+  it('khách ngoài Zalo: lấy/ghi id thiết bị ném lỗi → error câu lỗi máy, không gọi loginGuest', async () => {
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedSetStorage.mockRejectedValueOnce(boom());
+    await useAuthStore.getState().login();
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionStorage);
+  });
+
+  it('khách: loginGuest xong mà ghi refresh ném → vẫn vào phiên khách', async () => {
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedGetStorage.mockResolvedValue({ tubu_device_id: 'dev' });
+    mockedLoginGuest.mockResolvedValue(loginResponse('g1'));
+    mockedSetStorage.mockRejectedValue(boom());
+    await useAuthStore.getState().login();
+    expect(useAuthStore.getState().status).toBe('authenticated');
+  });
+
+  it('401 handler: đọc refresh ném lỗi → error câu lỗi máy, giữ token (không xoá)', async () => {
+    mockedGetStorage.mockRejectedValue(boom());
+    expect(await unauthorizedHandler!()).toBeNull();
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionStorage);
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
+  });
+
+  it('xoá refresh ném lỗi lúc bị khoá: vẫn báo khoá', async () => {
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'r' });
+    mockedRefresh.mockRejectedValue(blocked());
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockRejectedValue(blocked());
+    mockedRemoveStorage.mockRejectedValue(boom());
+    await useAuthStore.getState().restore();
+    expect(useAuthStore.getState().status).toBe('idle');
+    expect(useAuthStore.getState().error).toBe('Tài khoản đã bị khoá.');
   });
 });
