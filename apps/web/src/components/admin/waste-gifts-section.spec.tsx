@@ -53,6 +53,24 @@ describe('WasteGiftsSection', () => {
     expect(row(c, 'gift-seed').textContent).toContain('Hết hàng');
   });
 
+  it('QTUI-06: khổ < sm đổi sang thẻ: bảng không còn min-w cố định, tên/giá/tồn/chip trạng thái/Sửa hiện, Loại và Lượt đổi ẩn', async () => {
+    const { c } = await mount();
+    const table = c.querySelector('table')!;
+    expect(table.className).toContain('max-sm:block');
+    expect(table.className).not.toMatch(/(^|\s)min-w-\[/);
+    expect(c.querySelector('thead')!.className).toContain('max-sm:hidden');
+    const tr = row(c, 'gift-bottle');
+    expect(tr.className).toContain('max-sm:flex');
+    const tds = Array.from(tr.querySelectorAll('td'));
+    const hidden = tds.filter((td) => td.className.includes('max-sm:hidden')).map((td) => td.textContent);
+    expect(hidden.some((t) => t?.includes('Quà tặng'))).toBe(true);
+    expect(hidden.some((t) => t?.includes('lượt đổi'))).toBe(true);
+    const chip = tr.querySelector('[data-gift-chip]')!;
+    expect(chip.className).toContain('sm:hidden');
+    expect(chip.textContent).toBe('Đang hiện');
+    expect(tds.filter((td) => !td.className.includes('max-sm:hidden')).some((td) => td.textContent === 'Sửa')).toBe(true);
+  });
+
   it('thêm quà vật lý: tồn kho, hướng dẫn nhận', async () => {
     const { c, api } = await mount();
     click(btn(c, 'Thêm quà'));

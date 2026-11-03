@@ -496,6 +496,8 @@ function shellDefaults(api: MockApi): void {
 /** Khung quản trị (hộp việc, thẻ thành viên ở thanh đầu). Spec khách nào mở /admin thì gọi trong beforeEach. */
 export function adminShellDefaults(api: MockApi): void {
   api.fallback('GET', '/admin/ops/inbox', { generatedAt: '2026-10-28T03:00:00.000Z', items: [] });
+  // Thẻ "Hệ thống cần xem" ở Hôm nay (chỉ ADMIN) hỏi Sức khoẻ; mặc định không có sự cố nên thẻ ẩn.
+  api.fallback('GET', '/admin/ops/health', { generatedAt: '2026-10-28T03:00:00.000Z', problems: [], cronJobs: [] });
   api.fallback('GET', '/me/loyalty/member-card', { posCreditEnabled: true });
 }
 

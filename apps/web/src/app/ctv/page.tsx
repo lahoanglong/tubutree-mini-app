@@ -386,7 +386,7 @@ function Dashboard() {
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
-  const needsTaxId = needsTaxIdForAutoTransfer(head.big, cfgQ.data?.affiliatePitWithhold, me?.personalTaxId);
+  const needsTaxId = needsTaxIdForAutoTransfer(head.big, cfgQ.data?.affiliatePitWithhold, me?.personalTaxId, d?.withdrawTaxPreview);
   const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
   const firstSteps: Array<{ key: string; label: string; Icon: typeof Link2; onPress?: () => void; href?: string }> = [
     { key: 'share', label: 'Chia sẻ mã giới thiệu', Icon: Link2, onPress: () => setSharing(true) },

@@ -208,14 +208,41 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
     expect(await svc.zaloTokenProblems(NOW)).toEqual([]);
   });
 
-  it('chưa có mốc hạn hoặc mốc hỏng → không cảnh báo (cron làm mới sẽ lo)', async () => {
-    expect(await build(configured).svc.zaloTokenProblems(NOW)).toEqual([]);
-    expect(await build({ ...configured, 'zalo.oa_token_expires_at': 'không-phải-ngày' }).svc.zaloTokenProblems(NOW)).toEqual([]);
+  it('OPS-01: có token mà chưa có mốc hạn hợp lệ → 1 problem zalo.oa_token (chưa từng làm mới được)', async () => {
+    for (const store of [configured, { ...configured, 'zalo.oa_token_expires_at': 'không-phải-ngày' }]) {
+      const out = await build(store).svc.zaloTokenProblems(NOW);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.key).toBe('zalo.oa_token');
+      expect(out[0]!.message).toContain('chưa từng được làm mới');
+    }
+    expect(await build({}, { ZALO_OA_ACCESS_TOKEN: 'env-acc' }).svc.zaloTokenProblems(NOW)).toHaveLength(1);
+    expect(await build({}).svc.zaloTokenProblems(NOW)).toEqual([]);
   });
 
   it('đọc DB lỗi → không làm hỏng màn sức khoẻ, trả rỗng', async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const svc = new OpsHealthService({ systemConfig: { findUnique: async () => Promise.reject(new Error('db down')) } } as never, { get: () => '' } as never, []);
     await expect(svc.zaloTokenProblems(NOW)).resolves.toEqual([]);
+  });
+});
+
+describe('OpsHealthService.znsHealth (tin ZNS hỏng 24 giờ)', () => {
+  const NOW = new Date('2026-11-03T03:00:00Z');
+  const call = (svc: OpsHealthService) => (svc as unknown as { znsHealth(n: Date): Promise<{ failed24h: number; topError: string | null }> }).znsHealth(NOW);
+
+  it('đếm FAILED kênh ZNS 24 giờ gần nhất và lấy lỗi gặp nhiều nhất', async () => {
+    const count = jest.fn().mockResolvedValue(7);
+    const groupBy = jest.fn().mockResolvedValue([{ error: 'ZNS lỗi -124: token hết hạn', _count: { _all: 6 } }]);
+    const svc = new OpsHealthService({ notificationLog: { count, groupBy } } as never, { get: () => '' } as never, []);
+    expect(await call(svc)).toEqual({ failed24h: 7, topError: 'ZNS lỗi -124: token hết hạn' });
+    const where = count.mock.calls[0][0].where;
+    expect(where).toMatchObject({ channel: 'ZNS', status: 'FAILED' });
+    expect(where.sentAt.gte).toEqual(new Date(NOW.getTime() - 24 * 3_600_000));
+  });
+
+  it('đọc DB lỗi → trả 0, không làm hỏng màn sức khoẻ', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const svc = new OpsHealthService({ notificationLog: { count: async () => Promise.reject(new Error('db')), groupBy: async () => [] } } as never, { get: () => '' } as never, []);
+    expect(await call(svc)).toEqual({ failed24h: 0, topError: null });
   });
 });

@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import type { Job } from 'bullmq';
+import { DelayedError, type Job } from 'bullmq';
 import { NotificationsService, ZnsSendJobData } from './notifications.service';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 
@@ -26,7 +26,14 @@ export class NotificationsProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ZnsSendJobData>): Promise<void> {
+  async process(job: Job<ZnsSendJobData>, token?: string): Promise<void> {
+    // Lượt thử lại do BullMQ xếp theo backoff nên có thể rơi sau 21h dù lượt đầu đã được dời; dời tiếp tới hết giờ yên tĩnh.
+    // moveToDelayed + DelayedError không tính là một lượt thử (attemptsMade giữ nguyên), và chạy trước deliverZns để log vẫn còn nguyên trạng thái.
+    const quietMs = await this.notifications.quietDelayMs();
+    if (quietMs > 0) {
+      await job.moveToDelayed(Date.now() + quietMs, token);
+      throw new DelayedError();
+    }
     const attempts = job.opts.attempts ?? 1;
     const outcome = await this.notifications.deliverZns(job.data, job.attemptsMade + 1 >= attempts);
     if (outcome === 'SENT') return;
