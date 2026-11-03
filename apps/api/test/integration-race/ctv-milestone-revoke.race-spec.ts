@@ -90,7 +90,7 @@ describe('Thu hồi thưởng mốc doanh số CTV khi đảo hoa hồng (real P
   const returned = (orderId: string) => prisma.order.update({ where: { id: orderId }, data: { status: 'RETURNED' } });
   const balance = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id }, select: { pointsBalance: true } })).pointsBalance;
   const revokeRows = (id: string) =>
-    prisma.pointsTransaction.findMany({ where: { userId: id, reason: { startsWith: 'CTV_MILESTONE_REVOKE:' } }, orderBy: { createdAt: 'asc' } });
+    prisma.pointsTransaction.findMany({ where: { userId: id, reason: { startsWith: 'AFFILIATE_MILESTONE_REVOKE:' } }, orderBy: { createdAt: 'asc' } });
   const debtRows = (id: string) => prisma.pointsTransaction.findMany({ where: { userId: id, refType: 'REFERRAL_DEBT' } });
   async function ledgerMatchesBalance(id: string) {
     const agg = await prisma.pointsTransaction.aggregate({ where: { userId: id, lot: 'STANDARD' }, _sum: { delta: true } });

@@ -1999,19 +1999,24 @@ export class AffiliateService {
       }),
       this.prisma.ctvMilestoneClaim.findMany({
         where: { userId, monthKey: { in: [cur.key, prev.key] } },
-        select: { milestoneId: true, monthKey: true, revokedAt: true },
+        select: { milestoneId: true, monthKey: true, revokedAt: true, revokeDebt: true, rewardPoints: true },
       }),
       this.effectiveHoldDays(),
     ]);
 
     // Mốc đã bị thu hồi điểm (CTV-01) không còn là "đã nhận": doanh số lên lại thì nhận lại được.
     const claimed = new Set(claims.filter((c) => !c.revokedAt).map((c) => `${c.milestoneId}:${c.monthKey}`));
+    // Nhận lại chỉ được phần chưa bị nợ trừ (claimMilestone), nên màn hiện đúng số đó thay vì số đầy đủ của mốc.
+    const reclaimPoints = new Map<string, number>(
+      claims.filter((c) => c.revokedAt && c.revokeDebt > 0).map((c): [string, number] => [`${c.milestoneId}:${c.monthKey}`, Math.max(0, c.rewardPoints - c.revokeDebt)]),
+    );
     const build = (monthKey: string, revenue: number) =>
       CTV_MONTHLY_MILESTONES.map((m) => {
         const achieved = revenue >= m.threshold;
         const isClaimed = claimed.has(`${m.id}:${monthKey}`);
         return {
           ...m,
+          rewardPoints: reclaimPoints.get(`${m.id}:${monthKey}`) ?? m.rewardPoints,
           achieved,
           claimed: isClaimed,
           canClaim: achieved && !isClaimed,

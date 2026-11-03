@@ -114,7 +114,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       current: number;
       previous?: number;
       pending?: number;
-      claims?: { milestoneId: string; monthKey: string }[];
+      claims?: { milestoneId: string; monthKey: string; revokedAt?: Date | null; revokeDebt?: number; rewardPoints?: number }[];
     }) {
       const cur = vnMonthBounds(NOW_SEP);
       const aggregate = jest.fn(async (args: { where: { status: unknown; approvedAt?: { gte: Date } } }) => {
@@ -149,6 +149,17 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       // 40tr đang chờ chốt KHÔNG làm mốc 30tr đạt.
       expect(byId['milestone-30m']).toMatchObject({ achieved: false, canClaim: false, progressPct: 40 });
       expect(res.previousMonth).toBeNull();
+    });
+
+    it('mốc đã thu hồi còn nợ: rewardPoints trả về là số thực nhận lại (đã trừ nợ), khớp câu nhận lại', async () => {
+      const { prisma } = prismaFor({
+        current: 12_000_000,
+        claims: [{ milestoneId: 'milestone-10m', monthKey: '2026-09', revokedAt: new Date(), revokeDebt: 190_000, rewardPoints: 200_000 }],
+      });
+      const res = await makeService(prisma).getMilestones('ctv-1', NOW_SEP);
+      const m10 = res.milestones.find((m) => m.id === 'milestone-10m')!;
+      expect(m10).toMatchObject({ claimed: false, canClaim: true, rewardPoints: 10_000 });
+      expect(res.milestones.find((m) => m.id === 'milestone-3m')!.rewardPoints).toBe(50_000);
     });
 
     it('tháng trước còn mốc đạt mà chưa nhận → trả previousMonth để CTV nhận nốt (không mất thưởng khi qua tháng)', async () => {

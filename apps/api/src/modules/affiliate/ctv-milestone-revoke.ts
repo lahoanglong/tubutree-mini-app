@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { loadPointExpiryTxns, lotRecoverable } from '../loyalty/loyalty-expiry.service';
-import { CTV_MILESTONE_REVOKE_REF_TYPE, ctvMilestoneLotKey } from './ctv-milestone-ref';
+import { CTV_MILESTONE_REVOKE_REF_TYPE, ctvMilestoneDebtReason, ctvMilestoneLotKey, ctvMilestoneRevokeReason } from './ctv-milestone-ref';
 import { REFERRAL_DEBT_REF_TYPE } from '../wallet/referral-reward';
 import { CONFIRMED_COMMISSION_STATUSES, CTV_MONTHLY_MILESTONES, vnMonthBounds, type VnMonth } from './ctv-milestones';
 
@@ -82,7 +82,7 @@ export async function revokeLostCtvMilestones(tx: Db, userId: string, approvedAt
         userId,
         delta: -taken,
         lot: 'STANDARD',
-        reason: `CTV_MILESTONE_REVOKE:${claim.id}:${generation}`,
+        reason: ctvMilestoneRevokeReason(claim.id, generation),
         refType: CTV_MILESTONE_REVOKE_REF_TYPE,
         refId: claim.id,
       });
@@ -97,7 +97,7 @@ export async function revokeLostCtvMilestones(tx: Db, userId: string, approvedAt
           userId,
           delta: 0,
           lot: 'STANDARD',
-          reason: `CTV_MILESTONE_DEBT:${claim.id}:${generation}:${debt}`,
+          reason: ctvMilestoneDebtReason(claim.id, generation, debt),
           refType: REFERRAL_DEBT_REF_TYPE,
           refId: claim.id,
         },
