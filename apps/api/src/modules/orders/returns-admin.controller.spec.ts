@@ -24,14 +24,15 @@ describe('ReturnsAdminController — RB-05: tài khoản ngân hàng nhận hoà
     expect(res.data[0]).not.toHaveProperty('bankAccountName');
     expect(res.data[0]).not.toHaveProperty('bankName');
     expect(res.data[0]).toMatchObject({ id: 'r1', refundMethod: 'BANK', refundAmount: 100_000 });
-    expect(res.data[0].refund).not.toHaveProperty('bankAccountNo');
-    expect(res.data[0].refund).not.toHaveProperty('bankName');
-    expect(res.data[0].refund).toMatchObject({ method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 100_000 });
+    const refund = (res.data[0] as { refund: unknown }).refund;
+    expect(refund).not.toHaveProperty('bankAccountNo');
+    expect(refund).not.toHaveProperty('bankName');
+    expect(refund).toMatchObject({ method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 100_000 });
   });
 
   it('nhân viên KHO bấm "Đã nhận hàng về": phản hồi cũng không có bank*', async () => {
     const { controller } = setup();
-    const res = (await controller.received('v1', 'r1', viewer({ staffPermissions: ['KHO'] }))) as Record<string, unknown>;
+    const res = (await controller.received('v1', 'r1', viewer({ staffPermissions: ['KHO'] }))) as Record<string, unknown> & { refund: Record<string, unknown> };
     expect(res).not.toHaveProperty('bankAccountNo');
     expect(res.refund).not.toHaveProperty('bankAccountNo');
     expect(res.refund).not.toHaveProperty('bankName');
