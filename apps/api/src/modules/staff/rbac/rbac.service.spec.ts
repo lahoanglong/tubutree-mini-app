@@ -108,7 +108,7 @@ describe('RbacService.applyGrants: nhóm việc của lời mời', () => {
     });
   });
 
-  it('lời mời STAFF không có nhóm → như cũ: chỉ đổi vai trò, không đụng nhóm', async () => {
+  it('lời mời STAFF không có nhóm → nâng lên STAFF với nhóm rỗng', async () => {
     const prisma = makePrisma({
       roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]) },
       user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },

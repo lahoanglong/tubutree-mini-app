@@ -57,7 +57,7 @@ export class RbacService {
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
     this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone)}) ${user.role} → ${best}`);
-    // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì không đụng nhóm hiện có của user.
+    // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì nhóm sau khi nâng lên STAFF là rỗng (không giữ nhóm cũ của user).
     const invitedPerms =
       best === 'STAFF' ? normalizePermissions(grants.filter((g) => g.role === 'STAFF').flatMap((g) => g.staffPermissions ?? [])) : [];
     // Từ vai trò khác lên STAFF thì nhóm luôn bị đặt lại theo lời mời (cùng luật setUserRole): nhóm sót lại từ vai trò cũ
@@ -93,8 +93,8 @@ export class RbacService {
    * Admin thêm quyền theo SĐT. Không tạo grant trùng (cùng phone+role còn hiệu lực).
    * Bọc trong $transaction: tạo grant + áp role ngay là 1 thao tác atomic — tránh trạng thái
    * nửa vời (grant đã tạo nhưng role chưa nâng, hoặc ngược lại) nếu 1 bước lỗi giữa chừng.
-   * `permissions` (chỉ với STAFF): nhóm việc của lời mời, chép sang user khi lời mời được áp. Không truyền thì lời mời không ghi nhóm và
-   * nhóm đã lưu của user giữ nguyên. Truyền lại cho lời mời đang chờ thì cập nhật nhóm của lời mời; người đã là STAFF mà admin chọn ít nhất
+   * `permissions` (chỉ với STAFF): nhóm việc của lời mời, chép sang user khi lời mời được áp và nâng user lên STAFF. Không truyền thì lời mời
+   * không ghi nhóm, user được nâng lên STAFF với nhóm rỗng (nhóm cũ không sống lại); người đã là STAFF không đi qua bước nâng nên nhóm đang có giữ nguyên. Truyền lại cho lời mời đang chờ thì cập nhật nhóm của lời mời; người đã là STAFF mà admin chọn ít nhất
    * một nhóm thì nhóm cũ bị THAY bằng nhóm vừa chọn ngay (`permissionsChanged`), còn danh sách rỗng không xoá nhóm họ đang có.
    */
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[]) {

@@ -373,8 +373,9 @@ export class OrderReversalService {
       // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
       // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
       // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
-      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived cộng
-      // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
+      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived đã cộng
+      // (restockReturnedItems), chưa nhận thì sẽ cộng khi hàng về. "Cộng" chỉ đúng với biến thể tự quản kho; biến thể có
+      // pancakeStock thì Tubu không tự cộng, số tồn do Pancake báo về qua đồng bộ/webhook.
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
       const reserved = reservedQty(item);
       if (opts.restock !== false && reserved > 0) {

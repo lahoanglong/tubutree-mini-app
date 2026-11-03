@@ -704,7 +704,7 @@ export function CustomerRefundRow({
             </>
           ) : (
             <>
-              {view === 'PROCESSING' && r.claimedAt && (
+              {r.claimedAt && (
                 <span className="w-full text-xs text-stone-500">
                   Bắt đầu chuyển lúc {fmtDate(r.claimedAt)}
                   {claimHolderSuffix(r, meId)} — khách không đổi được nơi nhận.
@@ -719,7 +719,7 @@ export function CustomerRefundRow({
               <button type="button" className={BTN_WARNING} onClick={() => onAction('paid')}>
                 {`Đã chuyển khoản${takeOverTag}`}
               </button>
-              {view === 'PROCESSING' && onRelease && (
+              {onRelease && (
                 <button type="button" className={BTN_SECONDARY} disabled={releasing} onClick={onRelease}>
                   {releasing ? 'Đang trả…' : `Trả về hàng chờ${takeOverTag}`}
                 </button>

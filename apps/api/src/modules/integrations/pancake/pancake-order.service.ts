@@ -137,14 +137,6 @@ export function mayExistOnPancake(order: Pick<Order, 'pancakeOrderId' | 'pancake
   return Boolean(order.pancakeOrderId || order.pancakePushClaimedAt);
 }
 
-/**
- * Đẩy đơn local → Pancake (Build Spec §8.3) và các cập nhật sau đó (đã thanh toán, huỷ).
- *
- * Chống tạo đơn trùng ở kho: trước khi POST ghi `pancakePushClaimedAt`; nếu lần thử sau thấy mốc này mà chưa có
- * `pancakeOrderId` (timeout, mất response, lỗi lưu DB, worker bị kill khi deploy, job bị dọn) thì TRA Pancake theo
- * mã đơn trước, có thì nhận đơn đó, không thì mới tạo. Pancake từ chối dứt khoát (4xx) thì chắc chắn chưa tạo → gỡ
- * mốc. Vì vậy enqueue lại bao nhiêu lần cũng an toàn (không còn phải giữ job completed làm "chốt chặn").
- */
 /** Nhãn phương thức thanh toán trong lời báo lỗi admin; Record đầy đủ theo enum để thêm phương thức mới thì tsc buộc điền. */
 const PAYMENT_METHOD_LABEL_VI: Record<PaymentMethod, string> = {
   COD: 'COD',
@@ -155,6 +147,14 @@ const PAYMENT_METHOD_LABEL_VI: Record<PaymentMethod, string> = {
   XU: 'Xu',
 };
 
+/**
+ * Đẩy đơn local → Pancake (Build Spec §8.3) và các cập nhật sau đó (đã thanh toán, huỷ).
+ *
+ * Chống tạo đơn trùng ở kho: trước khi POST ghi `pancakePushClaimedAt`; nếu lần thử sau thấy mốc này mà chưa có
+ * `pancakeOrderId` (timeout, mất response, lỗi lưu DB, worker bị kill khi deploy, job bị dọn) thì TRA Pancake theo
+ * mã đơn trước, có thì nhận đơn đó, không thì mới tạo. Pancake từ chối dứt khoát (4xx) thì chắc chắn chưa tạo → gỡ
+ * mốc. Vì vậy enqueue lại bao nhiêu lần cũng an toàn (không còn phải giữ job completed làm "chốt chặn").
+ */
 @Injectable()
 export class PancakeOrderService {
   private readonly logger = new Logger(PancakeOrderService.name);

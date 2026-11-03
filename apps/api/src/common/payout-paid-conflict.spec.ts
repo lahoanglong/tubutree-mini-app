@@ -23,4 +23,21 @@ describe('alreadyPaidConflict', () => {
     expect(e.message).not.toContain('thu hồi');
     expect(e.message).not.toContain('chuyển');
   });
+
+  it('cùng người gửi lại với mã GD khác: 409 riêng, không dặn thu hồi, giờ theo giờ VN', async () => {
+    const e = await alreadyPaidConflict(prisma, row, { noun: 'Lệnh rút', actorId: 'a1' });
+    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026 với mã GD «FT1». Không ghi lần hai; nếu mã GD sai, báo quản trị viên sửa.');
+    expect(e.message).not.toContain('thu hồi');
+  });
+
+  it('cùng người, lần đầu bỏ trống mã: bỏ phần mã GD', async () => {
+    const e = await alreadyPaidConflict(prisma, { ...row, bankRef: null }, { noun: 'Phiếu đối soát', actorId: 'a1' });
+    expect(e.message).toBe('Bạn đã xác nhận khoản này lúc 10:00 01/11/2026. Không ghi lần hai; nếu mã GD sai, báo quản trị viên sửa.');
+  });
+
+  it('người khác vẫn nhận câu dặn thu hồi dù có truyền actorId', async () => {
+    const e = await alreadyPaidConflict(prisma, row, { noun: 'Lệnh rút', actorId: 'a2' });
+    expect(e.message).toContain('An xác nhận chuyển');
+    expect(e.message).toContain('thu hồi');
+  });
 });
