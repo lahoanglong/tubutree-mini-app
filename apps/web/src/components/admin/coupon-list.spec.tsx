@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CouponList } from './coupon-list';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminCoupon } from '@/lib/admin-client';
+import { vnTodayKey } from '@/lib/admin-reports';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -116,9 +117,51 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     await flush();
     click(byText(r.container, 'button', 'Lưu hạn'));
     await flush();
+    answerConfirm(true);
+    await flush();
     const patch = api.calls.find((c) => c.init?.method === 'PATCH');
     expect(JSON.parse(String(patch?.init?.body))).toEqual({ endAt: '2027-01-05T16:59:59.000Z' });
     expect(r.container.textContent).toContain('Đã đổi hạn mã SUMMER10 đến hết 05/01/2027.');
+  });
+
+  it('QTUI-03: ngày sớm hơn hạn hiện tại → hỏi "Rút ngắn hạn" (danger); huỷ thì không gửi; gia hạn dài hơn thì không hỏi', async () => {
+    const api = mockFetch({
+      '/admin/coupons/c1': { body: coupon() },
+      '/admin/coupons': { body: { data: [coupon({ endAt: '2030-06-01T16:59:59.000Z' })], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    const dateInput = () => r.container.querySelector<HTMLInputElement>('input[type="date"]');
+    typeInto(dateInput(), '2029-01-05');
+    await flush();
+    click(byText(r.container, 'button', 'Lưu hạn'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Rút ngắn hạn: mã hết hạn sớm với cả khách đã nhận');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((c) => c.init?.method === 'PATCH')).toBe(false);
+
+    typeInto(dateInput(), '2031-01-05');
+    await flush();
+    click(byText(r.container, 'button', 'Lưu hạn'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(api.calls.some((c) => c.init?.method === 'PATCH')).toBe(true);
+  });
+
+  it('QTUI-03: ô ngày có min = hôm nay giờ VN; ngày đã qua thì khoá "Lưu hạn"', async () => {
+    const api = mockFetch({ '/admin/coupons': { body: { data: [coupon()], meta: { page: 1, limit: 20, total: 1 } } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    const input = r.container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    expect(input.min).toBe(vnTodayKey());
+    typeInto(input, '2020-01-05');
+    await flush();
+    expect((byText(r.container, 'button', 'Lưu hạn') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('ô ngày gõ dở thì "Lưu hạn" khoá, không gửi PATCH', async () => {
@@ -163,6 +206,8 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
 
     click(save);
     await flush();
+    answerConfirm(true);
+    await flush();
     const patches = api.calls.filter((c) => c.init?.method === 'PATCH');
     expect(patches).toHaveLength(1);
     expect(JSON.parse(String(patches[0]!.init?.body))).toEqual({ endAt: '2027-01-05T16:59:59.000Z' });
@@ -178,9 +223,11 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     const r = render(<CouponList />);
     mounted.push(r);
     await flush();
-    typeInto(r.container.querySelector<HTMLInputElement>('input[type="date"]'), '2025-01-01');
+    typeInto(r.container.querySelector<HTMLInputElement>('input[type="date"]'), '2027-01-01');
     await flush();
     click(byText(r.container, 'button', 'Lưu hạn'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(r.container.textContent).toContain('Ngày kết thúc phải sau ngày bắt đầu.');
   });

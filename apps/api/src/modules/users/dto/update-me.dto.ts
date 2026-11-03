@@ -1,10 +1,13 @@
-import { IsEmail, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MaxLength } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
+import { IsAvatarUrl } from '../../../common/uploaded-image';
 
 export class UpdateMeDto {
   @OptionalNotNull()
   @IsString()
   @MaxLength(120)
+  // `<` `>` kiểm ở UsersService.updateMe, chỉ khi tên thực sự đổi: tên Zalo được ghi đè mỗi lần đăng nhập mà không qua DTO
+  // và client luôn gửi lại fullName, nên chặn ở đây sẽ khoá khách có tên như "Hoa <3" khỏi sửa hồ sơ.
   fullName?: string;
 
   @OptionalNotNull()
@@ -12,8 +15,7 @@ export class UpdateMeDto {
   email?: string;
 
   @OptionalNotNull()
-  @IsUrl({ require_protocol: true })
-  @MaxLength(1000)
+  @IsAvatarUrl()
   avatarUrl?: string;
 
   /**

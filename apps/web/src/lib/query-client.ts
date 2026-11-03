@@ -30,6 +30,8 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
   return failureCount < 1;
 }
 
+const PUBLIC_CONFIG_STALE_MS = 5 * 60_000;
+
 /** Khoá admin ('admin-...') và huy hiệu hoàn tiền: đổi tab qua lại trong 30 giây dùng lại dữ liệu cũ thay vì gọi lại mạng. */
 export const ADMIN_STALE_MS = 30_000;
 // Hội thoại chat và chấm công trực tiếp là dữ liệu sống (hỏi lại theo nhịp và khi quay lại cửa sổ): luôn coi là cũ.
@@ -75,5 +77,7 @@ export function createQueryClient(): QueryClient {
   // Danh mục sản phẩm đổi chậm (đồng bộ Pancake ~15 phút): quay lại trong 60 giây thì dùng lại, không gọi mạng.
   client.setQueryDefaults(['products'], { staleTime: CATALOG_STALE_MS });
   client.setQueryDefaults(['storefront-categories'], { staleTime: CATALOG_STALE_MS });
+  // Cấu hình công khai (/config/public) có nhiều trang cùng đọc; trang nào không tự đặt staleTime thì mount lại là gọi thêm một lần.
+  client.setQueryDefaults(['public-config'], { staleTime: PUBLIC_CONFIG_STALE_MS });
   return client;
 }

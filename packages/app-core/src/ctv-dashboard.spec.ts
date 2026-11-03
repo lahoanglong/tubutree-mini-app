@@ -50,6 +50,13 @@ describe('transferHeroNote và isAutoWalletTransfer', () => {
     expect(needsTaxIdForAutoTransfer(3_000_000, pit, null)).toBe(true);
     expect(needsTaxIdForAutoTransfer(3_000_000, pit, '0123456789')).toBe(false);
     expect(needsTaxIdForAutoTransfer(1_000_000, pit, null)).toBe(false);
+    // Đã chuyển 3tr trong tháng, lần này 2,5tr: riêng lần này dưới ngưỡng nhưng cộng dồn 5,5tr bị giữ thuế 550.000đ nên cần MST.
+    const pit5 = { pct: 0.1, threshold: 5_000_000 };
+    expect(needsTaxIdForAutoTransfer(2_500_000, pit5, null)).toBe(false);
+    expect(needsTaxIdForAutoTransfer(2_500_000, pit5, null, 550_000)).toBe(true);
+    expect(needsTaxIdForAutoTransfer(2_500_000, pit5, '0123456789', 550_000)).toBe(false);
+    // Máy chủ nói không có thuế thì tin máy chủ, kể cả khi ước tính riêng lần này có thuế.
+    expect(needsTaxIdForAutoTransfer(6_000_000, pit5, null, 0)).toBe(false);
     expect(needsTaxIdForAutoTransfer(3_000_000, undefined, null)).toBe(false);
   });
   it('chỉ đúng false mới là tắt; API cũ chưa trả trường này coi như bật', () => {

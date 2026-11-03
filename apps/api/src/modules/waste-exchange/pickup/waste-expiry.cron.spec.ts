@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
+import { endOfVnDay } from '../../../common/vn-time';
 import { expiryCloseReason, WasteExpiryCron } from './waste-expiry.cron';
 
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: jest.fn().mockResolvedValue({ id: 'ev1' }) }));
@@ -318,5 +319,37 @@ describe('WasteExpiryCron: nhắc trước hạn', () => {
     const { cron, remindFindMany } = setup([], { locked: false, remind: [remindRow('a', 30)] });
     await cron.run(NOW);
     expect(remindFindMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('WasteExpiryCron: hạn giữ chỗ hết ngày D giờ VN', () => {
+  // Tạo 01:00 ngày 01/11 giờ VN, giữ 7 ngày: hạn = 23:59:59.999 ngày 08/11.
+  const created = new Date('2026-10-31T18:00:00.000Z');
+  const expiresAt = endOfVnDay(new Date(created.getTime() + 7 * 86_400_000));
+  const vn = (iso: string) => new Date(`${iso}+07:00`);
+  const row = remindRow('r1', null, { expiresAt });
+
+  function run(now: Date) {
+    const s = setup([], { remind: [row] });
+    s.findMany.mockReset();
+    s.findMany.mockImplementation(async ({ where }: { where: Where }) => (!where.AND && row.expiresAt! < (where.expiresAt!.lt as Date) ? [openRow('r1', 'DROP_OFF')] : []));
+    return s.cron.run(now).then((res) => ({ res, notifier: s.notifier }));
+  }
+
+  it('03:30 ngày 08/11 chưa đóng và không nhắc (đã nhắc ở lượt 07/11); 03:30 ngày 09/11 đóng', async () => {
+    const open = await run(vn('2026-11-08T03:30:00'));
+    expect(open.res.expired).toBe(0);
+    expect(open.notifier.requestExpiring).not.toHaveBeenCalled();
+    const closed = await run(vn('2026-11-09T03:30:00'));
+    expect(closed.res.expired).toBe(1);
+  });
+
+  it('đúng một lượt nhắc: 03:30 ngày 07/11', async () => {
+    const hits: string[] = [];
+    for (const day of ['05', '06', '07', '08']) {
+      const { notifier } = await run(vn(`2026-11-${day}T03:30:00`));
+      if (notifier.requestExpiring.mock.calls.length > 0) hits.push(day);
+    }
+    expect(hits).toEqual(['07']);
   });
 });

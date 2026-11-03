@@ -14,6 +14,11 @@ import { StorefrontBody } from '@/components/shop-page/storefront-body';
 
 export const revalidate = 300;
 
+// Không dựng sẵn trang nào lúc build; trang đầu tiên của mỗi đường dẫn dựng khi có người vào rồi giữ theo revalidate (ISR thay vì dựng mỗi lượt).
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({
   params,
 }: {

@@ -36,7 +36,7 @@ import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
 import { ShopHeader } from '@/components/mini/shop-header';
-import { TierBadge, TierBadgeSkeleton } from '@/components/mini/tier-badge';
+import { TierBadge, TierBadgeHint, TierBadgeSkeleton } from '@/components/mini/tier-badge';
 import { QuestStrip } from '@/components/mini/quest-strip';
 import { SectionCard } from '@/components/mini/section-card';
 import { StorefrontNewSection } from './storefront-new-section';
@@ -127,7 +127,7 @@ const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayout
 /** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
 export const BUILDER_HEAD_SLOT = 'builder-head-actions';
 
-export function StorefrontBuilder({ sf, tier, tierPending }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean }) {
+export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { sf: StorefrontEdit; tier: { name: string; emoji: string } | null; tierPending: boolean; nextTier?: string | null }) {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -515,14 +515,14 @@ export function StorefrontBuilder({ sf, tier, tierPending }: { sf: StorefrontEdi
                 verified={Boolean(trustLabel)}
                 note={sf.headerNote}
                 badges={
-                  trustLabel || tier || tierPending ? (
+                  trustLabel || tier || tierPending || sf.type === 'CTV' ? (
                     <>
                       {trustLabel && (
                         <TrustBadge tone="verified" icon={Sparkles}>
                           {trustLabel}
                         </TrustBadge>
                       )}
-                      {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : null}
+                      {tier ? <TierBadge name={tier.name} emoji={tier.emoji} /> : tierPending ? <TierBadgeSkeleton /> : sf.type === 'CTV' ? <TierBadgeHint nextName={nextTier} /> : null}
                     </>
                   ) : undefined
                 }

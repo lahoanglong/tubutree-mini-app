@@ -368,7 +368,7 @@ describe('CheckoutPage — Ví bị mờ phải nói lý do, số điểm có d�
     mocks.getWallet.mockResolvedValue({ walletBalance: -50_000 });
     renderPage();
     expect(await screen.findByText('Ví Tubu (-50.000đ)')).toBeInTheDocument();
-    expect(await screen.findByText(/Ví đang âm 50\.000đ do thu hồi hoa hồng đơn trả hàng/)).toBeInTheDocument();
+    expect(await screen.findByText(/Số dư Ví Tubu đang âm 50\.000đ do thu hồi hoa hồng đơn trả hàng/)).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Ví Tubu/ })).toHaveAttribute('aria-disabled', 'true');
   });
 

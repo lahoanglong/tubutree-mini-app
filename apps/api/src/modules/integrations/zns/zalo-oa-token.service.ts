@@ -51,7 +51,11 @@ export class ZaloOaTokenService {
   async refresh(now: Date = new Date()): Promise<boolean> {
     const refreshToken = (await this.readConfig(K_REFRESH)) || this.envRefresh;
     if (!refreshToken || !this.appId || !this.appSecret) {
-      this.logger.warn('Zalo OA refresh: thiếu refresh_token/app_id/app_secret — skip.');
+      const hasAccess = Boolean((await this.readConfig(K_ACCESS)) || this.envAccess);
+      // Đã có access token mà không làm mới được thì ZNS sẽ ngừng sau ~25 giờ: phải là lỗi để lượt cron thành ERRORS (warn không được đếm).
+      const msg = 'Zalo OA refresh: thiếu refresh_token/app_id/app_secret — skip.';
+      if (hasAccess) this.logger.error(msg);
+      else this.logger.warn(msg);
       return false;
     }
     try {

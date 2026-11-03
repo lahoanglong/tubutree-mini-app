@@ -3,6 +3,18 @@ import { fillCopy } from '../shop-copy';
 /** Mã lỗi API khi đặt đơn vượt giới hạn mua mỗi khách của một suất Giờ vàng (kèm `limit`). Sửa được ngay ở giỏ: giảm số lượng. */
 export const FLASH_LIMIT_CODE = 'FLASH_LIMIT';
 
+/**
+ * Hai câu lỗi cũ của máy chủ (`flash-sale-notice.ts`) mà Mini App đã phát hành còn so khớp đúng từng chữ để biết lỗi sửa được ở giỏ: không đổi chữ.
+ * Máy chủ mới trả FLASH_LIMIT (có mã) thay cho câu vượt giới hạn; câu cũ vẫn gặp ở API cũ hoặc lúc hai bản chạy song song.
+ */
+export const FLASH_SOLD_OUT_MESSAGE = 'Hết suất ưu đãi.';
+export const FLASH_OVER_LIMIT_MESSAGE = 'Vượt giới hạn mua ưu đãi.';
+
+/** Lỗi đặt đơn mà khách chỉ sửa được bằng cách đổi/bỏ dòng ở giỏ hàng: thiếu tồn kho (câu có số nên so theo cụm) hoặc hai câu Giờ vàng cũ. */
+export function isCartFixableError(message: string): boolean {
+  return /không đủ tồn kho/.test(message) || message === FLASH_OVER_LIMIT_MESSAGE || message === FLASH_SOLD_OUT_MESSAGE;
+}
+
 interface ErrorBody {
   code?: unknown;
   limit?: unknown;

@@ -1,13 +1,16 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 
+/** MST doanh nghiệp 10 số (chi nhánh thêm -3 số); từ 01/07/2025 cá nhân và hộ kinh doanh dùng số CCCD 12 số làm MST. */
+const TAX_CODE_RE = /^(\d{10}(-\d{3})?|\d{12})$/;
+
 export class InvoiceRequestDto {
-  @IsString() taxCode!: string;
-  @IsString() companyName!: string;
-  @IsString() address!: string;
-  @IsEmail() email!: string; // e-invoice gửi qua email → phải hợp lệ
+  @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode!: string;
+  @IsString() @MaxLength(255) companyName!: string;
+  @IsString() @MaxLength(500) address!: string;
+  @IsEmail() @MaxLength(254) email!: string; // e-invoice gửi qua email → phải hợp lệ
 }
 
 export class QuoteDto {

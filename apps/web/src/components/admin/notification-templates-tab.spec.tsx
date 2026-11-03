@@ -106,6 +106,21 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     expect(row.textContent).toContain('Mã mẫu ZNS là dãy số Zalo cấp khi duyệt mẫu');
   });
 
+  it('QTUI-02: sửa chữ của mẫu ZNS đang thiếu mã sẵn → Lưu bật, vẫn nhắc cảnh báo; xoá mã đang có thì khoá', async () => {
+    const api = stub();
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    const row = container.querySelector<HTMLElement>('[data-template="ORDER_CONFIRMED"]')!;
+    const save = byText(row, 'button', 'Lưu') as HTMLButtonElement;
+    typeInto(row.querySelector('textarea[name="bodyTemplate"]'), 'Đơn {{order_code}} đã xác nhận rồi.');
+    expect(save.disabled).toBe(false);
+    expect(row.textContent).toContain('Kênh ZNS cần mã mẫu');
+    click(save);
+    await flush();
+    const [call] = api.patches();
+    expect(JSON.parse(String(call!.init!.body))).toMatchObject({ channel: 'ZNS', zaloTemplateId: null, bodyTemplate: 'Đơn {{order_code}} đã xác nhận rồi.' });
+  });
+
   it('mẫu ZNS có lượt lỗi: admin thấy số lượt và mã + lý do Zalo trả về của lần gần nhất', async () => {
     const failing = {
       id: 'nt-ship',
