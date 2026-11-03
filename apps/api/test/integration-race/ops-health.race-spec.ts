@@ -1,8 +1,10 @@
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { OpsHealthService, type OpsQueue } from '../../src/modules/ops/ops-health.service';
 import { OpsInboxService } from '../../src/modules/ops/ops-inbox.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { createOrder, createUser, markDeliveredEffectsDone, setConfig } from './helpers';
+import { pancakeEventRef } from '../../src/modules/integrations/pancake/pancake-webhook-dedupe';
 import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest } from './fixtures/waste-fixtures';
 
 /**
@@ -93,6 +95,46 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
 
     await health.recordCatalogRun({ ok: true, count: 12 });
     expect((await health.snapshot()).problems.map((p) => p.key)).not.toContain('pancake.catalog');
+  });
+
+  it('nhãn đơn của webhook lỗi lấy bằng SQL gọn khớp pancakeEventRef trên nguyên rawPayload, mọi dạng payload', async () => {
+    const bigNote = `${'x'.repeat(50_000)} Order code: TUBU7001`;
+    const payloads: Prisma.InputJsonValue[] = [
+      { event: 'order.updated', data: { extension: { external_order_id: 'TUBU7002' }, id: 9, note: 'Order code: TUBU0000' } },
+      { extension: { external_order_id: 'TUBUSUB7003', other: 'y' }, id: 10 },
+      { note: bigNote, id: 11, items: Array.from({ length: 200 }, (_, i) => ({ sku: `S${i}` })) },
+      { data: { id: 'P-12' } },
+      { data: { order_id: 13 } },
+      { id: null, order_id: '' },
+      { id: 0 },
+      { extension: 'chuỗi', note: 42, id: 14 },
+      { extension: { external_order_id: '' }, note: 'Order code: DLR7004' },
+      { data: null, id: 15 },
+      { data: [1, 2], order_id: 16 },
+      { data: 'chuỗi', id: 17 },
+      [1, 2, 3],
+      'chuỗi',
+      7,
+      {},
+    ];
+    // Năm 1990: danh sách lỗi xếp cũ nhất trước và cắt ở STUCK_LIST, dòng do spec khác để lại không đẩy các dòng này ra ngoài.
+    const ids: string[] = [];
+    for (const [i, rawPayload] of payloads.entries()) {
+      const e = await prisma.pancakeWebhookEvent.create({
+        data: { eventType: 'order', rawPayload, status: 'FAILED', error: 'boom', receivedAt: new Date(Date.UTC(1990, 0, 1, 0, i)) },
+      });
+      ids.push(e.id);
+    }
+    try {
+      const s = await health.snapshot();
+      const byId = new Map(s.pancake.failedEvents.map((e) => [e.id, e]));
+      const got = ids.map((id) => byId.get(id)?.orderRef);
+      expect(got).toEqual(payloads.map((p) => pancakeEventRef(p)));
+      expect(got.slice(0, 4)).toEqual(['TUBU7002', 'TUBUSUB7003', 'TUBU7001', '#P-12']);
+      expect(s.pancake.failedEvents.every((e) => !('rawPayload' in e))).toBe(true);
+    } finally {
+      await prisma.pancakeWebhookEvent.deleteMany({ where: { id: { in: ids } } });
+    }
   });
 
   it('báo admin một lần, không lặp trong giờ nhắc, báo "đã ổn" khi hết; webhook ngoài chỉ khi có biến môi trường', async () => {

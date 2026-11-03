@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { CRON_TZ } from '../../common/cron-tz';
@@ -376,7 +376,7 @@ export class OpsHealthService {
           where: pancakeOpenEventWhere(now),
           orderBy: { receivedAt: 'asc' },
           take: STUCK_LIST,
-          select: { id: true, eventType: true, status: true, attempts: true, error: true, receivedAt: true, rawPayload: true },
+          select: { id: true, eventType: true, status: true, attempts: true, error: true, receivedAt: true },
         }),
         this.prisma.order.count({ where: pancakeUnsyncedWhere(now) }),
         this.prisma.order.count({ where: stuckWhere }),
@@ -405,6 +405,7 @@ export class OpsHealthService {
         this.prisma.opsHealthState.findUnique({ where: { key: CATALOG_STATE_KEY } }),
       ]);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
+    const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));
     const catalogRun: CatalogRun & { detail: unknown } = {
       lastOkAt: catalog?.lastOkAt?.toISOString() ?? null,
       lastErrorAt: catalog?.lastErrorAt?.toISOString() ?? null,
@@ -419,10 +420,10 @@ export class OpsHealthService {
       webhookFailed24h,
       webhookFailedOpen,
       webhookStuck,
-      failedEvents: failedEvents.map(({ rawPayload, error, ...e }) => ({
+      failedEvents: failedEvents.map(({ error, ...e }) => ({
         ...e,
         source: 'pancake' as const,
-        orderRef: pancakeEventRef(rawPayload),
+        orderRef: failedRefs.get(e.id) ?? null,
         error: error?.slice(0, 300) ?? null,
       })),
       unsynced,
@@ -432,6 +433,28 @@ export class OpsHealthService {
       attentionOrders,
       catalog: catalogRun,
     };
+  }
+
+  /**
+   * rawPayload là nguyên đơn Pancake (có thể vài trăm KB mỗi dòng); trang sức khoẻ chỉ cần nhãn đơn,
+   * nên chỉ kéo đúng các trường pancakeEventRef đọc, cùng quy tắc chọn data/top-level như pancakeEventData.
+   */
+  private async pancakeEventRefs(ids: string[]): Promise<Map<string, string | null>> {
+    if (!ids.length) return new Map();
+    const rows = await this.prisma.$queryRaw<{ id: string; slim: unknown }[]>`
+      SELECT id, jsonb_build_object(
+        'extension', jsonb_build_object('external_order_id', d->'extension'->'external_order_id'),
+        'note', d->'note',
+        'id', d->'id',
+        'order_id', d->'order_id'
+      ) AS slim
+      FROM (
+        SELECT id,
+          CASE WHEN jsonb_typeof("rawPayload"->'data') = 'object' THEN "rawPayload"->'data' ELSE "rawPayload" END AS d
+        FROM "pancake_webhook_events"
+        WHERE id IN (${Prisma.join(ids)})
+      ) t`;
+    return new Map(rows.map((r) => [r.id, pancakeEventRef(r.slim)]));
   }
 
   private async gomdonHealth(now: Date, t: OpsThresholds) {
