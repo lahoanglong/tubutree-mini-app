@@ -128,7 +128,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   // ngày quá khứ vẫn lọt qua vì !!promo.startAt là false, tạo ra khuyến mãi chết ngay khi lưu.
   const dateRangeError = promoDateRangeError(promo);
   const dateRangeInvalid = dateRangeError !== null;
-  // startAt/endAt (yyyy-mm-dd từ input date) → ISO theo giờ VN; endAt mặc định = startAt + 30 ngày (xem vnPromoWindowIso).
+  // startAt/endAt (yyyy-mm-dd từ input date) → ISO theo giờ VN; endAt trống = hết ngày VN chứa (startAt + 30 ngày − 1 giây), xem vnPromoWindowIso.
   const promoIso = () => ({
     title: promo.title.trim(),
     subtitle: promo.subtitle.trim() || undefined,

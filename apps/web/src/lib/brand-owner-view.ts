@@ -43,7 +43,7 @@ export function promoDateRangeError(f: PromoForm, now = Date.now()): string | nu
   return vnDateRangeError(f.startAt, f.endAt, now);
 }
 
-/** yyyy-mm-dd từ ô ngày → ISO theo giờ VN (đầu ngày / cuối ngày); kết thúc mặc định = bắt đầu + 30 ngày (không phải now + 30 ngày, kẻo chiến dịch bắt đầu muộn có endAt < startAt). */
+/** yyyy-mm-dd từ ô ngày → ISO theo giờ VN (đầu ngày / cuối ngày); kết thúc trống = hết ngày VN chứa (bắt đầu + 30 ngày − 1 giây), xem vnPromoWindowIso. */
 export function promoPayload(f: PromoForm, now = Date.now()) {
   return {
     title: f.title.trim(),
