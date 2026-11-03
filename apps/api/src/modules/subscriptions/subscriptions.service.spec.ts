@@ -1052,6 +1052,52 @@ describe('SubscriptionsService.setStatus', () => {
     }
   });
 
+  it('TZ-01: bật lại lúc 01:00 VN đúng ngày hẹn (nextRunAt 0h VN hôm nay, cron 03:00 chưa chạy) → giữ nguyên, đơn ra sáng nay', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-10T18:00:00.000Z') }); // 01:00 VN 11/11
+    try {
+      const dueToday = new Date('2026-11-10T17:00:00.000Z'); // 0h VN 11/11
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 2, nextRunAt: dueToday });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(dueToday.toISOString());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 02:59 VN với nextRunAt giờ lẻ hôm nay (dữ liệu cũ) → giữ nguyên, cron 03:00 hôm nay nhận', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-10T19:59:00.000Z') }); // 02:59 VN 11/11
+    try {
+      const odd = new Date('2026-11-11T07:23:00.000Z'); // 14:23 VN 11/11
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: odd });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(odd.toISOString());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 10:00 VN đúng ngày hẹn (cron hôm nay đã bỏ qua gói tạm dừng) → quá hạn, dời một chu kỳ tính từ 0h VN hôm nay', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-11T03:00:00.000Z') }); // 10:00 VN 11/11
+    try {
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 2, nextRunAt: new Date('2026-11-10T17:00:00.000Z') });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe('2026-11-24T17:00:00.000Z'); // 0h VN 25/11
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 01:00 VN khi hẹn từ hôm qua (quá hạn hẳn) → dời một chu kỳ, không ra đơn bù', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-10T18:00:00.000Z') }); // 01:00 VN 11/11
+    try {
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: new Date('2026-11-09T17:00:00.000Z') });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe('2026-11-17T17:00:00.000Z'); // 0h VN 18/11
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('ACTIVE (bật lại từ PAUSED, đã quá hạn) → dời nextRunAt + phát subscription_changed action=resumed', async () => {
     const pastRunAt = new Date(Date.now() - 999_999_999);
     const { svc, update, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 4, nextRunAt: pastRunAt });

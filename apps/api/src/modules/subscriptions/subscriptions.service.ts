@@ -50,6 +50,8 @@ export const MAX_SUBSCRIPTION_QUANTITY = 999;
 export const SUBSCRIPTION_COD_MAX = 5_000_000;
 
 /** Cron mỗi đêm quét tối đa PAGE gói/trang, tối đa MAX_PAGES trang (chặn vòng lặp vô hạn nếu dữ liệu bất thường). */
+/** Giờ VN cron processDue chạy mỗi ngày; setStatus dựa vào mốc này để biết bật lại có kịp đơn hôm nay không. */
+const SUBSCRIPTION_CRON_HOUR_VN = 3;
 const DUE_PAGE_SIZE = 200;
 const DUE_MAX_PAGES = 50;
 
@@ -523,17 +525,26 @@ export class SubscriptionsService {
       });
       if (isPartnerOwnedVariation(variation)) throw partnerGoodsError('SUBSCRIPTION', variation?.product.name);
     }
-    // Khi bật lại từ PAUSED, dời nextRunAt tới chu kỳ kế nếu đã quá hạn.
-    const resumeNow = new Date();
-    const tomorrowVn = new Date(startOfVnDay(resumeNow).getTime() + 864e5);
-    const resumed = this.addWeeks(startOfVnDay(resumeNow), sub.intervalWeeks);
-    // Cron 03:00 nhận mọi gói có nextRunAt trước 0h VN ngày mai, nên giờ lẻ của một ngày tương lai vẫn ra đúng ngày đó. Riêng
-    // gói còn nextRunAt giờ lẻ ngay trong hôm nay (dữ liệu cũ) thì cron hôm nay đã/sắp chạy: dời về 0h ngày mai để ngày
-    // "Lần kế" khách thấy khớp ngày ra đơn, không ra hai lần trong ngày.
+    // Bật lại: cron 03:00 VN nhận mọi gói có nextRunAt trước 0h VN ngày mai, nên chỉ cần biết cron hôm nay còn chạy không.
+    // - Ngày hẹn từ mai trở đi: giữ nguyên (giờ lẻ của ngày đó vẫn ra đúng ngày).
+    // - Hẹn hôm nay và cron hôm nay chưa chạy: giữ nguyên, đơn ra sáng nay đúng ngày "Lần kế" khách thấy. nextRunAt đã neo
+    //   0h VN nên luôn nhỏ hơn giờ bấm; so với giờ bấm như trước thì gói bị coi là quá hạn và mất cả một chu kỳ.
+    // - Hẹn hôm nay mà cron đã chạy (gói đang tạm dừng nên bị bỏ qua): nextRunAt còn ở tương lai (giờ lẻ của dữ liệu cũ) thì
+    //   dời sang 0h ngày mai; đã qua thì coi là quá hạn, dời một chu kỳ tính từ hôm nay như cũ.
     let nextRunAt = sub.nextRunAt;
     if (status === 'ACTIVE') {
-      if (sub.nextRunAt < resumeNow) nextRunAt = resumed < tomorrowVn ? tomorrowVn : resumed;
-      else if (sub.nextRunAt < tomorrowVn) nextRunAt = tomorrowVn;
+      const resumeNow = new Date();
+      const todayVn = startOfVnDay(resumeNow);
+      const tomorrowVn = new Date(todayVn.getTime() + 864e5);
+      const cronStillToRunToday = resumeNow.getTime() < todayVn.getTime() + SUBSCRIPTION_CRON_HOUR_VN * 3600e3;
+      if (sub.nextRunAt >= tomorrowVn || (sub.nextRunAt >= todayVn && cronStillToRunToday)) {
+        nextRunAt = sub.nextRunAt;
+      } else if (sub.nextRunAt >= resumeNow) {
+        nextRunAt = tomorrowVn;
+      } else {
+        const resumed = this.addWeeks(todayVn, sub.intervalWeeks);
+        nextRunAt = resumed < tomorrowVn ? tomorrowVn : resumed;
+      }
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -589,7 +600,7 @@ export class SubscriptionsService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi tạo đơn từng subscription
    * đã được cô lập ở try/catch trong vòng lặp bên dưới.
    */
-  @Cron('0 3 * * *', { timeZone: CRON_TZ })
+  @Cron(`0 ${SUBSCRIPTION_CRON_HOUR_VN} * * *`, { timeZone: CRON_TZ })
   @TrackCron()
   async processDue(): Promise<void> {
     try {
