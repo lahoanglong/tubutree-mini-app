@@ -65,7 +65,7 @@ export class InvalidOrderTransitionError extends Error {
   ) {
     super(
       message ??
-        `Đơn vừa chuyển sang «${orderStatusLabelVi(from)}», không thể chuyển sang «${orderStatusLabelVi(to)}». Tải lại đơn để xem trạng thái mới.`,
+        `Đơn đang ở «${orderStatusLabelVi(from)}», không chuyển sang «${orderStatusLabelVi(to)}» được. Tải lại đơn để xem trạng thái mới.`,
     );
     this.name = 'InvalidOrderTransitionError';
   }

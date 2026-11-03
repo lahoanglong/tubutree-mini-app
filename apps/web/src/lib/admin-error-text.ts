@@ -6,11 +6,21 @@ import { actionErrorText as baseActionErrorText, isBusinessMessage, loadErrorTex
  * "Không cộng được Điểm Xanh, đã báo quản trị viên") giữ nguyên lời thay vì câu chung "Máy chủ đang bận", vì nhân viên cần biết bước nào
  * hỏng để xử lý. Còn lại (lời tiếng Anh của framework, 429, 401, mất mạng, hết giờ) theo đúng luật của error-text.ts.
  */
+/**
+ * Câu chung của máy chủ (tiếng Việt nhưng không nói bước nào hỏng) — dùng câu chung của web thay vì coi là lời nghiệp vụ. Nguồn:
+ * apps/api/src/common/filters/prisma-exception.filter.ts (hai câu) và apps/api/src/common/lock-busy.ts (LOCK_BUSY_MESSAGE).
+ */
+const SERVER_GENERIC_MESSAGES: readonly string[] = [
+  'Đã có lỗi xảy ra, bạn thử lại sau nhé.',
+  'Lỗi cơ sở dữ liệu.',
+  'Hệ thống đang bận, bạn thử lại sau ít giây nhé.',
+];
+
 function adminOverride(error: unknown): string | null {
   if (!(error instanceof ApiError)) return null;
   const message = error.message.trim();
   if (!message || message === GENERIC_ERROR) return null;
-  if (error.status >= 500 && isBusinessMessage(message)) return message;
+  if (error.status >= 500 && !SERVER_GENERIC_MESSAGES.includes(message) && isBusinessMessage(message)) return message;
   return null;
 }
 

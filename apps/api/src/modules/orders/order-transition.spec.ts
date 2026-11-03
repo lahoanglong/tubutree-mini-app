@@ -258,7 +258,7 @@ describe('ERR-02 — câu lỗi chuyển trạng thái nói nhãn tiếng Việt
       message = (e as Error).message;
     }
     expect(message).not.toMatch(/[A-Z_]{5,}/);
-    expect(message).toBe('Đơn vừa chuyển sang «Đang giao», không thể chuyển sang «Đang đóng gói». Tải lại đơn để xem trạng thái mới.');
+    expect(message).toBe('Đơn đang ở «Đang giao», không chuyển sang «Đang đóng gói» được. Tải lại đơn để xem trạng thái mới.');
   });
 
   it('lớp con giữ câu riêng', () => {

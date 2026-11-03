@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSupportQr, startSupportQr, type SupportQrState } from '@/lib/admin-client';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../ui';
-import { actionErrorText } from '@/lib/admin-error-text';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 const POLL_MS = 2000;
 const TERMINAL = new Set(['SUCCESS', 'EXPIRED', 'FAILED']);
@@ -40,7 +40,7 @@ export function QrModal({ initial, onClose, onSuccess }: { initial: SupportQrSta
           if (r.status === 'SUCCESS') onSuccess();
         })
         .catch((e: unknown) => {
-          if (!stopped) setError(actionErrorText(e));
+          if (!stopped) setError(loadErrorText(e));
         })
         .finally(() => {
           busy = false;

@@ -34,6 +34,9 @@ import {
 } from './dealer-config';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
+import { canonicalUserId } from '../external-points/external-claim-audit';
+import { isStaffOwnOrder } from '../../common/staff-own-order';
+import { assertBankRefUnusedByOrder, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
@@ -41,9 +44,6 @@ const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   REFUNDED: 'Đã hoàn tiền',
   FAILED: 'Thanh toán lỗi',
 };
-import { canonicalUserId } from '../external-points/external-claim-audit';
-import { isStaffOwnOrder } from '../../common/staff-own-order';
-import { assertBankRefUnusedByOrder, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 
 interface BonusTier {
   min: number;

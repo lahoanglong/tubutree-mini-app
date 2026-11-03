@@ -12,6 +12,13 @@ describe('admin-error-text', () => {
     );
   });
 
+  it('5xx câu chung của máy chủ (lỗi cơ sở dữ liệu, thử lại sau): câu chung của web', () => {
+    for (const m of ['Lỗi cơ sở dữ liệu.', 'Đã có lỗi xảy ra, bạn thử lại sau nhé.', 'Hệ thống đang bận, bạn thử lại sau ít giây nhé.']) {
+      expect(actionErrorText(new ApiError(m, 500))).toBe('Máy chủ đang bận, thử lại nhé.');
+      expect(loadErrorText(new ApiError(m, 503))).toBe('Máy chủ đang bận, thử lại nhé.');
+    }
+  });
+
   it('5xx lời mặc định tiếng Anh của Nest: câu chung, không lộ "Internal server error"', () => {
     expect(actionErrorText(new ApiError('Internal server error', 500))).toBe('Máy chủ đang bận, thử lại nhé.');
   });
