@@ -260,3 +260,23 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
     expect([...MARKETING_TEMPLATE_CODES].filter((c) => transactional.test(c))).toEqual([]);
   });
 });
+
+describe('NotificationTemplatesAdminService.list — nhắc hạ hạng gửi ZNS bằng khoá cấu hình riêng (NTF-01)', () => {
+  const tier = { id: 'nt-tier', code: 'TIER_DROP_NOTICE', channel: 'INAPP', zaloTemplateId: null, bodyTemplate: 'Hạng {{tier}} sắp hết hạn' };
+  const build = (znsKey: unknown) => {
+    const prisma = {
+      notificationTemplate: { findMany: jest.fn().mockResolvedValue([tier]) },
+      notificationLog: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const sys = { get: jest.fn(async (k: string, fb: unknown) => (k === 'loyalty.tier_drop_zns_template_id' ? znsKey : fb)) };
+    return new NotificationTemplatesAdminService(prisma, undefined, sys as never);
+  };
+
+  it('đã điền mã ZNS ở khoá loyalty.* → hiện "ZNS" dù mẫu ở kênh Trong app', async () => {
+    expect((await build('123456').list())[0]!.delivery).toBe('ZNS');
+  });
+
+  it.each([[''], ['abc'], [undefined]])('khoá trống/sai (%p) → vẫn "Chỉ trong app"', async (key) => {
+    expect((await build(key).list())[0]!.delivery).toBe('INAPP');
+  });
+});

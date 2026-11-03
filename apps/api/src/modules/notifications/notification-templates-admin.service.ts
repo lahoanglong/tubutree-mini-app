@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { ConfigService } from '@nestjs/config';
 import { PHONE_LIKE_RUN } from '../../common/mask-pii';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TIER_DROP_NOTICE_CODE, TIER_DROP_ZNS_TEMPLATE_KEY } from '../loyalty/tier-drop-notice.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { UpdateNotificationTemplateDto } from './dto/update-notification-template.dto';
 import { templateVariableProblem, variablesOf, type TemplateVariable } from './notification-variables';
@@ -108,11 +109,14 @@ export class NotificationTemplatesAdminService {
       if (c.channel === 'ZNS' && c.status === 'SENT') row.ZNS += n;
       sent.set(c.templateCode, row);
     }
+    // Nhắc hạ hạng gửi ZNS bằng mã lấy từ khoá cấu hình loyalty.* kể cả khi mẫu để kênh "Trong app" (NotificationsService.notify
+    // dùng mã của nơi gọi khi mẫu chưa có mã riêng) — màn này phải hiện đúng điều đó.
+    const tierDropZnsId = await this.tierDropZnsTemplateId();
     const lastError = new Map(failures.map((f) => [f.templateCode, { text: f.error ?? 'Không rõ lý do', at: f.sentAt }]));
     return templates
       .map((t) => ({
         ...t,
-        delivery: deliveryOf(t),
+        delivery: t.code === TIER_DROP_NOTICE_CODE && tierDropZnsId ? ('ZNS' as const) : deliveryOf(t),
         sent30d: sent.get(t.code) ?? { INAPP: 0, ZNS: 0 },
         znsFailed30d: failed.get(t.code) ?? 0,
         znsLastError: lastError.get(t.code) ?? null,
@@ -126,6 +130,11 @@ export class NotificationTemplatesAdminService {
           b.sent30d.INAPP + b.sent30d.ZNS - (a.sent30d.INAPP + a.sent30d.ZNS) ||
           a.code.localeCompare(b.code),
       );
+  }
+
+  private async tierDropZnsTemplateId(): Promise<string | null> {
+    const raw = await this.config?.get<unknown>(TIER_DROP_ZNS_TEMPLATE_KEY, '');
+    return typeof raw === 'string' && /^\d{1,20}$/.test(raw.trim()) ? raw.trim() : null;
   }
 
   async update(code: string, dto: UpdateNotificationTemplateDto, actor: { id: string; staff: boolean } = { id: 'system', staff: false }) {
