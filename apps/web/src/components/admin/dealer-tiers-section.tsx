@@ -22,7 +22,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, Field, INPUT_CLASS, LoadError, Notice, TOUCH_H } from './ui';
-import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 type Mode = { kind: 'create' } | { kind: 'edit'; id: string; baseline: TierValues };
 interface SaveInput {

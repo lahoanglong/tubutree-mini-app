@@ -8,7 +8,7 @@ import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { buildPartnerRuleWrites, configValue, friendlyPartnerRuleError, PARTNER_RULE_FIELDS, readPartnerRuleForm, type PartnerRuleForm, type PartnerRuleWrite } from '@/lib/admin-config-forms';
 import { BTN_PRIMARY, Field, INPUT_CLASS, Notice } from './ui';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const shortLabel = (w: PartnerRuleWrite) => w.label.replace(/ \((?:%|giờ|ngày)\)$/, '');
 const isRate = (key: string) => key.startsWith('affiliate.');

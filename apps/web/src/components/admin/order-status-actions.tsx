@@ -12,7 +12,7 @@ import {
   invalidateInbox,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { parseVndInput } from '@/lib/loyalty-pos';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
 import { BTN_WARNING, FIELD_XS, TOUCH_H, Field } from './ui';

@@ -12,7 +12,7 @@ import {
 import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError } from './ui';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const DELIVERY: Record<NotificationDelivery, { tone: Tone; label: string }> = {
   ZNS: { tone: 'success', label: 'Gửi ZNS + trong app' },

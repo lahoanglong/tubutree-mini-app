@@ -21,7 +21,7 @@ import {
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Badge ở dòng danh sách đơn: có thu gom / cần xử lý thu gom. */
 export function RecyclingBadge({ order }: { order: AdminOrder }) {

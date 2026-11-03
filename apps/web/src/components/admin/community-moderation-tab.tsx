@@ -30,7 +30,7 @@ import { EventsPanel } from './community-events-panel';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, ListSkeleton, LoadError, chipClass, Notice, ToneBadge } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export type { CommunityView };
 

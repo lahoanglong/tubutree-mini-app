@@ -9,7 +9,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, ToneBadge } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { PANCAKE_ATTENTION_COUNT_KEY } from './pancake-attention';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Trạng thái đơn Tubu còn trong kho — chỉ những đơn này được "Đẩy lại Pancake" (API chặn lần nữa). */
 const IN_WAREHOUSE = new Set(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED']);

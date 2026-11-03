@@ -6,7 +6,7 @@ import { listCashbackTxns, reviewCashbackTxn, type AdminCashbackTxn } from '@/li
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Nhãn trạng thái hoàn tiền sàn ngoài cho kế toán: Đã duyệt là chờ hết thời gian giữ; PAID do cron cộng thẳng vào Ví Tubu của khách, không có bước chi nào của kế toán. */
 export const CASHBACK_STATUS_LABELS: Record<string, string> = {

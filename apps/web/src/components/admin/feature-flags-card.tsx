@@ -7,7 +7,7 @@ import { configValue } from '@/lib/admin-config-forms';
 import { DEFAULT_OFF_WARNING, FEATURE_FLAGS, type FeatureFlag } from '@/lib/admin-feature-flags';
 import { useConfirm } from './confirm-dialog';
 import { Notice, ToneBadge } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Khoá nào chưa có dòng trong DB vẫn lưu được: API tự tạo dòng cho các khoá có luật ghi riêng. */
 export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[] | undefined; onOpenSupportChat?: () => void }) {

@@ -11,7 +11,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { WASTE_ITEM_STATUS_LABELS } from '@/lib/waste-labels';
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const DASH = '—';
 const STATUSES = Object.keys(WASTE_ITEM_STATUS_LABELS) as WasteItemStatus[];

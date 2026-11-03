@@ -7,7 +7,7 @@ import { invalidateInbox, PANCAKE_RESOLVE_NOTE_MAX, resolvePancakeAttention, typ
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, FIELD_XS, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export const PANCAKE_ATTENTION_COUNT_KEY = ['admin-pancake-attention-count'] as const;
 

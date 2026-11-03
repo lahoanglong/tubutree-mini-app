@@ -10,7 +10,7 @@ import { useConfirm } from './confirm-dialog';
 import { CouponListing } from './coupon-listing';
 import { VnDateInput } from './vn-date-input';
 import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const PAGE_SIZE = 20;
 const STATUS_FILTERS: { value: CouponStatusFilter; label: string }[] = [

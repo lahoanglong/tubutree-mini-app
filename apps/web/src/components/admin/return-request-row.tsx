@@ -16,7 +16,7 @@ import { PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { EvidenceImages } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H, Field } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const REJECT_NOTE_MIN = 3;
 

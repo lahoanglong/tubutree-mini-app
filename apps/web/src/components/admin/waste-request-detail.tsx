@@ -36,7 +36,7 @@ import {
 } from '@/lib/waste-labels';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, LoadError, Notice, ScrollRegion } from './ui';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const NOTE_MAX = 500;
 const WEIGHT_ERROR = 'Cân nặng là số nguyên từ 1 tới 100000 gram';

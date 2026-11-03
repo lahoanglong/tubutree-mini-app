@@ -115,7 +115,7 @@ describe('ProductPicker', () => {
     const b = mount(<ProductPicker mode="product" value={null} onChange={() => {}} label="Chọn sản phẩm" debounceMs={0} />);
     typeInto(search(b.container), 'nuoc');
     await flush();
-    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Lỗi máy chủ');
   });
 
   it('ô gõ có aria-label và cao tối thiểu 44px trên điện thoại', () => {

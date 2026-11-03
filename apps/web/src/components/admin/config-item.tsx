@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
  * Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, hoa hồng, mã giảm, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp.

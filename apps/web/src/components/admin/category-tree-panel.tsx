@@ -14,7 +14,7 @@ import {
 } from '@/lib/product-categories';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, LoadError, Notice } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Form = { kind: 'add'; parentId: string | null } | { kind: 'rename'; id: string };
 /** `at` = chỗ hiện lỗi: lỗi nằm cạnh mục hoặc ô nhập vừa thao tác, không dồn lên đầu danh sách. */

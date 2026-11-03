@@ -92,7 +92,7 @@ describe('OrderStatusHistory', () => {
     const b = mount(<OrderStatusHistory order={order({ id: 'o2' })} />);
     click(byText(b.container, 'button', 'Lịch sử trạng thái'));
     await flush();
-    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Lỗi máy chủ');
     expect(byText(b.container, 'button', 'Thử lại')).not.toBeNull();
   });
 });

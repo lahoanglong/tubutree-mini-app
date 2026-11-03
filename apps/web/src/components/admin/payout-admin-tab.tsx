@@ -18,7 +18,7 @@ import { useConfirm } from './confirm-dialog';
 import { VnMonthInput } from './vn-date-input';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const RELOAD_HINT = 'Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa trước khi chi lần nữa.';
 

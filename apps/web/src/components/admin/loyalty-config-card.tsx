@@ -8,7 +8,7 @@ import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { configValue, LOYALTY_DEFAULTS, LOYALTY_KEYS, parseCheckinPoints, parseIntInRange } from '@/lib/admin-config-forms';
 import { Field, INPUT_CLASS, Notice } from './ui';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 interface NumbersForm {
   checkin: string[];

@@ -14,7 +14,7 @@ import {
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 import { SeasonAdmin } from './season-admin';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 // Tab Nhiệm vụ nằm trong First Load của /admin; màn Câu đố ít dùng nên nạp khi tab mở.
 const GameQuizAdmin = dynamic(() => import('./game-quiz-tab').then((m) => m.GameQuizAdmin), {

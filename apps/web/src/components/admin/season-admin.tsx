@@ -7,7 +7,7 @@ import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { VnDateInput } from './vn-date-input';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, INPUT_CLASS, Field, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const STATUS_TEXT: Record<AdminSeason['status'], string> = { ACTIVE: 'Đang chạy', UPCOMING: 'Sắp tới', ENDED: 'Đã hết hạn' };
 

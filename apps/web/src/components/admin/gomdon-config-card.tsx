@@ -21,7 +21,7 @@ import {
 } from '@/lib/admin-config-forms';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, Field, INPUT_CLASS, LoadError, Notice } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Hằng (không phải `{}` mới mỗi render) — useEffect bên dưới so sánh theo tham chiếu. */
 const NO_CONFIG: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;

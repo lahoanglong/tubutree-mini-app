@@ -6,7 +6,7 @@ import { listLiveAttendance, manualCheckout, type LiveAttendance } from '@/lib/a
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, Notice, ToneBadge, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Nhân viên đang trong ca + nút "Chốt ra ca" cho người quên ra ca (ADMINOPS-17). Lương ngày đó tự tính lại. */
 export function AttendanceTab() {

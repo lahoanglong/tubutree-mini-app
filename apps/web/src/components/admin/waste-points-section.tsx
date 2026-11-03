@@ -10,7 +10,7 @@ import { BTN_PRIMARY, BTN_XS_SECONDARY, chipClass, Notice, ScrollRegion, ToneBad
 import type { WasteSeed } from './waste-tab';
 import { WastePointDetail } from './waste-point-detail';
 import { WastePointForm } from './waste-point-form';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = 'all' | 'pending' | 'perk';
 

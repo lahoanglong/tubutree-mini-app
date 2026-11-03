@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSupportQr, startSupportQr, type SupportQrState } from '@/lib/admin-client';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const POLL_MS = 2000;
 const TERMINAL = new Set(['SUCCESS', 'EXPIRED', 'FAILED']);

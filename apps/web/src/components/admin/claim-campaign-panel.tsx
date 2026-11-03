@@ -19,7 +19,7 @@ import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { VnDateInput } from './vn-date-input';
 import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const BATCH_MAX = 2000;
 type CouponType = 'PERCENT' | 'AMOUNT' | 'FREESHIP';

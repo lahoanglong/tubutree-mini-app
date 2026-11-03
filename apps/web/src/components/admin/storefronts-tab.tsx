@@ -22,7 +22,7 @@ import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
 import { USER_ROLE_LABELS } from './users-list';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const REASON_MAX = 300;
 

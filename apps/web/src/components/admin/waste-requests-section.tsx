@@ -32,7 +32,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, F
 import { useConfirm } from './confirm-dialog';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestDetail } from './waste-request-detail';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export type WasteQueuePreset = 'toCount' | 'inTransit' | 'customerBlocked' | 'orderNotDelivered' | 'expired' | 'transitOverdue' | 'orderMismatch';
 

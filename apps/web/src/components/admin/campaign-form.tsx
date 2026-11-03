@@ -17,7 +17,7 @@ import { ImageUrlField } from './image-url-field';
 import { ProductPicker } from './product-picker';
 import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, FIELD_CLASS, INPUT_CLASS, TOUCH_H } from './ui';
 import { VnDateTimeInput } from './vn-date-input';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export const PLACEMENT_LABELS: Record<CampaignPlacement, string> = { HOME_TOP: 'Đầu Trang chủ', OFFERS_TOP: 'Đầu Ưu đãi' };
 export const AUDIENCE_LABELS: Record<CampaignAudience, string> = { ALL: 'Mọi khách', NEW: 'Khách mới', RETURNING: 'Khách cũ' };

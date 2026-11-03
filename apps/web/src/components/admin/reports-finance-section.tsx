@@ -11,7 +11,7 @@ import {
 } from '@/lib/admin-reports-client';
 import { REVENUE_MAX_DAYS, rangeError } from '@/lib/admin-reports';
 import { BTN_SECONDARY, FIELD_XS, Notice } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const PAYOUT_STATUS_OPTIONS: { value: '' | PayoutExportStatus; label: string }[] = [
   { value: '', label: 'Mọi trạng thái' },

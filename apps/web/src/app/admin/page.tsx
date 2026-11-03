@@ -195,7 +195,7 @@ import { DEALER_APP_FILTERS, dealerAppStatusLabel } from '@/lib/dealer-applicati
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
-import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 type Tab =
   | 'inbox'

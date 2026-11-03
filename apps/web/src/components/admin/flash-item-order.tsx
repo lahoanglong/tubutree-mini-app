@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { updateFlashItemOrder } from '@/lib/admin-client';
 import { BTN_XS_SECONDARY, FIELD_CLASS, TOUCH_H } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const ORDER_MIN = -1000;
 const ORDER_MAX = 1000;

@@ -7,7 +7,7 @@ import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
 import { Notice, ToneBadge, chipClass, LoadError } from './ui';
 import { formatDate } from '@/lib/format-date';
-import { loadErrorText } from '@/lib/error-text';
+import { loadErrorText } from '@/lib/admin-error-text';
 
 const PAGE_SIZE = 20;
 const STATUS_CHIPS: { k: SubscriptionStatus | ''; label: string }[] = [

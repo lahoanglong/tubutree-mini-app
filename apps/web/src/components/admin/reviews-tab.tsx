@@ -15,7 +15,7 @@ import { safeEvidenceImage } from './evidence-images';
 import { PageNav } from './page-nav';
 import { BTN_LINK, Notice, ToneBadge, chipClass, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
-import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 const PAGE_SIZE = 20;
 const VISIBILITY_CHIPS: { k: ReviewVisibilityFilter | ''; label: string }[] = [

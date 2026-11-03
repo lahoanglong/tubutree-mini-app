@@ -14,7 +14,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { DealerCreditPanel } from './dealer-credit-panel';
 import { useConfirm } from './confirm-dialog';
 import { BTN_SMALL, BTN_XS_DANGER, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
  * Đại lý bấm "Báo đã chuyển khoản" trả nợ nhưng sổ công nợ chỉ giảm khi kế toán ghi nhận. Khối này giữ các báo cáo chưa xử lý, cũ nhất

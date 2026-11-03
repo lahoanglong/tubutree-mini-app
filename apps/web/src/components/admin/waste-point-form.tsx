@@ -17,7 +17,7 @@ import { getCommunes, getProvinces } from '@/lib/geo-client';
 import { WASTE_ITEM_STATUS_LABELS, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Slot = { open: string; close: string };
 type Hours = Partial<Record<WasteWeekday, Slot[]>>;

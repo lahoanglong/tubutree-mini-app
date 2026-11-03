@@ -9,7 +9,7 @@ import { BTN_DANGER_OUTLINE, BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass
 import { useConfirm } from './confirm-dialog';
 import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export type DeletionStatusFilter = 'PENDING' | 'RESOLVED' | 'ALL';
 

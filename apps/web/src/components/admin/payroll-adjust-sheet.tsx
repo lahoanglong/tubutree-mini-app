@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { adjustPayroll, recomputePayroll, type AdminPayrollRow } from '@tubutree/app-core/api/payroll';
 import { ApiError } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { formatVnd } from '@/lib/format-vnd';
 import { currentVnYearMonth, dowLabel, shortDayLabel, vnDateKey } from '@/lib/week';
 import { Sheet } from '@/components/ui/sheet';

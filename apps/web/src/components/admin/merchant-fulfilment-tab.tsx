@@ -16,7 +16,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass, LoadError } from './ui';
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';

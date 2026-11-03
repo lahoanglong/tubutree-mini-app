@@ -18,7 +18,7 @@ import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const LIST_KEY = ['admin-category-products'] as const;
 const OPTIONS_KEY = ['admin-category-options'] as const;

@@ -116,7 +116,7 @@ describe('CommunityModerationTab — bài chờ duyệt', () => {
     click(byText(r.container.querySelector('[data-post="p1"]')!, 'button', 'Duyệt'));
     await flush();
 
-    expect(r.container.querySelector('[data-post="p1"] [role="alert"]')!.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(r.container.querySelector('[data-post="p1"] [role="alert"]')!.textContent).toContain('Máy chủ bận');
     expect(r.container.querySelector('[data-post="p2"] [role="alert"]')).toBeNull();
   });
 
@@ -348,7 +348,7 @@ describe('CommunityModerationTab — câu hỏi chưa ai trả lời', () => {
     typeInto(r.container.querySelector('[data-post="q1"] textarea'), 'Dạ để em xem');
     click(byText(r.container.querySelector('[data-post="q1"]')!, 'button', 'Gửi trả lời'));
     await flush();
-    expect(r.container.querySelector('[data-post="q1"] [role="alert"]')!.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(r.container.querySelector('[data-post="q1"] [role="alert"]')!.textContent).toContain('Máy chủ bận');
     expect((r.container.querySelector('[data-post="q1"] textarea') as HTMLTextAreaElement).value).toBe('Dạ để em xem');
     expect(api.calls.filter((c) => c.url.includes('/feed/admin/unanswered'))).toHaveLength(1);
   });

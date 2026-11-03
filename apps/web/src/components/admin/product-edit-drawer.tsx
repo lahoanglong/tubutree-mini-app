@@ -8,7 +8,7 @@ import { ImageUrlField } from './image-url-field';
 import { SideDrawer } from './side-drawer';
 import { useDiscardGuard } from './use-discard-guard';
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, chipClass } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const MAX_IMAGES = 8;
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);

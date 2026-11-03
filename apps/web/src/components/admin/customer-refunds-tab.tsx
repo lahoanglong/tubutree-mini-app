@@ -42,7 +42,7 @@ import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refun
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 import { useDebounced } from '@/lib/use-debounced';
-import { loadErrorText } from '@/lib/error-text';
+import { loadErrorText } from '@/lib/admin-error-text';
 import { searchEmptyHint } from './search-empty-hint';
 
 const PAGE_SIZE = 20;

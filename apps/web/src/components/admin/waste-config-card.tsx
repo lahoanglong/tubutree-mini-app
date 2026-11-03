@@ -8,7 +8,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_PRIMARY, FIELD_CLASS, INPUT_CLASS, Notice } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export type WasteConfigField = { key: string; label: string } & (
   | { kind: 'boolean'; fallback: boolean }

@@ -12,7 +12,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 
 const newIdempotencyKey = () =>

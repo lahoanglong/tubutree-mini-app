@@ -8,7 +8,7 @@ import { REVENUE_MAX_DAYS, pivotRevenue, rangeError } from '@/lib/admin-reports'
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { BTN_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
  * KPI theo khoảng ngày và bảng doanh thu ngày × kênh. "Doanh thu" là tiền đã thu thật (đơn huỷ/trả/hoàn không tính, trừ phần

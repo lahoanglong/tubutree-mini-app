@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { generateFlashSlots } from '@/lib/admin-client';
 import { BTN_SECONDARY } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export const SLOT_GENERATE_DAYS = 2;
 

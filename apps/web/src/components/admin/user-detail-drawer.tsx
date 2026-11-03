@@ -20,7 +20,7 @@ import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Khách hàng',

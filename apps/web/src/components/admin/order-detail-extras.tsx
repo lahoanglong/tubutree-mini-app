@@ -13,7 +13,7 @@ import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, Field } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 import { COMMISSION_STATUS, getOrderReferral } from '@/lib/commission-rates';
 import { formatVnd } from '@/lib/shop-client';
-import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 const statusText = (s: string) => ORDER_STATUS_LABELS[s] ?? s;
 

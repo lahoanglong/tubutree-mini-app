@@ -9,7 +9,7 @@ import type { Tone } from '@/lib/recycling';
 import { AUDIENCE_LABELS, CampaignForm, PLACEMENT_LABELS } from './campaign-form';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, LoadError, ToneBadge, chipClass } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = CampaignPlacement | '';
 const FILTERS: { k: Filter; label: string }[] = [

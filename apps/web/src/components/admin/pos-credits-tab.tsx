@@ -12,7 +12,7 @@ import { UserPicker } from './user-picker';
 import { VnDateInput } from './vn-date-input';
 import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
-import { loadErrorText } from '@/lib/error-text';
+import { loadErrorText } from '@/lib/admin-error-text';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
 export function summarizePosCredits(rows: AdminPosCredit[]) {

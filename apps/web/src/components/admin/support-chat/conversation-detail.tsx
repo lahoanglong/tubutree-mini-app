@@ -16,7 +16,7 @@ import type { Tone } from '@/lib/recycling';
 import { useConfirm } from '../confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, INPUT_CLASS, LoadError, ToneBadge } from '../ui';
 import { CONVERSATIONS_KEY } from './conversation-list';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const REPLY_MAX = 1000;
 const FORWARD_VIEW: Record<SupportForwardStatus, { tone: Tone; text: string }> = {

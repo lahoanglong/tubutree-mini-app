@@ -15,7 +15,7 @@ import {
 } from '@/lib/admin-client';
 import { categoryLabel } from '@/components/game/game-utils';
 import { BTN_PRIMARY, BTN_SMALL, BTN_XS_SECONDARY, INPUT_CLASS, LoadError } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const OPTION_SLOTS = 4;
 const QUERY_KEY = ['admin-game-quiz'];

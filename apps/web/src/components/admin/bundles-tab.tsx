@@ -8,7 +8,7 @@ import type { Tone } from '@/lib/recycling';
 import { BundleForm, KIND_LABELS } from './bundle-form';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_LINK_DANGER, LoadError, ToneBadge, chipClass } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = AdminBundleStatus | '';
 const STATUS: Record<AdminBundleStatus, { label: string; tone: Tone }> = {

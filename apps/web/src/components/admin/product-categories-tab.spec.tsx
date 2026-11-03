@@ -213,7 +213,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     mounted.push(r);
     await flush();
     const text = r.container.textContent ?? '';
-    expect(text.split('Máy chủ đang bận, thử lại nhé.').length - 1).toBe(1);
+    expect(text.split('Máy chủ đang bận, vui lòng thử lại sau.').length - 1).toBe(1);
     expect(byText(r.container, 'button', 'Thử lại')).not.toBeNull();
   });
   describe('sửa sản phẩm', () => {

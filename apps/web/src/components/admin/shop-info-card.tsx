@@ -7,7 +7,7 @@ import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { LEGAL_PAGES, LEGAL_SLUGS, type LegalSlug } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const COMPANY_FIELDS = [
   { key: 'company.legal_name', label: 'Tên công ty', hint: 'Đúng tên trên giấy đăng ký kinh doanh. Hiện ở chân trang và các trang chính sách.', placeholder: 'Công ty TNHH ...' },

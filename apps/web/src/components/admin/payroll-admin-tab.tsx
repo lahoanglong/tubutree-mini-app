@@ -16,7 +16,7 @@ import {
 import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { adminPayrollDetailQuery, adminPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
-import { actionErrorText } from '@/lib/error-text';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { downloadCsvFile } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/format-vnd';
 import { addDaysKey, currentVnYearMonth, dowLabel, isoToVnHHMM, shiftYearMonth, shortDayLabel, vnDateKey, vnDateTimeISO } from '@/lib/week';
