@@ -1896,7 +1896,7 @@ describe('CatalogService.getBySlug — select tường minh (L3-01)', () => {
     expect(arg.include).toBeUndefined();
     const scalars = Object.keys(arg.select).filter((k) => arg.select[k] === true);
     const all = Object.values(Prisma.ProductScalarFieldEnum) as string[];
-    expect(all.filter((c) => !scalars.includes(c)).sort()).toEqual(['pancakeId', 'rejectReason']);
+    expect(all.filter((c) => !scalars.includes(c)).sort()).toEqual(['affiliateBlocked', 'approvedAt', 'nameSearch', 'pancakeHold', 'pancakeId', 'pancakeLinkCode', 'rejectReason', 'soldApp30d']);
     expect(scalars.filter((c) => !all.includes(c))).toEqual([]);
     for (const rel of ['variations', 'brandRef', 'reviews', 'storefront']) expect(arg.select).toHaveProperty(rel);
   });

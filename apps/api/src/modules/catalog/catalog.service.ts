@@ -166,19 +166,19 @@ export class CatalogService {
   // đơn hàng thật) ở Review — bất kỳ ai gọi API này đều lấy được. `stock` đã là tồn kho BÁN ĐƯỢC
   // (xem comment tại Variation.stock trong schema) nên không cần trừ reservedStock lại ở đây.
   /**
-   * Cột scalar của Product ra PDP công khai. Không có `pancakeId` (khoá nội bộ Pancake) và `rejectReason` (lời nhắn của admin cho
-   * đối tác; sản phẩm đang bán vẫn mang lý do từ chối bản sửa gần nhất). Liệt kê tường minh để cột mới thêm vào Product không tự lộ ra.
+   * Cột scalar của Product ra PDP công khai. Không có `pancakeId`/`pancakeLinkCode` (khoá nội bộ Pancake: mã liên kết bằng đúng
+   * `pancakeId` của biến thể mà `publicVariationSelect` cố giấu), `rejectReason` (lời nhắn của admin cho đối tác; sản phẩm đang bán
+   * vẫn mang lý do từ chối bản sửa gần nhất), và các cột chỉ phục vụ nội bộ (`affiliateBlocked`, `nameSearch`, `pancakeHold`,
+   * `soldApp30d`, `approvedAt`): controller đã whitelist nên không client nào đọc, khỏi kéo khỏi DB.
+   * Liệt kê tường minh để cột mới thêm vào Product không tự lộ ra.
    */
   private readonly publicProductScalars = {
     id: true,
     fulfilment: true,
-    pancakeLinkCode: true,
     brand: true,
     brandId: true,
-    affiliateBlocked: true,
     slug: true,
     name: true,
-    nameSearch: true,
     description: true,
     shortDesc: true,
     images: true,
@@ -186,14 +186,12 @@ export class CatalogService {
     categoryIds: true,
     tags: true,
     isActive: true,
-    pancakeHold: true,
     isFeatured: true,
     isCombo: true,
     ratingAvg: true,
     reviewCount: true,
     soldExternal: true,
     soldApp: true,
-    soldApp30d: true,
     basePrice: true,
     salePrice: true,
     metaTitle: true,
@@ -203,7 +201,6 @@ export class CatalogService {
     certifications: true,
     storefrontId: true,
     approvalStatus: true,
-    approvedAt: true,
     createdAt: true,
     updatedAt: true,
   } satisfies Prisma.ProductSelect;
