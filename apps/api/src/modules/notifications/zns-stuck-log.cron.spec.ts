@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { ZnsStuckLogCron } from './zns-stuck-log.cron';
-import type { NotificationsService } from './notifications.service';
+import { ZNS_REVIEW_PREFIX, type NotificationsService } from './notifications.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
@@ -17,7 +17,8 @@ function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: 
   const prisma = { notificationLog: { findMany } } as unknown as PrismaService;
   const closeStuckZnsLog = jest.fn().mockResolvedValue(true);
   const markStuckZnsSent = jest.fn().mockResolvedValue(true);
-  const notifications = { closeStuckZnsLog, markStuckZnsSent } as unknown as NotificationsService;
+  const markZnsLogForReview = jest.fn().mockResolvedValue(true);
+  const notifications = { closeStuckZnsLog, markStuckZnsSent, markZnsLogForReview } as unknown as NotificationsService;
   const getJob = jest.fn(async (jobId: string) => {
     const spec = jobs[jobId.replace(/^zns-/, '')];
     if (spec instanceof Error) throw spec;
@@ -25,7 +26,7 @@ function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: 
     return { getState: async () => spec.state, returnvalue: spec.returnvalue };
   });
   const cron = new ZnsStuckLogCron(prisma, notifications, opts.noQueue ? undefined : ({ getJob } as unknown as Queue));
-  return { cron, findMany, closeStuckZnsLog, markStuckZnsSent, getJob };
+  return { cron, findMany, closeStuckZnsLog, markStuckZnsSent, markZnsLogForReview, getJob };
 }
 
 let info: jest.SpyInstance;
@@ -43,7 +44,12 @@ describe('ZnsStuckLogCron: truy vấn', () => {
       const { cron, findMany } = setup([], {});
       await cron.sweepStuckZnsLogs();
       expect(findMany).toHaveBeenCalledWith({
-        where: { channel: 'ZNS', status: { in: ['PENDING', 'RETRYING'] }, sentAt: { lt: new Date('2026-11-05T09:00:00.000Z') } },
+        where: {
+          channel: 'ZNS',
+          status: { in: ['PENDING', 'RETRYING'] },
+          sentAt: { lt: new Date('2026-11-05T09:00:00.000Z') },
+          OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
+        },
         orderBy: { sentAt: 'asc' },
         take: 200,
         select: { id: true, status: true },
@@ -80,6 +86,20 @@ describe('ZnsStuckLogCron: nhánh theo trạng thái job', () => {
     await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ closed: 0, sent: 0, ambiguous: 1 });
     expect(closeStuckZnsLog).not.toHaveBeenCalled();
     expect(markStuckZnsSent).not.toHaveBeenCalled();
+  });
+
+  it('log mơ hồ được đánh dấu chờ đối soát theo đúng trạng thái đã thấy, để lượt sau không quét lại', async () => {
+    const { cron, markZnsLogForReview } = setup([{ id: 'a', status: 'RETRYING' }, { id: 'b', status: 'PENDING' }], { b: { state: 'completed' } });
+    await cron.sweepStuckZnsLogs();
+    expect(markZnsLogForReview).toHaveBeenCalledWith('a', 'RETRYING', expect.any(String));
+    expect(markZnsLogForReview).toHaveBeenCalledWith('b', 'PENDING', expect.any(String));
+  });
+
+  it('log mơ hồ đã được đánh dấu (hàm trả false, đường khác vừa đánh dấu) → không đếm, không warn lại', async () => {
+    const { cron, markZnsLogForReview } = setup([{ id: 'a', status: 'RETRYING' }], {});
+    markZnsLogForReview.mockResolvedValue(false);
+    await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ ambiguous: 0 });
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("job completed có returnvalue 'SENT' + log RETRYING → ghi SENT (CAS), không đóng FAILED", async () => {

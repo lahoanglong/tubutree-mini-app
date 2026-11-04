@@ -2,7 +2,8 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
-import { NotificationsService, type ZnsSendJobData } from '../../src/modules/notifications/notifications.service';
+import { NotificationsService, ZNS_REVIEW_PREFIX, type ZnsSendJobData } from '../../src/modules/notifications/notifications.service';
+import { ZnsStuckLogCron } from '../../src/modules/notifications/zns-stuck-log.cron';
 import type { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import { createUser, warmPool } from './helpers';
 
@@ -110,5 +111,31 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     await svc.notify(u.id, 'IT_STUCK_TPL', {}, { dedupeKey: key, retryZns: true });
     expect(await znsCount()).toBe(2);
     expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('log mơ hồ được đánh dấu rồi loại khỏi lượt quét sau: 200 log mơ hồ cũ không chặn log kẹt mới hơn', async () => {
+    const u = await newUser();
+    const ancient = (n: number) => new Date(Date.UTC(2000, 0, 1, 0, 0, n % 60, Math.floor(n / 60)));
+    const old = await Promise.all(
+      Array.from({ length: 200 }, (_, i) =>
+        prisma.notificationLog.create({ data: { userId: u.id, templateCode: 'IT_STUCK', channel: 'ZNS', payload: { data: {} }, status: 'RETRYING', sentAt: ancient(i) } }),
+      ),
+    );
+    const fresh = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_STUCK', channel: 'ZNS', payload: { data: {} }, status: 'PENDING', sentAt: new Date(Date.UTC(2000, 0, 2)) },
+    });
+    const mine = new Set([...old.map((l) => l.id), fresh.id]);
+    // Chỉ log của spec này "mất job"; log còn sót của spec khác coi như còn sống để cron không đụng.
+    const queue = { getJob: async (jobId: string) => (mine.has(jobId.replace(/^zns-/, '')) ? undefined : { getState: async () => 'active' }) };
+    const cron = new ZnsStuckLogCron(prisma, svc, queue as never);
+    const first = await cron.sweepStuckZnsLogs();
+    expect(first).toMatchObject({ scanned: 200, ambiguous: 200, closed: 0 });
+    expect((await row(fresh.id)).status).toBe('PENDING');
+    const marked = await row(old[0]!.id);
+    expect([marked.status, marked.error]).toEqual(['RETRYING', expect.stringContaining(ZNS_REVIEW_PREFIX)]);
+    const second = await cron.sweepStuckZnsLogs();
+    expect(second).toMatchObject({ closed: 1, ambiguous: 0 });
+    expect((await row(fresh.id)).status).toBe('FAILED');
+    expect((await row(old[0]!.id)).status).toBe('RETRYING');
   });
 });

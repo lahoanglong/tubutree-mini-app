@@ -3,7 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, ZNS_REVIEW_PREFIX } from './notifications.service';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
@@ -64,6 +64,8 @@ export class ZnsStuckLogCron {
         channel: 'ZNS',
         status: { in: ['PENDING', 'RETRYING'] },
         sentAt: { lt: new Date(Date.now() - ZnsStuckLogCron.STUCK_AFTER_MS) },
+        // Log đã xét là mơ hồ (không có đường tự gỡ) bị loại: nếu không, chúng chiếm hết `take` theo sentAt tăng dần và log kẹt mới hơn không bao giờ được xét.
+        OR: [{ error: null }, { error: { not: { startsWith: ZNS_REVIEW_PREFIX } } }],
       },
       orderBy: { sentAt: 'asc' },
       take: ZnsStuckLogCron.BATCH,
@@ -71,9 +73,9 @@ export class ZnsStuckLogCron {
     });
 
     // Đọc hết trạng thái job trước, ghi sau: Redis chập chờn giữa chừng thì bỏ cả lượt, không đóng log nào trên bằng chứng nửa vời.
-    const verdicts: { id: string; verdict: Verdict }[] = [];
+    const verdicts: { id: string; status: string; verdict: Verdict }[] = [];
     try {
-      for (const log of logs) verdicts.push({ id: log.id, verdict: await this.judge(queue, log.id, log.status) });
+      for (const log of logs) verdicts.push({ id: log.id, status: log.status, verdict: await this.judge(queue, log.id, log.status) });
     } catch (err) {
       this.logger.warn(`Quét log ZNS kẹt: đọc Redis lỗi, bỏ lượt này (${err instanceof Error ? err.message : err})`);
       markCronSkipped('REDIS');
@@ -81,10 +83,13 @@ export class ZnsStuckLogCron {
     }
 
     const result = { scanned: logs.length, closed: 0, sent: 0, ambiguous: 0, alive: 0 };
-    for (const { id, verdict } of verdicts) {
+    for (const { id, status, verdict } of verdicts) {
       try {
         if (verdict === 'ALIVE') result.alive++;
-        else if (verdict === 'AMBIGUOUS') result.ambiguous++;
+        else if (verdict === 'AMBIGUOUS') {
+          const note = 'không rõ Zalo đã nhận tin chưa (tác vụ gửi đã hoàn tất hoặc đã mất khỏi hàng đợi).';
+          if (await this.notifications.markZnsLogForReview(id, status, note)) result.ambiguous++;
+        }
         else if (verdict === 'MARK_SENT') {
           if (await this.notifications.markStuckZnsSent(id)) result.sent++;
         } else {
@@ -99,8 +104,9 @@ export class ZnsStuckLogCron {
         captureServerError(err);
       }
     }
+    // ambiguous chỉ đếm log MỚI bị đánh dấu ở lượt này, nên dòng cảnh báo không lặp lại mỗi 30 phút cho cùng một log.
     if (result.closed + result.sent + result.ambiguous > 0) {
-      this.logger.warn(`Quét log ZNS kẹt: ${JSON.stringify(result)} (ambiguous = job đã hoàn tất hoặc mất mà không rõ Zalo đã nhận chưa, giữ nguyên để admin đối soát).`);
+      this.logger.warn(`Quét log ZNS kẹt: ${JSON.stringify(result)} (ambiguous: không rõ Zalo đã nhận tin chưa, log giữ nguyên trạng thái và đã đánh dấu chờ đối soát tay).`);
     }
     return result;
   }

@@ -64,6 +64,9 @@ const DEFAULT_QUIET_END_HOUR = 8;
 const DEFAULT_PROMO_MONTHLY_CAP = 2;
 const HOUR_MS = 3_600_000;
 
+/** Tiền tố cột `error` của log đã được cron quét log kẹt xét và để lại chờ đối soát tay: cron bỏ qua log có tiền tố này ở các lượt sau. */
+export const ZNS_REVIEW_PREFIX = 'Chờ đối soát tay: ';
+
 const releasedZnsDedupeKey = (dedupeKey: string, logId: string) => `${dedupeKey}:failed:${logId}`;
 
 /** Log ZNS đã đóng vì không xếp được hàng đợi và đã nhả khoá chống trùng (xem dispatchZns). */
@@ -510,6 +513,19 @@ export class NotificationsService {
       data: { status: 'FAILED', error: reason },
     });
     return closed.count > 0;
+  }
+
+  /**
+   * Log mà cron không đoán được kết cục (Zalo có thể đã nhận tin): giữ nguyên status, ghi tiền tố chờ đối soát vào `error` (giữ lỗi cũ phía sau)
+   * để các lượt quét sau không xét lại và không để chúng chiếm hết mỗi lượt. CAS theo status đã thấy; true chỉ khi vừa đánh dấu.
+   */
+  async markZnsLogForReview(logId: string, seenStatus: string, note: string): Promise<boolean> {
+    const mark = `${ZNS_REVIEW_PREFIX}${note}`;
+    const updated = await this.prisma.$executeRaw`
+      UPDATE notification_logs
+         SET "error" = ${mark} || CASE WHEN "error" IS NULL THEN '' ELSE ' | ' || "error" END
+       WHERE id = ${logId} AND status = ${seenStatus} AND channel = 'ZNS' AND ("error" IS NULL OR "error" NOT LIKE ${`${ZNS_REVIEW_PREFIX}%`})`;
+    return updated > 0;
   }
 
   /** Job đã hoàn tất và báo SENT (Zalo đã nhận) mà log còn RETRYING vì markZnsSent ghi lỗi: ghi nốt SENT, chỉ từ RETRYING. */

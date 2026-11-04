@@ -1,13 +1,14 @@
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, ZNS_REVIEW_PREFIX } from './notifications.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 
 function setup(count = 1) {
   const updateMany = jest.fn().mockResolvedValue({ count });
-  const prisma = { notificationLog: { updateMany } } as unknown as PrismaService;
+  const executeRaw = jest.fn().mockResolvedValue(count);
+  const prisma = { notificationLog: { updateMany }, $executeRaw: executeRaw } as unknown as PrismaService;
   const svc = new NotificationsService(prisma, {} as ZnsClient, {} as AnalyticsEventsService);
-  return { svc, updateMany };
+  return { svc, updateMany, executeRaw };
 }
 
 describe('NotificationsService: đóng log ZNS kẹt vì job đã chết', () => {
@@ -35,5 +36,15 @@ describe('NotificationsService: đóng log ZNS kẹt vì job đã chết', () =>
     const { svc, updateMany } = setup(1);
     await expect(svc.markStuckZnsSent('log-1')).resolves.toBe(true);
     expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-1', status: 'RETRYING' }, data: { status: 'SENT', error: null } });
+  });
+
+  it('markZnsLogForReview: đánh dấu bằng tiền tố ở cột error, giữ status; true khi ghi được, false khi đã đánh dấu hoặc đổi trạng thái', async () => {
+    const a = setup(1);
+    await expect(a.svc.markZnsLogForReview('log-1', 'RETRYING', 'ghi chú')).resolves.toBe(true);
+    const sqlText = (a.executeRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
+    expect(sqlText).toContain('UPDATE notification_logs');
+    expect(sqlText).not.toMatch(/status\s*=\s*'/);
+    expect(a.executeRaw.mock.calls[0]!.slice(1)).toEqual(expect.arrayContaining([`${ZNS_REVIEW_PREFIX}ghi chú`, 'log-1', 'RETRYING']));
+    await expect(setup(0).svc.markZnsLogForReview('log-1', 'RETRYING', 'x')).resolves.toBe(false);
   });
 });
