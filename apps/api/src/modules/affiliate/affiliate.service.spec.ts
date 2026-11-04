@@ -2298,7 +2298,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     }
     findUnique.mockResolvedValueOnce(null);
     expect(await svc.isCommissionEligible('x')).toBe(false);
-    expect(findUnique).toHaveBeenLastCalledWith({ where: { id: 'x' }, select: { role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_SELECT } });
+    expect(findUnique).toHaveBeenLastCalledWith({ where: { id: 'x' }, select: { role: true, isBlocked: true, mergedIntoId: true, affiliateRevokedAt: true, storefronts: SAMPLE_SELECT } });
   });
 
   it('isCommissionEligible: tài khoản bị khoá không còn được ghi công đơn mới dù còn vai trò CTV', async () => {
@@ -2323,7 +2323,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
     findUnique.mockResolvedValueOnce({ id: 'ctv1', role: 'AFFILIATE', isBlocked: false, storefronts: [] });
     expect(await svc.findEligibleReferrer('linh', 'buyer1')).toBe('ctv1');
-    expect(findUnique).toHaveBeenLastCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_SELECT } });
+    expect(findUnique).toHaveBeenLastCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, mergedIntoId: true, affiliateRevokedAt: true, storefronts: SAMPLE_SELECT } });
     findUnique.mockResolvedValueOnce(null);
     expect(await svc.findEligibleReferrer('NOPE', 'buyer1')).toBeNull();
     findUnique.mockResolvedValueOnce({ id: 'buyer1', role: 'AFFILIATE', storefronts: [] });
@@ -2344,6 +2344,28 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
     expect(await svc.findEligibleReferrer('LINH', 'buyer1')).toBe('ctv1');
     expect(await svc.isCommissionEligible('ctv1')).toBe(true);
+  });
+
+  describe('dấu thu hồi quyền bán (affiliateRevokedAt) chặn ghi công đơn mới', () => {
+    const withCustomer = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.commission_eligible_roles' ? ['AFFILIATE', 'DEALER', 'CUSTOMER'] : fb) as T,
+    } as unknown as SystemConfigService;
+    const svcFor = (cfg: SystemConfigService, row: object | null) =>
+      new AffiliateService(makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(row) } }), cfg, pricing, pancakeOrder, coins, analytics);
+    const row = (role: string, revoked: boolean) => ({ id: 'u1', role, isBlocked: false, mergedIntoId: null, affiliateRevokedAt: revoked ? new Date() : null, storefronts: [] });
+
+    it.each([
+      ['mặc định', 'AFFILIATE', false, true, config],
+      ['mặc định', 'DEALER', true, false, config],
+      ['mặc định', 'CUSTOMER', true, false, config],
+      ['có CUSTOMER', 'CUSTOMER', false, true, withCustomer],
+      ['có CUSTOMER', 'CUSTOMER', true, false, withCustomer],
+      ['có CUSTOMER', 'AFFILIATE', true, false, withCustomer],
+    ])('cấu hình %s, vai trò %s, có dấu=%s → ghi công=%s', async (_label, role, revoked, ok, cfg) => {
+      const svc = svcFor(cfg as SystemConfigService, row(role, revoked));
+      expect(await svc.isCommissionEligible('u1')).toBe(ok);
+      expect(await svcFor(cfg as SystemConfigService, row(role, revoked)).findEligibleReferrer('LINH', 'buyer1')).toBe(ok ? 'u1' : null);
+    });
   });
 
   it('findEligibleReferrer: chủ gian hàng mẫu không được ghi công dù đúng vai trò', async () => {
@@ -2383,7 +2405,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     expect(r.ok).toBe(true);
     // Lookup PHẢI dùng mã đã hoa hoá — gửi thẳng 'linh' sẽ luôn trượt trên Postgres thật (referralCode
     // lưu 'LINH', so khớp phân biệt hoa/thường), dù mock ở trên không tự mô phỏng việc đó.
-    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_SELECT } });
+    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, mergedIntoId: true, affiliateRevokedAt: true, storefronts: SAMPLE_SELECT } });
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.create.referrerUserId).toBe('ctv1');
     // storefrontSlug giữ NGUYÊN chữ thường — quy ước của slug khác với referralCode, không đổi ở đây.
