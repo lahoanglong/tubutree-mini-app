@@ -144,6 +144,7 @@ import {
   chipClass,
   FIELD_CLASS,
   ListSkeleton,
+  Notice,
   StatCardsSkeleton,
   TableSkeleton,
   Field,
@@ -941,6 +942,11 @@ function DealerRow({ app: a }: { app: DealerApp }) {
       </div>
       <div className="break-words text-sm text-stone-600">{a.ownerName} · {a.phone}</div>
       <div className="break-words text-sm text-stone-600">{a.address}</div>
+      {a.applicantAffiliateRevoked && (
+        <div className="mt-2">
+          <Notice tone="warning">Người này từng bị thu hồi quyền CTV. Duyệt hồ sơ không mở lại quyền rút hoa hồng.</Notice>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap gap-3">
         {a.hasCccdFront && <DealerAppImage appId={a.id} field="cccdFront" label="CCCD trước" />}
         {a.hasCccdBack && <DealerAppImage appId={a.id} field="cccdBack" label="CCCD sau" />}

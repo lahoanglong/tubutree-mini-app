@@ -67,6 +67,7 @@ const mocks = vi.hoisted(() => ({
   returnsArgs: [] as unknown[][],
   wasteArgs: [] as unknown[][],
   dealerArgs: [] as unknown[][],
+  dealerRevoked: false,
   statusCountsCalls: [] as unknown[][],
   statusCountsMode: 'ok' as 'ok' | 'fail' | 'pending',
   orders: [] as unknown[],
@@ -275,6 +276,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           hasCccdFront: true,
           hasCccdBack: false,
           hasStoreFront: false,
+          applicantAffiliateRevoked: mocks.dealerRevoked,
           status: 'PENDING',
           createdAt: '2026-10-01T00:00:00.000Z',
         },
@@ -376,6 +378,7 @@ beforeEach(() => {
   mocks.returnsArgs = [];
   mocks.wasteArgs = [];
   mocks.dealerArgs = [];
+  mocks.dealerRevoked = false;
   mocks.statusCountsCalls = [];
   mocks.statusCountsMode = 'ok';
   mocks.orders = [];
@@ -3722,6 +3725,21 @@ describe('admin/page — UAT ui-admin-2', () => {
       expect(text).toContain('Nếu tài khoản đang là Quản trị: mất toàn quyền quản trị');
       expect(text).toContain('mất toàn bộ nhóm việc');
       await answerDialog(false);
+    });
+  });
+
+  describe('A2: hồ sơ đại lý của người từng bị thu hồi quyền CTV', () => {
+    const WARNING = 'Người này từng bị thu hồi quyền CTV. Duyệt hồ sơ không mở lại quyền rút hoa hồng.';
+    it('có dấu thu hồi thì hiện câu cảnh báo', async () => {
+      mocks.dealerRevoked = true;
+      window.history.replaceState(null, '', '/admin?tab=dealers');
+      const { container } = await mount();
+      expect(container.textContent).toContain(WARNING);
+    });
+    it('không có dấu thì không hiện', async () => {
+      window.history.replaceState(null, '', '/admin?tab=dealers');
+      const { container } = await mount();
+      expect(container.textContent).not.toContain('từng bị thu hồi quyền CTV');
     });
   });
 

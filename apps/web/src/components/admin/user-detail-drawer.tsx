@@ -14,7 +14,7 @@ import {
   type StaffPermission,
 } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
-import { formatDateTime } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
@@ -63,9 +63,13 @@ function EventLine({ e }: { e: AdminUserEvent }) {
           ? `Gian hàng đối tác: ${onOff(e.fromValue)} → ${onOff(e.toValue)}`
           : e.kind === 'WALLET_FORFEIT'
             ? `Xoá tài khoản: bỏ số dư Ví ${formatVnd(Number(e.fromValue ?? 0))}`
-            : e.kind === 'BLOCK'
-              ? 'Khoá tài khoản'
-              : 'Mở khoá';
+            : e.kind === 'AFFILIATE_REVOKE'
+              ? e.toValue
+                ? 'Thu hồi quyền CTV'
+                : 'Mở lại quyền CTV'
+              : e.kind === 'BLOCK'
+                ? 'Khoá tài khoản'
+                : 'Mở khoá';
   return (
     <li className="py-1.5">
       <div className="font-medium text-stone-900">{what}</div>
@@ -138,6 +142,13 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
           <div className="mt-2">
             <ToneBadge tone="danger">Đã khoá {u.blockedAt ? formatDateTime(u.blockedAt) : ''}</ToneBadge>
             {u.blockedReason && <p className="mt-1 text-xs text-stone-600">Lý do: {u.blockedReason}</p>}
+          </div>
+        )}
+        {u.affiliateRevokedAt && (
+          <div className="mt-2">
+            <Notice tone="warning">
+              Đã thu hồi quyền CTV ngày {formatDate(u.affiliateRevokedAt)}. Hoa hồng cũ bị giữ; đổi vai trò sang CTV hoặc Đại lý để cấp lại.
+            </Notice>
           </div>
         )}
       </Section>

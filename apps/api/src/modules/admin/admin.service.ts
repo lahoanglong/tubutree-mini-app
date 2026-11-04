@@ -330,11 +330,18 @@ export class AdminService {
           WHERE "id" IN (${Prisma.join(items.map((a) => a.id))})`
       : [];
     const flags = new Map(flagRows.map((r) => [r.id, r]));
+    // Duyệt hồ sơ không xoá dấu thu hồi CTV (đại lý bị hạ rồi duyệt lại vẫn không rút được hoa hồng cũ): báo ra để người duyệt biết trước.
+    const applicantIds = [...new Set(items.map((a) => a.userId))];
+    const revoked = applicantIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: applicantIds }, affiliateRevokedAt: { not: null } }, select: { id: true } })
+      : [];
+    const revokedIds = new Set(revoked.map((u) => u.id));
     const data = items.map((a) => ({
       ...a,
       hasCccdFront: flags.get(a.id)?.hasCccdFront ?? false,
       hasCccdBack: flags.get(a.id)?.hasCccdBack ?? false,
       hasStoreFront: flags.get(a.id)?.hasStoreFront ?? false,
+      applicantAffiliateRevoked: revokedIds.has(a.userId),
     }));
     return paginated(data, page, limit, total);
   }
@@ -755,6 +762,52 @@ export class AdminService {
   }
 
   /**
+   * Huỷ hoa hồng APPROVED chưa chuyển Ví của người đã bị thu hồi quyền CTV: cron chuyển Ví và nút rút đều từ chối người có dấu nên khoản này
+   * treo vô thời hạn. Thứ tự khoá hoa hồng rồi dòng người dùng giống `requestPayout`, nên hai đường không deadlock; dấu đọc lại sau khoá
+   * nên admin cấp lại CTV chen vào thì lần huỷ này nhận 409 thay vì huỷ tiền của người đã được mở lại quyền rút.
+   */
+  async forfeitRevokedCommissions(adminId: string, userId: string, rawReason: string): Promise<{ cancelled: number; amount: number }> {
+    const reason = rawReason.trim();
+    if (reason.length < 3) throw new BadRequestException('Cần ghi lý do huỷ hoa hồng (ít nhất 3 ký tự).');
+    const out = await this.prisma
+      .$transaction(
+        async (tx) => {
+          const rows = await tx.$queryRaw<{ id: string; amount: number }[]>`
+            SELECT "id", "amount" FROM "commissions"
+            WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
+            ORDER BY "id" FOR NO KEY UPDATE`;
+          const [user] = await tx.$queryRaw<{ affiliateRevokedAt: Date | null }[]>`
+            SELECT "affiliateRevokedAt" FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+          if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+          if (!user.affiliateRevokedAt) {
+            throw new ConflictException('Người này chưa bị thu hồi quyền CTV (hoặc vừa được cấp lại) nên không huỷ được hoa hồng. Tải lại trang.');
+          }
+          if (rows.length === 0) throw new ConflictException('Không còn hoa hồng chờ rút để huỷ (có thể đã được xử lý). Tải lại trang.');
+          const ids = rows.map((r) => r.id);
+          const { count } = await tx.commission.updateMany({
+            where: { id: { in: ids }, status: 'APPROVED', payoutBatchId: null },
+            data: { status: 'CANCELLED' },
+          });
+          if (count !== ids.length) throw new ConflictException('Hoa hồng vừa đổi trạng thái, chưa huỷ gì cả. Tải lại trang rồi thử lại.');
+          const amount = rows.reduce((sum, r) => sum + r.amount, 0);
+          await recordUserAdminEvent(tx, {
+            userId,
+            kind: 'WALLET_FORFEIT',
+            from: String(amount),
+            to: '0',
+            reason: `Huỷ ${count} khoản hoa hồng chờ rút: ${reason}`,
+            actorId: adminId,
+          });
+          return { cancelled: count, amount };
+        },
+        { maxWait: 15_000, timeout: 60_000 },
+      )
+      .catch(throwIfLockBusy);
+    this.logger.warn(`Admin ${adminId} huỷ ${out.cancelled} khoản hoa hồng chờ rút (${out.amount}đ) của người dùng ${userId} đã bị thu hồi quyền CTV: ${reason}`);
+    return out;
+  }
+
+  /**
    * Chi tiết một người dùng cho admin/CSKH (ADMINOPS-11): hồ sơ + số dư, đơn gần nhất, sổ ví, Điểm Xanh, lịch sử vai trò
    * (sổ user_admin_events + quyền cấp theo SĐT) và lịch sử khoá. Mỗi phần tối đa DETAIL_TAKE dòng mới nhất.
    */
@@ -831,7 +884,7 @@ export class AdminService {
       orders: { items: orders, total: orderTotal },
       wallet,
       points,
-      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS').map(withActor),
+      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS' || e.kind === 'AFFILIATE_REVOKE').map(withActor),
       blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
       partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),

@@ -34,6 +34,8 @@ export interface DealerApp {
   hasCccdFront: boolean;
   hasCccdBack: boolean;
   hasStoreFront: boolean;
+  /** Người nộp từng bị thu hồi quyền CTV; duyệt hồ sơ không mở lại quyền rút hoa hồng. */
+  applicantAffiliateRevoked: boolean;
   status: string;
   createdAt: string;
 }
@@ -2229,7 +2231,7 @@ export const cancelGiftRedemption = (id: string, body: WasteGiftCancelRequest) =
 // ── Chi tiết người dùng (ADMINOPS-11) + nhóm việc nhân viên (ADMINOPS-10) ──
 export interface AdminUserEvent {
   id: string;
-  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT';
+  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'AFFILIATE_REVOKE';
   fromValue: string | null;
   toValue: string | null;
   reason: string | null;
@@ -2252,6 +2254,7 @@ export interface AdminUserDetail {
     isBlocked: boolean;
     blockedAt: string | null;
     blockedReason: string | null;
+    affiliateRevokedAt: string | null;
     createdAt: string;
     tier: { name: string } | null;
   };

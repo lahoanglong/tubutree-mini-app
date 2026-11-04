@@ -2524,6 +2524,23 @@ describe('AdminService.listLinkedMerchantProducts — lọc liên kết ký gử
  * tổng đơn về ví mà KHÔNG nhìn thấy số tiền mình đang hoàn.
  */
 /** Hàng đợi chờ duyệt (PENDING / REQUESTED) cần xem CŨ NHẤT trước — web gửi order=asc. */
+describe('AdminService.getUserDetail — dấu thu hồi CTV', () => {
+  it.each([[new Date('2026-10-01T00:00:00Z')], [null]])('trả affiliateRevokedAt %p và đọc nó từ DB', async (mark) => {
+    const userFindUnique = jest.fn().mockResolvedValue({ id: 'u1', phone: null, affiliateRevokedAt: mark });
+    const prisma = makePrisma({
+      user: { findUnique: userFindUnique, findMany: jest.fn().mockResolvedValue([]) },
+      order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      userAdminEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      roleGrant: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const out = await mkAdmin(prisma).getUserDetail('u1');
+    expect(userFindUnique.mock.calls[0][0].select.affiliateRevokedAt).toBe(true);
+    expect(out.user.affiliateRevokedAt).toEqual(mark);
+  });
+});
+
 describe('AdminService.listDealerApplications — thứ tự createdAt theo tham số order', () => {
   function daPrisma() {
     const findMany = jest.fn().mockResolvedValue([]);
@@ -2550,9 +2567,22 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
     expect(Object.keys(select)).not.toEqual(expect.arrayContaining(['cccdFrontUrl']));
     for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(select[col]).toBeUndefined();
     expect(out.data).toEqual([
-      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
-      { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false, applicantAffiliateRevoked: false },
+      { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true, applicantAffiliateRevoked: false },
     ]);
+  });
+
+  it('applicantAffiliateRevoked: true chỉ cho người nộp hồ sơ có dấu thu hồi CTV', async () => {
+    const userFindMany = jest.fn().mockResolvedValue([{ id: 'u1', affiliateRevokedAt: new Date('2026-10-01T00:00:00Z') }]);
+    const prisma = makePrisma({
+      dealerApplication: { findMany: jest.fn().mockResolvedValue([{ id: 'a1', userId: 'u1' }, { id: 'a2', userId: 'u2' }]), count: jest.fn().mockResolvedValue(2) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      user: { findMany: userFindMany },
+    });
+    const out = await mkAdmin(prisma).listDealerApplications(undefined, 1, 20);
+    expect(out.data.map((a) => [a.id, a.applicantAffiliateRevoked])).toEqual([['a1', true], ['a2', false]]);
+    expect(userFindMany.mock.calls[0][0].where).toEqual({ id: { in: ['u1', 'u2'] }, affiliateRevokedAt: { not: null } });
   });
 
   describe('dealerApplicationImage', () => {

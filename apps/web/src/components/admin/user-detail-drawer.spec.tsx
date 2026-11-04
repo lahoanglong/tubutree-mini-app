@@ -32,6 +32,7 @@ const DETAIL: AdminUserDetail = {
     isBlocked: false,
     blockedAt: null,
     blockedReason: null,
+    affiliateRevokedAt: null,
     createdAt: '2026-09-01T03:00:00.000Z',
     tier: null,
   },
@@ -69,6 +70,19 @@ async function open(
   await flush();
   return document.body;
 }
+
+describe('UserDetailDrawer — dấu thu hồi quyền CTV (A2)', () => {
+  it('có dấu: hiện câu cố định, ngày theo giờ Việt Nam (17h UTC đã sang ngày hôm sau)', async () => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, affiliateRevokedAt: '2026-10-20T18:00:00.000Z' } });
+    expect(section(body, 'Hồ sơ').textContent).toContain(
+      'Đã thu hồi quyền CTV ngày 21/10/2026. Hoa hồng cũ bị giữ; đổi vai trò sang CTV hoặc Đại lý để cấp lại.',
+    );
+  });
+  it('không dấu: không hiện', async () => {
+    const body = await open();
+    expect(body.textContent).not.toContain('Đã thu hồi quyền CTV');
+  });
+});
 
 const section = (root: HTMLElement, title: string) => root.querySelector(`section[aria-label="${title}"]`)!;
 
