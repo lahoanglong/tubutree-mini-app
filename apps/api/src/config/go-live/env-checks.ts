@@ -1,6 +1,7 @@
 import { envSchema } from '../env.validation';
 import { isAdvisorEnabled, providerConfigured, resolveProviderOrder } from '../../modules/ai-advisor/advisor-config';
 import { resolveOpsEmailConfig } from '../ops-email-config';
+import { MIN_WEBHOOK_SECRET_LENGTH } from '../webhook-secrets';
 import { describeSecret, envValue, looksLikePlaceholder } from './secrets';
 import { fail, pass, warn, type CheckResult, type Env } from './types';
 
@@ -180,10 +181,21 @@ function secretRow(group: string, id: string, title: string, key: string, env: E
     const make = missing.status === 'FAIL' ? fail : warn;
     return make(group, id, title, `${key} chưa đặt${missing.note ? `: ${missing.note}` : ''}`, missing.hint);
   }
-  if (v.length < 16) {
-    return warn(group, id, title, `${key} ${describeSecret(v)}`, 'Token webhook ngắn dễ đoán: sinh chuỗi dài hơn (`openssl rand -hex 32`) và dán lại đúng y hệt ở phía đối tác.');
+  if (v.length < MIN_WEBHOOK_SECRET_LENGTH) {
+    return fail(group, id, title, `${key} ${describeSecret(v)} (cần từ ${MIN_WEBHOOK_SECRET_LENGTH} ký tự)`, 'Token webhook ngắn dễ dò (route webhook không bị giới hạn tốc độ): sinh chuỗi dài hơn (`openssl rand -hex 32`) và dán lại đúng y hệt ở phía đối tác.');
   }
   return pass(group, id, title, `${key} ${describeSecret(v)}`);
+}
+
+function zaloBridgeSecretRow(env: Env): CheckResult[] {
+  const v = envValue(env, 'ZALO_BRIDGE_SECRET');
+  if (!v) return [];
+  const title = 'Bí mật cầu nối chat Zalo';
+  const id = 'env.zalo.bridge_secret';
+  if (v.length < MIN_WEBHOOK_SECRET_LENGTH) {
+    return [fail(G_ZALO, id, title, `ZALO_BRIDGE_SECRET ${describeSecret(v)} (cần từ ${MIN_WEBHOOK_SECRET_LENGTH} ký tự)`, 'Sinh chuỗi dài hơn (`openssl rand -hex 32`), đặt giống nhau cho api và cầu nối rồi tạo lại hai container.')];
+  }
+  return [pass(G_ZALO, id, title, `ZALO_BRIDGE_SECRET ${describeSecret(v)}`)];
 }
 
 /** Khớp ZaloOaWebhookController: đủ ZALO_OA_SECRET_KEY + ZALO_APP_ID thì chữ ký là cửa duy nhất (token tĩnh bị bỏ qua), chưa đủ thì dùng token tĩnh. */
@@ -316,6 +328,7 @@ function zaloChecks(env: Env): CheckResult[] {
           'Lấy ở developers.zalo.me, mục Ứng dụng. Đăng nhập trong Mini App chỉ dùng token của khách nên vẫn chạy khi thiếu; secret cần cho lấy số điện thoại (/me/info), vị trí, đăng nhập Zalo trên web (đổi mã OAuth) và làm mới token OA.',
         ),
   );
+  out.push(...zaloBridgeSecretRow(env));
   const appId = envValue(env, 'ZALO_APP_ID');
   const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
   const idsTitle = 'ZALO_APP_ID khác ID Mini App';

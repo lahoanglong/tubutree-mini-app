@@ -12,7 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { timingSafeEqual } from 'node:crypto';
+import { safeEqualStrings } from '../../../common/safe-equal';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
@@ -90,11 +90,9 @@ export class PancakeWebhookController {
     return { received: true };
   }
 
-  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). */
+  /** So token tĩnh chống timing-attack (so băm nên không lộ độ dài secret). */
   private verifyToken(token?: string): boolean {
     if (!token) return false;
-    const a = Buffer.from(token, 'utf8');
-    const b = Buffer.from(this.secret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+    return safeEqualStrings(token, this.secret);
   }
 }

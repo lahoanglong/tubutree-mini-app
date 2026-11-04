@@ -1,4 +1,5 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { safeEqualStrings } from '../../common/safe-equal';
 
 /** Trần số ảnh mỗi yêu cầu (ReturnRequestDto.images); chỉ số ngoài trần không bao giờ có ảnh. */
 export const MAX_RETURN_IMAGES = 6;
@@ -24,7 +25,5 @@ export function returnImageRef(returnId: string, index: number, image: string): 
 /** So mã `v` trên URL với mã của ảnh đang lưu (so sánh thời gian không đổi). */
 export function matchesReturnImageVersion(given: unknown, returnId: string, index: number, image: string): boolean {
   if (typeof given !== 'string') return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(returnImageVersion(returnId, index, image));
-  return a.length === b.length && timingSafeEqual(a, b);
+  return safeEqualStrings(given, returnImageVersion(returnId, index, image));
 }

@@ -32,6 +32,16 @@ describe('evaluateEnv', () => {
     }
   });
 
+  describe('ZALO_BRIDGE_SECRET (cầu nối chat Zalo)', () => {
+    const present = (patch: Record<string, string | undefined>) => evaluateEnv(envWith(patch)).some((r) => r.id === 'env.zalo.bridge_secret');
+    it('không đặt thì không có dòng (cầu nối là tuỳ chọn)', () => expect(present({ ZALO_BRIDGE_SECRET: '' })).toBe(false));
+    it('đã đặt: dưới 32 ký tự FAIL, đủ PASS', () => {
+      expect(status({ ZALO_BRIDGE_SECRET: 'abc' }, 'env.zalo.bridge_secret')).toBe('FAIL');
+      expect(status({ ZALO_BRIDGE_SECRET: 'a'.repeat(31) }, 'env.zalo.bridge_secret')).toBe('FAIL');
+      expect(status({ ZALO_BRIDGE_SECRET: 'b1'.repeat(16) }, 'env.zalo.bridge_secret')).toBe('PASS');
+    });
+  });
+
   describe('NODE_ENV', () => {
     it.each([
       ['production', 'PASS'],
@@ -166,9 +176,11 @@ describe('evaluateEnv', () => {
       expect(status({ PANCAKE_SHOP_ID: undefined }, 'env.pancake.credentials')).toBe('FAIL');
       expect(status({}, 'env.pancake.credentials')).toBe('PASS');
     });
-    it('token webhook: thiếu FAIL, ngắn WARN, đủ PASS', () => {
+    it('token webhook: thiếu FAIL, ngắn dưới 32 ký tự FAIL, đủ PASS', () => {
       expect(status({ PANCAKE_WEBHOOK_SECRET: '' }, 'env.pancake.webhook_secret')).toBe('FAIL');
-      expect(status({ PANCAKE_WEBHOOK_SECRET: 'abc' }, 'env.pancake.webhook_secret')).toBe('WARN');
+      expect(status({ PANCAKE_WEBHOOK_SECRET: 'abc' }, 'env.pancake.webhook_secret')).toBe('FAIL');
+      expect(status({ PANCAKE_WEBHOOK_SECRET: 'a'.repeat(31) }, 'env.pancake.webhook_secret')).toBe('FAIL');
+      expect(status({ PANCAKE_WEBHOOK_SECRET: 'a1'.repeat(16) }, 'env.pancake.webhook_secret')).toBe('PASS');
       expect(status({}, 'env.pancake.webhook_secret')).toBe('PASS');
     });
     it('base url: http hoặc rác thì FAIL, trống thì dùng mặc định', () => {
@@ -199,8 +211,9 @@ describe('evaluateEnv', () => {
     it('chưa có tài khoản và thiếu token webhook thì chỉ WARN', () => {
       expect(status({ GOMDON_PHONE: '', GOMDON_PASSWORD: '', GOMDON_WEBHOOK_SECRET: '' }, 'env.gomdon.webhook_secret')).toBe('WARN');
     });
-    it('token webhook ngắn thì WARN, đủ thì PASS', () => {
-      expect(status({ GOMDON_WEBHOOK_SECRET: 'abc' }, 'env.gomdon.webhook_secret')).toBe('WARN');
+    it('token webhook ngắn dưới 32 ký tự thì FAIL, đủ thì PASS', () => {
+      expect(status({ GOMDON_WEBHOOK_SECRET: 'abc' }, 'env.gomdon.webhook_secret')).toBe('FAIL');
+      expect(status({ GOMDON_WEBHOOK_SECRET: 'a'.repeat(31) }, 'env.gomdon.webhook_secret')).toBe('FAIL');
       expect(status({}, 'env.gomdon.webhook_secret')).toBe('PASS');
     });
     it('GOMDON_BASE_URL: không có dòng khi trống, http thì FAIL, https thì PASS', () => {
@@ -264,9 +277,10 @@ describe('evaluateEnv', () => {
       expect(status({ ZALO_OA_REFRESH_TOKEN: '' }, 'env.zalo.oa')).toBe('WARN');
       expect(status({}, 'env.zalo.oa')).toBe('PASS');
     });
-    it('token webhook OA: trống WARN, ngắn WARN, đủ PASS', () => {
+    it('token webhook OA: trống WARN, ngắn dưới 32 ký tự FAIL, đủ PASS', () => {
       expect(status({ ZALO_OA_WEBHOOK_SECRET: '' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
-      expect(status({ ZALO_OA_WEBHOOK_SECRET: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
+      expect(status({ ZALO_OA_WEBHOOK_SECRET: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('FAIL');
+      expect(status({ ZALO_OA_WEBHOOK_SECRET: 'a'.repeat(31) }, 'env.zalo.oa_webhook_secret')).toBe('FAIL');
       expect(status({}, 'env.zalo.oa_webhook_secret')).toBe('PASS');
     });
     it('webhook OA có khoá ký + ZALO_APP_ID: PASS (không cần token tĩnh), nói rõ chế độ chữ ký; thiếu ZALO_APP_ID hoặc khoá ngắn thì WARN', () => {

@@ -24,6 +24,7 @@ import { throttlerOptions } from './throttle.config';
 const SECRET = 'test-access-secret-0123456789';
 const BYPASS = 'ssr-bypass-token-0123456789abcdef0123456789';
 const DEFAULT_LIMIT = 300;
+const SSR_LIMIT = 3000;
 
 @Controller('probe')
 class ProbeController {
@@ -234,33 +235,40 @@ describe('AppThrottlerGuard (Q-22)', () => {
     });
   });
 
-  describe('SSR web được miễn bằng THROTTLE_BYPASS_TOKEN', () => {
-    it('header đúng token thì không bao giờ bị 429', async () => {
-      const codes = await hitMany(base, DEFAULT_LIMIT + 20, () => ({
-        path: '/probe/public',
-        ip: '10.0.0.5',
-        headers: { 'x-throttle-bypass': BYPASS },
-      }));
+  describe('SSR web: THROTTLE_BYPASS_TOKEN chỉ đổi sang trần riêng `ssr`, không miễn throttle', () => {
+    const ssrCall = (ip: string, headers: Record<string, string>) => () => ({ path: '/probe/public', ip, headers });
+
+    it('header đúng token vượt trần mặc định 300 nhưng vẫn bị 429 sau trần ssr', async () => {
+      const codes = await hitMany(base, SSR_LIMIT + 20, ssrCall('10.0.0.5', { 'x-throttle-bypass': BYPASS }));
+      expect(codes.slice(0, DEFAULT_LIMIT + 20).filter((c) => c === 429)).toHaveLength(0);
+      expect(count429(codes)).toBe(20);
+    }, 60_000);
+
+    it('trần ssr tính theo khoá bypass, không theo IP', async () => {
+      const codes = await hitMany(base, SSR_LIMIT + 10, (i) => ({ path: '/probe/public', ip: `10.1.${i % 200}.1`, headers: { 'x-throttle-bypass': BYPASS } }));
+      expect(count429(codes)).toBe(10);
+    }, 60_000);
+
+    it('request bypass không ăn vào bộ đếm mặc định của IP đó', async () => {
+      await hitMany(base, 50, ssrCall('10.0.0.8', { 'x-throttle-bypass': BYPASS }));
+      const codes = await hitMany(base, DEFAULT_LIMIT, ssrCall('10.0.0.8', {}));
       expect(count429(codes)).toBe(0);
     });
 
-    it('header sai token thì vẫn bị đếm như thường', async () => {
-      const codes = await hitMany(base, DEFAULT_LIMIT + 2, () => ({
-        path: '/probe/public',
-        ip: '10.0.0.6',
-        headers: { 'x-throttle-bypass': `${BYPASS}x` },
-      }));
+    it('không có bypass: như cũ, 429 ngay sau trần mặc định', async () => {
+      const codes = await hitMany(base, DEFAULT_LIMIT + 2, ssrCall('10.0.0.9', {}));
       expect(count429(codes)).toBe(2);
     });
 
-    it('biến môi trường rỗng thì tắt hẳn đường miễn, kể cả header rỗng', async () => {
+    it('header sai token thì vẫn bị đếm như thường', async () => {
+      const codes = await hitMany(base, DEFAULT_LIMIT + 2, ssrCall('10.0.0.6', { 'x-throttle-bypass': `${BYPASS}x` }));
+      expect(count429(codes)).toBe(2);
+    });
+
+    it('biến môi trường rỗng thì tắt hẳn đường bypass, kể cả header rỗng', async () => {
       await app.close();
       ({ app, base } = await bootApp(''));
-      const codes = await hitMany(base, DEFAULT_LIMIT + 2, () => ({
-        path: '/probe/public',
-        ip: '10.0.0.7',
-        headers: { 'x-throttle-bypass': '' },
-      }));
+      const codes = await hitMany(base, DEFAULT_LIMIT + 2, ssrCall('10.0.0.7', { 'x-throttle-bypass': '' }));
       expect(count429(codes)).toBe(2);
     });
   });
