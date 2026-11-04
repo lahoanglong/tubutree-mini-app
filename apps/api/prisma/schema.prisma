@@ -38,6 +38,8 @@ model RoleGrant {
   grantedBy String // adminId, hoặc "seed" cho admin gán sẵn ban đầu
   note      String?
   revokedAt DateTime? // null = còn hiệu lực
+  /// Hạn của lời mời chưa áp (SĐT chưa có tài khoản); null = đã áp hoặc không có hạn. applyGrants bỏ qua lời mời quá hạn.
+  expiresAt DateTime?
   /// Nhóm việc (common/staff-permissions.ts) chép sang User.staffPermissions khi lời mời được áp; chỉ có nghĩa với role STAFF.
   staffPermissions String[] @default([])
   createdAt DateTime      @default(now())

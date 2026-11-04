@@ -20,7 +20,7 @@ const LIST = {
     { id: 'u1', phone: '0911111111', fullName: 'Lan', avatarUrl: null, role: 'STAFF', staffPermissions: ['KHO'], createdAt: '2026-10-01T00:00:00Z' },
     { id: 'u2', phone: '0922222222', fullName: null, avatarUrl: null, role: 'ADMIN', staffPermissions: [], createdAt: '2026-10-01T00:00:00Z' },
   ],
-  pendingInvites: [{ phone: '0933333333', role: 'STAFF', staffPermissions: ['KE_TOAN'], createdAt: '2026-10-02T00:00:00Z' }],
+  pendingInvites: [{ phone: '0933333333', role: 'STAFF', staffPermissions: ['KE_TOAN'], createdAt: '2026-10-02T00:00:00Z', expiresAt: '2026-10-09T00:00:00Z' }],
 };
 
 function stub(over: { list?: unknown; listStatus?: number; revoke?: unknown; grant?: unknown } = {}) {
@@ -131,13 +131,13 @@ describe('StaffRosterTab (Nhân sự)', () => {
     expect(JSON.parse(api.posts('/admin/staff/revoke')[0]!.init!.body as string)).toEqual({ phone: '0911111111' });
     expect(container.textContent).toContain('Đã thu hồi quyền.');
     // D7-15: huỷ lời mời cũng hỏi lại (người được mời phải mời lại từ đầu).
-    click(container.querySelector('[aria-label="Huỷ lời mời · 0933333333"]'));
+    click(container.querySelector('[aria-label="Thu hồi lời mời · 0933333333"]'));
     await flush();
     expect(confirmDialog()?.textContent).toContain('0933333333');
     answerConfirm(false);
     await flush();
     expect(api.posts('/admin/staff/revoke')).toHaveLength(1);
-    click(container.querySelector('[aria-label="Huỷ lời mời · 0933333333"]'));
+    click(container.querySelector('[aria-label="Thu hồi lời mời · 0933333333"]'));
     await flush();
     answerConfirm(true);
     await flush();
@@ -277,6 +277,20 @@ describe('StaffRosterTab (Nhân sự)', () => {
       await flush();
       expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0933333333', role: 'STAFF', permissions: ['KE_TOAN', 'KHO'] });
       expect(invites.textContent).toContain('Họ nhận đúng nhóm này khi mở app');
+    });
+
+    it('lời mời hiện hạn (ngày giờ Việt Nam) và nút Thu hồi; lời mời cũ chưa có hạn thì không hiện dòng hạn', async () => {
+      const api = stub({ list: { members: [], pendingInvites: [
+        { phone: '0933333333', role: 'STAFF', staffPermissions: [], createdAt: '2026-10-02T00:00:00Z', expiresAt: '2026-10-09T18:00:00Z' },
+        { phone: '0944444444', role: 'STAFF', staffPermissions: [], createdAt: '2026-10-02T00:00:00Z', expiresAt: null },
+      ] } });
+      void api;
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      const items = [...container.querySelectorAll('section[aria-label="Chờ mở app"] > ul > li')];
+      expect(items[0]!.textContent).toContain('Hết hạn 10/10/2026');
+      expect(items[1]!.textContent).not.toContain('Hết hạn');
+      expect(byText(items[0] as HTMLElement, 'button', 'Thu hồi')).not.toBeNull();
     });
 
     it('lời mời ADMIN không có ô chọn nhóm', async () => {

@@ -8,12 +8,15 @@ import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-co
 import { coreHttp } from '@/lib/core-http';
 import { setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
 import { errText } from '@/components/staff/staff-shell';
+import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK_DANGER, BTN_PRIMARY, chipClass, Field, INPUT_CLASS, Notice, ToneBadge } from './ui';
 
 const PHONE_RE = /^0\d{8,10}$/;
 const ROLE_LABEL: Record<StaffRole, string> = { STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
 const PERMISSIONS = Object.keys(STAFF_PERMISSION_SHORT) as StaffPermission[];
+/** Hạn của lời mời do API trả; kiểu dùng chung (app-core) chưa khai báo trường này nên đọc qua đây. Lời mời cũ không có hạn thì null. */
+const inviteExpiry = (p: object): string | null => (p as { expiresAt?: string | null }).expiresAt ?? null;
 
 /** Nhân sự: danh sách người có quyền, cấp quyền theo SĐT (STAFF hoặc ADMIN), thu hồi và huỷ lời mời chờ mở app. */
 export function StaffRosterTab({ meId }: { meId?: string } = {}) {
@@ -217,17 +220,18 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                 {staffQ.data.pendingInvites.map((p) => (
                   <li key={p.phone} className="space-y-2 rounded-card border border-stone-200 bg-stone-50 p-3 text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <span>
+                      <span className="min-w-0">
                         {p.phone} · {ROLE_LABEL[p.role]}
+                        {inviteExpiry(p) && <span className="block text-xs text-stone-500">Hết hạn {formatDate(inviteExpiry(p))}</span>}
                       </span>
                       <button
                         type="button"
-                        aria-label={`Huỷ lời mời · ${p.phone}`}
+                        aria-label={`Thu hồi lời mời · ${p.phone}`}
                         disabled={revokeM.isPending}
                         onClick={() => void askCancelInvite(p.phone)}
-                        className={BTN_LINK_DANGER}
+                        className={`${BTN_LINK_DANGER} shrink-0`}
                       >
-                        Huỷ
+                        Thu hồi
                       </button>
                     </div>
                     {p.role === 'STAFF' && (

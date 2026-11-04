@@ -8,6 +8,8 @@ import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '.
 import { throwIfLockBusy } from '../../../common/lock-busy';
 import { STAFF_PERMISSIONS, isStaffPermission, type StaffPermission } from '../../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
+import { SystemConfigService } from '../../system-config/system-config.service';
+import { DEFAULT_GRANT_INVITE_TTL_DAYS, STAFF_GRANT_INVITE_TTL_DAYS_KEY, grantInviteTtlDays } from './grant-invite-config';
 import { losesPartnerStore } from '../../merchant/partner-store';
 
 const RANK: Record<UserRole, number> = {
@@ -37,7 +39,14 @@ export class RbacService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly fulfilment?: MerchantFulfilmentService,
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
+
+  /** Hạn của lời mời mới (SĐT chưa có tài khoản): hiện tại + staff.grant_invite_ttl_days ngày. */
+  private async inviteExpiry(): Promise<Date> {
+    const raw = this.config ? await this.config.get<unknown>(STAFF_GRANT_INVITE_TTL_DAYS_KEY, DEFAULT_GRANT_INVITE_TTL_DAYS).catch(() => undefined) : undefined;
+    return new Date(Date.now() + grantInviteTtlDays(raw ?? DEFAULT_GRANT_INVITE_TTL_DAYS) * 864e5);
+  }
 
   /**
    * Áp grant theo SĐT khi login/refresh. CHỈ NÂNG role (không tự hạ — hạ qua revoke).
@@ -50,7 +59,7 @@ export class RbacService {
     if (!user.phone) return user;
     if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId);
     const peek = await db.roleGrant.findMany({
-      where: { phone: user.phone, revokedAt: null },
+      where: { phone: user.phone, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       select: { role: true },
     });
     if (!this.highestGrant(peek, user.role)) return user;
@@ -68,7 +77,7 @@ export class RbacService {
       SELECT "role", "staffPermissions" FROM "users" WHERE "id" = ${stale.id} FOR NO KEY UPDATE`;
     const user: User = locked ? { ...stale, role: locked.role, staffPermissions: locked.staffPermissions } : stale;
     const grants = await db.roleGrant.findMany({
-      where: { phone: user.phone!, revokedAt: null },
+      where: { phone: user.phone!, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       select: { role: true, staffPermissions: true },
     });
     if (grants.length === 0) return user;
@@ -86,6 +95,8 @@ export class RbacService {
       where: { id: user.id },
       data: { role: best, ...(resetPerms ? { staffPermissions: invitedPerms } : {}) },
     });
+    // Lời mời đã được áp thì hết là lời mời: bỏ hạn để về sau không có gì tự thu hồi quyền của người đã nhận.
+    await db.roleGrant.updateMany({ where: { phone: user.phone!, revokedAt: null, expiresAt: { not: null } }, data: { expiresAt: null } });
     await recordUserAdminEvent(db, {
       userId: user.id,
       kind: 'ROLE',
@@ -125,6 +136,10 @@ export class RbacService {
       if (user && user.id === adminId) {
         throw new BadRequestException('Không thể tự cấp quyền cho chính mình — nhờ một quản trị viên khác thực hiện.');
       }
+      // Quyền quản trị là quyền toàn hệ thống: ai sau này đăng nhập bằng số này cũng thành ADMIN nếu lời mời còn treo, nên chỉ cấp cho người đã có tài khoản.
+      if (!user && role === 'ADMIN') {
+        throw new BadRequestException('Chỉ cấp quyền quản trị cho số điện thoại đã có tài khoản. Nhờ người đó đăng nhập Tubu Tree một lần trước.');
+      }
       const existing = await tx.roleGrant.findFirst({
         where: { phone: normalized, role, revokedAt: null },
         select: { id: true, staffPermissions: true },
@@ -132,12 +147,14 @@ export class RbacService {
       if (existing && role === 'STAFF' && permissions && !samePermissions(existing.staffPermissions ?? [], perms)) {
         await tx.roleGrant.update({ where: { id: existing.id }, data: { staffPermissions: perms } });
       }
+      // Mời lại lời mời đang chờ (người chưa có tài khoản) là gia hạn một kỳ.
+      if (existing && !user) await tx.roleGrant.update({ where: { id: existing.id }, data: { expiresAt: await this.inviteExpiry() } });
       if (!existing) {
         // findFirst rồi create trong $transaction READ COMMITTED không atomic: hai addGrant đồng thời cùng phone+role cùng qua
         // check "chưa có". ON CONFLICT DO NOTHING (skipDuplicates) trên partial unique index role_grants_active_phone_role_key
         // để bản thua là no-op; bắt P2002 trong tx sẽ làm Postgres huỷ tx (25P02) ở bước applyGrants ngay sau.
         const { count } = await tx.roleGrant.createMany({
-          data: [{ phone: normalized, role, grantedBy: adminId, staffPermissions: perms }],
+          data: [{ phone: normalized, role, grantedBy: adminId, staffPermissions: perms, expiresAt: user ? null : await this.inviteExpiry() }],
           skipDuplicates: true,
         });
         if (count > 0) this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
@@ -276,8 +293,8 @@ export class RbacService {
     });
     const memberPhones = new Set(members.map((m) => m.phone).filter(Boolean) as string[]);
     const grants = await this.prisma.roleGrant.findMany({
-      where: { revokedAt: null },
-      select: { phone: true, role: true, staffPermissions: true, createdAt: true },
+      where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      select: { phone: true, role: true, staffPermissions: true, createdAt: true, expiresAt: true },
       orderBy: { createdAt: 'desc' },
     });
     const pendingInvites = grants.filter((g) => !memberPhones.has(g.phone));

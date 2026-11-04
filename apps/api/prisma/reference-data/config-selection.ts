@@ -43,6 +43,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'home',
   'catalog',
   'chat',
+  'staff',
 ];
 
 /**
@@ -143,6 +144,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'loyalty.chat_order_creator_monthly_points', value: 1000000, category: 'loyalty', description: 'Trần Điểm Xanh tự cộng (không qua nhân viên duyệt) mỗi tháng cho đơn chat do cùng một nhân viên tạo trên Pancake (creator.id); vượt thì đơn kế tiếp chờ duyệt. Chặn nhân viên lên nhiều đơn nhỏ cho mình', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'creatorMonthlyPoints: 1_000_000,' } },
   { key: 'pancake.staff_map', value: {}, category: 'pancake', description: 'Ánh xạ id tài khoản Pancake của nhân viên → userId nhân viên trên Tubu Tree, dạng { "pancakeId": "userId" }. Dùng để chặn nhân viên tự duyệt điểm đơn mình tạo và tự nhận điểm đơn mình tạo. Để trống thì chỉ so tên', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'config.get<unknown>(PANCAKE_STAFF_MAP_KEY, {})' } },
   { key: 'pancake.external_lookup_enabled', value: false, category: 'pancake', description: 'Khi khách nhập mã chưa có trong "Đơn ngoài app", tra Pancake theo mã (tối đa 5 giây, ngắt mạch sau 3 lỗi). Chỉ bật khi đã kiểm Pancake tìm được theo mã vận đơn', fallbackSource: { file: 'src/modules/external-points/external-claim-lookup.service.ts', text: 'EXTERNAL_LOOKUP_ENABLED_KEY, false' } },
+  { key: 'staff.grant_invite_ttl_days', value: 7, category: 'staff', description: 'Số ngày lời mời nhân viên theo SĐT (người chưa có tài khoản) còn hiệu lực, từ 1 đến 30; quá hạn thì người đó đăng nhập cũng không được nâng quyền (admin mời lại để gia hạn)', fallbackSource: { file: 'src/modules/staff/rbac/grant-invite-config.ts', text: 'export const DEFAULT_GRANT_INVITE_TTL_DAYS = 7;' } },
   { key: 'pancake.external_poll_enabled', value: false, category: 'pancake', description: 'Kéo dự phòng mỗi 10 phút: lấy đơn sàn đã cập nhật trong 2 giờ gần nhất khi webhook sàn rớt. Chỉ bật sau khi đã kiểm tham số startDateTime và order_sources trên Pancake thật', fallbackSource: { file: 'src/modules/external-points/external-claim-poll.service.ts', text: 'EXTERNAL_POLL_ENABLED_KEY, false' } },
 ];
 

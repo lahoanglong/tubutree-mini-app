@@ -192,6 +192,7 @@ const APPROVED_LOADED_KEYS = [
     'seasonpass.checkin_xp',
     'shipping.eta_max_days',
     'shipping.eta_min_days',
+    'staff.grant_invite_ttl_days',
     'storefront.identifier_cooldown_days',
     'storefront.require_approval',
     'storefront.subdomain_enabled',
