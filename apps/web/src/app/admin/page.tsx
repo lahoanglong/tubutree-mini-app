@@ -37,7 +37,8 @@ import {
   listDealerRewards,
   createDealerReward,
   deleteDealerReward,
-  listFlashSales,
+  listFlashSalesPage,
+  getFlashSale,
   createFlashSale,
   updateFlashSale,
   addFlashSaleItem,
@@ -64,7 +65,7 @@ import {
   type AdminBrand,
   type ConfigRow,
   type BrandCert,
-  type AdminFlashSale,
+  type AdminFlashSaleSummary,
   type AdminFaq,
   type ContentKitFaq,
   type AdminCourse,
@@ -162,7 +163,7 @@ import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbo
 import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
-import { FLASH_SALE_PAGE_SIZE, filterFlashSales, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
+import { FLASH_SALE_PAGE_SIZE, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
 import type { WasteSeed } from '@/components/admin/waste-tab';
 import type { ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
@@ -3220,13 +3221,19 @@ function DealerRewardsSection() {
 
 function FlashSalesTab() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['admin-flash-sales'], queryFn: listFlashSales });
+  const [saleFilter, setSaleFilter] = useState<FlashSaleFilter>('open');
+  // Phân trang keyset ở API: lọc theo trạng thái và "Tải thêm" đều chạy phía máy chủ, danh sách không kèm item.
+  const q = useInfiniteQuery({
+    queryKey: ['admin-flash-sales', 'list', saleFilter],
+    queryFn: ({ pageParam }) => listFlashSalesPage({ status: saleFilter, cursor: pageParam, take: FLASH_SALE_PAGE_SIZE }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const sales = q.data?.pages.flatMap((p) => p.items) ?? [];
   const [f, setF] = useState({ title: '', startAt: '', endAt: '' });
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [saleFilter, setSaleFilter] = useState<FlashSaleFilter>('open');
-  const [shown, setShown] = useState(FLASH_SALE_PAGE_SIZE);
   const create = useMutation({
     mutationFn: () =>
       createFlashSale({
@@ -3242,7 +3249,6 @@ function FlashSalesTab() {
     onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
-  const visibleSales = filterFlashSales(q.data ?? [], saleFilter);
 
   return (
     <div className="space-y-4">
@@ -3283,30 +3289,26 @@ function FlashSalesTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
-        {q.data && q.data.length > 0 && (
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc đợt giờ vàng">
-            {FLASH_SALE_FILTERS.map((x) => (
-              <button
-                key={x.k}
-                type="button"
-                aria-pressed={saleFilter === x.k}
-                onClick={() => { setSaleFilter(x.k); setShown(FLASH_SALE_PAGE_SIZE); }}
-                className={chipClass(saleFilter === x.k)}
-              >
-                {x.label}
-              </button>
-            ))}
-          </div>
+        {q.isError && !q.data && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc đợt giờ vàng">
+          {FLASH_SALE_FILTERS.map((x) => (
+            <button key={x.k} type="button" aria-pressed={saleFilter === x.k} onClick={() => setSaleFilter(x.k)} className={chipClass(saleFilter === x.k)}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+        {sales.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        <LoadMoreButton hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} error={q.isFetchNextPageError} onClick={() => void q.fetchNextPage()} />
+        {q.data && sales.length === 0 && (
+          <Empty>
+            {saleFilter === 'ended'
+              ? 'Chưa có đợt nào đã kết thúc.'
+              : saleFilter === 'open'
+                ? 'Không có đợt nào chưa kết thúc. Tạo đợt mới ở trên.'
+                : 'Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.'}
+          </Empty>
         )}
-        {visibleSales.slice(0, shown).map((s) => <FlashSaleRow key={s.id} sale={s} />)}
-        {visibleSales.length > shown && (
-          <button type="button" onClick={() => setShown((n) => n + FLASH_SALE_PAGE_SIZE)} className={BTN_SECONDARY}>
-            Xem thêm ({visibleSales.length - shown} đợt)
-          </button>
-        )}
-        {q.data?.length === 0 && <Empty>Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.</Empty>}
-        {q.data && q.data.length > 0 && visibleSales.length === 0 && <Empty>{saleFilter === 'ended' ? 'Chưa có đợt nào đã kết thúc.' : 'Không có đợt nào chưa kết thúc. Tạo đợt mới ở trên.'}</Empty>}
       </div>
     </div>
   );
@@ -3330,18 +3332,13 @@ const FLASH_SALE_STATE: Record<FlashSaleState, { label: string; tone: 'success' 
 
 const EMPTY_ITEM = { variationId: '', flashPrice: '', quota: '', perUserLimit: '' };
 
-function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
+function FlashSaleRow({ sale }: { sale: AdminFlashSaleSummary }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
   const toggleActive = useMutation({
     mutationFn: () => updateFlashSale(sale.id, { isActive: !sale.isActive }),
-    onSuccess: () => { setRowErr(null); refresh(); },
-    onError: (e) => setRowErr(actionErrorText(e)),
-  });
-  const delItem = useMutation({
-    mutationFn: (itemId: string) => deleteFlashSaleItem(itemId),
     onSuccess: () => { setRowErr(null); refresh(); },
     onError: (e) => setRowErr(actionErrorText(e)),
   });
@@ -3400,27 +3397,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onError: (e) => setRowErr(actionErrorText(e)),
   });
 
-  const [item, setItem] = useState(EMPTY_ITEM);
-  const [pickedVariation, setPickedVariation] = useState<PickedItem | null>(null);
-  const [itemErr, setItemErr] = useState<string | null>(null);
-  const variationLabels = useVariationLabels(sale.items.map((it) => it.variationId));
-  const addItem = useMutation({
-    mutationFn: () =>
-      addFlashSaleItem(sale.id, {
-        variationId: item.variationId.trim(),
-        flashPrice: Number(item.flashPrice),
-        quota: Number(item.quota),
-        perUserLimit: item.perUserLimit ? Number(item.perUserLimit) : undefined,
-      }),
-    onSuccess: () => {
-      setItem(EMPTY_ITEM);
-      setPickedVariation(null);
-      setItemErr(null);
-      refresh();
-    },
-    onError: (e) => setItemErr(actionErrorText(e)),
-  });
-  const itemReady = !!item.variationId.trim() && Number(item.flashPrice) >= 1 && Number(item.quota) >= 1;
+  const [open, setOpen] = useState(false);
 
   const fmt = formatDateTime;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
@@ -3489,9 +3466,61 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
       {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
 
       <div className="mt-3 border-t border-stone-200 pt-3">
-        <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({sale.items.length})</div>
+        <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className={BTN_SECONDARY}>
+          {open ? 'Ẩn sản phẩm' : `Xem sản phẩm (${sale.itemCount})`}
+        </button>
+        {open && <FlashSaleItemsPanel sale={sale} ended={ended} />}
+      </div>
+      {dialog}
+    </div>
+  );
+}
+
+function FlashSaleItemsPanel({ sale, ended }: { sale: AdminFlashSaleSummary; ended: boolean }) {
+  const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
+  // Item chỉ tải khi mở đợt; làm mới cả danh sách (số item) lẫn chi tiết sau mỗi thay đổi.
+  const detail = useQuery({ queryKey: ['admin-flash-sales', 'detail', sale.id], queryFn: () => getFlashSale(sale.id) });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
+  const items = detail.data?.items ?? [];
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const delItem = useMutation({
+    mutationFn: (itemId: string) => deleteFlashSaleItem(itemId),
+    onSuccess: () => { setRowErr(null); refresh(); },
+    onError: (e) => setRowErr(actionErrorText(e)),
+  });
+  const [item, setItem] = useState(EMPTY_ITEM);
+  const [pickedVariation, setPickedVariation] = useState<PickedItem | null>(null);
+  const [itemErr, setItemErr] = useState<string | null>(null);
+  const variationLabels = useVariationLabels(items.map((it) => it.variationId));
+  const addItem = useMutation({
+    mutationFn: () =>
+      addFlashSaleItem(sale.id, {
+        variationId: item.variationId.trim(),
+        flashPrice: Number(item.flashPrice),
+        quota: Number(item.quota),
+        perUserLimit: item.perUserLimit ? Number(item.perUserLimit) : undefined,
+      }),
+    onSuccess: () => {
+      setItem(EMPTY_ITEM);
+      setPickedVariation(null);
+      setItemErr(null);
+      refresh();
+    },
+    onError: (e) => setItemErr(actionErrorText(e)),
+  });
+  const itemReady = !!item.variationId.trim() && Number(item.flashPrice) >= 1 && Number(item.quota) >= 1;
+
+  const field = `${FIELD_CLASS} ${TOUCH_H}`;
+
+  if (detail.isError) return <LoadError message="Không tải được sản phẩm của đợt này." onRetry={() => void detail.refetch()} />;
+  if (!detail.data) return <p className="mt-2 text-sm text-stone-500">Đang tải sản phẩm…</p>;
+
+  return (
+    <div className="mt-2">
+        <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({items.length})</div>
         <div className="space-y-1">
-          {sale.items.map((it) => (
+          {items.map((it) => (
             <div key={it.id} className={LIST_ITEM_CLASS}>
               <span className="min-w-0 break-words">
                 {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
@@ -3513,7 +3542,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
               >Xoá</button>
             </div>
           ))}
-          {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
+          {items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
         </div>
 
         {ended ? (
@@ -3554,7 +3583,8 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           </>
         )}
         {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
-      </div>
+      
+      {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
       {dialog}
     </div>
   );

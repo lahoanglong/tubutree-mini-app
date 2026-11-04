@@ -1029,7 +1029,26 @@ export interface AdminFlashSale {
   isActive: boolean;
   items: AdminFlashSaleItem[];
 }
+/** Đợt trong danh sách phân trang: không kèm item, chỉ có số item; item tải khi mở đợt (`getFlashSale`). */
+export interface AdminFlashSaleSummary {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  isActive: boolean;
+  itemCount: number;
+}
+export interface AdminFlashSalePage {
+  items: AdminFlashSaleSummary[];
+  nextCursor: string | null;
+}
 export const listFlashSales = () => apiFetch<AdminFlashSale[]>('/admin/flash-sales');
+export const listFlashSalesPage = (p: { status: 'open' | 'ended' | 'all'; cursor?: string; take?: number }) => {
+  const qs = new URLSearchParams({ status: p.status, take: String(p.take ?? 20) });
+  if (p.cursor) qs.set('cursor', p.cursor);
+  return apiFetch<AdminFlashSalePage>(`/admin/flash-sales?${qs.toString()}`);
+};
+export const getFlashSale = (id: string) => apiFetch<AdminFlashSale>(`/admin/flash-sales/${encodeURIComponent(id)}`);
 export const createFlashSale = (body: { title: string; startAt: string; endAt: string }) =>
   apiFetch<AdminFlashSale>('/admin/flash-sales', { method: 'POST', body });
 export const updateFlashSale = (id: string, body: Partial<{ title: string; startAt: string; endAt: string; isActive: boolean }>) =>

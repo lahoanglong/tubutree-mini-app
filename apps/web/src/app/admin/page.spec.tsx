@@ -55,6 +55,8 @@ beforeAll(async () => {
   ]);
 }, 60_000);
 
+type FlashSaleMock = { id: string; title: string; startAt: string; endAt: string; isActive: boolean; items: unknown[] };
+
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
@@ -99,6 +101,8 @@ const mocks = vi.hoisted(() => ({
   createDealerReward: vi.fn(),
   deleteDealerReward: vi.fn(),
   flashSales: [] as unknown[],
+  flashSalePageCalls: [] as unknown[],
+  flashSaleDetailCalls: [] as string[],
   productSearch: [] as unknown[],
   createFlashSale: vi.fn(),
   updateFlashSale: vi.fn(),
@@ -332,7 +336,26 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     deletePromotion: (...args: unknown[]) => mocks.deletePromotion(...args),
     createDealerReward: (...args: unknown[]) => mocks.createDealerReward(...args),
     deleteDealerReward: (...args: unknown[]) => mocks.deleteDealerReward(...args),
-    listFlashSales: async () => mocks.flashSales,
+    // Giả lập phân trang keyset của API: lọc theo hạn kết thúc, startAt giảm dần, trang theo con trỏ là id dòng cuối.
+    listFlashSalesPage: async (p: { status: 'open' | 'ended' | 'all'; cursor?: string; take?: number }) => {
+      mocks.flashSalePageCalls.push(p);
+      const now = Date.now();
+      const rows = (mocks.flashSales as FlashSaleMock[])
+        .filter((x) => p.status === 'all' || (new Date(x.endAt).getTime() < now) === (p.status === 'ended'))
+        .sort((a, b) => b.startAt.localeCompare(a.startAt));
+      const from = p.cursor ? rows.findIndex((x) => x.id === p.cursor) + 1 : 0;
+      const take = p.take ?? 20;
+      const page = rows.slice(from, from + take);
+      const more = from + take < rows.length;
+      return {
+        items: page.map(({ items, ...sale }) => ({ ...sale, itemCount: items.length })),
+        nextCursor: more ? page[page.length - 1]!.id : null,
+      };
+    },
+    getFlashSale: async (id: string) => {
+      mocks.flashSaleDetailCalls.push(id);
+      return (mocks.flashSales as FlashSaleMock[]).find((x) => x.id === id);
+    },
     lookupVariations: async () => [],
     createFlashSale: (...args: unknown[]) => mocks.createFlashSale(...args),
     updateFlashSale: (...args: unknown[]) => mocks.updateFlashSale(...args),
@@ -398,6 +421,8 @@ beforeEach(() => {
   mocks.promotions = [];
   mocks.rewards = [];
   mocks.flashSales = [];
+  mocks.flashSalePageCalls = [];
+  mocks.flashSaleDetailCalls = [];
   mocks.productSearch = [{ id: 'p1', name: 'Dừa sáp', brand: 'Bến Tre', isActive: true, variations: [] }];
   mocks.faqs = [];
   mocks.quickReplies = [];
@@ -1742,6 +1767,12 @@ const readDateTime = (root: ParentNode, label: string) => {
 const labelledInput = (root: ParentNode, label: string) =>
   [...root.querySelectorAll('label')].find((l) => l.textContent?.startsWith(label))?.querySelector('input') as HTMLInputElement;
 
+/** Danh sách Giờ vàng không kèm sản phẩm: bấm "Xem sản phẩm" của từng đợt để tải item. */
+async function openAllSaleItems(container: HTMLElement) {
+  for (const b of [...container.querySelectorAll('button')].filter((x) => x.textContent?.startsWith('Xem sản phẩm'))) click(b);
+  await flush();
+}
+
 describe('admin/page — tab Flash Sale', () => {
   const SALE = {
     id: 's1',
@@ -1805,6 +1836,7 @@ describe('admin/page — tab Flash Sale', () => {
     const on = para(container, 'Đang chạy');
     expect(on.className).toContain('bg-success-bg');
     click(btn(container, 'Tất cả'));
+    await flush();
     const off = para(container, 'Đang tắt');
     expect(off.className).toContain('bg-warning-bg');
     const toggle = btn(container, 'Tắt');
@@ -1816,12 +1848,16 @@ describe('admin/page — tab Flash Sale', () => {
     await answerDialog(true);
     expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: false });
     expect(btn(container, 'Bật')).toBeTruthy();
+    expect(container.textContent).toContain('Xem sản phẩm (0)');
+    click([...container.querySelectorAll('button')].find((x) => x.textContent === 'Xem sản phẩm (0)')!);
+    await flush();
     expect(container.textContent).toContain('Chưa có sản phẩm nào trong đợt này.');
   });
 
   it('tab Giờ vàng có nút tạo khung mặc định và ô Thứ tự cho từng món (Q14), nút Lưu khoá khi chưa đổi', async () => {
     mocks.flashSales = [SALE];
     const { container } = await openSales();
+    await openAllSaleItems(container);
     expect(btn(container, 'Tạo khung giờ 2 ngày tới').disabled).toBe(false);
     const order = container.querySelector<HTMLInputElement>('input[aria-label^="Thứ tự của"]');
     expect(order?.value).toBe('0');
@@ -1832,6 +1868,7 @@ describe('admin/page — tab Flash Sale', () => {
   it('sản phẩm trong đợt: dòng ngắt chữ được, Xoá là nút chữ danger 44px, thêm SP khoá tới khi chọn biến thể', async () => {
     mocks.flashSales = [SALE];
     const { container } = await openSales();
+    await openAllSaleItems(container);
     expect(container.textContent).toContain('đã bán 3/20 · giới hạn 2/khách');
     const del = btn(container, 'Xoá');
     expect(del.className).toContain('text-danger-fg');
@@ -1916,9 +1953,12 @@ describe('admin/page — tab Flash Sale: trạng thái theo thời gian (QTUI-04
     expect(para(container, 'Sắp chạy')).toBeTruthy();
     expect(para(container, 'Đang tắt')).toBeTruthy();
     expect(container.querySelectorAll('button[aria-pressed="true"]')[0]?.textContent).toBe('Chưa kết thúc');
+    await openAllSaleItems(container);
     expect([...container.querySelectorAll('button')].filter((b) => b.textContent === 'Thêm SP')).toHaveLength(3);
 
     click(btn(container, 'Đã kết thúc'));
+    await flush();
+    await openAllSaleItems(container);
     expect(text()).toContain('Đợt xong');
     expect(text()).not.toContain('Đợt chạy');
     expect(para(container, 'Đã kết thúc').className).toContain('bg-stone-100');
@@ -1926,12 +1966,32 @@ describe('admin/page — tab Flash Sale: trạng thái theo thời gian (QTUI-04
     expect([...container.querySelectorAll('button')].filter((b) => b.textContent === 'Thêm SP')).toHaveLength(0);
   });
 
-  it('nhiều đợt: hiện 20 đợt đầu rồi "Xem thêm"', async () => {
+  it('nhiều đợt: API trả 20 đợt đầu, "Tải thêm" gửi con trỏ của trang trước; không tải item cho tới khi mở đợt (L4-06)', async () => {
     mocks.flashSales = Array.from({ length: 25 }, (_, i) => mk(`s${i}`, `Đợt số ${i}`, 10 + i, 12 + i));
     const { container } = await openSales();
     expect(container.querySelectorAll('[data-flash-sale-row]')).toHaveLength(20);
-    click(btn(container, 'Xem thêm (5 đợt)'));
+    expect(mocks.flashSalePageCalls).toEqual([{ status: 'open', cursor: undefined, take: 20 }]);
+    expect(mocks.flashSaleDetailCalls).toEqual([]);
+    click(btn(container, 'Tải thêm'));
+    await flush();
     expect(container.querySelectorAll('[data-flash-sale-row]')).toHaveLength(25);
+    expect(mocks.flashSalePageCalls[1]).toMatchObject({ status: 'open', cursor: 's5' });
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Tải thêm')).toBe(false);
+  });
+
+  it('chip trạng thái gửi status lên API, mở một đợt mới tải item của đợt đó', async () => {
+    mocks.flashSales = [mk('a', 'Đợt chạy', -1, 1, { items: [{ id: 'i1', variationId: 'v1', flashPrice: 1000, quota: 5, soldCount: 0, perUserLimit: 1 }] }), mk('d', 'Đợt xong', -30, -24)];
+    const { container } = await openSales();
+    click(btn(container, 'Đã kết thúc'));
+    await flush();
+    click(btn(container, 'Tất cả'));
+    await flush();
+    expect(mocks.flashSalePageCalls.map((c) => (c as { status: string }).status)).toEqual(['open', 'ended', 'all']);
+    expect(mocks.flashSaleDetailCalls).toEqual([]);
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem sản phẩm (1)')!);
+    await flush();
+    expect(mocks.flashSaleDetailCalls).toEqual(['a']);
+    expect(container.textContent).toContain('đã bán 0/5');
   });
 });
 
@@ -1950,6 +2010,11 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     return mount();
   };
   const localInput = isoToVnLocal;
+  const openSalesWithItems = async () => {
+    const r = await openSales();
+    await openAllSaleItems(r.container);
+    return r;
+  };
   const pickVariation = async (container: HTMLElement) => {
     mocks.productSearch = [
       { id: 'p1', name: 'Nước rửa chén', brand: 'Tubu', isActive: true, variations: [{ id: 'v1', name: 'Chai 500ml', sku: 'NRC-500', price: 80_000, stock: 50, isActive: true }] },
@@ -1962,7 +2027,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
 
   it('ô thêm sản phẩm có nhãn Giá flash / Số lượng bán (quota) / Giới hạn mỗi khách và bắt đầu RỖNG, không phải 0', async () => {
     mocks.flashSales = [upcoming()];
-    const { container } = await openSales();
+    const { container } = await openSalesWithItems();
     for (const label of ['Giá flash (đ)', 'Số lượng bán (quota)', 'Giới hạn mỗi khách']) {
       const el = labelledInput(container, label);
       expect(el, label).toBeTruthy();
@@ -1972,7 +2037,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
 
   it('Thêm SP khoá tới khi chọn biến thể và nhập giá flash + quota > 0; gửi đúng số, giới hạn bỏ trống = mặc định', async () => {
     mocks.flashSales = [upcoming()];
-    const { container } = await openSales();
+    const { container } = await openSalesWithItems();
     const add = btn(container, 'Thêm SP');
     await pickVariation(container);
     expect(add.disabled).toBe(true);
