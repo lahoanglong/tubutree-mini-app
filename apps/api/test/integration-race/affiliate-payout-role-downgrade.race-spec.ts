@@ -376,6 +376,47 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
       expect(await markedAfterBackfill([seller.id, plain.id])).toEqual({ [seller.id]: true, [plain.id]: false });
     });
 
+    it('nhân viên chưa từng bán bị hạ về khách, sau đó tự đăng ký CTV và có hoa hồng → dấu vết sinh SAU sự kiện không tính, KHÔNG có dấu', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin } = adminServices();
+      const phone = newPhone();
+      const u = await createUser(prisma, { role: 'STAFF', phone });
+      await admin.setUserRole(boss.id, phone, 'CUSTOMER');
+      expect(await markOf(u.id)).toBeNull();
+      await affiliate.register(u.id);
+      const buyer = await createUser(prisma);
+      const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', referrerUserId: u.id, total: 500_000 });
+      await prisma.commission.create({
+        data: { affiliateUserId: u.id, orderId: order.id, orderTotal: order.total, commissionableTotal: order.total, rate: 10, amount: 50_000, status: 'APPROVED', lockedAt: new Date(), approvedAt: new Date() },
+      });
+      await prisma.storefront.create({ data: { type: 'CTV', slug: `late-${randCode(8)}`, title: 'late', ownerUserId: u.id } });
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).role).toBe('AFFILIATE');
+      expect(await markedAfterBackfill([u.id])).toEqual({ [u.id]: false });
+    });
+
+    it('nhân viên đã có gian hàng CTV trước lúc bị hạ về khách → có dấu (dấu vết tồn tại tại thời điểm sự kiện)', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin } = adminServices();
+      const phone = newPhone();
+      const u = await createUser(prisma, { role: 'STAFF', phone });
+      await prisma.storefront.create({ data: { type: 'CTV', slug: `early-${randCode(8)}`, title: 'early', ownerUserId: u.id } });
+      await admin.setUserRole(boss.id, phone, 'CUSTOMER');
+      await preDeploy(u.id);
+      expect(await markedAfterBackfill([u.id])).toEqual({ [u.id]: true });
+    });
+
+    it('nhân viên có gian hàng đối tác (MERCHANT) bị hạ về khách: gian hàng chuyển sang CTV trong cùng lệnh, tạo từ trước → có dấu', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin } = adminServices();
+      const phone = newPhone();
+      const u = await createUser(prisma, { role: 'STAFF', phone });
+      const store = await prisma.storefront.create({ data: { type: 'MERCHANT', isPartner: true, slug: `mch-${randCode(8)}`, title: 'mch', ownerUserId: u.id } });
+      await admin.setUserRole(boss.id, phone, 'CUSTOMER');
+      expect((await prisma.storefront.findUniqueOrThrow({ where: { id: store.id } })).type).toBe('CTV');
+      await preDeploy(u.id);
+      expect(await markedAfterBackfill([u.id])).toEqual({ [u.id]: true });
+    });
+
     it('CTV hạ về khách rồi tự đăng ký lại (role AFFILIATE, không có sự kiện ROLE sau lần hạ) → có dấu', async () => {
       const boss = await createUser(prisma, { role: 'ADMIN' });
       const { admin } = adminServices();
