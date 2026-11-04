@@ -44,5 +44,27 @@ export function publicProductThumb(p: { id: string; thumbnail: string | null; im
 /** Tham chiếu lưu sẵn vào `thumbnail` khi ảnh đầu là base64, để không lưu cùng một ảnh hai lần (cột `images` giữ bản gốc). */
 export function storedThumbnailFor(productId: string, firstImage: string | undefined): string | null {
   if (!firstImage) return null;
-  return firstImage.startsWith('data:') ? publicImageRef('product', productId, 0, firstImage) : firstImage;
+  return decodeServedImage(firstImage) ? publicImageRef('product', productId, 0, firstImage) : firstImage;
+}
+
+const FIRST_IMAGE_REF_RE = new RegExp(`^${PUBLIC_IMAGE_PREFIX}/product/[A-Za-z0-9_-]+/0\\?v=[0-9a-f]+$`);
+
+/**
+ * Thumbnail đem lưu cho dữ liệu nhập tay (đối tác, bản sửa chờ duyệt). Endpoint ảnh chỉ phát ảnh của sản phẩm đang hoặc từng công khai
+ * (`everPublic`), nên đường dẫn chỉ được ghi cho sản phẩm đó: màn duyệt của admin hiện thumbnail của sản phẩm chưa từng duyệt, đường dẫn
+ * ở đó là 404. Chưa công khai thì data URL giữ nguyên, và đường dẫn cũ tới ảnh đầu được trả về thành chính ảnh đầu.
+ * Công khai rồi: data URL ảnh raster trùng đúng ảnh đầu thành đường dẫn tới ảnh đó; đường dẫn tới ảnh đầu dựng lại theo ảnh đầu hiện
+ * tại (mã `v` đi theo nội dung). Data URL khác ảnh đầu không có chỗ để trỏ (endpoint chỉ phục vụ phần tử của `images`) nên giữ nguyên.
+ */
+export function storedThumbnailOf(productId: string, thumbnail: string | null | undefined, firstImage: string | undefined, everPublic: boolean): string | null {
+  if (!thumbnail) return null;
+  if (FIRST_IMAGE_REF_RE.test(thumbnail)) return everPublic ? storedThumbnailFor(productId, firstImage) : (firstImage ?? null);
+  if (!everPublic) return thumbnail;
+  return thumbnail === firstImage && decodeServedImage(firstImage) ? publicImageRef('product', productId, 0, firstImage) : thumbnail;
+}
+
+/** Thumbnail chính là ảnh đầu: đường dẫn `/public-image/product/<id>/0?v=…` đã lưu, hay đúng chuỗi của ảnh đầu. */
+export function isFirstImageThumb(thumbnail: string | null | undefined, firstImage: string | undefined): boolean {
+  if (!thumbnail) return false;
+  return thumbnail === firstImage || FIRST_IMAGE_REF_RE.test(thumbnail);
 }

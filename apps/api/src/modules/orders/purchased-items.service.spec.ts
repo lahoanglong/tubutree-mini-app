@@ -122,3 +122,24 @@ describe('PurchasedItemsService.list', () => {
     expect(page.items[0]!.thumbnail).toBe('https://img.test/a.jpg');
   });
 });
+
+describe('PurchasedItemsService.list: không kéo cột images của sản phẩm (D3)', () => {
+  const { images: _images, ...bare } = variation('v1').product;
+
+  it('select sản phẩm không có images; thumbnail có sẵn thì không truy vấn ảnh đầu', async () => {
+    const { svc, queryRaw, findMany } = setup([row('v1')], [{ ...variation('v1'), product: bare } as never]);
+    const page = await svc.list('u1');
+    expect(findMany.mock.calls[0]![0].select.product.select).not.toHaveProperty('images');
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(page.items[0]!.thumbnail).toBe('https://img.test/v1.jpg');
+  });
+
+  it('sản phẩm không có thumbnail: dự phòng bằng đúng phần tử đầu của images (một câu SQL images[1])', async () => {
+    const { svc, queryRaw } = setup([row('v1')], [{ ...variation('v1'), product: { ...bare, thumbnail: null } } as never]);
+    queryRaw.mockResolvedValueOnce([row('v1')]).mockResolvedValueOnce([{ id: 'p-v1', cover: 'https://res.cloudinary.com/x/first.jpg' }]);
+    const page = await svc.list('u1');
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect((queryRaw.mock.calls[1]![0] as string[]).join('?')).toContain('"images"[1]');
+    expect(page.items[0]!.thumbnail).toBe('https://res.cloudinary.com/x/first.jpg');
+  });
+});

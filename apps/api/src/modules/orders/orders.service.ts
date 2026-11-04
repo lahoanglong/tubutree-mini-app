@@ -31,6 +31,7 @@ import { foldVietnamese } from '../catalog/search-text';
 import { isPublicProduct } from '../catalog/public-product';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
+import { withCoverImages } from '../catalog/card-select';
 
 export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
@@ -53,6 +54,27 @@ export interface OrderItemMedia {
   currentPrice: number | null;
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
+
+/** Cột Json chỉ màn chi tiết đơn đọc (hành trình vận chuyển) hoặc chỉ admin/checkout đọc (yêu cầu xuất hoá đơn): danh sách đơn không đọc. */
+/**
+ * Danh sách đơn không đọc hai cột Json chỉ màn chi tiết đơn (hành trình vận chuyển) hoặc chỉ admin/checkout (yêu cầu xuất hoá đơn) dùng.
+ * Liệt kê từng cột (không dựng động) để kiểu của dòng đơn suy ra từ chính `select`; test orders.service.spec giữ danh sách này khớp schema.
+ */
+export const ORDER_LIST_SELECT = {
+  id: true, code: true, idempotencyKey: true, pancakeOrderId: true, userId: true, type: true, status: true, subtotal: true,
+  discount: true, couponDiscount: true, comboDiscount: true, tierDiscount: true, pointsDiscount: true, shippingFee: true, total: true, pointsEarned: true,
+  pointsUsed: true, pointsUsedConverted: true, paymentMethod: true, paymentStatus: true, paymentTxnId: true, shippingAddress: true, recipientSearch: true, shippingPartner: true,
+  shippingCode: true, shippingStatus: true, trackingLink: true, invoiceUrl: true, invoiceStatus: true, referrerUserId: true, storefrontSlug: true, storefrontId: true,
+  fulfiller: true, fulfillerStorefrontId: true, merchantCommissionPct: true, checkoutGroup: true, merchantAcceptedAt: true, shippedAt: true, merchantSlaNotifiedAt: true, placedForCustomer: true,
+  commission: true, source: true, platform: true, paidAt: true, subscriptionId: true, endCustomerKey: true, couponCode: true, note: true,
+  hasRecyclingPickup: true, recyclingNote: true, gomdonOrderId: true, gomdonPartnerCode: true, gomdonStatus: true, gomdonStatusAt: true, gomdonCancelStatus: true, gomdonCancelRetrySince: true,
+  gomdonAttempt: true, deliveredAt: true, deliveredEffectsAt: true, reversalEffectsAt: true, reviewInvitedAt: true, pancakeAttention: true, pancakeAttentionAt: true, autoCancelBlockedAt: true,
+  pancakePaidReported: true, pancakePushStatus: true, pancakeSyncError: true, pancakePushAttempts: true, pancakeLastAttemptAt: true, pancakePushClaimedAt: true, pancakePaymentSynced: true, pancakeCancelStatus: true,
+  createdAt: true, updatedAt: true,
+  items: true,
+} satisfies Prisma.OrderSelect;
+/** Dòng đơn của danh sách: các cột của `ORDER_LIST_SELECT` kèm dòng hàng. */
+export type OrderListRow = Prisma.OrderGetPayload<{ select: typeof ORDER_LIST_SELECT }>;
 export type OrderItemView = OrderWithItems['items'][number] & OrderItemMedia;
 /** Ai giao đơn (D4): kho Tubu hay gian hàng đối tác tự giao, kèm hotline gian hàng để khách liên hệ. */
 export interface OrderFulfilmentView {
@@ -68,7 +90,7 @@ export interface SiblingOrderView {
   fulfillerName: string;
 }
 
-export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & {
+export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   /** Chỉ màn chi tiết (detailView) kèm trạng thái đánh giá từng dòng; danh sách đơn không có. */
   items: (OrderItemView & Partial<OrderLineReview>)[];
   fulfilment?: OrderFulfilmentView;
@@ -198,7 +220,7 @@ export class OrdersService {
         where,
         orderBy: { createdAt: 'desc' },
         ...skipTake(page, limit),
-        include: { items: true },
+        select: ORDER_LIST_SELECT,
       }),
       this.prisma.order.count({ where }),
     ]);
@@ -222,7 +244,7 @@ export class OrdersService {
       .map((o) => o.id);
     const pageIds = matched.slice((page - 1) * limit, page * limit);
     if (pageIds.length === 0) return paginated([], page, limit, matched.length);
-    const found = await this.prisma.order.findMany({ where: { id: { in: pageIds } }, include: { items: true } });
+    const found = await this.prisma.order.findMany({ where: { id: { in: pageIds } }, select: ORDER_LIST_SELECT });
     const byId = new Map(found.map((o) => [o.id, o]));
     const ordered = pageIds.flatMap((id) => byId.get(id) ?? []);
     return paginated(await this.attachItemMedia(ordered, viewerId), page, limit, matched.length);
@@ -329,7 +351,7 @@ export class OrdersService {
 
   /** Ảnh + tồn kho + còn bán được của từng dòng, join theo variationId (OrderItem không có FK/ảnh —
    * spec §3.2 không thêm cột). Một truy vấn cho cả trang đơn. */
-  private async attachItemMedia(orders: OrderWithItems[], viewerId: string): Promise<OrderView[]> {
+  private async attachItemMedia(orders: OrderListRow[], viewerId: string): Promise<OrderView[]> {
     const ids = [...new Set(orders.flatMap((o) => o.items.map((it) => it.variationId)))];
     // Hạn thanh toán của đơn chờ chuyển khoản: danh sách đơn cũng cần để thẻ đơn ghi "Hạn …" (cùng luật với chi tiết đơn).
     const deadlines = await pendingPaymentDeadlines(orders, this.config);
@@ -342,11 +364,14 @@ export class OrdersService {
             isActive: true,
             retailPrice: true,
             salePrice: true,
-            product: { select: { id: true, thumbnail: true, images: true, isActive: true, approvalStatus: true } },
+            product: { select: { id: true, thumbnail: true, isActive: true, approvalStatus: true } },
           },
         })
       : [];
-    const byId = new Map(variations.map((v) => [v.id, v]));
+    // Ảnh đầu chỉ cần cho sản phẩm không có thumbnail (dự phòng) và chỉ đọc phần tử đầu, không kéo cả mảng base64.
+    const covered = await withCoverImages(this.prisma, variations.map((v) => v.product));
+    const coverOf = new Map(covered.map((p) => [p.id, p.images]));
+    const byId = new Map(variations.map((v) => [v.id, { ...v, product: { ...v.product, images: coverOf.get(v.product.id) ?? [] } }]));
     // Biến thể có thể bị xoá hẳn (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác) trong khi sản phẩm vẫn đang bán: dòng đơn chỉ còn
     // slug đã lưu, tra sản phẩm theo đó để khách không mất nút "Viết đánh giá" của một sản phẩm còn mở.
     const orphanSlugs = [...new Set(orders.flatMap((o) => o.items.flatMap((it) => (!byId.has(it.variationId) && it.productSlug ? [it.productSlug] : []))))];

@@ -1816,6 +1816,16 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_EDIT_APPROVED', expect.objectContaining({ product_name: 'Nến thơm sả' }));
     });
 
+    it('duyệt bản sửa có ảnh đầu base64: thumbnail ghi đường dẫn tới ảnh đầu, không chép lại cả ảnh; ảnh https giữ nguyên', async () => {
+      const DATA = `data:image/png;base64,${Buffer.alloc(300, 1).toString('base64')}`;
+      const { prisma, productUpdate } = setup();
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ ...product, editDraft: { ...draft, images: [DATA, 'https://x/y.jpg'], thumbnail: DATA } });
+      await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, updatedAt.toISOString());
+      const data = productUpdate.mock.calls[0][0].data;
+      expect(data.images[0]).toBe(DATA);
+      expect(data.thumbnail).toMatch(/^\/public-image\/product\/p1\/0\?v=[0-9a-f]{16}$/);
+    });
+
     it('từ chối → nội dung đang bán giữ nguyên, bản chờ bị xoá, lý do lưu ở rejectReason, đối tác được báo', async () => {
       const { prisma, productUpdate, productUpdateMany } = setup();
       await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền', false, updatedAt.toISOString());
@@ -1896,7 +1906,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
   });
 
   it('reviewMerchantProduct duyệt APPROVED', async () => {
-    const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW' };
+    const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW', thumbnail: null, images: [] };
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
@@ -1909,12 +1919,65 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     expect(res.approvalStatus).toBe('APPROVED');
   });
 
+  describe('duyệt lần đầu sản phẩm đối tác: thumbnail data URL thành đường dẫn khi ảnh bắt đầu được phát (D3)', () => {
+    const DATA = `data:image/png;base64,${Buffer.alloc(300, 1).toString('base64')}`;
+    const SVG = 'data:image/svg+xml;base64,PHN2Zy8+';
+    const run = async (row: { thumbnail: string | null; images: string[] }, approve = true) => {
+      const product = { id: 'p1', name: 'Nước giặt', approvalStatus: 'PENDING_REVIEW', storefront: { ownerUserId: 'owner-1' } };
+      const update = jest.fn().mockResolvedValue({});
+      const prisma = makePrisma({
+        product: {
+          findUnique: jest.fn().mockResolvedValue(product),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, ...row }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          update,
+        },
+        merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },
+      });
+      (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', approve, approve ? undefined : 'x');
+      return update;
+    };
+
+    it('thumbnail trùng ảnh đầu base64: ghi đường dẫn tới ảnh đầu', async () => {
+      const update = await run({ thumbnail: DATA, images: [DATA] });
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls[0]![0]).toMatchObject({ where: { id: 'p1' } });
+      expect(update.mock.calls[0]![0].data.thumbnail).toMatch(/^\/public-image\/product\/p1\/0\?v=[0-9a-f]{16}$/);
+    });
+
+    it('thumbnail https, rỗng hay SVG: không ghi gì thêm', async () => {
+      expect(await run({ thumbnail: 'https://cdn/x.jpg', images: ['https://cdn/x.jpg'] })).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: null, images: [DATA] })).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: SVG, images: [SVG] })).not.toHaveBeenCalled();
+    });
+
+    it('từ chối: thumbnail data URL hay https giữ nguyên (ảnh vẫn chưa phát)', async () => {
+      expect(await run({ thumbnail: DATA, images: [DATA] }, false)).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: 'https://cdn/x.jpg', images: [DATA] }, false)).not.toHaveBeenCalled();
+    });
+
+    it('từ chối: thumbnail đường dẫn (ghi lúc còn công khai) trở về data URL của ảnh đầu, trong cùng giao dịch', async () => {
+      const ref = '/public-image/product/p1/0?v=0123456789abcdef';
+      const update = await run({ thumbnail: ref, images: [DATA] }, false);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { thumbnail: DATA } });
+    });
+
+    it('từ chối: thumbnail base64 khác ảnh đầu giữ nguyên', async () => {
+      const OTHER = `data:image/png;base64,${Buffer.alloc(300, 2).toString('base64')}`;
+      expect(await run({ thumbnail: OTHER, images: [DATA] }, false)).not.toHaveBeenCalled();
+    });
+  });
+
   it('D4: duyệt sản phẩm "Tubu giao hộ" → chuyển biến thể Pancake trong cùng transaction, báo đối tác', async () => {
     (notifications.notify as jest.Mock).mockClear();
     const product = {
       id: 'p1',
       name: 'Mật ong',
       approvalStatus: 'PENDING_REVIEW',
+      thumbnail: null,
+      images: [],
       storefrontId: 'sf-a',
       pancakeLinkCode: 'PK-1',
       storefront: { ownerUserId: 'owner-1' },
@@ -1958,7 +2021,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     });
 
     function setup(read: { approvalStatus?: string; pancakeLinkCode: string | null }, casCount = 1, now = read, variation: unknown = null) {
-      const product = { id: 'p1', name: 'Mật ong', storefrontId: 'sf-a', storefront: { ownerUserId: 'owner-1' }, approvalStatus: 'PENDING_REVIEW', ...read };
+      const product = { id: 'p1', name: 'Mật ong', storefrontId: 'sf-a', storefront: { ownerUserId: 'owner-1' }, approvalStatus: 'PENDING_REVIEW', thumbnail: null, images: [], ...read };
       const updateMany = jest.fn().mockResolvedValue({ count: casCount });
       const findUnique = jest.fn().mockResolvedValueOnce(product).mockResolvedValueOnce({ approvalStatus: 'PENDING_REVIEW', ...now });
       const prisma = makePrisma({
@@ -2119,7 +2182,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, thumbnail: null, images: [], approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -2173,6 +2236,8 @@ describe('AdminService.reviewMerchantProduct — dòng chờ duyệt lần đầ
       name: 'Khăn tre',
       storefrontId: 'sf-a',
       storefront: { ownerUserId: 'owner-1' },
+      thumbnail: null,
+      images: [],
       approvalStatus: 'PENDING_REVIEW',
       pancakeLinkCode: null,
       updatedAt: loadedAt,

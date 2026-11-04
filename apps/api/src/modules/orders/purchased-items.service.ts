@@ -5,6 +5,7 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import { VARIATION_ID_RE } from './variation-id';
 import { publicProductThumb } from '../../common/public-image';
+import { withCoverImages } from '../catalog/card-select';
 
 export interface PurchasedItem {
   variationId: string;
@@ -108,9 +109,12 @@ export class PurchasedItemsService {
         salePrice: true,
         stock: true,
         pancakeId: true,
-        product: { select: { id: true, slug: true, name: true, brand: true, thumbnail: true, images: true, fulfilment: true, storefrontId: true } },
+        product: { select: { id: true, slug: true, name: true, brand: true, thumbnail: true, fulfilment: true, storefrontId: true } },
       },
     });
+    // Ảnh đầu chỉ cần cho sản phẩm không có thumbnail (dự phòng) và chỉ đọc phần tử đầu, không kéo cả mảng base64.
+    const covered = await withCoverImages(this.prisma, variations.map((v) => v.product));
+    const coverOf = new Map(covered.map((p) => [p.id, p.images]));
     const byId = new Map(variations.map((v) => [v.id, v]));
     const items: PurchasedItem[] = [];
     for (const r of page) {
@@ -123,7 +127,7 @@ export class PurchasedItemsService {
         productName: v.product.name,
         variationName: v.name,
         brand: v.product.brand,
-        thumbnail: publicProductThumb({ id: v.product.id, thumbnail: v.product.thumbnail, images: v.product.images }),
+        thumbnail: publicProductThumb({ id: v.product.id, thumbnail: v.product.thumbnail, images: coverOf.get(v.product.id) }),
         price: v.retailPrice,
         salePrice: v.salePrice,
         stock: Math.max(v.stock, 0),

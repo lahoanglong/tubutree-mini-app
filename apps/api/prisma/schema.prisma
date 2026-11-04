@@ -2519,6 +2519,11 @@ model FeedPost {
   title         String?
   body          String
   images        String[]
+  // Tóm tắt của images do trigger feed_posts_image_summary_sync giữ (đừng ghi tay): số ảnh, và ảnh bìa (URL http/https nguyên văn,
+  // hoặc md5(id:0:ảnh) khi ảnh đầu bắt đầu bằng "data:"; NULL khi không có ảnh hoặc ảnh đầu là chuỗi lạ). Danh sách bảng tin đọc
+  // hai cột này thay vì giải nén mảng ảnh.
+  imageCount    Int                @default(0)
+  coverRef      String?
   meta          Json?
   isPinned      Boolean            @default(false)
   bestCommentId String?            @unique
@@ -2985,6 +2990,9 @@ model Review {
   rating       Int
   comment      String?
   images       String[]
+  // Phần tử tương ứng của images: mã md5 10 ký tự hex cho ảnh bắt đầu bằng "data:", chính chuỗi đó cho ảnh khác (URL). Danh sách
+  // công khai đọc cột này thay vì images (base64 nặng). Do trigger reviews_image_versions_sync giữ theo images (đừng ghi tay).
+  imageVersions String[] @default([])
   videoUrl     String? // review video (UGC §6.14.9)
   pointsEarned Int      @default(0)
   isVerified   Boolean  @default(true)
