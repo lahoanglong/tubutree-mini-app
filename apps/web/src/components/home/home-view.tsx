@@ -143,6 +143,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const bannerShown = banners.slides.length > 0 || (banners.hinted && (banners.loading || (settling && banners.revealable)));
   // Bán chạy nhất là khối ảnh đầu tiên khi phía trên nó không có banner (kể cả khung giữ chỗ), không có Giờ vàng (kể cả lúc đang tải: suất về sẽ giữ ảnh ưu tiên)
   // và Mua lại không đứng trước (thứ tự khách cũ). Khi đó kệ nằm trong màn đầu điện thoại và ảnh của nó là LCP, nên không được tải lười.
+  // Đánh đổi đã biết: suất Giờ vàng vừa bắt đầu mà HTML ISR (hạn 60 giây) chưa có nó thì hai ảnh của kệ đã xin ưu tiên trước khi Giờ vàng chen lên trên.
   const purchasedAt = order.indexOf('purchased');
   const bestSellersLead =
     !bannerShown && shelves.flash.length === 0 && !shelves.flashQuery.isLoading && (purchasedAt === -1 || purchasedAt > order.indexOf('bestSellers'));

@@ -799,8 +799,9 @@ describe('HomeView — ảnh ưu tiên của Bán chạy nhất (khối ảnh đ
   let live: ReturnType<typeof mountLive> | null = null;
 
   beforeEach(() => {
-    const others = routes['/products'];
-    const best = PAGE(['bs1', 'bs2', 'bs3', 'bs4'].map((id, i) => ({ ...card(id, `Hạng ${i + 1}`), thumbnail: thumb(id) })));
+    const others = routes['/products']!;
+    const items = ['bs1', 'bs2', 'bs3', 'bs4'].map((id, i) => ({ ...card(id, `Hạng ${i + 1}`), thumbnail: thumb(id) }));
+    const best = { data: items, meta: { page: 1, limit: 6, total: items.length } };
     routes['/products'] = (q) => (q?.sort === 'best_seller_30d' ? best : others(q));
   });
   afterEach(() => {

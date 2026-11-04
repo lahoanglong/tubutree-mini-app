@@ -44,22 +44,42 @@ function previewModeId(): string {
 /** Dựng lại Trang chủ ISR (bản dựng sẵn có thể từ trước khi gán ảnh, hạn 60–300 giây) rồi trả HTML mới. */
 async function regenerateHome(request: APIRequestContext): Promise<string> {
   const res = await request.get('/', { headers: { 'x-prerender-revalidate': previewModeId() } });
-  expect(res.status()).toBe(200);
+  expect(res.status(), 'dựng lại Trang chủ theo yêu cầu').toBe(200);
   return res.text();
+}
+
+/** Thẻ `<img>` mang fetchpriority=high trong khối Bán chạy nhất của HTML máy chủ (tới khối kế tiếp). React ghi `fetchPriority` (thuộc tính HTML không phân biệt hoa thường). */
+function serverPriorityImages(html: string): number {
+  const start = html.indexOf('data-home-block="bestSellers"');
+  if (start < 0) return -1;
+  const end = html.indexOf('data-home-block=', start + 1);
+  const block = html.slice(start, end < 0 ? undefined : end);
+  return (block.match(/<img\b[^>]*\bfetchpriority="high"/gi) ?? []).length;
 }
 
 test('LCP Trang chủ 375×812 không banner, không Giờ vàng: kệ Bán chạy nhất là khối ảnh đầu, ảnh ưu tiên trong màn đầu', async ({ page, api }, testInfo) => {
   test.skip(testInfo.project.name !== 'Web Customer Thumbs DB', 'ca ghi DB chỉ chạy ở project Web Customer Thumbs DB, sau các project web khách');
+  // Hai lần dựng lại `/` theo yêu cầu cộng phần đo (chờ kệ tới 20 giây).
+  test.setTimeout(90_000);
   const seeded = (await setDbThumbs(true)) !== null;
   test.skip(!seeded, 'DB không phải DB tạm: không gán được ảnh cho sản phẩm');
+  let bodyPassed = false;
   try {
     const html = await regenerateHome(page.request);
     expect(html, 'Trang chủ dựng lại chưa có ảnh vừa gán: làm mới ISR không chạy').toContain(path.posix.basename(DB_THUMB));
+    // Ảnh ưu tiên phải có ngay trong HTML máy chủ (trình duyệt xin ảnh trước khi JS chạy), không chỉ sau hydrate.
+    expect(serverPriorityImages(html), 'HTML máy chủ: số ảnh fetchpriority=high của kệ Bán chạy nhất').toBe(2);
     await runLcp(page, api, { name: 'Trang chủ không banner', path: '/', ready: '[data-home-block="bestSellers"] img', maxHigh: 2, promos: false });
     await expect(page.locator('[data-home-block="bestSellers"] img[fetchpriority="high"]')).toHaveCount(2);
+    bodyPassed = true;
   } finally {
-    await setDbThumbs(false);
-    await regenerateHome(page.request);
+    // Trả ảnh rồi dựng lại `/` để bản cache không giữ ảnh tạm. Lỗi dọn dẹp chỉ làm đỏ ca khi thân ca đã xanh, không che lỗi gốc.
+    try {
+      await setDbThumbs(false);
+      await regenerateHome(page.request);
+    } catch (e) {
+      if (bodyPassed) throw e;
+    }
   }
 });
 

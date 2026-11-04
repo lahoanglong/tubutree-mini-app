@@ -36,7 +36,7 @@ export interface BestSellerRailProps {
 
 /**
  * Bán chạy nhất (Q18, bản web của `best-seller-rail.tsx` ở Mini App) cho MỌI khách: một hàng thẻ có hạng #1..#n xếp theo lượt bán 30 ngày, "Xem tất cả" tới trang
- * xếp hạng. Đứng sau Giờ vàng và Danh mục. Có banner hay Giờ vàng thì kệ ở dưới màn đầu 375×812, ảnh tải lười; không có thì kệ lên màn đầu và ảnh của nó là LCP (`priorityCount`). Khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
+ * xếp hạng. Đứng sau Giờ vàng và Danh mục. Có banner hay Giờ vàng thì ảnh LCP là của khối đó nên kệ tải lười, không giành băng thông; không có thì ảnh của kệ là LCP (`priorityCount`). Khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
  */
 export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, retrying, priorityCount = 0 }: BestSellerRailProps) {
   const title = fillCopy('rank.title');
