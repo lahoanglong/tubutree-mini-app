@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -35,7 +36,7 @@ import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-ea
 import { percentLabel, pointsBoostOf } from '@/lib/points-boost';
 import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
-import { freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
+import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
 import { getCart } from '@/lib/shop-client';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -135,21 +136,24 @@ function offlineMessage(what: string): string {
   return `Chưa kết nối được tới Tubu Tree nên chưa ${what}. Bạn kiểm tra mạng rồi bấm lại nhé.`;
 }
 
-/** Dòng freeship: tín hiệu vận chuyển ngay chỗ quyết định mua. Hàng gian hàng tự giao không có freeship của Tubu nên trang cha ẩn đi. */
-export function PdpFreeship() {
+/**
+ * Dòng freeship: tín hiệu vận chuyển ngay chỗ quyết định mua. Hàng gian hàng tự giao không có freeship của Tubu nên trang cha ẩn đi.
+ * `initialConfig`: config công khai do server tải sẵn (cùng nguồn chân trang), để HTML đầu đã có dòng cho khách vãng lai thay vì chèn thêm sau hydrate.
+ * Máy có phiên cũ (`data-restoring`) giữ chỗ dòng nhưng giấu chữ tới khi biết ngưỡng theo hạng của khách.
+ */
+export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
   const phase = useAuthPhase();
-  const cfg = usePublicConfig();
+  const cfg = usePublicConfig(initialConfig);
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
-  const from = resolveFreeshipFrom({
-    phase,
-    cartThreshold: cartQ.data?.freeshipThreshold,
-    configThreshold: cfg.freeshipThreshold,
-    configLoaded: cfg.isLoaded,
-  });
-  if (from == null) return null;
+  const cartThreshold = cartQ.data?.freeshipThreshold;
+  const from = resolveFreeshipFrom({ phase, cartThreshold, configThreshold: cfg.freeshipThreshold, configLoaded: cfg.isLoaded });
+  const placeholder = freeshipPlaceholder({ phase, cartThreshold });
+  if (from == null && !placeholder) return null;
+  // Chưa có số thật: giấu hẳn, giữ chỗ. Đang tải phiên mà đã có ngưỡng chung: giấu chỉ khi <html> có `data-restoring` (khách chưa từng đăng nhập thấy chữ ngay).
+  const hideClass = from == null ? 'invisible' : phase === 'loading' ? '[html[data-restoring]_&]:invisible' : '';
   return (
-    <p data-testid="pdp-freeship" className={`text-sm font-medium text-forest-700 ${phoneBrandLabel}`}>
-      {freeshipLine(from)}
+    <p data-testid="pdp-freeship" aria-hidden={from == null ? true : undefined} className={`text-sm font-medium text-forest-700 ${phoneBrandLabel} ${hideClass}`}>
+      {freeshipLine(from ?? cfg.freeshipThreshold)}
     </p>
   );
 }
@@ -183,7 +187,9 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
   const [open, setOpen] = useState(false);
   const { notice, notify } = useGameNotice();
   const list = pdpCoupons(couponsQ.data, productId);
-  if (list.length === 0) return null;
+  if (list.length === 0) {
+    return offersSlotNeeded(phase) ? <div data-testid="pdp-offers-slot" aria-hidden="true" className={OFFERS_SLOT_CLASS} /> : null;
+  }
 
   const onCopy = async (code: string) => {
     let ok = true;

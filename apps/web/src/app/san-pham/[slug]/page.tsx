@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
+import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 import { PdpPrice } from '@/components/flash-price';
@@ -14,6 +16,8 @@ import ShareButton from '@/components/share-button';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
 import { brandAccent } from '@/components/mini/brand-accent';
 import { createServerHttp } from '@/lib/core-http-server';
+import { defaultVariationFor, runningFlash } from '@/lib/flash-price';
+import { FlashSalesSeed } from '@/lib/use-flash-sales';
 import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
@@ -29,6 +33,7 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
 
 export const revalidate = 300;
+const FLASH_REVALIDATE_S = 60;
 
 // Không dựng sẵn trang nào lúc build; trang đầu tiên của mỗi đường dẫn dựng khi có người vào rồi giữ theo revalidate (ISR thay vì dựng mỗi lượt).
 export function generateStaticParams() {
@@ -66,11 +71,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!product) notFound();
   const http = createServerHttp();
   const bundlesFetchedAt = Date.now();
-  const [related, boughtTogether, bundles] = await Promise.all([
+  const [related, boughtTogether, bundles, flashAll, publicConfig] = await Promise.all([
     orUndefined(fetchRelated(http, product.slug)),
     orUndefined(fetchBoughtTogether(http, product.slug)),
     orUndefined(fetchProductBundles(http, product.slug)),
+    // Giờ vàng đổi theo giờ và theo số suất còn: giữ ngắn như Trang chủ (lib/home-initial.ts), nên hạn làm mới của trang này thực tế là 60 giây.
+    orUndefined(fetchActiveFlashSales(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
+    orUndefined(publicConfigQuery(http).queryFn()),
   ]);
+  // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.
+  const flash = flashAll?.filter((it) => new Date(it.endAt).getTime() > Date.now());
+  const hasFlash = (flash ?? []).some((f) => product.variations.some((v) => v.id === f.variationId));
+  // Có Giờ vàng ở sản phẩm này thì mở sẵn đúng phân loại mà AddToCart sẽ chốt khi danh sách về (cùng `defaultVariationFor`), để giá không đổi hai lần.
+  const initialVariation = (hasFlash ? defaultVariationFor({ slug: product.slug }, product.variations, runningFlash(flash ?? [])) : undefined) ?? product.variations.find((v) => v.stock > 0) ?? product.variations[0];
 
   const images = galleryImages(product);
   const description = plainText(product.description);
@@ -96,7 +109,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       >
         ← Về trang chủ
       </BackLink>
-      <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
+      <FlashSalesSeed items={flash}>
+      <PdpSelectionProvider initialId={initialVariation?.id ?? ''}>
         <PdpLayout
           gallery={
             <div className="min-w-0">
@@ -168,7 +182,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                         {fulfillerText}
                       </p>
                     )}
-                    {!fromStore && <PdpFreeship />}
+                    {!fromStore && <PdpFreeship initialConfig={publicConfig} />}
                   </PdpShippingRow>
                 )}
               </div>
@@ -282,6 +296,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           }
         />
       </PdpSelectionProvider>
+      </FlashSalesSeed>
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
     </main>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { makeFlashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
@@ -94,8 +94,28 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
+/**
+ * Danh sách Giờ vàng do server tải sẵn cho trang ISR (trang sản phẩm): lần dựng đầu (HTML server và hydrate) đã biết giá/thanh Giờ vàng nên không chèn
+ * thanh Giờ vàng hay đổi dòng giá sau hydrate. Nằm trong context (không ghi vào kho dùng chung) vì kho là biến của tiến trình server, dùng chung
+ * giữa mọi yêu cầu và mọi trang.
+ */
+const ServerSeed = createContext<readonly FlashItem[] | null>(null);
+
+/**
+ * Ở trình duyệt gieo luôn vào kho dùng chung (cùng mảng với context, nên React không thấy snapshot đổi sau hydrate) để khối khác của trang đọc cùng
+ * dữ liệu. `fetchedAt` giữ 0: effect của `useActiveFlashSales` vẫn hỏi lại ngay, vì trang ISR có thể cũ hơn 60 giây.
+ */
+export function FlashSalesSeed({ items: seed, children }: { items: readonly FlashItem[] | undefined; children: ReactNode }) {
+  if (typeof window !== 'undefined' && seed && !loaded) {
+    items = seed;
+    loaded = true;
+  }
+  return createElement(ServerSeed.Provider, { value: seed ?? null }, children);
+}
+
 export function useActiveFlashSales(): readonly FlashItem[] {
-  const current = useSyncExternalStore(subscribe, () => items, () => NONE);
+  const seed = useContext(ServerSeed);
+  const current = useSyncExternalStore(subscribe, () => items, () => seed ?? NONE);
   useEffect(() => {
     ensureFresh();
   }, []);

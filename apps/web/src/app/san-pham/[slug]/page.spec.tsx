@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   serverFails: false,
   auth: { status: 'idle', initialized: true, sessionUnavailable: false, user: null } as Record<string, unknown>,
   coupons: [] as unknown[],
+  config: { freeshipThreshold: 199000, subscribeDiscountPct: 0.12 } as unknown,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
@@ -29,12 +30,14 @@ vi.mock('@/lib/core-http-server', () => ({
     get: async (path: string) => {
       if (api.serverFails) throw new Error('API tạm lỗi');
       if (path.endsWith('/bundles')) return api.bundles;
+      if (path === '/flash-sales/active') return api.flash;
+      if (path === '/config/public') return api.config;
       return path.endsWith('/related') ? api.related : api.together;
     },
   }),
 }));
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash, FlashSalesSeed: ({ children }: { children: unknown }) => children }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => api.auth }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponLabel, freeshipLine, groupBuyPitch, isRetailOnly, pdpCoupons, resolveFreeshipFrom } from './pdp-logic';
+import { couponLabel, freeshipLine, groupBuyPitch, isRetailOnly, freeshipPlaceholder, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from './pdp-logic';
 
 describe('isRetailOnly: hàng chỉ bán giá lẻ, không định kỳ, không mua chung', () => {
   it('gian hàng tự giao, tạm nghỉ/ngừng bán và hàng đối tác đều là retail only', () => {
@@ -50,6 +50,26 @@ describe('dòng freeship', () => {
   it('khách vãng lai dùng ngưỡng chung khi config đã về; đang tải phiên hoặc config thì chưa hứa', () => {
     expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBe(199000);
     expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 199000, configLoaded: false })).toBeUndefined();
-    expect(resolveFreeshipFrom({ phase: 'loading', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBeUndefined();
+    expect(resolveFreeshipFrom({ phase: 'loading', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBe(199000);
+    expect(resolveFreeshipFrom({ phase: 'loading', cartThreshold: undefined, configThreshold: 199000, configLoaded: false })).toBeUndefined();
+  });
+});
+
+describe('freeshipPlaceholder: dòng freeship giấu chữ khi chưa có số chắc', () => {
+  it('đang tải phiên hoặc đã đăng nhập mà giỏ chưa về thì giữ chỗ; còn lại thì không', () => {
+    expect(freeshipPlaceholder({ phase: 'loading', cartThreshold: undefined })).toBe(true);
+    expect(freeshipPlaceholder({ phase: 'authenticated', cartThreshold: undefined })).toBe(true);
+    expect(freeshipPlaceholder({ phase: 'authenticated', cartThreshold: 150000 })).toBe(false);
+    expect(freeshipPlaceholder({ phase: 'guest', cartThreshold: undefined })).toBe(false);
+  });
+});
+
+describe('chỗ giữ cho hàng Ưu đãi (PdpCoupons)', () => {
+  it('chỉ giữ khi đang khôi phục phiên, cao 44px (h-11) và chỉ hiện khi <html> có data-restoring', () => {
+    expect(offersSlotNeeded('loading')).toBe(true);
+    for (const p of ['guest', 'authenticated', 'unavailable'] as const) expect(offersSlotNeeded(p)).toBe(false);
+    expect(OFFERS_SLOT_CLASS).toContain('h-11');
+    expect(OFFERS_SLOT_CLASS).toContain('hidden');
+    expect(OFFERS_SLOT_CLASS).toContain('[html[data-restoring]_&]:block');
   });
 });

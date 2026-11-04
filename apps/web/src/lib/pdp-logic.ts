@@ -33,7 +33,8 @@ export function freeshipLine(from: number): string {
 
 /**
  * Ngưỡng freeship hứa với khách: khách đăng nhập dùng ngưỡng theo hạng của giỏ (cùng nguồn với giỏ hàng), khách vãng lai dùng ngưỡng
- * chung. Chưa biết chắc (đang tải phiên, giỏ hay config chưa về) thì undefined để không hiện một số rồi đổi.
+ * chung. Đang tải phiên thì dùng ngưỡng chung của config (server tải sẵn nên HTML đầu đã có dòng, không chèn thêm sau hydrate); máy có phiên
+ * cũ thì `PdpFreeship` giấu chữ đó tới khi biết phiên (`freeshipHiddenWhileRestoring`). Chưa biết chắc (giỏ chưa về, config chưa về) thì undefined để không hiện một số rồi đổi.
  */
 export function resolveFreeshipFrom(p: {
   phase: AuthPhase;
@@ -42,6 +43,23 @@ export function resolveFreeshipFrom(p: {
   configLoaded: boolean;
 }): number | undefined {
   if (p.phase === 'authenticated') return p.cartThreshold;
-  if (p.phase === 'loading' || !p.configLoaded) return undefined;
+  if (!p.configLoaded) return undefined;
   return p.configThreshold;
+}
+
+/**
+ * Dòng freeship của khách đang khôi phục phiên hoặc đã đăng nhập mà giỏ chưa về: giữ chỗ một dòng nhưng giấu chữ (ngưỡng theo hạng có thể khác ngưỡng chung),
+ * để dòng không chèn thêm khi có số thật. `pending` = còn chờ phiên hoặc giỏ.
+ */
+export function freeshipPlaceholder(p: { phase: AuthPhase; cartThreshold: number | undefined }): boolean {
+  return p.phase === 'loading' || (p.phase === 'authenticated' && p.cartThreshold === undefined);
+}
+
+/**
+ * Hàng "Ưu đãi ›" chỉ hiện khi ví có mã của khách đã đăng nhập: trong lúc khôi phục phiên giữ chỗ 44px (CSS chỉ cho chỗ này hiện khi <html> có
+ * `data-restoring`, nên khách chưa từng đăng nhập không mất chỗ nào), để hàng không chèn lên đầu khối ưu đãi khi mã về.
+ */
+export const OFFERS_SLOT_CLASS = 'hidden h-11 [html[data-restoring]_&]:block';
+export function offersSlotNeeded(phase: AuthPhase): boolean {
+  return phase === 'loading';
 }
