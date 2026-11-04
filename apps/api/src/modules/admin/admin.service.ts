@@ -432,6 +432,7 @@ export class AdminService {
           await recordUserAdminEvent(tx, { userId: app.userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: adminId });
         }
       }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+      this.imageResize?.invalidateRegistry();
       // Như setUserRole: grant STAFF/ADMIN còn hiệu lực sẽ được applyGrants nâng lại ở lần refresh token kế tiếp (chỉ nâng, không hạ).
       const revoked = applicantPhone
         ? await this.rbac.revokeGrantsAbove(applicantPhone, 'DEALER').catch((err) => {
@@ -715,6 +716,8 @@ export class AdminService {
       }
       return { updated, previousRole, revoked };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+    // Vai trò và cờ đối tác quyết định gian hàng của người này có hiện công khai không: danh sách ảnh /img nạp lại, đánh dấu sau commit.
+    this.imageResize?.invalidateRegistry();
     if (revoked > 0) {
       this.logger.warn(`Admin ${adminId} đổi role user ${updated.id} (${maskPhone(normalized)}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }

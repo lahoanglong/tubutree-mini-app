@@ -822,3 +822,125 @@ describe('SystemConfigService.set waste.enabled', () => {
     expect(off.upsert).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SystemConfigService.set: đánh dấu danh sách ảnh /img cũ', () => {
+  const mkStale = () => ({ markStale: jest.fn() });
+
+  it.each([
+    ['affiliate.commission_eligible_roles', ['DEALER']],
+    ['storefront.require_approval', false],
+  ])('khoá hiển thị gian hàng "%s" → đánh dấu đúng một lần, SAU giao dịch, cache khoá đó đã xoá', async (key, value) => {
+    const stale = mkStale();
+    const { prisma, upsert } = makePrisma({ existing: { value: Array.isArray(value) ? ['DEALER', 'STAFF'] : true } });
+    const service = new SystemConfigService(prisma, stale as never);
+    await service.get(key, undefined as never);
+    const cache = (service as unknown as { cache: Map<string, unknown> }).cache;
+    expect(cache.has(key)).toBe(true);
+    let insideCalls = -1;
+    let cachedInside = false;
+    (prisma.$transaction as jest.Mock).mockImplementation(async (cb: (tx: unknown) => unknown) => {
+      const out = await cb(prisma);
+      insideCalls = stale.markStale.mock.calls.length;
+      cachedInside = cache.has(key);
+      return out;
+    });
+    await service.set(key, value as object | boolean, 'admin1');
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(insideCalls).toBe(0);
+    expect(cachedInside).toBe(true);
+    expect(cache.has(key)).toBe(false);
+    expect(stale.markStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('khoá không liên quan hiển thị gian hàng → KHÔNG đánh dấu', async () => {
+    const stale = mkStale();
+    const { prisma } = makePrisma({ existing: { value: 100000 } });
+    await new SystemConfigService(prisma, stale as never).set('wallet.withdraw_min', 150000, 'admin1');
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('giao dịch ném lỗi trên khoá hiển thị → KHÔNG đánh dấu', async () => {
+    const stale = mkStale();
+    const { prisma } = makePrisma({ existing: { value: true }, upsert: jest.fn().mockRejectedValue(new Error('db down')) });
+    await expect(new SystemConfigService(prisma, stale as never).set('storefront.require_approval', false, 'admin1')).rejects.toThrow('db down');
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('bị chặn đổi kiểu trên khoá hiển thị → KHÔNG đánh dấu', async () => {
+    const stale = mkStale();
+    const { prisma } = makePrisma({ existing: { value: true } });
+    await expect(new SystemConfigService(prisma, stale as never).set('storefront.require_approval', 'x' as never, 'admin1')).rejects.toThrow(BadRequestException);
+    expect(stale.markStale).not.toHaveBeenCalled();
+  });
+
+  it('không tiêm ImageRegistryStale (@Optional) → set khoá hiển thị vẫn chạy, không ném', async () => {
+    const { prisma } = makePrisma({ existing: { value: true } });
+    await expect(new SystemConfigService(prisma).set('storefront.require_approval', false, 'admin1')).resolves.toBeUndefined();
+  });
+});
+
+describe('SystemConfigService.get: không ghi giá trị cũ vào cache khi set() xen giữa', () => {
+  const deferred = <T>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  it('get đang chờ DB, set() commit xong, get nhận dòng CŨ → không cache; lần get sau đọc lại DB', async () => {
+    const pending = deferred<{ value: unknown } | null>();
+    const findUnique = jest
+      .fn()
+      .mockReturnValueOnce(pending.promise) // get lần 1 (chờ)
+      .mockResolvedValueOnce({ value: 'v1' }) // đọc trong tx của set()
+      .mockResolvedValue({ value: 'v2' }); // get lần 2
+    const { prisma } = makePrisma({ findUnique });
+    const service = new SystemConfigService(prisma);
+    const first = service.get<string>('misc.key');
+    await service.set('misc.key', 'v2', 'admin1');
+    pending.resolve({ value: 'v1' });
+    expect(await first).toBe('v1');
+    const callsBefore = findUnique.mock.calls.length;
+    expect(await service.get<string>('misc.key')).toBe('v2');
+    expect(findUnique.mock.calls.length).toBe(callsBefore + 1);
+  });
+
+  it('nhánh fallback: dòng null về sau set() → không cache fallback; lần get sau đọc lại DB', async () => {
+    const pending = deferred<{ value: unknown } | null>();
+    const findUnique = jest
+      .fn()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(null) // đọc trong tx của set()
+      .mockResolvedValue({ value: 'v2' });
+    const { prisma } = makePrisma({ findUnique });
+    const service = new SystemConfigService(prisma);
+    const first = service.get<string>('misc.key', 'fb');
+    await service.set('misc.key', 'v2', 'admin1');
+    pending.resolve(null);
+    expect(await first).toBe('fb');
+    const callsBefore = findUnique.mock.calls.length;
+    expect(await service.get<string>('misc.key', 'fb')).toBe('v2');
+    expect(findUnique.mock.calls.length).toBe(callsBefore + 1);
+  });
+
+  it('không có set() xen giữa → vẫn cache: lần get thứ hai không đọc DB', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ value: 'v1' });
+    const { prisma } = makePrisma({ findUnique });
+    const service = new SystemConfigService(prisma);
+    await service.get('misc.key');
+    await service.get('misc.key');
+    expect(findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  it('set() trên khoá khác cũng chặn cache của get đang chờ (đếm theo lần ghi, chỉ làm mất một lần cache)', async () => {
+    const pending = deferred<{ value: unknown } | null>();
+    const findUnique = jest.fn().mockReturnValueOnce(pending.promise).mockResolvedValue({ value: 'x' });
+    const { prisma } = makePrisma({ findUnique });
+    const service = new SystemConfigService(prisma);
+    const first = service.get<string>('misc.a');
+    await service.set('misc.b', 'x', 'admin1');
+    pending.resolve({ value: 'a' });
+    await first;
+    await service.get<string>('misc.a');
+    expect(findUnique.mock.calls.filter((c) => c[0].where.key === 'misc.a').length).toBe(2);
+  });
+});

@@ -79,7 +79,7 @@ describe('BannerCarousel: ảnh slide (Pa3)', () => {
     expect(imgs).toHaveLength(3);
     for (const img of imgs) {
       expect(img.getAttribute('src')).toContain('/img?w=');
-      expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
+      expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 480w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
       expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px');
     }
     expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy']);

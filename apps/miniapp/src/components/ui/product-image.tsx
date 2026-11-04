@@ -26,11 +26,11 @@ export function ProductImageFallback(_props: { brand: string }) {
   );
 }
 
-/** Bề rộng thẻ sản phẩm lưới 2 cột ở khổ điện thoại (CSS px); chọn bản ảnh đổi cỡ 1x/2x theo số này. */
+/** Bề rộng thẻ sản phẩm lưới 2 cột ở khổ điện thoại (CSS px); chọn bản ảnh đổi cỡ 1x/2x/3x theo số này. */
 export const CARD_IMAGE_WIDTH = 170;
 
 /**
- * Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset 1x/2x; ảnh tải lỗi thì rơi về ô thay thế), không có thì ô thay thế.
+ * Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset 1x/2x/3x; ảnh tải lỗi thì rơi về ô thay thế), không có thì ô thay thế.
  * Cha phải `position: relative`; ô vuông của cha giữ chỗ nên ảnh về không làm nhảy bố cục.
  */
 export function ProductImage({ src, brand, width = CARD_IMAGE_WIDTH }: { src?: string | null; brand: string; width?: number }) {

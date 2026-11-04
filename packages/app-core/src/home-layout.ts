@@ -327,9 +327,19 @@ export function memberCardView(opts: {
  * Tên đọc cho vùng chạm của thẻ thành viên / thẻ Điểm Xanh. Chứa đủ chữ đang hiển thị (tên, hạng, điểm, giá trị quy đổi) rồi mới tới
  * hành động, để trình đọc màn hình và lệnh giọng nói khớp với những gì khách thấy.
  */
-export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string): string {
+export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string, failedText?: string): string {
   const who = [greeting, card.tierName].filter(Boolean).join(' · ');
+  // Tổng quan lỗi: dòng điểm trên thẻ đổi thành câu báo lỗi, nên tên đọc cũng thế (không còn số điểm không hiển thị).
+  if (failedText) return [who, failedText].filter(Boolean).join(', ') + `. ${action}`;
   return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ') + `. ${action}`;
+}
+
+/**
+ * Tên đọc của dải Điểm Xanh ở Ưu đãi: theo ĐÚNG thứ tự chữ nhìn thấy (hạng, "Hạng và lịch sử điểm", điểm, giá trị quy đổi) để tên bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3);
+ * axe bỏ dấu câu khi so, dấu phẩy chỉ giữ nhịp ngắt cho trình đọc màn hình.
+ */
+export function offersPointsAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, detail: string): string {
+  return [card.tierName, detail, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ');
 }
 
 // ---- Gợi ý cuộn vô tận ----

@@ -28,7 +28,9 @@ describe('OffersPointsStrip — dải Điểm Xanh gọn ở trang Ưu đãi', (
     expect(screen.getByRole('region', { name: /Điểm Xanh/ })).toBeInTheDocument();
     expect(screen.getByText('Mầm Xanh')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: /Hạng và lịch sử điểm/ });
-    await waitFor(() => expect(btn).toHaveAccessibleName(/Mầm Xanh, 120 điểm/));
+    await waitFor(() => expect(btn).toHaveAccessibleName(/^Mầm Xanh, Hạng và lịch sử điểm, 120 điểm/));
+    // WCAG 2.5.3: chữ nhìn thấy (đúng thứ tự, có khoảng trắng giữa các mảnh) nằm trọn trong tên đọc.
+    expect(btn.textContent!.replace(/\s+/g, ' ').trim()).toMatch(/^Mầm Xanh Hạng và lịch sử điểm 120 điểm/);
     fireEvent.click(btn);
     expect(mocks.navigate).toHaveBeenCalledWith('/loyalty');
   });

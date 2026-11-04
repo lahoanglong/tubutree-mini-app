@@ -93,18 +93,139 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
     expect(props.categories).toEqual(CATEGORIES);
   });
 
-  it('?q= cắt khoảng trắng đầu cuối, ?sort/?minPrice/?inStock/?rating/?brand đi đúng tham số API như Mini App; urlKey là khoá chuẩn', async () => {
-    await render({ q: '  dầu gội ', sort: 'price_asc', minPrice: '100000', inStock: '1', rating: '4', brand: 'Tubu' });
-    expect(productCalls()[0]![1]).toEqual({
-      query: { page: 1, limit: 20, q: 'dầu gội', sort: 'price_asc', brand: 'Tubu', minPrice: 100000, inStock: 'true', minRating: 4 },
-    });
+  it('nhãn có thật dựng sẵn với đúng tham số API như Mini App; urlKey là khoá chuẩn (tham số theo dõi không vào khoá)', async () => {
+    await render({ brand: 'Tubu', utm_source: 'zalo' });
+    expect(productCalls()[0]![1]).toEqual({ query: { page: 1, limit: 20, brand: 'Tubu' } });
     const key = (mocks.view.mock.calls[0]![0] as { initial: { urlKey: string } }).initial.urlKey;
-    expect(key).toBe(new URLSearchParams({ q: 'dầu gội', brand: 'Tubu', minPrice: '100000', inStock: '1', rating: '4', sort: 'price_asc' }).toString());
+    expect(key).toBe('brand=Tubu');
   });
 
-  it('?q lặp lại (mảng) lấy giá trị đầu; rỗng thì không gửi q', async () => {
-    await render({ q: ['a', 'b'] });
-    expect(productCalls().at(-1)![1]).toEqual({ query: { page: 1, limit: 20, q: 'a' } });
+  it('?q= (từ khoá tự do): máy chủ KHÔNG tải danh sách, BrowseView tải ở trình duyệt (initial = null); nhãn + danh mục vẫn dựng sẵn', async () => {
+    for (const o of [{ q: '  dầu gội ' }, { q: 'gội', brand: 'Tubu', sort: 'newest' }, { q: ['a', 'b'] }, { q: 'x', page: '3' }]) {
+      mocks.get.mockClear();
+      mocks.view.mockReset();
+      await render(o);
+      expect(productCalls(), JSON.stringify(o)).toEqual([]);
+      const props = mocks.view.mock.calls[0]![0] as { initial: unknown; brands: unknown; categories: unknown };
+      expect(props.initial, JSON.stringify(o)).toBeNull();
+      expect(props.brands).toEqual(BRANDS);
+      expect(props.categories).toEqual(CATEGORIES);
+    }
+  });
+
+  it('nhãn có thật (không từ khoá) vẫn tải danh sách ở máy chủ', async () => {
+    await render({ brand: 'Tubu' });
+    expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 20, brand: 'Tubu' } }]]);
+  });
+
+  it('chỉ dựng sẵn ở máy chủ các trang được lập chỉ mục (+ ?all=1 đứng một mình); tổ hợp khác tải ở trình duyệt', async () => {
+    const ssr = async (o: Record<string, string>) => {
+      mocks.get.mockClear();
+      mocks.view.mockReset();
+      await render(o);
+      const initial = (mocks.view.mock.calls[0]![0] as { initial: unknown }).initial;
+      expect(initial === null, JSON.stringify(o)).toBe(productCalls().length === 0);
+      return productCalls().length > 0;
+    };
+    expect(await ssr({ page: '2' })).toBe(true);
+    expect(await ssr({ page: '50' })).toBe(true);
+    expect(await ssr({ all: '1' })).toBe(true);
+    expect(await ssr({ all: '1', page: '3' })).toBe(true);
+    expect(await ssr({ brand: 'Tubu' })).toBe(true);
+    expect(await ssr({ brand: 'Tubu', page: '2' })).toBe(true);
+    expect(await ssr({ category: 'c-goi' })).toBe(true);
+    // Mỗi tổ hợp dưới đây là một khoá Data Cache riêng (A,B khác B,A), cộng lại hàng triệu: không dựng sẵn.
+    expect(await ssr({ brand: 'Tubu,A&B' })).toBe(false);
+    expect(await ssr({ brand: 'A&B,Tubu' })).toBe(false);
+    expect(await ssr({ brand: 'Tubu', sort: 'newest' })).toBe(false);
+    expect(await ssr({ brand: 'Tubu', category: 'c-goi' })).toBe(false);
+    expect(await ssr({ category: 'c-goi', minPrice: '100000', maxPrice: '200000' })).toBe(false);
+    expect(await ssr({ category: 'c-goi', page: '2' })).toBe(false);
+    expect(await ssr({ all: '1', sort: 'newest' })).toBe(false);
+    expect(await ssr({ sort: 'newest', inStock: '1', rating: '4' })).toBe(false);
+    expect(await ssr({ segment: 'eco' })).toBe(false);
+    expect(await ssr({ minPrice: '100000', maxPrice: '200000' })).toBe(false);
+    expect(await ssr({ brand: 'khong-co' })).toBe(false);
+    expect(await ssr({ category: 'khong-co' })).toBe(false);
+  });
+
+  it('trang sâu hơn 50 không dựng sẵn; vượt trang cuối thì hỏi tổng (trang 1, 1 món, khoá không có số trang) rồi về trang cuối', async () => {
+    catalog = () => pageOf([PRODUCT], 200, 1);
+    await expect(render({ all: '1', page: '60' })).rejects.toThrow('NEXT_REDIRECT /san-pham?all=1&page=10');
+    expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 1 } }]]);
+    mocks.get.mockClear();
+    await expect(render({ brand: 'Tubu', page: '70' })).rejects.toThrow('NEXT_REDIRECT /san-pham?brand=Tubu&page=10');
+    expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 1, brand: 'Tubu' } }]]);
+  });
+
+  it('trang sâu hơn 50 còn trong khoảng thật: không chuyển hướng, trình duyệt tải (initial = null)', async () => {
+    catalog = () => pageOf([PRODUCT], 2000, 1);
+    mocks.view.mockReset();
+    await render({ all: '1', page: '60' });
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect((mocks.view.mock.calls[0]![0] as { initial: unknown }).initial).toBeNull();
+  });
+
+  it('lối "Xem tất cả" (gốc theo trang, ?all=1) tải danh sách song song với nhãn + danh mục, không chờ hai cái đó', async () => {
+    let releaseBrands!: () => void;
+    const brandsGate = new Promise<void>((r) => (releaseBrands = r));
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/products') return pageOf([PRODUCT]);
+      if (path === '/brands') {
+        await brandsGate;
+        return BRANDS;
+      }
+      if (path === '/categories') return CATEGORIES;
+      throw new Error(`đường dẫn lạ ${path}`);
+    });
+    for (const o of [{ all: '1' }, { page: '2' }]) {
+      mocks.get.mockClear();
+      const done = render(o);
+      // Danh sách được gọi trong lúc /brands vẫn treo: không phụ thuộc số nhịp microtask.
+      await vi.waitFor(() => expect(productCalls(), JSON.stringify(o)).toHaveLength(1));
+      releaseBrands();
+      await done;
+    }
+  });
+
+  it('nhãn vẫn chờ danh sách nhãn trước khi quyết định tải', async () => {
+    let releaseBrands!: () => void;
+    const brandsGate = new Promise<void>((r) => (releaseBrands = r));
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/products') return pageOf([PRODUCT]);
+      if (path === '/brands') {
+        await brandsGate;
+        return BRANDS;
+      }
+      return CATEGORIES;
+    });
+    const done = render({ brand: 'Tubu' });
+    // /categories đã trả: chờ tới khi chỉ còn /brands treo rồi mới kiểm danh sách chưa được gọi.
+    await vi.waitFor(() => expect(mocks.get.mock.calls.some(([p]) => p === '/categories')).toBe(true));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(productCalls()).toHaveLength(0);
+    releaseBrands();
+    await done;
+    expect(productCalls()).toHaveLength(1);
+  });
+
+  it('tổ hợp không dựng sẵn thì cũng không hỏi tổng dù trang sâu', async () => {
+    await render({ brand: 'Tubu', sort: 'newest', page: '60' });
+    expect(productCalls()).toEqual([]);
+  });
+
+  it('API nhãn lỗi thì không kiểm được nhãn: không dựng sẵn danh sách theo nhãn, trình duyệt tự tải', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/products') return pageOf([PRODUCT]);
+      if (path === '/categories') return CATEGORIES;
+      throw new Error('down');
+    });
+    await render({ brand: 'Tubu' });
+    expect(productCalls()).toEqual([]);
+    expect((mocks.view.mock.calls[0]![0] as { initial: unknown }).initial).toBeNull();
+  });
+
+  it('?q chỉ có khoảng trắng coi như không có từ khoá: vẫn tải ở máy chủ', async () => {
     await render({ q: '   ', all: '1' });
     expect(productCalls().at(-1)![1]).toEqual({ query: { page: 1, limit: 20 } });
   });
@@ -123,6 +244,18 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
   it('?page vượt trang cuối: chuyển về trang cuối giữ bộ lọc thay vì báo chưa có sản phẩm', async () => {
     catalog = () => pageOf([], 45, 9);
     await expect(render({ page: '9', brand: 'Tubu' })).rejects.toThrow('NEXT_REDIRECT /san-pham?brand=Tubu&page=3');
+  });
+
+  it('chuyển về trang cuối giữ tham số lạ (ref, utm) của link; khoá API không chứa chúng', async () => {
+    catalog = () => pageOf([], 45, 9);
+    await expect(render({ brand: 'Tubu', page: '9', ref: 'AN1', utm_source: 'zalo', focus: 'search' })).rejects.toThrow(
+      'NEXT_REDIRECT /san-pham?brand=Tubu&page=3&ref=AN1&utm_source=zalo',
+    );
+    expect(productCalls()).toEqual([['/products', { query: { page: 9, limit: 20, brand: 'Tubu' } }]]);
+    mocks.get.mockClear();
+    catalog = () => pageOf([PRODUCT], 45, 1);
+    await expect(render({ all: '1', page: '60', ref: 'AN1' })).rejects.toThrow('NEXT_REDIRECT /san-pham?all=1&page=3&ref=AN1');
+    expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 1 } }]]);
   });
 
   it('catalog thật sự rỗng: không chuyển hướng', async () => {
@@ -225,6 +358,15 @@ describe('BrowsePage — SEO', () => {
     expect(brand.robots).toBeUndefined();
     const fake = await generateMetadata({ searchParams: sp({ brand: 'khong-co' }) });
     expect(fake.robots).toEqual({ index: false, follow: true });
+  });
+
+  it('nhãn từ trang 51 trở đi noindex, khớp với việc máy chủ không dựng sẵn danh sách sâu hơn trang 50', async () => {
+    const p50 = await generateMetadata({ searchParams: sp({ brand: 'Tubu', page: '50' }) });
+    expect(p50.robots).toBeUndefined();
+    expect(p50.alternates).toEqual({ canonical: '/san-pham?brand=Tubu&page=50' });
+    const p51 = await generateMetadata({ searchParams: sp({ brand: 'Tubu', page: '51' }) });
+    expect(p51.robots).toEqual({ index: false, follow: true });
+    expect(p51.alternates).toBeUndefined();
   });
 
   it('tham số theo dõi (utm, ref, s) không đổi canonical', async () => {

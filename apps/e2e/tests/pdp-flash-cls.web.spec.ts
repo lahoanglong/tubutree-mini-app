@@ -11,13 +11,15 @@ const CLS_MAX = 0.02;
 const HOUR = 3_600_000;
 let flash: FlashPdp | null = null;
 
-// Các ca dùng chung một đợt Giờ vàng gieo vào DB tạm, và bản dựng sẵn của trang chỉ đúng khi không ai xoá/gieo lại giữa chừng: chạy tuần tự trong một worker, và chỉ ở project desktop
-// (khung nhìn tự đặt trong từng ca). Project Mobile chạy cùng tệp ở worker khác sẽ gieo/xoá cùng phân loại song song, rồi một lần dựng lại có thể cache danh sách rỗng.
+// Các ca dùng chung một đợt Giờ vàng gieo vào DB tạm, và bản dựng sẵn của trang chỉ đúng khi không ai xoá/gieo lại giữa chừng: chạy tuần tự trong một worker.
+// Tệp chỉ thuộc project "Web Customer Flash DB" (playwright.config.ts), chạy sau khi hai project web khách xong: trong lúc đợt còn sống, Trang chủ
+// và mọi trang server dựng đều nhúng khối Giờ vàng, nên không spec web khách nào khác được chạy song song. Khung nhìn tự đặt trong từng ca.
+// Chạy riêng: `--project="Web Customer Flash DB" --no-deps`.
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ request }, testInfo) => {
   test.setTimeout(240_000);
-  if (testInfo.project.name !== 'Web Customer') return;
+  if (testInfo.project.name !== 'Web Customer Flash DB') return;
   flash = await seedFlashPdp(request);
   if (!flash) return;
   // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường), và trang chi tiết dựng lại sau tối đa 60 giây.
@@ -114,4 +116,22 @@ test('PDP Giờ vàng: điện thoại chạy nhanh 7 giờ, đợt còn chạy 
   expect(problems).toEqual([]);
   const { cls } = await readClsTotal(page);
   expect(cls).toBeLessThan(CLS_MAX);
+});
+
+// Móc `data-restore-mask` của dòng freeship (pdp-extras): HTML server đã có dòng, và lớp CSS giấu chữ chỉ có hiệu lực khi <html> có `data-restoring`.
+// Tắt JavaScript để giữ nguyên HTML server (hydrate sẽ đổi pha phiên và bỏ móc), rồi đo visibility tính ra của trình duyệt chứ không đọc tên lớp.
+test.describe('PDP: chữ freeship bị giấu theo data-restoring', () => {
+  test.use({ javaScriptEnabled: false });
+  test('HTML server: chữ hiện khi <html> chưa có data-restoring, ẩn khi có (chỗ vẫn giữ)', async ({ page, api }) => {
+    test.skip(!flash, 'DB e2e không phải DB tạm hoặc chưa có sản phẩm để gieo đợt Giờ vàng');
+    api.allowUnmocked('GET /products', 'GET /me/coupons', 'POST /events');
+    await page.goto(`/san-pham/${flash!.slug}`);
+    const line = page.getByTestId('pdp-freeship');
+    await expect(line).toHaveAttribute('data-restore-mask', 'restoring');
+    await expect(line).toHaveCSS('visibility', 'visible');
+    const box = await line.boundingBox();
+    await page.evaluate(() => document.documentElement.setAttribute('data-restoring', ''));
+    await expect(line).toHaveCSS('visibility', 'hidden');
+    expect((await line.boundingBox())?.height).toBe(box?.height);
+  });
 });

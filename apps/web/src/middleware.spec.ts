@@ -49,7 +49,7 @@ describe('middleware: Trang chủ cho khách đã có cookie phiên', () => {
   });
 
   it('chỉ rewrite "/": trang khác đi thẳng', () => {
-    expect(rewriteOf(withCookie('tubu_web_session=1', '/san-pham'))).toBeNull();
+    expect(rewriteOf(withCookie('tubu_web_session=1', '/gio-hang'))).toBeNull();
   });
 });
 
@@ -83,5 +83,42 @@ describe('middleware: slug dài vô lý không vào cache trang theo [slug]', ()
   it('route khác đi thẳng', () => {
     expect(visit('tubutree.com', `/ctv/${'a'.repeat(300)}`).status).toBe(200);
     expect(visit('tubutree.com', `/mua-chung/${'a'.repeat(300)}`).status).toBe(200);
+  });
+});
+
+describe('middleware: hub /san-pham dùng bản ISR', () => {
+  const at = (path: string, host = 'tubutree.com') => middleware(new NextRequest(`https://${host}${path}`, { headers: { host } }));
+
+  it('/san-pham không tham số lọc được rewrite sang bản tĩnh, URL trình duyệt không đổi', () => {
+    expect(rewriteOf(at('/san-pham'))).toBe('https://tubutree.com/hub-san-pham');
+  });
+
+  it('tham số theo dõi vẫn dùng bản tĩnh', () => {
+    for (const qs of ['utm_source=zalo&utm_campaign=x', 'ref=AN1', 'fbclid=abc']) {
+      expect(rewriteOf(at(`/san-pham?${qs}`)), qs).toBe('https://tubutree.com/hub-san-pham');
+    }
+  });
+
+  it('có từ khoá, bộ lọc hoặc số trang thì không rewrite (trang /san-pham động)', () => {
+    // focus=search: ô tìm mở ngay ở HTML server, bản tĩnh (searchParams rỗng) sẽ lệch lúc hydrate.
+    for (const qs of ['focus=search', 'q=goi', 'q=', 'brand=Tubu', 'category=c1', 'page=2', 'all=1', 'sort=newest', 'utm_source=zalo&brand=Tubu']) {
+      expect(rewriteOf(at(`/san-pham?${qs}`)), qs).toBeNull();
+    }
+  });
+
+  it('vào thẳng đường dẫn nội bộ: 308 về /san-pham', () => {
+    const res = at('/hub-san-pham');
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe('https://tubutree.com/san-pham');
+  });
+
+  it('vào thẳng đường dẫn nội bộ kèm query: 308 về /san-pham giữ nguyên query (utm, ref)', () => {
+    const res = at('/hub-san-pham?utm_source=zalo&ref=AN1');
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe('https://tubutree.com/san-pham?utm_source=zalo&ref=AN1');
+  });
+
+  it('host gian hàng (subdomain) không bị rewrite', () => {
+    expect(rewriteOf(at('/san-pham', 'ctv-an.tubutree.com'))).toBeNull();
   });
 });

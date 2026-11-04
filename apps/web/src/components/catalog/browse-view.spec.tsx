@@ -12,7 +12,18 @@ const nav = vi.hoisted(() => ({
   search: '',
   replaces: [] as string[],
   pushes: [] as string[],
+  shallows: [] as string[],
+  /** Giữ URL như cũ khi router.replace (mô phỏng điều hướng đang chạy). */
+  hold: false,
   listeners: new Set<() => void>(),
+}));
+// URL hub đổi tại chỗ (History API) thay vì router: middleware sẽ đưa nó sang route tĩnh khác và BrowseView mount lại (lib/use-browse-state.ts).
+vi.mock('@/lib/shallow-url', () => ({
+  shallowReplace: (url: string) => {
+    nav.shallows.push(url);
+    nav.search = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+    nav.listeners.forEach((l) => l());
+  },
 }));
 vi.mock('next/navigation', async () => {
   const React = await import('react');
@@ -22,6 +33,7 @@ vi.mock('next/navigation', async () => {
       push: (url: string) => nav.pushes.push(url),
       replace: (url: string) => {
         nav.replaces.push(url);
+        if (nav.hold) return;
         nav.search = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
         nav.listeners.forEach((l) => l());
       },
@@ -46,6 +58,8 @@ vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 
 import BrowseView from './browse-view';
+import { browseText } from '@/lib/browse-text';
+import { PRIORITY_CARDS } from '@/components/mini';
 
 const product = (n: number) => ({
   id: `p${n}`, slug: `sp-${n}`, brand: 'Tubu', name: `Sản phẩm ${n}`, thumbnail: null, basePrice: 100000 + n,
@@ -82,6 +96,8 @@ beforeEach(() => {
   nav.search = '';
   nav.replaces = [];
   nav.pushes = [];
+  nav.shallows = [];
+  nav.hold = false;
   localStorage.clear();
   http.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
     const handler = routes[path];
@@ -191,6 +207,17 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     expect(productCalls()[0]).toEqual({ page: 1, limit: 20 });
   });
 
+  it('ảnh ưu tiên: PRIORITY_CARDS thẻ đầu của lưới eager + fetchpriority=high, các thẻ sau lazy', async () => {
+    nav.search = LIST;
+    routes['/products'] = (q) => pageOf(Array.from({ length: 8 }, (_, i) => ({ ...product(i + 1), thumbnail: `https://cdn.example/${i + 1}.jpg` })), 8, Number(q?.page ?? 1));
+    const { container } = mount();
+    await flush();
+    const imgs = Array.from(container.querySelectorAll('ul img'));
+    expect(imgs).toHaveLength(8);
+    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual([...Array(PRIORITY_CARDS).fill('eager'), ...Array(8 - PRIORITY_CARDS).fill('lazy')]);
+    expect(imgs.filter((i) => i.getAttribute('fetchpriority') === 'high')).toHaveLength(PRIORITY_CARDS);
+  });
+
   it('?page=2 ở gốc là danh sách (không phải hub): tải trang 2', async () => {
     nav.search = 'page=2';
     routes['/products'] = (q) => pageOf([product(21)], 40, Number(q?.page), 20);
@@ -198,6 +225,57 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     await flush();
     expect(productCalls()[0]).toEqual({ page: 2, limit: 20 });
     expect(container.querySelector('[role="group"][aria-label="Sắp xếp"]')).not.toBeNull();
+  });
+
+  it('link phân trang cũ vượt trang cuối (trình duyệt tải): về trang cuối bằng replace, không hiện "không có sản phẩm" trong lúc chờ', async () => {
+    nav.search = 'category=c-goi&page=9';
+    routes['/products'] = (q) => (Number(q?.page) <= 3 ? pageOf([product(41)], 45, Number(q?.page), 20) : pageOf([], 45, Number(q?.page), 20));
+    const { container } = mount();
+    await flush();
+    expect(productCalls()[0]).toMatchObject({ page: 9, category: 'c-goi' });
+    expect(nav.replaces[0]).toBe('/san-pham?category=c-goi&page=3');
+    expect(nav.replaces).toHaveLength(1);
+    await flush();
+    expect(productCalls().at(-1)).toMatchObject({ page: 3, category: 'c-goi' });
+    expect(container.textContent).toContain('Sản phẩm 41');
+    expect(nav.replaces).toHaveLength(1);
+  });
+
+  it('về trang cuối giữ tham số lạ (ref, utm) của URL hiện tại, bỏ focus', async () => {
+    const qs = 'category=c-goi&page=9&ref=AN1&utm_source=zalo&focus=search';
+    nav.search = qs;
+    window.history.replaceState(null, '', `/san-pham?${qs}`);
+    routes['/products'] = (q) => pageOf([], 45, Number(q?.page), 20);
+    nav.hold = true;
+    try {
+      mount();
+      await flush();
+      // Lần replace đầu là gỡ ?focus (dùng một lần); router giả giữ URL nên trang vẫn là 9.
+      expect(nav.replaces).toContain('/san-pham?category=c-goi&page=3&ref=AN1&utm_source=zalo');
+      expect(productCalls()[0]).not.toHaveProperty('ref');
+      expect(productCalls()[0]).not.toHaveProperty('utm_source');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
+  it('trang đang chờ về trang cuối: khung chờ thay cho "không có sản phẩm"', async () => {
+    nav.search = 'sort=newest&page=7';
+    nav.hold = true;
+    routes['/products'] = (q) => pageOf([], 45, Number(q?.page), 20);
+    const { container } = mount();
+    await flush();
+    expect(nav.replaces[0]).toBe('/san-pham?sort=newest&page=3');
+    expect(container.textContent).not.toContain(browseText.noResultFiltered);
+    expect(container.querySelector('[data-testid="catalog-grid"]')).toBeNull();
+  });
+
+  it('danh sách thật sự rỗng (total = 0) ở trang > 1: không chuyển hướng', async () => {
+    nav.search = 'sort=newest&page=4';
+    routes['/products'] = (q) => pageOf([], 0, Number(q?.page), 20);
+    mount();
+    await flush();
+    expect(nav.replaces).toEqual([]);
   });
 
   it('có q trên URL: ẩn ô danh mục, gọi API với q', async () => {
@@ -594,7 +672,8 @@ describe('BrowseView — gõ tìm kiếm', () => {
     click(buttonByName(container, 'Huỷ'));
     expect(input.value).toBe('nuoc');
     click(buttonByName(container, 'Xoá từ khoá'));
-    expect(nav.replaces.at(-1)).toBe('/san-pham');
+    expect(nav.shallows.at(-1)).toBe('/san-pham');
+    expect(document.activeElement).toBe(input);
   });
 
   it('?focus=search từ trang chủ: focus ô tìm rồi gỡ cờ khỏi URL', async () => {
@@ -602,7 +681,7 @@ describe('BrowseView — gõ tìm kiếm', () => {
     const { container } = mount();
     await flush();
     expect(document.activeElement).toBe(container.querySelector('input[type="search"]'));
-    expect(nav.replaces.at(-1)).toBe('/san-pham');
+    expect(nav.shallows.at(-1)).toBe('/san-pham');
   });
 });
 

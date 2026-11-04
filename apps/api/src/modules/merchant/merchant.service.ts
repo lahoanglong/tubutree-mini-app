@@ -347,6 +347,8 @@ export class MerchantService {
           await recordUserAdminEvent(tx, { userId, kind: 'STOREFRONT_PARTNER', from: 'false', to: 'true', reason: store.id, actorId: userId });
           return true;
         }).catch(throwIfLockBusy);
+        // Cờ đối tác miễn bước duyệt: gian hàng CTV chưa duyệt của đại lý hiện ra, nên danh sách ảnh /img nạp lại (đánh dấu sau commit).
+        if (isPartner) this.imageStale?.markStale();
         return { ...store, isPartner };
       }
       return store;

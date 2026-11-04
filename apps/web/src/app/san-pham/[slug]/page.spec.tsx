@@ -94,6 +94,25 @@ afterEach(() => {
   mounted = [];
 });
 
+describe('/san-pham/[slug] — ghi "Đã xem gần đây"', () => {
+  it('mở trang sản phẩm thì máy ghi mục đã xem (slug, tên, thumbnail); web trước đây không ghi nên dải Đã xem không bao giờ hiện', async () => {
+    localStorage.clear();
+    await mount();
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toEqual([expect.objectContaining({ slug: 'dau-goi-bo-ket', name: 'Dầu gội bồ kết', thumbnail: 'https://cdn/a.jpg' })]);
+  });
+
+  it('không có thumbnail thì lưu ảnh đầu của images (như Mini App), không có ảnh nào thì null', async () => {
+    localStorage.clear();
+    api.product = { ...PRODUCT, thumbnail: null, images: ['https://cdn/first.jpg', 'https://cdn/b.jpg'] };
+    await mount();
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)[0].thumbnail).toBe('https://cdn/first.jpg');
+    localStorage.clear();
+    api.product = { ...PRODUCT, thumbnail: null, images: [] };
+    await mount();
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)[0].thumbnail).toBeNull();
+  });
+});
+
 describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB-18)', () => {
   it('tên nhãn mở danh mục lọc theo nhãn như Mini App (brandBrowsePath), kể cả nhãn chưa có trang riêng', async () => {
     for (const brandSlug of ['xanh-viet', undefined]) {

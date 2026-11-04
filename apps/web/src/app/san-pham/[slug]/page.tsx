@@ -23,6 +23,7 @@ import { breadcrumbJsonLd, galleryImages, jsonLdScript, plainText, productJsonLd
 import { ogBase, withBrand } from '@/lib/og';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
+import { RecordRecentlyViewed } from './record-recently-viewed';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
 import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
@@ -111,6 +112,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       >
         ← Về trang chủ
       </BackLink>
+      <RecordRecentlyViewed slug={product.slug} name={product.name} thumbnail={product.thumbnail ?? product.images[0] ?? null} />
       <FlashSalesSeed items={flash} now={generatedAt}>
       <PdpSelectionProvider initialId={initialVariation?.id ?? ''}>
         <PdpLayout

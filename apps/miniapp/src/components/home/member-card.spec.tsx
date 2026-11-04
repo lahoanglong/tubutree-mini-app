@@ -56,12 +56,13 @@ describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
     expect(screen.getByText('Chào bạn')).toBeInTheDocument();
   });
 
-  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng đầu phần hạng không bị dòng flex nuốt', async () => {
+  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng giữa lời chào và hạng là ký tự văn bản thật (flex không vẽ)', async () => {
     mocks.fullName = 'Trần Văn An';
     mocks.loyalty.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     render(<MemberCard />);
     const tier = (await screen.findByText(/Mầm Xanh/)).closest('span')!;
-    expect(tier.textContent).toMatch(/^\u00A0· /);
+    expect(tier.textContent).toMatch(/^· /);
+    expect(tier.previousSibling?.textContent).toBe(' ');
     mocks.loyalty.mockImplementation(() => new Promise(() => {}));
   });
 });
@@ -108,6 +109,17 @@ describe('MemberCard — dải lỗi cấp trang (một Thử lại cho cả tra
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByRole('button', { name: homeCopy.member.retry })).toBeNull();
     expect(screen.queryByText(homeCopy.member.tierFailed)).toBeNull();
+    mocks.loyalty.mockImplementation(() => new Promise(() => {}));
+  });
+});
+
+describe('MemberCard — tên đọc khi tổng quan lỗi', () => {
+  it('dòng điểm đổi thành câu báo lỗi thì tên đọc cũng nói câu đó, không còn số điểm không hiển thị', async () => {
+    mocks.loyalty.mockRejectedValue(new Error('500'));
+    render(<MemberCard />);
+    const btn = (await screen.findByText(homeCopy.member.tierFailed)).closest('button')!;
+    expect(btn.getAttribute('aria-label')).toContain(homeCopy.member.tierFailed);
+    expect(btn.getAttribute('aria-label')).not.toMatch(/\d+ điểm/);
     mocks.loyalty.mockImplementation(() => new Promise(() => {}));
   });
 });

@@ -11,7 +11,7 @@ export class ImageResizeController {
   constructor(private readonly images: ImageResizeService) {}
 
   /**
-   * Ảnh sản phẩm đổi cỡ: `?u=<ảnh nguồn>&w=<160|320|640|960|1280|1920>`. Nguồn chỉ nhận host Pancake/Cloudinary và ảnh của chính API.
+   * Ảnh sản phẩm đổi cỡ: `?u=<ảnh nguồn>&w=<160|320|480|640|960|1280|1920>`. Nguồn chỉ nhận host Pancake/Cloudinary và ảnh của chính API.
    * URL đổi theo nguồn nên cache vĩnh viễn (immutable) + ETag; `Vary: Accept` vì webp/jpeg tuỳ trình duyệt. Thẻ img không kèm token và
    * đếm theo IP, một trang danh mục xin cả chục ảnh nên nâng hạn mức riêng như public-image.
    */

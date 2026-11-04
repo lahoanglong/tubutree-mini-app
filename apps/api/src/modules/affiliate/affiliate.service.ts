@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   HttpException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -19,6 +20,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { isRealUser } from '../../common/real-user';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { PricingService } from '../pricing/pricing.service';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
@@ -166,6 +168,8 @@ export class AffiliateService {
     @Optional() private readonly env?: ConfigService<Env, true>,
     // @Optional cùng lý do; SessionStateModule là @Global.
     @Optional() private readonly sessionState?: SessionStateService,
+    // @Optional cùng lý do; AffiliateModule import ImageRegistryModule.
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
@@ -197,6 +201,8 @@ export class AffiliateService {
     }
     // Vai trò vừa đổi: bỏ bản nhớ 5 giây của phiên, không thì các route CTV (Học viện...) còn thấy vai trò cũ và trả 403.
     if (data.role) this.sessionState?.invalidate(userId);
+    // Lên CTV thì gian hàng CTV đang có của người này (vd. bị thu hồi quyền nhân viên về khách) hiện lại: danh sách ảnh /img nạp lại.
+    if (data.role) this.imageStale?.markStale();
     return { ok: true, referralCode: user.referralCode };
   }
 

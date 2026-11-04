@@ -35,8 +35,10 @@ describe('OffersPointsStrip (web) — dải Điểm Xanh gọn ở trang Ưu đ�
     const c = await mount(loaded());
     expect(c.querySelector('section[aria-label*="Điểm Xanh"]')).not.toBeNull();
     expect(c.textContent).toContain('Mầm Xanh');
-    const btn = c.querySelector<HTMLButtonElement>('button[aria-label$="Hạng và lịch sử điểm"]')!;
-    expect(btn.getAttribute('aria-label')).toMatch(/Mầm Xanh, 120 điểm/);
+    const btn = c.querySelector<HTMLButtonElement>('button[aria-label*="Hạng và lịch sử điểm"]')!;
+    expect(btn.getAttribute('aria-label')).toMatch(/^Mầm Xanh, Hạng và lịch sử điểm, 120 điểm/);
+    // WCAG 2.5.3: chữ nhìn thấy (đúng thứ tự, có khoảng trắng giữa các mảnh) nằm trọn trong tên đọc.
+    expect(btn.textContent!.replace(/\s+/g, ' ').trim()).toMatch(/^Mầm Xanh Hạng và lịch sử điểm 120 điểm/);
     click(btn);
     expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/diem-xanh');
   });
@@ -44,7 +46,7 @@ describe('OffersPointsStrip (web) — dải Điểm Xanh gọn ở trang Ưu đ�
   it('lối vào chi tiết điểm chỉ có một nút (cả khối bấm được), chữ "Hạng và lịch sử điểm" hiện đúng một lần', async () => {
     const c = await mount(loaded());
     expect(c.textContent!.split('Hạng và lịch sử điểm').length - 1).toBe(1);
-    expect(c.querySelectorAll('button[aria-label$="Hạng và lịch sử điểm"]')).toHaveLength(1);
+    expect(c.querySelectorAll('button[aria-label*="Hạng và lịch sử điểm"]')).toHaveLength(1);
   });
 
   it('số điểm (18px) dùng Inter, không Fraunces (Q1)', async () => {
