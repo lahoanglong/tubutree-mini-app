@@ -1817,7 +1817,7 @@ function OrdersTab({
                     {o.fulfiller === 'MERCHANT' && <ToneBadge tone="info">Gian hàng tự giao</ToneBadge>}
                     <RecyclingBadge order={o} />
                     <PancakeAttentionBadge order={o} />
-                            <PaymentUnlinkedBadge order={o} />
+                    <PaymentUnlinkedBadge order={o} />
                     <PancakeSyncBadge order={o} />
                   </span>
                   <span className="mt-1 block text-xs text-stone-600">
@@ -2119,7 +2119,7 @@ function OrderDetailBody({
     <div className="space-y-3">
       <OrderCustomerLine order={o} onOpenProfile={onOpenProfile} />
       <OrderPaymentSummary order={o} isAdmin={isAdmin} />
-      <PaymentUnlinkedPanel order={o} isAdmin={isAdmin} />
+      <PaymentUnlinkedPanel order={o} isAdmin={isAdmin} canFinance={canFinance} />
       {canWarehouse && <PancakeAttentionPanel order={o} />}
       {canWarehouse && <PancakeSyncPanel order={o} />}
 

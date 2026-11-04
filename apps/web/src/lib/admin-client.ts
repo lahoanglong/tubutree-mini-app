@@ -594,11 +594,11 @@ export const resolvePancakeAttention = (orderId: string, note: string) => {
 };
 
 export const PAYMENT_UNLINKED_NOTE_MIN = 3;
-/** POST /admin/orders/:id/payment-unlinked/resolve — chỉ ADMIN; ghi chú bắt buộc (API chặn dưới 3 ký tự sau khi cắt khoảng trắng). */
-export const resolvePaymentUnlinked = (orderId: string, note: string) =>
+/** POST /admin/orders/:id/payment-unlinked/resolve — chỉ ADMIN; seenAt = paymentUnlinkedAt đang hiển thị (khoản mới tới thì API trả 409); ghi chú bắt buộc (API chặn dưới 3 ký tự sau khi cắt khoảng trắng). */
+export const resolvePaymentUnlinked = (orderId: string, note: string, seenAt: string) =>
   apiFetch<{ ok: boolean; message: string }>(`/admin/orders/${encodeURIComponent(orderId)}/payment-unlinked/resolve`, {
     method: 'POST',
-    body: { note: note.trim().slice(0, PANCAKE_RESOLVE_NOTE_MAX) },
+    body: { note: note.trim().slice(0, PANCAKE_RESOLVE_NOTE_MAX), seenAt },
   });
 
 /** POST /admin/pancake/orders/:id/push — "Đẩy lại Pancake" cho đơn chưa lên kho (API tự chặn đơn huỷ/đã rời kho). */

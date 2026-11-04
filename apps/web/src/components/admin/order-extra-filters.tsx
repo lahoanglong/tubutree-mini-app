@@ -130,7 +130,7 @@ export function OrderExtraFilters({
       )}
       {value.paymentUnlinked && (
         <p className="text-xs text-stone-500">
-          Đang xem đơn {value.paymentUnlinked === 'closed' ? 'đã huỷ/trả' : 'còn mở'} mà Pancake báo đã thanh toán nhưng chưa gắn đúng đơn Pancake, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.
+          Đang xem đơn {value.paymentUnlinked === 'closed' ? 'đã huỷ/trả' : 'còn mở'} mà Pancake báo đã thanh toán nhưng chưa gắn đúng đơn Pancake. Bấm Xoá bộ lọc để xem tất cả.
         </p>
       )}
       {value.userId && <p className="text-xs text-stone-500">Đang xem đơn của {userLabel || 'một khách'}. Bấm Xoá bộ lọc để xem tất cả.</p>}

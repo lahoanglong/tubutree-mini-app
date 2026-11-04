@@ -2,8 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { invalidateInbox, PAYMENT_UNLINKED_NOTE_MIN, PANCAKE_RESOLVE_NOTE_MAX, resolvePaymentUnlinked, type AdminOrder } from '@/lib/admin-client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getOrderStatusHistory, invalidateInbox, PAYMENT_UNLINKED_NOTE_MIN, PANCAKE_RESOLVE_NOTE_MAX, resolvePaymentUnlinked, type AdminOrder } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY } from './ui';
 import { useConfirm } from './confirm-dialog';
@@ -14,6 +14,13 @@ export const PAYMENT_UNLINKED_OPEN_TEXT =
   'Pancake báo đã thanh toán nhưng đơn chưa gắn đúng đơn Pancake. Đối chiếu sao kê: khách đã chuyển thì bấm "Đã nhận tiền".';
 export const PAYMENT_UNLINKED_CLOSED_TEXT =
   'Pancake báo đã thanh toán cho đơn đã huỷ/trả. Quản trị viên đối chiếu sao kê: khách đã chuyển thì ghi tiền về muộn, rồi bấm "Đã đối chiếu".';
+
+/** Lời cho người không có nút trong tay (KHO/CSKH): chỉ nói việc đang chờ ai. */
+export const PAYMENT_UNLINKED_OPEN_NEUTRAL_TEXT = 'Pancake báo đã thanh toán nhưng đơn chưa gắn đúng đơn Pancake. Kế toán đang đối chiếu sao kê.';
+export const PAYMENT_UNLINKED_CLOSED_NEUTRAL_TEXT = 'Pancake báo đã thanh toán cho đơn đã huỷ/trả. Quản trị viên đang đối chiếu sao kê.';
+
+/** Trùng UNLINKED_HISTORY_PREFIX của PancakeProcessor: dòng lịch sử PANCAKE ghi mỗi khoản chưa gắn. */
+const UNLINKED_HISTORY_PREFIX = 'Pancake báo đã thanh toán (đơn Pancake #';
 
 const isClosed = (status: string) => status === 'CANCELLED' || status === 'RETURNED';
 
@@ -31,20 +38,34 @@ export function PaymentUnlinkedBadge({ order }: { order: AdminOrder }) {
  * Lời nhắc ở chi tiết đơn khi Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (cờ paymentUnlinkedAt, đơn còn UNPAID).
  * Nút "Đã đối chiếu" chỉ ADMIN thấy: API cũng chỉ mở cho ADMIN. Đơn còn mở tự rời hàng đợi khi Kế toán bấm "Đã nhận tiền".
  */
-export function PaymentUnlinkedPanel({ order, isAdmin }: { order: AdminOrder; isAdmin: boolean }) {
+export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { order: AdminOrder; isAdmin: boolean; canFinance?: boolean }) {
   const qc = useQueryClient();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
   const { ask, dialog } = useConfirm();
 
+  const flagged = !!order.paymentUnlinkedAt && order.paymentStatus === 'UNPAID';
+  // Cờ gộp nhiều khoản Pancake chưa gắn: liệt kê từng khoản để người đóng thấy đủ.
+  const historyQ = useQuery({
+    queryKey: ['admin-order-history', order.id],
+    queryFn: () => getOrderStatusHistory(order.id || order.code),
+    enabled: flagged,
+  });
+  const payments = (historyQ.data?.history ?? []).filter((h) => h.actorType === 'PANCAKE' && (h.note ?? '').startsWith(UNLINKED_HISTORY_PREFIX));
+
   const resolve = useMutation({
-    mutationFn: (note: string) => resolvePaymentUnlinked(order.id, note),
+    mutationFn: ({ note, seenAt }: { note: string; seenAt: string }) => resolvePaymentUnlinked(order.id, note, seenAt),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.message });
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void invalidateInbox(qc);
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
+    onError: (e: unknown) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      // 409 (khoản mới tới) hay 400 (bên kia đã đóng): lấy lại mốc cờ và danh sách khoản mới nhất.
+      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
+      void qc.invalidateQueries({ queryKey: ['admin-order-history', order.id] });
+    },
     onSettled: () => {
       inFlight.current = false;
     },
@@ -74,8 +95,17 @@ export function PaymentUnlinkedPanel({ order, isAdmin }: { order: AdminOrder; is
     if (note === null || inFlight.current) return;
     inFlight.current = true;
     setMsg(null);
-    resolve.mutate(note);
+    resolve.mutate({ note, seenAt: order.paymentUnlinkedAt! });
   };
+
+  const closed = isClosed(order.status);
+  const reminder = closed
+    ? isAdmin
+      ? PAYMENT_UNLINKED_CLOSED_TEXT
+      : PAYMENT_UNLINKED_CLOSED_NEUTRAL_TEXT
+    : isAdmin || canFinance
+      ? PAYMENT_UNLINKED_OPEN_TEXT
+      : PAYMENT_UNLINKED_OPEN_NEUTRAL_TEXT;
 
   return (
     <section aria-label="Pancake báo đã thanh toán, chờ đối chiếu" className="rounded-card border border-warning-fg bg-warning-bg p-3 text-xs text-warning-fg">
@@ -84,7 +114,16 @@ export function PaymentUnlinkedPanel({ order, isAdmin }: { order: AdminOrder; is
         <span>Chờ đối chiếu sao kê</span>
         <span className="font-normal text-stone-600">{formatDateTime(order.paymentUnlinkedAt)}</span>
       </div>
-      <p className="mt-1 text-stone-800">{isClosed(order.status) ? PAYMENT_UNLINKED_CLOSED_TEXT : PAYMENT_UNLINKED_OPEN_TEXT}</p>
+      <p className="mt-1 text-stone-800">{reminder}</p>
+      {payments.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-stone-700">
+          {payments.map((h) => (
+            <li key={h.id}>
+              <span className="text-stone-600">{formatDateTime(h.createdAt)}</span> — {h.note}
+            </li>
+          ))}
+        </ul>
+      )}
       {isAdmin && (
         <div className="mt-2">
           <button type="button" onClick={onResolve} disabled={resolve.isPending} className={BTN_XS_SECONDARY}>
