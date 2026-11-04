@@ -9,7 +9,7 @@ import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { homeText } from '@/lib/home-text';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
-import tubuLogo from '@/assets/tubu-logo.png';
+import tubuLogo from '@/assets/tubu-logo-login.png';
 import { useAuth } from '@/lib/auth-context';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { loginFailureMessage } from '@/lib/login-errors';

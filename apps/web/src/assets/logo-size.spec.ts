@@ -10,10 +10,17 @@ const png = (name: string) => {
 };
 
 describe('logo nhẹ và sát cỡ hiển thị (Pa6)', () => {
-  it('tubu-logo.png: hiện 99×36 (header) và 110×40 (chân trang), 160×58 (đăng nhập): rộng ≤ 3× cỡ lớn nhất, nhẹ dưới 12 KB', () => {
+  it('tubu-logo.png: hiện 99×36 (header) và 110×40 (chân trang): rộng ≥ 3× cỡ lớn nhất (nét ở máy 3x) và không quá 4×, nhẹ dưới 12 KB', () => {
     const { bytes, w, h } = png('tubu-logo.png');
-    expect(w).toBeLessThanOrEqual(160 * 3);
-    expect(w).toBeGreaterThanOrEqual(160 * 2);
+    expect(w).toBeGreaterThanOrEqual(110 * 3);
+    expect(w).toBeLessThanOrEqual(110 * 4);
+    expect(Math.abs(w / h - 1059 / 384)).toBeLessThan(0.02);
+    expect(bytes).toBeLessThan(12 * 1024);
+  });
+
+  it('tubu-logo-login.png: hiện 160×58 ở /dang-nhap: rộng ≥ 3× (480), cùng tỉ lệ logo, nhẹ dưới 12 KB', () => {
+    const { bytes, w, h } = png('tubu-logo-login.png');
+    expect(w).toBeGreaterThanOrEqual(160 * 3);
     expect(Math.abs(w / h - 1059 / 384)).toBeLessThan(0.02);
     expect(bytes).toBeLessThan(12 * 1024);
   });
