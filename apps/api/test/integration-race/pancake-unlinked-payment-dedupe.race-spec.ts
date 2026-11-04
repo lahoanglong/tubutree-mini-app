@@ -77,14 +77,15 @@ describe('Giữ khoản thanh toán chưa gắn Pancake: hai worker đua cùng c
     expect(alerts.alert).not.toHaveBeenCalled();
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).toBeNull();
   });
-  it('cặp khác trên đơn đã có cờ: giữ mốc đầu tiên (cờ chỉ đặt khi đang null), vẫn ghi dấu và báo ADMIN', async () => {
+  it('cặp khác trên đơn đã có cờ: đẩy mốc lên mới nhất (resolve theo mốc cũ sẽ 409), vẫn ghi dấu và báo ADMIN', async () => {
     const user = await createUser(prisma);
     const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
     await proc.holdUnattachedPayment(order, { id: 'PK-E' }, 100_000);
     const first = (await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt;
     expect(first).not.toBeNull();
     await proc.holdUnattachedPayment(order, { id: 'PK-F' }, 100_000);
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).toEqual(first);
+    const second = (await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt;
+    expect(second!.getTime()).toBeGreaterThan(first!.getTime());
     expect(alerts.alert).toHaveBeenCalledTimes(2);
   });
 });
