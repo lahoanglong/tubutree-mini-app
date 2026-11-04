@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatVnd } from '@/lib/shop-client';
 import {
+  forfeitUserCommissions,
   getUserDetail,
   getWasteUserFlags,
   setStaffPermissions,
@@ -149,6 +150,7 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
             <Notice tone="warning">
               Đã thu hồi quyền CTV ngày {formatDate(u.affiliateRevokedAt)}. Hoa hồng cũ bị giữ; đổi vai trò sang CTV hoặc Đại lý để cấp lại.
             </Notice>
+            {isAdmin && d.forfeitableCommission && <ForfeitCommissions userId={u.id} pending={d.forfeitableCommission} />}
           </div>
         )}
       </Section>
@@ -293,6 +295,52 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
           </ul>
         )}
       </Section>
+    </div>
+  );
+}
+
+function ForfeitCommissions({ userId, pending }: { userId: string; pending: { count: number; amount: number } }) {
+  const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
+  const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const run = useMutation({
+    mutationFn: (reason: string) => forfeitUserCommissions(userId, reason),
+    onSuccess: (r) => {
+      setMsg({ tone: 'success', text: `Đã huỷ ${r.cancelled} khoản hoa hồng, tổng ${formatVnd(r.amount)}.` });
+      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+    },
+    onError: (e) => {
+      setMsg({ tone: 'danger', text: actionErrorText(e) });
+      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+    },
+  });
+  const start = async () => {
+    const reason = await ask({
+      title: 'Huỷ hoa hồng chờ rút',
+      message: `Huỷ ${pending.count} khoản hoa hồng đã duyệt, tổng ${formatVnd(pending.amount)}, của người đã bị thu hồi quyền CTV? Không hoàn tác được và tiền không vào Ví.`,
+      confirmLabel: 'Huỷ hoa hồng',
+      cancelLabel: 'Giữ lại',
+      tone: 'danger',
+      input: { label: 'Lý do', required: true, maxLength: 500, validate: (t) => (t.trim().length < 3 ? 'Lý do cần ít nhất 3 ký tự.' : null) },
+    });
+    if (reason) run.mutate(reason);
+  };
+  return (
+    <div className="mt-2">
+      <button type="button" className={BTN_DANGER_OUTLINE} disabled={run.isPending} onClick={() => void start()}>
+        Huỷ hoa hồng chờ rút
+      </button>
+      <p className="mt-1 text-xs text-stone-500">
+        Còn {pending.count} khoản, {formatVnd(pending.amount)} đang chờ.
+      </p>
+      {msg && (
+        <div className="mt-2">
+          <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
+            {msg.text}
+          </Notice>
+        </div>
+      )}
+      {dialog}
     </div>
   );
 }

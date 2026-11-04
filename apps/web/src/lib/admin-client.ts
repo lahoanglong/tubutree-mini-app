@@ -2240,6 +2240,8 @@ export interface AdminUserEvent {
   createdAt: string;
 }
 export interface AdminUserDetail {
+  /** Hoa hồng đã duyệt chưa chuyển Ví của người bị thu hồi quyền CTV; null khi không có dấu hoặc không còn khoản nào. */
+  forfeitableCommission?: { count: number; amount: number } | null;
   user: {
     id: string;
     fullName: string | null;
@@ -2270,6 +2272,8 @@ export interface AdminUserDetail {
   grants: { id: string; role: string; grantedBy: string; grantedByName: string | null; note: string | null; revokedAt: string | null; createdAt: string }[];
 }
 export const getUserDetail = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}/detail`);
+export const forfeitUserCommissions = (id: string, reason: string) =>
+  apiFetch<{ cancelled: number; amount: number }>(`/admin/users/${encodeURIComponent(id)}/forfeit-commissions`, { method: 'POST', body: { reason } });
 export const setStaffPermissions = (id: string, permissions: StaffPermission[]) =>
   apiFetch<{ id: string; staffPermissions: StaffPermission[]; changed: boolean }>(`/admin/users/${encodeURIComponent(id)}/staff-permissions`, {
     method: 'PUT',

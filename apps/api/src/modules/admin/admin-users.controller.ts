@@ -6,6 +6,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserBlockService } from './user-block.service';
 import { AdminService } from './admin.service';
 import { AllowStaff } from '../../common/staff-permissions';
+import { ForfeitCommissionsDto } from './dto/forfeit-commissions.dto';
 
 export class BlockUserDto {
   @IsString() @MinLength(3) @MaxLength(500) reason!: string;
@@ -35,6 +36,12 @@ export class AdminUsersController {
   @Put(':id/staff-permissions')
   setStaffPermissions(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: StaffPermissionsDto) {
     return this.admin.setStaffPermissions(adminId, id, dto.permissions);
+  }
+
+  @Post(':id/forfeit-commissions')
+  @HttpCode(HttpStatus.OK)
+  forfeitCommissions(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ForfeitCommissionsDto) {
+    return this.admin.forfeitRevokedCommissions(adminId, id, dto.reason);
   }
 
   @Post(':id/block')

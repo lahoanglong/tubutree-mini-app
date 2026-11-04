@@ -786,7 +786,7 @@ export class AdminService {
           const ids = rows.map((r) => r.id);
           const { count } = await tx.commission.updateMany({
             where: { id: { in: ids }, status: 'APPROVED', payoutBatchId: null },
-            data: { status: 'CANCELLED' },
+            data: { status: 'REJECTED' },
           });
           if (count !== ids.length) throw new ConflictException('Hoa hồng vừa đổi trạng thái, chưa huỷ gì cả. Tải lại trang rồi thử lại.');
           const amount = rows.reduce((sum, r) => sum + r.amount, 0);
@@ -874,6 +874,14 @@ export class AdminService {
           })
         : Promise.resolve([]),
     ]);
+    // Chỉ người có dấu thu hồi mới có khoản huỷ được (cùng điều kiện với forfeitRevokedCommissions): web dựa vào đây để hiện nút.
+    const pending = user.affiliateRevokedAt
+      ? await this.prisma.commission.aggregate({
+          where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+          _count: { _all: true },
+          _sum: { amount: true },
+        })
+      : null;
     const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
@@ -882,6 +890,7 @@ export class AdminService {
     const withActor = <T extends { actorId: string | null }>(e: T) => ({ ...e, actorName: e.actorId ? (actorName.get(e.actorId) ?? null) : null });
     return {
       user,
+      forfeitableCommission: pending && pending._count._all > 0 ? { count: pending._count._all, amount: pending._sum.amount ?? 0 } : null,
       orders: { items: orders, total: orderTotal },
       wallet,
       points,

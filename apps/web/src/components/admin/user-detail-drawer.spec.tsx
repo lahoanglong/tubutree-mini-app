@@ -84,6 +84,41 @@ describe('UserDetailDrawer — dấu thu hồi quyền CTV (A2)', () => {
   });
 });
 
+describe('UserDetailDrawer — huỷ hoa hồng chờ rút của CTV bị thu hồi (A3)', () => {
+  const REVOKED = { ...DETAIL, user: { ...DETAIL.user, affiliateRevokedAt: '2026-10-20T18:00:00.000Z' }, forfeitableCommission: { count: 2, amount: 100000 } };
+  const forfeitCall = () => calls.find((c) => c.url.includes('/admin/users/u1/forfeit-commissions'));
+
+  it('admin thấy nút khi có dấu và còn hoa hồng; không có dấu, không còn khoản, hoặc không phải admin thì không thấy', async () => {
+    expect(byText(await open(REVOKED), 'button', 'Huỷ hoa hồng chờ rút')).not.toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(byText(await open({ ...REVOKED, forfeitableCommission: null }), 'button', 'Huỷ hoa hồng chờ rút')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(byText(await open(DETAIL), 'button', 'Huỷ hoa hồng chờ rút')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(byText(await open(REVOKED, NO_FLAGS, false), 'button', 'Huỷ hoa hồng chờ rút')).toBeNull();
+  });
+
+  it('bấm nút nêu số khoản và số tiền, bắt buộc lý do rồi gửi POST kèm lý do', async () => {
+    const body = await open(REVOKED);
+    click(byText(body, 'button', 'Huỷ hoa hồng chờ rút'));
+    await flush();
+    const dialog = document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('2 khoản');
+    expect(dialog.textContent).toContain('100.000');
+    answerConfirm(true);
+    await flush();
+    expect(forfeitCall()).toBeUndefined();
+    typeInto(document.querySelector('[role="alertdialog"] textarea'), 'Quyết định của quản lý');
+    answerConfirm(true);
+    await flush();
+    expect(forfeitCall()!.init!.method).toBe('POST');
+    expect(JSON.parse(String(forfeitCall()!.init!.body))).toEqual({ reason: 'Quyết định của quản lý' });
+  });
+});
+
 const section = (root: HTMLElement, title: string) => root.querySelector(`section[aria-label="${title}"]`)!;
 
 describe('UserDetailDrawer — sổ Điểm Xanh và sổ ví đọc được bằng tiếng Việt (R5-ADMIN-4)', () => {
