@@ -39,6 +39,7 @@ import { promoDateRangeError, promoFormDates, promoWindow } from '../utils/brand
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BrandSalesTab } from './brand-owner-sales';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const PAGE_TITLE = BRAND_OWNER_TITLE;
 
@@ -224,13 +225,13 @@ function Editor({ brand }: { brand: OwnedBrand }) {
             <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} /></div>
             <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} /></div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Câu giới thiệu ngắn"><Input value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Field>
+              <Field label="Câu giới thiệu ngắn"><Input maxLength={INPUT_LIMITS.brandTagline} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Nguồn gốc"><Input value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Field>
+              <Field label="Nguồn gốc"><Input maxLength={INPUT_LIMITS.brandOrigin} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Câu chuyện thương hiệu"><Input.TextArea value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Field>
+              <Field label="Câu chuyện thương hiệu"><Input.TextArea maxLength={INPUT_LIMITS.brandStory} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} /></Field>
             </div>
             <Button fullWidth loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
               Lưu thông tin
@@ -255,11 +256,11 @@ function Editor({ brand }: { brand: OwnedBrand }) {
               </div>
             ))}
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Input aria-label="Tiêu đề (MUA 2 TẶNG 1)" placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} />
-              <Input aria-label="Mô tả" placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} />
+              <Input maxLength={INPUT_LIMITS.promoTitle} aria-label="Tiêu đề (MUA 2 TẶNG 1)" placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} />
+              <Input maxLength={INPUT_LIMITS.promoSubtitle} aria-label="Mô tả" placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} />
               {/* Không có mã thì banner chỉ là lời quảng cáo: khách đọc "MUA 2 TẶNG 1" rồi không
                   biết làm gì tiếp. Máy chủ chỉ nhận mã có thật, công khai và còn hạn. */}
-              <Input
+              <Input maxLength={INPUT_LIMITS.promoCouponCode}
                 aria-label="Mã giảm giá (tuỳ chọn) — VD: TUBU20"
                 placeholder="Mã giảm giá (tuỳ chọn) — VD: TUBU20"
                 value={promo.couponCode}

@@ -48,6 +48,7 @@ import {
   shortDayLabel,
   dowLabel,
 } from '../utils/week';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const STATUS: Record<Shift['status'], { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -751,7 +752,7 @@ function StaffHub() {
             Huỷ trước 3 ngày: miễn phạt. Trễ hơn: phạt 1h công (trừ đột xuất có chứng cứ, tối đa 3 lần/tháng).
           </Text>
           <Field label="Lý do huỷ">
-            <Input.TextArea placeholder="Lý do huỷ" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+            <Input.TextArea maxLength={INPUT_LIMITS.shiftCancelReason} placeholder="Lý do huỷ" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
           </Field>
           <SwitchRow label="Đột xuất (có chứng cứ)" on={cancelEmergency} onToggle={() => setCancelEmergency((v) => !v)} />
           {cancelEmergency && (

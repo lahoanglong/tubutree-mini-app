@@ -32,6 +32,7 @@ import {
   vnDateTimeISO,
   vnDateKey,
 } from '../utils/week';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const STATUS_LABEL: Record<PayrollStatus, string> = {
   OPEN: 'Đang tính',
@@ -273,13 +274,13 @@ function MyPayrollHub() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Field label="Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)">
-            <Input inputMode="numeric" value={bin} onChange={(e) => setBin(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.bankBin} inputMode="numeric" value={bin} onChange={(e) => setBin(e.target.value)} />
           </Field>
           <Field label="Số tài khoản">
-            <Input inputMode="numeric" value={accNo} onChange={(e) => setAccNo(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.bankAccountNo} inputMode="numeric" value={accNo} onChange={(e) => setAccNo(e.target.value)} />
           </Field>
           <Field label="Tên chủ tài khoản">
-            <Input value={accName} onChange={(e) => setAccName(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.bankAccountName} value={accName} onChange={(e) => setAccName(e.target.value)} />
           </Field>
           <Text variant="caption" tone="tertiary" as="div">Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</Text>
           <ImageUpload label="QR nhận lương" value={qr} onChange={setQr} />

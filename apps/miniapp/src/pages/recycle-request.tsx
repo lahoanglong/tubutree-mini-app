@@ -34,6 +34,7 @@ import { copyText } from '../utils/clipboard';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
 import { METHOD_LABELS, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {
@@ -116,10 +117,10 @@ function TrackingForm({
   return (
     <div style={{ ...COLUMN, gap: 10 }}>
       <Field label="Hãng">
-        <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} />
+        <Input maxLength={INPUT_LIMITS.recycleCarrier} value={carrier} onChange={(e) => setCarrier(e.target.value)} />
       </Field>
       <Field label="Mã vận đơn">
-        <Input value={code} onChange={(e) => setCode(e.target.value)} />
+        <Input maxLength={INPUT_LIMITS.recycleTrackingCode} value={code} onChange={(e) => setCode(e.target.value)} />
       </Field>
       <Button fullWidth disabled={!ready || m.isPending} loading={m.isPending} onPress={() => m.mutate()}>
         Đã gửi

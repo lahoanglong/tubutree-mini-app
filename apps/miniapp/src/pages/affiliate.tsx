@@ -57,6 +57,7 @@ import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 const PAGE_TITLE = 'Cộng tác viên';
 
@@ -1143,7 +1144,7 @@ function TransferForm({
 
       {askTaxId && (
         <div style={{ marginTop: 12 }}>
-          <Input
+          <Input maxLength={INPUT_LIMITS.affiliateTaxId}
             label="Mã số thuế cá nhân hoặc số CCCD"
             inputMode="numeric"
             value={taxId}

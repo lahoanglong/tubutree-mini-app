@@ -12,6 +12,7 @@ import { Field } from '../ui/form';
 import { Heading, Text } from '../ui/text';
 import { isPartnerStore } from '../../utils/partner-store';
 import { SCROLL_BODY } from './shared';
+import { INPUT_LIMITS } from '../../utils/input-limits';
 
 /** Ô chọn màu: hình tròn 32px nhưng vùng chạm 44px, là nút thật có trạng thái chọn. */
 function ThemeSwatch({ code, label, selected, onPress }: { code: string; label: string; selected: boolean; onPress: () => void }) {
@@ -101,13 +102,13 @@ export function MerchantConfigSheet({
     <div style={SCROLL_BODY}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Field label="Tên gian hàng">
-          <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <Input maxLength={INPUT_LIMITS.storefrontTitle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </Field>
 
         {sf.subdomainEnabled && (
           <div>
             <Field label="Subdomain riêng">
-              <Input
+              <Input maxLength={INPUT_LIMITS.storefrontSubdomain}
                 placeholder="vd: brand1"
                 value={form.subdomain}
                 onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
@@ -166,19 +167,19 @@ export function MerchantConfigSheet({
               Dùng cho đơn gian hàng tự giao: khách thấy hotline này trong chi tiết đơn để liên hệ.
             </Text>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Input
+              <Input maxLength={INPUT_LIMITS.storefrontWarehouseAddress}
                 aria-label="Địa chỉ kho xuất hàng"
                 placeholder="Địa chỉ kho xuất hàng"
                 value={form.warehouseAddress}
                 onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
               />
-              <Input
+              <Input maxLength={INPUT_LIMITS.storefrontWarehouseCity}
                 aria-label="Tỉnh / Thành phố"
                 placeholder="Tỉnh / Thành phố"
                 value={form.warehouseCity}
                 onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
               />
-              <Input
+              <Input maxLength={INPUT_LIMITS.storefrontWarehousePhone}
                 aria-label="Hotline kho liên hệ"
                 placeholder="Hotline kho liên hệ"
                 value={form.warehousePhone}

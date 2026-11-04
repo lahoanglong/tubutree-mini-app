@@ -30,6 +30,7 @@ import { EmptyState, ErrorState } from './ui/empty-state';
 import { SectionTitle } from './ui/section-title';
 import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 
 /**
@@ -497,7 +498,7 @@ function WriteReview({
           </button>
         ))}
       </div>
-      <Input.TextArea
+      <Input.TextArea maxLength={INPUT_LIMITS.reviewComment}
         aria-label="Nội dung đánh giá"
         placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)…"
         value={comment}

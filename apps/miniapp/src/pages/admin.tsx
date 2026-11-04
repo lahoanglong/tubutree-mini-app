@@ -61,6 +61,7 @@ import {
   shiftYearMonth,
   vnDateKey,
 } from '../utils/week';
+import { INPUT_LIMITS } from '../utils/input-limits';
 
 export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -349,7 +350,7 @@ function PayrollSection() {
           <KeyValueRow label="Số tiền" value={formatVnd(payRow?.month.net ?? 0)} emphasis />
           <ImageUpload label="Ảnh xác nhận chuyển khoản *" value={proof} onChange={setProof} />
           <Field label="Ghi chú (tuỳ chọn)">
-            <Input value={note} onChange={(e) => setNote(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.payrollNote} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
         </div>
       </BottomSheet>
@@ -971,7 +972,7 @@ function ShiftsSection() {
         }
       >
         <Field label="Lý do">
-          <Input.TextArea placeholder="Lý do" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+          <Input.TextArea maxLength={INPUT_LIMITS.shiftRejectReason} placeholder="Lý do" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
         </Field>
       </BottomSheet>
 
@@ -1043,7 +1044,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
         ))}
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Field label="Tên ca">
-            <Input placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.shiftTemplateName} placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>

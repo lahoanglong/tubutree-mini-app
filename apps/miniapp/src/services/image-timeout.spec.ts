@@ -44,7 +44,7 @@ describe('gọi API mang ảnh', () => {
 
   it.each(IMAGE_CALLS)('%s dùng timeout 90 giây', async (_name, call, method) => {
     await call();
-    const args = mocks[method].mock.calls[0];
+    const args = mocks[method].mock.calls[0] as unknown[];
     expect(args[args.length - 1]).toMatchObject({ timeout: 90_000 });
   });
 
