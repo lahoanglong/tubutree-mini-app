@@ -9,6 +9,7 @@ import { campaignProductsQuery } from '@tubutree/app-core/queries/campaign';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
+import { sizedImage } from '@/lib/image-src';
 import { loadErrorText } from '@/lib/error-text';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { Button, ProductGrid, SectionHeader, Text, VoucherTicket } from '@/components/mini';
@@ -52,6 +53,10 @@ function Products({ slug, initial }: { slug: string; initial?: PageResponse<Prod
  * Thân trang một chiến dịch (banner bấm vào), bản web của `pages/campaign.tsx` ở Mini App: ảnh đầu trang, tên (h1 duy nhất), thời gian, mã giảm giá
  * gắn kèm (sao chép được, khách chưa đăng nhập cũng xem) và lưới sản phẩm "Xem thêm" từng 20 món. Trang 1 của lưới do server dựng sẵn.
  */
+/** Ảnh đầu trang chiến dịch: tràn khung trừ lề 16px ở điện thoại, từ md tối đa `max-w-3xl` (768px) giữa trang. */
+const HERO_MAX_WIDTH = 768;
+const HERO_SIZES = '(max-width: 767px) calc(100vw - 32px), 768px';
+
 export function CampaignBody({ campaign: c, initialProducts }: { campaign: CampaignDetail; initialProducts?: PageResponse<ProductCard> | undefined }) {
   const { copy, notice } = useCouponUse();
   const vouchers = useMemo(() => campaignVoucherViews(c.coupons, serverNow()), [c.coupons]);
@@ -59,6 +64,7 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
   const couponsLabel = fillCopy('campaign.sectionCoupons');
   const productsLabel = fillCopy('campaign.sectionProducts');
   const showProducts = c.productCount > 0;
+  const hero = sizedImage(c.image ?? '', HERO_MAX_WIDTH, HERO_SIZES);
   return (
     <>
       <PageHeader title={c.title} {...(c.subtitle ? { subtitle: c.subtitle } : {})} backHref="/" backLabel={fillCopy('campaign.backHome')} />
@@ -66,8 +72,12 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
         {c.image && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={c.image}
-            alt=""
+            src={hero.src}
+            srcSet={hero.srcSet}
+            sizes={hero.sizes}
+            alt={c.title}
+            loading="eager"
+            fetchPriority="high"
             decoding="async"
             className="md:mx-auto md:max-w-3xl"
             style={{ display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', objectFit: 'cover', borderRadius: 'var(--radius-media)' }}

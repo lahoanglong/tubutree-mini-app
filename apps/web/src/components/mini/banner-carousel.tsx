@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Pause, Play } from 'lucide-react';
 import { bannerInterval, bannerNextIndex, bannerShouldAutoplay } from '@tubutree/app-core/commerce/banner-autoplay';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useSizedImage } from '@/lib/image-src';
 
 export interface BannerSlide {
   id: string;
@@ -39,8 +40,13 @@ const DOT_BTN: CSSProperties = {
   cursor: 'pointer',
 };
 
+/** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
+const SLIDE_SIZES = '(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px';
+const SLIDE_MAX_WIDTH = 728;
+
 function SlideImage({ slide, eager }: { slide: BannerSlide; eager: boolean }) {
   const [failed, setFailed] = useState(false);
+  const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, SLIDE_SIZES);
   const frame: CSSProperties = { display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', borderRadius: 'var(--radius-media)', objectFit: 'cover' };
   if (failed) {
     return (
@@ -66,12 +72,15 @@ function SlideImage({ slide, eager }: { slide: BannerSlide; eager: boolean }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={slide.image}
+      src={img?.src ?? slide.image}
+      srcSet={img?.srcSet}
+      sizes={img?.sizes}
       alt={slide.alt}
       loading={eager ? 'eager' : 'lazy'}
+      fetchPriority={eager ? 'high' : undefined}
       decoding="async"
       draggable={false}
-      onError={() => setFailed(true)}
+      onError={() => fallBack() || setFailed(true)}
       style={frame}
     />
   );

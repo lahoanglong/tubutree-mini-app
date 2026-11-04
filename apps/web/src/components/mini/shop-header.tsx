@@ -4,6 +4,7 @@
 import { useId, useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import { CheckCircle2, Sprout } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useSizedImage } from '@/lib/image-src';
 import { Heading, Text } from './text';
 
 export interface ShopHeaderProps {
@@ -48,6 +49,11 @@ const LG = {
   note: 'lg:col-span-2 lg:col-start-2 lg:row-start-3 lg:mt-0',
 } as const;
 
+/** Bìa: điện thoại tràn 100vw (cao 120px); từ lg là ô trái 5/12 của khung 1200px (store-layout) ~500px. */
+const COVER_SIZES = '(max-width: 1023px) 100vw, 500px';
+/** Avatar: 56px, từ lg 72px (`LG.avatar`). */
+const AVATAR_SIZES = '(min-width: 1024px) 72px, 56px';
+
 const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
 
 /**
@@ -61,8 +67,8 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
 export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
   const noteId = useId();
-  // Ngoặc kép quanh URL + mã hoá ký tự phá chuỗi (", \, xuống dòng) để URL lạ không thoát khỏi url().
-  const background = coverUrl ? `url("${coverUrl.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--color-bg-cover)';
+  const cover = useSizedImage(coverUrl, 960, COVER_SIZES);
+  const avatar = useSizedImage(avatarUrl, 72, AVATAR_SIZES);
   const long = (note ?? '').length > NOTE_FOLD_CHARS;
   const lg = (key: keyof typeof LG) => (inStoreGrid ? ` ${LG[key]}` : '');
   return (
@@ -71,8 +77,24 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
         data-testid="shop-cover"
         aria-hidden="true"
         className={`h-[120px]${lg('cover')}`}
-        style={{ background }}
-      />
+        style={{ position: 'relative', overflow: 'hidden', background: 'var(--color-bg-cover)' }}
+      >
+        {/* Thẻ img thay cho nền CSS: nền CSS không có srcset, `fetchpriority`, và trình duyệt chỉ thấy nó sau khi tải CSS. Bìa là ảnh to nhất màn đầu của shop nên ưu tiên cao. */}
+        {cover.img && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={cover.img.src}
+            srcSet={cover.img.srcSet}
+            sizes={cover.img.sizes}
+            alt=""
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            onError={() => void cover.fallBack()}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+          />
+        )}
+      </div>
       <div className={`px-4${lg('info')}`}>
         <div className={`-mt-7 flex items-end justify-between gap-3${lg('avatarRow')}`}>
           <div className={`relative h-14 w-14 flex-none${lg('avatar')}`}>
@@ -83,8 +105,19 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
                 border: '3px solid var(--color-bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
               }}
             >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {avatar.img ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatar.img.src}
+                  srcSet={avatar.img.srcSet}
+                  sizes={avatar.img.sizes}
+                  alt=""
+                  width={56}
+                  height={56}
+                  decoding="async"
+                  onError={() => void avatar.fallBack()}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               ) : (
                 <Sprout size={28} color="var(--color-text-inverse)" aria-hidden="true" />
               )}

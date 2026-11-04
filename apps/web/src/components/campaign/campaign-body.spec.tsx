@@ -64,11 +64,21 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     const c = await mount(<CampaignBody campaign={DETAIL} initialProducts={page([1, 2, 3], 1, 3)} />);
     expect(c.querySelector('h1')!.textContent).toBe('Giữa Thu');
     expect(c.textContent).toContain('Giảm sâu mùa trăng');
-    expect(c.querySelector('img')!.getAttribute('alt')).toBe(''); // trang trí: h1 ngay trên đã gọi tên
+    expect(c.querySelector('img')!.getAttribute('alt')).toBe('Giữa Thu'); // ảnh banner thường mang chữ khuyến mãi
     expect(c.textContent).toContain('Từ 01/11 đến 11/11');
     expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/me'))).toEqual([]);
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
+  });
+
+  it('ảnh đầu trang qua bộ đổi cỡ (srcset w + sizes), eager + fetchpriority high vì là ảnh to nhất màn đầu', async () => {
+    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://content.pancake.vn/2-26/hero.jpg' }} initialProducts={page([1, 2, 3], 1, 3)} />);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=960&u=');
+    expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w$/);
+    expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), 768px');
+    expect(img.getAttribute('loading')).toBe('eager');
+    expect(img.getAttribute('fetchpriority')).toBe('high');
   });
 
   it('ảnh đầu trang giữ tỉ lệ banner nên không nhảy khi ảnh về', async () => {

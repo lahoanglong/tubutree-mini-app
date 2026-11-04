@@ -17,17 +17,33 @@ describe('ShopHeader (web)', () => {
     expect(b.container.querySelector('h2')!.textContent).toBe('Gian hàng Lan');
   });
 
-  it('chưa có ảnh bìa: bìa phẳng màu token, không gradient', () => {
+  it('chưa có ảnh bìa: bìa phẳng màu token, không gradient, không thẻ img', () => {
     mount(<ShopHeader title="Gian hàng Lan" />);
     expect(q('shop-cover')!.style.background).toContain('var(--color-bg-cover)');
     expect(q('shop-cover')!.style.background).not.toContain('gradient');
+    expect(q('shop-cover')!.querySelector('img')).toBeNull();
   });
 
-  it('có ảnh bìa: URL đặt trong ngoặc kép và ký tự phá chuỗi bị mã hoá', () => {
+  it('có ảnh bìa: là thẻ img phủ kín khung (absolute, object-fit cover), eager + fetchpriority high, không dùng nền CSS', () => {
+    mount(<ShopHeader title="Shop" coverUrl="https://content.pancake.vn/a/cover.jpg" />);
+    const cover = q('shop-cover')!;
+    const img = cover.querySelector('img')!;
+    expect(cover.style.background).not.toContain('url(');
+    expect(img.getAttribute('alt')).toBe('');
+    expect(img.getAttribute('loading')).toBe('eager');
+    expect(img.getAttribute('fetchpriority')).toBe('high');
+    expect(img.style.position).toBe('absolute');
+    expect(img.style.objectFit).toBe('cover');
+    expect(img.getAttribute('src')).toContain('/img?w=960&u=');
+    expect(img.getAttribute('srcset')).toMatch(/ 320w, .* 640w, .* 960w$/);
+    expect(img.getAttribute('sizes')).toBe('(max-width: 1023px) 100vw, 500px');
+  });
+
+  it('ảnh bìa host lạ: dùng nguyên URL làm src (thuộc tính, không thoát khỏi chuỗi), không srcset', () => {
     mount(<ShopHeader title="Shop" coverUrl={'https://x.vn/a") ,url("evil.png'} />);
-    const bg = q('shop-cover')!.style.background;
-    expect(bg).toContain('%22evil.png');
-    expect(bg).not.toContain('"evil');
+    const img = q('shop-cover')!.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('https://x.vn/a") ,url("evil.png');
+    expect(img.hasAttribute('srcset')).toBe(false);
   });
 
   it('avatar chưa có ảnh: biểu tượng lá, không chữ cái; có ảnh thì ảnh không alt', () => {
@@ -39,6 +55,14 @@ describe('ShopHeader (web)', () => {
     const img = q('shop-avatar')!.querySelector('img');
     expect(img?.getAttribute('src')).toBe('/a.png');
     expect(img?.getAttribute('alt')).toBe('');
+  });
+
+  it('avatar đi qua bộ đổi cỡ 160w kèm width/height', () => {
+    mount(<ShopHeader title="Gian hàng Lan" avatarUrl="https://content.pancake.vn/a/av.jpg" />);
+    const img = q('shop-avatar')!.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=160&u=');
+    expect(img.getAttribute('width')).toBe('56');
+    expect(img.getAttribute('height')).toBe('56');
   });
 
   it('verified: dấu tích có tên "Đã được Tubu Tree duyệt"; không verified thì không có', () => {
