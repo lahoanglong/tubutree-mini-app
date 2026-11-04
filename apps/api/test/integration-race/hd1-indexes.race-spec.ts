@@ -39,4 +39,10 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
       /\("userId", "createdAt" DESC, id DESC\)$/,
     );
   });
+
+  it('L3-14: bảng tin xếp "mới" theo (status, isPinned DESC, createdAt DESC, id DESC) đúng orderBy của getFeed và xem trước công khai', async () => {
+    expect(await def('feed_posts_status_isPinned_createdAt_id_idx')).toMatch(
+      /\(status, "isPinned" DESC, "createdAt" DESC, id DESC\)$/,
+    );
+  });
 });

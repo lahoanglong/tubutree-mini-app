@@ -2595,6 +2595,8 @@ model FeedPost {
   @@index([categoryId, status, createdAt])
   @@index([kind, status, createdAt])
   @@index([status, isPinned(sort: Desc), likeCount(sort: Desc), createdAt(sort: Desc)])
+  // Xếp "mới" của getFeed và publicPreview: ORDER BY isPinned DESC, createdAt DESC, id DESC. Index trên không phục vụ được vì sau isPinned là likeCount.
+  @@index([status, isPinned(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
   @@map("feed_posts")
 }
 
