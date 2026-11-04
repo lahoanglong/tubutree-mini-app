@@ -134,3 +134,64 @@ describe('VideoUpload — dùng chung hàm tải Cloudinary với web', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/moi.mp4'));
   });
 });
+
+describe('ImageUpload — luôn nén ảnh trước khi tải lên Cloudinary (F11)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const COMPRESSED = 'data:image/jpeg;base64,' + btoa('nho');
+
+  function stubCanvasPipeline() {
+    class FakeImage {
+      width = 4000;
+      height = 3000;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_v: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('Image', FakeImage);
+    const drawn: number[][] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: (...a: number[]) => void drawn.push(a) } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(COMPRESSED);
+    return drawn;
+  }
+
+  it('file gốc lớn: blob gửi lên là bản đã nén (cạnh dài 1600), không phải file gốc', async () => {
+    vi.stubEnv('VITE_CLOUDINARY_CLOUD_NAME', 'demo');
+    vi.stubEnv('VITE_CLOUDINARY_UPLOAD_PRESET', 'unsigned');
+    vi.resetModules();
+    const drawn = stubCanvasPipeline();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/a.jpg' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const { ImageUpload } = await import('./image-upload');
+    const onChange = vi.fn();
+    const { container } = render(<ImageUpload label="Ảnh" value="" onChange={onChange} />);
+    const big = new File([new Uint8Array(6 * 1024 * 1024)], 'big.jpg', { type: 'image/jpeg' });
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [big] } });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.jpg'));
+    const sent = (fetchMock.mock.calls[0]![1] as { body: FormData }).body.get('file') as Blob;
+    expect(sent.size).toBeLessThan(1024);
+    expect(sent.size).not.toBe(big.size);
+    expect(sent.type).toBe('image/jpeg');
+    expect(drawn[0]!.slice(3)).toEqual([1600, 1200]);
+  });
+
+  it('Cloudinary lỗi: dùng chính bản đã nén làm dự phòng', async () => {
+    vi.stubEnv('VITE_CLOUDINARY_CLOUD_NAME', 'demo');
+    vi.stubEnv('VITE_CLOUDINARY_UPLOAD_PRESET', 'unsigned');
+    vi.resetModules();
+    stubCanvasPipeline();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    const { ImageUpload } = await import('./image-upload');
+    const onChange = vi.fn();
+    const { container } = render(<ImageUpload label="Ảnh" value="" onChange={onChange} />);
+    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(COMPRESSED));
+  });
+});

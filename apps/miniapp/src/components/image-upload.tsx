@@ -73,6 +73,18 @@ export function readAndCompressImage(file: File, maxDim = 1200, quality = 0.82):
   });
 }
 
+/** Cạnh dài khi nén ảnh trước khi tải lên Cloudinary: ảnh chụp điện thoại vài MB không cần gửi nguyên bản qua mạng di động. */
+const UPLOAD_MAX_DIM = 1600;
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',');
+  const mime = /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? 'image/jpeg';
+  const bin = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 /**
  * Upload 1 file ảnh lên Cloudinary (unsigned preset) → secure_url, hoặc null nếu
  * chưa cấu hình VITE_CLOUDINARY_* hoặc request lỗi (caller tự fallback, VD base64 local).
@@ -132,16 +144,14 @@ export function ImageUpload({
     }
     setUploading(true);
     try {
-      // 1. Thử Cloudinary nếu được cấu hình
-      const secureUrl = await uploadToCloudinary(file);
+      // Luôn nén trước: Cloudinary nhận bản đã nén, lỗi mạng thì chính bản đó làm dự phòng (không nén hai lần).
+      const dataUrl = await readAndCompressImage(file, maxDim ?? (CONFIGURED ? UPLOAD_MAX_DIM : undefined), quality);
+      const secureUrl = await uploadToCloudinary(dataUrlToBlob(dataUrl));
       if (secureUrl) {
         haptic('medium');
         onChange(secureUrl);
         return;
       }
-
-      // 2. Client-side Smart Compression Fallback
-      const dataUrl = await readAndCompressImage(file, maxDim, quality);
       haptic('medium');
       onChange(dataUrl);
     } catch {
