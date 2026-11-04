@@ -11,9 +11,7 @@ import {
   claimOfferLabel,
   clearPendingClaim,
   needsZaloLogin,
-  readClaimParam,
   readPendingClaim,
-  savePendingClaim,
   withoutClaimParam,
 } from '@/components/account/coupon-claim';
 import { Sheet } from '@/components/ui/sheet';
@@ -34,12 +32,12 @@ type Phase =
   | { kind: 'failed'; message: string; retryable: boolean };
 
 /**
- * Nhận mã từ thẻ QR trong hộp hàng sàn (D2-03), cùng luật với `CouponClaimGate` của Mini App: link `?claim=CODE` → lưu mã trên
- * máy và xoá khỏi thanh địa chỉ → khi đã đăng nhập thì nhận vào ví đúng một lần và báo bằng sheet "Bạn nhận được ưu đãi".
+ * Nhận mã từ thẻ QR trong hộp hàng sàn (D2-03), cùng luật với `CouponClaimGate` của Mini App: link `?claim=CODE` (cổng ngoài đã lưu mã trên
+ * máy và xoá khỏi thanh địa chỉ) → khi đã đăng nhập thì nhận vào ví đúng một lần và báo bằng sheet "Bạn nhận được ưu đãi".
  * Chưa đăng nhập thì mời đăng nhập (web không có tài khoản khách ngầm); mã giữ trên máy nên sau khi đăng nhập xong mã tự vào ví.
  * Đang khôi phục phiên hoặc mất kết nối lúc khôi phục thì chưa làm gì. Khách đóng sheet thì phiên này không tự hỏi lại.
  */
-export function CouponClaimGateInner() {
+export function CouponClaimGateInner({ initialCode }: { initialCode: string | null }) {
   const phaseAuth = useAuthPhase();
   const router = useRouter();
   const pathname = useShellPathname();
@@ -54,12 +52,9 @@ export function CouponClaimGateInner() {
 
   useEffect(() => {
     let alive = true;
-    const { search, hash } = window.location;
-    const fromUrl = readClaimParam(search, hash);
-    if (fromUrl) {
-      setPending(fromUrl);
-      void savePendingClaim(fromUrl);
-      window.history.replaceState(window.history.state, '', withoutClaimParam(window.location.href));
+    // Mã từ `?claim=` đã được `CouponClaimGate` lưu và xoá khỏi thanh địa chỉ; ở đây chỉ nhận lại để mở luồng nhận.
+    if (initialCode) {
+      setPending(initialCode);
     } else {
       void readPendingClaim().then((code) => {
         if (alive && code) setPending(code);
@@ -68,7 +63,7 @@ export function CouponClaimGateInner() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [initialCode]);
 
   const forget = useCallback(async () => {
     setPending(null);

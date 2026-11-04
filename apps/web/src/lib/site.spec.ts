@@ -211,6 +211,28 @@ describe('recentlyViewedBootScript', () => {
   it('có ít nhất một mục hợp lệ thì đặt data-has-recent', async () => {
     expect(await run(JSON.stringify([{ slug: 'a', name: 'A', thumbnail: null, viewedAt: 1 }]))).toEqual(['data-has-recent']);
   });
+  it('cùng luật với parseRecentlyViewed (isItem): mục thiếu thumbnail/viewedAt hay sai kiểu thì không đặt', async () => {
+    const { parseRecentlyViewed } = await import('./recently-viewed');
+    const ok = { slug: 'a', name: 'A', thumbnail: null, viewedAt: 1 };
+    const cases: unknown[][] = [
+      [ok],
+      [{ ...ok, thumbnail: 'x.jpg' }],
+      [{ slug: 'a', name: 'A' }],
+      [{ ...ok, thumbnail: 5 }],
+      [{ ...ok, thumbnail: undefined }],
+      [{ ...ok, viewedAt: '1' }],
+      [{ ...ok, viewedAt: null }],
+      [{ ...ok, slug: '' }],
+      [{ ...ok, name: 3 }],
+      [null, 'x', 7],
+      [{ slug: 'a', name: 'A', thumbnail: null }, ok],
+      [],
+    ];
+    for (const c of cases) {
+      const raw = JSON.stringify(c);
+      expect(await run(raw), raw).toEqual(parseRecentlyViewed(raw).length > 0 ? ['data-has-recent'] : []);
+    }
+  });
   it('rỗng, hỏng, sai dạng hay storage ném lỗi thì không đặt gì', async () => {
     expect(await run(null)).toEqual([]);
     expect(await run('[]')).toEqual([]);

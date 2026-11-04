@@ -84,7 +84,8 @@ export function restoringBootScript(): string {
 export function recentlyViewedBootScript(): string {
   return (
     "(function(){try{var a=JSON.parse(localStorage.getItem('tubu_recently_viewed')||'null');" +
-    "if(Array.isArray(a)&&a.some(function(x){return x&&typeof x.slug==='string'&&x.slug!==''&&typeof x.name==='string'}))" +
+    "if(Array.isArray(a)&&a.some(function(x){return x&&typeof x==='object'&&typeof x.slug==='string'&&x.slug!==''&&typeof x.name==='string'&&" +
+    "(x.thumbnail===null||typeof x.thumbnail==='string')&&typeof x.viewedAt==='number'&&isFinite(x.viewedAt)}))" +
     "document.documentElement.setAttribute('data-has-recent','')}catch(e){}})()"
   );
 }

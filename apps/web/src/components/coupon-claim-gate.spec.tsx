@@ -113,6 +113,18 @@ describe('CouponClaimGate: nhận ưu đãi từ thẻ QR hộp hàng (D2-03)', 
     expect(sheet()).toBeNull();
   });
 
+  it('link ?claim=: mã được lưu và xoá khỏi URL ngay lúc gắn, trước khi phần giao diện tải xong (khách bấm sang trang khác sớm không mất mã)', async () => {
+    open('/?claim=shopee-ab12cd34&utm=box');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    host = { container, root: createRoot(container), client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) };
+    draw();
+    // Chưa flush: next/dynamic chưa kịp nạp phần giao diện, mà mã đã lưu và URL đã sạch.
+    expect(window.location.search).toBe('?utm=box');
+    expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34');
+    unmount();
+  });
+
   it('giỏ đã có hàng: "Dùng ngay" mở giỏ; mã đã có trong ví thì nói vậy', async () => {
     open('/?claim=SHOPEE-AB12CD34');
     mocks.cartCount = 2;

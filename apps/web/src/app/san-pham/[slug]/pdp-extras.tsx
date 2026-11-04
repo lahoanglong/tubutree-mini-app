@@ -30,16 +30,16 @@ import { useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { soldPercent } from '@/lib/flash-display';
-import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
+import { cardPricing, variationPricing } from '@/lib/flash-price';
 import { pointsEarnPreview, pointsEarnText } from '@/lib/points-earn';
 import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-earn-popup';
 import { percentLabel, pointsBoostOf } from '@/lib/points-boost';
 import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
-import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_HINT_KEY, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
+import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_HINT_KEY, OFFERS_SLOT_AUTH_CLASS, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
 import { getCart } from '@/lib/shop-client';
-import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
@@ -68,11 +68,11 @@ type PointsEarnProduct = {
 
 /** Tiền hàng của món đang xem: giá phân loại đang chọn (đã tính Giờ vàng) × số lượng; chưa chọn thì giá thẻ × 1. */
 function usePdpPricing(product: PointsEarnProduct): { amount: number; isFlash: boolean; unit: number; quantity: number } {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash, now } = useRunningFlash();
   useFlashListExpiry(flash);
   const selection = usePdpSelection();
   const selected = product.variations.find((v) => v.id === selection?.selectedId);
-  const { price: unit, isFlash } = selected ? variationPricing(selected, flash) : cardPricing(product, flash);
+  const { price: unit, isFlash } = selected ? variationPricing(selected, flash) : cardPricing(product, flash, now);
   const quantity = selection?.quantity ?? 1;
   return { amount: unit * quantity, isFlash, unit, quantity };
 }
@@ -147,7 +147,7 @@ export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const cartThreshold = cartQ.data?.freeshipThreshold;
   const from = resolveFreeshipFrom({ phase, cartThreshold, configThreshold: cfg.freeshipThreshold, configLoaded: cfg.isLoaded });
-  const placeholder = freeshipPlaceholder({ phase, cartThreshold });
+  const placeholder = freeshipPlaceholder({ phase, cartThreshold, cartFailed: cartQ.isError });
   if (from == null && !placeholder) return null;
   // Chưa có số thật: giấu hẳn, giữ chỗ. Đang tải phiên mà đã có ngưỡng chung: giấu chỉ khi <html> có `data-restoring` (khách chưa từng đăng nhập thấy chữ ngay).
   const hideClass = from == null ? 'invisible' : phase === 'loading' ? '[html[data-restoring]_&]:invisible' : '';
@@ -198,7 +198,9 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
     }
   }, [settled, hasOffers]);
   if (list.length === 0) {
-    return offersSlotNeeded(phase) ? <div data-testid="pdp-offers-slot" aria-hidden="true" className={OFFERS_SLOT_CLASS} /> : null;
+    return offersSlotNeeded(phase, couponsQ.isPending) ? (
+      <div data-testid="pdp-offers-slot" aria-hidden="true" className={phase === 'authenticated' ? OFFERS_SLOT_AUTH_CLASS : OFFERS_SLOT_CLASS} />
+    ) : null;
   }
 
   const onCopy = async (code: string) => {
@@ -252,7 +254,7 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
  * 60 giây (`useActiveFlashSales`); hết giờ khi khách đang xem thì thanh biến mất đúng mốc, trang quay về giá thường không cần tải lại.
  */
 export function PdpFlashBar({ product }: { product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] } }) {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash } = useRunningFlash();
   useFlashListExpiry(flash);
   const selectedId = usePdpSelection()?.selectedId;
   const item = flash.find((f) => f.variationId === selectedId);
@@ -278,10 +280,10 @@ export function PdpFlashBar({ product }: { product: { variations: { id: string; 
 
 /**
  * "Đã bán 1,2k+" nằm bên phải dòng giá. Phân loại đang Giờ vàng thì dòng giá trống (giá lên thanh Giờ vàng dưới ảnh), nên số này dời lên
- * dòng đánh giá thay vì để một dòng gần như trống chiếm chỗ (khung 1280×800 rất sát). Server chưa biết Giờ vàng nên HTML đầu vẫn ở dòng giá.
+ * dòng đánh giá thay vì để một dòng gần như trống chiếm chỗ (khung 1280×800 rất sát). Trang đã gieo sẵn Giờ vàng từ server nên HTML đầu đã ở đúng dòng.
  */
 export function PdpSold({ text, product, slot }: { text: string; product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] }; slot: 'price' | 'rating' }) {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash } = useRunningFlash();
   useFlashListExpiry(flash);
   const selectedId = usePdpSelection()?.selectedId;
   const selected = product.variations.find((v) => v.id === selectedId);

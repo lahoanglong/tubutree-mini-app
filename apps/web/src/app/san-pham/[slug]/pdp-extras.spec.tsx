@@ -26,7 +26,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getCart: mocks.getCart,
   getProductStock: mocks.getProductStock,
 }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash, useRunningFlash: () => ({ flash: (mocks.flash as { endAt?: string }[]).filter((f) => !f.endAt || Date.parse(f.endAt) > Date.now()), now: Date.now() }) }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => mocks.config }));
 vi.mock('@/lib/platform-bridge', () => ({
   platformBridge: {
@@ -104,6 +104,13 @@ describe('PdpFreeship', () => {
     await flush();
     expect(again.container.querySelector('[data-testid="pdp-freeship"]')).toBeNull();
   });
+  it('đã đăng nhập mà giỏ lỗi: bỏ dòng, không để một chỗ trống vĩnh viễn', async () => {
+    mocks.getCart.mockRejectedValue(new Error('500'));
+    const { container } = mount(<PdpFreeship />);
+    expect(container.querySelector('[data-testid="pdp-freeship"]')).not.toBeNull();
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-freeship"]')).toBeNull();
+  });
   it('ngưỡng 0 là mọi đơn', async () => {
     mocks.phase = 'guest';
     mocks.config = { ...mocks.config, freeshipThreshold: 0 };
@@ -128,6 +135,27 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
     expect(container.querySelector('ul')).toBeNull();
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
+  });
+  it('đã đăng nhập, ví mã chưa về: giữ chỗ 44px (không thả rồi chèn lại); về rỗng thì thả', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.http.get.mockReturnValue(new Promise((r) => (resolve = r)));
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-offers-slot"]')).not.toBeNull();
+    await act(async () => resolve([]));
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-offers-slot"]')).toBeNull();
+  });
+  it('đã đăng nhập, ví mã về có mã: chỗ giữ được thay bằng hàng Ưu đãi', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.http.get.mockReturnValue(new Promise((r) => (resolve = r)));
+    const { container } = mount(<PdpCoupons productId="p1" product={COUPON_PRODUCT} />);
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-offers-slot"]')).not.toBeNull();
+    await act(async () => resolve([coupon('A')]));
+    await flush();
+    expect(container.querySelector('[data-testid="pdp-offers-slot"]')).toBeNull();
+    expect(container.textContent).toContain('Ưu đãi');
   });
   it('bấm dòng mở hộp thoại "Mã giảm giá" có mỗi mã một nút "Sao chép" và đúng điều kiện đơn tối thiểu', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL', { type: 'PERCENT', value: 10, maxDiscount: 30000, minOrder: 100000 }), coupon('MINE', { products: [{ id: 'p1', name: 'a' }] })]);

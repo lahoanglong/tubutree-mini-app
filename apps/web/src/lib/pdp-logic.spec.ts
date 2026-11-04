@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponLabel, freeshipLine, groupBuyPitch, isRetailOnly, freeshipPlaceholder, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from './pdp-logic';
+import { couponLabel, freeshipLine, groupBuyPitch, isRetailOnly, freeshipPlaceholder, OFFERS_SLOT_AUTH_CLASS, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from './pdp-logic';
 
 describe('isRetailOnly: hàng chỉ bán giá lẻ, không định kỳ, không mua chung', () => {
   it('gian hàng tự giao, tạm nghỉ/ngừng bán và hàng đối tác đều là retail only', () => {
@@ -61,6 +61,7 @@ describe('freeshipPlaceholder: dòng freeship giấu chữ khi chưa có số ch
     expect(freeshipPlaceholder({ phase: 'authenticated', cartThreshold: undefined })).toBe(true);
     expect(freeshipPlaceholder({ phase: 'authenticated', cartThreshold: 150000 })).toBe(false);
     expect(freeshipPlaceholder({ phase: 'guest', cartThreshold: undefined })).toBe(false);
+    expect(freeshipPlaceholder({ phase: 'authenticated', cartThreshold: undefined, cartFailed: true })).toBe(false);
   });
 });
 
@@ -68,6 +69,16 @@ describe('chỗ giữ cho hàng Ưu đãi (PdpCoupons)', () => {
   it('chỉ giữ khi đang khôi phục phiên, cao 44px (h-11) và chỉ hiện khi <html> có data-restoring và data-has-offers', () => {
     expect(offersSlotNeeded('loading')).toBe(true);
     for (const p of ['guest', 'authenticated', 'unavailable'] as const) expect(offersSlotNeeded(p)).toBe(false);
+    expect(offersSlotNeeded('loading', false)).toBe(true);
+  });
+  it('đã đăng nhập mà ví mã chưa về: vẫn giữ chỗ (chỉ cần data-has-offers); mã về rồi thì thả', () => {
+    expect(offersSlotNeeded('authenticated', true)).toBe(true);
+    expect(offersSlotNeeded('authenticated', false)).toBe(false);
+    expect(offersSlotNeeded('guest', true)).toBe(false);
+    expect(OFFERS_SLOT_AUTH_CLASS).toContain('[html[data-has-offers]_&]:block');
+    expect(OFFERS_SLOT_AUTH_CLASS).not.toContain('data-restoring');
+  });
+  it('lớp giữ chỗ lúc khôi phục phiên', () => {
     expect(OFFERS_SLOT_CLASS).toContain('h-11');
     expect(OFFERS_SLOT_CLASS).toContain('hidden');
     expect(OFFERS_SLOT_CLASS).toContain('[html[data-restoring][data-has-offers]_&]:block');

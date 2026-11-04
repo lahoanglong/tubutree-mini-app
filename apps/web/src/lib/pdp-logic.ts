@@ -34,7 +34,7 @@ export function freeshipLine(from: number): string {
 /**
  * Ngưỡng freeship hứa với khách: khách đăng nhập dùng ngưỡng theo hạng của giỏ (cùng nguồn với giỏ hàng), khách vãng lai dùng ngưỡng
  * chung. Đang tải phiên thì dùng ngưỡng chung của config (server tải sẵn nên HTML đầu đã có dòng, không chèn thêm sau hydrate); máy có phiên
- * cũ thì `PdpFreeship` giấu chữ đó tới khi biết phiên (`freeshipHiddenWhileRestoring`). Chưa biết chắc (giỏ chưa về, config chưa về) thì undefined để không hiện một số rồi đổi.
+ * cũ thì `PdpFreeship` giấu chữ đó (CSS `data-restoring`) tới khi biết phiên. Chưa biết chắc (giỏ chưa về, config chưa về) thì undefined để không hiện một số rồi đổi.
  */
 export function resolveFreeshipFrom(p: {
   phase: AuthPhase;
@@ -49,10 +49,10 @@ export function resolveFreeshipFrom(p: {
 
 /**
  * Dòng freeship của khách đang khôi phục phiên hoặc đã đăng nhập mà giỏ chưa về: giữ chỗ một dòng nhưng giấu chữ (ngưỡng theo hạng có thể khác ngưỡng chung),
- * để dòng không chèn thêm khi có số thật. `pending` = còn chờ phiên hoặc giỏ.
+ * để dòng không chèn thêm khi có số thật. Chỉ giữ khi còn chờ phiên hoặc giỏ: giỏ lỗi (`cartFailed`) thì bỏ dòng, không để một chỗ trống vĩnh viễn.
  */
-export function freeshipPlaceholder(p: { phase: AuthPhase; cartThreshold: number | undefined }): boolean {
-  return p.phase === 'loading' || (p.phase === 'authenticated' && p.cartThreshold === undefined);
+export function freeshipPlaceholder(p: { phase: AuthPhase; cartThreshold: number | undefined; cartFailed?: boolean }): boolean {
+  return p.phase === 'loading' || (p.phase === 'authenticated' && p.cartThreshold === undefined && !p.cartFailed);
 }
 
 /** Khoá localStorage nhớ khách có mã dùng được ở lần xem trước (đọc bởi `offersHintBootScript`, ghi bởi `PdpCoupons`). */
@@ -64,6 +64,9 @@ export const OFFERS_HINT_KEY = 'tubu_offers_hint';
  * mã không mất chỗ nào, nên không phải gỡ chỗ giữ đi (một lần xê dịch khác).
  */
 export const OFFERS_SLOT_CLASS = 'hidden h-11 [html[data-restoring][data-has-offers]_&]:block';
-export function offersSlotNeeded(phase: AuthPhase): boolean {
-  return phase === 'loading';
+/** Đã đăng nhập, ví mã chưa về: `data-restoring` đã gỡ nên chỉ cần gợi ý "lần trước có mã". */
+export const OFFERS_SLOT_AUTH_CLASS = 'hidden h-11 [html[data-has-offers]_&]:block';
+/** Giữ chỗ từ lúc khôi phục phiên tới khi ví mã về (không thả chỗ rồi chèn lại hàng khi đã đăng nhập mà mã chưa về). `couponsPending` = đã đăng nhập, `/me/coupons` chưa có kết quả. */
+export function offersSlotNeeded(phase: AuthPhase, couponsPending = false): boolean {
+  return phase === 'loading' || (phase === 'authenticated' && couponsPending);
 }
