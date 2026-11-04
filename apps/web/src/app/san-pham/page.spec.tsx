@@ -94,12 +94,12 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
   });
 
   it('?sort/?minPrice/?inStock/?rating/?brand đi đúng tham số API như Mini App; urlKey là khoá chuẩn', async () => {
-    await render({ sort: 'price_asc', minPrice: '100000', inStock: '1', rating: '4', brand: 'Tubu' });
+    await render({ sort: 'price_asc', minPrice: '100000', maxPrice: '200000', inStock: '1', rating: '4', brand: 'Tubu' });
     expect(productCalls()[0]![1]).toEqual({
-      query: { page: 1, limit: 20, sort: 'price_asc', brand: 'Tubu', minPrice: 100000, inStock: 'true', minRating: 4 },
+      query: { page: 1, limit: 20, sort: 'price_asc', brand: 'Tubu', minPrice: 100000, maxPrice: 200000, inStock: 'true', minRating: 4 },
     });
     const key = (mocks.view.mock.calls[0]![0] as { initial: { urlKey: string } }).initial.urlKey;
-    expect(key).toBe(new URLSearchParams({ brand: 'Tubu', minPrice: '100000', inStock: '1', rating: '4', sort: 'price_asc' }).toString());
+    expect(key).toBe(new URLSearchParams({ brand: 'Tubu', minPrice: '100000', maxPrice: '200000', inStock: '1', rating: '4', sort: 'price_asc' }).toString());
   });
 
   it('?q= (từ khoá tự do): máy chủ KHÔNG tải danh sách, BrowseView tải ở trình duyệt (initial = null); nhãn + danh mục vẫn dựng sẵn', async () => {
@@ -118,6 +118,44 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
   it('nhãn có thật (không từ khoá) vẫn tải danh sách ở máy chủ', async () => {
     await render({ brand: 'Tubu' });
     expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 20, brand: 'Tubu' } }]]);
+  });
+
+  it('chỉ dựng sẵn ở máy chủ khi URL thuộc tập hữu hạn: nhãn/danh mục có thật, phân khúc đã biết, giá đúng mốc bộ lọc, trang ≤ 50', async () => {
+    const ssr = async (o: Record<string, string>) => {
+      mocks.get.mockClear();
+      mocks.view.mockReset();
+      await render(o);
+      const initial = (mocks.view.mock.calls[0]![0] as { initial: unknown }).initial;
+      expect(initial === null, JSON.stringify(o)).toBe(productCalls().length === 0);
+      return productCalls().length > 0;
+    };
+    expect(await ssr({ brand: 'Tubu' })).toBe(true);
+    expect(await ssr({ brand: 'Tubu,A&B' })).toBe(true);
+    expect(await ssr({ brand: 'khong-co' })).toBe(false);
+    expect(await ssr({ brand: 'Tubu,khong-co' })).toBe(false);
+    expect(await ssr({ category: 'c-goi' })).toBe(true);
+    expect(await ssr({ category: 'khong-co' })).toBe(false);
+    expect(await ssr({ segment: 'eco' })).toBe(true);
+    expect(await ssr({ segment: 'bia' })).toBe(false);
+    expect(await ssr({ minPrice: '100000', maxPrice: '200000' })).toBe(true);
+    expect(await ssr({ maxPrice: '100000' })).toBe(true);
+    expect(await ssr({ minPrice: '500000' })).toBe(true);
+    expect(await ssr({ minPrice: '123456' })).toBe(false);
+    expect(await ssr({ minPrice: '100000', maxPrice: '300000' })).toBe(false);
+    expect(await ssr({ page: '50' })).toBe(true);
+    expect(await ssr({ page: '51' })).toBe(false);
+    expect(await ssr({ sort: 'newest', inStock: '1', rating: '4' })).toBe(true);
+  });
+
+  it('API nhãn lỗi thì không kiểm được nhãn: không dựng sẵn danh sách theo nhãn, trình duyệt tự tải', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/products') return pageOf([PRODUCT]);
+      if (path === '/categories') return CATEGORIES;
+      throw new Error('down');
+    });
+    await render({ brand: 'Tubu' });
+    expect(productCalls()).toEqual([]);
+    expect((mocks.view.mock.calls[0]![0] as { initial: unknown }).initial).toBeNull();
   });
 
   it('?q chỉ có khoảng trắng coi như không có từ khoá: vẫn tải ở máy chủ', async () => {

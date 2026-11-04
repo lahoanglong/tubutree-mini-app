@@ -6,7 +6,10 @@ import { SEARCH_PARAM_KEYS } from './search-state';
  */
 export const HUB = '/hub-san-pham';
 
-/** Không có khoá nào đổi nội dung trang (bộ lọc, từ khoá, số trang): utm, ref, fbclid, focus vẫn dùng bản tĩnh. */
+/**
+ * Không có khoá nào đổi nội dung trang (bộ lọc, từ khoá, số trang): utm, ref, fbclid vẫn dùng bản tĩnh. `focus` thì không: bản tĩnh dựng
+ * với searchParams rỗng (ô tìm đóng) nên trình duyệt hydrate với ô tìm đang mở sẽ lệch HTML.
+ */
 export function isHubQuery(params: URLSearchParams): boolean {
-  return !params.has('page') && !SEARCH_PARAM_KEYS.some((key) => params.has(key));
+  return !params.has('page') && !params.has('focus') && !SEARCH_PARAM_KEYS.some((key) => params.has(key));
 }

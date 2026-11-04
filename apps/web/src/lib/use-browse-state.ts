@@ -3,7 +3,9 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { parsePage } from './catalog-filter';
-import { SEARCH_PARAM_KEYS, parseSearchState, serializeSearchState, type SearchState } from './search-state';
+import { isHubQuery } from './browse-hub-route';
+import { BROWSE_PATH, SEARCH_PARAM_KEYS, parseSearchState, serializeSearchState, type SearchState } from './search-state';
+import { shallowReplace } from './shallow-url';
 import { useShellPathname } from './shell-pathname';
 
 export interface UseBrowseState {
@@ -62,7 +64,11 @@ export function useBrowseState(): UseBrowseState {
       const next = build(new URLSearchParams(latestRef.current));
       latestRef.current = next.toString();
       const qs = next.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const href = qs ? `${pathname}?${qs}` : pathname;
+      // URL hub đi qua router sẽ được middleware viết lại sang route khác (app/hub-san-pham): BrowseView mount lại, ô tìm mất focus và
+      // "Tìm gần đây" (bấm X, bỏ ?focus). Đổi URL tại chỗ giữ nguyên màn; BrowseView tự tải phần hub còn thiếu ở trình duyệt.
+      if (pathname === BROWSE_PATH && isHubQuery(next)) shallowReplace(href);
+      else router.replace(href, { scroll: false });
     },
     [router, pathname],
   );

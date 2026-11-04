@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import IsrCacheHandler from '../isr-cache-handler.mjs';
+import IsrCacheHandler, { notFoundStore } from '../isr-cache-handler.mjs';
 
 // Lớp cache bám vào cấu trúc nội bộ của Next: chạy thật FileSystemCache trên thư mục tạm, không giả lập, để đổi phiên bản Next là hỏng ở đây.
 const require = createRequire(import.meta.url);
@@ -22,10 +22,19 @@ let dir: string;
 const make = (Cls: typeof FileSystemCache = IsrCacheHandler) =>
   new Cls({ fs: nodeFs, flushToDisk: true, serverDistDir: join(dir, 'server'), revalidatedTags: [], maxMemoryCacheSize: 0 });
 
+const defaults = { ttlMs: notFoundStore.ttlMs, maxEntries: notFoundStore.maxEntries, maxBytes: notFoundStore.maxBytes, now: notFoundStore.now };
+let clock = 0;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'isr-cache-'));
+  clock = 1_000_000;
+  notFoundStore.clear();
+  notFoundStore.now = () => clock;
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => {
+  Object.assign(notFoundStore, defaults);
+  notFoundStore.clear();
+  rmSync(dir, { recursive: true, force: true });
+});
 
 describe('Next 15.5.28: cấu trúc nội bộ mà isr-cache-handler.mjs dựa vào', () => {
   it('đúng phiên bản Next đã kiểm (đổi phiên bản thì đọc lại file-system-cache.js rồi sửa số ở đây)', () => {
@@ -51,11 +60,50 @@ describe('Next 15.5.28: cấu trúc nội bộ mà isr-cache-handler.mjs dựa v
 });
 
 describe('isr-cache-handler: không lưu trang 404 của đường dẫn lạ', () => {
-  it('404 APP_PAGE chưa từng có bản: không ghi file nào, đọc lại là trống', async () => {
+  it('404 APP_PAGE chưa từng có bản: không ghi file nào xuống đĩa, nhưng đọc lại trong hạn vẫn có (lần hỏi sau không dựng lại)', async () => {
     const cache = make();
     await cache.set(pdpKey('slug-bia'), page(404), pageCtx);
-    expect(await cache.get(pdpKey('slug-bia'), readPage)).toBeNull();
     expect(existsSync(join(dir, 'server'))).toBe(false);
+    // Handler mới cho mỗi request như Next: kho 404 dùng chung.
+    const got = await make().get(pdpKey('slug-bia'), readPage);
+    expect(got?.value).toMatchObject({ kind: 'APP_PAGE', status: 404 });
+    expect(got?.lastModified).toBe(clock);
+  });
+
+  it('hết hạn (300 s) thì trống, Next dựng lại', async () => {
+    const cache = make();
+    await cache.set(pdpKey('het-han'), page(404), pageCtx);
+    clock += 299_000;
+    expect(await cache.get(pdpKey('het-han'), readPage)).not.toBeNull();
+    clock += 1_000;
+    expect(await cache.get(pdpKey('het-han'), readPage)).toBeNull();
+    expect(notFoundStore.entries.size).toBe(0);
+  });
+
+  it('kho 404 không vượt trần số khoá: khoá cũ nhất bị đẩy ra', async () => {
+    notFoundStore.maxEntries = 3;
+    const cache = make();
+    for (const slug of ['a', 'b', 'c', 'd']) await cache.set(pdpKey(slug), page(404), pageCtx);
+    expect(notFoundStore.entries.size).toBe(3);
+    expect(await cache.get(pdpKey('a'), readPage)).toBeNull();
+    expect(await cache.get(pdpKey('d'), readPage)).not.toBeNull();
+  });
+
+  it('kho 404 không vượt trần byte', async () => {
+    const one = page(404).html.length + page(404).rscData.length;
+    notFoundStore.maxBytes = one * 2;
+    const cache = make();
+    for (const slug of ['a', 'b', 'c']) await cache.set(pdpKey(slug), page(404), pageCtx);
+    expect(notFoundStore.entries.size).toBe(2);
+    expect(notFoundStore.bytes).toBeLessThanOrEqual(one * 2);
+  });
+
+  it('đường dẫn trong kho 404 rồi có trang 200 (sản phẩm mới đúng slug): bỏ khỏi kho, ghi đĩa', async () => {
+    const cache = make();
+    await cache.set(pdpKey('moi'), page(404), pageCtx);
+    await cache.set(pdpKey('moi'), page(200), pageCtx);
+    expect(notFoundStore.entries.size).toBe(0);
+    expect((await cache.get(pdpKey('moi'), readPage))?.value).toMatchObject({ status: 200 });
   });
 
   it('APP_PAGE 200 (status vắng hoặc 200) vẫn lưu', async () => {
@@ -70,7 +118,8 @@ describe('isr-cache-handler: không lưu trang 404 của đường dẫn lạ', 
     const cache = make();
     await cache.set(pdpKey('vua-go'), page(200), pageCtx);
     await cache.set(pdpKey('vua-go'), page(404), pageCtx);
-    expect((await cache.get(pdpKey('vua-go'), readPage))?.value).toMatchObject({ status: 404 });
+    expect(notFoundStore.entries.size).toBe(0);
+    expect((await make().get(pdpKey('vua-go'), readPage))?.value).toMatchObject({ status: 404 });
   });
 
   it('APP_ROUTE và FETCH vẫn lưu như cũ', async () => {

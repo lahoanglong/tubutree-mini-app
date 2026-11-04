@@ -4,7 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 
 // Vỏ next/navigation có URL thật: router.replace đổi URL rồi báo cho useSearchParams như điều hướng mềm.
-const nav = vi.hoisted(() => ({ search: '', replaces: [] as string[], listeners: new Set<() => void>() }));
+const nav = vi.hoisted(() => ({ search: '', replaces: [] as string[], shallow: [] as string[], listeners: new Set<() => void>() }));
+// Đổi URL tại chỗ (History API): Next 15 cũng báo cho useSearchParams, không gọi máy chủ.
+vi.mock('./shallow-url', () => ({
+  shallowReplace: (url: string) => {
+    nav.shallow.push(url);
+    nav.search = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+    nav.listeners.forEach((l) => l());
+  },
+}));
 vi.mock('next/navigation', async () => {
   const React = await import('react');
   return {
@@ -45,6 +53,7 @@ const at = (search: string) => {
 };
 beforeEach(() => {
   nav.replaces = [];
+  nav.shallow = [];
 });
 afterEach(() => {
   mounted?.unmount();
@@ -73,12 +82,25 @@ describe('useBrowseState', () => {
     expect(nav.replaces).toEqual(['/san-pham?q=nuoc&sort=best_seller']);
   });
 
-  it('update với undefined gỡ tham số; gỡ hết thì về đường dẫn trơn', () => {
+  it('update với undefined gỡ tham số; gỡ hết thì về đường dẫn trơn (đổi tại chỗ, không qua router)', () => {
     at('minPrice=100000&maxPrice=200000&inStock=1');
     act(() => hook.update({ minPrice: undefined, maxPrice: undefined }));
     expect(nav.replaces.at(-1)).toBe('/san-pham?inStock=1');
     act(() => hook.update({ inStock: false }));
-    expect(nav.replaces.at(-1)).toBe('/san-pham');
+    expect(nav.replaces).toEqual(['/san-pham?inStock=1']);
+    expect(nav.shallow).toEqual(['/san-pham']);
+  });
+
+  it('URL đích là hub (xoá từ khoá, bỏ ?focus): đổi URL tại chỗ, không router.replace (middleware sẽ đổi route, BrowseView mount lại)', () => {
+    at('q=nuoc&utm=zalo');
+    act(() => hook.update({ q: '' }));
+    expect(nav.shallow).toEqual(['/san-pham?utm=zalo']);
+    expect(nav.replaces).toEqual([]);
+    expect(hook.state.q).toBe('');
+    at('focus=search');
+    act(() => hook.consumeFocus());
+    expect(nav.shallow.at(-1)).toBe('/san-pham');
+    expect(nav.replaces).toEqual([]);
   });
 
   it('giữ tham số lạ (utm, ref, s) theo thứ tự gốc, tham số chuẩn viết lại theo thứ tự cố định', () => {

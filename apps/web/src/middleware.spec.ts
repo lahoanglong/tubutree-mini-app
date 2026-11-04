@@ -93,14 +93,15 @@ describe('middleware: hub /san-pham dùng bản ISR', () => {
     expect(rewriteOf(at('/san-pham'))).toBe('https://tubutree.com/hub-san-pham');
   });
 
-  it('tham số theo dõi và focus vẫn dùng bản tĩnh', () => {
-    for (const qs of ['utm_source=zalo&utm_campaign=x', 'ref=AN1', 'fbclid=abc', 'focus=search']) {
+  it('tham số theo dõi vẫn dùng bản tĩnh', () => {
+    for (const qs of ['utm_source=zalo&utm_campaign=x', 'ref=AN1', 'fbclid=abc']) {
       expect(rewriteOf(at(`/san-pham?${qs}`)), qs).toBe('https://tubutree.com/hub-san-pham');
     }
   });
 
   it('có từ khoá, bộ lọc hoặc số trang thì không rewrite (trang /san-pham động)', () => {
-    for (const qs of ['q=goi', 'q=', 'brand=Tubu', 'category=c1', 'page=2', 'all=1', 'sort=newest', 'utm_source=zalo&brand=Tubu']) {
+    // focus=search: ô tìm mở ngay ở HTML server, bản tĩnh (searchParams rỗng) sẽ lệch lúc hydrate.
+    for (const qs of ['focus=search', 'q=goi', 'q=', 'brand=Tubu', 'category=c1', 'page=2', 'all=1', 'sort=newest', 'utm_source=zalo&brand=Tubu']) {
       expect(rewriteOf(at(`/san-pham?${qs}`)), qs).toBeNull();
     }
   });

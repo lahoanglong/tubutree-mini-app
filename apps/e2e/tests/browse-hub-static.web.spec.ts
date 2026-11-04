@@ -76,3 +76,42 @@ test.describe('hub /san-pham tĩnh', () => {
     await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 5_000 }).toBeGreaterThan(target - 80);
   });
 });
+
+test.describe('ô tìm ở /san-pham sau khi hub thành route riêng', () => {
+  test('/san-pham?focus=search tải đầy đủ: không lỗi hydrate, ô tìm có con trỏ', async ({ page, api }) => {
+    api.get('/flash-sales/active', []);
+    api.allowUnmocked('GET /categories', 'GET /brands', 'GET /products', 'GET /products/best-sellers', 'GET /me/coupons', 'POST /events', 'GET /me/wishlist/ids', 'GET /cart', 'GET /search/suggest');
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('console', (m) => {
+      if (m.type() === 'error' && /hydrat|did not match/i.test(m.text())) errors.push(m.text());
+    });
+    await page.goto('/san-pham?focus=search');
+    await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeFocused();
+    await expect(page).toHaveURL(/\/san-pham$/);
+    await page.waitForTimeout(500);
+    expect(errors).toEqual([]);
+  });
+
+  test('gõ, Enter, bấm X: ô tìm vẫn giữ con trỏ và hiện Tìm gần đây; Back về hub trước đó', async ({ page, api }) => {
+    api.get('/flash-sales/active', []);
+    api.get('/products', { data: [], meta: { page: 1, limit: 20, total: 0 } });
+    api.get('/search/suggest', []);
+    api.allowUnmocked('GET /categories', 'GET /brands', 'GET /products/best-sellers', 'GET /me/coupons', 'POST /events', 'GET /me/wishlist/ids', 'GET /cart');
+    await page.goto('/gio-hang');
+    await page.goto('/san-pham');
+    const input = page.getByRole('searchbox', { name: 'Tìm sản phẩm' });
+    await input.fill('xa phong');
+    await input.press('Enter');
+    await expect(page).toHaveURL(/\/san-pham\?q=xa(\+|%20)phong$/);
+    await page.getByRole('button', { name: 'Xoá từ khoá' }).click();
+    await expect(page).toHaveURL(/\/san-pham$/);
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue('');
+    await expect(page.getByText('Tìm gần đây')).toBeVisible();
+    await expect(page.getByText('xa phong', { exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/san-pham$/);
+    await expect(page.getByRole('button', { name: 'Xem tất cả sản phẩm' })).toBeVisible();
+  });
+});

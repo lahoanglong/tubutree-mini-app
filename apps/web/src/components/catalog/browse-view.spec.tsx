@@ -12,7 +12,16 @@ const nav = vi.hoisted(() => ({
   search: '',
   replaces: [] as string[],
   pushes: [] as string[],
+  shallows: [] as string[],
   listeners: new Set<() => void>(),
+}));
+// URL hub đổi tại chỗ (History API) thay vì router: middleware sẽ đưa nó sang route tĩnh khác và BrowseView mount lại (lib/use-browse-state.ts).
+vi.mock('@/lib/shallow-url', () => ({
+  shallowReplace: (url: string) => {
+    nav.shallows.push(url);
+    nav.search = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+    nav.listeners.forEach((l) => l());
+  },
 }));
 vi.mock('next/navigation', async () => {
   const React = await import('react');
@@ -82,6 +91,7 @@ beforeEach(() => {
   nav.search = '';
   nav.replaces = [];
   nav.pushes = [];
+  nav.shallows = [];
   localStorage.clear();
   http.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
     const handler = routes[path];
@@ -594,7 +604,8 @@ describe('BrowseView — gõ tìm kiếm', () => {
     click(buttonByName(container, 'Huỷ'));
     expect(input.value).toBe('nuoc');
     click(buttonByName(container, 'Xoá từ khoá'));
-    expect(nav.replaces.at(-1)).toBe('/san-pham');
+    expect(nav.shallows.at(-1)).toBe('/san-pham');
+    expect(document.activeElement).toBe(input);
   });
 
   it('?focus=search từ trang chủ: focus ô tìm rồi gỡ cờ khỏi URL', async () => {
@@ -602,7 +613,7 @@ describe('BrowseView — gõ tìm kiếm', () => {
     const { container } = mount();
     await flush();
     expect(document.activeElement).toBe(container.querySelector('input[type="search"]'));
-    expect(nav.replaces.at(-1)).toBe('/san-pham');
+    expect(nav.shallows.at(-1)).toBe('/san-pham');
   });
 });
 
