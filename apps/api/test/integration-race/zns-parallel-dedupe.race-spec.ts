@@ -51,7 +51,9 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
       data: { userId, templateCode: 'IT_DEDUPE', channel: 'ZNS', payload: { data: { n: String(n) }, dedupeKey }, status: over.status ?? 'PENDING', ...(over.sentAt ? { sentAt: over.sentAt } : {}) },
     });
   const jobOf = (logId: string, n: number): ZnsSendJobData => ({ notificationLogId: logId, phone: '0900000001', templateId: 'zt', templateData: { n: String(n) } });
-  const newUser = () => createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+  // Phone là khoá duy nhất: theo đồng hồ thì hai lần gọi trong cùng một mili giây (PG cục bộ trả lời dưới 1ms) đụng nhau. Đếm tăng từ một mốc ngẫu nhiên mỗi lần chạy.
+  let phoneSeq = Math.floor(Math.random() * 1e8);
+  const newUser = () => createUser(prisma, { phone: `09${String(phoneSeq++ % 1e8).padStart(8, '0')}` });
 
   it('log A có sentAt sớm hơn nhưng commit sau log B (hai tx chồng nhau), hai worker song song: Zalo nhận đúng một lần', async () => {
     const u = await newUser();
@@ -121,6 +123,17 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
     });
     expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SENT');
     expect(hits).toBe(1);
+  });
+
+  it('newUser: hai khách tạo liên tiếp trong cùng một mili giây không đụng khoá duy nhất của phone', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    try {
+      const a = await newUser();
+      const b = await newUser();
+      expect(a.phone).not.toBe(b.phone);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('khoá khác nhau thì cả hai đều gửi', async () => {
