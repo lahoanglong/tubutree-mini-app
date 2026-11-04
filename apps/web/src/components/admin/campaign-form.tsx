@@ -214,12 +214,12 @@ export function CampaignForm({ initial, onDone, onCancel }: { initial?: AdminCam
         </Field>
         {linkType === 'PRODUCT' && (
           <Field label="Slug sản phẩm" hint="Phần cuối đường dẫn trang sản phẩm.">
-            <input aria-label="Slug sản phẩm" maxLength={120} value={linkValue} onChange={(e) => setLinkValue(e.target.value)} className={INPUT_CLASS} />
+            <input aria-label="Slug sản phẩm" maxLength={200} value={linkValue} onChange={(e) => setLinkValue(e.target.value)} className={INPUT_CLASS} />
           </Field>
         )}
         {linkType === 'CATEGORY' && (
           <Field label="Slug danh mục" hint="Phần cuối đường dẫn của danh mục.">
-            <input aria-label="Slug danh mục" maxLength={120} value={linkValue} onChange={(e) => setLinkValue(e.target.value)} className={INPUT_CLASS} />
+            <input aria-label="Slug danh mục" maxLength={200} value={linkValue} onChange={(e) => setLinkValue(e.target.value)} className={INPUT_CLASS} />
           </Field>
         )}
         {linkType === 'URL_INTERNAL' && (
