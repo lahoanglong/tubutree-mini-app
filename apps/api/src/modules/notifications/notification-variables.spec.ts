@@ -85,7 +85,7 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
   const INTERNAL_KEYS = new Set(['post_id', 'route', 'product_slug']);
   const SRC = join(__dirname, '../..');
   // Tên hàm → vị trí của mã mẫu trong danh sách tham số (dữ liệu ngay sau đó). notifyOwner / notifyMerchantOwner là hàm bọc chuyển tiếp xuống notify().
-  const NOTIFY_CALLS: Record<string, number> = { notify: 1, notifySafe: 2, notifyOwner: 1, notifyMerchantOwner: 4 };
+  const NOTIFY_CALLS: Record<string, number> = { notify: 1, notifySafe: 2, notifyWithRetry: 1, notifyOwner: 1, notifyMerchantOwner: 4 };
 
   /** Hàm bọc cố định mã mẫu: tên hàm → mã và vị trí tham số dữ liệu. */
   const FIXED_CODE_CALLS: Record<string, { code: string; dataAt: number }> = {
@@ -104,7 +104,8 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     'modules/feed/community-feed.service.ts|template': { reason: 'Hàm gửi báo tác giả nhận mã (thích/bình luận) và hàm tạo dữ liệu bất đồng bộ làm tham số; chỗ gọi truyền chuỗi và thunk.', codes: ['COMMUNITY_POST_LIKED', 'COMMUNITY_POST_COMMENTED'] },
     'modules/integrations/gomdon/gomdon-alert.service.ts|template': { reason: 'Tham số template của alert() (mặc định OPS_GOMDON_ALERT hoặc OPS_PANCAKE_ALERT), dữ liệu { order_code, message } ngay tại chỗ.', codes: ['OPS_GOMDON_ALERT', 'OPS_PANCAKE_ALERT'] },
     'modules/merchant/merchant-fulfilment.service.ts|template': { reason: 'Hàm bọc notifyOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifyOwner được dò (NOTIFY_CALLS).' },
-    'modules/notifications/notifications.service.ts|templateCode': { reason: 'notifySafe (phương thức) chuyển tiếp mã và dữ liệu của người gọi xuống notify(); chỗ gọi notifySafe được dò (NOTIFY_CALLS).' },
+    'modules/notifications/notifications.service.ts|templateCode': { reason: 'notifySafe và notifyWithRetry (phương thức) chuyển tiếp mã và dữ liệu của người gọi xuống notify(); chỗ gọi hai hàm đó được dò (NOTIFY_CALLS).' },
+    'modules/notifications/notifications.processor.ts|templateCode': { reason: 'Job inapp-retry gửi lại đúng mã và dữ liệu notifyWithRetry đã xếp hàng; chỗ gọi notifyWithRetry được dò (NOTIFY_CALLS).' },
     'modules/ops/cron-run.service.ts|template': { reason: 'Bộ chuyển tiếp cho notifyAdmins; chỗ gọi notifyAdmins được dò theo dạng { template, data }.' },
     'modules/orders/merchant-order-notify.ts|template': { reason: 'Hàm bọc notifyMerchantOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi hàm đó được dò (NOTIFY_CALLS).' },
     'modules/orders/order-status.service.ts|opts.notifyEvent ?? `ORDER_${targetStatus}`': { reason: 'Mã theo trạng thái đơn (ORDER_<trạng thái>) hoặc mã người gọi chỉ định; dữ liệu là biến cục bộ notifyData cùng khoá cho mọi mã.', codes: ['ORDER_CONFIRMED', 'ORDER_PACKED', 'ORDER_SHIPPING', 'ORDER_CANCELLED', 'ORDER_RETURNED'] },

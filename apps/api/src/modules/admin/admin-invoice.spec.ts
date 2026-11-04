@@ -17,13 +17,14 @@ const VIEWER = { sub: 'admin-1', role: 'ADMIN' as const };
 
 const REQUEST = { taxCode: '0312345678', companyName: 'Cty ABC', address: '1 Lê Lợi, Q1', email: 'ketoan@abc.vn' };
 
-function mkAdmin(prisma: unknown, notify = jest.fn().mockResolvedValue(undefined)) {
+/** `notify` ở đây là notifyWithRetry: tin "đã xuất hoá đơn" gửi ngay, lỗi thì xếp hàng thử lại, không làm hỏng thao tác. */
+function mkAdmin(prisma: unknown, notify = jest.fn().mockResolvedValue('SENT')) {
   const svc = new AdminService(
     prisma as PrismaService,
     {} as never,
     {} as never,
     {} as never,
-    { notify } as never,
+    { notify: jest.fn(), notifyWithRetry: notify } as never,
     {} as never,
     {} as never,
     {} as never,
@@ -134,7 +135,7 @@ describe('AdminService.issueOrderInvoice', () => {
     expect(JSON.stringify(call.where)).toContain('ISSUED'); // guard loại đơn đã ISSUED
     expect(call.data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.meinvoice.vn/abc' });
     expect(order).toMatchObject({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.meinvoice.vn/abc' });
-    expect(notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TB-900' });
+    expect(notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TB-900' }, { dedupeKey: 'invoice-issued:o1' }, 'order=TB-900');
     expect(out).toMatchObject({ ok: true, order: { code: 'TB-900', invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.meinvoice.vn/abc' } });
   });
 
@@ -160,6 +161,14 @@ describe('AdminService.issueOrderInvoice', () => {
     await svc.issueOrderInvoice('admin1', 'o1', {});
     expect(updateMany.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED' });
     expect(order.invoiceUrl).toBe('https://cu.meinvoice.vn/x');
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['QUEUED', 'LOST'])('báo khách lỗi (%s) → thao tác vẫn thành công: đơn đã ISSUED, tin đi qua notifyWithRetry', async (outcome) => {
+    const { prisma, updateMany } = fakePrisma(baseOrder());
+    const { svc, notify } = mkAdmin(prisma, jest.fn().mockResolvedValue(outcome));
+    await expect(svc.issueOrderInvoice('admin1', 'o1', {})).resolves.toMatchObject({ ok: true, order: { invoiceStatus: 'ISSUED' } });
+    expect(updateMany).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
