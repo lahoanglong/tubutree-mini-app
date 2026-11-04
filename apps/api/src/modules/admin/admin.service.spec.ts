@@ -1934,8 +1934,21 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(await run({ thumbnail: SVG, images: [SVG] })).not.toHaveBeenCalled();
     });
 
-    it('từ chối: không đổi thumbnail (ảnh vẫn chưa phát)', async () => {
+    it('từ chối: thumbnail data URL hay https giữ nguyên (ảnh vẫn chưa phát)', async () => {
       expect(await run({ thumbnail: DATA, images: [DATA] }, false)).not.toHaveBeenCalled();
+      expect(await run({ thumbnail: 'https://cdn/x.jpg', images: [DATA] }, false)).not.toHaveBeenCalled();
+    });
+
+    it('từ chối: thumbnail đường dẫn (ghi lúc còn công khai) trở về data URL của ảnh đầu, trong cùng giao dịch', async () => {
+      const ref = '/public-image/product/p1/0?v=0123456789abcdef';
+      const update = await run({ thumbnail: ref, images: [DATA] }, false);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { thumbnail: DATA } });
+    });
+
+    it('từ chối: thumbnail base64 khác ảnh đầu giữ nguyên', async () => {
+      const OTHER = `data:image/png;base64,${Buffer.alloc(300, 2).toString('base64')}`;
+      expect(await run({ thumbnail: OTHER, images: [DATA] }, false)).not.toHaveBeenCalled();
     });
   });
 
@@ -2151,7 +2164,7 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue(product),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...product, thumbnail: null, images: [], approvalStatus: 'REJECTED', rejectReason: 'Chưa đủ chứng nhận' }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       merchantPancakeLink: { findFirst: jest.fn().mockResolvedValue(null) },

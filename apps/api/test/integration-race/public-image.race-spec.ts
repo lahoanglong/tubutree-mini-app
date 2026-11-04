@@ -123,6 +123,26 @@ describe('PublicImageService (real Postgres)', () => {
     for (const slot of ['0', 'thumb']) await expect(svc.get('product', p.id, slot, undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('đã công khai (thumbnail đường dẫn) → xin liên kết → admin từ chối → đổi mã lần nữa: danh sách chờ duyệt trả data URL, không phải đường dẫn 404', async () => {
+    const catalogVariation = async () => {
+      const tag = randCode(8);
+      const cat = await product({ fulfilment: 'TUBU', images: [], thumbnail: null, variations: { create: { sku: `itimg-c-${tag}`, name: 'V', attributes: {}, retailPrice: 1000, stock: 5, pancakeId: `itimg-pk-c-${tag}` } } });
+      return (await prisma.variation.findFirstOrThrow({ where: { productId: cat.id } })).pancakeId as string;
+    };
+    const { owner, p } = await partnerProduct('APPROVED', { isActive: true });
+    await prisma.product.update({ where: { id: p.id }, data: { thumbnail: publicImageRef('product', p.id, 0, PNG_A) } });
+    await merchant.updateProduct(owner.id, p.id, { pancakeCode: await catalogVariation() });
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).approvalStatus).toBe('PENDING_REVIEW');
+    await admin.reviewMerchantProduct('admin-it', p.id, false, 'Mã sai', false, undefined, {});
+    const rejected = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(rejected).toMatchObject({ approvalStatus: 'REJECTED', approvedAt: null, thumbnail: PNG_A });
+    await merchant.updateProduct(owner.id, p.id, { pancakeCode: await catalogVariation() });
+    expect(await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ approvalStatus: 'PENDING_REVIEW', approvedAt: null });
+    const listed = (await admin.listPendingMerchantProducts(1, 200)).data.find((x) => x.id === p.id);
+    expect(listed?.thumbnail).toBe(PNG_A);
+    await expect(svc.get('product', p.id, '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('thumbnail đường dẫn chỉ có khi ảnh phát được: đăng mới giữ data URL (ảnh chưa phát), admin duyệt lần đầu thì đổi sang đường dẫn và ảnh phát được', async () => {
     const owner = await createUser(prisma, { role: 'DEALER' });
     const tag = randCode(8).toLowerCase();

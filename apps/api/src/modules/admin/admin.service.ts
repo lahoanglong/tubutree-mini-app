@@ -2033,6 +2033,11 @@ export class AdminService {
         if (thumbnail !== live.thumbnail) await tx.product.update({ where: { id: productId }, data: { thumbnail } });
         return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seenTakeover });
       }
+      // Từ chối đặt approvedAt về null: sản phẩm hết công khai, endpoint ảnh trả 404 cho đường dẫn thumbnail đã ghi lúc còn công khai,
+      // màn duyệt sẽ vỡ ảnh nếu đối tác sửa tiếp mà không đổi nội dung (thumbnail không được ghi lại). Trả thumbnail về data URL ảnh đầu.
+      const live = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { thumbnail: true, images: true } });
+      const thumbnail = storedThumbnailOf(productId, live.thumbnail, live.images[0], false);
+      if (thumbnail !== live.thumbnail) await tx.product.update({ where: { id: productId }, data: { thumbnail } });
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
       return undefined;
