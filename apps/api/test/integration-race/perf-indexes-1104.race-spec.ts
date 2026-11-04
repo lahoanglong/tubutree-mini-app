@@ -99,7 +99,7 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     for (const q of qs) expect(await planOf(q)).toMatch(/notification_logs_zns_failed_sentAt_idx/);
   });
 
-  it('D4: lọc khoảng sentAt (trang mẫu tin 30 ngày) dùng BRIN', async () => {
+  it('D4: lọc khoảng sentAt (trang mẫu tin 30 ngày) dùng index sentAt', async () => {
     captured = [];
     await prisma.notificationLog.count({ where: { sentAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } });
     const q = captured.find((c) => /FROM "(public"\.")?notification_logs"/.test(c.query))!;
