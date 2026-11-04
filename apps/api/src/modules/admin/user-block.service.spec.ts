@@ -37,6 +37,21 @@ describe('UserBlockService.block — luôn còn một quản trị viên hoạt 
     expect(tx.$executeRaw.mock.invocationCallOrder[0]!).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
   });
 
+  it('khoá dòng users rồi mới lấy mốc: mốc bằng giờ lúc có khoá', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-05T03:00:00.000Z') });
+    try {
+      const { svc, tx } = txWith({ id: 'u3', role: 'CUSTOMER', isBlocked: false }, 0);
+      const locked = new Date('2026-11-05T03:00:01.700Z');
+      tx.$executeRaw.mockImplementationOnce(async () => 0).mockImplementationOnce(async () => { jest.setSystemTime(locked); return 1; });
+      await svc.block('admin1', 'u3', 'farm voucher');
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+      expect(tx.$executeRaw.mock.invocationCallOrder[1]!).toBeLessThan(tx.user.update.mock.invocationCallOrder[0]!);
+      expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ blockedAt: locked, sessionsRevokedAt: locked }) }));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('khoá khách hàng → không cần đếm admin', async () => {
     const { svc, tx } = txWith({ id: 'u3', role: 'CUSTOMER', isBlocked: false }, 0);
     await svc.block('admin1', 'u3', 'farm voucher');
@@ -49,6 +64,7 @@ describe('UserBlockService.revokeSessions — cắt phiên không khoá tài kho
   function revokeSvc(found = 1) {
     const order: string[] = [];
     const tx = {
+      $executeRaw: jest.fn(async () => { order.push('khoá'); return found; }),
       user: { updateMany: jest.fn(async () => { order.push('mốc'); return { count: found }; }) },
       userAdminEvent: { create: jest.fn(async () => { order.push('sổ'); return {}; }) },
       refreshToken: { updateMany: jest.fn(async () => { order.push('thu hồi'); return { count: 3 }; }) },
@@ -62,7 +78,7 @@ describe('UserBlockService.revokeSessions — cắt phiên không khoá tài kho
     const { svc, tx, sessions, order } = revokeSvc();
     const out = await svc.revokeSessions('admin1', 'u9', '  Nghi lộ phiên  ');
     expect(out).toEqual({ id: 'u9', revokedSessions: 3 });
-    expect(order).toEqual(['mốc', 'thu hồi', 'sổ']);
+    expect(order).toEqual(['khoá', 'mốc', 'thu hồi', 'sổ']);
     expect(tx.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u9' }, data: { sessionsRevokedAt: expect.any(Date) } });
     expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u9', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
     expect(tx.userAdminEvent.create).toHaveBeenCalledWith({

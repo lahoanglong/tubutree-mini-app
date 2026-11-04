@@ -56,13 +56,17 @@ describe('Refresh đang chạy dở × thu hồi phiên: INSERT con xảy ra sau
     const insertReached = new Promise<void>((r) => (reached = r));
     const original = prisma.refreshToken.create.bind(prisma.refreshToken);
     let first = true;
+    let insertDone = false;
     jest.spyOn(prisma.refreshToken, 'create').mockImplementation(((args: Parameters<typeof original>[0]) => {
       if (!first) return original(args);
       first = false;
       reached();
-      return gate.then(() => original(args));
+      return gate.then(() => original(args)).then((row) => {
+        insertDone = true;
+        return row;
+      });
     }) as never);
-    return { release, insertReached };
+    return { release, insertReached, isInsertDone: () => insertDone };
   }
 
   async function guest() {
@@ -84,7 +88,7 @@ describe('Refresh đang chạy dở × thu hồi phiên: INSERT con xảy ra sau
 
   it('logout-all: INSERT con chen vào đúng lúc tx thu hồi đã chạy lệnh thu hồi nhưng chưa commit → vẫn không sống', async () => {
     const { login, userId } = await guest();
-    const { release, insertReached } = holdFirstInsert();
+    const { release, insertReached, isInsertDone } = holdFirstInsert();
     const settled = auth.refresh(login.refreshToken).then(() => 'ok', () => 'rejected');
     await insertReached;
     const realTx = prisma.$transaction.bind(prisma);
@@ -100,6 +104,9 @@ describe('Refresh đang chạy dở × thu hồi phiên: INSERT con xảy ra sau
                   const r = await (rt.updateMany as (...x: unknown[]) => Promise<unknown>)(...a);
                   release();
                   await sleep(400);
+                  // Khe phải dựng được thật: INSERT con đã xong khi tx thu hồi còn chưa commit. Nếu sau này INSERT bị chặn tới commit
+                  // thì ca này thành ca logout-all xong trước INSERT và không còn thử đúng khe.
+                  expect(isInsertDone()).toBe(true);
                   return r;
                 };
               },

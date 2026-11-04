@@ -48,6 +48,7 @@ function makeService(over: Record<string, unknown> = {}) {
   const prisma = {
     ...base,
     $queryRaw: jest.fn().mockResolvedValue([{ sessionsRevokedAt: null }]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(prisma)),
     ...over,
   } as unknown as PrismaService;
@@ -889,6 +890,7 @@ describe('AuthService.logoutAll (L1-04)', () => {
   it('một transaction: ghi mốc TRƯỚC, rồi thu hồi refresh token, ghi sổ do khách tự làm, xoá cache phiên', async () => {
     const order: string[] = [];
     const tx = {
+      $executeRaw: jest.fn(async () => { order.push('khoá'); return 1; }),
       user: { update: jest.fn(async () => { order.push('mốc'); return {}; }) },
       refreshToken: { updateMany: jest.fn(async () => { order.push('thu hồi'); return { count: 2 }; }) },
       userAdminEvent: { create: jest.fn(async () => { order.push('sổ'); return {}; }) },
@@ -898,7 +900,7 @@ describe('AuthService.logoutAll (L1-04)', () => {
     const svc = new AuthService(prisma, {} as JwtService, { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>,
       {} as ZaloService, mkRbac(), undefined, undefined, undefined, { invalidate } as never);
     await svc.logoutAll('u1');
-    expect(order).toEqual(['mốc', 'thu hồi', 'sổ']);
+    expect(order).toEqual(['khoá', 'mốc', 'thu hồi', 'sổ']);
     expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { sessionsRevokedAt: expect.any(Date) } });
     expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
     expect(tx.userAdminEvent.create).toHaveBeenCalledWith({
@@ -912,17 +914,20 @@ describe('AuthService — mốc thu hồi lấy trong transaction và kiểm l�
   it('revokeAllSessions lấy `now` trong callback, sau khi transaction đã có kết nối (không lấy trước khe chờ pool)', async () => {
     jest.useFakeTimers({ now: new Date('2026-11-05T03:00:00.000Z') });
     try {
+      const later = new Date('2026-11-05T03:00:02.500Z');
+      // Giờ lúc có khoá dòng users: mốc phải lấy SAU khoá, không phải lúc callback bắt đầu.
+      const locked = new Date('2026-11-05T03:00:02.900Z');
       const tx = {
+        $executeRaw: jest.fn(async () => { jest.setSystemTime(locked); return 1; }),
         user: { update: jest.fn().mockResolvedValue({}) },
         refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
         userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
       };
-      const later = new Date('2026-11-05T03:00:02.500Z');
       const prisma = { $transaction: jest.fn(async (cb: (t: unknown) => unknown) => { jest.setSystemTime(later); return cb(tx); }) } as unknown as PrismaService;
       const svc = new AuthService(prisma, {} as JwtService, { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>, {} as ZaloService, mkRbac());
       await svc.logoutAll('u1');
-      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { sessionsRevokedAt: later } });
-      expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: later } });
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { sessionsRevokedAt: locked } });
+      expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: locked } });
     } finally {
       jest.useRealTimers();
     }

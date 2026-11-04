@@ -981,14 +981,15 @@ export class AuthService {
   }
 
   /**
-   * Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. Một transaction, lệnh ĐẦU là ghi mốc
-   * trên dòng users (giữ khoá dòng tới commit): lượt refresh song song chờ ở kiểm sau (FOR SHARE) cho tới khi mốc commit, nên không
-   * thể để lại token con sống sau khi thu hồi xong.
+   * Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. Một transaction, lệnh ĐẦU khoá dòng
+   * users (giữ tới commit) rồi mới lấy giờ và ghi mốc: lượt refresh song song chờ ở kiểm sau (FOR SHARE) cho tới khi mốc commit, nên
+   * không thể để lại token con sống sau khi thu hồi xong.
    */
   private async revokeAllSessions(userId: string, selfServiceReason?: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      // Lấy giờ trong callback, ngay trước lệnh ghi mốc: lấy trước $transaction thì trong khe chờ kết nối từ pool một lượt
-      // refresh có thể cấp token có createdAt/iatMs lớn hơn mốc và lọt qua các kiểm theo đồng hồ.
+      // Khoá dòng users rồi mới lấy giờ: refresh nào cấp token sau giờ này thì câu FOR SHARE ở kiểm sau của nó phải chờ tx này
+      // commit và thấy mốc mới. Lấy giờ trước khi giữ khoá thì token cấp trong khe đó có iatMs lớn hơn mốc mà vẫn qua kiểm sau.
+      await tx.$executeRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
       const now = new Date();
       await tx.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
       const { count } = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });

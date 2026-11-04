@@ -29,6 +29,8 @@ export class UserBlockService {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true, isBlocked: true } });
       if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
       if (user.role === 'ADMIN' && !user.isBlocked) await assertAnotherActiveAdmin(tx, userId, LAST_ADMIN_MESSAGE.block);
+      // Khoá dòng rồi mới lấy giờ (xem AuthService.revokeAllSessions).
+      await tx.$executeRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
       const now = new Date();
       const updated = await tx.user.update({
         where: { id: userId },
@@ -78,8 +80,9 @@ export class UserBlockService {
       throw new BadRequestException('Không tự cắt phiên của chính mình. Dùng Đăng xuất mọi thiết bị trong Cài đặt.');
     }
     const result = await this.prisma.$transaction(async (tx) => {
+      // Khoá dòng rồi mới lấy giờ, giữ khoá tới commit (xem AuthService.revokeAllSessions).
+      await tx.$executeRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
       const now = new Date();
-      // Lệnh đầu: ghi mốc và giữ khoá dòng tới commit (xem AuthService.revokeAllSessions).
       const marked = await tx.user.updateMany({ where: { id: userId }, data: { sessionsRevokedAt: now } });
       if (marked.count === 0) throw new NotFoundException('Không tìm thấy người dùng.');
       const { count } = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
