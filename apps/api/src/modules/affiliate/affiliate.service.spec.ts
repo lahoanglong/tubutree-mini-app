@@ -1543,12 +1543,16 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     priorTax?: number;
     /** Phần thuế giữ dư đã hoàn về Ví của các lệnh đó (Q2b). */
     priorRefunded?: number;
+    role?: string;
+    /** Dấu vết của đại lý: gian hàng CTV hoặc dòng hoa hồng. */
+    dealerStorefront?: boolean;
+    dealerCommission?: boolean;
   }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
     const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: opts.priorGross ?? null, taxWithheld: opts.priorTax ?? null, taxRefunded: opts.priorRefunded ?? null } });
     const executeRaw = jest.fn().mockResolvedValue(1);
     const userUpdate = jest.fn().mockResolvedValue({});
-    const userFindUnique = jest.fn().mockResolvedValue({ personalTaxId: opts.taxId ?? null });
+    const userFindUnique = jest.fn().mockResolvedValue({ id: 'u1', role: opts.role ?? 'AFFILIATE', personalTaxId: opts.taxId ?? null });
     const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
     const updateMany = jest.fn().mockResolvedValue({ count: opts.markCount ?? rows.length });
     // Hoa hồng khả dụng đọc bằng SELECT ... FOR NO KEY UPDATE (đợi lần trả một phần đang cắt amount rồi đọc số đã cắt).
@@ -1557,7 +1561,9 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       commission: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: opts.available ?? 100_000 } }),
         updateMany,
+        findFirst: jest.fn().mockResolvedValue(opts.dealerCommission ? { id: 'c0' } : null),
       },
+      storefront: { findFirst: jest.fn().mockResolvedValue(opts.dealerStorefront ? { id: 's0' } : null) },
       $queryRaw: queryRaw,
       user: { update: userUpdate, findUnique: userFindUnique },
       payout: { create: payoutCreate, aggregate: payoutAggregate },
@@ -1568,6 +1574,48 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
     return { prisma, userUpdate, userFindUnique, payoutCreate, updateMany, payoutAggregate, executeRaw, queryRaw };
   }
+
+  describe('quyền CTV', () => {
+    const svcOf = (prisma: PrismaService) => new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
+
+    it('khách thường có hoa hồng APPROVED → 403, không đánh dấu PAID, không đụng Ví', async () => {
+      const { prisma, updateMany, userUpdate, payoutCreate } = makePrisma({ role: 'CUSTOMER' });
+      await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(payoutCreate).not.toHaveBeenCalled();
+    });
+
+    it('CTV (AFFILIATE) → qua', async () => {
+      const { prisma } = makePrisma({ role: 'AFFILIATE' });
+      await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true, credited: 100_000 });
+    });
+
+    it('ngoại lệ: đại lý còn dòng hoa hồng hoặc gian hàng CTV → qua; đại lý thuần → 403', async () => {
+      const a = makePrisma({ role: 'DEALER', dealerCommission: true });
+      await expect(svcOf(a.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true });
+      const b = makePrisma({ role: 'DEALER', dealerStorefront: true });
+      await expect(svcOf(b.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true });
+      const c = makePrisma({ role: 'DEALER' });
+      await expect(svcOf(c.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('vai trò bị hạ giữa lúc chờ khoá (đọc lại trong transaction thấy CUSTOMER) → 403, không đánh dấu PAID', async () => {
+      const { prisma, userFindUnique, updateMany } = makePrisma({ role: 'AFFILIATE' });
+      userFindUnique.mockResolvedValueOnce({ id: 'u1', role: 'AFFILIATE' }).mockResolvedValueOnce({ id: 'u1', role: 'CUSTOMER' });
+      await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('createLink: khách thường 403 và không tạo link; CTV qua', async () => {
+      const create = jest.fn().mockResolvedValue({ id: 'l1' });
+      const mk = (role: string) =>
+        ({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', role }) }, affiliateLink: { create } }) as unknown as PrismaService;
+      await expect(svcOf(mk('CUSTOMER')).createLink('u1', 'PRODUCT', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(create).not.toHaveBeenCalled();
+      await expect(svcOf(mk('AFFILIATE')).createLink('u1', 'PRODUCT', 'p1')).resolves.toEqual({ id: 'l1' });
+    });
+  });
 
   it('số dư khả dụng = 0 → BadRequest', async () => {
     const { prisma } = makePrisma({ available: 0 });
@@ -1688,6 +1736,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         commissionRows.filter((r) => r.status === 'APPROVED' && r.payoutBatchId === null).map((r) => ({ id: r.id, amount: r.amount })),
       ),
       user: {
+        findUnique: jest.fn(async () => ({ id: 'u1', role: 'AFFILIATE' })),
         update: jest.fn(async ({ data }: { data: { walletBalance: { increment: number } } }) => {
           wallet += data.walletBalance.increment;
           return {};

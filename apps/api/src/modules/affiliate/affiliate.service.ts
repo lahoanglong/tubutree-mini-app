@@ -337,7 +337,16 @@ export class AffiliateService {
     return { referrerUserId: t.referrerUserId, storefrontSlug: t.storefrontSlug, kind: t.kind };
   }
 
+  /** Chặn người đã mất quyền CTV (bị hạ về khách): công cụ CTV chỉ mở cho người còn quyền, kể cả ngoại lệ đại lý còn dấu vết hoa hồng. */
+  private async assertAffiliateAccess(db: Parameters<typeof affiliateAccess>[0] & Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<void> {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
+    if (!user || !(await affiliateAccess(db, user)).hasAccess) {
+      throw new ForbiddenException('Tài khoản của bạn không còn quyền Cộng tác viên nên không dùng được chức năng này. Vui lòng liên hệ Tubu Tree để được hỗ trợ.');
+    }
+  }
+
   async createLink(userId: string, targetType: string, targetId?: string) {
+    await this.assertAffiliateAccess(this.prisma, userId);
     const shortCode = randomBytes(5).toString('base64url');
     return this.prisma.affiliateLink.create({
       data: { userId, shortCode, targetType, targetId },
@@ -1384,6 +1393,7 @@ export class AffiliateService {
     taxIdInput?: string,
   ) {
     if (method !== 'WALLET_BALANCE') throw new BadRequestException(WALLET_ONLY_MESSAGE);
+    await this.assertAffiliateAccess(this.prisma, userId);
     // Không đọc `affiliate.tubu_wallet_multiplier` ở đây: walletBalance là VND thật (Ví dùng trả tiền hàng), nên nhân hệ
     // số ở đường chuyển hoa hồng vào Ví là in tiền thật (1.000.000đ hoa hồng thành 1.497.000đ ở hệ số cũ 1.5). Chuyển
     // vào Ví luôn 1:1 (credited = total), bất kể SystemConfig còn giá trị gì cho key này. Key vẫn được `system-config`
@@ -1453,6 +1463,10 @@ export class AffiliateService {
           SELECT "id", "amount" FROM "commissions"
           WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
           ORDER BY "id" FOR NO KEY UPDATE`;
+        // Khoá dòng người dùng sau dòng hoa hồng (cùng thứ tự với đường thu hồi) rồi đọc lại vai trò: admin hạ quyền cùng lúc thì hoặc
+        // thấy vai trò mới và từ chối, hoặc đợi lần rút này xong. Kiểm ở đầu hàm chỉ là đường nhanh, không chặn được cuộc đua.
+        await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+        await this.assertAffiliateAccess(tx, userId);
         const total = rows.reduce((s, c) => s + c.amount, 0);
         // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
