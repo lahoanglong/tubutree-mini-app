@@ -691,8 +691,8 @@ export class DealerService {
         { isolationLevel: 'Serializable' },
       );
     } catch (err) {
-      // P2034: serialization failure — 2 lần duyệt công nợ của CÙNG đại lý chạm nhau.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+      // Thua race Serializable: 2 lần duyệt công nợ của CÙNG đại lý chạm nhau. Câu ORM báo P2034, câu raw (khoá mã GD) báo P2010/40001.
+      if (isSerializationFailure(err)) {
         throw new BadRequestException('Hệ thống đang bận xử lý công nợ đại lý này, bạn thử lại nhé.');
       }
       // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như

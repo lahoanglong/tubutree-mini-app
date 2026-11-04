@@ -387,6 +387,40 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     await expect(svc.adminRecordCreditPayment('admin1', 'd1', 100_000)).rejects.toThrow(/đang bận/);
   });
 
+  it.each([
+    ['P2034 của Prisma', new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict', { code: 'P2034', clientVersion: 'x' })],
+    [
+      'P2010 của câu raw khoá mã GD (meta 40001)',
+      new Prisma.PrismaClientKnownRequestError('Raw query failed. Code: `40001`. Message: `could not serialize access`', {
+        code: 'P2010',
+        clientVersion: 'x',
+        meta: { code: '40001', message: 'could not serialize access due to read/write dependencies among transactions' },
+      }),
+    ],
+    ['lỗi Postgres trần mang SQLSTATE 40001', Object.assign(new Error('ERROR: could not serialize access due to concurrent update'), { code: '40001' })],
+  ])('thua race Serializable (%s) → BadRequest "đang bận", không 500, không ghi sổ', async (_label, err) => {
+    const { svc, prisma, ledgerCreate } = build({ debt: 500_000 });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(err);
+    const p = svc.adminRecordCreditPayment('admin1', 'd1', 100_000, { bankRef: 'FT77', idempotencyKey: 'k-77' });
+    await expect(p).rejects.toBeInstanceOf(BadRequestException);
+    await expect(p).rejects.toThrow('Hệ thống đang bận xử lý công nợ đại lý này, bạn thử lại nhé.');
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('lỗi nghiệp vụ trong tx có chữ "40001" (HttpException) giữ nguyên, không bị đổi thành "đang bận"', async () => {
+    const { svc, prisma } = build({ debt: 500_000 });
+    const business = new BadRequestException('Mã giao dịch 40001 đã dùng để ghi giảm công nợ. Kiểm tra lại mã hoặc bỏ trống ô mã.');
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(business);
+    await expect(svc.adminRecordCreditPayment('admin1', 'd1', 100_000)).rejects.toBe(business);
+  });
+
+  it('lỗi khác (P2028 hết giờ tx) không bị gọi là thua race, ném nguyên', async () => {
+    const { svc, prisma } = build({ debt: 500_000 });
+    const timeout = new Prisma.PrismaClientKnownRequestError('Transaction already closed', { code: 'P2028', clientVersion: 'x' });
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockRejectedValue(timeout);
+    await expect(svc.adminRecordCreditPayment('admin1', 'd1', 100_000)).rejects.toBe(timeout);
+  });
+
   it('race P2002 khi CÓ Idempotency-Key (2 request cùng key qua pre-check, request thua ăn unique) → trả lại sổ công nợ hiện tại', async () => {
     const { svc, prisma } = build({ debt: 500_000, existingClaim: null });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
