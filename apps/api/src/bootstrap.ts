@@ -1,6 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { CronAwareLogger } from './common/cron-run/cron-aware-logger';
-import { ConfigService } from '@nestjs/config';
 import { Logger, type NestApplicationOptions, type Type } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -69,15 +68,6 @@ async function closeWithin(app: NestExpressApplication | undefined, ms: number, 
   }
 }
 
-/** Cùng nguồn với JwtStrategy (ConfigService); module gốc tối giản của test không có ConfigModule nên rơi về process.env. */
-function accessSecretOf(app: NestExpressApplication): string {
-  try {
-    return app.get(ConfigService, { strict: false }).get<string>('JWT_ACCESS_SECRET') ?? '';
-  } catch {
-    return process.env.JWT_ACCESS_SECRET ?? '';
-  }
-}
-
 async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Promise<NestExpressApplication> {
   const isProd = process.env.NODE_ENV === 'production';
   const bootLogger = new Logger('Bootstrap');
@@ -130,8 +120,9 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   app.use('/api/events', eventsBodyParser());
   // Webhook Pancake (thân tới 10mb): kiểm token trước khi parse.
   app.use(pancakeWebhookTokenGuard);
+  // Secret đọc từ process.env: ConfigModule đã nạp .env vào đó và JwtStrategy dùng cùng giá trị.
   // Trần theo nhóm route (mặc định 256kb; ảnh base64/CSV 10mb; webhook 1mb, Pancake 10mb), rồi duyệt khoá/phần tử/NUL trước ValidationPipe.
-  app.use(...createBodyParsers(accessSecretOf(app)), bodyParserErrorHandler, requestInputGuard);
+  app.use(...createBodyParsers(process.env.JWT_ACCESS_SECRET ?? ''), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);
   app.use(helmet());
   app.setGlobalPrefix('api');

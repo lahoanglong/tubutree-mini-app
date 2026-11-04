@@ -1,6 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import { Body, Controller, Get, Injectable, Module, Post, type INestApplication, type Type } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { Cron, ScheduleModule } from '@nestjs/schedule';
 import { bootstrap } from './bootstrap';
 import { CRON_LEADER_OPTIONS, CronLeaderService } from './common/cron-leader/cron-leader.service';
@@ -54,6 +55,14 @@ function rootModule(prisma: object, ticks: { n: number }, controllers: Type<unkn
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
+  const SHELL_JWT_SECRET = process.env.JWT_ACCESS_SECRET;
+  beforeAll(() => {
+    process.env.JWT_ACCESS_SECRET = 'bootstrap-spec-access-secret-0123456789';
+  });
+  afterAll(() => {
+    if (SHELL_JWT_SECRET === undefined) delete process.env.JWT_ACCESS_SECRET;
+    else process.env.JWT_ACCESS_SECRET = SHELL_JWT_SECRET;
+  });
   const opened: INestApplication[] = [];
   afterEach(async () => {
     await Promise.all(opened.splice(0).map((a) => a.close().catch(() => undefined)));
@@ -131,7 +140,10 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     const tooBig = await fetch(`${base}/auth/guest`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://h5.zdn.vn' }, body: JSON.stringify(big) });
     expect(tooBig.status).toBe(413);
     expect(tooBig.headers.get('access-control-allow-origin')).toBe('https://h5.zdn.vn');
-    expect((await post('/feed', big)).status).toBe(201);
+    expect((await post('/feed', big)).status).toBe(413);
+    const bearer = new JwtService().sign({ sub: 'u1' }, { secret: process.env.JWT_ACCESS_SECRET!, expiresIn: '5m' });
+    const authed = await fetch(`${base}/feed`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}` }, body: JSON.stringify(big) });
+    expect(authed.status).toBe(201);
     const manyKeys = await post('/auth/guest', Object.fromEntries(Array.from({ length: 20_000 }, (_, i) => [`k${i}`, 1])));
     expect(manyKeys.status).toBe(400);
     expect((await fetch(`${base}/products?q=a%00`)).status).toBe(400);
