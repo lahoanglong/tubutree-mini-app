@@ -1,7 +1,7 @@
 'use client';
 
 import type { QueryClient } from '@tanstack/react-query';
-import { apiDownload, apiFetch } from './client-api';
+import { apiBlob, apiDownload, apiFetch } from './client-api';
 import { vnDateKey } from './week';
 import type { GomdonAlertView } from './recycling';
 import type {
@@ -31,11 +31,16 @@ export interface DealerApp {
   phone: string;
   address: string;
   taxCode: string | null;
-  cccdFrontUrl: string;
-  cccdBackUrl: string;
+  hasCccdFront: boolean;
+  hasCccdBack: boolean;
+  hasStoreFront: boolean;
   status: string;
   createdAt: string;
 }
+export type DealerAppImageField = 'cccdFront' | 'cccdBack' | 'storeFront';
+/** Ảnh hồ sơ đại lý: API trả byte ảnh (base64 đã giải mã) hoặc JSON `{ url }` cho ảnh trên host upload. */
+export const getDealerAppImage = (id: string, field: DealerAppImageField) =>
+  apiBlob(`/admin/dealer-applications/${encodeURIComponent(id)}/images/${field}`);
 export interface AdminUser {
   id: string;
   fullName: string | null;

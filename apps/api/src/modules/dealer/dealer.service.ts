@@ -38,6 +38,7 @@ import { forBuyer } from '../orders/buyer-order-fields';
 import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
+import { isRealUser } from '../../common/real-user';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
@@ -155,6 +156,8 @@ export class DealerService {
   ) {}
 
   async apply(userId: string, dto: ApplyDealerDto) {
+    const applicant = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(applicant)) throw new BadRequestException('Đăng nhập Zalo để đăng ký đại lý.');
     const pending = await this.prisma.dealerApplication.findFirst({
       where: { userId, status: 'PENDING' },
     });

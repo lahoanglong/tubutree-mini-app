@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { JwtPayload } from '@tubutree/shared-types';
@@ -28,7 +28,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
-import { AdminService } from './admin.service';
+import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
+import type { DealerApplicationImageField } from './admin.service';
 import { streamCsv } from './admin-export';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
@@ -467,6 +468,15 @@ export class AdminController {
   @Get('dealer-applications')
   dealerApps(@Query() q: DealerAppsQuery) {
     return this.admin.listDealerApplications(q.status, q.page, q.limit, q.order);
+  }
+
+  @Get('dealer-applications/:id/images/:field')
+  async dealerAppImage(@Param('id') id: string, @Param('field') field: string, @Res({ passthrough: true }) res: Response) {
+    if (!Object.prototype.hasOwnProperty.call(DEALER_APPLICATION_IMAGE_COLUMNS, field)) throw new NotFoundException('Không tìm thấy ảnh.');
+    const img = await this.admin.dealerApplicationImage(id, field as DealerApplicationImageField);
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    if (img.kind === 'url') return { url: img.url };
+    return new StreamableFile(img.data, { type: img.mime });
   }
 
   @Post('dealer-applications/:id/review')

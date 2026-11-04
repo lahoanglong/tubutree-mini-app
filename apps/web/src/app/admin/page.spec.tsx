@@ -238,8 +238,9 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           phone: '0911111111',
           address: '1 Lê Lợi',
           taxCode: null,
-          cccdFrontUrl: 'https://img.test/f.jpg',
-          cccdBackUrl: '',
+          hasCccdFront: true,
+          hasCccdBack: false,
+          hasStoreFront: false,
           status: 'PENDING',
           createdAt: '2026-10-01T00:00:00.000Z',
         },
@@ -877,11 +878,13 @@ describe('admin/page — tab Đại lý', () => {
     expect(chip.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD có viền token', async () => {
+  it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD chỉ là nút xem (không có img nhận URL từ danh sách)', async () => {
     const { container } = await openDealers();
     const card = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Cửa hàng Xanh') && d.className.includes('rounded-card'))!;
     expect(card.querySelector('span.break-words')!.textContent).toBe('Cửa hàng Xanh');
-    expect(card.querySelector('img')!.className).toContain('border-stone-200');
+    expect(card.querySelector('img')).toBeNull();
+    expect(card.textContent).toContain('Xem CCCD trước');
+    expect(card.textContent).not.toContain('Xem CCCD sau');
   });
 });
 

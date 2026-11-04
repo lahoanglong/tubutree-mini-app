@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { decodeServedImage } from '../../common/served-image';
+import { isUploadedMediaUrl } from '../../common/uploaded-image';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
@@ -237,6 +239,30 @@ const ORDER_LIST_REFUNDS = {
   select: { id: true, kind: true, method: true, status: true, amount: true, createdAt: true, completedAt: true },
 } satisfies Prisma.Order$customerRefundsArgs;
 
+export const DEALER_APPLICATION_IMAGE_COLUMNS = {
+  cccdFront: 'cccdFrontUrl',
+  cccdBack: 'cccdBackUrl',
+  storeFront: 'storeFrontUrl',
+} as const;
+export type DealerApplicationImageField = keyof typeof DEALER_APPLICATION_IMAGE_COLUMNS;
+
+const DEALER_APPLICATION_LIST_SELECT = {
+  id: true,
+  userId: true,
+  businessName: true,
+  taxCode: true,
+  ownerName: true,
+  phone: true,
+  address: true,
+  monthlyVolumeEstimate: true,
+  notes: true,
+  status: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  rejectionReason: true,
+  createdAt: true,
+} as const;
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -300,13 +326,38 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.dealerApplication.findMany({
         where,
+        select: DEALER_APPLICATION_LIST_SELECT,
         // Hàng chờ duyệt (PENDING) web gửi order=asc — hồ sơ cũ nhất lên đầu.
         orderBy: { createdAt: order ?? 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.dealerApplication.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    // Ảnh có thể là base64 hàng trăm KB: danh sách chỉ báo có/không (CCCD hai mặt là cột bắt buộc), ảnh lấy từng tấm qua dealerApplicationImage.
+    const withStore = items.length
+      ? await this.prisma.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "dealer_applications"
+          WHERE "id" IN (${Prisma.join(items.map((a) => a.id))}) AND COALESCE("storeFrontUrl", '') <> ''`
+      : [];
+    const storeIds = new Set(withStore.map((r) => r.id));
+    const data = items.map((a) => ({ ...a, hasCccdFront: true, hasCccdBack: true, hasStoreFront: storeIds.has(a.id) }));
+    return paginated(data, page, limit, total);
+  }
+
+  /** Một ảnh của hồ sơ đại lý: ảnh base64 trả byte, ảnh host upload (Cloudinary) trả URL để web tự hiện. */
+  async dealerApplicationImage(
+    id: string,
+    field: DealerApplicationImageField,
+  ): Promise<{ kind: 'data'; mime: string; data: Buffer } | { kind: 'url'; url: string }> {
+    const column = DEALER_APPLICATION_IMAGE_COLUMNS[field];
+    if (!column) throw new NotFoundException('Không tìm thấy ảnh.');
+    const app = await this.prisma.dealerApplication.findUnique({ where: { id }, select: { [column]: true } });
+    const value = (app as Record<string, string | null> | null)?.[column];
+    if (!value) throw new NotFoundException('Không tìm thấy ảnh.');
+    const decoded = decodeServedImage(value);
+    if (decoded) return { kind: 'data', ...decoded };
+    if (isUploadedMediaUrl(value)) return { kind: 'url', url: value };
+    throw new NotFoundException('Không tìm thấy ảnh.');
   }
 
   async reviewDealerApplication(

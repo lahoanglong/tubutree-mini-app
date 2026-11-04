@@ -7,59 +7,35 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  isURL,
+  Matches,
+  Max,
+  MaxLength,
   Min,
-  registerDecorator,
   ValidateNested,
 } from 'class-validator';
-import type { ValidationArguments, ValidationOptions } from 'class-validator';
+import { PUBLIC_CONTENT_MAX_DATA_URL_LENGTH, IsUploadedImage } from '../../../common/uploaded-image';
+import type { UploadedImageOptions } from '../../../common/uploaded-image';
+import { IsTypedVnPhone } from '../../../common/phone';
+import { TAX_CODE_RE } from '../../checkout/dto/checkout.dto';
 
-// P0 A5-10 (docs/audit-2026-09/05-ctv-dealer-staff.md): DTO trước đây chỉ nhận URL http(s)
-// (@IsUrl), nhưng ImageUpload (apps/miniapp/src/components/image-upload.tsx) fallback sang base64
-// data-URL bất cứ khi nào VITE_CLOUDINARY_* chưa cấu hình — biến này KHÔNG có trong bất kỳ .env
-// nào của repo, nên validator cũ chặn 400 mọi hồ sơ đăng ký đại lý. Ảnh nén qua
-// readAndCompressImage() (maxDim mặc định 1200, quality 0.82) ra ~150-250KB JPEG → base64 dài
-// ~200-330 nghìn ký tự; giới hạn dưới đây cho dư ~6x so với mức thực tế nhưng vẫn chặn payload
-// khổng lồ cố ý (DoS) — 3 trường ảnh x 2 triệu ký tự vẫn nằm rất xa dưới trần body 10mb hiện có
-// (apps/api/src/main.ts: json({ limit: '10mb' })), nên KHÔNG cần nới trần đó.
-const MAX_DATA_URL_LENGTH = 2_000_000;
-const IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
-
-function IsUrlOrImageDataUrl(validationOptions?: ValidationOptions) {
-  return (object: object, propertyName: string) => {
-    registerDecorator({
-      name: 'isUrlOrImageDataUrl',
-      target: object.constructor,
-      propertyName,
-      options: validationOptions,
-      validator: {
-        validate(value: unknown, _args: ValidationArguments) {
-          if (typeof value !== 'string' || value.length === 0) return false;
-          if (value.length > MAX_DATA_URL_LENGTH) return false;
-          if (value.startsWith('data:')) return IMAGE_DATA_URL_RE.test(value);
-          return isURL(value, { require_protocol: true });
-        },
-        defaultMessage(args: ValidationArguments) {
-          return `${args.property} phải là URL hợp lệ (https://...) hoặc ảnh base64 (data:image/...;base64,...), tối đa ${MAX_DATA_URL_LENGTH.toLocaleString('vi-VN')} ký tự.`;
-        },
-      },
-    });
-  };
-}
+// ImageUpload của miniapp nén JPEG cạnh 1200px (~150-250KB → ~200-330 nghìn ký tự base64) khi chưa cấu hình
+// Cloudinary; trần 700k đủ dư và giữ 3 ảnh + chữ dưới 2,2 triệu ký tự mỗi hồ sơ (admin tải về từng ảnh một).
+export const DEALER_IMAGE: UploadedImageOptions = {
+  maxDataUrlLength: PUBLIC_CONTENT_MAX_DATA_URL_LENGTH,
+  verifySignature: true,
+};
 
 export class ApplyDealerDto {
-  @IsString() businessName!: string;
-  @IsOptional() @IsString() taxCode?: string;
-  @IsString() ownerName!: string;
-  @IsString() phone!: string;
-  @IsString() address!: string;
-  // Ảnh CCCD/mặt tiền cửa hàng: chấp nhận URL (Cloudinary) HOẶC base64 data-URL ảnh (fallback thật
-  // của ImageUpload khi thiếu Cloudinary) — vẫn chặn chuỗi rác/quá khổ, xem IsUrlOrImageDataUrl().
-  @IsUrlOrImageDataUrl() cccdFrontUrl!: string;
-  @IsUrlOrImageDataUrl() cccdBackUrl!: string;
-  @IsOptional() @IsUrlOrImageDataUrl() storeFrontUrl?: string;
-  @IsOptional() @IsInt() monthlyVolumeEstimate?: number;
-  @IsOptional() @IsString() notes?: string;
+  @IsString() @MaxLength(120) businessName!: string;
+  @IsOptional() @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode?: string;
+  @IsString() @MaxLength(120) ownerName!: string;
+  @IsString() @IsTypedVnPhone({ message: 'Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0, +84 hoặc 84).' }) phone!: string;
+  @IsString() @MaxLength(500) address!: string;
+  @IsUploadedImage(DEALER_IMAGE) cccdFrontUrl!: string;
+  @IsUploadedImage(DEALER_IMAGE) cccdBackUrl!: string;
+  @IsOptional() @IsUploadedImage(DEALER_IMAGE) storeFrontUrl?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(1_000_000_000) monthlyVolumeEstimate?: number;
+  @IsOptional() @IsString() @MaxLength(1000) notes?: string;
 }
 
 export class DealerOrderLine {

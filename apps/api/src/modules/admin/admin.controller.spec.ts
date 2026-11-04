@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { NotFoundException, RequestMethod, StreamableFile, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import {
@@ -290,6 +290,23 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
       await expect(asQuery(DealerAppsQuery, { order: bad })).rejects.toThrow();
       await expect(asQuery(ReturnRequestsQuery, { order: bad })).rejects.toThrow();
     }
+  });
+
+  it('route ảnh hồ sơ đại lý: byte + nosniff; URL → JSON; tên trường lạ → 404', async () => {
+    const admin = {
+      dealerApplicationImage: jest
+        .fn()
+        .mockResolvedValueOnce({ kind: 'data', mime: 'image/png', data: Buffer.from('x') })
+        .mockResolvedValueOnce({ kind: 'url', url: 'https://res.cloudinary.com/a.jpg' }),
+    };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { set: jest.fn() };
+    const file = await ctrl.dealerAppImage('a1', 'cccdFront', res as never);
+    expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store' }));
+    expect(file).toBeInstanceOf(StreamableFile);
+    expect(await ctrl.dealerAppImage('a1', 'cccdBack', res as never)).toEqual({ url: 'https://res.cloudinary.com/a.jpg' });
+    await expect(ctrl.dealerAppImage('a1', 'constructor', res as never)).rejects.toThrow(NotFoundException);
+    expect(Reflect.getMetadata('roles', AdminController)).toEqual(['ADMIN']);
   });
 
   it('controller chuyển order xuống AdminService (thiếu → undefined, service mặc định desc)', async () => {

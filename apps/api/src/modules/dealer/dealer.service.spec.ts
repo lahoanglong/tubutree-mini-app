@@ -294,6 +294,7 @@ describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', 
     const { Prisma } = jest.requireActual('@prisma/client');
     const p2002 = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'test' });
     const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0900000000', zaloId: 'z1' }) },
       dealerApplication: {
         // findFirst pre-check chưa thấy đơn PENDING (request kia chưa commit lúc check chạy),
         // nhưng create() đụng partial unique index dealer_applications_pending_user_key.
@@ -313,6 +314,7 @@ describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', 
   it('không có đơn PENDING, create() thành công bình thường → trả đơn mới tạo', async () => {
     const created = { id: 'app1', userId: 'u1', status: 'PENDING' };
     const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: null, zaloId: 'z1' }) },
       dealerApplication: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue(created),
@@ -324,6 +326,26 @@ describe('DealerService.apply (Việc 3 — TOCTOU khi đăng ký đại lý)', 
     };
     const out = await new DealerService(prisma, makeConfig()).apply('u1', dto as never);
     expect(out).toEqual(created);
+  });
+});
+
+describe('DealerService.apply — chỉ user thật', () => {
+  const dto = { businessName: 'Cty A', ownerName: 'A', phone: '0900000000', address: 'HN', cccdFrontUrl: 'f', cccdBackUrl: 'b' };
+  it.each([
+    ['khách guest_ không SĐT', { phone: null, zaloId: 'guest_dev1' }],
+    ['không tìm thấy user', null],
+  ])('%s → BadRequest, không tạo hồ sơ, không báo admin', async (_l, user) => {
+    const create = jest.fn();
+    const notify = jest.fn();
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue(null), create },
+    } as unknown as PrismaService;
+    await expect(new DealerService(prisma, makeConfig(), { notify } as never).apply('u1', dto as never)).rejects.toThrow(
+      'Đăng nhập Zalo để đăng ký đại lý.',
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
   });
 });
 
