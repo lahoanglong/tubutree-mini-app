@@ -40,7 +40,7 @@ const TAB: CSSProperties = {
 /**
  * Dải tab khung giờ của trang Giờ vàng (mẫu tabs của APG): MỘT tab nằm trong thứ tự Tab (roving tabindex), mũi tên trái/phải quay vòng,
  * Home/End nhảy tới đầu cuối, đổi tab kéo theo tiêu điểm. Chọn tab theo phím chọn luôn (tự kích hoạt): nội dung chỉ là danh sách đã có sẵn,
- * không tải nặng. Tên đọc của tab là "12:00, đang diễn ra"; chữ nhìn thấy (giờ + chú thích) là cùng thông tin. Tab chọn gạch chân 3px bằng
+ * không tải nặng. Tên đọc của tab là "12:00 Đang diễn ra"; chữ nhìn thấy (giờ + chú thích) là cùng thông tin. Tab chọn gạch chân 3px bằng
  * token viền chọn: không dựa vào màu chữ một mình. Quá 5 tab thì dải cuộn ngang (app-core đã cắt còn 5).
  */
 export function SlotTabs({ tabs, value, onChange, panelId }: SlotTabsProps) {

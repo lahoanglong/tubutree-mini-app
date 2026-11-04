@@ -195,6 +195,7 @@ function TextField({
           maxLength={maxLength}
           autoComplete={autoComplete}
           inputMode={inputMode}
+          aria-required="true"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           className={`${error ? ui.fieldError : ui.field} mt-1`}

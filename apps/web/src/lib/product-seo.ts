@@ -1,4 +1,5 @@
 import type { ProductDetail } from './api';
+import { SITE_URL } from './site';
 
 const MAX_GALLERY = 12;
 const JSON_LD_DESCRIPTION_MAX = 500;
@@ -49,12 +50,83 @@ export function plainText(html: string | null | undefined): string {
 
 const IN_STOCK = 'https://schema.org/InStock';
 const OUT_OF_STOCK = 'https://schema.org/OutOfStock';
+const DISCONTINUED = 'https://schema.org/Discontinued';
+
+const BRAND_NAME = 'Tubu Tree';
+export const META_DESCRIPTION_MAX = 160;
+
+/**
+ * Cắt mô tả meta ở ranh giới từ (không bỏ lửng giữa từ), gộp xuống một dòng và thêm "…" khi có cắt; kết quả luôn ≤ `max` ký tự.
+ */
+export function trimAtWord(text: string, max = META_DESCRIPTION_MAX): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= max) return flat;
+  const head = flat.slice(0, max - 1);
+  // Ký tự ngay sau điểm cắt là khoảng trắng nghĩa là đã cắt đúng ranh giới từ; ngược lại lùi về khoảng trắng gần nhất.
+  const cut = flat[max - 1] === ' ' ? head : head.includes(' ') ? head.slice(0, head.lastIndexOf(' ')) : head;
+  return `${cut.replace(/[\s,;:.\-–—]+$/, '')}…`;
+}
+
+/** Tiêu đề trang sản phẩm (chưa gồm hậu tố "— Tubu Tree" của template gốc); sản phẩm thuộc nhãn Tubu Tree thì không lặp tên nhãn. */
+export function productTitle(p: Pick<ProductDetail, 'name' | 'brand'>): string {
+  const brand = p.brand?.trim();
+  return brand && brand.toLowerCase() !== BRAND_NAME.toLowerCase() ? `${p.name} — ${brand}` : p.name;
+}
+
+/** Mô tả meta: mô tả ngắn, rồi mô tả đầy đủ (chuỗi rỗng từ Pancake không rơi xuống `??`), cuối cùng dựng từ tên + nhãn. */
+export function productMetaDescription(p: Pick<ProductDetail, 'name' | 'brand' | 'shortDesc' | 'description'>): string {
+  const own = plainText(p.shortDesc) || plainText(p.description);
+  if (own) return trimAtWord(own);
+  const brand = p.brand?.trim();
+  return trimAtWord(
+    brand && brand.toLowerCase() !== BRAND_NAME.toLowerCase()
+      ? `${p.name} — ${brand}, bán tại Tubu Tree.`
+      : `${p.name} — sản phẩm thiên nhiên tại Tubu Tree.`,
+  );
+}
+
+/** Tình trạng bán cho JSON-LD: gian hàng tạm nghỉ → hết hàng, đã ngừng bán → Discontinued, còn lại theo tồn kho. */
+export function productAvailability(p: Pick<ProductDetail, 'variations' | 'fulfiller'>): string {
+  const f = p.fulfiller;
+  if (f?.kind === 'UNAVAILABLE') return f.reason === 'STORE_PAUSED' ? OUT_OF_STOCK : DISCONTINUED;
+  return p.variations.some((v) => v.stock > 0) ? IN_STOCK : OUT_OF_STOCK;
+}
+
+/** Mô tả meta của trang thương hiệu: khẩu hiệu, rồi câu giới thiệu, cuối cùng dựng từ tên (+ xuất xứ nếu có); không đưa thêm điều khẳng định nào. */
+export function brandMetaDescription(b: { name: string; tagline?: string | null; story?: string | null; origin?: string | null }): string {
+  const tagline = plainText(b.tagline);
+  if (tagline) return trimAtWord(tagline);
+  const story = plainText(b.story);
+  if (story) return trimAtWord(`${b.name} trên Tubu Tree: ${story}`);
+  const origin = b.origin?.trim();
+  return trimAtWord(`${b.name}${origin ? ` đến từ ${origin}` : ''} — thương hiệu sống xanh trên Tubu Tree.`);
+}
+
+export interface Crumb {
+  name: string;
+  /** Đường dẫn trong site (có thể kèm query); bỏ trống ở mục cuối nếu không có URL riêng. */
+  href?: string;
+}
+
+/** Dữ liệu có cấu trúc BreadcrumbList; mọi URL được đổi sang tuyệt đối. */
+export function breadcrumbJsonLd(items: readonly Crumb[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((c, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: c.name,
+      ...(c.href ? { item: `${SITE_URL}${c.href}` } : {}),
+    })),
+  };
+}
 
 /** Dữ liệu có cấu trúc schema.org/Product để Google hiện giá, tình trạng hàng và đánh giá ở kết quả tìm kiếm. */
 export function productJsonLd(p: ProductDetail, url: string): Record<string, unknown> {
   const images = galleryImages(p);
   const prices = p.variations.map((v) => v.salePrice ?? v.retailPrice);
-  const availability = p.variations.some((v) => v.stock > 0) ? IN_STOCK : OUT_OF_STOCK;
+  const availability = productAvailability(p);
 
   let offers: Record<string, unknown>;
   if (p.variations.length > 1) {

@@ -160,6 +160,7 @@ describe('web tailwind.config', () => {
 
   it('có bóng thanh dưới (shadow-nav) và cỡ chữ nhãn 12px (text-label) theo token', () => {
     expect(ext?.boxShadow).toMatchObject({ nav: 'var(--elevation-nav)' });
+    expect(ext?.fontFamily).toMatchObject({ ui: ['var(--font-ui)'] });
     expect(ext?.fontSize).toMatchObject({ label: ['var(--type-label-size)', { lineHeight: 'var(--type-label-lh)' }] });
   });
 });

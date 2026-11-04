@@ -2,6 +2,20 @@
 @import '@tubutree/design-tokens/src/tokens.css';
 @import '../components/mini/mini.css';
 
+/* Phông dự phòng chỉnh cỡ theo Inter (số đo công bố của Inter so với Arial): trong lúc Inter chưa tải, chữ chiếm gần đúng bề rộng và chiều cao
+   cuối cùng nên lúc đổi phông trang ít xê dịch. design-tokens khai ngăn xếp `'Inter', system-ui` không có chỗ cho nó, nên khai lại ở đây. */
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  size-adjust: 107.4%;
+  ascent-override: 90.2%;
+  descent-override: 22.48%;
+  line-gap-override: 0%;
+}
+:root {
+  --font-ui: 'Inter', 'Inter Fallback', system-ui, sans-serif;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -22,6 +36,11 @@
   :focus-visible {
     outline: 2px solid var(--color-border-focus);
     outline-offset: 2px;
+  }
+
+  /* Nền tối (forest-800/700, stone-900, cam): vòng xanh rừng chỉ đạt 1,3–3:1, nên đổi sang trắng (≥3:1 trên cả bốn nền). */
+  [data-surface='inverse'] :focus-visible {
+    outline-color: var(--color-text-inverse);
   }
 }
 
@@ -57,6 +76,18 @@ html {
   html {
     scroll-padding-top: calc(var(--header-h) + 64px);
     scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Có thanh hành động dính: chừa đúng chiều cao thanh đã đo (--sticky-bar-h, đã gồm vùng an toàn đáy) + 16px, vì thanh giỏ cao hơn nhiều so với 72px cố định.
+   Thanh chỉ hiện dưới md; giỏ và thanh toán (has-sticky-bar-lg) giữ nó tới hết 1023px. */
+@media (max-width: 767.98px) {
+  html:has(body.has-sticky-bar) {
+    scroll-padding-bottom: calc(var(--sticky-bar-h) + 16px);
+  }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  html:has(body.has-sticky-bar-lg) {
+    scroll-padding-bottom: calc(var(--sticky-bar-h) + 16px);
   }
 }
 
@@ -130,4 +161,10 @@ body.has-sticky-bar [data-bottom-nav] {
   main:has(> header[data-page-bleed]) {
     padding-top: 0;
   }
+}
+
+/* Chữ cái đầu của ảnh đại diện chữ vẽ bằng pseudo-element: là chữ trang trí, không để nó nằm trong "chữ nhìn thấy" của liên kết bao quanh
+   (WCAG 2.5.3: tên truy cập "X xem thương hiệu" phải bắt đầu bằng chữ nhìn thấy "X", không phải "V" + "X"). */
+.tubu-initial::before {
+  content: attr(data-initial);
 }

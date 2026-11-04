@@ -125,16 +125,16 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
   test('thanh dưới và ô Số lượng ngoài bảng: qty = giới hạn ghi 3 × giá Giờ vàng, qty 5 ghi cả dòng giá thường kèm ghi chú', async ({ page, api, request }) => {
     const { standing } = await setup(page, api, request);
     const plus = page.locator('[data-section="pdp-quantity"]').getByRole('button', { name: 'Tăng số lượng' });
-    const buy = page.getByRole('button', { name: /^Mua ngay · / });
+    const buy = page.getByRole('button', { name: /^Mua ngay / });
     await expect(page.locator('[data-section="pdp-variation-chips"] button').first()).toContainText('Giờ vàng');
     await expectChipMetrics(page.locator('[data-section="pdp-variation-chips"] button').first());
     await plus.click();
     await plus.click();
-    await expect(buy).toHaveAccessibleName(`Mua ngay · ${vnd(LIMIT * FLASH_PRICE)}`);
+    await expect(buy).toHaveAccessibleName(`Mua ngay ${vnd(LIMIT * FLASH_PRICE)}`);
     await expect(page.locator('[data-section="pdp-flash-limit"]')).toHaveText('');
     await plus.click();
     await plus.click();
-    await expect(buy).toHaveAccessibleName(`Mua ngay · ${vnd(5 * standing)}`);
+    await expect(buy).toHaveAccessibleName(`Mua ngay ${vnd(5 * standing)}`);
     await expect(page.locator('[data-section="pdp-flash-limit"]')).toHaveText(`Giá Giờ vàng tối đa ${LIMIT} sản phẩm mỗi khách. Mua 5 thì cả dòng tính giá thường.`);
   });
 
@@ -167,7 +167,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
 
   test('giỏ đã có 2 sản phẩm Giờ vàng (giới hạn 3): "Mua ngay" ghi cả dòng, "Thêm vào giỏ" ghi giỏ tăng, ghi chú nói theo giỏ, ô Số lượng không nhảy', async ({ page, api, request }) => {
     const { standing } = await setup(page, api, request, { inCart: 2 });
-    await page.getByRole('button', { name: /^Mua ngay · / }).click();
+    await page.getByRole('button', { name: /^Mua ngay / }).click();
     const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
     await expect(dialog).toBeVisible();
     const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
@@ -193,11 +193,11 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
   });
   test('khách đã dùng hết suất Giờ vàng ở đơn trước (perUserLeft 0): nút, bảng và ghi chú ghi giá thường, chỉ một request cho cả lần đổi số lượng', async ({ page, api, request }) => {
     const { standing } = await setup(page, api, request, { allowance: { perUserLeft: 0 } });
-    const buy = page.getByRole('button', { name: /^Mua ngay · / });
-    await expect(buy).toHaveAccessibleName(`Mua ngay · ${vnd(standing)}`);
+    const buy = page.getByRole('button', { name: /^Mua ngay / });
+    await expect(buy).toHaveAccessibleName(`Mua ngay ${vnd(standing)}`);
     await expect(page.locator('[data-section="pdp-flash-limit"]')).toHaveText(SPENT);
     await page.locator('[data-section="pdp-quantity"]').getByRole('button', { name: 'Tăng số lượng' }).click();
-    await expect(buy).toHaveAccessibleName(`Mua ngay · ${vnd(2 * standing)}`);
+    await expect(buy).toHaveAccessibleName(`Mua ngay ${vnd(2 * standing)}`);
     expect(api.callsTo('GET', '/flash-sales/me/allowance')).toHaveLength(1);
 
     await buy.click();
@@ -208,7 +208,7 @@ test.describe('Web khổ điện thoại: giá Giờ vàng ở nút mua và bả
 
   test('số về muộn (request chậm 2 giây): bảng đã mở, ô Số lượng không nhảy khi nút đổi sang giá thường và ghi chú hiện', async ({ page, api, request }) => {
     const { standing } = await setup(page, api, request, { allowance: { perUserLeft: 0, delayMs: 2_000 } });
-    await page.getByRole('button', { name: /^Mua ngay · / }).click();
+    await page.getByRole('button', { name: /^Mua ngay / }).click();
     const dialog = page.getByRole('dialog', { name: 'Chọn phân loại' });
     const buy = dialog.getByRole('button', { name: /^Mua ngay · / });
     const plus = dialog.getByRole('button', { name: 'Tăng số lượng' });

@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getBrand } from '@/lib/api';
+import { ogBase, withBrand } from '@/lib/og';
+import { brandMetaDescription, breadcrumbJsonLd, jsonLdScript } from '@/lib/product-seo';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { findBrandOrigin } from '@/lib/brand-origins';
 import { BrandBody } from '@/components/shop-page/brand-body';
@@ -20,14 +22,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const b = await getBrand(slug);
-  if (!b) return { title: 'Thương hiệu — Tubu Tree' };
-  const title = `${b.name}${b.isVerified ? ' ✓' : ''} — Tubu Tree`;
-  const description = b.tagline ?? 'Thương hiệu sống xanh trên Tubu Tree';
+  if (!b) return { title: 'Thương hiệu' };
+  // ✓ là chữ trong chuỗi <title>/og (huy hiệu trên trang là icon): nhãn chính hãng nhận dấu ngay ở kết quả tìm kiếm và khi chia sẻ.
+  const title = `${b.name}${b.isVerified ? ' ✓' : ''}`;
+  const description = brandMetaDescription(b);
   const img = b.coverUrl ?? b.logoUrl ?? b.products?.[0]?.thumbnail ?? undefined;
+  // Link chia sẻ của CTV thêm ?ref=: canonical bỏ tham số đó để cùng một trang không bị tính là bản trùng.
+  const path = `/brand/${encodeURIComponent(b.slug)}`;
   return {
     title,
     description,
-    openGraph: { title, description, images: img ? [img] : [], type: 'website' },
+    alternates: { canonical: path },
+    openGraph: { ...ogBase, url: path, title: withBrand(title), description, images: img ? [img] : ogBase.images },
   };
 }
 
@@ -45,6 +51,12 @@ export default async function BrandPage({
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
       <BrandBody brand={b} mapOriginId={mapOrigin?.id ?? null} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript(breadcrumbJsonLd([{ name: 'Trang chủ', href: '/' }, { name: b.name, href: `/brand/${encodeURIComponent(b.slug)}` }])),
+        }}
+      />
     </main>
   );
 }

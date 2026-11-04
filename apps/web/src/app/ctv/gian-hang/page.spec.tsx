@@ -255,7 +255,7 @@ afterEach(() => {
 
 describe('/ctv/gian-hang — cổng vào theo phiên', () => {
   it('tiêu đề trang và noindex', () => {
-    expect(metadata.title).toBe('Gian hàng của tôi — Tubu Tree');
+    expect(metadata.title).toBe('Gian hàng của tôi');
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 
@@ -1252,7 +1252,7 @@ describe('kiểu Mini App ở điện thoại', () => {
     }
   });
 
-  it('ảnh bìa thiếu: bìa phẳng như khách thấy, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
+  it('ảnh bìa thiếu: bìa phẳng như khách thấy, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu là thẻ img, URL lạ nằm trong thuộc tính src', async () => {
     const a = mount();
     await flush();
     const cover = a.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!;
@@ -1265,8 +1265,9 @@ describe('kiểu Mini App ở điện thoại', () => {
     state.sf = storefront({ coverUrl: 'https://cdn.example/c.jpg");background:red;("' });
     const b = mount();
     await flush();
-    const style = b.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!.getAttribute('style')!;
-    expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
+    const cover2 = b.container.querySelector<HTMLElement>('[data-testid="shop-cover"]')!;
+    expect(cover2.getAttribute('style')).not.toContain('url(');
+    expect(cover2.querySelector('img')!.getAttribute('src')).toBe('https://cdn.example/c.jpg");background:red;("');
   });
 
   it('chip bố cục không hiện ở điện thoại; thanh dưới nền nhạt, không xuống dòng', async () => {

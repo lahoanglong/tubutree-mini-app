@@ -7,7 +7,7 @@ import BrandStoryPage, { metadata } from './page';
 
 describe('/cau-chuyen — trang công khai có metadata', () => {
   it('có tiêu đề, mô tả, canonical và được lập chỉ mục', () => {
-    expect(metadata.title).toBe('Hành trình nguyên liệu — Tubu Tree');
+    expect(metadata.title).toBe('Hành trình nguyên liệu');
     expect(metadata.description).toContain('Tubu Tree');
     expect(metadata.alternates?.canonical).toBe('/cau-chuyen');
     expect(metadata.robots).toBeUndefined();

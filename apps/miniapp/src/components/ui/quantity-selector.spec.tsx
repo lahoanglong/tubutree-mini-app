@@ -127,4 +127,11 @@ describe('QuantitySelector — nhập nhanh (editable, quickSteps)', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: /Thêm/ })).toBeNull();
   });
+
+  it('itemLabel đặt tên riêng cho từng nút để danh sách nhiều dòng không có chục nút trùng tên (như web)', () => {
+    render(<QuantitySelector value={2} max={5} itemLabel="Sữa tắm" quickSteps={[5]} editable onChange={() => {}} />);
+    for (const name of ['Giảm số lượng Sữa tắm', 'Tăng số lượng Sữa tắm', 'Số lượng Sữa tắm', 'Thêm 5 Sữa tắm']) {
+      expect(screen.getByLabelText(name)).toBeInTheDocument();
+    }
+  });
 });

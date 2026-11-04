@@ -25,6 +25,8 @@ export interface BrowseSortOption {
   value: SortTab;
   label: string;
   spoken?: string;
+  /** Gợi ý đọc thêm sau tên (aria-describedby), tách khỏi tên để tên vẫn bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3). */
+  hint?: string;
 }
 
 /**
@@ -34,9 +36,9 @@ export interface BrowseSortOption {
 export function browseSortOptions(sort: CatalogSort | undefined, hasQuery: boolean): BrowseSortOption[] {
   const price =
     sort === 'price_asc'
-      ? { label: fillCopy('sort.priceAsc'), spoken: fillCopy('sort.priceAscSpoken') }
+      ? { label: fillCopy('sort.priceAsc'), spoken: fillCopy('sort.priceAscSpoken'), hint: fillCopy('sort.priceHint') }
       : sort === 'price_desc'
-        ? { label: fillCopy('sort.priceDesc'), spoken: fillCopy('sort.priceDescSpoken') }
+        ? { label: fillCopy('sort.priceDesc'), spoken: fillCopy('sort.priceDescSpoken'), hint: fillCopy('sort.priceHint') }
         : { label: fillCopy('sort.price'), spoken: fillCopy('sort.priceSpoken') };
   return [
     { value: 'default', label: fillCopy(hasQuery ? 'sort.relevant' : 'sort.default') },

@@ -346,7 +346,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.goto('/tai-khoan/dia-chi');
     await expect(page.getByRole('heading', { name: 'Sổ địa chỉ', level: 1 })).toBeVisible();
     const patched = api.waitForCall('PATCH', '/me/addresses/:id');
-    await page.getByRole('button', { name: 'Đặt địa chỉ của Trần Thị Bình làm mặc định' }).click();
+    await page.getByRole('button', { name: 'Đặt mặc định cho địa chỉ của Trần Thị Bình' }).click();
     expect((await patched).body).toEqual({ isDefault: true });
 
     await page.getByRole('button', { name: 'Xoá địa chỉ của Trần Thị Bình' }).click();

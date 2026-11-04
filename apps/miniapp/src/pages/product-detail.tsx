@@ -1108,18 +1108,19 @@ export default function ProductDetailPage() {
                 )}
               </Button>
               {/* 2 dòng (nhãn + giá): "Mua ngay · 1.250.000đ" một dòng cần ~170px, trong khi mỗi nút
-                  chỉ còn ~110-140px ở 320-390px → trước đây tràn khỏi màn hình. aria-label giữ
-                  nguyên câu một dòng cho trình đọc màn hình (và cả lúc loading — I1). */}
+                  chỉ còn ~110-140px ở 320-390px → trước đây tràn khỏi màn hình. aria-label là câu một dòng "Mua ngay <giá>" cho trình đọc màn hình (và cả lúc loading — I1). */}
               <Button
                 variant="primary"
                 size="lg"
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
                 onPress={handleBuyNow}
-                aria-label={`Mua ngay · ${formatVnd(line.lineTotal)}`}
+                aria-label={`${buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'} ${formatVnd(line.lineTotal)}`}
                 style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
               >
-                <span style={BUY_NOW_LINE}>Mua ngay</span>
+                <span style={BUY_NOW_LINE}>{buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'}</span>
+                {/* Khoảng trắng giữa hai khối (flex không vẽ ra) để chữ nhìn thấy khớp aria-label (WCAG 2.5.3). */}
+                {' '}
                 <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>
                   {formatVnd(line.lineTotal)}
                 </span>

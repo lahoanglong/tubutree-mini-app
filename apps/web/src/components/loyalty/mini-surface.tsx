@@ -14,4 +14,4 @@ export const miniBleed = 'max-md:-mx-4 max-md:rounded-none max-md:border-0 max-m
 export const miniSectionTitle = 'max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)]';
 
 /** Nút phụ như nút secondary ZaUI của Mini App ở điện thoại (nền xanh nhạt, không viền, chữ brand); từ md giữ nút viền. */
-export const miniBtnSecondary = `${ui.btnSecondary} max-md:border-transparent max-md:bg-forest-50 max-md:text-forest-700 max-md:hover:bg-forest-100 max-md:disabled:bg-stone-200 max-md:disabled:text-stone-400`;
+export const miniBtnSecondary = `${ui.btnSecondary} max-md:border-transparent max-md:bg-forest-50 max-md:text-forest-700 max-md:hover:bg-forest-100 max-md:[&:is(:disabled,[aria-disabled=true])]:bg-stone-100 max-md:[&:is(:disabled,[aria-disabled=true])]:text-stone-500`;

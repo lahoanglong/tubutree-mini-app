@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -180,5 +181,56 @@ describe('/tai-khoan/yeu-thich — nút giỏ nhanh', () => {
     await flush(6);
     expect(c.querySelector('[role="alert"]')).not.toBeNull();
     expect(addButton(c, 'Nước rửa chén')!.disabled).toBe(false);
+  });
+
+  it('A11Y-02: vùng báo role=status có sẵn trước khi bấm; sau khi thêm, chính nút đó chứa lời báo', async () => {
+    const c = await mount();
+    const region = c.querySelector('[role="status"]')!;
+    expect(region).not.toBeNull();
+    expect(region.textContent).toBe('');
+    click(addButton(c, 'Nước rửa chén')!);
+    await flush(6);
+    expect(region.isConnected).toBe(true);
+    expect(c.querySelector('[role="status"]')).toBe(region);
+    expect(region.textContent).toContain('Đã thêm vào giỏ!');
+  });
+
+  it('A11Y-03: đang tải chi tiết thì nút chỉ aria-disabled và giữ focus; bấm tiếp không gọi lại', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/wishlist') return [card('a', 'Nước rửa chén')];
+      return new Promise(() => undefined);
+    });
+    const c = await mount();
+    const btn = addButton(c, 'Nước rửa chén')!;
+    btn.focus();
+    click(btn);
+    await flush(3);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    expect(document.activeElement).toBe(btn);
+    click(btn);
+    await flush(2);
+    expect(mocks.get.mock.calls.filter(([path]) => String(path).startsWith('/products/'))).toHaveLength(1);
+  });
+
+  it('A11Y-05: thông báo "Đã thêm vào giỏ!" tự tắt sau 4 giây, nhưng dừng khi trỏ ở trên nó (có liên kết Xem giỏ hàng)', async () => {
+    const c = await mount();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      click(addButton(c, 'Nước rửa chén')!);
+      await vi.advanceTimersByTimeAsync(100);
+      await flush(4);
+      const note = () => Array.from(c.querySelectorAll<HTMLElement>('[data-surface="inverse"]'))[0];
+      expect(note()).toBeDefined();
+      act(() => { note()!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(note()).toBeDefined();
+      act(() => { note()!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); });
+      await vi.advanceTimersByTimeAsync(4_200);
+      await flush(2);
+      expect(note()).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

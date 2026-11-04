@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { paginated, skipTake } from '../../common/pagination';
 import { isStorefrontApprovalRequired, STOREFRONT_PENDING_APPROVAL_WHERE } from './storefront-config';
 import { isStorefrontApproved, ownerHiddenReason, type PublicVisibilityOptions } from './storefront-visibility';
@@ -93,6 +94,7 @@ export class StorefrontAdminService {
     private readonly config: SystemConfigService,
     private readonly affiliate: AffiliateService,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   async list(q: StorefrontAdminListQuery) {
@@ -149,6 +151,9 @@ export class StorefrontAdminService {
     });
     const sf = await this.summaryOf(id);
     if (count === 1) {
+      // Danh sách ảnh cho /img chỉ gồm gian hàng khách thấy được. Đánh dấu cũ để lần tra kế tiếp nạp lại ở nền: ảnh bị gỡ khỏi danh sách sau lần nạp đó,
+      // yêu cầu đầu tiên ngay sau khi gỡ vẫn có thể được phục vụ.
+      this.imageStale?.markStale();
       this.logger.warn(`Admin ${adminId} gỡ đăng gian hàng ${id} (chủ ${sf.ownerUserId ?? 'không có'}): ${reason}`);
       await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_TAKEN_DOWN', { store: sf.title, reason });
     }
@@ -168,6 +173,7 @@ export class StorefrontAdminService {
     }
     const sf = await this.summaryOf(id);
     if (count === 1) {
+      this.imageStale?.markStale();
       this.logger.warn(`Admin ${adminId} đăng lại gian hàng ${id} (chủ ${sf.ownerUserId ?? 'không có'}).`);
       // Tin nói "hiển thị lại với khách" nên chỉ gửi khi khách thật sự thấy: gian hàng nháp, chủ bị khoá hoặc mất vai trò CTV vẫn ẩn.
       if (sf.publicVisible) await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_REINSTATED', { store: sf.title });
@@ -187,6 +193,7 @@ export class StorefrontAdminService {
       : await this.prisma.storefront.updateMany({ where: { id, approvedAt: { not: null } }, data: { approvedAt: null, approvedById: null } });
     const sf = await this.summaryOf(id);
     if (count === 1) {
+      this.imageStale?.markStale();
       this.logger.warn(`Admin ${adminId} ${approved ? 'duyệt' : 'bỏ duyệt'} gian hàng ${id}.`);
       if (approved) await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_APPROVED', { store: sf.title });
     }

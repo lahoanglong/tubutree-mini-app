@@ -15,7 +15,13 @@
       "screens": [
         "/",
         "/offers"
-      ]
+      ],
+      "propsDiff": {
+        "webOnly": [
+          "sizes"
+        ],
+        "reason": "`sizes` của ảnh slide theo bề rộng thật của khung web (banner Ưu đãi tràn 1152px ở lg); Mini chạy một khổ nên không cần"
+      }
     },
     {
       "name": "BottomSheet",
@@ -55,6 +61,12 @@
       "miniapp": "apps/miniapp/src/components/ui/chip.tsx",
       "web": "apps/web/src/components/mini/chip.tsx",
       "props": "ChipProps",
+      "propsDiff": {
+        "webOnly": [
+          "href"
+        ],
+        "reason": "chip thương hiệu ở Trang chủ web là liên kết thật tới /brand/[slug] để công cụ tìm kiếm đi theo được; Mini không có trang để bò"
+      },
       "screens": [
         "/",
         "/about",
@@ -227,9 +239,10 @@
           "listSource"
         ],
         "webOnly": [
-          "priority"
+          "priority",
+          "imageSizes"
         ],
-        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priority: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần"
+        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priority: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần; `sizes` của srcset w theo cột lưới web; Mini chạy một khổ"
       },
       "screens": [
         "/",
@@ -282,9 +295,10 @@
           "alt",
           "className",
           "priority",
-          "size"
+          "size",
+          "sizes"
         ],
-        "reason": "web: alt cho ảnh có nghĩa, className và size để ảnh vừa khung của khuôn máy tính, priority (fetchPriority high) cho ảnh ứng viên LCP khi render server; Mini luôn vẽ ảnh trang trí đúng khung thẻ"
+        "reason": "web: alt cho ảnh có nghĩa, className và size để ảnh vừa khung của khuôn máy tính, priority (fetchPriority high) cho ảnh ứng viên LCP khi render server; Mini luôn vẽ ảnh trang trí đúng khung thẻ; `sizes` của srcset w theo cột lưới web; Mini chạy một khổ"
       }
     },
     {
@@ -325,7 +339,10 @@
         "miniOnly": [
           "navState"
         ],
-        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu"
+        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; `sizes` của srcset w theo cột lưới web; Mini chạy một khổ",
+        "webOnly": [
+          "imageSizes"
+        ]
       },
       "screens": [
         "/",
@@ -503,9 +520,10 @@
       "props": "ShopHeaderProps",
       "propsDiff": {
         "webOnly": [
-          "inStoreGrid"
+          "inStoreGrid",
+          "imageSource"
         ],
-        "reason": "đặt ô của đầu shop vào lưới StoreLayout từ lg; Mini không có khổ lg"
+        "reason": "đặt ô của đầu shop vào lưới StoreLayout từ lg; Mini không có khổ lg; ảnh gian hàng CTV dán mọi host https nên web chỉ đổi cỡ ảnh Cloudinary; Mini không có bộ đổi cỡ theo nguồn"
       },
       "screens": [
         "/brand/:slug",
@@ -519,7 +537,13 @@
       "props": "ShopSectionProps",
       "screens": [
         "/s/:slug"
-      ]
+      ],
+      "propsDiff": {
+        "webOnly": [
+          "priorityCount"
+        ],
+        "reason": "số thẻ đầu tải ưu tiên (LCP): chỉ web có Lighthouse/LCP theo trang; Mini là WebView một màn"
+      }
     },
     {
       "name": "ShopStatsRow",

@@ -63,6 +63,7 @@ export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true
                   <div>
                     <QuantitySelector
                       size="sm"
+                      itemLabel={item.name}
                       editable
                       quickSteps={QUICK_QTY_STEPS}
                       min={0}

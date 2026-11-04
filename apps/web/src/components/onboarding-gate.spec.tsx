@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -32,6 +32,11 @@ vi.mock('@/lib/platform-bridge', () => ({
 
 import { OnboardingGate } from './onboarding-gate';
 import { ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS } from './account/onboarding-rules';
+
+// Phần giao diện cổng tải bằng next/dynamic: nạp trước để lần dựng đầu không phải chờ chunk.
+beforeAll(async () => {
+  await import('./onboarding-gate-ui');
+});
 
 let mounted: Rendered | null = null;
 const mount = async () => {

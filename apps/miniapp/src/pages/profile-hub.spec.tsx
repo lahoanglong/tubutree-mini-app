@@ -146,11 +146,11 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
 
   it('có đúng ba số dư: Điểm Xanh (tổng hai lô), Ví Tubu, Mã giảm giá — không còn ô xu (C-047, PD-3)', async () => {
     renderPage();
-    expect(await screen.findByRole('button', { name: /^Mã giảm giá: 2 mã$/ })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /^Điểm Xanh: 150 điểm$/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Ví Tubu: 50\.000đ$/ })).toBeInTheDocument();
-    const balances = screen.getAllByRole('button').filter((b) => /^[^:]+: .+/.test(b.getAttribute('aria-label') ?? ''));
-    expect(balances.map((b) => (b.getAttribute('aria-label') ?? '').split(':')[0])).toEqual(['Điểm Xanh', 'Ví Tubu', 'Mã giảm giá']);
+    expect(await screen.findByRole('button', { name: /^2 mã\s*Mã giảm giá$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^150 điểm\s*Điểm Xanh$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ })).toBeInTheDocument();
+    const balances = ['Điểm Xanh', 'Ví Tubu', 'Mã giảm giá'].map((label) => screen.getAllByRole('button').find((b) => b.getAttribute('aria-label') === null && (b.textContent ?? '').endsWith(label)));
+    expect(balances.every(Boolean)).toBe(true);
     expect(screen.queryByText(/TubuXu/)).toBeNull();
     expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
   });
@@ -181,7 +181,7 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
 
   it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {
     renderPage();
-    const tile = await screen.findByRole('button', { name: /^Ví Tubu: 50\.000đ$/ });
+    const tile = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
     const value = Array.from(tile.querySelectorAll<HTMLElement>('*')).find((el) => el.textContent === '50.000đ' && el.children.length === 0)!;
     expect(value).toBeTruthy();
     expect(value.style.fontFamily).toContain('--font-ui');
@@ -263,9 +263,9 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
 
   it('ô Ví Tubu mang state.from để nút quay lại về hub; ô Mã giảm giá mở tab Ưu đãi ở phần mã', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /^Mã giảm giá: 2 mã$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^2 mã\s*Mã giảm giá$/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/offers?section=coupons');
-    fireEvent.click(await screen.findByRole('button', { name: /^Ví Tubu: / }));
+    fireEvent.click(await screen.findByRole('button', { name: /Ví Tubu$/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/wallet', { state: { from: '/profile' } });
   });
 });

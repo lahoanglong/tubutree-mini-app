@@ -70,6 +70,54 @@ afterEach(() => {
   Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
 });
 
+const PANCAKE_SLIDES: BannerSlide[] = SLIDES.map((s) => ({ ...s, image: `https://res.cloudinary.com/tubutree/image/upload/v1/${s.id}.jpg` }));
+
+describe('BannerCarousel: ảnh slide (Pa3)', () => {
+  it('ảnh đi qua bộ đổi cỡ: srcset theo w, sizes theo khung; slide 0 eager + fetchpriority high, còn lại lazy', () => {
+    mountPlain(<BannerCarousel slides={PANCAKE_SLIDES} />);
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('[aria-roledescription="slide"] img'));
+    expect(imgs).toHaveLength(3);
+    for (const img of imgs) {
+      expect(img.getAttribute('src')).toContain('/img?w=');
+      expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
+      expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px');
+    }
+    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy']);
+    expect(imgs.map((i) => i.getAttribute('fetchpriority'))).toEqual(['high', null, null]);
+  });
+
+  it('srcset có bản đổi cỡ 1280/1920 (không phải ảnh gốc) cho màn 2x–3x; nơi gọi truyền `sizes` riêng thì ảnh dùng đúng giá trị đó', () => {
+    mountPlain(<BannerCarousel slides={PANCAKE_SLIDES.slice(0, 1)} sizes="min(100vw - 48px, 1152px)" />);
+    const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
+    expect(img.getAttribute('srcset')!).toMatch(/\/img\?w=1920&u=.* 1920w$/);
+    expect(img.getAttribute('srcset')!).not.toContain(`${PANCAKE_SLIDES[0]!.image} `);
+    expect(img.getAttribute('sizes')).toBe('min(100vw - 48px, 1152px)');
+  });
+
+  it('ảnh Pancake (không có trong danh sách của /img cho banner): giữ URL gốc, không srcset, không tốn lượt 404', () => {
+    mountPlain(<BannerCarousel slides={[{ ...SLIDES[0]!, image: 'https://content.pancake.vn/2-26/a.jpg' }]} />);
+    const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
+    expect(img.getAttribute('src')).toBe('https://content.pancake.vn/2-26/a.jpg');
+    expect(img.hasAttribute('srcset')).toBe(false);
+  });
+
+  it('host lạ: giữ URL gốc, không srcset', () => {
+    mountPlain(<BannerCarousel slides={SLIDES.slice(0, 1)} />);
+    const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
+    expect(img.getAttribute('src')).toBe('https://cdn.example/a.jpg');
+    expect(img.hasAttribute('srcset')).toBe(false);
+    expect(img.getAttribute('fetchpriority')).toBe('high');
+  });
+
+  it('bản đổi cỡ lỗi thì thử ảnh gốc một lần rồi mới rơi về chữ alt', () => {
+    mountPlain(<BannerCarousel slides={PANCAKE_SLIDES.slice(0, 1)} />);
+    fire(document.querySelector('[aria-roledescription="slide"] img')!, new Event('error'));
+    expect(document.querySelector('[aria-roledescription="slide"] img')!.getAttribute('src')).toBe('https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg');
+    fire(document.querySelector('[aria-roledescription="slide"] img')!, new Event('error'));
+    expect(document.querySelector('[aria-roledescription="slide"] img')).toBeNull();
+  });
+});
+
 describe('BannerCarousel (web)', () => {
   it('khung: section carousel có tên; slide có tên "alt, i trên n"; chỉ slide đang hiện không inert', () => {
     mountPlain(<BannerCarousel slides={SLIDES} />);

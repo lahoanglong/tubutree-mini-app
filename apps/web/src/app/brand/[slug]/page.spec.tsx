@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ReactElement } from 'react';
+import { act, type ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import BrandPage, { generateMetadata, revalidate } from './page';
@@ -92,9 +92,37 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect((await html()).textContent).not.toContain('Chính hãng');
   });
 
-  it('tiêu đề trang vẫn gắn ✓ cho thương hiệu chính hãng (chuỗi <title>, không phải icon)', async () => {
+  it('tiêu đề trang vẫn gắn ✓ cho nhãn chính hãng (chuỗi <title>, không phải icon); nhãn thường không có', async () => {
     const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
-    expect(meta.title).toBe('Bồ Hòn Xanh ✓ — Tubu Tree');
+    expect(meta.title).toBe('Bồ Hòn Xanh ✓');
+    expect((meta.openGraph as { title: string }).title).toBe('Bồ Hòn Xanh ✓ — Tubu Tree');
+    mocks.brand = { ...BRAND, isVerified: false };
+    expect((await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) })).title).toBe('Bồ Hòn Xanh');
+  });
+
+  it('metadata: tiêu đề là tên nhãn (template gốc thêm hậu tố), canonical không mang ?ref=, og đủ siteName/locale/url/ảnh', async () => {
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
+    expect(meta.title).toBe('Bồ Hòn Xanh ✓');
+    expect(meta.description).toBe('Giặt sạch, nhẹ với đất');
+    expect(meta.alternates).toEqual({ canonical: '/brand/bo-hon' });
+    expect(meta.openGraph).toMatchObject({ type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: '/brand/bo-hon', title: 'Bồ Hòn Xanh ✓ — Tubu Tree' });
+    expect((meta.openGraph as { images: { url: string }[] }).images[0]!.url).toBeTruthy();
+  });
+
+  it('nhãn không có ảnh nào thì og dùng ảnh mặc định; mô tả không còn câu chung chung khi thiếu khẩu hiệu', async () => {
+    mocks.brand = { ...BRAND, tagline: null, coverUrl: null, logoUrl: null, products: [] };
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
+    expect((meta.openGraph as { images: { url: string }[] }).images).toEqual([expect.objectContaining({ url: '/opengraph-image.png', width: 1200 })]);
+    expect(meta.description).toContain('Bồ Hòn Xanh');
+    expect((meta.description as string).length).toBeLessThanOrEqual(160);
+  });
+
+  it('có BreadcrumbList JSON-LD Trang chủ › nhãn', async () => {
+    const box = await html();
+    const ld = Array.from(box.querySelectorAll('script[type="application/ld+json"]')).map((s) => JSON.parse(s.textContent!));
+    const crumbs = ld.find((d) => d['@type'] === 'BreadcrumbList');
+    expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Bồ Hòn Xanh']);
+    expect(crumbs.itemListElement[1].item).toBe('https://app.tubutree.com/brand/bo-hon');
   });
 
   it('bìa phẳng token, avatar là biểu tượng lá không chữ cái, không còn gradient', async () => {
@@ -265,6 +293,17 @@ describe('trang thương hiệu — tab Câu chuyện', () => {
     const imgs = c.querySelectorAll('[role="region"][aria-label="Ảnh câu chuyện thương hiệu"] img');
     expect(imgs).toHaveLength(2);
     expect(imgs[0]!.getAttribute('alt')).toBe('Fuwa3e, ảnh 1');
+  });
+
+  it('ảnh câu chuyện qua bộ đổi cỡ; bộ đổi cỡ lỗi thì lùi về ảnh gốc một lần', async () => {
+    const orig = 'https://content.pancake.vn/2-26/story.jpg';
+    mocks.brand = { ...BRAND, ...WITH_STORY, storyImages: [orig] };
+    const c = await live();
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đọc câu chuyện'))!);
+    const img = c.querySelector('[role="region"][aria-label="Ảnh câu chuyện thương hiệu"] img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=');
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
   });
 
   it('nút "Đọc câu chuyện" nới vùng chạm bằng tubu-hit-44 chứ không dùng min-h-11 chiếm chỗ thật (G6 #24)', async () => {

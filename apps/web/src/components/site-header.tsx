@@ -34,9 +34,9 @@ export default function SiteHeader() {
       {/* Hàng 1 luôn một hàng cao 64px (logo, ô tìm, chuông, giỏ, tài khoản); hàng 2 là điều hướng mục chính. Chiều cao tổng
           cố định = --header-h trong globals.css (6.75rem + 2px viền, 110px ở chữ mặc định), để cột dính của các trang đặt đúng dưới thanh. */}
       <div className={`${PAGE_WIDE} flex h-16 items-center gap-3`}>
-        {/* Logo thật của thương hiệu (đã có sẵn khẩu hiệu), không dựng lại bằng biểu tượng + chữ. */}
+        {/* Logo thật của thương hiệu (đã có sẵn khẩu hiệu), không dựng lại bằng biểu tượng + chữ. Không `priority`: header này `hidden md:block`, preload sẽ tải logo trên điện thoại nơi nó bị ẩn. */}
         <Link href="/" aria-label="Tubu Tree — trang chủ" className="flex min-h-11 flex-none items-center">
-          <Image src={tubuLogo} alt="Tubu Tree" width={99} height={36} priority className="h-9 w-auto" />
+          <Image src={tubuLogo} alt="Tubu Tree" width={99} height={36} className="h-9 w-auto" />
         </Link>
 
         {/* data-site-search: html[data-tenant-host] ẩn khung này từ khung hình đầu trên host gian hàng CTV (globals.css).
@@ -46,7 +46,7 @@ export default function SiteHeader() {
         </div>
 
         {/* Chuông, giỏ hàng & tài khoản */}
-        <nav aria-label="Điều hướng chính" className="ml-auto flex items-center gap-2 text-sm sm:gap-3">
+        <nav aria-label="Tài khoản và giỏ hàng" className="ml-auto flex items-center gap-2 text-sm sm:gap-3">
           <HeaderBell authed={status === 'authenticated'} />
           <Link
             href="/gio-hang"
@@ -69,7 +69,7 @@ export default function SiteHeader() {
               href="/tai-khoan"
               className="flex min-h-11 items-center gap-1.5 rounded-control border border-stone-200 bg-stone-0 px-3 text-xs font-semibold text-stone-800 shadow-card transition hover:border-stone-300 hover:bg-stone-50"
             >
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-forest-100 text-xs font-bold text-forest-800">
+              <div aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-forest-100 text-xs font-bold text-forest-800">
                 {user?.fullName ? user.fullName.slice(0, 1).toUpperCase() : <User className="h-3.5 w-3.5" aria-hidden="true" />}
               </div>
               <span className="max-w-[100px] truncate">
@@ -88,7 +88,7 @@ export default function SiteHeader() {
       </div>
 
       {/* Máy tính: các mục gốc và chức năng chương trình (mục chưa làm xong bị ẩn). Trang chủ là logo, Cá nhân là nút tài khoản nên không lặp. */}
-      <nav aria-label="Mục chính" data-desktop-nav className="border-t border-stone-100">
+      <nav aria-label="Điều hướng chính" data-desktop-nav className="border-t border-stone-100">
         <ul className={`${PAGE_WIDE} flex h-11 items-center gap-1 overflow-x-auto text-sm`}>
           {readyDesktopNav({ wasteVisible }).map((t) => {
             const active = pathname === t.path || pathname.startsWith(`${t.path}/`);
@@ -97,7 +97,7 @@ export default function SiteHeader() {
                 <Link
                   href={t.path}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex min-h-9 items-center rounded-control px-3 font-medium transition hover:bg-forest-50 hover:text-forest-700 ${active ? 'text-forest-700' : 'text-stone-700'}`}
+                  className={`flex min-h-9 items-center rounded-control px-3 font-medium transition hover:bg-forest-50 hover:text-forest-700 ${active ? 'text-forest-700 underline decoration-2 underline-offset-8' : 'text-stone-700'}`}
                 >
                   {t.label}
                 </Link>

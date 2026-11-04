@@ -1,10 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import type { BrandCount } from '@tubutree/app-core/api/catalog';
 import { hubBrands } from '@tubutree/app-core/browse/hub';
 import { avatarInitial, avatarTone } from '@tubutree/app-core/initials-avatar';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { Section, SectionHeader, Text } from '@/components/mini';
+import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 
 const AVATAR = 48;
 
@@ -21,15 +24,15 @@ function InitialsAvatar({ name }: { name: string }) {
   return (
     <div
       data-testid="initials-avatar"
+      data-initial={avatarInitial(name)}
+      className="tubu-initial"
       aria-hidden="true"
       style={{
         width: AVATAR, height: AVATAR, flex: '0 0 auto', borderRadius: '50%', background: tone.background, color: tone.color,
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: Math.round(AVATAR * 0.44), lineHeight: 1,
         fontFamily: 'var(--font-ui)', userSelect: 'none',
       }}
-    >
-      {avatarInitial(name)}
-    </div>
+    />
   );
 }
 
@@ -46,21 +49,27 @@ export function BrandGrid({ brands, onSelect }: BrandGridProps) {
       <SectionHeader title={title} />
       <div className="grid grid-cols-4 gap-2 md:grid-cols-6 lg:grid-cols-12">
         {list.map((b) => (
-          <button
+          // Liên kết thật để công cụ tìm kiếm đi theo được; chạm/nhấp trái thường vẫn lọc tại chỗ (không tải lại trang), còn Ctrl/Cmd/chuột giữa mở tab mới như mọi liên kết.
+          <Link
             key={b.brand}
-            type="button"
+            href={browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] })}
             className="tubu-press"
             aria-label={fillCopy('browse.brandSpoken', { name: b.brand })}
-            onClick={() => onSelect(b.brand)}
+            onClick={(e) => {
+              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              onSelect(b.brand);
+            }}
             style={{
               minHeight: 44, minWidth: 0, padding: '8px 4px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center',
-              gap: 6, fontFamily: 'inherit', background: 'transparent', border: 'none', cursor: 'pointer',
+              gap: 6, fontFamily: 'inherit', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', textDecoration: 'none',
             }}
           >
             {b.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={b.logoUrl}
+                src={sizedImage(b.logoUrl, AVATAR).src}
+                onError={fallBackToOriginal(b.logoUrl)}
                 alt=""
                 width={AVATAR}
                 height={AVATAR}
@@ -73,7 +82,7 @@ export function BrandGrid({ brands, onSelect }: BrandGridProps) {
             <Text variant="caption" data-brand-label="" style={{ fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {b.brand}
             </Text>
-          </button>
+          </Link>
         ))}
       </div>
     </Section>

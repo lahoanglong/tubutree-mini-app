@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { fetchCampaign, fetchCampaignProducts, type CampaignDetail } from '@tubutree/app-core/api/campaign';
 import { CAMPAIGN_PRODUCTS_PAGE } from '@tubutree/app-core/commerce/campaign';
 import { ApiNotFoundError, createServerHttp } from '@/lib/core-http-server';
+import { ogBase, withBrand } from '@/lib/og';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { CampaignBody } from '@/components/campaign/campaign-body';
 
@@ -27,10 +28,16 @@ async function loadCampaign(slug: string): Promise<CampaignDetail | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const c = await loadCampaign(slug);
-  if (!c) return { title: 'Chương trình — Tubu Tree' };
-  const title = `${c.title} — Tubu Tree`;
+  if (!c) return { title: 'Chương trình' };
+  const title = c.title;
   const description = c.subtitle ?? 'Ưu đãi đang diễn ra trên Tubu Tree';
-  return { title, description, openGraph: { title, description, images: c.image ? [c.image] : [], type: 'website' } };
+  const path = `/chien-dich/${encodeURIComponent(slug)}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: { ...ogBase, url: path, title: withBrand(title), description, images: c.image ? [c.image] : ogBase.images },
+  };
 }
 
 export default async function CampaignPage({ params }: { params: Promise<{ slug: string }> }) {

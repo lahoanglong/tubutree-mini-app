@@ -155,22 +155,73 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
 describe('BrowsePage — SEO', () => {
   it('trang gốc: tiêu đề riêng, canonical về /san-pham', async () => {
     const m = await generateMetadata({ searchParams: sp({}) });
-    expect(m.title).toBe('Tất cả sản phẩm | Tubu Tree');
+    expect(m.title).toBe('Tất cả sản phẩm');
     expect(m.alternates).toEqual({ canonical: '/san-pham' });
   });
 
-  it('kết quả tìm kiếm, danh mục, phân khúc và lọc/sắp xếp không cho công cụ tìm kiếm lập chỉ mục (vô hạn biến thể URL)', async () => {
-    for (const o of [{ q: 'gội' }, { category: 'c-goi' }, { segment: 'eco' }, { minPrice: '1' }, { sort: 'newest' }, { inStock: '1' }, { rating: '4' }, { all: '1' }]) {
+  it('mọi trạng thái được lập chỉ mục đều có mô tả (trước đây /san-pham thiếu meta description)', async () => {
+    for (const o of [{}, { page: '2' }, { brand: 'Tubu' }, { category: 'c-goi' }, { utm_source: 'zalo' }]) {
+      const m = await generateMetadata({ searchParams: sp(o) });
+      expect(typeof m.description, JSON.stringify(o)).toBe('string');
+      expect((m.description as string).length, JSON.stringify(o)).toBeGreaterThan(40);
+    }
+  });
+
+  it('?category=<id có thật> đứng một mình: tiêu đề là tên danh mục, canonical riêng, cho lập chỉ mục', async () => {
+    const m = await generateMetadata({ searchParams: sp({ category: 'c-goi' }) });
+    expect(m.title).toBe('Dầu gội');
+    expect(m.alternates).toEqual({ canonical: '/san-pham?category=c-goi' });
+    expect(m.robots).toBeUndefined();
+    const tracked = await generateMetadata({ searchParams: sp({ category: 'c-goi', utm_source: 'zalo' }) });
+    expect(tracked.alternates).toEqual({ canonical: '/san-pham?category=c-goi' });
+  });
+
+  it('?category= không có trong cây (id lạ) hoặc kèm tham số khác → noindex', async () => {
+    expect(await generateMetadata({ searchParams: sp({ category: 'khong-co' }) })).toEqual({ robots: { index: false, follow: true } });
+    for (const o of [{ category: 'c-goi', brand: 'Tubu' }, { category: 'c-goi', page: '2' }, { category: 'c-goi', sort: 'newest' }, { category: 'c-goi', q: 'gội' }, { category: '' }]) {
+      expect(await generateMetadata({ searchParams: sp(o) }), JSON.stringify(o)).toEqual({ robots: { index: false, follow: true } });
+    }
+  });
+
+  it('?category= hợp lệ nhưng API danh mục lỗi: ném lỗi như nhánh brand, không trả 200 + noindex làm URL rớt khỏi chỉ mục', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/categories') throw new Error('API lỗi');
+      return [];
+    });
+    await expect(generateMetadata({ searchParams: sp({ category: 'c-goi' }) })).rejects.toThrow('API lỗi');
+  });
+
+  it('BreadcrumbList JSON-LD ở trạng thái nhãn và danh mục (theo vệt breadcrumb hiển thị), không có ở hub hay trạng thái noindex', async () => {
+    const ld = (html: string) => Array.from(html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)).map((m) => JSON.parse(m[1]!));
+    const brandLd = ld(await render({ brand: 'Tubu' }))[0];
+    expect(brandLd.itemListElement.map((i: { name: string; item: string }) => [i.name, i.item])).toEqual([
+      ['Trang chủ', 'https://app.tubutree.com/'],
+      ['Danh mục', 'https://app.tubutree.com/san-pham'],
+      ['Tubu', 'https://app.tubutree.com/san-pham?brand=Tubu'],
+    ]);
+    const catLd = ld(await render({ category: 'c-goi' }))[0];
+    expect(catLd.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Danh mục', 'Dầu gội']);
+    expect(ld(await render({}))).toEqual([]);
+    expect(ld(await render({ brand: 'khong-co' }))).toEqual([]);
+    expect(ld(await render({ category: 'c-goi', sort: 'newest' }))).toEqual([]);
+  });
+
+  it('kết quả tìm kiếm, phân khúc và lọc/sắp xếp không cho công cụ tìm kiếm lập chỉ mục (vô hạn biến thể URL)', async () => {
+    for (const o of [{ q: 'gội' }, { segment: 'eco' }, { minPrice: '1' }, { sort: 'newest' }, { inStock: '1' }, { rating: '4' }, { all: '1' }]) {
       expect(await generateMetadata({ searchParams: sp(o) })).toEqual({ robots: { index: false, follow: true } });
     }
   });
 
-  it('trang phân trang và trang nhãn có tiêu đề + canonical riêng; nhãn không có thật thì noindex', async () => {
+  it('danh sách gốc từ trang 2 noindex như ?all=1 (trang 1 của danh sách); trang nhãn có tiêu đề + canonical riêng; nhãn không có thật thì noindex', async () => {
     const p2 = await generateMetadata({ searchParams: sp({ page: '2' }) });
-    expect(p2.title).toBe('Sản phẩm sống xanh — Trang 2 | Tubu Tree');
-    expect(p2.alternates).toEqual({ canonical: '/san-pham?page=2' });
+    expect(p2.title).toBe('Sản phẩm sống xanh — Trang 2');
+    expect(p2.robots).toEqual({ index: false, follow: true });
+    expect(p2.alternates).toBeUndefined();
+    const brandP2 = await generateMetadata({ searchParams: sp({ brand: 'Tubu', page: '2' }) });
+    expect(brandP2.alternates).toEqual({ canonical: '/san-pham?brand=Tubu&page=2' });
+    expect(brandP2.robots).toBeUndefined();
     const brand = await generateMetadata({ searchParams: sp({ brand: 'Tubu' }) });
-    expect(brand.title).toBe('Sản phẩm Tubu | Tubu Tree');
+    expect(brand.title).toBe('Sản phẩm Tubu');
     expect(brand.robots).toBeUndefined();
     const fake = await generateMetadata({ searchParams: sp({ brand: 'khong-co' }) });
     expect(fake.robots).toEqual({ index: false, follow: true });

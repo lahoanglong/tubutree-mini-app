@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Campaign, CampaignAudience, CampaignLinkType, CampaignPlacement, CouponScope } from '@prisma/client';
 import { publicImage } from '../../common/public-image';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
@@ -91,7 +92,10 @@ const named = (items: readonly string[]) => items.slice(0, 5).join(', ');
 
 @Injectable()
 export class CampaignsAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
+  ) {}
 
   async list(placement?: CampaignPlacement, now: Date = new Date()): Promise<AdminCampaignRow[]> {
     const rows = await this.prisma.campaign.findMany({
@@ -143,6 +147,8 @@ export class CampaignsAdminService {
         },
         include: DETAIL_INCLUDE,
       });
+      // Ảnh banner https chỉ đổi cỡ được khi có trong danh sách của /img: nạp lại ngay thay vì đợi 5 phút.
+      this.imageStale?.markStale();
       return toDetail(created, now);
     } catch (e) {
       if (isUniqueViolation(e)) throw new ConflictException(`Đã có chiến dịch dùng slug "${slug}". Đổi tên hoặc nhập slug khác.`);
@@ -177,6 +183,7 @@ export class CampaignsAdminService {
       if (linkType !== current.linkType || data.linkValue !== current.linkValue) await this.assertLinkTarget(linkType, data.linkValue);
     }
     const updated = await this.prisma.campaign.update({ where: { id }, data, include: DETAIL_INCLUDE });
+    if (dto.image !== undefined && dto.image !== current.image) this.imageStale?.markStale();
     return toDetail(updated, now);
   }
 

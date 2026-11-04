@@ -1,7 +1,8 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/segmented-tabs.tsx
-import { useEffect } from 'react';
+import { useEffect, type MutableRefObject } from 'react';
+import { useRovingGroup } from '@/lib/use-roving-group';
 import { useScrollHints } from './use-scroll-hints';
 
 export interface SegmentedTabItem {
@@ -28,9 +29,16 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
     const active = hints.ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
     active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [scroll, value, hints.ref]);
+  const roving = useRovingGroup({ keys: 'horizontal' });
+  const setRefs = (el: HTMLDivElement | null) => {
+    (hints.ref as MutableRefObject<HTMLDivElement | null>).current = el;
+    (roving.ref as MutableRefObject<HTMLDivElement | null>).current = el;
+  };
   return (
     <div
       {...(scroll ? hints : {})}
+      ref={setRefs}
+      onKeyDown={roving.onKeyDown}
       role="tablist"
       aria-label={label}
       className={scroll ? 'scroll-x tubu-scroll-fade' : undefined}

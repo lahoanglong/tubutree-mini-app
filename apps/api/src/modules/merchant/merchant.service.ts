@@ -507,6 +507,16 @@ export class MerchantService {
       }
     }
 
+    // Ảnh đại diện/bìa https mới, hay đăng/ẩn gian hàng, đổi tập ảnh /img được đổi cỡ. Đánh dấu SAU mỗi lần ghi thành công: đánh dấu trước thì lần nạp lại
+    // có thể chạy trước lúc ghi xong, xoá cờ rồi bỏ lỡ thay đổi.
+    const registryChanged =
+      (dto.avatarUrl !== undefined && dto.avatarUrl !== store.avatarUrl) ||
+      (dto.coverUrl !== undefined && dto.coverUrl !== store.coverUrl) ||
+      dto.isPublished !== undefined;
+    const written = <T>(result: T): T => {
+      if (registryChanged) this.imageStale?.markStale();
+      return result;
+    };
     const releasedPrevious = [store.subdomain, store.customDomain];
     const releasedNext = [
       updateData.subdomain === undefined ? store.subdomain : (updateData.subdomain as string | null),
@@ -526,7 +536,7 @@ export class MerchantService {
             await tx.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitleLocked } });
           }
           return updated;
-        });
+        }).then(written);
       } catch (err) {
         if (dto.isPublished && isLostToTakeDown(err)) throw takenDownError(null);
         throw err;
@@ -538,14 +548,14 @@ export class MerchantService {
     const where = { id: store.id, ...(dto.isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) };
     try {
       if (!newTitle || newTitle === store.title) {
-        return await this.prisma.storefront.update({ where, data: updateData });
+        return written(await this.prisma.storefront.update({ where, data: updateData }));
       }
       // Tên nhãn của sản phẩm tự đăng chép từ tên gian hàng lúc đăng: đổi tên gian hàng thì đổi theo (R2-MERCHANT-7).
       const [updated] = await this.prisma.$transaction([
         this.prisma.storefront.update({ where, data: updateData }),
         this.prisma.product.updateMany({ where: { storefrontId: store.id, brand: store.title }, data: { brand: newTitle } }),
       ]);
-      return updated;
+      return written(updated);
     } catch (err) {
       if (dto.isPublished && isLostToTakeDown(err)) throw takenDownError(null);
       throw err;
@@ -557,10 +567,12 @@ export class MerchantService {
     if (Boolean(store.isPublished) === isPublished) return store;
     if (isPublished) await assertCanPublish(this.prisma, store);
     try {
-      return await this.prisma.storefront.update({
+      const updated = await this.prisma.storefront.update({
         where: { id: store.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
         data: { isPublished, publishedAt: isPublished ? new Date() : null },
       });
+      this.imageStale?.markStale();
+      return updated;
     } catch (err) {
       if (isPublished && isLostToTakeDown(err)) throw takenDownError(null);
       throw err;

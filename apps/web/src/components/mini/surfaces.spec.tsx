@@ -26,13 +26,16 @@ describe('Card', () => {
     expect((mount(<Card variant="flat" padding={0}>a</Card>).container.firstElementChild as HTMLElement).style.background).toBe('var(--color-bg-subtle)');
   });
 
-  it('có onPress thì là role=button bấm được', () => {
+  it('có onPress thì là <button> thật bấm được (A11Y-23), không onPress thì là div không có role', () => {
     const onPress = vi.fn();
     const el = mount(<Card onPress={onPress}>x</Card>).container.firstElementChild as HTMLElement;
-    expect(el.getAttribute('role')).toBe('button');
+    expect(el.tagName).toBe('BUTTON');
+    expect(el.getAttribute('type')).toBe('button');
     click(el);
     expect(onPress).toHaveBeenCalled();
-    expect(mount(<Card>x</Card>).container.firstElementChild!.getAttribute('role')).toBeNull();
+    const plain = mount(<Card>x</Card>).container.firstElementChild!;
+    expect(plain.tagName).toBe('DIV');
+    expect(plain.getAttribute('role')).toBeNull();
   });
 });
 
@@ -129,7 +132,7 @@ describe('Tiles', () => {
     const onPress = vi.fn();
     const el = mount(<StatTile label="Đơn" value="12" delta="+2" onPress={onPress} />).container.firstElementChild as HTMLElement;
     expect(el.textContent).toBe('12Đơn+2');
-    expect(el.getAttribute('role')).toBe('button');
+    expect(el.tagName).toBe('BUTTON');
     click(el);
     expect(onPress).toHaveBeenCalled();
   });

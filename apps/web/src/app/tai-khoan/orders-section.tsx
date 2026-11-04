@@ -181,8 +181,8 @@ export function OrdersSection() {
             <div className="mt-2 text-center">
               <button
                 type="button"
-                onClick={() => void ordersQ.fetchNextPage()}
-                disabled={ordersQ.isFetchingNextPage}
+                onClick={() => !ordersQ.isFetchingNextPage && void ordersQ.fetchNextPage()}
+                aria-disabled={ordersQ.isFetchingNextPage || undefined}
                 className={ui.btnSecondary}
               >
                 {ordersQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm đơn cũ hơn'}

@@ -12,7 +12,7 @@ export interface SlotTab {
   /** "HH:mm" giờ Việt Nam. */
   clock: string;
   caption: string;
-  /** Tên đọc cho trình đọc màn hình: "12:00, đang diễn ra". */
+  /** Tên đọc cho trình đọc màn hình: "12:00 Đang diễn ra". */
   spoken: string;
   status: FlashSlotStatus;
 }
@@ -44,7 +44,7 @@ export function slotTabs(slots: readonly FlashSlot[], now: number): SlotTab[] {
             ? fillCopy('flash.slotNext')
             : fillCopy('flash.slotTomorrow');
       const clock = slotClock(s.startAt);
-      return { id: s.id, clock, caption, spoken: `${clock}, ${caption.toLowerCase()}`, status };
+      return { id: s.id, clock, caption, spoken: `${clock} ${caption}`, status };
     });
 }
 

@@ -6,9 +6,9 @@ import type { SlotTab } from '@tubutree/app-core/commerce/flash-slots';
 import { SlotTabs, slotTabId } from './slot-tabs';
 
 const TABS: SlotTab[] = [
-  { id: 'a', clock: '12:00', caption: 'Đang diễn ra', spoken: '12:00, đang diễn ra', status: 'LIVE' },
-  { id: 'b', clock: '20:00', caption: 'Sắp diễn ra', spoken: '20:00, sắp diễn ra', status: 'UPCOMING' },
-  { id: 'c', clock: '12:00', caption: 'Ngày mai', spoken: '12:00, ngày mai', status: 'UPCOMING' },
+  { id: 'a', clock: '12:00', caption: 'Đang diễn ra', spoken: '12:00 Đang diễn ra', status: 'LIVE' },
+  { id: 'b', clock: '20:00', caption: 'Sắp diễn ra', spoken: '20:00 Sắp diễn ra', status: 'UPCOMING' },
+  { id: 'c', clock: '12:00', caption: 'Ngày mai', spoken: '12:00 Ngày mai', status: 'UPCOMING' },
 ];
 
 function Harness({ onChange = () => {}, initial = 'a' }: { onChange?: (id: string) => void; initial?: string }) {
@@ -32,11 +32,11 @@ function Harness({ onChange = () => {}, initial = 'a' }: { onChange?: (id: strin
 }
 
 describe('SlotTabs', () => {
-  it('tablist có tên "Khung giờ"; mỗi tab đọc "12:00, đang diễn ra", chỉ tab đang chọn nằm trong thứ tự Tab', () => {
+  it('tablist có tên "Khung giờ"; mỗi tab đọc "12:00 Đang diễn ra", chỉ tab đang chọn nằm trong thứ tự Tab', () => {
     render(<Harness />);
     expect(screen.getByRole('tablist', { name: 'Khung giờ' })).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['12:00, đang diễn ra', '20:00, sắp diễn ra', '12:00, ngày mai']);
+    expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['12:00 Đang diễn ra', '20:00 Sắp diễn ra', '12:00 Ngày mai']);
     expect(tabs.map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
     expect(tabs.map((t) => t.tabIndex)).toEqual([0, -1, -1]);
   });

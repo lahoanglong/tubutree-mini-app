@@ -15,7 +15,7 @@ const mount = (props: Partial<Parameters<typeof WasteItemStep>[0]> = {}) => {
   return { c: r.container, onChange };
 };
 const card = (c: HTMLElement, name: string) => byText(c, '[data-item]', name)!;
-const btn = (el: HTMLElement, label: string) => el.querySelector<HTMLElement>(`button[aria-label="${label}"]`)!;
+const btn = (el: HTMLElement, label: string) => el.querySelector<HTMLElement>(`button[aria-label^="${label}"]`)!;
 
 afterEach(() => {
   mounted.forEach((m) => m.unmount());

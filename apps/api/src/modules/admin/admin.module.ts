@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 import { AdminUsersController } from './admin-users.controller';
+import { ImageRegistryModule } from '../catalog/image-registry.module';
 import { UserBlockService } from './user-block.service';
 import { AdminEngagementController } from './admin-engagement.controller';
 import { AdminEngagementService } from './admin-engagement.service';
@@ -22,7 +23,7 @@ import { MerchantModule } from '../merchant/merchant.module';
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 
 @Module({
-  imports: [CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
+  imports: [ImageRegistryModule, CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
   controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminCouponBatchController, AdminReportsController],
   providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, AdminCouponBatchService, AdminReportsService],
 })

@@ -20,6 +20,10 @@ vi.mock('@/lib/core-http-server', () => ({
         if (failAll) throw new Error(`API ${path} không sẵn sàng`);
         if (path.startsWith('/products')) return { data: [], meta: { page: 1, limit: 12, total: 0 } };
         if (path.includes('/config/public')) return { freeshipThreshold: 350000 };
+        if (path === '/flash-sales/active') {
+          if (failFlash) throw new Error('x');
+          return flashList ?? flashItems;
+        }
         return [];
       },
     };
@@ -27,9 +31,6 @@ vi.mock('@/lib/core-http-server', () => ({
 }));
 const flashItems = [{ itemId: 'i1', endAt: '2099-01-01T00:00:00Z' }];
 const bestSellerRows = [{ id: 'b1' }];
-vi.mock('@tubutree/app-core/api/flash-sale', () => ({
-  fetchActiveFlashSales: async () => { if (failAll || failFlash) throw new Error('x'); return flashList ?? flashItems; },
-}));
 const comboItems = [{ id: 'cb1', endAt: '2099-01-01T00:00:00Z' }];
 vi.mock('@tubutree/app-core/api/bundle', () => ({
   HOME_COMBOS_LIMIT: 4,

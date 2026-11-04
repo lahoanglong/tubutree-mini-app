@@ -145,3 +145,18 @@ describe('envSchema — production: ZaloPay sandbox', () => {
     expect(r.success).toBe(true);
   });
 });
+
+describe('envSchema — CLOUDINARY_CLOUD_NAME', () => {
+  it.each(['', 'tubutree', 'tubu-tree_01'])('chấp nhận %p', (v) => {
+    expect(envSchema.safeParse({ ...PROD_BASE, CLOUDINARY_CLOUD_NAME: v }).success).toBe(true);
+  });
+
+  it('không đặt thì mặc định rỗng', () => {
+    const r = envSchema.safeParse(PROD_BASE);
+    expect(r.success && r.data.CLOUDINARY_CLOUD_NAME).toBe('');
+  });
+
+  it.each(['a/b', 'a b', 'a%b', 'a.b', '../x'])('từ chối %p (không thành đường dẫn hay mẫu LIKE)', (v) => {
+    expect(envSchema.safeParse({ ...PROD_BASE, CLOUDINARY_CLOUD_NAME: v }).success).toBe(false);
+  });
+});

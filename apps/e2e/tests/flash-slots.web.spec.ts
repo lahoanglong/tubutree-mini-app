@@ -57,9 +57,9 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Giờ vàng' })).toBeVisible();
     const tabs = page.getByRole('tablist', { name: 'Khung giờ' });
     await expect(tabs.getByRole('tab')).toHaveCount(3);
-    await expect(tabs.getByRole('tab', { name: '12:00, đang diễn ra' })).toHaveAttribute('aria-selected', 'true');
-    await expect(tabs.getByRole('tab', { name: '20:00, sắp diễn ra' })).toBeVisible();
-    await expect(tabs.getByRole('tab', { name: '12:00, ngày mai' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: '12:00 Đang diễn ra' })).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.getByRole('tab', { name: '20:00 Sắp diễn ra' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: '12:00 Ngày mai' })).toBeVisible();
     await expect(page.getByRole('timer')).toHaveCount(1);
     await expect(page.getByRole('group', { name: 'Danh mục' }).getByRole('button')).toHaveCount(3);
 
@@ -91,9 +91,9 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
     const siteHeader = page.locator('header[data-site-header]');
     if (await siteHeader.isVisible()) expect((await siteHeader.boundingBox())!.y + (await siteHeader.boundingBox())!.height).toBeLessThanOrEqual(stickyTop + 1);
     await expect(page.getByRole('timer')).toBeInViewport();
-    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeInViewport();
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
-    await expect(page.getByRole('tab', { name: '20:00, sắp diễn ra' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: '12:00 Đang diễn ra' })).toBeInViewport();
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
+    await expect(page.getByRole('tab', { name: '20:00 Sắp diễn ra' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true })).toBeVisible();
   });
 
@@ -108,11 +108,11 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
 
   test('phím mũi tên sang tab 20:00; Nhắc tôi gửi POST remind, bấm lại gửi DELETE', async ({ page, api }) => {
     await page.goto('/gio-vang');
-    const live = page.getByRole('tab', { name: '12:00, đang diễn ra' });
+    const live = page.getByRole('tab', { name: '12:00 Đang diễn ra' });
     await expect(live).toBeVisible();
     await live.focus();
     await page.keyboard.press('ArrowRight');
-    const next = page.getByRole('tab', { name: '20:00, sắp diễn ra' });
+    const next = page.getByRole('tab', { name: '20:00 Sắp diễn ra' });
     await expect(next).toHaveAttribute('aria-selected', 'true');
     await expect(next).toBeFocused();
     await expect(buyButtons(page)).toHaveCount(0);
@@ -148,9 +148,9 @@ test.describe('Web khách: Giờ vàng theo khung, chưa đăng nhập', () => {
   test('xem được trang; bấm Nhắc tôi chuyển tới đăng nhập kèm đường quay lại và không gọi remind', async ({ page, api }) => {
     mockFlashSlots(api);
     await page.goto('/gio-vang');
-    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: '12:00 Đang diễn ra' })).toBeVisible();
     await expect(buyButtons(page).first()).toBeVisible();
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
     await page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true }).click();
     await expect(page).toHaveURL(/\/dang-nhap\?returnTo=%2Fgio-vang/);
     expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(0);
@@ -180,7 +180,7 @@ test.describe('Web khách: quay về /gio-vang sau đăng nhập với một Nh�
     const posted = api.waitForCall('POST', '/flash-sales/items/:id/remind');
     await page.goto('/gio-vang');
     expect((await posted).path).toBe('/flash-sales/items/fi-21/remind');
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
     await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true');
     expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(1);
     expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);
@@ -191,7 +191,7 @@ test.describe('Web khách: quay về /gio-vang sau đăng nhập với một Nh�
     mockFlashSlots(api, { remindedIds: ['fi-21'] });
     await page.goto('/gio-vang');
     await expect.poll(() => api.callsTo('GET', '/flash-sales/upcoming').length).toBeGreaterThan(0);
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
     await expect(page.getByRole('button', { name: 'Đã đặt nhắc Sản phẩm Giờ vàng 21, bỏ nhắc', exact: true })).toHaveAttribute('aria-pressed', 'true');
     expect(api.callsTo('POST', '/flash-sales/items/:id/remind')).toHaveLength(0);
     expect(api.callsTo('DELETE', '/flash-sales/items/:id/remind')).toHaveLength(0);

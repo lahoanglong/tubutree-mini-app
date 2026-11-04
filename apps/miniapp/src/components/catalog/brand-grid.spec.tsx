@@ -10,13 +10,13 @@ import { BrandGrid } from './brand-grid';
 const brands = (n: number) => Array.from({ length: n }, (_, i) => ({ brand: `Nhãn ${String(i).padStart(2, '0')}`, count: i + 1 }));
 
 describe('BrandGrid', () => {
-  it('5 nhãn: hiện đủ, tên đọc là "Xem thương hiệu X", chạm gọi onSelect(tên)', () => {
+  it('5 nhãn: hiện đủ, tên đọc là "X, xem thương hiệu", chạm gọi onSelect(tên)', () => {
     const onSelect = vi.fn();
     render(<BrandGrid brands={brands(5)} onSelect={onSelect} />);
     const region = screen.getByRole('region', { name: 'Thương hiệu' });
     expect(within(region).getByRole('heading', { level: 2, name: 'Thương hiệu' })).toBeInTheDocument();
     expect(within(region).getAllByRole('button')).toHaveLength(5);
-    fireEvent.click(screen.getByRole('button', { name: 'Xem thương hiệu Nhãn 03' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Nhãn 03, xem thương hiệu' }));
     expect(onSelect).toHaveBeenCalledWith('Nhãn 03');
   });
 
@@ -31,8 +31,8 @@ describe('BrandGrid', () => {
     render(<BrandGrid brands={brands(20)} onSelect={vi.fn()} />);
     const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
     expect(names).toHaveLength(12);
-    expect(names[0]).toBe('Xem thương hiệu Nhãn 19');
-    expect(names[11]).toBe('Xem thương hiệu Nhãn 08');
+    expect(names[0]).toBe('Nhãn 19, xem thương hiệu');
+    expect(names[11]).toBe('Nhãn 08, xem thương hiệu');
   });
 
   it('có logoUrl: ảnh trang trí (alt rỗng); không có: chữ cái đầu của tên', () => {

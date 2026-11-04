@@ -299,6 +299,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'sort.priceSpoken': null,
   'sort.priceAscSpoken': null,
   'sort.priceDescSpoken': null,
+  'sort.priceHint': null,
   'browse.categories': 12,
   'browse.all': 8,
   'browse.seeAllProducts': 22,

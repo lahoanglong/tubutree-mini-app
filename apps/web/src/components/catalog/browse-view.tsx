@@ -422,7 +422,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               }}
             />
             <section aria-labelledby="danh-sach-san-pham" className="pb-6 pt-2">
-              <h2 id="danh-sach-san-pham" className="sr-only">
+              <h2 id="danh-sach-san-pham" tabIndex={-1} className="sr-only">
                 Danh sách sản phẩm
               </h2>
               {products.isLoading ? (

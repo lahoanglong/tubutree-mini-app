@@ -33,6 +33,7 @@ export function PageHeader({ title, subtitle, backHref, backLabel = 'Quay lại'
   return (
     <header
       data-page-bleed=""
+      data-surface={hero ? 'inverse' : undefined}
       data-back-href={backHref ?? parentHref}
       className={`flex items-center gap-2 max-md:mx-[calc(50%-50vw)] max-md:px-4 max-md:pb-3 max-md:pt-[calc(12px+var(--safe-top))] ${
         hero

@@ -47,11 +47,11 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
   return (
     <div>
       <CategoryTiles entries={entries} isLoading={categoriesLoading} placeholderCount={placeholderCount} onSelect={onPickCategory} onSelectAll={onPickAll} />
-      <RecentlyViewedRail />
+      <RecentlyViewedRail reserve />
       {showBestSellers && (
         <Section id="browse-best-sellers" label={title}>
           <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />
-          <ProductRail items={items} variant="rank" rankFrom={1} label={title} loading={q.isLoading} skeletonCount={max} />
+          <ProductRail items={items} variant="rank" rankFrom={1} label={title} loading={q.isLoading} skeletonCount={max} priorityCount={2} />
         </Section>
       )}
       <BrandGrid brands={brands} onSelect={onPickBrand} />

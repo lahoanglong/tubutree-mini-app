@@ -2,9 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -28,25 +30,34 @@ import { useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { soldPercent } from '@/lib/flash-display';
-import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
+import { cardPricing, variationPricing } from '@/lib/flash-price';
 import { pointsEarnPreview, pointsEarnText } from '@/lib/points-earn';
 import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-earn-popup';
 import { percentLabel, pointsBoostOf } from '@/lib/points-boost';
 import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
-import { freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
+import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_HINT_KEY, OFFERS_SLOT_AUTH_CLASS, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
 import { getCart } from '@/lib/shop-client';
-import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
-import { ContentKitSheet } from './content-kit-sheet';
-import { SubscribeSheet } from './subscribe-sheet';
-import { PointsEarnSheet } from './points-earn-sheet';
 import { actionErrorText } from '@/lib/error-text';
 import { phoneBand, phoneBrandLabel } from '@/lib/phone-ui';
+
+// Ba sheet chỉ mở khi khách bấm: tách khỏi First Load của trang sản phẩm, và chỉ tải lúc mở lần đầu (xem `useEverOpen`).
+const ContentKitSheet = dynamic(() => import('./content-kit-sheet').then((m) => m.ContentKitSheet), { ssr: false });
+const SubscribeSheet = dynamic(() => import('./subscribe-sheet').then((m) => m.SubscribeSheet), { ssr: false });
+const PointsEarnSheet = dynamic(() => import('./points-earn-sheet').then((m) => m.PointsEarnSheet), { ssr: false });
+
+/** Đã từng mở: sheet chỉ dựng (và tải chunk) từ lần mở đầu, rồi giữ nguyên để hiệu ứng đóng vẫn chạy. */
+function useEverOpen(open: boolean): boolean {
+  const [ever, setEver] = useState(open);
+  if (open && !ever) setEver(true);
+  return ever;
+}
 
 type PointsEarnProduct = {
   slug: string;
@@ -57,11 +68,11 @@ type PointsEarnProduct = {
 
 /** Tiền hàng của món đang xem: giá phân loại đang chọn (đã tính Giờ vàng) × số lượng; chưa chọn thì giá thẻ × 1. */
 function usePdpPricing(product: PointsEarnProduct): { amount: number; isFlash: boolean; unit: number; quantity: number } {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash, now } = useRunningFlash();
   useFlashListExpiry(flash);
   const selection = usePdpSelection();
   const selected = product.variations.find((v) => v.id === selection?.selectedId);
-  const { price: unit, isFlash } = selected ? variationPricing(selected, flash) : cardPricing(product, flash);
+  const { price: unit, isFlash } = selected ? variationPricing(selected, flash) : cardPricing(product, flash, now);
   const quantity = selection?.quantity ?? 1;
   return { amount: unit * quantity, isFlash, unit, quantity };
 }
@@ -78,14 +89,15 @@ function tierEarnFor(phase: string, tierId: string | null | undefined, loyalty: 
 }
 
 /** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
-export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
+export function PdpPointsEarn({ product, initialConfig }: { product: PointsEarnProduct; initialConfig?: PublicConfig }) {
   const amount = usePdpAmount(product);
   const phase = useAuthPhase();
-  const config = usePublicConfig();
+  const config = usePublicConfig(initialConfig);
   const { user } = useAuth();
   const tier = tierEarnFor(phase, user?.tierId, config.loyalty);
   const preview = pointsEarnPreview(amount, config.loyalty, tier?.multiplier ?? null);
   const [open, setOpen] = useState(false);
+  const everOpen = useEverOpen(open);
   if (preview === null) return null;
   const text = preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points);
   const boost = pointsBoostOf(config.isLoaded ? config.loyalty : undefined);
@@ -109,7 +121,7 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
         <span>{text}</span>
         <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       </button>
-      <PointsEarnSheet open={open} onClose={() => setOpen(false)} popup={popup} />
+      {everOpen && <PointsEarnSheet open={open} onClose={() => setOpen(false)} popup={popup} />}
     </>
   );
 }
@@ -124,21 +136,24 @@ function offlineMessage(what: string): string {
   return `Chưa kết nối được tới Tubu Tree nên chưa ${what}. Bạn kiểm tra mạng rồi bấm lại nhé.`;
 }
 
-/** Dòng freeship: tín hiệu vận chuyển ngay chỗ quyết định mua. Hàng gian hàng tự giao không có freeship của Tubu nên trang cha ẩn đi. */
-export function PdpFreeship() {
+/**
+ * Dòng freeship: tín hiệu vận chuyển ngay chỗ quyết định mua. Hàng gian hàng tự giao không có freeship của Tubu nên trang cha ẩn đi.
+ * `initialConfig`: config công khai do server tải sẵn (cùng nguồn chân trang), để HTML đầu đã có dòng cho khách vãng lai thay vì chèn thêm sau hydrate.
+ * Máy có phiên cũ (`data-restoring`) giữ chỗ dòng nhưng giấu chữ tới khi biết ngưỡng theo hạng của khách.
+ */
+export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
   const phase = useAuthPhase();
-  const cfg = usePublicConfig();
+  const cfg = usePublicConfig(initialConfig);
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
-  const from = resolveFreeshipFrom({
-    phase,
-    cartThreshold: cartQ.data?.freeshipThreshold,
-    configThreshold: cfg.freeshipThreshold,
-    configLoaded: cfg.isLoaded,
-  });
-  if (from == null) return null;
+  const cartThreshold = cartQ.data?.freeshipThreshold;
+  const from = resolveFreeshipFrom({ phase, cartThreshold, configThreshold: cfg.freeshipThreshold, configLoaded: cfg.isLoaded });
+  const placeholder = freeshipPlaceholder({ phase, cartThreshold, cartFailed: cartQ.isError });
+  if (from == null && !placeholder) return null;
+  // Chưa có số thật: giấu hẳn, giữ chỗ. Đang tải phiên mà đã có ngưỡng chung: giấu chỉ khi <html> có `data-restoring` (khách chưa từng đăng nhập thấy chữ ngay).
+  const hideClass = from == null ? 'invisible' : phase === 'loading' ? '[html[data-restoring]_&]:invisible' : '';
   return (
-    <p data-testid="pdp-freeship" className={`text-sm font-medium text-forest-700 ${phoneBrandLabel}`}>
-      {freeshipLine(from)}
+    <p data-testid="pdp-freeship" aria-hidden={from == null ? true : undefined} className={`text-sm font-medium text-forest-700 ${phoneBrandLabel} ${hideClass}`}>
+      {freeshipLine(from ?? cfg.freeshipThreshold)}
     </p>
   );
 }
@@ -172,7 +187,21 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
   const [open, setOpen] = useState(false);
   const { notice, notify } = useGameNotice();
   const list = pdpCoupons(couponsQ.data, productId);
-  if (list.length === 0) return null;
+  const settled = couponsQ.isSuccess;
+  const hasOffers = list.length > 0;
+  useEffect(() => {
+    if (!settled) return;
+    try {
+      localStorage.setItem(OFFERS_HINT_KEY, hasOffers ? '1' : '0');
+    } catch {
+      /* chế độ riêng tư hoặc bị chặn: bỏ qua, chỉ mất việc giữ chỗ lần sau */
+    }
+  }, [settled, hasOffers]);
+  if (list.length === 0) {
+    return offersSlotNeeded(phase, couponsQ.isPending) ? (
+      <div data-testid="pdp-offers-slot" aria-hidden="true" className={phase === 'authenticated' ? OFFERS_SLOT_AUTH_CLASS : OFFERS_SLOT_CLASS} />
+    ) : null;
+  }
 
   const onCopy = async (code: string) => {
     let ok = true;
@@ -225,7 +254,7 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
  * 60 giây (`useActiveFlashSales`); hết giờ khi khách đang xem thì thanh biến mất đúng mốc, trang quay về giá thường không cần tải lại.
  */
 export function PdpFlashBar({ product }: { product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] } }) {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash } = useRunningFlash();
   useFlashListExpiry(flash);
   const selectedId = usePdpSelection()?.selectedId;
   const item = flash.find((f) => f.variationId === selectedId);
@@ -251,10 +280,10 @@ export function PdpFlashBar({ product }: { product: { variations: { id: string; 
 
 /**
  * "Đã bán 1,2k+" nằm bên phải dòng giá. Phân loại đang Giờ vàng thì dòng giá trống (giá lên thanh Giờ vàng dưới ảnh), nên số này dời lên
- * dòng đánh giá thay vì để một dòng gần như trống chiếm chỗ (khung 1280×800 rất sát). Server chưa biết Giờ vàng nên HTML đầu vẫn ở dòng giá.
+ * dòng đánh giá thay vì để một dòng gần như trống chiếm chỗ (khung 1280×800 rất sát). Trang đã gieo sẵn Giờ vàng từ server nên HTML đầu đã ở đúng dòng.
  */
 export function PdpSold({ text, product, slot }: { text: string; product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] }; slot: 'price' | 'rating' }) {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash } = useRunningFlash();
   useFlashListExpiry(flash);
   const selectedId = usePdpSelection()?.selectedId;
   const selected = product.variations.find((v) => v.id === selectedId);
@@ -294,6 +323,7 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
   const sel = usePdpSelection();
   const stockQ = useProductStock(slug);
   const [open, setOpen] = useState(false);
+  const everOpen = useEverOpen(open);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -347,13 +377,15 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
           {error}
         </p>
       )}
-      <SubscribeSheet
-        visible={open}
-        onClose={() => setOpen(false)}
-        onNotice={setNotice}
-        variationId={selected.id}
-        quantity={Math.min(sel?.quantity ?? 1, Math.max(1, stock))}
-      />
+      {everOpen && (
+        <SubscribeSheet
+          visible={open}
+          onClose={() => setOpen(false)}
+          onNotice={setNotice}
+          variationId={selected.id}
+          quantity={Math.min(sel?.quantity ?? 1, Math.max(1, stock))}
+        />
+      )}
     </div>
   );
 }
@@ -424,6 +456,7 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
 export function PdpContentKitRow({ slug }: { slug: string }) {
   const phase = useAuthPhase();
   const [open, setOpen] = useState(false);
+  const everOpen = useEverOpen(open);
   const meQ = useQuery({ ...affiliateMeQuery(coreHttp), enabled: phase === 'authenticated', staleTime: 5 * 60_000 });
   if (meQ.data?.isAffiliate !== true) return null;
   return (
@@ -438,7 +471,7 @@ export function PdpContentKitRow({ slug }: { slug: string }) {
         </span>
         <ChevronRight className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
       </button>
-      <ContentKitSheet visible={open} onClose={() => setOpen(false)} productSlug={slug} />
+      {everOpen && <ContentKitSheet visible={open} onClose={() => setOpen(false)} productSlug={slug} />}
     </div>
   );
 }

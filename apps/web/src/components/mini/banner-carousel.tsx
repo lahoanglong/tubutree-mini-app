@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { Pause, Play } from 'lucide-react';
 import { bannerInterval, bannerNextIndex, bannerShouldAutoplay } from '@tubutree/app-core/commerce/banner-autoplay';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useSizedImage } from '@/lib/image-src';
+import { BANNER_SLIDE_SIZES, BANNER_WIDE_SLIDE_SIZES } from '@/lib/image-sizes';
 
 export interface BannerSlide {
   id: string;
@@ -20,6 +22,8 @@ export interface BannerCarouselProps {
   slides: BannerSlide[];
   /** Dưới 5000 thì vẫn lấy 5000 (WCAG 2.2.2); chỉ để kéo dài. */
   intervalMs?: number;
+  /** `sizes` của ảnh slide; mặc định theo Trang chủ (lg chiếm 8/12 cột). */
+  sizes?: string;
 }
 
 const SETTLE_MS = 700;
@@ -39,8 +43,15 @@ const DOT_BTN: CSSProperties = {
   cursor: 'pointer',
 };
 
-function SlideImage({ slide, eager }: { slide: BannerSlide; eager: boolean }) {
+/** `sizes` của banner Ưu đãi: từ lg tràn cả khung nội dung (~1152px) thay vì chiếm 8/12 cột như Trang chủ. */
+export { BANNER_WIDE_SLIDE_SIZES as WIDE_SLIDE_SIZES };
+/** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
+const SLIDE_SIZES = BANNER_SLIDE_SIZES;
+const SLIDE_MAX_WIDTH = 728;
+
+function SlideImage({ slide, eager, sizes }: { slide: BannerSlide; eager: boolean; sizes: string }) {
   const [failed, setFailed] = useState(false);
+  const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, sizes, true, true);
   const frame: CSSProperties = { display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', borderRadius: 'var(--radius-media)', objectFit: 'cover' };
   if (failed) {
     return (
@@ -66,12 +77,15 @@ function SlideImage({ slide, eager }: { slide: BannerSlide; eager: boolean }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={slide.image}
+      src={img?.src ?? slide.image}
+      srcSet={img?.srcSet}
+      sizes={img?.sizes}
       alt={slide.alt}
       loading={eager ? 'eager' : 'lazy'}
+      fetchPriority={eager ? 'high' : undefined}
       decoding="async"
       draggable={false}
-      onError={() => setFailed(true)}
+      onError={() => fallBack() || setFailed(true)}
       style={frame}
     />
   );
@@ -85,7 +99,7 @@ const isPauseButton = (node: EventTarget | null) => node instanceof Element && n
  * gặp trước các slide. Slide không hiện là `inert` nên Tab không rơi vào liên kết nằm ngoài khung nhìn. Cuộn ngang tự vuốt
  * (scroll-snap), không có thư viện carousel.
  */
-export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
+export function BannerCarousel({ slides, intervalMs, sizes }: BannerCarouselProps) {
   const count = slides.length;
   const trackRef = useRef<HTMLDivElement>(null);
   const settleUntil = useRef(0);
@@ -208,7 +222,7 @@ export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
             style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start' }}
           >
             <Link href={s.href} className="tubu-press" style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
-              <SlideImage slide={s} eager={i === 0} />
+              <SlideImage slide={s} eager={i === 0} sizes={sizes ?? SLIDE_SIZES} />
             </Link>
           </div>
         ))}

@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, type MutableRefObject } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useShellPathname } from '@/lib/shell-pathname';
 import { useScrollHints } from '@/components/mini/use-scroll-hints';
+import { useRovingGroup } from '@/lib/use-roving-group';
 
 export interface SegmentedTabItem {
   key: string;
@@ -27,23 +28,19 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
     ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [scroll, value]);
 
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    const i = items.findIndex((it) => it.key === value);
-    const next = items[(i + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length];
-    if (!next) return;
-    e.preventDefault();
-    onChange(next.key);
-    ref.current?.querySelectorAll<HTMLElement>('[role="tab"]')[items.indexOf(next)]?.focus();
+  const roving = useRovingGroup({ keys: 'horizontal' });
+  const setRefs = (el: HTMLDivElement | null) => {
+    (ref as MutableRefObject<HTMLDivElement | null>).current = el;
+    (roving.ref as MutableRefObject<HTMLDivElement | null>).current = el;
   };
 
   return (
     <div
-      ref={ref}
+      ref={setRefs}
       {...(scroll ? hintProps : {})}
       role="tablist"
       aria-label={label}
-      onKeyDown={onKeyDown}
+      onKeyDown={roving.onKeyDown}
       className={`flex gap-1 rounded-control bg-stone-100 p-[3px] ${scroll ? 'tubu-scroll-fade overflow-x-auto' : ''}`}
     >
       {items.map((it) => {
@@ -54,7 +51,6 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
             type="button"
             role="tab"
             aria-selected={active}
-            tabIndex={active ? 0 : -1}
             onClick={() => onChange(it.key)}
             className={`min-h-11 min-w-11 whitespace-nowrap rounded-control px-3 text-sm font-semibold ${scroll ? 'shrink-0' : 'flex-1'} ${
               active ? 'bg-stone-0 text-forest-700 shadow-card' : 'text-stone-600 hover:text-stone-900'

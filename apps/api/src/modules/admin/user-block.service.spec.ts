@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SessionStateService } from '../auth/session-state.service';
 import { UserBlockService } from './user-block.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 
 function txWith(target: { id: string; role: string; isBlocked: boolean } | null, otherActiveAdmins: number) {
   const tx = {
@@ -16,7 +17,8 @@ function txWith(target: { id: string; role: string; isBlocked: boolean } | null,
   };
   const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
   const sessions = { invalidate: jest.fn() } as unknown as SessionStateService;
-  return { svc: new UserBlockService(prisma, sessions), tx };
+  const stale = new ImageRegistryStale();
+  return { svc: new UserBlockService(prisma, sessions, stale), tx, stale };
 }
 
 // R4-ADMIN-6: khoá tài khoản cũng bớt một admin hoạt động — hai admin cuối cùng khoá nhau cùng lúc thì không ai vào
@@ -42,5 +44,16 @@ describe('UserBlockService.block — luôn còn một quản trị viên hoạt 
     await svc.block('admin1', 'u3', 'farm voucher');
     expect(tx.user.count).not.toHaveBeenCalled();
     expect(tx.user.update).toHaveBeenCalled();
+  });
+});
+
+describe('UserBlockService: khoá/mở khoá đổi gian hàng nào khách thấy được', () => {
+  it('khoá xong thì đánh dấu danh sách ảnh của /img cũ; khoá lỗi thì không', async () => {
+    const { svc, stale } = txWith({ id: 'u2', role: 'AFFILIATE', isBlocked: false }, 1);
+    await svc.block('admin1', 'u2', 'lừa đảo');
+    expect(stale.isStale()).toBe(true);
+    const bad = txWith(null, 1);
+    await expect(bad.svc.block('admin1', 'u3', 'x')).rejects.toThrow();
+    expect(bad.stale.isStale()).toBe(false);
   });
 });

@@ -59,7 +59,8 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
 
   it('Hành trình nguyên liệu: thẻ bản đồ và chip nhãn vẫn bấm được', async () => {
     const c = await mount(<BrandJourney initialBrands={[{ brand: 'Tubu', count: 4, slug: 'tubu' }]} />);
-    const chip = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tubu')!;
+    const chip = Array.from(c.querySelectorAll('a')).find((b) => b.textContent === 'Tubu')!;
+    expect(chip.getAttribute('href')).toBe('/brand/tubu');
     click(chip);
     expect(mocks.push).toHaveBeenCalledWith('/brand/tubu');
     const card = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('thương hiệu Việt'))!;

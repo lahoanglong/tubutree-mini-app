@@ -134,6 +134,14 @@ describe('ShopSection (web) từ lg (G6 #36)', () => {
     for (const img of [...imgs(railBox), ...imgs(gridBox)]) expect(img.getAttribute('loading')).toBe('lazy');
   });
 
+  it('ưu tiên tải ảnh chỉ cấp cho kệ hiện ở mọi khổ: kệ ít món có hai bản nên không bản nào eager (bản ẩn display:none vẫn tải ảnh eager)', async () => {
+    const withImage = (n: number) => item(n, { thumbnail: `https://cdn.test/sp-${n}.jpg` });
+    const few = await mount(<ShopSection priorityCount={2} collection={col({ layout: 'CAROUSEL', items: [1, 2, 3, 4].map(withImage) })} />);
+    expect(few.querySelectorAll('img[fetchpriority="high"]')).toHaveLength(0);
+    const lots = await mount(<ShopSection priorityCount={2} collection={col({ layout: 'CAROUSEL', items: Array.from({ length: 8 }, (_, i) => withImage(i + 1)) })} />);
+    expect(lots.querySelectorAll('img[fetchpriority="high"]')).toHaveLength(2);
+  });
+
   it('kệ nhiều món (> 6): chỉ có kệ ngang cuộn, không lưới thứ hai', async () => {
     const c = await mount(rail(8));
     expect(c.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();

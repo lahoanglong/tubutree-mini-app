@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   serverFails: false,
   auth: { status: 'idle', initialized: true, sessionUnavailable: false, user: null } as Record<string, unknown>,
   coupons: [] as unknown[],
+  config: { freeshipThreshold: 199000, subscribeDiscountPct: 0.12 } as unknown,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
@@ -29,12 +30,14 @@ vi.mock('@/lib/core-http-server', () => ({
     get: async (path: string) => {
       if (api.serverFails) throw new Error('API tạm lỗi');
       if (path.endsWith('/bundles')) return api.bundles;
+      if (path === '/flash-sales/active') return api.flash;
+      if (path === '/config/public') return api.config;
       return path.endsWith('/related') ? api.related : api.together;
     },
   }),
 }));
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash, useRunningFlash: () => ({ flash: (api.flash as { endAt?: string }[]).filter((f) => !f.endAt || Date.parse(f.endAt) > Date.now()), now: Date.now() }), FlashSalesSeed: ({ children }: { children: unknown }) => children }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => api.auth }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
@@ -280,7 +283,7 @@ describe('/san-pham/[slug] — SEO (BUYERWEB-16)', () => {
   it('JSON-LD không thể bị phá bằng tên sản phẩm chứa </script>', async () => {
     api.product = { ...PRODUCT, name: 'X</script><script>alert(1)</script>' };
     const c = await mount();
-    expect(c.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(1);
+    expect(c.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(2);
     expect(c.querySelectorAll('script:not([type])')).toHaveLength(0);
     expect(JSON.parse(c.querySelector('script[type="application/ld+json"]')!.textContent ?? '').name).toContain('</script>');
   });
@@ -293,16 +296,35 @@ describe('/san-pham/[slug] — SEO (BUYERWEB-16)', () => {
     const og = m.openGraph as { images: string[]; url: string; siteName: string };
     expect(og.images).toHaveLength(4);
     expect(og.images[0]).toBe('https://cdn/a.jpg');
+    expect(m.title).toBe('Dầu gội bồ kết — Xanh Việt');
     expect(og.url).toBe('/san-pham/dau-goi-bo-ket');
     expect(og.siteName).toBe('Tubu Tree');
     expect((m.twitter as { card: string }).card).toBe('summary_large_image');
   });
 
-  it('không có ảnh: twitter card thường, og:image rỗng', async () => {
+  it('không có ảnh: og:image và twitter dùng ảnh mặc định của site (thẻ chia sẻ không trống)', async () => {
     api.product = { ...PRODUCT, images: [], thumbnail: null };
     const m = await generateMetadata({ params: Promise.resolve({ slug: 'x' }) });
-    expect((m.openGraph as { images: string[] }).images).toEqual([]);
-    expect((m.twitter as { card: string }).card).toBe('summary');
+    expect((m.openGraph as { images: { url: string }[] }).images).toEqual([expect.objectContaining({ url: '/opengraph-image.png' })]);
+    expect((m.twitter as { card: string; images: string[] }).card).toBe('summary_large_image');
+    expect((m.twitter as { images: string[] }).images).toEqual(['/opengraph-image.png']);
+  });
+
+  it('nhãn Tubu Tree không lặp trong <title>; thiếu mô tả thì dựng từ tên + nhãn (luôn có meta description)', async () => {
+    api.product = { ...PRODUCT, brand: 'Tubu Tree', name: 'Xịt tràm cho bé Pineboo 150ml', shortDesc: '', description: '' };
+    const m = await generateMetadata({ params: Promise.resolve({ slug: 'x' }) });
+    expect(m.title).toBe('Xịt tràm cho bé Pineboo 150ml');
+    expect((m.openGraph as { title: string }).title).toBe('Xịt tràm cho bé Pineboo 150ml — Tubu Tree');
+    expect(m.description).toBe('Xịt tràm cho bé Pineboo 150ml — sản phẩm thiên nhiên tại Tubu Tree.');
+  });
+
+  it('có BreadcrumbList JSON-LD khớp vệt breadcrumb hiển thị (Trang chủ › nhãn › sản phẩm), URL tuyệt đối', async () => {
+    api.product = PRODUCT;
+    const c = await mount();
+    const lds = Array.from(c.querySelectorAll('script[type="application/ld+json"]')).map((s) => JSON.parse(s.textContent!));
+    const crumbs = lds.find((d) => d['@type'] === 'BreadcrumbList');
+    expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', PRODUCT.brand, PRODUCT.name]);
+    expect(crumbs.itemListElement.every((i: { item: string }) => i.item.startsWith('https://'))).toBe(true);
   });
 
   it('sản phẩm không tồn tại: tiêu đề "Không tìm thấy", không canonical', async () => {

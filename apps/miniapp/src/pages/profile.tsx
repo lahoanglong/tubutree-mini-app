@@ -533,7 +533,6 @@ function Stat({ label, value, onClick }: { label: string; value: string; onClick
       role="button"
       {...rowKeyboardProps()}
       className="tubu-press"
-      aria-label={`${label}: ${value}`}
       onClick={onClick}
       style={{
         minHeight: 44,

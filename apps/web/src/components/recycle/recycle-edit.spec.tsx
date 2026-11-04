@@ -80,7 +80,7 @@ const mount = async () => {
 };
 const card = (c: HTMLElement, name: string) => byText(c, '[data-item]', name)!;
 const stepper = (c: HTMLElement, item: string, label: 'Tăng số lượng' | 'Giảm số lượng') =>
-  card(c, item).querySelector<HTMLElement>(`button[aria-label="${label}"]`)!;
+  card(c, item).querySelector<HTMLElement>(`button[aria-label^="${label}"]`)!;
 const button = (c: ParentNode, name: string) => byText(c, 'button', name) as HTMLButtonElement | null;
 const calls = (method: string) => state.calls.filter((x) => x.method === method);
 
@@ -135,9 +135,9 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
     state.me = makeWasteMe({ items: [{ ...ITEM_CARTON, monthRemainingQty: 0 }, ITEM_MILK] });
     const c = await mount();
     const carton = card(c, 'Thùng carton');
-    expect(carton.querySelector<HTMLInputElement>('input[aria-label="Số lượng"]')?.value).toBe('5');
-    expect(carton.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
-    expect(carton.querySelector('button[aria-label="Giảm số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
+    expect(carton.querySelector<HTMLInputElement>('input[aria-label^="Số lượng"]')?.value).toBe('5');
+    expect(carton.querySelector('button[aria-label^="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(carton.querySelector('button[aria-label^="Giảm số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
   });
 
   describe('trần ngày của món chỉ mang tới theo ngày của yêu cầu', () => {
@@ -153,14 +153,14 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
       const t = card(c, 'Pin đã dùng');
       expect(t.textContent).not.toContain('Hôm nay còn nhận được');
       expect(t.textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
-      expect(t.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
+      expect(t.querySelector('button[aria-label^="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
     });
     it('không tạo hôm nay: không áp trần ngày phía khách, không dòng "Hôm nay còn…"', async () => {
       withPin('2026-10-17T03:00:00.000Z', 5);
       const c = await mount();
       const t = card(c, 'Pin đã dùng');
       expect(t.textContent).not.toContain('Hôm nay còn nhận được');
-      expect(t.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
+      expect(t.querySelector('button[aria-label^="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
     });
   });
 

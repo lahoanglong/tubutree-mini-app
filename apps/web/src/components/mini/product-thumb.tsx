@@ -39,6 +39,7 @@ export function ProductThumb({ src, alt, size = 64 }: ProductThumbProps) {
         <img
           src={img?.src}
           srcSet={img?.srcSet}
+          sizes={img?.sizes}
           alt={alt}
           width={size}
           height={size}
