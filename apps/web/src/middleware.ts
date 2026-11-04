@@ -33,7 +33,11 @@ export function middleware(request: NextRequest) {
   }
 
   // Bản tĩnh của hub chỉ đi qua rewrite bên dưới; vào thẳng thì về đường dẫn thật để không có hai URL cho một trang.
-  if (pathname === HUB) return NextResponse.redirect(new URL('/san-pham', request.url), 308);
+  if (pathname === HUB) {
+    const target = new URL('/san-pham', request.url);
+    target.search = request.nextUrl.search;
+    return NextResponse.redirect(target, 308);
+  }
 
   const slugRoute = SLUG_ROUTE.exec(pathname);
   if (slugRoute && !isPlausibleSlug(slugRoute[1] ?? '', slugRoute[2] ?? '')) {
