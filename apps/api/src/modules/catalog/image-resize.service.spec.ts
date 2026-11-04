@@ -12,7 +12,7 @@ jest.mock('node:dns', () => ({ lookup: (...args: unknown[]) => lookupMock(...arg
 
 import { ImageResizeService } from './image-resize.service';
 import { ImageRegistryStale } from './image-registry-stale';
-import { MAX_SOURCE_BYTES } from './image-resize';
+import { MAX_SOURCE_BYTES, RESIZE_PIPELINE_VERSION, cacheKey } from './image-resize';
 
 let dir: string;
 let png: Buffer;
@@ -310,6 +310,34 @@ describe('ImageResizeService', () => {
     const res = await svc.prune();
     expect(res.bytes).toBeLessThanOrEqual(0.8 * 1024 * 1024);
     expect(readdirSync(sub).sort()).toEqual(['f2', 'f3', 'f4', 'f5']);
+  });
+});
+
+describe('ImageResizeService — cache ở volume bền qua lần dựng lại container (deploy)', () => {
+  it('tiến trình mới trên cùng thư mục phát bản đã đổi cỡ từ đĩa, không đổi cỡ lại', async () => {
+    const src = '/public-image/product/v1/0';
+    const first = make();
+    const out = await first.svc.get(src, 480, 'webp');
+    const restarted = make();
+    const again = await restarted.svc.get(src, 480, 'webp');
+    expect(again.data.equals(out.data)).toBe(true);
+    expect(again.etag).toBe(out.etag);
+    expect(restarted.own.get).not.toHaveBeenCalled();
+  });
+
+  it('bản của phiên bản đổi cỡ cũ còn trong thư mục không được phát: đổi cỡ lại theo cách hiện tại', async () => {
+    const src = 'https://content.pancake.vn/a.png';
+    const oldKey = cacheKey(new URL(src).toString(), 320, 'webp', RESIZE_PIPELINE_VERSION - 1);
+    require('node:fs').mkdirSync(join(dir, oldKey.slice(0, 2)), { recursive: true });
+    writeFileSync(join(dir, oldKey.slice(0, 2), oldKey), 'ban-cu');
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    lookupMock.mockImplementation((_h: string, _o: unknown, cb: (e: null, a: string, f: number) => void) => cb(null, '1.1.1.1', 4));
+    const { svc } = make();
+    const out = await svc.get(src, 320, 'webp');
+    expect(out.data.toString()).not.toBe('ban-cu');
+    expect((await sharp(out.data).metadata()).width).toBe(320);
+    expect(out.etag).not.toBe(`"${oldKey}"`);
+    expect(requestMock).toHaveBeenCalledTimes(1);
   });
 });
 

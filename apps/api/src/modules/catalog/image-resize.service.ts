@@ -64,7 +64,8 @@ const PRUNE_EVERY_MS = 10 * 60 * 1000;
 
 /**
  * Đổi cỡ ảnh sản phẩm lúc có người xem lần đầu, lưu bản nhỏ trên đĩa. Thư mục cache: IMAGE_CACHE_DIR (mặc định thư mục tạm của
- * container, mất khi dựng lại container và tự tạo lại dần); dung lượng: IMAGE_CACHE_MAX_MB (mặc định 512), file quá 14 ngày bị xoá.
+ * container; compose PROD gắn volume bền vào đó nên cache còn qua deploy); dung lượng: IMAGE_CACHE_MAX_MB (mặc định 512), file quá 14 ngày bị xoá.
+ * Lần ghi đầu của mỗi tiến trình quét thư mục để tính dung lượng sẵn có, nên cache cũ trong volume vẫn bị giữ dưới trần.
  */
 @Injectable()
 export class ImageResizeService {
@@ -212,6 +213,7 @@ export class ImageResizeService {
     try {
       const input = await this.loadSource(source, client);
       const pipeline = sharp(input, { limitInputPixels: MAX_SOURCE_PIXELS, failOn: 'error' }).rotate().resize({ width, withoutEnlargement: true });
+      // Đổi tham số ở đây thì tăng RESIZE_PIPELINE_VERSION (image-resize.ts): cache bền qua deploy.
       data = await (format === 'webp' ? pipeline.webp({ quality: 78 }) : pipeline.jpeg({ quality: 80, mozjpeg: true })).toBuffer();
     } catch (e) {
       if (e instanceof HttpException) throw e;

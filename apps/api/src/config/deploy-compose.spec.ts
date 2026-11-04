@@ -38,6 +38,13 @@ describe.each(COMPOSE_FILES)('%s', (file) => {
     expect(compose).toMatch(/\nvolumes:\n(?: {2}\w+:\n)* {2}zalo_bridge_data:\n/);
   });
 
+  it('api giữ cache ảnh đổi cỡ trong volume img_cache (còn qua deploy), IMAGE_CACHE_DIR trỏ đúng điểm gắn', () => {
+    const block = svc.api ?? '';
+    expect(block).toMatch(/\n {4}volumes:\n {6}- img_cache:\/tmp\/tubu-img-cache\n/);
+    expect(block).toMatch(/\n {6}IMAGE_CACHE_DIR: \/tmp\/tubu-img-cache\n/);
+    expect(compose).toMatch(/\nvolumes:\n(?: {2}\w+:\n)* {2}img_cache:\n/);
+  });
+
   it('Redis chạy maxmemory-policy noeviction (BullMQ mất job âm thầm nếu Redis tự xoá key)', () => {
     const command = /\n {4}command: (.*)\n/.exec(svc.redis ?? '')?.[1] ?? '';
     expect(command).toMatch(/'--maxmemory-policy',\s*'noeviction'/);
@@ -139,6 +146,18 @@ describe('apps/web/Dockerfile', () => {
     expect(runner).not.toContain('DUY NHẤT');
     expect(runner.indexOf('chown node:node')).toBeLessThan(runner.indexOf('USER node'));
     expect(runner.indexOf('USER node')).toBeLessThan(runner.indexOf('CMD ['));
+  });
+});
+
+describe('apps/api/Dockerfile', () => {
+  const dockerfile = repoFile('apps/api/Dockerfile');
+
+  it('thư mục cache ảnh có sẵn trong image và thuộc node trước USER node: volume mới lấy chủ sở hữu từ đó, thiếu thì node không ghi được', () => {
+    const instructions = dockerfile.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+    const chown = instructions.indexOf('RUN mkdir -p /tmp/tubu-img-cache && chown node:node /tmp/tubu-img-cache\n');
+    expect(chown).toBeGreaterThan(-1);
+    expect(chown).toBeLessThan(instructions.lastIndexOf('\nUSER node\n'));
+    expect(instructions.lastIndexOf('\nUSER node\n')).toBeLessThan(instructions.indexOf('CMD ['));
   });
 });
 

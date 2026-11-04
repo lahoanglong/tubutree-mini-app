@@ -36,9 +36,11 @@ ENV TZ=Asia/Ho_Chi_Minh
 COPY --from=builder /app ./
 
 WORKDIR /app/apps/api
-# API chỉ ghi file vào cache ảnh đổi cỡ (IMAGE_CACHE_DIR, mặc định thư mục tạm /tmp, node ghi được; mất khi dựng lại container, tự tạo
-# lại dần). Ảnh upload đi thẳng Cloudinary, log ra stdout, Prisma engine nằm sẵn trong node_modules, nên cây /app để root sở hữu, chỉ đọc
-# được với node. Thêm đường ghi file khác thì chown thư mục đó ở đây, đừng chạy root.
+# API chỉ ghi file vào cache ảnh đổi cỡ (IMAGE_CACHE_DIR, mặc định /tmp/tubu-img-cache). Compose PROD gắn volume bền vào đúng thư mục này:
+# volume mới lấy chủ sở hữu từ thư mục có sẵn trong image, nên phải tạo và chown cho node ở đây (thiếu thì Docker tạo điểm gắn của root,
+# node không ghi được và cache tắt im lặng). Ảnh upload đi thẳng Cloudinary, log ra stdout, Prisma engine nằm sẵn trong node_modules, nên
+# cây /app để root sở hữu, chỉ đọc được với node. Thêm đường ghi file khác thì chown thư mục đó ở đây, đừng chạy root.
+RUN mkdir -p /tmp/tubu-img-cache && chown node:node /tmp/tubu-img-cache
 # sharp (đổi cỡ ảnh): `pnpm install --frozen-lockfile` ở stage builder (alpine) lấy @img/sharp-linuxmusl-x64 và libvips-linuxmusl-x64 có sẵn
 # trong pnpm-lock.yaml; cả cây /app (kèm node_modules) được chép sang đây nên không cần cài thêm gói hệ thống.
 USER node
