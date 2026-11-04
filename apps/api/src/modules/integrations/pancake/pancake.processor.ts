@@ -50,6 +50,7 @@ import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 import { vatInvoiceUrlError } from '../../../common/vat-invoice-url';
 import { notifyAdmins } from '../../../common/notify-admins';
+import { safeHttpUrl } from '../../../common/safe-http-url';
 
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
@@ -762,7 +763,7 @@ export class PancakeProcessor extends WorkerHost {
     const carrierS = str(carrier);
     const waybillS = str(waybill);
     const shipStatusS = str(shipStatus);
-    const linkS = str(trackingLink);
+    const linkS = safeHttpUrl(str(trackingLink));
 
     // Đơn có vận đơn Gomdon ĐANG SỐNG: Gomdon là nguồn DUY NHẤT của shippingCode/Partner/Status/History
     // (webhook Gomdon ghi, kèm chặn lùi trạng thái). Pancake không ghi đè — trước đây "ai ghi sau thắng":
