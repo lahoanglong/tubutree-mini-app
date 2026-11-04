@@ -43,7 +43,7 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - `cashback_transactions`: 0 dòng, không có dòng Kế toán từ chối tay nào cần bảo vệ.
 - Còn lại: Mini App bản cũ không gửi lý do khi cấp/thu quyền, nên sổ ghi "(không có lý do — Mini App bản cũ)". Gói he thêm ô lý do; DTO đổi về bắt buộc sau khi Mini App mới lên PROD.
 
-## Đợt 2 (đang làm, gốc 2da8b1337)
+## Đợt 2 (xong trên nhánh, chờ PR; gốc 2da8b1337)
 - hd1 (index và truy vấn, PG 46534), hd2 (hàng đợi, timeout, breaker, PG 46535), hd3 (payload ảnh, cột nặng, PG 46536). Brief: `brief-hd1.md`, `brief-hd2.md`, `brief-hd3.md`.
 - Giới hạn RAM (máy dùng chung với phiên web): jest `--maxWorkers=2`, vitest tối đa 2 luồng, Playwright `--workers=2`.
 - Phiên web báo #170 dep3 xong 05/11 02:2x (PROD c68ce32f3). Cache ảnh `/api/img` mất mỗi deploy: phiên web làm ở nhánh riêng; đợt 2 không đụng image-resize.ts, compose, dep script.
@@ -64,6 +64,12 @@ Kế hoạch: `PLAN.md`. Phát hiện và quyết định của chủ: `audit-11
 - hd3: 6 commit b48416624..02eefc05c, không migration. Opus APPROVE (3 MINOR), sửa ở b3a2cec09..ce5aad3d8 (kẹp limit 50 thay vì 400, PDP bớt cột kéo từ DB, AdminImage tải khi vào khung nhìn + ô lỗi). Opus vòng 2 APPROVE (rút lại điểm "PDP lộ cột": `toPublicProductDetail` vốn đã lọc), 3 NIT sửa ở 0ef6e785f. Gộp vào w2 ở b1a0388e6.
   - Response admin đổi (ảnh thành ref, route ảnh admin mới chỉ ADMIN): API và web phải lên cùng lần deploy, rollback cùng cặp. Runbook §1.21 và §7.4.
 - Gộp main c68ce32f3 (#170) ở e265c0dd5, không xung đột.
+- Opus review chéo cả nhánh, vòng 1 APPROVE với MAJOR ẩn: options trong `DATABASE_URL` làm `$DC run api … migrate/seed` và deploy.sh dính statement_timeout. Đổi thiết kế ở 16b80251f..1a891ab2c: `PrismaService` nối `DB_SESSION_OPTIONS` vào datasource; go-live `db.session_timeouts`; `PendingMerchantProductsQuery.page` theo trần 1000; §1.0 thêm 3 migration hd1; `IMAGE_COMPATIBLE_MIGRATIONS` thêm 7 migration đợt 2.
+- Gộp main 7589f36c9 (#171 cache ảnh) ở f9cffe992. Mục runbook cache ảnh của phiên web đổi số thành 1.22 (dep3-check.sh theo).
+- Review chéo vòng 2 REQUEST_CHANGES: khối lệnh 7.2 dựng lại chỉ mục đánh giá cũ vô điều kiện, sai khi r8 đã áp (PROD từ tháng 10). Sửa ở 9c4c8ad95..c18f3bc2a: chỉ chạy khi `.pending-migrations` có r8; bảng 7.0 cùng điều kiện; `db.pending_scope` PASS nêu migration nặng; §1.19 dòng env trước bước 4 + `$DC config`. Mỗi điểm có spec đỏ trước. Vòng 3, 4: APPROVE.
+- Kiểm cuối ở 1a891ab2c (giới hạn 2 worker): gate 0 FAIL; migrate 0, drift 0; race 364 suite / 2822 test; vitest app-core 2688, miniapp 6710 (cả UTC), web 601 file / 10225; Playwright Mini App 475 passed / 10 skipped, web 740 passed / 137 skipped / 0 failed. jest 14019/14020: 1 đỏ `refill-removed-audit.spec.ts` (còn đòi chữ "sáu tên này"), sửa ở 8cb7dc98f.
+- Kiểm phần đổi ở c18f3bc2a: tsc api 0, eslint api 0, jest 587 suite / 14030 test.
+- Migration đợt 2 (7, đều CREATE INDEX, image cũ chạy được): 20261105130000..130500 (HEAVY: 130100 users, 130200 notification_logs, 130300 points_transactions), 20261105140000_payouts_status_index.
 
 ## Đợt 3 (chưa giao)
 - he (Mini App, PG 46537; sửa app-core phải hỏi điều phối), hf (admin web, PG 46538).
