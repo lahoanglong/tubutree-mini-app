@@ -336,6 +336,7 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'loyalty.chat_phone_verified_max_days',
         'loyalty.chat_order_creator_monthly_points',
         'pancake.staff_map',
+        'staff.grant_invite_ttl_days',
       ];
       expect(createdBy(results).system_configs).toBe(extraKeys.length);
       expect(await pc.systemConfig.count({ where: { key: { in: extraKeys } } })).toBe(extraKeys.length);
