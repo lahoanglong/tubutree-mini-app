@@ -19,7 +19,7 @@ export const RESERVED_STOREFRONT_IDENTIFIERS = new Set([
   'zalo', 'facebook', 'shopee', 'lazada', 'tiktok', 'login', 'payment', 'checkout',
 ]);
 
-const SUBDOMAIN_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+export const SUBDOMAIN_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 // Bắt buộc có ít nhất 1 dấu chấm (tên miền thật, vd shop.example.com) — subdomain/slug theo
 // SUBDOMAIN_RE ở trên KHÔNG BAO GIỜ chứa dấu chấm, nên yêu cầu này tự nhiên tách biệt 2 không
 // gian tên: customDomain không thể trùng ký tự với bất kỳ subdomain/slug nào, kể cả trước khi

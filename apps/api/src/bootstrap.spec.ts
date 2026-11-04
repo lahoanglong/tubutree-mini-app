@@ -167,6 +167,10 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     class AuthStub {
       @Post('auth/refresh') refresh() { return { ok: true }; }
       @Post('auth/logout') logout() { return { ok: true }; }
+      @Post('auth/guest') guest() { return { ok: true }; }
+      @Post('auth/zalo-oauth') zaloOauth() { return { ok: true }; }
+      @Post('auth/zalo-mini-app') zaloMini() { return { ok: true }; }
+      @Post('auth/ensure-phone') ensurePhone() { return { ok: true }; }
     }
     async function start(env: 'production' | 'test') {
       process.env.NODE_ENV = env;
@@ -213,6 +217,45 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
         expect(res.status).toBe(403);
         expect(((await res.json()) as { message: string }).message).toMatch(/Tubu Tree/);
       }
+    });
+
+    const cookieCall = (base: string, route: string, origin?: string) =>
+      fetch(`${base}/api/auth/${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-client': 'web', ...(origin ? { Origin: origin } : {}) },
+        body: '{}',
+      }).then((r) => r.status);
+
+    it.each(['refresh', 'logout'])('%s chế độ cookie: gian hàng https://<slug>.tubutree.com hợp lệ được nhận', async (route) => {
+      const base = await start('production');
+      expect(await cookieCall(base, route, 'https://abc.tubutree.com')).not.toBe(403);
+      expect(await cookieCall(base, route, 'https://my-shop-01.tubutree.com')).not.toBe(403);
+    });
+
+    it.each(['refresh', 'logout'])('%s chế độ cookie: nhãn dành riêng, nhiều cấp, cổng, http bị 403 ở production', async (route) => {
+      const base = await start('production');
+      for (const origin of ['https://api.tubutree.com', 'https://www.tubutree.com', 'https://hello.tubutree.com', 'https://admin.tubutree.com', 'https://mail.tubutree.com', 'https://a.b.tubutree.com', 'https://abc.tubutree.com:8443', 'http://abc.tubutree.com', 'https://ab.tubutree.com', 'https://-abc.tubutree.com', 'https://abc.tubutree.com.evil.com']) {
+        expect(await cookieCall(base, route, origin)).toBe(403);
+      }
+    });
+
+    it('non-production nhận http://<nhãn>.localhost:<cổng> và http://localhost', async () => {
+      const base = await start('test');
+      expect(await cookieCall(base, 'refresh', 'http://abc.localhost:3000')).not.toBe(403);
+      expect(await cookieCall(base, 'refresh', 'http://localhost:3000')).not.toBe(403);
+    });
+
+    it.each(['guest', 'zalo-oauth', 'zalo-mini-app', 'ensure-phone'])('%s chế độ cookie (đặt cookie phiên): Origin Zalo, lạ hoặc thiếu → 403; Origin web → chạy', async (route) => {
+      const base = await start('production');
+      for (const origin of ['https://h5.zdn.vn', 'https://evil.example', undefined]) expect(await cookieCall(base, route, origin)).toBe(403);
+      expect(await cookieCall(base, route, 'https://app.tubutree.com')).toBe(201);
+      expect(await cookieCall(base, route, 'https://abc.tubutree.com')).toBe(201);
+    });
+
+    it.each(['guest', 'zalo-oauth', 'zalo-mini-app', 'ensure-phone'])('%s chế độ thân (Mini App, không x-client) không cần Origin', async (route) => {
+      const base = await start('production');
+      const res = await fetch(`${base}/api/auth/${route}`, { method: 'POST', headers: { 'content-type': 'application/json', Origin: 'https://h5.zdn.vn' }, body: '{}' });
+      expect(res.status).toBe(201);
     });
 
     it('refresh chế độ cookie với Origin web đúng danh sách → chạy', async () => {
