@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -9,6 +9,7 @@ import { throwIfLockBusy } from '../../../common/lock-busy';
 import { STAFF_PERMISSIONS, isStaffPermission, type StaffPermission } from '../../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
 import { losesPartnerStore } from '../../merchant/partner-store';
+import { ImageRegistryStale } from '../../catalog/image-registry-stale';
 
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
@@ -37,6 +38,7 @@ export class RbacService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly fulfilment?: MerchantFulfilmentService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
@@ -86,6 +88,9 @@ export class RbacService {
         actorId,
       });
     }
+    // Vai trò quyết định gian hàng CTV của người này có hiện công khai không, nên danh sách ảnh /img phải nạp lại. Chỉ đánh dấu khi đã
+    // ghi thẳng (đăng nhập/refresh); trong tx của addGrant thì chưa commit, lần nạp chen giữa sẽ đọc vai trò cũ rồi xoá cờ: addGrant đánh dấu sau commit.
+    if (db === this.prisma) this.imageStale?.markStale();
     return updated;
   }
 
@@ -100,7 +105,7 @@ export class RbacService {
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[]) {
     const normalized = phone.trim();
     const perms = role === 'STAFF' && permissions ? normalizePermissions(permissions) : [];
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Cùng luật với revokeGrant/setUserRole: không tự đổi quyền của chính mình. Thiếu chặn này, admin
       // vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN vĩnh viễn (ADMINOPS-1).
       const user = await tx.user.findUnique({ where: { phone: normalized } });
@@ -148,6 +153,8 @@ export class RbacService {
       }
       return { granted: role, applied, permissionsChanged };
     });
+    if (result.applied) this.imageStale?.markStale();
+    return result;
   }
 
   /**
@@ -162,7 +169,7 @@ export class RbacService {
     const normalized = phone.trim();
     // Đọc cấu hình đối soát trước khi mở tx (như AdminService.setUserRole): chỉ dùng khi người này rơi xuống CUSTOMER.
     const partnerCfg = await this.fulfilment?.settlementConfig();
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       const { count } = await tx.roleGrant.updateMany({
         where: { phone: normalized, revokedAt: null },
@@ -214,6 +221,8 @@ export class RbacService {
       }
       return { revoked: count, downgraded, role, ...(storeBlocked ? { storeBlocked } : {}) };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
+    if (result.downgraded) this.imageStale?.markStale();
+    return result;
   }
 
   /**

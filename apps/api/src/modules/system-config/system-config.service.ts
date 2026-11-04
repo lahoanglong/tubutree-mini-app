@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { formatPoints } from '../../common/format-points';
@@ -18,6 +18,8 @@ import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.k
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
 import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/catalog-launch-date';
 import { FLASH_SLOTS_KEY, flashSlotsProblem } from '../flash-sale/flash-slots';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
+import { PUBLIC_VISIBILITY_CONFIG_KEYS } from '../storefront/public-visibility';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
   EXTERNAL_LOOKUP_ENABLED_KEY,
@@ -54,7 +56,10 @@ export class SystemConfigService {
   private cache = new Map<string, { value: unknown; at: number }>();
   private readonly ttlMs = 60_000;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
+  ) {}
 
   async get<T>(key: string, fallback?: T): Promise<T> {
     const cached = this.cache.get(key);
@@ -561,5 +566,7 @@ export class SystemConfigService {
       }
     });
     this.cache.delete(key);
+    // Đánh dấu sau khi xoá cache: lần nạp danh sách ảnh kế tiếp đọc lại giá trị mới, không phải bản cache 60 giây.
+    if (PUBLIC_VISIBILITY_CONFIG_KEYS.includes(key)) this.imageStale?.markStale();
   }
 }

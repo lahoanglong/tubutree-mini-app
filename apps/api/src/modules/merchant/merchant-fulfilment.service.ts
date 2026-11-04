@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -15,6 +16,7 @@ import { formatVnDate } from '../../common/vn-time';
 import { alreadyPaidConflict, isSameConfirmation } from '../../common/payout-paid-conflict';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import {
   CONSIGNMENT_SETTLE_FROM_KEY,
@@ -386,6 +388,7 @@ export class MerchantFulfilmentService {
     private readonly orderStatus: OrderStatusService,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly config?: SystemConfigService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   private async num(key: string, fallback: number): Promise<number> {
@@ -1468,6 +1471,8 @@ export class MerchantFulfilmentService {
       { maxWait: 15_000, timeout: 60_000 },
     );
     if (result.changed) {
+      // Cờ đối tác miễn bước duyệt gian hàng CTV, nên đổi nó có thể làm gian hàng hiện hoặc ẩn: danh sách ảnh /img nạp lại.
+      this.imageStale?.markStale();
       // Gian hàng không có chủ (ownerUserId null) không có dòng user_admin_events để gắn: dòng log này là dấu vết duy nhất.
       this.logger.warn(
         `Admin ${adminId} ${isPartner ? 'bật' : 'tắt'} cờ đối tác của gian hàng ${storefrontId} (chủ ${result.ownerUserId ?? 'không có — chỉ ghi log'}).`,
