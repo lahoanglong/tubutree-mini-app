@@ -298,8 +298,9 @@ export const SHOP_COPY: Record<string, string> = {
   'sort.priceAsc': 'Giá thấp',
   'sort.priceDesc': 'Giá cao',
   'sort.priceSpoken': 'Giá, chạm để xếp từ thấp đến cao',
-  'sort.priceAscSpoken': 'Giá từ thấp đến cao, chạm để đổi chiều',
-  'sort.priceDescSpoken': 'Giá từ cao đến thấp, chạm để đổi chiều',
+  'sort.priceAscSpoken': 'Giá thấp, từ thấp đến cao',
+  'sort.priceDescSpoken': 'Giá cao, từ cao đến thấp',
+  'sort.priceHint': 'Chạm để đổi chiều',
 
   // Danh mục (hub + danh sách)
   'browse.categories': 'Danh mục',

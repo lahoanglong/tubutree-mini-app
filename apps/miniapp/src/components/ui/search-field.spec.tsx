@@ -143,3 +143,11 @@ describe('SearchField', () => {
     });
   });
 });
+
+describe('SearchField — viền (A11Y-12)', () => {
+  it('viền ô nhập dùng token border-strong (đủ 3:1 theo WCAG 1.4.11)', () => {
+    renderField();
+    const box = screen.getByRole('search').querySelector('[style*="border"]') as HTMLElement;
+    expect(box.getAttribute('style')).toContain('var(--color-border-strong)');
+  });
+});

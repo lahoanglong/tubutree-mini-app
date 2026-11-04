@@ -1,9 +1,10 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/sort-bar.tsx
-import { useEffect } from 'react';
+import { Fragment, useEffect, useId } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { SR_ONLY } from './sr-only';
 import { useScrollHints } from './use-scroll-hints';
 
 export interface SortOption {
@@ -11,6 +12,8 @@ export interface SortOption {
   label: string;
   /** Tên đọc khi nhãn nhìn thấy không đủ nghĩa ("Giá ⇅" → "Giá, đổi chiều sắp xếp"). */
   spoken?: string;
+  /** Gợi ý đọc thêm sau tên ("Chạm để đổi chiều"): để ở aria-describedby, vì tên phải bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3). */
+  hint?: string;
 }
 
 export interface SortBarProps {
@@ -30,6 +33,7 @@ export interface SortBarProps {
  */
 export function SortBar({ value, options, onChange, filterCount, onFilter, sticky }: SortBarProps) {
   const hints = useScrollHints<HTMLDivElement>();
+  const uid = useId();
   useEffect(() => {
     // Chỉ cuộn ngang trong hàng: scrollIntoView sẽ kéo cả trang tới thanh sắp xếp khi nó nằm dưới màn hình lúc mới vào.
     const row = hints.ref.current;
@@ -56,12 +60,13 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
         {options.map((o) => {
           const on = o.value === value;
           return (
+            <Fragment key={o.value}>
             <button
-              key={o.value}
               type="button"
               className="tubu-press"
               aria-pressed={on}
               aria-label={o.spoken}
+              aria-describedby={o.hint ? `${uid}-hint-${o.value}` : undefined}
               onClick={() => onChange(o.value)}
               style={{
                 flex: '1 0 auto',
@@ -82,6 +87,12 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
             >
               {o.label}
             </button>
+            {o.hint && (
+              <span id={`${uid}-hint-${o.value}`} style={SR_ONLY}>
+                {o.hint}
+              </span>
+            )}
+            </Fragment>
           );
         })}
       </div>

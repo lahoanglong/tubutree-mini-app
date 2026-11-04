@@ -47,4 +47,16 @@ describe('browseSortOptions', () => {
     expect(desc.spoken).toMatch(/từ cao đến thấp/);
     expect(browseSortOptions(undefined, false).find((x) => x.value === 'price')!.spoken).toBeTruthy();
   });
+
+  it('A11Y-07: tên đọc bắt đầu bằng chữ nhìn thấy; chữ "chạm để đổi chiều" nằm ở hint chứ không ở tên', () => {
+    for (const sort of ['price_asc', 'price_desc', undefined] as const) {
+      for (const o of browseSortOptions(sort, false)) {
+        if (!o.spoken) continue;
+        const visible = o.label.replace(/[^\p{L}\p{N}\s]/gu, '').trim();
+        expect(o.spoken.startsWith(visible), `${o.label} -> ${o.spoken}`).toBe(true);
+        if (sort) expect(o.spoken).not.toMatch(/chạm/i);
+      }
+    }
+    expect(browseSortOptions('price_asc', false).find((x) => x.value === 'price')!.hint).toBe('Chạm để đổi chiều');
+  });
 });
