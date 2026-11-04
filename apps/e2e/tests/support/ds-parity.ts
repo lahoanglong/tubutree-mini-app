@@ -161,7 +161,7 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'builder-stats-card': { height: '180.1px' },
   'builder-stat-value': { fontSize: '15px', lineHeight: '22.05px', fontWeight: '700', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
   'builder-stat-label': { fontSize: '13px', lineHeight: '20.02px', fontWeight: '400', letterSpacing: 'normal', color: MUTED, fontFamilyKind: 'inter' },
-  'builder-stat-box': { height: '62.07px', borderRadius: '12px', backgroundColor: 'rgb(242, 245, 236)', paddingTop: '10px', paddingRight: '10px', paddingBottom: '10px', paddingLeft: '10px' },
+  'builder-stat-box': { height: '62.07px', borderRadius: '12px', backgroundColor: 'rgb(242, 245, 236)', paddingTop: '10px', paddingRight: '4px', paddingBottom: '10px', paddingLeft: '4px' },
   'builder-sections-title': { fontSize: '16px', lineHeight: '24px', fontWeight: '700', letterSpacing: '-0.16px', color: INK, fontFamilyKind: 'inter' },
 
   // Thưởng mốc doanh số tháng (K6): số đo Mini 375px, nút Button 48px/15px là chuẩn; web dùng cùng Button và thang chữ caption/body-sm.
