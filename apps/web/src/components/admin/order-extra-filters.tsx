@@ -51,7 +51,7 @@ export function OrderExtraFilters({
   useEffect(() => setStoreInput(value.storefront ?? ''), [value.storefront]);
   const picked: PickedItem | null = value.referrerUserId ? { id: value.referrerUserId, label: referrerLabel || 'CTV đang lọc' } : null;
   const set = <K extends keyof OrderListExtra>(key: K, v: OrderListExtra[K] | '') => onChange(v ? { ...value, [key]: v } : without(value, key));
-  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.referrerUserId || value.userId || value.storefront);
+  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.paymentUnlinked || value.referrerUserId || value.userId || value.storefront);
   const kindHint = ORDER_KIND_OPTIONS.find((o) => o.k === value.kind)?.hint;
 
   const submitStore = (e: React.FormEvent) => {
@@ -126,6 +126,11 @@ export function OrderExtraFilters({
       {value.queue && (
         <p className="text-xs text-stone-500">
           {value.queue === 'dealer_transfer_to_confirm' ? 'Đang xem đơn đại lý trả trước chưa nhận tiền' : 'Đang xem đơn lẻ chuyển khoản chưa nhận tiền'}, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.
+        </p>
+      )}
+      {value.paymentUnlinked && (
+        <p className="text-xs text-stone-500">
+          Đang xem đơn {value.paymentUnlinked === 'closed' ? 'đã huỷ/trả' : 'còn mở'} mà Pancake báo đã thanh toán nhưng chưa gắn đúng đơn Pancake, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.
         </p>
       )}
       {value.userId && <p className="text-xs text-stone-500">Đang xem đơn của {userLabel || 'một khách'}. Bấm Xoá bộ lọc để xem tất cả.</p>}

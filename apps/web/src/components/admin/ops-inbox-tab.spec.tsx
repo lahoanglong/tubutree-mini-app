@@ -473,3 +473,25 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect((fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('/admin/ops/inbox'))).toBe(false);
   });
 });
+
+describe('OpsInboxTab — khoản Pancake báo đã thanh toán chờ đối chiếu', () => {
+  it('hai thẻ ra đúng nhãn và bấm mở đúng khoá', async () => {
+    stubInbox([
+      { key: 'paymentUnlinked', count: 2 },
+      { key: 'paymentUnlinkedClosed', count: 1 },
+    ]);
+    expect(INBOX_LABELS.paymentUnlinked.title).toBe('Pancake báo đã thanh toán — chờ đối chiếu sao kê');
+    expect(INBOX_LABELS.paymentUnlinkedClosed.title).toBe('Pancake báo đã thanh toán cho đơn đã huỷ/trả');
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} onOpenHealth={vi.fn()} isAdmin />);
+    mounted.push(r);
+    await flush();
+    const open = r.container.querySelector<HTMLElement>('[data-inbox="paymentUnlinked"]')!;
+    const closed = r.container.querySelector<HTMLElement>('[data-inbox="paymentUnlinkedClosed"]')!;
+    expect(open.textContent).toContain('Pancake báo đã thanh toán — chờ đối chiếu sao kê');
+    expect(closed.textContent).toContain('Pancake báo đã thanh toán cho đơn đã huỷ/trả');
+    click(open);
+    click(closed);
+    expect(onOpen.mock.calls.map((c) => c[0])).toEqual(['paymentUnlinked', 'paymentUnlinkedClosed']);
+  });
+});

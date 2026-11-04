@@ -124,6 +124,7 @@ const mocks = vi.hoisted(() => ({
   inbox: vi.fn(),
   inboxExternal: null as Record<string, number> | null,
   inboxUncategorized: 0,
+  inboxUnlinked: null as { open: number; closed: number } | null,
   access: { role: 'STAFF', staffPermissions: [] as string[] },
   refundsCalls: 0,
   refundsArgs: [] as unknown[][],
@@ -208,6 +209,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'communityReports', count: 3 },
           { key: 'dealerApplications', count: 5 },
           { key: 'productsMissingImage', count: 4 },
+          ...(mocks.inboxUnlinked ? [{ key: 'paymentUnlinked', count: mocks.inboxUnlinked.open }, { key: 'paymentUnlinkedClosed', count: mocks.inboxUnlinked.closed }] : []),
           ...(mocks.inboxUncategorized ? [{ key: 'productsUncategorized', count: mocks.inboxUncategorized }] : []),
           ...(mocks.inboxExternal ? [{ key: 'externalPoints', count: Object.values(mocks.inboxExternal).reduce((a, b) => a + b, 0), parts: mocks.inboxExternal }] : []),
         ],
@@ -411,6 +413,7 @@ beforeEach(() => {
   mocks.inbox.mockReset();
   mocks.inboxExternal = null;
   mocks.inboxUncategorized = 0;
+  mocks.inboxUnlinked = null;
   mocks.todayCalls = 0;
   mocks.guestCount = 7;
   mocks.access = { role: 'STAFF', staffPermissions: [] };
@@ -823,6 +826,52 @@ describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
     await flush();
     expect(mocks.resolvePancakeAttention).toHaveBeenCalledWith('o9', '  đã hoàn tay cho khách ');
     expect(container.querySelector('[role="status"]')?.textContent).toContain('đã rời hàng đợi');
+  });
+});
+
+describe('admin/page — lời nhắc khoản Pancake báo đã thanh toán chờ đối chiếu ở chi tiết đơn', () => {
+  const unlinked = (over: Record<string, unknown> = {}) => ({
+    id: 'o7',
+    code: 'TUBU7',
+    status: 'CANCELLED',
+    total: 300000,
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    createdAt: '2026-10-02T03:00:00.000Z',
+    user: { fullName: 'Khách C', phone: '0933333333' },
+    paymentUnlinkedAt: '2026-11-04T01:00:00.000Z',
+    ...over,
+  });
+  const openDetail = async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const r = await mount();
+    act(() => [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+    await flush();
+    return r.container;
+  };
+
+  it('ADMIN: đơn đã huỷ có lời nhắc dành cho quản trị viên và nút "Đã đối chiếu"', async () => {
+    mocks.orders = [unlinked()];
+    const container = await openDetail();
+    const panel = container.querySelector('section[aria-label="Pancake báo đã thanh toán, chờ đối chiếu"]')!;
+    expect(panel.textContent).toContain('Pancake báo đã thanh toán cho đơn đã huỷ/trả. Quản trị viên đối chiếu sao kê');
+    expect([...panel.querySelectorAll('button')].some((b) => b.textContent === 'Đã đối chiếu')).toBe(true);
+  });
+
+  it('Kế toán: đơn còn mở thấy lời nhắc "Đã nhận tiền" nhưng KHÔNG có nút "Đã đối chiếu"', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KE_TOAN'] };
+    mocks.orders = [unlinked({ status: 'CONFIRMED' })];
+    const container = await openDetail();
+    const panel = container.querySelector('section[aria-label="Pancake báo đã thanh toán, chờ đối chiếu"]')!;
+    expect(panel.textContent).toContain('khách đã chuyển thì bấm "Đã nhận tiền"');
+    expect([...panel.querySelectorAll('button')].some((b) => b.textContent === 'Đã đối chiếu')).toBe(false);
+  });
+
+  it('đơn đã PAID dù còn cờ cũ: không hiện lời nhắc', async () => {
+    mocks.orders = [unlinked({ paymentStatus: 'PAID' })];
+    const container = await openDetail();
+    expect(container.querySelector('section[aria-label="Pancake báo đã thanh toán, chờ đối chiếu"]')).toBeNull();
   });
 });
 
@@ -3894,6 +3943,21 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'bank_transfer_to_confirm', order: 'asc' });
+  });
+
+  it.each([
+    ['paymentUnlinked', 'open', 'Pancake báo đã thanh toán — chờ đối chiếu sao kê', 'còn mở'],
+    ['paymentUnlinkedClosed', 'closed', 'Pancake báo đã thanh toán cho đơn đã huỷ/trả', 'đã huỷ/trả'],
+  ] as const)('thẻ %s ra đúng nhãn và mở tab Đơn hàng với bộ lọc paymentUnlinked=%s, cũ nhất trước', async (key, filter, label, hint) => {
+    mocks.inboxUnlinked = { open: 2, closed: 1 };
+    const { container } = await mount();
+    const card = container.querySelector(`[data-inbox="${key}"]`)!;
+    expect(card.textContent).toContain(label);
+    click(card);
+    await flush();
+    expect(window.location.search).toBe(`?tab=orders&paymentUnlinked=${filter}`);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined, { paymentUnlinked: filter, order: 'asc' });
+    expect(container.textContent).toContain(`Đang xem đơn ${hint} mà Pancake báo đã thanh toán nhưng chưa gắn đúng đơn Pancake`);
   });
 
   it('thẻ đơn đại lý trả trước chờ tiền mở tab Đơn hàng đúng hàng đợi đại lý, cũ nhất trước', async () => {
