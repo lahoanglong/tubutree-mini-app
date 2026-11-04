@@ -2983,7 +2983,7 @@ model Review {
   comment      String?
   images       String[]
   // Phần tử tương ứng của images: mã md5 10 ký tự hex cho ảnh base64, chính URL cho ảnh https. Danh sách công khai đọc cột này
-  // thay vì images (base64 nặng). Ghi cùng images ở mọi chỗ tạo/sửa.
+  // thay vì images (base64 nặng). Do trigger reviews_image_versions_sync giữ theo images (đừng ghi tay).
   imageVersions String[] @default([])
   videoUrl     String? // review video (UGC §6.14.9)
   pointsEarned Int      @default(0)

@@ -108,7 +108,6 @@ describe('ReviewsService.create', () => {
           rating: 2,
           comment: 'đổi ý',
           images: ['x.jpg'],
-          imageVersions: ['x.jpg'],
           videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv2.mp4',
         },
       });
@@ -136,7 +135,7 @@ describe('ReviewsService.create', () => {
       const prisma = withExisting();
       await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 4 } as never);
       const p = prisma as unknown as P;
-      expect(p.review.update.mock.calls[0][0].data).toEqual({ rating: 4, comment: null, images: [], imageVersions: [], videoUrl: null });
+      expect(p.review.update.mock.calls[0][0].data).toEqual({ rating: 4, comment: null, images: [], videoUrl: null });
     });
 
     it('ghi engagement_action review_updated CÙNG tx, pointsEarned = 0', async () => {
@@ -1314,15 +1313,13 @@ describe('ReviewsService.listByProduct: không kéo cột images (base64) của 
   });
 });
 
-describe('ReviewsService: ghi imageVersions cùng images', () => {
-  it('tạo mới ghi imageVersions đúng thứ tự ảnh (base64 → mã md5, https → URL)', async () => {
+describe('ReviewsService: imageVersions do trigger DB giữ, mã ứng dụng không ghi', () => {
+  it('tạo và sửa đánh giá không đưa imageVersions vào data', async () => {
     const B64 = `data:image/jpeg;base64,${'B'.repeat(300)}`;
-    const URL = 'https://res.cloudinary.com/x/y.jpg';
     const prisma = makePrisma();
-    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 5, images: [B64, URL] } as never);
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 5, images: [B64] } as never);
     const data = (prisma as unknown as { review: { create: jest.Mock } }).review.create.mock.calls[0][0].data;
-    expect(data.images).toEqual([B64, URL]);
-    expect(data.imageVersions).toEqual([reviewImageVersions([B64])[0], URL]);
-    expect(data.imageVersions[0]).toMatch(/^[0-9a-f]{10}$/);
+    expect(data.images).toEqual([B64]);
+    expect(data).not.toHaveProperty('imageVersions');
   });
 });

@@ -54,7 +54,6 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
       data: {
         userId: user.id, productId: product.id, orderId: `it-order-${tag}`, rating: 5,
         images: IMAGES,
-        imageVersions: reviewImageVersions(IMAGES),
       },
     });
     reviewId = review.id;
@@ -136,5 +135,21 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
     for (let run = 0; run < 2; run++) for (const stmt of statements) await prisma.$executeRawUnsafe(stmt); // chạy lại không đổi gì
     const row = await prisma.review.findUnique({ where: { id: reviewId }, select: { imageVersions: true } });
     expect(row!.imageVersions).toEqual(reviewImageVersions(IMAGES));
+  });
+
+  it('trigger: insert/update images bằng Prisma và SQL thô đều ra imageVersions bằng mã JS; đổi cột khác không chạm', async () => {
+    const versions = async () => (await prisma.review.findUniqueOrThrow({ where: { id: reviewId }, select: { imageVersions: true } })).imageVersions;
+    expect(await versions()).toEqual(reviewImageVersions(IMAGES));
+    const next = [`data:image/png;base64,${Buffer.alloc(900, 3).toString('base64')}`, 'https://res.cloudinary.com/x/z.jpg', `data:image/jpeg;base64,${Buffer.alloc(50, 9).toString('base64')}`];
+    await prisma.review.update({ where: { id: reviewId }, data: { images: next } });
+    expect(await versions()).toEqual(reviewImageVersions(next));
+    const raw = [`data:image/webp;base64,${Buffer.alloc(70, 4).toString('base64')}`];
+    await prisma.$executeRaw`UPDATE "reviews" SET "images" = ${raw}::text[] WHERE "id" = ${reviewId}`;
+    expect(await versions()).toEqual(reviewImageVersions(raw));
+    await prisma.$executeRaw`UPDATE "reviews" SET "imageVersions" = '{}' WHERE "id" = ${reviewId}`;
+    await prisma.review.update({ where: { id: reviewId }, data: { rating: 4 } });
+    expect(await versions()).toEqual([]); // đổi cột khác không kích hoạt trigger
+    await prisma.review.update({ where: { id: reviewId }, data: { images: IMAGES } });
+    expect(await versions()).toEqual(reviewImageVersions(IMAGES));
   });
 });

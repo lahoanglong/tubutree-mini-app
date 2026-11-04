@@ -22,8 +22,8 @@ const errCode = (err: unknown): string | undefined =>
  * `v` là mã băm nội dung để sửa đánh giá không dính ảnh cũ trong cache. Ảnh https (Cloudinary) giữ nguyên.
  *
  * Cột `imageVersions` lưu sẵn phần tử tương ứng của `images`: ảnh base64 là mã băm md5 10 ký tự hex, ảnh https là chính URL.
- * Nhờ vậy danh sách công khai dựng được đường dẫn mà không phải đọc (và băm) cột `images` của cả trăm đánh giá. Phải ghi
- * cùng lúc với `images` ở mọi chỗ tạo/sửa đánh giá; migration đã điền cho dữ liệu cũ.
+ * Nhờ vậy danh sách công khai dựng được đường dẫn mà không phải đọc (và băm) cột `images` của cả trăm đánh giá. Trigger DB
+ * `reviews_image_versions_sync` giữ cột này theo `images` (cùng công thức `reviewImageVersions`), mã ứng dụng không ghi nó.
  */
 export function reviewImageVersions(images: readonly string[]): string[] {
   return images.map((img) => (img.startsWith('data:') ? createHash('md5').update(img).digest('hex').slice(0, 10) : img));
@@ -246,7 +246,6 @@ export class ReviewsService {
           rating: dto.rating,
           comment: dto.comment,
           images: dto.images ?? [],
-          imageVersions: reviewImageVersions(dto.images ?? []),
           videoUrl: dto.videoUrl ?? null,
           pointsEarned,
         },
@@ -314,7 +313,6 @@ export class ReviewsService {
           rating: dto.rating,
           comment: dto.comment ?? null,
           images: dto.images ?? [],
-          imageVersions: reviewImageVersions(dto.images ?? []),
           videoUrl: dto.videoUrl ?? null,
         },
       });
