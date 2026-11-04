@@ -375,3 +375,33 @@ describe('ShiftsService.createTemplate — chống thêm ca chuẩn trùng', () 
     expect(order).toEqual(['lock', 'find', 'create']);
   });
 });
+
+describe('ShiftsService.updateTemplate — đổi tên không được trùng ca khác', () => {
+  const make = (rows: { id: string; name: string }[]) => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      shiftTemplate: { findMany: jest.fn().mockResolvedValue(rows), findFirst: jest.fn(), create: jest.fn(), updateMany, delete: jest.fn() },
+    });
+    return { svc: mk(prisma), updateMany };
+  };
+  const rows = [{ id: 't1', name: 'Ca sáng' }, { id: 't2', name: 'Ca chiều' }];
+
+  it('đổi sang tên của ca khác → 409, không ghi', async () => {
+    const { svc, updateMany } = make(rows);
+    await expect(svc.updateTemplate('t2', { name: ' CA SÁNG ' })).rejects.toBeInstanceOf(ConflictException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('giữ nguyên tên của chính ca đang sửa (đổi giờ, đổi hoa thường) vẫn được; tên lưu đã cắt khoảng trắng', async () => {
+    const { svc, updateMany } = make(rows);
+    await svc.updateTemplate('t1', { name: ' ca SÁNG ', startMin: 420 });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 't1' }, data: { name: 'ca SÁNG', startMin: 420 } });
+  });
+
+  it('không gửi tên thì không kiểm trùng', async () => {
+    const { svc, updateMany } = make(rows);
+    await svc.updateTemplate('t1', { active: false });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 't1' }, data: { active: false } });
+  });
+});

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -10,6 +10,7 @@ import {
   IsString,
   Max,
   MaxLength,
+  MinLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -96,8 +97,12 @@ export class BulkApproveDto {
   ids!: string[];
 }
 
+const trimString = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
+
 export class ShiftTemplateDto {
+  @Transform(trimString)
   @IsString()
+  @MinLength(1, { message: 'Tên ca không được để trống.' })
   @MaxLength(60)
   name!: string;
 
@@ -122,7 +127,9 @@ export class ShiftTemplateDto {
 
 export class UpdateShiftTemplateDto {
   @OptionalNotNull()
+  @Transform(trimString)
   @IsString()
+  @MinLength(1, { message: 'Tên ca không được để trống.' })
   @MaxLength(60)
   name?: string;
 

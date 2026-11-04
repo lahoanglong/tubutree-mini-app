@@ -48,4 +48,12 @@ describe('ShiftsService.createTemplate / updateTemplate — so tên ca chuẩn (
     await make(`Ca sáng ${tag}`);
     await expect(make(`  CA SÁNG ${tag.toLowerCase()} `)).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('đổi tên sang tên ca khác → 409; đổi sang tên có "_" khác nghĩa đen thì được', async () => {
+    const tag = randCode(6);
+    await make(`Ca A ${tag}`);
+    const b = await make(`Ca B ${tag}`);
+    await expect(svc.updateTemplate(b.id, { name: ` ca a ${tag} ` })).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.updateTemplate(b.id, { name: `Ca_A ${tag}` })).resolves.toEqual({ updated: true });
+  });
 });

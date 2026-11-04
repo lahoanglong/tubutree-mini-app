@@ -307,7 +307,17 @@ export class ShiftsService {
     id: string,
     data: { name?: string; startMin?: number; endMin?: number; active?: boolean; sortOrder?: number },
   ) {
-    const r = await this.prisma.shiftTemplate.updateMany({ where: { id }, data });
+    const patch = data.name === undefined ? data : { ...data, name: data.name.trim() };
+    if (patch.name === undefined) return this.applyTemplatePatch(this.prisma, id, patch);
+    // Cùng khoá với createTemplate: đổi tên và thêm ca song song không được cùng lọt qua kiểm trùng.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('shift-template-create'))`;
+      await this.assertTemplateNameFree(tx, patch.name as string, id);
+      return this.applyTemplatePatch(tx, id, patch);
+    });
+  }
+  private async applyTemplatePatch(db: Pick<PrismaService, 'shiftTemplate'>, id: string, data: object) {
+    const r = await db.shiftTemplate.updateMany({ where: { id }, data });
     if (r.count === 0) throw new NotFoundException('Không tìm thấy ca chuẩn.');
     return { updated: true };
   }
