@@ -1,6 +1,7 @@
 import { applyDecorators, type ExecutionContext, SetMetadata } from '@nestjs/common';
 import { Throttle, type ThrottlerModuleOptions } from '@nestjs/throttler';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { safeEqualStrings } from '../safe-equal';
 import type { Request } from 'express';
 
 /**
@@ -12,7 +13,7 @@ import type { Request } from 'express';
  *   chung IP (CGNAT) không bị cộng dồn mọi màn hình vào một bộ đếm.
  * - `authIp`: chỉ bật trên route gắn @AuthThrottle, là trần theo IP nới rộng cho đăng nhập/refresh,
  *   còn giới hạn chặt nằm ở `default` với khoá theo thiết bị/token.
- * - `ssr`: trần riêng (3000/phút, một khoá chung) cho request web SSR mang `x-throttle-bypass` đúng token. Request đó
+ * - `ssr`: trần riêng 3000/phút cho mỗi handler (khoá của throttler 6.5 gồm class + handler + tên + tracker, nên `ssr:bypass` đếm riêng từng route) cho request web SSR mang `x-throttle-bypass` đúng token. Request đó
  *   bỏ qua `default` và `authIp` (mọi SSR đi ra từ một IP máy chủ web) nhưng không được miễn hoàn toàn: token lộ hay
  *   một trang SSR bị khuếch đại (vd `/san-pham?q=`) vẫn chạm trần này.
  * - blockDuration để mặc định (= ttl, 60s): bộ nhớ của throttler 6.5 đưa bộ đếm về 0 khi hết khoá,
@@ -27,16 +28,17 @@ export const SSR_LIMIT = 3000;
 /** Header web SSR gửi kèm (giá trị = THROTTLE_BYPASS_TOKEN). */
 export const THROTTLE_BYPASS_HEADER = 'x-throttle-bypass';
 
-const sha256 = (v: string): Buffer => createHash('sha256').update(v).digest();
+const bypassSeen = new WeakMap<Request, boolean>();
 
-/** Token hợp lệ khi header khớp THROTTLE_BYPASS_TOKEN (env, đọc lúc gọi); env rỗng thì tắt hẳn đường này. */
+/** Token hợp lệ khi header khớp THROTTLE_BYPASS_TOKEN (env, đọc lúc gọi); env rỗng thì tắt hẳn đường này. Tính một lần mỗi request. */
 export function hasValidBypass(req: Request): boolean {
-  const expected = process.env.THROTTLE_BYPASS_TOKEN ?? '';
-  if (expected.length === 0) return false;
+  const cached = bypassSeen.get(req);
+  if (cached !== undefined) return cached;
   const h = req.headers?.[THROTTLE_BYPASS_HEADER];
   const presented = Array.isArray(h) ? h[0] : h;
-  if (typeof presented !== 'string' || presented.length === 0) return false;
-  return timingSafeEqual(sha256(presented), sha256(expected));
+  const ok = typeof presented === 'string' && safeEqualStrings(presented, process.env.THROTTLE_BYPASS_TOKEN ?? '');
+  bypassSeen.set(req, ok);
+  return ok;
 }
 
 const isBypass = (ctx: ExecutionContext): boolean => hasValidBypass(ctx.switchToHttp().getRequest<Request>());

@@ -124,7 +124,7 @@ export class ZaloOaWebhookController {
     return Boolean(this.oaSecretKey && this.appId);
   }
 
-  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). Chưa đặt token thì lớp này không bao giờ qua. */
+  /** So token tĩnh chống timing-attack (so băm nên không lộ độ dài secret). Chưa đặt token thì lớp này không bao giờ qua. */
   private verifyToken(token?: string): boolean {
     if (!this.secret || !token) return false;
     return safeEqualStrings(token, this.secret);

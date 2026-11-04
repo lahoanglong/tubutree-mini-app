@@ -42,6 +42,18 @@ describe('secret webhook ngắn', () => {
     it('31 ký tự → ném', () => {
       expect(() => validateEnv({ ...PROD, GOMDON_WEBHOOK_SECRET: 'x'.repeat(31) })).toThrow(/GOMDON_WEBHOOK_SECRET/);
     });
+    it('ZALO_OA_WEBHOOK_SECRET ngắn nhưng chế độ chữ ký đã đủ (ZALO_OA_SECRET_KEY + ZALO_APP_ID): token tĩnh không dùng nên vẫn boot', () => {
+      const signing = { ZALO_OA_SECRET_KEY: 'k'.repeat(32), ZALO_APP_ID: '123456' };
+      expect(() => validateEnv({ ...PROD, ...signing, ZALO_OA_WEBHOOK_SECRET: 'abc' })).not.toThrow();
+    });
+    it('ZALO_OA_WEBHOOK_SECRET ngắn và chữ ký chưa đủ (thiếu ZALO_APP_ID hoặc khoá) → ném', () => {
+      expect(() => validateEnv({ ...PROD, ZALO_OA_SECRET_KEY: 'k'.repeat(32), ZALO_OA_WEBHOOK_SECRET: 'abc' })).toThrow(/ZALO_OA_WEBHOOK_SECRET/);
+      expect(() => validateEnv({ ...PROD, ZALO_APP_ID: '123456', ZALO_OA_WEBHOOK_SECRET: 'abc' })).toThrow(/ZALO_OA_WEBHOOK_SECRET/);
+    });
+    it('shortWebhookSecretKeys bỏ ZALO_OA_WEBHOOK_SECRET khi chữ ký đủ', () => {
+      expect(shortWebhookSecretKeys({ ZALO_OA_WEBHOOK_SECRET: 'abc', ZALO_OA_SECRET_KEY: 'k', ZALO_APP_ID: '1' })).toEqual([]);
+      expect(shortWebhookSecretKeys({ ZALO_OA_WEBHOOK_SECRET: 'abc' })).toEqual(['ZALO_OA_WEBHOOK_SECRET']);
+    });
     it('rỗng giữ nguyên hành vi cũ (tính năng tắt vẫn boot)', () => {
       expect(() => validateEnv({ ...PROD, GOMDON_WEBHOOK_SECRET: '', ZALO_OA_WEBHOOK_SECRET: '', ZALO_BRIDGE_SECRET: '' })).not.toThrow();
     });
