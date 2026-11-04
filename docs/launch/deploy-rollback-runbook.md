@@ -167,7 +167,7 @@ psqlq -tAc "SELECT value FROM system_configs WHERE key = 'loyalty.vnd_per_point_
 
 Hai số đầu phải là `0`; dòng thứ ba phải không có dòng nào (mặc định 1000) hoặc `1000`. Khác đi: đối soát tay với Tech lead TRƯỚC ngày deploy (đây là điều kiện sửa được trước, không phải lý do dừng giữa lúc đang bảo trì).
 
-Migration không có trong bảng trên chỉ thêm cột, bảng nhỏ hoặc dữ liệu tham chiếu (spec `db-checks.spec.ts` quét mọi migration sau bản PROD, gồm `LOCK TABLE` và SQL động, để bảng khớp danh sách nặng của `go-live:check`; migration thêm sau này mà vượt quy tắc quét thì spec đỏ cho tới khi được thêm vào danh sách). Khi danh sách có migration ngoài sáu cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
+Migration không có trong bảng trên chỉ thêm cột, bảng nhỏ hoặc dữ liệu tham chiếu (spec `db-checks.spec.ts` quét mọi migration sau bản PROD, gồm `LOCK TABLE` và SQL động, để bảng khớp danh sách nặng của `go-live:check`; migration thêm sau này mà vượt quy tắc quét thì spec đỏ cho tới khi được thêm vào danh sách). Khi danh sách có migration ngoài danh sách tương thích image (`IMAGE_COMPATIBLE_MIGRATIONS`), mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
 
 - [ ] Đã ghi bản PROD đang chạy (image khớp DB) và số migration chờ áp
 - [ ] Đã đối chiếu từng tên với bảng migration nặng; PD-3 (nếu có) đã kiểm 0, 0, 1000
@@ -856,7 +856,7 @@ $DC run --rm --no-deps -T api pnpm exec prisma migrate status 2>&1 | tr -d '\r' 
 Kỳ vọng:
 - `check-env` in `Cấu hình môi trường hợp lệ.` và thoát 0.
 - `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.shipping_eta`, `db.company_identity`, `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài danh sách tương thích image) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); `db.membership_tiers` và `db.dealer_tiers` khi DB còn mới (hạng và bậc đại lý nạp ở bước 7b); các dòng WARN "chưa kiểm được trước khi migrate (schema cũ: ...)" (schema còn cũ hơn mã; kiểm lại ở bước 10, và chỉ được phép khi còn migration chờ áp); và các dòng backup `không kiểm được` (xem ghi chú). `env.zalo.ids` WARN vì `ZALO_MINIAPP_ID` rỗng KHÔNG được phép: chủ phải đặt giá trị trước khi tiếp tục (xem `docs/GO-LIVE-KEYS.md`). `db.waste_point` là PASS khi `waste.enabled` chưa có (trước deploy; bảng `waste_points` do migration `20261020000000_waste_exchange` tạo) và không nằm trong các WARN được phép. Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
-- Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có sáu migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
+- Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có các migration của đợt (bảng mục 1.0), và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
 - Dòng `db.pending_scope` (chỉ có khi có migration ngoài danh sách tương thích image) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
 
@@ -917,7 +917,7 @@ time $DC run --rm --no-deps api pnpm exec prisma migrate deploy
 date '+%H:%M:%S'
 ```
 
-Kỳ vọng: liệt kê các migration "Applying migration `...`" gồm MỌI tên trong `.pending-migrations` (kể cả sáu migration của đợt), kết thúc bằng `All migrations have been successfully applied.` Thời gian khớp "tổng thời gian migrate" ở mục 3.2 (cho phép gấp vài lần vì máy dùng chung). Điểm dừng: bất kỳ lỗi nào (mục 7.1).
+Kỳ vọng: liệt kê các migration "Applying migration `...`" gồm MỌI tên trong `.pending-migrations` (kể cả các migration của đợt), kết thúc bằng `All migrations have been successfully applied.` Thời gian khớp "tổng thời gian migrate" ở mục 3.2 (cho phép gấp vài lần vì máy dùng chung). Điểm dừng: bất kỳ lỗi nào (mục 7.1).
 
 Xác minh sau migrate:
 
@@ -1177,10 +1177,10 @@ cat .pending-migrations
 | Tình huống | Đường | Mất dữ liệu? |
 |---|---|---|
 | Migrate lỗi (chưa bật API) | 7.1 | Không |
-| Migrate xong, API/web mới lỗi, API mới CHƯA nhận khách (vài phút đầu), danh sách chờ áp CHỈ gồm tên trong danh sách tương thích image (`IMAGE_COMPATIBLE_MIGRATIONS` trong `apps/api/src/config/go-live/db-checks.ts`) (r6, r8 điểm nhận vỏ, r8 đánh giá, r9 mốc tồn kho, r10 hàng trả cũ, Đổi rác lấy quà, bảy migration chỉ mục hardening 05/11), và không có đánh giá trùng | 7.2 (chỉ quay image) | Không |
+| Migrate xong, API/web mới lỗi, API mới CHƯA nhận khách (vài phút đầu), danh sách chờ áp CHỈ gồm tên trong danh sách tương thích image (`IMAGE_COMPATIBLE_MIGRATIONS` trong `apps/api/src/config/go-live/db-checks.ts`) (r6, r8 điểm nhận vỏ, r8 đánh giá, r9 mốc tồn kho, r10 hàng trả cũ, Đổi rác lấy quà, bảy migration chỉ mục hardening 05/11), và (chỉ khi `.pending-migrations` có `20261015150000_r8_multi_reviews_unique_per_order`) không có đánh giá trùng | 7.2 (chỉ quay image) | Không |
 | Migrate xong nhưng danh sách chờ áp có BẤT KỲ migration nào ngoài danh sách tương thích image (p1, p4, p8, PD-3, hoặc tên khác), hoặc `.pending-migrations` không còn | 7.3 (khôi phục bản backup). KHÔNG dùng 7.2 | Mất mọi thứ ghi sau bước 6 |
 | Migration `20261020000000_waste_exchange` (Đổi rác lấy quà) chỉ THÊM bảng, cột, enum và chỉ mục, tương thích với image cũ: quay về image trước là an toàn vì các bảng, enum và cột của Refill được giữ nguyên và không có lệnh DROP nào (R13.1.9) | 7.2 nếu mọi điều kiện của 7.2 thoả | Không |
-| Quay image nhưng đã có khách ghi đánh giá lần hai cho cùng một sản phẩm | 7.3 (khôi phục bản backup) hoặc gộp tay đánh giá rồi 7.2 (chỉ khi danh sách chờ áp chỉ là các migration của đợt) | 7.3 mất dữ liệu sau điểm backup |
+| Quay image khi `.pending-migrations` còn `20261015150000_r8_multi_reviews_unique_per_order` nhưng đã có khách ghi đánh giá lần hai cho cùng một sản phẩm (r8 đã áp từ trước thì đánh giá nhiều lần là dữ liệu đúng, cứ 7.2) | 7.3 (khôi phục bản backup) hoặc gộp tay đánh giá rồi 7.2 (chỉ khi danh sách chờ áp chỉ là các migration của đợt) | 7.3 mất dữ liệu sau điểm backup |
 | Hỏng nặng, không rõ nguyên nhân, cần về đúng trạng thái trước deploy | 7.3 | Mất mọi thứ ghi sau bước 6 |
 | Chỉ lỗi giao diện hoặc lỗi nhỏ, schema ổn | KHÔNG quay lại: sửa tiến bằng hotfix, deploy lại theo mục 5 (bỏ bước migrate nếu không có migration mới) | Không |
 
@@ -1296,7 +1296,7 @@ Ngược lại, Mini App bản cũ gửi dòng pin về 0 ở quầy. Vì vậy 
 
 MẤT mọi dữ liệu ghi sau bước 6 (đơn, thanh toán, đánh giá, đăng ký mới...). Chỉ làm khi Chủ shop đồng ý bằng lời trong nhóm chat.
 
-Thứ tự quan trọng: phải đưa container về image CŨ trước, vì `restore-db.sh` bật lại API bằng `docker compose start api` (khởi động lại đúng container hiện có). Nếu container đó đang là bản mới, API mới sẽ bật lên trên DB cũ và `prisma migrate deploy` áp lại toàn bộ các migration chờ áp (`.pending-migrations`). Đây cũng là đường quay lại bắt buộc khi danh sách chờ áp có migration ngoài sáu cái của đợt (7.0): bản backup ở bước 6 là bản DUY NHẤT còn nguyên schema cũ.
+Thứ tự quan trọng: phải đưa container về image CŨ trước, vì `restore-db.sh` bật lại API bằng `docker compose start api` (khởi động lại đúng container hiện có). Nếu container đó đang là bản mới, API mới sẽ bật lên trên DB cũ và `prisma migrate deploy` áp lại toàn bộ các migration chờ áp (`.pending-migrations`). Đây cũng là đường quay lại bắt buộc khi danh sách chờ áp có migration ngoài danh sách tương thích image (7.0): bản backup ở bước 6 là bản DUY NHẤT còn nguyên schema cũ.
 
 ```bash
 . ./.rollback-images

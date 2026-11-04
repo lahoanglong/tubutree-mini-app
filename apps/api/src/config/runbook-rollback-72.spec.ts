@@ -72,3 +72,22 @@ describe('runbook 1.19: DB_SESSION_OPTIONS phải có trong .env trước bướ
     expect(line).toMatch(/trước bước 4/i);
   });
 });
+
+describe('runbook 7.0: điều kiện đánh giá trùng chỉ áp khi r8 còn chờ áp', () => {
+  const start = RUNBOOK.indexOf('### 7.0 ');
+  const sec = RUNBOOK.slice(start, RUNBOOK.indexOf('### 7.1 ', start));
+
+  it('mọi dòng bảng chọn đường nhắc đánh giá trùng hoặc đánh giá lần hai đều kèm r8 hoặc .pending-migrations', () => {
+    expect(start).toBeGreaterThan(0);
+    const rows = sec.split('\n').filter((l) => l.startsWith('|') && /đánh giá (trùng|lần hai)/.test(l));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.includes(R8) || row.includes('.pending-migrations')).toBe(true);
+  });
+});
+
+describe('runbook: điều kiện quay lại dẫn theo danh sách tương thích image, không đếm "sáu"', () => {
+  // Dòng 0.2 và 1.0 còn nhắc "sáu" như số liệu lịch sử của đợt UAT; chỉ cấm khi nó là điều kiện chọn 7.2/7.3.
+  it('không còn "ngoài sáu cái của đợt", "có sáu migration của đợt", "kể cả sáu migration của đợt"', () => {
+    expect(RUNBOOK).not.toMatch(/ngoài sáu cái của đợt|có sáu migration của đợt|kể cả sáu migration của đợt/);
+  });
+});
