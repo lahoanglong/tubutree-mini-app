@@ -1,7 +1,7 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { LIKE_ESCAPE } from './search-text';
 import { CARD_PRODUCT_SELECT } from './card-select';
 
@@ -181,17 +181,16 @@ describe('CatalogService.getBySlug — PDP không nhúng ảnh đánh giá (R2-E
     const findUnique = jest.fn().mockResolvedValue(null);
     const prisma = { product: { findUnique } } as unknown as PrismaService;
     await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
-    const arg = findUnique.mock.calls[0]![0] as { include: { reviews: { select: Record<string, unknown> } } };
-    expect(arg.include.reviews.select).not.toHaveProperty('images');
-    expect(arg.include.reviews.select).toMatchObject({ rating: true, comment: true });
+    const arg = findUnique.mock.calls[0]![0] as { select: { reviews: { select: Record<string, unknown> } } };
+    expect(arg.select.reviews.select).not.toHaveProperty('images');
+    expect(arg.select.reviews.select).toMatchObject({ rating: true, comment: true });
   });
 });
 
 describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)', () => {
-  it('product trả về không có pancakeId', async () => {
+  it('select sản phẩm không chọn pancakeId nên PDP không có khoá nội bộ Pancake', async () => {
     const findUnique = jest.fn().mockResolvedValue({
       id: 'p1',
-      pancakeId: 'pk-123',
       slug: 'tinh-dau',
       isActive: true,
       approvalStatus: 'APPROVED',
@@ -202,8 +201,8 @@ describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)
     });
     const prisma = { product: { findUnique } } as unknown as PrismaService;
     const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect((findUnique.mock.calls[0]![0] as { select: object }).select).not.toHaveProperty('pancakeId');
     expect(JSON.stringify(r)).not.toContain('pancakeId');
-    expect(JSON.stringify(r)).not.toContain('pk-123');
     expect(r.sold).toBe(3);
     expect(r.variations[0]).toMatchObject({ id: 'v1', sku: 'S1' });
   });
@@ -212,8 +211,8 @@ describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)
     const findUnique = jest.fn().mockResolvedValue(null);
     const prisma = { product: { findUnique } } as unknown as PrismaService;
     await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
-    const arg = findUnique.mock.calls[0]![0] as { include: { variations: { select: object } } };
-    expect(arg.include.variations.select).not.toHaveProperty('pancakeId');
+    const arg = findUnique.mock.calls[0]![0] as { select: { variations: { select: object } } };
+    expect(arg.select.variations.select).not.toHaveProperty('pancakeId');
   });
 });
 
@@ -331,8 +330,8 @@ describe('CatalogService.getBySlug — liên kết sang trang nhãn hàng (BUYER
     const r = await new CatalogService({ product: { findUnique } } as unknown as PrismaService).getBySlug('tinh-dau');
     expect(r.brandSlug).toBe('hector');
     expect(r).not.toHaveProperty('brandRef');
-    const arg = findUnique.mock.calls[0]![0] as { include: { brandRef: { select: object } } };
-    expect(arg.include.brandRef.select).toEqual({ slug: true, isPublished: true });
+    const arg = findUnique.mock.calls[0]![0] as { select: { brandRef: { select: object } } };
+    expect(arg.select.brandRef.select).toEqual({ slug: true, isPublished: true });
   });
 
   it('nhãn chưa công khai (trang /brand/:slug sẽ 404) hoặc sản phẩm không gắn nhãn → brandSlug null', async () => {
@@ -1423,17 +1422,17 @@ describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () =
   });
 
   it('R3-MERCHANT-4: lý do từ chối bản sửa là lời nhắn riêng cho đối tác, không lộ ra PDP công khai', async () => {
-    const prisma = {
-      product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null, rejectReason: 'Ảnh vi phạm' }) },
-    } as unknown as PrismaService;
+    const findUnique = jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null });
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
     const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect((findUnique.mock.calls[0]![0] as { select: object }).select).not.toHaveProperty('rejectReason');
     expect(r).not.toHaveProperty('rejectReason');
   });
 
   it('R3-MERCHANT-3: PDP lấy thêm trạng thái tạm nghỉ và chủ gian hàng từ DB', async () => {
     const findUnique = jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null });
     await new CatalogService({ product: { findUnique } } as unknown as PrismaService, config as never).getBySlug('xa-phong');
-    expect(findUnique.mock.calls[0][0].include.storefront.select).toMatchObject({
+    expect(findUnique.mock.calls[0][0].select.storefront.select).toMatchObject({
       ordersPausedAt: true,
       owner: { select: { role: true, isBlocked: true } },
     });
@@ -1885,5 +1884,34 @@ describe('CatalogService.cardsByIds (trang chiến dịch)', () => {
     const { svc, findMany } = setup([]);
     expect(await svc.cardsByIds([])).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('CatalogService.getBySlug — select tường minh (L3-01)', () => {
+  it('chọn đúng các cột scalar của Product trừ cột nội bộ không ra công khai; không dùng include', async () => {
+    const findUnique = jest.fn().mockResolvedValue(null);
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
+    const arg = findUnique.mock.calls[0]![0] as { include?: unknown; select: Record<string, unknown> };
+    expect(arg.include).toBeUndefined();
+    const scalars = Object.keys(arg.select).filter((k) => arg.select[k] === true);
+    const all = Object.values(Prisma.ProductScalarFieldEnum) as string[];
+    expect(all.filter((c) => !scalars.includes(c)).sort()).toEqual(['pancakeId', 'rejectReason']);
+    expect(scalars.filter((c) => !all.includes(c))).toEqual([]);
+    for (const rel of ['variations', 'brandRef', 'reviews', 'storefront']) expect(arg.select).toHaveProperty(rel);
+  });
+
+  it('phản hồi giữ nguyên với ảnh URL và ảnh base64: base64 thành đường dẫn ảnh công khai, URL giữ nguyên', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const row = {
+      id: 'p1', slug: 'tinh-dau', isActive: true, approvalStatus: 'APPROVED', soldExternal: 1, soldApp: 2, fulfilment: 'TUBU', storefrontId: null,
+      images: ['https://cdn/x.jpg', png], thumbnail: null, variations: [], brandRef: null, storefront: null, reviews: [],
+    };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue(row) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect(r.images[0]).toBe('https://cdn/x.jpg');
+    expect(r.images[1]).toMatch(/^\/public-image\/product\/p1\/1\?v=[0-9a-f]{16}$/);
+    expect(r.thumbnail).toBe('https://cdn/x.jpg');
+    expect(r.sold).toBe(3);
   });
 });

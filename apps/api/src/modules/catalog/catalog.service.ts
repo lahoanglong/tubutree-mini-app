@@ -165,6 +165,49 @@ export class CatalogService {
   // pancakeStock/pancakeId (nội bộ đồng bộ) ở Variation, cùng userId/orderId (định danh khách +
   // đơn hàng thật) ở Review — bất kỳ ai gọi API này đều lấy được. `stock` đã là tồn kho BÁN ĐƯỢC
   // (xem comment tại Variation.stock trong schema) nên không cần trừ reservedStock lại ở đây.
+  /**
+   * Cột scalar của Product ra PDP công khai. Không có `pancakeId` (khoá nội bộ Pancake) và `rejectReason` (lời nhắn của admin cho
+   * đối tác; sản phẩm đang bán vẫn mang lý do từ chối bản sửa gần nhất). Liệt kê tường minh để cột mới thêm vào Product không tự lộ ra.
+   */
+  private readonly publicProductScalars = {
+    id: true,
+    fulfilment: true,
+    pancakeLinkCode: true,
+    brand: true,
+    brandId: true,
+    affiliateBlocked: true,
+    slug: true,
+    name: true,
+    nameSearch: true,
+    description: true,
+    shortDesc: true,
+    images: true,
+    thumbnail: true,
+    categoryIds: true,
+    tags: true,
+    isActive: true,
+    pancakeHold: true,
+    isFeatured: true,
+    isCombo: true,
+    ratingAvg: true,
+    reviewCount: true,
+    soldExternal: true,
+    soldApp: true,
+    soldApp30d: true,
+    basePrice: true,
+    salePrice: true,
+    metaTitle: true,
+    metaDesc: true,
+    forSegment: true,
+    ingredients: true,
+    certifications: true,
+    storefrontId: true,
+    approvalStatus: true,
+    approvedAt: true,
+    createdAt: true,
+    updatedAt: true,
+  } satisfies Prisma.ProductSelect;
+
   private readonly publicVariationSelect = {
     id: true,
     sku: true,
@@ -515,7 +558,8 @@ export class CatalogService {
   async getBySlug(slug: string) {
     const product = await this.prisma.product.findUnique({
       where: { slug },
-      include: {
+      select: {
+        ...this.publicProductScalars,
         variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: this.publicVariationSelect },
         // Chỉ slug + cờ công khai của nhãn (không kéo cả bản ghi Brand: có ownerUserId): để tên nhãn ở PDP dẫn sang /brand/:slug.
         brandRef: { select: { slug: true, isPublished: true } },
@@ -546,10 +590,7 @@ export class CatalogService {
     if (!product || !isPublicProduct(product)) {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
-    // pancakeId là khoá nội bộ của hệ thống Pancake (endpoint này @Public) — không có lý do để FE công
-    // khai cần; admin dùng endpoint admin riêng. rejectReason là lời nhắn của admin cho đối tác (sản phẩm đang bán vẫn mang lý
-    // do từ chối bản sửa gần nhất). include trả mọi cột scalar nên phải bỏ tại đây (variations đã loại qua publicVariationSelect).
-    const { pancakeId: _pancakeId, rejectReason: _rejectReason, brandRef, storefront, ...publicProduct } = product;
+    const { brandRef, storefront, ...publicProduct } = product;
     // Nhãn chưa công khai thì /brand/:slug trả 404: không đưa slug ra để FE không dựng liên kết chết.
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
     return {
