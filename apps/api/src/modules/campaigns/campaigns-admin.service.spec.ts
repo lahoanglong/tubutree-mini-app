@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { CampaignsAdminService } from './campaigns-admin.service';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -58,7 +59,8 @@ function setup(opts: { existing?: unknown; slugTaken?: boolean; products?: { id:
     $queryRaw: jest.fn().mockReturnValue('lock'),
     $transaction: jest.fn().mockResolvedValue([]),
   };
-  return { svc: new CampaignsAdminService(prisma as never), prisma };
+  const stale = new ImageRegistryStale();
+  return { svc: new CampaignsAdminService(prisma as never, stale), prisma, stale };
 }
 
 describe('CampaignsAdminService.list', () => {
@@ -303,5 +305,24 @@ describe('CampaignsAdminService.setCoupons', () => {
     const { svc } = setup({ coupons: [] });
     await expect(svc.setCoupons('c1', ['KHONGCO'])).rejects.toThrow(/KHONGCO/);
     await expect(svc.setCoupons('c1', Array.from({ length: 11 }, (_, i) => `M${i}`))).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('CampaignsAdminService: danh sách ảnh của /img', () => {
+  it('tạo chiến dịch đánh dấu danh sách ảnh cũ để banner https đổi cỡ được ngay', async () => {
+    const { svc, stale } = setup();
+    expect(stale.isStale()).toBe(false);
+    await svc.create(input({ image: 'https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg' }), NOW);
+    expect(stale.isStale()).toBe(true);
+  });
+
+  it('sửa ảnh thì đánh dấu; sửa tiêu đề hoặc lưu lại đúng ảnh cũ thì không', async () => {
+    const same = setup({ existing: row({ image: 'https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg' }) });
+    await same.svc.update('c1', { title: 'Tên mới' }, NOW);
+    await same.svc.update('c1', { image: 'https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg' }, NOW);
+    expect(same.stale.isStale()).toBe(false);
+    const changed = setup({ existing: row({ image: 'https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg' }) });
+    await changed.svc.update('c1', { image: 'https://res.cloudinary.com/tubutree/image/upload/v1/b.jpg' }, NOW);
+    expect(changed.stale.isStale()).toBe(true);
   });
 });

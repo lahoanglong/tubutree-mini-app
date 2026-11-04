@@ -1,8 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { storefrontSalesByProduct, storefrontSalesByStore } from '../affiliate/storefront-sales';
 import { hasAffiliateAccess } from '../affiliate/affiliate-access';
 import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
@@ -49,6 +50,7 @@ export class StorefrontService {
     // AffiliateModule là @Global() (affiliate.module.ts) — inject thẳng không cần import module,
     // không tạo circular dependency (AffiliateModule không phụ thuộc ngược lại StorefrontModule).
     private readonly affiliate: AffiliateService,
+    @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /**
@@ -219,13 +221,24 @@ export class StorefrontService {
     Object.assign(data, contentChangedPatch(sf, data));
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
       const sub = dto.subdomain;
-      return this.prisma.$transaction(async (tx) => {
+      const saved = await this.prisma.$transaction(async (tx) => {
         await assertIdentifierAvailable(tx, sub, sf.id, undefined, sf.ownerUserId);
         await recordReleasedIdentifiers(tx, sf.id, [sf.subdomain], [sub]);
         return tx.storefront.update({ where: { id: sf.id }, data });
       });
+      this.markImagesStale(dto, sf);
+      return saved;
     }
-    return this.prisma.storefront.update({ where: { id: sf.id }, data });
+    const saved = await this.prisma.storefront.update({ where: { id: sf.id }, data });
+    this.markImagesStale(dto, sf);
+    return saved;
+  }
+
+  /** Ảnh đại diện/bìa https mới phải vào danh sách của /img ngay (banner gian hàng đi qua bộ đổi cỡ). Chỉ khi ảnh thật sự đổi. */
+  private markImagesStale(dto: { avatarUrl?: string; coverUrl?: string }, current: { avatarUrl: string | null; coverUrl: string | null }): void {
+    if ((dto.avatarUrl !== undefined && dto.avatarUrl !== current.avatarUrl) || (dto.coverUrl !== undefined && dto.coverUrl !== current.coverUrl)) {
+      this.imageStale?.markStale();
+    }
   }
 
   async publishMine(userId: string, isPublished: boolean) {

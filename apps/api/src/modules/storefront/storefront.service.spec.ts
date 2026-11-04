@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { StorefrontService } from './storefront.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -186,6 +187,32 @@ describe('StorefrontService.getMine', () => {
     await expect(svc.getMineOrNull('u1')).resolves.toBeNull();
     (prisma.storefront.findFirst as jest.Mock).mockRejectedValueOnce(new Error('db down'));
     await expect(svc.getMineOrNull('u1')).rejects.toThrow('db down');
+  });
+});
+
+describe('StorefrontService.updateMine: danh sách ảnh của /img', () => {
+  const COVER = 'https://res.cloudinary.com/tubutree/image/upload/v1/cover.jpg';
+  const setup = (current: Record<string, unknown> = {}) => {
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() } });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1', subdomain: 'linh', avatarUrl: null, coverUrl: null, ...current });
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const stale = new ImageRegistryStale();
+    return { svc: new StorefrontService(prisma, config, affiliate, stale), stale };
+  };
+
+  it('đổi ảnh bìa hoặc ảnh đại diện thì đánh dấu danh sách ảnh cũ', async () => {
+    const cover = setup();
+    await cover.svc.updateMine('u1', { coverUrl: COVER });
+    expect(cover.stale.isStale()).toBe(true);
+    const avatar = setup();
+    await avatar.svc.updateMine('u1', { avatarUrl: COVER });
+    expect(avatar.stale.isStale()).toBe(true);
+  });
+
+  it('sửa tên, hoặc gửi lại đúng ảnh đang lưu (trình dựng gửi cả hai ảnh mỗi lần Lưu), thì không đánh dấu', async () => {
+    const t = setup({ coverUrl: COVER });
+    await t.svc.updateMine('u1', { title: 'Shop mới', coverUrl: COVER });
+    expect(t.stale.isStale()).toBe(false);
   });
 });
 

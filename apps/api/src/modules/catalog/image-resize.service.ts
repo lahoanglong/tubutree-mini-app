@@ -7,10 +7,10 @@ import { request as httpsRequest } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PublicImageService } from './public-image.service';
 import { ImageRegistryStale } from './image-registry-stale';
+import { registrySql } from './image-registry-query';
 import {
   FETCH_TIMEOUT_MS,
   FETCH_TOTAL_MS,
@@ -113,9 +113,9 @@ export class ImageResizeService {
   }
 
   /**
-   * Chỉ đổi cỡ ảnh đang nằm trong sản phẩm, nhãn, vật phẩm/quà đổi rác: host Pancake/Cloudinary chung của mọi cửa hàng, kiểm host
+   * Chỉ đổi cỡ ảnh đang nằm trong sản phẩm, nhãn, vật phẩm/quà đổi rác, banner chiến dịch, ảnh đại diện/bìa gian hàng: host Pancake/Cloudinary chung của mọi cửa hàng, kiểm host
    * thôi sẽ biến endpoint thành proxy ảnh cho bất kỳ ai. Danh sách URL http(s) nạp bằng MỘT truy vấn (ảnh base64 bị loại ngay trong
-   * SQL), dùng chung cho mọi request, làm mới mỗi 5 phút và ngay khi ảnh sản phẩm được ghi (admin, đồng bộ Pancake, đối tác: ImageRegistryStale); tra một URL là tra trong bộ nhớ, không chạm DB.
+   * SQL), dùng chung cho mọi request, làm mới mỗi 5 phút và ngay khi ảnh được ghi (sản phẩm: admin, đồng bộ Pancake, đối tác; chiến dịch; gian hàng: ImageRegistryStale); tra một URL là tra trong bộ nhớ, không chạm DB.
    */
   private async isRegistered(raw: string): Promise<boolean> {
     await this.refreshRegistry(this.stale.isStale() || Date.now() >= this.registryUntil);
@@ -156,14 +156,7 @@ export class ImageResizeService {
 
   private async loadRegistry(): Promise<void> {
     this.stale.clear();
-    const rows = await this.prisma.$queryRaw<{ u: string }[]>(Prisma.sql`
-      SELECT u FROM (SELECT unnest("images") AS u FROM "products") a WHERE left(u, 8) = 'https://'
-      UNION ALL SELECT "thumbnail" FROM "products" WHERE left("thumbnail", 8) = 'https://'
-      UNION ALL SELECT "logoUrl" FROM "brands" WHERE left("logoUrl", 8) = 'https://'
-      UNION ALL SELECT "coverUrl" FROM "brands" WHERE left("coverUrl", 8) = 'https://'
-      UNION ALL SELECT u FROM (SELECT unnest("storyImages") AS u FROM "brands") b WHERE left(u, 8) = 'https://'
-      UNION ALL SELECT "imageUrl" FROM "waste_items" WHERE left("imageUrl", 8) = 'https://'
-      UNION ALL SELECT "imageUrl" FROM "waste_gifts" WHERE left("imageUrl", 8) = 'https://'`);
+    const rows = await this.prisma.$queryRaw<{ u: string }[]>(registrySql());
     this.registry = new Set(rows.map((r) => r.u));
     this.registryUntil = Date.now() + REGISTRY_TTL_MS;
     this.registryLoadedAt = Date.now();
