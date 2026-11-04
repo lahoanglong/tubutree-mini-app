@@ -8,7 +8,7 @@ import { shelf } from '@tubutree/app-core/merch/shelves';
 import BrowseView, { type BrowseInitial } from '@/components/catalog/browse-view';
 import { firstParam, normalizeSearchQuery, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
-import { browseBreadcrumb, browseMetadata, browseNoindex } from '@/lib/home-seo';
+import { BROWSE_INDEX_MAX_PAGE, browseBreadcrumb, browseMetadata, browseNoindex } from '@/lib/home-seo';
 import { browseText } from '@/lib/browse-text';
 import { jsonLdScript, breadcrumbJsonLd } from '@/lib/product-seo';
 import { BROWSE_PATH, PAGE_LIMIT, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery, type SearchState } from '@/lib/search-state';
@@ -51,23 +51,27 @@ export async function generateMetadata({ searchParams }: { searchParams: BrowseS
 /** Phần phụ của trang (nhãn, danh mục, danh sách đầu): lỗi thì bỏ phần đó, để BrowseView tự tải lại phía trình duyệt. */
 const orUndefined = <T,>(p: Promise<T>): Promise<T | undefined> => p.catch(() => undefined);
 
-/** Trang xa nhất còn dựng sẵn ở máy chủ; sâu hơn thì trình duyệt tự tải. */
-const SSR_MAX_PAGE = 50;
+/** Trang xa nhất còn dựng sẵn ở máy chủ (cũng là trần lập chỉ mục); sâu hơn thì trình duyệt tự tải. */
+const SSR_MAX_PAGE = BROWSE_INDEX_MAX_PAGE;
 
 /**
  * Mỗi trạng thái danh sách dựng ở máy chủ là một lượt gọi API mang token vượt throttle và một file Data Cache không bao giờ xoá, nên chỉ
- * dựng sẵn đúng các trang được lập chỉ mục (xem browseNoindex/browseMetadata): danh sách gốc theo trang, đúng một nhãn có thật theo trang,
- * một danh mục có thật đứng một mình ở trang 1. Thêm ?all=1 đứng một mình: chỉ một URL mỗi trang, là lối "Xem tất cả" từ hub.
- * Mọi tổ hợp khác (nhiều nhãn, sắp xếp, giá, phân khúc, từ khoá…) nhân lên hàng triệu khoá: BrowseView tải ở trình duyệt.
- * So trên dạng chuẩn của trạng thái nên tham số rác hay tham số lạ (utm) không đẻ thêm khoá.
+ * dựng sẵn hai nhóm hữu hạn. Một: trang được lập chỉ mục (xem browseNoindex/browseMetadata): đúng một nhãn có thật theo trang, một danh mục
+ * có thật đứng một mình ở trang 1. Hai: lối "Xem tất cả" — ?all=1 và phân trang gốc ?page=N (noindex, nhưng chung một khoá API với
+ * ?all=1&page=N nên mỗi trang chỉ một file). Mọi tổ hợp khác (nhiều nhãn, sắp xếp, giá, phân khúc, từ khoá…) nhân lên hàng triệu khoá:
+ * BrowseView tải ở trình duyệt. So trên dạng chuẩn của trạng thái nên tham số rác hay tham số lạ (utm) không đẻ thêm khoá.
  */
-function isServerListState(state: SearchState, page: number, brands: { brand: string }[] | undefined, categories: Parameters<typeof categoryTrail>[0] | undefined): boolean {
+/** Lối "Xem tất cả" (gốc theo trang hoặc ?all=1): không cần nhãn/danh mục để quyết định nên tải danh sách song song. */
+function isPlainListState(state: SearchState): boolean {
   const keys = [...serializeSearchState(state).keys()];
-  if (keys.length === 0) return true;
+  return keys.length === 0 || (keys.length === 1 && keys[0] === 'all');
+}
+
+function isServerListState(state: SearchState, page: number, brands: { brand: string }[] | undefined, categories: Parameters<typeof categoryTrail>[0] | undefined): boolean {
+  if (isPlainListState(state)) return true;
+  const keys = [...serializeSearchState(state).keys()];
   if (keys.length > 1) return false;
   switch (keys[0]) {
-    case 'all':
-      return true;
     case 'brand':
       return state.brands.length === 1 && !!brands?.some((b) => b.brand === state.brands[0]);
     case 'category':
@@ -105,22 +109,23 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const http = createServerHttp();
   // Gốc không tham số, trang 1 là hub: KHÔNG tải danh sách, chỉ kệ Bán chạy nhất (HTML đầu có sản phẩm cho crawler).
   const hub = isBrowseHub(state, startPage);
-  const [bestSellers, brands, categories] = await Promise.all([
+  // Trang sâu hơn trần không dựng sẵn, nhưng link cũ vượt trang cuối vẫn phải về trang cuối: hỏi tổng bằng trang 1, 1 món (khoá không chứa
+  // số trang nên số file Data Cache vẫn hữu hạn).
+  const loadList = () =>
+    orUndefined(fetchCatalog(http, startPage <= SSR_MAX_PAGE ? toCatalogQuery(state, startPage, PAGE_LIMIT) : toCatalogQuery(state, 1, 1)));
+  const plainList = !hub && isPlainListState(state);
+  const [bestSellers, brands, categories, early] = await Promise.all([
     hub ? orUndefined(fetchBestSellers(http, shelf('browse.bestSellers').maxItems)) : undefined,
     orUndefined(fetchBrands(http)),
     orUndefined(fetchCategories(http)),
+    plainList ? loadList() : undefined,
   ]);
-  const serverList = !hub && isServerListState(state, startPage, brands, categories);
-  const catalog =
-    serverList && startPage <= SSR_MAX_PAGE ? await orUndefined(fetchCatalog(http, toCatalogQuery(state, startPage, PAGE_LIMIT))) : undefined;
+  const listed = plainList ? early : !hub && isServerListState(state, startPage, brands, categories) ? await loadList() : undefined;
+  const catalog = startPage <= SSR_MAX_PAGE ? listed : undefined;
+  const probe = startPage > SSR_MAX_PAGE ? listed : undefined;
 
   if (catalog && catalog.data.length === 0 && catalog.meta.total > 0 && startPage > 1) redirectToLastPage(state, catalog.meta.total);
-  if (serverList && startPage > SSR_MAX_PAGE) {
-    // Trang sâu không dựng sẵn, nhưng vẫn phải đưa link cũ vượt trang cuối về trang cuối. Hỏi tổng bằng trang 1, 1 món: khoá không chứa
-    // số trang nên số file Data Cache vẫn hữu hạn.
-    const probe = await orUndefined(fetchCatalog(http, toCatalogQuery(state, 1, 1)));
-    if (probe && probe.meta.total > 0 && startPage > Math.ceil(probe.meta.total / PAGE_LIMIT)) redirectToLastPage(state, probe.meta.total);
-  }
+  if (probe && probe.meta.total > 0 && startPage > Math.ceil(probe.meta.total / PAGE_LIMIT)) redirectToLastPage(state, probe.meta.total);
 
   const initial: BrowseInitial | null = catalog
     ? { urlKey: serializeSearchState(state).toString(), page: catalog, startPage }

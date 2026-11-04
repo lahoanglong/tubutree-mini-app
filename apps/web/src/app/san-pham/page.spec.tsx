@@ -166,6 +166,49 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
     expect((mocks.view.mock.calls[0]![0] as { initial: unknown }).initial).toBeNull();
   });
 
+  it('lối "Xem tất cả" (gốc theo trang, ?all=1) tải danh sách song song với nhãn + danh mục, không chờ hai cái đó', async () => {
+    let releaseBrands!: () => void;
+    const brandsGate = new Promise<void>((r) => (releaseBrands = r));
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/products') return pageOf([PRODUCT]);
+      if (path === '/brands') {
+        await brandsGate;
+        return BRANDS;
+      }
+      if (path === '/categories') return CATEGORIES;
+      throw new Error(`đường dẫn lạ ${path}`);
+    });
+    for (const o of [{ all: '1' }, { page: '2' }]) {
+      mocks.get.mockClear();
+      const done = render(o);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(productCalls(), JSON.stringify(o)).toHaveLength(1);
+      releaseBrands();
+      await done;
+    }
+  });
+
+  it('nhãn vẫn chờ danh sách nhãn trước khi quyết định tải', async () => {
+    let releaseBrands!: () => void;
+    const brandsGate = new Promise<void>((r) => (releaseBrands = r));
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/products') return pageOf([PRODUCT]);
+      if (path === '/brands') {
+        await brandsGate;
+        return BRANDS;
+      }
+      return CATEGORIES;
+    });
+    const done = render({ brand: 'Tubu' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(productCalls()).toHaveLength(0);
+    releaseBrands();
+    await done;
+    expect(productCalls()).toHaveLength(1);
+  });
+
   it('tổ hợp không dựng sẵn thì cũng không hỏi tổng dù trang sâu', async () => {
     await render({ brand: 'Tubu', sort: 'newest', page: '60' });
     expect(productCalls()).toEqual([]);
@@ -303,6 +346,15 @@ describe('BrowsePage — SEO', () => {
     expect(brand.robots).toBeUndefined();
     const fake = await generateMetadata({ searchParams: sp({ brand: 'khong-co' }) });
     expect(fake.robots).toEqual({ index: false, follow: true });
+  });
+
+  it('nhãn từ trang 51 trở đi noindex, khớp với việc máy chủ không dựng sẵn danh sách sâu hơn trang 50', async () => {
+    const p50 = await generateMetadata({ searchParams: sp({ brand: 'Tubu', page: '50' }) });
+    expect(p50.robots).toBeUndefined();
+    expect(p50.alternates).toEqual({ canonical: '/san-pham?brand=Tubu&page=50' });
+    const p51 = await generateMetadata({ searchParams: sp({ brand: 'Tubu', page: '51' }) });
+    expect(p51.robots).toEqual({ index: false, follow: true });
+    expect(p51.alternates).toBeUndefined();
   });
 
   it('tham số theo dõi (utm, ref, s) không đổi canonical', async () => {

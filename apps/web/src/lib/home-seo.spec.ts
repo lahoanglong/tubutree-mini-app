@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toE164, browseBreadcrumb, browseCanonicalPath, browseMetadata, browseNoindex, HOME_DESCRIPTION, HOME_TITLE, siteJsonLd } from './home-seo';
+import { BROWSE_INDEX_MAX_PAGE, toE164, browseBreadcrumb, browseCanonicalPath, browseMetadata, browseNoindex, HOME_DESCRIPTION, HOME_TITLE, siteJsonLd } from './home-seo';
 
 // R2-BUYERWEB-9: /san-pham?page=N và ?brand= dùng chung một tiêu đề, không có canonical. Danh mục chuyển từ "/" sang
 // /san-pham (00-ma-tran dòng 2) nên canonical, tiêu đề và noindex theo trang mới.
@@ -39,6 +39,11 @@ describe('browseNoindex', () => {
 });
 
 describe('browseMetadata', () => {
+  it('trang sâu hơn BROWSE_INDEX_MAX_PAGE noindex kể cả trang nhãn (máy chủ không dựng sẵn danh sách ở đó)', () => {
+    expect(browseMetadata({ brand: 'Tubu', page: BROWSE_INDEX_MAX_PAGE }, true).robots).toBeUndefined();
+    expect(browseMetadata({ brand: 'Tubu', page: BROWSE_INDEX_MAX_PAGE + 1 }, true).robots).toEqual({ index: false, follow: true });
+  });
+
   it('trang gốc: tiêu đề riêng của trang danh mục, canonical về "/san-pham"', () => {
     const m = browseMetadata({ page: 1 }, true);
     expect(m.title).toBe('Tất cả sản phẩm');
