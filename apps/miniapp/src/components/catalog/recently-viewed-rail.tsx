@@ -39,7 +39,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
       queryClient.setQueryData(['recently-viewed-products', nextSlugs.join(',')], (productsQ.data ?? []).filter((p) => keep.has(p.slug)));
     }
     pruneRecentlyViewed(keep, new Set(slugs));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `slugs` không cần trong deps: `productsQ.data` thuộc khoá dựng từ chính `slugs` (không có placeholderData). Nếu thêm placeholderData thì phải chặn `productsQ.isPlaceholderData`, kẻo dọn bằng dữ liệu của danh sách cũ.
   }, [productsQ.isSuccess, productsQ.data]);
   const items = (productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) return null;

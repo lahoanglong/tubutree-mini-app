@@ -48,6 +48,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
     // Sau khi xoá, khoá truy vấn đổi theo danh sách slug mới: nạp sẵn dữ liệu cho khoá mới để thẻ không chớp (không mất giá, không lùi về URL ảnh cũ) và không tốn lần gọi thừa.
     if (nextSlugs.length > 0 && nextSlugs.length !== slugs.length) queryClient.setQueryData(recentlyViewedQuery(coreHttp, nextSlugs).queryKey, (live.data ?? []).filter((p) => keep.has(p.slug)));
     pruneRecentlyViewed(keep, new Set(slugs));
+    // `slugs` không cần trong deps: `live.data` thuộc khoá dựng từ chính `slugs` (không có placeholderData). Nếu thêm placeholderData thì phải chặn `live.isPlaceholderData`, kẻo dọn bằng dữ liệu của danh sách cũ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.isSuccess, live.data]);
   const items = (live.isSuccess ? stored.filter((it) => bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
