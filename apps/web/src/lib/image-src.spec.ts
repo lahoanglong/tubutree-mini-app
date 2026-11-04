@@ -31,11 +31,14 @@ describe('sizedImage: srcset theo bề rộng (Pa1)', () => {
   });
 });
 
-describe('sizedImage: ảnh gốc làm ứng viên cuối cho banner/hero (không mờ trên desktop 2x)', () => {
-  it('withOriginal thêm ảnh gốc 1920w sau 960w; mặc định không thêm', () => {
+describe('sizedImage: bản 1280/1920 đã đổi cỡ cho banner/hero (màn 2x–3x không mờ, không tải ảnh gốc)', () => {
+  it('wide thêm w=1280 và w=1920 qua bộ đổi cỡ sau 960w; mặc định không thêm', () => {
     const img = sizedImage(PANCAKE, 728, '728px', true);
-    expect(widthsOf(img.srcSet)).toEqual(['160w', '320w', '640w', '960w', '1920w']);
-    expect(img.srcSet!.endsWith(`${PANCAKE} 1920w`)).toBe(true);
+    expect(widthsOf(img.srcSet)).toEqual(['160w', '320w', '640w', '960w', '1280w', '1920w']);
+    const entries = img.srcSet!.split(', ');
+    expect(entries.at(-2)).toContain('/img?w=1280&u=');
+    expect(entries.at(-1)).toContain('/img?w=1920&u=');
+    expect(img.srcSet).not.toContain(`${PANCAKE} `);
     expect(widthsOf(sizedImage(PANCAKE, 728).srcSet)).toEqual(['160w', '320w', '640w', '960w']);
   });
 

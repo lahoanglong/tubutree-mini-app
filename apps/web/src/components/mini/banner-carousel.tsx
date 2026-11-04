@@ -7,6 +7,7 @@ import { Pause, Play } from 'lucide-react';
 import { bannerInterval, bannerNextIndex, bannerShouldAutoplay } from '@tubutree/app-core/commerce/banner-autoplay';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useSizedImage } from '@/lib/image-src';
+import { BANNER_SLIDE_SIZES, BANNER_WIDE_SLIDE_SIZES } from '@/lib/image-sizes';
 
 export interface BannerSlide {
   id: string;
@@ -43,9 +44,8 @@ const DOT_BTN: CSSProperties = {
 };
 
 /** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
-export const SLIDE_SIZES = '(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px';
-/** Banner Ưu đãi ở lg tràn cả khung nội dung 1200px (~1152px), không chia cột như Trang chủ. */
-export const WIDE_SLIDE_SIZES = '(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), min(100vw - 48px, 1152px)';
+export { BANNER_WIDE_SLIDE_SIZES as WIDE_SLIDE_SIZES };
+const SLIDE_SIZES = BANNER_SLIDE_SIZES;
 const SLIDE_MAX_WIDTH = 728;
 
 function SlideImage({ slide, eager, sizes }: { slide: BannerSlide; eager: boolean; sizes: string }) {

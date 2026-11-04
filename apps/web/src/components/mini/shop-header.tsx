@@ -5,6 +5,7 @@ import { useId, useState, type CSSProperties, type ElementType, type ReactNode }
 import { CheckCircle2, Sprout } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useSizedImage } from '@/lib/image-src';
+import { SHOP_AVATAR_SIZES, SHOP_COVER_SIZES } from '@/lib/image-sizes';
 import { Heading, Text } from './text';
 
 export interface ShopHeaderProps {
@@ -50,9 +51,9 @@ const LG = {
 } as const;
 
 /** Bìa: điện thoại tràn 100vw (cao 120px); từ lg là ô trái 5/12 của khung 1200px (store-layout) ~500px. */
-const COVER_SIZES = '(max-width: 1023px) 100vw, 500px';
+const COVER_SIZES = SHOP_COVER_SIZES;
 /** Avatar: 56px, từ lg 72px (`LG.avatar`). */
-const AVATAR_SIZES = '(min-width: 1024px) 72px, 56px';
+const AVATAR_SIZES = SHOP_AVATAR_SIZES;
 
 const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
 

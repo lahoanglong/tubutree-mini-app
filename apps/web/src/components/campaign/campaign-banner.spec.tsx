@@ -110,11 +110,11 @@ describe('CampaignBanner (web) — banner đầu trang Ưu đãi', () => {
     });
   });
 
-  it('ảnh banner Ưu đãi tràn khung ~1152px ở lg: sizes riêng, ảnh gốc là ứng viên cuối của srcset', async () => {
+  it('ảnh banner Ưu đãi tràn khung ~1152px ở lg: sizes riêng, srcset có bản đổi cỡ 1920w', async () => {
     mocks.get.mockResolvedValue([camp('a', { image: 'https://content.pancake.vn/2-26/wide.jpg' })]);
     const c = await mount('OFFERS_TOP', 'new');
     const img = c.querySelector('img')!;
     expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), min(100vw - 48px, 1152px)');
-    expect(img.getAttribute('srcset')!.endsWith('https://content.pancake.vn/2-26/wide.jpg 1920w')).toBe(true);
+    expect(img.getAttribute('srcset')!).toMatch(/\/img\?w=1920&u=.* 1920w$/);
   });
 });

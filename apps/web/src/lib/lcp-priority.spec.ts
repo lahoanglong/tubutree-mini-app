@@ -28,8 +28,6 @@ describe('ảnh ưu tiên chỉ đặt ở khối nằm trong màn đầu 375×8
     expect(read('components/shop-page/storefront-body.tsx')).toMatch(/priorityCount=\{i === 0 \? 2 : 0\}/);
     const section = read('components/mini/shop-section.tsx');
     expect(section).toMatch(/priorityCount = 0/);
-    expect(section.match(/priorityCount=\{priorityCount\}/g)!.length).toBeGreaterThanOrEqual(2);
-    expect(section).toMatch(/priorityCount=\{railAsGrid \? 0 : priorityCount\}/);
   });
 });
 

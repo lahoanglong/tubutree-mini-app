@@ -10,6 +10,7 @@ import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
 import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
+import { CAMPAIGN_HERO_SIZES } from '@/lib/image-sizes';
 import { loadErrorText } from '@/lib/error-text';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { Button, ProductGrid, SectionHeader, Text, VoucherTicket } from '@/components/mini';
@@ -55,7 +56,7 @@ function Products({ slug, initial }: { slug: string; initial?: PageResponse<Prod
  */
 /** Ảnh đầu trang chiến dịch: tràn khung trừ lề 16px ở điện thoại, từ md tối đa `max-w-3xl` (768px) giữa trang. */
 const HERO_MAX_WIDTH = 768;
-const HERO_SIZES = '(max-width: 767px) calc(100vw - 32px), 768px';
+const HERO_SIZES = CAMPAIGN_HERO_SIZES;
 
 export function CampaignBody({ campaign: c, initialProducts }: { campaign: CampaignDetail; initialProducts?: PageResponse<ProductCard> | undefined }) {
   const { copy, notice } = useCouponUse();

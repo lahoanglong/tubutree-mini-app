@@ -4,12 +4,13 @@ import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LeafGlyph } from '@/components/mini/product-image';
 import { useSizedImage } from '@/lib/image-src';
+import { PDP_MAIN_IMAGE_SIZES } from '@/lib/image-sizes';
 
 /** Bề rộng ảnh chính lớn nhất (CSS px): máy tính bảng dọc, 767px tràn mép. */
 const MAIN_IMAGE_WIDTH = 600;
 
 /** Điện thoại: ảnh tràn mép (100vw); md: nửa khung trang (lề 24, khe 32); lg: cột trái 440px (pdp-layout). */
-const MAIN_IMAGE_SIZES = '(max-width: 767px) 100vw, (max-width: 1023px) calc((100vw - 80px) / 2), 440px';
+const MAIN_IMAGE_SIZES = PDP_MAIN_IMAGE_SIZES;
 
 // Điện thoại: ảnh tràn mép, vuông, không viền như Gallery của Mini App; từ md là khung bo góc.
 const FRAME =

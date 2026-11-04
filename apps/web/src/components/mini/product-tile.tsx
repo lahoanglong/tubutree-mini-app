@@ -7,7 +7,7 @@ import { Zap } from 'lucide-react';
 import type { CardBadge, CardVariant, ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
-import { GRID_IMAGE_SIZES } from '@/lib/product-grid';
+import { GRID_IMAGE_SIZES, TILE_IMAGE_SIZES } from '@/lib/image-sizes';
 import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
 import { PriceTag } from './price-tag';
@@ -69,7 +69,7 @@ const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
 /** Bề rộng hiển thị lớn nhất của ảnh theo biến thể (CSS px) để chọn các bản srcset; ô lưới 2 cột ở 767px rộng ~361px. */
 const IMAGE_WIDTH: Record<CardVariant, number> = { grid: 360, 'rail-md': 148, 'rail-sm': 128, flash: 128, rank: 360, line: 64 };
 /** `sizes` mặc định khi không có lưới nào truyền: kệ có bề rộng ô cố định (token `--tile-w-*`), thẻ lưới theo lưới mặc định. */
-const IMAGE_SIZES: Record<CardVariant, string> = { grid: GRID_IMAGE_SIZES, 'rail-md': '148px', 'rail-sm': '128px', flash: '128px', rank: '128px', line: '64px' };
+const IMAGE_SIZES: Record<CardVariant, string> = { grid: GRID_IMAGE_SIZES, 'rail-md': TILE_IMAGE_SIZES.rail, 'rail-sm': TILE_IMAGE_SIZES.flash, flash: TILE_IMAGE_SIZES.flash, rank: TILE_IMAGE_SIZES.flash, line: TILE_IMAGE_SIZES.line };
 
 const STACKED: ReadonlySet<CardVariant> = new Set(['rail-sm', 'rail-md', 'flash', 'rank']);
 const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
@@ -183,7 +183,6 @@ export function ProductTile({
           brand={view.brandLine ?? ''}
           // Trang trí: liên kết phủ lên ảnh đã gọi tên sản phẩm; alt có chữ thì trình đọc màn hình đọc tên hai lần và dừng hai lần mỗi thẻ.
           alt=""
-
           width={IMAGE_WIDTH[variant]}
           sizes={imageSizes ?? IMAGE_SIZES[variant]}
           size={isLine ? undefined : 400}
