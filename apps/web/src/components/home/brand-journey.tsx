@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Map as MapIcon } from 'lucide-react';
@@ -7,8 +8,44 @@ import { homeCopy } from '@tubutree/app-core/home-copy';
 import { brandsQuery } from '@tubutree/app-core/queries/catalog';
 import { coreHttp } from '@/lib/core-http';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
-import { Chip, Icon, ScrollRow, SectionHeader, Text } from '@/components/mini';
+import { Icon, ScrollRow, SectionHeader, Text } from '@/components/mini';
 import { SR_ONLY } from '@/components/mini/sr-only';
+
+/**
+ * Chip nhãn là liên kết thật (công cụ tìm kiếm đi theo được tới /brand/[slug]); trông và hit-area y hệt `Chip` (md, chưa chọn), chỉ là thẻ `<a>`:
+ * `Chip` là `<button>` nên không bọc được trong `Link` (điều khiển lồng điều khiển).
+ */
+function BrandChipLink({ href, children }: { href: string; children: string }) {
+  return (
+    <Link
+      href={href}
+      className="tubu-press tubu-hit-44"
+      style={{
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        lineHeight: 'inherit',
+        textDecoration: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        background: 'var(--color-bg-surface)',
+        boxShadow: 'inset 0 0 0 1px var(--color-border-subtle)',
+        color: 'var(--color-text-secondary)',
+        fontWeight: 600,
+        fontSize: 'var(--type-body-sm-size)',
+        padding: '7px 14px',
+        minHeight: 36,
+        minWidth: 44,
+        flexShrink: 0,
+        borderRadius: 'var(--radius-pill)',
+        whiteSpace: 'nowrap',
+        boxSizing: 'border-box',
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ (bản web của `brand-journey.tsx` ở Mini App): tiêu đề `SectionHeader` (Inter 16/700, nút
@@ -45,9 +82,9 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
         {list.length > 0 && (
           <ScrollRow arrows label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
             {list.map((b) => (
-              <Chip key={b.brand} onPress={() => router.push(b.slug ? `/brand/${encodeURIComponent(b.slug)}` : browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] }))}>
+              <BrandChipLink key={b.brand} href={b.slug ? `/brand/${encodeURIComponent(b.slug)}` : browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] })}>
                 {b.brand}
-              </Chip>
+              </BrandChipLink>
             ))}
           </ScrollRow>
         )}
