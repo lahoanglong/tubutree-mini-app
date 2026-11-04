@@ -9,7 +9,7 @@ import InvitedGroupBuyPage, { metadata as invitedMetadata } from './[id]/page';
 
 describe('/mua-chung — trang công khai có metadata', () => {
   it('danh sách có tiêu đề, mô tả, canonical và được lập chỉ mục', () => {
-    expect(metadata.title).toBe('Mua chung giá tốt — Tubu Tree');
+    expect(metadata.title).toBe('Mua chung giá tốt');
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe('/mua-chung');
     expect(metadata.robots).toBeUndefined();
@@ -24,6 +24,6 @@ describe('/mua-chung — trang công khai có metadata', () => {
     const el = (await InvitedGroupBuyPage({ params: Promise.resolve({ id: 'g1' }) })) as ReactElement<{ invitedId?: string }>;
     expect(el.props.invitedId).toBe('g1');
     expect(invitedMetadata.robots).toEqual({ index: false, follow: true });
-    expect(invitedMetadata.title).toContain('Tubu Tree');
+    expect(invitedMetadata.title).toBe('Bạn được mời mua chung');
   });
 });

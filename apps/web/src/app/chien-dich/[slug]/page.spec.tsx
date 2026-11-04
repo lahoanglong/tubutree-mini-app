@@ -121,10 +121,10 @@ describe('/chien-dich/[slug] — trang chiến dịch (server)', () => {
 
   it('tiêu đề tab và thẻ chia sẻ lấy từ chương trình; không có chương trình thì tiêu đề chung', async () => {
     const meta = await generateMetadata({ params });
-    expect(meta.title).toBe('Giữa Thu — Tubu Tree');
+    expect(meta.title).toBe('Giữa Thu');
     expect(meta.description).toBe('Giảm sâu mùa trăng');
     expect((meta.openGraph as { images: string[] }).images).toEqual(['https://img.test/giua-thu.jpg']);
     mocks.get.mockRejectedValue(new FakeNotFound('/campaigns/giua-thu'));
-    expect((await generateMetadata({ params })).title).toBe('Chương trình — Tubu Tree');
+    expect((await generateMetadata({ params })).title).toBe('Chương trình');
   });
 });

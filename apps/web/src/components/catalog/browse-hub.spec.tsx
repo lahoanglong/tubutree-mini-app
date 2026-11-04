@@ -110,7 +110,7 @@ describe('BrowseHub', () => {
     await flush();
     click(button(c, 'Xem tất cả sản phẩm'));
     expect(handlers.onPickAll).toHaveBeenCalledTimes(1);
-    click(button(c, 'Xem thương hiệu Cỏ Mềm'));
+    click(c.querySelector('a[aria-label="Xem thương hiệu Cỏ Mềm"]'));
     expect(handlers.onPickBrand).toHaveBeenCalledWith('Cỏ Mềm');
   });
 

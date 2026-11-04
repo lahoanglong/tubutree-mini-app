@@ -64,10 +64,10 @@ describe('Trang chủ dựng sẵn cho khách đã có cookie phiên (HTML đầ
     expect(blocks(html)).toContain('bestSellers');
   });
 
-  it('chỉ có đúng 5 bản, gợi ý lạ thì 404, không cho lập chỉ mục, canonical về "/"', async () => {
+  it('chỉ có đúng 5 bản, gợi ý lạ thì 404, không cho lập chỉ mục và không canonical', async () => {
     expect(generateStaticParams()).toEqual(['unknown', 'new', 'returning-0', 'returning-1', 'returning-2'].map((hint) => ({ hint })));
     await expect(render('admin')).rejects.toThrow('NEXT_NOT_FOUND');
-    expect(metadata.alternates?.canonical).toBe('/');
+    expect(metadata.alternates).toBeUndefined();
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 });

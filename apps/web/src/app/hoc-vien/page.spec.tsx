@@ -18,7 +18,10 @@ afterEach(() => {
 
 describe('/hoc-vien — trang công khai', () => {
   it('có metadata: tiêu đề, mô tả, không lập chỉ mục (API chỉ cho CTV/đại lý/nhân viên)', () => {
-    expect(metadata.title).toBe('Học viện — Tubu Tree');
+    expect(metadata.title).toBe('Học viện');
+    // Trang noindex: không canonical và không og:url (hai tín hiệu mâu thuẫn).
+    expect(metadata.alternates).toBeUndefined();
+    expect(metadata.openGraph).toBeUndefined();
     expect(typeof metadata.description).toBe('string');
     expect(metadata.robots).toEqual({ index: false });
   });

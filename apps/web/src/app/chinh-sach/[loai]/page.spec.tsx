@@ -91,7 +91,7 @@ describe('/chinh-sach/[loai] (D5-01)', () => {
 
   it('metadata: tiêu đề theo trang; bản nháp không lập chỉ mục, bản admin đã nhập thì có', async () => {
     const draft = await generateMetadata({ params: Promise.resolve({ loai: 'van-chuyen' }) });
-    expect(draft.title).toBe('Chính sách vận chuyển — Tubu Tree');
+    expect(draft.title).toBe('Chính sách vận chuyển');
     expect(draft.robots).toEqual({ index: false, follow: true });
     expect(draft.alternates?.canonical).toBe('/chinh-sach/van-chuyen');
 
