@@ -35,8 +35,9 @@ function dealerApp(over: Partial<DealerApp> & Pick<DealerApp, 'id' | 'businessNa
     phone: '0901234567',
     address: '123 Đường A, Quận 1',
     taxCode: null,
-    cccdFrontUrl: '',
-    cccdBackUrl: '',
+    hasCccdFront: false,
+    hasCccdBack: false,
+    hasStoreFront: false,
     status: 'PENDING',
     ...over,
   };

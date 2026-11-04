@@ -24,7 +24,7 @@ export const DEALER_IMAGE: UploadedImageOptions = {
   maxDataUrlLength: DEFAULT_MAX_DATA_URL_LENGTH,
   verifySignature: true,
 };
-const DEALER_IMAGE_MSG = { message: 'Ảnh quá nặng hoặc không hợp lệ, vui lòng chụp lại hoặc chọn ảnh nhỏ hơn.' };
+const DEALER_IMAGE_MSG = { message: 'Ảnh quá nặng hoặc không hợp lệ. Hãy chụp lại hoặc chọn ảnh nhỏ hơn.' };
 
 // Ô tuỳ chọn mà khách gõ rồi xoá thì client gửi chuỗi rỗng: coi như không gửi.
 const blankToUndefined = ({ value }: { value: unknown }) => {

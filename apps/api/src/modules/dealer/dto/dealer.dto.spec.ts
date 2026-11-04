@@ -133,7 +133,7 @@ describe('ApplyDealerDto — sửa sau review (M1, M2, SĐT bàn)', () => {
     expect(await keys({ ...base, cccdFrontUrl: big })).toEqual([]);
     const errs = await validate(plainToInstance(ApplyDealerDto, { ...base, cccdFrontUrl: `data:image/jpeg;base64,/9j/${'A'.repeat(1_500_001)}` }));
     const msg = Object.values(errs[0]!.constraints!)[0]!;
-    expect(msg).toBe('Ảnh quá nặng hoặc không hợp lệ, vui lòng chụp lại hoặc chọn ảnh nhỏ hơn.');
+    expect(msg).toBe('Ảnh quá nặng hoặc không hợp lệ. Hãy chụp lại hoặc chọn ảnh nhỏ hơn.');
     expect(msg).not.toContain('cccdFrontUrl');
   });
 
