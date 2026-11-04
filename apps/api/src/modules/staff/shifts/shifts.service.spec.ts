@@ -336,34 +336,40 @@ describe('ShiftsService.copyWeek — chỉ chép ca còn hiệu lực, không t�
 
 describe('ShiftsService.createTemplate — chống thêm ca chuẩn trùng', () => {
   const dto = { name: 'Ca sáng', startMin: 480, endMin: 720 };
-  const withTx = (findFirst: jest.Mock, create: jest.Mock) =>
+  const withTx = (findMany: jest.Mock, create: jest.Mock) =>
     makePrisma({
       $executeRaw: jest.fn().mockResolvedValue(1),
-      shiftTemplate: { findMany: jest.fn(), findFirst, create, updateMany: jest.fn(), delete: jest.fn() },
+      shiftTemplate: { findMany, findFirst: jest.fn(), create, updateMany: jest.fn(), delete: jest.fn() },
     });
 
-  it('trùng tên (không phân biệt hoa thường) → 409, không tạo', async () => {
+  it('trùng tên (không phân biệt hoa thường, thừa khoảng trắng) → 409, không tạo', async () => {
     const create = jest.fn();
-    const findFirst = jest.fn().mockResolvedValue({ id: 't1', name: 'ca sáng' });
-    await expect(mk(withTx(findFirst, create)).createTemplate({ ...dto, name: '  CA SÁNG ' })).rejects.toBeInstanceOf(ConflictException);
-    expect(findFirst.mock.calls[0][0].where.name).toEqual({ equals: 'CA SÁNG', mode: 'insensitive' });
+    const findMany = jest.fn().mockResolvedValue([{ id: 't1', name: 'ca sáng' }]);
+    await expect(mk(withTx(findMany, create)).createTemplate({ ...dto, name: '  CA SÁNG ' })).rejects.toBeInstanceOf(ConflictException);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each(['Ca_1', '%', 'Ca%', '_'])('tên "%s" chứa ký tự đại diện của LIKE vẫn so đúng nghĩa đen, không trùng "Ca 1"', async (name) => {
+    const create = jest.fn().mockResolvedValue({ id: 't2' });
+    const findMany = jest.fn().mockResolvedValue([{ id: 't1', name: 'Ca 1' }, { id: 't3', name: 'Ca chiều' }]);
+    await mk(withTx(findMany, create)).createTemplate({ ...dto, name });
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ name }) });
   });
 
   it('chưa có tên trùng → tạo, tên đã cắt khoảng trắng', async () => {
     const create = jest.fn().mockResolvedValue({ id: 't2' });
-    await mk(withTx(jest.fn().mockResolvedValue(null), create)).createTemplate({ ...dto, name: ' Ca chiều ' });
+    await mk(withTx(jest.fn().mockResolvedValue([]), create)).createTemplate({ ...dto, name: ' Ca chiều ' });
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ name: 'Ca chiều' }) });
   });
 
   it('khoá advisory được lấy trước khi kiểm trùng (hai lần thêm song song xếp hàng)', async () => {
     const order: string[] = [];
     const exec = jest.fn(async () => { order.push('lock'); return 1; });
-    const findFirst = jest.fn(async () => { order.push('find'); return null; });
+    const findMany = jest.fn(async () => { order.push('find'); return []; });
     const create = jest.fn(async () => { order.push('create'); return {}; });
     const prisma = makePrisma({
       $executeRaw: exec,
-      shiftTemplate: { findMany: jest.fn(), findFirst, create, updateMany: jest.fn(), delete: jest.fn() },
+      shiftTemplate: { findMany, findFirst: jest.fn(), create, updateMany: jest.fn(), delete: jest.fn() },
     });
     await mk(prisma).createTemplate(dto);
     expect(order).toEqual(['lock', 'find', 'create']);

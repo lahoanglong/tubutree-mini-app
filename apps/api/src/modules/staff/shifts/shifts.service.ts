@@ -11,6 +11,8 @@ export interface ShiftItem {
   templateId?: string;
 }
 
+const templateNameKey = (name: string): string => name.trim().toLocaleLowerCase('vi');
+
 @Injectable()
 export class ShiftsService {
   constructor(
@@ -286,10 +288,20 @@ export class ShiftsService {
     // Khoá advisory xếp hàng hai lần thêm song song để cùng một tên không lọt qua cả hai lần kiểm.
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('shift-template-create'))`;
-      const dup = await tx.shiftTemplate.findFirst({ where: { name: { equals: data.name, mode: 'insensitive' } }, select: { id: true } });
-      if (dup) throw new ConflictException('Đã có ca chuẩn cùng tên. Bạn đổi tên khác hoặc sửa ca đang có nhé.');
+      await this.assertTemplateNameFree(tx, data.name);
       return tx.shiftTemplate.create({ data });
     });
+  }
+  /**
+   * So tên đúng nghĩa đen: Prisma `mode: 'insensitive'` dịch thành ILIKE nên `_` và `%` trong tên thành ký tự đại diện
+   * ("Ca_1" bị coi là trùng "Ca 1", tên "%" trùng mọi ca). Số ca chuẩn rất nhỏ nên đọc tên rồi so trong bộ nhớ.
+   */
+  private async assertTemplateNameFree(tx: Pick<PrismaService, 'shiftTemplate'>, name: string, exceptId?: string) {
+    const key = templateNameKey(name);
+    const all = await tx.shiftTemplate.findMany({ select: { id: true, name: true } });
+    if (all.some((t) => t.id !== exceptId && templateNameKey(t.name) === key)) {
+      throw new ConflictException('Đã có ca chuẩn cùng tên. Bạn đổi tên khác hoặc sửa ca đang có nhé.');
+    }
   }
   async updateTemplate(
     id: string,
