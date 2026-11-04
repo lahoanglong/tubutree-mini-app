@@ -14,7 +14,8 @@ export const INPUT_LIMITS = {
   addressRecipient: 120,
   addressPhone: 20,
   addressStreet: 255,
-  invoiceTaxCode: 14,
+  // Ô MST hoá đơn: khách dán cả dấu chấm/khoảng trắng, client bỏ chúng rồi mới kiểm (DTO nhận tối đa 14 sau chuẩn hoá).
+  invoiceTaxCode: 28,
   invoiceCompanyName: 255,
   invoiceAddress: 500,
   invoiceEmail: 254,
