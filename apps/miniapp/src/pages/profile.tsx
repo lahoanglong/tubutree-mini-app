@@ -37,6 +37,7 @@ import { getAffiliateMe } from '../services/affiliate-api';
 import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
 import { formatVnd, formatPoints } from '../utils/format';
+import { useNearViewport } from '../hooks/use-near-viewport';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
@@ -103,9 +104,13 @@ export default function ProfilePage() {
   const unreadCount = summaryQ.data?.unreadNotifications ?? 0;
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
-  const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
-  const referralRef = useRef<HTMLElement>(null);
+  // Các khối dưới màn đầu (mã giới thiệu, lối vào theo vai) chỉ tải khi sắp cuộn tới; đầu trang (hạng, ví, mã ưu đãi, số đơn, chấm chat) tải ngay.
+  const referralZone = useNearViewport();
+  const menuZone = useNearViewport();
   const wantsReferral = new URLSearchParams(location.search).get('section') === PROFILE_REFERRAL_SECTION;
+  const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed && (referralZone.near || wantsReferral) });
+  const belowFold = authed && menuZone.near;
+  const referralRef = useRef<HTMLElement>(null);
   const referralReady = referralQ.isSuccess || referralQ.isError;
   useEffect(() => {
     if (wantsReferral && referralReady) referralRef.current?.scrollIntoView?.({ block: 'start' });
@@ -113,8 +118,8 @@ export default function ProfilePage() {
   // Mini App tạm không bán giao định kỳ nên hàng đơn bỏ ô Định kỳ khi cờ tắt; web vẫn có ô này.
   const orderRow = SUBSCRIPTIONS_IN_MINIAPP ? ORDER_STATUS_ROW : ORDER_STATUS_ROW.filter((r) => r.key !== 'subscriptions');
 
-  const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.ownsBrand, enabled: authed, retry: false });
-  const hasDeskPointQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.hasDeskPoint, enabled: authed, retry: false });
+  const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.ownsBrand, enabled: belowFold, retry: false });
+  const hasDeskPointQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.hasDeskPoint, enabled: belowFold, retry: false });
   const ownedBrandQ = useQuery({
     queryKey: ['owned-brand', 'profile'],
     queryFn: () =>
@@ -122,12 +127,12 @@ export default function ProfilePage() {
         if (isNotFoundError(e)) return null;
         throw e;
       }),
-    enabled: authed && !ownsBrandQ.isPending && ownsBrandQ.data !== false,
+    enabled: belowFold && !ownsBrandQ.isPending && ownsBrandQ.data !== false,
     retry: false,
   });
-  const dealerQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe, enabled: authed, retry: false });
+  const dealerQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe, enabled: belowFold, retry: false });
   // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
-  const needsCtvProbe = status === 'authenticated' && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
+  const needsCtvProbe = belowFold && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
   const ctvAccessQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: needsCtvProbe, retry: false });
   const dealerItem: MenuItem = dealerQ.data?.isDealer || dealerQ.data?.status === 'APPROVED'
     ? { Icon: Store, label: 'Kênh đại lý', to: '/dealer', hint: dealerQ.data?.tier?.name ?? homeCopy.earn.dealer.hint }
@@ -143,7 +148,7 @@ export default function ProfilePage() {
   // để khách thường không bị gọi thêm API. Cờ chung một lần gọi /auth/me với ownsBrand; cờ đổi rác tắt thì điểm đối tác không mở quầy.
   const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
   const mayHaveDesk = isStaffOrAdmin || (user?.role === 'DEALER' && cfg.waste.enabled) || (hasDeskPointQ.data === true && cfg.waste.enabled);
-  const deskQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints, enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
+  const deskQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints, enabled: belowFold && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
   const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);
 
@@ -404,6 +409,7 @@ export default function ProfilePage() {
         </Card>
       </section>
 
+      <div ref={referralZone.ref} aria-hidden style={{ height: 0 }} />
       {code && (
         <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={homeCopy.profile.referralTitle} style={{ padding: '12px 16px 0' }}>
           <Card padding={12}>
@@ -445,6 +451,7 @@ export default function ProfilePage() {
         </section>
       )}
 
+      <div ref={menuZone.ref} aria-hidden style={{ height: 0 }} />
       {menu.map((section) => (
         <div key={section.group} style={{ margin: '12px 16px 0' }}>
           <Text variant="label" tone="tertiary" as="h2" style={{ marginBottom: 6, marginLeft: 4 }}>
