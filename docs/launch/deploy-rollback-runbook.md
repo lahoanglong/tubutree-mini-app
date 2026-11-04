@@ -666,8 +666,8 @@ done
 ```
 
 1. Cả bốn số bằng 0: quay bình thường.
-2. Còn job `delayed`/`wait`: chờ tối đa 15 phút (6 lượt, backoff 30 giây nhân đôi; worker mới vẫn đang chạy) rồi đếm lại; hàng này thường rỗng vì lỗi ghi tin trong app hiếm.
-3. Vẫn còn sau 15 phút và buộc phải quay: ghi lại để làm sau, không xoá khoá Redis bằng tay. Mỗi job mang `dedupeKey`, nên khi lên lại bản mới worker xử lý tiếp và không gửi trùng. Tin đã gửi trực tiếp cho khách không bị ảnh hưởng.
+2. Còn job `delayed`/`wait`: chờ tối đa 16 phút (6 lượt, backoff 30 giây nhân đôi: 30+60+120+240+480 = 930 giây chờ, cộng thời gian chạy từng lượt; worker mới vẫn đang chạy) rồi đếm lại; hàng này thường rỗng vì lỗi ghi tin trong app hiếm.
+3. Vẫn còn sau 16 phút và buộc phải quay: ghi lại để làm sau, không xoá khoá Redis bằng tay. Mỗi job mang `dedupeKey`, nên khi lên lại bản mới worker xử lý tiếp và không gửi trùng. Tin đã gửi trực tiếp cho khách không bị ảnh hưởng.
 
 Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý tiếp bình thường (concurrency 1).
 
