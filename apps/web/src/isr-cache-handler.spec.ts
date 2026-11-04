@@ -89,13 +89,27 @@ describe('isr-cache-handler: không lưu trang 404 của đường dẫn lạ', 
     expect(await cache.get(pdpKey('d'), readPage)).not.toBeNull();
   });
 
-  it('kho 404 không vượt trần byte', async () => {
-    const one = page(404).html.length + page(404).rscData.length;
-    notFoundStore.maxBytes = one * 2;
+  it('kho 404 không vượt trần byte, tính 2 byte mỗi ký tự cho HTML có dấu (V8 lưu chuỗi tiếng Việt hai byte)', async () => {
+    const vi = { ...page(404), html: 'Không tìm thấy sản phẩm'.repeat(100) };
+    const real = 2 * vi.html.length + vi.rscData.byteLength;
+    // Trần vừa đủ cho một trang theo byte thật nhưng đủ cho hai nếu đếm theo số ký tự.
+    notFoundStore.maxBytes = 2 * (vi.html.length + vi.rscData.byteLength);
+    expect(notFoundStore.maxBytes).toBeLessThan(2 * real);
     const cache = make();
-    for (const slug of ['a', 'b', 'c']) await cache.set(pdpKey(slug), page(404), pageCtx);
-    expect(notFoundStore.entries.size).toBe(2);
-    expect(notFoundStore.bytes).toBeLessThanOrEqual(one * 2);
+    for (const slug of ['a', 'b', 'c']) await cache.set(pdpKey(slug), vi, pageCtx);
+    expect(notFoundStore.entries.size).toBe(1);
+    expect(notFoundStore.bytes).toBe(real);
+  });
+
+  it('LRU thật: khoá vừa đọc không bị đẩy ra trước khoá chưa đọc', async () => {
+    notFoundStore.maxEntries = 2;
+    const cache = make();
+    await cache.set(pdpKey('a'), page(404), pageCtx);
+    await cache.set(pdpKey('b'), page(404), pageCtx);
+    expect(await cache.get(pdpKey('a'), readPage)).not.toBeNull();
+    await cache.set(pdpKey('c'), page(404), pageCtx);
+    expect(await cache.get(pdpKey('a'), readPage)).not.toBeNull();
+    expect(await cache.get(pdpKey('b'), readPage)).toBeNull();
   });
 
   it('đường dẫn trong kho 404 rồi có trang 200 (sản phẩm mới đúng slug): bỏ khỏi kho, ghi đĩa', async () => {

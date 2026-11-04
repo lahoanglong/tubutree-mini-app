@@ -12,10 +12,13 @@ export function isDroppable404(data) {
   return data?.kind === 'APP_PAGE' && data.status === 404;
 }
 
-const sizeOf = (data) => (data.html?.length ?? 0) + (data.rscData?.length ?? 0) + (data.postponed?.length ?? 0);
+// Chuỗi có tiếng Việt V8 lưu 2 byte mỗi ký tự: tính trần theo mức đó cho html/postponed (bảo thủ với chuỗi ASCII), rscData là Buffer.
+const charBytes = (str) => 2 * (str?.length ?? 0);
+const sizeOf = (data) =>
+  charBytes(data.html) + charBytes(data.postponed) + (typeof data.rscData === 'string' ? charBytes(data.rscData) : (data.rscData?.byteLength ?? 0));
 
 /**
- * LRU theo thứ tự chèn của Map. Next tạo một handler cho mỗi request nên kho phải dùng chung cấp module (như memoryCache của FileSystemCache).
+ * LRU theo thứ tự của Map (đọc trúng hay ghi đều đưa khoá về cuối, đẩy ra từ đầu). Next tạo một handler cho mỗi request nên kho phải dùng chung cấp module (như memoryCache của FileSystemCache).
  * Trần theo cả số khoá lẫn số byte: trang 404 nặng ~53 KB, 5000 khoá không chặn byte là ~260 MB RAM.
  */
 export const notFoundStore = {
@@ -32,6 +35,9 @@ export const notFoundStore = {
       this.delete(key);
       return null;
     }
+    // Đưa khoá vừa đọc về cuối: link chết còn được hỏi thì ở lại lâu hơn khoá không ai hỏi.
+    this.entries.delete(key);
+    this.entries.set(key, hit);
     return hit;
   },
   set(key, value) {
