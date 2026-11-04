@@ -11,6 +11,10 @@ export class BlockUserDto {
   @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
+export class RevokeSessionsDto {
+  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+}
+
 export class StaffPermissionsDto {
   /** Nhóm việc của nhân viên — xem common/staff-permissions.ts. Mảng rỗng = chỉ quầy thu ngân/đổi vỏ/chấm công. */
   @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) permissions!: string[];
@@ -41,6 +45,12 @@ export class AdminUsersController {
   @HttpCode(HttpStatus.OK)
   block(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: BlockUserDto) {
     return this.blocks.block(adminId, id, dto.reason);
+  }
+
+  @Post(':id/revoke-sessions')
+  @HttpCode(HttpStatus.OK)
+  revokeSessions(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: RevokeSessionsDto) {
+    return this.blocks.revokeSessions(adminId, id, dto.reason);
   }
 
   @Post(':id/unblock')

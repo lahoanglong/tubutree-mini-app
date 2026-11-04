@@ -129,4 +129,24 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     await expect(auth.refresh(sibling.refreshToken)).rejects.toThrow('không hợp lệ');
     await expect(auth.refresh(child.refreshToken)).rejects.toThrow('không hợp lệ');
   });
+
+  it('L1-04: logout-all ở phiên 1 → refresh và access token của phiên 2 (cùng user) đều 401', async () => {
+    const deviceId = `dev_${randCode(10)}`;
+    const s1 = await auth.loginAsGuest(deviceId);
+    const s2 = await auth.loginAsGuest(deviceId);
+    expect(s2.user.id).toBe(s1.user.id);
+    expect(s2.refreshToken).not.toBe(s1.refreshToken);
+    await sleep(1100);
+    await expect(strategy.validate(decode(s2.accessToken))).resolves.toMatchObject({ sub: s1.user.id });
+
+    await auth.logoutAll(s1.user.id);
+
+    await expect(auth.refresh(s2.refreshToken)).rejects.toThrow('không hợp lệ');
+    await expect(auth.refresh(s1.refreshToken)).rejects.toThrow('không hợp lệ');
+    await expect(strategy.validate(decode(s2.accessToken))).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
+    // Đăng nhập lại sau mốc thu hồi cấp token dùng được
+    await sleep(1100);
+    const again = await auth.loginAsGuest(deviceId);
+    await expect(strategy.validate(decode(again.accessToken))).resolves.toMatchObject({ sub: s1.user.id });
+  });
 });

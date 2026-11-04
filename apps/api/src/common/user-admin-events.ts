@@ -1,8 +1,9 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 /** WALLET_FORFEIT: xoá tài khoản, số dư Ví bị trừ về 0 (from = số dư trước, to = 0); khách đã đồng ý bỏ, hoặc admin xử lý dù chưa đồng ý (reason nêu rõ, kèm lý do admin).
+ * SESSIONS_REVOKED: admin cắt mọi phiên đăng nhập mà không khoá (reason = lý do admin, to = số refresh token đã thu hồi).
  * STOREFRONT_PARTNER: admin bật/tắt cờ đối tác của gian hàng do người này làm chủ (reason = id gian hàng). */
-export type UserAdminEventKind = 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT';
+export type UserAdminEventKind = 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'SESSIONS_REVOKED';
 
 type Db = Pick<PrismaClient, 'userAdminEvent'> | Prisma.TransactionClient;
 

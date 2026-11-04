@@ -66,4 +66,25 @@ export class UserBlockService {
     this.logger.warn(`Admin ${adminId} mở khoá user ${userId}.`);
     return updated;
   }
+
+  /**
+   * Cắt mọi phiên đăng nhập (nghi lộ phiên, thiết bị mất) mà không khoá tài khoản: khách đăng nhập lại được ngay.
+   * Cùng cơ chế với khoá: thu hồi refresh token, chốt sessionsRevokedAt để access token đã cấp mất hiệu lực.
+   */
+  async revokeSessions(adminId: string, userId: string, rawReason: string) {
+    const reason = rawReason.trim();
+    if (!reason) throw new BadRequestException('Cần ghi lý do cắt phiên đăng nhập.');
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+      const now = new Date();
+      await tx.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+      const { count } = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+      await recordUserAdminEvent(tx, { userId, kind: 'SESSIONS_REVOKED', to: String(count), reason, actorId: adminId });
+      return { id: userId, revokedSessions: count };
+    });
+    this.sessions.invalidate(userId);
+    this.logger.warn(`Admin ${adminId} cắt ${result.revokedSessions} phiên của user ${userId}: ${reason}`);
+    return result;
+  }
 }

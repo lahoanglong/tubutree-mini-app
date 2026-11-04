@@ -34,6 +34,7 @@ describe('AuthController — giao refresh token theo client', () => {
     loginWithZaloOAuth: jest.fn(),
     refresh: jest.fn(),
     logout: jest.fn(),
+    logoutAll: jest.fn(),
     ensurePhoneForCurrentUser: jest.fn(),
     toAuthUser: jest.fn((u: { id: string }) => ({ id: u.id })),
   };
@@ -166,6 +167,15 @@ describe('AuthController — giao refresh token theo client', () => {
       const { res, cleared } = makeRes();
       await c.logout({}, webReq(), res);
       expect(auth.logout).not.toHaveBeenCalled();
+      expect(cleared).toEqual([REFRESH_COOKIE]);
+    });
+  });
+
+  describe('logout-all (L1-04)', () => {
+    it('thu hồi mọi phiên của user trong JWT và xoá cookie', async () => {
+      const { res, cleared } = makeRes();
+      await c.logoutAll({ sub: 'u1', role: 'CUSTOMER' } as never, makeReq({ 'x-client': 'web', cookie: `${REFRESH_COOKIE}=tok` }), res);
+      expect(auth.logoutAll).toHaveBeenCalledWith('u1');
       expect(cleared).toEqual([REFRESH_COOKIE]);
     });
   });

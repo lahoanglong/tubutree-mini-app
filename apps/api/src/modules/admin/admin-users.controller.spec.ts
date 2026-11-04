@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
-import { AdminUsersController, BlockUserDto } from './admin-users.controller';
+import { AdminUsersController, BlockUserDto, RevokeSessionsDto } from './admin-users.controller';
 import type { UserBlockService } from './user-block.service';
 
 describe('AdminUsersController — khoá/mở khoá người dùng', () => {
@@ -25,5 +25,22 @@ describe('AdminUsersController — khoá/mở khoá người dùng', () => {
     ['lý do quá dài', { reason: 'x'.repeat(501) }],
   ])('BlockUserDto từ chối: %s', (_label, body) => {
     expect(validateSync(plainToInstance(BlockUserDto, body)).length).toBeGreaterThan(0);
+  });
+});
+
+describe('AdminUsersController — cắt phiên (L1-04)', () => {
+  it('chuyển admin, id và lý do sang service', async () => {
+    const blocks = { revokeSessions: jest.fn().mockResolvedValue({ revokedSessions: 2 }) };
+    const ctrl = new AdminUsersController(blocks as unknown as UserBlockService, {} as never);
+    await expect(ctrl.revokeSessions('admin1', 'u9', { reason: 'Nghi lộ phiên' })).resolves.toEqual({ revokedSessions: 2 });
+    expect(blocks.revokeSessions).toHaveBeenCalledWith('admin1', 'u9', 'Nghi lộ phiên');
+  });
+
+  it.each([
+    ['thiếu lý do', {}],
+    ['lý do quá ngắn', { reason: 'ab' }],
+    ['lý do quá dài', { reason: 'x'.repeat(501) }],
+  ])('RevokeSessionsDto từ chối: %s', (_label, body) => {
+    expect(validateSync(plainToInstance(RevokeSessionsDto, body)).length).toBeGreaterThan(0);
   });
 });

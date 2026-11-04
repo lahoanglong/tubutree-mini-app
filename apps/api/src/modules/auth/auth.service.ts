@@ -974,6 +974,11 @@ export class AuthService {
     throw new UnauthorizedException('Refresh token đã được sử dụng.');
   }
 
+  /** Khách tự bấm "Đăng xuất mọi thiết bị": refresh token và access token của mọi phiên đều chết (JwtStrategy so iat với mốc). */
+  async logoutAll(userId: string): Promise<void> {
+    await this.revokeAllSessions(userId);
+  }
+
   /** Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. */
   private async revokeAllSessions(userId: string): Promise<void> {
     const now = new Date();

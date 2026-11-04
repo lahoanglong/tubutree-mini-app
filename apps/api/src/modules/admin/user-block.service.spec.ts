@@ -44,3 +44,41 @@ describe('UserBlockService.block — luôn còn một quản trị viên hoạt 
     expect(tx.user.update).toHaveBeenCalled();
   });
 });
+
+describe('UserBlockService.revokeSessions — cắt phiên không khoá tài khoản (L1-04)', () => {
+  function revokeSvc(user: { id: string } | null) {
+    const tx = {
+      user: { findUnique: jest.fn().mockResolvedValue(user), update: jest.fn().mockResolvedValue({}) },
+      userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
+      refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) },
+    };
+    const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const sessions = { invalidate: jest.fn() };
+    return { svc: new UserBlockService(prisma, sessions as unknown as SessionStateService), tx, sessions };
+  }
+
+  it('thu hồi refresh token, chốt sessionsRevokedAt, ghi SESSIONS_REVOKED có lý do, xoá cache; không đụng isBlocked', async () => {
+    const { svc, tx, sessions } = revokeSvc({ id: 'u9' });
+    const out = await svc.revokeSessions('admin1', 'u9', '  Nghi lộ phiên  ');
+    expect(out).toEqual({ id: 'u9', revokedSessions: 3 });
+    const data = tx.user.update.mock.calls[0]![0].data;
+    expect(data).toEqual({ sessionsRevokedAt: expect.any(Date) });
+    expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u9', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(tx.userAdminEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u9', kind: 'SESSIONS_REVOKED', reason: 'Nghi lộ phiên', actorId: 'admin1', toValue: '3' }),
+    });
+    expect(sessions.invalidate).toHaveBeenCalledWith('u9');
+  });
+
+  it('lý do rỗng sau khi cắt khoảng trắng → 400, không ghi gì', async () => {
+    const { svc, tx } = revokeSvc({ id: 'u9' });
+    await expect(svc.revokeSessions('admin1', 'u9', '   ')).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('không có người dùng → 404, không ghi gì', async () => {
+    const { svc, tx } = revokeSvc(null);
+    await expect(svc.revokeSessions('admin1', 'u9', 'nghi lộ phiên')).rejects.toThrow('Không tìm thấy');
+    expect(tx.userAdminEvent.create).not.toHaveBeenCalled();
+  });
+});

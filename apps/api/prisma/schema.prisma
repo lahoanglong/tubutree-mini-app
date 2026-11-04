@@ -343,7 +343,7 @@ model User {
 model UserAdminEvent {
   id        String   @id @default(cuid())
   userId    String
-  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK
+  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK | SESSIONS_REVOKED
   kind      String
   fromValue String?
   toValue   String?

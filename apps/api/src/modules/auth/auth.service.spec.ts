@@ -862,6 +862,21 @@ describe('AuthService.logout', () => {
   });
 });
 
+describe('AuthService.logoutAll (L1-04)', () => {
+  it('thu hồi mọi refresh token còn sống, chốt sessionsRevokedAt và xoá cache phiên của user', async () => {
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const updateMany = jest.fn().mockResolvedValue({ count: 2 });
+    const invalidate = jest.fn();
+    const prisma = { refreshToken: { updateMany }, user: { update: userUpdate } } as unknown as PrismaService;
+    const svc = new AuthService(prisma, {} as JwtService, { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>,
+      {} as ZaloService, mkRbac(), undefined, undefined, undefined, { invalidate } as never);
+    await svc.logoutAll('u1');
+    expect(updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { sessionsRevokedAt: expect.any(Date) } });
+    expect(invalidate).toHaveBeenCalledWith('u1');
+  });
+});
+
 describe('AuthService.refresh — ghi họ token (parentId)', () => {
   it('xoay thành công → token mới mang parentId là token cũ', async () => {
     const { svc, prisma, create } = makeService();
