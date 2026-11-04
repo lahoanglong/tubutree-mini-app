@@ -302,11 +302,11 @@ export function ProductTile({
           >
             {label && (
               <>
-                <Badge tone={BADGE_TONE[label.kind]} size="sm" style={{ display: 'inline-block', verticalAlign: 'top', margin: '1px 4px 0 0', lineHeight: '16px' }}>
+                <Badge tone={BADGE_TONE[label.kind]} size="sm" style={{ display: 'inline-block', verticalAlign: 'top', margin: '1px 0 0 0', lineHeight: '16px' }}>
                   {label.text}
                 </Badge>
-                {/* Khoảng trắng không chiếm chỗ (tuyệt đối): chữ nhìn thấy "Tubu chọn Tên" khớp tên truy cập mà bố cục vẫn như Mini. */}
-                <span aria-hidden style={SR_ONLY}> </span>
+                {/* Dấu cách thật (≈4px, bằng lề phải 4px của Mini): chữ nhìn thấy "Tubu chọn Tên" phải khớp tên truy cập (WCAG 2.5.3); khoảng trắng ẩn thì axe không tính. */}
+                {' '}
               </>
             )}
             {view.name}
