@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { INPUT_LIMITS } from './input-limits';
+import { INPUT_LIMITS, STAFF_REASON_MIN } from './input-limits';
 
 const ROOT = resolve(__dirname, '../../../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -47,6 +47,8 @@ const DTO_ROWS: DtoRow[] = [
   { key: 'recycleTrackingCode', file: 'apps/api/src/modules/waste-exchange/customer/waste-customer.controller.ts', cls: 'WasteTrackingDto', prop: 'trackingCode', uses: ['pages/recycle-request.tsx'] },
   { key: 'recycleDeskCode', file: 'apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts', cls: 'WasteLookupQueryDto', prop: 'code', uses: ['pages/recycle-desk.tsx'] },
   { key: 'recycleRejectNote', file: 'apps/api/src/modules/waste-exchange/receiving/waste-receiving.dto.ts', cls: 'WasteRejectDto', prop: 'rejectionNote', uses: ['pages/recycle-desk.tsx'] },
+  { key: 'staffReason', file: 'apps/api/src/modules/staff/dto/grant-role.dto.ts', cls: 'GrantRoleDto', prop: 'reason', uses: ['pages/admin.tsx'] },
+  { key: 'staffReason', file: 'apps/api/src/modules/staff/dto/revoke-role.dto.ts', cls: 'RevokeRoleDto', prop: 'reason', uses: ['pages/admin.tsx'] },
   { key: 'externalPointsCode', file: 'apps/api/src/modules/external-points/external-claims.controller.ts', cls: 'SubmitExternalClaimDto', prop: 'code', uses: ['pages/external-points.tsx'] },
   { key: 'voucherCode', file: 'apps/api/src/modules/admin/admin.controller.ts', cls: 'CreateCouponDto', prop: 'code', uses: ['components/checkout/voucher-sheet.tsx'] },
 ];
@@ -107,6 +109,12 @@ describe('ô nhập Mini App: maxLength bằng trần DTO', () => {
       expect(/@Matches\(\/\^\(\\d\{6\}\)\?\$\//.test(read(row.file))).toBe(true);
     }
     for (const f of row.uses) expect(usesLimit(f, `maxLength={INPUT_LIMITS.${row.key}}`), `${f} thiếu maxLength cho ${row.key}`).toBe(true);
+  });
+
+  it('lý do tối thiểu bằng @MinLength của DTO', () => {
+    for (const f of ['grant-role', 'revoke-role']) {
+      expect(new RegExp(`MinLength\\(${STAFF_REASON_MIN},`).test(read(`apps/api/src/modules/staff/dto/${f}.dto.ts`))).toBe(true);
+    }
   });
 
   it('không có khoá thừa trong bảng', () => {

@@ -61,7 +61,7 @@ import {
   shiftYearMonth,
   vnDateKey,
 } from '../utils/week';
-import { INPUT_LIMITS } from '../utils/input-limits';
+import { INPUT_LIMITS, STAFF_REASON_MIN } from '../utils/input-limits';
 
 export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -509,6 +509,9 @@ function permissionsText(perms: readonly string[] | undefined): string {
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
+/** Lý do cấp/thu hồi quyền: máy chủ ghi vào sổ và đòi 3–500 ký tự sau khi cắt khoảng trắng. */
+const reasonOk = (text: string): boolean => text.trim().length >= STAFF_REASON_MIN;
+
 function StaffSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -520,6 +523,9 @@ function StaffSection() {
   const [perms, setPerms] = useState<StaffPermission[]>([]);
   const [revokeTarget, setRevokeTarget] = useState<{ phone: string; who: string } | null>(null);
   const [confirmAdmin, setConfirmAdmin] = useState(false);
+  const [grantReason, setGrantReason] = useState('');
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revokeInvite, setRevokeInvite] = useState(false);
 
   // Thêm lại SĐT của người đã là nhân viên: máy chủ thay nhóm cũ bằng nhóm chọn ở đây, nên báo trước nhóm họ đang có.
   const existingStaff = role === 'STAFF' ? staffQ.data?.members.find((m) => m.role === 'STAFF' && m.phone === phone.trim()) : undefined;
@@ -533,7 +539,7 @@ function StaffSection() {
     mutationFn: async () => {
       const to = phone.trim();
       const picked = STAFF_PERMISSIONS.filter((p) => perms.includes(p));
-      const r = await grantStaff(to, role, role === 'STAFF' && picked.length ? picked : undefined);
+      const r = await grantStaff(to, role, role === 'STAFF' && picked.length ? picked : undefined, grantReason.trim());
       return { r, to, names: picked.map((p) => STAFF_PERMISSION_LABELS[p]), alreadyStaff: existingNames !== null };
     },
     onSuccess: ({ r, to, names, alreadyStaff }) => {
@@ -541,13 +547,14 @@ function StaffSection() {
       setSheetOpen(false);
       setPhone('');
       setPerms([]);
+      setGrantReason('');
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const revokeM = useMutation({
-    mutationFn: (p: string) => revokeStaff(p),
+    mutationFn: (v: { phone: string; reason: string }) => revokeStaff(v.phone, v.reason),
     onSuccess: (res) => {
       openSnackbar(
         res.storeBlocked
@@ -561,6 +568,10 @@ function StaffSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  const closeRevoke = () => {
+    setRevokeTarget(null);
+    setRevokeReason('');
+  };
 
   // Cấp ADMIN là nâng quyền toàn hệ thống, rủi ro hơn hẳn cấp STAFF nên hỏi thêm một bước (web admin làm cùng cách).
   const submitGrant = () => {
@@ -615,7 +626,10 @@ function StaffSection() {
                     style={{ color: 'var(--color-text-danger)', border: '1px solid var(--color-text-danger)' }}
                     disabled={revokeM.isPending}
                     // Hạ quyền nhầm một quản trị viên thì chỉ người còn quyền mới cấp lại được, nên hỏi lại trước khi gỡ.
-                    onPress={() => setRevokeTarget({ phone: m.phone as string, who: m.fullName ?? (m.phone as string) })}
+                    onPress={() => {
+                      setRevokeInvite(false);
+                      setRevokeTarget({ phone: m.phone as string, who: m.fullName ?? (m.phone as string) });
+                    }}
                   >
                     Thu hồi
                   </Button>
@@ -650,7 +664,10 @@ function StaffSection() {
                       variant="ghost"
                       aria-label={`Huỷ lời mời · ${p.phone}`}
                       disabled={revokeM.isPending}
-                      onPress={() => revokeM.mutate(p.phone)}
+                      onPress={() => {
+                        setRevokeInvite(true);
+                        setRevokeTarget({ phone: p.phone, who: p.phone });
+                      }}
                     >
                       Huỷ
                     </Button>
@@ -667,7 +684,7 @@ function StaffSection() {
         onClose={() => setSheetOpen(false)}
         title="Thêm nhân sự theo SĐT"
         footer={
-          <Button fullWidth loading={grantM.isPending} disabled={!PHONE_RE.test(phone.trim())} onPress={submitGrant}>
+          <Button fullWidth loading={grantM.isPending} disabled={!PHONE_RE.test(phone.trim()) || !reasonOk(grantReason)} onPress={submitGrant}>
             Lưu quyền
           </Button>
         }
@@ -696,6 +713,14 @@ function StaffSection() {
               Quản trị
             </Button>
           </div>
+          <Field label="Lý do">
+            <Input.TextArea
+              maxLength={INPUT_LIMITS.staffReason}
+              placeholder="Vì sao cấp quyền này (ít nhất 3 ký tự)"
+              value={grantReason}
+              onChange={(e) => setGrantReason(e.target.value)}
+            />
+          </Field>
           {role === 'STAFF' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
@@ -733,18 +758,50 @@ function StaffSection() {
           grantM.mutate();
         }}
       />
-      <ConfirmSheet
+      <BottomSheet
         open={!!revokeTarget}
-        title="Thu hồi quyền?"
-        message={revokeTarget ? `Thu hồi quyền của ${revokeTarget.who}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.` : undefined}
-        confirmLabel="Thu hồi"
-        tone="danger"
-        onCancel={() => setRevokeTarget(null)}
-        onConfirm={() => {
-          if (revokeTarget) revokeM.mutate(revokeTarget.phone);
-          setRevokeTarget(null);
-        }}
-      />
+        onClose={closeRevoke}
+        title={revokeInvite ? 'Huỷ lời mời?' : 'Thu hồi quyền?'}
+        dismissible={!revokeM.isPending}
+        footer={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Button
+              fullWidth
+              variant="danger"
+              loading={revokeM.isPending}
+              disabled={!reasonOk(revokeReason)}
+              onPress={() => {
+                if (!revokeTarget) return;
+                revokeM.mutate({ phone: revokeTarget.phone, reason: revokeReason.trim() });
+                closeRevoke();
+              }}
+            >
+              Thu hồi
+            </Button>
+            <Button fullWidth variant="secondary" disabled={revokeM.isPending} onPress={closeRevoke}>
+              Huỷ
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {revokeTarget && (
+            <Text variant="body-sm" tone="secondary" as="p">
+              {revokeInvite
+                ? `Huỷ lời mời đang chờ của ${revokeTarget.who}?`
+                : `Thu hồi quyền của ${revokeTarget.who}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`}
+            </Text>
+          )}
+          <Field label="Lý do">
+            <Input.TextArea
+              maxLength={INPUT_LIMITS.staffReason}
+              placeholder="Vì sao thu hồi (ít nhất 3 ký tự)"
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+            />
+          </Field>
+        </div>
+      </BottomSheet>
     </div>
   );
 }

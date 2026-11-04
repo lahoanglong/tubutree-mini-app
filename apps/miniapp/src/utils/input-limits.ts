@@ -44,6 +44,7 @@ export const INPUT_LIMITS = {
   externalPointsCode: 100,
   voucherCode: 64,
   affiliateTaxId: 14,
+  staffReason: 500,
 } as const;
 
 /** Ô của form địa chỉ giao hàng theo tên trường. */
@@ -52,3 +53,6 @@ export const ADDRESS_INPUT_LIMIT = {
   phone: INPUT_LIMITS.addressPhone,
   street: INPUT_LIMITS.addressStreet,
 } as const;
+
+/** Lý do cấp/thu hồi quyền nhân sự tối thiểu (GrantRoleDto/RevokeRoleDto `@MinLength`). */
+export const STAFF_REASON_MIN = 3;
