@@ -86,6 +86,8 @@ export class PendingPaymentExpiryCron {
         paymentMethod: { in: [...PREPAID_METHODS] },
         // Đã bàn giao vận chuyển (D1): lần thử đầu đã nhắc người xử lý, thử lại mỗi lượt chỉ lặp lỗi và nhắc lại (R4-SYNC-5).
         autoCancelBlockedAt: null,
+        // Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake: Kế toán đối chiếu sao kê trước, đừng tự huỷ đơn khách có thể đã trả.
+        paymentUnlinkedAt: null,
         OR: [
           { type: 'RETAIL', createdAt: { lt: cutoff } },
           { type: 'DEALER', createdAt: { lt: dealerCutoff } },
