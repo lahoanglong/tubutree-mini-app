@@ -592,7 +592,7 @@
   "apps/web/src/components/mini/move-buttons.tsx": 2,
   "apps/web/src/components/mini/price-tag.tsx": 3,
   "apps/web/src/components/mini/product-rail.tsx": 1,
-  "apps/web/src/components/mini/product-tile.tsx": 22,
+  "apps/web/src/components/mini/product-tile.tsx": 21,
   "apps/web/src/components/mini/progress-bar.tsx": 2,
   "apps/web/src/components/mini/quantity-selector.tsx": 3,
   "apps/web/src/components/mini/quest-strip.tsx": 3,
