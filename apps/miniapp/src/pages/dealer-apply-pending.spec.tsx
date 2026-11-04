@@ -10,14 +10,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('zmp-ui')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => vi.fn(),
   useLocation: () => ({ pathname: '/dealer', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/dealer-api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../services/dealer-api')>()),
+  ...(await importOriginal<Record<string, unknown>>()),
   getDealerMe: mocks.getDealerMe,
   applyDealer: mocks.applyDealer,
 }));
