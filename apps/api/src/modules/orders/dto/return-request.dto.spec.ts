@@ -8,7 +8,7 @@ const asBody = (value: Record<string, unknown>) =>
   pipe.transform(value, { type: 'body', metatype: ReturnRequestDto, data: undefined });
 
 const reason = 'Cây bị dập lá khi nhận';
-const JPEG_DATA_URL = `data:image/jpeg;base64,${'A'.repeat(400)}==`;
+const JPEG_DATA_URL = `data:image/jpeg;base64,/9j/${'A'.repeat(400)}==`;
 
 // C-050 (A5N-05): images trước đây chỉ @IsString → khách lưu được "javascript:..." và admin bấm ảnh là chạy
 // mã trong phiên admin. Chỉ nhận ảnh upload thật: https trên host Cloudinary hoặc ảnh base64 raster mà
@@ -25,6 +25,7 @@ describe('ReturnRequestDto.images (C-050)', () => {
     ['//res.cloudinary.com/demo/image/upload/a.jpg'],
     ['vbscript:msgbox(1)'],
     ['data:image/jpeg;base64,<script>'],
+    [`data:image/jpeg;base64,${'A'.repeat(400)}`],
   ])('từ chối %s', async (img) => {
     await expect(asBody({ reason, images: [img] })).rejects.toThrow();
   });

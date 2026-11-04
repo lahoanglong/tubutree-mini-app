@@ -6,7 +6,7 @@ import { CreateReviewDto } from './review.dto';
 
 const IMG = 'https://res.cloudinary.com/tubu/image/upload/v1/a.jpg';
 const VID = 'https://res.cloudinary.com/tubu/video/upload/v1/rv.mp4';
-const JPEG_DATA_URL = `data:image/jpeg;base64,${'A'.repeat(300_000)}==`;
+const JPEG_DATA_URL = `data:image/jpeg;base64,/9j/${'A'.repeat(300_000)}==`;
 
 async function errorsOf(body: Record<string, unknown>) {
   const errs = await validate(plainToInstance(CreateReviewDto, { rating: 5, ...body }));
@@ -31,6 +31,7 @@ describe('CreateReviewDto — ảnh/video đánh giá (MONEY-10)', () => {
     ['data:text/html', 'data:text/html;base64,PHNjcmlwdD4='],
     ['SVG base64', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
     ['GIF base64', 'data:image/gif;base64,R0lGODlhAQABAAAAACw='],
+    ['JPEG base64 sai chữ ký tệp', `data:image/jpeg;base64,${'A'.repeat(1000)}`],
   ])('ảnh %s → bị từ chối bằng thông báo tiếng Việt', async (_label, value) => {
     expect(await errorsOf({ images: [value] })).toEqual(['Ảnh đánh giá phải là ảnh đã tải lên từ ứng dụng.']);
   });
