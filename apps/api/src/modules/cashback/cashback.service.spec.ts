@@ -316,6 +316,32 @@ describe('CashbackService.ingest', () => {
       expect(notifications.notify).toHaveBeenCalledWith('adm1', 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining('Giữ quyết định của Kế toán') }));
     });
 
+    it('m3: sàn lật REJECTED → CONFIRMED trên dòng chưa có quyết định tay → cộng pending như cũ và báo ADMIN', async () => {
+      const { prisma, userUpdate } = conflictPrisma({ id: 'tx1', status: 'REJECTED', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null, merchantOrderId: 'AT-1', provider: 'accesstrade' });
+      await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
+      expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { cashbackPending: { increment: 35000 } } }));
+      expect(notifications.notify).toHaveBeenCalledTimes(1);
+      expect(notifications.notify).toHaveBeenCalledWith('adm1', 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining('duyệt lại khoản đã "Từ chối"') }));
+    });
+
+    it('PENDING → CONFIRMED bình thường không báo', async () => {
+      const { prisma } = conflictPrisma({ id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null });
+      await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('m4: thua CAS 3 lần liên tiếp → log error kèm mã đơn + trạng thái, ingest trả {ok:false, retry:true}', async () => {
+      const row = { id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u1', userReward: 35000, adminReviewedAt: null, merchantOrderId: 'AT-9', provider: 'accesstrade' };
+      const { prisma, updateMany, userUpdate } = updateBranchPrisma(row, 0);
+      const svc = new CashbackService(prisma, config, notifications, registry);
+      const err = jest.spyOn((svc as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+      const r = await svc.ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
+      expect(updateMany).toHaveBeenCalledTimes(3);
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(r).toEqual({ ok: false, retry: true });
+      expect(err).toHaveBeenCalledWith(expect.stringMatching(/AT-9.*CONFIRMED/));
+    });
+
     it('lần báo thứ hai cho cùng dòng (đã đánh dấu) → không báo lại', async () => {
       const { prisma } = conflictPrisma(rejectedByAdmin, 0);
       await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'CONFIRMED' }), 'accesstrade');
@@ -619,6 +645,13 @@ describe('CashbackService.adminListTransactions — che SĐT cho người không
       notifications,
       registry,
     );
+
+  it('select có adminReviewedAt và conflictNotifiedAt để Kế toán thấy dòng đang lệch', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const svc = new CashbackService({ cashbackTransaction: { findMany } } as unknown as PrismaService, config, notifications, registry);
+    await svc.adminListTransactions();
+    expect(findMany.mock.calls[0][0].select).toMatchObject({ adminReviewedAt: true, conflictNotifiedAt: true });
+  });
 
   it('Kế toán thấy 3 số cuối, ADMIN thấy đủ', async () => {
     expect((await svcWith().adminListTransactions(undefined, 100, { maskPhones: true }))[0]!.user).toEqual({ id: 'u1', fullName: 'A', phone: '*******678' });

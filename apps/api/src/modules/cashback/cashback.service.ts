@@ -37,6 +37,8 @@ type ExistingCashbackRow = {
   provider?: string;
 };
 
+type ConflictNotice = { row: ExistingCashbackRow; kind: 'PAID_REJECTED' | 'ADMIN_OVERRIDE' | 'REVIVED' };
+
 const STATUS_VI: Record<CashbackStatus, string> = {
   PENDING: 'Chờ duyệt',
   CONFIRMED: 'Đã duyệt',
@@ -49,7 +51,10 @@ export class CashbackService {
   /** Trần mỗi lượt settle — phần còn lại để lượt cron kế (chạy 30 phút/lần). */
   private static readonly SETTLE_BATCH = 500;
 
-  /** Trạng thái đang có mà sự kiện của sàn được phép chuyển đi. REJECTED là nhánh riêng: sàn duyệt lại thì REJECTED → CONFIRMED. */
+  /**
+   * Trạng thái đang có mà sự kiện của sàn được phép chuyển đi. Chỉ chặn kéo LÙI về PENDING (và PENDING lên PENDING thì chỉ cập nhật số tiền).
+   * REJECTED ↔ CONFIRMED vẫn cho đi cả hai chiều vì sàn có quyền duyệt lại hoặc huỷ sau duyệt; chiều REJECTED → CONFIRMED được báo ADMIN.
+   */
   private static readonly FORWARD_FROM: Record<NormalizedCashbackEvent['status'], CashbackStatus[]> = {
     PENDING: ['PENDING'],
     CONFIRMED: ['PENDING', 'REJECTED'],
@@ -138,10 +143,11 @@ export class CashbackService {
     const existing = await this.prisma.cashbackTransaction.findFirst({
       where: { provider, merchantOrderId: event.merchantOrderId },
     });
+    let lost = false;
 
     if (existing) {
       // Trạng thái lạ của sàn không có ý nghĩa với dòng đã có (không có gì để chuyển).
-      if (event.unknownStatus === undefined) await this.applyToExisting(existing, event, status, userReward);
+      if (event.unknownStatus === undefined && (await this.applyToExisting(existing, event, status, userReward)) === 'lost') lost = true;
     } else {
       // Atomic create + cộng pending. @@unique([provider, merchantOrderId]) → sự kiện thứ 2 song
       // song ném P2002.
@@ -163,14 +169,15 @@ export class CashbackService {
             return { ok: false };
           }
           this.logger.warn(`Ingest trùng (${provider}, ${event.merchantOrderId}) (race) — áp dụng như update.`);
-          if (event.unknownStatus === undefined) await this.applyToExisting(winner, event, status, userReward);
+          if (event.unknownStatus === undefined && (await this.applyToExisting(winner, event, status, userReward)) === 'lost') lost = true;
         } else {
           throw err;
         }
       }
     }
 
-    return { ok: true };
+    // Thua CAS mãi (đã log error): báo cho webhook trả lỗi tạm để sàn gửi lại, thay vì ok:true làm mất sự kiện.
+    return lost ? { ok: false, retry: true } : { ok: true };
   }
 
   // ── Quản trị ────────────────────────────────────────────────────────────────────────────
@@ -199,6 +206,8 @@ export class CashbackService {
         confirmedAt: true,
         paidAt: true,
         clickId: true,
+        adminReviewedAt: true,
+        conflictNotifiedAt: true,
       },
     });
     if (rows.length === 0) return [];
@@ -254,9 +263,9 @@ export class CashbackService {
       status,
       raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
     };
-    const moved = await this.applyToExisting(existing, synthetic, status, existing.userReward, { manual: true, reviewedBy: adminId });
+    const outcome = await this.applyToExisting(existing, synthetic, status, existing.userReward, { manual: true, reviewedBy: adminId });
     // CAS thua: người khác (tab khác, postback, cron settle) đã đổi dòng này giữa lúc ta đọc và ghi. Không log như đã đổi.
-    if (!moved) throw new ConflictException('Khoản này vừa được người khác xử lý — tải lại.');
+    if (outcome !== 'moved') throw new ConflictException('Khoản này vừa được người khác xử lý — tải lại.');
     this.logger.warn(
       `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );
@@ -270,28 +279,28 @@ export class CashbackService {
     status: NormalizedCashbackEvent['status'],
     userReward: number,
     opts: { manual?: boolean; reviewedBy?: string } = {},
-  ): Promise<boolean> {
+  ): Promise<'moved' | 'skipped' | 'lost'> {
     // Chuyển trạng thái ATOMIC bằng optimistic CAS + điều chỉnh pending trong CÙNG tx → chống 2 sự kiện song song cùng cộng
     // pending 2 lần. CAS khớp cả userReward: số trừ khỏi cashbackPending phải là số đang nằm trên dòng lúc CAS, không phải số
     // đọc ngoài tx từ trước (một sự kiện khác có thể đã sửa số tiền giữa chừng). Thua CAS thì đọc lại dòng trong tx rồi quyết định lại.
-    let conflict: ExistingCashbackRow | null = null;
-    const moved = await this.prisma.$transaction(async (tx) => {
+    let conflict: ConflictNotice | null = null;
+    const outcome = await this.prisma.$transaction(async (tx): Promise<'moved' | 'skipped' | 'lost'> => {
       let cur = existing;
       for (let attempt = 0; attempt < CashbackService.CAS_ATTEMPTS; attempt++) {
         // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư (không claw-back được tiền đã về Ví).
         // Riêng "rejected" sau PAID là việc kế toán phải biết: sàn đòi lại hoa hồng nhưng tiền khách đã về Ví.
         if (cur.status === 'PAID') {
-          if (!opts.manual && status === 'REJECTED') conflict = cur;
-          return false;
+          if (!opts.manual && status === 'REJECTED') conflict = { row: cur, kind: 'PAID_REJECTED' };
+          return 'skipped';
         }
         // Dòng đã có quyết định tay của Kế toán: sàn báo khác thì giữ nguyên quyết định, chỉ báo ADMIN (PENDING là sàn chưa có ý kiến, không báo).
         if (!opts.manual && cur.adminReviewedAt) {
-          if (status !== cur.status && status !== 'PENDING') conflict = cur;
-          return false;
+          if (status !== cur.status && status !== 'PENDING') conflict = { row: cur, kind: 'ADMIN_OVERRIDE' };
+          return 'skipped';
         }
         // Sự kiện đến muộn hoặc sai thứ tự (postback PENDING sau khi reconcile đã CONFIRMED) không được kéo trạng thái lùi: lùi về
         // PENDING thì khoản đó không bao giờ settle về Ví. Admin duyệt tay là quyết định tường minh nên được đi mọi hướng.
-        if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(cur.status)) return false;
+        if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(cur.status)) return 'skipped';
         const wasConfirmed = cur.status === 'CONFIRMED';
         const nowConfirmed = status === 'CONFIRMED';
         const moved = await tx.cashbackTransaction.updateMany({
@@ -313,27 +322,32 @@ export class CashbackService {
         if (moved.count > 0) {
           if (nowConfirmed && !wasConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { increment: userReward } } });
+            // Sàn lật khoản đã bị từ chối thành duyệt khi chưa có quyết định tay: tiền sẽ về Ví sau thời gian giữ, ADMIN cần biết.
+            if (!opts.manual && cur.status === 'REJECTED') conflict = { row: cur, kind: 'REVIVED' };
           } else if (wasConfirmed && !nowConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { decrement: cur.userReward } } });
           }
-          return true;
+          return 'moved';
         }
-        if (opts.manual) return false;
+        if (opts.manual) return 'lost';
         const fresh = await tx.cashbackTransaction.findUnique({
           where: { id: cur.id },
           select: { id: true, userId: true, status: true, confirmedAt: true, userReward: true, adminReviewedAt: true, merchantOrderId: true, provider: true },
         });
-        if (!fresh) return false;
+        if (!fresh) return 'skipped';
         cur = fresh;
       }
-      return false;
+      this.logger.error(
+        `Cashback ${cur.merchantOrderId ?? event.merchantOrderId}: thua CAS ${CashbackService.CAS_ATTEMPTS} lần liên tiếp, bỏ sự kiện ${event.status} (provider ${cur.provider ?? '?'}).`,
+      );
+      return 'lost';
     });
     if (conflict) await this.reportConflict(conflict, event);
-    return moved;
+    return outcome;
   }
 
-  /** Báo ADMIN một lần mỗi dòng (CAS trên conflictNotifiedAt) khi sàn báo khác quyết định tay hoặc đòi lại khoản đã trả. Không ném. */
-  private async reportConflict(row: ExistingCashbackRow, event: NormalizedCashbackEvent): Promise<void> {
+  /** Báo ADMIN một lần mỗi dòng (CAS trên conflictNotifiedAt) khi sàn báo khác quyết định tay, đòi lại khoản đã trả hoặc lật khoản đã từ chối. Không ném. */
+  private async reportConflict({ row, kind }: ConflictNotice, event: NormalizedCashbackEvent): Promise<void> {
     try {
       const claimed = await this.prisma.cashbackTransaction.updateMany({
         where: { id: row.id, conflictNotifiedAt: null },
@@ -342,7 +356,9 @@ export class CashbackService {
       if (claimed.count === 0) return;
       const order = row.merchantOrderId ?? event.merchantOrderId;
       const summary =
-        row.status === 'PAID'
+        kind === 'REVIVED'
+          ? `Đơn ${order} (${row.provider ?? 'sàn'}): sàn duyệt lại khoản đã "Từ chối", cashback chờ về Ví ${row.userReward.toLocaleString('vi-VN')}đ đã được cộng lại. Kế toán kiểm tra nếu không đúng.`
+          : kind === 'PAID_REJECTED'
           ? `Đơn ${order} (${row.provider ?? 'sàn'}): sàn báo "Từ chối" nhưng khoản hoàn ${row.userReward.toLocaleString('vi-VN')}đ đã trả về Ví khách. Tiền không đổi, kế toán đối chiếu với sàn.`
           : `Đơn ${order} (${row.provider ?? 'sàn'}): Kế toán đã đặt "${STATUS_VI[row.status]}", sàn báo "${STATUS_VI[event.status]}". Giữ quyết định của Kế toán, số dư không đổi.`;
       this.logger.warn(`Cashback ${row.id}: ${summary}`);
