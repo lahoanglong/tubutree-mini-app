@@ -504,13 +504,21 @@ export class NotificationsService {
   /**
    * Đóng log ZNS mà job BullMQ đã chết hẳn (hết lượt, stalled quá giới hạn, hoặc không còn trong Redis) và không ai ghi kết cục.
    * CAS theo trạng thái cũ (`from`: nơi gọi chỉ đóng từ trạng thái nó đã dựa vào để quyết, vd log vừa sang RETRYING thì không đóng theo bằng chứng của PENDING): hai đường cùng đóng (sự kiện của worker, cron quét, hai bản API) chỉ một lần ghi, log đã SENT/FAILED không đổi.
-   * Không đụng payload: log FAILED đã không chặn dedupeWhere/claimUnderDedupeLock (chỉ PENDING/RETRYING/SENT mới tính), nên không cần nhả
-   * khoá; đổi khoá còn làm mất dấu vết đối soát. Không gọi Zalo và không tạo job, nên không có đường gửi đôi.
+   * Log mang dedupeKey thì nhả khoá như dispatchZns (`<khoá>:failed:<id>`, giữ `data` và `dedupeWithinMs`): log FAILED đã không chặn dedupeWhere
+   * nên khoá không cần nhả để tin sau đi được, nhưng job sống lại (khôi phục Redis, retry tay) mà log FAILED còn khoá nguyên thì deliverZns gửi
+   * tiếp trong lúc khoá đã mở cho log mới = gửi đôi; nhả khoá thì deliverZns trả SKIPPED. Tiền tố khoá còn trong chuỗi nên vẫn đối soát được.
+   * Không gọi Zalo và không tạo job.
    */
   async closeStuckZnsLog(logId: string, reason: string, from: readonly string[] = ['PENDING', 'RETRYING']): Promise<boolean> {
+    const log = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { payload: true } });
+    if (!log) return false;
+    const payload = log.payload as { dedupeKey?: unknown } | null;
+    const key = payload?.dedupeKey;
+    // Chỉ closer ghi payload của log đang PENDING/RETRYING nên đọc rồi ghi kèm CAS theo status là đủ; key đã nhả (đường khác đóng trước) thì không nhả lần hai.
+    const release = typeof key === 'string' && !/:failed:[^:]+$/.test(key) ? { payload: { ...payload, dedupeKey: releasedZnsDedupeKey(key, logId) } as Prisma.InputJsonObject } : {};
     const closed = await this.prisma.notificationLog.updateMany({
       where: { id: logId, status: { in: [...from] } },
-      data: { status: 'FAILED', error: reason },
+      data: { status: 'FAILED', error: reason, ...release },
     });
     return closed.count > 0;
   }

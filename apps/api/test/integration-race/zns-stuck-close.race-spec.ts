@@ -65,6 +65,18 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect((await row(log.id)).status).toBe('RETRYING');
   });
 
+  it('job sống lại (khôi phục Redis, retry tay) sau khi log kẹt bị đóng: deliverZns ra SKIPPED, Zalo không được gọi, khoá đã nhả cho log mới', async () => {
+    const u = await newUser();
+    const key = `it-stuck-revive:${Date.now()}`;
+    const stuck = await mkLog(u.id, key, 'RETRYING');
+    await svc.closeStuckZnsLog(stuck.id, 'job hỏng');
+    const after = await row(stuck.id);
+    expect(after.payload).toMatchObject({ dedupeKey: `${key}:failed:${stuck.id}` });
+    expect(await svc.deliverZns(jobOf(stuck.id), false)).toBe('SKIPPED');
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect((await row(stuck.id)).status).toBe('FAILED');
+  });
+
   it('markStuckZnsSent chỉ từ RETRYING; đua với closeStuckZnsLog thì đúng một bên thắng', async () => {
     const u = await newUser();
     const pending = await mkLog(u.id, null, 'PENDING');
