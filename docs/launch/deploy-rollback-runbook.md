@@ -653,7 +653,7 @@ Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-de
 
 ### 1.20 Hàng thông báo tách đôi, worker ZNS 5 chỗ (hard/1105, L3-06)
 
-- Job thử lại tin trong app (`inapp-retry`) chuyển sang hàng mới `notifications-inapp-retry` (worker riêng, concurrency 2). Hàng `notifications` chỉ còn job `zns-send`: worker concurrency 5 và limiter 10 job/giây (mức tự chọn: Zalo không công bố trần theo giây, chỉ hạn mức ngày của OA). Gọi Zalo hết hạn sau 10 giây (trước đó 25 giây).
+- Job thử lại tin trong app (`inapp-retry`) chuyển sang hàng mới `notifications-inapp-retry` (worker riêng, concurrency 2). Hàng `notifications` chỉ còn job `zns-send`: worker concurrency 5 và limiter 10 job/giây (mức tự chọn: Zalo không công bố trần theo giây, chỉ hạn mức ngày của OA).
 - Hai log ZNS cùng (khách, `dedupeKey`) chạy song song thì chỉ log ra đời trước gửi; log sau đóng `FAILED` với lý do "Bỏ qua: tin cho cùng sự kiện đã có ở log …" và job báo warn "log đã đóng". Đây không phải lỗi gửi.
 - Không có migration, không cần biến môi trường. `go-live:check` mục Redis giờ đếm 9 hàng đợi.
 
@@ -674,7 +674,7 @@ done
 2. Còn job `delayed`/`wait`: chờ tối đa 15 phút (6 lượt, backoff 30 giây nhân đôi; worker mới vẫn đang chạy) rồi đếm lại; hàng này thường rỗng vì lỗi ghi tin trong app hiếm.
 3. Vẫn còn sau 15 phút và buộc phải quay: ghi lại để làm sau, không xoá khoá Redis bằng tay. Mỗi job mang `dedupeKey`, nên khi lên lại bản mới worker xử lý tiếp và không gửi trùng. Tin đã gửi trực tiếp cho khách không bị ảnh hưởng.
 
-Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý tiếp bình thường (concurrency 1, hạn chờ 25 giây).
+Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý tiếp bình thường (concurrency 1).
 
 - [ ] Sau deploy: `$DC logs --since 10m api | grep -ciE 'ZNS|notifications'` không có lỗi khởi tạo worker; `go-live:check` Redis PASS (9 hàng đợi)
 

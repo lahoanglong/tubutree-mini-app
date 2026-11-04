@@ -6,7 +6,7 @@ import { QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY } from '../../jobs
 import { captureServerError } from '../../config/sentry';
 
 /**
- * concurrency 5: mỗi job chủ yếu chờ Zalo (tối đa 10 giây), một worker tuần tự (mặc định 1) dồn hàng khi chiến dịch gửi hàng loạt.
+ * concurrency 5: mỗi job chủ yếu chờ Zalo (tối đa 25 giây), một worker tuần tự (mặc định 1) dồn hàng khi chiến dịch gửi hàng loạt.
  * limiter 10 job/giây là mức TỰ CHỌN thận trọng, không phải con số của Zalo: tài liệu ZNS công bố hạn mức theo ngày của OA
  * (xem API "Lấy thông tin quota ZNS"), không công bố trần theo giây. Hết hạn mức ngày thì Zalo trả lỗi nhóm hạn mức, đã được
  * coi là lỗi vĩnh viễn (zns-result). Nâng limiter chỉ khi đo thấy hàng đợi tồn mà Zalo không từ chối.

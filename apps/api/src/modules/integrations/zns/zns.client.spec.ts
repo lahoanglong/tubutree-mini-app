@@ -24,10 +24,10 @@ describe('ZnsClient — chờ Zalo đủ lâu và gắn tracking_id cố định
 
   beforeEach(() => (axios.post as jest.Mock).mockReset().mockResolvedValue({ data: { error: 0 } }));
 
-  it('hạn chờ 10 giây: một lần gọi treo không giữ worker lâu; gửi lại không làm khách nhận hai tin vì Zalo đối soát theo tracking_id', async () => {
+  it('hạn chờ 25 giây: Zalo phản hồi chậm vài chục giây không bị coi là lỗi rồi gửi lại tin thứ hai', async () => {
     await make().sendTemplate('0910087109', 'tpl1', { order_code: 'T1' }, 'log-1');
     const config = (axios.post as jest.Mock).mock.calls[0][2];
-    expect(ZNS_REQUEST_TIMEOUT_MS).toBe(10_000);
+    expect(ZNS_REQUEST_TIMEOUT_MS).toBe(25_000);
     expect(config.timeout).toBe(ZNS_REQUEST_TIMEOUT_MS);
   });
 

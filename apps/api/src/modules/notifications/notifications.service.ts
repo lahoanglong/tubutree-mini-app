@@ -27,7 +27,7 @@ export interface ZnsSendJobData {
 }
 
 /**
- * Lần gửi ZNS đầu tiên cũng đi qua queue để request đặt hàng/thanh toán không phải chờ Zalo (timeout 10s mỗi lần
+ * Lần gửi ZNS đầu tiên cũng đi qua queue để request đặt hàng/thanh toán không phải chờ Zalo (timeout 25s mỗi lần
  * gọi, xem ZNS_REQUEST_TIMEOUT_MS). Backoff dài hơn mặc định của queue (2s): ZNS lỗi tạm thời thường là Zalo gián đoạn hoặc access token chờ làm
  * mới nên thử lại sau vài chục giây là vô ích. 6 lần ≈ 15 phút.
  */
