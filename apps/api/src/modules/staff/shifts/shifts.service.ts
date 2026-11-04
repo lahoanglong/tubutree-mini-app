@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { rangesOverlap } from './time.util';
@@ -279,9 +279,17 @@ export class ShiftsService {
   listAllTemplates() {
     return this.prisma.shiftTemplate.findMany({ orderBy: { sortOrder: 'asc' } });
   }
-  createTemplate(data: { name: string; startMin: number; endMin: number; sortOrder?: number }) {
-    if (data.endMin <= data.startMin) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
-    return this.prisma.shiftTemplate.create({ data });
+  async createTemplate(input: { name: string; startMin: number; endMin: number; sortOrder?: number }) {
+    if (input.endMin <= input.startMin) throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
+    const data = { ...input, name: input.name.trim() };
+    // Không có unique index: bảng đang chạy thật có thể đã chứa tên trùng nên thêm ràng buộc sẽ làm migration hỏng.
+    // Khoá advisory xếp hàng hai lần thêm song song để cùng một tên không lọt qua cả hai lần kiểm.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('shift-template-create'))`;
+      const dup = await tx.shiftTemplate.findFirst({ where: { name: { equals: data.name, mode: 'insensitive' } }, select: { id: true } });
+      if (dup) throw new ConflictException('Đã có ca chuẩn cùng tên. Bạn đổi tên khác hoặc sửa ca đang có nhé.');
+      return tx.shiftTemplate.create({ data });
+    });
   }
   async updateTemplate(
     id: string,

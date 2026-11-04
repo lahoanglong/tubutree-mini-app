@@ -643,6 +643,31 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã thêm ca chuẩn.', type: 'success' }));
       await waitFor(() => expect(screen.getByLabelText('Tên ca')).toHaveValue(''));
     });
+
+    it('Ca chuẩn: tải danh sách lỗi thì báo lỗi kèm nút thử lại, chưa cho thêm (tránh thêm trùng khi danh sách đang trống)', async () => {
+      mocks.adminGetTemplates.mockRejectedValueOnce(new Error('mạng lỗi'));
+      await openShifts();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));
+      expect(await screen.findByText('mạng lỗi')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      expect(await screen.findByText('Ca sáng · 08:00–12:00')).toBeInTheDocument();
+      expect(screen.queryByText('mạng lỗi')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled());
+    });
+
+    it('Ca chuẩn: tên trùng ca đã có (không phân biệt hoa thường) thì báo và không cho thêm', async () => {
+      await openShifts();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));
+      expect(await screen.findByText('Ca sáng · 08:00–12:00')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: ' ca SÁNG ' } });
+      expect(screen.getByText('Đã có ca chuẩn cùng tên.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+      expect(screen.queryByText('Đã có ca chuẩn cùng tên.')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled();
+    });
   });
 
   describe('Lương', () => {
@@ -825,6 +850,16 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(screen.getByText('08:00 → 12:30 · trễ')).toBeInTheDocument();
       expect(screen.getByText('22:00 → đang mở')).toBeInTheDocument();
       expect(screen.getByText('14h30')).toBeInTheDocument();
+    });
+
+    it('Xem giờ: tải chi tiết lỗi thì báo lỗi kèm nút thử lại', async () => {
+      await openPayroll();
+      mocks.adminGetDetail.mockRejectedValueOnce(new Error('không tải được giờ công'));
+      fireEvent.click(screen.getByRole('button', { name: 'Xem giờ · Lan' }));
+      expect(await screen.findByText('không tải được giờ công')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      expect(await screen.findByText('T2 02/03 · 4h30')).toBeInTheDocument();
+      expect(screen.queryByText('không tải được giờ công')).not.toBeInTheDocument();
     });
 
     it('Sửa giờ phiên: nạp giờ cũ, lưu gửi giờ vào/ra theo ngày làm, báo và tải lại', async () => {

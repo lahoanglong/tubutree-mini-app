@@ -413,6 +413,9 @@ function DetailSheet({
     <BottomSheet open={!!row} onClose={onClose} title={`Giờ công · ${row?.staff.fullName ?? ''} · T${month}/${year}`}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '60vh', overflowY: 'auto' }}>
         {detailQ.isLoading && <Skeleton height={100} radius="var(--radius-card)" />}
+        {detailQ.isError && !detailQ.data && (
+          <ErrorState variant="inline" message={getLoadErrorMessage(detailQ.error)} onRetry={() => void detailQ.refetch()} />
+        )}
         {detailQ.data && (
           <>
             <Text variant="body-sm" as="div">
@@ -988,6 +991,9 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
   const [name, setName] = useState('');
   const [start, setStart] = useState('08:00');
   const [end, setEnd] = useState('12:00');
+  // Danh sách chưa tải được thì chưa biết ca nào đã có: không cho thêm, kẻo tạo trùng.
+  const typedName = name.trim().toLowerCase();
+  const duplicateName = !!typedName && (tplQ.data ?? []).some((t) => t.name.trim().toLowerCase() === typedName);
 
   const addM = useMutation({
     mutationFn: () => createTemplate({ name: name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
@@ -1018,7 +1024,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
           fullWidth
           icon={Plus}
           loading={addM.isPending}
-          disabled={!name.trim() || !TIME_RE.test(start) || !TIME_RE.test(end)}
+          disabled={!tplQ.isSuccess || !name.trim() || duplicateName || !TIME_RE.test(start) || !TIME_RE.test(end)}
           onPress={() => addM.mutate()}
         >
           Thêm ca chuẩn
@@ -1026,6 +1032,10 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {tplQ.isLoading && <Skeleton height={60} radius="var(--radius-card)" />}
+        {tplQ.isError && !tplQ.data && (
+          <ErrorState variant="inline" message={getLoadErrorMessage(tplQ.error)} onRetry={() => void tplQ.refetch()} />
+        )}
         {(tplQ.data ?? []).map((t) => (
           <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <Text variant="body-sm">
@@ -1043,7 +1053,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
           </div>
         ))}
         <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Field label="Tên ca">
+          <Field label="Tên ca" error={duplicateName ? 'Đã có ca chuẩn cùng tên.' : undefined}>
             <Input maxLength={INPUT_LIMITS.shiftTemplateName} placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <div style={{ display: 'flex', gap: 8 }}>
