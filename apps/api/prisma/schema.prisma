@@ -3089,6 +3089,9 @@ model NotificationLog {
   @@index([sentAt], map: "notification_logs_sentAt_idx")
   // Partial, chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention):
   // "notification_logs_zns_failed_sentAt_idx" ("sentAt") WHERE channel='ZNS' AND status='FAILED' — znsHealth 24 giờ.
+  // Partial, chỉ có trong SQL (20261105130200_hd1_notification_inapp_indexes): "notification_logs_inapp_feed_idx"
+  // ("userId", "sentAt" DESC, "id" DESC) WHERE channel='INAPP' — hộp tin; "notification_logs_inapp_unread_idx" ("userId")
+  // WHERE channel='INAPP' AND status<>'READ' — số chưa đọc.
   @@map("notification_logs")
 }
 
