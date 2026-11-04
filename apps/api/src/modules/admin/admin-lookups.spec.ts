@@ -218,6 +218,14 @@ describe('AdminService.listUsers — số tổng nhớ không thấp hơn số d
     expect((await admin.listUsers(1, 20)).meta.total).toBe(1);
   });
 
+  it('trang vượt cuối (items rỗng) giữ nguyên số đếm, không bị thổi phồng theo page × limit', async () => {
+    const count = jest.fn().mockResolvedValue(30);
+    const findMany = jest.fn().mockResolvedValue([]);
+    const admin = mk(count, findMany);
+    expect((await admin.listUsers(3, 20)).meta.total).toBe(30);
+    expect((await admin.listUsers(1000, 100)).meta.total).toBe(30);
+  });
+
   it('trang 3 limit 20 có 5 dòng mà tổng nhớ nhỏ hơn → total ít nhất 45', async () => {
     const count = jest.fn().mockResolvedValue(10);
     const findMany = jest.fn().mockResolvedValue(Array.from({ length: 5 }, (_, i) => row(`u${i}`)));

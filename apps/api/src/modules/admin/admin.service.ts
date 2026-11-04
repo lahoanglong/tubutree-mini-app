@@ -496,7 +496,8 @@ export class AdminService {
       this.userCounts.get(`guest:${search?.trim() ?? ''}`, () => this.countGuestUsers(searchWhere)),
     ]);
     // Số tổng nhớ có thể cũ hơn danh sách vừa đọc: không để nó nhỏ hơn số dòng đã chắc chắn tồn tại tới trang này.
-    const seen = (page - 1) * limit + items.length;
+    // Trang rỗng (vượt cuối) không chứng minh gì về số dòng nên giữ số đếm.
+    const seen = items.length > 0 ? (page - 1) * limit + items.length : 0;
     return { ...paginated(items, page, limit, Math.max(total, seen)), guestCount };
   }
 
