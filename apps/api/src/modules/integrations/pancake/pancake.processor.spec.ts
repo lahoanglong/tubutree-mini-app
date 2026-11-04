@@ -1699,69 +1699,65 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
   it.each([
     'https://127.0.0.1/x', 'https://192.168.1.5/inv', 'https://localhost/x', 'http://evil.vn/x', 'https://u:p@evil.vn/x',
     'https://hoadon-tubu.evil.com/x.pdf', 'https://8.8.8.8/x', 'https://[::127.0.0.1]/x',
-  ])('link bị loại %s → giữ link cũ, vẫn ISSUED và báo khách; đơn vào hàng "Cần xử lý Pancake", ADMIN + CSKH được báo', async (bad) => {
-    const { go, prisma, orderUpdate, orderUpdateMany, customerNotices, adminAlerts } = run(bad);
+  ])('link bị loại %s → giữ link cũ, vẫn ISSUED và báo khách; ADMIN + CSKH được báo in-app', async (bad) => {
+    const { go, prisma, orderUpdate, customerNotices, adminAlerts } = run(bad);
     await go();
     expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
     expect(customerNotices()).toEqual([['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }]]);
-    const flags = attentionFlags(orderUpdateMany);
-    expect(flags).toHaveLength(1);
-    expect(flags[0]).toMatch(/^Link hoá đơn VAT từ Pancake bị bỏ, đơn chưa có link hoá đơn cho khách\. .+ Gửi hoá đơn cho khách qua chat CSKH\.$/);
-    expect(adminAlerts()).toEqual([['admin1', 'OPS_PANCAKE_ALERT', { order_code: 'TUBU1', message: flags[0] }]]);
+    const alerts = adminAlerts();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.slice(0, 2)).toEqual(['admin1', 'OPS_PANCAKE_ALERT']);
+    expect(alerts[0]![2]).toEqual({
+      order_code: 'TUBU1',
+      message: expect.stringMatching(/^Link hoá đơn VAT từ Pancake bị bỏ, đơn chưa có link hoá đơn cho khách\. .+ Gửi hoá đơn cho khách qua chat CSKH\.$/),
+    });
     expect((prisma.user.findMany as jest.Mock).mock.calls[0]![0].where).toMatchObject({
       OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }],
     });
   });
 
-  it('đơn đang có việc khác (Khách chuyển thiếu) → nối thêm lý do hoá đơn, không xoá việc cũ', async () => {
-    const underpaid = 'Khách chuyển thiếu: Pancake ghi nhận 100.000 ₫/200.000 ₫';
-    const { go, orderUpdateMany } = run('https://hoadon-tubu.evil.com/x.pdf', underpaid);
+  it('không đụng ô "Cần xử lý Pancake": việc khác đang chờ trên đơn giữ nguyên, việc hoá đơn không bị luồng khác xoá mất', async () => {
+    const { go, orderUpdateMany } = run('https://hoadon-tubu.evil.com/x.pdf', 'Khách chuyển thiếu: Pancake ghi nhận 100.000 ₫/200.000 ₫');
     await go();
-    const [flag] = attentionFlags(orderUpdateMany);
-    expect(flag!.startsWith(`${underpaid} | Link hoá đơn VAT từ Pancake bị bỏ`)).toBe(true);
+    expect(orderUpdateMany.mock.calls.filter(([a]) => a?.data && 'pancakeAttention' in a.data)).toEqual([]);
   });
 
-  it('lý do hoá đơn đã có trên đơn (webhook gửi lại sau lần ghi ISSUED lỗi) → không ghi lại, không báo admin lần hai', async () => {
-    const first = run('https://hoadon-tubu.evil.com/x.pdf');
-    await first.go();
-    const [reason] = attentionFlags(first.orderUpdateMany);
-    const again = run('https://hoadon-tubu.evil.com/x.pdf', reason!);
-    await again.go();
-    expect(attentionFlags(again.orderUpdateMany)).toEqual([]);
-    expect(again.adminAlerts()).toEqual([]);
-    expect(again.orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
-  });
-
-  it('báo admin lỗi → vẫn ISSUED và báo khách (báo admin chỉ là best-effort, việc đã nằm trên đơn)', async () => {
-    const { go, prisma, orderUpdate, customerNotices, orderUpdateMany } = run('https://hoadon-tubu.evil.com/x.pdf');
+  it('báo admin lỗi → vẫn ISSUED và báo khách (báo admin là best-effort)', async () => {
+    const { go, prisma, orderUpdate, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
     (prisma.user.findMany as jest.Mock).mockRejectedValueOnce(new Error('db hiccup'));
     await go();
-    expect(attentionFlags(orderUpdateMany)).toHaveLength(1);
     expect(orderUpdate).toHaveBeenCalledTimes(1);
     expect(customerNotices()).toHaveLength(1);
   });
 
-  it('link ngoài danh sách: lý do nêu tên miền và ALLOWED_VAT_INVOICE_HOSTS, không lộ đường dẫn của link', async () => {
-    const { go, orderUpdateMany } = run('https://hoadon.nha-cung-cap-moi.vn/tra-cuu?token=bi-mat');
+  it('link ngoài danh sách: lời báo nêu tên miền và ALLOWED_VAT_INVOICE_HOSTS, không lộ đường dẫn của link', async () => {
+    const { go, adminAlerts } = run('https://hoadon.nha-cung-cap-moi.vn/tra-cuu?token=bi-mat');
     await go();
-    const [reason] = attentionFlags(orderUpdateMany);
-    expect(reason).toMatch(/hoadon\.nha-cung-cap-moi\.vn.*ALLOWED_VAT_INVOICE_HOSTS/);
-    expect(reason).not.toContain('bi-mat');
+    const message = (adminAlerts()[0]![2] as { message: string }).message;
+    expect(message).toMatch(/hoadon\.nha-cung-cap-moi\.vn.*ALLOWED_VAT_INVOICE_HOSTS/);
+    expect(message).not.toContain('bi-mat');
   });
 
-  it('gắn việc cần xử lý TRƯỚC khi lật ISSUED: ghi lỗi thì chưa lật, lần thử lại của webhook vẫn còn việc để gắn', async () => {
-    const { go, orderUpdate, orderUpdateMany, notifications } = run('https://hoadon-tubu.evil.com/x.pdf');
-    orderUpdateMany.mockRejectedValueOnce(new Error('db down'));
-    await go().catch(() => undefined);
-    expect(orderUpdate).not.toHaveBeenCalled();
+  it('ghi ISSUED lỗi → chưa báo admin, chưa báo khách; lần thử lại của webhook báo đúng một lần', async () => {
+    const { go, orderUpdate, notifications } = run('https://hoadon-tubu.evil.com/x.pdf');
+    orderUpdate.mockRejectedValueOnce(new Error('db down'));
+    await expect(go()).rejects.toThrow('db down');
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 
-  it('link hợp lệ hoặc không có link → không gắn việc, không báo admin', async () => {
+  it('tin cho khách lỗi sau khi đã báo admin → admin đã có việc (lần thử lại dừng ở guard ISSUED)', async () => {
+    const { go, notifications, adminAlerts } = run('https://hoadon-tubu.evil.com/x.pdf');
+    (notifications.notify as jest.Mock).mockImplementation(async (_u: string, code: string) => {
+      if (code === 'INVOICE_ISSUED') throw new Error('zns down');
+    });
+    await go().catch(() => undefined);
+    expect(adminAlerts()).toHaveLength(1);
+  });
+
+  it('link hợp lệ hoặc không có link → không báo admin', async () => {
     for (const url of ['https://abc.meinvoice.vn/inv/1', undefined]) {
-      const { go, orderUpdateMany, adminAlerts, alerts } = run(url);
+      const { go, adminAlerts, alerts } = run(url);
       await go();
-      expect(attentionFlags(orderUpdateMany)).toEqual([]);
       expect(adminAlerts()).toEqual([]);
       expect(alerts.alert).not.toHaveBeenCalled();
     }

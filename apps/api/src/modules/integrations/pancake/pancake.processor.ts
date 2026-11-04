@@ -12,15 +12,12 @@ import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
 import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
-  ATTENTION_INVOICE_URL_REJECTED,
   ATTENTION_PARTIAL_RETURN_ACK,
-  ATTENTION_SEPARATOR,
   ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
-  appendPancakeAttention,
   clearPancakeAttention,
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
@@ -883,32 +880,29 @@ export class PancakeProcessor extends WorkerHost {
     // nhận thông báo "đã xuất hoá đơn" trùng lặp dù order đã ISSUED từ trước.
     if (order.invoiceStatus === 'ISSUED') return;
     // Khách thấy link trên đơn (web: nút "Tải PDF"): cùng luật với link Kế toán nhập. Link bị loại thì không ghi (giữ link cũ) nhưng vẫn
-    // đặt ISSUED và báo khách. Sau ISSUED không còn chỗ nhập lại link, nên đơn vào hàng "Cần xử lý Pancake" và ADMIN + CSKH được báo để
-    // gửi hoá đơn qua chat. Nối lý do (không ghi đè việc khác của đơn, việc khác tới sau cũng không xoá nó) và gắn trước khi lật ISSUED:
-    // lật xong mà ghi lỗi thì lần thử lại dừng ở guard ISSUED phía trên và việc này mất dấu.
+    // đặt ISSUED và báo khách. Sau ISSUED không còn chỗ nhập lại link, nên báo in-app ADMIN + CSKH để gửi hoá đơn qua chat. Không ghi vào
+    // ô pancakeAttention: nhiều luồng khác gỡ hoặc ghi đè cả ô, việc hoá đơn sẽ mất mà guard ISSUED không cho gắn lại.
+    // Báo sau khi lật ISSUED (ghi lỗi thì lần thử lại báo đúng một lần) và trước tin cho khách (tin khách lỗi thì lần thử lại dừng ở guard).
     const incoming = data['invoice_url'] ? String(data['invoice_url']).trim() : '';
     const urlError = incoming ? vatInvoiceUrlError(incoming) : null;
     const safeUrl = incoming && !urlError ? incoming : undefined;
-    if (urlError) {
-      const reason = `${ATTENTION_INVOICE_URL_REJECTED}, đơn chưa có link hoá đơn cho khách. ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`;
-      if (!(order.pancakeAttention ?? '').split(ATTENTION_SEPARATOR).includes(reason)) {
-        await appendPancakeAttention(this.prisma, order.id, reason);
-        this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${reason}`);
-        await notifyAdmins(
-          { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-          {
-            template: PANCAKE_ALERT_TEMPLATE,
-            audience: 'admins+cskh',
-            subject: `link hoá đơn VAT đơn ${order.code}`,
-            data: () => ({ order_code: order.code, message: reason }),
-          },
-        ).catch((err) => this.logger.warn(`Không báo được admin về link hoá đơn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
-      }
-    }
     await this.prisma.order.update({
       where: { id: order.id },
       data: { invoiceStatus: 'ISSUED', invoiceUrl: safeUrl ?? order.invoiceUrl },
     });
+    if (urlError) {
+      const message = `Link hoá đơn VAT từ Pancake bị bỏ, đơn chưa có link hoá đơn cho khách. ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`;
+      this.logger.warn(`Đơn ${order.code}: ${message}`);
+      await notifyAdmins(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        {
+          template: PANCAKE_ALERT_TEMPLATE,
+          audience: 'admins+cskh',
+          subject: `link hoá đơn VAT đơn ${order.code}`,
+          data: () => ({ order_code: order.code, message }),
+        },
+      ).catch((err) => this.logger.warn(`Không báo được admin về link hoá đơn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
+    }
     await this.notifications.notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code });
   }
 
