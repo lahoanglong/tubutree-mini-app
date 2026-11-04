@@ -75,10 +75,10 @@ export class UserBlockService {
     const reason = rawReason.trim();
     if (!reason) throw new BadRequestException('Cần ghi lý do cắt phiên đăng nhập.');
     const result = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
-      if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
       const now = new Date();
-      await tx.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+      // Lệnh đầu: ghi mốc và giữ khoá dòng tới commit (xem AuthService.revokeAllSessions).
+      const marked = await tx.user.updateMany({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+      if (marked.count === 0) throw new NotFoundException('Không tìm thấy người dùng.');
       const { count } = await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
       await recordUserAdminEvent(tx, { userId, kind: 'SESSIONS_REVOKED', to: String(count), reason, actorId: adminId });
       return { id: userId, revokedSessions: count };

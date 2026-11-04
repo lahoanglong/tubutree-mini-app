@@ -15,6 +15,7 @@ import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferr
 import { roleClaims } from './session-state.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
 import { ExternalChatService } from '../external-points/external-chat.service';
@@ -938,6 +939,11 @@ export class AuthService {
     if (!stored || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
     }
+    // Bất biến: refresh token cấp trước mốc thu hồi là chết dù revokedAt còn null. Mốc được commit TRƯỚC khi token bị thu hồi
+    // (xem revokeAllSessions), nên token con do một lượt refresh đang chạy dở sinh ra cũng bị bắt ở đây hoặc ở kiểm sau.
+    if (stored.user.sessionsRevokedAt && stored.createdAt <= stored.user.sessionsRevokedAt) {
+      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+    }
     // isBlocked được chặn tập trung trong issueTokens() (dùng chung cho login + refresh) —
     // không check riêng ở đây để tránh 1 user bị khoá đăng nhập lại (guest/zalo-mini-app/
     // zalo-oauth) lấy token mới, né hoàn toàn chặn refresh.
@@ -950,7 +956,7 @@ export class AuthService {
         where: { id: stored.id, revokedAt: null },
         data: { revokedAt: now, rotatedAt: now },
       });
-      if (revoked.count === 1) return this.issueTokens(stored.user, stored.id);
+      if (revoked.count === 1) return this.rotateInto(stored.user, stored.id);
       const fresh = await this.prisma.refreshToken.findUnique({ where: { id: stored.id }, include: { user: true } });
       if (!fresh) throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
       current = fresh;
@@ -964,7 +970,7 @@ export class AuthService {
     }
     const graceMs = this.config.get('JWT_REFRESH_REUSE_GRACE_SECONDS', { infer: true }) * 1000;
     if (Date.now() - current.rotatedAt.getTime() <= graceMs) {
-      return this.issueTokens(current.user, current.id);
+      return this.rotateInto(current.user, current.id);
     }
     // Reuse phát hiện (P1-2, docs/2026-09-08-review-progress.md): nếu kẻ trộm đã rotate 1 lần TRƯỚC KHI
     // nạn nhân refresh lại, chuỗi refresh token của kẻ trộm vẫn sống nguyên tới hết JWT_REFRESH_TTL_DAYS.
@@ -976,18 +982,45 @@ export class AuthService {
 
   /** Khách tự bấm "Đăng xuất mọi thiết bị": refresh token và access token của mọi phiên đều chết (JwtStrategy so iat với mốc). */
   async logoutAll(userId: string): Promise<void> {
-    await this.revokeAllSessions(userId);
+    await this.revokeAllSessions(userId, 'Khách tự đăng xuất mọi thiết bị');
   }
 
-  /** Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. */
-  private async revokeAllSessions(userId: string): Promise<void> {
+  /**
+   * Thu hồi mọi refresh token còn hiệu lực và chốt mốc để token đã xoay trước đó mất ân hạn. Một transaction, lệnh ĐẦU là ghi mốc
+   * trên dòng users (giữ khoá dòng tới commit): lượt refresh song song chờ ở kiểm sau (FOR SHARE) cho tới khi mốc commit, nên không
+   * thể để lại token con sống sau khi thu hồi xong.
+   */
+  private async revokeAllSessions(userId: string, selfServiceReason?: string): Promise<void> {
     const now = new Date();
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: now },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
+      await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+      if (selfServiceReason) {
+        await recordUserAdminEvent(tx, { userId, kind: 'SESSIONS_REVOKED', reason: selfServiceReason, actorId: userId });
+      }
     });
-    await this.prisma.user.update({ where: { id: userId }, data: { sessionsRevokedAt: now } });
     this.sessionState?.invalidate(userId);
+  }
+
+  /**
+   * Cấp token con từ token cha vừa xoay (hoặc đang trong ân hạn), rồi kiểm lại sau khi con đã tồn tại: nếu lúc đó phiên đã bị cắt
+   * (mốc thu hồi không nhỏ hơn thời điểm cấp token cha) hoặc họ token đã bị logout thu hồi thì thu hồi luôn con và trả 401. Câu đọc
+   * mốc dùng FOR SHARE để chờ transaction thu hồi đang chạy commit; không bọc quanh issueTokens vì issueTokens tự khoá users trong
+   * transaction riêng (applyGrants).
+   */
+  private async rotateInto(user: User, parentId: string): Promise<LoginResponse> {
+    const res = await this.issueTokens(user, parentId);
+    const [row] = await this.prisma.$queryRaw<{ sessionsRevokedAt: Date | null }[]>`
+      SELECT "sessionsRevokedAt" FROM users WHERE id = ${user.id} FOR SHARE`;
+    const parent = await this.prisma.refreshToken.findUnique({ where: { id: parentId }, select: { createdAt: true, rotatedAt: true } });
+    const mark = row?.sessionsRevokedAt ?? null;
+    if (!parent || parent.rotatedAt === null || (mark && parent.createdAt <= mark)) {
+      await this.prisma.refreshToken
+        .updateMany({ where: { tokenHash: this.hashToken(res.refreshToken), revokedAt: null }, data: { revokedAt: new Date() } })
+        .catch((err) => this.logger.warn(`Thu hồi token con sau khi phiên bị cắt thất bại: ${err}`));
+      throw new UnauthorizedException('Refresh token không hợp lệ hoặc đã hết hạn.');
+    }
+    return res;
   }
 
   /**
@@ -1061,7 +1094,7 @@ export class AuthService {
     const refreshTtlDays = this.config.get('JWT_REFRESH_TTL_DAYS', { infer: true });
     const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
     await this.prisma.refreshToken.create({
-      data: { userId: user.id, tokenHash: this.hashToken(refreshToken), expiresAt, parentId: parentTokenId ?? null },
+      data: { userId: user.id, tokenHash: this.hashToken(refreshToken), expiresAt, parentId: parentTokenId ?? null, createdAt: new Date() },
     });
 
     return { accessToken, refreshToken, user: this.toAuthUser(user) };

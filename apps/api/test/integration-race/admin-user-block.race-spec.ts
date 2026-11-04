@@ -145,4 +145,16 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     const again = await auth.loginAsGuest(deviceId);
     await expect(strategy.validate(decode(again.accessToken))).resolves.toMatchObject({ sub: userId });
   });
+
+  it('M1: refresh song song với Cắt phiên của admin (20 lần) → sau cùng không còn refresh token nào sống', async () => {
+    const admin = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const survivors: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const login = await auth.loginAsGuest(`dev_${randCode(10)}`);
+      const userId = login.user.id;
+      await Promise.allSettled([auth.refresh(login.refreshToken), blocks.revokeSessions(admin.id, userId, 'Nghi lộ phiên')]);
+      survivors.push(await prisma.refreshToken.count({ where: { userId, revokedAt: null } }));
+    }
+    expect(survivors.filter((n) => n > 0)).toEqual([]);
+  });
 });
