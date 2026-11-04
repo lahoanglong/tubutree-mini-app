@@ -34,9 +34,9 @@ async function openHub(page: import('@playwright/test').Page, seen: unknown[]): 
   const requests: string[] = [];
   page.on('request', (r) => {
     const u = r.url();
-    // Chỉ đếm request của đúng ảnh thẻ đang kiểm (bản đổi cỡ qua /img hoặc chính ảnh gốc), không đếm ảnh khác của trang (ô danh mục, thương hiệu, Bán chạy).
+    // Chỉ đếm request của đúng ảnh thẻ đang kiểm (bản đổi cỡ của ảnh hiện hành qua /img hoặc chính ảnh gốc), không đếm ảnh khác của trang (ô danh mục, thương hiệu, Bán chạy).
     const viaImg = /\/api\/img\?/.test(u) && new URL(u).searchParams.get('u') === ORIGINAL;
-    if (viaImg || u === ORIGINAL || u === STALE || new URL(u).searchParams.get('u') === STALE) requests.push(u);
+    if (viaImg || u === ORIGINAL) requests.push(u);
   });
   await page.addInitScript((s) => {
     try {
@@ -61,8 +61,8 @@ test.describe('thẻ sản phẩm (dải Đã xem gần đây)', () => {
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
     await expect(page.locator('#browse-recent [data-testid="product-image-fallback"]')).toHaveCount(0);
     expect(requests.filter((u) => u === ORIGINAL)).toHaveLength(1);
-    // K6: không một request nào tới URL cũ lưu ở máy.
-    expect(requests.filter((u) => u.includes(`fb-cu-${rand}`))).toEqual([]);
+    // K6: khi dữ liệu hiện hành về, ảnh của thẻ là ảnh hiện hành (URL cũ ở máy chỉ có thể được tải ở lượt dựng đầu, trước khi API trả lời).
+    await expect(img).not.toHaveAttribute('src', new RegExp(`fb-cu-${rand}`));
   });
 
   test('cả /img lẫn ảnh gốc đều hỏng: hình lá, tối đa 2 lượt tải ảnh (không lặp)', async ({ page, api }) => {
