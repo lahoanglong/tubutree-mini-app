@@ -28,6 +28,9 @@ import { PageHeader } from '@/components/ui/page-header';
 import { FlashSlotItem } from '@/components/flash/flash-slot-item';
 
 const SOLD_FOOTER_HEIGHT = 20;
+/** Chiều cao dải tab khung giờ (SlotTabs) và dải đồng hồ bên dưới: khung chờ dùng đúng hai số này để danh sách không nhảy khi khung giờ về. */
+const TABS_HEIGHT = 56;
+const STRIP_HEIGHT = 44;
 /** Nhịp tải lại món của khung đang diễn ra: suất đã bán nhích lên, món hết suất xuống cuối. Phản hồi máy chủ được cache 3 giây. */
 const LIVE_ITEMS_REFETCH_MS = 30_000;
 const SLOTS_REFETCH_MS = 60_000;
@@ -46,7 +49,7 @@ const STRIP: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: 8,
-  minHeight: 44,
+  minHeight: STRIP_HEIGHT,
   padding: '0 16px',
   boxSizing: 'border-box',
   background: 'var(--color-bg-surface)',
@@ -54,7 +57,8 @@ const STRIP: CSSProperties = {
 
 function ListSkeleton() {
   return (
-    <div data-testid="flash-items-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 16px 0' }}>
+    // Cao tối thiểu một màn hình: danh sách thật dài hơn khung chờ bốn thẻ, nên không có chỗ này thì chân trang đang hiện trong màn hình bị đẩy ra ngoài khi món về (một lần xê dịch).
+    <div data-testid="flash-items-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 16px 0', minHeight: '100svh' }}>
       {[0, 1, 2, 3].map((i) => (
         <ProductTileSkeleton key={i} variant="line" note footerHeight={SOLD_FOOTER_HEIGHT} />
       ))}
@@ -214,8 +218,9 @@ export default function FlashSlotsView() {
   let body: ReactNode;
   if (slotsQ.isPending) {
     body = (
-      <div data-testid="flash-slots-loading" aria-hidden="true" className={BLEED} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Skeleton height={56} radius="0" />
+      <div data-testid="flash-slots-loading" aria-hidden="true" className={BLEED}>
+        <Skeleton height={TABS_HEIGHT} radius="0" />
+        <Skeleton height={STRIP_HEIGHT} radius="0" />
         <ListSkeleton />
       </div>
     );

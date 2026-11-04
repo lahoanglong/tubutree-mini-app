@@ -17,12 +17,12 @@ beforeEach(() => {
 describe('cỡ chữ toàn web', () => {
   it('applyFontScale đặt cỡ gốc và data-font-scale', () => {
     applyFontScale('small');
-    expect(document.documentElement.style.fontSize).toBe('15px');
+    expect(document.documentElement.style.fontSize).toBe('93.75%');
     expect(document.documentElement.dataset.fontScale).toBe('small');
     applyFontScale('large');
-    expect(document.documentElement.style.fontSize).toBe('18px');
+    expect(document.documentElement.style.fontSize).toBe('112.5%');
     applyFontScale('normal');
-    expect(document.documentElement.style.fontSize).toBe('16px');
+    expect(document.documentElement.style.fontSize).toBe('100%');
   });
 
   it('loadFontScale đọc tubu_prefs; thiếu, hỏng hay giá trị lạ thì normal', async () => {

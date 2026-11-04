@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { createElement, useContext, useState, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { makeFlashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
-import type { FlashItem } from '@/lib/flash-price';
+import { runningFlash, type FlashItem } from '@/lib/flash-price';
+import { markFlashClockSynced, resetFlashClockSynced, ServerSeed, useFlashNow } from '@/lib/flash-now';
 
 /**
  * Đợt Giờ vàng đang chạy, dùng chung cho mọi thẻ sản phẩm trên trang: một lần gọi API (không qua React Query để các test render
@@ -30,6 +31,8 @@ function load(): Promise<void> {
       items = Array.isArray(res) ? res : NONE;
       fetchedAt = Date.now();
       failure = null;
+      // Chỉ lần hỏi thành công mới đo được độ lệch đồng hồ (fetchActiveFlashSales đồng bộ khi API trả serverNow); lỗi thì vẫn dùng đồng hồ đơn điệu.
+      markFlashClockSynced();
     })
     .catch((err: unknown) => {
       items = NONE;
@@ -94,12 +97,32 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
+/**
+ * Ở trình duyệt gieo mảng này vào kho dùng chung (cùng mảng với context, nên React không thấy snapshot đổi sau hydrate) để khối khác của trang đọc cùng
+ * dữ liệu, nhưng KHÔNG đánh dấu `loaded`: bản ISR có thể cũ tới 5 phút, nên những việc chờ "danh sách thật đã về" (chọn phân loại mở sẵn) vẫn chờ lần hỏi
+ * đầu tiên của trình duyệt. `fetchedAt` giữ 0 để effect của `useActiveFlashSales` hỏi lại ngay.
+ */
+export function FlashSalesSeed({ items: seed, now, children }: { items: readonly FlashItem[] | undefined; now: number; children: ReactNode }) {
+  if (typeof window !== 'undefined' && seed && !loaded && items === NONE) items = seed;
+  // Mốc đồng hồ đơn điệu của CHÍNH seed này (mỗi lần điều hướng phía khách dựng seed mới có mốc mới): chỉ dùng sau mount, không ảnh hưởng giá trị lúc hydrate.
+  const [anchor] = useState(() => (typeof performance !== 'undefined' ? performance.now() : 0));
+  return createElement(ServerSeed.Provider, { value: seed ? { items: seed, now, anchor } : null }, children);
+}
+
 export function useActiveFlashSales(): readonly FlashItem[] {
-  const current = useSyncExternalStore(subscribe, () => items, () => NONE);
+  const seed = useContext(ServerSeed);
+  const current = useSyncExternalStore(subscribe, () => items, () => seed?.items ?? NONE);
   useEffect(() => {
     ensureFresh();
   }, []);
   return current;
+}
+
+/** Đợt đang chạy cho trang sản phẩm, cùng `now` (`useFlashNow`) để mọi chỗ lọc/tính giá khớp nhau, kể cả lúc hydrate. */
+export function useRunningFlash(): { flash: FlashItem[]; now: number } {
+  const list = useActiveFlashSales();
+  const now = useFlashNow();
+  return { flash: runningFlash(list, now), now };
 }
 
 /** Đã có kết quả đầu tiên (kể cả lỗi): trang chi tiết chờ cờ này rồi mới chốt phân loại mặc định. */
@@ -109,6 +132,7 @@ export function useFlashSalesLoaded(): boolean {
 
 /** Chỉ cho test: xoá bộ nhớ dùng chung giữa các ca. */
 export function resetFlashSales(): void {
+  resetFlashClockSynced();
   loaded = false;
   items = NONE;
   fetchedAt = 0;

@@ -6,7 +6,7 @@ import { hydrateRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import type { FlashItem } from '@/lib/flash-price';
-import { resetFlashSales } from '@/lib/use-flash-sales';
+import { FlashSalesSeed, resetFlashSales } from '@/lib/use-flash-sales';
 
 const api = vi.hoisted(() => ({ flash: [] as unknown[], config: null as unknown }));
 vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => api.flash }));
@@ -269,5 +269,38 @@ describe('ProductCard: nút nổi trên ảnh (imageOverlay)', () => {
 
   it('hết hàng không vẽ nút nổi', async () => {
     expect((await mount({ product: { ...PRODUCT, inStock: false }, imageOverlay: BTN })).querySelector('button[aria-label="Thêm vào giỏ"]')).toBeNull();
+  });
+});
+
+describe('ProductCard dưới trang gieo Giờ vàng (hydrate)', () => {
+  it('đợt hết giữa lúc server dựng HTML và lúc tải: hydrate không lệch (vẫn giá Giờ vàng như HTML), sau mount thẻ về giá thường', async () => {
+    const t0 = Date.now() - 120_000;
+    const ended: FlashItem = { ...FLASH, endAt: new Date(t0 + 30_000).toISOString() };
+    const tree = (
+      <QueryClientProvider client={new QueryClient()}>
+        <FlashSalesSeed items={[ended]} now={t0}>
+          <ProductCard product={PRODUCT} variant="grid" />
+        </FlashSalesSeed>
+      </QueryClientProvider>
+    );
+    const html = staticHtml(tree);
+    expect(html).toContain('?v=v1');
+    resetFlashSales();
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, tree, { onRecoverableError: (e) => errors.push(e) });
+    });
+    await flush();
+    expect(errors).toEqual([]);
+    expect(logged).not.toHaveBeenCalled();
+    expect(link(container).getAttribute('href')).toBe('/san-pham/nuoc-rua-chen');
+    act(() => root.unmount());
+    container.remove();
+    logged.mockRestore();
   });
 });

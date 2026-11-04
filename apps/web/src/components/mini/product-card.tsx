@@ -10,6 +10,7 @@ import { productHref } from '@/lib/product-href';
 import type { ProductCard as ProductCardType } from '@/lib/api';
 import { useCatalogLaunchDate } from '@/lib/use-catalog-launch-date';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { useFlashNow } from '@/lib/flash-now';
 import { useFlashExpiry } from '@/lib/use-flash-expiry';
 import { useFreeShipThreshold } from '@/lib/use-free-ship-threshold';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -77,7 +78,7 @@ export function ProductCard({
   const activeFlash = useActiveFlashSales();
   const launchDate = useCatalogLaunchDate();
   const freeShip = useFreeShipThreshold();
-  const now = serverNow();
+  const now = useFlashNow();
   const flash = flashProp !== undefined ? flashProp : pickCardFlash(product, activeFlash, now);
   useFlashExpiry(flash?.endAt);
 

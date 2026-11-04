@@ -47,7 +47,7 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
   return (
     <div>
       <CategoryTiles entries={entries} isLoading={categoriesLoading} placeholderCount={placeholderCount} onSelect={onPickCategory} onSelectAll={onPickAll} />
-      <RecentlyViewedRail />
+      <RecentlyViewedRail reserve />
       {showBestSellers && (
         <Section id="browse-best-sellers" label={title}>
           <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />

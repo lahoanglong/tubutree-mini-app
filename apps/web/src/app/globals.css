@@ -2,6 +2,20 @@
 @import '@tubutree/design-tokens/src/tokens.css';
 @import '../components/mini/mini.css';
 
+/* Phông dự phòng chỉnh cỡ theo Inter (số đo công bố của Inter so với Arial): trong lúc Inter chưa tải, chữ chiếm gần đúng bề rộng và chiều cao
+   cuối cùng nên lúc đổi phông trang ít xê dịch. design-tokens khai ngăn xếp `'Inter', system-ui` không có chỗ cho nó, nên khai lại ở đây. */
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  size-adjust: 107.4%;
+  ascent-override: 90.2%;
+  descent-override: 22.48%;
+  line-gap-override: 0%;
+}
+:root {
+  --font-ui: 'Inter', 'Inter Fallback', system-ui, sans-serif;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

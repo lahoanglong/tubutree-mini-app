@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 
 const store = vi.hoisted(() => ({ value: null as string | null }));
@@ -16,6 +16,11 @@ import * as appGates from './app-gates';
 import { AppGates } from './app-gates';
 import * as couponGate from './coupon-claim-gate';
 import * as onboardingGate from './onboarding-gate';
+
+// Phần giao diện cổng tải bằng next/dynamic: nạp trước để lần dựng đầu không phải chờ chunk.
+beforeAll(async () => {
+  await import('./coupon-claim-gate-ui');
+});
 
 let mounted: Rendered | null = null;
 beforeEach(() => {
@@ -47,7 +52,7 @@ describe('AppGates', () => {
     store.value = JSON.stringify({ fontScale: 'large' });
     mounted = render(<AppGates />);
     await flush();
-    expect(document.documentElement.style.fontSize).toBe('18px');
+    expect(document.documentElement.style.fontSize).toBe('112.5%');
   });
 
   it('chưa chọn thì không đổi cỡ gốc', async () => {

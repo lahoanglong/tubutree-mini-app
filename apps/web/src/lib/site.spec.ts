@@ -190,3 +190,110 @@ describe('restoringBootScript', () => {
     ).toEqual([]);
   });
 });
+
+describe('recentlyViewedBootScript', () => {
+  const run = async (raw: string | null | 'throw') => {
+    const { recentlyViewedBootScript } = await loadSite();
+    const attrs: string[] = [];
+    new Function('localStorage', 'document', recentlyViewedBootScript())(
+      {
+        getItem: (k: string) => {
+          expect(k).toBe('tubu_recently_viewed');
+          if (raw === 'throw') throw new Error('blocked');
+          return raw;
+        },
+      },
+      { documentElement: { setAttribute: (k: string) => attrs.push(k) } },
+    );
+    return attrs;
+  };
+  it('có ít nhất một mục hợp lệ thì đặt data-has-recent', async () => {
+    expect(await run(JSON.stringify([{ slug: 'a', name: 'A', thumbnail: null, viewedAt: 1 }]))).toEqual(['data-has-recent']);
+  });
+  it('cùng luật với parseRecentlyViewed (isItem): mục thiếu thumbnail/viewedAt hay sai kiểu thì không đặt', async () => {
+    const { parseRecentlyViewed } = await import('./recently-viewed');
+    const ok = { slug: 'a', name: 'A', thumbnail: null, viewedAt: 1 };
+    const cases: unknown[][] = [
+      [ok],
+      [{ ...ok, thumbnail: 'x.jpg' }],
+      [{ slug: 'a', name: 'A' }],
+      [{ ...ok, thumbnail: 5 }],
+      [{ ...ok, thumbnail: undefined }],
+      [{ ...ok, viewedAt: '1' }],
+      [{ ...ok, viewedAt: null }],
+      [{ ...ok, slug: '' }],
+      [{ ...ok, name: 3 }],
+      [null, 'x', 7],
+      [{ slug: 'a', name: 'A', thumbnail: null }, ok],
+      [],
+    ];
+    for (const c of cases) {
+      const raw = JSON.stringify(c);
+      expect(await run(raw), raw).toEqual(parseRecentlyViewed(raw).length > 0 ? ['data-has-recent'] : []);
+    }
+  });
+  it('rỗng, hỏng, sai dạng hay storage ném lỗi thì không đặt gì', async () => {
+    expect(await run(null)).toEqual([]);
+    expect(await run('[]')).toEqual([]);
+    expect(await run('{oops')).toEqual([]);
+    expect(await run(JSON.stringify([{ slug: '', name: 'A' }]))).toEqual([]);
+    expect(await run('throw')).toEqual([]);
+  });
+});
+
+describe('fontScaleBootScript', () => {
+  const run = async (raw: string | null | 'throw') => {
+    const { fontScaleBootScript } = await loadSite();
+    const attrs: Record<string, string> = {};
+    const style = { fontSize: '' };
+    new Function('localStorage', 'document', fontScaleBootScript())(
+      {
+        getItem: (k: string) => {
+          expect(k).toBe('tubu_prefs');
+          if (raw === 'throw') throw new Error('blocked');
+          return raw;
+        },
+      },
+      { documentElement: { style, setAttribute: (k: string, v: string) => (attrs[k] = v) } },
+    );
+    return { fontSize: style.fontSize, attrs };
+  };
+  it('đặt font-size gốc theo phần trăm và data-font-scale, khớp bảng của font-scale.ts', async () => {
+    const { FONT_SIZE } = await import('../components/account/font-scale');
+    for (const s of ['small', 'normal', 'large'] as const) {
+      const out = await run(JSON.stringify({ fontScale: s }));
+      expect(out.fontSize).toBe(FONT_SIZE[s]);
+      expect(out.fontSize.endsWith('%')).toBe(true);
+      expect(out.attrs).toEqual({ 'data-font-scale': s });
+    }
+  });
+  it('chưa chọn, giá trị lạ, JSON hỏng hay storage ném lỗi thì không đụng gì', async () => {
+    for (const raw of [null, JSON.stringify({}), JSON.stringify({ fontScale: 'huge' }), JSON.stringify({ fontScale: 'toString' }), '{oops', 'throw'] as const) {
+      expect(await run(raw)).toEqual({ fontSize: '', attrs: {} });
+    }
+  });
+});
+
+describe('offersHintBootScript', () => {
+  const run = async (raw: string | null | 'throw') => {
+    const { offersHintBootScript } = await loadSite();
+    const attrs: string[] = [];
+    new Function('localStorage', 'document', offersHintBootScript())(
+      {
+        getItem: (k: string) => {
+          expect(k).toBe('tubu_offers_hint');
+          if (raw === 'throw') throw new Error('blocked');
+          return raw;
+        },
+      },
+      { documentElement: { setAttribute: (k: string) => attrs.push(k) } },
+    );
+    return attrs;
+  };
+  it("nhớ có mã ('1') thì đặt data-has-offers; còn lại thì không", async () => {
+    expect(await run('1')).toEqual(['data-has-offers']);
+    expect(await run('0')).toEqual([]);
+    expect(await run(null)).toEqual([]);
+    expect(await run('throw')).toEqual([]);
+  });
+});
