@@ -53,3 +53,16 @@ export function staleBaseline(side: AxeBaselineEntry['side'], screen: string, fo
   const seen = new Set(found.map((v) => v.id));
   return baseline.filter((e) => e.side === side && e.screen === screen && !seen.has(e.rule)).map((e) => `${screen}: ${e.rule} không còn vi phạm, xoá khỏi AXE_BASELINE`);
 }
+
+/**
+ * Chạy riêng một số luật theo id, kể cả luật `experimental` (runAxe chỉ chạy theo tag nên bỏ sót chúng), vd `label-content-name-mismatch`
+ * (WCAG 2.5.3: tên truy cập phải chứa chữ nhìn thấy; Lighthouse trên PROD đã bắt luật này). Trả mọi vi phạm bất kể mức độ; gọi sau runAxe vì dùng lại axe đã nạp.
+ */
+export async function runAxeRules(page: Page, ruleIds: readonly string[]): Promise<AxeViolation[]> {
+  axeSource ??= readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+  if (!(await page.evaluate(() => typeof window.axe !== 'undefined'))) await page.addScriptTag({ content: axeSource });
+  return page.evaluate(async (ids) => {
+    const result = await window.axe.run(document, { runOnly: { type: 'rule', values: ids }, resultTypes: ['violations'] });
+    return result.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.map((n) => ({ target: n.target as string[] })) }));
+  }, [...ruleIds]);
+}

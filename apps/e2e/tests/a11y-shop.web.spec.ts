@@ -1,10 +1,11 @@
 import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { test as plain, type APIRequestContext } from '@playwright/test';
+import { test as plain, type APIRequestContext, type Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
-import { blockingViolations, runAxe, staleBaseline } from './support/axe';
+import { blockingViolations, runAxe, runAxeRules, staleBaseline } from './support/axe';
+import { mockBuyer, seedSession } from './support/a11y-buyer';
 import { A11Y_BRAND_SLUG, A11Y_STOREFRONT_SLUG, assertSeededOnCi, firstPublicBrandSlug, seedDatabaseUrl, seedShopScreens } from './support/a11y-db';
 import { mockFlashSlots } from './support/flash-slot-mocks';
 import { mockCollectable } from './support/voucher-mocks';
@@ -72,7 +73,7 @@ const SCREENS: Screen[] = [
   { name: 'Danh mục (danh sách)', path: fixed('/san-pham?all=1'), ready: TILE, setup: (api) => mockDiscovery(api, { tree: true }) },
   // Nút Mua ngay của thanh dưới bị khoá tới khi phiên khôi phục xong rồi mới mở: đợi `h1` thì axe có lúc đo nút đang mờ dần (color-contrast).
   {
-    name: 'Chi tiết sản phẩm', ready: '[aria-label^="Mua ngay"]:enabled', needsServerData: true, setup: (api) => mockDiscovery(api),
+    name: 'Chi tiết sản phẩm', ready: 'button:enabled:visible:has-text("Mua ngay")', needsServerData: true, setup: (api) => mockDiscovery(api),
     path: async (request) => { const slug = await firstProductSlug(request); return slug ? `/san-pham/${slug}` : null; },
   },
   { name: 'Gian hàng CTV', path: fixed(`/s/${A11Y_STOREFRONT_SLUG}`), ready: 'h1', needsServerData: true, setup: (api) => mockDiscovery(api) },
@@ -104,7 +105,96 @@ test.describe('axe smoke web 375px: serious/critical', () => {
       const found = await runAxe(page);
       expect(blockingViolations('web', screen.name, found)).toEqual([]);
       expect(staleBaseline('web', screen.name, found)).toEqual([]);
+      // WCAG 2.5.3: luật experimental nên không nằm trong runAxe; Lighthouse trên PROD đã bắt nút "Mua ngay · giá" ở thanh dính của chi tiết sản phẩm.
+      const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
+      const nodes = mismatch.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
+      // Thẻ sản phẩm, ô thương hiệu, tab giờ vàng và dải điểm ở Tài khoản còn lệch nhãn: thuộc phần việc khác nên chỉ ghi chú, chưa chặn.
+      const own = nodes.filter((t) => t.includes('!py-1') || /Mua ngay|Thêm vào giỏ/.test(t));
+      if (nodes.length > own.length) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.join(' | ').slice(0, 500) });
+      expect(own.map((t) => `${screen.name}: label-content-name-mismatch ${t}`)).toEqual([]);
     });
+  }
+});
+
+/**
+ * Màn khách đã đăng nhập (A11Y-26): Giỏ có hàng, Thanh toán, Đăng nhập, Tài khoản và hai trang con, Đổi rác (tạo yêu cầu), và một trạng thái sheet đang mở,
+ * mỗi màn ở ba khổ 375 / 768 / 1440. Mọi lời gọi /api/** đi qua mock nên không cần DB. Ca đọc `screen.name` + khổ làm khoá baseline: `Giỏ có hàng @768`...
+ */
+const WASTE_ITEM = {
+  id: 'item-carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 10, monthlyCapQty: 20,
+  status: 'ACTIVE', prepInstructions: 'Gấp phẳng, bỏ băng keo', imageUrl: null, gramsPerUnit: null, hazardous: false, sortOrder: 1, monthRemainingQty: 20, dayRemainingQty: 10,
+};
+const mockWaste = (api: MockApi): void => {
+  api.get('/waste/me', () => ({
+    programmeEnabled: true, eligibility: 'OK', blocked: false, shipLockedAt: null, laneFlags: { dropoff: true, mailin: true, pickup: false }, parcelLimits: { maxWeightKg: 10, maxEdgeCm: 60 },
+    balance: { pointsBalance: 120, pointsConvertedBalance: 0, redeemablePoints: 120 }, monthUsage: { capMonthKey: '2026-10', pointsUsed: 0, pointsCap: 200000 }, impactGrams: 0,
+    thresholds: { mailinMinPoints: 15000, pickupMinPoints: 10000, maxOpenRequests: 3 }, items: [WASTE_ITEM], openRequests: [], deskPoints: [],
+  }));
+  api.get('/waste/rules', { text: 'Quy định mẫu' });
+  api.get('/me/loyalty/rewards', { pointsBalance: 120, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 120, giftClaimDays: 60, claimPoint: null, rewards: [] });
+};
+
+interface BuyerScreen {
+  name: string;
+  path: string;
+  ready: string;
+  guest?: boolean;
+  setup?(api: MockApi): void;
+  open?(page: Page): Promise<void>;
+  lines?: number;
+}
+
+const BUYER_SCREENS: BuyerScreen[] = [
+  { name: 'Giỏ có hàng', path: '/gio-hang', ready: '[data-testid="cart-line"]', lines: 6 },
+  { name: 'Thanh toán', path: '/thanh-toan', ready: '[role="radiogroup"]' },
+  { name: 'Đăng nhập', path: '/dang-nhap', ready: 'h1', guest: true },
+  { name: 'Tài khoản', path: '/tai-khoan', ready: 'h1' },
+  { name: 'Tài khoản: hồ sơ', path: '/tai-khoan/ho-so', ready: 'form:not([role="search"])' },
+  { name: 'Tài khoản: sổ địa chỉ', path: '/tai-khoan/dia-chi', ready: 'h1' },
+  { name: 'Đổi rác: tạo yêu cầu', path: '/doi-rac/tao', ready: '[data-item]', setup: mockWaste },
+  {
+    name: 'Thanh toán: sheet mã giảm giá', path: '/thanh-toan', ready: '[role="radiogroup"]',
+    open: async (page) => {
+      await page.getByRole('button', { name: /Chọn mã/ }).first().click();
+      await expect(page.getByText('GIAM10K').first()).toBeVisible();
+    },
+    setup: (api) => api.get('/me/coupons', [{ code: 'GIAM10K', type: 'FIXED', value: 10_000, minOrder: 100_000, maxDiscount: null, endAt: '2027-12-31T05:00:00Z' }]),
+  },
+];
+
+test.describe('axe web: màn khách đã đăng nhập ở 375 / 768 / 1440', () => {
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'tự đặt khổ từng ca, chỉ chạy ở một project');
+  });
+
+  for (const screen of BUYER_SCREENS) {
+    for (const width of [375, 768, 1440]) {
+      const key = `${screen.name} @${width}`;
+      test(key, async ({ page, api }) => {
+        if (!screen.guest) {
+          await seedSession(page);
+          mockBuyer(api, { lines: screen.lines });
+        } else {
+          api.get('/config/public', { freeshipThreshold: 500_000 });
+          api.allowUnmocked('GET /me', 'POST /auth/refresh');
+        }
+        screen.setup?.(api);
+        await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+        const response = await page.goto(screen.path);
+        expect(response?.status(), key).toBe(200);
+        await expect(page.locator(screen.ready).first()).toBeVisible({ timeout: 20_000 });
+        await screen.open?.(page);
+        await expect(page).toHaveTitle(/\S/, { timeout: 20_000 });
+        await page.evaluate(() => document.fonts.ready);
+        const found = await runAxe(page);
+        expect(blockingViolations('web', key, found)).toEqual([]);
+        expect(staleBaseline('web', key, found)).toEqual([]);
+        const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
+        const nodes = mismatch.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
+        if (nodes.length > 0) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.join(' | ').slice(0, 500) });
+        expect(nodes.filter((t) => t.includes('!py-1'))).toEqual([]);
+      });
+    }
   }
 });
 
@@ -242,7 +332,7 @@ test.describe('axe smoke web 375px: giỏ có combo (K5)', () => {
   test('axe serious/critical khi hộp "Bỏ món khỏi combo?" đang mở', async ({ page }) => {
     const screen = 'Giỏ có combo (hộp báo bỏ món)';
     await page.getByRole('button', { name: 'Xoá Món combo 2 khỏi giỏ hàng' }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
     const found = await runAxe(page);
     expect(blockingViolations('web', screen, found)).toEqual([]);
     expect(staleBaseline('web', screen, found)).toEqual([]);
