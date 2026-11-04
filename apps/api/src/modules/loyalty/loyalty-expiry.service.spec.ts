@@ -1467,14 +1467,53 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
       expect(notifFindFirst.mock.calls[0][0].where.sentAt.gte).toEqual(new Date('2026-11-03T17:00:00.000Z'));
     });
 
-    it('lô hết hạn sau cửa sổ không làm tin được gửi', async () => {
+    it('lô hết hạn từ 0h ngày VN thứ 8 trở đi nằm ngoài cửa sổ, không làm tin được gửi', async () => {
       jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
       const { svc, notify } = setup({
         candidates: [{ userId: 'u1' }],
-        userTxns: [tx('a', 40, '2025-11-20', '2026-11-11T01:00:01.000Z')],
+        userTxns: [tx('a', 40, '2025-11-20', '2026-11-11T17:00:00.000Z')],
         recentLog: null,
       });
       await svc.remindExpiringPoints();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('"trong 7 ngày tới" gồm trọn ngày VN thứ 7: lô hết hạn 22h ngày 11/11 được tính khi nhắc 8h ngày 04/11', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const { svc, notify, findMany } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 40, '2025-11-11', '2026-11-11T15:00:00.000Z'), tx('b', 10, '2025-11-11', '2026-11-11T01:30:00.000Z')],
+        recentLog: null,
+      });
+      await svc.remindExpiringPoints();
+      expect(findMany.mock.calls[0][0].where.expiresAt).toEqual({
+        gt: new Date('2026-11-04T01:00:00.000Z'),
+        lte: new Date('2026-11-11T16:59:59.999Z'),
+      });
+      expect(notify.mock.calls[0][2]).toEqual({ points: '50', days: '7', date: '11/11/2026' });
+    });
+
+    it('cron 8h tuần sau chạy trễ tới 10h: lô hết hạn 9h ngày đó đã được tin tuần trước phủ', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const { svc, notify } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 40, '2025-11-11', '2026-11-11T02:00:00.000Z')],
+        recentLog: null,
+      });
+      await svc.remindExpiringPoints();
+      expect(notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('cấu hình 0 ngày = tắt nhắc: không quét, không gửi (kể cả lô hết hạn hôm nay)', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const { svc, notify, findMany } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 40, '2025-11-04', '2026-11-04T10:00:00.000Z')],
+        recentLog: null,
+        reminderDays: 0,
+      });
+      await svc.remindExpiringPoints();
+      expect(findMany).not.toHaveBeenCalled();
       expect(notify).not.toHaveBeenCalled();
     });
   });

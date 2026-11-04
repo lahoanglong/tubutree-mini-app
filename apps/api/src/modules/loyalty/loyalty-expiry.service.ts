@@ -6,7 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatPoints } from '../../common/format-points';
-import { formatVnDate, startOfVnDay, vnDateKey, vnDateParts } from '../../common/vn-time';
+import { endOfVnDay, formatVnDate, startOfVnDay, vnDateKey, vnDateParts } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
   MILESTONE_REVOKE_PREFIX,
@@ -512,9 +512,12 @@ export class LoyaltyExpiryService {
   async remindExpiringPoints(): Promise<void> {
     try {
       const reminderDays = await this.config.get<number>('loyalty.point_expiry_reminder_days', 7);
+      if (!(reminderDays > 0)) return;
       const now = new Date();
-      const windowMs = reminderDays * DAY;
-      const windowEnd = new Date(now.getTime() + windowMs);
+      // "Trong N ngày tới" gồm trọn ngày VN thứ N: lô hết hạn chiều ngày thứ 7 được nhắc từ tuần trước, và cron 8h chạy trễ
+      // vài giờ không để lọt lô hết hạn giữa 8h với giờ chạy thật (tin tuần trước đã phủ tới hết ngày đó).
+      const windowEnd = endOfVnDay(new Date(now.getTime() + reminderDays * DAY));
+      const windowMs = windowEnd.getTime() - now.getTime();
 
       let sent = 0;
       let cursor: string | undefined;
