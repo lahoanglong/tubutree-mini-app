@@ -3,13 +3,15 @@ import { BadRequestException } from '@nestjs/common';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
-import { createOrder, createUser, summarize, warmPool } from './helpers';
+import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
+import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /** C-094: admin ghi nhận "đã xuất hoá đơn VAT" trên Postgres thật (enum nullable + guard atomic + bộ lọc danh sách). */
 describe('AdminService.issueOrderInvoice (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let admin: AdminService;
+  let webhook: { onInvoiceIssued(data: Record<string, unknown>): Promise<void> };
   const notify = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
@@ -29,6 +31,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
       {} as never,
       {} as never,
     );
+    webhook = new PancakeProcessor(prisma, { notify, notifySafe: notify } as never, {} as never, { alert: jest.fn() } as never) as unknown as typeof webhook;
   });
 
   afterAll(async () => {
@@ -53,6 +56,33 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     expect(row.invoiceStatus).toBe('ISSUED');
     expect(row.invoiceUrl).toBe(s.fulfilled[0]!.value.order.invoiceUrl);
     expect(notify.mock.calls.filter((c) => c[1] === 'INVOICE_ISSUED')).toHaveLength(1);
+  });
+
+  it('admin bấm "Đã xuất hoá đơn" cùng lúc với 2 webhook invoice.issued -> khách nhận đúng 1 tin, link là của bên thắng', async () => {
+    for (let round = 0; round < 8; round++) {
+      notify.mockClear();
+      const u = await createUser(prisma, {});
+      const pancakeOrderId = `pk-${randCode()}`;
+      const o = await createOrder(prisma, {
+        userId: u.id, status: 'DELIVERED', invoiceRequest: REQUEST, invoiceStatus: 'REQUESTED', pancakeOrderId,
+        invoiceUrl: 'https://hd.meinvoice.vn/cu',
+      });
+      const [byAdmin, ...byHook] = await Promise.allSettled([
+        admin.issueOrderInvoice('admin1', o.code, { invoiceUrl: 'https://hd.meinvoice.vn/admin' }),
+        webhook.onInvoiceIssued({ id: pancakeOrderId, invoice_url: 'https://hd.meinvoice.vn/pk1' }),
+        webhook.onInvoiceIssued({ id: pancakeOrderId, invoice_url: 'https://hd.meinvoice.vn/pk2' }),
+      ]);
+      const row = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
+      byHook.forEach((r) => expect(r.status).toBe('fulfilled'));
+      expect(row.invoiceStatus).toBe('ISSUED');
+      expect(notify.mock.calls.filter((c) => c[1] === 'INVOICE_ISSUED')).toHaveLength(1);
+      if (byAdmin.status === 'fulfilled') {
+        expect(row.invoiceUrl).toBe('https://hd.meinvoice.vn/admin');
+      } else {
+        expect(byAdmin.reason).toBeInstanceOf(BadRequestException);
+        expect(row.invoiceUrl).toMatch(/^https:\/\/hd\.meinvoice\.vn\/pk[12]$/);
+      }
+    }
   });
 
   it('cột invoiceStatus NULL (dữ liệu cũ) mà có invoiceRequest vẫn xuất được; đơn không có yêu cầu thì bị từ chối', async () => {

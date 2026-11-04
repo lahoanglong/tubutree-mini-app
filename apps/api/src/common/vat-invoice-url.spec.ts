@@ -24,6 +24,16 @@ describe('vatInvoiceHosts', () => {
     ]);
     expect(vatInvoiceUrlError('https://a.meinvoice.vn/x', vatInvoiceHosts('https://a.meinvoice.vn/'))).toBeNull();
   });
+  it('mục env kèm cổng hoặc tài khoản (`user@`) vẫn ra tên miền đúng', () => {
+    expect(vatInvoiceHosts('meinvoice.vn:443, user:pw@b.vn, https://u@c.vn:8443/x, *.d.vn:443, e.vn:')).toEqual([
+      'meinvoice.vn',
+      'b.vn',
+      'c.vn',
+      '*.d.vn',
+      'e.vn',
+    ]);
+    expect(vatInvoiceUrlError('https://abc.d.vn/x', vatInvoiceHosts('*.d.vn:443'))).toBeNull();
+  });
   it('mặc định có kho lưu trữ của hệ thống', () => {
     expect(DEFAULT_VAT_INVOICE_HOSTS).toContain('res.cloudinary.com');
     expect(DEFAULT_VAT_INVOICE_HOSTS).toContain('drive.google.com');

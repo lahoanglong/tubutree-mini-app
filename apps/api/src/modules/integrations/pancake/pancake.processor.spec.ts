@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
 import { OrderReversalService } from '../../orders/order-reversal.service';
@@ -1678,51 +1677,121 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', note: null, pancakeOrderId: 'p1', fulfiller: 'TUBU',
     fulfillerStorefrontId: null, invoiceStatus: 'REQUESTED', invoiceUrl: 'https://cu.meinvoice.vn/x', shippingHistory: [], items: [],
   };
-  function run(invoiceUrl: unknown) {
-    const ctx = setup(order);
+  function run(invoiceUrl: unknown, pancakeAttention: string | null = null) {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const ctx = setup({ ...order, pancakeAttention }, undefined, alerts);
     (ctx.prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
       id: 'e1', status: 'RECEIVED', eventType: 'invoice.issued', rawPayload: { id: 'p1', invoice_url: invoiceUrl },
     });
-    return { ...ctx, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
+    const notify = ctx.notifications.notify as jest.Mock;
+    const adminAlerts = () => notify.mock.calls.filter(([, code]) => code === 'OPS_PANCAKE_ALERT');
+    const customerNotices = () => notify.mock.calls.filter(([, code]) => code === 'INVOICE_ISSUED');
+    const issuedWrites = () => ctx.orderUpdateMany.mock.calls.filter(([a]) => a?.data?.invoiceStatus === 'ISSUED').map(([a]) => a);
+    return { ...ctx, alerts, adminAlerts, customerNotices, issuedWrites, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
   }
 
   it('link https công khai → ghi link mới, ISSUED, báo khách', async () => {
-    const { go, orderUpdate, notifications } = run('https://abc.meinvoice.vn/inv/1');
+    const { go, orderUpdate, issuedWrites, notifications } = run('https://abc.meinvoice.vn/inv/1');
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/1' });
+    expect(issuedWrites()).toEqual([{
+      where: { id: 'o1', OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      data: { invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/1' },
+    }]);
+    expect(orderUpdate).not.toHaveBeenCalled();
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' });
   });
 
   it.each([
     'https://127.0.0.1/x', 'https://192.168.1.5/inv', 'https://localhost/x', 'http://evil.vn/x', 'https://u:p@evil.vn/x',
     'https://hoadon-tubu.evil.com/x.pdf', 'https://8.8.8.8/x', 'https://[::127.0.0.1]/x',
-  ])('link bị loại %s → giữ link cũ, vẫn ISSUED và báo khách', async (bad) => {
-    const { go, orderUpdate, notifications } = run(bad);
+  ])('link bị loại %s → giữ link cũ, vẫn ISSUED và báo khách; ADMIN + CSKH được báo in-app', async (bad) => {
+    const { go, prisma, issuedWrites, customerNotices, adminAlerts } = run(bad);
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
-    expect(notifications.notify).toHaveBeenCalledTimes(1);
+    expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED' }]);
+    expect(customerNotices()).toEqual([['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }]]);
+    const alerts = adminAlerts();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.slice(0, 2)).toEqual(['admin1', 'OPS_PANCAKE_ALERT']);
+    expect(alerts[0]![2]).toEqual({
+      order_code: 'TUBU1',
+      message: expect.stringMatching(/^Link hoá đơn VAT từ Pancake bị bỏ, đơn chưa có link hoá đơn cho khách\. .+ Gửi hoá đơn cho khách qua chat CSKH\.$/),
+    });
+    expect((prisma.user.findMany as jest.Mock).mock.calls[0]![0].where).toMatchObject({
+      OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }],
+    });
   });
 
-  it('link ngoài danh sách: log nêu tên miền để quản trị viên thêm vào ALLOWED_VAT_INVOICE_HOSTS', async () => {
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    try {
-      const { go } = run('https://hoadon.nha-cung-cap-moi.vn/x.pdf');
+  it('không đụng ô "Cần xử lý Pancake": việc khác đang chờ trên đơn giữ nguyên, việc hoá đơn không bị luồng khác xoá mất', async () => {
+    const { go, orderUpdateMany } = run('https://hoadon-tubu.evil.com/x.pdf', 'Khách chuyển thiếu: Pancake ghi nhận 100.000 ₫/200.000 ₫');
+    await go();
+    expect(orderUpdateMany.mock.calls.filter(([a]) => a?.data && 'pancakeAttention' in a.data)).toEqual([]);
+  });
+
+  it('báo admin lỗi → vẫn ISSUED và báo khách (báo admin là best-effort)', async () => {
+    const { go, prisma, issuedWrites, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
+    (prisma.user.findMany as jest.Mock).mockRejectedValueOnce(new Error('db hiccup'));
+    await go();
+    expect(issuedWrites()).toHaveLength(1);
+    expect(customerNotices()).toHaveLength(1);
+  });
+
+  it('link ngoài danh sách: lời báo nêu tên miền và ALLOWED_VAT_INVOICE_HOSTS, không lộ đường dẫn của link', async () => {
+    const { go, adminAlerts } = run('https://hoadon.nha-cung-cap-moi.vn/tra-cuu?token=bi-mat');
+    await go();
+    const message = (adminAlerts()[0]![2] as { message: string }).message;
+    expect(message).toMatch(/hoadon\.nha-cung-cap-moi\.vn.*ALLOWED_VAT_INVOICE_HOSTS/);
+    expect(message).not.toContain('bi-mat');
+  });
+
+  it('ghi ISSUED lỗi → chưa báo admin, chưa báo khách; lần thử lại của webhook báo đúng một lần', async () => {
+    const { go, orderUpdateMany, issuedWrites, notifications, adminAlerts, customerNotices } = run('https://hoadon-tubu.evil.com/x.pdf');
+    orderUpdateMany.mockRejectedValueOnce(new Error('db down'));
+    await expect(go()).rejects.toThrow('db down');
+    expect(notifications.notify).not.toHaveBeenCalled();
+    await go();
+    expect(issuedWrites()).toHaveLength(2);
+    expect(adminAlerts()).toHaveLength(1);
+    expect(customerNotices()).toHaveLength(1);
+  });
+
+  it('tin cho khách lỗi sau khi đã báo admin → admin đã có việc (lần thử lại dừng ở guard ISSUED)', async () => {
+    const { go, notifications, adminAlerts } = run('https://hoadon-tubu.evil.com/x.pdf');
+    (notifications.notify as jest.Mock).mockImplementation(async (_u: string, code: string) => {
+      if (code === 'INVOICE_ISSUED') throw new Error('zns down');
+    });
+    await go().catch(() => undefined);
+    expect(adminAlerts()).toHaveLength(1);
+  });
+
+  it.each(['https://abc.meinvoice.vn/inv/9', 'https://hoadon-tubu.evil.com/x.pdf'])(
+    'đơn vừa được lật ISSUED ở nơi khác (admin bấm "Đã xuất hoá đơn", hoặc invoice.issued khác chạy cùng lúc), link %s → không báo trùng',
+    async (url) => {
+      const { go, orderUpdateMany, issuedWrites, notifications } = run(url);
+      orderUpdateMany.mockResolvedValue({ count: 0 });
       await go();
-      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TUBU1.*hoadon\.nha-cung-cap-moi\.vn.*ALLOWED_VAT_INVOICE_HOSTS/));
-    } finally {
-      warn.mockRestore();
+      expect(issuedWrites()).toHaveLength(1);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    },
+  );
+
+  it('link hợp lệ hoặc không có link → không báo admin', async () => {
+    for (const url of ['https://abc.meinvoice.vn/inv/1', undefined]) {
+      const { go, adminAlerts, alerts } = run(url);
+      await go();
+      expect(adminAlerts()).toEqual([]);
+      expect(alerts.alert).not.toHaveBeenCalled();
     }
   });
 
   it('link có khoảng trắng hai đầu → ghi bản đã cắt khoảng trắng', async () => {
-    const { go, orderUpdate } = run('  https://abc.meinvoice.vn/inv/2 ');
+    const { go, issuedWrites } = run('  https://abc.meinvoice.vn/inv/2 ');
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/2' });
+    expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/2' }]);
   });
 
-  it('không có invoice_url → giữ link cũ, vẫn ISSUED', async () => {
-    const { go, orderUpdate } = run(undefined);
+  it('không có invoice_url → giữ link cũ (không ghi invoiceUrl), vẫn ISSUED', async () => {
+    const { go, issuedWrites } = run(undefined);
     await go();
-    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
+    expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED' }]);
   });
 });
