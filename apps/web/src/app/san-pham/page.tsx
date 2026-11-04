@@ -133,7 +133,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
     : null;
   const crumbs = breadcrumbOf(params, state.brands, brands, categories);
   return (
-    <main className={`${PAGE_WIDE} py-6 max-md:pb-0 max-md:pt-0 md:py-8`}>
+    <main className={`${PAGE_WIDE} md:py-8`}>
       <BrowseView initial={initial} bestSellers={bestSellers} brands={brands} categories={categories} />
       {crumbs && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd(crumbs)) }} />}
     </main>
