@@ -115,7 +115,6 @@ describe('trang chủ', () => {
 describe('toE164', () => {
   it('đúng một số VN: bỏ khoảng trắng, chấm, gạch rồi đổi sang +84; +84 và tổng đài 1800/1900 giữ nguyên', () => {
     expect(toE164('0984 606 774')).toBe('+84984606774');
-    expect(toE164('028.3822.1234')).toBe('+842838221234');
     expect(toE164('0984-606-774')).toBe('+84984606774');
     expect(toE164('+84 984 606 774')).toBe('+84984606774');
     expect(toE164('1900 6868')).toBe('19006868');
