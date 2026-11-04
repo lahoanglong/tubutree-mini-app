@@ -265,11 +265,11 @@ describe('Hàng chờ duyệt sản phẩm đối tác — controller (L3-02)', 
     const q = plainToInstance(PendingMerchantProductsQuery, raw);
     return { q, errors: await validate(q) };
   };
-  it('mặc định 20 dòng, tối đa 50; 51 và 100 bị từ chối', async () => {
+  it('mặc định 20 dòng; limit lớn (web cũ gửi 100) vẫn hợp lệ, trần 50 do service kẹp', async () => {
     expect((await check({})).q).toMatchObject({ page: 1, limit: 20 });
     expect((await check({ limit: '50' })).errors).toHaveLength(0);
-    expect((await check({ limit: '51' })).errors).toHaveLength(1);
-    expect((await check({ limit: '100' })).errors).toHaveLength(1);
+    expect((await check({ limit: '51' })).errors).toHaveLength(0);
+    expect((await check({ limit: '100' })).errors).toHaveLength(0);
     expect((await check({ limit: '0' })).errors).toHaveLength(1);
   });
 

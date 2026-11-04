@@ -422,10 +422,13 @@ export class ListReviewsQuery extends PaginationQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
 }
 
-/** Hàng chờ duyệt mang nội dung đầy đủ của từng sản phẩm: trần 50 dòng/trang (mặc định 20), nhẹ hơn trần chung 100. */
+/**
+ * Hàng chờ duyệt mang nội dung đầy đủ của từng sản phẩm: service kẹp 50 dòng/trang (mặc định 20), nhẹ hơn trần chung 100.
+ * DTO không chặn `limit` lớn vì web bản cũ vẫn gửi 100 trong lúc deploy; trả 400 sẽ làm hỏng màn duyệt.
+ */
 export class PendingMerchantProductsQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) page = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 20;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) limit = 20;
 }
 
 export class ListLinkedMerchantProductsQuery extends PaginationQuery {

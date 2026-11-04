@@ -2064,7 +2064,8 @@ export class AdminService {
    * Hàng chờ duyệt: sản phẩm mới/bị sửa khi chưa bán, và sản phẩm ĐANG BÁN có bản sửa nội dung chờ duyệt (R3-MERCHANT-4).
    * Dòng có bản sửa mang nội dung MỚI ở các trường thường (cái admin sẽ duyệt) và nội dung đang bán ở `live` để đối chiếu.
    */
-  async listPendingMerchantProducts(page: number, limit: number) {
+  async listPendingMerchantProducts(page: number, requestedLimit: number) {
+    const limit = Math.min(requestedLimit, 50);
     const where = PENDING_MERCHANT_PRODUCT_WHERE;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({

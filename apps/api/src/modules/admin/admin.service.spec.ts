@@ -1818,6 +1818,13 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     return { prisma, findMany, queryRaw, variationFindMany, variationFindUnique, storefrontFindMany, storefrontFindUnique, queries };
   }
 
+  it('limit=100 (web cũ) bị kẹp còn 50 dòng, meta phản ánh trần thật', async () => {
+    const { prisma, findMany } = pendingPrisma([{ id: 'p1', name: 'A', approvalStatus: 'PENDING_REVIEW', editDraft: null }]);
+    const res = await mkAdmin(prisma).listPendingMerchantProducts(2, 100);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 50, take: 50 }));
+    expect(JSON.stringify(res)).toContain('"limit":50');
+  });
+
   it('listPendingMerchantProducts lấy sản phẩm chờ duyệt và sản phẩm đang bán có bản sửa chờ duyệt, có phân trang thật', async () => {
     const { prisma, findMany } = pendingPrisma([{ id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW', editDraft: null }]);
     const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
