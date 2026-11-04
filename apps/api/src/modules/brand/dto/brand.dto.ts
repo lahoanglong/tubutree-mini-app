@@ -7,7 +7,7 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 const IMAGE_MAX = 1_500_000;
 
 // Câu chuyện nhãn là đoạn văn dài; id là cuid/uuid nên 64 ký tự là dư.
-const STORY_MAX = 5000;
+const STORY_MAX = 20000;
 const ID_MAX = 64;
 
 // Cột threshold là BigInt nhưng API trao đổi bằng number JSON: trần 1 nghìn tỷ vừa rộng hơn mọi

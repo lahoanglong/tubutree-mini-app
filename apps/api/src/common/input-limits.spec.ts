@@ -74,9 +74,9 @@ describe('Brand DTO: chữ thương hiệu có trần độ dài', () => {
     ['CreateBrandDto', CreateBrandDto, { name: 'Tubu' }],
     ['UpdateBrandDto', UpdateBrandDto, {}],
     ['UpdateOwnedBrandDto', UpdateOwnedBrandDto, {}],
-  ] as const)('%s.story: 5000 ký tự qua, 5001 bị chặn', async (_n, cls, base) => {
-    expect(await errorsFor(cls as new () => object, { ...base, story: 'x'.repeat(5000) })).toEqual([]);
-    expect(await errorsFor(cls as new () => object, { ...base, story: 'x'.repeat(5001) })).toContain('story.maxLength');
+  ] as const)('%s.story: 20000 ký tự qua, 20001 bị chặn', async (_n, cls, base) => {
+    expect(await errorsFor(cls as new () => object, { ...base, story: 'x'.repeat(20000) })).toEqual([]);
+    expect(await errorsFor(cls as new () => object, { ...base, story: 'x'.repeat(20001) })).toContain('story.maxLength');
   });
   it('ownerUserId, brandId và productIds có trần 64 ký tự', async () => {
     expect(await errorsFor(UpdateBrandDto, { ownerUserId: 'x'.repeat(64) })).toEqual([]);
