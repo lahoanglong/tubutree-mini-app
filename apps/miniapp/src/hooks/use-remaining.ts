@@ -33,9 +33,15 @@ export function useRemaining(target: Date | string | null | undefined): Remainin
     return { text: formatRemaining(ms), expired: ms <= 0 };
   };
   const [state, setState] = useState(compute);
+  // Giữ nguyên object cũ khi chữ và cờ không đổi: nhịp 15 giây phần lớn không đổi chữ, không đáng một lần vẽ lại.
+  const refresh = () =>
+    setState((prev) => {
+      const next = compute();
+      return prev.text === next.text && prev.expired === next.expired ? prev : next;
+    });
   useEffect(() => {
-    setState(compute());
-    const id = setInterval(() => setState(compute()), TICK_MS);
+    refresh();
+    const id = setInterval(refresh, TICK_MS);
     return () => clearInterval(id);
   }, [key]); // `key` là dạng so sánh được của `target` (Date mới mỗi lần render không làm chạy lại)
   return state;
