@@ -1445,8 +1445,10 @@ export class AffiliateService {
     const approved = await this.prisma.commission.aggregate({
       where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null, order: { status: 'DELIVERED' } },
       _sum: { amount: true },
+      _count: { _all: true },
     });
     const available = approved._sum.amount ?? 0;
+    const availableCount = approved._count._all;
     if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để chuyển vào Ví.');
     if (amount > available) throw new BadRequestException('Số dư hoa hồng khả dụng không đủ.');
     // Bug đã sửa: trước đây 'amount' chỉ được VALIDATE (amount > available → throw ở trên) nhưng
@@ -1489,8 +1491,10 @@ export class AffiliateService {
         await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
         await this.assertNotRevoked(tx, userId);
         const total = rows.reduce((s, c) => s + c.amount, 0);
-        // Đơn đổi trạng thái giữa lúc tính `available` và lúc khoá: không rút một phần, bảo người dùng thử lại với số mới.
-        if (total !== available) throw new ConflictException('Số hoa hồng khả dụng vừa thay đổi, bạn tải lại rồi thử lại nhé.');
+        // Đơn bị trả/huỷ (hoặc hoa hồng đổi trạng thái) giữa lúc tính `available` và lúc khoá làm tập dòng khác đi: không rút một phần,
+        // bảo người dùng thử lại. So SỐ DÒNG chứ không so tổng tiền: trả một phần chỉ cắt `amount` của dòng, và đường đó đã được thiết
+        // kế để lần rút này đọc số đã cắt sau khi khoá (xem chú thích khoá dòng ở trên).
+        if (rows.length !== availableCount) throw new ConflictException('Số hoa hồng khả dụng vừa thay đổi, bạn tải lại rồi thử lại nhé.');
         // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);

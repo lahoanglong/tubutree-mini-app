@@ -44,8 +44,6 @@ describe('Rút hoa hồng bỏ qua đơn đã RETURNED (real Postgres)', () => {
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
     config = moduleRef.get(SystemConfigService);
-    await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
-    await setConfig(prisma, 'affiliate.pit_withhold_threshold', 50_000_000);
     await setConfig(prisma, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, true);
     (config as unknown as { cache: Map<string, unknown> }).cache.clear();
   });
