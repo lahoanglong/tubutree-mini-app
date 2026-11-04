@@ -664,13 +664,12 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     expect(row.mergedIntoId).toBe(t.id);
   });
 
-  it('(9b) R2-Z: gộp xong, client gửi lại ensurePhone bằng token khách cũ với đúng Zalo của T → token của T; Zalo khác → từ chối', async () => {
+  it('(9b) R2-Z: gộp xong, client gửi lại ensurePhone bằng token khách cũ (JwtStrategy đã chặn token đó) → từ chối dù Zalo là của T hay khác', async () => {
     const g = await guestUser();
     const t = await zaloUser();
     await merge(g.id, t);
     zaloIdForNextCall = t.zaloId!;
-    const res = await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access');
-    expect(res.user.id).toBe(t.id);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
     zaloIdForNextCall = `zalo_other_${randCode(8)}`;
     await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
   });
@@ -770,7 +769,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).userId).toBe(t.id);
   }, 30_000);
 
-  it('(X4) refresh token cũ của khách đã gộp không đổi ra phiên mới; ensurePhone bằng access token khách vẫn nhận token của T', async () => {
+  it('(X4) refresh token cũ của khách đã gộp không đổi ra phiên mới; ensurePhone bằng dòng khách đã gộp bị từ chối (khách đăng nhập lại)', async () => {
     const t = await zaloUser();
     const login = await auth.loginAsGuest(`dev_${randCode(10)}`);
     const g = login.user;
@@ -779,7 +778,7 @@ describe('Khách là người mời: gộp mang theo danh tính giới thiệu (
     await expect(auth.refresh(login.refreshToken!)).rejects.toBeInstanceOf(UnauthorizedException);
     await expect(auth.refresh(rotated.refreshToken!)).rejects.toBeInstanceOf(UnauthorizedException);
     zaloIdForNextCall = t.zaloId!;
-    expect((await auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).user.id).toBe(t.id);
+    await expect(auth.ensurePhoneForCurrentUser(g.id, 'code', 'access')).rejects.toBeInstanceOf(ConflictException);
   });
 
   async function anonymize(userId: string) {
