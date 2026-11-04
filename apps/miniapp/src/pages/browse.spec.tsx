@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), fetchCatalog: vi.fn(), fetchBrands: vi.fn(), fetchCategories: vi.fn(), suggestProducts: vi.fn(), coreGet: vi.fn(),
+  navigate: vi.fn(), fetchCatalog: vi.fn(), fetchBrands: vi.fn(), fetchCategories: vi.fn(), suggestProducts: vi.fn(), coreGet: vi.fn(), fetchProducts: vi.fn(),
   routerNavigate: undefined as undefined | ((to: string) => void),
   trackFilterApplied: vi.fn(), trackSearchPerformed: vi.fn(), trackSearchResultClicked: vi.fn(),
   auth: { status: 'idle', user: null } as { status: string; user: null | { id: string; phone?: string | null; zaloId?: string | null } },
@@ -16,6 +16,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useNavigate: () => mocks.navigate,
 }));
 vi.mock('../services/shop-api', () => ({
+  fetchProducts: mocks.fetchProducts,
   fetchCatalog: mocks.fetchCatalog, fetchBrands: mocks.fetchBrands, fetchCategories: mocks.fetchCategories,
   suggestProducts: mocks.suggestProducts, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn(),
   fetchProductsBySlugs: vi.fn().mockResolvedValue([{ id: 'id-old-1', slug: 'old-1', brand: 'Tubu', name: 'Sản phẩm xem trước', thumbnail: null, basePrice: 45000, salePrice: null, isFeatured: false, inStock: true }]),
@@ -111,6 +112,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     mocks.fetchCategories.mockResolvedValue([]);
     mocks.suggestProducts.mockResolvedValue([]);
     mocks.coreGet.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
     // `useNavigate` của zmp-ui bị thay bằng vi.fn(): chuyển các lượt mở Danh mục vào router thật để thấy URL đổi.
     mocks.navigate.mockImplementation((to: unknown) => {
       if (typeof to === 'string' && to.startsWith('/browse')) mocks.routerNavigate?.(to);
@@ -169,10 +171,10 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     });
 
     it('kệ Bán chạy nhất lấy sort=best_seller_30d, không đi qua fetchCatalog', async () => {
-      mocks.coreGet.mockResolvedValue({ data: Array.from({ length: 10 }, (_, i) => card(`b${i}`, `Bán chạy ${i}`)), meta: { page: 1, limit: 10, total: 10 } });
+      mocks.fetchProducts.mockResolvedValue({ data: Array.from({ length: 10 }, (_, i) => card(`b${i}`, `Bán chạy ${i}`)), meta: { page: 1, limit: 10, total: 10 } });
       renderAt('/browse');
       expect(await screen.findByRole('region', { name: 'Bán chạy nhất' })).toBeInTheDocument();
-      expect(mocks.coreGet).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 10 } });
+      expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 24, sort: 'best_seller_30d' });
       expect(mocks.fetchCatalog).not.toHaveBeenCalled();
     });
 

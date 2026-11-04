@@ -35,6 +35,7 @@ import { useSuggest } from '../hooks/use-suggest';
 import { vi } from '../i18n/vi';
 import { clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from '../utils/recent-searches';
 import { uniqueById } from '../utils/unique-by-id';
+import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
   CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, MAX_QUERY_LENGTH, PAGE_LIMIT, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseHub, isBrowseRoot,
@@ -253,7 +254,7 @@ export default function BrowsePage() {
       <PullToRefresh
         onRefresh={() =>
           Promise.all([
-            hub ? queryClient.invalidateQueries({ queryKey: ['products', 'best-sellers'] }) : products.refetch(),
+            hub ? queryClient.invalidateQueries({ queryKey: homeBestSellerQuery.queryKey }) : products.refetch(),
             brands.refetch(),
           ])
         }

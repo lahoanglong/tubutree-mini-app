@@ -3067,7 +3067,7 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
       </div>
       <div className="mt-2">
         <Field label="Câu chuyện thương hiệu">
-          <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} className={INPUT_CLASS} />
+          <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} maxLength={20000} className={INPUT_CLASS} />
         </Field>
       </div>
 

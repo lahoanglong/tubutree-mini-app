@@ -30,6 +30,7 @@ import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { safeEvidenceImage } from '@/components/admin/evidence-images';
 import { errText, PeriodNav, useNotice } from './staff-shell';
 
 const STATUS_LABEL: Record<PayrollStatus, string> = {
@@ -113,6 +114,7 @@ export function PayrollHub() {
   });
 
   const m = payQ.data?.month;
+  const proof = m?.proofImageUrl ? safeEvidenceImage(m.proofImageUrl) : null;
 
   return (
     <div className="flex flex-col gap-3 pb-6">
@@ -145,11 +147,11 @@ export function PayrollHub() {
               <div className="mt-2">
                 <Badge tone="neutral">{STATUS_LABEL[m.status]}</Badge>
               </div>
-              {m.status === 'PAID' && m.proofImageUrl && (
+              {m.status === 'PAID' && proof && (
                 <div className="mt-3">
                   <div className="mb-1 text-xs">Ảnh xác nhận đã chuyển:</div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.proofImageUrl} alt="Xác nhận chuyển khoản" className="max-w-full rounded-control" />
+                  <img src={proof.src} alt="Xác nhận chuyển khoản" className="max-w-full rounded-control" />
                 </div>
               )}
             </section>

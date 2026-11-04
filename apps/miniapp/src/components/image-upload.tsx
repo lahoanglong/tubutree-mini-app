@@ -103,7 +103,7 @@ const UPLOAD_KEEP_BYTES = 500 * 1024;
  * Bản gửi lên Cloudinary. Chỉ JPEG lớn mới nén: PNG/WebP/GIF giữ nguyên (nền trong suốt, QR, logo), và mọi lỗi giải mã
  * (HEIC, ảnh quá lớn, không có canvas) cũng gửi nguyên file để Cloudinary tự xử lý thay vì báo lỗi cho khách.
  */
-async function prepareForCloudinary(file: File): Promise<Blob> {
+export async function prepareForCloudinary(file: File): Promise<Blob> {
   if (file.type !== 'image/jpeg') return file;
   try {
     const { img } = await decodeImage(file);
