@@ -682,7 +682,10 @@ function StaffSection() {
 
       <BottomSheet
         open={sheetOpen && !confirmAdmin}
-        onClose={() => setSheetOpen(false)}
+        onClose={() => {
+          setSheetOpen(false);
+          setGrantReason('');
+        }}
         title="Thêm nhân sự theo SĐT"
         footer={
           <Button fullWidth loading={grantM.isPending} disabled={!PHONE_RE.test(phone.trim()) || !reasonOk(grantReason)} onPress={submitGrant}>

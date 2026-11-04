@@ -397,6 +397,16 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu quyền (sẽ áp khi họ mở app).', type: 'success' }));
     });
 
+    it('đóng sheet Thêm mà chưa lưu thì lý do không kéo sang lần mở sau', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Lý do của người trước' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+      await waitFor(() => expect(screen.queryByText('Thêm nhân sự theo SĐT')).not.toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
+      expect(await screen.findByLabelText('Lý do')).toHaveValue('');
+    });
+
     it('cấp QUẢN TRỊ phải xác nhận thêm bằng tấm xác nhận; Huỷ thì không gọi API và giữ SĐT đã gõ, đồng ý thì gửi vai trò ADMIN', async () => {
       const confirm = confirmSpy();
       renderPage();
