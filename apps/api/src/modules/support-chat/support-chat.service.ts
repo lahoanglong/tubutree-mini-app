@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
+import { isRealUser } from '../../common/real-user';
 import { startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isWithinHours } from './chat-hours';
 import { issueConversationCode } from './conversation-code';
@@ -28,6 +29,7 @@ const SLOW_AFTER_MS = 10 * 60_000;
 const CODE_ATTEMPTS = 8;
 
 export const CHAT_DISABLED_MESSAGE = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
+export const CHAT_LOGIN_REQUIRED_MESSAGE = 'Đăng nhập Zalo để chat với Tubu Tree nhé.';
 export const CHAT_BLOCKED_MESSAGE = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 
 type MessageRow = Pick<SupportMessage, 'id' | 'sender' | 'body' | 'imageUrl' | 'context' | 'clientMsgId' | 'createdAt'>;
@@ -60,7 +62,16 @@ export class SupportChatService {
     @InjectQueue(QUEUE_SUPPORT_CHAT_FORWARD) private readonly forwardQueue: Queue,
   ) {}
 
+  /** Khách vãng lai (guest_<deviceId>) tạo vô hạn tài khoản bằng deviceId mới, nên không được mở hội thoại hay gửi tin: làm cạn trần tin của cầu nối. */
+  private async assertRealUser(userId: string): Promise<void> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(u)) {
+      throw new ForbiddenException({ statusCode: 403, error: 'Forbidden', code: 'CHAT_LOGIN_REQUIRED', message: CHAT_LOGIN_REQUIRED_MESSAGE });
+    }
+  }
+
   async getThread(userId: string): Promise<SupportChatThreadDTO> {
+    await this.assertRealUser(userId);
     const conv = await this.getOrCreate(userId);
     const [rows, enabled, slow] = await Promise.all([
       this.prisma.supportMessage.findMany({
@@ -83,6 +94,7 @@ export class SupportChatService {
   }
 
   async page(userId: string, q: { after?: string; before?: string }): Promise<SupportChatPageDTO> {
+    await this.assertRealUser(userId);
     const conv = await this.getOrCreate(userId);
     const forward = !!q.after;
     const cursorId = q.after || q.before;
@@ -113,6 +125,7 @@ export class SupportChatService {
   }
 
   async send(userId: string, input: SupportChatSendInput, source: 'MINIAPP' | 'WEB'): Promise<SupportChatMessageDTO> {
+    await this.assertRealUser(userId);
     const conv = await this.getOrCreate(userId);
     // Thử lại tin đã lưu phải trả tin cũ dù khách vừa bị chặn hay chat vừa tắt, kẻo khách thấy tin đã lưu là lỗi.
     const existing = await this.findByClientMsgId(conv.id, input.clientMsgId);
