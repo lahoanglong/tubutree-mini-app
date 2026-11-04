@@ -17,6 +17,7 @@ export const REQUIRED_MIGRATIONS = [
   '20261015150000_r8_multi_reviews_unique_per_order',
 ] as const;
 const ORDERS_LOCK_MIGRATION = REQUIRED_MIGRATIONS[0];
+const MULTI_REVIEWS_MIGRATION = REQUIRED_MIGRATIONS[2];
 
 /**
  * Migration mà image cũ vẫn chạy đúng trên schema sau khi áp: quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ
@@ -213,7 +214,16 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
     const scopeTitle = 'Phạm vi migration sẽ áp';
     out.push(
       extra.length === 0
-        ? pass(G_DB, 'db.pending_scope', scopeTitle, `chỉ các migration của đợt (${pending.length}): quay lại bằng image cũ (runbook 7.2) hợp lệ`)
+        ? pass(
+            G_DB,
+            'db.pending_scope',
+            scopeTitle,
+            `chỉ các migration của đợt (${pending.length}): quay lại bằng image cũ (runbook 7.2) hợp lệ${heavy.length > 0 ? `; nặng: ${listNames(heavy, HEAVY_MIGRATIONS.length)}` : ''}; ${
+              pending.includes(MULTI_REVIEWS_MIGRATION)
+                ? 'r8 còn chờ: 7.2 đếm đánh giá trùng và dựng lại chỉ mục đánh giá cũ'
+                : 'r8 đã áp từ trước: 7.2 bỏ qua bước đếm đánh giá trùng và chỉ mục đánh giá cũ'
+            }`,
+          )
         : warn(
             G_DB,
             'db.pending_scope',

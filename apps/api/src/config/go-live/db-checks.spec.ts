@@ -146,6 +146,28 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain(`(${required.length + extraSmall.length})`);
     });
 
+    it('nhánh PASS cũng nêu migration nặng chờ áp (130100, 130200, 130300 không được biến mất khỏi kết quả)', () => {
+      const phase2 = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => m.startsWith('20261105'));
+      const r = byId(run(behind(1_000, phase2), 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('; nặng:');
+      for (const n of ['20261105130100_hd1_users_guest_partial_idx', '20261105130200_hd1_notification_inapp_indexes', '20261105130300_hd1_points_history_index']) {
+        expect(r.detail).toContain(n);
+      }
+    });
+
+    it('nhánh PASS nói rõ bước đếm đánh giá trùng và chỉ mục cũ chỉ áp khi r8 còn chờ', () => {
+      const R8 = '20261015150000_r8_multi_reviews_unique_per_order';
+      const without = byId(run(dbWith({ expectedMigrations: ['20261105140000_payouts_status_index', ...GOOD_DB.expectedMigrations], orderCount: 1_000 }), 'pre-deploy'), 'db.pending_scope');
+      expect(without.status).toBe('PASS');
+      expect(without.detail).toContain('r8 đã áp');
+      expect(without.detail).toContain('bỏ qua');
+      const withR8 = byId(run(dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => m !== R8), orderCount: 1_000 }), 'pre-deploy'), 'db.pending_scope');
+      expect(withR8.status).toBe('PASS');
+      expect(withR8.detail).toContain('r8 còn chờ');
+      expect(withR8.detail).toContain('đánh giá trùng');
+    });
+
     it('bảy migration chỉ thêm chỉ mục của đợt hardening 05/11 nằm trong danh sách tương thích image', () => {
       const phase2 = [
         '20261105130000_hd1_coupon_milestone_period_idx',
