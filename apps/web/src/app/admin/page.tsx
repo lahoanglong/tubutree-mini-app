@@ -155,12 +155,13 @@ import {
 import { reportSectionsFor } from '@/components/admin/report-sections';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
-import { useOpsInbox } from '@/components/admin/use-ops-inbox';
+import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbox-filter-seeds';
+import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
 import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { vnLocalToIso, isoToVnLocal } from '@/lib/admin-campaign-form';
 import { FLASH_SALE_PAGE_SIZE, filterFlashSales, flashSaleState, type FlashSaleFilter, type FlashSaleState } from '@/lib/admin-flash-sale';
 import type { WasteSeed } from '@/components/admin/waste-tab';
-import { type ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
+import type { ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
@@ -477,12 +478,6 @@ export default function AdminPage() {
     queryFn: getOpsAccess,
     enabled: status === 'authenticated' && role === 'STAFF',
   });
-  // Nơi duy nhất giữ nhịp một phút cho hộp việc; thẻ Hôm nay, huy hiệu menu và số trên chip chỉ đọc chung khoá này.
-  useOpsInbox({
-    enabled: status === 'authenticated' && (role === 'ADMIN' || (role === 'STAFF' && !!accessQ.data && staffTabs(accessQ.data.staffPermissions ?? []).has('inbox'))),
-    poll: true,
-  });
-
   useEffect(() => {
     const u = readUrlState();
     if (u.tab) setTabState(u.tab);
@@ -515,6 +510,9 @@ export default function AdminPage() {
     setExternalSeed(null);
     setDeletionSeed(0);
     setReportsSeed(0);
+    // Tab Chi trả / Yêu cầu thưởng tải lười: đổi sang mục khác trước khi chúng nạp xong thì bộ lọc đã gieo không được kẹt tới lần mở sau.
+    if (t !== 'payouts') seedPayoutFilter(null);
+    if (t !== 'dealerClaims') seedDealerClaimFilter(null);
     setTabState(t);
     writeUrlState(t, t === 'orders' ? ordersRecycling : '', t === 'orders' ? ordersPancake : '');
   };
@@ -695,6 +693,8 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-3 sm:py-6">
+      {/* Nơi duy nhất giữ nhịp một phút cho hộp việc; các nơi khác chỉ đọc chung khoá. */}
+      <OpsInboxPoller enabled={allowed.has('inbox')} />
       <div className={`${isAdmin ? 'hidden sm:flex' : 'flex'} items-center justify-between gap-2`}>
         <h1 className="hidden min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:block sm:text-xl">Quản trị Tubu Tree</h1>
         {/* Điện thoại: bỏ tiêu đề; quản trị viên vào màn thu ngân từ mục "Tích điểm tại quầy" trong menu, nhân viên quầy giữ nút này. */}
@@ -2259,9 +2259,6 @@ function ReturnsTab({
 
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
 
-// Khoá/mở khoá chỉ đổi trạng thái người dùng: làm mới mọi trang danh sách và hồ sơ đang mở, không phải mọi khoá admin.
-const USER_STATE_INVALIDATE = { adminInvalidate: ['admin-users', 'admin-user-detail'] } as const;
-
 function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?: boolean; onOpenOrder?: (code: string) => void; onOpenUserOrders?: (userId: string, label: string) => void }) {
   // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
   // người dùng (limit mặc định của BE) thì phần còn lại vĩnh viễn không xem/không cấp quyền
@@ -2293,7 +2290,6 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const onError = (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) });
   const block = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
-    meta: USER_STATE_INVALIDATE,
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã khoá ${v.label}. Mọi phiên đăng nhập của người này đã bị thu hồi.` });
     },
@@ -2301,7 +2297,6 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   });
   const unblock = useMutation({
     mutationFn: ({ id }: { id: string; label: string }) => unblockUser(id),
-    meta: USER_STATE_INVALIDATE,
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
     },

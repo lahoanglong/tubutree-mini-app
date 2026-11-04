@@ -61,8 +61,9 @@ const isAdminKey = (query: { queryKey: readonly unknown[] }) => typeof query.que
  * không có hàng đợi nào chạy lại về sau. Query: khoá admin có staleTime riêng (defaultStaleTime), khoá khác giữ mặc định.
  */
 export function createQueryClient(): QueryClient {
-  // Mutation nào xong (thành công hay lỗi) cũng làm cũ mọi khoá admin: nhiều mutation chỉ làm mới khoá của mình, mà màn khác
-  // (Người dùng, hộp việc, số trên chip...) đọc cùng dữ liệu. staleTime 30 giây chỉ để đổi tab không gọi lại mạng.
+  // Mutation nào xong (thành công hay lỗi) cũng làm cũ khoá admin: mặc định là mọi khoá admin-* (nhiều mutation chỉ làm mới khoá của
+  // mình, mà màn khác đọc cùng dữ liệu); `meta.adminInvalidate` thu hẹp còn các khoá được khai, `meta.skipAdminInvalidate` bỏ hẳn.
+  // staleTime 30 giây chỉ để đổi tab không gọi lại mạng.
   const mutationCache = new MutationCache({
     onSettled: (_data, _error, _variables, _context, mutation) => {
       const { skipAdminInvalidate, adminInvalidate } = mutation.meta ?? {};

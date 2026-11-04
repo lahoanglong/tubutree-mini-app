@@ -21,7 +21,6 @@ function Reader({ label }: { label: string }) {
   const q = useOpsInbox();
   return <span data-reader={label}>{q.data ? 'ok' : '…'}</span>;
 }
-/** Cách cũ: mỗi nơi tự giữ một refetchInterval riêng. */
 function LegacyObserver() {
   useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
   return null;

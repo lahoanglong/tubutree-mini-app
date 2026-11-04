@@ -1022,7 +1022,7 @@ describe('admin/page — tab Người dùng', () => {
     expect(mocks.unblockUser).toHaveBeenCalledWith('u3');
   });
 
-  it('F6 — mở khoá xong chỉ tải lại danh sách một lần (không refetch thừa, không kéo khoá admin khác)', async () => {
+  it('F6 — mở khoá xong danh sách người dùng chỉ tải lại một lần (không còn refetch thừa ngoài lần làm cũ chung)', async () => {
     mocks.users = [
       { id: 'u3', fullName: 'Trần Cường', phone: '0966666666', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-03T00:00:00.000Z', isBlocked: true, blockedReason: 'Farm voucher' },
     ];

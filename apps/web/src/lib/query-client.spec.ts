@@ -168,10 +168,17 @@ describe('mutation chỉ làm mới các khoá admin mà nó khai (F6)', () => {
     t.done();
   });
 
-  it('adminInvalidate rỗng và skipAdminInvalidate cùng khai: skip thắng', async () => {
+  it('skipAdminInvalidate và adminInvalidate cùng khai: skip thắng', async () => {
     const t = await setup([['admin-a']]);
     await t.run({ skipAdminInvalidate: true, adminInvalidate: ['admin-a'] });
     expect(t.calls('admin-a')).toBe(1);
+    t.done();
+  });
+
+  it('adminInvalidate rỗng: không khoá admin nào bị làm mới', async () => {
+    const t = await setup([['admin-a'], ['admin-b']]);
+    await t.run({ adminInvalidate: [] });
+    expect([t.calls('admin-a'), t.calls('admin-b')]).toEqual([1, 1]);
     t.done();
   });
 });

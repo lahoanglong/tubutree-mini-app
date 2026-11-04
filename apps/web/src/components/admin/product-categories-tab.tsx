@@ -12,7 +12,8 @@ import {
   type CategoryProduct,
 } from '@/lib/product-categories';
 import { buildCategoryTree } from '@/lib/category-tree';
-import { getOpsInbox, invalidateInbox, type InboxKey } from '@/lib/admin-client';
+import { invalidateInbox, type InboxKey } from '@/lib/admin-client';
+import { useOpsInbox } from './use-ops-inbox';
 import { CategoryTreePanel } from './category-tree-panel';
 import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
@@ -48,7 +49,7 @@ export function ProductCategoriesTab({
   const [missingImage, setMissingImage] = useState(initialMissingImage);
   // Mở từ thẻ hộp việc là đang đi gán sản phẩm: thu cây lại để danh sách sản phẩm lên đầu màn hình điện thoại.
   const [treeOpen, setTreeOpen] = useState(!(initialMissingImage || initialUncategorized));
-  const inbox = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data;
+  const inbox = useOpsInbox().data;
   const inboxCount = (key: InboxKey) => inbox?.items.find((i) => i.key === key)?.count;
   const missingImageCount = inboxCount('productsMissingImage');
   const uncategorizedCount = inboxCount('productsUncategorized');

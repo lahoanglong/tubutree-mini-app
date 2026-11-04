@@ -8,7 +8,13 @@ import AdminPage from './page';
 
 // Mỗi module tab ở đây được thay bằng bản giả ghi lại việc nó bị nạp: khoá import tĩnh sẽ nạp ngay khi page.tsx được nạp.
 const loaded = vi.hoisted(() => [] as string[]);
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { role: 'ADMIN' }, status: 'authenticated', initialized: true }) }));
+const authRenders = vi.hoisted(() => ({ n: 0 }));
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => {
+    authRenders.n++;
+    return { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+  },
+}));
 vi.mock('@/components/admin/dealer-claims-tab', () => {
   loaded.push('dealer-claims-tab');
   return { DealerClaimsTab: () => <div data-tab="DealerClaimsTab" /> };
@@ -155,6 +161,38 @@ describe('admin/page — tab tải lười (F5)', () => {
     });
     expect(host.querySelector('nav[aria-label="Mục quản trị"]')).not.toBeNull();
     expect(loaded).toEqual([]);
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  it('F12 — lượt poll hộp việc không dựng lại AdminPage (observer poll là component lá)', async () => {
+    let inboxCalls = 0;
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (String(url).includes('/admin/ops/inbox')) inboxCalls++;
+      return new Response(JSON.stringify({ generatedAt: '2026-11-04T00:00:00.000Z', items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.useFakeTimers();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={createQueryClient()}>
+          <AdminPage />
+        </QueryClientProvider>,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    const rendersBefore = authRenders.n;
+    const callsBefore = inboxCalls;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(inboxCalls).toBeGreaterThan(callsBefore);
+    expect(authRenders.n).toBe(rendersBefore);
+    vi.useRealTimers();
     await act(async () => root.unmount());
     host.remove();
   });

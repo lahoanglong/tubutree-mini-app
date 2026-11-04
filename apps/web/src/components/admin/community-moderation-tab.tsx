@@ -22,7 +22,7 @@ import {
   type CommunityReport,
   type CommunityUnansweredQuestion,
 } from '@/lib/community-moderation-client';
-import { getOpsInbox } from '@/lib/admin-client';
+import { useOpsInbox } from './use-ops-inbox';
 import { ApiError } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
@@ -69,7 +69,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const reports = useQuery({ queryKey: QUERY_KEYS.reports, queryFn: listCommunityReports }).data;
   // adminReports chỉ trả tối đa 50 báo cáo; số thật lấy từ hộp việc (cùng số với thẻ ở trang Hôm nay), chưa có thì ghi "50+" khi đủ trần.
-  const inbox = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000, retry: false }).data;
+  const inbox = useOpsInbox({ retry: false }).data;
   const inboxCount = inbox?.items.find((i) => i.key === 'communityReports')?.count;
   const reportCount = reportsTabCount(inboxCount, reports?.length);
   return (
