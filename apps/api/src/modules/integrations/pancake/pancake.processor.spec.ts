@@ -385,6 +385,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(historyCreate).toHaveBeenCalledTimes(1);
       expect(historyCreate.mock.calls[0]![0].data).toMatchObject({ orderId: 'o1', actorType: 'PANCAKE', fromStatus: 'PENDING_PAYMENT', toStatus: 'PENDING_PAYMENT' });
       expect(historyCreate.mock.calls[0]![0].data.note).toContain('chờ đối chiếu sao kê');
+      expect(historyCreate.mock.calls[0]![0].data.createdAt).toEqual(unlinkedFlags(orderUpdateMany)[0]!.data.paymentUnlinkedFirstAt);
       expect(alerts.alert).toHaveBeenCalledTimes(1);
       expect(alerts.alert.mock.calls[0]![1]).toContain('Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"');
       // Cờ riêng, mỗi cặp Pancake mới đẩy mốc lên mới nhất (resolve phải thấy đúng mốc đó); không đụng ô chữ pancakeAttention.

@@ -766,7 +766,8 @@ export class PancakeProcessor extends WorkerHost {
         data: { paymentUnlinkedAt: stamp, paymentUnlinkedFirstAt: locked.paymentUnlinkedFirstAt ?? stamp },
       });
       await tx.orderStatusHistory.create({
-        data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note },
+        // createdAt = đúng mốc cờ: web liệt kê các khoản của đợt hiện tại bằng createdAt >= paymentUnlinkedFirstAt.
+        data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note, createdAt: stamp },
       });
       return { closed: isClosedOrder(locked.status) };
     });
