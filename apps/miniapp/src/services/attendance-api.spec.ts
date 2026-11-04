@@ -113,6 +113,21 @@ describe('máy chủ từ chối toạ độ thô', () => {
     await expect(acquireLocationPayload()).resolves.toEqual({ lat: 1, lng: 2 });
   });
 
+  it('hết 10 phút thì tự thử lại GPS (admin có thể đã bật IP văn phòng)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-11-04T08:00:00Z'));
+      vi.mocked(api.post).mockRejectedValueOnce(refusal);
+      await expect(heartbeat({ lat: 1, lng: 2 })).rejects.toBe(refusal);
+      await expect(acquireLocationPayload()).resolves.toEqual({});
+      vi.setSystemTime(new Date('2026-11-04T08:10:01Z'));
+      stubGeolocation((ok) => ok({ coords: { latitude: 5, longitude: 6 } }));
+      await expect(acquireLocationPayload()).resolves.toEqual({ lat: 5, lng: 6 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('checkin bị từ chối toạ độ thô cũng ghi nhớ; lỗi 400 khác không ghi nhớ', async () => {
     vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 400, data: { message: 'Không tìm thấy ca đã duyệt.' } } });
     await expect(checkin({ shiftId: 's', lat: 1, lng: 2 })).rejects.toBeTruthy();

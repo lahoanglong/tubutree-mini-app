@@ -251,6 +251,8 @@ export class SupportChatService {
   }
 
   async unreadCount(userId: string): Promise<number> {
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(u)) return 0;
     const conv = await this.prisma.supportConversation.findUnique({ where: { userId } });
     if (!conv) return 0;
     return this.prisma.supportMessage.count({

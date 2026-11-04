@@ -63,7 +63,6 @@ export function normalizeCspReports(body: unknown): CspViolation[] {
 
 export const CSP_LOG_WINDOW_MS = 60_000;
 export const CSP_LOG_MAX_LINES_PER_WINDOW = 30;
-const MAX_TRACKED_KEYS = 500;
 
 /**
  * Chống ngập log: cùng (directive, blocked, document) chỉ ghi một dòng mỗi cửa sổ 60 giây, và tổng không quá 30 dòng mỗi cửa sổ.
@@ -89,7 +88,7 @@ export class CspLogGate {
       this.seen = new Set();
     }
     const key = `${v.directive}|${v.blocked}|${v.document}`;
-    if (this.seen.has(key) || this.lines >= CSP_LOG_MAX_LINES_PER_WINDOW || this.seen.size >= MAX_TRACKED_KEYS) {
+    if (this.seen.has(key) || this.lines >= CSP_LOG_MAX_LINES_PER_WINDOW) {
       this.suppressed += 1;
       return { log: false, summary };
     }

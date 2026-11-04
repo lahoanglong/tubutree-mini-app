@@ -147,6 +147,12 @@ describe('page', () => {
 describe('khách vãng lai', () => {
   const guest = { phone: null, zaloId: 'guest_device-1' };
 
+  it('unreadCount: 0 cho khách vãng lai, không đọc tin', async () => {
+    const { svc, prisma } = setup({ user: guest });
+    expect(await svc.unreadCount('u1')).toBe(0);
+    expect(prisma.supportMessage.count).not.toHaveBeenCalled();
+  });
+
   it('send: 403 mã CHAT_LOGIN_REQUIRED, không tạo hội thoại, không tạo tin, không đặt lịch', async () => {
     const { svc, prisma, queue } = setup({ user: guest });
     const err = await svc.send('u1', { ...input, body: 'hi' }, 'MINIAPP').catch((e) => e);
