@@ -109,7 +109,6 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     await blocks.unblock(admin.id, userId);
     // Mở khoá không làm sống lại access token cấp trước lần khoá; phải đăng nhập lại (sau mốc thu hồi).
     await expect(strategy.validate(decode(login.accessToken))).rejects.toBeInstanceOf(UnauthorizedException);
-    await new Promise((r) => setTimeout(r, 1100));
     const relogin = await auth.loginAsGuest(deviceId);
     await expect(strategy.validate(decode(relogin.accessToken))).resolves.toMatchObject({ sub: userId });
     expect(await prisma.user.findUniqueOrThrow({ where: { id: userId } })).toMatchObject({
@@ -130,7 +129,6 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     const deviceId = `dev_${randCode(10)}`;
     const login = await auth.loginAsGuest(deviceId);
     const userId = login.user.id;
-    await new Promise((r) => setTimeout(r, 1100));
 
     const out = await blocks.revokeSessions(admin.id, userId, 'Nghi lộ phiên');
     expect(out).toEqual({ id: userId, revokedSessions: 1 });
@@ -141,7 +139,6 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     const ev = await prisma.userAdminEvent.findFirstOrThrow({ where: { userId, kind: 'SESSIONS_REVOKED' } });
     expect(ev).toMatchObject({ actorId: admin.id, reason: 'Nghi lộ phiên', toValue: '1' });
 
-    await new Promise((r) => setTimeout(r, 1100));
     const again = await auth.loginAsGuest(deviceId);
     await expect(strategy.validate(decode(again.accessToken))).resolves.toMatchObject({ sub: userId });
   });

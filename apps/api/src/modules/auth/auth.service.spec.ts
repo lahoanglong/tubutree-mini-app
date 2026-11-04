@@ -931,6 +931,19 @@ describe('AuthService.refresh — bất biến mốc thu hồi (M1)', () => {
   });
 });
 
+describe('AuthService.issueTokens — claim iatMs (m2)', () => {
+  it('access token ký kèm iatMs (mili giây) để strategy phân biệt token cấp cùng giây ngay sau mốc thu hồi', async () => {
+    const { svc, prisma } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({ id: 't1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER });
+    const jwt = (svc as unknown as { jwt: { signAsync: jest.Mock } }).jwt;
+    const before = Date.now();
+    await svc.refresh('tok');
+    const payload = jwt.signAsync.mock.calls[0]![0] as { iatMs: number };
+    expect(payload.iatMs).toBeGreaterThanOrEqual(before);
+    expect(payload.iatMs).toBeLessThanOrEqual(Date.now());
+  });
+});
+
 describe('AuthService.refresh — ghi họ token (parentId)', () => {
   it('xoay thành công → token mới mang parentId là token cũ', async () => {
     const { svc, prisma, create } = makeService();

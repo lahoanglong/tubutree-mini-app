@@ -1078,7 +1078,9 @@ export class AuthService {
     // Điểm đơn chat/điện thoại chờ SĐT này (B9): liên kết ngay khi khách đăng nhập. Không bao giờ chặn hay làm rớt phiên.
     await this.linkChatPoints(user);
 
-    const payload: JwtPayload = {
+    // iatMs: JWT chỉ có iat theo giây; JwtStrategy cần mili giây để không chặn nhầm token cấp ngay sau lần thu hồi.
+    const payload: JwtPayload & { iatMs: number } = {
+      iatMs: Date.now(),
       sub: user.id,
       role: user.role,
       zaloId: user.zaloId ?? undefined,

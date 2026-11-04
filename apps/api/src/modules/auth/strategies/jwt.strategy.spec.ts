@@ -117,4 +117,46 @@ describe('JwtStrategy.validate — access token chết theo phiên (L1-03)', () 
     const { strategy } = setup({ role: 'CUSTOMER', isBlocked: false, sessionsRevokedAt: revokedAt });
     await expect(strategy.validate(ADMIN_TOKEN)).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
   });
+
+  it('m1: người bị khoá nhận ACCOUNT_BLOCKED, không phải SESSION_EXPIRED, dù block() cũng ghi mốc thu hồi', async () => {
+    const { strategy } = setup({ role: 'CUSTOMER', isBlocked: true, sessionsRevokedAt: revokedAt });
+    await expect(strategy.validate({ ...ADMIN_TOKEN, iat: iatSec(revokedAt, -60) })).rejects.toMatchObject({
+      response: { code: 'ACCOUNT_BLOCKED' },
+    });
+  });
+
+  it('m2: token có iatMs so theo mili giây — cấp cùng giây nhưng SAU mốc thì qua, TRƯỚC mốc thì chết', async () => {
+    const { strategy } = setup({ role: 'CUSTOMER', isBlocked: false, sessionsRevokedAt: revokedAt });
+    const sameSec = iatSec(revokedAt, 0);
+    await expect(strategy.validate({ ...ADMIN_TOKEN, role: 'CUSTOMER', iat: sameSec, iatMs: revokedAt.getTime() + 1 } as never)).resolves.toBeDefined();
+    await expect(strategy.validate({ ...ADMIN_TOKEN, iat: sameSec, iatMs: revokedAt.getTime() - 1 } as never)).rejects.toMatchObject({
+      response: { code: 'SESSION_EXPIRED' },
+    });
+    await expect(strategy.validate({ ...ADMIN_TOKEN, iat: sameSec, iatMs: revokedAt.getTime() } as never)).rejects.toMatchObject({
+      response: { code: 'SESSION_EXPIRED' },
+    });
+  });
+
+  it('m2: token cũ không có iatMs vẫn so theo giây', async () => {
+    const { strategy } = setup({ role: 'CUSTOMER', isBlocked: false, sessionsRevokedAt: revokedAt });
+    await expect(strategy.validate({ ...ADMIN_TOKEN, iat: iatSec(revokedAt, 0) })).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
+  });
+
+  it('trần TTL: không gọi invalidate, token cũ chết khi cache hết hạn (≤ 5 s)', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-05T03:00:00Z') });
+    try {
+      const { strategy, findUnique } = setup({ role: 'CUSTOMER', isBlocked: false, sessionsRevokedAt: null });
+      const issuedMs = Date.now();
+      const tok = { ...ADMIN_TOKEN, role: 'CUSTOMER', iat: Math.floor(issuedMs / 1000), iatMs: issuedMs } as never;
+      await expect(strategy.validate(tok)).resolves.toBeDefined();
+      jest.setSystemTime(issuedMs + 1000);
+      findUnique.mockResolvedValue({ role: 'CUSTOMER', isBlocked: false, sessionsRevokedAt: new Date(issuedMs + 500) });
+      await expect(strategy.validate(tok)).resolves.toBeDefined(); // còn trong cache
+      jest.setSystemTime(issuedMs + SessionStateService.TTL_MS + 1);
+      expect(SessionStateService.TTL_MS).toBeLessThanOrEqual(5000);
+      await expect(strategy.validate(tok)).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

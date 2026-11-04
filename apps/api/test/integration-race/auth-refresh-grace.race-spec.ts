@@ -105,7 +105,6 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
   });
 
   const decode = (jwt: string) => new JwtService().decode(jwt) as JwtPayload & { iat: number };
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   it('L1-03: phát hiện reuse → access token cũ bị 401 sau khi cache hết hạn (hoặc ngay khi invalidate)', async () => {
     const { login, userId } = await guestSession();
@@ -113,7 +112,6 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     await expect(strategy.validate(decode(login.accessToken))).resolves.toMatchObject({ sub: userId });
     const old = new Date(Date.now() - 60_000);
     await prisma.refreshToken.updateMany({ where: { userId, rotatedAt: { not: null } }, data: { rotatedAt: old, revokedAt: old } });
-    await sleep(1100);
     await expect(auth.refresh(login.refreshToken)).rejects.toThrow('đã được sử dụng');
     sessions.invalidate(userId);
     await expect(strategy.validate(decode(login.accessToken))).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
@@ -136,7 +134,6 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     const s2 = await auth.loginAsGuest(deviceId);
     expect(s2.user.id).toBe(s1.user.id);
     expect(s2.refreshToken).not.toBe(s1.refreshToken);
-    await sleep(1100);
     await expect(strategy.validate(decode(s2.accessToken))).resolves.toMatchObject({ sub: s1.user.id });
 
     await auth.logoutAll(s1.user.id);
@@ -144,8 +141,7 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     await expect(auth.refresh(s2.refreshToken)).rejects.toThrow('không hợp lệ');
     await expect(auth.refresh(s1.refreshToken)).rejects.toThrow('không hợp lệ');
     await expect(strategy.validate(decode(s2.accessToken))).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
-    // Đăng nhập lại sau mốc thu hồi cấp token dùng được
-    await sleep(1100);
+    // Đăng nhập ngay sau lần thu hồi (cùng giây) dùng được ngay
     const again = await auth.loginAsGuest(deviceId);
     await expect(strategy.validate(decode(again.accessToken))).resolves.toMatchObject({ sub: s1.user.id });
   });
