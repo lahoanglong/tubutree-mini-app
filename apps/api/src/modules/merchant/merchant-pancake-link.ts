@@ -218,6 +218,7 @@ export async function linkTubuFulfilledVariation(
     data: { productId: product.id, affiliateRate: null },
   });
   if (moved.count === 0) throw new ConflictException(LINK_TAKEN_MESSAGE);
+  await recordRateChange(tx, target.variationId, rateAtLink, null, opts.adminId);
 
   await tx.variation.deleteMany({ where: { productId: product.id, pancakeId: null } });
   await tx.product.update({
@@ -245,6 +246,18 @@ export async function linkTubuFulfilledVariation(
     },
   });
   return { linkId: link.id, originProductId: target.productId, takeover: target.requiresAdminConfirm };
+}
+
+/** Đổi % hoa hồng CTV của biến thể do liên kết/gỡ liên kết cũng vào lịch sử, cùng giao dịch (lỗi ghi huỷ cả thao tác). Không đổi thì không ghi. */
+async function recordRateChange(
+  tx: Prisma.TransactionClient,
+  variationId: string,
+  from: Prisma.Decimal | null,
+  to: Prisma.Decimal | null,
+  actorId: string,
+): Promise<void> {
+  if (from === null ? to === null : to !== null && from.equals(to)) return;
+  await tx.commissionRateHistory.create({ data: { variationId, fromPct: from, toPct: to, actorId } });
 }
 
 export interface UnlinkOptions {
@@ -290,12 +303,16 @@ export async function unlinkTubuFulfilledVariation(
   });
   if (closed.count === 0) return null;
 
+  const rateBefore = link.affiliateRateCaptured
+    ? (await tx.variation.findUnique({ where: { id: link.variationId }, select: { affiliateRate: true } }))?.affiliateRate ?? null
+    : null;
   await tx.variation.updateMany({
     where: { id: link.variationId, productId },
     // Về lại sản phẩm gốc: trả đúng % lúc liên kết (NULL = theo mặc định, 0 = cố ý không hoa hồng), bỏ % đặt khi ở gian hàng đối tác.
     // Liên kết có từ trước cột lưu % thì không đụng.
     data: { productId: link.originProductId, ...(link.affiliateRateCaptured ? { affiliateRate: link.affiliateRateAtLink } : {}) },
   });
+  if (link.affiliateRateCaptured) await recordRateChange(tx, link.variationId, rateBefore, link.affiliateRateAtLink, opts.actorId);
   const product = await tx.product.findUniqueOrThrow({
     where: { id: productId },
     select: { basePrice: true, salePrice: true },
