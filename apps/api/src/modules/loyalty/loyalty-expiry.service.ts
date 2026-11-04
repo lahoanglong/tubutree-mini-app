@@ -569,6 +569,7 @@ export class LoyaltyExpiryService {
     await this.notifications
       .notifySafe(userId, 'POINTS_EXPIRING', {
         points: formatPoints(expiringSoon.amount),
+        days: String(reminderDays),
         date: formatVnDate(expiringSoon.earliestExpiresAt),
       }); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;

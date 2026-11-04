@@ -878,7 +878,7 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
   { id: 'nt-tier-upgraded', code: 'TIER_UPGRADED', channel: 'INAPP', bodyTemplate: 'Chúc mừng bạn đã lên hạng {{tier}} tại Tubu Tree 🌿', createOnly: true },
   { id: 'nt-tier-drop-notice', code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: '⚠️ Hạng {{tier}} của bạn được giữ đến {{date}}. {{need}} trước ngày đó để giữ hạng nhé 🌿' },
-  { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
+  { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: 'Bạn có {{points}} Điểm Xanh hết hạn trong {{days}} ngày tới, sớm nhất vào {{date}}.' },
   { id: 'nt-storefront-trending', code: 'STOREFRONT_TRENDING_PRODUCTS', channel: 'INAPP', bodyTemplate: '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!' },
   // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.
   // Không dùng {{order_code}} ở COMMISSION_NEW: đó là đơn của khách, app sẽ hiện nút "Xem đơn" mà CTV không xem được.
