@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -12,28 +12,51 @@ import {
   MaxLength,
   Min,
   ValidateNested,
+  registerDecorator,
 } from 'class-validator';
-import { PUBLIC_CONTENT_MAX_DATA_URL_LENGTH, IsUploadedImage } from '../../../common/uploaded-image';
+import { DEFAULT_MAX_DATA_URL_LENGTH, IsUploadedImage } from '../../../common/uploaded-image';
 import type { UploadedImageOptions } from '../../../common/uploaded-image';
-import { IsTypedVnPhone } from '../../../common/phone';
 import { TAX_CODE_RE } from '../../checkout/dto/checkout.dto';
 
-// ImageUpload của miniapp nén JPEG cạnh 1200px (~150-250KB → ~200-330 nghìn ký tự base64) khi chưa cấu hình
-// Cloudinary; trần 700k đủ dư và giữ 3 ảnh + chữ dưới 2,2 triệu ký tự mỗi hồ sơ (admin tải về từng ảnh một).
+// Trần bằng trần mà API nhận cho ảnh base64 nói chung (và ≥ trần nén của web, MAX_UPLOAD_DATA_URL_LENGTH): ảnh giấy tờ nhiều chi tiết
+// có thể ra ~800 nghìn ký tự. 3 ảnh + chữ vẫn dưới trần thân 10mb của /api/dealer (body-limits.ts).
 export const DEALER_IMAGE: UploadedImageOptions = {
-  maxDataUrlLength: PUBLIC_CONTENT_MAX_DATA_URL_LENGTH,
+  maxDataUrlLength: DEFAULT_MAX_DATA_URL_LENGTH,
   verifySignature: true,
 };
+const DEALER_IMAGE_MSG = { message: 'Ảnh quá nặng hoặc không hợp lệ, vui lòng chụp lại hoặc chọn ảnh nhỏ hơn.' };
+
+// Ô tuỳ chọn mà khách gõ rồi xoá thì client gửi chuỗi rỗng: coi như không gửi.
+const blankToUndefined = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const t = value.trim();
+  return t === '' ? undefined : t;
+};
+
+/** Số liên hệ của doanh nghiệp: di động hoặc số bàn VN (0 + 9-10 số, hoặc +84/84), bỏ khoảng trắng, chấm, gạch, ngoặc. */
+const VN_BUSINESS_PHONE = /^(?:0|\+?84)\d{9,10}$/;
+const PHONE_MSG = 'Số điện thoại không hợp lệ (di động hoặc số bàn, bắt đầu bằng 0, +84 hoặc 84).';
+function IsVnBusinessPhone() {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'isVnBusinessPhone',
+      target: object.constructor,
+      propertyName,
+      options: { message: PHONE_MSG },
+      validator: { validate: (v: unknown) => typeof v === 'string' && VN_BUSINESS_PHONE.test(v.replace(/[\s.\-()]/g, '')) },
+    });
+  };
+}
 
 export class ApplyDealerDto {
   @IsString() @MaxLength(120) businessName!: string;
-  @IsOptional() @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode?: string;
+  @IsOptional() @Transform(blankToUndefined) @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode?: string;
   @IsString() @MaxLength(120) ownerName!: string;
-  @IsString() @IsTypedVnPhone({ message: 'Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0, +84 hoặc 84).' }) phone!: string;
+  @IsString() @MaxLength(30) @IsVnBusinessPhone() phone!: string;
   @IsString() @MaxLength(500) address!: string;
-  @IsUploadedImage(DEALER_IMAGE) cccdFrontUrl!: string;
-  @IsUploadedImage(DEALER_IMAGE) cccdBackUrl!: string;
-  @IsOptional() @IsUploadedImage(DEALER_IMAGE) storeFrontUrl?: string;
+  @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) cccdFrontUrl!: string;
+  @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) cccdBackUrl!: string;
+  @IsOptional() @Transform(blankToUndefined) @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) storeFrontUrl?: string;
   @IsOptional() @IsInt() @Min(0) @Max(1_000_000_000) monthlyVolumeEstimate?: number;
   @IsOptional() @IsString() @MaxLength(1000) notes?: string;
 }

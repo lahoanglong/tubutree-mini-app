@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ApplyDealerDto } from './dealer.dto';
+import { createValidationPipe } from '../../../common/validation-pipe';
 
 async function errorKeys(plain: Record<string, unknown>): Promise<string[]> {
   const dto = plainToInstance(ApplyDealerDto, plain);
@@ -91,7 +92,7 @@ describe('ApplyDealerDto — V1/V5 (SEC-1104): trần chữ, SĐT, MST, số, �
     expect(await keys({ ...base, taxCode: '0312345678-001' })).toEqual([]);
   });
   it('SĐT không phải số VN → lỗi', async () => {
-    expect(await keys({ ...base, phone: '12345' })).toContain('isTypedVnPhone');
+    expect(await keys({ ...base, phone: '12345' })).toContain('isVnBusinessPhone');
   });
   it.each([3_000_000_000, -1, 1.5])('monthlyVolumeEstimate %p → lỗi', async (n) => {
     expect((await keys({ ...base, monthlyVolumeEstimate: n })).length).toBeGreaterThan(0);
@@ -101,10 +102,45 @@ describe('ApplyDealerDto — V1/V5 (SEC-1104): trần chữ, SĐT, MST, số, �
     ['http://', 'http://x'],
     ['host lạ', 'https://evil.example/a.jpg'],
     ['SVG', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
-    ['quá trần 700k', `data:image/jpeg;base64,/9j/${'A'.repeat(700_001)}`],
+    ['quá trần 1,5 triệu ký tự', `data:image/jpeg;base64,/9j/${'A'.repeat(1_500_001)}`],
   ])('ảnh CCCD: %s → lỗi', async (_l, v) => {
     expect(await keys({ ...base, cccdFrontUrl: v })).toContain('isUploadedImage');
     expect(await keys({ ...base, cccdBackUrl: v })).toContain('isUploadedImage');
     expect(await keys({ ...base, storeFrontUrl: v })).toContain('isUploadedImage');
+  });
+});
+
+describe('ApplyDealerDto — sửa sau review (M1, M2, SĐT bàn)', () => {
+  const pipe = createValidationPipe();
+  const run = (body: Record<string, unknown>) =>
+    pipe.transform({ ...base, ...body }, { type: 'body', metatype: ApplyDealerDto }) as Promise<ApplyDealerDto>;
+
+  it.each([[''], ['   ']])('taxCode %j (khách gõ rồi xoá) → được nhận, lưu như không gửi', async (v) => {
+    const dto = await run({ taxCode: v });
+    expect(dto.taxCode).toBeUndefined();
+  });
+  it('taxCode có khoảng trắng hai đầu → cắt rồi kiểm', async () => {
+    expect((await run({ taxCode: ' 0312345678 ' })).taxCode).toBe('0312345678');
+    await expect(run({ taxCode: 'abc' })).rejects.toThrow();
+  });
+  it.each([[''], ['  ']])('storeFrontUrl %j → được nhận, bỏ qua', async (v) => {
+    expect((await run({ storeFrontUrl: v })).storeFrontUrl).toBeUndefined();
+  });
+
+  it('ảnh đúng trần nén của web (1.400.000 ký tự) → hợp lệ; ảnh sai/quá trần → câu lỗi tiếng Việt không lộ tên trường', async () => {
+    const big = `data:image/jpeg;base64,/9j/${'A'.repeat(1_400_000 - 'data:image/jpeg;base64,/9j/'.length)}`;
+    expect(big.length).toBe(1_400_000);
+    expect(await keys({ ...base, cccdFrontUrl: big })).toEqual([]);
+    const errs = await validate(plainToInstance(ApplyDealerDto, { ...base, cccdFrontUrl: `data:image/jpeg;base64,/9j/${'A'.repeat(1_500_001)}` }));
+    const msg = Object.values(errs[0]!.constraints!)[0]!;
+    expect(msg).toBe('Ảnh quá nặng hoặc không hợp lệ, vui lòng chụp lại hoặc chọn ảnh nhỏ hơn.');
+    expect(msg).not.toContain('cccdFrontUrl');
+  });
+
+  it.each([['0912345678'], ['02838234567'], ['028 3823 4567'], ['028.3823.4567'], ['(028) 3823-4567'], ['+84912345678'], ['842838234567']])('SĐT %s → hợp lệ', async (phone) => {
+    expect(await keys({ ...base, phone })).toEqual([]);
+  });
+  it.each([['12345'], ['abc'], ['091234567'], ['091234567890'], ['1912345678'], ['0912a45678']])('SĐT %s → lỗi', async (phone) => {
+    expect((await keys({ ...base, phone })).length).toBeGreaterThan(0);
   });
 });
