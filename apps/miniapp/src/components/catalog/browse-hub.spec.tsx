@@ -107,7 +107,7 @@ describe('BrowseHub', () => {
     expect(handlers.onPickAll).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả sản phẩm' }));
     expect(handlers.onPickAll).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Cỏ Mềm xem thương hiệu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cỏ Mềm, xem thương hiệu' }));
     expect(handlers.onPickBrand).toHaveBeenCalledWith('Cỏ Mềm');
   });
 

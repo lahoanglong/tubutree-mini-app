@@ -83,6 +83,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: { ...legacyV1Colors, promo, ...statusColors },
+      // Mảng cố định của preset không có 'Inter Fallback' mà globals.css khai ở --font-ui: `font-ui` (body) phải đọc biến để cùng chuỗi phông với tiêu đề, nếu không chữ nhảy khi phông tải xong.
+      fontFamily: { ui: ['var(--font-ui)'] },
       // Chữ phụ của Mini App (--type-caption-*): 13px, không phải 12px của text-xs.
       fontSize: {
         caption: ['var(--type-caption-size)', { lineHeight: 'var(--type-caption-lh)' }],

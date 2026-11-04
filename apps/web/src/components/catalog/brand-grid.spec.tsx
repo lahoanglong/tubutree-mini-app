@@ -18,18 +18,18 @@ afterEach(() => {
 });
 
 describe('BrandGrid', () => {
-  it('5 nhãn: hiện đủ, tên đọc là "X xem thương hiệu", chạm gọi onSelect(tên)', () => {
+  it('5 nhãn: hiện đủ, tên đọc là "X, xem thương hiệu", chạm gọi onSelect(tên)', () => {
     const { c, onSelect } = mount(brands(5));
     const region = c.querySelector('section[aria-label="Thương hiệu"]')!;
     expect(region.querySelector('h2')!.textContent).toBe('Thương hiệu');
     expect(region.querySelectorAll('a')).toHaveLength(5);
-    click(c.querySelector('a[aria-label="Nhãn 03 xem thương hiệu"]'));
+    click(c.querySelector('a[aria-label="Nhãn 03, xem thương hiệu"]'));
     expect(onSelect).toHaveBeenCalledWith('Nhãn 03');
   });
 
   it('mỗi ô là liên kết thật tới /san-pham?brand=… (crawler đi theo được); Ctrl/Cmd+nhấp không bị chặn để mở tab mới', () => {
     const { c, onSelect } = mount(brands(5));
-    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Nhãn 03 xem thương hiệu"]')!;
+    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Nhãn 03, xem thương hiệu"]')!;
     expect(link.getAttribute('href')).toBe('/san-pham?brand=Nh%C3%A3n+03');
     const ev = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
     link.dispatchEvent(ev);
@@ -56,8 +56,8 @@ describe('BrandGrid', () => {
     const { c } = mount(brands(20));
     const n = names(c);
     expect(n).toHaveLength(12);
-    expect(n[0]).toBe('Nhãn 19 xem thương hiệu');
-    expect(n[11]).toBe('Nhãn 08 xem thương hiệu');
+    expect(n[0]).toBe('Nhãn 19, xem thương hiệu');
+    expect(n[11]).toBe('Nhãn 08, xem thương hiệu');
   });
 
   it('có logoUrl: ảnh trang trí (alt rỗng); không có: chữ cái đầu của tên', () => {

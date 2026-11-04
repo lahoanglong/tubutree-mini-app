@@ -367,7 +367,7 @@ function AccountContent() {
               <div className="mt-2.5 flex items-center gap-2">
                 <button
                   type="button"
-                  aria-label={`${homeCopy.profile.referralCopy} mã ${code}`}
+                  aria-label={`${homeCopy.profile.referralCode}: ${code}, ${homeCopy.profile.referralCopy.toLowerCase()}`}
                   onClick={() => void copyReferral()}
                   className="tubu-press flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-control bg-[var(--color-action-secondary-bg)] px-3 py-2 text-left"
                 >

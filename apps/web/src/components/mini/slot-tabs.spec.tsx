@@ -57,8 +57,8 @@ describe('SlotTabs (web)', () => {
 
   it('hiện giờ và chú thích bằng chữ nhìn thấy', () => {
     mount(<Harness />);
-    expect(tabs()[0]!.textContent).toBe('12:00Đang diễn ra');
-    expect(tabs()[2]!.textContent).toBe('12:00Ngày mai');
+    expect(tabs()[0]!.textContent).toBe('12:00 Đang diễn ra');
+    expect(tabs()[2]!.textContent).toBe('12:00 Ngày mai');
   });
 
   it('ArrowRight/ArrowLeft chọn tab kế và chuyển tiêu điểm theo (quay vòng)', () => {

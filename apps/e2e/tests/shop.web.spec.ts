@@ -767,7 +767,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByText('Chào An')).toBeVisible();
     await expect(page.getByTestId('home-settling')).toHaveCount(0);
     const chips = [
-      page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
+      page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('link').first(),
       page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button', { name: 'Tất cả', exact: true }),
     ];
     for (const chip of chips) await expectChipHitArea44(chip);

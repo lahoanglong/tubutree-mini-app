@@ -162,3 +162,9 @@ body.has-sticky-bar [data-bottom-nav] {
     padding-top: 0;
   }
 }
+
+/* Chữ cái đầu của ảnh đại diện chữ vẽ bằng pseudo-element: là chữ trang trí, không để nó nằm trong "chữ nhìn thấy" của liên kết bao quanh
+   (WCAG 2.5.3: tên truy cập "X xem thương hiệu" phải bắt đầu bằng chữ nhìn thấy "X", không phải "V" + "X"). */
+.tubu-initial::before {
+  content: attr(data-initial);
+}

@@ -24,15 +24,15 @@ function InitialsAvatar({ name }: { name: string }) {
   return (
     <div
       data-testid="initials-avatar"
+      data-initial={avatarInitial(name)}
+      className="tubu-initial"
       aria-hidden="true"
       style={{
         width: AVATAR, height: AVATAR, flex: '0 0 auto', borderRadius: '50%', background: tone.background, color: tone.color,
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: Math.round(AVATAR * 0.44), lineHeight: 1,
         fontFamily: 'var(--font-ui)', userSelect: 'none',
       }}
-    >
-      {avatarInitial(name)}
-    </div>
+    />
   );
 }
 

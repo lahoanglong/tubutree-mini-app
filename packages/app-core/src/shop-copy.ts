@@ -307,7 +307,7 @@ export const SHOP_COPY: Record<string, string> = {
   'browse.all': 'Tất cả',
   'browse.seeAllProducts': 'Xem tất cả sản phẩm',
   'browse.brands': 'Thương hiệu',
-  'browse.brandSpoken': '{name} xem thương hiệu',
+  'browse.brandSpoken': '{name}, xem thương hiệu',
   'browse.chipsLabel': 'Danh mục con',
   'browse.pageLabel': 'Phân trang',
   'browse.pageN': 'Trang {n}',

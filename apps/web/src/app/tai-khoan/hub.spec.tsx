@@ -135,7 +135,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const c = await mount();
     const btn = byText(c, 'button', 'Mã của bạn: AN1')!;
-    expect(btn.getAttribute('aria-label')).toBe('Sao chép mã AN1');
+    expect(btn.getAttribute('aria-label')).toBe('Mã của bạn: AN1, sao chép');
     click(btn);
     await flush(3);
     expect(writeText).toHaveBeenCalledWith('AN1');
