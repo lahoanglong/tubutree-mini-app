@@ -97,11 +97,13 @@ export const INBOX_COUNT_CONCURRENCY = 4;
 export const DEFAULT_INBOX_CACHE_TTL_MS = 20_000;
 /** `countStoresToSettle` dựng bảng kê đối soát (~9 truy vấn) cho từng gian hàng có khoản chờ nên cache lâu hơn phần còn lại. */
 export const DEFAULT_STORES_TO_SETTLE_TTL_MS = 60_000;
+/** Lượt tính treo (DB không trả lời) không được giữ cache mãi: quá chừng này request sau bỏ lượt đó và tính lại. */
+const INFLIGHT_MAX_MS = 30_000;
 
 type InboxResult = { generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number; oldestAt?: string; parts?: Record<string, number> }[] };
 interface CacheEntry<T> {
   value: Promise<T>;
-  /** Infinity khi lượt tính còn chạy: các lượt gọi tới sau dùng chung kết quả thay vì bắt đầu lượt mới. */
+  /** Lúc lượt tính còn chạy là hạn tối đa của lượt đó (INFLIGHT_MAX_MS): các lượt gọi tới sau dùng chung, quá hạn thì tính lượt mới. */
   expiresAt: number;
 }
 
@@ -152,7 +154,7 @@ export class OpsInboxService {
     if (ttl <= 0) return compute();
     const hit = slot.get();
     if (hit && hit.expiresAt > Date.now()) return hit.value;
-    const entry: CacheEntry<T> = { value: compute(), expiresAt: Infinity };
+    const entry: CacheEntry<T> = { value: compute(), expiresAt: Date.now() + INFLIGHT_MAX_MS };
     slot.set(entry);
     entry.value.then(
       () => {

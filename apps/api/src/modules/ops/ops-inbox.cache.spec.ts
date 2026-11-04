@@ -116,6 +116,29 @@ describe('OpsInboxService — cache 20 giây theo phạm vi người xem (L3-04)
   });
 });
 
+describe('OpsInboxService — lượt tính treo không chặn mãi', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('lượt đang chạy được dùng chung tối đa 30 giây; quá hạn mà vẫn treo thì request sau tự tính lượt mới', async () => {
+    let now = 9_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const { svc, settle } = harness({ OPS_STORES_TO_SETTLE_TTL_MS: 0 });
+    settle.mockImplementationOnce(() => new Promise<number>(() => undefined));
+    void svc.counts(ADMIN);
+    await new Promise((r) => setImmediate(r));
+    expect(settle).toHaveBeenCalledTimes(1);
+
+    now += 29_000;
+    void svc.counts(ADMIN);
+    await new Promise((r) => setImmediate(r));
+    expect(settle).toHaveBeenCalledTimes(1);
+
+    now += 2_000;
+    await expect(svc.counts(ADMIN)).resolves.toBeDefined();
+    expect(settle).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('OpsInboxService — merchantToSettle có cache 60 giây riêng', () => {
   afterEach(() => jest.restoreAllMocks());
 
