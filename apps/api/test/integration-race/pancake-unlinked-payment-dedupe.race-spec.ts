@@ -67,4 +67,14 @@ describe('Giữ khoản thanh toán chưa gắn Pancake: hai worker đua cùng c
     expect([row.fromStatus, row.toStatus]).toEqual(['CANCELLED', 'CANCELLED']);
     expect(alerts.alert.mock.calls[0][1]).toContain('Đơn đã huỷ/trả');
   });
+  it('markPaid commit trước khi khoá: bản đơn cũ báo UNPAID nhưng DB đã PAID → không ghi lịch sử, không báo động, không ghim lý do', async () => {
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+    const stale = { ...order };
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'PAID' } });
+    await proc.holdUnattachedPayment(stale, { id: 'PK-D' }, 100_000);
+    expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id, actorType: 'PANCAKE' } })).toBe(0);
+    expect(alerts.alert).not.toHaveBeenCalled();
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { pancakeAttention: true } })).pancakeAttention).toBeNull();
+  });
 });
