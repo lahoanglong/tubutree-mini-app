@@ -1,8 +1,9 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { DelayedError, type Job } from 'bullmq';
-import { NotificationsService, ZnsSendJobData } from './notifications.service';
+import { INAPP_RETRY_JOB, NotificationsService, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
+import { captureServerError } from '../../config/sentry';
 
 /**
  * Worker gửi ZNS. notify() chỉ ghi NotificationLog (PENDING) rồi xếp job vào QUEUE_NOTIFICATIONS, nên request đặt
@@ -26,7 +27,29 @@ export class NotificationsProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ZnsSendJobData>, token?: string): Promise<void> {
+  async process(job: Job<ZnsSendJobData | InAppRetryJobData>, token?: string): Promise<void> {
+    if (job.name === INAPP_RETRY_JOB) return this.retryInApp(job as Job<InAppRetryJobData>);
+    return this.sendZns(job as Job<ZnsSendJobData>, token);
+  }
+
+  /** Tin trong app không dời theo giờ yên tĩnh ZNS. Mẫu kênh ZNS thì notify() tự dời phần ZNS qua job zns-send của nó. */
+  private async retryInApp(job: Job<InAppRetryJobData>): Promise<void> {
+    const { userId, templateCode, data, dedupeKey, context } = job.data;
+    try {
+      await this.notifications.notify(userId, templateCode, data, { dedupeKey });
+    } catch (err) {
+      const attempts = job.opts.attempts ?? 1;
+      if (job.attemptsMade + 1 >= attempts) {
+        this.logger.error(
+          `Gửi tin ${templateCode} cho ${userId}${context ? ` (${context})` : ''} THẤT BẠI sau ${attempts} lượt: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        captureServerError(err);
+      }
+      throw err;
+    }
+  }
+
+  private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<void> {
     // Lượt thử lại do BullMQ xếp theo backoff nên có thể rơi sau 21h dù lượt đầu đã được dời; dời tiếp tới hết giờ yên tĩnh.
     // moveToDelayed + DelayedError không tính là một lượt thử (attemptsMade giữ nguyên), và chạy trước deliverZns để log vẫn còn nguyên trạng thái.
     const quietMs = await this.notifications.quietDelayMs();

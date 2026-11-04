@@ -35,6 +35,26 @@ export const ZNS_SEND_JOB_OPTIONS = {
   backoff: { type: 'exponential' as const, delay: 30_000 },
 };
 
+/** Job thử lại tin trong app (xem notifyWithRetry). */
+export interface InAppRetryJobData {
+  userId: string;
+  templateCode: string;
+  data: Record<string, string>;
+  dedupeKey: string;
+  context?: string;
+}
+
+export const INAPP_RETRY_JOB = 'inapp-retry';
+
+/**
+ * Lỗi ghi tin trong app gần như luôn là DB hay kết nối chập chờn: 6 lần, 30 giây nhân đôi (≈ 15 phút) như ZNS. Không đặt jobId:
+ * BullMQ giữ job xong/lỗi (removeOnComplete/removeOnFail) nên jobId cố định làm lần xếp sau thành no-op; chống trùng đã có dedupeKey.
+ */
+export const INAPP_RETRY_JOB_OPTIONS = {
+  attempts: 6,
+  backoff: { type: 'exponential' as const, delay: 30_000 },
+};
+
 const QUIET_START_KEY = 'notifications.zns_quiet_start_hour';
 const QUIET_END_KEY = 'notifications.zns_quiet_end_hour';
 const PROMO_CAP_KEY = 'notifications.zns_promo_monthly_cap';
@@ -176,6 +196,46 @@ export class NotificationsService {
     const znsTemplateId = (tpl?.channel === 'ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId || null;
     if (user?.phone && znsTemplateId) {
       await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, opts.retryZns ? dedupeKey : undefined);
+    }
+  }
+
+  /**
+   * Như notifySafe nhưng tin không được mất (vd "đã xuất hoá đơn" sau khi đơn đã ISSUED, không còn đường nào báo lại): lỗi thì xếp
+   * job thử lại vào QUEUE_NOTIFICATIONS cùng `dedupeKey`, nên lượt thử lại và mọi nơi khác gọi cùng khoá chỉ ghi một tin. Không ném.
+   * Trả SENT (đã gửi hoặc đã có tin cho khoá này), QUEUED (đã xếp hàng thử lại) hay LOST (không có hàng đợi hoặc xếp hàng lỗi: ghi
+   * log error và báo Sentry để không mất im lặng). `context` là nhãn ngắn kiểu `order=<mã>`.
+   */
+  async notifyWithRetry(
+    userId: string,
+    templateCode: string,
+    data: Record<string, string>,
+    opts: { dedupeKey: string },
+    context?: string,
+  ): Promise<'SENT' | 'QUEUED' | 'LOST'> {
+    try {
+      await this.notify(userId, templateCode, data, { dedupeKey: opts.dedupeKey });
+      return 'SENT';
+    } catch (err) {
+      const what = `${templateCode} cho ${userId}${context ? ` (${context})` : ''}`;
+      const reason = err instanceof Error ? err.message : String(err);
+      const queue = this.notificationsQueue;
+      if (queue) {
+        const job: InAppRetryJobData = { userId, templateCode, data, dedupeKey: opts.dedupeKey, ...(context ? { context } : {}) };
+        try {
+          await withQueueTimeout(queue.add(INAPP_RETRY_JOB, job, INAPP_RETRY_JOB_OPTIONS), `${QUEUE_NOTIFICATIONS} ${INAPP_RETRY_JOB}`);
+          this.logger.warn(`Gửi tin ${what} lỗi (${reason}), đã xếp hàng thử lại.`);
+          return 'QUEUED';
+        } catch (queueErr) {
+          this.logger.error(
+            `Gửi tin ${what} lỗi: ${reason}; xếp hàng thử lại cũng lỗi: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`,
+          );
+          captureServerError(err);
+          return 'LOST';
+        }
+      }
+      this.logger.error(`Gửi tin ${what} lỗi: ${reason}; không có hàng đợi để thử lại.`);
+      captureServerError(err);
+      return 'LOST';
     }
   }
 

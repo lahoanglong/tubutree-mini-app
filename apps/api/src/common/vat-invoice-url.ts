@@ -106,3 +106,8 @@ export function vatInvoiceUrlError(raw: string, hosts: readonly string[] = vatIn
   }
   return null;
 }
+
+/** Khoá chống trùng tin "đã xuất hoá đơn" của một đơn: nút admin, webhook Pancake và job thử lại dùng chung nên khách nhận đúng một tin. */
+export function invoiceIssuedDedupeKey(orderId: string): string {
+  return `invoice-issued:${orderId}`;
+}
