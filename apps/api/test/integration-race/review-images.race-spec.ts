@@ -40,8 +40,8 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
     app.use(helmet());
     app.setGlobalPrefix('api');
     await app.init();
-    await app.listen(0);
-    base = `${await app.getUrl()}/api`.replace('[::1]', 'localhost');
+    await app.listen(0, '127.0.0.1');
+    base = `${await app.getUrl()}/api`;
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
 

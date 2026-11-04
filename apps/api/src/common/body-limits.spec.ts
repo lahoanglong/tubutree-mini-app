@@ -56,7 +56,7 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
   let server: Server;
   let base: string;
   beforeAll(async () => {
-    server = buildApp().listen(0);
+    server = buildApp().listen(0, '127.0.0.1');
     await new Promise((r) => server.once('listening', r));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
