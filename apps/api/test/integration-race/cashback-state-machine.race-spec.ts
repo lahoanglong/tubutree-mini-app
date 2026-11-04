@@ -120,4 +120,44 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     }
     expect(await pendingOf(user.id)).toBe(5 * 35000);
   });
+
+  it('L2-02: Kế toán REJECTED, sau đó postback/đối soát CONFIRMED song song → vẫn REJECTED, Ví và pending không đổi, đúng 1 cảnh báo', async () => {
+    const { user, utm } = await seedClick();
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const o = `L202-${randCode(6)}`;
+    await svc.ingest(ev(utm, o, 'PENDING'), 'accesstrade');
+    await svc.adminReview(admin.id, (await rowOf(o)).id, 'REJECTED', 'sàn báo gian lận');
+    await Promise.all([svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade'), svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade'), svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade')]);
+    const row = await rowOf(o);
+    expect(row.status).toBe('REJECTED');
+    expect(row.adminReviewedAt).not.toBeNull();
+    expect(row.adminReviewedBy).toBe(admin.id);
+    expect(row.conflictNotifiedAt).not.toBeNull();
+    expect(row.conflictPayload).toEqual({ status: 'CONFIRMED' });
+    expect(await pendingOf(user.id)).toBe(0);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).walletBalance).toBe(0);
+    const notified = (notify.mock.calls as unknown[][]).filter((c) => c[1] === 'OPS_HEALTH_ALERT' && String((c[2] as { summary: string }).summary).includes(o));
+    expect(new Set(notified.map((c) => c[0])).size).toBe(notified.length);
+    expect(notified.length).toBeLessThanOrEqual(await prisma.user.count({ where: { role: 'ADMIN', isBlocked: false } }));
+    const second = notify.mock.calls.length;
+    await svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade');
+    expect(notify.mock.calls.length).toBe(second);
+  });
+
+  it('L2-08: sàn báo rejected sau khi đã PAID → tiền Ví không đổi, payload được lưu, báo một lần', async () => {
+    const { user, utm } = await seedClick();
+    const o = `L208-${randCode(6)}`;
+    await svc.ingest(ev(utm, o, 'CONFIRMED'), 'accesstrade');
+    await prisma.cashbackTransaction.updateMany({ where: { userId: user.id }, data: { confirmedAt: new Date(Date.now() - 90 * 86400_000) } });
+    await svc.settleConfirmed();
+    expect((await rowOf(o)).status).toBe('PAID');
+    await Promise.all([svc.ingest(ev(utm, o, 'REJECTED'), 'accesstrade'), svc.ingest(ev(utm, o, 'REJECTED'), 'accesstrade')]);
+    const row = await rowOf(o);
+    expect(row.status).toBe('PAID');
+    expect(row.conflictNotifiedAt).not.toBeNull();
+    expect(row.conflictPayload).toEqual({ status: 'REJECTED' });
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(after.walletBalance).toBe(35000);
+    expect(after.cashbackPending).toBe(0);
+  });
 });
