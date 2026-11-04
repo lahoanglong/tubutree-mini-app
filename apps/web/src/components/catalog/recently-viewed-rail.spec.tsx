@@ -69,3 +69,26 @@ describe('RecentlyViewedRail: nguồn ảnh', () => {
     expect(decodeURIComponent(list[0]!.getAttribute('src')!)).toContain('stored-1.jpg');
   });
 });
+
+describe('RecentlyViewedRail: dọn mục API không trả lại', () => {
+  it('API trả về thiếu món (đã ẩn): kho chỉ còn món còn sống; trả rỗng hết thì xoá khoá để script <head> không giữ chỗ lần sau', async () => {
+    http.get.mockImplementation(async (_p: string, opts?: { query?: { slugs?: string } }) => {
+      const slugs = (opts?.query?.slugs ?? '').split(',').filter(Boolean).filter((s) => s !== 'sp-2');
+      return { data: slugs.map((s) => LIVE(Number(s.replace('sp-', '')))), meta: { page: 1, limit: slugs.length, total: slugs.length } };
+    });
+    await mount(<RecentlyViewedRail />, [1, 2, 3].map(STORED));
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug)).toEqual(['sp-1', 'sp-3']);
+    mounted?.unmount();
+    localStorage.clear();
+    http.get.mockResolvedValue({ data: [], meta: { page: 1, limit: 0, total: 0 } });
+    const c = await mount(<RecentlyViewedRail />, [1, 2].map(STORED));
+    expect(localStorage.getItem('tubu_recently_viewed')).toBeNull();
+    expect(c.querySelector('#browse-recent')).toBeNull();
+  });
+
+  it('API lỗi: không dọn (mất mạng không được xoá lịch sử xem)', async () => {
+    http.get.mockRejectedValue(new Error('offline'));
+    await mount(<RecentlyViewedRail />, [1, 2].map(STORED));
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(2);
+  });
+});

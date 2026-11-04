@@ -117,6 +117,26 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     await waitFor(() => expect(decodeURIComponent(again.container.querySelector('img')!.getAttribute('src')!)).toContain('cu.jpg'));
   });
 
+  it('API trả thiếu món (đã ẩn): kho chỉ còn món còn sống; trả rỗng thì xoá khoá; API lỗi thì không dọn', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
+    recordRecentlyViewed({ slug: 'b', name: 'B', thumbnail: null }, 2);
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.filter((s) => s !== 'a').map((s) => liveProduct(s)));
+    const first = renderRail();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug)).toEqual(['b']));
+    first.unmount();
+    mocks.fetchProductsBySlugs.mockResolvedValue([]);
+    renderRail();
+    await waitFor(() => expect(localStorage.getItem('tubu_recently_viewed')).toBeNull());
+  });
+
+  it('API lỗi: không dọn lịch sử xem', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
+    mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
+    renderRail();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(1);
+  });
+
   it('sản phẩm không có ảnh vẫn hiện thẻ (khung ảnh trống, không có thẻ img)', () => {
     recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null });
     renderRail();

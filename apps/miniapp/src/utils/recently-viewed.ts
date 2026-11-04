@@ -104,6 +104,24 @@ export function recordRecentlyViewed(
   return next;
 }
 
+/**
+ * Bỏ khỏi kho các mục mà API không trả lại (sản phẩm đã ẩn/gỡ): lần vào sau script ở <head> không còn giữ chỗ cho một dải sẽ biến mất, và dải không dựng
+ * rồi thu lại. Chỉ gọi khi truy vấn theo đúng danh sách slug đã thành công.
+ */
+export function pruneRecentlyViewed(keep: ReadonlySet<string>, storage: StorageLike | null = browserStorage()): void {
+  if (!storage) return;
+  const all = readRecentlyViewed(storage);
+  const next = all.filter((x) => keep.has(x.slug));
+  if (next.length === all.length) return;
+  try {
+    if (next.length === 0) storage.removeItem(RECENTLY_VIEWED_KEY);
+    else storage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
+  } catch {
+    return;
+  }
+  notifyChange();
+}
+
 export function clearRecentlyViewed(storage: StorageLike | null = browserStorage()): void {
   if (!storage) return;
   try {

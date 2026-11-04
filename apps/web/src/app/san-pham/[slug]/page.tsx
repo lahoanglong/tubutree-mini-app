@@ -112,7 +112,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       >
         ← Về trang chủ
       </BackLink>
-      <RecordRecentlyViewed slug={product.slug} name={product.name} thumbnail={product.thumbnail} images={product.images} />
+      <RecordRecentlyViewed slug={product.slug} name={product.name} thumbnail={product.thumbnail ?? product.images[0] ?? null} />
       <FlashSalesSeed items={flash} now={generatedAt}>
       <PdpSelectionProvider initialId={initialVariation?.id ?? ''}>
         <PdpLayout

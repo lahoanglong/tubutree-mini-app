@@ -1,12 +1,13 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { recentlyViewedQuery } from '@tubutree/app-core/queries/catalog';
 import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { useRecentlyViewed } from '@/lib/use-recently-viewed';
+import { pruneRecentlyViewed } from '@/lib/recently-viewed';
 import { ProductCard } from '@/components/mini/product-card';
 import { RailCell, RailShell } from '@/components/mini/product-rail';
 import { Section } from '@/components/mini/section';
@@ -37,6 +38,11 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
   const slugs = stored.map((it) => it.slug);
   const live = useQuery({ ...recentlyViewedQuery(coreHttp, slugs), enabled: slugs.length > 0, staleTime: 30_000 });
   const bySlug = new Map((live.data ?? []).map((p) => [p.slug, p]));
+  // API đã trả lời: mục không còn (ẩn/gỡ) bị xoá khỏi máy, để lần sau script ở <head> không giữ chỗ cho dải sẽ biến mất. Trong lần vào này dải đã dựng từ kho trước khi API trả lời
+  // (giữ chỗ rồi chờ API sẽ trì hoãn ảnh ưu tiên của đường thường), nên khi cả danh sách bị ẩn thì dải vẫn thu lại một lần: chỉ xảy ra khi mọi món đã xem đều bị gỡ.
+  useEffect(() => {
+    if (live.isSuccess) pruneRecentlyViewed(new Set((live.data ?? []).map((p) => p.slug)));
+  }, [live.isSuccess, live.data]);
   const items = (live.isSuccess ? stored.filter((it) => bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) {
     return reserve && !hydrated ? <div data-testid="recent-slot" aria-hidden="true" className={`hidden [html[data-has-recent]_&]:block ${RESERVED_HEIGHT}`} /> : null;

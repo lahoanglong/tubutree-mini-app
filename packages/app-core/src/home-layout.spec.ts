@@ -552,8 +552,10 @@ describe('tên đọc của thẻ Điểm Xanh', () => {
     expect(memberCardAriaLabel(card, 'Xem ưu đãi', 'Chào An')).toBe('Chào An · Mầm Xanh, 120 điểm, ≈ 12.000đ. Xem ưu đãi');
   });
   it('memberCardAriaLabel khi tổng quan lỗi: nói câu báo lỗi đang hiển thị, không đọc số điểm không thấy', () => {
-    expect(memberCardAriaLabel(card, 'Xem ưu đãi', 'Chào An', 'Chưa tải được hạng và điểm')).toBe('Chào An · Mầm Xanh, Chưa tải được hạng và điểm. Xem ưu đãi');
-    expect(memberCardAriaLabel(card, 'Xem ưu đãi', 'Chào An', 'Chưa tải được hạng và điểm')).not.toContain('120');
+    // Ở trạng thái lỗi ứng dụng không có hạng (overview chưa về).
+    const failed = { ...card, tierName: null };
+    expect(memberCardAriaLabel(failed, 'Xem ưu đãi', 'Chào An', 'Chưa tải được hạng và điểm')).toBe('Chào An, Chưa tải được hạng và điểm. Xem ưu đãi');
+    expect(memberCardAriaLabel(failed, 'Xem ưu đãi', 'Chào An', 'Chưa tải được hạng và điểm')).not.toContain('120');
   });
   it('offersPointsAriaLabel: đúng thứ tự chữ nhìn thấy (hạng, chi tiết, điểm, giá trị); thiếu hạng thì bỏ', () => {
     expect(offersPointsAriaLabel(card, 'Hạng và lịch sử điểm')).toBe('Mầm Xanh, Hạng và lịch sử điểm, 120 điểm, ≈ 12.000đ');
