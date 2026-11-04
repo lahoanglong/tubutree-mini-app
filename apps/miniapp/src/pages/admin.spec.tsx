@@ -351,8 +351,8 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(screen.queryByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).not.toBeInTheDocument());
 
       mocks.revokeStaff.mockRejectedValueOnce(new Error('Không thu hồi được'));
-      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
-      fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
+      fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.change(await screen.findByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không thu hồi được', type: 'error' }));
       expect(screen.getByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).toBeInTheDocument();
