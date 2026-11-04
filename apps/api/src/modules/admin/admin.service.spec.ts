@@ -2556,7 +2556,7 @@ describe('AdminService.forfeitRevokedCommissions', () => {
     expect(t.updateMany.mock.invocationCallOrder[0]).toBeLessThan(revoke.mock.invocationCallOrder[0]!);
   });
 
-  it('khoá hoa hồng trước rồi tới dòng người dùng (cùng thứ tự với requestPayout), huỷ mọi khoản, ghi WALLET_FORFEIT kèm lý do', async () => {
+  it('khoá hoa hồng trước rồi tới dòng người dùng (cùng thứ tự với requestPayout), huỷ mọi khoản, ghi COMMISSION_FORFEIT kèm lý do', async () => {
     const t = forfeitPrisma({});
     const out = await mkAdmin(t.prisma).forfeitRevokedCommissions('admin1', 'u1', '  Đã thu hồi quyền, huỷ theo quyết định  ');
     expect(out).toEqual({ cancelled: 2, amount: 100_000 });
@@ -2564,7 +2564,7 @@ describe('AdminService.forfeitRevokedCommissions', () => {
     expect(t.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['c1', 'c2'] }, status: 'APPROVED', payoutBatchId: null }, data: { status: 'REJECTED' } });
     expect(t.eventCreate.mock.calls[0][0].data).toMatchObject({
       userId: 'u1',
-      kind: 'WALLET_FORFEIT',
+      kind: 'COMMISSION_FORFEIT',
       fromValue: '100000',
       toValue: '0',
       actorId: 'admin1',
@@ -2609,6 +2609,55 @@ describe('AdminService.getUserDetail — dấu thu hồi CTV', () => {
     expect(out.user.affiliateRevokedAt).toEqual(mark);
     expect(out.forfeitableCommission).toEqual(mark ? { count: 2, amount: 100_000 } : null);
     expect(aggregate.aggregate).toHaveBeenCalledTimes(mark ? 1 : 0);
+  });
+});
+
+describe('AdminService.getUserDetail — lịch sử vai trò và khoá', () => {
+  const at = (n: number) => new Date(Date.UTC(2026, 10, 1, 0, n));
+  const ev = (id: string, kind: string, n: number, actorId: string | null = null) => ({ id, kind, actorId, createdAt: at(n) });
+  function setup(common: unknown[], sessions: unknown[]) {
+    const findMany = jest.fn().mockImplementation(({ where }: { where: { kind: unknown } }) => {
+      if (where.kind === 'SESSIONS_REVOKED') return Promise.resolve(sessions);
+      if (where.kind === 'STOREFRONT_PARTNER') return Promise.resolve([]);
+      return Promise.resolve(common);
+    });
+    const prisma = makePrisma({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: null, affiliateRevokedAt: null }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'a1', fullName: 'Admin', phone: null }]),
+      },
+      order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      userAdminEvent: { findMany },
+      roleGrant: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    return { prisma, findMany };
+  }
+
+  it('dòng cắt phiên lấy riêng 20 dòng: 100 dòng mới nhất không đẩy mất BLOCK / AFFILIATE_REVOKE cũ, blockHistory gộp sắp giảm dần', async () => {
+    const sessions = Array.from({ length: 20 }, (_, i) => ev(`s${i}`, 'SESSIONS_REVOKED', 100 - i, 'a1'));
+    const common = [ev('b1', 'BLOCK', 5, 'a1'), ev('r1', 'AFFILIATE_REVOKE', 4), ev('u1e', 'UNBLOCK', 2)];
+    const { prisma, findMany } = setup(common, sessions);
+    const out = await mkAdmin(prisma).getUserDetail('u1');
+    const commonWhere = findMany.mock.calls.map((c) => c[0]).find((a) => typeof a.where.kind === 'object' && 'in' in a.where.kind);
+    expect(commonWhere.where.kind.in).not.toContain('SESSIONS_REVOKED');
+    expect(commonWhere.take).toBe(100);
+    const sessCall = findMany.mock.calls.map((c) => c[0]).find((a) => a.where.kind === 'SESSIONS_REVOKED');
+    expect(sessCall).toMatchObject({ where: { userId: 'u1', kind: 'SESSIONS_REVOKED' }, orderBy: { createdAt: 'desc' }, take: 20 });
+    expect(out.blockHistory.map((e) => e.id)).toEqual([...sessions.map((e) => e.id), 'b1', 'u1e']);
+    expect(out.roleHistory.map((e) => e.id)).toEqual(['r1']);
+    expect(out.blockHistory[0]!.actorName).toBe('Admin');
+  });
+
+  it('COMMISSION_FORFEIT vào roleHistory, WALLET_FORFEIT vào blockHistory', async () => {
+    const common = [ev('cf', 'COMMISSION_FORFEIT', 9), ev('wf', 'WALLET_FORFEIT', 8), ev('ro', 'ROLE', 7), ev('sp', 'STAFF_PERMISSIONS', 6)];
+    const { prisma, findMany } = setup(common, []);
+    const out = await mkAdmin(prisma).getUserDetail('u1');
+    const kinds = findMany.mock.calls.map((c) => c[0].where.kind).find((k) => typeof k === 'object').in;
+    expect(kinds).toEqual(expect.arrayContaining(['COMMISSION_FORFEIT', 'WALLET_FORFEIT']));
+    expect(out.roleHistory.map((e) => e.id)).toEqual(['cf', 'ro', 'sp']);
+    expect(out.blockHistory.map((e) => e.id)).toEqual(['wf']);
   });
 });
 

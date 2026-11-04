@@ -72,8 +72,10 @@ function EventLine({ e }: { e: AdminUserEvent }) {
         ? `Nhóm việc ${permLabel(e.fromValue)} → ${permLabel(e.toValue)}`
         : e.kind === 'STOREFRONT_PARTNER'
           ? `Gian hàng đối tác: ${onOff(e.fromValue)} → ${onOff(e.toValue)}`
-          : e.kind === 'WALLET_FORFEIT'
-            ? `Xoá tài khoản: bỏ số dư Ví ${formatVnd(Number(e.fromValue ?? 0))}`
+          : e.kind === 'COMMISSION_FORFEIT'
+            ? `Huỷ hoa hồng chờ rút ${formatVnd(Number(e.fromValue ?? 0))}`
+            : e.kind === 'WALLET_FORFEIT'
+              ? `Xoá tài khoản: bỏ số dư Ví ${formatVnd(Number(e.fromValue ?? 0))}`
             : e.kind === 'AFFILIATE_REVOKE'
               ? e.toValue
                 ? 'Thu hồi quyền CTV'

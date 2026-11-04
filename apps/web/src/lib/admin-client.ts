@@ -2254,7 +2254,7 @@ export const cancelGiftRedemption = (id: string, body: WasteGiftCancelRequest) =
 // ── Chi tiết người dùng (ADMINOPS-11) + nhóm việc nhân viên (ADMINOPS-10) ──
 export interface AdminUserEvent {
   id: string;
-  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'AFFILIATE_REVOKE' | 'SESSIONS_REVOKED';
+  kind: 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'COMMISSION_FORFEIT' | 'AFFILIATE_REVOKE' | 'SESSIONS_REVOKED';
   fromValue: string | null;
   toValue: string | null;
   reason: string | null;

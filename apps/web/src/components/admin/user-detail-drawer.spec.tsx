@@ -435,6 +435,18 @@ describe('UserDetailDrawer — Cắt phiên (L1-04)', () => {
     expect(body.querySelector('section[aria-label="Phiên đăng nhập"]')).toBeNull();
   });
 
+  it('nhãn huỷ hoa hồng và xoá tài khoản tách nhau', async () => {
+    const body = await open({
+      ...DETAIL,
+      roleHistory: [{ id: 'e2', kind: 'COMMISSION_FORFEIT', fromValue: '150000', toValue: '0', reason: 'Huỷ 2 khoản hoa hồng chờ rút: x', actorId: 'a1', actorName: 'Admin', createdAt: '2026-11-05T03:00:00.000Z' }],
+      blockHistory: [{ id: 'e3', kind: 'WALLET_FORFEIT', fromValue: '20000', toValue: '0', reason: null, actorId: 'a1', actorName: 'Admin', createdAt: '2026-11-05T02:00:00.000Z' }],
+    });
+    const text = body.textContent ?? '';
+    expect(text).toContain('Huỷ hoa hồng chờ rút 150.000');
+    expect(text).not.toContain('Xoá tài khoản: bỏ số dư Ví 150.000');
+    expect(text).toContain('Xoá tài khoản: bỏ số dư Ví 20.000');
+  });
+
   it('lịch sử ghi dòng cắt phiên kèm số phiên và lý do', async () => {
     const body = await open({
       ...DETAIL,

@@ -796,7 +796,7 @@ export class AdminService {
           for (const approvedAt of months.values()) await revokeLostCtvMilestones(tx, userId, approvedAt);
           await recordUserAdminEvent(tx, {
             userId,
-            kind: 'WALLET_FORFEIT',
+            kind: 'COMMISSION_FORFEIT',
             from: String(amount),
             to: '0',
             reason: `Huỷ ${count} khoản hoa hồng chờ rút: ${reason}`,
@@ -846,7 +846,7 @@ export class AdminService {
     // chính admin thì dùng nút Đăng xuất mọi thiết bị của khách.
     const sessionsRevocable = userId !== viewerId && !mergedIntoId && !(zaloId?.startsWith('guest_') ?? false);
     const take = AdminService.DETAIL_TAKE;
-    const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([
+    const [orders, orderTotal, wallet, points, events, partnerEvents, sessionEvents, grants] = await Promise.all([
       this.prisma.order.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -866,9 +866,10 @@ export class AdminService {
         take,
         select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
       }),
-      // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
+      // STOREFRONT_PARTNER và SESSIONS_REVOKED lấy riêng: khách tự bấm "Đăng xuất mọi thiết bị" được nhiều lần, không để nó đẩy
+      // dòng vai trò/khoá/huỷ hoa hồng ra khỏi 100 dòng.
       this.prisma.userAdminEvent.findMany({
-        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT', 'AFFILIATE_REVOKE', 'SESSIONS_REVOKED'] } },
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT', 'COMMISSION_FORFEIT', 'AFFILIATE_REVOKE'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
@@ -876,6 +877,11 @@ export class AdminService {
         where: { userId, kind: 'STOREFRONT_PARTNER' },
         orderBy: { createdAt: 'desc' },
         take: 100,
+      }),
+      this.prisma.userAdminEvent.findMany({
+        where: { userId, kind: 'SESSIONS_REVOKED' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
       }),
       user.phone
         ? this.prisma.roleGrant.findMany({
@@ -902,7 +908,7 @@ export class AdminService {
           select: { id: true, route: true, filters: true, rowCount: true, createdAt: true },
         })
       : null;
-    const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
+    const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...sessionEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
       : [];
@@ -915,8 +921,10 @@ export class AdminService {
       orders: { items: orders, total: orderTotal },
       wallet,
       points,
-      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS' || e.kind === 'AFFILIATE_REVOKE').map(withActor),
-      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK' || e.kind === 'SESSIONS_REVOKED').map(withActor),
+      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS' || e.kind === 'AFFILIATE_REVOKE' || e.kind === 'COMMISSION_FORFEIT').map(withActor),
+      blockHistory: [...events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK' || e.kind === 'WALLET_FORFEIT'), ...sessionEvents]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map(withActor),
       partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };

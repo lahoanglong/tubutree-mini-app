@@ -77,17 +77,17 @@ describe('Huỷ hoa hồng chờ rút của CTV bị thu hồi chạy song song 
     const [u, c, forfeits, ledger] = await Promise.all([
       prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { walletBalance: true } }),
       prisma.commission.findUniqueOrThrow({ where: { id: commissionId }, select: { status: true } }),
-      prisma.userAdminEvent.count({ where: { userId, kind: 'WALLET_FORFEIT' } }),
+      prisma.userAdminEvent.count({ where: { userId, kind: 'COMMISSION_FORFEIT' } }),
       prisma.walletTransaction.count({ where: { userId, type: 'COMMISSION_PAYOUT' } }),
     ]);
     return { balance: u.walletBalance, status: c.status, forfeits, ledger };
   };
 
-  it('người có dấu: huỷ thành công, hoa hồng REJECTED, Ví không đổi, sổ có WALLET_FORFEIT kèm lý do và người làm', async () => {
+  it('người có dấu: huỷ thành công, hoa hồng REJECTED, Ví không đổi, sổ có COMMISSION_FORFEIT kèm lý do và người làm', async () => {
     const { user, commission } = await ctv(true);
     await expect(admin.forfeitRevokedCommissions(boss.id, user.id, 'Quyết định của quản lý')).resolves.toEqual({ cancelled: 1, amount: 100_000 });
     expect(await snapshot(user.id, commission.id)).toEqual({ balance: 0, status: 'REJECTED', forfeits: 1, ledger: 0 });
-    const ev = await prisma.userAdminEvent.findFirstOrThrow({ where: { userId: user.id, kind: 'WALLET_FORFEIT' } });
+    const ev = await prisma.userAdminEvent.findFirstOrThrow({ where: { userId: user.id, kind: 'COMMISSION_FORFEIT' } });
     expect(ev).toMatchObject({ fromValue: '100000', toValue: '0', actorId: boss.id });
     expect(ev.reason).toContain('Quyết định của quản lý');
   });
