@@ -7,9 +7,8 @@ import { getOpsHealth, getOpsInbox, getRetentionDaily, getTodaySummary, type Adm
 import { formatVnd } from '@/lib/shop-client';
 import { summarizeNs1 } from './ns1-card';
 import { formatDateTime } from '@/lib/format-date';
-import { seedDealerClaimFilter } from './dealer-claims-tab';
-import { seedPayoutFilter } from './payout-admin-tab';
-import { failingCronJobs } from './ops-health-tab';
+import { seedDealerClaimFilter, seedPayoutFilter } from './inbox-filter-seeds';
+import { failingCronJobs } from './ops-health-crons';
 import { LoadError } from './ui';
 
 export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {

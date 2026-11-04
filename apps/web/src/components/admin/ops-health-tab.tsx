@@ -23,6 +23,9 @@ import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { failingCronJobs } from './ops-health-crons';
+
+export { failingCronJobs };
 
 const PUSH_STATUS_LABELS: Record<string, string> = {
   PENDING: 'chờ đẩy',
@@ -54,10 +57,6 @@ function cronOutcomeLabel(j: OpsCronJob): string {
 
 /** Tên dễ đọc của việc nền; chưa có trong bảng thì giữ tên kỹ thuật. */
 const cronTitle = (job: string) => CRON_JOB_LABELS[job] ?? job;
-
-/** Việc nền đang lỗi: lượt gần nhất lỗi (consecutiveFailures > 0). Banner xanh chỉ hiện khi không còn việc nào như vậy. */
-export const failingCronJobs = (h: Pick<OpsHealth, 'cronJobs'>): OpsCronJob[] =>
-  (h.cronJobs ?? []).filter((j) => j.consecutiveFailures > 0).sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.job.localeCompare(b.job));
 
 const OPS_HEALTH_KEY = ['admin-ops-health'] as const;
 

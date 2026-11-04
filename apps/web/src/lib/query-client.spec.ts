@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { QueryObserver } from '@tanstack/react-query';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { createQueryClient, shouldRetryQuery } from './query-client';
 
@@ -115,5 +116,62 @@ describe('createQueryClient — làm mới số đếm /me/summary', () => {
     const client = seed();
     await client.invalidateQueries();
     expect(stale(client)).toBe(true);
+  });
+});
+
+describe('mutation chỉ làm mới các khoá admin mà nó khai (F6)', () => {
+  type Meta = { skipAdminInvalidate?: boolean; adminInvalidate?: readonly string[] };
+  const setup = async (keys: string[][]) => {
+    const client = createQueryClient();
+    const fns = new Map<string, ReturnType<typeof vi.fn>>();
+    const unsubs: Array<() => void> = [];
+    for (const key of keys) {
+      const fn = vi.fn(async () => key.join('/'));
+      fns.set(key[0], fn);
+      const obs = new QueryObserver(client, { queryKey: key, queryFn: fn });
+      unsubs.push(obs.subscribe(() => undefined));
+    }
+    await vi.waitFor(() => expect([...fns.values()].every((f) => f.mock.calls.length === 1)).toBe(true));
+    const run = async (meta?: Meta) => {
+      await client.getMutationCache().build(client, { mutationFn: async () => 'ok', meta }).execute(undefined);
+      await new Promise((r) => setTimeout(r, 20));
+    };
+    const calls = (k: string) => fns.get(k)!.mock.calls.length;
+    return { client, run, calls, done: () => unsubs.forEach((u) => u()) };
+  };
+
+  it('skipAdminInvalidate: không queryFn admin nào chạy lại', async () => {
+    const t = await setup([['admin-a'], ['admin-b'], ['public-x']]);
+    await t.run({ skipAdminInvalidate: true });
+    expect([t.calls('admin-a'), t.calls('admin-b'), t.calls('public-x')]).toEqual([1, 1, 1]);
+    t.done();
+  });
+
+  it("adminInvalidate: ['admin-a'] chỉ chạy lại admin-a", async () => {
+    const t = await setup([['admin-a', 1], ['admin-b'], ['public-x']]);
+    await t.run({ adminInvalidate: ['admin-a'] });
+    expect([t.calls('admin-a'), t.calls('admin-b'), t.calls('public-x')]).toEqual([2, 1, 1]);
+    t.done();
+  });
+
+  it('adminInvalidate khớp đúng tên khoá đầu, không khớp theo tiền tố chuỗi (admin-user không kéo admin-users)', async () => {
+    const t = await setup([['admin-user'], ['admin-users']]);
+    await t.run({ adminInvalidate: ['admin-user'] });
+    expect([t.calls('admin-user'), t.calls('admin-users')]).toEqual([2, 1]);
+    t.done();
+  });
+
+  it('không khai gì: chạy lại mọi admin-*, khoá public không bị đụng', async () => {
+    const t = await setup([['admin-a'], ['admin-b'], ['public-x']]);
+    await t.run();
+    expect([t.calls('admin-a'), t.calls('admin-b'), t.calls('public-x')]).toEqual([2, 2, 1]);
+    t.done();
+  });
+
+  it('adminInvalidate rỗng và skipAdminInvalidate cùng khai: skip thắng', async () => {
+    const t = await setup([['admin-a']]);
+    await t.run({ skipAdminInvalidate: true, adminInvalidate: ['admin-a'] });
+    expect(t.calls('admin-a')).toBe(1);
+    t.done();
   });
 });

@@ -20,6 +20,7 @@ import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { ApiError } from '@/lib/client-api';
+import { peekPayoutSeed, seedPayoutFilter } from './inbox-filter-seeds';
 
 const PAID_RELOAD_HINT = 'Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa trước khi chi lần nữa.';
 const RELOAD_HINT = 'Tải lại danh sách để xem trạng thái hiện tại của lệnh.';
@@ -31,12 +32,7 @@ const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
   REJECTED: 'danger',
 };
 
-// Thẻ ở Việc cần xử lý nhắn bộ lọc cho tab này qua biến module (trang admin không truyền seed xuống): số trên thẻ phải
-// khớp số dòng khi bấm vào. Chỉ có hiệu lực cho lần mở tab kế tiếp, tab đọc xong thì xoá.
-let inboxFilterSeed: AdminPayoutStatus | null = null;
-export const seedPayoutFilter = (status: AdminPayoutStatus | null) => {
-  inboxFilterSeed = status;
-};
+export { seedPayoutFilter };
 
 /**
  * Thuế TNCN hoa hồng và các lệnh rút ngân hàng cũ (hoa hồng CTV / Ví Tubu → ngân hàng; rút đã bỏ, chỉ còn lệnh tạo trước đó). Trước đây (P0 A5-08 = A6-05) Payout
@@ -46,9 +42,9 @@ export const seedPayoutFilter = (status: AdminPayoutStatus | null) => {
  * `canReview=false` (nhân viên KE_TOAN): chỉ chi lệnh đã được ADMIN duyệt, nên mặc định mở hàng "Đã duyệt, chờ chuyển khoản".
  */
 export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
-  const [filter, setFilter] = useState<AdminPayoutStatus | ''>(inboxFilterSeed ?? (canReview ? 'REQUESTED' : 'APPROVED'));
+  const [filter, setFilter] = useState<AdminPayoutStatus | ''>(peekPayoutSeed() ?? (canReview ? 'REQUESTED' : 'APPROVED'));
   useEffect(() => {
-    inboxFilterSeed = null;
+    seedPayoutFilter(null);
   }, []);
   const [page, setPage] = useState(1);
   const q = useQuery({
