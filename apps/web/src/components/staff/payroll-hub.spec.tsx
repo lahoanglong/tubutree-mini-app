@@ -12,7 +12,7 @@ afterEach(() => {
 
 const profile = { hourlyRate: 30000, bankBin: '970436', bankAccountNo: '0123456789', bankAccountName: 'NGUYEN VAN A', qrImageUrl: null, active: true };
 
-function stub(payrollOk: boolean) {
+function stub(payrollOk: boolean, month: Record<string, unknown> = {}) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal(
     'fetch',
@@ -22,7 +22,7 @@ function stub(payrollOk: boolean) {
       if (init?.method === 'PUT') return json(profile);
       if (url.includes('/staff/payroll')) {
         if (!payrollOk) return json({ message: 'Lỗi máy chủ' }, 500);
-        return json({ month: { year: 2026, month: 10, status: 'OPEN', totalMinutes: 0, gross: 0, totalFines: 0, net: 0 }, days: [], profile });
+        return json({ month: { year: 2026, month: 10, status: 'OPEN', totalMinutes: 0, gross: 0, totalFines: 0, net: 0, ...month }, days: [], profile });
       }
       return json([]);
     }),
@@ -56,5 +56,26 @@ describe('PayrollHub (Lương của tôi)', () => {
     click(byText(document.body, 'button', 'Lưu'));
     await flush();
     expect(JSON.parse(api.puts()[0]!.init!.body as string)).toMatchObject({ bankBin: '970436', bankAccountNo: '0123456789', bankAccountName: 'NGUYEN VAN A' });
+  });
+
+  it('ảnh xác nhận đã chuyển: ảnh https hợp lệ hiện, javascript:/http:/svg bị chặn', async () => {
+    const proofImg = () => document.querySelector('img[alt="Xác nhận chuyển khoản"]') as HTMLImageElement | null;
+    stub(true, { status: 'PAID', proofImageUrl: 'https://res.cloudinary.com/t/p.jpg' });
+    const ok = render(<PayrollHub />);
+    mounted.push(ok);
+    await flush();
+    expect(proofImg()?.getAttribute('src')).toBe('https://res.cloudinary.com/t/p.jpg');
+    ok.unmount();
+    mounted = [];
+
+    for (const bad of ['javascript:alert(1)', 'http://evil.example/p.jpg', 'data:image/svg+xml;base64,PHN2Zz4=']) {
+      stub(true, { status: 'PAID', proofImageUrl: bad });
+      const r = render(<PayrollHub />);
+      mounted.push(r);
+      await flush();
+      expect(proofImg()).toBeNull();
+      r.unmount();
+      mounted = [];
+    }
   });
 });

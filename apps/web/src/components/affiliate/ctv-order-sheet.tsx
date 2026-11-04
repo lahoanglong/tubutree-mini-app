@@ -403,7 +403,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
 
       <div className="mt-3">
         <Field label={t.note}>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t.notePlaceholder} rows={2} className={`${ui.field} py-2`} />
+          <textarea maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t.notePlaceholder} rows={2} className={`${ui.field} py-2`} />
         </Field>
       </div>
 

@@ -2,20 +2,23 @@ import { Logger } from '@nestjs/common';
 import { ZaloOaEventsReconcileService } from './zalo-oa-events-reconcile.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Queue } from 'bullmq';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../../common/cron-leader/run-exclusive');
 
 const NOW = new Date('2026-10-28T10:00:00Z');
 const MIN = 60_000;
 
 function setup(opts: { rows?: { id: string }[]; locked?: boolean; addImpl?: jest.Mock } = {}) {
   const findMany = jest.fn().mockResolvedValue(opts.rows ?? []);
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.locked ?? true));
   const prisma = {
     oaInboundMessage: { findMany },
-    $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   } as unknown as PrismaService;
   const add = opts.addImpl ?? jest.fn().mockResolvedValue(undefined);
   const queue = { name: 'zalo-oa-events', getJob: jest.fn().mockResolvedValue(null), add } as unknown as Queue;
-  return { svc: new ZaloOaEventsReconcileService(prisma, queue), findMany, add, queue, tx };
+  return { svc: new ZaloOaEventsReconcileService(prisma, queue), findMany, add, queue };
 }
 
 describe('ZaloOaEventsReconcileService.redriveEvents', () => {

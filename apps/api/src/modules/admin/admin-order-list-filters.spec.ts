@@ -5,6 +5,7 @@ import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AdminService } from './admin.service';
+import { PAYMENT_UNLINKED_CLOSED_WHERE, PAYMENT_UNLINKED_OPEN_WHERE } from './admin-order-filter';
 import { AdminController, ExportOrdersQuery, ListOrdersQuery, OrderStatusCountsQuery } from './admin.controller';
 import type { PrismaService } from '../../prisma/prisma.service';
 
@@ -326,5 +327,39 @@ describe('AdminController GET orders/status-counts (R-70)', () => {
   it('DTO từ chối status (số đếm luôn gom theo mọi trạng thái)', async () => {
     const errs = await validate(plainToInstance(OrderStatusCountsQuery, { status: 'CONFIRMED' }), { whitelist: true, forbidNonWhitelisted: true });
     expect(errs.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Bộ lọc paymentUnlinked (khoản Pancake báo đã thanh toán chờ đối chiếu)', () => {
+  it('open/closed lọc đúng điều kiện của thẻ hộp việc, cho cả danh sách lẫn count', async () => {
+    for (const [value, expected] of [['open', PAYMENT_UNLINKED_OPEN_WHERE], ['closed', PAYMENT_UNLINKED_CLOSED_WHERE]] as const) {
+      const { prisma, findMany, count } = listPrisma();
+      await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, { paymentUnlinked: value });
+      expect(findMany.mock.calls[0][0].where).toEqual(expected);
+      expect(count.mock.calls[0][0].where).toEqual(expected);
+    }
+  });
+
+  it('dòng đơn trả cho admin có paymentUnlinkedAt (web hiện lời nhắc theo trường này)', async () => {
+    const { prisma, findMany } = listPrisma();
+    const at = new Date('2026-11-04T01:00:00Z');
+    const lateRefunds = { findMany: jest.fn().mockResolvedValue([]) };
+    findMany.mockResolvedValue([{ id: 'o1', code: 'TUBU1', type: 'RETAIL', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 1, paymentUnlinkedAt: at, items: [], user: null, customerRefunds: [] }]);
+    const res = (await mkAdmin({ ...prisma, orderCustomerRefund: lateRefunds }).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, { paymentUnlinked: 'closed' })) as { data: { paymentUnlinkedAt: Date }[] };
+    expect(res.data[0]!.paymentUnlinkedAt).toEqual(at);
+  });
+
+  it('DTO của danh sách, số đếm theo trạng thái và CSV nhận open|closed, chặn giá trị lạ', async () => {
+    for (const Q of [ListOrdersQuery, OrderStatusCountsQuery, ExportOrdersQuery]) {
+      expect(await validate(plainToInstance(Q, { paymentUnlinked: 'open' }))).toHaveLength(0);
+      expect(await validate(plainToInstance(Q, { paymentUnlinked: 'closed' }))).toHaveLength(0);
+      expect((await validate(plainToInstance(Q, { paymentUnlinked: 'all' }))).map((e) => e.property)).toEqual(['paymentUnlinked']);
+    }
+  });
+
+  it('controller chuyển paymentUnlinked xuống listOrders', async () => {
+    const admin = { listOrders: jest.fn().mockResolvedValue({ data: [] }) };
+    await new AdminController(admin as never, {} as never).orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, paymentUnlinked: 'open' as const }), VIEWER);
+    expect(admin.listOrders).toHaveBeenCalledWith(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, expect.objectContaining({ paymentUnlinked: 'open' }));
   });
 });

@@ -60,6 +60,21 @@ function write(userId: string, list: RecentCustomer[]): void {
   }
 }
 
+/** Xoá khách gần đây của mọi tài khoản trên máy (đăng xuất): tên, SĐT, địa chỉ khách của CTV không được để lại cho người dùng máy sau. */
+export function clearAllRecentCustomers(): void {
+  try {
+    const prefix = `${KEY_PREFIX}:`;
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(prefix)) keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* storage bị chặn: không có gì để xoá */
+  }
+}
+
 export function saveRecentCustomer(userId: string | undefined, customer: RecentCustomer, now = Date.now()): void {
   if (!userId) return;
   const key = normalizeCustomerPhone(customer.phone);

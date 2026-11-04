@@ -1,4 +1,5 @@
 import { getQueueToken } from '@nestjs/bullmq';
+import { runExclusive } from '../../src/common/cron-leader/run-exclusive';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -144,6 +145,23 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     const logs = await prisma.notificationLog.findMany({ where: { userId: a.id, templateCode: CTV_NOTIFICATION.AUTO_WALLET } });
     expect(logs).toHaveLength(1);
     expect((logs[0]!.payload as { body: string }).body).toBe('Tubu Tree đã chuyển 100.000đ hoa hồng (2 đơn) vào Ví của bạn.');
+  });
+
+  it('khách (CUSTOMER) hoặc người có dấu thu hồi còn hoa hồng APPROVED: cron không chuyển; STAFF được nâng từ CTV vẫn chuyển', async () => {
+    const customer = await ctv({ role: 'CUSTOMER' });
+    const revoked = await ctv({ role: 'CUSTOMER', affiliateRevokedAt: new Date() });
+    const staff = await ctv({ role: 'STAFF' });
+    for (const u of [customer, revoked, staff]) await commissionFor(u.id, 30_000);
+    const credited = await affiliate.autoTransferApprovedToWallet();
+    expect(credited.has(customer.id) || credited.has(revoked.id)).toBe(false);
+    expect(credited.has(staff.id)).toBe(true);
+    for (const u of [customer, revoked]) {
+      const st = await state(u.id);
+      expect(st.balance).toBe(0);
+      expect(st.payouts).toHaveLength(0);
+      expect(st.commissions.every((c) => c.status === 'APPROVED')).toBe(true);
+    }
+    expect((await state(staff.id)).balance).toBe(30_000);
   });
 
   it('chạy lại sau khi đã chuyển: không cộng thêm, không báo thêm', async () => {
@@ -390,17 +408,11 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect(await tins(u.id, CTV_NOTIFICATION.AUTO_WALLET)).toHaveLength(2);
   });
 
-  it('hai tiến trình cùng lúc: bên thua khoá advisory bỏ qua, không duyệt, không chuyển, không báo; nhả khoá thì chạy được', async () => {
+  it('hai tiến trình cùng lúc: bên thua khoá lượt chạy bỏ qua, không duyệt, không chuyển, không báo; nhả khoá thì chạy được', async () => {
     await clearMarker();
     const u = await ctv();
     await commissionFor(u.id, 30_000, 'LOCKED');
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('cron:affiliate.approve_due'))::text`;
-        await affiliate.approveDueCommissions(dayNow());
-      },
-      { timeout: 30_000 },
-    );
+    await runExclusive(prisma, 'cron:affiliate.approve_due', () => affiliate.approveDueCommissions(dayNow()));
     let s = await state(u.id);
     expect(s.commissions.map((c) => c.status)).toEqual(['LOCKED']);
     expect(s.balance).toBe(0);

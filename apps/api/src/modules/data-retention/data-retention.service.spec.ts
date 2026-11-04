@@ -6,22 +6,25 @@ import { firstLogLine } from '../../common/cron-run/cron-aware-logger';
 import { DataRetentionService, RETENTION_POLICY, resolveRetentionDays } from './data-retention.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
 
 const NOW = new Date('2026-10-10T20:00:00.000Z');
 const DAY = 86_400_000;
 
 function make(opts: { locked?: boolean; config?: Record<string, unknown>; batchCounts?: number[] } = {}) {
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: opts.locked ?? true }]) };
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.locked ?? true));
   const queue = [...(opts.batchCounts ?? [])];
   const prisma = {
-    $transaction: jest.fn<Promise<unknown>, [(t: unknown) => Promise<unknown>]>(async (fn) => fn(tx)),
     $executeRaw: jest.fn(async () => queue.shift() ?? 0),
   };
   const systemConfig = {
     get: jest.fn(async (key: string, fallback: unknown) => (opts.config && key in opts.config ? opts.config[key] : fallback)),
   };
   const svc = new DataRetentionService(prisma as unknown as PrismaService, systemConfig as unknown as SystemConfigService);
-  return { svc, prisma, tx, systemConfig };
+  return { svc, prisma, systemConfig };
 }
 
 /** Ghép câu SQL Prisma.sql đã truyền vào $executeRaw thành chuỗi + tham số để assert. */
@@ -50,6 +53,7 @@ describe('DataRetentionService (C-046)', () => {
     expect(RETENTION_POLICY.notification_logs.defaultDays).toBe(180);
     expect(RETENTION_POLICY.webhook_events.defaultDays).toBe(90);
     expect(RETENTION_POLICY.refresh_tokens.defaultDays).toBe(30);
+    expect(RETENTION_POLICY.cashback_clicks.defaultDays).toBe(180);
   });
 
   describe('resolveRetentionDays', () => {
@@ -69,16 +73,16 @@ describe('DataRetentionService (C-046)', () => {
     });
   });
 
-  it('không giữ được khoá advisory → bỏ qua, không xoá gì', async () => {
+  it('không giành được khoá lượt chạy → bỏ qua, không xoá gì', async () => {
     const { svc, prisma } = make({ locked: false });
     expect(await svc.runAll({ now: NOW })).toEqual({ skipped: 'LOCKED' });
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 
   it('đang chạy chồng trong cùng instance → bỏ qua', async () => {
-    const { svc, prisma } = make();
+    const { svc } = make();
     let release!: () => void;
-    prisma.$transaction.mockImplementationOnce(() => new Promise((r) => (release = () => r({ deleted: {}, truncated: false }))));
+    (runExclusive as jest.Mock).mockImplementationOnce(() => new Promise((r) => (release = () => r({ acquired: true, value: { deleted: {}, truncated: false } }))));
     const first = svc.runAll({ now: NOW });
     expect(await svc.runAll({ now: NOW })).toEqual({ skipped: 'RUNNING' });
     release();
@@ -102,11 +106,12 @@ describe('DataRetentionService (C-046)', () => {
         support_messages: 0,
         support_forwards: 0,
         support_recall_tombstones: 0,
+        cashback_clicks: 0,
       },
       truncated: false,
     });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(12);
-    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(13);
+    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
     expect(cutoffs).toEqual([
       NOW.getTime() - 395 * DAY,
       NOW.getTime() - 60 * DAY,
@@ -120,6 +125,7 @@ describe('DataRetentionService (C-046)', () => {
       NOW.getTime() - 365 * DAY,
       NOW.getTime() - 365 * DAY,
       NOW.getTime() - 2 * DAY,
+      NOW.getTime() - 180 * DAY,
     ]);
   });
 
@@ -165,7 +171,7 @@ describe('DataRetentionService (C-046)', () => {
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0 });
     expect(res).toMatchObject({ truncated: false });
     expect((res as { deleted: Record<string, number> }).deleted.analytics_events).toBe(7);
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 11);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 12);
     expect(call(prisma, 0).values).toContain(3);
   });
 
@@ -173,7 +179,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make({ batchCounts: [3, 3, 3, 3] });
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: -1 });
     expect(res).toMatchObject({ truncated: true });
-    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(13);
+    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(14);
   });
 
   it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
@@ -194,8 +200,8 @@ describe('DataRetentionService (C-046)', () => {
     } finally {
       now.mockRestore();
     }
-    // analytics_events chỉ được 400/5 = 80 ms (16 lô); phần còn lại chia cho các bảng sau.
-    expect(perTable['"analytics_events"']).toBe(16);
+    // analytics_events chỉ được 400/6 ≈ 67 ms (14 lô); phần còn lại chia cho các bảng sau.
+    expect(perTable['"analytics_events"']).toBe(14);
     expect(perTable['"refresh_tokens"']).toBeGreaterThan(16);
   });
 
@@ -203,7 +209,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make();
     prisma.$executeRaw.mockRejectedValueOnce(new Error('boom'));
     const res = await svc.runAll({ now: NOW, pauseMs: 0 });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 11);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 12);
     expect((res as { deleted: Record<string, number> }).deleted).not.toHaveProperty('analytics_events');
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty('refresh_tokens');
   });
@@ -244,8 +250,8 @@ describe('DataRetentionService (C-046)', () => {
   });
 
   it('handleCron không bao giờ ném lỗi ra ngoài', async () => {
-    const { svc, prisma } = make();
-    prisma.$transaction.mockRejectedValueOnce(new Error('db down'));
+    const { svc } = make();
+    (runExclusive as jest.Mock).mockRejectedValueOnce(new Error('db down'));
     await expect(svc.handleCron()).resolves.toBeUndefined();
   });
 });

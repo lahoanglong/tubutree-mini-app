@@ -21,6 +21,40 @@ async function waitFor(cond: () => boolean, timeoutMs = 5000) {
   }
 }
 
+// Các tab tải lười (next/dynamic) nạp lần đầu mất cả giây vì phải biên dịch: nạp sẵn để mỗi ca test chỉ chờ vài lượt flush như trước.
+beforeAll(async () => {
+  await Promise.all([
+    import('@/components/admin/dealer-claims-tab'),
+    import('@/components/admin/dealer-accounts-tab'),
+    import('@/components/admin/dealer-price-history-tab'),
+    import('@/components/admin/commission-rates-tab'),
+    import('@/components/admin/product-categories-tab'),
+    import('@/components/admin/engagement-tab'),
+    import('@/components/admin/external-orders-tab'),
+    import('@/components/admin/external-claims-tab'),
+    import('@/components/admin/support-chat-tab'),
+    import('@/components/admin/payout-admin-tab'),
+    import('@/components/admin/customer-refunds-tab'),
+    import('@/components/admin/cashback-tab'),
+    import('@/components/admin/pos-credits-tab'),
+    import('@/components/admin/reviews-tab'),
+    import('@/components/admin/subscriptions-tab'),
+    import('@/components/admin/ops-health-tab'),
+    import('@/components/admin/attendance-tab'),
+    import('@/components/admin/staff-roster-tab'),
+    import('@/components/admin/shift-approval-tab'),
+    import('@/components/admin/payroll-admin-tab'),
+    import('@/components/admin/storefronts-tab'),
+    import('@/components/admin/merchant-products-tab'),
+    import('@/components/admin/merchant-fulfilment-tab'),
+    import('@/components/admin/campaigns-tab'),
+    import('@/components/admin/bundles-tab'),
+    import('@/components/admin/notification-templates-tab'),
+    import('@/components/admin/reports-tab'),
+    import('./analytics-tab'),
+  ]);
+}, 60_000);
+
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
@@ -90,6 +124,7 @@ const mocks = vi.hoisted(() => ({
   inbox: vi.fn(),
   inboxExternal: null as Record<string, number> | null,
   inboxUncategorized: 0,
+  inboxUnlinked: null as { open: number; closed: number } | null,
   access: { role: 'STAFF', staffPermissions: [] as string[] },
   refundsCalls: 0,
   refundsArgs: [] as unknown[][],
@@ -174,6 +209,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'communityReports', count: 3 },
           { key: 'dealerApplications', count: 5 },
           { key: 'productsMissingImage', count: 4 },
+          ...(mocks.inboxUnlinked ? [{ key: 'paymentUnlinked', count: mocks.inboxUnlinked.open }, { key: 'paymentUnlinkedClosed', count: mocks.inboxUnlinked.closed }] : []),
           ...(mocks.inboxUncategorized ? [{ key: 'productsUncategorized', count: mocks.inboxUncategorized }] : []),
           ...(mocks.inboxExternal ? [{ key: 'externalPoints', count: Object.values(mocks.inboxExternal).reduce((a, b) => a + b, 0), parts: mocks.inboxExternal }] : []),
         ],
@@ -238,8 +274,9 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           phone: '0911111111',
           address: '1 Lê Lợi',
           taxCode: null,
-          cccdFrontUrl: 'https://img.test/f.jpg',
-          cccdBackUrl: '',
+          hasCccdFront: true,
+          hasCccdBack: false,
+          hasStoreFront: false,
           status: 'PENDING',
           createdAt: '2026-10-01T00:00:00.000Z',
         },
@@ -376,6 +413,7 @@ beforeEach(() => {
   mocks.inbox.mockReset();
   mocks.inboxExternal = null;
   mocks.inboxUncategorized = 0;
+  mocks.inboxUnlinked = null;
   mocks.todayCalls = 0;
   mocks.guestCount = 7;
   mocks.access = { role: 'STAFF', staffPermissions: [] };
@@ -791,6 +829,52 @@ describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
   });
 });
 
+describe('admin/page — lời nhắc khoản Pancake báo đã thanh toán chờ đối chiếu ở chi tiết đơn', () => {
+  const unlinked = (over: Record<string, unknown> = {}) => ({
+    id: 'o7',
+    code: 'TUBU7',
+    status: 'CANCELLED',
+    total: 300000,
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    createdAt: '2026-10-02T03:00:00.000Z',
+    user: { fullName: 'Khách C', phone: '0933333333' },
+    paymentUnlinkedAt: '2026-11-04T01:00:00.000Z',
+    ...over,
+  });
+  const openDetail = async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const r = await mount();
+    act(() => [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!.click());
+    await flush();
+    return r.container;
+  };
+
+  it('ADMIN: đơn đã huỷ có lời nhắc dành cho quản trị viên và nút "Đã đối chiếu"', async () => {
+    mocks.orders = [unlinked()];
+    const container = await openDetail();
+    const panel = container.querySelector('section[aria-label="Pancake báo đã thanh toán, chờ đối chiếu"]')!;
+    expect(panel.textContent).toContain('Pancake báo đã thanh toán cho đơn đã huỷ/trả. Quản trị viên đối chiếu sao kê');
+    expect([...panel.querySelectorAll('button')].some((b) => b.textContent === 'Đã đối chiếu')).toBe(true);
+  });
+
+  it('Kế toán: đơn còn mở thấy lời nhắc "Đã nhận tiền" nhưng KHÔNG có nút "Đã đối chiếu"', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KE_TOAN'] };
+    mocks.orders = [unlinked({ status: 'CONFIRMED' })];
+    const container = await openDetail();
+    const panel = container.querySelector('section[aria-label="Pancake báo đã thanh toán, chờ đối chiếu"]')!;
+    expect(panel.textContent).toContain('khách đã chuyển thì bấm "Đã nhận tiền"');
+    expect([...panel.querySelectorAll('button')].some((b) => b.textContent === 'Đã đối chiếu')).toBe(false);
+  });
+
+  it('đơn đã PAID dù còn cờ cũ: không hiện lời nhắc', async () => {
+    mocks.orders = [unlinked({ paymentStatus: 'PAID' })];
+    const container = await openDetail();
+    expect(container.querySelector('section[aria-label="Pancake báo đã thanh toán, chờ đối chiếu"]')).toBeNull();
+  });
+});
+
 describe('admin/page — tab Đại lý', () => {
   const openDealers = async () => {
     window.history.replaceState(null, '', '/admin?tab=dealers');
@@ -877,11 +961,13 @@ describe('admin/page — tab Đại lý', () => {
     expect(chip.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD có viền token', async () => {
+  it('thẻ hồ sơ: tên/địa chỉ dài ngắt dòng, ảnh CCCD chỉ là nút xem (không có img nhận URL từ danh sách)', async () => {
     const { container } = await openDealers();
     const card = [...container.querySelectorAll('div')].find((d) => d.textContent?.startsWith('Cửa hàng Xanh') && d.className.includes('rounded-card'))!;
     expect(card.querySelector('span.break-words')!.textContent).toBe('Cửa hàng Xanh');
-    expect(card.querySelector('img')!.className).toContain('border-stone-200');
+    expect(card.querySelector('img')).toBeNull();
+    expect(card.textContent).toContain('Xem CCCD trước');
+    expect(card.textContent).not.toContain('Xem CCCD sau');
   });
 });
 
@@ -986,6 +1072,25 @@ describe('admin/page — tab Người dùng', () => {
     act(() => (accept as HTMLButtonElement).click());
     await flush();
     expect(mocks.unblockUser).toHaveBeenCalledWith('u3');
+  });
+
+  it('F6 — mở khoá xong danh sách người dùng chỉ tải lại một lần (không còn refetch thừa ngoài lần làm cũ chung)', async () => {
+    mocks.users = [
+      { id: 'u3', fullName: 'Trần Cường', phone: '0966666666', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-03T00:00:00.000Z', isBlocked: true, blockedReason: 'Farm voucher' },
+    ];
+    mocks.unblockUser.mockReset().mockResolvedValue({ id: 'u3', isBlocked: false, blockedAt: null, blockedReason: null });
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const r = render(<AdminPage />, createQueryClient());
+    mounted.push(r);
+    await flush();
+    const { container } = r;
+    const before = mocks.listUsersArgs.length;
+    act(() => (container.querySelector('button[aria-label="Mở khoá Trần Cường"]') as HTMLButtonElement).click());
+    await flush();
+    const accept = [...document.body.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Mở khoá')!;
+    act(() => (accept as HTMLButtonElement).click());
+    await flush();
+    expect(mocks.listUsersArgs.length - before).toBe(1);
   });
 
   it('khoá thất bại (vd tự khoá mình) → báo lỗi màu danger, không nuốt lỗi', async () => {
@@ -3838,6 +3943,21 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'bank_transfer_to_confirm', order: 'asc' });
+  });
+
+  it.each([
+    ['paymentUnlinked', 'open', 'Pancake báo đã thanh toán — chờ đối chiếu sao kê', 'còn mở'],
+    ['paymentUnlinkedClosed', 'closed', 'Pancake báo đã thanh toán cho đơn đã huỷ/trả', 'đã huỷ/trả'],
+  ] as const)('thẻ %s ra đúng nhãn và mở tab Đơn hàng với bộ lọc paymentUnlinked=%s, cũ nhất trước', async (key, filter, label, hint) => {
+    mocks.inboxUnlinked = { open: 2, closed: 1 };
+    const { container } = await mount();
+    const card = container.querySelector(`[data-inbox="${key}"]`)!;
+    expect(card.textContent).toContain(label);
+    click(card);
+    await flush();
+    expect(window.location.search).toBe(`?tab=orders&paymentUnlinked=${filter}`);
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, undefined, undefined, { paymentUnlinked: filter, order: 'asc' });
+    expect(container.textContent).toContain(`Đang xem đơn ${hint} mà Pancake báo đã thanh toán nhưng chưa gắn đúng đơn Pancake`);
   });
 
   it('thẻ đơn đại lý trả trước chờ tiền mở tab Đơn hàng đúng hàng đợi đại lý, cũ nhất trước', async () => {

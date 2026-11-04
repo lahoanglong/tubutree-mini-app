@@ -183,6 +183,7 @@ const APPROVED_LOADED_KEYS = [
     'reorder.default_cycle_days',
     'reorder.remind_ratio',
     'retention.analytics_events_days',
+    'retention.cashback_clicks_days',
     'retention.notification_logs_days',
     'retention.refresh_sessions_days',
     'retention.support_chat_days',

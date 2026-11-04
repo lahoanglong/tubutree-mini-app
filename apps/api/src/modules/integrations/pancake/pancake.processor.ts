@@ -50,6 +50,7 @@ import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../../common/vat-invoice-url';
 import { notifyAdmins } from '../../../common/notify-admins';
+import { safeHttpUrl } from '../../../common/safe-http-url';
 
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
@@ -131,6 +132,13 @@ function latestPancakeAt(history: unknown[]): Date | null {
     if (at && (!latest || at > latest)) latest = at;
   }
   return latest;
+}
+
+const UNLINKED_HISTORY_PREFIX = 'Pancake báo đã thanh toán (đơn Pancake #';
+
+function webhookPancakeId(data: Record<string, unknown>): string | null {
+  const raw = data['id'] ?? data['order_id'];
+  return raw === null || raw === undefined || raw === '' ? null : String(raw);
 }
 
 @Processor(QUEUE_PANCAKE_EVENTS)
@@ -673,6 +681,11 @@ export class PancakeProcessor extends WorkerHost {
     const order = await this.findOrder(data);
     if (!order) return null;
     if (order.paymentMethod !== 'BANK_TRANSFER') return null;
+    // Đơn chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó (hay nhân viên sửa
+    // ghi chú) cũng khớp. Cờ is_paid của đơn như vậy chưa đủ để lật PAID, ghi khoản hoàn hay tính trả vượt: chốt ở đây, trước mọi nhánh tiền.
+    // Đơn đã gắn id khác với id trong webhook không tới được đây (resolveOrder trả `foreign`, bỏ qua và báo ở nhánh khác). Webhook không có id
+    // thì khớp được chỉ nhờ mã trong note, cũng chưa chứng minh được đơn Pancake là đơn Tubu đã đẩy.
+    if (!order.pancakeOrderId || webhookPancakeId(data) !== order.pancakeOrderId) return this.onUnattachedPayment(order, data);
     if (order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED') {
       // Đơn đã nhận đủ: Pancake báo vượt tổng đơn có thể là khách chuyển dư (chuyển hai lần) — R3-MONEY-1.
       await this.recordOverpayment(order, pancakePaidAmountAfterPaid(data));
@@ -710,6 +723,65 @@ export class PancakeProcessor extends WorkerHost {
       await this.recordLatePancakePayment(current ?? order, reported);
     }
     return null;
+  }
+
+  private async onUnattachedPayment(order: Order, data: Record<string, unknown>): Promise<null> {
+    if (order.paymentStatus !== 'UNPAID') return null;
+    if (await hasDealerCreditDebit(this.prisma, order)) return null;
+    const flaggedPaid = isPancakeOrderPaid(data, order.total);
+    const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
+    if (!flaggedPaid && !(reported > 0)) return null;
+    // Không tạo dòng hoàn hay báo khách ở đây, kể cả đơn đã huỷ/trả: dòng hoàn PENDING cho khách chọn nhận về Ví là tiền ra ngay, mà chưa ai
+    // chứng minh có khoản chuyển khoản thật. Kế toán đối chiếu sao kê rồi ghi tiền về muộn qua đường admin.
+    await this.holdUnattachedPayment(order, data, reported);
+    return null;
+  }
+
+  /**
+   * Giữ khoản "đã thanh toán" của đơn chưa gắn Pancake chờ đối chiếu sao kê: đặt/đẩy mốc cờ riêng orders.paymentUnlinkedAt (không ghi ô
+   * pancakeAttention: ô chữ bị nhiều đường ghi đè/xoá cả ô và KHO gỡ được, còn cờ này chỉ Kế toán hoặc ADMIN gỡ), ghi dòng lịch sử đơn làm
+   * dấu và báo ADMIN. Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ đối chiếu.
+   */
+  private async holdUnattachedPayment(order: Order, data: Record<string, unknown>, reported: number): Promise<void> {
+    const rawId = data['id'] ?? data['order_id'];
+    const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
+    // Chữ này là khoá chống trùng nên giống nhau cho đơn mở và đơn đóng: trạng thái đơn đổi giữa hai webhook không làm ghi đôi.
+    const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đúng đơn Pancake: chờ đối chiếu sao kê`;
+    // Chỉ xử lý LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên người đã đối chiếu/đóng cờ cho #A rồi thì webhook sau của #A không
+    // đặt lại cờ, còn #B khác vẫn được ghim. Cờ gộp mọi khoản chưa đối chiếu của đơn: mỗi cặp mới đẩy mốc lên mới nhất (nút "Đã đối chiếu" CAS theo mốc người bấm đã thấy nên không đóng luôn khoản mới), và chỉ đặt khi đơn còn UNPAID để không đua với nút "Đã nhận tiền".
+    // Khoá dòng đơn trước khi tìm dấu: hai worker cùng cặp (đơn, đơn Pancake) không còn cùng thấy "chưa ghi" rồi ghi đôi và báo đôi.
+    // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời báo và dòng lịch sử.
+    const written = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR NO KEY UPDATE`;
+      const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true, paymentStatus: true, paymentUnlinkedAt: true, paymentUnlinkedFirstAt: true } });
+      // Đơn đã PAID (nút "Đã nhận tiền" commit trước khoá): không còn gì chờ đối chiếu, không đặt cờ, không ghi dấu, không báo.
+      if (!locked || locked.paymentStatus !== 'UNPAID') return null;
+      const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+      if (logged) return null;
+      // Mốc là phiên bản CAS của "Đã đối chiếu": tăng NGẶT (dưới khoá dòng đơn) để hai cặp trong cùng một mili giây vẫn cho hai mốc khác nhau.
+      const now = new Date();
+      const stamp = locked.paymentUnlinkedAt && locked.paymentUnlinkedAt.getTime() >= now.getTime() ? new Date(locked.paymentUnlinkedAt.getTime() + 1) : now;
+      await tx.order.updateMany({
+        where: { id: order.id, paymentStatus: 'UNPAID' },
+        data: { paymentUnlinkedAt: stamp, paymentUnlinkedFirstAt: locked.paymentUnlinkedFirstAt ?? stamp },
+      });
+      await tx.orderStatusHistory.create({
+        // createdAt = đúng mốc cờ: web liệt kê các khoản của đợt hiện tại bằng createdAt >= paymentUnlinkedFirstAt.
+        data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note, createdAt: stamp },
+      });
+      return { closed: isClosedOrder(locked.status) };
+    });
+    if (!written) return;
+    const { closed } = written;
+    const amount = reported > 0 ? `${formatVnd(reported)}/${formatVnd(order.total)}` : formatVnd(order.total);
+    const next = closed
+      ? 'Đơn đã huỷ/trả nên không có nút "Đã nhận tiền" và hệ thống KHÔNG tạo khoản hoàn: quản trị viên đối chiếu sao kê; khách đã chuyển thì ghi tiền về muộn của đơn (hệ thống tạo khoản hoàn), rồi bấm "Đã đối chiếu".'
+      : 'Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền" nếu khách đã chuyển.';
+    const reason =
+      `Chờ đối chiếu: đơn Pancake #${pancakeRef} mang mã ${order.code} báo đã thanh toán (${amount}), nhưng đơn Tubu chưa gắn đúng đơn Pancake nên hệ thống KHÔNG tự xác nhận đã nhận tiền. ` +
+      `${next} Kiểm tra đơn Pancake này có phải đơn do Tubu đẩy không.`;
+    this.logger.warn(`Đơn ${order.code}: ${reason}`);
+    await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
   }
 
   private async recordLatePancakePayment(order: Order, reported: number): Promise<void> {
@@ -762,7 +834,7 @@ export class PancakeProcessor extends WorkerHost {
     const carrierS = str(carrier);
     const waybillS = str(waybill);
     const shipStatusS = str(shipStatus);
-    const linkS = str(trackingLink);
+    const linkS = safeHttpUrl(str(trackingLink));
 
     // Đơn có vận đơn Gomdon ĐANG SỐNG: Gomdon là nguồn DUY NHẤT của shippingCode/Partner/Status/History
     // (webhook Gomdon ghi, kèm chặn lùi trạng thái). Pancake không ghi đè — trước đây "ai ghi sau thắng":

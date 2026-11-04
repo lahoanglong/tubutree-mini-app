@@ -88,5 +88,5 @@ export function useHomeShelves(kind: HomeKindState): HomeShelves {
     };
   }, [kind, flashData, purchasedData, bestData, combosData, expiredTick]);
   const holdBestSellers = combosLoading && !holdExpired;
-  return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery: holdBestSellers ? { ...bestSellerQuery, isLoading: true } : bestSellerQuery, onFlashEnd };
+  return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery: holdBestSellers ? (Object.create(bestSellerQuery, { isLoading: { value: true, enumerable: true } }) as BlockQuery<BestSellersPage>) : bestSellerQuery, onFlashEnd };
 }

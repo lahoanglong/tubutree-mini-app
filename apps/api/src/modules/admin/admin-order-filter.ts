@@ -145,6 +145,26 @@ export const DEALER_TRANSFER_TO_CONFIRM_WHERE = {
   paymentMethod: 'BANK_TRANSFER',
 } as const;
 
+/**
+ * Khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (Order.paymentUnlinkedAt, xem PancakeProcessor.holdUnattachedPayment). Chỉ tính khi
+ * còn UNPAID: đơn sang PAID ở bất kỳ đường nào (ZaloPay, Pancake có gắn, đại lý) tự rời hàng đợi mà không cần ai gỡ cờ. Đơn còn mở do Kế toán đóng
+ * bằng "Đã nhận tiền"; đơn đã huỷ/trả do ADMIN đóng. Một nguồn cho hộp việc và bộ lọc danh sách đơn để số trên thẻ bằng số dòng khi bấm vào.
+ */
+export const PAYMENT_UNLINKED_OPEN_WHERE = {
+  paymentUnlinkedAt: { not: null },
+  paymentStatus: 'UNPAID',
+  status: { notIn: ['CANCELLED', 'RETURNED'] },
+} as const satisfies Prisma.OrderWhereInput;
+export const PAYMENT_UNLINKED_CLOSED_WHERE = {
+  paymentUnlinkedAt: { not: null },
+  paymentStatus: 'UNPAID',
+  status: { in: ['CANCELLED', 'RETURNED'] },
+} as const satisfies Prisma.OrderWhereInput;
+
+/** open = đơn còn mở (Kế toán đóng bằng "Đã nhận tiền"); closed = đơn đã huỷ/trả (ADMIN đóng). */
+export const PAYMENT_UNLINKED_FILTERS = ['open', 'closed'] as const;
+export type PaymentUnlinkedFilter = (typeof PAYMENT_UNLINKED_FILTERS)[number];
+
 export interface AdminOrderFilter {
   status?: string;
   search?: string;
@@ -155,6 +175,7 @@ export interface AdminOrderFilter {
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
   queue?: OrderQueue;
+  paymentUnlinked?: PaymentUnlinkedFilter;
   /** Id CTV / người giới thiệu (Order.referrerUserId). */
   referrerUserId?: string;
   /** Id khách đặt đơn (Order.userId): "Xem tất cả đơn" từ hồ sơ khách. */
@@ -185,6 +206,7 @@ export interface OrderListExtra {
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
   queue?: OrderQueue;
+  paymentUnlinked?: PaymentUnlinkedFilter;
   referrerUserId?: string;
   userId?: string;
   storefront?: string;
@@ -355,6 +377,8 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.platform) and.push({ platform: f.platform });
   if (f.queue === 'bank_transfer_to_confirm') and.push(BANK_TRANSFER_TO_CONFIRM_WHERE);
   else if (f.queue === 'dealer_transfer_to_confirm') and.push(DEALER_TRANSFER_TO_CONFIRM_WHERE);
+  if (f.paymentUnlinked === 'open') and.push(PAYMENT_UNLINKED_OPEN_WHERE);
+  else if (f.paymentUnlinked === 'closed') and.push(PAYMENT_UNLINKED_CLOSED_WHERE);
   if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });
   if (f.userId) and.push({ userId: f.userId });
   if (f.storefrontId) and.push({ storefrontId: f.storefrontId });

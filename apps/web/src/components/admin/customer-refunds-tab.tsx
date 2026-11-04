@@ -38,6 +38,8 @@ import {
 import { CopyButton } from '@/components/copy-button';
 import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, FIELD_CLASS, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
 import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
+
+export { CustomerRefundsPendingBadge } from './customer-refunds-badge';
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 import { useDebounced } from '@/lib/use-debounced';
@@ -107,30 +109,6 @@ function codAmountError(n: number | null, max: number): string | null {
   if (n == null || n <= 0) return 'Nhập số tiền hoàn cho khách (lớn hơn 0đ).';
   if (n > max) return `Số tiền hoàn không vượt quá ${formatVnd(max)} (phần chưa hoàn của đơn).`;
   return null;
-}
-
-/**
- * Số khoản hoàn cần xử lý cạnh nhãn tab — bộ lọc "Đang mở", cùng tập với thẻ "Hoàn tiền khách" ở trang chủ: một lần gọi
- * limit=1 lấy meta.total. Lỗi tải thì không hiện gì, không chặn thanh tab. Cùng tiền tố khoá với danh sách nên mark-paid
- * làm mới cả hai.
- */
-export function CustomerRefundsPendingBadge() {
-  const q = useQuery({
-    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, 'OPEN', 'count'],
-    queryFn: () => listCustomerRefunds('OPEN', 1, 1).then((r) => r.meta.total),
-  });
-  const n = q.data ?? 0;
-  if (n <= 0) return null;
-  return (
-    <span
-      data-refunds-pending
-      className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-warning-bg px-1.5 text-[11px] font-semibold leading-5 text-warning-fg"
-    >
-      <span className="sr-only">, </span>
-      {n > 99 ? '99+' : n}
-      <span className="sr-only"> khoản hoàn cần xử lý</span>
-    </span>
-  );
 }
 
 /**

@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
 export const PERSONAL_COUPON_RETENTION_KEY = 'coupons.personal_expired_retention_days';
 export const DEFAULT_PERSONAL_COUPON_RETENTION_DAYS = 90;
@@ -56,17 +57,10 @@ export class CouponCleanupCron {
     if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt chạy (nhiều instance cùng lên lịch thì chỉ một chạy);
-      // các lệnh xoá chạy trên kết nối khác nên từng lô commit riêng và lượt bị ngắt vẫn giữ kết quả đã xoá.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return this.deleteInBatches(now, opts);
-        },
-        { maxWait: 10_000, timeout: 10 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy. Từng lô xoá commit riêng nên lượt bị ngắt vẫn giữ kết quả đã xoá.
+      const run = await runExclusive(this.prisma, LOCK_KEY, () => this.deleteInBatches(now, opts));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } finally {
       this.running = false;
     }

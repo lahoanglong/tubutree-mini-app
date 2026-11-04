@@ -223,6 +223,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
         'wasteTransitOverdue',
         'wasteGiftOverdue',
         'wasteOrderMismatch',
+        'paymentUnlinked',
+        'paymentUnlinkedClosed',
       ]),
     );
 
@@ -242,6 +244,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       'invoicePending',
       'merchantPayoutsPending',
       'merchantToSettle',
+      'paymentUnlinked',
       'payoutsToPay',
       'wasteToCount',
       'wasteUnmatched',

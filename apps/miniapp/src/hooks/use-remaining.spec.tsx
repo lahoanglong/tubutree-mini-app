@@ -67,3 +67,22 @@ describe('useRemaining', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('useRemaining — chỉ render khi chữ hiển thị đổi (F9)', () => {
+  beforeEach(() => vi.useFakeTimers({ now: new Date('2026-10-17T10:00:00Z') }));
+  afterEach(() => vi.useRealTimers());
+
+  it('nhịp 15 giây mà chữ không đổi thì không render lại; sang phút khác thì render', () => {
+    let renders = 0;
+    renderHook(() => {
+      renders += 1;
+      return useRemaining('2026-10-17T12:30:30Z');
+    });
+    const settled = renders;
+    act(() => void vi.advanceTimersByTime(15_000));
+    act(() => void vi.advanceTimersByTime(15_000));
+    expect(renders).toBe(settled);
+    act(() => void vi.advanceTimersByTime(30_000));
+    expect(renders).toBe(settled + 1);
+  });
+});

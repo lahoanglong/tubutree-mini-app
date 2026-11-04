@@ -8,7 +8,15 @@ import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.servi
 import { UNCATEGORIZED_ON_SALE_WHERE } from '../catalog/public-product';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
-import { BANK_TRANSFER_TO_CONFIRM_WHERE, buildAdminOrderWhere, DEALER_TRANSFER_TO_CONFIRM_WHERE, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
+import {
+  BANK_TRANSFER_TO_CONFIRM_WHERE,
+  buildAdminOrderWhere,
+  DEALER_TRANSFER_TO_CONFIRM_WHERE,
+  PAYMENT_UNLINKED_CLOSED_WHERE,
+  PAYMENT_UNLINKED_OPEN_WHERE,
+  pancakeUnsyncedWhere,
+  recyclingAttentionWhere,
+} from '../admin/admin-order-filter';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
@@ -33,6 +41,8 @@ export type InboxKey =
   | 'pancakeUnsynced'
   | 'gomdonAttention'
   | 'customerRefunds'
+  | 'paymentUnlinked'
+  | 'paymentUnlinkedClosed'
   | 'returnsPending'
   | 'returnsToReceive'
   | 'merchantOverdue'
@@ -117,6 +127,21 @@ export class OpsInboxService {
       { key: 'pancakeUnsynced', audience: ['KHO'], count: () => p.order.count({ where: pancakeUnsyncedWhere(now) }) },
       { key: 'gomdonAttention', audience: ['KHO'], count: () => p.order.count({ where: recyclingAttentionWhere() }) },
       { key: 'customerRefunds', audience: ['KE_TOAN'], count: () => p.orderCustomerRefund.count({ where: { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } }) },
+      // Pancake báo đã thanh toán mà đơn chưa gắn đơn Pancake: hệ thống không tự PAID và không tự hoàn. Đơn còn mở: Kế toán đối chiếu sao kê rồi bấm
+      // "Đã nhận tiền" (tự rời khi PAID). Đơn đã huỷ/trả: tiền khách có thể đã về, chỉ ADMIN ghi tiền về muộn/hoàn rồi bấm "Đã đối chiếu".
+      // KHO không thấy: KHO không đóng được khoản này. "Cũ nhất" tính theo paymentUnlinkedFirstAt (paymentUnlinkedAt bị đẩy lên mỗi cặp mới).
+      {
+        key: 'paymentUnlinked',
+        audience: ['KE_TOAN'],
+        count: () => p.order.count({ where: PAYMENT_UNLINKED_OPEN_WHERE }),
+        oldest: async () => (await p.order.findFirst({ where: PAYMENT_UNLINKED_OPEN_WHERE, orderBy: { paymentUnlinkedFirstAt: 'asc' }, select: { paymentUnlinkedFirstAt: true } }))?.paymentUnlinkedFirstAt,
+      },
+      {
+        key: 'paymentUnlinkedClosed',
+        audience: 'ADMIN',
+        count: () => p.order.count({ where: PAYMENT_UNLINKED_CLOSED_WHERE }),
+        oldest: async () => (await p.order.findFirst({ where: PAYMENT_UNLINKED_CLOSED_WHERE, orderBy: { paymentUnlinkedFirstAt: 'asc' }, select: { paymentUnlinkedFirstAt: true } }))?.paymentUnlinkedFirstAt,
+      },
       {
         key: 'returnsPending',
         audience: ['CSKH'],

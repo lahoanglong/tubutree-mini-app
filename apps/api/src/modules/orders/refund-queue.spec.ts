@@ -33,6 +33,7 @@ const assistedOrder = (over: Record<string, unknown> = {}) =>
 function setup(opts: { recordedAmount?: number | null } = {}) {
   const tx = {
     $queryRaw: jest.fn().mockResolvedValue([]),
+    order: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     orderCustomerRefund: {
       findFirst: jest.fn().mockResolvedValue(null),
       aggregate: jest.fn().mockResolvedValue({ _sum: { amount: opts.recordedAmount ?? null } }),
@@ -104,6 +105,21 @@ describe('MONEY-1: tiền về muộn của đơn CTV lên hộ là khoản củ
     const { ctx, createdRow } = setup();
     await recordLatePaymentRefund(ctx, assistedOrder() as never, { amount: 50_000, source: 'ADMIN', refKey: ADMIN_LATE_PAYMENT_REF, note: 'Mã GD FT1' });
     expect(createdRow()).toMatchObject({ refKey: `ADMIN:${ADMIN_LATE_PAYMENT_REF}`, userId: null, phone: '0912345678', adminNote: 'Mã GD FT1' });
+  });
+
+  it('admin ghi tiền về muộn KHÔNG gỡ cờ paymentUnlinkedAt ở bất kỳ outcome nào (cờ gộp nhiều khoản: chỉ "Đã đối chiếu" theo seenAt mới đóng)', async () => {
+    const created = setup();
+    await recordLatePaymentRefund(created.ctx, regularOrder() as never, { amount: 300_000, source: 'ADMIN', refKey: ADMIN_LATE_PAYMENT_REF });
+    expect(created.tx.order.updateMany).not.toHaveBeenCalled();
+
+    const existed = setup();
+    existed.tx.orderCustomerRefund.findFirst.mockResolvedValue({ id: 'r9', adminNote: 'Mã GD FT1' });
+    await recordLatePaymentRefund(existed.ctx, regularOrder() as never, { amount: 300_000, source: 'ADMIN', refKey: ADMIN_LATE_PAYMENT_REF });
+    expect(existed.tx.order.updateMany).not.toHaveBeenCalled();
+
+    const webhook = setup();
+    await recordLatePaymentRefund(webhook.ctx, regularOrder() as never, { amount: 300_000, source: 'PANCAKE', refKey: 'p1:300000' });
+    expect(webhook.tx.order.updateMany).not.toHaveBeenCalled();
   });
 
   it('admin ghi tay mà đơn đã có khoản tiền về muộn (EXISTS): mã GD vừa gõ được nối vào adminNote của khoản đó; mã đã có thì không nối lại', async () => {

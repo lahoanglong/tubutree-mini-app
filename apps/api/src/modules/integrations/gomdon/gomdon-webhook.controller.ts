@@ -14,7 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import { SkipThrottle } from '@nestjs/throttler';
-import { timingSafeEqual } from 'node:crypto';
+import { safeEqualStrings } from '../../../common/safe-equal';
 import { Public } from '../../../common/decorators/public.decorator';
 import type { Env } from '../../../config/env.validation';
 import type { GomdonWebhookPayload } from './gomdon.types';
@@ -102,11 +102,9 @@ export class GomdonWebhookController {
     }
   }
 
-  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). */
+  /** So token tĩnh chống timing-attack (so băm nên không lộ độ dài secret). */
   private verifyToken(token?: string): boolean {
     if (!token) return false;
-    const a = Buffer.from(token, 'utf8');
-    const b = Buffer.from(this.secret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+    return safeEqualStrings(token, this.secret);
   }
 }

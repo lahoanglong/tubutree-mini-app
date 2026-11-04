@@ -868,7 +868,7 @@ export class MerchantFulfilmentService {
         SELECT oi."id" AS "orderItemId", o."id" AS "orderId", o."code", o."total", o."shippingFee", o."createdAt",
                COALESCE(
                  o."deliveredAt",
-                 (SELECT MAX(h."createdAt") FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED'),
+                 (SELECT MAX(h."createdAt") FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED' AND h."fromStatus" <> 'DELIVERED'),
                  o."updatedAt") AS "deliveredAt"
           FROM "order_items" oi
           JOIN "orders" o ON o."id" = oi."orderId"

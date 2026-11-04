@@ -898,10 +898,14 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
  * đặt bưu tá thu gom, báo khách) gom về MỘT hàm để nút admin và webhook đối soát không lệch nhau.
  */
 describe('OrderStatusService.markPaid', () => {
-  function make(reads: Record<string, unknown>[], flipCounts: number[] = [1]) {
+  function make(reads: Record<string, unknown>[], flipCounts: number[] = [1], attention: string | null = null) {
     const flips = [...flipCounts];
     const tx = {
-      order: { updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })), findUniqueOrThrow: jest.fn(async () => ({ userId: reads[0]?.userId })) },
+      order: {
+        updateMany: jest.fn(async () => ({ count: flips.length ? flips.shift()! : 1 })),
+        findUniqueOrThrow: jest.fn(async () => ({ userId: reads[0]?.userId })),
+        findUnique: jest.fn(async () => ({ pancakeAttention: attention })),
+      },
       orderStatusHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const findFirst = jest.fn();
@@ -983,6 +987,13 @@ describe('OrderStatusService.markPaid', () => {
       }),
     );
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, expect.stringMatching(/^order=/));
+  });
+
+  it('lật PAID gỡ luôn cờ paymentUnlinkedAt trong CÙNG câu lật (đơn rời hàng đợi chờ đối chiếu, không để cờ mồ côi)', async () => {
+    const { svc, tx } = make([pending()]);
+    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
+    const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
+    expect(call[0].data).toMatchObject({ paymentStatus: 'PAID', paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null });
   });
 
   it('đơn đã xác nhận trước khi tiền về → chỉ lật PAID, giữ trạng thái', async () => {

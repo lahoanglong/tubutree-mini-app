@@ -1,5 +1,9 @@
+import { affiliateRevocationPatch } from '../affiliate/affiliate-revocation';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
+import { decodeServedImage } from '../../common/served-image';
+import { isUploadedMediaUrl } from '../../common/uploaded-image';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
@@ -23,6 +27,7 @@ import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.servi
 import { ImageResizeService } from '../catalog/image-resize.service';
 import { losesPartnerStore } from '../merchant/partner-store';
 import { throwIfLockBusy } from '../../common/lock-busy';
+import { storedThumbnailOf } from '../../common/public-image';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import {
@@ -237,6 +242,13 @@ const ORDER_LIST_REFUNDS = {
   select: { id: true, kind: true, method: true, status: true, amount: true, createdAt: true, completedAt: true },
 } satisfies Prisma.Order$customerRefundsArgs;
 
+export const DEALER_APPLICATION_IMAGE_COLUMNS = {
+  cccdFront: 'cccdFrontUrl',
+  cccdBack: 'cccdBackUrl',
+  storeFront: 'storeFrontUrl',
+} as const;
+export type DealerApplicationImageField = keyof typeof DEALER_APPLICATION_IMAGE_COLUMNS;
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -300,13 +312,47 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.dealerApplication.findMany({
         where,
+        select: DEALER_APPLICATION_LIST_SELECT,
         // Hàng chờ duyệt (PENDING) web gửi order=asc — hồ sơ cũ nhất lên đầu.
         orderBy: { createdAt: order ?? 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.dealerApplication.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    // Ảnh có thể là base64 hàng trăm KB: danh sách chỉ báo có/không (xoá tài khoản đặt ảnh về chuỗi rỗng), ảnh lấy từng tấm qua dealerApplicationImage.
+    const flagRows = items.length
+      ? await this.prisma.$queryRaw<{ id: string; hasCccdFront: boolean; hasCccdBack: boolean; hasStoreFront: boolean }[]>`
+          SELECT "id",
+            COALESCE("cccdFrontUrl", '') <> '' AS "hasCccdFront",
+            COALESCE("cccdBackUrl", '') <> '' AS "hasCccdBack",
+            COALESCE("storeFrontUrl", '') <> '' AS "hasStoreFront"
+          FROM "dealer_applications"
+          WHERE "id" IN (${Prisma.join(items.map((a) => a.id))})`
+      : [];
+    const flags = new Map(flagRows.map((r) => [r.id, r]));
+    const data = items.map((a) => ({
+      ...a,
+      hasCccdFront: flags.get(a.id)?.hasCccdFront ?? false,
+      hasCccdBack: flags.get(a.id)?.hasCccdBack ?? false,
+      hasStoreFront: flags.get(a.id)?.hasStoreFront ?? false,
+    }));
+    return paginated(data, page, limit, total);
+  }
+
+  /** Một ảnh của hồ sơ đại lý: ảnh base64 trả byte, ảnh host upload (Cloudinary) trả URL để web tự hiện. */
+  async dealerApplicationImage(
+    id: string,
+    field: DealerApplicationImageField,
+  ): Promise<{ kind: 'data'; mime: string; data: Buffer } | { kind: 'url'; url: string }> {
+    const column = DEALER_APPLICATION_IMAGE_COLUMNS[field];
+    if (!column) throw new NotFoundException('Không tìm thấy ảnh.');
+    const app = await this.prisma.dealerApplication.findUnique({ where: { id }, select: { [column]: true } });
+    const value = (app as Record<string, string | null> | null)?.[column];
+    if (!value) throw new NotFoundException('Không tìm thấy ảnh.');
+    const decoded = decodeServedImage(value);
+    if (decoded) return { kind: 'data', ...decoded };
+    if (isUploadedMediaUrl(value)) return { kind: 'url', url: value };
+    throw new NotFoundException('Không tìm thấy ảnh.');
   }
 
   async reviewDealerApplication(
@@ -316,7 +362,7 @@ export class AdminService {
     tierId?: string,
     reason?: string,
   ) {
-    const app = await this.prisma.dealerApplication.findUnique({ where: { id } });
+    const app = await this.prisma.dealerApplication.findUnique({ where: { id }, select: DEALER_APPLICATION_LIST_SELECT });
     if (!app) throw new NotFoundException('Không tìm thấy đơn đăng ký.');
     if (app.status !== 'PENDING') throw new BadRequestException('Đơn đã được xử lý.');
 
@@ -402,7 +448,7 @@ export class AdminService {
         reason: reason?.trim() || 'Hồ sơ chưa đủ điều kiện',
       })
       .catch((e: unknown) => this.logger.warn(`Báo kết quả hồ sơ đại lý ${id} lỗi: ${(e as Error).message}`));
-    return this.prisma.dealerApplication.findUnique({ where: { id } });
+    return this.prisma.dealerApplication.findUnique({ where: { id }, select: DEALER_APPLICATION_LIST_SELECT });
   }
 
   // ── Users & orders ──
@@ -612,6 +658,8 @@ export class AdminService {
           spareAdminToggled: !losesPartnerStore(previousRole, role),
         });
       }
+      // Tính dấu SAU khi gian hàng đối tác (MERCHANT) đã chuyển về CTV: chủ gian hàng đối tác không hoa hồng vẫn có dấu vết CTV khi về khách.
+      Object.assign(data, await affiliateRevocationPatch(tx, user.id, previousRole, role));
       if (dealerTierId) {
         // Gộp dealerTierId vào metadata đọc từ dòng users đã khoá (như duyệt hồ sơ), không phải bản findUnique ở trên: ghi metadata chen
         // giữa (nhóm da, onboardedAt) không bị ghi đè. Khoá users đứng cuối thứ tự khoá, sau gian hàng.
@@ -1301,7 +1349,8 @@ export class AdminService {
 
   /**
    * Vết "Đã xử lý" trong lịch sử đơn (cùng trạng thái, khách không thấy: dòng giờ hành trình bỏ dòng cùng trạng thái). Việc đã đóng
-   * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác.
+   * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác. Đơn huỷ/trả chưa xong phần đảo cũng được ghi: cron chạy lại
+   * (resyncReversalEffects) chỉ coi dòng có fromStatus khác toStatus là dòng đóng đơn nên dòng ghi chú này không làm nó nhầm.
    */
   private async logHandledInHistory(
     adminId: string,
@@ -1309,13 +1358,6 @@ export class AdminService {
     what: string,
     note?: string,
   ) {
-    // Đơn đã huỷ/trả mà phần đảo sau commit chưa xong: cron chạy lại (resyncReversalEffects) lấy dòng lịch sử MỚI NHẤT có toStatus = trạng
-    // thái đơn làm "dòng đóng đơn" để biết ai đóng và gửi tin từ lúc nào. Một dòng cùng trạng thái của admin chen vào sẽ làm cron gửi
-    // lại tin huỷ/trả, nhầm người huỷ, hoặc xếp huỷ Pancake lần nữa — nên chưa ghi, chỉ để lại log.
-    if ((order.status === 'CANCELLED' || order.status === 'RETURNED') && !order.reversalEffectsAt) {
-      this.logger.warn(`Đơn ${order.code} ${order.status} chưa xong phần đảo sau huỷ/trả: không ghi dòng "đã xử lý" vào lịch sử để cron chạy lại không nhầm dòng đóng đơn.`);
-      return;
-    }
     try {
       await this.prisma.orderStatusHistory.create({
         data: {
@@ -1435,6 +1477,33 @@ export class AdminService {
     );
     await this.logHandledInHistory(adminId, order, `Đã xử lý việc Pancake: ${order.pancakeAttention ?? ''}`.trimEnd(), cleanNote);
     return { ok: true, message: `Đơn ${order.code} đã rời hàng đợi cần xử lý Pancake.` };
+  }
+
+  /**
+   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (cờ paymentUnlinkedAt). Gỡ bằng CAS theo mốc cờ người bấm
+   * đã thấy: hai ADMIN bấm cùng lúc thì đúng một bên thắng, bên kia nhận 400; khoản Pancake mới tới giữa chừng (mốc đổi, cờ còn) thì 409. Không động vào paymentStatus hay tiền: việc ghi tiền về muộn/hoàn làm ở đường riêng
+   * trước đó; đây chỉ đóng việc chờ đối chiếu và để lại ai/lúc nào/vì sao.
+   */
+  async resolvePaymentUnlinked(adminId: string, idOrCode: string, note: string, seenAt: string) {
+    const order = await this.resolveOrderRef(idOrCode);
+    const seen = new Date(seenAt);
+    if (Number.isNaN(seen.getTime())) throw new BadRequestException('Mốc đã xem (seenAt) không hợp lệ.');
+    // CAS theo ĐÚNG mốc người bấm đã thấy: khoản Pancake mới đẩy mốc lên nên bấm trên mốc cũ không đóng luôn khoản chưa ai xem.
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, paymentUnlinkedAt: seen },
+      data: { paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
+    });
+    if (r.count === 0) {
+      const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { paymentUnlinkedAt: true } });
+      if (now?.paymentUnlinkedAt) {
+        throw new ConflictException(`Có khoản Pancake mới báo đã thanh toán cho đơn ${order.code} — tải lại để xem trước khi đóng.`);
+      }
+      throw new BadRequestException(`Đơn ${order.code} không còn khoản Pancake báo đã thanh toán chờ đối chiếu.`);
+    }
+    const cleanNote = note.trim().replace(/\s+/g, ' ').slice(0, 500);
+    this.logger.warn(`Admin ${adminId} đánh dấu đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code} (${order.status}) — ghi chú: ${cleanNote}.`);
+    await this.logHandledInHistory(adminId, order, 'Đã đối chiếu khoản Pancake báo đã thanh toán', cleanNote);
+    return { ok: true, message: `Đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code}.` };
   }
 
   async markGomdonHandled(adminId: string, idOrCode: string, note?: string) {
@@ -2025,7 +2094,19 @@ export class AdminService {
         if (seenVersion !== undefined && now.updatedAt?.getTime() !== seenVersion) throw productContentChanged();
         throw productAlreadyReviewed(now.approvalStatus);
       }
-      if (approve) return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seenTakeover });
+      if (approve) {
+        // Từ lúc này endpoint ảnh phát ảnh của sản phẩm: đổi thumbnail data URL trùng ảnh đầu sang đường dẫn trong cùng giao dịch
+        // (đọc lại dưới khoá dòng vừa ghi, không dùng bản đọc trước giao dịch có thể đã cũ).
+        const live = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { thumbnail: true, images: true } });
+        const thumbnail = storedThumbnailOf(productId, live.thumbnail, live.images[0], true);
+        if (thumbnail !== live.thumbnail) await tx.product.update({ where: { id: productId }, data: { thumbnail } });
+        return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seenTakeover });
+      }
+      // Từ chối đặt approvedAt về null: sản phẩm hết công khai, endpoint ảnh trả 404 cho đường dẫn thumbnail đã ghi lúc còn công khai,
+      // màn duyệt sẽ vỡ ảnh nếu đối tác sửa tiếp mà không đổi nội dung (thumbnail không được ghi lại). Trả thumbnail về data URL ảnh đầu.
+      const live = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { thumbnail: true, images: true } });
+      const thumbnail = storedThumbnailOf(productId, live.thumbnail, live.images[0], false);
+      if (thumbnail !== live.thumbnail) await tx.product.update({ where: { id: productId }, data: { thumbnail } });
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
       return undefined;
@@ -2088,7 +2169,7 @@ export class AdminService {
               description: draft.description,
               shortDesc: draft.shortDesc,
               images: draft.images,
-              thumbnail: draft.thumbnail,
+              thumbnail: storedThumbnailOf(product.id, draft.thumbnail, draft.images[0], true),
               rejectReason: null,
             }
           : { rejectReason: reason },

@@ -55,19 +55,20 @@ export function createOrderKeyRing(make: () => string = newIdempotencyKey) {
  * ID ngẫu nhiên mạnh cho định danh thiết bị (đăng nhập khách).
  *
  * `deviceId` là thứ DUY NHẤT xác thực tài khoản khách ở `/auth/guest` — đoán được nó là đăng
- * nhập được vào giỏ hàng/đơn/điểm của khách khác. `Date.now()+Math.random()` chỉ cho vài
- * chục bit entropy và Math.random KHÔNG phải nguồn mật mã (đoán trước được state), nên ở đây
- * bắt buộc dùng crypto. Thứ tự ưu tiên: randomUUID → getRandomValues → (WebView quá cũ) mới
- * đành quay lại Math.random, nhưng trộn thêm nhiều nguồn để không tệ hơn bản cũ.
+ * nhập được vào giỏ hàng/đơn/điểm của khách khác. Math.random KHÔNG phải nguồn mật mã nên không
+ * bao giờ dùng ở đây: randomUUID, không có thì dựng UUID v4 từ getRandomValues, không có cả hai thì ném
+ * (đăng nhập báo lỗi tạm, không tạo tài khoản với id đoán được).
  */
 export function newDeviceId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `d_${crypto.randomUUID()}`;
   }
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-    return `d_${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6]! & 0x0f) | 0x40;
+    b[8] = (b[8]! & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    return `d_${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   }
-  const rand = () => Math.random().toString(36).slice(2, 12);
-  return `d_${Date.now().toString(36)}_${rand()}${rand()}`;
+  throw new Error('Thiết bị không có nguồn ngẫu nhiên an toàn (crypto)');
 }

@@ -13,6 +13,8 @@ export const BUYER_HIDDEN_ORDER_FIELDS = [
   'reviewInvitedAt',
   'pancakeAttention',
   'pancakeAttentionAt',
+  'paymentUnlinkedAt',
+  'paymentUnlinkedFirstAt',
   'autoCancelBlockedAt',
   'pancakePushStatus',
   'pancakeSyncError',

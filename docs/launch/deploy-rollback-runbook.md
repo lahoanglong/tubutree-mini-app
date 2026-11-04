@@ -109,8 +109,47 @@ Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng d
 | `20261016210000_r11_delivered_effects_marker`, `20261013173621_p3_gomdon_order_note_cleanup` | r11 thêm cột `deliveredEffectsAt`, viết lại MỌI đơn đã giao hoặc đã trả (`UPDATE orders`) rồi dựng chỉ mục từng phần; p3 gomdon duyệt cả bảng `orders` theo `LIKE` trên `note` rồi viết lại các đơn có dòng "Gomdon webhook" hoặc "Tự huỷ" | Thời gian tỉ lệ số đơn; tính vào cửa sổ |
 | `20261018140000_lr_reports_source_indexes` | Dựng `users_createdAt_idx` và `orders_userId_createdAt_idx` không `CONCURRENTLY`: khoá chặn ghi `users` và `orders` | Tính vào cửa sổ |
 | `20261012100000_pd3_points_lot_schema`, `20261014090000_p5_refunds_returns_queue`, `20261018000100_n1_indexes`, `20261019100000_external_orders`, `20261020000000_waste_exchange`, `20261020100000_review_return_reversal` | Thêm ràng buộc CHECK (duyệt hết `points_transactions`, `users`) và chỉ mục (duy nhất từng phần, hoặc `userId, refId`) trên `points_transactions`, không `CONCURRENTLY`: khoá chặn ghi sổ điểm. Không đổi dữ liệu trên `points_transactions`; `pd3_points_lot_schema` đổi `community_events.rewardPoints` và p5 đặt `return_requests.fullReturn = true` (UPDATE một chiều, hoàn tác = backup), `waste_exchange` còn INSERT dữ liệu tham chiếu | Thời gian tỉ lệ số dòng sổ điểm; không tính vào `db.orders_lock` nhưng tính vào cửa sổ. `waste_exchange` còn tương thích image cũ (mục 7.0) |
+| `20261104130000_perf_indexes_notification_points_retention` | Dựng chỉ mục KHÔNG `CONCURRENTLY`: một chỉ mục từng phần `points_transactions_order_refId_idx` trên `points_transactions` (`refId` với `refType = 'ORDER'`) khoá chặn ghi sổ điểm lúc dựng; các chỉ mục còn lại nằm trên `notification_logs`, `pancake_webhook_events`, `gomdon_webhook_events`, `oa_inbound_messages`, `analytics_events`, `refresh_tokens` (khoá chặn ghi các bảng đó, gồm cả ghi log tin và làm mới token đăng nhập). Chỉ thêm chỉ mục, không đổi dữ liệu, image cũ vẫn chạy | Thời gian tỉ lệ số dòng sổ điểm và `notification_logs`; không tính vào `db.orders_lock` nhưng tính vào cửa sổ |
 | `20261019170000_chat_review1` | `UPDATE users SET phoneVerifiedAt = now()` cho mọi user có SĐT mà chưa xác minh | Thời gian tỉ lệ số user; tính vào cửa sổ |
+| `20261104140500_review_image_versions_backfill` | `UPDATE reviews` điền `imageVersions` cho mọi đánh giá có ảnh: giải nén mảng `images` và băm `md5` từng ảnh `data:` (base64, nặng CPU theo dung lượng ảnh, không theo số dòng). Cột `imageVersions` do `20261104140000_review_image_versions` thêm riêng trước đó (chỉ ADD COLUMN). Chỉ khoá dòng của `reviews` (row lock), không khoá bảng, không đụng `orders` (`ordersLock: false`). Chạy lại không đổi (chỉ dòng chưa có phiên bản) | Đếm trước trên PROD: `psqlq -tAc "SELECT count(*) FROM reviews WHERE EXISTS (SELECT 1 FROM unnest(images) i WHERE i LIKE 'data:image%')"`; số dòng càng lớn và ảnh càng nặng thì càng lâu, tính vào cửa sổ. Mở rộng một chiều (thêm dữ liệu, không xoá `images`), image cũ vẫn chạy; hoàn tác = image cũ, cột thừa vô hại |
+| `20261104141000_product_thumbnail_ref` | `UPDATE products` đổi `thumbnail` là ảnh base64 trùng ảnh đầu thành đường dẫn `/public-image/product/<id>/0?v=...` (băm `md5` ảnh đầu) cho sản phẩm đã từng duyệt. Chỉ khoá dòng của `products` (row lock), không khoá bảng, không đụng `orders` (`ordersLock: false`). Chạy lại không khớp dòng nào | Đếm trước trên PROD: `psqlq -tAc "SELECT count(*) FROM products WHERE thumbnail LIKE 'data:image/%'"` (và tổng `SELECT count(*) FROM products` để so); tính vào cửa sổ. Không đổi schema, image cũ vẫn chạy (`thumbnail` vẫn là chuỗi, endpoint `/public-image` đã có từ trước); hoàn tác = image cũ, thumbnail đã đổi giữ nguyên đường dẫn, muốn lại data URL gốc thì khôi phục backup (7.3) |
+| `20261104142500_feed_post_image_summary_backfill` | `UPDATE feed_posts` điền `imageCount` và `coverRef` cho bài có ảnh: giải nén mảng `images` một lần mỗi bài (`unnest` qua subquery, `md5` ảnh đầu nếu là `data:`). Chỉ khoá dòng của `feed_posts` (row lock), không khoá bảng, không đụng `orders` (`ordersLock: false`). Cột do `20261104142000_feed_post_image_summary` thêm riêng trước đó. Chạy lại không đổi (chỉ bài `imageCount = 0`) | Đếm trước trên PROD: `psqlq -tAc "SELECT count(*) FROM feed_posts WHERE cardinality(images) > 0"`; tính vào cửa sổ. Mở rộng một chiều (không xoá `images`), image cũ vẫn chạy; hoàn tác = image cũ, cột thừa vô hại |
+| `20261104160500_user_affiliate_revoked_backfill` | `UPDATE users SET affiliateRevokedAt = now()` phát lại điều `setUserRole` sẽ làm, bất kể vai trò hiện tại, theo sổ `user_admin_events` (có từ `20261014150100`). Chỉ sự kiện ROLE không có `reason` (chỉ `setUserRole` ghi như vậy) đặt hoặc xoá dấu: đặt khi về khách từ CTV/đại lý, hoặc từ nhân viên/admin mà người đó đã có hoa hồng hoặc gian hàng CTV từ trước hoặc đúng lúc sự kiện (dấu vết sinh sau không tính); xoá khi sang CTV/đại lý. Có dấu khi sự kiện đặt/xoá GẦN NHẤT là sự kiện đặt. Cấp/thu hồi nhân viên và duyệt hồ sơ đại lý không tính. Người chưa có sự kiện ROLE nào (hạ từ trước khi có sổ): khách có gian hàng CTV, hoặc có hoa hồng khi cấu hình `affiliate.commission_eligible_roles` không có CUSTOMER. Migration thêm cột `20261104160000_user_affiliate_revoked_at` chạy riêng trước đó (chỉ ADD COLUMN nullable). Sau khi chạy, những người này không tự đăng ký lại CTV và không rút hoa hồng/nhận thưởng mốc được; cần mở lại thì admin đặt lại vai trò CTV/đại lý | Chạy trước truy vấn đếm ở khối ngay dưới bảng (chỉ đọc; mỗi dòng là một nhóm, nhóm không chồng nhau); thời gian tỉ lệ số user; không khoá `orders` (`ordersLock: false`); tính vào cửa sổ
+| `20261104180000_order_payment_unlinked` | Thêm cột nullable `orders.paymentUnlinkedAt` (không viết lại dòng) rồi dựng chỉ mục `orders_paymentUnlinkedAt_idx` KHÔNG `CONCURRENTLY`: khoá chặn ghi `orders` lúc dựng (cùng cỡ các chỉ mục orders khác trong bảng). Image cũ vẫn chạy (không đọc cột mới). Hoàn tác = khôi phục backup (7.3); xoá tay cột và chỉ mục chỉ khi image mới đã dừng | Thời gian tỉ lệ số đơn; tính vào cửa sổ và vào `db.orders_lock` |
+| `20261104180100_order_payment_unlinked_first_at` | Thêm cột nullable `orders.paymentUnlinkedFirstAt` (không viết lại dòng, không dựng chỉ mục): khoá `ACCESS EXCLUSIVE` chỉ trong tích tắc lúc ALTER, nên KHÔNG tính vào `db.orders_lock` (vẫn nằm trong danh sách nặng để `db.pending_scope` nêu tên). Image cũ vẫn chạy. Hoàn tác = khôi phục backup (7.3) | Tức thì |
 | `20261020120000_q19_reversal_effects_marker` | Thêm cột `orders.reversalEffectsAt` (đánh dấu phần đảo sau huỷ/trả đã xong), `UPDATE orders` điền sẵn mốc cho mọi đơn đã `CANCELLED` hoặc `RETURNED` (để cron chạy lại không quét lịch sử), rồi dựng chỉ mục từng phần `orders_reversal_effects_pending_idx` không `CONCURRENTLY`: khoá chặn ghi `orders` lúc dựng. Cột mới nullable nên image cũ vẫn chạy, nhưng không ghi mốc: đơn huỷ/trả trong lúc chạy image cũ sẽ được cron của image mới chạy lại phần đảo (idempotent). Hoàn tác = khôi phục backup (7.3). Đi kèm `ReversalEffectsResyncCron`: 5 phút một lượt, quét đơn huỷ/trả thiếu mốc quá 5 phút và cập nhật trong 14 ngày, tối đa 200 đơn mỗi lượt | Thời gian tỉ lệ số đơn; tính vào cửa sổ và vào `db.orders_lock` |
+
+
+Đếm trước trên PROD số người mà `20261104160500_user_affiliate_revoked_backfill` sẽ đánh dấu (chỉ đọc, không ghi; chạy bằng `psqlq`). Mỗi người chỉ rơi vào một dòng: `su_kien_gan_nhat_la_ha_quyen` theo vai trò hiện tại, hoặc `ha_tu_truoc_khi_co_so`:
+
+```bash
+psqlq -tAc "
+WITH last_ev AS (
+  SELECT DISTINCT ON (e.\"userId\") e.\"userId\", e.\"toValue\"
+  FROM user_admin_events e JOIN users u ON u.id = e.\"userId\"
+  WHERE e.kind = 'ROLE' AND e.reason IS NULL
+    AND (e.\"toValue\" IN ('AFFILIATE', 'DEALER')
+      OR (e.\"toValue\" = 'CUSTOMER' AND (e.\"fromValue\" IN ('AFFILIATE', 'DEALER')
+        OR (e.\"fromValue\" IN ('STAFF', 'ADMIN')
+          AND (EXISTS (SELECT 1 FROM commissions c WHERE c.\"affiliateUserId\" = u.id AND c.\"createdAt\" <= e.\"createdAt\")
+            OR EXISTS (SELECT 1 FROM storefronts s WHERE s.\"ownerUserId\" = u.id AND s.type = 'CTV' AND s.\"createdAt\" <= e.\"createdAt\"))))))
+  ORDER BY e.\"userId\", e.\"createdAt\" DESC, e.id DESC
+)
+SELECT 'su_kien_gan_nhat_la_ha_quyen: ' || u.role AS nhom, count(*)
+FROM users u JOIN last_ev l ON l.\"userId\" = u.id
+WHERE u.\"affiliateRevokedAt\" IS NULL AND l.\"toValue\" = 'CUSTOMER'
+GROUP BY u.role
+UNION ALL
+SELECT 'ha_tu_truoc_khi_co_so', count(*) FROM users u
+WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role = 'CUSTOMER'
+  AND NOT EXISTS (SELECT 1 FROM user_admin_events a WHERE a.\"userId\" = u.id AND a.kind = 'ROLE')
+  AND (EXISTS (SELECT 1 FROM storefronts s WHERE s.\"ownerUserId\" = u.id AND s.type = 'CTV')
+    OR (EXISTS (SELECT 1 FROM commissions c WHERE c.\"affiliateUserId\" = u.id)
+      AND NOT EXISTS (SELECT 1 FROM system_configs sc WHERE sc.key = 'affiliate.commission_eligible_roles' AND jsonb_typeof(sc.value) = 'array' AND sc.value @> '[\"CUSTOMER\"]'::jsonb)))
+"
+```
+
+Dòng theo vai trò `AFFILIATE`/`DEALER` là người hạ về khách rồi thành CTV/đại lý lại không qua `setUserRole` (tự đăng ký, duyệt hồ sơ đại lý, thu hồi nhân viên); `STAFF`/`ADMIN` là người hạ rồi lên nhân viên. Xem từng người trước khi deploy: người được duyệt hồ sơ đại lý hợp lệ sau lần hạ cũng nằm trong nhóm và sẽ bị chặn rút cho đến khi admin đặt lại vai trò.
 
 Ba truy vấn kiểm PD-3 (chỉ cần khi danh sách có `pd3_xu_to_points`; chỉ đọc):
 
@@ -316,7 +355,7 @@ Trước đó đặt một lần `app.miniapp_base_url` (Cấu hình, nhóm `app
 
 #### 1.6.4 Gian hàng CTV dạng `<mã>.tubutree.com` (B4)
 
-Mã web đã sẵn sàng: `apps/web/src/middleware.ts` nhận host `<một nhãn>.<tên miền gốc>` rồi viết lại trang chủ sang `/s/<nhãn>`; các nhãn `www`, `admin`, `api`, `app`, `mail` là của hệ thống; API đã cho phép CORS cho mọi `*.tubutree.com`. Tên miền gốc lấy từ biến BUILD `NEXT_PUBLIC_TENANT_ROOT_DOMAIN`, mặc định `tubutree.com`; `docker-compose.vietnix.yml` truyền sẵn `${WEB_DOMAIN}`, nên chỉ cần dựng lại web khi `WEB_DOMAIN` không phải `tubutree.com`. Việc còn lại là hạ tầng, làm theo thứ tự và KHÔNG bật cờ trước khi bước 4 qua:
+Mã web đã sẵn sàng: `apps/web/src/middleware.ts` nhận host `<một nhãn>.<tên miền gốc>` rồi viết lại trang chủ sang `/s/<nhãn>`; các nhãn `www`, `admin`, `api`, `app`, `mail` là của hệ thống; API cho phép CORS cho `https://*.tubutree.com` (production chỉ https, không cổng). Riêng đăng nhập, làm mới và đăng xuất bằng cookie (`x-client: web`) chỉ nhận Origin trong `CORS_ORIGINS` hoặc `https://<một nhãn>.tubutree.com` có nhãn hợp lệ theo luật gian hàng và không thuộc danh sách dành riêng (`RESERVED_STOREFRONT_IDENTIFIERS`: api, www, app, admin, mail, hello...); nhãn nhiều cấp, có cổng hay http bị 403. Tên miền gốc cố định `tubutree.com` trong `apps/api/src/common/cors.ts` (`TENANT_ROOT_DOMAIN`). Tên miền gốc lấy từ biến BUILD `NEXT_PUBLIC_TENANT_ROOT_DOMAIN`, mặc định `tubutree.com`; `docker-compose.vietnix.yml` truyền sẵn `${WEB_DOMAIN}`, nên chỉ cần dựng lại web khi `WEB_DOMAIN` không phải `tubutree.com`. Việc còn lại là hạ tầng, làm theo thứ tự và KHÔNG bật cờ trước khi bước 4 qua:
 
 1. **DNS Cloudflare**: thêm bản ghi `A` tên `*` trỏ `14.225.207.177`. Các bản ghi riêng (`api`, `app`, `www`, `mail`, và `hello` của link-bio nếu trỏ chỗ khác) giữ nguyên, bản ghi riêng luôn thắng wildcard. Một nhãn nào còn rơi vào wildcard sẽ bị coi là gian hàng (vd `hello` sẽ thành `/s/hello`, 404).
 2. **Chứng chỉ wildcard**, chọn MỘT trong hai:
@@ -591,7 +630,7 @@ psqlq -tAc 'SELECT count(*) FROM orders'
 
 Quy tắc ước tính (khớp với `go-live:check`) cho MỘT migration nặng trên `orders` (đo ở UAT với r6): dưới 50.000 đơn khoảng 2 giây; từ đó trở lên khoảng 14 giây cho mỗi 300.000 đơn (`số đơn × 14 / 300.000`, làm tròn lên). Chính migration viết lại mọi đơn có tên người nhận và dựng chỉ mục tìm kiếm, nên thời gian tỉ lệ với số đơn.
 
-Nhưng r6 chỉ là một trong các migration nặng. Nếu danh sách chờ áp (1.0) có thêm p1, p4, p8 hay các migration orders khác ở bảng 1.0, mỗi cái cũng viết lại hoặc dựng chỉ mục trên `orders` (p4 còn điền cả bảng `users`), và PD-3 khoá `users`. Chưa có số đo riêng cho từng cái; `go-live:check --phase=pre-deploy` (dòng `db.orders_lock`) lấy số trên nhân với số migration nặng trên `orders` còn chờ áp (r6, p1, p4, p8, r11, p2, p3 gomdon, chỉ mục hoá đơn, `lr_reports_source_indexes`, `lr_orders_filter_indexes`, `points_1d`, `q19_reversal_effects_marker`: tối đa 12), coi mỗi cái ngang r6. Dùng số đó làm "ước tính khoá" ở 3.2, hoặc tốt hơn là đo thật ở 3.4.
+Nhưng r6 chỉ là một trong các migration nặng. Nếu danh sách chờ áp (1.0) có thêm p1, p4, p8 hay các migration orders khác ở bảng 1.0, mỗi cái cũng viết lại hoặc dựng chỉ mục trên `orders` (p4 còn điền cả bảng `users`), và PD-3 khoá `users`. Chưa có số đo riêng cho từng cái; `go-live:check --phase=pre-deploy` (dòng `db.orders_lock`) lấy số trên nhân với số migration nặng trên `orders` còn chờ áp (r6, p1, p4, p8, r11, p2, p3 gomdon, chỉ mục hoá đơn, `lr_reports_source_indexes`, `lr_orders_filter_indexes`, `points_1d`, `q19_reversal_effects_marker`, `order_payment_unlinked`: tối đa 13), coi mỗi cái ngang r6. Dùng số đó làm "ước tính khoá" ở 3.2, hoặc tốt hơn là đo thật ở 3.4.
 
 | Số đơn | Khoá `orders` ước tính (một migration nặng, như r6) |
 |---|---|
@@ -610,7 +649,7 @@ cửa sổ (phút) = 10 + thời gian backup đo ở mục 1.2 + 5 × (tổng th
 
 "Tổng thời gian migrate" là thời gian của TOÀN BỘ danh sách chờ áp (1.0), không chỉ r6: lấy số đo thật của diễn tập ở 3.4 nếu có; không thì lấy "ước tính khoá" ở 3.1 (đã nhân theo số migration nặng) và xin gấp đôi cửa sổ tính ra, vì phần PD-3, p4 trên `users` và p8 chưa được đo.
 
-10 phút là: dừng API 30 giây, bật lại và chờ khoẻ 3 phút, kiểm tra khói 5 đến 7 phút. Hệ số 5 là biên an toàn vì máy dùng chung với ChoDeli nên chậm hơn lúc đo. Ví dụ 200.000 đơn, backup 2 phút, PROD còn ở bản cũ (cả 12 migration nặng trên `orders` cùng chờ, ước tính 12 × 10 giây = 120 giây, tức 2 phút): 10 + 2 + 5 × 2 = 22, tròn lên 30 phút, rồi gấp đôi vì chưa đo: xin 60 phút. Ví dụ chỉ có các migration của đợt (chỉ r6 nặng), 200.000 đơn (một migration nặng, 10 giây, tức 0,17 phút): 10 + 2 + 5 × 0,17 = 12,8, nên xin 30 phút.
+10 phút là: dừng API 30 giây, bật lại và chờ khoẻ 3 phút, kiểm tra khói 5 đến 7 phút. Hệ số 5 là biên an toàn vì máy dùng chung với ChoDeli nên chậm hơn lúc đo. Ví dụ 200.000 đơn, backup 2 phút, PROD còn ở bản cũ (cả 13 migration nặng trên `orders` cùng chờ, ước tính 13 × 10 giây = 130 giây, tức khoảng 2,2 phút): 10 + 2 + 5 × 2,2 = 23, tròn lên 30 phút, rồi gấp đôi vì chưa đo: xin 60 phút. Ví dụ chỉ có các migration của đợt (chỉ r6 nặng), 200.000 đơn (một migration nặng, 10 giây, tức 0,17 phút): 10 + 2 + 5 × 0,17 = 12,8, nên xin 30 phút.
 
 ### 3.3 Chọn giờ vắng nhất
 

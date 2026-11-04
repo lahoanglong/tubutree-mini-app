@@ -1,7 +1,7 @@
 import { Body, Controller, Headers, HttpCode, Post, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
-import { timingSafeEqual } from 'node:crypto';
+import { safeEqualStrings } from '../../common/safe-equal';
 import type { ZaloBridgeEvent } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
 import type { Env } from '../../config/env.validation';
@@ -35,8 +35,6 @@ export class BridgeEventsController {
     if (!this.secret) return false;
     const m = /^Bearer (.+)$/.exec(header ?? '');
     if (!m) return false;
-    const a = Buffer.from(m[1]!, 'utf8');
-    const b = Buffer.from(this.secret, 'utf8');
-    return a.length === b.length && timingSafeEqual(a, b);
+    return safeEqualStrings(m[1]!, this.secret);
   }
 }

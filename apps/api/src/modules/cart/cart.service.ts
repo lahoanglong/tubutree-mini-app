@@ -44,6 +44,49 @@ const ADD_ITEM_INCLUDE = {
     },
   },
 } satisfies Prisma.VariationInclude;
+/**
+ * Cột giỏ, báo giá và đặt đơn đọc từ dòng giỏ. Không dùng `include` trần: nó kéo cả `description`/`images` (base64 tới ~1,5 triệu ký tự
+ * mỗi ảnh) của sản phẩm và `dealerPrices`/`affiliateRate` của phân loại cho mỗi dòng, mà không đường nào của giỏ đọc đến.
+ */
+const CART_ITEM_SELECT = {
+  id: true,
+  variationId: true,
+  quantity: true,
+  variation: {
+    select: {
+      productId: true,
+      name: true,
+      isActive: true,
+      pancakeId: true,
+      retailPrice: true,
+      salePrice: true,
+      stock: true,
+      weight: true,
+      product: {
+        select: {
+          isActive: true,
+          approvalStatus: true,
+          name: true,
+          slug: true,
+          thumbnail: true,
+          fulfilment: true,
+          storefrontId: true,
+          storefront: {
+            select: {
+              title: true,
+              ownerUserId: true,
+              type: true,
+              ordersPausedAt: true,
+              isPartner: true,
+              owner: { select: { role: true, isBlocked: true } },
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.CartItemSelect;
+
 type AddableVariation = Prisma.VariationGetPayload<{ include: typeof ADD_ITEM_INCLUDE }>;
 export type AddItemsOutcome = { ok: true; toppedUp?: number } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' };
 
@@ -123,29 +166,7 @@ export class CartService {
       where: { userId },
       include: {
         user: forCheckout ? false : { select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } },
-        items: {
-          orderBy: { id: 'asc' },
-          include: {
-            variation: {
-              include: {
-                product: {
-                  include: {
-                    storefront: {
-                      select: {
-                        title: true,
-                        ownerUserId: true,
-                        type: true,
-                        ordersPausedAt: true,
-                        isPartner: true,
-                        owner: { select: { role: true, isBlocked: true } },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        items: { orderBy: { id: 'asc' }, select: CART_ITEM_SELECT },
       },
     });
     const cart =

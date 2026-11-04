@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { safeEqualStrings } from '../../common/safe-equal';
 import { decodeServedImage } from '../../common/served-image';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 
@@ -22,9 +23,7 @@ export function storefrontImageRef(storefrontId: string, kind: StorefrontImageKi
 
 export function matchesStorefrontImageVersion(given: unknown, storefrontId: string, kind: StorefrontImageKind, image: string): boolean {
   if (typeof given !== 'string') return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(storefrontImageVersion(storefrontId, kind, image));
-  return a.length === b.length && timingSafeEqual(a, b);
+  return safeEqualStrings(given, storefrontImageVersion(storefrontId, kind, image));
 }
 
 /**

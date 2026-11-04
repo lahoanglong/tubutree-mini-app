@@ -4,6 +4,10 @@ import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { endOfVnDay, vnMonthKey } from '../../../common/vn-time';
 import { expiryCloseReason, WasteExpiryCron } from './waste-expiry.cron';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../../common/cron-leader/run-exclusive');
 
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: jest.fn().mockResolvedValue({ id: 'ev1' }) }));
 
@@ -64,8 +68,8 @@ function setup(
     return { count: o.counts?.[where.id] ?? 1 };
   });
   const orderFind = jest.fn(async ({ where }: { where: { id: string } }) => ({ gomdonStatus: o.gomdon?.[where.id] ?? null }));
-  const tx = { $queryRaw: jest.fn().mockResolvedValue([{ locked: o.locked ?? true }]), wasteRequest: { updateMany }, order: { findUnique: orderFind } };
-  // The outer try-lock transaction ends after the per-row ones, so the first 'tx end' belongs to the first row transaction.
+  (runExclusive as jest.Mock).mockImplementation(holdsLease(o.locked ?? true));
+  const tx = { wasteRequest: { updateMany }, order: { findUnique: orderFind } };
   const order: string[] = [];
   const access = { availablePointIds: jest.fn(async (_db: unknown, ids: string[]) => new Set(ids.filter((id) => !o.unavailablePoints?.includes(id)))) };
   const quotaOf = o.quota ?? {};
@@ -224,10 +228,10 @@ describe('WasteExpiryCron.run (§12.3)', () => {
   });
 
   it('không lấy được try-lock (replica khác đang chạy) → { expired: 0 }, không quét', async () => {
-    const { cron, findMany, tx } = setup([openRow('r1')], { locked: false });
+    const { cron, findMany, prisma } = setup([openRow('r1')], { locked: false });
     await expect(cron.run(NOW)).resolves.toEqual({ expired: 0 });
     expect(findMany).not.toHaveBeenCalled();
-    expect((tx.$queryRaw.mock.calls[0]![0] as string[]).join('?')).toContain(`pg_try_advisory_xact_lock(hashtext('cron:waste.expiry'))`);
+    expect(runExclusive).toHaveBeenCalledWith(prisma, 'cron:waste.expiry', expect.any(Function));
   });
 
   it('đang chạy trong tiến trình → lần gọi chồng trả { expired: 0 }', async () => {

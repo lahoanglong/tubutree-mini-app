@@ -14,7 +14,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { safeEqualStrings } from '../../../common/safe-equal';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
@@ -123,10 +124,10 @@ export class ZaloOaWebhookController {
     return Boolean(this.oaSecretKey && this.appId);
   }
 
-  /** So token tĩnh chống timing-attack (độ dài khác → false ngay, không ném). Chưa đặt token thì lớp này không bao giờ qua. */
+  /** So token tĩnh chống timing-attack (so băm nên không lộ độ dài secret). Chưa đặt token thì lớp này không bao giờ qua. */
   private verifyToken(token?: string): boolean {
     if (!this.secret || !token) return false;
-    return constantTimeEqual(token, this.secret);
+    return safeEqualStrings(token, this.secret);
   }
 
   private verifySignature(body: ZaloOaWebhookBody, signature: string | undefined, req?: { rawBody?: Buffer; headers?: Record<string, string | string[] | undefined> }): boolean {
@@ -147,13 +148,8 @@ export class ZaloOaWebhookController {
       return false;
     }
     const given = signature.trim().toLowerCase().replace(/^mac=\s*/, '');
-    return constantTimeEqual(given, zaloOaEventSignature(this.appId, rawBody, String(timestamp), this.oaSecretKey));
+    return safeEqualStrings(given, zaloOaEventSignature(this.appId, rawBody, String(timestamp), this.oaSecretKey));
   }
 
 }
 
-function constantTimeEqual(x: string, y: string): boolean {
-  const a = Buffer.from(x, 'utf8');
-  const b = Buffer.from(y, 'utf8');
-  return a.length === b.length && timingSafeEqual(a, b);
-}

@@ -350,7 +350,6 @@ export class StorefrontService {
       headerNote: sf.headerNote,
       avatarUrl: publicStorefrontImage(sf.id, 'avatar', sf.avatarUrl),
       coverUrl: publicStorefrontImage(sf.id, 'cover', sf.coverUrl),
-      theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
       // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
       ...(!sf.isSample && isPartnerStore(sf)

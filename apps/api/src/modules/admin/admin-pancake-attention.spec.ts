@@ -65,7 +65,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
   });
 
   it.each(['CANCELLED', 'RETURNED'])(
-    'đơn %s chưa có mốc đảo sau huỷ/trả: vẫn đóng việc nhưng KHÔNG ghi dòng lịch sử cùng trạng thái (cron chạy lại lấy nhầm dòng đóng đơn)',
+    'đơn %s chưa có mốc đảo sau huỷ/trả: vẫn đóng việc và vẫn ghi dòng lịch sử cùng trạng thái (resync bỏ qua dòng fromStatus = toStatus)',
     async (status) => {
       const order = { id: 'o1', code: 'TUBU1', status, reversalEffectsAt: null, pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
       const history = jest.fn().mockResolvedValue({});
@@ -75,7 +75,7 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
       jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
       await expect(admin.resolvePancakeAttention('admin1', 'TUBU1', 'đã gọi khách')).resolves.toMatchObject({ ok: true });
       expect(updateMany).toHaveBeenCalled();
-      expect(history).not.toHaveBeenCalled();
+      expect(history).toHaveBeenCalledTimes(1);
     },
   );
 

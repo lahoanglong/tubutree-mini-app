@@ -32,6 +32,7 @@ import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/loc
 import { DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED, isStorefrontSubdomainEnabled, withSubdomainFlag } from '../storefront/storefront-config';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
+import { isFirstImageThumb, storedThumbnailOf } from '../../common/public-image';
 import { contentChangedPatch } from '../storefront/storefront-content-change';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
@@ -194,13 +195,18 @@ function contentOf(c: { name: string; description: string; shortDesc: string | n
   return { name: c.name, description: c.description, shortDesc: c.shortDesc, images: c.images, thumbnail: c.thumbnail };
 }
 
+/** Cùng ảnh đại diện: cùng chuỗi, hoặc cả hai đều là ảnh đầu (data URL lúc nhập và đường dẫn tới ảnh đầu lúc lưu là một ảnh). */
+function sameThumbnail(a: ProductContent, b: ProductContent): boolean {
+  return (a.thumbnail ?? '') === (b.thumbnail ?? '') || (isFirstImageThumb(a.thumbnail, a.images[0]) && isFirstImageThumb(b.thumbnail, b.images[0]));
+}
+
 function sameContent(a: ProductContent, b: ProductContent): boolean {
   return (
     a.name === b.name &&
     a.description === b.description &&
     (a.shortDesc ?? '') === (b.shortDesc ?? '') &&
     JSON.stringify(a.images) === JSON.stringify(b.images) &&
-    (a.thumbnail ?? '') === (b.thumbnail ?? '')
+    sameThumbnail(a, b)
   );
 }
 
@@ -618,6 +624,8 @@ export class MerchantService {
     // hàng chờ của đối tác; hàng "Tubu giao hộ" nhận biến thể Pancake thật lúc duyệt.
     // Chèn dưới FOR KEY SHARE của dòng gian hàng rồi kiểm lại cờ (như checkout.assertPartnerStoresUnderLock): thu hồi đại lý giữ FOR UPDATE
     // cùng dòng này trước khi tắt cờ, nên hoặc sản phẩm bị từ chối, hoặc thu hồi thấy sản phẩm này và 409, không bao giờ cả hai cùng qua.
+    // Thumbnail giữ nguyên data URL: sản phẩm chưa từng được duyệt thì endpoint ảnh chưa phát, màn duyệt của admin cần ảnh thật.
+    // Đổi sang đường dẫn tới ảnh đầu là việc của lúc admin duyệt lần đầu (reviewMerchantProduct).
     const product = await this.prisma.$transaction(async (tx) => {
       await this.lockSellableStore(tx, store.id, userId);
       return tx.product.create({
@@ -731,7 +739,7 @@ export class MerchantService {
       thumbnail: dto.thumbnail === undefined ? baseline.thumbnail : dto.thumbnail,
     };
     const contentChanged = !sameContent(merged, baseline);
-    const imagesChanged = JSON.stringify(merged.images) !== JSON.stringify(product.images) || (merged.thumbnail ?? null) !== (product.thumbnail ?? null);
+    const imagesChanged = JSON.stringify(merged.images) !== JSON.stringify(product.images) || !sameThumbnail(merged, contentOf(product));
     // Mở bán lại sản phẩm đã gỡ liên kết, hoặc xin mã Pancake khác, thì admin duyệt lại để liên kết biến thể Pancake. Bỏ mã (tự
     // giao) giữ nguyên trạng thái duyệt: nội dung đã được duyệt, giá và tồn do gian hàng tự đặt như mọi sản phẩm tự giao.
     const requestsLink = awaitingLink && codeChanged && !!codeChange;
@@ -745,6 +753,8 @@ export class MerchantService {
     const revertsToLive = liveEdit && contentChanged && sameContent(merged, contentOf(product));
     const startsDraft = liveEdit && contentChanged && !revertsToLive && !draft;
     const reReview = !liveEdit && (contentChanged || relink || codeChanged) && product.approvalStatus !== 'PENDING_REVIEW';
+    // Sau lần ghi này endpoint ảnh còn phát ảnh của sản phẩm không: đổi ảnh xoá `approvedAt` (xem ghi bên dưới) nên ảnh mới chưa phát.
+    const publicAfterWrite = !imagesChanged && (product.approvalStatus === 'APPROVED' || product.approvedAt !== null);
 
     await this.prisma.$transaction(async (tx) => {
       if (codeChanged) {
@@ -779,7 +789,7 @@ export class MerchantService {
             isActive: requestsLink ? true : dto.isActive,
             ...(tubuFulfilled ? {} : { basePrice, salePrice }),
             // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
-            ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),
+            ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? { ...merged, thumbnail: storedThumbnailOf(product.id, merged.thumbnail, merged.images[0], publicAfterWrite) } : {}),
             ...(reReview
               ? {
                   approvalStatus: 'PENDING_REVIEW' as const,

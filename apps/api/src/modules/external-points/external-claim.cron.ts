@@ -13,7 +13,7 @@ import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 /**
  * Hai cron của điểm đơn ngoài app (đơn sàn và đơn chat). Cron chỉ chạy trên instance giữ lease (CronLeaderService); mỗi việc còn tự an toàn khi chạy chồng
- * (khoá advisory cho lượt cộng, điều kiện trạng thái cho từng claim). Lỗi không bao giờ ném ra khỏi @Cron.
+ * (lease cron_leases cho lượt cộng, điều kiện trạng thái cho từng claim). Lỗi không bao giờ ném ra khỏi @Cron.
  */
 @Injectable()
 export class ExternalClaimCron {

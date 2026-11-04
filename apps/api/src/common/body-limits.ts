@@ -1,5 +1,6 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { JwtService } from '@nestjs/jwt';
 import { json, urlencoded } from 'express';
+import { safeEqualStrings } from './safe-equal';
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from 'express';
 
 /**
@@ -119,9 +120,28 @@ function rawGuard(maxNodes: number, maxDepth: number) {
   };
 }
 
+export const CSP_REPORT_BODY_LIMIT = '32kb';
+export const CSP_REPORT_CONTENT_TYPES = ['application/csp-report', 'application/reports+json'] as const;
+export const CSP_REPORT_UNSUPPORTED_MESSAGE = 'Chỉ nhận báo cáo CSP (application/csp-report hoặc application/reports+json).';
+
+/**
+ * /api/csp-report: trình duyệt gửi báo cáo bằng hai content-type riêng mà parser JSON chung không nhận. Content-type khác bị 415 tại
+ * đây (không để thân rơi xuống parser chung rồi thành `{}`), thân quá 32kb bị 413 bởi parser này.
+ */
+export function cspReportBodyParsers(): RequestHandler[] {
+  const parse = json({ type: [...CSP_REPORT_CONTENT_TYPES], limit: CSP_REPORT_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) });
+  const typeGuard: RequestHandler = (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+    if (!(CSP_REPORT_CONTENT_TYPES as readonly string[]).includes(type)) return reject(res, 415, CSP_REPORT_UNSUPPORTED_MESSAGE);
+    next();
+  };
+  return [typeGuard, parse];
+}
+
 /** Parser riêng của /api/events: cùng chốt charset và quét thô (rawGuard) như các route khác, trần dung lượng riêng 512 KB. */
 export function eventsBodyParser(): RequestHandler {
-  return json({ limit: '512kb', verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) });
+  return json({ limit: '512kb', verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH), inflate: false });
 }
 
 /**
@@ -135,19 +155,60 @@ function keepRawBody(verify: ReturnType<typeof rawGuard>): ReturnType<typeof raw
   };
 }
 
-/** json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần. */
-export function createBodyParsers(): RequestHandler[] {
-  const specs: Record<BodyTier, { limit: string; verify: ReturnType<typeof rawGuard> }> = {
-    default: { limit: DEFAULT_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
-    webhook: { limit: WEBHOOK_BODY_LIMIT, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
-    pancake: { limit: PANCAKE_WEBHOOK_BODY_LIMIT, verify: rawGuard(MAX_PANCAKE_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH) },
-    large: { limit: LARGE_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
+const BEARER_RE = /^bearer\s+(.+)$/i;
+const SECONDS_PER_DAY = 86_400;
+
+/**
+ * Bearer JWT do API ký (đúng chữ ký secret access, cùng thư viện với JwtStrategy) và chưa hết hạn quá `JWT_REFRESH_TTL_DAYS`.
+ * Token hết hạn gần đây vẫn tính: client chỉ refresh khi nhận 401 từ JwtAuthGuard, nên nếu tầng body trả 413 trước đó thì form
+ * ảnh/CSV mở lâu hơn thời hạn access token không bao giờ lưu được. Token quá cũ thì refresh token tương ứng cũng đã chết.
+ * Không chạm DB. Kết quả nhớ theo request vì cả json và urlencoded cùng hỏi.
+ */
+function makeJwtChecker(accessSecret: string, refreshTtlDays: number) {
+  const jwt = new JwtService();
+  const seen = new WeakMap<Request, boolean>();
+  return (req: Request): boolean => {
+    const cached = seen.get(req);
+    if (cached !== undefined) return cached;
+    let ok = false;
+    const m = BEARER_RE.exec(req.headers.authorization ?? '');
+    if (m) {
+      try {
+        const payload = jwt.verify<{ exp?: unknown }>(m[1]!.trim(), { secret: accessSecret, ignoreExpiration: true });
+        ok = typeof payload.exp === 'number' && Date.now() / 1000 - payload.exp <= refreshTtlDays * SECONDS_PER_DAY;
+      } catch {
+        ok = false;
+      }
+    }
+    seen.set(req, ok);
+    return ok;
+  };
+}
+
+/**
+ * json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần.
+ * `inflate: false` ở tầng của app (mặc định và lớn): thân nén (gzip/deflate/br) bị 415 thay vì giải nén trước khi xác thực,
+ * đây là lớp chặn bom nén. Webhook đối tác vẫn giải nén (đối tác có thể gửi gzip và bỏ sự kiện sau vài lần lỗi), trần
+ * 1 MB/10 MB tính trên kích thước sau giải nén. Tầng 10 MB của app chỉ mở cho request có Bearer hợp lệ, nhưng `/auth/guest`
+ * cấp JWT cho bất kỳ ai nên đó không phải hàng rào chống ẩn danh; nó chỉ giữ thân lớn khỏi request không từng đăng nhập.
+ */
+export function createBodyParsers(accessSecret: string, refreshTtlDays = 30): RequestHandler[] {
+  const hasValidJwt = makeJwtChecker(accessSecret, refreshTtlDays);
+  const specs: Record<BodyTier, { limit: string; inflate: boolean; verify: ReturnType<typeof rawGuard> }> = {
+    default: { limit: DEFAULT_BODY_LIMIT, inflate: false, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
+    webhook: { limit: WEBHOOK_BODY_LIMIT, inflate: true, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
+    pancake: { limit: PANCAKE_WEBHOOK_BODY_LIMIT, inflate: true, verify: rawGuard(MAX_PANCAKE_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH) },
+    large: { limit: LARGE_BODY_LIMIT, inflate: false, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
   };
   const tiers = new Map<BodyTier, { json: RequestHandler; urlencoded: RequestHandler }>();
-  for (const [tier, { limit, verify }] of Object.entries(specs) as Array<[BodyTier, (typeof specs)[BodyTier]]>) {
-    tiers.set(tier, { json: json({ limit, verify }), urlencoded: urlencoded({ limit, extended: true }) });
+  for (const [tier, { limit, inflate, verify }] of Object.entries(specs) as Array<[BodyTier, (typeof specs)[BodyTier]]>) {
+    tiers.set(tier, { json: json({ limit, verify, inflate }), urlencoded: urlencoded({ limit, extended: true, inflate }) });
   }
-  const pick = (kind: 'json' | 'urlencoded'): RequestHandler => (req, res, next) => tiers.get(tierFor(req.path))![kind](req, res, next);
+  const pick = (kind: 'json' | 'urlencoded'): RequestHandler => (req, res, next) => {
+    let tier = tierFor(req.path);
+    if (tier === 'large' && !hasValidJwt(req)) tier = 'default';
+    tiers.get(tier)![kind](req, res, next);
+  };
   return [pick('json'), pick('urlencoded')];
 }
 
@@ -230,9 +291,7 @@ export const pancakeWebhookTokenGuard: RequestHandler = (req: Request, res: Resp
   }
   const header = req.headers['x-webhook-token'];
   const token = Array.isArray(header) ? header[0] : header;
-  // So băm cùng độ dài để thời gian phản hồi không lộ độ dài secret.
-  const digest = (v: string) => createHash('sha256').update(v, 'utf8').digest();
-  if (!token || !timingSafeEqual(digest(token), digest(secret))) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
+  if (!token || !safeEqualStrings(token, secret)) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
   next();
 };
 

@@ -11,6 +11,8 @@ import type { NormalizedCashbackEvent } from './providers/cashback-provider.inte
 import { CRON_TZ } from '../../common/cron-tz';
 import { maskPhoneKeepLast3 } from '../../common/mask-pii';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { isRealUser } from '../../common/real-user';
+import { productUrlMatchesMerchant } from './cashback-hosts';
 
 /**
  * Cashback sàn ngoài (Build Spec §9, §15 cashback.*). Provider-agnostic: I/O vendor nằm ở
@@ -51,8 +53,13 @@ export class CashbackService {
 
   /** Tạo click + sinh deeplink chứa clickId theo provider của merchant. */
   async createClick(userId: string, merchantId: string, productUrl?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(user)) throw new BadRequestException('Đăng nhập Zalo để nhận hoàn tiền mua sắm.');
     const merchant = await this.prisma.cashbackMerchant.findUnique({ where: { id: merchantId } });
     if (!merchant || !merchant.isActive) throw new BadRequestException('Sàn không khả dụng.');
+    if (productUrl && !productUrlMatchesMerchant(merchant.slug, productUrl)) {
+      throw new BadRequestException(`Link sản phẩm phải thuộc sàn ${merchant.name}.`);
+    }
     const provider = this.registry.get(merchant.provider);
 
     const rateLimit = await this.config.get<number>('cashback.click_rate_limit_seconds', 30);

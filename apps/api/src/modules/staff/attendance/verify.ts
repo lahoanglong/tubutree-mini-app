@@ -12,13 +12,18 @@ export interface AttnConfig {
 export type VerifyReason = 'NOT_CONFIGURED' | 'IP_NOT_ALLOWED' | 'OUT_OF_RADIUS';
 export type VerifyResult = { ok: true; distanceM: number } | { ok: false; reason: VerifyReason };
 
+/** Kiểm IP văn phòng đang bật: cờ bật và có ít nhất một IP. Tắt thì toạ độ duy nhất đáng tin là toạ độ Zalo giải mã. */
+export function isIpEnforced(cfg: Pick<AttnConfig, 'enforceIp' | 'officeIps'>): boolean {
+  return cfg.enforceIp && cfg.officeIps.length > 0;
+}
+
 /**
  * Xác minh nhân viên đang ở công ty: cần đúng IP nội bộ (nếu bật) + trong bán kính GPS.
  * Fail-closed: thiếu cả IP allowlist lẫn toạ độ → NOT_CONFIGURED (không cho checkin).
  */
 export function verifyPresence(cfg: AttnConfig, ip: string, lat: number, lng: number): VerifyResult {
   const gpsConfigured = cfg.lat !== null && cfg.lng !== null;
-  const ipActive = cfg.enforceIp && cfg.officeIps.length > 0;
+  const ipActive = isIpEnforced(cfg);
   if (!gpsConfigured && !ipActive) return { ok: false, reason: 'NOT_CONFIGURED' };
   if (ipActive && !ipMatch(ip, cfg.officeIps)) return { ok: false, reason: 'IP_NOT_ALLOWED' };
   if (gpsConfigured) {

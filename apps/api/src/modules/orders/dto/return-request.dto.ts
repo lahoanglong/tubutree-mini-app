@@ -61,7 +61,7 @@ export class ReturnRequestDto extends RefundDestinationDto {
   /** Mô tả thêm. Bắt buộc ≥ 5 ký tự khi không chọn lý do sẵn hoặc chọn "Lý do khác" (kiểm ở service). */
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
   // C-050: ảnh minh chứng hiện ở admin web — chặn javascript:/data:text/html/host lạ ngay khi lưu.
-  @IsOptional() @IsArray() @ArrayMaxSize(6) @IsUploadedImage({}, { each: true }) images?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(6) @IsUploadedImage({ verifySignature: true }, { each: true }) images?: string[];
   /** Dòng và số lượng trả (D3). Không gửi = trả mọi phần còn lại của đơn (app bản cũ). */
   @IsOptional()
   @IsArray()

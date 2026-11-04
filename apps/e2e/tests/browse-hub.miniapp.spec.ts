@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { mockDiscovery } from './support/discovery-mocks';
+import { HOME_BEST_SELLER_LIMIT } from '../../../packages/app-core/src/home-layout';
 
 /**
  * Zalo Mini App E2E — hub của Danh mục (gốc /browse). API mock toàn bộ; chạy trên WebKit (iPhone 12) nên vùng chạm, cuộn của
@@ -11,6 +12,8 @@ import { mockDiscovery } from './support/discovery-mocks';
 const hubTiles = (page: Page): Locator => page.getByRole('region', { name: 'Danh mục', exact: true });
 const scrollerOf = (page: Page): Locator => page.locator('.zaui-page').first();
 const productCalls = (api: MockApi) => api.callsTo('GET', '/products').map((c) => [c.query.get('sort'), c.query.get('limit')]);
+// Hub dùng chung query kệ Bán chạy nhất của Trang chủ (cùng khoá cache), nên gọi đúng giới hạn của kệ Trang chủ.
+const HUB_LIMIT = String(HOME_BEST_SELLER_LIMIT);
 
 test.describe('Danh mục — hub', () => {
   test.use({ viewport: { width: 375, height: 812 } });
@@ -27,7 +30,7 @@ test.describe('Danh mục — hub', () => {
     await expect(page.getByRole('region', { name: 'Bán chạy nhất' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('catalog-grid')).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'Sắp xếp' })).toHaveCount(0);
-    expect(productCalls(api)).toEqual([['best_seller_30d', '10']]);
+    expect(productCalls(api)).toEqual([['best_seller_30d', HUB_LIMIT]]);
   });
 
   test('cây danh mục thật: hub chỉ có gốc; chạm gốc có con → danh sách có hàng chip con và thẻ đầu nằm trong 200px đầu màn hình', async ({ page, api }) => {
@@ -75,7 +78,7 @@ test.describe('Danh mục — hub', () => {
     await page.goto('/browse');
     await expect(hubTiles(page).getByRole('button')).toHaveCount(5, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Bán chạy nhất' })).toBeVisible({ timeout: 15_000 });
-    expect(productCalls(api)).toEqual([['best_seller_30d', '10'], ['best_seller', '10']]);
+    expect(productCalls(api)).toEqual([['best_seller_30d', HUB_LIMIT], ['best_seller', HUB_LIMIT]]);
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Xem tất cả sản phẩm' })).toBeVisible();
   });

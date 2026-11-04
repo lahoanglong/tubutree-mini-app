@@ -4,7 +4,7 @@ import { LayoutGrid } from 'lucide-react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), coreGet: vi.fn(), fetchCatalog: vi.fn() }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), coreGet: vi.fn(), fetchProducts: vi.fn(), fetchCatalog: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -13,9 +13,12 @@ vi.mock('../../services/shop-api', () => ({
   getPublicConfig: vi.fn().mockResolvedValue({}),
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   fetchProductsBySlugs: vi.fn().mockResolvedValue([]),
+  fetchProducts: mocks.fetchProducts,
   fetchCatalog: mocks.fetchCatalog,
 }));
 
+import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
+import { homeBestSellerQuery } from '../home/home-best-seller-query';
 import { SEGMENT_ENTRIES, type CategoryEntry } from '../../hooks/use-categories';
 import { BrowseHub, type BrowseHubProps } from './browse-hub';
 
@@ -26,8 +29,7 @@ const flat = (n: number): CategoryEntry[] => Array.from({ length: n }, (_, i) =>
 const handlers = { onPickCategory: vi.fn(), onPickAll: vi.fn(), onPickBrand: vi.fn() };
 const BRANDS = [{ brand: 'Tubu', count: 9 }, { brand: 'Cỏ Mềm', count: 5 }, { brand: 'Xanh', count: 3 }, { brand: 'Lá', count: 2 }];
 
-function renderHub(over: Partial<BrowseHubProps> = {}) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderHub(over: Partial<BrowseHubProps> = {}, qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={qc}>
       <BrowseHub entries={SEGMENT_ENTRIES} categoriesLoading={false} placeholderCount={4} brands={BRANDS} {...handlers} {...over} />
@@ -39,7 +41,7 @@ describe('BrowseHub', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    mocks.coreGet.mockResolvedValue(page(10));
+    mocks.fetchProducts.mockResolvedValue(page(10));
     mocks.fetchCatalog.mockRejectedValue(new Error('hub không được tải danh sách'));
   });
 
@@ -49,11 +51,21 @@ describe('BrowseHub', () => {
     await waitFor(() => expect(region.querySelectorAll('button').length).toBeGreaterThanOrEqual(10));
     const ranks = Array.from(region.querySelectorAll('[data-ds-part="rank"]')).map((n) => n.textContent);
     expect(ranks).toEqual(Array.from({ length: 10 }, (_, i) => `#${i + 1}`));
-    expect(mocks.coreGet).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 10 } });
+    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' });
+  });
+
+  it('mở Trang chủ rồi vào Danh mục: endpoint Bán chạy nhất chỉ bị gọi một lần, dùng chung cache của Trang chủ', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await qc.fetchQuery(homeBestSellerQuery);
+    renderHub({}, qc);
+    const region = await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    await waitFor(() => expect(region.querySelectorAll('[data-ds-part="rank"]')).toHaveLength(10));
+    expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
+    expect(mocks.coreGet).not.toHaveBeenCalled();
   });
 
   it('API trả 2 món: kệ ẩn hẳn, nút "Xem tất cả sản phẩm" vẫn còn', async () => {
-    mocks.coreGet.mockResolvedValue(page(2));
+    mocks.fetchProducts.mockResolvedValue(page(2));
     renderHub();
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Bán chạy nhất' })).toBeNull());
     expect(screen.queryByRole('heading', { name: 'Bán chạy nhất' })).toBeNull();
@@ -61,7 +73,7 @@ describe('BrowseHub', () => {
   });
 
   it('API lỗi: kệ ẩn, phần còn lại của hub không đổ', async () => {
-    mocks.coreGet.mockRejectedValue(Object.assign(new Error('500'), { status: 500 }));
+    mocks.fetchProducts.mockRejectedValue(Object.assign(new Error('500'), { status: 500 }));
     renderHub();
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Bán chạy nhất' })).toBeNull());
     expect(screen.getByRole('region', { name: 'Danh mục' })).toBeInTheDocument();

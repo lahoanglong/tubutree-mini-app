@@ -18,7 +18,13 @@ export {
   readDealerPendingPaymentTtlHours,
   readPendingPaymentTtlHours,
 } from './pending-payment-ttl';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
+/**
+ * Đơn có cờ "Pancake báo đã thanh toán, chờ đối chiếu" được hoãn tự huỷ chừng này giờ kể từ khoản đầu tiên (paymentUnlinkedFirstAt): đủ để Kế toán đối
+ * chiếu sao kê. Quá hạn mà khách không trả thì cron huỷ như thường; cờ còn nguyên nên đơn sang hàng đợi của ADMIN (đơn đã huỷ).
+ */
+export const PAYMENT_UNLINKED_HOLD_HOURS = 48;
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
 
@@ -62,17 +68,10 @@ export class PendingPaymentExpiryCron {
     if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
-      // Khoá advisory theo transaction giữ suốt lượt chạy: nhiều instance API cùng lên lịch thì chỉ một
-      // instance quét. Từng lần huỷ chạy transaction riêng (kết nối khác) — tx này chỉ để giữ khoá.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
-          return this.cancelExpired(now);
-        },
-        { maxWait: 10_000, timeout: 15 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
+      const run = await runExclusive(this.prisma, LOCK_KEY, () => this.cancelExpired(now));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
+      return run.value;
     } finally {
       this.running = false;
     }
@@ -85,6 +84,7 @@ export class PendingPaymentExpiryCron {
     ]);
     const cutoff = new Date(now.getTime() - ttlHours * 3_600_000);
     const dealerCutoff = new Date(now.getTime() - dealerTtlHours * 3_600_000);
+    const unlinkedHoldCutoff = new Date(now.getTime() - PAYMENT_UNLINKED_HOLD_HOURS * 3_600_000);
     const stale = await this.prisma.order.findMany({
       where: {
         status: 'PENDING_PAYMENT',
@@ -92,6 +92,9 @@ export class PendingPaymentExpiryCron {
         paymentMethod: { in: [...PREPAID_METHODS] },
         // Đã bàn giao vận chuyển (D1): lần thử đầu đã nhắc người xử lý, thử lại mỗi lượt chỉ lặp lỗi và nhắc lại (R4-SYNC-5).
         autoCancelBlockedAt: null,
+        // Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake: để Kế toán đối chiếu sao kê trong PAYMENT_UNLINKED_HOLD_HOURS, quá hạn thì huỷ như thường.
+        // Dòng chưa có mốc đầu (cờ đặt trước khi có cột) thì tính theo paymentUnlinkedAt.
+        AND: [{ OR: [{ paymentUnlinkedAt: null }, { paymentUnlinkedFirstAt: { lt: unlinkedHoldCutoff } }, { paymentUnlinkedFirstAt: null, paymentUnlinkedAt: { lt: unlinkedHoldCutoff } }] }],
         OR: [
           { type: 'RETAIL', createdAt: { lt: cutoff } },
           { type: 'DEALER', createdAt: { lt: dealerCutoff } },

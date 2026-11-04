@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { PlaceOrderDto } from '../modules/checkout/dto/checkout.dto';
+import { PlaceOrderForCustomerDto } from '../modules/affiliate/dto/place-order-for-customer.dto';
+import { CreateBrandDto, DealerRewardDto, ProductIdsDto, UpdateBrandDto, UpdateOwnedBrandDto } from '../modules/brand/dto/brand.dto';
 import { CreatePostDto, EditPostDto } from '../modules/feed/community-feed.controller';
 
 /**
@@ -49,5 +51,39 @@ describe('CreatePostDto / EditPostDto.images', () => {
   it('quá nhiều slug sản phẩm/thẻ → lỗi', async () => {
     const keys = await errorsFor(CreatePostDto, { body: 'x', productSlugs: Array(21).fill('a'), tagSlugs: Array(21).fill('b') });
     expect(keys).toEqual(expect.arrayContaining(['productSlugs.arrayMaxSize', 'tagSlugs.arrayMaxSize']));
+  });
+});
+
+describe('PlaceOrderForCustomerDto (CTV lên đơn hộ)', () => {
+  const customer = { recipient: 'Nguyễn Văn A', phone: '0912345678', province: 'HN', ward: 'Phường 1', street: '1 Lê Lợi', provinceCode: '84_VN01', wardCode: '84_VN01_001' };
+  const base = { items: [{ variationId: 'v1', quantity: 1 }], customer, paymentMethod: 'COD' };
+  it('đơn bình thường → hợp lệ', async () => {
+    expect(await errorsFor(PlaceOrderForCustomerDto, { ...base, note: 'Gọi trước 15 phút' })).toEqual([]);
+  });
+  it('ghi chú dài hơn 500 ký tự → lỗi', async () => {
+    expect(await errorsFor(PlaceOrderForCustomerDto, { ...base, note: 'x'.repeat(501) })).toContain('note.maxLength');
+  });
+  it.each(['recipient', 'street'])('%s chứa < hoặc > → lỗi', async (field) => {
+    const keys = await errorsFor(PlaceOrderForCustomerDto, { ...base, customer: { ...customer, [field]: 'A <script>x</script>' } });
+    expect(keys).toContain(`customer.${field}.matches`);
+  });
+});
+
+describe('Brand DTO: chữ thương hiệu có trần độ dài', () => {
+  it.each([
+    ['CreateBrandDto', CreateBrandDto, { name: 'Tubu' }],
+    ['UpdateBrandDto', UpdateBrandDto, {}],
+    ['UpdateOwnedBrandDto', UpdateOwnedBrandDto, {}],
+  ] as const)('%s.story: 20000 ký tự qua, 20001 bị chặn', async (_n, cls, base) => {
+    expect(await errorsFor(cls as new () => object, { ...base, story: 'x'.repeat(20000) })).toEqual([]);
+    expect(await errorsFor(cls as new () => object, { ...base, story: 'x'.repeat(20001) })).toContain('story.maxLength');
+  });
+  it('ownerUserId, brandId và productIds có trần 64 ký tự', async () => {
+    expect(await errorsFor(UpdateBrandDto, { ownerUserId: 'x'.repeat(64) })).toEqual([]);
+    expect(await errorsFor(UpdateBrandDto, { ownerUserId: 'x'.repeat(65) })).toContain('ownerUserId.maxLength');
+    const reward = { type: 'GIFT', title: 'Quà', threshold: 1 };
+    expect(await errorsFor(DealerRewardDto, { ...reward, brandId: 'x'.repeat(65) })).toContain('brandId.maxLength');
+    expect(await errorsFor(ProductIdsDto, { productIds: ['x'.repeat(65)] })).toContain('productIds.maxLength');
+    expect(await errorsFor(ProductIdsDto, { productIds: ['x'.repeat(64)] })).toEqual([]);
   });
 });

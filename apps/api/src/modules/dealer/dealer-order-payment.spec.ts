@@ -40,6 +40,7 @@ function build(order: O | null, opts: { creditRow?: boolean; flipCount?: number 
       findFirst: jest.fn().mockResolvedValue(order),
       updateMany,
       findUniqueOrThrow: jest.fn(async () => ({ ...order, paymentStatus: 'PAID' })),
+      findUnique: jest.fn().mockResolvedValue({ pancakeAttention: null }),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditRow ? { id: 'led1' } : null), findMany: jest.fn().mockResolvedValue([]) },
     orderStatusHistory: { create: historyCreate, findMany: jest.fn().mockResolvedValue([]) },
@@ -61,7 +62,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     const res = await svc.confirmDealerOrderPayment('admin1', 'DLR1', { bankRef: ' FT26270001 ', note: 'VCB 27/09' });
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', type: 'DEALER', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(historyCreate).toHaveBeenCalledTimes(1);
     const h = historyCreate.mock.calls[0]![0].data;
@@ -96,7 +97,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     // record(tx, ...) trong callback $transaction, không phải record(this.prisma, ...) ngoài nó.
     const txUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const txHistoryCreate = jest.fn().mockResolvedValue({});
-    const txMarker = { order: { updateMany: txUpdateMany }, orderStatusHistory: { create: txHistoryCreate } };
+    const txMarker = { order: { updateMany: txUpdateMany, findUnique: jest.fn().mockResolvedValue({ pancakeAttention: null }) }, orderStatusHistory: { create: txHistoryCreate } };
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(DEALER_ORDER) },
       dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -116,7 +117,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     await svc.confirmDealerOrderPayment('admin1', 'o1', {});
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', type: 'DEALER', paymentStatus: 'UNPAID', status: 'SHIPPING' },
-      data: { paymentStatus: 'PAID', paidAt: expect.any(Date) },
+      data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(historyCreate.mock.calls[0]![0].data).toMatchObject({ fromStatus: 'SHIPPING', toStatus: 'SHIPPING', actorId: 'admin1' });
     expect(analytics.record).toHaveBeenCalledTimes(1);

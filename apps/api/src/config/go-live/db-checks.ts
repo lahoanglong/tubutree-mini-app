@@ -57,6 +57,13 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261020000000_waste_exchange', ordersLock: false },
   { name: '20261020100000_review_return_reversal', ordersLock: false },
   { name: '20261020120000_q19_reversal_effects_marker', ordersLock: true },
+  { name: '20261104130000_perf_indexes_notification_points_retention', ordersLock: false },
+  { name: '20261104140500_review_image_versions_backfill', ordersLock: false },
+  { name: '20261104141000_product_thumbnail_ref', ordersLock: false },
+  { name: '20261104142500_feed_post_image_summary_backfill', ordersLock: false },
+  { name: '20261104160500_user_affiliate_revoked_backfill', ordersLock: false },
+  { name: '20261104180000_order_payment_unlinked', ordersLock: true },
+  { name: '20261104180100_order_payment_unlinked_first_at', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

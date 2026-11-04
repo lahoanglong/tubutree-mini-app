@@ -4,8 +4,17 @@ import { useState } from 'react';
 import { byText, click, render, type Rendered } from '@/test-utils/dom';
 import { TabErrorBoundary } from './tab-error-boundary';
 
+const reloadPage = vi.hoisted(() => vi.fn());
+vi.mock('./chunk-load-error', async (importOriginal) => ({ ...(await importOriginal<typeof import('./chunk-load-error')>()), reloadPage }));
+
 let mounted: Rendered[] = [];
 afterEach(() => {
+  reloadPage.mockReset();
+  try {
+    sessionStorage.clear();
+  } catch {
+    // jsdom luôn có sessionStorage
+  }
   mounted.forEach((m) => m.unmount());
   mounted = [];
   vi.restoreAllMocks();
@@ -59,5 +68,68 @@ describe('TabErrorBoundary', () => {
     mounted.push(r);
     expect(byText(r.container, 'button', 'Về Việc cần xử lý')).toBeFalsy();
     expect(byText(r.container, 'button', 'Thử lại')).toBeTruthy();
+  });
+});
+
+describe('TabErrorBoundary: chunk tab cũ sau khi deploy', () => {
+  let chunkError: Error | null = null;
+  function ChunkBomb() {
+    if (chunkError) throw chunkError;
+    return <p>Nội dung ổn</p>;
+  }
+  const mountChunk = (err: Error) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    chunkError = err;
+    const r = render(<TabErrorBoundary tabLabel="Đổi rác" onGoHome={() => {}}><ChunkBomb /></TabErrorBoundary>);
+    mounted.push(r);
+    return r;
+  };
+  const named = (name: string, message: string) => Object.assign(new Error(message), { name });
+
+  it('ChunkLoadError: tự tải lại trang đúng một lần, không hiện câu "Mục này đang gặp lỗi"', () => {
+    const r = mountChunk(named('ChunkLoadError', 'Loading chunk 123 failed.'));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    expect(r.container.textContent).not.toContain('Mục này đang gặp lỗi');
+    expect(r.container.textContent).toContain('Trang quản trị vừa được cập nhật. Tải lại trang để dùng tiếp.');
+  });
+
+  it.each([
+    'Failed to fetch dynamically imported module: https://x/_next/static/chunks/1.js',
+    'Importing a module script failed.',
+    'Loading chunk 9 failed.',
+  ])('nhận ra lỗi tải chunk theo message: %s', (message) => {
+    mountChunk(new Error(message));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('lần hai trong 60 giây: không tự tải lại nữa, hiện nút Tải lại trang và bấm thì gọi reload', () => {
+    mountChunk(named('ChunkLoadError', 'x'));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    const r2 = mountChunk(named('ChunkLoadError', 'x'));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    click(byText(r2.container, 'button', 'Tải lại trang'));
+    expect(reloadPage).toHaveBeenCalledTimes(2);
+    expect(byText(r2.container, 'button', 'Thử lại')).toBeNull();
+  });
+
+  it('lỗi thường: không tải lại trang, giữ câu và nút Thử lại như cũ', () => {
+    const r = mountChunk(new TypeError('rows.find is not a function'));
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(r.container.textContent).toContain('Mục này đang gặp lỗi');
+    expect(byText(r.container, 'button', 'Thử lại')).not.toBeNull();
+  });
+
+  it('mất mạng: không tự tải lại, không dùng lượt claim, hiện câu mất kết nối và nút Tải lại trang', () => {
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    const r = mountChunk(named('ChunkLoadError', 'Loading chunk 1 failed.'));
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(r.container.textContent).toContain('Mất kết nối. Có mạng lại thì bấm Tải lại trang.');
+    expect(r.container.textContent).not.toContain('vừa được cập nhật');
+    expect(sessionStorage.length).toBe(0);
+    click(byText(r.container, 'button', 'Tải lại trang'));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    online.mockReturnValue(true);
+    mountChunk(named('ChunkLoadError', 'x'));
+    expect(reloadPage).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { JwtPayload } from '@tubutree/shared-types';
@@ -9,9 +9,11 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsISO8601,
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -20,15 +22,19 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
+  ValidateNested,
   registerDecorator,
 } from 'class-validator';
 import type { ValidationArguments, ValidationOptions } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
+import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
-import { AdminService } from './admin.service';
+import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
+import type { DealerApplicationImageField } from './admin.service';
 import { streamCsv } from './admin-export';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
@@ -37,6 +43,7 @@ import {
   ADMIN_ORDER_STATUSES,
   ORDER_KINDS,
   ORDER_QUEUES,
+  PAYMENT_UNLINKED_FILTERS,
   ORDER_LIST_PLATFORMS,
   ORDER_PAYMENT_STATUSES,
   PANCAKE_FILTERS,
@@ -44,6 +51,7 @@ import {
   type OrderKind,
   type OrderListPlatform,
   type OrderQueue,
+  type PaymentUnlinkedFilter,
   type OrderPaymentFilter,
   type PancakeFilter,
   type RecyclingFilter,
@@ -266,16 +274,24 @@ export class UpdateCouponDto {
 }
 /** Trần mảng `rows` của hai đường nhập hàng loạt; khớp trần mảng của bộ đọc thân request để lỗi nêu đúng trường. Client admin chỉ gửi csv. */
 const IMPORT_ROWS_MAX = 500;
+class DealerPriceRowDto {
+  @IsString() @MaxLength(100) sku!: string;
+  @IsNumber({ allowNaN: false, allowInfinity: false }) @Min(0) @Max(1_000_000_000_000) price!: number;
+}
+class SoldExternalRowDto {
+  @IsString() @MaxLength(100) sku!: string;
+  @IsNumber({ allowNaN: false, allowInfinity: false }) @Min(0) @Max(1_000_000_000_000) count!: number;
+}
 export class ImportDealerPricesDto {
   @IsString() @IsNotEmpty() @MaxLength(100) tierId!: string;
   // Dán trực tiếp 2 cột Excel "sku,giá" (mỗi dòng 1 SKU). Hoặc gửi rows JSON.
   @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) rows?: { sku: string; price: number }[];
+  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) @ValidateNested({ each: true }) @Type(() => DealerPriceRowDto) rows?: DealerPriceRowDto[];
 }
 export class ImportSoldExternalDto {
   // Dán "sku,số-đã-bán" (mỗi dòng 1 SKU) — tổng đã bán gom từ sàn ngoài. Hoặc rows JSON.
-  @IsOptional() @IsString() csv?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) rows?: { sku: string; count: number }[];
+  @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) @ValidateNested({ each: true }) @Type(() => SoldExternalRowDto) rows?: SoldExternalRowDto[];
 }
 class UpdateOrderStatusDto {
   @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])
@@ -329,6 +345,7 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
   /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   /** Id khách đặt đơn (từ hồ sơ khách: "Xem tất cả đơn"). */
@@ -352,6 +369,7 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
@@ -369,6 +387,7 @@ export class OrderStatusCountsQuery {
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
@@ -438,6 +457,16 @@ export class ResolvePancakeAttentionDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
+export class ResolvePaymentUnlinkedDto {
+  /** Bắt buộc: khoản tiền khách chuyển đã được đối chiếu thế nào (vd "đã ghi tiền về muộn theo sao kê VCB 04/11"). */
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) note!: string;
+  /**
+   * Mốc paymentUnlinkedAt người bấm đang thấy. Cờ gộp nhiều khoản Pancake chưa gắn của một đơn: khoản mới tới thì mốc đổi, nên bấm trên
+   * mốc cũ bị từ chối (409) thay vì đóng luôn khoản chưa ai xem.
+   */
+  @IsISO8601({ strict: true }) seenAt!: string;
+}
+
 export class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
@@ -467,6 +496,15 @@ export class AdminController {
   @Get('dealer-applications')
   dealerApps(@Query() q: DealerAppsQuery) {
     return this.admin.listDealerApplications(q.status, q.page, q.limit, q.order);
+  }
+
+  @Get('dealer-applications/:id/images/:field')
+  async dealerAppImage(@Param('id') id: string, @Param('field') field: string, @Res({ passthrough: true }) res: Response) {
+    if (!Object.prototype.hasOwnProperty.call(DEALER_APPLICATION_IMAGE_COLUMNS, field)) throw new NotFoundException('Không tìm thấy ảnh.');
+    const img = await this.admin.dealerApplicationImage(id, field as DealerApplicationImageField);
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    if (img.kind === 'url') return { url: img.url };
+    return new StreamableFile(img.data, { type: img.mime });
   }
 
   @Post('dealer-applications/:id/review')
@@ -520,12 +558,13 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    const { kind, payment, platform, queue, referrerUserId, userId, storefront, order } = q;
+    const { kind, payment, platform, queue, paymentUnlinked, referrerUserId, userId, storefront, order } = q;
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
       kind,
       payment,
       platform,
       queue,
+      paymentUnlinked,
       referrerUserId,
       userId,
       storefront,
@@ -564,6 +603,15 @@ export class AdminController {
     @Body() dto: ResolvePancakeAttentionDto,
   ) {
     return this.admin.resolvePancakeAttention(adminId, id, dto.note);
+  }
+
+  /**
+   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake. Chỉ ADMIN (không @AllowStaff): đơn mở thì Kế toán
+   * đóng bằng "Đã nhận tiền", đơn đã huỷ/trả thì quản trị viên đóng sau khi ghi tiền về muộn hoặc hoàn.
+   */
+  @Post('orders/:id/payment-unlinked/resolve')
+  resolvePaymentUnlinked(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ResolvePaymentUnlinkedDto) {
+    return this.admin.resolvePaymentUnlinked(adminId, id, dto.note, dto.seenAt);
   }
 
   /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */

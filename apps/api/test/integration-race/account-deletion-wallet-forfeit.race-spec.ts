@@ -83,6 +83,8 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
   }
 
   async function approvedCommission(affiliateUserId: string, amount: number) {
+    // Chỉ CTV (hoặc nhân viên/admin) còn rút được hoa hồng; khách không dấu bị chặn.
+    await prisma.user.update({ where: { id: affiliateUserId }, data: { role: 'AFFILIATE' } });
     const buyer = await createUser(prisma);
     const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', referrerUserId: affiliateUserId, total: amount * 10 });
     return prisma.commission.create({

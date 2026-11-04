@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   markRead: vi.fn(),
   summary: vi.fn(),
   login: vi.fn(),
+  user: undefined as unknown,
+  ensurePhone: vi.fn(),
   openSnackbar: vi.fn(),
   fetchContact: vi.fn(),
   upload: vi.fn(),
@@ -38,12 +40,13 @@ vi.mock('../services/support-chat-api', () => ({
   markSupportChatRead: mocks.markRead,
 }));
 vi.mock('../store/auth', () => {
-  const state = () => ({ status: mocks.authStatus, login: mocks.login, restore: vi.fn() });
+  const state = () => ({ status: mocks.authStatus, user: mocks.user, login: mocks.login, ensurePhoneOrThrow: mocks.ensurePhone, restore: vi.fn() });
   return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
 });
 vi.mock('../components/image-upload', () => ({
   isCloudinaryConfigured: () => mocks.cloudinary,
   uploadToCloudinary: mocks.upload,
+  prepareForCloudinary: async (f: File) => f,
   MAX_IMAGE_BYTES: 20 * 1024 * 1024,
 }));
 vi.mock('./about-data', async (importOriginal) => ({
@@ -99,6 +102,7 @@ describe('Màn chat với Tubu Tree', () => {
     vi.clearAllMocks();
     mocks.search = '';
     mocks.authStatus = 'authenticated';
+    mocks.user = { id: 'u1', zaloId: 'zalo-1', phone: null };
     mocks.cloudinary = false;
     mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
     mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
@@ -111,6 +115,33 @@ describe('Màn chat với Tubu Tree', () => {
     vi.spyOn(crypto, 'randomUUID').mockImplementation(() => `cid-${++n}` as `${string}-${string}-${string}-${string}-${string}`);
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it('khách vãng lai (zaloId guest_): không gọi API chat, không có ô gửi, mời đăng nhập Zalo', async () => {
+    mocks.user = { id: 'g1', zaloId: 'guest_dev-1', phone: null };
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    renderPage();
+    expect(screen.getByText('Đăng nhập Zalo để chat với Tubu Tree')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(mocks.getThread).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục với Zalo' }));
+    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
+  });
+
+  it('máy chủ trả 403 CHAT_LOGIN_REQUIRED khi tải hội thoại: hiện lời mời thay vì lỗi chung', async () => {
+    mocks.getThread.mockRejectedValue(Object.assign(new Error('x'), { isHttpError: true, response: { status: 403, data: { code: 'CHAT_LOGIN_REQUIRED', message: 'Đăng nhập Zalo để chat với Tubu Tree nhé.' } } }));
+    renderPage();
+    expect(await screen.findByText('Đăng nhập Zalo để chat với Tubu Tree')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('gửi tin bị 403 CHAT_LOGIN_REQUIRED: hiện lời mời đăng nhập', async () => {
+    mocks.send.mockRejectedValue(Object.assign(new Error('x'), { isHttpError: true, response: { status: 403, data: { code: 'CHAT_LOGIN_REQUIRED', message: 'm' } } }));
+    renderPage();
+    await screen.findByRole('textbox');
+    typeAndSend('Xin chào');
+    expect(await screen.findByText('Đăng nhập Zalo để chat với Tubu Tree')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
 
   it('chưa đăng nhập: không gọi API chat, mời đăng nhập', () => {
     mocks.authStatus = 'idle';

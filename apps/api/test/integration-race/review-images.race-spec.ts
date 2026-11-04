@@ -7,7 +7,10 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { ReviewsController } from '../../src/modules/reviews/reviews.controller';
-import { ReviewsService } from '../../src/modules/reviews/reviews.service';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
+import { ReviewsService, reviewImageVersions } from '../../src/modules/reviews/reviews.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { createUser, randCode, warmPool } from './helpers';
 
@@ -23,6 +26,7 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
   const tag = randCode(6).toLowerCase();
   // ~400 nghìn ký tự base64 để mô phỏng ảnh nén thật của miniapp.
   const HEAVY_B64 = Buffer.alloc(300_000, 7).toString('base64');
+  const IMAGES = [`data:image/png;base64,${HEAVY_B64}`, 'https://res.cloudinary.com/x/y.jpg'];
   let slug = '';
   let reviewId = '';
 
@@ -49,7 +53,7 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
     const review = await prisma.review.create({
       data: {
         userId: user.id, productId: product.id, orderId: `it-order-${tag}`, rating: 5,
-        images: [`data:image/png;base64,${HEAVY_B64}`, 'https://res.cloudinary.com/x/y.jpg'],
+        images: IMAGES,
       },
     });
     reviewId = review.id;
@@ -102,5 +106,50 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
     expect(pdp.reviews).toHaveLength(1);
     expect(JSON.stringify(pdp.reviews)).not.toContain('base64');
     expect(pdp.reviews[0]).not.toHaveProperty('images');
+  });
+
+  it('danh sách không đọc cột images của reviews/products: không câu SQL nào chứa "images"; URL ảnh vẫn tải đúng ảnh', async () => {
+    const queries: string[] = [];
+    const logged = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+    (logged as unknown as { $on: (e: 'query', cb: (q: { query: string }) => void) => void }).$on('query', (q) => queries.push(q.query));
+    await logged.$connect();
+    try {
+      const none = {} as never;
+      const service = new ReviewsService(logged as unknown as PrismaService, none, none);
+      const out = await service.listByProduct(slug);
+      expect(queries.length).toBeGreaterThan(0);
+      expect(queries.filter((q) => q.includes('"images"'))).toEqual([]);
+      expect(out.items[0]!.images[1]).toBe('https://res.cloudinary.com/x/y.jpg');
+      const res = await fetch(`${base}${out.items[0]!.images[0]}`);
+      expect(res.status).toBe(200);
+      expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(HEAVY_B64, 'base64'))).toBe(true);
+    } finally {
+      await logged.$disconnect();
+    }
+  });
+
+  it('migration backfill (140500, tách khỏi migration thêm cột): dựng lại imageVersions từ images giống mã ứng dụng ghi (md5 10 ký tự, URL giữ nguyên)', async () => {
+    await prisma.$executeRaw`UPDATE "reviews" SET "imageVersions" = '{}' WHERE "id" = ${reviewId}`;
+    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104140500_review_image_versions_backfill/migration.sql'), 'utf8');
+    const statements = sql.replace(/^--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean);
+    for (let run = 0; run < 2; run++) for (const stmt of statements) await prisma.$executeRawUnsafe(stmt); // chạy lại không đổi gì
+    const row = await prisma.review.findUnique({ where: { id: reviewId }, select: { imageVersions: true } });
+    expect(row!.imageVersions).toEqual(reviewImageVersions(IMAGES));
+  });
+
+  it('trigger: insert/update images bằng Prisma và SQL thô đều ra imageVersions bằng mã JS; đổi cột khác không chạm', async () => {
+    const versions = async () => (await prisma.review.findUniqueOrThrow({ where: { id: reviewId }, select: { imageVersions: true } })).imageVersions;
+    expect(await versions()).toEqual(reviewImageVersions(IMAGES));
+    const next = [`data:image/png;base64,${Buffer.alloc(900, 3).toString('base64')}`, 'https://res.cloudinary.com/x/z.jpg', `data:image/jpeg;base64,${Buffer.alloc(50, 9).toString('base64')}`];
+    await prisma.review.update({ where: { id: reviewId }, data: { images: next } });
+    expect(await versions()).toEqual(reviewImageVersions(next));
+    const raw = [`data:image/webp;base64,${Buffer.alloc(70, 4).toString('base64')}`];
+    await prisma.$executeRaw`UPDATE "reviews" SET "images" = ${raw}::text[] WHERE "id" = ${reviewId}`;
+    expect(await versions()).toEqual(reviewImageVersions(raw));
+    await prisma.$executeRaw`UPDATE "reviews" SET "imageVersions" = '{}' WHERE "id" = ${reviewId}`;
+    await prisma.review.update({ where: { id: reviewId }, data: { rating: 4 } });
+    expect(await versions()).toEqual([]); // đổi cột khác không kích hoạt trigger
+    await prisma.review.update({ where: { id: reviewId }, data: { images: IMAGES } });
+    expect(await versions()).toEqual(reviewImageVersions(IMAGES));
   });
 });

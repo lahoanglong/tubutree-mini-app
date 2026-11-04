@@ -67,14 +67,14 @@ describe('newDeviceId — định danh thiết bị cho đăng nhập khách', (
     spy.mockRestore();
   });
 
-  it('không có randomUUID → dùng getRandomValues (16 byte hex), KHÔNG rơi về Math.random', () => {
+  it('không có randomUUID → dựng UUID v4 từ getRandomValues, KHÔNG rơi về Math.random', () => {
     const orig = crypto.randomUUID;
     // @ts-expect-error giả lập WebView thiếu randomUUID
     crypto.randomUUID = undefined;
     const spy = vi.spyOn(Math, 'random');
     try {
       const id = newDeviceId();
-      expect(id).toMatch(/^d_[0-9a-f]{32}$/);
+      expect(id).toMatch(/^d_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       expect(spy).not.toHaveBeenCalled();
     } finally {
       crypto.randomUUID = orig;

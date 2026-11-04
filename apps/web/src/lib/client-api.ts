@@ -287,6 +287,33 @@ export async function apiFetch<T>(
   return reply.body as T;
 }
 
+/**
+ * Tải thân phản hồi dạng nhị phân bằng phiên hiện tại (thẻ img không gửi được Authorization): ảnh hồ sơ quản trị.
+ * 401 thì làm mới phiên và thử lại một lần như apiFetch.
+ */
+export async function apiBlob(path: string, _retried = false): Promise<{ type: string; blob: Blob }> {
+  const headers: Record<string, string> = { 'X-Client-Platform': 'web' };
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${BASE}${path}`, { headers, credentials: 'include', signal: ctrl.signal });
+    if (res.status === 401 && !_retried && hasSessionMarker() && (await rawRefresh())) return apiBlob(path, true);
+    if (!res.ok) {
+      const { message, code } = parseError(await res.json().catch(() => undefined));
+      throw new ApiError(message, res.status, code);
+    }
+    const blob = await res.blob();
+    return { type: (res.headers.get('content-type') ?? blob.type).split(';')[0]!.trim().toLowerCase(), blob };
+  } catch (e) {
+    if (ctrl.signal.aborted) throw new NetworkError(true);
+    if (e instanceof TypeError) throw new NetworkError(false);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Xuất toàn bộ dữ liệu có thể lâu hơn hạn chờ thường của apiFetch (API ghi dần từng lô). */
 export const DOWNLOAD_TIMEOUT_MS = 5 * 60_000;
 

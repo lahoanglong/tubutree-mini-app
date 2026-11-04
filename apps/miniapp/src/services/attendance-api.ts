@@ -24,6 +24,23 @@ export interface LocationPayload {
   zaloAccessToken?: string;
 }
 
+/** Lời máy chủ khi từ chối toạ độ thô (chưa bật kiểm IP văn phòng). Nhận ra bằng đoạn đầu để không lệ thuộc dấu câu. */
+const RAW_COORDS_REFUSED = /^Mở Tubu Tree trong Zalo/;
+const RAW_COORDS_REFUSED_FALLBACK = 'Mở Tubu Tree trong Zalo và cho phép quyền vị trí để chấm công.';
+
+/** Máy chủ đã từ chối toạ độ thô: gửi thêm lần nữa chỉ bị từ chối lần nữa, nên bỏ qua dự phòng GPS thô tới khi Zalo trả được token. */
+let rawCoordsRefused: { message: string; at: number } | null = null;
+/** Hết hạn để khi admin bật kiểm IP văn phòng (không cần toạ độ thô nữa) ứng dụng tự thử lại GPS. */
+const RAW_COORDS_REFUSAL_TTL_MS = 10 * 60_000;
+
+function noteRawCoordsRefusal(payload: LocationPayload, error: unknown): void {
+  if (typeof payload.lat !== 'number') return;
+  const data = (error as { response?: { status?: number; data?: { message?: string | string[] } } } | undefined)?.response;
+  if (data?.status !== 400) return;
+  const raw = Array.isArray(data.data?.message) ? data.data?.message[0] : data.data?.message;
+  if (raw && RAW_COORDS_REFUSED.test(raw)) rawCoordsRefused = { message: raw, at: Date.now() };
+}
+
 const LOCATION_FAIL_PREFIX = 'Không lấy được vị trí';
 const LOCATION_FAIL_MSG = {
   denied: `${LOCATION_FAIL_PREFIX}: bạn chưa cấp quyền vị trí cho Zalo. Hãy bật quyền vị trí trong phần cài đặt rồi thử lại.`,
@@ -54,10 +71,18 @@ export async function acquireLocationPayload(onFailure?: (message: string) => vo
     const loc = await requestZaloLocationStrict();
     if (loc?.token) {
       const { accessToken } = await getZaloAccessToken();
-      if (accessToken) return { locationToken: loc.token, zaloAccessToken: accessToken };
+      if (accessToken) {
+        rawCoordsRefused = null;
+        return { locationToken: loc.token, zaloAccessToken: accessToken };
+      }
     }
   } catch (e) {
     zaloError = e;
+  }
+  if (rawCoordsRefused !== null && Date.now() - rawCoordsRefused.at >= RAW_COORDS_REFUSAL_TTL_MS) rawCoordsRefused = null;
+  if (rawCoordsRefused !== null) {
+    onFailure?.(rawCoordsRefused.message || RAW_COORDS_REFUSED_FALLBACK);
+    return {};
   }
   let geoError: unknown;
   try {
@@ -76,7 +101,13 @@ export const getAttendanceStatus = () =>
   api.get<AttendanceStatus>('/staff/attendance/status').then((r) => r.data);
 
 export const checkin = (payload: LocationPayload & { shiftId: string }) =>
-  api.post<{ sessionId: string; isLate: boolean }>('/staff/attendance/checkin', payload).then((r) => r.data);
+  api
+    .post<{ sessionId: string; isLate: boolean }>('/staff/attendance/checkin', payload)
+    .then((r) => r.data)
+    .catch((e: unknown) => {
+      noteRawCoordsRefusal(payload, e);
+      throw e;
+    });
 
 export const checkout = (at?: string) =>
   api.post<{ checkedOut: boolean }>('/staff/attendance/checkout', at ? { at } : {}).then((r) => r.data);
@@ -84,7 +115,11 @@ export const checkout = (at?: string) =>
 export const heartbeat = (payload: LocationPayload) =>
   api
     .post<{ open: boolean; closed?: boolean; reason?: string }>('/staff/attendance/heartbeat', payload)
-    .then((r) => r.data);
+    .then((r) => r.data)
+    .catch((e: unknown) => {
+      noteRawCoordsRefusal(payload, e);
+      throw e;
+    });
 
 export interface SessionHistory {
   id: string;

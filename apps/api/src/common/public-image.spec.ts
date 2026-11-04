@@ -1,4 +1,4 @@
-import { isPublicImageKind, publicImage, publicImageRef, publicImages, publicProductThumb, storedThumbnailFor } from './public-image';
+import { isPublicImageKind, publicImage, publicImageRef, publicImages, publicProductThumb, storedThumbnailFor, storedThumbnailOf } from './public-image';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const SVG = 'data:image/svg+xml;base64,PHN2Zz4=';
@@ -34,6 +34,25 @@ describe('public-image', () => {
     expect(storedThumbnailFor('p1', PNG)).toBe(publicImageRef('product', 'p1', 0, PNG));
     expect(storedThumbnailFor('p1', 'https://x/a.jpg')).toBe('https://x/a.jpg');
     expect(storedThumbnailFor('p1', undefined)).toBeNull();
+  });
+
+  it('thumbnail lưu sẵn: SVG (endpoint ảnh không phục vụ) giữ nguyên, không đổi thành đường dẫn 404', () => {
+    expect(storedThumbnailFor('p1', SVG)).toBe(SVG);
+    expect(storedThumbnailOf('p1', SVG, SVG, true)).toBe(SVG);
+  });
+
+  it('thumbnail của dữ liệu nhập tay: sản phẩm từng công khai thì trùng ảnh đầu thành đường dẫn, chưa từng công khai thì giữ data URL', () => {
+    expect(storedThumbnailOf('p1', PNG, PNG, true)).toBe(publicImageRef('product', 'p1', 0, PNG));
+    expect(storedThumbnailOf('p1', PNG, PNG, false)).toBe(PNG);
+    expect(storedThumbnailOf('p1', null, PNG, true)).toBeNull();
+    expect(storedThumbnailOf('p1', 'https://x/a.jpg', PNG, true)).toBe('https://x/a.jpg');
+  });
+
+  it('sản phẩm chưa công khai mà thumbnail còn là đường dẫn cũ tới ảnh đầu: trả lại chính ảnh đầu, không để đường dẫn 404', () => {
+    const stale = publicImageRef('product', 'p1', 0, PNG);
+    expect(storedThumbnailOf('p1', stale, PNG + '', false)).toBe(PNG);
+    expect(storedThumbnailOf('p1', stale, undefined, false)).toBeNull();
+    expect(storedThumbnailOf('p1', stale, PNG, true)).toBe(stale);
   });
 
   it('loại ảnh campaign hợp lệ, ảnh base64 của chiến dịch đi ra dạng đường dẫn cover', () => {

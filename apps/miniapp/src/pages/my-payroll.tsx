@@ -20,6 +20,7 @@ import { Text } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
 import { formatVnd } from '../utils/format';
+import { safeImageUrl } from '../utils/safe-image-url';
 import {
   currentVnYearMonth,
   shiftYearMonth,
@@ -176,12 +177,12 @@ function MyPayrollHub() {
             <div style={{ marginTop: 8 }}>
               <Badge tone="neutral">{STATUS_LABEL[m.status]}</Badge>
             </div>
-            {m.status === 'PAID' && m.proofImageUrl && (
+            {m.status === 'PAID' && safeImageUrl(m.proofImageUrl) && (
               <div style={{ marginTop: 10 }}>
                 <Text variant="caption" tone="inverse" as="div" style={{ marginBottom: 4 }}>
                   Ảnh xác nhận đã chuyển:
                 </Text>
-                <img src={m.proofImageUrl} alt="Xác nhận chuyển khoản" style={{ maxWidth: '100%', borderRadius: 'var(--radius-media)' }} />
+                <img src={safeImageUrl(m.proofImageUrl) as string} alt="Xác nhận chuyển khoản" style={{ maxWidth: '100%', borderRadius: 'var(--radius-media)' }} />
               </div>
             )}
           </div>

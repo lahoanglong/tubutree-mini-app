@@ -105,6 +105,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
         wardCode: '00001',
       },
     });
+    await prisma.order.update({ where: { id: order.id }, data: { pancakeOrderId: `pc-${order.code}` } });
     return { ctv, order, customerPhone };
   }
 

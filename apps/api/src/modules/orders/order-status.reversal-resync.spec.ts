@@ -90,6 +90,22 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     expect(markerWrites()).toEqual([[{ where: { id: 'o1', reversalEffectsAt: null }, data: { reversalEffectsAt: expect.any(Date) } }]]);
   });
 
+  it('dòng ghi chú cùng trạng thái (PANCAKE CANCELLED→CANCELLED) mới hơn dòng ADMIN huỷ KHÔNG bị coi là dòng đóng đơn: actor vẫn ADMIN, xếp huỷ Pancake, mốc since lấy từ dòng huỷ', async () => {
+    const rows = [
+      { fromStatus: 'CONFIRMED', toStatus: 'CANCELLED', actorType: 'ADMIN', createdAt: CLOSED_AT },
+      { fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actorType: 'PANCAKE', createdAt: new Date(CLOSED_AT.getTime() + 3_600_000) },
+    ];
+    const b = build(makeOrder());
+    b.prisma.orderStatusHistory.findFirst.mockImplementation(async (args: { where: { toStatus: string; fromStatus?: { not: string } } }) => {
+      const hit = rows.filter((r) => r.toStatus === args.where.toStatus && (!args.where.fromStatus || r.fromStatus !== args.where.fromStatus.not));
+      return hit.sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime())[0] ?? null;
+    });
+    await b.svc.resyncReversalEffects('o1');
+    expect(b.hooks.afterLocalCancel).toHaveBeenCalledWith('o1', undefined);
+    const since = (b.prisma.notificationLog.findFirst.mock.calls[0]![0] as { where: { sentAt: { gte: Date } } }).where.sentAt.gte;
+    expect(since).toEqual(CLOSED_AT);
+  });
+
   it('điểm thường hoàn lại ở bước này được nói trong tin báo khách', async () => {
     const { svc, notifications } = build(makeOrder(), { loyalty: { reverseOrderPoints: jest.fn().mockResolvedValue(20_000) } });
 

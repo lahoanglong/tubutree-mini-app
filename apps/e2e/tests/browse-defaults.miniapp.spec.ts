@@ -1,5 +1,6 @@
 import { test, expect, makeUser, mockSession } from './support/mock-api';
 import type { CartSummary } from '../../miniapp/src/services/shop-api';
+import { HOME_BEST_SELLER_LIMIT } from '../../../packages/app-core/src/home-layout';
 
 /**
  * Dự án 4b — mọi endpoint mà trang Danh mục/Tìm kiếm gọi (`/categories`, `/search/suggest`, `/products`
@@ -16,12 +17,12 @@ test.describe('Danh mục — mock mặc định của mockSession', () => {
     api.allowUnmocked('POST /events', 'POST /affiliate/touch', 'GET /me/coupons', 'GET /affiliate/me');
   });
 
-  test('/browse (gốc, hub) mở được, đã gọi /categories và /products của kệ Bán chạy nhất (sort=best_seller_30d, limit=10), không tải danh sách đầy đủ', async ({ page, api }) => {
+  test('/browse (gốc, hub) mở được, đã gọi /categories và /products của kệ Bán chạy nhất (sort=best_seller_30d, limit của kệ Trang chủ), không tải danh sách đầy đủ', async ({ page, api }) => {
     await page.goto('/browse');
     await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => api.callsTo('GET', '/categories').length, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect.poll(() => api.callsTo('GET', '/products').length, { timeout: 15_000 }).toBeGreaterThan(0);
-    expect(api.callsTo('GET', '/products').map((c) => [c.query.get('sort'), c.query.get('limit')])).toEqual([['best_seller_30d', '10']]);
+    expect(api.callsTo('GET', '/products').map((c) => [c.query.get('sort'), c.query.get('limit')])).toEqual([['best_seller_30d', String(HOME_BEST_SELLER_LIMIT)]]);
   });
 
   test('/browse?all=1 (danh sách đầy đủ) gọi /products với limit=20 và không có lời gọi chưa mock', async ({ page, api }) => {

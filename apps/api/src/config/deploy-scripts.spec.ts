@@ -699,6 +699,17 @@ describe('docs/launch/deploy-rollback-runbook.md: bảng 1.0 và ví dụ cửa 
     expect(HEAVY_MIGRATIONS.map((h) => h.name).filter((n) => !table.includes(n))).toEqual([]);
   });
 
+  it.each([
+    ['20261104140500_review_image_versions_backfill', 'FROM reviews'],
+    ['20261104141000_product_thumbnail_ref', 'FROM products'],
+    ['20261104142500_feed_post_image_summary_backfill', 'FROM feed_posts'],
+  ])('backfill ảnh %s: nằm trong HEAVY_MIGRATIONS (không khoá orders) và mục 1.0 có câu đếm để ước thời gian', (name, countFrom) => {
+    expect(HEAVY_MIGRATIONS).toContainEqual({ name, ordersLock: false });
+    const row = runbook.split('\n').find((l) => l.startsWith(`| \`${name}\``));
+    expect(row).toBeDefined();
+    expect(row).toContain(`SELECT count(*) ${countFrom}`);
+  });
+
   it('mục 1.0 không còn nói các migration còn lại chỉ thêm cột hoặc bảng nhỏ', () => {
     expect(section('### 1.0 ')).not.toContain('chủ yếu thêm cột hoặc bảng nhỏ');
   });

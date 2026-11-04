@@ -11,6 +11,7 @@ import { WasteShipLockService } from '../core/waste-ship-lock.service';
 import { GOMDON_DISPATCHED_STATUSES } from '../waste.constants';
 import { vnMonthKey } from '../../../common/vn-time';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
+import { runExclusive } from '../../../common/cron-leader/run-exclusive';
 
 const PAGE = 200;
 const HOUR_MS = 3_600_000;
@@ -59,17 +60,10 @@ export class WasteExpiryCron {
     this.running = true;
     try {
       const cfg = await this.config.snapshot();
-      // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Từng dòng đóng trên
-      // kết nối khác; tx này chỉ để giữ khoá. Khoá viết thẳng trong SQL để cổng quét khoá thấy `hashtext('cron:`.
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
-            SELECT pg_try_advisory_xact_lock(hashtext('cron:waste.expiry')) AS "locked"`;
-          if (!row?.locked) { markCronSkipped('LOCKED'); return { expired: 0 }; }
-          return this.sweep(now, cfg);
-        },
-        { maxWait: 10_000, timeout: 15 * 60_000 },
-      );
+      // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
+      const run = await runExclusive(this.prisma, 'cron:waste.expiry', () => this.sweep(now, cfg));
+      if (!run.acquired) { markCronSkipped('LOCKED'); return { expired: 0 }; }
+      return run.value;
     } finally {
       this.running = false;
     }

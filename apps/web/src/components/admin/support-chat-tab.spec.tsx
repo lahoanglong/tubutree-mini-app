@@ -733,6 +733,26 @@ describe('SupportChatTab — hội thoại', () => {
     expect(container.querySelector('[data-refresh-error]')!.textContent).toContain('Không làm mới được hội thoại.');
   });
 
+  it('chặn chat làm cũ hộp việc và thẻ cầu nối, không làm cũ khoá admin khác (F6)', async () => {
+    stub();
+    const client = createQueryClient();
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    const r = render(<SupportChatTab isAdmin={false} />, client);
+    mounted.push(r);
+    await flush();
+    await openDetail(r.container);
+    spy.mockClear();
+    click(byText(r.container, 'button', 'Chặn chat'));
+    answerConfirm(true);
+    await flush();
+    const predicates = spy.mock.calls.map(([f]) => f?.predicate).filter((p): p is NonNullable<typeof p> => !!p);
+    expect(predicates).toHaveLength(1);
+    const hits = (head: string) => predicates[0]!({ queryKey: [head] } as never);
+    expect(hits('admin-ops-inbox')).toBe(true);
+    expect(hits('admin-support-bridge')).toBe(true);
+    expect(hits('admin-users')).toBe(false);
+  });
+
   it('tin STAFF nguồn ADMIN không có tên: chỉ hiện "Admin" một lần', async () => {
     stub();
     const { container } = mount(<SupportChatTab isAdmin={false} />);

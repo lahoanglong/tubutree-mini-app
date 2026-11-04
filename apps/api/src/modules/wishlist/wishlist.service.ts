@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { VARIATION_ORDER_BY, cardPrices } from '../catalog/variation-order';
+import { cardPrices } from '../catalog/variation-order';
+import { CARD_PRODUCT_SELECT, withCoverImages } from '../catalog/card-select';
 import { publicProductThumb } from '../../common/public-image';
 
 // Chặn tăng trưởng vô hạn: giới hạn hợp lý cho 1 wishlist (không ai cần thích quá số này).
@@ -20,10 +21,13 @@ export class WishlistService {
     });
     if (rows.length === 0) return [];
 
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: rows.map((r) => r.productId) }, isActive: true },
-      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
-    });
+    const products = await withCoverImages(
+      this.prisma,
+      await this.prisma.product.findMany({
+        where: { id: { in: rows.map((r) => r.productId) }, isActive: true },
+        select: CARD_PRODUCT_SELECT,
+      }),
+    );
     const byId = new Map(products.map((p) => [p.id, p]));
     // Giữ thứ tự thêm gần nhất, bỏ sản phẩm đã ẩn/xóa.
     return rows
