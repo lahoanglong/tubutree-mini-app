@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -15,6 +15,7 @@ import {
   SELLABLE_PANCAKE_VARIATION_WHERE,
 } from '../cart/sellable';
 import { generateUniqueOrderCode } from '../../common/order-code';
+import { isSerializationFailure, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -47,6 +48,8 @@ interface BonusTier {
  * mà được tính doanh số thì đặt đơn to cuối kỳ → nhận thưởng → tự huỷ là "in" thưởng từ không khí.
  */
 export const DEALER_SETTLED_STATUSES: readonly string[] = ['PACKED', 'SHIPPING', 'DELIVERED'];
+
+const KEY_IN_USE_MESSAGE = 'Idempotency-Key đã được sử dụng, bạn thử lại nhé.';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Giờ cron trả thưởng quý (dealer.cron.ts, 04:00 ngày 10 giờ VN) tính từ 00:00 ngày đó. */
@@ -253,7 +256,7 @@ export class DealerService {
     if (key) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
       if (existing && existing.userId === userId) return this.orderForDealer(existing.id);
-      if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
+      if (existing) throw new BadRequestException(KEY_IN_USE_MESSAGE);
     }
     if (dto.items.length === 0) throw new BadRequestException('Đơn trống.');
 
@@ -332,8 +335,8 @@ export class DealerService {
 
     const code = await generateUniqueOrderCode(this.prisma, 'DEALER');
     let order: Awaited<ReturnType<typeof this.prisma.order.create>> & { hasBackorder: boolean };
-    try {
-      order = await this.prisma.$transaction(
+    const runTx = () =>
+      this.prisma.$transaction(
         async (tx) => {
           // Kiểm tra hạn mức công nợ TRONG transaction Serializable: 2 đơn CREDIT
           // đồng thời không thể cùng vượt trần (một trong hai sẽ serialization-fail).
@@ -386,16 +389,29 @@ export class DealerService {
         },
         onCredit ? { isolationLevel: 'Serializable' } : undefined,
       );
-    } catch (err) {
-      // P2034: serialization failure — 2 đơn CREDIT chạm nhau. Báo thử lại thay vì 500.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
-        throw new BadRequestException('Hệ thống đang bận xử lý đơn công nợ, bạn thử lại nhé.');
+    try {
+      try {
+        order = await runTx();
+      } catch (first) {
+        if (!isSerializationFailure(first)) throw first;
+        // Tx thua đã rollback hết. Cùng key mà bên thắng đã ghi đơn thì trả đơn đó; chưa có thì chạy lại cả tx một lần.
+        const won = key ? await this.prisma.order.findUnique({ where: { idempotencyKey: key } }) : null;
+        if (won) {
+          if (won.userId !== userId) throw new BadRequestException(KEY_IN_USE_MESSAGE);
+          return this.orderForDealer(won.id);
+        }
+        order = await runTx();
       }
+    } catch (err) {
+      if (isSerializationFailure(err)) throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
       // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn unique-violation
       // (P2002) trên idempotencyKey. Trả lại đơn mà request thắng đã tạo (mirror checkout.placeOrder).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
-        if (existing) return this.orderForDealer(existing.id);
+        if (existing) {
+          if (existing.userId !== userId) throw new BadRequestException(KEY_IN_USE_MESSAGE);
+          return this.orderForDealer(existing.id);
+        }
       }
       throw err;
     }

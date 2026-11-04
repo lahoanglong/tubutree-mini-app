@@ -39,6 +39,7 @@ import { formatPoints } from '../../common/format-points';
 import { missionKindOf } from '../../common/mission-kinds';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
 import { returnedProductsByOrder, REVIEWABLE_ORDER, returnWindowClosed } from '../reviews/review-eligibility';
+import { isSerializationFailure } from '../../common/lock-busy';
 
 interface SpinPrize {
   id: string;
@@ -478,7 +479,7 @@ export class GameService {
       // P2034 = Postgres serialization failure (2 request song song đụng trần coupon/tồn kho
       // nước) — KHÔNG nuốt lỗi như rewardWithDailyCap (đó là bonus best-effort, còn ở đây nước
       // là tài nguyên thật): báo lỗi rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2034') {
+      if (isSerializationFailure(err)) {
         throw new BadRequestException('Hệ thống đang bận, bạn thử tưới lại nhé.');
       }
       throw err;
