@@ -1,12 +1,13 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { recentlyViewedQuery } from '@tubutree/app-core/queries/catalog';
 import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { useRecentlyViewed } from '@/lib/use-recently-viewed';
+import { pruneRecentlyViewed } from '@/lib/recently-viewed';
 import { ProductCard } from '@/components/mini/product-card';
 import { RailCell, RailShell } from '@/components/mini/product-rail';
 import { Section } from '@/components/mini/section';
@@ -28,13 +29,28 @@ const subscribeNever = () => () => undefined;
  * `reserve`: trang Danh mục dựng sẵn (ISR) không biết khách đã xem gì, nên HTML đầu không có dải; script ở <head> (`recentlyViewedBootScript`) đặt
  * `data-has-recent` lên <html> khi máy có mục đã xem, và chỉ khi đó CSS mới giữ chỗ `RESERVED_HEIGHT` cho tới khi dải thật dựng ở lần hydrate.
  * Khách chưa xem gì không có thuộc tính nên không mất chỗ nào.
+ *
+ * `priorityCount`: số thẻ đầu tải ảnh ngay. Dải chỉ dựng ở trình duyệt (không có trong HTML server) nên không tranh chỗ với ảnh ưu tiên của kệ phía dưới trong HTML đầu.
  */
-export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve = false }: { title?: string; reserve?: boolean }) {
+export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve = false, priorityCount = 0 }: { title?: string; reserve?: boolean; priorityCount?: number }) {
   const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
   const stored = useRecentlyViewed();
   const slugs = stored.map((it) => it.slug);
   const live = useQuery({ ...recentlyViewedQuery(coreHttp, slugs), enabled: slugs.length > 0, staleTime: 30_000 });
   const bySlug = new Map((live.data ?? []).map((p) => [p.slug, p]));
+  // API đã trả lời: mục không còn (ẩn/gỡ) bị xoá khỏi máy, để lần sau script ở <head> không giữ chỗ cho dải sẽ biến mất. Trong lần vào này dải đã dựng từ kho trước khi API trả lời
+  // (giữ chỗ rồi chờ API sẽ trì hoãn ảnh ưu tiên của đường thường), nên khi cả danh sách bị ẩn thì dải vẫn thu lại một lần: chỉ xảy ra khi mọi món đã xem đều bị gỡ.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!live.isSuccess) return;
+    const keep = new Set((live.data ?? []).map((p) => p.slug));
+    const nextSlugs = slugs.filter((s) => keep.has(s));
+    // Sau khi xoá, khoá truy vấn đổi theo danh sách slug mới: nạp sẵn dữ liệu cho khoá mới để thẻ không chớp (không mất giá, không lùi về URL ảnh cũ) và không tốn lần gọi thừa.
+    if (nextSlugs.length > 0 && nextSlugs.length !== slugs.length) queryClient.setQueryData(recentlyViewedQuery(coreHttp, nextSlugs).queryKey, (live.data ?? []).filter((p) => keep.has(p.slug)));
+    pruneRecentlyViewed(keep, new Set(slugs));
+    // `slugs` không cần trong deps: `live.data` thuộc khoá dựng từ chính `slugs` (không có placeholderData). Nếu thêm placeholderData thì phải chặn `live.isPlaceholderData`, kẻo dọn bằng dữ liệu của danh sách cũ.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live.isSuccess, live.data]);
   const items = (live.isSuccess ? stored.filter((it) => bySlug.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) {
     return reserve && !hydrated ? <div data-testid="recent-slot" aria-hidden="true" className={`hidden [html[data-has-recent]_&]:block ${RESERVED_HEIGHT}`} /> : null;
@@ -43,12 +59,12 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
     <Section id="browse-recent" label={title}>
       <SectionHeader title={title} />
       <RailShell label={title}>
-        {items.map((it) => {
+        {items.map((it, index) => {
           const product = bySlug.get(it.slug);
           return (
             <RailCell key={it.slug} variant="rail-sm">
               <ProductCard
-                // Tên và ảnh luôn là của lần xem; chỉ giá và còn hàng lấy từ dữ liệu hiện hành.
+                // Tên là của lần xem; ảnh, giá và còn hàng lấy từ dữ liệu hiện hành (URL ảnh lưu ở máy chỉ là dự phòng khi chưa có dữ liệu hiện hành).
                 product={{
                   id: it.slug,
                   brand: '',
@@ -59,8 +75,10 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
                   ...product,
                   slug: it.slug,
                   name: it.name,
-                  thumbnail: it.thumbnail ?? product?.thumbnail ?? null,
+                  // Ảnh hiện hành thắng: URL lưu ở máy có thể là ảnh cũ đã bị thay, /img không còn nhận (404) nên thẻ phải lùi về ảnh gốc.
+                  thumbnail: product?.thumbnail ?? it.thumbnail ?? null,
                 }}
+                priority={index < priorityCount}
                 variant="rail-sm"
                 hidePrice={!product}
               />

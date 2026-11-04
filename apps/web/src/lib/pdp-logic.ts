@@ -66,6 +66,14 @@ export const OFFERS_HINT_KEY = 'tubu_offers_hint';
 export const OFFERS_SLOT_CLASS = 'hidden h-11 [html[data-restoring][data-has-offers]_&]:block';
 /** Đã đăng nhập, ví mã chưa về: `data-restoring` đã gỡ nên chỉ cần gợi ý "lần trước có mã". */
 export const OFFERS_SLOT_AUTH_CLASS = 'hidden h-11 [html[data-has-offers]_&]:block';
+
+/**
+ * Một nguồn cho "mặt nạ khôi phục phiên" của PDP: giá trị `data-restore-mask` trên phần tử và lớp CSS tương ứng đều lấy từ đây, nên test đọc móc ngữ nghĩa
+ * mà không thể lệch lớp thật. Chữ freeship: `always` (chưa có số, giấu hẳn), `restoring` (giấu khi <html> có data-restoring). Ô giữ chỗ Ưu đãi: `restoring` (phiên đang tải)
+ * hoặc `hint` (đã đăng nhập, ví mã chưa về).
+ */
+export const FREESHIP_MASK_CLASS = { always: 'invisible', restoring: '[html[data-restoring]_&]:invisible' } as const;
+export const OFFERS_SLOT_MASK_CLASS = { restoring: OFFERS_SLOT_CLASS, hint: OFFERS_SLOT_AUTH_CLASS } as const;
 /** Giữ chỗ từ lúc khôi phục phiên tới khi ví mã về (không thả chỗ rồi chèn lại hàng khi đã đăng nhập mà mã chưa về). `couponsPending` = đã đăng nhập, `/me/coupons` chưa có kết quả. */
 export function offersSlotNeeded(phase: AuthPhase, couponsPending = false): boolean {
   return phase === 'loading' || (phase === 'authenticated' && couponsPending);

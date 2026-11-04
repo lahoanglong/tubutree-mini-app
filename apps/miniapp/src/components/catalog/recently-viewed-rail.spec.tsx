@@ -106,6 +106,59 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(img).toHaveAttribute('src', 'https://img.test/a.jpg');
   });
 
+  it('ảnh hiện hành thắng URL lưu ở máy (URL cũ đã khỏi danh sách /img); API lỗi thì dùng URL lưu', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: 'https://content.pancake.vn/2-26/cu.jpg' });
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.map((s) => liveProduct(s, { thumbnail: 'https://content.pancake.vn/2-26/moi.jpg' })));
+    const { container, unmount } = renderRail();
+    await waitFor(() => expect(decodeURIComponent(container.querySelector('img')!.getAttribute('src')!)).toContain('moi.jpg'));
+    unmount();
+    mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
+    const again = renderRail();
+    await waitFor(() => expect(decodeURIComponent(again.container.querySelector('img')!.getAttribute('src')!)).toContain('cu.jpg'));
+  });
+
+  it('API trả thiếu món (đã ẩn): kho chỉ còn món còn sống; trả rỗng thì xoá khoá; API lỗi thì không dọn', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
+    recordRecentlyViewed({ slug: 'b', name: 'B', thumbnail: null }, 2);
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.filter((s) => s !== 'a').map((s) => liveProduct(s)));
+    const first = renderRail();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug)).toEqual(['b']));
+    first.unmount();
+    mocks.fetchProductsBySlugs.mockResolvedValue([]);
+    renderRail();
+    await waitFor(() => expect(localStorage.getItem('tubu_recently_viewed')).toBeNull());
+  });
+
+  it('sau khi dọn: không gọi API thừa theo khoá mới và ảnh không lùi về URL lưu ở máy', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: 'https://content.pancake.vn/2-26/stored-a.jpg' }, 1);
+    recordRecentlyViewed({ slug: 'b', name: 'B', thumbnail: 'https://content.pancake.vn/2-26/stored-b.jpg' }, 2);
+    recordRecentlyViewed({ slug: 'c', name: 'C', thumbnail: 'https://content.pancake.vn/2-26/stored-c.jpg' }, 3);
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.filter((s) => s !== 'b').map((s) => liveProduct(s, { thumbnail: `https://content.pancake.vn/2-26/live-${s}.jpg` })));
+    const { container } = renderRail();
+    const bad: string[] = [];
+    let live = false;
+    const look = () => {
+      const srcs = Array.from(container.querySelectorAll('img')).map((i) => decodeURIComponent(i.getAttribute('src') ?? ''));
+      if (srcs.some((u) => u.includes('live-'))) live = true;
+      if (live && srcs.some((u) => u.includes('stored-'))) bad.push(srcs.join('|'));
+    };
+    new MutationObserver(look).observe(container, { childList: true, subtree: true, attributes: true });
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    look();
+    expect(live).toBe(true);
+    expect(bad).toEqual([]);
+    expect(mocks.fetchProductsBySlugs).toHaveBeenCalledTimes(1);
+  });
+
+  it('API lỗi: không dọn lịch sử xem', async () => {
+    recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
+    mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
+    renderRail();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(1);
+  });
+
   it('sản phẩm không có ảnh vẫn hiện thẻ (khung ảnh trống, không có thẻ img)', () => {
     recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null });
     renderRail();

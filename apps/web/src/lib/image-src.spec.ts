@@ -58,6 +58,7 @@ describe('fallBackToOriginal: bộ đổi cỡ lỗi thì lùi về ảnh gốc 
     expect(img.getAttribute('src')).toBe('https://orig/a.jpg');
     expect(img.hasAttribute('srcset')).toBe(false);
     expect(img.hasAttribute('sizes')).toBe(false);
+    expect(img.dataset.fellBack).toBe('1');
     img.setAttribute('src', 'https://orig/other.jpg');
     handler({ currentTarget: img });
     expect(img.getAttribute('src')).toBe('https://orig/other.jpg');

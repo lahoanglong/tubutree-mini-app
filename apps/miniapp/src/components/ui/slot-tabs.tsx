@@ -89,6 +89,8 @@ export function SlotTabs({ tabs, value, onChange, panelId }: SlotTabsProps) {
             <span aria-hidden style={{ fontSize: 'var(--type-title-sm-size)', fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums' }}>
               {tab.clock}
             </span>
+            {/* Trong flex không vẽ khoảng trắng này, nhưng tên theo chữ nhìn thấy ("12:00 Đang diễn ra") cần nó giữa hai dòng. */}
+            {' '}
             <span aria-hidden style={{ fontSize: 'var(--type-label-size)', fontWeight: 500, lineHeight: 1.25 }}>
               {tab.caption}
             </span>

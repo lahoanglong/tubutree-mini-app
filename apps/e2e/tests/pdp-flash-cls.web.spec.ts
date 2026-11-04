@@ -115,3 +115,21 @@ test('PDP Giờ vàng: điện thoại chạy nhanh 7 giờ, đợt còn chạy 
   const { cls } = await readClsTotal(page);
   expect(cls).toBeLessThan(CLS_MAX);
 });
+
+// Móc `data-restore-mask` của dòng freeship (pdp-extras): HTML server đã có dòng, và lớp CSS giấu chữ chỉ có hiệu lực khi <html> có `data-restoring`.
+// Tắt JavaScript để giữ nguyên HTML server (hydrate sẽ đổi pha phiên và bỏ móc), rồi đo visibility tính ra của trình duyệt chứ không đọc tên lớp.
+test.describe('PDP: chữ freeship bị giấu theo data-restoring', () => {
+  test.use({ javaScriptEnabled: false });
+  test('HTML server: chữ hiện khi <html> chưa có data-restoring, ẩn khi có (chỗ vẫn giữ)', async ({ page, api }) => {
+    test.skip(!flash, 'DB e2e không phải DB tạm hoặc chưa có sản phẩm để gieo đợt Giờ vàng');
+    api.allowUnmocked('GET /products', 'GET /me/coupons', 'POST /events');
+    await page.goto(`/san-pham/${flash!.slug}`);
+    const line = page.getByTestId('pdp-freeship');
+    await expect(line).toHaveAttribute('data-restore-mask', 'restoring');
+    await expect(line).toHaveCSS('visibility', 'visible');
+    const box = await line.boundingBox();
+    await page.evaluate(() => document.documentElement.setAttribute('data-restoring', ''));
+    await expect(line).toHaveCSS('visibility', 'hidden');
+    expect((await line.boundingBox())?.height).toBe(box?.height);
+  });
+});

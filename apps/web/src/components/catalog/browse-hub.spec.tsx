@@ -49,6 +49,28 @@ describe('BrowseHub', () => {
     expect(http.get).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 10 } });
   });
 
+  it('ảnh ưu tiên: hai thẻ đầu của Bán chạy eager + fetchpriority=high, tám thẻ sau lazy', async () => {
+    http.get.mockResolvedValue({ ...page(10), data: page(10).data.map((p) => ({ ...p, thumbnail: `https://cdn.example/${p.id}.jpg` })) });
+    const c = mount();
+    await flush();
+    const imgs = Array.from(region(c, 'Bán chạy nhất')!.querySelectorAll('img'));
+    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'eager', ...Array(8).fill('lazy')]);
+    expect(imgs.map((i) => i.getAttribute('fetchpriority'))).toEqual(['high', 'high', ...Array(8).fill(null)]);
+  });
+
+  it('có Đã xem: hai ảnh đầu của dải Đã xem cũng ưu tiên, tổng ảnh ưu tiên cả trang không quá 4', async () => {
+    localStorage.setItem('tubu_recently_viewed', JSON.stringify([1, 2, 3].map((n) => ({ slug: `v${n}`, name: `Đã xem ${n}`, thumbnail: `https://cdn.example/v${n}.jpg`, viewedAt: n }))));
+    http.get.mockImplementation(async (_path: string, opts?: { query?: Record<string, unknown> }) => {
+      if (opts?.query?.slugs) return { data: [1, 2, 3].map((n) => ({ ...P(n), id: `v${n}`, slug: `v${n}`, thumbnail: `https://cdn.example/v${n}.jpg` })), meta: { page: 1, limit: 3, total: 3 } };
+      return { ...page(10), data: page(10).data.map((p) => ({ ...p, thumbnail: `https://cdn.example/${p.id}.jpg` })) };
+    });
+    const c = mount();
+    await flush(8);
+    const recent = Array.from(region(c, 'Đã xem gần đây')!.querySelectorAll('img'));
+    expect(recent.map((i) => i.getAttribute('fetchpriority'))).toEqual(['high', 'high', null]);
+    expect(c.querySelectorAll('img[fetchpriority="high"]').length).toBeLessThanOrEqual(4);
+  });
+
   it('kệ "Xem tất cả" là liên kết thật tới trang Bán chạy nhất', async () => {
     const c = mount();
     await flush();

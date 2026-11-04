@@ -248,7 +248,6 @@ function RebuyLine({
         <div style={{ height: PURCHASED_LINE_HEIGHT, padding: 12, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             type="button"
-            aria-label={item.productName}
             className="tubu-press"
             onClick={onOpen}
             style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 auto', minWidth: 0, minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
@@ -306,7 +305,6 @@ function CompactRebuyCard({
     <Card variant="raised" padding={12}>
       <button
         type="button"
-        aria-label={item.productName}
         className="tubu-press"
         onClick={onOpen}
         style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
