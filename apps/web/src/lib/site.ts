@@ -17,17 +17,16 @@ const BASE_PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/
 
 /**
  * Route công khai trong route map (`private: false`: khách chưa đăng nhập vẫn mở được) nhưng chính trang đánh dấu noindex vì nội dung
- * là của riêng khách (ví mã, điểm). Vẫn `Disallow` trong robots như route riêng tư; robots không `allow` lại chúng (Google chọn `allow`
- * khi hai luật dài bằng nhau) và sitemap không nộp chúng.
+ * là của riêng khách (ví mã, điểm). KHÔNG `Disallow` trong robots: Googlebot bị chặn thì không đọc được thẻ meta noindex, URL vẫn có thể
+ * lên kết quả tìm kiếm khi có link trỏ tới. Chỉ meta noindex của trang (layout) và việc sitemap không nộp chúng giữ chúng khỏi chỉ mục.
  */
 export const NOINDEX_PUBLIC_PATHS = ['/uu-dai', '/ma-giam-gia'];
 
-/** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. Danh sách gốc + tiền tố các route `private` của route map + route công khai noindex. */
+/** Trang riêng tư/nội bộ — robots chặn cào. Danh sách gốc + tiền tố các route `private` của route map (không gồm NOINDEX_PUBLIC_PATHS). */
 export const PRIVATE_PATHS = [
   ...new Set([
     ...BASE_PRIVATE_PATHS,
     ...privatePrefixes().filter((p) => !BASE_PRIVATE_PATHS.some((b) => p === b || p.startsWith(`${b}/`))),
-    ...NOINDEX_PUBLIC_PATHS,
   ]),
 ];
 
@@ -74,4 +73,39 @@ export function tenantHostBootScript(): string {
  */
 export function restoringBootScript(): string {
   return "(function(){try{if(localStorage.getItem('tubu_web_session')==='1')document.documentElement.setAttribute('data-restoring','')}catch(e){}})()";
+}
+
+/**
+ * Script chạy ở <head> trước khi vẽ: máy có "Đã xem gần đây" (localStorage.tubu_recently_viewed có ít nhất một mục hợp lệ) thì đặt
+ * `data-has-recent` lên <html>. Trang Danh mục dựng sẵn (ISR) không biết khách đã xem gì, nên CSS giữ chỗ cho dải đó theo thuộc tính này;
+ * không giữ thì dải ~250px chèn vào sau hydrate và đẩy "Bán chạy nhất" xuống. Luật "mục hợp lệ" lặp lại `isItem` của lib/recently-viewed.ts.
+ */
+export function recentlyViewedBootScript(): string {
+  return (
+    "(function(){try{var a=JSON.parse(localStorage.getItem('tubu_recently_viewed')||'null');" +
+    "if(Array.isArray(a)&&a.some(function(x){return x&&typeof x==='object'&&typeof x.slug==='string'&&x.slug!==''&&typeof x.name==='string'&&" +
+    "(x.thumbnail===null||typeof x.thumbnail==='string')&&typeof x.viewedAt==='number'&&isFinite(x.viewedAt)}))" +
+    "document.documentElement.setAttribute('data-has-recent','')}catch(e){}})()"
+  );
+}
+
+/**
+ * Script chạy ở <head> trước khi vẽ: đọc cỡ chữ khách chọn ở Cài đặt (localStorage.tubu_prefs, cùng khoá với account/font-scale.ts) và đặt
+ * font-size gốc + `data-font-scale` lên <html> ngay khung hình đầu. Chờ effect sau hydrate thì mọi trang dựng lại một lần với khách chọn cỡ nhỏ/lớn.
+ * Dùng phần trăm (không px) để không đè cỡ chữ mặc định của trình duyệt (WCAG 1.4.4); ở 16px kết quả y hệt 15/16/18px.
+ */
+export function fontScaleBootScript(): string {
+  return (
+    "(function(){try{var p=JSON.parse(localStorage.getItem('tubu_prefs')||'null'),m={small:'93.75%',normal:'100%',large:'112.5%'},s=p&&p.fontScale;" +
+    "if(typeof s==='string'&&Object.prototype.hasOwnProperty.call(m,s)){var e=document.documentElement;e.style.fontSize=m[s];e.setAttribute('data-font-scale',s)}}catch(e){}})()"
+  );
+}
+
+/**
+ * Script chạy ở <head> trước khi vẽ: máy còn nhớ lần trước khách có mã giảm giá dùng được (localStorage.tubu_offers_hint = '1', do `PdpCoupons` ghi) thì đặt
+ * `data-has-offers`. Trang sản phẩm dựng sẵn không biết khách có mã hay không; chỗ giữ 44px cho hàng "Ưu đãi" chỉ nên hiện khi khách đang khôi phục phiên VÀ
+ * thường có mã, vì giữ chỗ cho khách không có mã rồi gỡ đi cũng là một lần xê dịch.
+ */
+export function offersHintBootScript(): string {
+  return "(function(){try{if(localStorage.getItem('tubu_offers_hint')==='1')document.documentElement.setAttribute('data-has-offers','')}catch(e){}})()";
 }

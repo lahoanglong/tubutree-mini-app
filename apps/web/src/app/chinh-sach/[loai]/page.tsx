@@ -20,13 +20,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   if (!isLegalSlug(loai)) notFound();
   const { content } = await getLegalDoc(loai);
   const page = LEGAL_PAGES[loai];
-  return {
-    title: `${page.title} — Tubu Tree`,
-    description: page.description,
-    alternates: { canonical: `/chinh-sach/${loai}` },
-    // Bản nháp chưa được duyệt không nên nằm trên Google như chính sách thật của cửa hàng.
-    ...(content === null ? { robots: { index: false, follow: true } } : {}),
-  };
+  // Bản nháp chưa được duyệt không nên nằm trên Google như chính sách thật của cửa hàng; noindex kèm canonical là hai tín hiệu mâu thuẫn.
+  if (content === null) return { title: page.title, description: page.description, robots: { index: false, follow: true } };
+  return { title: page.title, description: page.description, alternates: { canonical: `/chinh-sach/${loai}` } };
 }
 
 export default async function LegalPage({ params }: Params) {

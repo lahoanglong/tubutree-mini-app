@@ -32,15 +32,17 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
-const UNDO_WINDOW_MS = 3500;
+// 10 giây: người dùng bàn phím/đọc màn hình cần đủ thời gian tới nút "Hoàn tác" (WCAG 2.2.1); đồng hồ còn dừng khi trỏ/focus đang ở trên thanh.
+const UNDO_WINDOW_MS = 10_000;
 
 // Ô −/+ của dòng giỏ: từ md nút trần 44px trong khung viền chung; ở điện thoại là hai ô vuông 36px có viền tách rời như QuantitySelector size sm của
 // Mini App, vùng chạm vẫn 44x44 nhờ .tubu-hit-44-square (giãn 4px mỗi phía, nằm trong khe 8px nên không chồng nút bên cạnh). Ô 44px làm bộ đếm
 // rộng ~134px, giá + bộ đếm không vừa cột chữ ~203px ở 375px và bộ đếm rớt xuống hàng riêng.
 const qtyButton =
-  'tubu-hit-44-square flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 max-md:h-9 max-md:w-9 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
+  'tubu-hit-44-square flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 aria-disabled:opacity-40 max-md:h-9 max-md:w-9 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
 
 const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
 
@@ -100,33 +102,75 @@ export default function CartPage() {
     if (pendingGone) setConfirmOpen(false);
   }, [pendingGone]);
   const [undoError, setUndoError] = useState<string | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (undoTimer.current) clearTimeout(undoTimer.current);
-    },
-    [],
-  );
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const undoHold = useAutoDismiss(!!removedLine, UNDO_WINDOW_MS, () => setRemovedLine(null), removedLine);
+  // Dòng vừa xoá bị gỡ khỏi cây kéo theo nút Xoá đang giữ focus: chuyển focus sang "Hoàn tác" để bàn phím không rơi về đầu trang.
+  // Chỉ khi nút Xoá đang có vòng lấy nét (người dùng bàn phím): chuột/cảm ứng không bị giữ đồng hồ vì một focus họ không thấy.
+  // Đợi phản hồi chậm thì khách có thể đã Tab sang ô khác (vd gõ mã giảm giá): chỉ kéo focus khi nó đang rơi về body, không giật khỏi chỗ khách đang làm.
+  const focusIsFree = () => !document.activeElement || document.activeElement === document.body;
+  const focusUndo = useRef(false);
+  const removeOrigin = useRef<Element | null>(null);
+  useEffect(() => {
+    if (removedLine && focusUndo.current && (focusIsFree() || document.activeElement === removeOrigin.current)) undoRef.current?.focus();
+    focusUndo.current = false;
+  }, [removedLine]);
   // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
   // Hết giờ Giờ vàng khi khách đang xem: lấy lại giỏ để máy chủ tính lại giá, không cần tải trang.
   const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
-  const removeWithUndo = (line: CartLine) =>
+  // Bấm "Hoàn tác" bằng bàn phím làm thanh hoàn tác biến mất khi nó đang giữ focus: đưa focus tới dòng vừa thêm lại (hoặc tiêu đề trang nếu dòng không còn).
+  const restoreFocus = useRef<{ variationId: string } | null>(null);
+  const focusHeading = () => {
+    if (!focusIsFree()) return;
+    const h = document.querySelector<HTMLElement>('main h1');
+    if (!h) return;
+    h.tabIndex = -1;
+    h.addEventListener('blur', () => h.removeAttribute('tabindex'), { once: true });
+    h.focus();
+  };
+  useEffect(() => {
+    const want = restoreFocus.current;
+    if (!want) return;
+    restoreFocus.current = null;
+    const lines = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="cart-line"]'));
+    const row = lines.find((l) => l.dataset.variationId === want.variationId);
+    const target = row?.querySelector<HTMLElement>('input[type="checkbox"]');
+    if (!focusIsFree()) return;
+    if (target) target.focus();
+    else focusHeading();
+  }, [cartQ.data, cartQ.dataUpdatedAt]);
+  const removeWithUndo = (line: CartLine) => {
+    removeOrigin.current = document.activeElement;
+    try {
+      focusUndo.current = !!document.activeElement?.matches(':focus-visible');
+    } catch {
+      focusUndo.current = false;
+    }
     remove.mutate(line.id, {
       onSuccess: () => {
         setUndoError(null);
         setRemovedLine(line);
-        if (undoTimer.current) clearTimeout(undoTimer.current);
-        undoTimer.current = setTimeout(() => setRemovedLine(null), UNDO_WINDOW_MS);
       },
     });
+  };
   const undoRemove = () => {
     if (!removedLine) return;
     const line = removedLine;
+    let viaKeyboard = false;
+    try {
+      viaKeyboard = !!document.activeElement?.matches(':focus-visible');
+    } catch {
+      viaKeyboard = false;
+    }
     setRemovedLine(null);
-    if (undoTimer.current) clearTimeout(undoTimer.current);
     addToCart(line.variationId, line.quantity)
-      .then((c) => qc.setQueryData(cartKey(), c))
-      .catch((e: unknown) => setUndoError(actionErrorText(e)));
+      .then((c) => {
+        if (viaKeyboard) restoreFocus.current = { variationId: line.variationId };
+        qc.setQueryData(cartKey(), c);
+      })
+      .catch((e: unknown) => {
+        setUndoError(actionErrorText(e));
+        if (viaKeyboard) focusHeading();
+      });
   };
   // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
   // nút của đúng item đó (item khác vẫn thao tác được bình thường).
@@ -231,7 +275,7 @@ export default function CartPage() {
     const busy = busyItemId === it.id;
     const compareAt = lineCompareAt(it);
     return (
-      <div key={it.id} data-testid="cart-line" className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
+      <div key={it.id} data-testid="cart-line" data-variation-id={it.variationId} className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
         <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
           <span className={miniCheckboxWrap}>
             <input
@@ -318,8 +362,9 @@ export default function CartPage() {
             <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
               <button
                 type="button"
-                onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
-                disabled={busy || soldOut || it.quantity <= 1}
+                onClick={() => !busy && update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                disabled={soldOut || it.quantity <= 1}
+                aria-disabled={busy || undefined}
                 aria-label={`Giảm số lượng ${it.productName}`}
                 className={qtyButton}
               >
@@ -331,8 +376,9 @@ export default function CartPage() {
               </span>
               <button
                 type="button"
-                onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
-                disabled={busy || soldOut || atMax}
+                onClick={() => !busy && update.mutate({ id: it.id, q: it.quantity + 1 })}
+                disabled={soldOut || atMax}
+                aria-disabled={busy || undefined}
                 aria-label={`Tăng số lượng ${it.productName}`}
                 className={qtyButton}
               >
@@ -342,11 +388,11 @@ export default function CartPage() {
             </div>
             <button
               type="button"
-              onClick={() => requestRemove(it)}
-              disabled={busy}
+              onClick={() => !busy && requestRemove(it)}
+              aria-disabled={busy || undefined}
               aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
               aria-haspopup={comboRemovalNotice(cart?.comboGroups, it.id) ? 'dialog' : undefined}
-              className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0"
+              className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 aria-disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0"
             >
               <Trash2 className="h-5 w-5 text-[color:var(--color-text-primary)] md:hidden" strokeWidth={1.75} aria-hidden="true" />
               <span className="max-md:hidden">Xoá</span>
@@ -400,10 +446,10 @@ export default function CartPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => remove.mutate(it.id)}
-                  disabled={remove.isPending && remove.variables === it.id}
+                  onClick={() => !(remove.isPending && remove.variables === it.id) && remove.mutate(it.id)}
+                  aria-disabled={(remove.isPending && remove.variables === it.id) || undefined}
                   aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
-                  className="inline-flex min-h-11 shrink-0 items-center rounded-control px-3 font-semibold underline disabled:opacity-50"
+                  className="inline-flex min-h-11 shrink-0 items-center rounded-control px-3 font-semibold underline aria-disabled:opacity-50"
                 >
                   Xoá
                 </button>
@@ -572,19 +618,23 @@ export default function CartPage() {
           onCancel={() => setConfirmOpen(false)}
         />
       )}
-      {removedLine && (
-        <div
-          role="status"
-          className={`fixed inset-x-3 z-30 mx-auto flex max-w-md items-center justify-between rounded-control bg-stone-900 px-4 py-2 text-sm text-stone-0 ${
-            showBar ? 'bottom-[calc(var(--sticky-bar-h,8rem)+0.5rem)] lg:bottom-6' : 'bottom-6'
-          }`}
-        >
-          <span>Đã bỏ khỏi giỏ</span>
-          <button type="button" onClick={undoRemove} className="min-h-11 px-2 font-bold text-forest-200">
-            Hoàn tác
-          </button>
-        </div>
-      )}
+      {/* Vùng báo luôn có mặt trong cây (chỉ đổi phần con): vùng live vừa gắn cùng chữ thường không được đọc ra. */}
+      <div role="status" data-testid="undo-region">
+        {removedLine && (
+          <div
+            data-surface="inverse"
+            {...undoHold}
+            className={`fixed inset-x-3 z-30 mx-auto flex max-w-md items-center justify-between rounded-control bg-stone-900 px-4 py-2 text-sm text-stone-0 ${
+              showBar ? 'bottom-[calc(var(--sticky-bar-h,8rem)+0.5rem)] lg:bottom-6' : 'bottom-6'
+            }`}
+          >
+            <span>Đã bỏ khỏi giỏ</span>
+            <button ref={undoRef} type="button" onClick={undoRemove} className="min-h-11 px-2 font-bold text-forest-200">
+              Hoàn tác
+            </button>
+          </div>
+        )}
+      </div>
       {showBar && (
         <StickyActionBar label="Thanh toán" hideFrom="lg">
           {/* Dưới md khung tóm tắt bị ẩn hẳn (cả với trình đọc màn hình): lời báo ở đây là bản duy nhất khách thấy/nghe được. */}

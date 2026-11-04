@@ -46,7 +46,7 @@ test.describe('Web: yêu thích, nút giỏ nhanh', () => {
     const posted = api.waitForCall('POST', '/cart/items');
     await btn.click();
     expect((await posted).body).toMatchObject({ variationId: 'var-1', quantity: 1, addSource: 'wishlist' });
-    await expect(page.getByRole('status').filter({ hasText: 'Đã thêm vào giỏ' })).toBeVisible();
+    await expect(page.getByRole('status').getByText('Đã thêm vào giỏ!')).toBeVisible();
     await expect(page).toHaveURL(/\/tai-khoan\/yeu-thich/);
   });
 

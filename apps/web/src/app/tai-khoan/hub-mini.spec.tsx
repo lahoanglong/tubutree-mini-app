@@ -91,7 +91,7 @@ describe('hub /tai-khoan như Mini App (điện thoại)', () => {
     const head = c.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/ho-so"]')!;
     const band = head.parentElement as HTMLElement;
     expect(band.className).toContain('bg-[linear-gradient(');
-    const tiles = Array.from(c.querySelectorAll('a')).filter((a) => /^(Điểm Xanh|Ví Tubu|Mã giảm giá):/.test(a.getAttribute('aria-label') ?? ''));
+    const tiles = Array.from(c.querySelectorAll('a')).filter((a) => /(Điểm Xanh|Ví Tubu|Mã giảm giá)$/.test(a.textContent ?? '') && a.className.includes('min-h-11'));
     expect(tiles).toHaveLength(3);
     for (const t of tiles) {
       expect(t.className).toContain('bg-[var(--color-bg-surface)]');

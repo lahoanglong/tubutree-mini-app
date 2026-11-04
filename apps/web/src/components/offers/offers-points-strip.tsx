@@ -32,6 +32,7 @@ export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
   return (
     <section aria-label={homeCopy.offers.pointsTitle}>
       <div
+        data-surface="inverse"
         style={{
           padding: '12px 16px',
           color: 'var(--color-text-inverse)',

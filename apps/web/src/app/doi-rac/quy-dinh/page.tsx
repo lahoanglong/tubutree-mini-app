@@ -6,7 +6,7 @@ import { RecycleRulesView } from '@/components/recycle/recycle-rules-view';
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: 'Thể lệ Đổi rác lấy quà — Tubu Tree',
+  title: 'Thể lệ Đổi rác lấy quà',
   description: 'Thể lệ chương trình Đổi rác lấy quà của Tubu Tree: món nhận, cách quy đổi Điểm Xanh và điều kiện tham gia.',
   alternates: { canonical: '/doi-rac/quy-dinh' },
 };

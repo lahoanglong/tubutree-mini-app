@@ -136,8 +136,8 @@ export function StorefrontBody({ storefront: sf, badgeLabel, intro }: Storefront
           <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: SORT_TOP }}>
             {tab === 'shop' && (
               <div className="px-4 md:px-0">
-                {plan.main.map((col) => (
-                  <ShopSection key={col.id} collection={asSection(col)} onSeeAll={() => openTab('products', col.id)} />
+                {plan.main.map((col, i) => (
+                  <ShopSection key={col.id} collection={asSection(col)} onSeeAll={() => openTab('products', col.id)} priorityCount={i === 0 ? 2 : 0} />
                 ))}
               </div>
             )}

@@ -70,7 +70,6 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
   return (
     <Link
       href={href}
-      aria-label={`${label}: ${value}`}
       className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >
       <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -226,7 +225,7 @@ function AccountContent() {
       <h1 className="sr-only">Cá nhân</h1>
 
       <div className="md:mx-auto md:mt-3 md:max-w-2xl lg:mx-0">
-        <div className="relative bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
+        <div data-surface="inverse" className="relative bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
           {chatEnabled && (
             <Link
               href="/ho-tro/chat"
@@ -368,7 +367,7 @@ function AccountContent() {
               <div className="mt-2.5 flex items-center gap-2">
                 <button
                   type="button"
-                  aria-label={`${homeCopy.profile.referralCopy} mã ${code}`}
+                  aria-label={`${homeCopy.profile.referralCode}: ${code}, ${homeCopy.profile.referralCopy.toLowerCase()}`}
                   onClick={() => void copyReferral()}
                   className="tubu-press flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-control bg-[var(--color-action-secondary-bg)] px-3 py-2 text-left"
                 >

@@ -592,6 +592,24 @@ describe('UpcomingFlashSales', () => {
     expect(byText(c, 'button', 'Nhắc tôi')).not.toBeNull();
   });
 
+  it('A11Y-03: đang gửi thì nút nhắc aria-disabled (vẫn giữ focus) và bấm thêm không gửi lần hai', async () => {
+    upcomingResult = async () => [upcoming()];
+    let release: (v: unknown) => void = () => undefined;
+    mocks.post.mockReset().mockImplementation(() => new Promise((r) => { release = r; }));
+    const c = await mount(<UpcomingFlashSales />);
+    const btn = byText(c, 'button', 'Nhắc tôi')!;
+    btn.focus();
+    click(btn);
+    await flush(4);
+    const busy = Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-disabled="true"]'))[0]!;
+    expect(busy).toBeTruthy();
+    expect(busy.disabled).toBe(false);
+    click(busy);
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    await act(async () => { release({}); });
+  });
+
   it('đặt nhắc lỗi → hoàn lại nhãn cũ', async () => {
     upcomingResult = async () => [upcoming()];
     mocks.post.mockRejectedValue(new Error('boom'));

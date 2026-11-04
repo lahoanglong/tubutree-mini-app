@@ -5,6 +5,7 @@ import { LayoutGrid } from 'lucide-react';
 import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubHasMoreCategories, hubPlaceholderTiles } from '@tubutree/app-core/browse/hub';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { CategoryEntry } from '@/lib/browse-categories';
+import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { Icon, Section, SectionHeader, Skeleton, Text } from '@/components/mini';
 
 /** 4 cột ở điện thoại (như Mini App); màn rộng thêm cột để 9 ô (8 danh mục + "Tất cả") vừa một hàng ở lg. */
@@ -81,7 +82,7 @@ export function CategoryTiles({ entries, isLoading, placeholderCount, onSelect, 
             <Tile key={`${e.kind}:${e.key}`} label={e.label} onPress={() => onSelect(e)}>
               {e.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.image} alt="" width={MEDIA} height={MEDIA} loading="lazy" style={{ width: MEDIA, height: MEDIA, objectFit: 'cover' }} />
+                <img src={sizedImage(e.image, MEDIA).src} onError={fallBackToOriginal(e.image)} alt="" width={MEDIA} height={MEDIA} loading="lazy" style={{ width: MEDIA, height: MEDIA, objectFit: 'cover' }} />
               ) : (
                 <Icon icon={e.icon} size="md" tone="brand" />
               )}

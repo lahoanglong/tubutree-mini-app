@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import type { ProductCard as ProductCardType } from '@/lib/api';
-import { GRID_PRODUCTS } from '@/lib/product-grid';
+import { GRID_PRODUCTS, gridImageSizes } from '@/lib/product-grid';
 import { ProductCard } from './product-card';
 import { ProductTileSkeleton } from './skeleton';
 
@@ -55,6 +55,8 @@ export function ProductGrid({
       </div>
     );
   }
+  // Thẻ `line` có ảnh 64px cố định: sizes của lưới (theo cột) không áp cho nó.
+  const sizes = variant === 'line' ? undefined : gridImageSizes(className);
   const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
   const reserveNote = notes?.some((n) => !!n) ?? false;
   return (
@@ -67,6 +69,7 @@ export function ProductGrid({
               variant={variant}
               rank={rankFrom === undefined ? undefined : rankFrom + i}
               priority={i < priorityCount}
+              imageSizes={sizes}
               showBrand={showBrand}
               showWishlist={showWishlist}
               note={notes?.[i] || (reserveNote ? '' : undefined)}

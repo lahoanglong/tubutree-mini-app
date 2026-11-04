@@ -29,10 +29,10 @@ export function ProductImageFallback(_props: { brand: string }) {
   );
 }
 
-/** Bề rộng thẻ sản phẩm lưới 2 cột ở khổ điện thoại (CSS px); chọn bản ảnh đổi cỡ 1x/2x theo số này. */
+/** Bề rộng thẻ sản phẩm lưới 2 cột ở khổ điện thoại (CSS px); chọn các bản ảnh đổi cỡ trong srcset theo số này. */
 export const CARD_IMAGE_WIDTH = 170;
 
-/** Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset 1x/2x) (tải lỗi thì rơi về ô thay thế), không có thì ô thay thế. Cha phải `position: relative`. */
+/** Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset theo bề rộng w) (tải lỗi thì rơi về ô thay thế), không có thì ô thay thế. Cha phải `position: relative`. */
 export function ProductImage({
   src,
   brand,
@@ -41,6 +41,7 @@ export function ProductImage({
   priority = false,
   size,
   width = CARD_IMAGE_WIDTH,
+  sizes,
 }: {
   src?: string | null;
   brand: string;
@@ -48,21 +49,24 @@ export function ProductImage({
   className?: string;
   priority?: boolean;
   size?: number;
-  /** Bề rộng hiển thị (CSS px) để chọn bản ảnh đổi cỡ 1x/2x. */
+  /** Bề rộng hiển thị lớn nhất (CSS px) để chọn các bản ảnh đổi cỡ. */
   width?: number;
+  /** Thuộc tính `sizes` của ảnh: bề rộng thật theo khung nhìn; thiếu thì lấy đúng `width`. */
+  sizes?: string;
 }) {
   const [failed, setFailed] = useState(false);
   // Mặc định hiện: HTML dựng sẵn (ISR) và lần hydrate đầu phải khớp nhau, và ảnh đã tải xong thì không được chớp trong suốt (PL-15a).
   const [loaded, setLoaded] = useState(true);
   const ref = useRef<HTMLImageElement>(null);
   useEffect(() => setFailed(false), [src]);
-  const { img, fallBack } = useSizedImage(src, width);
+  const { img, fallBack } = useSizedImage(src, width, sizes);
   // Ảnh HTML dựng sẵn có thể đã lỗi trước khi React hydrate; sự kiện lỗi đó không phát lại nên `onError` không chạy.
   useEffect(() => {
     const el = ref.current;
     if (el && el.complete && el.naturalWidth === 0 && !fallBack()) setFailed(true);
     // Chưa tải xong: ẩn để hiện dần ở `onLoad`; ảnh chưa tải thì cũng chưa có gì để thấy nên ẩn lúc này không chớp.
-    setLoaded(Boolean(el && el.complete && el.naturalWidth > 0));
+    // Ảnh ưu tiên (ứng viên LCP) không mờ dần: opacity 0 làm mốc vẽ LCP trễ tới hết lúc hiện lại.
+    setLoaded(priority || Boolean(el && el.complete && el.naturalWidth > 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
   if (!img || failed) return <ProductImageFallback brand={brand} />;
@@ -72,6 +76,7 @@ export function ProductImage({
       ref={ref}
       src={img.src}
       srcSet={img.srcSet}
+      sizes={img.sizes}
       alt={alt}
       width={size ?? width}
       height={size ?? width}
@@ -84,7 +89,7 @@ export function ProductImage({
       style={{
         ...(className ? null : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }),
         opacity: loaded ? 1 : 0,
-        transition: 'opacity 200ms var(--p-ease-out)',
+        transition: priority ? undefined : 'opacity 200ms var(--p-ease-out)',
         // Ảnh nền trắng (đa số ảnh Pancake) không hoà vào thân thẻ trắng.
         outline: '1px solid var(--color-media-outline)',
         outlineOffset: -1,

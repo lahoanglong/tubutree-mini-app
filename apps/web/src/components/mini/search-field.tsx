@@ -56,7 +56,7 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
           padding: '0 2px 0 14px',
           borderRadius: 'var(--radius-pill)',
           background: 'var(--color-bg-surface)',
-          border: '1px solid var(--color-border-subtle)',
+          border: '1px solid var(--color-border-strong)',
           boxSizing: 'border-box',
         }}
       >

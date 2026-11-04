@@ -492,7 +492,7 @@
   "apps/web/src/app/dang-nhap/login-skeleton.tsx": 4,
   "apps/web/src/app/dang-nhap/page.tsx": 2,
   "apps/web/src/app/gio-hang/page.tsx": 8,
-  "apps/web/src/app/gio-vang/flash-slots-view.tsx": 19,
+  "apps/web/src/app/gio-vang/flash-slots-view.tsx": 17,
   "apps/web/src/app/gioi-thieu/about-view.tsx": 1,
   "apps/web/src/app/ho-tro/chat/page.tsx": 9,
   "apps/web/src/app/hoan-tien/page.tsx": 2,
@@ -522,7 +522,6 @@
   "apps/web/src/app/uu-dai/page.tsx": 3,
   "apps/web/src/components/account/account-shell.tsx": 4,
   "apps/web/src/components/account/avatar-crop-sheet.tsx": 4,
-  "apps/web/src/components/account/font-scale.ts": 3,
   "apps/web/src/components/add-to-cart.tsx": 3,
   "apps/web/src/components/affiliate/choice-card.tsx": 1,
   "apps/web/src/components/affiliate/ctv-shortcuts.tsx": 1,
@@ -541,6 +540,7 @@
   "apps/web/src/components/catalog/category-chip-row.tsx": 3,
   "apps/web/src/components/catalog/category-tiles.tsx": 3,
   "apps/web/src/components/catalog/list-heading.tsx": 3,
+  "apps/web/src/components/catalog/recently-viewed-rail.tsx": 1,
   "apps/web/src/components/catalog/suggested-rail.tsx": 1,
   "apps/web/src/components/catalog/wishlist-heart.tsx": 4,
   "apps/web/src/components/checkout/order-success.tsx": 24,
@@ -592,7 +592,7 @@
   "apps/web/src/components/mini/move-buttons.tsx": 2,
   "apps/web/src/components/mini/price-tag.tsx": 3,
   "apps/web/src/components/mini/product-rail.tsx": 1,
-  "apps/web/src/components/mini/product-tile.tsx": 22,
+  "apps/web/src/components/mini/product-tile.tsx": 21,
   "apps/web/src/components/mini/progress-bar.tsx": 2,
   "apps/web/src/components/mini/quantity-selector.tsx": 3,
   "apps/web/src/components/mini/quest-strip.tsx": 3,
@@ -613,7 +613,7 @@
   "apps/web/src/components/mini/timeline.tsx": 6,
   "apps/web/src/components/mini/voucher-ticket.tsx": 26,
   "apps/web/src/components/offers/offers-points-strip.tsx": 16,
-  "apps/web/src/components/onboarding-gate.tsx": 6,
+  "apps/web/src/components/onboarding-gate-ui.tsx": 6,
   "apps/web/src/components/order-mobile/mobile-ui.tsx": 1,
   "apps/web/src/components/recycle/recycle-desk.tsx": 1,
   "apps/web/src/components/recycle/waste-point-picker.tsx": 3,
@@ -640,6 +640,7 @@
   "apps/web/src/components/ui/segmented-tabs.tsx": 1,
   "apps/web/src/components/variation-chip.tsx": 1,
   "apps/web/src/components/variation-sheet.tsx": 5,
-  "apps/web/src/lib/copy-text.ts": 1
+  "apps/web/src/lib/copy-text.ts": 1,
+  "apps/web/src/lib/og.ts": 2
  }
 }

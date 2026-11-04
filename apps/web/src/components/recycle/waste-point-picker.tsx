@@ -8,6 +8,7 @@ import { missingItemsReason } from '@tubutree/app-core/waste-copy';
 import { openingStatus } from '@tubutree/app-core/waste-hours';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
+import { useRovingGroup } from '@/lib/use-roving-group';
 import { mapsUrl, pointAddress } from './recycle-labels';
 
 export interface WastePointPickerProps {
@@ -42,10 +43,11 @@ export function sortWastePoints(points: readonly WastePointDTO[], selectedItemId
 export function WastePointPicker({ points, value, onChange, items, selectedItemIds, now }: WastePointPickerProps) {
   const sorted = sortWastePoints(points, selectedItemIds);
   const clock = now ?? new Date();
+  const group = useRovingGroup();
   const isLocked = (p: WastePointDTO) => p.quotaFull || missingItemIds(p, selectedItemIds).length > 0;
 
   return (
-    <div role="radiogroup" aria-label="Chọn điểm nhận" className="grid gap-2 md:grid-cols-2">
+    <div ref={group.ref} onKeyDown={group.onKeyDown} role="radiogroup" aria-label="Chọn điểm nhận" className="grid gap-2 md:grid-cols-2">
       {sorted.map((p) => {
         const selected = p.id === value;
         const locked = isLocked(p);

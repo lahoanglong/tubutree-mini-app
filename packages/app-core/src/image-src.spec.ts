@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imageVariants, pickImageWidth } from './image-src';
+import { IMAGE_WIDTHS, WIDE_IMAGE_WIDTHS, imageVariants, pickImageWidth, resizedImageUrl } from './image-src';
 
 const API = 'https://api.tubutree.com/api';
 const decode = (url: string) => new URL(url).searchParams.get('u');
@@ -44,5 +44,31 @@ describe('imageVariants', () => {
     expect(imageVariants('https://content.pancake.vn/a.jpg', 170, '')).toBeNull();
     expect(imageVariants('https://content.pancake.vn/a.jpg', 0, API)).toBeNull();
     expect(imageVariants(null, 170, API)).toBeNull();
+  });
+});
+
+describe('resizedImageUrl và WIDE_IMAGE_WIDTHS', () => {
+  it('bề rộng thêm 1280/1920 không đổi IMAGE_WIDTHS: pickImageWidth và imageVariants vẫn tối đa 960', () => {
+    expect(WIDE_IMAGE_WIDTHS).toEqual([1280, 1920]);
+    expect(IMAGE_WIDTHS).toEqual([160, 320, 640, 960]);
+    expect(pickImageWidth(2000)).toBe(960);
+    expect(imageVariants('https://content.pancake.vn/a.jpg', 1000, API)!.src).toContain('w=960');
+  });
+
+  it('dựng URL /img đúng bề rộng cho ảnh đổi cỡ được (host Pancake, ảnh API)', () => {
+    const url = resizedImageUrl('https://content.pancake.vn/a.jpg', 1920, API)!;
+    expect(url.startsWith(`${API}/img?w=1920&u=`)).toBe(true);
+    expect(decode(url)).toBe('https://content.pancake.vn/a.jpg');
+    expect(decode(resizedImageUrl('/public-image/product/p1/0', 1280, API)!)).toBe('/public-image/product/p1/0');
+    expect(resizedImageUrl('https://content.pancake.vn/a.jpg', 640, `${API}/`)!.startsWith(`${API}/img?w=640&`)).toBe(true);
+  });
+
+  it('null khi không đổi cỡ được hoặc bề rộng không nằm trong danh sách API', () => {
+    expect(resizedImageUrl('https://img.test/a.jpg', 1280, API)).toBeNull();
+    expect(resizedImageUrl('data:image/png;base64,AAAA', 1280, API)).toBeNull();
+    expect(resizedImageUrl('https://content.pancake.vn/a.jpg', 1000, API)).toBeNull();
+    expect(resizedImageUrl('https://content.pancake.vn/a.jpg', 2400, API)).toBeNull();
+    expect(resizedImageUrl('https://content.pancake.vn/a.jpg', 1280, '')).toBeNull();
+    expect(resizedImageUrl(null, 1280, API)).toBeNull();
   });
 });

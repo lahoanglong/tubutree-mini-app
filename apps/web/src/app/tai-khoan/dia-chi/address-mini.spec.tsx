@@ -87,7 +87,7 @@ describe('sổ địa chỉ như Mini App', () => {
 
   it('nút đặt mặc định ghi "Đặt mặc định"; nút thêm không có dấu "+" và có biểu tượng', async () => {
     const c = await mount();
-    expect(btn(c, 'Đặt địa chỉ của Trần Bình làm mặc định')!.textContent).toBe('Đặt mặc định');
+    expect(btn(c, 'Đặt mặc định cho địa chỉ của Trần Bình')!.textContent).toBe('Đặt mặc định');
     const add = btn(c, 'Thêm địa chỉ mới')!;
     expect(add.querySelector('svg')).not.toBeNull();
     expect(add.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');

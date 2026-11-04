@@ -56,7 +56,7 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
         )}
       </div>
       <div className="flex-none">
-        <QuantitySelector value={qty} min={0} max={DEALER_MAX_QTY} size="md" onChange={onQty} />
+        <QuantitySelector itemLabel={row.variation ? `${row.product} ${row.variation}` : row.product} value={qty} min={0} max={DEALER_MAX_QTY} size="md" onChange={onQty} />
       </div>
     </li>
   );

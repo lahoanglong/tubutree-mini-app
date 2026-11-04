@@ -5,6 +5,7 @@ import { fetchCategories } from '@tubutree/app-core/api/catalog';
 import { BEST_SELLERS_PAGE_LIMIT, bestSellerScope, bestSellerTabs, bestSellersHref } from '@tubutree/app-core/browse/best-sellers';
 import { firstParam, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
+import { ogBase, withBrand } from '@/lib/og';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import BestSellersView, { type BestSellersInitial } from './best-sellers-view';
 
@@ -12,7 +13,7 @@ export const revalidate = 300;
 
 type BestSellersSearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-const TITLE = 'Bán chạy nhất — Tubu Tree';
+const TITLE = 'Bán chạy nhất';
 const DESCRIPTION = 'Sản phẩm bán chạy nhất Tubu Tree theo lượt bán 30 ngày qua, xem theo từng danh mục.';
 
 // Theo quy tắc của /san-pham: trang lọc theo danh mục là bản trùng của bảng xếp hạng gốc nên noindex (follow để crawler vẫn đi tới sản phẩm) và
@@ -21,13 +22,13 @@ const DESCRIPTION = 'Sản phẩm bán chạy nhất Tubu Tree theo lượt bán
 export async function generateMetadata({ searchParams }: { searchParams: BestSellersSearchParams }): Promise<Metadata> {
   const sp = await searchParams;
   const page = parsePage(sp.page);
-  const base: Metadata = {
-    title: page > 1 ? `Bán chạy nhất — Trang ${page} | Tubu Tree` : TITLE,
-    description: DESCRIPTION,
-    openGraph: { title: TITLE, description: DESCRIPTION, type: 'website' },
-  };
-  if (firstParam(sp.category)) return { ...base, robots: { index: false, follow: true } };
-  return { ...base, alternates: { canonical: page > 1 ? `/ban-chay?page=${page}` : '/ban-chay' } };
+  const title = page > 1 ? `${TITLE} — Trang ${page}` : TITLE;
+  const base: Metadata = { title, description: DESCRIPTION };
+  const og = { ...ogBase, title: withBrand(title), description: DESCRIPTION };
+  // Trang noindex không khai url/canonical: hai tín hiệu "đừng lập chỉ mục" và "trang này là bản chuẩn" mâu thuẫn nhau.
+  if (firstParam(sp.category)) return { ...base, openGraph: og, robots: { index: false, follow: true } };
+  const path = page > 1 ? `/ban-chay?page=${page}` : '/ban-chay';
+  return { ...base, openGraph: { ...og, url: path }, alternates: { canonical: path } };
 }
 
 /** Phần phụ của trang (cây danh mục, danh sách đầu): lỗi thì bỏ phần đó, để BestSellersView tự tải lại phía trình duyệt. */

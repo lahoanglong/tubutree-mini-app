@@ -59,7 +59,8 @@ export function BottomSheet({ open, onClose, title, description, footer, size = 
       // Hộp modal khác mở sau (portal cuối DOM) giữ bàn phím.
       const modals = document.querySelectorAll('[aria-modal="true"]');
       if (modals[modals.length - 1] !== panel) return;
-      if (e.key === 'Escape' && dismissibleRef.current) {
+      // Đang gõ tiếng Việt (IME): Esc huỷ bản gõ chứ không đóng sheet.
+      if (e.key === 'Escape' && dismissibleRef.current && !e.isComposing) {
         e.stopPropagation();
         onCloseRef.current();
         return;

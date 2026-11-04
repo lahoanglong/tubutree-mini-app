@@ -31,6 +31,7 @@ import {
   chipClass,
 } from '@/components/admin/ui';
 import { actionErrorText } from '@/lib/error-text';
+import { safeHttpUrl } from '@/lib/order-view';
 
 const FILTERS: { k: FulfilStatus | ''; label: string }[] = [
   { k: 'CONFIRMED', label: 'Chờ xử lý' },
@@ -223,8 +224,9 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
         <p className="mt-2 flex flex-wrap items-center gap-1 text-xs text-stone-600">
           <Truck className="h-3 w-3" aria-hidden="true" />
           {o.shippingPartner} · {o.shippingCode}
-          {o.trackingLink && (
-            <a href={o.trackingLink} target="_blank" rel="noreferrer" className="font-medium text-forest-700 underline">
+          {/* Link do đối tác vận chuyển trả về: chỉ mở http(s), `javascript:`/`data:` thì không dựng liên kết. */}
+          {safeHttpUrl(o.trackingLink) && (
+            <a href={safeHttpUrl(o.trackingLink)!} target="_blank" rel="noreferrer" className="font-medium text-forest-700 underline">
               Tra cứu
             </a>
           )}

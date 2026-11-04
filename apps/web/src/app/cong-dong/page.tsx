@@ -12,7 +12,7 @@ import { FeedView } from './feed-view';
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: 'Cộng đồng Vườn Tubu — Tubu Tree',
+  title: 'Cộng đồng Vườn Tubu',
   description: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm và cổ vũ nhau trong cộng đồng Vườn Tubu của Tubu Tree.',
   alternates: { canonical: '/cong-dong' },
 };

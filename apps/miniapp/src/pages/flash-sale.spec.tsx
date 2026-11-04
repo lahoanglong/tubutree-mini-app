@@ -153,7 +153,7 @@ describe('Trang Giờ vàng: khung giờ và danh sách', () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: 'Giờ vàng' })).toBeInTheDocument();
     const tabs = await screen.findAllByRole('tab');
-    expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['12:00, đang diễn ra', '20:00, sắp diễn ra']);
+    expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['12:00 Đang diễn ra', '20:00 Sắp diễn ra']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mua ngay Sản phẩm b' })).toBeInTheDocument();

@@ -4,6 +4,12 @@
  */
 export const IMAGE_WIDTHS: readonly number[] = [160, 320, 640, 960];
 
+/**
+ * Bề rộng thêm cho ảnh tràn khung (banner, hero chiến dịch) ở màn 2x–3x; API nhận chúng (RESIZE_WIDTHS) nhưng thẻ SP và Mini App không dùng,
+ * nên không nằm trong IMAGE_WIDTHS để `pickImageWidth`/`imageVariants` giữ nguyên hành vi.
+ */
+export const WIDE_IMAGE_WIDTHS: readonly number[] = [1280, 1920];
+
 /** Host ảnh nguồn mà API chịu đổi cỡ; phải khớp PANCAKE_IMAGE_HOSTS và UPLOAD_IMAGE_HOSTS của API. */
 const RESIZABLE_HOSTS: readonly string[] = ['content.pancake.vn', 'res.cloudinary.com'];
 
@@ -61,4 +67,13 @@ export function imageVariants(src: string | null | undefined, cssWidth: number, 
   const w1 = pickImageWidth(cssWidth);
   const w2 = pickImageWidth(cssWidth * 2);
   return w1 === w2 ? { src: url(w1) } : { src: url(w1), srcSet: `${url(w1)} 1x, ${url(w2)} 2x` };
+}
+
+/** URL đổi cỡ ở đúng bề rộng `width` (một trong IMAGE_WIDTHS hoặc WIDE_IMAGE_WIDTHS). Null khi ảnh không đổi cỡ được hoặc bề rộng không được API nhận. */
+export function resizedImageUrl(src: string | null | undefined, width: number, apiBase: string | null | undefined): string | null {
+  if (!src || !apiBase) return null;
+  if (!IMAGE_WIDTHS.includes(width) && !WIDE_IMAGE_WIDTHS.includes(width)) return null;
+  const base = apiBase.replace(/\/+$/, '');
+  const source = resizeSource(src, base);
+  return source ? `${base}/img?w=${width}&u=${encodeURIComponent(source)}` : null;
 }

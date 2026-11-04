@@ -19,9 +19,12 @@ interface QuantitySelectorProps {
   onChange: (n: number) => void;
   /** Khoá cả − lẫn + (dòng hết hàng): nút vẫn là phần tử đọc được, chỉ không đổi số. */
   disabled?: boolean;
+  /** Tên món: bộ chọn lặp theo danh sách thì tên nút phải khác nhau, như bản ui/quantity-selector. */
+  itemLabel?: string;
 }
 
-export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, disabled }: QuantitySelectorProps) {
+export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, disabled, itemLabel }: QuantitySelectorProps) {
+  const named = (base: string) => (itemLabel ? `${base} ${itemLabel}` : base);
   const side = size === 'md' ? 44 : 36;
   const btn = (disabled: boolean): React.CSSProperties => ({
     width: side,
@@ -44,7 +47,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, d
     <div style={{ display: 'flex', alignItems: 'center', gap: size === 'md' ? 12 : 8 }}>
       <button
         type="button"
-        aria-label="Giảm số lượng"
+        aria-label={named('Giảm số lượng')}
         aria-disabled={disabled || value <= min}
         className={!disabled && value > min ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
         style={btn(!!disabled || value <= min)}
@@ -57,7 +60,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, d
       </Text>
       <button
         type="button"
-        aria-label="Tăng số lượng"
+        aria-label={named('Tăng số lượng')}
         aria-disabled={disabled || value >= max}
         className={!disabled && value < max ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
         style={btn(!!disabled || value >= max)}

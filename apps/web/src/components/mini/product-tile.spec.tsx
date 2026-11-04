@@ -354,6 +354,40 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     expect(lazy.getAttribute('fetchpriority')).toBeNull();
     expect(lazy.getAttribute('alt')).toBe('');
   });
+
+  it('ảnh sản phẩm là trang trí (alt rỗng): liên kết phủ lên đã gọi tên, alt có chữ làm đọc tên hai lần và hai điểm dừng mỗi thẻ', () => {
+    const c = tile(viewOf({ thumbnail: 'https://cdn.example/a.jpg' }), 'grid');
+    expect(c.querySelector('img')!.getAttribute('alt')).toBe('');
+  });
+
+  it('nhãn đầu tên đã nằm trong tên liên kết thì không đọc lại ở mô tả; nhãn trên ảnh (giảm %) vẫn ở mô tả', () => {
+    const v = viewOf({ isFeatured: true }, 'grid');
+    const c = tile(v, 'grid');
+    const text = v.label!.text;
+    expect(link(c).getAttribute('aria-label')!.startsWith(text)).toBe(true);
+    expect(described(c)).not.toContain(v.label!.spoken);
+    const sale = viewOf({ basePrice: 52_000, salePrice: 39_000 }, 'grid');
+    expect(sale.imageBadge).not.toBeNull();
+    expect(described(tile(sale, 'grid'))).toContain(sale.imageBadge!.spoken);
+  });
+
+  it('tên truy cập của liên kết bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3): có nhãn đầu tên thì "nhãn tên", không thì chỉ tên', () => {
+    const labelled = tile(viewOf({ isFeatured: true }, 'grid'), 'grid');
+    const visible = link(labelled).textContent!.trim();
+    expect(viewOf({ isFeatured: true }, 'grid').label).not.toBeNull();
+    expect(link(labelled).getAttribute('aria-label')!.startsWith(visible.slice(0, visible.length - 'Serum Bã Trầu'.length).trim())).toBe(true);
+    expect(link(labelled).getAttribute('aria-label')).toBe(`${viewOf({ isFeatured: true }, 'grid').label!.text} Serum Bã Trầu`);
+    expect(link(tile(viewOf({}, 'grid'), 'grid')).getAttribute('aria-label')).toBe('Serum Bã Trầu');
+  });
+
+  it('imageSizes của nơi gọi thắng sizes mặc định của biến thể; kệ có sizes bằng bề rộng ô', () => {
+    const v = (variant: CardVariant) => viewOf({ thumbnail: 'https://content.pancake.vn/a.jpg' }, variant);
+    expect(tile(v('rail-md'), 'rail-md').querySelector('img')!.getAttribute('sizes')).toBe('148px');
+    expect(tile(v('flash'), 'flash').querySelector('img')!.getAttribute('sizes')).toBe('128px');
+    expect(tile(v('line'), 'line').querySelector('img')!.getAttribute('sizes')).toBe('64px');
+    expect(tile(v('grid'), 'grid', { imageSizes: '33vw' }).querySelector('img')!.getAttribute('sizes')).toBe('33vw');
+    expect(tile(v('grid'), 'grid').querySelector('img')!.getAttribute('sizes')).toContain('calc((100vw - 44px) / 2)');
+  });
 });
 
 describe('ProductTile: cấu trúc truy cập', () => {

@@ -109,4 +109,12 @@ describe('CampaignBanner (web) — banner đầu trang Ưu đãi', () => {
       expect(localStorage.getItem(OFFERS_BANNER_HINT_KEY)).toBeNull();
     });
   });
+
+  it('ảnh banner Ưu đãi tràn khung ~1152px ở lg: sizes riêng, srcset có bản đổi cỡ 1920w', async () => {
+    mocks.get.mockResolvedValue([camp('a', { image: 'https://res.cloudinary.com/tubutree/image/upload/v1/wide.jpg' })]);
+    const c = await mount('OFFERS_TOP', 'new');
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), min(100vw - 48px, 1152px)');
+    expect(img.getAttribute('srcset')!).toMatch(/\/img\?w=1920&u=.* 1920w$/);
+  });
 });

@@ -19,3 +19,21 @@ describe('globals.css: scroll-padding cho thanh dính (a11y A7, WCAG 2.4.11)', (
     expect(m![1]).toMatch(/scroll-padding-bottom:\s*calc\(72px \+ env\(safe-area-inset-bottom, 0px\)\)/);
   });
 });
+
+describe('globals.css: scroll-padding theo chiều cao thanh dính đã đo (A11Y-04)', () => {
+  it('điện thoại có thanh dính: --sticky-bar-h + 16px', () => {
+    const m = /@media \(max-width: 767\.98px\)\s*\{\s*html:has\(body\.has-sticky-bar\)\s*\{([^}]*)\}\s*\}/.exec(css);
+    expect(m, 'thiếu html:has(body.has-sticky-bar)').not.toBeNull();
+    expect(m![1]).toMatch(/scroll-padding-bottom:\s*calc\(var\(--sticky-bar-h\) \+ 16px\)/);
+  });
+
+  it('768–1023 có thanh dính (giỏ, thanh toán): cùng công thức', () => {
+    const m = /@media \(min-width: 768px\) and \(max-width: 1023\.98px\)\s*\{\s*html:has\(body\.has-sticky-bar-lg\)\s*\{([^}]*)\}\s*\}/.exec(css);
+    expect(m, 'thiếu html:has(body.has-sticky-bar-lg)').not.toBeNull();
+    expect(m![1]).toMatch(/scroll-padding-bottom:\s*calc\(var\(--sticky-bar-h\) \+ 16px\)/);
+  });
+
+  it('focus trên nền tối đổi sang vòng trắng (A11Y-01)', () => {
+    expect(css).toMatch(/\[data-surface='inverse'\] :focus-visible\s*\{\s*outline-color:\s*var\(--color-text-inverse\)/);
+  });
+});

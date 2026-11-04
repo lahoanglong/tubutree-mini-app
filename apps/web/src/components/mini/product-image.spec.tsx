@@ -59,14 +59,44 @@ describe('ảnh thay thế thống nhất (B-23)', () => {
   });
 });
 
+function setPending() {
+  const proto = HTMLImageElement.prototype;
+  Object.defineProperty(proto, 'complete', { configurable: true, get: () => false });
+  Object.defineProperty(proto, 'naturalWidth', { configurable: true, get: () => 0 });
+}
+
 describe('ảnh đổi cỡ (R-5)', () => {
+  afterEach(() => {
+    delete (HTMLImageElement.prototype as unknown as Record<string, unknown>).complete;
+    delete (HTMLImageElement.prototype as unknown as Record<string, unknown>).naturalWidth;
+  });
   const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
 
-  it('ảnh Pancake đi qua /img với srcset 1x/2x', () => {
-    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+  it('ảnh Pancake đi qua /img với srcset theo bề rộng w (không dùng 1x/2x) kèm sizes', () => {
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" sizes="170px" /></div>);
     const img = container.querySelector('img')!;
     expect(img.getAttribute('src')).toContain('/img?w=320&u=');
-    expect(img.getAttribute('srcset')).toMatch(/w=320.* 1x, .*w=640.* 2x$/);
+    expect(img.getAttribute('srcset')).toMatch(/w=160&u=[^ ]+ 160w, .*w=320&u=[^ ]+ 320w, .*w=640&u=[^ ]+ 640w$/);
+    expect(img.getAttribute('srcset')).not.toMatch(/\dx\b/);
+    expect(img.getAttribute('sizes')).toBe('170px');
+  });
+
+  it('ảnh ưu tiên (ứng viên LCP): eager + fetchpriority high và không bị ẩn opacity 0 để mờ dần', () => {
+    setPending();
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" priority /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.getAttribute('loading')).toBe('eager');
+    expect(img.getAttribute('fetchpriority')).toBe('high');
+    expect(img.style.opacity).toBe('1');
+  });
+
+  it('ảnh thường chưa tải xong thì ẩn tới onLoad (giữ hiệu ứng hiện dần), lazy, không fetchpriority', () => {
+    setPending();
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.getAttribute('loading')).toBe('lazy');
+    expect(img.hasAttribute('fetchpriority')).toBe(false);
+    expect(img.style.opacity).toBe('0');
   });
 
   it('bản đổi cỡ lỗi thì thử ảnh gốc một lần, gốc cũng lỗi mới rơi về hình lá', () => {

@@ -185,7 +185,7 @@ describe('/tai-khoan/cai-dat: cỡ chữ', () => {
     expect(radios(container).map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
     click(radios(container)[2]!);
     await flush(2);
-    expect(document.documentElement.style.fontSize).toBe('18px');
+    expect(document.documentElement.style.fontSize).toBe('112.5%');
     expect(mocks.storageSet).toHaveBeenCalledWith('tubu_prefs', JSON.stringify({ fontScale: 'large' }));
     expect(radios(container).map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true']);
   });
@@ -202,7 +202,7 @@ describe('/tai-khoan/cai-dat: cỡ chữ', () => {
     mocks.storageGet.mockResolvedValue(JSON.stringify({ fontScale: 'small' }));
     const { container } = await mount();
     expect(radios(container).map((r) => r.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false']);
-    expect(document.documentElement.style.fontSize).toBe('15px');
+    expect(document.documentElement.style.fontSize).toBe('93.75%');
   });
 });
 

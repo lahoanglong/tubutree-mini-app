@@ -149,7 +149,7 @@ describe('Trang Giờ vàng (web): khung giờ và danh sách', () => {
   it('có tiêu đề h1, dải tab khung giờ chọn sẵn khung đang diễn ra, panel gắn với tab', async () => {
     const c = await mount();
     expect(c.querySelector('h1')!.textContent).toBe('Giờ vàng');
-    expect(tabs(c).map((t) => t.getAttribute('aria-label'))).toEqual(['12:00, đang diễn ra', '20:00, sắp diễn ra']);
+    expect(tabs(c).map((t) => t.getAttribute('aria-label'))).toEqual(['12:00 Đang diễn ra', '20:00 Sắp diễn ra']);
     expect(tabs(c)[0]!.getAttribute('aria-selected')).toBe('true');
     expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
     expect(named(c, 'Mua ngay Sản phẩm b')).not.toBeNull();
@@ -457,6 +457,17 @@ describe('Trang Giờ vàng (web): trạng thái tải, rỗng, lỗi', () => {
     mounted.push(r);
     expect(r.container.querySelector('[data-testid="flash-slots-loading"]')).not.toBeNull();
     expect(tabs(r.container)).toHaveLength(0);
+  });
+
+  it('khung chờ cao đúng phần đầu thật: dải tab 56px + dải đồng hồ 44px liền nhau (không khe), rồi mới tới danh sách', () => {
+    const r = render(<FlashSlotsView />);
+    mounted.push(r);
+    const root = r.container.querySelector<HTMLElement>('[data-testid="flash-slots-loading"]')!;
+    expect(root.style.gap).toBe('');
+    const [tabsBar, strip, list] = Array.from(root.children) as HTMLElement[];
+    expect(tabsBar!.style.height).toBe('56px');
+    expect(strip!.style.height).toBe('44px');
+    expect(list!.getAttribute('data-testid')).toBe('flash-items-loading');
   });
 
   it('không có khung nào: trạng thái rỗng, nút dẫn tới danh mục sản phẩm', async () => {

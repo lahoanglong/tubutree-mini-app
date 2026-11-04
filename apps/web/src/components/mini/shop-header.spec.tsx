@@ -17,17 +17,33 @@ describe('ShopHeader (web)', () => {
     expect(b.container.querySelector('h2')!.textContent).toBe('Gian hàng Lan');
   });
 
-  it('chưa có ảnh bìa: bìa phẳng màu token, không gradient', () => {
+  it('chưa có ảnh bìa: bìa phẳng màu token, không gradient, không thẻ img', () => {
     mount(<ShopHeader title="Gian hàng Lan" />);
     expect(q('shop-cover')!.style.background).toContain('var(--color-bg-cover)');
     expect(q('shop-cover')!.style.background).not.toContain('gradient');
+    expect(q('shop-cover')!.querySelector('img')).toBeNull();
   });
 
-  it('có ảnh bìa: URL đặt trong ngoặc kép và ký tự phá chuỗi bị mã hoá', () => {
+  it('có ảnh bìa: là thẻ img phủ kín khung (absolute, object-fit cover), eager + fetchpriority high, không dùng nền CSS', () => {
+    mount(<ShopHeader title="Shop" coverUrl="https://res.cloudinary.com/tubutree/image/upload/v1/cover.jpg" />);
+    const cover = q('shop-cover')!;
+    const img = cover.querySelector('img')!;
+    expect(cover.style.background).not.toContain('url(');
+    expect(img.getAttribute('alt')).toBe('');
+    expect(img.getAttribute('loading')).toBe('eager');
+    expect(img.getAttribute('fetchpriority')).toBe('high');
+    expect(img.style.position).toBe('absolute');
+    expect(img.style.objectFit).toBe('cover');
+    expect(img.getAttribute('src')).toContain('/img?w=960&u=');
+    expect(img.getAttribute('srcset')).toMatch(/ 320w, .* 640w, .* 960w$/);
+    expect(img.getAttribute('sizes')).toBe('(max-width: 1023px) 100vw, 500px');
+  });
+
+  it('ảnh bìa host lạ: dùng nguyên URL làm src (thuộc tính, không thoát khỏi chuỗi), không srcset', () => {
     mount(<ShopHeader title="Shop" coverUrl={'https://x.vn/a") ,url("evil.png'} />);
-    const bg = q('shop-cover')!.style.background;
-    expect(bg).toContain('%22evil.png');
-    expect(bg).not.toContain('"evil');
+    const img = q('shop-cover')!.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('https://x.vn/a") ,url("evil.png');
+    expect(img.hasAttribute('srcset')).toBe(false);
   });
 
   it('avatar chưa có ảnh: biểu tượng lá, không chữ cái; có ảnh thì ảnh không alt', () => {
@@ -39,6 +55,24 @@ describe('ShopHeader (web)', () => {
     const img = q('shop-avatar')!.querySelector('img');
     expect(img?.getAttribute('src')).toBe('/a.png');
     expect(img?.getAttribute('alt')).toBe('');
+  });
+
+  it('avatar đi qua bộ đổi cỡ 160w kèm width/height', () => {
+    mount(<ShopHeader title="Gian hàng Lan" avatarUrl="https://res.cloudinary.com/tubutree/image/upload/v1/av.jpg" />);
+    const img = q('shop-avatar')!.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=160&u=');
+    expect(img.getAttribute('width')).toBe('56');
+    expect(img.getAttribute('height')).toBe('56');
+  });
+
+  it('gian hàng CTV: ảnh trên host khác (Pancake, cloud khác) giữ URL gốc; thương hiệu (admin nhập) thì mọi host https đi qua bộ đổi cỡ', () => {
+    mount(<ShopHeader title="Shop" coverUrl="https://content.pancake.vn/a/cover.jpg" avatarUrl="https://evil.example/av.jpg" />);
+    expect(q('shop-cover')!.querySelector('img')!.getAttribute('src')).toBe('https://content.pancake.vn/a/cover.jpg');
+    expect(q('shop-avatar')!.querySelector('img')!.getAttribute('src')).toBe('https://evil.example/av.jpg');
+    document.body.replaceChildren();
+    mount(<ShopHeader title="Hiệu" imageSource="brand" coverUrl="https://content.pancake.vn/a/cover.jpg" avatarUrl="https://content.pancake.vn/a/av.jpg" />);
+    expect(q('shop-cover')!.querySelector('img')!.getAttribute('src')).toContain('/img?w=');
+    expect(q('shop-avatar')!.querySelector('img')!.getAttribute('src')).toContain('/img?w=160&u=');
   });
 
   it('verified: dấu tích có tên "Đã được Tubu Tree duyệt"; không verified thì không có', () => {
@@ -88,6 +122,12 @@ describe('ShopHeader (web)', () => {
     // Không còn style nội tuyến nào đè được lớp lg: ở phần tử xếp lưới.
     for (const el of [cover, info, nameCell, avatarRow]) expect(el.style.display).toBe('');
     expect(info.style.padding).toBe('');
+  });
+
+  it('khung nút (action) có position: bìa là phần tử định vị nên không có thì bìa đè 18px đầu nút ở khổ md (hàng avatar lùi -mt-7)', () => {
+    mount(<ShopHeader title="Shop" action={<button type="button">Chia sẻ gian hàng</button>} />);
+    const wrapper = document.querySelector('button')!.parentElement!;
+    expect(wrapper.className.split(/\s+/)).toContain('relative');
   });
 
   it('badges và action hiện trong đầu shop', () => {

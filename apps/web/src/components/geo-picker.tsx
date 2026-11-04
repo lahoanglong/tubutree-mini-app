@@ -49,6 +49,7 @@ export function GeoPicker({
         </label>
         <select
           id={provinceId}
+          aria-required="true"
           aria-invalid={errorProvince ? true : undefined}
           value={value.provinceCode}
           onChange={(e) => {
@@ -82,6 +83,7 @@ export function GeoPicker({
         </label>
         <select
           id={wardId}
+          aria-required="true"
           aria-invalid={errorWard ? true : undefined}
           value={value.wardCode}
           disabled={!value.provinceCode}

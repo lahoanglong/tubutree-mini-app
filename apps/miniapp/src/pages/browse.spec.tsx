@@ -156,7 +156,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     it('thương hiệu: đủ 4 nhãn mới có lưới; chạm → /browse?brand=<tên>', async () => {
       mocks.fetchBrands.mockResolvedValue([{ brand: 'Tubu', count: 9 }, { brand: 'Cỏ Mềm', count: 5 }, { brand: 'Xanh', count: 3 }, { brand: 'Lá', count: 2 }]);
       renderAt('/browse');
-      fireEvent.click(await screen.findByRole('button', { name: 'Xem thương hiệu Cỏ Mềm' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Cỏ Mềm, xem thương hiệu' }));
       expect(mocks.navigate).toHaveBeenCalledWith('/browse?brand=C%E1%BB%8F+M%E1%BB%81m');
     });
 
@@ -369,12 +369,12 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       await listPainted();
       fireEvent.click(screen.getByRole('button', { name: 'Giá, chạm để xếp từ thấp đến cao' }));
       await waitFor(() => expect(loc()).toBe('/browse?sort=price_asc'));
-      const asc = await screen.findByRole('button', { name: 'Giá từ thấp đến cao, chạm để đổi chiều' });
+      const asc = await screen.findByRole('button', { name: 'Giá thấp, từ thấp đến cao' });
       expect(asc).toHaveAttribute('aria-pressed', 'true');
       expect(asc).toHaveTextContent('Giá thấp');
       fireEvent.click(asc);
       await waitFor(() => expect(loc()).toBe('/browse?sort=price_desc'));
-      const desc = await screen.findByRole('button', { name: 'Giá từ cao đến thấp, chạm để đổi chiều' });
+      const desc = await screen.findByRole('button', { name: 'Giá cao, từ cao đến thấp' });
       expect(desc).toHaveAttribute('aria-pressed', 'true');
       expect(desc).toHaveTextContent('Giá cao');
       await waitFor(() => expect(catalogCalls().some((q) => q.sort === 'price_desc')).toBe(true));

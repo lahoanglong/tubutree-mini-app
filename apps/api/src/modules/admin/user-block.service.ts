@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../common/admin-roster';
 
@@ -16,6 +17,7 @@ export class UserBlockService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionStateService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   async block(adminId: string, userId: string, rawReason: string) {
@@ -43,6 +45,8 @@ export class UserBlockService {
       return { ...updated, revokedSessions: count };
     });
     this.sessions.invalidate(userId);
+    // Gian hàng của người bị khoá/mở khoá đổi trạng thái hiển thị, danh sách ảnh cho /img phải nạp lại.
+    this.imageStale?.markStale();
     this.logger.warn(`Admin ${adminId} khoá user ${userId} (thu hồi ${result.revokedSessions} phiên): ${reason}`);
     return result;
   }
@@ -63,6 +67,7 @@ export class UserBlockService {
       recordUserAdminEvent(this.prisma, { userId, kind: 'UNBLOCK', actorId: adminId }),
     ]);
     this.sessions.invalidate(userId);
+    this.imageStale?.markStale();
     this.logger.warn(`Admin ${adminId} mở khoá user ${userId}.`);
     return updated;
   }

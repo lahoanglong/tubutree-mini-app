@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import { act } from 'react';
 import { join } from 'node:path';
 import { Baby, LayoutGrid } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -174,6 +175,15 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ key: 'c1' }));
     click(c.querySelector('button[aria-label="Tất cả danh mục"]'));
     expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('ảnh danh mục đi qua bộ đổi cỡ; bộ đổi cỡ lỗi thì lùi về ảnh gốc một lần', () => {
+    const orig = 'https://content.pancake.vn/2-26/c.jpg';
+    mounted = render(<CategoryRow entries={[{ kind: 'category', key: 'a', label: 'Có ảnh', icon: LayoutGrid, image: orig }]} isLoading={false} onSelect={vi.fn()} />);
+    const img = mounted.container.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=');
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
   });
 
   it('không truyền onSeeAll thì không có ô "Tất cả"', () => {

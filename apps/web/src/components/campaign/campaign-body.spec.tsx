@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
@@ -69,6 +70,35 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/me'))).toEqual([]);
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
+  });
+
+  it('ảnh đầu trang qua bộ đổi cỡ (srcset w + sizes), eager + fetchpriority high vì là ảnh to nhất màn đầu', async () => {
+    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://res.cloudinary.com/tubutree/image/upload/v1/hero.jpg' }} initialProducts={page([1, 2, 3], 1, 3)} />);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=960&u=');
+    expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
+    expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), 768px');
+    expect(img.getAttribute('loading')).toBe('eager');
+    expect(img.getAttribute('fetchpriority')).toBe('high');
+  });
+
+  it('ảnh đầu trang không phải Cloudinary/API (vd Pancake): giữ URL gốc, không srcset', async () => {
+    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://content.pancake.vn/2-26/hero.jpg' }} initialProducts={page([1], 1, 1)} />);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('https://content.pancake.vn/2-26/hero.jpg');
+    expect(img.hasAttribute('srcset')).toBe(false);
+  });
+
+  it('bản đổi cỡ (1x hoặc 1280/1920) lỗi thì lùi về ảnh gốc đúng một lần, lỗi tiếp thì để yên', async () => {
+    const orig = 'https://res.cloudinary.com/tubutree/image/upload/v1/hero.jpg';
+    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: orig }} initialProducts={page([1], 1, 1)} />);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=');
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
+    expect(img.hasAttribute('srcset')).toBe(false);
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
   });
 
   it('ảnh đầu trang giữ tỉ lệ banner nên không nhảy khi ảnh về', async () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -46,6 +46,11 @@ const CLAIMED = {
   newCustomerOnly: true,
   alreadyClaimed: false,
 };
+
+// Phần giao diện cổng tải bằng next/dynamic: nạp trước để lần dựng đầu không phải chờ chunk.
+beforeAll(async () => {
+  await import('./coupon-claim-gate-ui');
+});
 
 let host: { container: HTMLDivElement; root: Root; client: QueryClient } | null = null;
 const draw = () =>
@@ -106,6 +111,18 @@ describe('CouponClaimGate: nhận ưu đãi từ thẻ QR hộp hàng (D2-03)', 
     click(byText(body, 'button', 'Dùng ngay'));
     expect(mocks.push).toHaveBeenCalledWith('/san-pham');
     expect(sheet()).toBeNull();
+  });
+
+  it('link ?claim=: mã được lưu và xoá khỏi URL ngay lúc gắn, trước khi phần giao diện tải xong (khách bấm sang trang khác sớm không mất mã)', async () => {
+    open('/?claim=shopee-ab12cd34&utm=box');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    host = { container, root: createRoot(container), client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) };
+    draw();
+    // Chưa flush: next/dynamic chưa kịp nạp phần giao diện, mà mã đã lưu và URL đã sạch.
+    expect(window.location.search).toBe('?utm=box');
+    expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34');
+    unmount();
   });
 
   it('giỏ đã có hàng: "Dùng ngay" mở giỏ; mã đã có trong ví thì nói vậy', async () => {

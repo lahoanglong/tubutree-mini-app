@@ -24,7 +24,9 @@ describe('bề mặt kiểu Mini App ở điện thoại', () => {
     expect(miniBtnSecondary).toContain('max-md:border-transparent');
     expect(miniBtnSecondary).toContain('max-md:bg-forest-50');
     expect(miniBtnSecondary).toContain('max-md:text-forest-700');
-    expect(miniBtnSecondary).toContain('max-md:disabled:bg-stone-200');
+    expect(miniBtnSecondary).toContain('bg-stone-100');
+    expect(miniBtnSecondary).toContain('text-stone-500');
+    expect(miniBtnSecondary).toContain('[aria-disabled=true]');
   });
 });
 

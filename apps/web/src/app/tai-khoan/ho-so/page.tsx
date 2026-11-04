@@ -43,6 +43,9 @@ const errorText = loadErrorText;
 /** Ô nhập của Mini App cao khoảng 50px (Input của zmp-ui), cao hơn ô 44px của web. */
 const FIELD_MINI = 'max-md:min-h-[50px]';
 
+// Hàm ổn định (không tạo mới mỗi lần vẽ) để ref chỉ chạy lúc hộp xuất hiện, không giật focus ở các lần vẽ lại.
+const focusOnMount = (el: HTMLElement | null) => el?.focus();
+
 export default function EditProfilePage() {
   const { user, updateProfile } = useAuth();
   const phase = useAuthPhase();
@@ -242,11 +245,14 @@ export default function EditProfilePage() {
         ) : (
           avatarFigure
         )}
-        {avatarMsg && (
-          <p role={avatarMsg.kind === 'error' ? 'alert' : 'status'} className={`mt-2 text-center text-sm ${avatarMsg.kind === 'error' ? 'text-danger-fg' : 'text-success-fg'}`}>
-            {avatarMsg.text}
-          </p>
-        )}
+        {/* Vùng báo luôn có mặt trong cây, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
+        <div role="status">
+          {avatarMsg && (
+            <p role={avatarMsg.kind === 'error' ? 'alert' : undefined} className={`mt-2 text-center text-sm ${avatarMsg.kind === 'error' ? 'text-danger-fg' : 'text-success-fg'}`}>
+              {avatarMsg.text}
+            </p>
+          )}
+        </div>
       </div>
 
       <Field label="Họ và tên">
@@ -273,6 +279,7 @@ export default function EditProfilePage() {
               ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, autoComplete: 'bday', value: dobText }
               : { type: 'text', value: formatDobDisplay(me?.dob) || dob })}
             readOnly={!dobEditable || confirmingDob}
+            aria-describedby="profile-dob-hint"
             aria-invalid={dobError ? true : undefined}
             onBlur={() => setDobTouched(true)}
             onChange={(e) => {
@@ -284,9 +291,13 @@ export default function EditProfilePage() {
           />
         </Field>
         {dobDisplay && dobNew && <p className="mt-1 text-xs text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
-        <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
+        <p id="profile-dob-hint" className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
-          Nhận mã giảm giá quà tặng vào tháng sinh nhật.{me?.dob ? ' Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.' : ''}
+          <span>
+            Nhận mã giảm giá quà tặng vào tháng sinh nhật.{me?.dob ? ' Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.' : ''}
+            {/* Mini App chỉ có placeholder; ở web định dạng nằm trong mô tả của ô (placeholder không phải nhãn và biến mất khi gõ). */}
+            {dobEditable && <span className="sr-only"> Nhập theo dạng ngày/tháng/năm, ví dụ 25/12/1990.</span>}
+          </span>
         </p>
       </div>
 
@@ -306,7 +317,7 @@ export default function EditProfilePage() {
       </p>
 
       {confirmingDob && dobNew ? (
-        <div role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} className="flex flex-col gap-2 rounded-card bg-stone-50 p-3 max-md:bg-[var(--color-bg-subtle)]">
+        <div ref={focusOnMount} tabIndex={-1} role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} className="flex outline-none flex-col gap-2 rounded-card bg-stone-50 p-3 max-md:bg-[var(--color-bg-subtle)]">
           <p className="text-sm text-stone-900">{profileCopy.dobConfirm(dobDisplay)}</p>
           <button type="submit" aria-busy={save.isPending ? 'true' : undefined} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
             {profileCopy.dobConfirmYes}

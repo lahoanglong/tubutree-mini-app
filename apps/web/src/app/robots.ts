@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { NOINDEX_PUBLIC_PATHS, PRIVATE_PATHS, SITE_URL } from '@/lib/site';
+import { PRIVATE_PATHS, SITE_URL } from '@/lib/site';
 import { publicAllowPaths } from '@/lib/route-map';
 
 /**
@@ -13,8 +13,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        // Longest-match: route công khai dưới tiền tố riêng tư (vd /doi-rac/quy-dinh) được mở lại; trang noindex tự thân thì không.
-        allow: ['/', ...publicAllowPaths(PRIVATE_PATHS).filter((p) => !NOINDEX_PUBLIC_PATHS.includes(p))],
+        // Longest-match: route công khai dưới tiền tố riêng tư (vd /doi-rac/quy-dinh) được mở lại. /uu-dai và /ma-giam-gia không có ở đây
+        // lẫn ở disallow: chúng noindex bằng meta nên crawler phải đọc được trang.
+        allow: ['/', ...publicAllowPaths(PRIVATE_PATHS)],
         disallow: [...PRIVATE_PATHS, ...PRIVATE_PATHS.map((p) => `${p}/`)],
       },
     ],

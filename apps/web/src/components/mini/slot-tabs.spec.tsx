@@ -8,9 +8,9 @@ import { mount } from './harness';
 import { SlotTabs, slotTabId } from './slot-tabs';
 
 const TABS: SlotTab[] = [
-  { id: 'a', clock: '12:00', caption: 'Đang diễn ra', spoken: '12:00, đang diễn ra', status: 'LIVE' },
-  { id: 'b', clock: '20:00', caption: 'Sắp diễn ra', spoken: '20:00, sắp diễn ra', status: 'UPCOMING' },
-  { id: 'c', clock: '12:00', caption: 'Ngày mai', spoken: '12:00, ngày mai', status: 'UPCOMING' },
+  { id: 'a', clock: '12:00', caption: 'Đang diễn ra', spoken: '12:00 Đang diễn ra', status: 'LIVE' },
+  { id: 'b', clock: '20:00', caption: 'Sắp diễn ra', spoken: '20:00 Sắp diễn ra', status: 'UPCOMING' },
+  { id: 'c', clock: '12:00', caption: 'Ngày mai', spoken: '12:00 Ngày mai', status: 'UPCOMING' },
 ];
 
 function Harness({ onChange = () => {}, initial = 'a' }: { onChange?: (id: string) => void; initial?: string }) {
@@ -40,10 +40,10 @@ const key = (k: string) =>
   });
 
 describe('SlotTabs (web)', () => {
-  it('tablist có tên "Khung giờ"; mỗi tab đọc "12:00, đang diễn ra", chỉ tab đang chọn nằm trong thứ tự Tab', () => {
+  it('tablist có tên "Khung giờ"; mỗi tab đọc "12:00 Đang diễn ra", chỉ tab đang chọn nằm trong thứ tự Tab', () => {
     mount(<Harness />);
     expect(document.querySelector('[role="tablist"]')!.getAttribute('aria-label')).toBe('Khung giờ');
-    expect(tabs().map((t) => t.getAttribute('aria-label'))).toEqual(['12:00, đang diễn ra', '20:00, sắp diễn ra', '12:00, ngày mai']);
+    expect(tabs().map((t) => t.getAttribute('aria-label'))).toEqual(['12:00 Đang diễn ra', '20:00 Sắp diễn ra', '12:00 Ngày mai']);
     expect(tabs().map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
     expect(tabs().map((t) => t.tabIndex)).toEqual([0, -1, -1]);
   });
@@ -57,8 +57,8 @@ describe('SlotTabs (web)', () => {
 
   it('hiện giờ và chú thích bằng chữ nhìn thấy', () => {
     mount(<Harness />);
-    expect(tabs()[0]!.textContent).toBe('12:00Đang diễn ra');
-    expect(tabs()[2]!.textContent).toBe('12:00Ngày mai');
+    expect(tabs()[0]!.textContent).toBe('12:00 Đang diễn ra');
+    expect(tabs()[2]!.textContent).toBe('12:00 Ngày mai');
   });
 
   it('ArrowRight/ArrowLeft chọn tab kế và chuyển tiêu điểm theo (quay vòng)', () => {

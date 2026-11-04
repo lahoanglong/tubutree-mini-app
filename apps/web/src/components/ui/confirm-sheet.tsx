@@ -1,6 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/confirm-sheet.tsx (cùng props; web dựng từ Sheet)
+import { useId } from 'react';
 import { Button, Text } from '@/components/mini';
 import { Sheet } from './sheet';
 
@@ -19,9 +20,12 @@ export interface ConfirmSheetProps {
 
 /** Tấm xác nhận một bước thay cho `window.confirm`: sheet đáy ở điện thoại, hộp giữa màn hình từ md, giống ConfirmSheet của Mini App. */
 export function ConfirmSheet({ open, title, message, confirmLabel, cancelLabel = 'Huỷ', tone = 'default', loading, onConfirm, onCancel }: ConfirmSheetProps) {
+  const messageId = useId();
   return (
     <Sheet
       open={open}
+      role="alertdialog"
+      describedBy={message ? messageId : undefined}
       onClose={onCancel}
       title={title}
       dismissible={!loading}
@@ -36,7 +40,11 @@ export function ConfirmSheet({ open, title, message, confirmLabel, cancelLabel =
         </div>
       }
     >
-      {message && <Text variant="body-sm" tone="secondary" as="p">{message}</Text>}
+      {message && (
+        <div id={messageId}>
+          <Text variant="body-sm" tone="secondary" as="p">{message}</Text>
+        </div>
+      )}
     </Sheet>
   );
 }

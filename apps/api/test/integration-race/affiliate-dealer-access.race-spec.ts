@@ -6,6 +6,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
 import { StorefrontService } from '../../src/modules/storefront/storefront.service';
+import { ImageRegistryStale } from '../../src/modules/catalog/image-registry-stale';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
@@ -33,6 +34,7 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
         RewardPointsService,
         AffiliateService,
         StorefrontService,
+        ImageRegistryStale,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],

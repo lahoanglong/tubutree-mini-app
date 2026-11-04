@@ -4,9 +4,13 @@ import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LeafGlyph } from '@/components/mini/product-image';
 import { useSizedImage } from '@/lib/image-src';
+import { PDP_MAIN_IMAGE_SIZES } from '@/lib/image-sizes';
 
-/** Bề rộng ảnh chính (CSS px) ở khổ máy tính: chọn bản đổi cỡ 640 (1x) và 960 (2x). */
+/** Bề rộng ảnh chính lớn nhất (CSS px): máy tính bảng dọc, 767px tràn mép. */
 const MAIN_IMAGE_WIDTH = 600;
+
+/** Điện thoại: ảnh tràn mép (100vw); md: nửa khung trang (lề 24, khe 32); lg: cột trái 440px (pdp-layout). */
+const MAIN_IMAGE_SIZES = PDP_MAIN_IMAGE_SIZES;
 
 // Điện thoại: ảnh tràn mép, vuông, không viền như Gallery của Mini App; từ md là khung bo góc.
 const FRAME =
@@ -14,15 +18,16 @@ const FRAME =
 const ARROW =
   'absolute top-1/2 z-10 flex h-11 w-11 min-h-11 -translate-y-1/2 items-center justify-center rounded-full bg-stone-0/90 text-stone-900 shadow-card transition hover:bg-stone-0 disabled:hidden max-md:hidden';
 
-/** Ảnh chính của một slide: bản đổi cỡ 1x/2x, lỗi thì thử ảnh gốc một lần rồi báo hỏng để rơi về hình lá. */
+/** Ảnh chính của một slide: bản đổi cỡ theo bề rộng, lỗi thì thử ảnh gốc một lần rồi báo hỏng để rơi về hình lá. */
 function SlideImage({ src, alt, eager, onBroken }: { src: string; alt: string; eager: boolean; onBroken: () => void }) {
-  const { img, fallBack } = useSizedImage(src, MAIN_IMAGE_WIDTH);
+  const { img, fallBack } = useSizedImage(src, MAIN_IMAGE_WIDTH, MAIN_IMAGE_SIZES);
   if (!img) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={img.src}
       srcSet={img.srcSet}
+      sizes={img.sizes}
       alt={alt}
       className="h-full w-full object-contain"
       width={800}

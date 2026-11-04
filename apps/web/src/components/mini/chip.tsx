@@ -1,6 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/chip.tsx
+import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from './icon';
@@ -9,6 +10,8 @@ export interface ChipProps {
   children: ReactNode;
   selected?: boolean;
   onPress?: () => void;
+  /** Có `href` thì vẽ `<Link>` (liên kết thật, công cụ tìm kiếm đi theo được) với đúng kiểu của chip; không lồng nút trong liên kết. */
+  href?: string;
   icon?: LucideIcon;
   count?: number;
   size?: 'sm' | 'md';
@@ -31,6 +34,7 @@ export function Chip({
   children,
   selected,
   onPress,
+  href,
   icon: IconCmp,
   count,
   size = 'md',
@@ -38,39 +42,46 @@ export function Chip({
   className,
   style,
 }: ChipProps) {
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      aria-label={ariaLabel}
-      className={['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ')}
-      onClick={onPress}
-      style={{
-        border: 'none',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        lineHeight: 'inherit',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        background: selected ? 'var(--color-action-primary-bg)' : size === 'md' ? 'var(--color-bg-surface)' : 'var(--color-bg-chip)',
-        boxShadow: !selected && size === 'md' ? 'inset 0 0 0 1px var(--color-border-subtle)' : undefined,
-        color: selected ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
-        fontWeight: 600,
-        fontSize: 'var(--type-body-sm-size)',
-        padding: size === 'md' ? '7px 14px' : '6px 10px',
-        minHeight: size === 'md' ? 36 : 32,
-        minWidth: 44,
-        flexShrink: 0,
-        borderRadius: 'var(--radius-pill)',
-        whiteSpace: 'nowrap',
-        boxSizing: 'border-box',
-        ...style,
-      }}
-    >
+  const chipClass = ['tubu-press', 'tubu-hit-44', className].filter(Boolean).join(' ');
+  const baseStyle: CSSProperties = {
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    lineHeight: 'inherit',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    background: selected ? 'var(--color-action-primary-bg)' : size === 'md' ? 'var(--color-bg-surface)' : 'var(--color-bg-chip)',
+    boxShadow: !selected && size === 'md' ? 'inset 0 0 0 1px var(--color-border-subtle)' : undefined,
+    color: selected ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
+    fontWeight: 600,
+    fontSize: 'var(--type-body-sm-size)',
+    padding: size === 'md' ? '7px 14px' : '6px 10px',
+    minHeight: size === 'md' ? 36 : 32,
+    minWidth: 44,
+    flexShrink: 0,
+    borderRadius: 'var(--radius-pill)',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box',
+    ...style,
+  };
+  const content = (
+    <>
       {IconCmp && <Icon icon={IconCmp} size="sm" tone={selected ? 'inverse' : 'muted'} />}
       {children}
       {typeof count === 'number' && <span style={{ fontWeight: 500 }}>({count})</span>}
+    </>
+  );
+  if (href) {
+    return (
+      <Link href={href} aria-label={ariaLabel} className={chipClass} {...(onPress ? { onClick: onPress } : {})} style={{ ...baseStyle, textDecoration: 'none' }}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" aria-pressed={selected} aria-label={ariaLabel} className={chipClass} onClick={onPress} style={baseStyle}>
+      {content}
     </button>
   );
 }

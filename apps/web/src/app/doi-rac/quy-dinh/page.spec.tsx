@@ -21,7 +21,7 @@ afterEach(() => {
 
 describe('/doi-rac/quy-dinh (trang công khai)', () => {
   it('metadata: có tiêu đề, mô tả, canonical và không chặn lập chỉ mục', () => {
-    expect(metadata.title).toBe('Thể lệ Đổi rác lấy quà — Tubu Tree');
+    expect(metadata.title).toBe('Thể lệ Đổi rác lấy quà');
     expect(metadata.description).toBeTruthy();
     expect(metadata.alternates?.canonical).toBe('/doi-rac/quy-dinh');
     expect(metadata.robots).toBeUndefined();

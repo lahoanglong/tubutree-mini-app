@@ -107,9 +107,12 @@ export function MemberCard() {
         <button
           type="button"
           className="tubu-press"
-          disabled={!checkInView?.canCheckIn || pending}
+          disabled={!checkInView?.canCheckIn}
+          aria-disabled={pending || undefined}
           aria-busy={pending || undefined}
-          onClick={checkIn}
+          onClick={() => {
+            if (!pending) checkIn();
+          }}
           style={{
             flex: '0 0 auto',
             minWidth: 96,
@@ -129,11 +132,10 @@ export function MemberCard() {
           {checkInView?.buttonLabel ?? homeCopy.member.checkInLoading}
         </button>
       </div>
-      {message && (
-        <p role="status" style={{ margin: '8px 0 0', fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>
-          {message.text}
-        </p>
-      )}
+      {/* Vùng báo luôn có mặt (chỉ đổi chữ bên trong) để trình đọc màn hình đọc ra kết quả điểm danh. */}
+      <p role="status" style={{ margin: message ? '8px 0 0' : 0, fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>
+        {message?.text}
+      </p>
     </section>
   );
 }

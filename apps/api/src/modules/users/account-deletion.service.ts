@@ -6,6 +6,7 @@ import { formatVndText as vnd } from '../../common/format-vnd';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
@@ -115,6 +116,7 @@ export class AccountDeletionService {
     @Optional() @Inject(PARTNER_STORE_BLOCKERS) private readonly partnerStores?: PartnerStoreBlockersPort,
     @Optional() private readonly sessions?: SessionStateService,
     @Optional() private readonly config?: SystemConfigService,
+    @Optional() @Inject(ImageRegistryStale) private readonly imageStale?: ImageRegistryStale,
   ) {}
 
   /** `returns.window_days` (cùng khoá, mặc định 7 và cách xử lý giá trị sai như OrdersReturns / LoyaltyService.returnWindowDays). */
@@ -207,6 +209,8 @@ export class AccountDeletionService {
     }
     // Bộ nhớ đệm phiên (SessionStateService, TTL 5 giây) còn coi chủ vừa bị ẩn danh là đang đăng nhập: cắt ngay như khoá tài khoản.
     this.sessions?.invalidate(result.userId);
+    // Ẩn danh gỡ ảnh đại diện/bìa và ẩn gian hàng của chủ: danh sách ảnh của /img phải thôi giữ ảnh đó (quyền riêng tư), không đợi hết TTL.
+    if (!result.alreadyProcessed) this.imageStale?.markStale();
     return result;
   }
 

@@ -31,7 +31,7 @@ export interface BestSellerRailProps {
 
 /**
  * Bán chạy nhất (Q18, bản web của `best-seller-rail.tsx` ở Mini App) cho MỌI khách: một hàng thẻ có hạng #1..#n xếp theo lượt bán 30 ngày, "Xem tất cả" tới trang
- * xếp hạng. Đứng sau Danh mục; khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
+ * xếp hạng. Đứng sau Giờ vàng và Danh mục (dưới màn đầu 375×812 nên không đặt ảnh ưu tiên: ảnh sát màn hình vẫn được trình duyệt tải sớm); khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
  */
 export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, retrying }: BestSellerRailProps) {
   const title = fillCopy('rank.title');
@@ -42,7 +42,7 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
   return (
     <section aria-label={title}>
       <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
-      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={ranks !== undefined && !ranksAreSequential(ranks)} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={2} />
+      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={ranks !== undefined && !ranksAreSequential(ranks)} items={items} loading={loading} skeletonCount={SKELETON_COUNT} />
     </section>
   );
 }

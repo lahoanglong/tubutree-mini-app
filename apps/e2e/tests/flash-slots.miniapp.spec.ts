@@ -42,9 +42,9 @@ test.describe('Mini App — Giờ vàng theo khung: khách đã đăng nhập', 
     await expect(page.getByRole('heading', { level: 1, name: 'Giờ vàng' })).toBeVisible({ timeout: 15_000 });
     const tabs = page.getByRole('tablist', { name: 'Khung giờ' });
     await expect(tabs.getByRole('tab')).toHaveCount(3);
-    await expect(tabs.getByRole('tab', { name: '12:00, đang diễn ra' })).toHaveAttribute('aria-selected', 'true');
-    await expect(tabs.getByRole('tab', { name: '20:00, sắp diễn ra' })).toHaveAttribute('aria-selected', 'false');
-    await expect(tabs.getByRole('tab', { name: '12:00, ngày mai' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: '12:00 Đang diễn ra' })).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.getByRole('tab', { name: '20:00 Sắp diễn ra' })).toHaveAttribute('aria-selected', 'false');
+    await expect(tabs.getByRole('tab', { name: '12:00 Ngày mai' })).toBeVisible();
     await expect(page.getByRole('timer')).toHaveCount(1);
 
     const chips = page.getByRole('group', { name: 'Danh mục' });
@@ -76,9 +76,9 @@ test.describe('Mini App — Giờ vàng theo khung: khách đã đăng nhập', 
     // Hàng tiêu đề trang cũng cao đúng 56px nên chỗ dính trùng chỗ nằm yên: đã cuộn quá 600px mà tab vẫn ở 56px là bằng chứng của việc dính.
     await expect.poll(async () => Math.round((await tablist.boundingBox())!.y), { timeout: 5_000 }).toBe(56);
     await expect(page.getByRole('timer')).toBeInViewport();
-    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeInViewport();
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
-    await expect(page.getByRole('tab', { name: '20:00, sắp diễn ra' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: '12:00 Đang diễn ra' })).toBeInViewport();
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
+    await expect(page.getByRole('tab', { name: '20:00 Sắp diễn ra' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true })).toBeVisible();
   });
 
@@ -95,11 +95,11 @@ test.describe('Mini App — Giờ vàng theo khung: khách đã đăng nhập', 
 
   test('phím mũi tên chuyển tab sang 20:00 (Nhắc tôi thay Mua ngay); bấm Nhắc tôi gửi POST remind, bấm lại gửi DELETE', async ({ page, api }) => {
     await page.goto('/flash-sale');
-    const live = page.getByRole('tab', { name: '12:00, đang diễn ra' });
+    const live = page.getByRole('tab', { name: '12:00 Đang diễn ra' });
     await expect(live).toBeVisible({ timeout: 15_000 });
     await live.focus();
     await page.keyboard.press('ArrowRight');
-    const next = page.getByRole('tab', { name: '20:00, sắp diễn ra' });
+    const next = page.getByRole('tab', { name: '20:00 Sắp diễn ra' });
     await expect(next).toHaveAttribute('aria-selected', 'true');
     await expect(next).toBeFocused();
     await expect(buyButtons(page)).toHaveCount(0);
@@ -152,9 +152,9 @@ test.describe('Mini App — Giờ vàng theo khung: khách chưa đăng nhập',
     mockNoSession(api);
     mockFlashSlots(api);
     await page.goto('/flash-sale');
-    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: '12:00 Đang diễn ra' })).toBeVisible({ timeout: 15_000 });
     await expect(buyButtons(page).first()).toBeVisible();
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
     const remind = page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true });
     await expect(remind).toBeVisible({ timeout: 10_000 });
 
@@ -181,8 +181,8 @@ test.describe('Mini App — Giờ vàng: bấm Nhắc tôi khi chưa đăng nh�
     mockNoSession(api);
     const reminded = mockFlashSlots(api, { remindedIds });
     await page.goto('/flash-sale');
-    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await expect(page.getByRole('tab', { name: '12:00 Đang diễn ra' })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('tab', { name: '20:00 Sắp diễn ra' }).click();
     const remind = page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true });
     await expect(remind).toBeVisible({ timeout: 10_000 });
     const authCalls = () => api.callsTo('POST', '/auth/guest').length + api.callsTo('POST', '/auth/zalo-mini-app').length;

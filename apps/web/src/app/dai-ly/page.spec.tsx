@@ -87,7 +87,7 @@ const mount = async (search = '') => {
 const posts = (path: string) => m.calls.filter((c) => c.method === 'post' && c.path === path);
 const button = (name: string | RegExp) =>
   Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => (typeof name === 'string' ? (b.getAttribute('aria-label') ?? b.textContent) === name : name.test(b.getAttribute('aria-label') ?? b.textContent ?? '')))!;
-const plus = () => document.querySelector<HTMLButtonElement>('button[aria-label="Tăng số lượng"]')!;
+const plus = () => document.querySelector<HTMLButtonElement>('button[aria-label^="Tăng số lượng"]')!;
 const tab = (label: string) => Array.from(document.querySelectorAll<HTMLElement>('[role="tab"]')).find((t) => t.textContent === label)!;
 const setup = (over: Record<string, unknown> = {}) => {
   m.data = {

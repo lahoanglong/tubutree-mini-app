@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -521,7 +522,7 @@ describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () =>
     const box = await apply('FS', { couponCode: 'FS', freeship: true }, [{ code: 'FS', eligible: false, reason: REASON, discount: 0 }]);
     expect(state.applied).toEqual(['FS']);
     expect(warn(box)!.textContent).toBe(`Mã chưa được áp dụng cho đơn này: ${REASON}`);
-    expect(warn(box)!.getAttribute('role')).toBe('status');
+    expect(warn(box)!.closest('[role="status"]')).not.toBeNull();
   });
 
   it('xem trước eligible:true: không báo', async () => {
@@ -570,6 +571,59 @@ describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () =>
       await vi.advanceTimersByTimeAsync(5100);
       await flush(2);
       expect(warn(box)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('CouponBox — vùng báo và đồng hồ lời báo (A11Y-02, A11Y-05)', () => {
+  const warnBox = (box: HTMLElement) => box.querySelector<HTMLElement>('[data-testid="coupon-apply-warning"]');
+  const REASON2 = 'Đơn tối thiểu 500.000đ';
+  const setup = async () => {
+    state.coupons = [c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
+    state.previews.mockResolvedValue([{ code: 'FS', eligible: false, reason: REASON2, discount: 0 }]);
+    state.applyCart = { couponCode: 'FS', freeship: true };
+    const r = render(<CouponBox currentCode={null} subtotal={300000} shippingFee={0} preview={{ addressId: 'a1' }} />);
+    mounted.push(r);
+    await flush(8);
+    return r.container;
+  };
+  const applyCode = async (box: HTMLElement) => {
+    click(box.querySelector<HTMLButtonElement>('button[aria-controls="coupon-panel"]')!);
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'fs');
+    click(byText(box, 'button', 'Áp dụng'));
+    await flush(6);
+  };
+
+  it('A11Y-02: vùng role=status có sẵn trước khi có lời báo; lời báo đến thì chính nút DOM đó chứa chữ', async () => {
+    const box = await setup();
+    const region = box.querySelector('[role="status"]:not([aria-label])')!;
+    expect(region).not.toBeNull();
+    expect(region.textContent).toBe('');
+    await applyCode(box);
+    expect(region.isConnected).toBe(true);
+    expect(box.querySelector('[role="status"]:not([aria-label])')).toBe(region);
+    expect(region.textContent).toContain(REASON2);
+  });
+
+  it('A11Y-05: lời báo không tắt khi trỏ đang ở trên nó, rời đi thì đếm lại đủ 5 giây', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const box = await setup();
+      await applyCode(box);
+      const note = warnBox(box)!;
+      act(() => { note.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); });
+      await vi.advanceTimersByTimeAsync(20_000);
+      await flush(2);
+      expect(warnBox(box)).not.toBeNull();
+      act(() => { note.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); });
+      await vi.advanceTimersByTimeAsync(4_000);
+      await flush(2);
+      expect(warnBox(box)).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(1_200);
+      await flush(2);
+      expect(warnBox(box)).toBeNull();
     } finally {
       vi.useRealTimers();
     }

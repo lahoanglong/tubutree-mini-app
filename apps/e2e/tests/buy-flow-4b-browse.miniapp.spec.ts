@@ -222,7 +222,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await page.goBack();
 
     await expect(page).toHaveURL(/\/browse\?segment=eco&sort=price_desc$/, { timeout: 15_000 });
-    await expect(sortGroup.getByRole('button', { name: /^Giá từ cao đến thấp/ })).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
+    await expect(sortGroup.getByRole('button', { name: /^Giá cao, từ cao đến thấp/ })).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     await expect(page.getByRole('heading', { level: 2, name: 'Sống xanh' })).toBeVisible(); // tên phân khúc là tiêu đề, không còn chip
     await expect(page.getByTestId('result-count')).toHaveText('26 sản phẩm', { timeout: 15_000 });
     await expect(tile).toBeVisible();
