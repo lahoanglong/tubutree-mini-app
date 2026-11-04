@@ -18,8 +18,9 @@ export const metadata: Metadata = {
   // metadataBase để ảnh openGraph khai bằng đường dẫn tương đối dựng được URL tuyệt đối (thiếu
   // nó thì link chia sẻ mất ảnh và Next cảnh báo mỗi lần build).
   metadataBase: new URL(SITE_URL),
-  title: 'Tubu Tree — Sống xanh An Lành',
-  description: 'Mỹ phẩm & đồ tiêu dùng thiên nhiên Tubu Tree.',
+  // Template chỉ áp lên title dạng chuỗi của trang con; trang cần tiêu đề nguyên văn (trang chủ) dùng `title: { absolute }`.
+  title: { default: 'Tubu Tree — Sống xanh An Lành', template: '%s — Tubu Tree' },
+  description: 'Mỹ phẩm và đồ tiêu dùng thiên nhiên Tubu Tree: sống xanh an lành cùng các thương hiệu Việt, từ chăm sóc da, mẹ và bé đến đồ dùng trong nhà.',
   openGraph: { type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN' },
 };
 

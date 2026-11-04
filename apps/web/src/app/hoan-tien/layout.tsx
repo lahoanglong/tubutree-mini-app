@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 
 export const metadata: Metadata = {
-  title: 'Hoàn tiền — Tubu Tree',
+  title: 'Hoàn tiền',
   ...(CASHBACK_ENABLED ? {} : { robots: { index: false, follow: false } }),
 };
 

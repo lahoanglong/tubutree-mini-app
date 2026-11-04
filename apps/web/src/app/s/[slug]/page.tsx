@@ -4,6 +4,7 @@ import { Globe, MapPin, PackageSearch, Phone, CreditCard, ShieldCheck, RotateCcw
 import { sampleShareText } from '@tubutree/app-core/storefront-signup';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { getReturnWindowDays, getStorefront } from '@/lib/api';
+import { ogBase, withBrand } from '@/lib/og';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
@@ -26,17 +27,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const sf = await getStorefront(slug);
-  if (!sf) return { title: 'Gian hàng — Tubu Tree' };
+  if (!sf) return { title: 'Gian hàng' };
   // Ảnh chia sẻ do opengraph-image.tsx của trang này dựng: ảnh gốc có thể là base64 nên không đưa thẳng vào og:image.
   const canonical = `${SITE_URL}/s/${sf.slug}`;
-  const title = sampleShareText(`${sf.title} — Tubu Tree`, sf.isSample);
+  const title = sampleShareText(sf.title, sf.isSample);
   const description = sampleShareText(sf.headerNote ?? 'Gian hàng sống xanh trên Tubu Tree', sf.isSample);
   return {
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical, type: 'website' },
-    twitter: { card: 'summary_large_image', title, description },
+    // Ảnh chia sẻ do opengraph-image.tsx của trang này dựng nên không rải `ogBase.images`.
+    openGraph: { type: ogBase.type, siteName: ogBase.siteName, locale: ogBase.locale, title: withBrand(title), description, url: canonical },
+    twitter: { card: 'summary_large_image', title: withBrand(title), description },
     ...(sf.isSample ? { robots: { index: false, follow: false } } : {}),
   };
 }

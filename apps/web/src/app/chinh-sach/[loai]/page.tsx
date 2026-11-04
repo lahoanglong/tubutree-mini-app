@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { content } = await getLegalDoc(loai);
   const page = LEGAL_PAGES[loai];
   return {
-    title: `${page.title} — Tubu Tree`,
+    title: page.title,
     description: page.description,
     alternates: { canonical: `/chinh-sach/${loai}` },
     // Bản nháp chưa được duyệt không nên nằm trên Google như chính sách thật của cửa hàng.

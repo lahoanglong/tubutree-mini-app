@@ -10,7 +10,7 @@ export const revalidate = 300;
 export const dynamicParams = false;
 
 // Chỉ middleware chuyển khách có cookie phiên tới đây (URL trình duyệt vẫn là "/"); không để công cụ tìm kiếm lập chỉ mục bản này.
-export const metadata: Metadata = { alternates: { canonical: '/' }, robots: { index: false, follow: false } };
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export const generateStaticParams = () => HOME_HINT_SLUGS.map((hint) => ({ hint }));
 

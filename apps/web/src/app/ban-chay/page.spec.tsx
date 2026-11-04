@@ -51,8 +51,9 @@ const viewProps = () => mocks.view.mock.calls[0]![0] as { initial: { category: s
 describe('generateMetadata', () => {
   it('trang trơn được lập chỉ mục, canonical /ban-chay', async () => {
     const m = await generateMetadata({ searchParams: sp({}) });
-    expect(m.title).toBe('Bán chạy nhất — Tubu Tree');
+    expect(m.title).toBe('Bán chạy nhất');
     expect(m.alternates?.canonical).toBe('/ban-chay');
+    expect(m.openGraph).toMatchObject({ siteName: 'Tubu Tree', locale: 'vi_VN', url: '/ban-chay', title: 'Bán chạy nhất — Tubu Tree', images: [expect.objectContaining({ url: '/opengraph-image.png' })] });
     expect(m.robots).toBeUndefined();
   });
 
@@ -61,6 +62,7 @@ describe('generateMetadata', () => {
       const m = await generateMetadata({ searchParams: sp(q) });
       expect(m.robots).toEqual({ index: false, follow: true });
       expect(m.alternates).toBeUndefined();
+      expect((m.openGraph as { url?: string }).url).toBeUndefined();
     }
   });
 
@@ -68,7 +70,7 @@ describe('generateMetadata', () => {
     const m = await generateMetadata({ searchParams: sp({ page: '2' }) });
     expect(m.robots).toBeUndefined();
     expect(m.alternates?.canonical).toBe('/ban-chay?page=2');
-    expect(m.title).toBe('Bán chạy nhất — Trang 2 | Tubu Tree');
+    expect(m.title).toBe('Bán chạy nhất — Trang 2');
   });
 
   it('?page=1, số lạ và tham số theo dõi chuẩn hoá về /ban-chay, được lập chỉ mục', async () => {
