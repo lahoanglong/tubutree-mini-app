@@ -32,7 +32,7 @@ export default async function BrowseHubPage() {
   if (failed) await createServerHttp({ revalidate: BUILD_GAP_REVALIDATE_S }).get('/config/public').catch(() => undefined);
   const [bestSellers, brands, categories] = parts;
   return (
-    <main className={`${PAGE_WIDE} py-6 max-md:pb-0 max-md:pt-0 md:py-8`}>
+    <main className={`${PAGE_WIDE} md:py-8`}>
       <BrowseView initial={null} bestSellers={valueOf(bestSellers)} brands={valueOf(brands)} categories={valueOf(categories)} />
     </main>
   );
