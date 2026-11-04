@@ -137,6 +137,7 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     expect(await pendingOf(user.id)).toBe(0);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).walletBalance).toBe(0);
     const notified = (notify.mock.calls as unknown[][]).filter((c) => c[1] === 'OPS_HEALTH_ALERT' && String((c[2] as { summary: string }).summary).includes(o));
+    expect(notified.length).toBeGreaterThan(0);
     expect(new Set(notified.map((c) => c[0])).size).toBe(notified.length);
     expect(notified.length).toBeLessThanOrEqual(await prisma.user.count({ where: { role: 'ADMIN', isBlocked: false } }));
     const second = notify.mock.calls.length;
