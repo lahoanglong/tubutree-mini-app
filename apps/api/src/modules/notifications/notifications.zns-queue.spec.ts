@@ -75,6 +75,23 @@ describe('NotificationsService.deliverZns', () => {
     expect(update).toHaveBeenCalledWith({ where: { id: 'log-2' }, data: { status: 'SENT', error: null } });
   });
 
+  it('L2-03: ghi SENT lỗi một lần sau khi Zalo đã nhận → ghi lại được, không gửi lần hai', async () => {
+    const { svc, update, sendTemplate } = setup();
+    update.mockRejectedValueOnce(new Error('db blip'));
+    expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenLastCalledWith({ where: { id: 'log-2' }, data: { status: 'SENT', error: null } });
+  });
+
+  it('L2-03: ghi SENT lỗi cả 3 lần → nuốt lỗi (job không ném để BullMQ gửi lại), Zalo chỉ được gọi một lần', async () => {
+    const { svc, update, sendTemplate } = setup();
+    update.mockRejectedValue(new Error('db down'));
+    await expect(svc.deliverZns(JOB, false)).resolves.toBe('SENT');
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(3);
+  });
+
   it('HTTP 200 + error != 0 không phải SENT: lỗi vĩnh viễn → FAILED ngay (kể cả còn lượt), lưu mã + lý do', async () => {
     const failure = { ok: false, retryable: false, code: -118, reason: 'user not exist' };
     const { svc, update } = setup({ sendTemplate: jest.fn().mockResolvedValue(failure) });

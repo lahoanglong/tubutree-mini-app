@@ -1,4 +1,3 @@
-import { once } from 'node:events';
 import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -291,19 +290,91 @@ export async function* userCsvChunks(
 }
 
 /** Ghi CSV (BOM UTF-8 để Excel đọc đúng tiếng Việt) theo từng đoạn, tôn trọng backpressure của kết nối. */
-export async function streamCsv(res: Response, filename: string, chunks: AsyncGenerator<string>) {
+/**
+ * Đếm số dòng dữ liệu của luồng CSV mà không giữ nội dung: một xuống dòng chỉ tính khi nằm ngoài ô nháy kép
+ * (ô có xuống dòng bên trong vẫn là một dòng). Trạng thái nháy giữ qua các đoạn vì một ô có thể bị cắt giữa hai đoạn.
+ */
+export function createCsvRecordCounter() {
+  let quoted = false;
+  let records = 0;
+  return {
+    push(chunk: string) {
+      for (let i = 0; i < chunk.length; i++) {
+        const ch = chunk.charCodeAt(i);
+        if (ch === 34) quoted = !quoted;
+        else if (ch === 10 && !quoted) records++;
+      }
+    },
+    /** Số dòng dữ liệu, không tính dòng tiêu đề. */
+    dataRows: () => Math.max(0, records - 1),
+  };
+}
+
+/**
+ * Ghi file CSV xuống response từng đoạn. `audit` (nếu có) được gọi đúng một lần với số dòng dữ liệu ĐÃ GỬI đi: khi luồng
+ * kết thúc, khi lỗi giữa chừng, hoặc khi khách ngắt kết nối (res 'close'). Khách ngắt thì vòng đọc DB dừng ngay, không đọc
+ * thêm lô nào. Nhật ký ghi SAU res.end() và không được await: ghi chậm hay lỗi không giữ kết nối; lỗi của audit chỉ bị nuốt
+ * (hàm audit tự log).
+ */
+export async function streamCsv(
+  res: Response,
+  filename: string,
+  chunks: AsyncGenerator<string>,
+  audit?: (rowCount: number) => unknown,
+) {
+  const counter = createCsvRecordCounter();
+  let closed = false;
+  let reported = false;
+  const report = () => {
+    if (reported || !audit) return;
+    reported = true;
+    try {
+      const pending = audit(counter.dataRows());
+      if (pending instanceof Promise) pending.catch(() => undefined);
+    } catch {
+      // Không còn gì để báo: file đã gửi.
+    }
+  };
+  let wake: (() => void) | undefined;
+  res.on('close', () => {
+    closed = true;
+    wake?.();
+    report();
+  });
   const first = await chunks.next();
+  if (closed) {
+    await chunks.return(undefined);
+    return;
+  }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-store');
   res.write('\uFEFF');
-  if (!first.done) res.write(first.value);
+  if (!first.done) {
+    counter.push(first.value);
+    res.write(first.value);
+  }
   try {
-    for await (const chunk of chunks) {
-      if (!res.write(chunk)) await once(res, 'drain');
+    if (!first.done) {
+      for (;;) {
+        if (closed) break;
+        const next = await chunks.next();
+        if (next.done || closed) break;
+        counter.push(next.value);
+        if (!res.write(next.value)) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+            res.once('drain', resolve);
+          });
+          wake = undefined;
+        }
+      }
     }
+    if (closed) await chunks.return(undefined);
     res.end();
+    report();
   } catch (err) {
+    report();
     res.destroy(err instanceof Error ? err : new Error(String(err)));
   }
 }

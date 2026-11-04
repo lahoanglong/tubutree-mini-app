@@ -38,6 +38,8 @@ const toDecimal = (rate: number | null): Prisma.Decimal | null => (rate === null
 
 type LockedRate = { id: string; sku: string; affiliateRate: Prisma.Decimal | null };
 type RateChange = { sku: string; from: number | null; to: number | null };
+type RateHistoryRow = { variationId: string; from: number | null; to: number | null };
+const toHistory = (rows: LockedRate[], to: number | null): RateHistoryRow[] => rows.map((v) => ({ variationId: v.id, from: toRate(v.affiliateRate), to }));
 const toChanges = (rows: LockedRate[], to: number | null): RateChange[] => rows.map((v) => ({ sku: v.sku, from: toRate(v.affiliateRate), to }));
 
 /** Cursor "Tải thêm" của danh sách % hoa hồng: (tên, id) sản phẩm cuối trang, base64url JSON — web coi là chuỗi mờ. */
@@ -65,7 +67,8 @@ const LOG_CHUNK = 100;
  * (createCommissionForOrder, order-reversal) mà trước đây không có đường ghi nào, nên mọi đơn CTV với hàng đồng bộ từ Pancake
  * ra 0đ. Đồng bộ Pancake không ghi cột này (pancake-sync.service upsertProduct), nên mức admin đặt không bị ghi đè.
  *
- * Không có bảng nhật ký chung: mọi lần ghi để lại log có id admin cùng giá trị cũ → mới (theo SKU).
+ * Mọi lần đổi % ghi một dòng `commission_rate_history` (biến thể, từ, sang, admin) cùng giao dịch với lần đổi, và để lại log
+ * có id admin cùng giá trị cũ → mới (theo SKU).
  * Biến thể chưa đặt giữ NULL và hưởng mức mặc định `affiliate.default_rate_pct` lúc đặt đơn (commission-rate.ts); hàng đối tác
  * chưa đặt vẫn 0đ.
  */
@@ -170,6 +173,7 @@ export class CommissionAdminService {
         SELECT "id", "sku", "affiliateRate" FROM "variations" WHERE "id" = ${variationId} FOR NO KEY UPDATE`;
       if (!before) throw new NotFoundException('Không tìm thấy biến thể.');
       await tx.variation.update({ where: { id: variationId }, data: { affiliateRate: toDecimal(rate) } });
+      await this.recordRateHistory(tx, adminId, toHistory([before], rate));
       this.logRateChanges(adminId, rate === null ? 'xoá % hoa hồng CTV của biến thể (về mặc định)' : 'đặt % hoa hồng CTV cho biến thể', toChanges([before], rate));
       return { id: before.id, sku: before.sku, affiliateRate: rate };
     });
@@ -187,6 +191,7 @@ export class CommissionAdminService {
         ORDER BY "id" FOR NO KEY UPDATE`;
       if (locked.length === 0) throw new BadRequestException('Sản phẩm không có biến thể đang bán để đặt %.');
       await tx.variation.updateMany({ where: { id: { in: locked.map((v) => v.id) } }, data: { affiliateRate: toDecimal(rate) } });
+      await this.recordRateHistory(tx, adminId, toHistory(locked, rate));
       this.logRateChanges(adminId, `${rate === null ? 'xoá % (về mặc định)' : 'đặt %'} hoa hồng CTV cho sản phẩm ${productId} (${product.name})`, toChanges(locked, rate));
       return { productId, updated: locked.length, affiliateRate: rate };
     });
@@ -212,12 +217,21 @@ export class CommissionAdminService {
             where: { id: { in: locked.map((v) => v.id) }, affiliateRate: null },
             data: { affiliateRate: new Prisma.Decimal(rate) },
           });
+          await this.recordRateHistory(tx, adminId, toHistory(locked, rate));
         }
         this.logRateChanges(adminId, 'áp % hoa hồng CTV cho biến thể đang bán chưa có % (hàng Tubu)', toChanges(locked, rate));
         return { updated: locked.length, affiliateRate: rate };
       },
       { timeout: 30_000 },
     );
+  }
+
+  /** Một dòng lịch sử cho mỗi biến thể có % thật sự đổi. Gọi trong giao dịch đổi %, nên lỗi ghi lịch sử huỷ cả lần đổi. */
+  private async recordRateHistory(tx: Prisma.TransactionClient, adminId: string, rows: RateHistoryRow[]) {
+    const data = rows
+      .filter((r) => r.from !== r.to)
+      .map((r) => ({ variationId: r.variationId, fromPct: toDecimal(r.from), toPct: toDecimal(r.to), actorId: adminId }));
+    if (data.length) await tx.commissionRateHistory.createMany({ data });
   }
 
   /** Log "sku: cũ→mới" theo lô (một dòng tối đa LOG_CHUNK thay đổi). Gọi trong transaction, ngay trước commit. */
@@ -256,6 +270,15 @@ export class CommissionAdminService {
         for (const [rate, skus] of byRate) {
           await tx.variation.updateMany({ where: { sku: { in: skus } }, data: { affiliateRate: toDecimal(rate) } });
         }
+        // classify đã khoá các dòng này theo id nên id theo SKU đọc ở đây không đổi trước commit.
+        const idBySku = new Map(
+          (await tx.variation.findMany({ where: { sku: { in: changes.map((r) => r.sku) } }, select: { id: true, sku: true } })).map((v) => [v.sku, v.id]),
+        );
+        await this.recordRateHistory(
+          tx,
+          adminId,
+          changes.flatMap((r) => (idBySku.has(r.sku) ? [{ variationId: idBySku.get(r.sku)!, from: r.currentRate, to: r.rate }] : [])),
+        );
         this.logRateChanges(
           adminId,
           'nhập CSV % hoa hồng CTV',

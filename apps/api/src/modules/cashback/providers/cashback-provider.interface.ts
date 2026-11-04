@@ -5,6 +5,8 @@ export interface NormalizedCashbackEvent {
   orderAmount: number; // VND, ≥ 0
   commission: number; // VND, ≥ 0
   status: 'PENDING' | 'CONFIRMED' | 'REJECTED';
+  /** Trạng thái sàn gửi mà adapter không hiểu (đã chuẩn hoá về PENDING). Chỉ được tạo dòng PENDING mới, không đổi dòng đã có. */
+  unknownStatus?: string;
   raw: unknown; // payload gốc → lưu postbackPayload
 }
 

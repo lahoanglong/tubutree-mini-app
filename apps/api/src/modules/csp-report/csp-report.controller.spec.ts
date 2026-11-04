@@ -17,7 +17,7 @@ async function startApp(): Promise<{ app: INestApplication; base: string }> {
   app.use('/api/csp-report', ...cspReportBodyParsers());
   app.use(bodyParserErrorHandler);
   app.setGlobalPrefix('api');
-  await app.listen(0);
+  await app.listen(0, '127.0.0.1');
   return { app, base: `http://127.0.0.1:${((app.getHttpServer().address()) as AddressInfo).port}` };
 }
 

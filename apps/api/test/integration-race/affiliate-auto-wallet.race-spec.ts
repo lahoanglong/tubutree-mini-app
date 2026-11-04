@@ -16,7 +16,7 @@ import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import { QUEUE_NOTIFICATIONS } from '../../src/jobs/queues';
 import { startOfVnDay } from '../../src/common/vn-time';
 import { DAILY_WALLET_TRANSFER_JOB } from '../../src/modules/affiliate/affiliate-auto-transfer-config';
-import { createOrder, createUser, setConfig, summarize, warmPool } from './helpers';
+import { createOrder, createUser, pinConfig, setConfig, summarize, warmPool } from './helpers';
 
 /**
  * Hoa hồng đã duyệt tự vào Ví Tubu: chạy trên Postgres thật. Cùng một đường requestPayout với nút "Chuyển vào Ví", nên kiểm
@@ -29,6 +29,9 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
   let affiliate: AffiliateService;
   let config: SystemConfigService;
   const MST = '079201001234';
+
+  // Khôi phục khoá thuế dùng chung để spec chạy sau không phụ thuộc thứ tự.
+  let restorePit: Array<() => Promise<void>> = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -62,12 +65,12 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
         create: { id: t.id, code: t.code, channel: 'INAPP', bodyTemplate: t.body },
       });
     }
-    await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
-    await setConfig(prisma, 'affiliate.pit_withhold_threshold', 5_000_000);
+    restorePit = [await pinConfig(prisma, 'affiliate.pit_withhold_pct', 0.1), await pinConfig(prisma, 'affiliate.pit_withhold_threshold', 5_000_000)];
     await setFlag(true);
   });
 
   afterAll(async () => {
+    for (const restore of restorePit.reverse()) await restore();
     await setFlag(true);
     await moduleRef?.close();
   });
@@ -294,7 +297,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
       ]);
       expect(cron.status).toBe('fulfilled');
       // Bên thua bị từ chối sạch (đã xử lý), không được lỗi lạ.
-      if (manual.status === 'rejected') expect(String((manual.reason as Error).message)).toMatch(/đã được xử lý|không có hoa hồng khả dụng/i);
+      if (manual.status === 'rejected') expect(String((manual.reason as Error).message)).toMatch(/đã được xử lý|không có hoa hồng khả dụng|vừa thay đổi/i);
       const s = await state(u.id);
       expect(s.balance).toBe(52_345);
       expect(s.ledger).toHaveLength(1);
@@ -363,7 +366,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
         })(),
       ]);
       expect(cron.status).toBe('fulfilled');
-      if (manual.status === 'rejected') expect(String((manual.reason as Error).message)).toMatch(/đã được xử lý|không có hoa hồng khả dụng/i);
+      if (manual.status === 'rejected') expect(String((manual.reason as Error).message)).toMatch(/đã được xử lý|không có hoa hồng khả dụng|vừa thay đổi/i);
       const s = await state(u.id);
       expect(s.balance).toBe(40_000);
       expect(s.ledger).toHaveLength(1);

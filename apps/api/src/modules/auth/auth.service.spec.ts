@@ -43,7 +43,15 @@ function makeService(over: Record<string, unknown> = {}) {
       create,
     },
   };
-  const prisma = { ...base, ...over } as unknown as PrismaService;
+  // Kiểm sau của refresh đọc lại token cha: mặc định là token vừa xoay, đời cũ, chưa bị cắt phiên.
+  base.refreshToken.findUnique.mockResolvedValue({ createdAt: new Date(0), rotatedAt: new Date() });
+  const prisma = {
+    ...base,
+    $queryRaw: jest.fn().mockResolvedValue([{ sessionsRevokedAt: null }]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(prisma)),
+    ...over,
+  } as unknown as PrismaService;
   const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
   const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
   const zalo = {} as unknown as ZaloService;
@@ -77,7 +85,7 @@ describe('AuthService.refresh (rotation atomic)', () => {
 
   it('hợp lệ → revoke-gate count=1 → cấp cặp token mới (JWT + refresh mới)', async () => {
     const { svc, prisma, create } = makeService();
-    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
       id: 't1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
     });
     const r = await svc.refresh('tok');
@@ -104,7 +112,7 @@ describe('AuthService.refresh (rotation atomic)', () => {
 
   it('token đã xoay vài giây trước (request đến sau khi request kia xong) → vẫn trong ân hạn, cấp token', async () => {
     const { svc, prisma, create, updateMany } = makeService();
-    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
       id: 't1', userId: 'u1', revokedAt: new Date(Date.now() - 5_000), rotatedAt: new Date(Date.now() - 5_000),
       expiresAt: new Date(Date.now() + 1e6), user: USER,
     });
@@ -158,7 +166,7 @@ describe('AuthService.refresh (rotation atomic)', () => {
 
   it('rotation thành công bình thường (không reuse) → KHÔNG thu hồi cả chuỗi, chỉ token cũ (đánh dấu rotatedAt)', async () => {
     const { svc, prisma, updateMany } = makeService();
-    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
       id: 't1', userId: 'u1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
     });
     await svc.refresh('tok');
@@ -289,7 +297,7 @@ describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedA
   it('tài khoản CUSTOMER không bị chặn: kiểm grant theo cả số cũ lẫn số mới trong một truy vấn', async () => {
     const { svc, roleGrant } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
     await svc.loginWithZaloMiniApp('c', 'at', 'pt');
-    expect(roleGrant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: { in: ['0901234567', '0987654321'] }, revokedAt: null } }));
+    expect(roleGrant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: { in: ['0901234567', '0987654321'] }, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] } }));
   });
 
   it('số mới bị người khác lấy giữa lúc kiểm và lúc ghi (P2002): vẫn đăng nhập, giữ số cũ', async () => {
@@ -540,10 +548,10 @@ function makeGuestMergeFixture(opts: {
   };
 }
 
-function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>, vouchers?: VouchersService) {
+function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>, vouchers?: VouchersService, sessionState?: { invalidate: jest.Mock }) {
   const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
   const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
-  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac(), undefined, vouchers);
+  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac(), undefined, vouchers, undefined, sessionState as never);
 }
 
 describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm thầm đổi user)', () => {
@@ -658,6 +666,22 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
     expect(res.user.id).toBe('target1');
     expect(fixture.state.users.get('target1')!.phone).toBe('0933333333');
     expect(fixture.state.users.get('guest1')!.mergedIntoId).toBe('target1');
+  });
+
+  it('m3: gộp xong xoá cache phiên của dòng khách để access token cũ của khách chết ngay', async () => {
+    const TARGET = { id: 'target1', zaloId: 'z-real-existing', fullName: 'Người Thật', phone: null, avatarUrl: null, role: 'CUSTOMER', isBlocked: false, pointsBalance: 0, walletBalance: 0, coinsBalance: 0, cashbackPending: 0, referralCode: 'RT1' };
+    const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+    const sessionState = { invalidate: jest.fn() };
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue(null) };
+    await makeEnsurePhoneSvc(fixture, zalo, undefined, sessionState).ensurePhoneForCurrentUser('guest1', 'code', 'at');
+    expect(sessionState.invalidate).toHaveBeenCalledWith('guest1');
+  });
+
+  it('m3: dòng khách đã gộp gọi lại ensure-phone (token cũ lọt qua) → 401 hết phiên, không cấp token cho tài khoản đích', async () => {
+    const merged = { ...GUEST, id: 'old1', zaloId: 'guest_d_merged_1700000000000', mergedIntoId: 'target1' };
+    const fixture = makeGuestMergeFixture({ guest: merged });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'A' }), resolvePhoneNumber: jest.fn() };
+    await expect(makeEnsurePhoneSvc(fixture, zalo).ensurePhoneForCurrentUser('old1', 'code', 'at')).rejects.toMatchObject({ status: 401, response: { code: 'SESSION_EXPIRED' } });
   });
 
   describe('khách + zaloId/SĐT đã thuộc một user THẬT khác có từ trước → GỘP (không mất giỏ/địa chỉ/điểm/đơn của khách)', () => {
@@ -800,12 +824,197 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
 });
 
 describe('AuthService.logout', () => {
+  function logoutSvc(tokens: Record<string, { id: string; userId: string; parentId: string | null; rotatedAt: Date | null }>) {
+    const findUnique = jest.fn(async ({ where }: { where: { tokenHash?: string; id?: string } }) => {
+      if (where.tokenHash) return Object.values(tokens).find((t) => (t as { hash?: string }).hash === where.tokenHash) ?? null;
+      return tokens[where.id!] ?? null;
+    });
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const executeRaw = jest.fn().mockResolvedValue(3);
+    return { ...makeService({ refreshToken: { findUnique, updateMany, create: jest.fn() }, $executeRaw: executeRaw }), findUnique, updateMany, executeRaw };
+  }
+  const hashOf = (t: string) => createHash('sha256').update(t).digest('hex');
+  const live = (over: object) => ({ id: 'c', userId: 'u1', parentId: null, rotatedAt: null, hash: hashOf('tok'), ...over });
+
   it('revoke refresh token theo hash (chưa revoke)', async () => {
-    const { svc, updateMany } = makeService();
+    const { svc, updateMany } = logoutSvc({ c: live({}) });
     await svc.logout('tok');
     expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ revokedAt: null }) }),
+      expect.objectContaining({ where: expect.objectContaining({ id: 'c', revokedAt: null }) }),
     );
+  });
+
+  it('token cha vừa xoay trong ân hạn → mất ân hạn (rotatedAt=null) và mọi con còn sống của nó bị thu hồi', async () => {
+    const parent = { id: 'p', userId: 'u1', parentId: null, rotatedAt: new Date(Date.now() - 5_000) };
+    const { svc, updateMany, executeRaw } = logoutSvc({ c: live({ parentId: 'p' }), p: parent });
+    await svc.logout('tok');
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['p'] } }, data: { revokedAt: expect.any(Date), rotatedAt: null } });
+    // thu hồi MỌI hậu duệ (CTE đệ quy theo parentId) chạy sau khi tổ tiên đã mất ân hạn
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(String((executeRaw.mock.calls[0]![0] as string[]).join('?'))).toMatch(/WITH RECURSIVE[\s\S]*"parentId"/);
+    expect(updateMany.mock.invocationCallOrder.at(-1)!).toBeLessThan(executeRaw.mock.invocationCallOrder[0]!);
+  });
+
+  it('tab giữ chính token đã xoay mà đăng xuất → token đó cũng mất ân hạn, con của nó bị thu hồi', async () => {
+    const { svc, updateMany, executeRaw } = logoutSvc({ c: live({ rotatedAt: new Date(Date.now() - 2_000) }) });
+    await svc.logout('tok');
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['c'] } }, data: { revokedAt: expect.any(Date), rotatedAt: null } });
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('token cha xoay đã quá ân hạn → không đụng tới', async () => {
+    const parent = { id: 'p', userId: 'u1', parentId: null, rotatedAt: new Date(Date.now() - 120_000) };
+    const { svc, updateMany, executeRaw } = logoutSvc({ c: live({ parentId: 'p' }), p: parent });
+    await svc.logout('tok');
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('logout xong, dùng lại token vừa xoay trong ân hạn → refresh trả 401 (rotatedAt đã bị xoá)', async () => {
+    const { svc, prisma } = makeService({ user: { update: jest.fn() } });
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValue({
+      id: 'p', userId: 'u1', revokedAt: new Date(Date.now() - 5_000), rotatedAt: null,
+      expiresAt: new Date(Date.now() + 1e6), user: USER,
+    });
+    await expect(svc.refresh('old')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('token không tồn tại → im lặng, không ghi gì', async () => {
+    const { svc, updateMany } = logoutSvc({});
+    await expect(svc.logout('tok')).resolves.toBeUndefined();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.logoutAll (L1-04)', () => {
+  it('một transaction: ghi mốc TRƯỚC, rồi thu hồi refresh token, ghi sổ do khách tự làm, xoá cache phiên', async () => {
+    const order: string[] = [];
+    const tx = {
+      $executeRaw: jest.fn(async () => { order.push('khoá'); return 1; }),
+      user: { update: jest.fn(async () => { order.push('mốc'); return {}; }) },
+      refreshToken: { updateMany: jest.fn(async () => { order.push('thu hồi'); return { count: 2 }; }) },
+      userAdminEvent: { create: jest.fn(async () => { order.push('sổ'); return {}; }) },
+    };
+    const invalidate = jest.fn();
+    const prisma = { $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const svc = new AuthService(prisma, {} as JwtService, { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>,
+      {} as ZaloService, mkRbac(), undefined, undefined, undefined, { invalidate } as never);
+    await svc.logoutAll('u1');
+    expect(order).toEqual(['khoá', 'mốc', 'thu hồi', 'sổ']);
+    expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { sessionsRevokedAt: expect.any(Date) } });
+    expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(tx.userAdminEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', kind: 'SESSIONS_REVOKED', actorId: 'u1', reason: 'Khách tự đăng xuất mọi thiết bị', toValue: '2' }),
+    });
+    expect(invalidate).toHaveBeenCalledWith('u1');
+  });
+});
+
+describe('AuthService — mốc thu hồi lấy trong transaction và kiểm lại mốc (m-A)', () => {
+  it('revokeAllSessions lấy `now` trong callback, sau khi transaction đã có kết nối (không lấy trước khe chờ pool)', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-05T03:00:00.000Z') });
+    try {
+      const later = new Date('2026-11-05T03:00:02.500Z');
+      // Giờ lúc có khoá dòng users: mốc phải lấy SAU khoá, không phải lúc callback bắt đầu.
+      const locked = new Date('2026-11-05T03:00:02.900Z');
+      const tx = {
+        $executeRaw: jest.fn(async () => { jest.setSystemTime(locked); return 1; }),
+        user: { update: jest.fn().mockResolvedValue({}) },
+        refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
+      };
+      const prisma = { $transaction: jest.fn(async (cb: (t: unknown) => unknown) => { jest.setSystemTime(later); return cb(tx); }) } as unknown as PrismaService;
+      const svc = new AuthService(prisma, {} as JwtService, { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>, {} as ZaloService, mkRbac());
+      await svc.logoutAll('u1');
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { sessionsRevokedAt: locked } });
+      expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: locked } });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('kiểm sau không phụ thuộc đồng hồ: mốc đọc lại khác mốc đọc ở đầu refresh → thu hồi con, 401', async () => {
+    const { svc, prisma, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, createdAt: new Date(1000), expiresAt: new Date(Date.now() + 1e6), user: { ...USER, sessionsRevokedAt: null },
+    }).mockResolvedValue({ createdAt: new Date(2000), rotatedAt: new Date() });
+    // mốc mới ghi sau lúc đọc đầu, dù createdAt của cha vẫn "lớn hơn" mốc theo đồng hồ
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ sessionsRevokedAt: new Date(500) }]);
+    await expect(svc.refresh('tok')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(updateMany).toHaveBeenLastCalledWith({ where: { tokenHash: expect.any(String), revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+  });
+
+  it('mốc không đổi giữa hai lần đọc → cấp token bình thường', async () => {
+    const mark = new Date(500);
+    const { svc, prisma } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, createdAt: new Date(1000), expiresAt: new Date(Date.now() + 1e6), user: { ...USER, sessionsRevokedAt: mark },
+    }).mockResolvedValue({ createdAt: new Date(2000), rotatedAt: new Date() });
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ sessionsRevokedAt: new Date(500) }]);
+    await expect(svc.refresh('tok')).resolves.toMatchObject({ accessToken: 'access-jwt' });
+  });
+});
+
+describe('AuthService.refresh — bất biến mốc thu hồi (M1)', () => {
+  it('trước: refresh token cấp trước mốc thu hồi → 401 dù revokedAt còn null, không cấp token', async () => {
+    const { svc, prisma, create } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, createdAt: new Date(1000), expiresAt: new Date(Date.now() + 1e6),
+      user: { ...USER, sessionsRevokedAt: new Date(1000) },
+    });
+    await expect(svc.refresh('tok')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('sau: phiên bị cắt trong lúc đang cấp token con → thu hồi con vừa tạo và trả 401', async () => {
+    const { svc, prisma, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock)
+      .mockResolvedValueOnce({ id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, createdAt: new Date(1000), expiresAt: new Date(Date.now() + 1e6), user: USER })
+      .mockResolvedValue({ createdAt: new Date(1000), rotatedAt: new Date() });
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ sessionsRevokedAt: new Date(2000) }]);
+    await expect(svc.refresh('tok')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(updateMany).toHaveBeenLastCalledWith({ where: { tokenHash: expect.any(String), revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+  });
+
+  it('sau: họ token đã bị logout thu hồi (rotatedAt của cha bị xoá) → thu hồi con và 401', async () => {
+    const { svc, prisma, updateMany } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock)
+      .mockResolvedValueOnce({ id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, createdAt: new Date(1000), expiresAt: new Date(Date.now() + 1e6), user: USER })
+      .mockResolvedValue({ createdAt: new Date(1000), rotatedAt: null });
+    await expect(svc.refresh('tok')).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: { revokedAt: expect.any(Date) } }));
+  });
+
+  it('sau: câu đọc mốc dùng FOR SHARE để chờ transaction thu hồi commit', async () => {
+    const { svc, prisma } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({ id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, createdAt: new Date(1000), expiresAt: new Date(Date.now() + 1e6), user: USER });
+    await svc.refresh('tok');
+    const sql = ((prisma.$queryRaw as jest.Mock).mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toMatch(/FOR SHARE/);
+  });
+});
+
+describe('AuthService.issueTokens — claim iatMs (m2)', () => {
+  it('access token ký kèm iatMs (mili giây) để strategy phân biệt token cấp cùng giây ngay sau mốc thu hồi', async () => {
+    const { svc, prisma } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({ id: 't1', revokedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER });
+    const jwt = (svc as unknown as { jwt: { signAsync: jest.Mock } }).jwt;
+    const before = Date.now();
+    await svc.refresh('tok');
+    const payload = jwt.signAsync.mock.calls[0]![0] as { iatMs: number };
+    expect(payload.iatMs).toBeGreaterThanOrEqual(before);
+    expect(payload.iatMs).toBeLessThanOrEqual(Date.now());
+  });
+});
+
+describe('AuthService.refresh — ghi họ token (parentId)', () => {
+  it('xoay thành công → token mới mang parentId là token cũ', async () => {
+    const { svc, prisma, create } = makeService();
+    (prisma.refreshToken.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 't1', userId: 'u1', revokedAt: null, rotatedAt: null, expiresAt: new Date(Date.now() + 1e6), user: USER,
+    });
+    await svc.refresh('tok');
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ parentId: 't1' }) });
   });
 });
 

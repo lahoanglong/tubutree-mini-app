@@ -1,5 +1,6 @@
 import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import type { Response } from 'express';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Transform, Type } from 'class-transformer';
@@ -36,6 +37,7 @@ import { PaginationQuery } from '../../common/pagination';
 import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
 import type { DealerApplicationImageField } from './admin.service';
 import { streamCsv } from './admin-export';
+import { assertStaffUserListQuery } from './admin-users-staff-limits';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
@@ -473,6 +475,8 @@ export class SetUserRoleDto {
   role!: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN';
   /** Bắt buộc khi role = DEALER (kiểm ở AdminService.setUserRole — C-008). */
   @IsOptional() @IsString() @MaxLength(100) tierId?: string;
+  /** Lý do đổi vai trò, ghi vào lịch sử vai trò của người đó. */
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
 
 @Roles('ADMIN')
@@ -513,8 +517,11 @@ export class AdminController {
   }
 
   @AllowStaff('CSKH')
+  // Mỗi lần gõ ở ô tìm khách là một lượt gọi: trần riêng để một tài khoản CSKH không quét cả danh sách khách bằng cách gọi liên tục (ADMIN không bị).
+  @StaffLookupThrottle(30)
   @Get('users')
-  users(@Query() q: ListUsersQuery) {
+  users(@Query() q: ListUsersQuery, @CurrentUser() viewer: JwtPayload) {
+    if (viewer.role === 'STAFF') assertStaffUserListQuery(q);
     return this.admin.listUsers(q.page, q.limit, q.search, q.guests === true);
   }
 
@@ -552,7 +559,7 @@ export class AdminController {
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
   @Post('users/role')
   setUserRole(@CurrentUser('sub') adminId: string, @Body() dto: SetUserRoleDto) {
-    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId);
+    return this.admin.setUserRole(adminId, dto.phone, dto.role, dto.tierId, dto.reason);
   }
 
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
@@ -585,13 +592,17 @@ export class AdminController {
    */
   @AllowStaff('KE_TOAN')
   @Get('orders/export')
-  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response) {
-    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }));
+  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
+    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }), (n) =>
+      this.admin.recordExport(actorId ?? '', 'orders/export', q, n),
+    );
   }
 
   @Get('users/export')
-  async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response) {
-    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search, q.guests === true));
+  async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
+    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search, q.guests === true), (n) =>
+      this.admin.recordExport(actorId ?? '', 'users/export', q, n),
+    );
   }
 
   /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */

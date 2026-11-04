@@ -16,6 +16,7 @@ function make(prisma: Record<string, unknown>, maxRate?: unknown) {
   // applyImport chạy trong $transaction(fn): tx chính là mock prisma.
   p.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(p));
   p.$queryRaw ??= jest.fn().mockResolvedValue([]);
+  p.commissionRateHistory ??= { createMany: jest.fn().mockResolvedValue({ count: 0 }) };
   return { svc: new CommissionAdminService(p as never, makeConfig(maxRate) as never), prisma: p };
 }
 
@@ -41,6 +42,27 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
     expect(update.mock.calls[0][0].where).toEqual({ id: 'v1' });
     expect(update.mock.calls[0][0].data.affiliateRate.toString()).toBe('12');
     expect(logSpy.mock.calls.map((c) => c[0]).join('\n')).toMatch(/admin-1.*A1: mặc định→12/);
+    const hist = (prisma.commissionRateHistory as { createMany: jest.Mock }).createMany;
+    expect(hist).toHaveBeenCalledTimes(1);
+    expect(hist.mock.calls[0][0].data).toEqual([{ variationId: 'v1', fromPct: null, toPct: dec(12), actorId: 'admin-1' }]);
+    expect(update.mock.invocationCallOrder[0]).toBeLessThan(hist.mock.invocationCallOrder[0]!);
+  });
+
+  it('đặt lại đúng % đang có thì không ghi lịch sử (không có gì đổi)', async () => {
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'v1', sku: 'A1', affiliateRate: dec(12) }]);
+    const { svc, prisma } = make({ variation: { update: jest.fn().mockResolvedValue({}) }, $queryRaw });
+    await svc.setVariationRate('admin-1', 'v1', 12);
+    expect((prisma.commissionRateHistory as { createMany: jest.Mock }).createMany).not.toHaveBeenCalled();
+  });
+
+  it('lỗi ghi lịch sử làm hỏng cả giao dịch: không có thay đổi % nào không có dòng lịch sử', async () => {
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'v1', sku: 'A1', affiliateRate: null }]);
+    const { svc } = make({
+      variation: { update: jest.fn().mockResolvedValue({}) },
+      commissionRateHistory: { createMany: jest.fn().mockRejectedValue(new Error('db')) },
+      $queryRaw,
+    });
+    await expect(svc.setVariationRate('admin-1', 'v1', 12)).rejects.toThrow('db');
   });
 
   it('rate null: xoá % riêng (về mặc định), không kiểm trần, log cũ→mặc định', async () => {
@@ -95,8 +117,12 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
       { id: 'v1', sku: 'A1', affiliateRate: null },
       { id: 'v2', sku: 'A2', affiliateRate: dec(5) },
     ]);
-    const { svc } = make({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', name: 'SP' }) }, variation: { updateMany }, $queryRaw });
+    const { svc, prisma } = make({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', name: 'SP' }) }, variation: { updateMany }, $queryRaw });
     expect(await svc.setProductRate('admin-2', 'p1', 8)).toEqual({ productId: 'p1', updated: 2, affiliateRate: 8 });
+    expect((prisma.commissionRateHistory as { createMany: jest.Mock }).createMany.mock.calls[0][0].data).toEqual([
+      { variationId: 'v1', fromPct: null, toPct: dec(8), actorId: 'admin-2' },
+      { variationId: 'v2', fromPct: dec(5), toPct: dec(8), actorId: 'admin-2' },
+    ]);
     expect(sql($queryRaw.mock.calls[0])).toMatch(/"productId" = \? AND "isActive" = true\s+ORDER BY "id" FOR NO KEY UPDATE/);
     expect($queryRaw.mock.calls[0][1]).toBe('p1');
     expect(updateMany.mock.calls[0][0].where).toEqual({ id: { in: ['v1', 'v2'] } });
@@ -121,8 +147,12 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
       { id: 'v1', sku: 'A1', affiliateRate: null },
       { id: 'v3', sku: 'C3', affiliateRate: null },
     ]);
-    const { svc } = make({ variation: { updateMany }, $queryRaw });
+    const { svc, prisma } = make({ variation: { updateMany }, $queryRaw });
     expect(await svc.fillMissingRates('admin-3', 10)).toEqual({ updated: 2, affiliateRate: 10 });
+    expect((prisma.commissionRateHistory as { createMany: jest.Mock }).createMany.mock.calls[0][0].data).toEqual([
+      { variationId: 'v1', fromPct: null, toPct: dec(10), actorId: 'admin-3' },
+      { variationId: 'v3', fromPct: null, toPct: dec(10), actorId: 'admin-3' },
+    ]);
     const q = sql($queryRaw.mock.calls[0]);
     expect(q).toMatch(/v\."isActive" = true AND v\."affiliateRate" IS NULL AND p\."isActive" = true AND p\."storefrontId" IS NULL/);
     expect(q).toMatch(/ORDER BY v\."id" FOR NO KEY UPDATE OF v/);
@@ -148,9 +178,9 @@ describe('CommissionAdminService — đặt % hoa hồng CTV (D1-01)', () => {
 
 describe('CommissionAdminService — nhập CSV "sku,%"', () => {
   const catalog = [
-    { sku: 'A1', name: '500ml', affiliateRate: dec(null), product: { name: 'Nước rửa chén' } },
-    { sku: 'B2', name: '1L', affiliateRate: dec(8), product: { name: 'Nước giặt' } },
-    { sku: 'C3', name: 'Mặc định', affiliateRate: dec(5), product: { name: 'Xà phòng' } },
+    { id: 'va1', sku: 'A1', name: '500ml', affiliateRate: dec(null), product: { name: 'Nước rửa chén' } },
+    { id: 'vb2', sku: 'B2', name: '1L', affiliateRate: dec(8), product: { name: 'Nước giặt' } },
+    { id: 'vc3', sku: 'C3', name: 'Mặc định', affiliateRate: dec(5), product: { name: 'Xà phòng' } },
   ];
   const variationMock = (updateMany = jest.fn().mockResolvedValue({ count: 1 })) => ({
     findMany: jest.fn(async ({ where }: { where: { sku: { in: string[] } } }) => catalog.filter((v) => where.sku.in.includes(v.sku))),
@@ -227,6 +257,12 @@ describe('CommissionAdminService — nhập CSV "sku,%"', () => {
     expect(logs).toContain('admin-9');
     expect(logs).toContain('A1: mặc định→10');
     expect(logs).toContain('C3: 5→10');
+    const hist = (prisma.commissionRateHistory as { createMany: jest.Mock }).createMany;
+    expect(hist).toHaveBeenCalledTimes(1);
+    expect(hist.mock.calls[0][0].data).toEqual([
+      { variationId: 'va1', fromPct: null, toPct: dec(10), actorId: 'admin-9' },
+      { variationId: 'vc3', fromPct: dec(5), toPct: dec(10), actorId: 'admin-9' },
+    ]);
   });
 
   it('áp: log ghi trong transaction (trước commit)', async () => {

@@ -1,4 +1,5 @@
 import type { PrismaClient, StorefrontType, UserRole } from '@prisma/client';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 
 /**
  * Gian hàng mẫu để giới thiệu tính năng trên máy thử. Chỉ chạy qua `pnpm --filter api seed:sample-storefronts`, không nằm trong
@@ -292,9 +293,13 @@ export async function removeSampleStorefronts(db: Pick<PrismaClient, 'user' | 's
   const { storefronts, ownerIds } = await db.$transaction(async (tx) => {
     const samples = await tx.storefront.findMany({ where: { isSample: true }, select: { id: true } });
     for (const sf of samples) await tx.storefront.delete({ where: { id: sf.id } });
-    const owners = await tx.user.findMany({ where: { metadata: { path: ['sampleStorefront'], equals: true } }, select: { id: true } });
+    const owners = await tx.user.findMany({ where: { metadata: { path: ['sampleStorefront'], equals: true } }, select: { id: true, role: true, affiliateRevokedAt: true } });
     for (const u of owners) {
-      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date(), isBlocked: true, referralCode: `SAMPLE-GONE-${u.id.toUpperCase()}` } });
+      const marked = new Date();
+      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: marked, isBlocked: true, referralCode: `SAMPLE-GONE-${u.id.toUpperCase()}` } });
+      if (u.affiliateRevokedAt === null) {
+        await recordUserAdminEvent(tx, { userId: u.id, kind: 'AFFILIATE_REVOKE', from: null, to: marked.toISOString(), reason: 'Gỡ gian hàng mẫu' });
+      }
     }
     return { storefronts: samples.length, ownerIds: owners.map((u) => u.id) };
   });

@@ -188,6 +188,7 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
         findUniqueOrThrow: jest.fn().mockResolvedValue({ isActive: opts.originActive ?? true }),
       },
       merchantPancakeLink: { create: jest.fn().mockResolvedValue({}) },
+      commissionRateHistory: { create: jest.fn().mockResolvedValue({}) },
     };
   }
   const OPTS = { adminId: 'admin-1' };
@@ -201,6 +202,18 @@ describe('linkTubuFulfilledVariation — admin duyệt "Tubu giao hộ"', () => 
       expect(data.affiliateRateCaptured).toBe(true);
       expect(Number(data.affiliateRateAtLink)).toBe(rate);
     }
+  });
+
+  it('liên kết xoá % hoa hồng đang đặt thì ghi lịch sử (từ % cũ sang mặc định, người duyệt); % vốn là mặc định thì không ghi', async () => {
+    const t = tx({ rate: 12 });
+    await linkTubuFulfilledVariation(t as never, product, OPTS);
+    expect(t.commissionRateHistory.create).toHaveBeenCalledTimes(1);
+    const data = t.commissionRateHistory.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ variationId: 'var-pk', toPct: null, actorId: 'admin-1' });
+    expect(Number(data.fromPct)).toBe(12);
+    const none = tx({ rate: null });
+    await linkTubuFulfilledVariation(none as never, product, OPTS);
+    expect(none.commissionRateHistory.create).not.toHaveBeenCalled();
   });
 
   it('gian hàng không còn là đối tác (CTV đã tắt cờ) hoặc đã mất → 409 nêu rõ, không đụng biến thể', async () => {
@@ -330,7 +343,12 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
         updateMany: jest.fn().mockResolvedValue({ count: closed }),
       },
       $queryRaw: jest.fn().mockResolvedValue([]),
-      variation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), create: jest.fn().mockResolvedValue({}) },
+      variation: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn().mockResolvedValue({ affiliateRate: null }),
+      },
+      commissionRateHistory: { create: jest.fn().mockResolvedValue({}) },
       product: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ basePrice: 150_000, salePrice: null }),
         update: jest.fn().mockResolvedValue({}),
@@ -339,6 +357,18 @@ describe('unlinkTubuFulfilledVariation — gỡ liên kết trả biến thể v
     };
   }
   const LINK = { id: 'l1', variationId: 'var-pk', originProductId: 'tubu-shell', originDeactivated: true, affiliateRateCaptured: true, affiliateRateAtLink: null };
+
+  it('gỡ liên kết đổi % hoa hồng (đặt ở gian hàng đối tác → % lúc liên kết) thì ghi lịch sử; không đổi thì không ghi', async () => {
+    const t = tx({ ...LINK, affiliateRateAtLink: new Prisma.Decimal(12) });
+    t.variation.findUnique.mockResolvedValue({ affiliateRate: new Prisma.Decimal(7) });
+    await unlinkTubuFulfilledVariation(t as never, 'prod-a', { actorId: 'admin-1', reason: 'Nhầm', deactivate: true });
+    const data = t.commissionRateHistory.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ variationId: 'var-pk', actorId: 'admin-1' });
+    expect([Number(data.fromPct), Number(data.toPct)]).toEqual([7, 12]);
+    const same = tx(LINK);
+    await unlinkTubuFulfilledVariation(same as never, 'prod-a', { actorId: 'admin-1', reason: 'Nhầm', deactivate: true });
+    expect(same.commissionRateHistory.create).not.toHaveBeenCalled();
+  });
 
   it('trả biến thể về sản phẩm gốc, bật lại sản phẩm gốc, sản phẩm đối tác nhận biến thể tạm và tắt bán', async () => {
     const t = tx(LINK);

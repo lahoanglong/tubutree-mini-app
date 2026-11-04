@@ -10,6 +10,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Text } from '../components/ui/text';
 import { useAuthStore } from '../store/auth';
+import { LogoutAllSection } from '../components/logout-all-section';
 import { AccountDeletionSection } from '../components/account-deletion-section';
 import { isGuestUser } from '../components/coupon-claim-gate';
 import { haptic } from '../utils/haptic';
@@ -171,10 +172,11 @@ export default function SettingsPage() {
       </Section>
 
       {canLogout && (
-        <div style={{ padding: 16 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
           <Button fullWidth variant="secondary" onPress={() => void logout()}>
             Đăng xuất
           </Button>
+          <LogoutAllSection />
         </div>
       )}
 

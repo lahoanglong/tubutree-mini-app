@@ -228,6 +228,25 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     expect(await state(ctv.id)).toEqual({ balance: 100_000, payouts: 1, paid: 1, approved: 0, ledger: 1 });
   });
 
+  it('A1: hạ CTV rồi đặt lại cùng vai trò đại lý (dấu còn) → sổ có đúng 2 dòng AFFILIATE_REVOKE theo thứ tự đặt rồi xoá', async () => {
+    const created = await ctvWithCommission(100_000);
+    const phone = newPhone();
+    await prisma.user.update({ where: { id: created.id }, data: { phone } });
+    const boss = await createUser(prisma, { role: 'ADMIN' });
+    const tier = await prisma.dealerTier.create({ data: { id: `tier-${randCode(6)}`, name: 'T', minOrderVolume: 0, discountRules: {} } });
+    const { admin } = adminServices();
+    await admin.setUserRole(boss.id, phone, 'CUSTOMER');
+    await prisma.user.update({ where: { id: created.id }, data: { role: 'DEALER' } });
+    expect(await markOf(created.id)).not.toBeNull();
+    await admin.setUserRole(boss.id, phone, 'DEALER', tier.id);
+    expect(await markOf(created.id)).toBeNull();
+    const rows = await prisma.userAdminEvent.findMany({ where: { userId: created.id, kind: 'AFFILIATE_REVOKE' }, orderBy: { createdAt: 'asc' } });
+    expect(rows.map((r) => [r.fromValue === null, r.toValue === null, r.actorId])).toEqual([
+      [true, false, boss.id],
+      [false, true, boss.id],
+    ]);
+  });
+
   it('migration backfill: đặt dấu cho khách có dấu vết CTV, bỏ qua khách thường và CTV đang hoạt động; chạy lại không đổi', async () => {
     const withCommission = await ctvWithCommission(50_000);
     await prisma.user.update({ where: { id: withCommission.id }, data: { role: 'CUSTOMER' } });

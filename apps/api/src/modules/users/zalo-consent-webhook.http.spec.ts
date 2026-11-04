@@ -29,7 +29,7 @@ describe('POST /api/webhooks/zalo-miniapp (HTTP, guard + pipe + prefix toÃ n cá»
     app.use(json({ limit: '10mb' }));
     app.setGlobalPrefix('api');
     app.useGlobalPipes(createValidationPipe());
-    await app.listen(0);
+    await app.listen(0, '127.0.0.1');
     port = (app.getHttpServer().address() as { port: number }).port;
   });
   afterAll(() => app.close());

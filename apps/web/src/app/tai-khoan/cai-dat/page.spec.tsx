@@ -23,8 +23,10 @@ const mocks = vi.hoisted(() => ({
   follow: vi.fn(),
   storageSet: vi.fn(),
   storageGet: vi.fn(),
+  apiFetch: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+vi.mock('@/lib/client-api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), apiFetch: mocks.apiFetch }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, patch: mocks.patch } }));
 vi.mock('@/lib/platform-bridge', () => ({
   platformBridge: {
@@ -57,6 +59,7 @@ beforeEach(() => {
   mocks.auth.initialized = true;
   mocks.auth.sessionUnavailable = false;
   mocks.auth.logout.mockReset().mockResolvedValue(undefined);
+  mocks.apiFetch.mockReset().mockResolvedValue(undefined);
   mocks.get.mockReset().mockResolvedValue({ notifyPromo: true, notifyGarden: true });
   mocks.patch.mockReset().mockImplementation(async (_p: string, body: object) => ({ notifyPromo: true, notifyGarden: true, ...body }));
   mocks.oaAvailable = false;
@@ -230,8 +233,38 @@ describe('/tai-khoan/cai-dat: liên kết, theo dõi OA, đăng xuất', () => {
 
   it('Đăng xuất gọi logout', async () => {
     const { container } = await mount();
-    click(byText(container, 'button', 'Đăng xuất'));
+    click(byText(container, 'button', /^Đăng xuất$/));
     await flush(2);
     expect(mocks.auth.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('Đăng xuất mọi thiết bị: hỏi xác nhận, gọi logout-all rồi đăng xuất máy này', async () => {
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đăng xuất mọi thiết bị'));
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Đăng xuất khỏi mọi thiết bị?');
+    click(byText(document.body, 'button', 'Đăng xuất mọi máy'));
+    await flush(4);
+    expect(mocks.apiFetch).toHaveBeenCalledWith('/auth/logout-all', { method: 'POST' });
+    expect(mocks.auth.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it('Đăng xuất mọi thiết bị: máy chủ lỗi thì giữ phiên và báo lỗi', async () => {
+    mocks.apiFetch.mockRejectedValueOnce(new Error('boom'));
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đăng xuất mọi thiết bị'));
+    click(byText(document.body, 'button', 'Đăng xuất mọi máy'));
+    await flush(4);
+    expect(mocks.auth.logout).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it('Huỷ ở hộp xác nhận: không gọi máy chủ', async () => {
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đăng xuất mọi thiết bị'));
+    click(byText(document.body, 'button', 'Huỷ'));
+    await flush(2);
+    expect(mocks.apiFetch).not.toHaveBeenCalled();
+    expect(byText(container, 'button', 'Đăng xuất mọi thiết bị')).not.toBeNull();
   });
 });

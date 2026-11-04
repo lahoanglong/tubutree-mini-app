@@ -270,6 +270,82 @@ describe('streamCsv', () => {
     expect(headers['Content-Disposition']).toBe('attachment; filename="don-hang.csv"');
     expect(body).toBe('\uFEFFa,b\r\n1,2\r\n3,4\r\n');
   });
+
+  function sink() {
+    const out = new PassThrough();
+    const res = Object.assign(out, { setHeader: () => undefined }) as unknown as Response;
+    out.on('data', () => undefined);
+    out.on('error', () => undefined);
+    return { out, res };
+  }
+
+  it('audit: đếm dòng dữ liệu (trừ dòng tiêu đề), xuống dòng trong ô nháy kép không tính là dòng mới', async () => {
+    const { res } = sink();
+    const audit = jest.fn();
+    async function* gen() {
+      yield 'a,b\r\n"x\r\ny",2\r\n"q""';
+      yield '\n",3\r\n4,5\r\n';
+    }
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit).toHaveBeenCalledWith(3);
+  });
+
+  it('audit: file chỉ có tiêu đề → 0 dòng; không có audit thì vẫn chạy như cũ', async () => {
+    const { res } = sink();
+    const audit = jest.fn();
+    async function* gen() {
+      yield 'a,b\r\n';
+    }
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(audit).toHaveBeenCalledWith(0);
+  });
+
+  it('audit: lỗi giữa chừng vẫn ghi số dòng đã gửi đi, và lỗi ghi audit không làm hỏng luồng', async () => {
+    const { res } = sink();
+    const audit = jest.fn().mockRejectedValue(new Error('db down'));
+    async function* gen() {
+      yield 'a\r\n';
+      yield '1\r\n';
+      throw new Error('boom');
+    }
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(audit).toHaveBeenCalledWith(1);
+  });
+
+  it('khách ngắt sau lô đầu: không đọc lô sau, audit ghi đúng số dòng đã gửi, đúng một lần', async () => {
+    const { out, res } = sink();
+    const audit = jest.fn();
+    const secondBatch = jest.fn();
+    async function* gen() {
+      yield 'a\r\n1\r\n2\r\n';
+      secondBatch();
+      yield '3\r\n';
+    }
+    const write = out.write.bind(out);
+    let writes = 0;
+    out.write = ((chunk: unknown) => {
+      const ok = write(chunk as string);
+      if (++writes === 2) out.emit('close');
+      return ok;
+    }) as typeof out.write;
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(secondBatch).not.toHaveBeenCalled();
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit).toHaveBeenCalledWith(2);
+  });
+
+  it('audit chậm không giữ kết nối: res.end() chạy trước khi audit xong', async () => {
+    const { out, res } = sink();
+    let release!: () => void;
+    const audit = jest.fn(() => new Promise<void>((r) => (release = r)));
+    async function* gen() {
+      yield 'a\r\n1\r\n';
+    }
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(out.writableEnded).toBe(true);
+    release();
+  });
 });
 
 // D1-04a: kế toán/marketing phải thấy đơn đến từ nền tảng nào, kênh nào, CTV nào, gian hàng nào ngay trong file CSV.

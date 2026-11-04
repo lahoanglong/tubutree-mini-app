@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StaffRosterTab } from './staff-roster-tab';
-import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerAsk, answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -20,7 +20,7 @@ const LIST = {
     { id: 'u1', phone: '0911111111', fullName: 'Lan', avatarUrl: null, role: 'STAFF', staffPermissions: ['KHO'], createdAt: '2026-10-01T00:00:00Z' },
     { id: 'u2', phone: '0922222222', fullName: null, avatarUrl: null, role: 'ADMIN', staffPermissions: [], createdAt: '2026-10-01T00:00:00Z' },
   ],
-  pendingInvites: [{ phone: '0933333333', role: 'STAFF', staffPermissions: ['KE_TOAN'], createdAt: '2026-10-02T00:00:00Z' }],
+  pendingInvites: [{ phone: '0933333333', role: 'STAFF', staffPermissions: ['KE_TOAN'], createdAt: '2026-10-02T00:00:00Z', expiresAt: '2026-10-09T00:00:00Z' }],
 };
 
 function stub(over: { list?: unknown; listStatus?: number; revoke?: unknown; grant?: unknown } = {}) {
@@ -74,7 +74,10 @@ describe('StaffRosterTab (Nhân sự)', () => {
     expect(save.disabled).toBe(false);
     click(save);
     await flush();
-    expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'STAFF' });
+    expect(api.posts('/admin/staff/grant')).toHaveLength(0);
+    answerAsk('Nhân viên kho mới');
+    await flush();
+    expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'STAFF', reason: 'Nhân viên kho mới' });
     expect(container.textContent).toContain('Đã lưu quyền (sẽ áp khi họ mở app).');
   });
 
@@ -92,9 +95,10 @@ describe('StaffRosterTab (Nhân sự)', () => {
     expect(api.posts('/admin/staff/grant')).toHaveLength(0);
     click(byText(container, 'button', 'Lưu quyền'));
     await flush();
-    answerConfirm(true);
+    expect(api.posts('/admin/staff/grant')).toHaveLength(0);
+    answerAsk('Quản lý mới');
     await flush();
-    expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'ADMIN' });
+    expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'ADMIN', reason: 'Quản lý mới' });
   });
 
   it('thẻ nhân viên có nhóm việc đang bật; tick thêm rồi lưu gửi đúng danh sách; quản trị không có ô tick', async () => {
@@ -112,7 +116,9 @@ describe('StaffRosterTab (Nhân sự)', () => {
     expect((byText(memberList, 'button', 'Lưu nhóm việc') as HTMLButtonElement).disabled).toBe(false);
     click(byText(memberList, 'button', 'Lưu nhóm việc'));
     await flush();
-    expect(JSON.parse(api.puts('/admin/users/u1/staff-permissions')[0]!.init!.body as string)).toEqual({ permissions: ['KHO', 'CSKH'] });
+    answerAsk('Chuyển sang chăm sóc khách');
+    await flush();
+    expect(JSON.parse(api.puts('/admin/users/u1/staff-permissions')[0]!.init!.body as string)).toEqual({ permissions: ['KHO', 'CSKH'], reason: 'Chuyển sang chăm sóc khách' });
   });
 
   it('thu hồi có xác nhận; huỷ lời mời chờ thì gọi thẳng revoke theo SĐT', async () => {
@@ -128,20 +134,23 @@ describe('StaffRosterTab (Nhân sự)', () => {
     await flush();
     answerConfirm(true);
     await flush();
-    expect(JSON.parse(api.posts('/admin/staff/revoke')[0]!.init!.body as string)).toEqual({ phone: '0911111111' });
+    expect(api.posts('/admin/staff/revoke')).toHaveLength(0);
+    answerAsk('Nghỉ việc');
+    await flush();
+    expect(JSON.parse(api.posts('/admin/staff/revoke')[0]!.init!.body as string)).toEqual({ phone: '0911111111', reason: 'Nghỉ việc' });
     expect(container.textContent).toContain('Đã thu hồi quyền.');
     // D7-15: huỷ lời mời cũng hỏi lại (người được mời phải mời lại từ đầu).
-    click(container.querySelector('[aria-label="Huỷ lời mời · 0933333333"]'));
+    click(container.querySelector('[aria-label="Thu hồi lời mời · 0933333333"]'));
     await flush();
     expect(confirmDialog()?.textContent).toContain('0933333333');
     answerConfirm(false);
     await flush();
     expect(api.posts('/admin/staff/revoke')).toHaveLength(1);
-    click(container.querySelector('[aria-label="Huỷ lời mời · 0933333333"]'));
+    click(container.querySelector('[aria-label="Thu hồi lời mời · 0933333333"]'));
     await flush();
-    answerConfirm(true);
+    answerAsk('Nhập nhầm số');
     await flush();
-    expect(JSON.parse(api.posts('/admin/staff/revoke')[1]!.init!.body as string)).toEqual({ phone: '0933333333' });
+    expect(JSON.parse(api.posts('/admin/staff/revoke')[1]!.init!.body as string)).toEqual({ phone: '0933333333', reason: 'Nhập nhầm số' });
   });
 
   it('thu hồi mà gian hàng đối tác còn việc dở: cảnh báo storeBlocked, không báo thành công', async () => {
@@ -150,7 +159,7 @@ describe('StaffRosterTab (Nhân sự)', () => {
     await flush();
     click(container.querySelector('[aria-label="Thu hồi · Lan"]'));
     await flush();
-    answerConfirm(true);
+    answerAsk('Nghỉ việc');
     await flush();
     expect(container.textContent).toContain('gian hàng đối tác của người này còn việc dở');
     expect(container.textContent).not.toContain('Đã thu hồi quyền.');
@@ -192,6 +201,8 @@ describe('StaffRosterTab (Nhân sự)', () => {
       click(byText(container.querySelector('[aria-label="Nhóm việc cho người mới"]') as HTMLElement, 'button', 'Chăm sóc khách'));
       click(byText(container, 'button', 'Lưu quyền'));
       await flush();
+      answerAsk('Cấp lại quyền');
+      await flush();
       expect(container.textContent).toContain('Đã đổi nhóm việc của 0911111111 thành Chăm sóc khách.');
       expect(container.textContent).not.toContain('sẽ áp khi họ mở app');
     });
@@ -203,6 +214,8 @@ describe('StaffRosterTab (Nhân sự)', () => {
       typeInto(container.querySelector('input[type=tel]'), '0911111111');
       click(byText(container, 'button', 'Lưu quyền'));
       await flush();
+      answerAsk('Cấp lại quyền');
+      await flush();
       expect(container.textContent).toContain('0911111111 đã là nhân viên, nhóm việc giữ nguyên.');
       expect(container.textContent).not.toContain('sẽ áp khi họ mở app');
     });
@@ -213,6 +226,8 @@ describe('StaffRosterTab (Nhân sự)', () => {
       await flush();
       typeInto(container.querySelector('input[type=tel]'), '0944444444');
       click(byText(container, 'button', 'Lưu quyền'));
+      await flush();
+      answerAsk('Cấp lại quyền');
       await flush();
       expect(container.textContent).toContain('Đã lưu quyền (sẽ áp khi họ mở app).');
     });
@@ -242,7 +257,9 @@ describe('StaffRosterTab (Nhân sự)', () => {
       expect(byText(group, 'button', 'Kho')!.getAttribute('aria-pressed')).toBe('true');
       click(byText(container, 'button', 'Lưu quyền'));
       await flush();
-      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'STAFF', permissions: ['KHO', 'CSKH'] });
+      answerAsk('Kho mới');
+      await flush();
+      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'STAFF', permissions: ['KHO', 'CSKH'], reason: 'Kho mới' });
       // Gửi xong thì chọn lại từ đầu, không kéo nhóm của người trước sang người sau.
       expect([...form.querySelectorAll('[aria-label="Nhóm việc cho người mới"] button[aria-pressed=true]')]).toHaveLength(0);
 
@@ -260,9 +277,9 @@ describe('StaffRosterTab (Nhân sự)', () => {
       click(byText(container.querySelector('form')!, 'button', 'Quản trị'));
       click(byText(container, 'button', 'Lưu quyền'));
       await flush();
-      answerConfirm(true);
+      answerAsk('Quản lý mới');
       await flush();
-      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'ADMIN' });
+      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'ADMIN', reason: 'Quản lý mới' });
     });
 
     it('lời mời chờ mở app hiện nhóm đã chọn và cho đổi: lưu gửi lại lời cấp cùng SĐT với nhóm mới', async () => {
@@ -275,8 +292,24 @@ describe('StaffRosterTab (Nhân sự)', () => {
       click(boxes[1]!);
       click(byText(invites, 'button', 'Lưu nhóm việc'));
       await flush();
-      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0933333333', role: 'STAFF', permissions: ['KE_TOAN', 'KHO'] });
+      answerAsk('Đổi nhóm của lời mời');
+      await flush();
+      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0933333333', role: 'STAFF', permissions: ['KE_TOAN', 'KHO'], reason: 'Đổi nhóm của lời mời' });
       expect(invites.textContent).toContain('Họ nhận đúng nhóm này khi mở app');
+    });
+
+    it('lời mời hiện hạn (ngày giờ Việt Nam) và nút Thu hồi; lời mời cũ chưa có hạn thì không hiện dòng hạn', async () => {
+      const api = stub({ list: { members: [], pendingInvites: [
+        { phone: '0933333333', role: 'STAFF', staffPermissions: [], createdAt: '2026-10-02T00:00:00Z', expiresAt: '2026-10-09T18:00:00Z' },
+        { phone: '0944444444', role: 'STAFF', staffPermissions: [], createdAt: '2026-10-02T00:00:00Z', expiresAt: null },
+      ] } });
+      void api;
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      const items = [...container.querySelectorAll('section[aria-label="Chờ mở app"] > ul > li')];
+      expect(items[0]!.textContent).toContain('Hết hạn 10/10/2026');
+      expect(items[1]!.textContent).not.toContain('Hết hạn');
+      expect(byText(items[0] as HTMLElement, 'button', 'Thu hồi')).not.toBeNull();
     });
 
     it('lời mời ADMIN không có ô chọn nhóm', async () => {

@@ -1548,6 +1548,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     /** Dấu vết của đại lý: gian hàng CTV hoặc dòng hoa hồng. */
     dealerStorefront?: boolean;
     dealerCommission?: boolean;
+    availableCount?: number;
   }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
     const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: opts.priorGross ?? null, taxWithheld: opts.priorTax ?? null, taxRefunded: opts.priorRefunded ?? null } });
@@ -1560,7 +1561,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     const queryRaw = jest.fn().mockResolvedValue(rows);
     const prisma = {
       commission: {
-        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: opts.available ?? 100_000 } }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: opts.available ?? 100_000 }, _count: { _all: opts.availableCount ?? rows.length } }),
         updateMany,
         findFirst: jest.fn().mockResolvedValue(opts.dealerCommission ? { id: 'c0' } : null),
       },
@@ -1575,6 +1576,20 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
     return { prisma, userUpdate, userFindUnique, payoutCreate, updateMany, payoutAggregate, executeRaw, queryRaw };
   }
+
+  it('L2-04: số dòng khoá được khác số dòng lúc tính khả dụng (đơn vừa RETURNED) → 409, không đánh dấu PAID, không đụng Ví', async () => {
+    const { prisma, updateMany, userUpdate, payoutCreate } = makePrisma({ rows: [{ id: 'c1', amount: 100_000 }], available: 100_000, availableCount: 2 });
+    await expect(new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toMatchObject({ status: 409 });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(payoutCreate).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('L2-04: khả dụng chỉ tính hoa hồng của đơn DELIVERED', async () => {
+    const { prisma } = makePrisma({});
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 100_000, 'WALLET_BALANCE');
+    expect((prisma.commission.aggregate as jest.Mock).mock.calls[0][0].where).toMatchObject({ order: { status: 'DELIVERED' } });
+  });
 
   describe('quyền CTV', () => {
     const svcOf = (prisma: PrismaService) => new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
@@ -1754,6 +1769,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
               .filter((r) => r.status === 'APPROVED' && r.payoutBatchId === null)
               .reduce((s, r) => s + r.amount, 0),
           },
+          _count: { _all: commissionRows.filter((r) => r.status === 'APPROVED' && r.payoutBatchId === null).length },
         })),
         updateMany: jest.fn(
           async ({

@@ -325,18 +325,35 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     async function* empty(): AsyncGenerator<string> {}
     const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
     const ctrl = new AdminController(admin as never, {} as never);
-    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn(), on: jest.fn() };
     await ctrl.exportOrders({} as never, 'STAFF', res as never);
     expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: true });
     await ctrl.exportOrders({} as never, 'ADMIN', res as never);
     expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: false });
   });
 
+  it('xuất CSV đơn và người dùng ghi nhật ký xuất: người xuất, route, bộ lọc, số dòng (L1-07)', async () => {
+    async function* rows(): AsyncGenerator<string> {
+      yield 'a\r\n';
+      yield '1\r\n';
+      yield '2\r\n';
+    }
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => rows()), userCsv: jest.fn().mockImplementation(() => rows()), recordExport: jest.fn() };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn(), on: jest.fn() };
+    const q = { kind: 'ctv' } as never;
+    await ctrl.exportOrders(q, 'KE_TOAN', res as never, 'acc1');
+    expect(admin.recordExport).toHaveBeenLastCalledWith('acc1', 'orders/export', q, 2);
+    const uq = { search: '09' } as never;
+    await ctrl.exportUsers(uq, res as never, 'adm1');
+    expect(admin.recordExport).toHaveBeenLastCalledWith('adm1', 'users/export', uq, 2);
+  });
+
   it('xuất CSV đơn có bộ lọc mới (loại đơn, thanh toán, ngày, gian hàng): kế toán vẫn bị che SĐT, bộ lọc giữ nguyên (D1-05, D1-17)', async () => {
     async function* empty(): AsyncGenerator<string> {}
     const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };
     const ctrl = new AdminController(admin as never, {} as never);
-    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn(), on: jest.fn() };
     const q = Object.assign(new ExportOrdersQuery(), {
       kind: 'ctv' as const,
       payment: 'PAID' as const,
@@ -454,17 +471,17 @@ describe('POST /admin/orders/:id/confirm-payment (C-024)', () => {
 
 describe('POST /admin/users/role — tierId cho DEALER (C-008)', () => {
   it('DTO nhận tierId (forbidNonWhitelisted không chặn) và controller chuyển xuống AdminService', async () => {
-    const dto = (await asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'dealer_l3' })) as SetUserRoleDto;
+    const dto = (await asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'dealer_l3', reason: 'Đã ký hợp đồng đại lý' })) as SetUserRoleDto;
     expect(dto).toEqual(expect.objectContaining({ phone: '0899625240', role: 'DEALER', tierId: 'dealer_l3' }));
     const admin = { setUserRole: jest.fn().mockResolvedValue({ ok: true }) };
     const ctrl = new AdminController(admin as never, {} as never);
     await ctrl.setUserRole('admin-1', dto);
-    expect(admin.setUserRole).toHaveBeenCalledWith('admin-1', '0899625240', 'DEALER', 'dealer_l3');
+    expect(admin.setUserRole).toHaveBeenCalledWith('admin-1', '0899625240', 'DEALER', 'dealer_l3', 'Đã ký hợp đồng đại lý');
   });
 
   it('tierId sai kiểu / quá dài → 400', async () => {
-    await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 5 })).rejects.toThrow();
-    await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'x'.repeat(101) })).rejects.toThrow();
+    await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 5, reason: 'Hợp lệ' })).rejects.toThrow();
+    await expect(asBody(SetUserRoleDto, { phone: '0899625240', role: 'DEALER', tierId: 'x'.repeat(101), reason: 'Hợp lệ' })).rejects.toThrow();
   });
 });
 

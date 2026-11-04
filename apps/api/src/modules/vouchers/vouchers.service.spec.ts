@@ -55,7 +55,7 @@ describe('VouchersService.grant', () => {
 
   it('không cấp lại khi đã có coupon cùng reason cho user (findUnique theo code)', async () => {
     const prisma = {
-      coupon: { findUnique: jest.fn().mockResolvedValue({ id: 'existing' }), create: jest.fn() },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue({ id: 'existing' }), create: jest.fn() },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -69,7 +69,7 @@ describe('VouchersService.grant', () => {
 
   it('cấp coupon cá nhân (USER_GROUP, usageLimit 1) + code deterministic + notify', async () => {
     const prisma = {
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -97,7 +97,7 @@ describe('VouchersService.grant', () => {
 
   it('endAt cố định (mã đơn thứ 2 hết hạn cùng cửa sổ 30 ngày) thay cho now + validDays', async () => {
     const prisma = {
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -118,7 +118,7 @@ describe('VouchersService.grant', () => {
   // C-053 (A1-019): tin WELCOME_VOUCHER không nói đơn tối thiểu 199.000đ → khách mở app thấy mã không dùng được.
   it('notify kèm min_order_note có đơn tối thiểu (định dạng vi-VN) để mẫu tin nói rõ điều kiện dùng', async () => {
     const prisma = {
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -134,7 +134,7 @@ describe('VouchersService.grant', () => {
 
   it.each([undefined, 0])('mã không có đơn tối thiểu (%p) → min_order_note rỗng, không in "đơn từ 0đ"', async (minOrder) => {
     const prisma = {
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(), notify);
@@ -172,7 +172,7 @@ describe('VouchersService.birthdayVouchers (P0 A3-05 — theo hạng thành viê
     const create = jest.fn().mockResolvedValue({});
     const prisma = {
       $queryRaw: jest.fn().mockResolvedValue(rows),
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create },
       membershipTier: {
         findMany: jest.fn().mockResolvedValue(
           Object.entries(tierAmounts).map(([id, birthdayVoucherAmount]) => ({ id, birthdayVoucherAmount })),
@@ -374,7 +374,7 @@ describe.each([
 
 /** Kho coupon trong bộ nhớ: findUnique/create theo code như unique thật; đo số create đang chạy cùng lúc. */
 function makeCouponStore(opts: { failOn?: string[]; failAll?: boolean } = {}) {
-  const store = new Map<string, { code: string; value: number; endAt: Date }>();
+  const store = new Map<string, { code: string; value: number; endAt: Date; scopeMeta: { userId: string; reason?: string } }>();
   let inFlight = 0;
   let maxInFlight = 0;
   const create = jest.fn(async ({ data }: { data: { code: string; value: number; endAt: Date; scopeMeta: { userId: string } } }) => {
@@ -383,10 +383,19 @@ function makeCouponStore(opts: { failOn?: string[]; failAll?: boolean } = {}) {
     await new Promise((r) => setTimeout(r, 5));
     inFlight--;
     if (opts.failAll || opts.failOn?.includes(data.scopeMeta.userId)) throw new Error(`db down ${data.scopeMeta.userId}`);
-    store.set(data.code, { code: data.code, value: data.value, endAt: data.endAt });
+    store.set(data.code, { code: data.code, value: data.value, endAt: data.endAt, scopeMeta: (data as { scopeMeta: { userId: string; reason?: string } }).scopeMeta });
     return {};
   });
-  const coupon = { findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null), create };
+  const coupon = {
+    findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null),
+    // Mô phỏng truy vấn theo kỳ của milestoneReceived: lọc theo hậu tố kỳ ở scopeMeta.reason như SQL thật.
+    findMany: jest.fn(async ({ where }: { where?: { scopeMeta?: { string_ends_with?: string } } } = {}) =>
+      [...store.values()]
+        .filter((c) => c.code.startsWith('MILESTONE') && String(c.scopeMeta.reason ?? '').endsWith(where?.scopeMeta?.string_ends_with ?? ''))
+        .map((c, i) => ({ id: `id${i}`, code: c.code, value: c.value, scopeMeta: c.scopeMeta })),
+    ),
+    create,
+  };
   return { store, create, coupon, maxInFlight: () => maxInFlight };
 }
 
@@ -535,7 +544,7 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
     const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => (isCurrentPeriodCall(a) ? rows : []));
     const prisma = {
       $queryRaw: queryRaw,
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     return { svc: new VouchersService(prisma, makeConfig(), notify), create, prisma };
@@ -599,7 +608,7 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
       const start = a.find((x): x is Date => x instanceof Date)!;
       return start.toISOString() === '2026-08-31T17:00:00.000Z' ? [{ userId: 'u1', spent: BigInt(1_200_000) }] : [];
     });
-    const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const prisma = { $queryRaw: queryRaw, coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
     const notify = mockNotifier();
     jest.useFakeTimers().setSystemTime(new Date('2026-11-05T03:00:00Z'));
     try {
@@ -617,7 +626,7 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
       const start = a.find((x): x is Date => x instanceof Date)!;
       return start.toISOString() === '2026-08-31T17:00:00.000Z' ? [{ userId: 'u1', spent: BigInt(5_500_000) }] : [];
     });
-    const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const prisma = { $queryRaw: queryRaw, coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
     const notify = mockNotifier();
     jest.useFakeTimers().setSystemTime(new Date('2026-10-08T03:00:00Z'));
     try {
@@ -648,6 +657,95 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
   });
 });
 
+describe('VouchersService.milestoneVouchers — bù chênh lệch bậc trong cùng tháng (L2-05)', () => {
+  function setup(spent: { value: bigint }) {
+    const k = makeCouponStore();
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      const start = a.find((x): x is Date => x instanceof Date)!;
+      return start.getTime() === startOfVnMonth(new Date(Date.now())).getTime() ? [{ userId: 'u1', spent: spent.value }] : [];
+    });
+    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
+    const svc = new VouchersService(prisma, makeConfig(), mockNotifier());
+    spyLoggers(svc);
+    const values = () => [...k.store.values()].map((c) => c.value).sort((a, b) => a - b);
+    return { svc, values, store: k.store };
+  }
+
+  // Chỉ giả Date: coupon store giả dùng setTimeout thật để mô phỏng độ trễ.
+  const pinTime = (iso: string) => jest.useFakeTimers({ now: new Date(iso), doNotFake: ['setTimeout', 'setImmediate', 'nextTick', 'queueMicrotask'] });
+  afterEach(() => jest.useRealTimers());
+
+  it('1tr rồi 3tr trong cùng tháng: 30k rồi thêm 70k (tổng 100k), chạy lại không cấp thêm', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const spent = { value: BigInt(1_200_000) };
+    const { svc, values } = setup(spent);
+    await svc.milestoneVouchers();
+    expect(values()).toEqual([30_000]);
+    spent.value = BigInt(3_500_000);
+    await svc.milestoneVouchers();
+    expect(values()).toEqual([30_000, 70_000]);
+    await svc.milestoneVouchers();
+    expect(values()).toEqual([30_000, 70_000]);
+  });
+
+  it('đạt 3tr ngay từ đầu: một voucher 100k', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const { svc, values } = setup({ value: BigInt(3_500_000) });
+    await svc.milestoneVouchers();
+    expect(values()).toEqual([100_000]);
+  });
+
+  it('1tr, 3tr rồi 5tr: 30k + 70k + 100k = 200k; mã vẫn duy nhất theo (bậc, tháng)', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const spent = { value: BigInt(1_200_000) };
+    const { svc, values, store } = setup(spent);
+    for (const v of [1_200_000, 3_500_000, 6_000_000]) {
+      spent.value = BigInt(v);
+      await svc.milestoneVouchers();
+    }
+    expect(values()).toEqual([30_000, 70_000, 100_000]);
+    expect(store.size).toBe(3);
+    expect([...store.keys()].every((c) => /^MILESTONE\d+-2026-10-U1$/.test(c))).toBe(true);
+  });
+
+  it('chi tiêu rớt về bậc thấp sau khi đã nhận bậc cao (trả hàng): không cấp thêm bậc thấp', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const spent = { value: BigInt(3_500_000) };
+    const { svc, values } = setup(spent);
+    await svc.milestoneVouchers();
+    spent.value = BigInt(1_200_000);
+    await svc.milestoneVouchers();
+    expect(values()).toEqual([100_000]);
+  });
+
+  it('m2: admin đổi bậc 3tr thành 2,5tr sau khi đã cấp 100k → không cấp thêm (đã nhận tính theo coupon đã cấp, không theo cấu hình)', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const k = makeCouponStore();
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      const start = a.find((x): x is Date => x instanceof Date)!;
+      return start.getTime() === startOfVnMonth(new Date(Date.now())).getTime() ? [{ userId: 'u1', spent: BigInt(3_500_000) }] : [];
+    });
+    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
+    const oldCfg = makeConfig();
+    await new VouchersService(prisma, oldCfg, mockNotifier()).milestoneVouchers();
+    expect([...k.store.values()].map((c) => c.value)).toEqual([100_000]);
+    const newCfg = makeConfig({ 'voucher.milestones': [{ spend: 1_000_000, reward: 30_000 }, { spend: 2_500_000, reward: 100_000 }, { spend: 5_000_000, reward: 200_000 }] });
+    await new VouchersService(prisma, newCfg, mockNotifier()).milestoneVouchers();
+    expect([...k.store.values()].map((c) => c.value)).toEqual([100_000]);
+  });
+
+  it('sang tháng sau tính lại từ đầu: đạt 1tr tháng mới vẫn nhận đủ 30k', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const spent = { value: BigInt(3_500_000) };
+    const { svc, values } = setup(spent);
+    await svc.milestoneVouchers();
+    jest.setSystemTime(new Date('2026-11-15T03:00:00Z'));
+    spent.value = BigInt(1_200_000);
+    await svc.milestoneVouchers();
+    expect(values()).toEqual([30_000, 100_000]);
+  });
+});
+
 describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ sót khách ngoài trang đầu', () => {
   const statics = VouchersService as unknown as { MILESTONE_PAGE: number };
   const originalPage = statics.MILESTONE_PAGE;
@@ -666,7 +764,7 @@ describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ 
       const cursor = a.find((x): x is string => typeof x === 'string') ?? '';
       return userIds.filter((id) => id > cursor).slice(0, statics.MILESTONE_PAGE).map((userId) => ({ userId, spent: BigInt(3_500_000) }));
     });
-    const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const prisma = { $queryRaw: queryRaw, coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(config), notify);
     return { svc, create, queryRaw, args, ...spyLoggers(svc) };
@@ -758,7 +856,7 @@ describe('VouchersService.welcomeVouchers — quét hết cửa sổ 24h', () =>
     const findMany = jest.fn().mockResolvedValueOnce([{ id: 'u1' }]).mockResolvedValue([]);
     const prisma = {
       user: { findMany },
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
       notificationLog: { create: jest.fn().mockResolvedValue({}) },
     } as unknown as PrismaService;
 
@@ -775,7 +873,7 @@ describe('VouchersService — lịch giờ VN, độc lập TZ host (C-026)', ()
   function setup() {
     const prisma = {
       $queryRaw: jest.fn().mockResolvedValue([]),
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
       membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
     const notify = mockNotifier();
@@ -831,7 +929,7 @@ describe('VouchersService.grantWelcomeNow', () => {
     const create = jest.fn().mockResolvedValue({});
     const prisma = {
       user: { findFirst },
-      coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
+      coupon: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null), create },
     } as unknown as PrismaService;
     const notify = mockNotifier();
     return { svc: new VouchersService(prisma, makeConfig(config), notify), findFirst, create, notify };

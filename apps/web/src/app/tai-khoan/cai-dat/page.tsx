@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
+import { LogoutAllSection } from '@/components/account/logout-all-section';
 import { AccountDeletionSection } from '@/components/account/account-deletion-section';
 import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -157,10 +158,11 @@ export default function SettingsPage() {
         <LinkRow href="/tai-khoan/dia-chi" label="Sổ địa chỉ" last />
       </Section>
 
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-2">
         <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
           Đăng xuất
         </button>
+        <LogoutAllSection />
       </div>
 
       <AccountDeletionSection />

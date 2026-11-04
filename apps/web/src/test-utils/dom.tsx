@@ -100,6 +100,14 @@ export function confirmDialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="alertdialog"]');
 }
 
+/** Gõ lý do vào ô nhập của hộp thoại `ask` đang mở rồi bấm Xác nhận. */
+export function answerAsk(reason: string) {
+  const d = confirmDialog();
+  if (!d) throw new Error('answerAsk: không có hộp thoại đang mở');
+  typeInto(d.querySelector('textarea'), reason);
+  click(d.querySelector('[data-confirm="accept"]'));
+}
+
 /** Bấm "Xác nhận" (true) hoặc "Huỷ" (false) trên hộp thoại useConfirm đang mở. */
 export function answerConfirm(accept: boolean) {
   const d = confirmDialog();

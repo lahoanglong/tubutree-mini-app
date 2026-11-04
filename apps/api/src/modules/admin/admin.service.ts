@@ -10,6 +10,8 @@ import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
+import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
@@ -330,11 +332,18 @@ export class AdminService {
           WHERE "id" IN (${Prisma.join(items.map((a) => a.id))})`
       : [];
     const flags = new Map(flagRows.map((r) => [r.id, r]));
+    // Duyệt hồ sơ không xoá dấu thu hồi CTV (đại lý bị hạ rồi duyệt lại vẫn không rút được hoa hồng cũ): báo ra để người duyệt biết trước.
+    const applicantIds = [...new Set(items.map((a) => a.userId))];
+    const revoked = applicantIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: applicantIds }, affiliateRevokedAt: { not: null } }, select: { id: true } })
+      : [];
+    const revokedIds = new Set(revoked.map((u) => u.id));
     const data = items.map((a) => ({
       ...a,
       hasCccdFront: flags.get(a.id)?.hasCccdFront ?? false,
       hasCccdBack: flags.get(a.id)?.hasCccdBack ?? false,
       hasStoreFront: flags.get(a.id)?.hasStoreFront ?? false,
+      applicantAffiliateRevoked: revokedIds.has(a.userId),
     }));
     return paginated(data, page, limit, total);
   }
@@ -617,6 +626,7 @@ export class AdminService {
     phone: string,
     role: 'CUSTOMER' | 'AFFILIATE' | 'DEALER' | 'STAFF' | 'ADMIN',
     tierId?: string,
+    reason?: string,
   ) {
     const normalized = searchPhone(phone) ?? phone.trim();
     const dealerTierId = role === 'DEALER' ? tierId?.trim() : undefined;
@@ -629,8 +639,13 @@ export class AdminService {
     }
     // Đọc cấu hình đối soát trước khi mở tx (như setStorePartner): chỉ dùng khi người này được đặt về CUSTOMER/AFFILIATE.
     const partnerCfg = losesPartnerStore('DEALER', role) ? await this.fulfilment?.settlementConfig() : undefined;
-    const { updated, previousRole } = await this.prisma.$transaction(async (tx) => {
+    const { updated, previousRole, revoked } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
+      // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán, cùng giao dịch với lệnh đổi role: applyGrants (chỉ nâng, chạy ở mỗi
+      // lần refresh token) khoá grant của SĐT rồi dòng users và đọc lại grant, nên hoặc thấy grant đã thu hồi, hoặc đợi giao dịch này xong. Lỗi ở đây phải làm
+      // hỏng cả lệnh (không được nuốt): role hạ mà grant còn thì lần refresh kế tự nâng lại. Đặt trước lệnh ghi users để thứ tự khoá
+      // (grant rồi tới users) trùng addGrant/revokeGrant.
+      const revoked = await this.rbac.revokeGrantsAbove(normalized, role, tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
       if (!user) throw new NotFoundException(`Không tìm thấy người dùng có SĐT ${normalized} (cần mở Mini App Zalo ≥1 lần).`);
       const previousRole = user.role;
@@ -674,7 +689,20 @@ export class AdminService {
         select: { id: true, phone: true, fullName: true, role: true },
       });
       if (previousRole !== role) {
-        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, actorId: adminId });
+        await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, reason, actorId: adminId });
+      }
+      // Dấu đổi giá trị mà vai trò không đổi (DEALER→DEALER mở lại quyền rút) vẫn phải có dòng sổ: lịch sử vai trò không nói được ai mở lại.
+      const markBefore = user.affiliateRevokedAt ?? null;
+      const markAfter = 'affiliateRevokedAt' in data ? ((data.affiliateRevokedAt as Date | null | undefined) ?? null) : markBefore;
+      if ((markBefore === null) !== (markAfter === null)) {
+        await recordUserAdminEvent(tx, {
+          userId: user.id,
+          kind: 'AFFILIATE_REVOKE',
+          from: markBefore?.toISOString() ?? null,
+          to: markAfter?.toISOString() ?? null,
+          reason,
+          actorId: adminId,
+        });
       }
       if (droppedPerms.length) {
         await recordUserAdminEvent(tx, {
@@ -682,23 +710,14 @@ export class AdminService {
           kind: 'STAFF_PERMISSIONS',
           from: droppedPerms.join(','),
           to: '',
+          reason,
           actorId: adminId,
         });
       }
-      return { updated, previousRole };
+      return { updated, previousRole, revoked };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     // Vai trò và cờ đối tác quyết định gian hàng của người này có hiện công khai không: danh sách ảnh /img nạp lại, đánh dấu sau commit.
     this.imageResize?.invalidateRegistry();
-    // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán — trước đây KHÔNG làm
-    // việc này: hạ quyền qua đường setUserRole trong khi grant từ /admin/staff/grant còn hiệu
-    // lực → lần refresh token tiếp theo, applyGrants (chỉ nâng không hạ) tự phục hồi quyền cũ
-    // (P0-3, docs/2026-09-08-review-progress.md). Chạy SAU khi user.update đã thành công —
-    // nếu lỗi ở bước này, role đã hạ vẫn đứng, chỉ còn nguy cơ tự phục hồi ở lần refresh sau
-    // (best-effort, không rollback role vì role change tự nó luôn đúng ý admin).
-    const revoked = await this.rbac.revokeGrantsAbove(normalized, role).catch((err) => {
-      this.logger.error(`revokeGrantsAbove lỗi cho SĐT ${maskPhone(normalized)}: ${err instanceof Error ? err.message : err}`);
-      return 0;
-    });
     if (revoked > 0) {
       this.logger.warn(`Admin ${adminId} đổi role user ${updated.id} (${maskPhone(normalized)}) → thu hồi ${revoked} grant xếp hạng cao hơn ${role}.`);
     }
@@ -719,7 +738,7 @@ export class AdminService {
    * Gán nhóm việc cho nhân viên (ADMINOPS-10). Chỉ cho tài khoản STAFF: ADMIN đã có mọi quyền, khách thì phải cấp vai
    * trò nhân viên trước. Có hiệu lực ở request kế tiếp (JwtStrategy đọc DB, cache vài giây).
    */
-  async setStaffPermissions(adminId: string, userId: string, raw: string[]) {
+  async setStaffPermissions(adminId: string, userId: string, raw: string[], reason?: string) {
     const unknown = raw.filter((p) => !isStaffPermission(p));
     if (unknown.length) throw new BadRequestException(`Nhóm việc không hợp lệ: ${unknown.join(', ')}.`);
     const perms = STAFF_PERMISSIONS.filter((p) => raw.includes(p));
@@ -739,17 +758,68 @@ export class AdminService {
       if (res.count === 0) {
         throw new BadRequestException('Tài khoản vừa đổi vai trò, không còn là Nhân viên — tải lại trang.');
       }
-      await recordUserAdminEvent(tx, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, actorId: adminId });
+      await recordUserAdminEvent(tx, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, reason, actorId: adminId });
     });
     this.logger.warn(`Admin ${adminId} đổi nhóm việc nhân viên ${userId}: [${before}] → [${after}]`);
     return { id: userId, staffPermissions: perms, changed: true };
   }
 
   /**
+   * Huỷ hoa hồng APPROVED chưa chuyển Ví của người đã bị thu hồi quyền CTV: cron chuyển Ví và nút rút đều từ chối người có dấu nên khoản này
+   * treo vô thời hạn. Thứ tự khoá hoa hồng rồi dòng người dùng giống `requestPayout`, nên hai đường không deadlock; dấu đọc lại sau khoá
+   * nên admin cấp lại CTV chen vào thì lần huỷ này nhận 409 thay vì huỷ tiền của người đã được mở lại quyền rút.
+   */
+  async forfeitRevokedCommissions(adminId: string, userId: string, rawReason: string): Promise<{ cancelled: number; amount: number }> {
+    const reason = rawReason.trim();
+    if (reason.length < 3) throw new BadRequestException('Cần ghi lý do huỷ hoa hồng (ít nhất 3 ký tự).');
+    const out = await this.prisma
+      .$transaction(
+        async (tx) => {
+          const rows = await tx.$queryRaw<{ id: string; amount: number; approvedAt: Date | null }[]>`
+            SELECT "id", "amount", "approvedAt" FROM "commissions"
+            WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
+            ORDER BY "id" FOR NO KEY UPDATE`;
+          const [user] = await tx.$queryRaw<{ affiliateRevokedAt: Date | null }[]>`
+            SELECT "affiliateRevokedAt" FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+          if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+          if (!user.affiliateRevokedAt) {
+            throw new ConflictException('Người này chưa bị thu hồi quyền CTV (hoặc vừa được cấp lại) nên không huỷ được hoa hồng. Tải lại trang.');
+          }
+          if (rows.length === 0) throw new ConflictException('Không còn hoa hồng chờ rút để huỷ (có thể đã được xử lý). Tải lại trang.');
+          const ids = rows.map((r) => r.id);
+          const { count } = await tx.commission.updateMany({
+            where: { id: { in: ids }, status: 'APPROVED', payoutBatchId: null },
+            data: { status: 'REJECTED' },
+          });
+          if (count !== ids.length) throw new ConflictException('Hoa hồng vừa đổi trạng thái, chưa huỷ gì cả. Tải lại trang rồi thử lại.');
+          const amount = rows.reduce((sum, r) => sum + r.amount, 0);
+          // Như mọi đường đưa hoa hồng đã chốt về REJECTED (huỷ đơn, trả hàng, lệnh chuyển hỏng): hoa hồng rời doanh số tháng thì mốc thưởng
+          // tháng đã nhận mà doanh số nay dưới ngưỡng phải bị thu hồi, kẻo CTV giữ điểm mốc của doanh số không còn. Mỗi tháng một lần.
+          const months = new Map(rows.filter((r) => r.approvedAt).map((r) => [vnMonthBounds(r.approvedAt!).key, r.approvedAt!]));
+          for (const approvedAt of months.values()) await revokeLostCtvMilestones(tx, userId, approvedAt);
+          await recordUserAdminEvent(tx, {
+            userId,
+            kind: 'COMMISSION_FORFEIT',
+            from: String(amount),
+            to: '0',
+            reason: `Huỷ ${count} khoản hoa hồng chờ rút: ${reason}`,
+            actorId: adminId,
+          });
+          return { cancelled: count, amount };
+        },
+        { maxWait: 15_000, timeout: 60_000 },
+      )
+      .catch(throwIfLockBusy);
+    this.logger.warn(`Admin ${adminId} huỷ ${out.cancelled} khoản hoa hồng chờ rút (${out.amount}đ) của người dùng ${userId} đã bị thu hồi quyền CTV: ${reason}`);
+    return out;
+  }
+
+  /**
    * Chi tiết một người dùng cho admin/CSKH (ADMINOPS-11): hồ sơ + số dư, đơn gần nhất, sổ ví, Điểm Xanh, lịch sử vai trò
    * (sổ user_admin_events + quyền cấp theo SĐT) và lịch sử khoá. Mỗi phần tối đa DETAIL_TAKE dòng mới nhất.
    */
-  async getUserDetail(userId: string) {
+  /** viewerId: admin đang xem, để tắt cờ sessionsRevocable với chính mình (cắt phiên mình thì dùng Đăng xuất mọi thiết bị). */
+  async getUserDetail(userId: string, viewerId?: string, opts: { withExports?: boolean } = {}) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -766,13 +836,20 @@ export class AdminService {
         isBlocked: true,
         blockedAt: true,
         blockedReason: true,
+        affiliateRevokedAt: true,
         createdAt: true,
+        zaloId: true,
+        mergedIntoId: true,
         tier: { select: { name: true } },
       },
     });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
+    const { zaloId, mergedIntoId, ...userFields } = user;
+    // Ẩn nút với khách tạm (guest_...) là chọn lựa sản phẩm, không phải vì họ không có phiên; dòng khách đã gộp không còn phiên nào;
+    // chính admin thì dùng nút Đăng xuất mọi thiết bị của khách.
+    const sessionsRevocable = userId !== viewerId && !mergedIntoId && !(zaloId?.startsWith('guest_') ?? false);
     const take = AdminService.DETAIL_TAKE;
-    const [orders, orderTotal, wallet, points, events, partnerEvents, grants] = await Promise.all([
+    const [orders, orderTotal, wallet, points, events, partnerEvents, sessionEvents, grants] = await Promise.all([
       this.prisma.order.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -792,9 +869,10 @@ export class AdminService {
         take,
         select: { id: true, delta: true, reason: true, refType: true, refId: true, lot: true, expiresAt: true, createdAt: true },
       }),
-      // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
+      // STOREFRONT_PARTNER và SESSIONS_REVOKED lấy riêng: khách tự bấm "Đăng xuất mọi thiết bị" được nhiều lần, không để nó đẩy
+      // dòng vai trò/khoá/huỷ hoa hồng ra khỏi 100 dòng.
       this.prisma.userAdminEvent.findMany({
-        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT'] } },
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT', 'COMMISSION_FORFEIT', 'AFFILIATE_REVOKE'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
@@ -803,30 +881,69 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
+      this.prisma.userAdminEvent.findMany({
+        where: { userId, kind: 'SESSIONS_REVOKED' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
       user.phone
         ? this.prisma.roleGrant.findMany({
             where: { phone: user.phone },
             orderBy: { createdAt: 'desc' },
-            select: { id: true, role: true, grantedBy: true, note: true, revokedAt: true, createdAt: true },
+            select: { id: true, role: true, grantedBy: true, note: true, revokedAt: true, expiresAt: true, createdAt: true },
           })
         : Promise.resolve([]),
     ]);
-    const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
+    // Chỉ người có dấu thu hồi mới có khoản huỷ được (cùng điều kiện với forfeitRevokedCommissions): web dựa vào đây để hiện nút.
+    const pending = user.affiliateRevokedAt
+      ? await this.prisma.commission.aggregate({
+          where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+          _count: { _all: true },
+          _sum: { amount: true },
+        })
+      : null;
+    // Chỉ ADMIN xem được: lịch sử xuất file của người này (CSKH mở hồ sơ để trả lời khách, không cần thấy).
+    const recentExports = opts.withExports
+      ? await this.prisma.adminExportLog.findMany({
+          where: { actorId: userId },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { id: true, route: true, filters: true, rowCount: true, createdAt: true },
+        })
+      : null;
+    const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...sessionEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
       : [];
     const actorName = new Map(actors.map((a) => [a.id, a.fullName ?? a.phone ?? a.id]));
     const withActor = <T extends { actorId: string | null }>(e: T) => ({ ...e, actorName: e.actorId ? (actorName.get(e.actorId) ?? null) : null });
     return {
-      user,
+      user: { ...userFields, sessionsRevocable },
+      recentExports,
+      forfeitableCommission: pending && pending._count._all > 0 ? { count: pending._count._all, amount: pending._sum.amount ?? 0 } : null,
       orders: { items: orders, total: orderTotal },
       wallet,
       points,
-      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS').map(withActor),
-      blockHistory: events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK').map(withActor),
+      roleHistory: events.filter((e) => e.kind === 'ROLE' || e.kind === 'STAFF_PERMISSIONS' || e.kind === 'AFFILIATE_REVOKE' || e.kind === 'COMMISSION_FORFEIT').map(withActor),
+      blockHistory: [...events.filter((e) => e.kind === 'BLOCK' || e.kind === 'UNBLOCK' || e.kind === 'WALLET_FORFEIT'), ...sessionEvents]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map(withActor),
       partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };
+  }
+
+  /**
+   * Ghi nhật ký một lần xuất CSV. Gọi sau khi file đã gửi đi nên lỗi chỉ được log, không ném ra: không có ai để báo
+   * và không được làm hỏng luồng đã mở.
+   */
+  async recordExport(actorId: string, route: string, filters: object, rowCount: number): Promise<void> {
+    const clean = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+    try {
+      await this.prisma.adminExportLog.create({ data: { actorId, route, filters: clean as Prisma.InputJsonObject, rowCount } });
+    } catch (err) {
+      this.logger.error(`Không ghi được nhật ký xuất ${route} của ${actorId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   static readonly DETAIL_TAKE = 30;

@@ -484,10 +484,10 @@ describe('admin-client — setUserRole gửi tierId khi cấp DEALER (C-008)', (
     const { setUserRole } = await import('@/lib/admin-client');
     const api = mockFetch({ '/admin/users/role': { body: { ok: true } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    await setUserRole('0899625240', 'DEALER', ' dealer_l3 ');
-    await setUserRole('0899625240', 'AFFILIATE', 'dealer_l3');
-    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ phone: '0899625240', role: 'DEALER', tierId: 'dealer_l3' });
-    expect(JSON.parse(String(api.calls[1]!.init?.body))).toEqual({ phone: '0899625240', role: 'AFFILIATE' });
+    await setUserRole('0899625240', 'DEALER', 'Đại lý đã ký hợp đồng', ' dealer_l3 ');
+    await setUserRole('0899625240', 'AFFILIATE', 'Đại lý đã ký hợp đồng', 'dealer_l3');
+    expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({ phone: '0899625240', role: 'DEALER', reason: 'Đại lý đã ký hợp đồng', tierId: 'dealer_l3' });
+    expect(JSON.parse(String(api.calls[1]!.init?.body))).toEqual({ phone: '0899625240', role: 'AFFILIATE', reason: 'Đại lý đã ký hợp đồng' });
   });
 });
 

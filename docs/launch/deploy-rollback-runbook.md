@@ -120,7 +120,7 @@ Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng d
 | `20261020120000_q19_reversal_effects_marker` | Thêm cột `orders.reversalEffectsAt` (đánh dấu phần đảo sau huỷ/trả đã xong), `UPDATE orders` điền sẵn mốc cho mọi đơn đã `CANCELLED` hoặc `RETURNED` (để cron chạy lại không quét lịch sử), rồi dựng chỉ mục từng phần `orders_reversal_effects_pending_idx` không `CONCURRENTLY`: khoá chặn ghi `orders` lúc dựng. Cột mới nullable nên image cũ vẫn chạy, nhưng không ghi mốc: đơn huỷ/trả trong lúc chạy image cũ sẽ được cron của image mới chạy lại phần đảo (idempotent). Hoàn tác = khôi phục backup (7.3). Đi kèm `ReversalEffectsResyncCron`: 5 phút một lượt, quét đơn huỷ/trả thiếu mốc quá 5 phút và cập nhật trong 14 ngày, tối đa 200 đơn mỗi lượt | Thời gian tỉ lệ số đơn; tính vào cửa sổ và vào `db.orders_lock` |
 
 
-Đếm trước trên PROD số người mà `20261104160500_user_affiliate_revoked_backfill` sẽ đánh dấu (chỉ đọc, không ghi; chạy bằng `psqlq`). Mỗi người chỉ rơi vào một dòng: `su_kien_gan_nhat_la_ha_quyen` theo vai trò hiện tại, hoặc `ha_tu_truoc_khi_co_so`:
+Đếm trước trên PROD số người mà `20261104160500_user_affiliate_revoked_backfill` sẽ đánh dấu (chỉ đọc, không ghi; chạy bằng `psqlq`). Mỗi người chỉ rơi vào một dòng: `su_kien_gan_nhat_la_ha_quyen` theo vai trò hiện tại, hoặc `ha_tu_truoc_khi_co_so`. Trước deploy cột `users.affiliateRevokedAt` chưa có nên câu không lọc theo cột đó (mọi người đều chưa có dấu); chạy lại sau deploy thì thêm `u."affiliateRevokedAt" IS NULL AND` vào hai mệnh đề `WHERE` cuối:
 
 ```bash
 psqlq -tAc "
@@ -137,11 +137,11 @@ WITH last_ev AS (
 )
 SELECT 'su_kien_gan_nhat_la_ha_quyen: ' || u.role AS nhom, count(*)
 FROM users u JOIN last_ev l ON l.\"userId\" = u.id
-WHERE u.\"affiliateRevokedAt\" IS NULL AND l.\"toValue\" = 'CUSTOMER'
+WHERE l.\"toValue\" = 'CUSTOMER'
 GROUP BY u.role
 UNION ALL
 SELECT 'ha_tu_truoc_khi_co_so', count(*) FROM users u
-WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role = 'CUSTOMER'
+WHERE u.role = 'CUSTOMER'
   AND NOT EXISTS (SELECT 1 FROM user_admin_events a WHERE a.\"userId\" = u.id AND a.kind = 'ROLE')
   AND (EXISTS (SELECT 1 FROM storefronts s WHERE s.\"ownerUserId\" = u.id AND s.type = 'CTV')
     OR (EXISTS (SELECT 1 FROM commissions c WHERE c.\"affiliateUserId\" = u.id)

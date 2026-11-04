@@ -30,6 +30,7 @@ describe('CSV đơn có bộ lọc: che SĐT khi người xuất không phải A
       setHeader: () => undefined,
       write: (c: string) => ((out += c), true),
       end: () => undefined,
+      on: () => undefined,
       destroy: (e: Error) => {
         throw e;
       },

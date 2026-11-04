@@ -62,8 +62,8 @@ describe('Không tự duyệt yêu cầu trả hàng của chính mình (real Po
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     app.setGlobalPrefix('api');
     await app.init();
-    await app.listen(0);
-    base = `${await app.getUrl()}/api`.replace('[::1]', 'localhost');
+    await app.listen(0, '127.0.0.1');
+    base = `${await app.getUrl()}/api`;
     prisma = moduleRef.get(PrismaService);
     returns = moduleRef.get(OrderReturnsService);
     await warmPool(prisma);

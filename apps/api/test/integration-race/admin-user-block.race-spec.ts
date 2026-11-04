@@ -55,6 +55,7 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     await moduleRef?.close();
   });
 
+  const decode = (jwt: string) => new JwtService().decode(jwt) as JwtPayload & { iat: number };
   const phone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
 
   function rolesGuardAllows(user: JwtPayload, roles: string[]) {
@@ -91,7 +92,7 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     const deviceId = `dev_${randCode(10)}`;
     const login = await auth.loginAsGuest(deviceId);
     const userId = login.user.id;
-    const token: JwtPayload = { sub: userId, role: 'CUSTOMER' };
+    const token = decode(login.accessToken);
     await strategy.validate(token);
 
     const out = await blocks.block(admin.id, userId, 'Farm voucher nhiều tài khoản');
@@ -106,8 +107,10 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
 
     await blocks.unblock(admin.id, userId);
-    await expect(strategy.validate(token)).resolves.toMatchObject({ sub: userId });
-    await expect(auth.loginAsGuest(deviceId)).resolves.toMatchObject({ user: { id: userId } });
+    // Mở khoá không làm sống lại access token cấp trước lần khoá; phải đăng nhập lại (sau mốc thu hồi).
+    await expect(strategy.validate(decode(login.accessToken))).rejects.toBeInstanceOf(UnauthorizedException);
+    const relogin = await auth.loginAsGuest(deviceId);
+    await expect(strategy.validate(decode(relogin.accessToken))).resolves.toMatchObject({ sub: userId });
     expect(await prisma.user.findUniqueOrThrow({ where: { id: userId } })).toMatchObject({
       isBlocked: false, blockedAt: null, blockedReason: null, blockedById: null,
     });
@@ -119,5 +122,24 @@ describe('Khoá tài khoản + hạ quyền có hiệu lực ngay (real Postgres
     const deleted = await createUser(prisma, { isBlocked: true, metadata: { anonymizedAt: new Date().toISOString() } });
     await expect(blocks.unblock(admin.id, deleted.id)).rejects.toBeInstanceOf(BadRequestException);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: deleted.id } })).isBlocked).toBe(true);
+  });
+
+  it('L1-04: admin cắt phiên → refresh và access token chết, tài khoản vẫn mở, đăng nhập lại được, có dòng SESSIONS_REVOKED', async () => {
+    const admin = await createUser(prisma, { role: 'ADMIN', phone: phone() });
+    const deviceId = `dev_${randCode(10)}`;
+    const login = await auth.loginAsGuest(deviceId);
+    const userId = login.user.id;
+
+    const out = await blocks.revokeSessions(admin.id, userId, 'Nghi lộ phiên');
+    expect(out).toEqual({ id: userId, revokedSessions: 1 });
+
+    await expect(strategy.validate(decode(login.accessToken))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(auth.refresh(login.refreshToken)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).isBlocked).toBe(false);
+    const ev = await prisma.userAdminEvent.findFirstOrThrow({ where: { userId, kind: 'SESSIONS_REVOKED' } });
+    expect(ev).toMatchObject({ actorId: admin.id, reason: 'Nghi lộ phiên', toValue: '1' });
+
+    const again = await auth.loginAsGuest(deviceId);
+    await expect(strategy.validate(decode(again.accessToken))).resolves.toMatchObject({ sub: userId });
   });
 });

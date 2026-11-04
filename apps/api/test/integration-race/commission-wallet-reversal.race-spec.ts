@@ -18,7 +18,7 @@ import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
 import { findWalletLedgerDrift } from '../../src/modules/wallet/wallet-reconcile';
 import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../../src/modules/affiliate/affiliate-auto-transfer-config';
-import { createOrder, createUser, legacyBankCommissionPayout, pinConfig, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createOrder, createUser, legacyBankCommissionPayout, pinConfig, randCode, sleep, summarize, warmPool } from './helpers';
 
 /**
  * Hoa hồng đã vào Ví Tubu của CTV mà đơn bị trả: trừ thẳng Ví (COMMISSION_REVERSAL, số dư có thể âm). Chạy trên Postgres thật qua
@@ -35,6 +35,9 @@ describe('Thu hồi hoa hồng đã vào Ví khi đơn bị trả (real Postgres
   let affiliate: AffiliateService;
   const notify = jest.fn().mockResolvedValue(undefined);
   let restoreAutoWallet: (() => Promise<void>) | undefined;
+
+  // Khôi phục khoá thuế dùng chung để spec chạy sau không phụ thuộc thứ tự.
+  let restorePit: Array<() => Promise<void>> = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -60,15 +63,18 @@ describe('Thu hồi hoa hồng đã vào Ví khi đơn bị trả (real Postgres
     await warmPool(prisma);
     returns = moduleRef.get(OrderReturnsService);
     affiliate = moduleRef.get(AffiliateService);
-    await setConfig(prisma, 'returns.window_days', 7);
-    await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
-    await setConfig(prisma, 'affiliate.pit_withhold_threshold', 50_000_000);
+    restorePit = [
+      await pinConfig(prisma, 'returns.window_days', 7),
+      await pinConfig(prisma, 'affiliate.pit_withhold_pct', 0.1),
+      await pinConfig(prisma, 'affiliate.pit_withhold_threshold', 50_000_000),
+    ];
     // Cờ tự chuyển tắt: ca nào cần chuyển hoa hồng vào Ví thì gọi requestPayout tường minh, không để cron của DB dùng chung xen vào.
     restoreAutoWallet = await pinConfig(prisma, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, false);
     (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.clear();
   });
 
   afterAll(async () => {
+    for (const restore of restorePit.reverse()) await restore();
     await restoreAutoWallet?.();
     await moduleRef?.close();
   });

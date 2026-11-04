@@ -38,6 +38,7 @@ function dealerApp(over: Partial<DealerApp> & Pick<DealerApp, 'id' | 'businessNa
     hasCccdFront: false,
     hasCccdBack: false,
     hasStoreFront: false,
+    applicantAffiliateRevoked: false,
     status: 'PENDING',
     ...over,
   };

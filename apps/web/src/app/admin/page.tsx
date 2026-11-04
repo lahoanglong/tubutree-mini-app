@@ -146,6 +146,7 @@ import {
   chipClass,
   FIELD_CLASS,
   ListSkeleton,
+  Notice,
   StatCardsSkeleton,
   TableSkeleton,
   Field,
@@ -175,6 +176,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { STAFF_USER_MAX_PAGE, staffUserSearchProblem } from '@/lib/staff-user-search';
 
 type Tab =
   | 'inbox'
@@ -955,6 +957,11 @@ function DealerRow({ app: a }: { app: DealerApp }) {
       </div>
       <div className="break-words text-sm text-stone-600">{a.ownerName} · {a.phone}</div>
       <div className="break-words text-sm text-stone-600">{a.address}</div>
+      {a.applicantAffiliateRevoked && (
+        <div className="mt-2">
+          <Notice tone="warning">Người này từng bị thu hồi quyền CTV. Duyệt hồ sơ không mở lại quyền rút hoa hồng.</Notice>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap gap-3">
         {a.hasCccdFront && <DealerAppImage appId={a.id} field="cccdFront" label="CCCD trước" />}
         {a.hasCccdBack && <DealerAppImage appId={a.id} field="cccdBack" label="CCCD sau" />}
@@ -2284,8 +2291,14 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [guests, setGuests] = useState(false);
-  const q = useQuery({ queryKey: ['admin-users', page, search, guests], queryFn: () => listUsers(page, search || undefined, guests) });
-  const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
+  // CSKH (không phải ADMIN) chỉ tra từng khách: chưa gõ từ khoá hợp lệ thì không gọi API, và chỉ xem tối đa STAFF_USER_MAX_PAGE trang.
+  const searchProblem = isAdmin ? null : staffUserSearchProblem(search);
+  const q = useQuery({
+    queryKey: ['admin-users', page, search, guests],
+    queryFn: () => listUsers(page, search || undefined, guests),
+    enabled: !searchProblem,
+  });
+  const totalPages = q.data ? Math.min(Math.ceil(q.data.meta.total / q.data.meta.limit), isAdmin ? Infinity : STAFF_USER_MAX_PAGE) : 1;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -2313,7 +2326,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
     onError,
   });
   const unblock = useMutation({
-    mutationFn: ({ id }: { id: string; label: string }) => unblockUser(id),
+    mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => unblockUser(id, reason),
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
     },
@@ -2340,12 +2353,18 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const askUnblock = async (u: AdminUser) => {
     setMsg(null);
     const label = u.fullName ?? u.phone ?? u.id;
-    const ok = await confirm({
+    const reason = await ask({
       title: 'Mở khoá tài khoản',
       message: `Mở khoá ${label}? Người này đăng nhập lại được ngay.`,
       confirmLabel: 'Mở khoá',
+      input: { label: 'Lý do mở khoá', placeholder: 'VD: đã liên hệ khách, xác minh không vi phạm', required: true, maxLength: 500 },
     });
-    if (ok) unblock.mutate({ id: u.id, label });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ ok: false, text: 'Lý do mở khoá cần ít nhất 3 ký tự.' });
+      return;
+    }
+    unblock.mutate({ id: u.id, label, reason });
   };
 
   return (
@@ -2384,7 +2403,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
         <input
           type="search"
           aria-label="Tìm theo SĐT, tên hoặc mã người dùng"
-          placeholder="Tìm theo SĐT, tên hoặc mã người dùng…"
+          placeholder={isAdmin ? 'Tìm theo SĐT, tên hoặc mã người dùng…' : 'SĐT đủ 10 số, mã khách hoặc tên từ 3 ký tự…'}
           maxLength={100}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -2418,7 +2437,9 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       {msg && (
         <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}
-      {q.isError ? (
+      {searchProblem ? (
+        <Notice tone="info">{searchProblem}</Notice>
+      ) : q.isError ? (
         <LoadError message="Không tải được danh sách người dùng." onRetry={() => void q.refetch()} />
       ) : (
         <>
@@ -2531,9 +2552,9 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [checking, setChecking] = useState(false);
-  const { confirm, dialog } = useConfirm();
+  const { ask, dialog } = useConfirm();
   const mut = useMutation({
-    mutationFn: (v: { phone: string; role: UserRole; tierId?: string }) => setUserRole(v.phone, v.role, v.tierId),
+    mutationFn: (v: { phone: string; role: UserRole; reason: string; tierId?: string }) => setUserRole(v.phone, v.role, v.reason, v.tierId),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${roleLabel(r.previousRole)} → ${roleLabel(r.role)}` });
       setPhone('');
@@ -2551,23 +2572,30 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     setChecking(true);
     const current = await lookupRoleByPhone(target.phone);
     setChecking(false);
-    const ok = await confirm(
+    const input = { label: 'Lý do đổi vai trò', placeholder: 'VD: nhân viên mới vào kho, đại lý đã ký hợp đồng', required: true, maxLength: 500 };
+    const reason = await ask(
       role === 'ADMIN'
         ? {
             title: 'Cấp quyền ADMIN',
             message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${target.phone}?`,
             confirmLabel: 'Cấp quyền ADMIN',
             tone: 'danger',
+            input,
           }
         : {
             title: 'Đổi vai trò',
             message: `Đổi vai trò của SĐT ${target.phone} sang "${roleLabel(target.role)}"?\n${roleChangeConsequences(target.role, current)}`,
             confirmLabel: 'Đổi vai trò',
             tone: 'danger',
+            input,
           },
     );
-    if (!ok) return;
-    mut.mutate(target);
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ ok: false, text: 'Lý do đổi vai trò cần ít nhất 3 ký tự.' });
+      return;
+    }
+    mut.mutate({ ...target, reason });
   };
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
