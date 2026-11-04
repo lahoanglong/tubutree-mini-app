@@ -57,6 +57,20 @@ describe('NotificationsService.notify: bộ nhớ đệm mẫu theo mã', () => 
     expect(prisma.notificationLog.create).toHaveBeenCalledTimes(2);
   });
 
+  it('lần đọc DB bắt đầu trước khi admin sửa mẫu không ghi bản cũ vào cache', async () => {
+    const { svc, admin, tplFindUnique } = setup();
+    let release!: (v: unknown) => void;
+    tplFindUnique.mockImplementationOnce(() => new Promise((r) => { release = r; }) as never);
+    const pending = svc.notify('u1', 'ORDER_CONFIRMED', { order_code: 'X' });
+    await new Promise((r) => setImmediate(r));
+    await admin.update('ORDER_CONFIRMED', { bodyTemplate: 'Đơn {{order_code}} đã giao' });
+    release({ ...TPL }); // bản cũ về sau khi đã invalidate
+    await pending;
+    const reads = tplFindUnique.mock.calls.length;
+    await svc.notify('u2', 'ORDER_CONFIRMED', { order_code: 'X' });
+    expect(tplFindUnique.mock.calls.length).toBe(reads + 1);
+  });
+
   it('quá TTL thì đọc lại', async () => {
     jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
     const { svc, tplFindUnique } = setup();

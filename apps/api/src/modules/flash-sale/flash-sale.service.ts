@@ -66,12 +66,13 @@ export interface FlashSlotItemDTO {
   perUserLimit: number;
 }
 
-/** Quota giảm theo từng đơn và khung bắt đầu/kết thúc đúng mốc: cache RAM chỉ đủ gom request đồng thời (cùng TTL với khối Giờ vàng của /home). */
-// Nhắc "đã bắt đầu": mỗi trang 500, lặp trang trong một lượt cron tới khi hết người hoặc hết ngân sách thời gian (dưới 1 phút để
-// lượt sau không chồng lên).
+// Nhắc "đã bắt đầu": mỗi trang 500, lặp trang trong một lượt cron tới khi hết người hoặc hết ngân sách thời gian. Ngân sách chỉ để
+// một lượt không kéo dài mãi (kiểm sau mỗi trang, không khoá); lượt chồng lên vẫn an toàn nhờ claim `updateMany where notifiedAt: null`
+// và CronLeader chỉ cho một instance chạy.
 const STARTED_REMINDER_PAGE = 500;
 const STARTED_REMINDER_MAX_PAGES = 200;
 const STARTED_REMINDER_BUDGET_MS = 50_000;
+/** Quota giảm theo từng đơn và khung bắt đầu/kết thúc đúng mốc: cache RAM chỉ đủ gom request đồng thời (cùng TTL với khối Giờ vàng của /home). */
 const SLOT_CACHE_TTL_MS = 3_000;
 const SLOT_CACHE_MAX_KEYS = 50;
 

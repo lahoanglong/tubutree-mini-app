@@ -103,7 +103,7 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     captured = [];
     await prisma.notificationLog.count({ where: { sentAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } });
     const q = captured.find((c) => /FROM "(public"\.")?notification_logs"/.test(c.query))!;
-    expect(await planOf(q)).toMatch(/notification_logs_sentAt_brin/);
+    expect(await planOf(q)).toMatch(/notification_logs_sentAt_idx/);
   });
 
   it('D5: dò dòng điểm của đơn theo refId + refType=ORDER dùng partial index', async () => {
@@ -120,11 +120,11 @@ describe('Index hiệu năng 2026-11-04 (real Postgres)', () => {
     captured = [];
     await svc.runAll({ now: new Date(), batchSize: 100, pauseMs: 0, maxRunMs: 5_000 });
     const expected: Record<string, RegExp> = {
-      notification_logs: /notification_logs_sentAt_brin/,
-      pancake_webhook_events: /pancake_webhook_events_receivedAt_brin/,
-      gomdon_webhook_events: /gomdon_webhook_events_receivedAt_brin/,
-      oa_inbound_messages: /oa_inbound_messages_createdAt_brin/,
-      analytics_events: /analytics_events_receivedAt_brin/,
+      notification_logs: /notification_logs_sentAt_idx/,
+      pancake_webhook_events: /pancake_webhook_events_receivedAt_idx/,
+      gomdon_webhook_events: /gomdon_webhook_events_receivedAt_idx/,
+      oa_inbound_messages: /oa_inbound_messages_createdAt_idx/,
+      analytics_events: /analytics_events_receivedAt_idx/,
       refresh_tokens: /refresh_tokens_expiresAt_idx/,
     };
     for (const [table, re] of Object.entries(expected)) {
