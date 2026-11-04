@@ -267,6 +267,14 @@ describe('LoyaltyService.creditOrderPoints', () => {
     expect(txn).not.toHaveBeenCalled();
   });
 
+  it('dò dòng đã cộng kèm refType ORDER để đi bằng partial index (refId) WHERE refType=ORDER', async () => {
+    const { prisma } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 });
+    await new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1');
+    expect(prisma.pointsTransaction.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { reason: 'ORDER_DELIVERED:C1', refType: 'ORDER', refId: 'o1' } }),
+    );
+  });
+
   it('đã cộng rồi (cùng reason) → idempotent, không cộng lại', async () => {
     const { prisma, txn } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }, { id: 'tx-old' });
     await new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1');

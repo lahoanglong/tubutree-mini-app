@@ -369,6 +369,9 @@ model RefreshToken {
   @@index([userId])
   // Thống kê DAU theo ngày tạo token (analytics-aggregation.service.ts).
   @@index([createdAt])
+  // data-retention xoá theo (revokedAt < cutoff OR expiresAt < cutoff). "refresh_tokens_revokedAt_idx" ("revokedAt") WHERE
+  // revokedAt IS NOT NULL chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention).
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
@@ -1318,6 +1321,8 @@ model PointsTransaction {
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
+  // Partial (20261104130000_perf_indexes_notification_points_retention): "points_transactions_order_refId_idx"
+  // ("refId") WHERE refType='ORDER' — creditOrderPoints dò theo refId + refType.
   // Partial unique (thêm bằng SQL tay, Prisma không khai báo được WHERE — migration
   // 20260926120000_loyalty_checkin_pos):
   //  - "points_transactions_checkin_day_key" ON ("userId","refId") WHERE refType='CHECKIN'
@@ -3019,6 +3024,9 @@ model NotificationLog {
   @@index([userId, sentAt])
   // Cron nhắc theo mẫu trong N ngày gần nhất (game-reminder: templateCode + sentAt >= mốc).
   @@index([templateCode, sentAt])
+  // Chỉ có trong SQL (migration 20261104130000_perf_indexes_notification_points_retention):
+  //  - "notification_logs_zns_failed_sentAt_idx" ("sentAt") WHERE channel='ZNS' AND status='FAILED' — znsHealth 24 giờ.
+  //  - "notification_logs_sentAt_brin" BRIN ("sentAt") — trang mẫu tin 30 ngày và data-retention.
   @@map("notification_logs")
 }
 
@@ -3047,6 +3055,7 @@ model PancakeWebhookEvent {
   dismissedById String?
 
   @@index([status, receivedAt])
+  // BRIN ("receivedAt") "pancake_webhook_events_receivedAt_brin" chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention): data-retention xoá theo lô.
   @@map("pancake_webhook_events")
 }
 
@@ -3075,6 +3084,7 @@ model GomdonWebhookEvent {
 
   @@index([status, receivedAt])
   @@index([gomdonOrderId])
+  // BRIN ("receivedAt") "gomdon_webhook_events_receivedAt_brin" chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention): data-retention xoá theo lô.
   @@map("gomdon_webhook_events")
 }
 
@@ -3281,6 +3291,7 @@ model OaInboundMessage {
 
   @@index([zaloUserId])
   @@index([status])
+  // BRIN ("createdAt") "oa_inbound_messages_createdAt_brin" chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention): data-retention xoá theo lô.
   @@map("oa_inbound_messages")
 }
 
@@ -3320,6 +3331,7 @@ model AnalyticsEvent {
   @@index([eventName, occurredAt])
   @@index([userId, occurredAt])
   @@index([anonymousId])
+  // BRIN ("receivedAt") "analytics_events_receivedAt_brin" chỉ có trong SQL (20261104130000_perf_indexes_notification_points_retention): data-retention xoá theo lô.
   @@map("analytics_events")
 }
 

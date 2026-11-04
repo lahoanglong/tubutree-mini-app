@@ -109,7 +109,7 @@ export class LoyaltyService {
 
     // Theo đúng khoá của unique index (reason, refId), không theo userId: dòng sổ đi theo đơn khi gộp phiên khách.
     const creditedRow = (code: string) =>
-      this.prisma.pointsTransaction.findFirst({ where: { reason: `ORDER_DELIVERED:${code}`, refId: order.id }, select: { userId: true } });
+      this.prisma.pointsTransaction.findFirst({ where: { reason: `ORDER_DELIVERED:${code}`, refType: 'ORDER', refId: order.id }, select: { userId: true } });
     const existed = await creditedRow(order.code);
     if (existed) {
       // Đã cộng điểm ở lần gọi trước nhưng có thể đã crash TRƯỚC KHI recalcTier (dòng cuối
