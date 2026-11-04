@@ -1,6 +1,6 @@
 'use client';
 
-import { createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { createElement, useContext, useState, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { makeFlashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
@@ -31,6 +31,8 @@ function load(): Promise<void> {
       items = Array.isArray(res) ? res : NONE;
       fetchedAt = Date.now();
       failure = null;
+      // Chỉ lần hỏi thành công mới đo được độ lệch đồng hồ (fetchActiveFlashSales đồng bộ khi API trả serverNow); lỗi thì vẫn dùng đồng hồ đơn điệu.
+      markFlashClockSynced();
     })
     .catch((err: unknown) => {
       items = NONE;
@@ -39,7 +41,6 @@ function load(): Promise<void> {
     })
     .finally(() => {
       loaded = true;
-      markFlashClockSynced();
       inflight = null;
       listeners.forEach((l) => l());
       reschedule();
@@ -103,7 +104,9 @@ function subscribe(onChange: () => void): () => void {
  */
 export function FlashSalesSeed({ items: seed, now, children }: { items: readonly FlashItem[] | undefined; now: number; children: ReactNode }) {
   if (typeof window !== 'undefined' && seed && !loaded && items === NONE) items = seed;
-  return createElement(ServerSeed.Provider, { value: seed ? { items: seed, now } : null }, children);
+  // Mốc đồng hồ đơn điệu của CHÍNH seed này (mỗi lần điều hướng phía khách dựng seed mới có mốc mới): chỉ dùng sau mount, không ảnh hưởng giá trị lúc hydrate.
+  const [anchor] = useState(() => (typeof performance !== 'undefined' ? performance.now() : 0));
+  return createElement(ServerSeed.Provider, { value: seed ? { items: seed, now, anchor } : null }, children);
 }
 
 export function useActiveFlashSales(): readonly FlashItem[] {

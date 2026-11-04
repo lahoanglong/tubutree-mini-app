@@ -148,3 +148,46 @@ describe('useFlashNow: đồng hồ điện thoại lệch (trước khi lần h
     expect(container.textContent).toBe('0|loaded');
   });
 });
+
+describe('điều hướng phía khách tới trang có seed mới', () => {
+  it('mã đã nạp từ lâu, lần hỏi đầu chưa xong: seed mới có đợt còn chạy thì vẫn hiện (mốc đơn điệu tính từ seed, không từ lúc nạp mã)', async () => {
+    const t0 = Date.now();
+    const realPerf = performance.now.bind(performance);
+    // Giả lập đã ở trên trang 10 phút: đồng hồ đơn điệu đã chạy xa trước khi seed này được dựng.
+    vi.spyOn(performance, 'now').mockImplementation(() => realPerf() + 600_000);
+    resetFlashSales();
+    api.impl = () => new Promise(() => undefined);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const { createRoot } = await import('react-dom/client');
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(tree([item(new Date(t0 + 120_000).toISOString())], t0));
+    });
+    await flush();
+    expect(container.textContent).toBe('1|wait');
+    act(() => root.unmount());
+  });
+
+  it('lần hỏi đầu lỗi: không đánh dấu đã đồng bộ giờ; thành công thì có', async () => {
+    const { isFlashClockSynced } = await import('./flash-now');
+    const t0 = Date.now();
+    const mountOnce = async () => {
+      const c = document.createElement('div');
+      document.body.appendChild(c);
+      const { createRoot } = await import('react-dom/client');
+      const root = createRoot(c);
+      await act(async () => root.render(tree([], t0)));
+      await flush();
+      act(() => root.unmount());
+    };
+    resetFlashSales();
+    api.impl = () => Promise.reject(new Error('x'));
+    await mountOnce();
+    expect(isFlashClockSynced()).toBe(false);
+    resetFlashSales();
+    api.impl = async () => [];
+    await mountOnce();
+    expect(isFlashClockSynced()).toBe(true);
+  });
+});
