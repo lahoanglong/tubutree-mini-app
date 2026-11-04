@@ -992,7 +992,8 @@ export class CatalogService {
     //    ngắn. Hai `groupBy` đọc ở hai thời điểm nên đơn
     //    giao xen giữa có thể chỉ hiện ở số 30 ngày: lấy hợp hai tập sản phẩm và `soldApp` không thấp hơn
     //    `soldApp30d`, để sản phẩm đó không bị bỏ sót hay bị đưa về 0 oan (lần chạy 03:00 sau tự chỉnh về đúng).
-    //    Sản phẩm bị xoá giữa chừng không còn dòng ở lần đọc lô nên bị bỏ qua, không làm hỏng cả lượt.
+    //    Sản phẩm bị xoá trước lần đọc lô thì không còn dòng nên bị bỏ qua; bị xoá giữa lần đọc và lần ghi thì `updateMany` trả
+    //    count 0 (không ném P2025 làm hỏng cả lô và bỏ bước đưa về 0), dòng đó không tính vào `updated`.
     //  - Dòng đang khác 0 mà không còn đơn nào → đưa về 0, một câu lệnh, phạm vi hẹp.
     const ids = [...new Set([...perProduct.keys(), ...perProduct30d.keys()])];
     let written = 0;
@@ -1006,11 +1007,11 @@ export class CatalogService {
         const recent = perProduct30d.get(row.id) ?? 0;
         const total = Math.max(perProduct.get(row.id) ?? 0, recent);
         if (row.soldApp === total && row.soldApp30d === recent) return [];
-        return [this.prisma.product.update({ where: { id: row.id }, data: { soldApp: total, soldApp30d: recent } })];
+        return [this.prisma.product.updateMany({ where: { id: row.id }, data: { soldApp: total, soldApp30d: recent } })];
       });
       if (ops.length === 0) continue;
-      await this.prisma.$transaction(ops);
-      written += ops.length;
+      const results = await this.prisma.$transaction(ops);
+      written += results.filter((r) => r.count === 1).length;
     }
     const zeroed = await this.prisma.product.updateMany({
       where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
