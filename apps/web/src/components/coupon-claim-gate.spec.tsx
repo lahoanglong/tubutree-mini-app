@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -46,6 +46,11 @@ const CLAIMED = {
   newCustomerOnly: true,
   alreadyClaimed: false,
 };
+
+// Phần giao diện cổng tải bằng next/dynamic: nạp trước để lần dựng đầu không phải chờ chunk.
+beforeAll(async () => {
+  await import('./coupon-claim-gate-ui');
+});
 
 let host: { container: HTMLDivElement; root: Root; client: QueryClient } | null = null;
 const draw = () =>

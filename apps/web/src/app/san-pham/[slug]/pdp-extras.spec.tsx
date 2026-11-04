@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -53,6 +53,11 @@ const VARIATIONS = [
 ];
 const COUPON_PRODUCT = { slug: 'dau-goi', basePrice: 150000, salePrice: null, variations: [{ id: 'v1', retailPrice: 150000, salePrice: null }, { id: 'v2', retailPrice: 150000, salePrice: null }] };
 const coupon = (code: string, over: Record<string, unknown> = {}) => ({ code, type: 'AMOUNT', value: 20000, minOrder: null, maxDiscount: null, endAt: '2026-12-01', ...over });
+
+// Ba sheet tải bằng next/dynamic: nạp trước để lần mở đầu không phải chờ chunk.
+beforeAll(async () => {
+  await Promise.all([import('./content-kit-sheet'), import('./subscribe-sheet'), import('./points-earn-sheet')]);
+});
 
 let mounted: Rendered[] = [];
 const mount = (ui: React.ReactElement, initialId = 'v2') => {
@@ -501,6 +506,7 @@ describe('PdpContentKitRow', () => {
     await flush();
     expect(mocks.http.get).toHaveBeenCalledWith('/affiliate/me');
     click(byText(container, 'button', /Nội dung bán hàng/));
+    await flush();
     expect(container.ownerDocument.querySelector('[data-testid="kit-sheet"]')!.getAttribute('data-slug')).toBe('dau-goi');
   });
   it('không phải cộng tác viên hoặc khách chưa đăng nhập thì không hiện và không gọi API', async () => {
@@ -654,6 +660,7 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
       mocks.user = { tierId: 't2' };
       await mountEarn();
       openPopup();
+      await flush();
       expect(dialog()?.getAttribute('aria-labelledby')).toBeTruthy();
       expect(dialog()?.textContent).toContain('Cách tính Điểm Xanh');
       expect(dialog()?.textContent).toContain('Hạng Lộc Biếc: ×1,5');

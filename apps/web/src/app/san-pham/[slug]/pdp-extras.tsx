@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Leaf, MessageCircle, Megaphone, Repeat, Ticket, Truck, Users } from 'lucide-react';
@@ -42,11 +43,20 @@ import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
-import { ContentKitSheet } from './content-kit-sheet';
-import { SubscribeSheet } from './subscribe-sheet';
-import { PointsEarnSheet } from './points-earn-sheet';
 import { actionErrorText } from '@/lib/error-text';
 import { phoneBand, phoneBrandLabel } from '@/lib/phone-ui';
+
+// Ba sheet chỉ mở khi khách bấm: tách khỏi First Load của trang sản phẩm, và chỉ tải lúc mở lần đầu (xem `useEverOpen`).
+const ContentKitSheet = dynamic(() => import('./content-kit-sheet').then((m) => m.ContentKitSheet), { ssr: false });
+const SubscribeSheet = dynamic(() => import('./subscribe-sheet').then((m) => m.SubscribeSheet), { ssr: false });
+const PointsEarnSheet = dynamic(() => import('./points-earn-sheet').then((m) => m.PointsEarnSheet), { ssr: false });
+
+/** Đã từng mở: sheet chỉ dựng (và tải chunk) từ lần mở đầu, rồi giữ nguyên để hiệu ứng đóng vẫn chạy. */
+function useEverOpen(open: boolean): boolean {
+  const [ever, setEver] = useState(open);
+  if (open && !ever) setEver(true);
+  return ever;
+}
 
 type PointsEarnProduct = {
   slug: string;
@@ -86,6 +96,7 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
   const tier = tierEarnFor(phase, user?.tierId, config.loyalty);
   const preview = pointsEarnPreview(amount, config.loyalty, tier?.multiplier ?? null);
   const [open, setOpen] = useState(false);
+  const everOpen = useEverOpen(open);
   if (preview === null) return null;
   const text = preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points);
   const boost = pointsBoostOf(config.isLoaded ? config.loyalty : undefined);
@@ -109,7 +120,7 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
         <span>{text}</span>
         <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       </button>
-      <PointsEarnSheet open={open} onClose={() => setOpen(false)} popup={popup} />
+      {everOpen && <PointsEarnSheet open={open} onClose={() => setOpen(false)} popup={popup} />}
     </>
   );
 }
@@ -294,6 +305,7 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
   const sel = usePdpSelection();
   const stockQ = useProductStock(slug);
   const [open, setOpen] = useState(false);
+  const everOpen = useEverOpen(open);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -347,13 +359,15 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
           {error}
         </p>
       )}
-      <SubscribeSheet
-        visible={open}
-        onClose={() => setOpen(false)}
-        onNotice={setNotice}
-        variationId={selected.id}
-        quantity={Math.min(sel?.quantity ?? 1, Math.max(1, stock))}
-      />
+      {everOpen && (
+        <SubscribeSheet
+          visible={open}
+          onClose={() => setOpen(false)}
+          onNotice={setNotice}
+          variationId={selected.id}
+          quantity={Math.min(sel?.quantity ?? 1, Math.max(1, stock))}
+        />
+      )}
     </div>
   );
 }
@@ -424,6 +438,7 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
 export function PdpContentKitRow({ slug }: { slug: string }) {
   const phase = useAuthPhase();
   const [open, setOpen] = useState(false);
+  const everOpen = useEverOpen(open);
   const meQ = useQuery({ ...affiliateMeQuery(coreHttp), enabled: phase === 'authenticated', staleTime: 5 * 60_000 });
   if (meQ.data?.isAffiliate !== true) return null;
   return (
@@ -438,7 +453,7 @@ export function PdpContentKitRow({ slug }: { slug: string }) {
         </span>
         <ChevronRight className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
       </button>
-      <ContentKitSheet visible={open} onClose={() => setOpen(false)} productSlug={slug} />
+      {everOpen && <ContentKitSheet visible={open} onClose={() => setOpen(false)} productSlug={slug} />}
     </div>
   );
 }
