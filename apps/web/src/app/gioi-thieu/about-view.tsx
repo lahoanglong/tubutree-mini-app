@@ -136,11 +136,10 @@ function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; i
               <span className="flex-1 text-sm font-semibold text-stone-900">{item.q}</span>
               <ChevronDown className={`h-4 w-4 shrink-0 text-stone-500 transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
-            {expanded && (
-              <p id={`faq-answer-${i}`} className="pb-3 text-sm text-stone-700">
-                {item.a}
-              </p>
-            )}
+            {/* Luôn có trong HTML (công cụ tìm kiếm đọc được mọi câu trả lời); câu đang thu gọn chỉ ẩn bằng `hidden`. */}
+            <p id={`faq-answer-${i}`} hidden={!expanded} className="pb-3 text-sm text-stone-700">
+              {item.a}
+            </p>
           </div>
         );
       })}

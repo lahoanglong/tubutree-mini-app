@@ -85,7 +85,8 @@ afterEach(() => {
 
 describe('/gioi-thieu: trang công khai', () => {
   it('có tiêu đề riêng, mô tả, canonical và cho lập chỉ mục', () => {
-    expect(metadata.title).toBe('Về Tubu Tree — Tubu Tree');
+    expect(metadata.title).toBe('Về Tubu Tree');
+    expect(metadata.openGraph).toMatchObject({ siteName: 'Tubu Tree', locale: 'vi_VN', url: '/gioi-thieu', title: 'Về Tubu Tree — Tubu Tree' });
     expect(metadata.description).toEqual(expect.any(String));
     expect(metadata.alternates?.canonical).toBe('/gioi-thieu');
     expect(metadata.robots).toBeUndefined();
@@ -120,6 +121,29 @@ describe('/gioi-thieu: trang công khai', () => {
     mounted.push(r);
     expect(r.container.textContent).toContain('0984 606 774');
     expect(r.container.querySelector('a[href^="mailto:"]')).not.toBeNull();
+  });
+
+  it('FAQPage JSON-LD lấy đúng danh sách FAQ server đã đọc; cùng bản dự phòng với client khi admin chưa nhập dòng nào', async () => {
+    mocks.serverGet.mockImplementation(async (path: string) => (path === '/faqs' ? FAQS : { support: SUPPORT }));
+    const ld = (c: HTMLElement) => JSON.parse(c.querySelector('script[type="application/ld+json"]')!.textContent!);
+    const real = render(await AboutPage());
+    mounted.push(real);
+    expect(ld(real.container)).toMatchObject({ '@type': 'FAQPage' });
+    expect(ld(real.container).mainEntity).toEqual(
+      FAQS.map((f) => ({ '@type': 'Question', name: f.question, acceptedAnswer: { '@type': 'Answer', text: f.answer } })),
+    );
+
+    mocks.serverGet.mockImplementation(async (path: string) => (path === '/faqs' ? [] : { support: SUPPORT }));
+    const fb = render(await AboutPage());
+    mounted.push(fb);
+    const names = ld(fb.container).mainEntity.map((e: { name: string }) => e.name);
+    expect(names).toContain('Tubu Tree bán những gì?');
+  });
+
+  it('server không đọc được FAQ thì không khai FAQPage (HTML chưa có câu hỏi nào để khớp)', async () => {
+    const r = render(await AboutPage());
+    mounted.push(r);
+    expect(r.container.querySelector('script[type="application/ld+json"]')).toBeNull();
   });
 
   it('server không đọc được FAQ: vẫn dựng trang, client tự tải như trước', async () => {
@@ -187,14 +211,31 @@ describe('/gioi-thieu: câu hỏi thường gặp', () => {
     const q2 = button(container, /Phí ship bao nhiêu\?/);
     expect(q1.getAttribute('aria-expanded')).toBe('true');
     expect(q2.getAttribute('aria-expanded')).toBe('false');
-    expect(container.textContent).toContain('2-4 ngày.');
-    expect(container.textContent).not.toContain('Miễn phí từ 200k.');
+    const answer = (q: HTMLElement) => container.querySelector<HTMLElement>(`#${q.getAttribute('aria-controls')}`)!;
+    expect(answer(q1).hidden).toBe(false);
+    expect(answer(q1).textContent).toBe('2-4 ngày.');
+    expect(answer(q2).hidden).toBe(true);
     click(q2);
     expect(q2.getAttribute('aria-expanded')).toBe('true');
     expect(q1.getAttribute('aria-expanded')).toBe('false');
-    expect(container.textContent).toContain('Miễn phí từ 200k.');
+    expect(answer(q2).hidden).toBe(false);
+    expect(answer(q2).textContent).toBe('Miễn phí từ 200k.');
+    expect(answer(q1).hidden).toBe(true);
     click(q2);
     expect(q2.getAttribute('aria-expanded')).toBe('false');
+    expect(answer(q2).hidden).toBe(true);
+  });
+
+  it('mọi câu trả lời đều có trong HTML (công cụ tìm kiếm đọc được), câu thu gọn chỉ ẩn bằng thuộc tính hidden; aria-controls luôn trỏ tới phần tử có thật', async () => {
+    const { container } = await mount();
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-controls]'));
+    expect(buttons.length).toBeGreaterThan(1);
+    for (const b of buttons) {
+      const target = container.querySelector<HTMLElement>(`#${b.getAttribute('aria-controls')}`);
+      expect(target).not.toBeNull();
+      expect(target!.hidden).toBe(b.getAttribute('aria-expanded') !== 'true');
+    }
+    expect(container.textContent).toContain('Miễn phí từ 200k.');
   });
 
   it('chọn nhóm lọc: chỉ còn câu hỏi của nhóm và gập hết câu đang mở', async () => {
