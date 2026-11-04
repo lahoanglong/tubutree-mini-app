@@ -10,6 +10,7 @@ import type { AffiliateService } from '../../src/modules/affiliate/affiliate.ser
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { OpsInboxService } from '../../src/modules/ops/ops-inbox.service';
 import { createOrder, createUser, warmPool } from './helpers';
 
 /**
@@ -20,6 +21,7 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
   let prisma: PrismaService;
   let admin: AdminService;
   let proc: PancakeProcessor;
+  let inbox: OpsInboxService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
 
@@ -37,6 +39,7 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
     const orderStatus = new OrderStatusService(prisma, loyalty, affiliate, notifications, reversal, undefined, new AnalyticsEventsService(prisma));
     admin = new AdminService(prisma, {} as never, loyalty, affiliate, notifications, reversal, orderStatus, {} as never, {} as never, {} as never);
     proc = new PancakeProcessor(prisma, notifications, orderStatus, alerts as never);
+    inbox = new OpsInboxService(prisma, { countOverdue: async () => 0, countStoresToSettle: async () => 0 } as never);
   });
 
   afterAll(async () => {
@@ -67,6 +70,21 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
       await admin.resolvePancakeAttention(kho.id, order.id).catch(() => undefined);
       expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).not.toBeNull();
     }
+  });
+
+  it('webhook is_paid song song với ADMIN "Đã nhận tiền" trên đơn mở → cuối cùng PAID và hộp việc paymentUnlinked không tăng (20 vòng)', async () => {
+    const admin1 = await createUser(prisma, { role: 'ADMIN' });
+    const countOpen = async () => (await inbox.counts({ role: 'ADMIN' })).items.find((i) => i.key === 'paymentUnlinked')?.count ?? 0;
+    const before = await countOpen();
+    for (let i = 0; i < 20; i++) {
+      const user = await createUser(prisma);
+      const order = await createOrder(prisma, { userId: user.id, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+      await Promise.all([hold(order, `PK-C${i}`), admin.confirmOrderPayment(admin1.id, order.id, {})]);
+      const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentStatus: true, paymentUnlinkedAt: true } });
+      expect(after.paymentStatus).toBe('PAID');
+      expect(after.paymentUnlinkedAt).toBeNull();
+    }
+    expect(await countOpen()).toBe(before);
   });
 
   it('hai ADMIN resolve cùng lúc → đúng một bên OK, bên kia 400; cờ gỡ, đúng một dòng lịch sử "Đã đối chiếu" (10 vòng)', async () => {

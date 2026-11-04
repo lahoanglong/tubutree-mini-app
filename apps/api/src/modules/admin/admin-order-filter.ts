@@ -145,6 +145,22 @@ export const DEALER_TRANSFER_TO_CONFIRM_WHERE = {
   paymentMethod: 'BANK_TRANSFER',
 } as const;
 
+/**
+ * Khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (Order.paymentUnlinkedAt, xem PancakeProcessor.holdUnattachedPayment). Chỉ tính khi
+ * còn UNPAID: đơn sang PAID ở bất kỳ đường nào (ZaloPay, Pancake có gắn, đại lý) tự rời hàng đợi mà không cần ai gỡ cờ. Đơn còn mở do Kế toán đóng
+ * bằng "Đã nhận tiền"; đơn đã huỷ/trả do ADMIN đóng. Một nguồn cho hộp việc và bộ lọc danh sách đơn để số trên thẻ bằng số dòng khi bấm vào.
+ */
+export const PAYMENT_UNLINKED_OPEN_WHERE = {
+  paymentUnlinkedAt: { not: null },
+  paymentStatus: 'UNPAID',
+  status: { notIn: ['CANCELLED', 'RETURNED'] },
+} as const satisfies Prisma.OrderWhereInput;
+export const PAYMENT_UNLINKED_CLOSED_WHERE = {
+  paymentUnlinkedAt: { not: null },
+  paymentStatus: 'UNPAID',
+  status: { in: ['CANCELLED', 'RETURNED'] },
+} as const satisfies Prisma.OrderWhereInput;
+
 export interface AdminOrderFilter {
   status?: string;
   search?: string;

@@ -322,7 +322,7 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
   });
 
   it('KE_TOAN: hoàn tiền khách, thưởng đại lý đã duyệt chờ chi, VAT chờ xuất, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển, rút tiền đã duyệt chờ chi — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
-    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerCreditReported', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerCreditReported', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'paymentUnlinked', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
@@ -342,7 +342,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     const res = await svc.counts({ role: 'ADMIN' }, now);
 
     expect(keys(res)).toEqual([
-      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'productsUncategorized', 'merchantOverdue', 'merchantProducts',
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'paymentUnlinked', 'paymentUnlinkedClosed', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'productsUncategorized', 'merchantOverdue', 'merchantProducts',
       'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'dealerCreditReported', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
@@ -635,5 +635,48 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     expect(find(cskh, 'communityReports')?.count).toBe(3);
     expect(find(cskh, 'storefrontsPending')).toBeUndefined();
     expect(find(cskh, 'productsMissingImage')).toBeUndefined();
+  });
+});
+
+describe('OpsInboxService — khoản Pancake báo đã thanh toán chờ đối chiếu (paymentUnlinked)', () => {
+  const OPEN = { paymentUnlinkedAt: { not: null }, paymentStatus: 'UNPAID', status: { notIn: ['CANCELLED', 'RETURNED'] } };
+  const CLOSED = { paymentUnlinkedAt: { not: null }, paymentStatus: 'UNPAID', status: { in: ['CANCELLED', 'RETURNED'] } };
+  const find = (res: { items: { key: string; count: number; oldestAt?: string }[] }, key: string) => res.items.find((i) => i.key === key);
+
+  const mk = () => {
+    const t = build();
+    const unlinkedCount = (a?: { where?: Record<string, unknown> }) =>
+      JSON.stringify(a?.where) === JSON.stringify(OPEN) ? 2 : JSON.stringify(a?.where) === JSON.stringify(CLOSED) ? 1 : 0;
+    t.orderCount.mockImplementation(((a?: { where?: Record<string, unknown> }) => Promise.resolve(unlinkedCount(a))) as never);
+    const orderFindFirst = (t.svc as unknown as { prisma: { order: { findFirst: jest.Mock } } }).prisma.order.findFirst;
+    orderFindFirst.mockImplementation(async (a?: { where?: Record<string, unknown> }) =>
+      JSON.stringify(a?.where) === JSON.stringify(OPEN) ? { paymentUnlinkedAt: new Date('2026-11-04T01:00:00Z') } : null,
+    );
+    return { ...t, orderFindFirst };
+  };
+
+  it('KE_TOAN thấy paymentUnlinked (đơn còn mở), không thấy bản đơn đã huỷ/trả', async () => {
+    const { svc } = mk();
+    const res = await svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(find(res, 'paymentUnlinked')).toMatchObject({ key: 'paymentUnlinked', count: 2, oldestAt: '2026-11-04T01:00:00.000Z' });
+    expect(find(res, 'paymentUnlinkedClosed')).toBeUndefined();
+  });
+
+  it('KHO (và CSKH, MARKETING, chưa có nhóm) không thấy cả hai: KHO không đóng được khoản tiền này', async () => {
+    const { svc } = mk();
+    for (const perms of [['KHO'], ['CSKH'], ['MARKETING'], []]) {
+      const keys = (await svc.counts({ role: 'STAFF', staffPermissions: perms })).items.map((i) => i.key);
+      expect(keys).not.toContain('paymentUnlinked');
+      expect(keys).not.toContain('paymentUnlinkedClosed');
+    }
+  });
+
+  it('ADMIN thấy cả hai; đếm theo cờ + UNPAID + trạng thái mở/đóng (đơn đã PAID không được đếm)', async () => {
+    const { svc, orderCount } = mk();
+    const res = await svc.counts({ role: 'ADMIN' });
+    expect(find(res, 'paymentUnlinked')?.count).toBe(2);
+    expect(find(res, 'paymentUnlinkedClosed')?.count).toBe(1);
+    expect(orderCount).toHaveBeenCalledWith({ where: OPEN });
+    expect(orderCount).toHaveBeenCalledWith({ where: CLOSED });
   });
 });
