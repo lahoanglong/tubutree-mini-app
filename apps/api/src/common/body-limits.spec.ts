@@ -1,5 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import { gzipSync } from 'node:zlib';
+import { JwtService } from '@nestjs/jwt';
 import express from 'express';
 import {
   bodyParserErrorHandler,
@@ -25,11 +27,14 @@ import {
 const bodyOf = async (res: Response) => (await res.json()) as { message?: unknown; statusCode?: number };
 
 /** Cùng thứ tự middleware với bootstrap.ts (events → parser theo nhóm → lỗi parser → guard → no-store). */
+const ACCESS_SECRET = 'test-access-secret-0123456789abcdef0123';
+const validJwt = () => new JwtService().sign({ sub: 'u1' }, { secret: ACCESS_SECRET, expiresIn: '5m' });
+
 function buildApp() {
   const app = express();
   app.use('/api/events', eventsBodyParser());
   app.use(pancakeWebhookTokenGuard);
-  app.use(...createBodyParsers(), bodyParserErrorHandler, requestInputGuard);
+  app.use(...createBodyParsers(ACCESS_SECRET), bodyParserErrorHandler, requestInputGuard);
   app.use(privateNoStoreForAuthenticated);
   app.use((req, res) => {
     if (req.path === '/api/public-cached') res.setHeader('Cache-Control', 'public, max-age=60');
@@ -56,8 +61,9 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
   });
   afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
+  // Mặc định mang JWT hợp lệ: tầng 10 MB chỉ mở cho request có Bearer đúng; ca ẩn danh dùng postAnon.
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-    fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+    fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${validJwt()}`, ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
   describe('quét thô trước JSON.parse (route 10 MB không cần token)', () => {
     const manyKeys = (n: number) => `{${Array.from({ length: n }, (_, i) => `"k${i}":1`).join(',')}}`;
@@ -313,12 +319,51 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
     });
   });
 
-  it.each(['gzip', 'deflate'])('thân %s hỏng → 400 JSON, không lộ chữ của zlib', async (enc) => {
-    const res = await fetch(base + '/api/cart/coupon', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': enc }, body: 'khong-phai-du-lieu-nen' });
-    expect(res.status).toBe(400);
-    const body = await bodyOf(res);
-    expect(body).toMatchObject({ statusCode: 400, message: 'Dữ liệu gửi lên không đọc được. Bạn kiểm tra lại nhé.' });
-    expect(JSON.stringify(body)).not.toMatch(/header check|zlib|Z_/i);
+  describe('không giải nén thân và tầng 10 MB chỉ cho JWT hợp lệ (W1)', () => {
+    const postAnon = (path: string, body: Buffer | string, headers: Record<string, string> = {}) =>
+      fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body });
+
+    it.each(['gzip', 'deflate', 'br'])('thân %s → 415 tiếng Việt trên mọi tầng, kể cả khi có JWT', async (enc) => {
+      for (const path of ['/api/cart/coupon', '/api/admin/x', '/api/webhooks/zalo-oa']) {
+        for (const auth of [{}, { authorization: `Bearer ${validJwt()}` }] as Array<Record<string, string>>) {
+          const res = await postAnon(path, gzipSync('{"a":1}'), { 'content-encoding': enc, ...auth });
+          expect(res.status).toBe(415);
+          expect(await bodyOf(res)).toMatchObject({ statusCode: 415, message: ENCODING_UNSUPPORTED_MESSAGE });
+        }
+      }
+    });
+
+    it('gzip gửi tới /api/admin không token → 415 và không JSON.parse, không scanRawJson', async () => {
+      const parse = jest.spyOn(JSON, 'parse');
+      try {
+        const res = await postAnon('/api/admin/x', gzipSync(`{${Array.from({ length: 50_000 }, (_, i) => `"k${i}":1`).join(',')}}`), { 'content-encoding': 'gzip' });
+        expect(res.status).toBe(415);
+        expect(parse.mock.calls.filter(([t]) => typeof t === 'string' && t.includes('"k49999"'))).toHaveLength(0);
+      } finally {
+        parse.mockRestore();
+      }
+    });
+
+    const oneMb = JSON.stringify({ blob: 'x'.repeat(1024 * 1024) });
+    it('thân identity 1 MB không token → 413 ở route tầng lớn', async () => {
+      for (const path of ['/api/admin/x', '/api/feed/posts', '/api/storefront/me']) {
+        expect((await postAnon(path, oneMb)).status).toBe(413);
+      }
+    });
+    it('Bearer sai chữ ký, hết hạn hoặc không phải JWT → vẫn 413', async () => {
+      const wrong = new JwtService().sign({ sub: 'u1' }, { secret: 'secret-khac-hoan-toan-0123456789', expiresIn: '5m' });
+      const expired = new JwtService().sign({ sub: 'u1' }, { secret: ACCESS_SECRET, expiresIn: '-10s' });
+      for (const token of [wrong, expired, 'rac']) {
+        expect((await postAnon('/api/admin/x', oneMb, { authorization: `Bearer ${token}` })).status).toBe(413);
+      }
+    });
+    it('cùng thân 1 MB kèm JWT hợp lệ → qua tầng body', async () => {
+      const res = await postAnon('/api/admin/x', oneMb, { authorization: `Bearer ${validJwt()}` });
+      expect(res.status).toBe(200);
+    });
+    it('route không thuộc tầng lớn vẫn 256 KB dù có JWT', async () => {
+      expect((await postAnon('/api/cart/coupon', oneMb, { authorization: `Bearer ${validJwt()}` })).status).toBe(413);
+    });
   });
 
   it('Content-Encoding lạ → 415 JSON, không chuyển lỗi cho Nest', async () => {

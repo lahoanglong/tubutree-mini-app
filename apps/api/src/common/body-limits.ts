@@ -1,3 +1,4 @@
+import { JwtService } from '@nestjs/jwt';
 import { json, urlencoded } from 'express';
 import { safeEqualStrings } from './safe-equal';
 import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from 'express';
@@ -135,8 +136,25 @@ function keepRawBody(verify: ReturnType<typeof rawGuard>): ReturnType<typeof raw
   };
 }
 
-/** json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần. */
-export function createBodyParsers(): RequestHandler[] {
+/** Bearer JWT còn hạn, đúng chữ ký secret access của API (cùng thư viện và secret với JwtStrategy). Không chạm DB. */
+function hasValidAccessJwt(jwt: JwtService, secret: string, req: Request): boolean {
+  const auth = req.headers.authorization;
+  if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) return false;
+  try {
+    jwt.verify(auth.slice(7).trim(), { secret });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần.
+ * `inflate: false`: thân nén (gzip/deflate/br) bị 415 thay vì giải nén trước khi xác thực, nên không có bom nén.
+ * Tầng 10 MB của app chỉ mở cho request mang Bearer JWT hợp lệ; ẩn danh rơi về trần mặc định.
+ */
+export function createBodyParsers(accessSecret: string): RequestHandler[] {
+  const jwt = new JwtService();
   const specs: Record<BodyTier, { limit: string; verify: ReturnType<typeof rawGuard> }> = {
     default: { limit: DEFAULT_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
     webhook: { limit: WEBHOOK_BODY_LIMIT, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
@@ -145,9 +163,13 @@ export function createBodyParsers(): RequestHandler[] {
   };
   const tiers = new Map<BodyTier, { json: RequestHandler; urlencoded: RequestHandler }>();
   for (const [tier, { limit, verify }] of Object.entries(specs) as Array<[BodyTier, (typeof specs)[BodyTier]]>) {
-    tiers.set(tier, { json: json({ limit, verify }), urlencoded: urlencoded({ limit, extended: true }) });
+    tiers.set(tier, { json: json({ limit, verify, inflate: false }), urlencoded: urlencoded({ limit, extended: true, inflate: false }) });
   }
-  const pick = (kind: 'json' | 'urlencoded'): RequestHandler => (req, res, next) => tiers.get(tierFor(req.path))![kind](req, res, next);
+  const pick = (kind: 'json' | 'urlencoded'): RequestHandler => (req, res, next) => {
+    let tier = tierFor(req.path);
+    if (tier === 'large' && !hasValidAccessJwt(jwt, accessSecret, req)) tier = 'default';
+    tiers.get(tier)![kind](req, res, next);
+  };
   return [pick('json'), pick('urlencoded')];
 }
 
