@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import type { FlashPriceItem } from '@tubutree/app-core/flash-price';
@@ -44,7 +44,7 @@ const HEART_VARIANTS: ReadonlySet<CardVariant> = new Set(['grid', 'rail-md', 'ra
  * Nhãn chỉ hiện khi dữ kiện đã về, không hứa rồi rút: chưa biết mốc ngày mở bán thì bỏ `createdAt` (không "Mới"), chưa có cấu hình thì
  * không "Miễn phí giao hàng". Thẻ tự vẽ lại đúng mốc hết giờ của suất đang áp (`useFlashExpiry`).
  */
-export function ProductCard({
+export const ProductCard = memo(function ProductCard({
   product,
   variant,
   flash: flashProp,
@@ -103,4 +103,4 @@ export function ProductCard({
       wishlist={showWishlist && HEART_VARIANTS.has(variant) ? <WishlistHeart productId={product.id} productName={product.name} floating size={18} /> : undefined}
     />
   );
-}
+});
