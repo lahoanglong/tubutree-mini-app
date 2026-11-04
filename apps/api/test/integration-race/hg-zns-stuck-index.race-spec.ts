@@ -35,11 +35,12 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
    * EXPLAIN truy vấn của cron cho một trạng thái trong một transaction rồi ROLLBACK (mọi SET LOCAL và DDL thử đều bị huỷ).
    * Câu PREPARE sống theo kết nối chứ không theo transaction: gỡ đúng câu mình tạo (không DEALLOCATE ALL, sẽ xoá câu Prisma đang cache).
    */
-  async function explainStuck(mode: 'force_custom_plan' | 'force_generic_plan', setup: string[] = []): Promise<string> {
+  async function explainStuck(mode: 'force_custom_plan' | 'force_generic_plan', opts: { seqscanOff?: boolean; setup?: string[] } = {}): Promise<string> {
+    const { seqscanOff = true, setup = [] } = opts;
     let plan = '';
     await prisma
       .$transaction(async (tx) => {
-        await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+        if (seqscanOff) await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
         await tx.$executeRawUnsafe(`SET LOCAL plan_cache_mode = ${mode}`);
         for (const sql of setup) await tx.$executeRawUnsafe(sql);
         let prepared = false;
@@ -66,13 +67,19 @@ describe('hg: index quét log ZNS kẹt (real Postgres)', () => {
     return plan;
   }
 
-  it('lượt đầu của prepared statement (plan theo tham số thật): đi index (channel, status, sentAt)', async () => {
+  it('cài đặt planner mặc định (KHÔNG tắt seqscan), plan theo tham số thật như lượt đầu của prepared statement: đi index (channel, status, sentAt), không quét bảng', async () => {
+    const plan = await explainStuck('force_custom_plan', { seqscanOff: false });
+    expect(plan).toContain('notification_logs_channel_status_sentAt_idx');
+    expect(plan).not.toMatch(/Seq Scan/);
+  });
+
+  it('plan theo tham số thật khi tắt seqscan: index mới là lựa chọn so với các index còn lại', async () => {
     expect(await explainStuck('force_custom_plan')).toContain('notification_logs_channel_status_sentAt_idx');
   });
 
-  it('generic plan: index dùng được cho truy vấn (khi index sentAt đơn bị gỡ thử trong transaction rồi huỷ, planner vẫn đi index mới, không rơi về quét bảng)', async () => {
-    // Với generic plan planner không biết `status` hiếm nên có thể thích đi index sentAt rồi lọc; điều cần chứng minh là index mới khớp truy vấn.
-    const plan = await explainStuck('force_generic_plan', ['DROP INDEX "notification_logs_sentAt_idx"']);
+  it('generic plan, tắt seqscan: chỉ chứng minh index mới KHỚP truy vấn (khi index sentAt đơn bị gỡ thử trong transaction rồi huỷ, planner vẫn đi index mới, không rơi về quét bảng)', async () => {
+    // Không chứng minh generic plan tự chọn index này: planner không biết `status` hiếm nên có thể thích index sentAt rồi lọc. Prisma dùng plan theo tham số cho lượt đầu, đó là ca ở hai test trên.
+    const plan = await explainStuck('force_generic_plan', { setup: ['DROP INDEX "notification_logs_sentAt_idx"'] });
     expect(plan).toContain('notification_logs_channel_status_sentAt_idx');
   });
 
