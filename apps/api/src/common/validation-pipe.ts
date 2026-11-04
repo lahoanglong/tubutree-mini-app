@@ -259,7 +259,7 @@ const TEMPLATES: Record<string, (subject: string, original: string) => string> =
   isIn: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
   isEnum: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
   minLength: (s, o) => `${s} phải có ít nhất ${trailingNumber(o)} ký tự.`,
-  length: (s, o) => {
+  isLength: (s, o) => {
     const range = o.match(/equal to (\d+) and shorter than or equal to (\d+)/);
     if (range) return `${s} phải dài từ ${range[1]} đến ${range[2]} ký tự.`;
     const max = o.match(/shorter than or equal to (\d+)/)?.[1];
