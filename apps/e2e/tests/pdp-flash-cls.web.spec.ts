@@ -22,15 +22,20 @@ test.beforeAll(async ({ request }, testInfo) => {
   if (!flash) return;
   // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường), và trang chi tiết dựng lại sau tối đa 60 giây.
   // Cả hai đều trả bản cũ rồi mới làm mới ở nền, nên lần dựng lại đầu tiên có thể vẫn đọc danh sách cũ: tệ nhất khoảng 3 phút (60 giây fetch + hai lượt dựng lại 60 giây).
-  // Hỏi chính trang mỗi 5 giây tới khi HTML có thanh Giờ vàng.
-  const web = `http://localhost:${process.env.E2E_WEB_PORT}`;
+  // Hỏi chính trang mỗi 5 giây tới khi HTML có thanh Giờ vàng. Đường dẫn tương đối theo baseURL của project: CI không đặt E2E_WEB_PORT (chỉ web-gate.sh đặt).
   const deadline = Date.now() + 200_000;
+  let last = 'chưa hỏi lần nào';
   while (Date.now() < deadline) {
-    const html = await request.get(`${web}/san-pham/${flash.slug}`).then((r) => r.text()).catch(() => '');
-    if (html.includes('flash-price-bar')) return;
+    try {
+      const res = await request.get(`/san-pham/${flash.slug}`);
+      if ((await res.text()).includes('flash-price-bar')) return;
+      last = `HTTP ${res.status()}, HTML chưa có thanh Giờ vàng`;
+    } catch (err) {
+      last = `lỗi gọi trang: ${String(err)}`;
+    }
     await new Promise((r) => setTimeout(r, 5_000));
   }
-  throw new Error(`HTML của /san-pham/${flash.slug} không có thanh Giờ vàng sau 200 giây: bản dựng sẵn không thấy đợt vừa gieo`);
+  throw new Error(`HTML của /san-pham/${flash.slug} không có thanh Giờ vàng sau 200 giây (lần cuối: ${last}): bản dựng sẵn không thấy đợt vừa gieo`);
 });
 test.afterAll(async () => {
   test.setTimeout(120_000);
@@ -76,7 +81,7 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
 test('PDP Giờ vàng: điện thoại chạy nhanh 7 giờ, đợt còn chạy theo giờ thật: hydrate không lỗi và thanh Giờ vàng không bị giấu trong lúc lần hỏi danh sách chưa xong', async ({ page, api, request }) => {
   test.skip(!flash, 'DB e2e không phải DB tạm hoặc chưa có sản phẩm để gieo đợt Giờ vàng');
   const f = flash!;
-  const html = await request.get(`http://localhost:${process.env.E2E_WEB_PORT}/san-pham/${f.slug}`).then((r) => r.text());
+  const html = await request.get(`/san-pham/${f.slug}`).then((r) => r.text());
   expect(html, 'HTML server phải đã có thanh Giờ vàng (đợt còn chạy lúc dựng)').toContain('flash-price-bar');
   // Đồng hồ treo tường của máy khách chạy trước 7 giờ, trong khi đợt gieo ở đây kết thúc sau 6 giờ: nếu mốc lọc đợt lấy theo đồng hồ điện thoại trước khi đồng bộ thì thanh bị giấu
   // rồi hiện lại khi lần hỏi đầu xong. `performance.now()` không bị đổi nên mốc đơn điệu vẫn giữ thanh.
