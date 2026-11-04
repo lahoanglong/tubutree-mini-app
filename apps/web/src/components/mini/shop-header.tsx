@@ -128,7 +128,7 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
               </span>
             )}
           </div>
-          {action && <div className={`flex-none pb-0.5${lg('action')}`}>{action}</div>}
+          {action && <div className={`relative flex-none pb-0.5${lg('action')}`}>{action}</div>}
         </div>
         <div className={`mt-2 min-w-0${lg('name')}`}>
           <Heading variant="title-lg" as={titleAs} style={{ minWidth: 0, ...CLAMP_2 }}>

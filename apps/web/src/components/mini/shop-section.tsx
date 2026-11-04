@@ -145,8 +145,9 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false, 
     <Section id={`shop-col-${collection.id}`}>
       <SectionHeader title={collection.title} action={action} />
       {layout === 'rail' && (
+        // Kệ ít món có hai bản (kệ dưới lg, lưới từ lg), mỗi bản `display:none` ở một khổ; ảnh eager vẫn tải dù bị ẩn nên ưu tiên chỉ cấp cho kệ hiện ở mọi khổ.
         <div data-testid="shop-rail" className={railAsGrid ? 'lg:hidden' : undefined}>
-          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} priorityCount={priorityCount} />
+          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} priorityCount={railAsGrid ? 0 : priorityCount} />
         </div>
       )}
       {railAsGrid && (

@@ -114,6 +114,12 @@ describe('ShopHeader (web)', () => {
     expect(info.style.padding).toBe('');
   });
 
+  it('khung nút (action) có position: bìa là phần tử định vị nên không có thì bìa đè 18px đầu nút ở khổ md (hàng avatar lùi -mt-7)', () => {
+    mount(<ShopHeader title="Shop" action={<button type="button">Chia sẻ gian hàng</button>} />);
+    const wrapper = document.querySelector('button')!.parentElement!;
+    expect(wrapper.className.split(/\s+/)).toContain('relative');
+  });
+
   it('badges và action hiện trong đầu shop', () => {
     mount(<ShopHeader title="Shop" badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} />);
     expect(document.body.textContent).toContain('Chính hãng');
