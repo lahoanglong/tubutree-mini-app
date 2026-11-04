@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import { ActiveFilters } from './active-filters';
@@ -43,5 +44,39 @@ describe('ActiveFilters', () => {
     const c = mount({ chips: [], filtersIgnored: true, onPatch: vi.fn() });
     expect(c.querySelector('[role="status"]')!.textContent).toContain('Bộ lọc nâng cao chưa dùng được');
     expect(c.querySelector('[role="group"][aria-label="Đang lọc"]')).toBeNull();
+  });
+
+  describe('focus sau khi gỡ chip', () => {
+    const chips = [{ key: 'a', label: 'A', patch: { inStock: false } }, { key: 'b', label: 'B', patch: { brands: [] } }];
+    function Harness() {
+      const [list, setList] = useState(chips);
+      return <ActiveFilters chips={list} filtersIgnored={false} onPatch={() => setList((l) => l.slice(1))} />;
+    }
+    const mountHarness = () => {
+      mounted = render(<Harness />);
+      return mounted.container;
+    };
+    const realMatches = Element.prototype.matches;
+    afterEach(() => vi.restoreAllMocks());
+    const withVisible = (visible: boolean) =>
+      vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, sel: string) {
+        return sel === ':focus-visible' ? visible && this === document.activeElement : realMatches.call(this, sel);
+      });
+
+    it('bàn phím (focus-visible): chip bị gỡ thì focus sang chip kế', () => {
+      withVisible(true);
+      const c = mountHarness();
+      byLabel(c, 'Bỏ lọc A').focus();
+      click(byLabel(c, 'Bỏ lọc A'));
+      expect(document.activeElement).toBe(byLabel(c, 'Bỏ lọc B'));
+    });
+
+    it('chuột/cảm ứng (không focus-visible): không đưa focus đi đâu', () => {
+      withVisible(false);
+      const c = mountHarness();
+      byLabel(c, 'Bỏ lọc A').focus();
+      click(byLabel(c, 'Bỏ lọc A'));
+      expect(document.activeElement).not.toBe(byLabel(c, 'Bỏ lọc B'));
+    });
   });
 });

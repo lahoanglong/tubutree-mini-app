@@ -81,10 +81,10 @@ const label = (c: ParentNode, text: string) => (byText(c, 'label', text) as HTML
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 const lineOf = (c: ParentNode, name: string) => byText(c, '[data-line]', name) as HTMLElement;
 const minus = (c: ParentNode, name: string, n: number) => {
-  for (let i = 0; i < n; i++) click(lineOf(c, name).querySelector('[aria-label="Giảm số lượng"]'));
+  for (let i = 0; i < n; i++) click(lineOf(c, name).querySelector('[aria-label^="Giảm số lượng"]'));
 };
 const plus = (c: ParentNode, name: string, n: number) => {
-  for (let i = 0; i < n; i++) click(lineOf(c, name).querySelector('[aria-label="Tăng số lượng"]'));
+  for (let i = 0; i < n; i++) click(lineOf(c, name).querySelector('[aria-label^="Tăng số lượng"]'));
 };
 const lookupReq = (over: Partial<WasteDeskRequestDTO> = {}) => {
   state.lookup = { type: 'REQUEST', request: { ...REQ, ...over } };
@@ -263,7 +263,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     expect(lineOf(c, 'Thùng carton').textContent).toContain('Tối đa 5');
     plus(c, 'Thùng carton', 2);
     expect(lineOf(c, 'Thùng carton').querySelector('[aria-live]')?.textContent).toBe('5');
-    expect(lineOf(c, 'Thùng carton').querySelector('[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(lineOf(c, 'Thùng carton').querySelector('[aria-label^="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(c.querySelectorAll('select')).toHaveLength(0);
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     expect(c.textContent).not.toContain('Chọn lý do cho món nhận thiếu để xác nhận');
@@ -300,7 +300,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
     const c = await mount();
     await lookUp(c);
-    expect(lineOf(c, 'Pin đã dùng').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(lineOf(c, 'Pin đã dùng').querySelector('[aria-label^="Tăng số lượng"]')).not.toBeNull();
     expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
     expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách; chọn lý do nhận thiếu "Hỏng"');
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 2.000 điểm');
@@ -324,7 +324,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
       await lookUp(c);
       expect(c.textContent).toContain(text);
       if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
-      expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
+      expect(c.querySelector('[aria-label^="Tăng số lượng"]')).toBeNull();
       expect(button(c, 'Xác nhận đã nhận')).toBeNull();
       expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
     });
@@ -344,7 +344,7 @@ describe('/doi-rac/quay: món chỉ kho HCMC nhận', () => {
     const c = await mount();
     await lookUp(c);
     expect(lineOf(c, 'Vỏ chai Tubu').textContent).toContain('Chỉ kho HCMC nhận, trả lại khách');
-    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label^="Tăng số lượng"]')).toBeNull();
     expect(lineOf(c, 'Vỏ chai Tubu').querySelector('select')).toBeNull();
     expect(lineOf(c, 'Thùng carton').textContent).not.toContain('Chỉ kho HCMC nhận');
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 5.000 điểm');
@@ -364,7 +364,7 @@ describe('/doi-rac/quay: món chỉ kho HCMC nhận', () => {
     const c = await mount();
     await lookUp(c);
     expect(c.textContent).not.toContain('Chỉ kho HCMC nhận, trả lại khách');
-    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label^="Tăng số lượng"]')).not.toBeNull();
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 6.000 điểm');
   });
   it('tra yêu cầu của điểm khác tab đang chọn: tự chuyển sang tab của điểm đó để thẻ hạn mức khớp yêu cầu', async () => {
@@ -381,7 +381,7 @@ describe('/doi-rac/quay: món chỉ kho HCMC nhận', () => {
     const c = await mount();
     await lookUp(c);
     expect(c.textContent).not.toContain('Chỉ kho HCMC nhận, trả lại khách');
-    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label^="Tăng số lượng"]')).not.toBeNull();
   });
 });
 

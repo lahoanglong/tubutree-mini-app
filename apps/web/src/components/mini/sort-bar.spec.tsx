@@ -24,6 +24,14 @@ describe('SortBar (web)', () => {
     expect(byLabel('Phổ biến').getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('A11Y-07: tên của tab giá bắt đầu bằng chữ nhìn thấy; gợi ý "Chạm để đổi chiều" nằm ở aria-describedby, không ở tên', () => {
+    mount(<SortBar value="price" options={[{ value: 'price', label: 'Giá thấp', spoken: 'Giá thấp, từ thấp đến cao', hint: 'Chạm để đổi chiều' }]} onChange={() => {}} />);
+    const btn = byLabel('Giá thấp, từ thấp đến cao');
+    expect(btn.getAttribute('aria-label')!.startsWith(btn.textContent!)).toBe(true);
+    expect(btn.getAttribute('aria-label')).not.toMatch(/chạm/i);
+    expect(document.getElementById(btn.getAttribute('aria-describedby')!)!.textContent).toBe('Chạm để đổi chiều');
+  });
+
   it('bấm tab gọi onChange(value), kể cả tab đang chọn', () => {
     const onChange = vi.fn();
     mount(<SortBar value="price" options={OPTIONS} onChange={onChange} />);

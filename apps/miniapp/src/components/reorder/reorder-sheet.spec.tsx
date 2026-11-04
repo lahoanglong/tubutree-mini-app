@@ -78,7 +78,7 @@ describe('ReorderSheet', () => {
     mocks.repurchaseOrder.mockResolvedValue({ cart: CART, legacy: false, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 3 }] });
     const onClose = vi.fn();
     renderSheet(<ReorderSheet target={ORDER} source="order_card" onClose={onClose} />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Tăng số lượng' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Tăng số lượng/ })[0]!);
     fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(mocks.repurchaseOrder).toHaveBeenCalledWith('TUBU1', { items: [{ orderItemId: 'a', quantity: 3 }], addSource: 'repurchase' });
@@ -185,8 +185,24 @@ describe('ReorderSheet', () => {
         </QueryClientProvider>,
       );
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Tăng số lượng/ }));
     expect(mocks.trackReorderClicked).toHaveBeenCalledTimes(1);
+  });
+
+  it('dòng hết hàng chỉ mờ ảnh, chữ không bị opacity (đủ tương phản)', () => {
+    renderSheet(<ReorderSheet target={ORDER} source="order_card" onClose={() => {}} />);
+    const rows = screen.getAllByTestId('reorder-line');
+    const unavailable = rows.find((r) => r.textContent?.includes(copy.reorder.unavailable))!;
+    expect(unavailable.style.opacity).toBe('');
+    const dimmed = Array.from(unavailable.querySelectorAll<HTMLElement>('div')).find((d) => d.style.opacity === '0.5')!;
+    expect(dimmed).toBeTruthy();
+    expect(dimmed.textContent).toBe('');
+  });
+
+  it('nút số lượng của mỗi dòng mang tên sản phẩm nên không trùng tên (như web)', () => {
+    renderSheet(<ReorderSheet target={{ kind: 'order', orderCode: 'T', lines: [line('a', 'Nước rửa chén'), line('c', 'Dầu gội')] }} source="order_card" onClose={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Tăng số lượng Nước rửa chén' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Giảm số lượng Dầu gội' })).toBeInTheDocument();
   });
 
   it('target=null → không hiện gì', () => {

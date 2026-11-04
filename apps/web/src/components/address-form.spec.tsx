@@ -238,4 +238,13 @@ describe('AddressForm tạo mới — điền sẵn từ hồ sơ và địa gi�
     expect(submit).toHaveBeenCalled();
     expect(localStorage.length).toBe(0);
   });
+
+  it('A11Y-17: mọi ô bắt buộc (người nhận, SĐT, tỉnh, phường, số nhà) có aria-required="true"', async () => {
+    const c = await mount();
+    expect(input(c, 'Người nhận').getAttribute('aria-required')).toBe('true');
+    expect(input(c, 'Số điện thoại').getAttribute('aria-required')).toBe('true');
+    expect(input(c, 'Số nhà, tên đường').getAttribute('aria-required')).toBe('true');
+    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('aria-required')).toBe('true');
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('aria-required')).toBe('true');
+  });
 });

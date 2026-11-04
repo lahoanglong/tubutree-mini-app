@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, type PointerEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Check, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
 
 const MASK = 240;
 const OUTPUT = 200;
+const NUDGE = 10;
 
 /**
  * Cắt ảnh đại diện thành hình tròn 200x200 JPEG, cùng cách làm với `AvatarCropModal` của Mini App: kéo để dời, thanh trượt
@@ -52,6 +53,14 @@ export function AvatarCropSheet({
     if (dragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
   };
   const up = () => setDragging(false);
+  // Bàn phím: mũi tên dời ảnh trong khung (Shift dời nhanh x4), thay cho thao tác kéo (WCAG 2.5.1/2.1.1).
+  const nudge = (e: KeyboardEvent) => {
+    const step = e.shiftKey ? NUDGE * 4 : NUDGE;
+    const d = e.key === 'ArrowLeft' ? [-step, 0] : e.key === 'ArrowRight' ? [step, 0] : e.key === 'ArrowUp' ? [0, -step] : e.key === 'ArrowDown' ? [0, step] : null;
+    if (!d) return;
+    e.preventDefault();
+    setOffset((o) => ({ x: o.x + d[0]!, y: o.y + d[1]! }));
+  };
 
   const confirm = () => {
     setProcessing(true);
@@ -108,6 +117,10 @@ export function AvatarCropSheet({
       }
     >
       <div
+        role="group"
+        tabIndex={0}
+        aria-label="Khung cắt ảnh đại diện. Dùng phím mũi tên để dời ảnh"
+        onKeyDown={nudge}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}

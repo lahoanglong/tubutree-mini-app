@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,6 +15,7 @@ import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
+import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 
 const VariationSheet = dynamic(() => import('@/components/variation-sheet').then((m) => m.VariationSheet), { ssr: false });
 
@@ -41,22 +42,12 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
   const [notice, setNotice] = useState<Notice | null>(null);
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flash, picker?.variations.map((v) => v.id) ?? []);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chống bấm đúp đồng bộ: state chưa kịp render lại giữa hai cú chạm liền nhau, còn ref thì có ngay.
   const inFlight = useRef(false);
 
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  const show = (n: Notice) => {
-    if (timer.current) clearTimeout(timer.current);
-    setNotice(n);
-    timer.current = setTimeout(() => setNotice(null), NOTICE_MS);
-  };
+  // Tự tắt sau NOTICE_MS nhưng dừng khi trỏ/focus đang ở trên thông báo (có liên kết "Xem giỏ hàng"; WCAG 2.2.1).
+  const noticeHold = useAutoDismiss(!!notice, NOTICE_MS, () => setNotice(null), notice);
+  const show = (n: Notice) => setNotice(n);
 
   const addLine = async (variationId: string, qty: number) => {
     const cart = await addToCart(coreHttp, variationId, qty, 'wishlist', cartStorefrontSlug());
@@ -106,7 +97,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
         type="button"
         aria-label={`Thêm ${p.name} vào giỏ`}
         aria-busy={busyId === p.id}
-        disabled={busyId === p.id}
+        aria-disabled={busyId === p.id || undefined}
         onClick={() => void quickAdd(p)}
         className="inline-flex h-11 w-11 items-center justify-center text-stone-700"
       >
@@ -118,19 +109,24 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
 
   const feedback = (
     <>
-      {notice && (
-        <div
-          role={notice.ok ? 'status' : 'alert'}
-          className="fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-card bg-stone-900 px-4 py-2 text-sm text-stone-0 shadow-raised"
-        >
-          <span>{notice.text}</span>
-          {notice.ok && (
-            <Link href="/gio-hang" className="inline-flex min-h-11 flex-none items-center font-semibold underline underline-offset-2">
-              Xem giỏ hàng
-            </Link>
-          )}
-        </div>
-      )}
+      {/* Vùng báo luôn có mặt trong cây, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
+      <div role="status">
+        {notice && (
+          <div
+            role={notice.ok ? undefined : 'alert'}
+            data-surface="inverse"
+            {...noticeHold}
+            className="fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-card bg-stone-900 px-4 py-2 text-sm text-stone-0 shadow-raised"
+          >
+            <span>{notice.text}</span>
+            {notice.ok && (
+              <Link href="/gio-hang" className="inline-flex min-h-11 flex-none items-center font-semibold underline underline-offset-2">
+                Xem giỏ hàng
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
       {picker && (
         <VariationSheet
           open

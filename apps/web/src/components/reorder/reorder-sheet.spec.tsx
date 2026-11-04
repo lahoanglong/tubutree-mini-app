@@ -32,7 +32,7 @@ const mount = (props: { target: ReorderTarget | null; onClose?: () => void; navi
   return document.body;
 };
 const cta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''))!;
-const plus = () => document.querySelector<HTMLButtonElement>('button[aria-label="Tăng số lượng"]')!;
+const plus = () => document.querySelector<HTMLButtonElement>('button[aria-label^="Tăng số lượng"]')!;
 const checkbox = (name: string) => document.querySelector<HTMLInputElement>(`input[type="checkbox"][aria-label="Chọn ${name}"]`)!;
 
 beforeEach(() => {
@@ -186,5 +186,22 @@ describe('ReorderSheet', () => {
   it('mọi điều khiển có tên truy cập', () => {
     mount({ target: ORDER });
     expect(unnamedControls(document.body)).toEqual([]);
+  });
+});
+
+describe('ReorderSheet — truy cập (A11Y-06/08)', () => {
+  it('nút số lượng của mỗi dòng mang tên sản phẩm nên không trùng tên', () => {
+    mount({ target: { kind: 'order', orderCode: 'T', lines: [line('a', 'Nước rửa chén'), line('c', 'Dầu gội')] } });
+    const names = Array.from(document.querySelectorAll('button[aria-label$="Nước rửa chén"], button[aria-label$="Dầu gội"]')).map((b) => b.getAttribute('aria-label'));
+    expect(new Set(names).size).toBe(names.length);
+    expect(names.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('dòng hết hàng chỉ mờ ảnh, chữ không bị opacity (đủ tương phản)', () => {
+    mount({ target: ORDER });
+    const rows = document.querySelectorAll<HTMLElement>('[data-testid="reorder-line"]');
+    expect(rows[1]!.className).not.toContain('opacity');
+    expect(rows[1]!.querySelector('.opacity-50')).not.toBeNull();
+    expect(rows[1]!.querySelector('.opacity-50')!.textContent).toBe('');
   });
 });

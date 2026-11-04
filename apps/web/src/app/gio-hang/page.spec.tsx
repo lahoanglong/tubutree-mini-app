@@ -679,7 +679,7 @@ describe('/gio-hang — gom món của combo dưới đầu nhóm, báo trước
   const heading = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-combo-heading"]')!;
   const pick = (c: HTMLElement, name: string) => c.querySelector<HTMLInputElement>(`input[type="checkbox"][aria-label="Chọn ${name} để thanh toán"]`)!;
   const trash = (c: HTMLElement, name: string) => button(c, `Xoá ${name} khỏi giỏ hàng`);
-  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+  const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
   const dialogButton = (label: string) => [...dialog()!.querySelectorAll('button')].find((b) => b.textContent === label)!;
 
   it('các dòng của bộ nằm chung một khối có đầu nhóm "Combo: tên · Tiết kiệm số", dòng lẻ nằm ngoài; chân dính vẫn ghi số combo', async () => {

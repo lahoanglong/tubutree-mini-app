@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { focusableIn } from '@/lib/use-modal-a11y';
 
 export type SheetSize = 'auto' | 'half' | 'full';
 
@@ -27,8 +28,6 @@ const SIZE_CLASS: Record<SheetSize, string> = {
   half: 'h-[50vh]',
   full: 'h-[92vh] md:h-[85vh]',
 };
-
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Ngăn xếp sheet đang mở: chỉ sheet trên cùng xử lý bàn phím; bộ đếm khoá cuộn để đóng sai thứ tự LIFO không trả overflow sai.
 const openStack: symbol[] = [];
@@ -58,7 +57,8 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
     if (scrollLocks++ === 0) savedOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const panel = panelRef.current;
-    const items = () => Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+    // Bỏ phần tử nằm trong vùng hidden/inert: Tab không được kẹt ở nút mà trình duyệt không thể focus.
+    const items = () => (panel ? focusableIn(panel) : []);
     // Nút Đóng (nếu có) là phần tử đầu tiên nên nhận focus; sheet không dismissible thì focus khung.
     (items()[0] ?? panel)?.focus();
 
@@ -67,7 +67,8 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
       // Hộp modal khác (ConfirmDialog) không vào openStack; portal mở sau luôn nằm cuối DOM nên nó giữ bàn phím.
       const modals = document.querySelectorAll('[aria-modal="true"]');
       if (modals[modals.length - 1] !== panel) return;
-      if (e.key === 'Escape' && dismissibleRef.current) {
+      // Đang gõ tiếng Việt (IME): Esc huỷ bản gõ chứ không đóng sheet.
+      if (e.key === 'Escape' && dismissibleRef.current && !e.isComposing) {
         e.stopPropagation();
         onCloseRef.current();
         return;
@@ -102,6 +103,7 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
 
   if (!open || typeof document === 'undefined') return null;
   const titleId = `${uid}-title`;
+  const descId = `${uid}-desc`;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
       <div data-sheet-backdrop className="absolute inset-0 bg-sheet-scrim md:motion-safe:animate-dialog-fade" onClick={dismissible ? onClose : undefined} />
@@ -110,7 +112,7 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
         role={role}
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
-        aria-describedby={describedBy}
+        aria-describedby={[describedBy, description ? descId : null].filter(Boolean).join(' ') || undefined}
         tabIndex={-1}
         className={`relative flex w-full flex-col overflow-hidden rounded-t-sheet bg-stone-0 shadow-card outline-none md:max-w-[var(--dialog-w)] md:rounded-sheet md:shadow-dialog md:motion-safe:animate-dialog-pop ${SIZE_CLASS[size]}`}
       >
@@ -124,7 +126,11 @@ export function Sheet({ open, onClose, title, description, footer, size = 'auto'
                 {title}
               </h2>
             )}
-            {description && <p className="mt-1 text-sm text-stone-600">{description}</p>}
+            {description && (
+              <p id={descId} className="mt-1 text-sm text-stone-600">
+                {description}
+              </p>
+            )}
           </div>
           {dismissible && (
             <button

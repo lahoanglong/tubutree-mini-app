@@ -210,7 +210,7 @@ export default function NotificationsPage() {
       )}
       {notifQ.hasNextPage && (
         <div className="mt-3 text-center">
-          <button type="button" disabled={notifQ.isFetchingNextPage} onClick={() => void notifQ.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+          <button type="button" aria-disabled={notifQ.isFetchingNextPage || undefined} onClick={() => !notifQ.isFetchingNextPage && void notifQ.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
             {notifQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
           </button>
         </div>

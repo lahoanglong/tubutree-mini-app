@@ -21,9 +21,12 @@ interface QuantitySelectorProps {
   quickSteps?: readonly number[];
   /** Khoá cả − lẫn + (dòng hết hàng): nút vẫn là phần tử đọc được, chỉ không đổi số. */
   disabled?: boolean;
+  /** Tên món: bộ chọn lặp theo danh sách thì tên nút phải khác nhau ("Giảm số lượng Sữa tắm"), như web. */
+  itemLabel?: string;
 }
 
-export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, editable, quickSteps, disabled }: QuantitySelectorProps) {
+export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, editable, quickSteps, disabled, itemLabel }: QuantitySelectorProps) {
+  const named = (base: string) => (itemLabel ? `${base} ${itemLabel}` : base);
   const side = size === 'md' ? 44 : 36;
   const btn = (disabled: boolean): React.CSSProperties => ({
     width: side,
@@ -46,7 +49,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
     <div style={{ display: 'flex', alignItems: 'center', gap: size === 'md' ? 12 : 8 }}>
       <button
         type="button"
-        aria-label="Giảm số lượng"
+        aria-label={named('Giảm số lượng')}
         aria-disabled={disabled || value <= min}
         className={!disabled && value > min ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
         style={btn(!!disabled || value <= min)}
@@ -59,7 +62,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          aria-label="Số lượng"
+          aria-label={named('Số lượng')}
           value={String(value)}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => onChange(parseQtyInput(e.target.value, min, max))}
@@ -83,7 +86,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
       )}
       <button
         type="button"
-        aria-label="Tăng số lượng"
+        aria-label={named('Tăng số lượng')}
         aria-disabled={disabled || value >= max}
         className={!disabled && value < max ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
         style={btn(!!disabled || value >= max)}
@@ -102,7 +105,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
           <button
             key={n}
             type="button"
-            aria-label={`Thêm ${n}`}
+            aria-label={named(`Thêm ${n}`)}
             aria-disabled={disabled || value >= max}
             className={!disabled && value < max ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
             onClick={() => !disabled && value < max && onChange(Math.min(max, value + n))}

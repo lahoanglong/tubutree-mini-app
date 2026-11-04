@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect } from 'react';
+import './globals.css';
 import { ERROR_GENERIC } from '@tubutree/app-core/client-copy';
 import { AlertTriangle } from 'lucide-react';
 import { reportError } from '@/lib/error-report';
 import { ui } from '@/lib/guest-ui';
 
 // Bắt lỗi ở CHÍNH root layout (Providers/SiteHeader throw) — error.tsx thường không phủ được
-// trường hợp này vì nó nằm TRONG layout. Phải tự vẽ <html>/<body> vì layout gốc đã hỏng.
+// trường hợp này vì nó nằm TRONG layout. Phải tự vẽ <html>/<body> vì layout gốc đã hỏng, và tự nạp globals.css
+// (Tailwind + token) vì layout gốc không chạy nên trang lỗi sẽ không có kiểu nào nếu thiếu dòng import này.
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => reportError(error), [error]);
   return (

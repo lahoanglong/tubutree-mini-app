@@ -119,3 +119,17 @@ export function scrollRegionProblems(root: ParentNode): string[] {
     .filter((box) => box.getAttribute('tabindex') !== '0' || box.getAttribute('role') !== 'region' || !box.getAttribute('aria-label')?.trim())
     .map((box) => box.outerHTML.slice(0, 120));
 }
+
+/**
+ * Điều khiển cùng loại trùng tên truy cập trong một danh sách (WCAG 2.4.6 / 2.5.3): chục nút "Giảm số lượng" y hệt khiến người dùng
+ * trình đọc màn hình không biết nút nào của món nào. Chỉ xét nút/liên kết/ô nhập có tên; trả về danh sách tên bị trùng (rỗng = đạt).
+ */
+export function duplicateControlNames(root: ParentNode): string[] {
+  const seen = new Map<string, number>();
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>(CONTROLS))) {
+    if (el.getAttribute('aria-hidden') === 'true') continue;
+    const name = accessibleName(el).replace(/\s+/g, ' ').trim();
+    if (name) seen.set(name, (seen.get(name) ?? 0) + 1);
+  }
+  return Array.from(seen).filter(([, n]) => n > 1).map(([name, n]) => `${name} (x${n})`);
+}

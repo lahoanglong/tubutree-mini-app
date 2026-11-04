@@ -12,6 +12,7 @@ import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
+import { SkipLink } from '@/components/skip-link';
 import { SITE_URL, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -43,17 +44,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ErrorReporter />
           <AppGates />
           <PdpNavSkeleton />
+          <SkipLink />
+          {/* Nút lùi nổi (position: fixed) đặt trước nội dung để thứ tự Tab/đọc màn hình khớp vị trí: ở điện thoại nó là điểm dừng đầu của trang con, không phải cuối cùng sau chân trang. */}
+          <HideOnPortals>
+            <BackButton className="md:!hidden" />
+          </HideOnPortals>
           <HideOnPortals>
             <SiteHeader />
           </HideOnPortals>
           <PortalHeader />
-          {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. */}
-          <div className="flex-1">{children}</div>
+          {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. Đích của liên kết bỏ qua tự nhận tabindex khi được kích hoạt (SkipLink). */}
+          <div id="main-content" className="flex-1 outline-none">
+            {children}
+          </div>
           <HideOnPortals>
             <SiteFooter />
           </HideOnPortals>
           <HideOnPortals>
-            <BackButton className="md:!hidden" />
             <BottomNav />
           </HideOnPortals>
         </Providers>

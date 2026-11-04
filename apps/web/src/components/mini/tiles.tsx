@@ -1,20 +1,30 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/tiles.tsx
+import type { CSSProperties } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from './icon';
 import { Text, Heading } from './text';
 
 export function StatTile({ label, value, delta, icon: IconCmp, onPress }: { label: string; value: string; delta?: string; icon?: LucideIcon; onPress?: () => void }) {
-  return (
-    <div role={onPress ? 'button' : undefined} onClick={onPress} className={onPress ? 'tubu-press' : undefined}
-      style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)', padding: 12 }}>
+  const style: CSSProperties = { background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)', padding: 12 };
+  const body = (
+    <>
       {IconCmp && <Icon icon={IconCmp} size="sm" tone="brand" />}
       <Heading variant="title-lg" as="div" style={{ marginTop: 4 }}>{value}</Heading>
       <Text variant="caption" tone="tertiary">{label}</Text>
       {delta && <Text variant="caption" tone="success">{delta}</Text>}
-    </div>
+    </>
   );
+  // Có onPress thì là <button> thật: div role="button" không tabindex, không phím thì bàn phím không tới được.
+  if (onPress) {
+    return (
+      <button type="button" onClick={onPress} className="tubu-press" style={{ ...style, display: 'block', width: '100%', margin: 0, border: 'none', font: 'inherit', color: 'inherit', textAlign: 'inherit' }}>
+        {body}
+      </button>
+    );
+  }
+  return <div style={style}>{body}</div>;
 }
 
 export function FlashBadge({ label }: { label: string }) {

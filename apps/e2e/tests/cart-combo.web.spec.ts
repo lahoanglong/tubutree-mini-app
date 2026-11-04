@@ -42,7 +42,7 @@ async function openCart(page: Page, api: MockApi, o: ComboCartOptions, size: { w
 }
 
 const group = (page: Page) => page.getByTestId('cart-combo-group');
-const dialog = (page: Page) => page.getByRole('dialog');
+const dialog = (page: Page) => page.getByRole('alertdialog');
 
 test.describe('Giỏ web: khối combo', () => {
   for (const [name, size] of [['375px', PHONE], ['1280px', DESKTOP]] as const) {
