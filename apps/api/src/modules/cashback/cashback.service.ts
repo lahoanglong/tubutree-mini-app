@@ -30,6 +30,13 @@ export class CashbackService {
   /** Trần mỗi lượt settle — phần còn lại để lượt cron kế (chạy 30 phút/lần). */
   private static readonly SETTLE_BATCH = 500;
 
+  /** Trạng thái đang có mà sự kiện của sàn được phép chuyển đi. REJECTED là nhánh riêng: sàn duyệt lại thì REJECTED → CONFIRMED. */
+  private static readonly FORWARD_FROM: Record<NormalizedCashbackEvent['status'], CashbackStatus[]> = {
+    PENDING: ['PENDING'],
+    CONFIRMED: ['PENDING', 'REJECTED'],
+    REJECTED: ['PENDING', 'CONFIRMED'],
+  };
+
   private readonly logger = new Logger(CashbackService.name);
 
   constructor(
@@ -225,7 +232,7 @@ export class CashbackService {
       status,
       raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
     };
-    await this.applyToExisting(existing, synthetic, status, existing.userReward);
+    await this.applyToExisting(existing, synthetic, status, existing.userReward, { manual: true });
     this.logger.warn(
       `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );
@@ -238,10 +245,14 @@ export class CashbackService {
     event: NormalizedCashbackEvent,
     status: NormalizedCashbackEvent['status'],
     userReward: number,
+    opts: { manual?: boolean } = {},
   ): Promise<void> {
     // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư
     // (không claw-back được tiền đã về Ví).
     if (existing.status === 'PAID') return;
+    // Sự kiện đến muộn hoặc đến sai thứ tự (postback PENDING sau khi reconcile đã CONFIRMED) không được kéo trạng thái lùi:
+    // lùi về PENDING thì khoản đó không bao giờ settle về Ví. Admin duyệt tay là quyết định tường minh nên được đi mọi hướng.
+    if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(existing.status)) return;
 
     // Chuyển trạng thái ATOMIC bằng optimistic CAS theo status đã đọc + điều chỉnh pending trong
     // CÙNG tx → chống 2 sự kiện 'approved' song song cùng cộng pending 2 lần. Racer thua thấy

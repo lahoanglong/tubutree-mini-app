@@ -251,6 +251,23 @@ describe('CashbackService.ingest', () => {
     expect(userUpdate).not.toHaveBeenCalled();
   });
 
+  it('L2-01: CONFIRMED rồi postback PENDING muộn → không đổi, không đụng updateMany/pending', async () => {
+    const { prisma, updateMany, userUpdate } = updateBranchPrisma({
+      id: 'tx1', status: 'CONFIRMED', confirmedAt: new Date(), userId: 'u1', userReward: 35000,
+    });
+    await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'PENDING' }), 'accesstrade');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
+  it('L2-01: REJECTED rồi postback PENDING muộn → không đổi', async () => {
+    const { prisma, updateMany } = updateBranchPrisma({
+      id: 'tx1', status: 'REJECTED', confirmedAt: null, userId: 'u1', userReward: 35000,
+    });
+    await new CashbackService(prisma, config, notifications, registry).ingest(event({ status: 'PENDING' }), 'accesstrade');
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
   it('race chuyển trạng thái: updateMany count=0 (racer khác đã chuyển) → KHÔNG cộng pending lần 2', async () => {
     const { prisma, userUpdate } = updateBranchPrisma(
       { id: 'tx1', status: 'PENDING', confirmedAt: null, userId: 'u9', userReward: 35000 },

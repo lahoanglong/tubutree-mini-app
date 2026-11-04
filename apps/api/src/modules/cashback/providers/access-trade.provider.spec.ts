@@ -33,6 +33,10 @@ describe('AccessTradeProvider.parseWebhook', () => {
     });
   });
 
+  it.each(['paid', 'cancelled', '', 'constructor', undefined, 7])('trạng thái lạ %p → null, không map thành PENDING', (status) => {
+    expect(makeProvider().parseWebhook(post({ status: status as never }))).toBeNull();
+  });
+
   it('pending → PENDING; rejected → REJECTED', () => {
     expect(makeProvider().parseWebhook(post({ status: 'pending' }))!.status).toBe('PENDING');
     expect(makeProvider().parseWebhook(post({ status: 'rejected' }))!.status).toBe('REJECTED');

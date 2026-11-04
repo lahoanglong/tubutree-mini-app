@@ -51,6 +51,12 @@ export class AccessTradeProvider implements CashbackProvider {
    * (chuỗi) đều trả null → controller trả 2xx im lặng → sàn coi như đã giao, không gửi lại.
    * Khoản hoàn tiền của khách biến mất mà không có bản ghi nào và không ai biết.
    */
+  private static readonly STATUS_MAP = new Map<string, NormalizedCashbackEvent['status']>([
+    ['pending', 'PENDING'],
+    ['approved', 'CONFIRMED'],
+    ['rejected', 'REJECTED'],
+  ]);
+
   private static toAmount(v: unknown): number | null {
     const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
     if (!Number.isFinite(n) || n < 0) return null; // chống cộng số dư âm (forge/bug)
@@ -71,7 +77,12 @@ export class AccessTradeProvider implements CashbackProvider {
       );
       return null;
     }
-    const status = p.status === 'approved' ? 'CONFIRMED' : p.status === 'rejected' ? 'REJECTED' : 'PENDING';
+    // Trạng thái lạ KHÔNG được coi là PENDING: sàn thêm trạng thái mới (vd "paid") sẽ kéo khoản đã CONFIRMED về PENDING.
+    const status = typeof p.status === 'string' ? AccessTradeProvider.STATUS_MAP.get(p.status) : undefined;
+    if (!status) {
+      this.logger.warn(`Postback ${p.order_id} có trạng thái lạ (${String(p.status)}) — bỏ qua.`);
+      return null;
+    }
     return {
       clickRef: p.utm_content,
       merchantOrderId: p.order_id,
