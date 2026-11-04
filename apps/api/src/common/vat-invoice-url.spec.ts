@@ -2,7 +2,6 @@ import {
   DEFAULT_VAT_INVOICE_HOSTS,
   hostMatches,
   isPrivateOrInternalHost,
-  isSafePublicHttpsUrl,
   vatInvoiceHosts,
   vatInvoiceUrlError,
 } from './vat-invoice-url';
@@ -15,6 +14,15 @@ describe('vatInvoiceHosts', () => {
   });
   it('env có giá trị THAY danh sách mặc định, trim + chữ thường + bỏ mục rỗng', () => {
     expect(vatInvoiceHosts(' *.Foo.VN , bar.com ,,')).toEqual(['*.foo.vn', 'bar.com']);
+  });
+  it('mục env dán cả link, có dấu chấm cuối, hoặc tách bằng chấm phẩy/khoảng trắng vẫn ra tên miền đúng', () => {
+    expect(vatInvoiceHosts('https://a.meinvoice.vn/tra-cuu?x=1; meinvoice.vn.  *.ehoadon.vn\nHTTP://B.vn#x')).toEqual([
+      'a.meinvoice.vn',
+      'meinvoice.vn',
+      '*.ehoadon.vn',
+      'b.vn',
+    ]);
+    expect(vatInvoiceUrlError('https://a.meinvoice.vn/x', vatInvoiceHosts('https://a.meinvoice.vn/'))).toBeNull();
   });
   it('mặc định có kho lưu trữ của hệ thống', () => {
     expect(DEFAULT_VAT_INVOICE_HOSTS).toContain('res.cloudinary.com');
@@ -82,8 +90,12 @@ describe('vatInvoiceUrlError (mặc định)', () => {
     'https://192.168.0.10/x', 'https://169.254.169.254/latest', 'https://0.0.0.0/x', 'https://[::1]/x', 'https://[fe80::1]/x', 'https://[fc00::1]/x',
     'https://[::ffff:127.0.0.1]/x', 'https://svc.internal/x', 'https://nas.local/x', 'https://2130706433/x', 'https://0x7f.1/x',
   ])('địa chỉ nội bộ %s → báo nội bộ', (u) => blocked(u, /nội bộ/));
-  it('IP công khai không nằm trong allowlist vẫn bị chặn', () => {
-    blocked('https://8.8.8.8/x', /chưa được phép/);
+  it.each([
+    'https://8.8.8.8/x', 'https://100.64.0.1/x', 'https://[::127.0.0.1]/x', 'https://[64:ff9b::a00:1]/x', 'https://[2002:7f00:1::]/x',
+    'https://[fec0::1]/x', 'https://[2606:4700::1111]/x',
+  ])('địa chỉ IP %s (công khai hoặc IPv6 nhúng IPv4) → báo phải dùng tên miền', (u) => blocked(u, /tên miền.*không dùng địa chỉ IP/));
+  it('câu lỗi dạng link nói rõ chỉ dùng cổng 443', () => {
+    blocked('https://abc.meinvoice.vn:8443/x', /chỉ dùng cổng mặc định \(443\)/);
   });
   it('ngoài danh sách: nêu tên miền và gợi ý ALLOWED_VAT_INVOICE_HOSTS', () => {
     blocked('https://Evil.Example.com./x', /evil\.example\.com.*ALLOWED_VAT_INVOICE_HOSTS/);
@@ -111,18 +123,8 @@ describe('vatInvoiceUrlError (tham số hosts)', () => {
       else process.env.ALLOWED_VAT_INVOICE_HOSTS = prev;
     }
   });
-  it('allowlist không cứu được địa chỉ nội bộ', () => {
+  it('allowlist không cứu được địa chỉ nội bộ hay địa chỉ IP', () => {
     expect(vatInvoiceUrlError('https://127.0.0.1/x', ['127.0.0.1'])).toMatch(/nội bộ/);
+    expect(vatInvoiceUrlError('https://8.8.8.8/x', ['8.8.8.8'])).toMatch(/địa chỉ IP/);
   });
-});
-
-describe('isSafePublicHttpsUrl', () => {
-  it('https công khai qua (không xét allowlist)', () => {
-    expect(isSafePublicHttpsUrl('https://bat-ky.example.com/x.pdf')).toBe(true);
-    expect(isSafePublicHttpsUrl('https://8.8.8.8/x')).toBe(true);
-  });
-  it.each(['http://a.com/x', 'https://u:p@a.com/x', 'https://a.com:8443/x', 'https://127.0.0.1/x', 'https://x.internal/x', 'https://[::1]/x', 'rác', '', undefined, 42])(
-    '%p bị loại',
-    (u) => expect(isSafePublicHttpsUrl(u)).toBe(false),
-  );
 });
