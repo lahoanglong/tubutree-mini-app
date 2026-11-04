@@ -122,7 +122,7 @@ export class NotificationsService {
     // Optional như queue: khởi tạo trực tiếp không có cấu hình thì dùng mặc định trong mã.
     @Optional() private readonly config?: SystemConfigService,
     // Hàng riêng cho job thử lại tin trong app; không có (khởi tạo trực tiếp) thì notifyWithRetry trả LOST khi lỗi như khi không có hàng.
-    @InjectQueue(QUEUE_NOTIFICATIONS_INAPP_RETRY) private readonly inAppRetryQueue?: Queue,
+    @Optional() @InjectQueue(QUEUE_NOTIFICATIONS_INAPP_RETRY) private readonly inAppRetryQueue?: Queue,
   ) {}
 
   /**

@@ -141,7 +141,9 @@ export class OpsInboxService {
   private settleCache?: CacheEntry<number>;
 
   private ttlMs(key: 'OPS_INBOX_CACHE_TTL_MS' | 'OPS_STORES_TO_SETTLE_TTL_MS', fallback: number): number {
-    const v: unknown = this.env?.get(key, { infer: true });
+    // Không có ConfigService (khởi tạo trực tiếp trong test): không cache, để số đọc ngay sau thao tác luôn mới. Nest luôn truyền ConfigService nên PROD dùng mặc định.
+    if (!this.env) return 0;
+    const v: unknown = this.env.get(key, { infer: true });
     return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback;
   }
 
