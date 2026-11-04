@@ -46,7 +46,7 @@ export class SetCampaignProductsDto {
 }
 
 export class SetCampaignCouponsDto {
-  @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) codes!: string[];
+  @IsArray() @ArrayMaxSize(CAMPAIGN_MAX_COUPONS) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) codes!: string[];
 }
 
 export class AdminCampaignListQuery {

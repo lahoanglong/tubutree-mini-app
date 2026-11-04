@@ -129,6 +129,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/waste-requests-section.tsx::parcelTracking": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-receiving.dto.ts:WasteMatchDto.parcelTracking", max: 64 },
   "components/admin/waste-requests-section.tsx::note": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteUnmatchedResolveDto.note", max: 500 },
   "components/admin/coupon-listing.tsx::title": { dto: "apps/api/src/modules/admin/admin.controller.ts:UpdateCouponDto.title", max: 60 },
+  "components/admin/merchant-products-tab.tsx::rejectReason": { dto: "apps/api/src/modules/admin/admin.controller.ts:ReviewMerchantProductDto.rejectReason", max: 500 },
 };
 
 /** Ô gõ chữ không đặt `maxLength`, kèm lý do. */
@@ -201,8 +202,7 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "app/admin/page.tsx::lesson.body": "khoá học và bài học: DTO không đặt @MaxLength cho trường này (chỉ giới hạn chung của body); ghi ở câu hỏi mở của gói hf",
   "app/admin/page.tsx::f.videoUrl": "khoá học và bài học: DTO không đặt @MaxLength cho trường này (chỉ giới hạn chung của body); ghi ở câu hỏi mở của gói hf",
   "app/admin/page.tsx::f.body": "khoá học và bài học: DTO không đặt @MaxLength cho trường này (chỉ giới hạn chung của body); ghi ở câu hỏi mở của gói hf",
-  "components/admin/campaign-form.tsx::codesText": "mỗi dòng một mã: DTO chỉ giới hạn số mã (CAMPAIGN_MAX_COUPONS), không giới hạn độ dài từng mã",
-  "components/admin/merchant-products-tab.tsx::rejectReason": "ReviewMerchantProductDto.rejectReason: DTO không đặt @MaxLength cho trường này (chỉ giới hạn chung của body); ghi ở câu hỏi mở của gói hf",
+  "components/admin/campaign-form.tsx::codesText": "mỗi dòng một mã: DTO giới hạn số mã (CAMPAIGN_MAX_COUPONS) và từng mã (64), không giới hạn cả khối chữ",
   "components/admin/vn-date-input.tsx::text": "ô ngày dd/mm/yyyy định dạng cố định (10 ký tự), kiểm bằng bộ chọn ngày",
   "components/admin/gomdon-config-card.tsx::warehouse[f]": "SetConfigDto.value dùng @Allow, không có trần; 255 là trần do chính màn đặt",
 };

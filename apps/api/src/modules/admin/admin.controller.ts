@@ -135,7 +135,7 @@ class ReviewDto {
 }
 export class ReviewMerchantProductDto {
   @ApiProperty() @IsBoolean() approve!: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsString() rejectReason?: string;
+  @ApiPropertyOptional() @IsOptional() @Trim() @IsString() @MaxLength(500) rejectReason?: string;
   /** Admin đã xem sản phẩm đang bán sẽ bị chuyển sang gian hàng ("Tubu giao hộ" lấy mã của sản phẩm đang bán). */
   @ApiPropertyOptional() @IsOptional() @IsBoolean() confirmTakeover?: boolean;
   /** Dòng "Bản sửa chờ duyệt": lần sửa gần nhất admin đã xem (`editVersion` của hàng chờ duyệt). Có thì chỉ xử lý đúng bản đó. */

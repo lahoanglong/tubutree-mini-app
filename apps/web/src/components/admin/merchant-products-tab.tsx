@@ -549,6 +549,7 @@ export function MerchantProductRow({
                   type="text"
                   aria-label="Lý do từ chối"
                   placeholder="Lý do từ chối..."
+                  maxLength={500}
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   className={`${FIELD_XS} w-full`}
