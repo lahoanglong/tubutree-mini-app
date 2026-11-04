@@ -7,6 +7,9 @@ import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support
 import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { vi } from '../i18n/vi';
 import { AuthGate } from '../components/ui/auth-gate';
+import { EmptyState } from '../components/ui/empty-state';
+import { useAuthStore } from '../store/auth';
+import { isGuestUser } from '../utils/guest-user';
 import { PageHeader } from '../components/ui/page-header';
 import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
@@ -28,6 +31,9 @@ import { DEFAULT_SUPPORT, fetchSupportContact } from './about-data';
 
 const POLL_MS = 5000;
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
+
+const LOGIN_REQUIRED_CODE = 'CHAT_LOGIN_REQUIRED';
+const LOGIN_FAILED_TEXT = 'Chưa đăng nhập được. Bạn thử lại nhé.';
 
 const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
 
@@ -59,7 +65,37 @@ function toItem(m: SupportChatMessageDTO): ChatItem {
   return { key: m.id, sender: m.sender, body: m.body, imageUrl: m.imageUrl, createdAt: m.createdAt, status: 'sent' };
 }
 
-function ChatBody() {
+/** Khách vãng lai không chat được (máy chủ từ chối): mời đăng nhập Zalo thay cho ô gửi. */
+function ChatLoginInvite({ onDone }: { onDone: () => void }) {
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  const login = async () => {
+    setBusy(true);
+    setFailed(null);
+    try {
+      const phone = await ensurePhoneOrThrow();
+      if (phone) onDone();
+      else setFailed(LOGIN_FAILED_TEXT);
+    } catch (e) {
+      setFailed(getErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <EmptyState
+      art="sprout"
+      heading="Đăng nhập Zalo để chat với Tubu Tree"
+      body={failed ?? 'Bạn cần đăng nhập bằng Zalo để nhắn tin cho nhân viên Tubu Tree.'}
+      ctaLabel={vi.auth.loginCta}
+      ctaLoading={busy}
+      onCta={() => void login()}
+    />
+  );
+}
+
+function ChatBody({ onLoginRequired }: { onLoginRequired: () => void }) {
   const { pathname, search } = useLocation();
   const livePathname = useLivePathnameRef();
   const qc = useQueryClient();
@@ -85,6 +121,10 @@ function ChatBody() {
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   const hotline = support?.hotline ?? null;
   const thread = threadQ.data;
+  const threadLoginRequired = !thread && errorCode(threadQ.error) === LOGIN_REQUIRED_CODE;
+  useEffect(() => {
+    if (threadLoginRequired) onLoginRequired();
+  }, [threadLoginRequired, onLoginRequired]);
   const chatOpen = !!thread && thread.enabled && !thread.blocked;
   const shippingQ = useQuery({
     queryKey: ['orders', 'home-strip'],
@@ -117,6 +157,11 @@ function ChatBody() {
         });
         patch(p.clientMsgId, { status: 'sent' });
       } catch (e) {
+        if (errorCode(e) === LOGIN_REQUIRED_CODE) {
+          patch(p.clientMsgId, { status: 'failed' });
+          onLoginRequired();
+          return;
+        }
         const kind = sendFailureKind(errorStatus(e), errorCode(e));
         if (kind === 'rate-limited') patch(p.clientMsgId, { status: 'failed', error: getErrorMessage(e) });
         else if (kind === 'rejected') patch(p.clientMsgId, { status: 'rejected', error: chatErrorText(e) });
@@ -125,7 +170,7 @@ function ChatBody() {
         void qc.invalidateQueries({ queryKey: supportChatQueryOptions().queryKey });
       }
     },
-    [patch, qc],
+    [patch, qc, onLoginRequired],
   );
 
   const enqueue = (body: string, imageUrl: string | null, ctx?: SupportChatContext) => {
@@ -226,6 +271,7 @@ function ChatBody() {
       </div>
     );
   }
+  if (threadLoginRequired) return null;
   if (!thread) return <ErrorState message={chatErrorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
 
   // Chat tắt: còn lịch sử thì vẫn cho đọc (chỉ đọc, phần liên hệ thay ô nhập); chưa có tin nào thì cả màn là phần liên hệ.
@@ -287,12 +333,31 @@ function ChatBody() {
   );
 }
 
+function ChatGate() {
+  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
+  const [serverSaidGuest, setServerSaidGuest] = useState(false);
+  const guest = (user ? isGuestUser(user) : false) || serverSaidGuest;
+  const needLogin = useCallback(() => setServerSaidGuest(true), []);
+  if (guest) {
+    return (
+      <ChatLoginInvite
+        onDone={() => {
+          setServerSaidGuest(false);
+          void qc.invalidateQueries({ queryKey: supportChatQueryOptions().queryKey });
+        }}
+      />
+    );
+  }
+  return <ChatBody onLoginRequired={needLogin} />;
+}
+
 export default function SupportChatPage() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Chat với Tubu Tree" />
       <AuthGate>
-        <ChatBody />
+        <ChatGate />
       </AuthGate>
     </Page>
   );
