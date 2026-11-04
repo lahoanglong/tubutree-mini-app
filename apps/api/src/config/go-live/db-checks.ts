@@ -62,6 +62,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261104141000_product_thumbnail_ref', ordersLock: false },
   { name: '20261104142500_feed_post_image_summary_backfill', ordersLock: false },
   { name: '20261104160500_user_affiliate_revoked_backfill', ordersLock: false },
+  { name: '20261104180000_order_payment_unlinked', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;
