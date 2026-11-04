@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { cartOutOfStockBlocked } from '../../../packages/app-core/src/cart-copy';
 import { expect, test, type MockApi } from './support/mock-api';
 import { footerCart, mockCouponHint, type FooterCartOptions } from './support/cart-footer-mocks';
 
@@ -80,7 +81,7 @@ test.describe('Web khách: chân dính giỏ ở 375px', () => {
 
   test('giỏ 8 dòng có dòng hết hàng: cuộn hết thì chân trang nằm trên chân dính (không bị che)', async ({ page, api }) => {
     await openCart(page, api, { lines: 8, reached: true, outOfStock: true });
-    await expect(bar(page).getByRole('alert')).toBeVisible();
+    await expect(bar(page).getByRole('status').filter({ hasText: cartOutOfStockBlocked(['Sản phẩm thử 1']) })).toBeVisible();
 
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(300);

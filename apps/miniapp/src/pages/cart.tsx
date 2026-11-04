@@ -614,7 +614,7 @@ function CartLineRow({
             vẫn cho cả khối giá xuống dòng thay vì tràn. */}
         <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 6, flexWrap: 'wrap', rowGap: 4, columnGap: 8 }}>
           <PriceTag value={line.unitPrice} compareAt={compareAt} size="sm" layout={compareAt ? 'stack' : 'inline'} tone={compareAt || line.isFlash ? 'deal' : 'default'} />
-          <QuantitySelector size="sm" value={localQty} max={Math.max(1, line.stock)} onChange={setLocalQty} />
+          <QuantitySelector size="sm" value={localQty} max={Math.max(1, line.stock)} disabled={soldOut} onChange={setLocalQty} />
         </Box>
         {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
         {line.quantity > 1 && localQty === line.quantity && !pending && (

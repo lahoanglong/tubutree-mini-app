@@ -5,6 +5,7 @@
  */
 import { BRAND_BADGE, ERROR_NETWORK, REQUIRED_FIELD, overStockMessage } from '@tubutree/app-core/client-copy';
 import { orderCopy } from '@tubutree/app-core/account-copy';
+import { CART_EMPTY, CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
@@ -219,9 +220,9 @@ export const vi = {
 
   cart: {
     title: 'Giỏ hàng',
-    emptyHeading: 'Giỏ còn trống đấy',
-    emptyBody: 'Khám phá sản phẩm Tubu chọn riêng cho bạn',
-    emptyCta: 'Khám phá ngay',
+    emptyHeading: CART_EMPTY.heading,
+    emptyBody: CART_EMPTY.body,
+    emptyCta: CART_EMPTY.cta,
     subtotal: 'Tạm tính',
     discount: 'Giảm giá',
     comboDiscount: 'Giảm giá combo',
@@ -236,10 +237,9 @@ export const vi = {
     freeshipReached: 'Bạn được miễn phí giao hàng 🌿',
     freeshipReachedTubuOnly: 'Miễn phí giao hàng cho phần hàng Tubu Tree giao',
     freeshipProgress: (amount: string) => `Mua thêm ${amount} để được miễn phí giao hàng`,
-    outOfStock: 'Sản phẩm đã hết hàng',
-    overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
-    outOfStockBlocked: (names: string[]) =>
-      `${names.map((n) => `"${n}"`).join(', ')} đã hết hàng. Bỏ chọn hoặc xoá ${names.length > 1 ? 'các sản phẩm' : 'sản phẩm'} này để thanh toán.`,
+    outOfStock: CART_OUT_OF_STOCK,
+    overStockBlocked: CART_OVER_STOCK_BLOCKED,
+    outOfStockBlocked: cartOutOfStockBlocked,
     discontinuedHeading: (n: number) => `${n} sản phẩm đã ngừng bán`,
     discontinuedBody: 'Không thể đặt các sản phẩm này nên đã được tách khỏi đơn của bạn.',
     discontinuedRemove: 'Xoá',

@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
+import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -179,6 +180,7 @@ export default function CartPage() {
   const selectedSubtotal = buyableSelected.reduce((sum, it) => sum + it.total, 0);
   const selectedCount = selectedItems.reduce((sum, it) => sum + it.quantity, 0);
   // Chỉ chặn theo các dòng đang chọn: bỏ chọn dòng hết hàng thì vẫn thanh toán được phần còn lại.
+  const outOfStockSelected = selectedItems.filter((it) => it.stock <= 0);
   const stockBlocked = selectedItems.some((it) => it.stock <= 0 || it.quantity > it.stock);
   const toggleAll = () => setDeselected(allSelected ? new Set(allItems.map((it) => it.id)) : new Set());
   // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
@@ -210,7 +212,9 @@ export default function CartPage() {
     selectedItems.length === 0
       ? 'Chọn ít nhất một sản phẩm để thanh toán.'
       : stockBlocked
-        ? 'Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xoá, giảm số lượng hoặc bỏ chọn rồi thanh toán.'
+        ? outOfStockSelected.length > 0
+          ? cartOutOfStockBlocked(outOfStockSelected.map((it) => it.productName))
+          : CART_OVER_STOCK_BLOCKED
         : null;
   // Thanh tiến độ freeship theo phần đang chọn như StickySummary của Mini App; có hàng gian hàng tự giao thì chỉ hiện khi phần Tubu giao > 0.
   const barRemaining = cart ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
@@ -222,7 +226,7 @@ export default function CartPage() {
   const renderLine = (it: CartLine) => {
     // Hết hàng / vượt tồn: `+` chỉ làm khách mất dòng (quantity kẹp về 0 → API xoá) mà không báo gì.
     const soldOut = it.stock <= 0;
-    const atMax = !soldOut && it.quantity >= it.stock;
+    const atMax = it.quantity >= Math.max(1, it.stock);
     const stockNote = cartStockNote(it.quantity, it.stock);
     const busy = busyItemId === it.id;
     const compareAt = lineCompareAt(it);
@@ -294,8 +298,9 @@ export default function CartPage() {
           )}
           {it.flashLimitNotice && <p className="mt-1 basis-full text-caption font-medium text-warning-fg max-md:order-2">{it.flashLimitNotice}</p>}
           {soldOut && (
-            <p className="mt-1 basis-full text-caption font-semibold text-danger-fg max-md:order-2">
-              Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
+            <p className="mt-1 flex basis-full items-center gap-1 text-caption text-warning-fg max-md:order-2">
+              <AlertTriangle size={13} aria-hidden className="shrink-0" />
+              {CART_OUT_OF_STOCK}
             </p>
           )}
           {/* Chạm trần tồn: giải thích nút + khoá. Cam chỉ khi tồn thấp hoặc đang vượt, tồn cao thì chữ thường (cùng luật `cartStockNote` với Mini). */}
@@ -310,42 +315,38 @@ export default function CartPage() {
             </p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
-            {!soldOut && (
-              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
-                <button
-                  type="button"
-                  onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
-                  disabled={busy || it.quantity <= 1}
-                  aria-label={`Giảm số lượng ${it.productName}`}
-                  className={qtyButton}
-                >
-                  <Minus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
-                  <span className="max-md:hidden">−</span>
-                </button>
-                <span className="w-7 text-center text-stone-900 max-md:min-w-[22px] max-md:font-semibold" aria-live="polite">
-                  {it.quantity}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
-                  disabled={busy || atMax}
-                  aria-label={`Tăng số lượng ${it.productName}`}
-                  className={qtyButton}
-                >
-                  <Plus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
-                  <span className="max-md:hidden">+</span>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
+              <button
+                type="button"
+                onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}
+                disabled={busy || soldOut || it.quantity <= 1}
+                aria-label={`Giảm số lượng ${it.productName}`}
+                className={qtyButton}
+              >
+                <Minus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
+                <span className="max-md:hidden">−</span>
+              </button>
+              <span className="w-7 text-center text-stone-900 max-md:min-w-[22px] max-md:font-semibold" aria-live="polite">
+                {it.quantity}
+              </span>
+              <button
+                type="button"
+                onClick={() => update.mutate({ id: it.id, q: it.quantity + 1 })}
+                disabled={busy || soldOut || atMax}
+                aria-label={`Tăng số lượng ${it.productName}`}
+                className={qtyButton}
+              >
+                <Plus className="h-[18px] w-[18px] md:hidden" strokeWidth={2.2} aria-hidden="true" />
+                <span className="max-md:hidden">+</span>
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => requestRemove(it)}
               disabled={busy}
               aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
               aria-haspopup={comboRemovalNotice(cart?.comboGroups, it.id) ? 'dialog' : undefined}
-              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0 ${
-                soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
-              }`}
+              className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:absolute max-md:right-1 max-md:top-1 max-md:min-w-11 max-md:justify-center max-md:px-0"
             >
               <Trash2 className="h-5 w-5 text-[color:var(--color-text-primary)] md:hidden" strokeWidth={1.75} aria-hidden="true" />
               <span className="max-md:hidden">Xoá</span>
@@ -542,7 +543,7 @@ export default function CartPage() {
                   <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán ({selectedCount})
                   </button>
-                  <p role="alert" className="mt-2 text-caption text-danger-fg">
+                  <p role="status" className="mt-2 text-caption text-warning-fg">
                     {payHint}
                   </p>
                 </>
@@ -590,8 +591,8 @@ export default function CartPage() {
           {payHint && (
             <p
               id="cart-pay-hint"
-              role={stockBlocked ? 'alert' : 'status'}
-              className={`mb-1 text-caption ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}
+              role="status"
+              className={`mb-1 text-caption ${stockBlocked ? 'text-warning-fg' : 'text-stone-600'}`}
             >
               {payHint}
             </p>

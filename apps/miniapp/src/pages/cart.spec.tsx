@@ -233,6 +233,26 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(screen.queryByText('Còn 0 sản phẩm')).toBeNull();
   });
 
+  it('hết hàng hẳn mà SL ≥ 2: cả − lẫn + đều khoá (không gửi SL 1 vào chỗ còn 0), nút Xoá vẫn còn', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 0 }] }));
+    renderPage();
+    await screen.findByText('Sản phẩm đã hết hàng');
+    expect(screen.getByRole('button', { name: 'Giảm số lượng' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Xoá ${OK_LINE.productName}` })).toBeInTheDocument();
+  });
+
+  it('vượt tồn nhưng còn hàng (SL 3, tồn 2): nút − vẫn dùng được', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 2 }] }));
+    renderPage();
+    const minus = await screen.findByRole('button', { name: 'Giảm số lượng' });
+    expect(minus).toHaveAttribute('aria-disabled', 'false');
+    fireEvent.click(minus);
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
   describe('dòng hết hàng (tồn 0) đang chọn', () => {
     const OOS = { ...OK_LINE, id: 'ci-oos', variationId: 'v-oos', productName: 'Cobote bột giặt', unitPrice: 79_000, quantity: 2, stock: 0, total: 158_000 };
     const BUYABLE = { ...OK_LINE, id: 'ci-buy', variationId: 'v-buy', productName: 'Cà phê hoà tan', unitPrice: 75_000, quantity: 1, stock: 5, total: 75_000 };

@@ -76,16 +76,37 @@ afterEach(() => {
 });
 
 describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10)', () => {
-  it('dòng hết hàng: không có nút +/− (không thể làm mất dòng), có nhãn Hết hàng và nút Xoá rõ ràng', async () => {
-    state.cart = cartOf([line({ stock: 0 })]);
+  it('dòng hết hàng: chữ như Mini App, nút +/− còn nhưng bị khoá (không thể làm mất dòng), nút Xoá rõ ràng', async () => {
+    state.cart = cartOf([line({ stock: 0, quantity: 1 })]);
     const { container } = await mount();
-    expect(container.textContent).toContain('Hết hàng');
-    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')).toBeNull();
-    expect(button(container, 'Giảm số lượng Dầu gội bồ kết')).toBeNull();
+    expect(container.textContent).toContain('Sản phẩm đã hết hàng');
+    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
+    expect(button(container, 'Giảm số lượng Dầu gội bồ kết')!.disabled).toBe(true);
     click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     expect(state.removed).toEqual(['i1']);
     expect(state.updates).toEqual([]);
+  });
+
+  it('hết hàng mà SL ≥ 2: cả − lẫn + đều khoá, bấm không gửi lệnh nào', async () => {
+    state.cart = cartOf([line({ stock: 0, quantity: 3 })]);
+    const { container } = await mount();
+    const minus = button(container, 'Giảm số lượng Dầu gội bồ kết')!;
+    expect(minus.disabled).toBe(true);
+    expect(button(container, 'Tăng số lượng Dầu gội bồ kết')!.disabled).toBe(true);
+    click(minus);
+    await flush();
+    expect(state.updates).toEqual([]);
+  });
+
+  it('vượt tồn nhưng còn hàng (SL 3, tồn 2): nút − vẫn bật và kéo SL về tồn', async () => {
+    state.cart = cartOf([line({ stock: 2, quantity: 3 })]);
+    const { container } = await mount();
+    const minus = button(container, 'Giảm số lượng Dầu gội bồ kết')!;
+    expect(minus.disabled).toBe(false);
+    click(minus);
+    await flush();
+    expect(state.updates).toEqual([{ id: 'i1', q: 2 }]);
   });
 
   it('chạm trần tồn kho: nút + bị khoá kèm chú thích "Còn N sản phẩm"; bấm không gửi lệnh nào', async () => {
@@ -151,7 +172,7 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(container.querySelector('a[href="/thanh-toan"]')).toBeNull();
     const pay = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Thanh toán'))!;
     expect(pay.disabled).toBe(true);
-    expect(container.textContent).toContain('hết hàng hoặc vượt số lượng còn lại');
+    expect(container.textContent).toContain('"Xà phòng" đã hết hàng. Bỏ chọn hoặc xoá sản phẩm này để thanh toán.');
   });
 
   it('giỏ hợp lệ: Thanh toán là liên kết sang /thanh-toan', async () => {

@@ -124,6 +124,7 @@ export class CartService {
       include: {
         user: forCheckout ? false : { select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } },
         items: {
+          orderBy: { id: 'asc' },
           include: {
             variation: {
               include: {

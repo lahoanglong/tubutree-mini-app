@@ -1,6 +1,7 @@
 import { isTaxCodeValid } from '@tubutree/app-core/commerce/tax-code';
 import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
+import { heldPointsNote } from '@tubutree/app-core/cart-copy';
 import { lockedPointsLabel } from '@tubutree/app-core/points-lots';
 import { convertedPointsNote, pointsSummary } from './points-lots';
 
@@ -123,7 +124,7 @@ export function checkoutPoints(
   const usable = standardUsable + lots.converted;
   const balance = lots.total;
   const held = lots.standard - standardUsable;
-  const heldText = `${formatPoints(held)} từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được`;
+  const heldText = heldPointsNote(held);
   const convertedNote = lots.converted > 0 ? `${convertedPointsNote(lots.converted)}, trả tới 100% giá trị hàng` : null;
   const base = { balance, converted: lots.converted, usable, convertedNote };
   if (balance === 0) return { ...base, label: null, lockNote: null };
