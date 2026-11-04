@@ -33,9 +33,15 @@ const blankToUndefined = ({ value }: { value: unknown }) => {
   return t === '' ? undefined : t;
 };
 
-/** Số liên hệ của doanh nghiệp: di động hoặc số bàn VN (0 + 9-10 số, hoặc +84/84), bỏ khoảng trắng, chấm, gạch, ngoặc. */
-const VN_BUSINESS_PHONE = /^(?:0|\+?84)\d{9,10}$/;
+/** Số liên hệ của doanh nghiệp sau chuẩn hoá: di động 0[35789] + 8 số (cùng đầu số với PHONE_LIKE) hoặc số bàn 02 + 9 số. */
+const VN_BUSINESS_PHONE = /^(?:0[35789]\d{8}|02\d{9})$/;
 const PHONE_MSG = 'Số điện thoại không hợp lệ (di động hoặc số bàn, bắt đầu bằng 0, +84 hoặc 84).';
+
+/** Bỏ ký tự không phải số, đổi tiền tố 84 thành 0 (đi thẳng sang Pancake nên lưu một dạng 0xxxxxxxxx). Chuỗi không phải số VN giữ nguyên để validator báo lỗi. */
+export function normalizeBusinessPhone(raw: string): string {
+  const local = raw.replace(/\D/g, '').replace(/^84/, '0');
+  return VN_BUSINESS_PHONE.test(local) ? local : raw;
+}
 function IsVnBusinessPhone() {
   return (object: object, propertyName: string) => {
     registerDecorator({
@@ -43,7 +49,7 @@ function IsVnBusinessPhone() {
       target: object.constructor,
       propertyName,
       options: { message: PHONE_MSG },
-      validator: { validate: (v: unknown) => typeof v === 'string' && VN_BUSINESS_PHONE.test(v.replace(/[\s.\-()]/g, '')) },
+      validator: { validate: (v: unknown) => typeof v === 'string' && VN_BUSINESS_PHONE.test(v) },
     });
   };
 }
@@ -52,7 +58,7 @@ export class ApplyDealerDto {
   @IsString() @MaxLength(120) businessName!: string;
   @IsOptional() @Transform(blankToUndefined) @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode?: string;
   @IsString() @MaxLength(120) ownerName!: string;
-  @IsString() @MaxLength(30) @IsVnBusinessPhone() phone!: string;
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeBusinessPhone(value) : value)) @IsString() @MaxLength(30) @IsVnBusinessPhone() phone!: string;
   @IsString() @MaxLength(500) address!: string;
   @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) cccdFrontUrl!: string;
   @IsUploadedImage(DEALER_IMAGE, DEALER_IMAGE_MSG) cccdBackUrl!: string;
