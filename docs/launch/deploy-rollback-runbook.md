@@ -655,7 +655,7 @@ Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-de
 ### 1.20 Hàng thông báo tách đôi, worker ZNS 5 chỗ (hard/1105, L3-06)
 
 - Job thử lại tin trong app (`inapp-retry`) chuyển sang hàng mới `notifications-inapp-retry` (worker riêng, concurrency 2). Hàng `notifications` chỉ còn job `zns-send`: worker concurrency 5 và limiter 10 job/giây (mức tự chọn: Zalo không công bố trần theo giây, chỉ hạn mức ngày của OA).
-- Hai log ZNS cùng (khách, `dedupeKey`) chạy song song thì chỉ log ra đời trước gửi; log sau đóng `FAILED` với lý do "Bỏ qua: tin cho cùng sự kiện đã có ở log …" và job báo warn "log đã đóng". Đây không phải lỗi gửi.
+- Hai log ZNS cùng (khách, `dedupeKey`) chạy song song: worker nhận quyền gửi trong một khoá advisory ngắn (không giữ khi gọi Zalo) và có ba kết cục. (1) Log kia đã SENT: log này đóng `FAILED` với lý do "Bỏ qua: tin cho cùng sự kiện đã gửi ở log <id>." (job báo warn "log đã đóng", không phải lỗi gửi). (2) Log kia đang RETRYING (đang gửi hoặc chờ thử lại): log này hoãn, vẫn PENDING và không gọi Zalo, BullMQ thử lại sau; tới lượt cuối mà log kia vẫn RETRYING thì đóng `FAILED` với lý do "Không gửi: log <id> cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ." (3) Log kia FAILED hẳn hoặc không có: log này gửi bình thường. Lưu ý đã biết: log kẹt RETRYING vì job hỏng hẳn sẽ chặn tin cùng khoá cho tới lượt cuối (có từ trước).
 - Không có migration, không cần biến môi trường. `go-live:check` mục Redis giờ đếm 9 hàng đợi.
 
 **Lên bản mới.** Job `inapp-retry` đã nằm trong hàng cũ `notifications` lúc deploy KHÔNG mất: `NotificationsProcessor` (worker của hàng `notifications`) vẫn xử lý tên job đó. Không cần xả trước khi lên bản.
