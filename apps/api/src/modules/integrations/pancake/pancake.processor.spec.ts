@@ -387,9 +387,9 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(historyCreate.mock.calls[0]![0].data.note).toContain('chờ đối chiếu sao kê');
       expect(alerts.alert).toHaveBeenCalledTimes(1);
       expect(alerts.alert.mock.calls[0]![1]).toContain('Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"');
-      // Cờ riêng, đặt chỉ khi đang null (giữ mốc đầu tiên); không đụng ô chữ pancakeAttention.
+      // Cờ riêng, mỗi cặp Pancake mới đẩy mốc lên mới nhất (resolve phải thấy đúng mốc đó); không đụng ô chữ pancakeAttention.
       expect(unlinkedFlags(orderUpdateMany)).toEqual([
-        { where: { id: 'o1', paymentStatus: 'UNPAID', paymentUnlinkedAt: null }, data: { paymentUnlinkedAt: expect.any(Date) } },
+        { where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: expect.any(Date) } },
       ]);
       expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
     });

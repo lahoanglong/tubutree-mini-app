@@ -1480,17 +1480,26 @@ export class AdminService {
   }
 
   /**
-   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (cờ paymentUnlinkedAt). Gỡ bằng CAS theo cờ còn đặt: hai
-   * ADMIN bấm cùng lúc thì đúng một bên thắng, bên kia nhận 400. Không động vào paymentStatus hay tiền: việc ghi tiền về muộn/hoàn làm ở đường riêng
+   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (cờ paymentUnlinkedAt). Gỡ bằng CAS theo mốc cờ người bấm
+   * đã thấy: hai ADMIN bấm cùng lúc thì đúng một bên thắng, bên kia nhận 400; khoản Pancake mới tới giữa chừng (mốc đổi, cờ còn) thì 409. Không động vào paymentStatus hay tiền: việc ghi tiền về muộn/hoàn làm ở đường riêng
    * trước đó; đây chỉ đóng việc chờ đối chiếu và để lại ai/lúc nào/vì sao.
    */
-  async resolvePaymentUnlinked(adminId: string, idOrCode: string, note: string) {
+  async resolvePaymentUnlinked(adminId: string, idOrCode: string, note: string, seenAt: string) {
     const order = await this.resolveOrderRef(idOrCode);
+    const seen = new Date(seenAt);
+    if (Number.isNaN(seen.getTime())) throw new BadRequestException('Mốc đã xem (seenAt) không hợp lệ.');
+    // CAS theo ĐÚNG mốc người bấm đã thấy: khoản Pancake mới đẩy mốc lên nên bấm trên mốc cũ không đóng luôn khoản chưa ai xem.
     const r = await this.prisma.order.updateMany({
-      where: { id: order.id, paymentUnlinkedAt: { not: null } },
+      where: { id: order.id, paymentUnlinkedAt: seen },
       data: { paymentUnlinkedAt: null },
     });
-    if (r.count === 0) throw new BadRequestException(`Đơn ${order.code} không còn khoản Pancake báo đã thanh toán chờ đối chiếu.`);
+    if (r.count === 0) {
+      const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { paymentUnlinkedAt: true } });
+      if (now?.paymentUnlinkedAt) {
+        throw new ConflictException(`Có khoản Pancake mới báo đã thanh toán cho đơn ${order.code} — tải lại để xem trước khi đóng.`);
+      }
+      throw new BadRequestException(`Đơn ${order.code} không còn khoản Pancake báo đã thanh toán chờ đối chiếu.`);
+    }
     const cleanNote = note.trim().replace(/\s+/g, ' ').slice(0, 500);
     this.logger.warn(`Admin ${adminId} đánh dấu đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code} (${order.status}) — ghi chú: ${cleanNote}.`);
     await this.logHandledInHistory(adminId, order, 'Đã đối chiếu khoản Pancake báo đã thanh toán', cleanNote);

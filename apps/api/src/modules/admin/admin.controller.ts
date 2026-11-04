@@ -9,6 +9,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsISO8601,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -459,6 +460,11 @@ export class ResolvePancakeAttentionDto {
 export class ResolvePaymentUnlinkedDto {
   /** Bắt buộc: khoản tiền khách chuyển đã được đối chiếu thế nào (vd "đã ghi tiền về muộn theo sao kê VCB 04/11"). */
   @Trim() @IsString() @MinLength(3) @MaxLength(500) note!: string;
+  /**
+   * Mốc paymentUnlinkedAt người bấm đang thấy. Cờ gộp nhiều khoản Pancake chưa gắn của một đơn: khoản mới tới thì mốc đổi, nên bấm trên
+   * mốc cũ bị từ chối (409) thay vì đóng luôn khoản chưa ai xem.
+   */
+  @IsISO8601({ strict: true }) seenAt!: string;
 }
 
 export class SetUserRoleDto {
@@ -605,7 +611,7 @@ export class AdminController {
    */
   @Post('orders/:id/payment-unlinked/resolve')
   resolvePaymentUnlinked(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ResolvePaymentUnlinkedDto) {
-    return this.admin.resolvePaymentUnlinked(adminId, id, dto.note);
+    return this.admin.resolvePaymentUnlinked(adminId, id, dto.note, dto.seenAt);
   }
 
   /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */

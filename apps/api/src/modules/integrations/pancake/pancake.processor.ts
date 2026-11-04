@@ -738,7 +738,7 @@ export class PancakeProcessor extends WorkerHost {
   }
 
   /**
-   * Giữ khoản "đã thanh toán" của đơn chưa gắn Pancake chờ đối chiếu sao kê: lần đầu thì đặt cờ riêng orders.paymentUnlinkedAt (không ghi ô
+   * Giữ khoản "đã thanh toán" của đơn chưa gắn Pancake chờ đối chiếu sao kê: đặt/đẩy mốc cờ riêng orders.paymentUnlinkedAt (không ghi ô
    * pancakeAttention: ô chữ bị nhiều đường ghi đè/xoá cả ô và KHO gỡ được, còn cờ này chỉ Kế toán hoặc ADMIN gỡ), ghi dòng lịch sử đơn làm
    * dấu và báo ADMIN. Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ đối chiếu.
    */
@@ -748,7 +748,7 @@ export class PancakeProcessor extends WorkerHost {
     // Chữ này là khoá chống trùng nên giống nhau cho đơn mở và đơn đóng: trạng thái đơn đổi giữa hai webhook không làm ghi đôi.
     const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đúng đơn Pancake: chờ đối chiếu sao kê`;
     // Chỉ xử lý LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên người đã đối chiếu/đóng cờ cho #A rồi thì webhook sau của #A không
-    // đặt lại cờ, còn #B khác vẫn được ghim. Cờ chỉ đặt khi đang null (giữ mốc đầu) và đơn còn UNPAID để không đua với nút "Đã nhận tiền".
+    // đặt lại cờ, còn #B khác vẫn được ghim. Cờ gộp mọi khoản chưa đối chiếu của đơn: mỗi cặp mới đẩy mốc lên mới nhất (nút "Đã đối chiếu" CAS theo mốc người bấm đã thấy nên không đóng luôn khoản mới), và chỉ đặt khi đơn còn UNPAID để không đua với nút "Đã nhận tiền".
     // Khoá dòng đơn trước khi tìm dấu: hai worker cùng cặp (đơn, đơn Pancake) không còn cùng thấy "chưa ghi" rồi ghi đôi và báo đôi.
     // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời báo và dòng lịch sử.
     const written = await this.prisma.$transaction(async (tx) => {
@@ -758,7 +758,7 @@ export class PancakeProcessor extends WorkerHost {
       if (!locked || locked.paymentStatus !== 'UNPAID') return null;
       const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
       if (logged) return null;
-      await tx.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID', paymentUnlinkedAt: null }, data: { paymentUnlinkedAt: new Date() } });
+      await tx.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: new Date() } });
       await tx.orderStatusHistory.create({
         data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note },
       });

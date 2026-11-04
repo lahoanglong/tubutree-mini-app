@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
@@ -49,7 +49,9 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
   const hold = (order: unknown, id: string) =>
     (proc as unknown as { holdUnattachedPayment(o: unknown, d: Record<string, unknown>, r: number): Promise<void> }).holdUnattachedPayment(order, { id }, 100_000);
 
-  it('đơn đã huỷ, chưa gắn: webhook is_paid đồng thời KHO resolve pancakeAttention → paymentUnlinkedAt vẫn còn (10 vòng)', async () => {
+  const flagOf = async (id: string) => (await prisma.order.findUniqueOrThrow({ where: { id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt;
+
+  it('KHO resolvePancakeAttention song song với webhook lặp cùng cặp → cờ paymentUnlinkedAt không đổi (cùng mốc), ô chữ thì được gỡ (10 vòng)', async () => {
     for (let i = 0; i < 10; i++) {
       const user = await createUser(prisma);
       const kho = await createUser(prisma, { role: 'STAFF' });
@@ -63,12 +65,12 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
         pancakeAttention: 'Pancake báo ĐANG HOÀN',
         pancakeAttentionAt: new Date(),
       });
+      await hold(order, `PK-${i}`);
+      const before = await flagOf(order.id);
+      expect(before).not.toBeNull();
       await Promise.all([hold(order, `PK-${i}`), admin.resolvePancakeAttention(kho.id, order.id, 'kho đã xử lý')]);
-      const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true, pancakeAttention: true } });
-      expect(after.paymentUnlinkedAt).not.toBeNull();
-      // KHO resolve sau khi cờ đã đặt cũng không chạm cờ.
-      await admin.resolvePancakeAttention(kho.id, order.id).catch(() => undefined);
-      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).not.toBeNull();
+      expect(await flagOf(order.id)).toEqual(before);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { pancakeAttentionAt: true } })).pancakeAttentionAt).toBeNull();
     }
   });
 
@@ -93,7 +95,8 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
       const [a1, a2] = await Promise.all([createUser(prisma, { role: 'ADMIN' }), createUser(prisma, { role: 'ADMIN' })]);
       const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
       await hold(order, `PK-R${i}`);
-      const res = await Promise.allSettled([admin.resolvePaymentUnlinked(a1.id, order.id, 'đã ghi tiền về muộn'), admin.resolvePaymentUnlinked(a2.id, order.id, 'đã hoàn khách')]);
+      const seenAt = (await flagOf(order.id))!.toISOString();
+      const res = await Promise.allSettled([admin.resolvePaymentUnlinked(a1.id, order.id, 'đã ghi tiền về muộn', seenAt), admin.resolvePaymentUnlinked(a2.id, order.id, 'đã hoàn khách', seenAt)]);
       expect(res.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       const rejected = res.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
       expect(rejected).toHaveLength(1);
@@ -104,7 +107,7 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
     }
   });
 
-  it('ghi tiền về muộn của ADMIN gỡ cờ của đơn đã huỷ cùng lúc với webhook: webhook trước thì cờ gỡ, webhook sau thì dấu lịch sử không đặt lại cờ đã gỡ ở cặp cũ', async () => {
+  it('tuần tự: webhook đặt cờ, ADMIN ghi tiền về muộn gỡ cờ, webhook lặp cùng cặp sau đó không đặt lại cờ (dấu lịch sử chặn)', async () => {
     const user = await createUser(prisma);
     const adm = await createUser(prisma, { role: 'ADMIN' });
     const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
@@ -128,5 +131,40 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
     await admin.confirmOrderPayment(adm.id, order.id, { bankRef: `FT${Date.now()}` });
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).not.toBeNull();
     expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id, kind: 'LATE_PAYMENT' } })).toBe(1);
+  });
+
+  it('hai cặp Pancake khác nhau tới: cờ đẩy lên mốc mới; resolve với seenAt cũ → 409, cờ còn; resolve với mốc mới → đóng (10 vòng)', async () => {
+    for (let i = 0; i < 10; i++) {
+      const user = await createUser(prisma);
+      const adm = await createUser(prisma, { role: 'ADMIN' });
+      const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+      await hold(order, `PK-A${i}`);
+      const seenA = (await flagOf(order.id))!;
+      await new Promise((r) => setTimeout(r, 5));
+      await hold(order, `PK-B${i}`);
+      const seenB = (await flagOf(order.id))!;
+      expect(seenB.getTime()).toBeGreaterThan(seenA.getTime());
+
+      const err = await admin.resolvePaymentUnlinked(adm.id, order.id, 'đã đối chiếu A', seenA.toISOString()).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).message).toContain('Có khoản Pancake mới báo đã thanh toán');
+      expect(await flagOf(order.id)).toEqual(seenB);
+
+      await expect(admin.resolvePaymentUnlinked(adm.id, order.id, 'đã đối chiếu A và B', seenB.toISOString())).resolves.toMatchObject({ ok: true });
+      expect(await flagOf(order.id)).toBeNull();
+    }
+  });
+
+  it('resolve với seenA song song với khoản #B tới: hoặc resolve thắng rồi #B đặt lại cờ, hoặc #B đẩy mốc trước nên resolve 409 — không bao giờ mất cờ của #B (10 vòng)', async () => {
+    for (let i = 0; i < 10; i++) {
+      const user = await createUser(prisma);
+      const adm = await createUser(prisma, { role: 'ADMIN' });
+      const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+      await hold(order, `PK-A${i}`);
+      const seenA = (await flagOf(order.id))!;
+      await new Promise((r) => setTimeout(r, 3));
+      await Promise.allSettled([hold(order, `PK-B${i}`), admin.resolvePaymentUnlinked(adm.id, order.id, 'đã đối chiếu A', seenA.toISOString())]);
+      expect(await flagOf(order.id)).not.toBeNull();
+    }
   });
 });
