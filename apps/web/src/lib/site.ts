@@ -75,3 +75,28 @@ export function tenantHostBootScript(): string {
 export function restoringBootScript(): string {
   return "(function(){try{if(localStorage.getItem('tubu_web_session')==='1')document.documentElement.setAttribute('data-restoring','')}catch(e){}})()";
 }
+
+/**
+ * Script chạy ở <head> trước khi vẽ: máy có "Đã xem gần đây" (localStorage.tubu_recently_viewed có ít nhất một mục hợp lệ) thì đặt
+ * `data-has-recent` lên <html>. Trang Danh mục dựng sẵn (ISR) không biết khách đã xem gì, nên CSS giữ chỗ cho dải đó theo thuộc tính này;
+ * không giữ thì dải ~250px chèn vào sau hydrate và đẩy "Bán chạy nhất" xuống. Luật "mục hợp lệ" lặp lại `isItem` của lib/recently-viewed.ts.
+ */
+export function recentlyViewedBootScript(): string {
+  return (
+    "(function(){try{var a=JSON.parse(localStorage.getItem('tubu_recently_viewed')||'null');" +
+    "if(Array.isArray(a)&&a.some(function(x){return x&&typeof x.slug==='string'&&x.slug!==''&&typeof x.name==='string'}))" +
+    "document.documentElement.setAttribute('data-has-recent','')}catch(e){}})()"
+  );
+}
+
+/**
+ * Script chạy ở <head> trước khi vẽ: đọc cỡ chữ khách chọn ở Cài đặt (localStorage.tubu_prefs, cùng khoá với account/font-scale.ts) và đặt
+ * font-size gốc + `data-font-scale` lên <html> ngay khung hình đầu. Chờ effect sau hydrate thì mọi trang dựng lại một lần với khách chọn cỡ nhỏ/lớn.
+ * Dùng phần trăm (không px) để không đè cỡ chữ mặc định của trình duyệt (WCAG 1.4.4); ở 16px kết quả y hệt 15/16/18px.
+ */
+export function fontScaleBootScript(): string {
+  return (
+    "(function(){try{var p=JSON.parse(localStorage.getItem('tubu_prefs')||'null'),m={small:'93.75%',normal:'100%',large:'112.5%'},s=p&&p.fontScale;" +
+    "if(typeof s==='string'&&Object.prototype.hasOwnProperty.call(m,s)){var e=document.documentElement;e.style.fontSize=m[s];e.setAttribute('data-font-scale',s)}}catch(e){}})()"
+  );
+}

@@ -12,7 +12,7 @@ import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
-import { SITE_URL, restoringBootScript, tenantHostBootScript } from '@/lib/site';
+import { SITE_URL, fontScaleBootScript, recentlyViewedBootScript, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
   // metadataBase để ảnh openGraph khai bằng đường dẫn tương đối dựng được URL tuyệt đối (thiếu
@@ -28,11 +28,13 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, view
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // suppressHydrationWarning: script ở <head> thêm data-tenant-host / data-restoring lên <html> trước khi React hydrate.
+    // suppressHydrationWarning: script ở <head> thêm data-tenant-host / data-restoring / data-has-recent / data-font-scale + font-size lên <html> trước khi React hydrate.
     <html lang="vi" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: tenantHostBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: restoringBootScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: recentlyViewedBootScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: fontScaleBootScript() }} />
       </head>
       <body className="flex min-h-screen flex-col font-ui">
         <Providers>
