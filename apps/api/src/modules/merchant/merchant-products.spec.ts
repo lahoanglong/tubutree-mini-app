@@ -8,7 +8,6 @@ import {
   PANCAKE_TAKEOVER_CHANGED,
   PANCAKE_TAKEOVER_UNCONFIRMED,
 } from './merchant-pancake-link';
-import { PUBLIC_IMAGE_PREFIX } from '../../common/public-image';
 import { assertIdentifierAvailable } from '../storefront/identifier-validation';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { OrderStatusService } from '../orders/order-status.service';
@@ -907,23 +906,19 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
   });
 });
 
-describe('thumbnail sản phẩm đối tác lưu đường dẫn, không lưu lại cả ảnh base64 (D3)', () => {
-  const DATA = `data:image/png;base64,${'iVBORw0KGgo='.repeat(20)}`;
+describe('thumbnail sản phẩm đối tác: đường dẫn chỉ cho sản phẩm từng công khai (D3)', () => {
+  const DATA = `data:image/png;base64,${Buffer.alloc(300, 1).toString('base64')}`;
   const OTHER = `data:image/png;base64,${'AAAA'.repeat(20)}`;
-  const REF = /^\/public-image\/product\/prod-new\/0\?v=[0-9a-f]{16}$/;
+  const SVG = 'data:image/svg+xml;base64,PHN2Zy8+';
 
-  it('đăng với ảnh đầu base64: ghi thumbnail là đường dẫn tới ảnh đầu, cột images giữ bản gốc', async () => {
+  it('đăng với ảnh đầu base64: sản phẩm chưa từng được duyệt giữ thumbnail là data URL (màn duyệt của admin cần ảnh thật, endpoint ảnh chưa phát), cột images giữ bản gốc', async () => {
     const { svc, prisma, productCreate } = build();
     (prisma.product as unknown as { update: jest.Mock }).update = jest.fn().mockResolvedValue({});
     const out = await svc.createProduct('u1', { ...BASE, images: [DATA, OTHER] });
     expect(productCreate.mock.calls[0]![0].data.images).toEqual([DATA, OTHER]);
-    expect(productCreate.mock.calls[0]![0].data.thumbnail).toBeNull();
-    const update = (prisma.product as unknown as { update: jest.Mock }).update;
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0]![0].where).toEqual({ id: 'prod-new' });
-    expect(update.mock.calls[0]![0].data.thumbnail).toMatch(REF);
-    expect(out.thumbnail).toMatch(REF);
-    expect(out.thumbnail!.startsWith(PUBLIC_IMAGE_PREFIX)).toBe(true);
+    expect(productCreate.mock.calls[0]![0].data.thumbnail).toBe(DATA);
+    expect((prisma.product as unknown as { update: jest.Mock }).update).not.toHaveBeenCalled();
+    expect(out.thumbnail).toBe(DATA);
   });
 
   it('đăng với ảnh https hoặc không ảnh: thumbnail như cũ, không ghi thêm', async () => {
@@ -936,31 +931,55 @@ describe('thumbnail sản phẩm đối tác lưu đường dẫn, không lưu l
     expect((await b.svc.createProduct('u1', BASE)).thumbnail).toBeNull();
   });
 
-  it('thumbnail gửi riêng khác ảnh đầu: giữ nguyên (không có ảnh đầu để trỏ)', async () => {
+  it('thumbnail gửi riêng khác ảnh đầu: giữ nguyên', async () => {
     const { svc, productCreate } = build();
     await svc.createProduct('u1', { ...BASE, images: [DATA], thumbnail: OTHER });
     expect(productCreate.mock.calls[0]![0].data.thumbnail).toBe(OTHER);
   });
 
-  it('sửa sản phẩm chưa bán được (bị từ chối): thumbnail base64 cũ trùng ảnh đầu chuyển thành đường dẫn khi ghi thẳng vào sản phẩm', async () => {
-    const harness = (() => {
-      const productUpdate = jest.fn().mockResolvedValue({});
-      const prod = { id: 'prod-a', name: 'Mật ong', description: 'x', shortDesc: null, images: [DATA], thumbnail: DATA, basePrice: 200_000, salePrice: null, approvalStatus: 'REJECTED', fulfilment: 'MERCHANT', editDraft: null, pancakeLinkCode: null, approvedAt: null, variations: [{ id: 'v-a' }] };
-      const p = {
-        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }), findMany: jest.fn().mockResolvedValue([]) },
-        storefront: { findFirst: jest.fn().mockResolvedValue(MERCHANT_STORE) },
-        product: { findFirst: jest.fn().mockResolvedValue(prod), update: productUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ ...prod, editDraft: null }) },
-        productEditDraft: { upsert: jest.fn(), deleteMany: jest.fn() },
-        variation: { update: jest.fn().mockResolvedValue({}) },
-        $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, isBlocked: false }]),
-        $transaction: jest.fn(),
-      };
-      p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
-      return { svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify: jest.fn() } as never), productUpdate };
-    })();
-    await harness.svc.updateProduct('u1', 'prod-a', { images: [DATA, OTHER] });
-    const data = harness.productUpdate.mock.calls[0]![0].data;
+  const editHarness = (prodExtra: Record<string, unknown>) => {
+    const productUpdate = jest.fn().mockResolvedValue({});
+    const prod = { id: 'prod-a', name: 'Mật ong', description: 'x', shortDesc: null, images: [DATA], thumbnail: DATA, basePrice: 200_000, salePrice: null, approvalStatus: 'REJECTED', fulfilment: 'MERCHANT', editDraft: null, pancakeLinkCode: null, approvedAt: null, variations: [{ id: 'v-a' }], ...prodExtra };
+    const p = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'DEALER' }), findMany: jest.fn().mockResolvedValue([]) },
+      storefront: { findFirst: jest.fn().mockResolvedValue(MERCHANT_STORE) },
+      product: { findFirst: jest.fn().mockResolvedValue(prod), update: productUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ ...prod, editDraft: null }) },
+      productEditDraft: { upsert: jest.fn(), deleteMany: jest.fn() },
+      variation: { update: jest.fn().mockResolvedValue({}) },
+      $queryRaw: jest.fn().mockResolvedValue([{ type: 'MERCHANT', isPartner: true, isBlocked: false }]),
+      $transaction: jest.fn(),
+    };
+    p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
+    return { svc: new MerchantService(p as unknown as PrismaService, orderStatus, { notify: jest.fn() } as never), productUpdate };
+  };
+  const REF_A = /^\/public-image\/product\/prod-a\/0\?v=[0-9a-f]{16}$/;
+
+  it('sửa sản phẩm bị từ chối chưa từng được duyệt: thumbnail base64 giữ nguyên, không đổi thành đường dẫn 404', async () => {
+    const { svc, productUpdate } = editHarness({});
+    await svc.updateProduct('u1', 'prod-a', { images: [DATA, OTHER] });
+    const data = productUpdate.mock.calls[0]![0].data;
     expect(data.images).toEqual([DATA, OTHER]);
-    expect(data.thumbnail).toMatch(/^\/public-image\/product\/prod-a\/0\?v=[0-9a-f]{16}$/);
+    expect(data.thumbnail).toBe(DATA);
+  });
+
+  it('sản phẩm từng được duyệt, đang chờ duyệt lại, sửa chữ không đụng ảnh: thumbnail trùng ảnh đầu thành đường dẫn (vẫn đang phát ảnh)', async () => {
+    const { svc, productUpdate } = editHarness({ approvalStatus: 'PENDING_REVIEW', approvedAt: new Date() });
+    await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng' });
+    expect(productUpdate.mock.calls[0]![0].data.thumbnail).toMatch(REF_A);
+  });
+
+  it('sản phẩm từng được duyệt nhưng đổi ảnh (approvedAt bị xoá, ảnh ngừng phát): thumbnail đường dẫn cũ trả về ảnh đầu mới dạng data URL', async () => {
+    const stale = `/public-image/product/prod-a/0?v=${'a'.repeat(16)}`;
+    const { svc, productUpdate } = editHarness({ approvalStatus: 'PENDING_REVIEW', approvedAt: new Date(), thumbnail: stale });
+    await svc.updateProduct('u1', 'prod-a', { images: [OTHER], thumbnail: stale });
+    const data = productUpdate.mock.calls[0]![0].data;
+    expect(data.approvedAt).toBeNull();
+    expect(data.thumbnail).toBe(OTHER);
+  });
+
+  it('ảnh đầu là SVG: thumbnail giữ nguyên dù sản phẩm từng công khai', async () => {
+    const { svc, productUpdate } = editHarness({ approvalStatus: 'PENDING_REVIEW', approvedAt: new Date(), images: [SVG], thumbnail: SVG });
+    await svc.updateProduct('u1', 'prod-a', { name: 'Mật ong rừng' });
+    expect(productUpdate.mock.calls[0]![0].data.thumbnail).toBe(SVG);
   });
 });

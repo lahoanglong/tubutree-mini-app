@@ -128,9 +128,9 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
     }
   });
 
-  it('migration backfill: dựng lại imageVersions từ images giống mã ứng dụng ghi (md5 10 ký tự, URL giữ nguyên)', async () => {
+  it('migration backfill (140500, tách khỏi migration thêm cột): dựng lại imageVersions từ images giống mã ứng dụng ghi (md5 10 ký tự, URL giữ nguyên)', async () => {
     await prisma.$executeRaw`UPDATE "reviews" SET "imageVersions" = '{}' WHERE "id" = ${reviewId}`;
-    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104140000_review_image_versions/migration.sql'), 'utf8');
+    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104140500_review_image_versions_backfill/migration.sql'), 'utf8');
     const statements = sql.replace(/^--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean);
     for (let run = 0; run < 2; run++) for (const stmt of statements) await prisma.$executeRawUnsafe(stmt); // chạy lại không đổi gì
     const row = await prisma.review.findUnique({ where: { id: reviewId }, select: { imageVersions: true } });

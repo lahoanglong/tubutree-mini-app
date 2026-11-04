@@ -81,9 +81,9 @@ describe('sec-1104-e: đường đọc nhẹ (real Postgres)', () => {
   describe('migration 20261104141000: thumbnail data URL → đường dẫn ảnh đầu', () => {
     const png = (n: number) => `data:image/png;base64,${Buffer.alloc(n, n).toString('base64')}`;
     const made: string[] = [];
-    const mk = (suffix: string, thumbnail: string | null, images: string[]) =>
+    const mk = (suffix: string, thumbnail: string | null, images: string[], extra: Record<string, unknown> = {}) =>
       prisma.product
-        .create({ data: { brand: `IT ${tag}`, slug: `it-th-${tag}-${suffix}`, name: `IT th ${suffix}`, description: 'd', basePrice: 1, thumbnail, images } })
+        .create({ data: { brand: `IT ${tag}`, slug: `it-th-${tag}-${suffix}`, name: `IT th ${suffix}`, description: 'd', basePrice: 1, thumbnail, images, ...extra } })
         .then((p) => {
           made.push(p.id);
           return p;
@@ -113,6 +113,21 @@ describe('sec-1104-e: đường đọc nhẹ (real Postgres)', () => {
       expect((await read(https.id)).thumbnail).toBe('https://res.cloudinary.com/x/t.jpg');
       expect((await read(svg.id)).thumbnail).toBe('data:image/svg+xml;base64,PHN2Zy8+');
       expect((await read(none.id)).thumbnail).toBeNull();
+    });
+
+    it('chỉ sản phẩm đang hoặc từng công khai: chưa từng duyệt hoặc bị từ chối giữ data URL (endpoint ảnh không phát, màn duyệt cần ảnh thật)', async () => {
+      const A = png(500);
+      const pending = await mk('pend', A, [A], { approvalStatus: 'PENDING_REVIEW' });
+      const rejected = await mk('rej', A, [A], { approvalStatus: 'REJECTED' });
+      const again = await mk('again', A, [A], { approvalStatus: 'PENDING_REVIEW', approvedAt: new Date() });
+      const live = await mk('live', A, [A], { approvalStatus: 'APPROVED' });
+      const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104141000_product_thumbnail_ref/migration.sql'), 'utf8');
+      await prisma.$executeRawUnsafe(sql.replace(/^--.*$/gm, '').trim().replace(/;$/, ''));
+      const read = async (id: string) => (await prisma.product.findUniqueOrThrow({ where: { id }, select: { thumbnail: true } })).thumbnail;
+      expect(await read(pending.id)).toBe(A);
+      expect(await read(rejected.id)).toBe(A);
+      expect(await read(again.id)).toBe(storedThumbnailFor(again.id, A));
+      expect(await read(live.id)).toBe(storedThumbnailFor(live.id, A));
     });
   });
 
@@ -198,9 +213,9 @@ describe('sec-1104-e: đường đọc nhẹ (real Postgres)', () => {
       expect((await summary(multi)).imageCount).toBe(4);
     });
 
-    it('migration backfill: dựng lại hai cột từ images giống trigger, chạy lại không đổi gì', async () => {
+    it('migration backfill (142500, tách khỏi migration thêm cột): dựng lại hai cột từ images giống trigger, chạy lại không đổi gì', async () => {
       await prisma.$executeRaw`UPDATE "feed_posts" SET "imageCount" = 0, "coverRef" = NULL WHERE "id" = ANY(${made})`;
-      const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104142000_feed_post_image_summary/migration.sql'), 'utf8');
+      const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104142500_feed_post_image_summary_backfill/migration.sql'), 'utf8');
       const backfill = sql.slice(sql.indexOf('UPDATE "feed_posts" p')).trim().replace(/;$/, '');
       const before = await prisma.feedPost.findUniqueOrThrow({ where: { id: multi }, select: { images: true } });
       await prisma.$executeRawUnsafe(backfill);

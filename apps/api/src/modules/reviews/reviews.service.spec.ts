@@ -91,6 +91,21 @@ describe('ReviewsService.create', () => {
       product: { update: jest.Mock };
     };
 
+    it('phản hồi sau khi sửa không lộ cột nội bộ imageVersions (trigger giữ, không phải dữ liệu của khách)', async () => {
+      const prisma = makePrisma({
+        review: {
+          findUnique: jest.fn().mockResolvedValue(existing),
+          findMany: jest.fn().mockResolvedValue([{ orderId: 'o1' }]),
+          create: jest.fn(),
+          update: jest.fn().mockResolvedValue({ ...existing, rating: 2, images: ['x.jpg'], imageVersions: ['x.jpg'] }),
+          aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 2 }, _count: 1 }),
+        },
+      });
+      const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 2, images: ['x.jpg'] } as never);
+      expect(out).not.toHaveProperty('imageVersions');
+      expect(out.images).toEqual(['x.jpg']);
+    });
+
     it('sửa sao, nội dung, ảnh, video của đánh giá cũ; không tạo mới', async () => {
       const prisma = withExisting();
       const out = await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', {

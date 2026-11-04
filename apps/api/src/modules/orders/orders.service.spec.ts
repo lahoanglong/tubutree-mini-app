@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { OrdersService } from './orders.service';
+import { Prisma } from '@prisma/client';
+import { ORDER_LIST_SELECT, OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
 import * as refundQueue from './refund-queue';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -1557,5 +1558,12 @@ describe('OrdersService.cancel — hook thu kèm rác (§12.2 bước 3, §17.3)
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' }, { wastePickupHooks });
     await expect(svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
     expect(notifications.notify as jest.Mock).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.anything(), undefined, 'order=TUBU1');
+  });
+});
+
+describe('ORDER_LIST_SELECT', () => {
+  it('đủ mọi cột của đơn trừ shippingHistory và invoiceRequest, kèm items: cột mới thêm vào schema phải vào danh sách (hoặc bị loại có chủ ý)', () => {
+    const expected = Object.keys(Prisma.OrderScalarFieldEnum).filter((k) => k !== 'shippingHistory' && k !== 'invoiceRequest');
+    expect(Object.keys(ORDER_LIST_SELECT).sort()).toEqual([...expected, 'items'].sort());
   });
 });

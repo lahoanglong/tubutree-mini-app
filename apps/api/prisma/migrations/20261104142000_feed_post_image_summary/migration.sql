@@ -5,6 +5,7 @@
 --                 feed/feed-images.ts); NULL khi không có ảnh hoặc ảnh đầu là chuỗi lạ.
 -- Một trigger giữ hai cột này theo "images" (mã phụ thuộc id bài và có ba nơi ghi images, gồm cả SQL thô dọn ảnh khách vãng lai),
 -- nên không nơi ghi nào quên cập nhật được. ADD COLUMN có DEFAULT hằng không viết lại bảng.
+-- Migration này chỉ đổi cấu trúc và dựng trigger (khoá bảng ngắn); tính lại các bài cũ nằm ở 20261104142500 để khoá không bị giữ suốt lúc giải nén ảnh.
 ALTER TABLE "feed_posts" ADD COLUMN IF NOT EXISTS "imageCount" INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE "feed_posts" ADD COLUMN IF NOT EXISTS "coverRef" TEXT;
 
@@ -30,19 +31,3 @@ DROP TRIGGER IF EXISTS feed_posts_image_summary_sync ON "feed_posts";
 CREATE TRIGGER feed_posts_image_summary_sync
 BEFORE INSERT OR UPDATE OF "images" ON "feed_posts"
 FOR EACH ROW EXECUTE FUNCTION feed_posts_image_summary_sync();
-
--- Backfill idempotent: chỉ bài có ảnh mà chưa có tóm tắt. Không ghi lại cột images (UPDATE chỉ đặt hai cột tóm tắt nên trigger,
--- vốn chỉ chạy khi "images" nằm trong SET, không kích hoạt); mỗi bài giải nén mảng một lần.
-UPDATE "feed_posts" p
-SET "imageCount" = s."cnt",
-    "coverRef" = CASE
-      WHEN s."cover" ~ '^https?://' THEN s."cover"
-      WHEN s."cover" LIKE 'data:%' THEN md5(p."id" || ':0:' || s."cover")
-      ELSE NULL
-    END
-FROM (
-  SELECT f."id", cardinality(f."images") AS "cnt", f."images"[1] AS "cover"
-  FROM "feed_posts" f
-  WHERE cardinality(f."images") > 0
-) s
-WHERE p."id" = s."id" AND p."imageCount" = 0;

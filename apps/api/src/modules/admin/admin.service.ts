@@ -2025,7 +2025,14 @@ export class AdminService {
         if (seenVersion !== undefined && now.updatedAt?.getTime() !== seenVersion) throw productContentChanged();
         throw productAlreadyReviewed(now.approvalStatus);
       }
-      if (approve) return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seenTakeover });
+      if (approve) {
+        // Từ lúc này endpoint ảnh phát ảnh của sản phẩm: đổi thumbnail data URL trùng ảnh đầu sang đường dẫn trong cùng giao dịch
+        // (đọc lại dưới khoá dòng vừa ghi, không dùng bản đọc trước giao dịch có thể đã cũ).
+        const live = await tx.product.findUniqueOrThrow({ where: { id: productId }, select: { thumbnail: true, images: true } });
+        const thumbnail = storedThumbnailOf(productId, live.thumbnail, live.images[0], true);
+        if (thumbnail !== live.thumbnail) await tx.product.update({ where: { id: productId }, data: { thumbnail } });
+        return linkTubuFulfilledVariation(tx, product, { adminId, confirmTakeover, takeoverProductId: seenTakeover });
+      }
       // Sản phẩm chờ duyệt đang giữ biến thể Pancake mà bị từ chối: trả biến thể về sản phẩm gốc để SKU vẫn bán được.
       await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
       return undefined;
@@ -2088,7 +2095,7 @@ export class AdminService {
               description: draft.description,
               shortDesc: draft.shortDesc,
               images: draft.images,
-              thumbnail: storedThumbnailOf(product.id, draft.thumbnail, draft.images[0]),
+              thumbnail: storedThumbnailOf(product.id, draft.thumbnail, draft.images[0], true),
               rejectReason: null,
             }
           : { rejectReason: reason },

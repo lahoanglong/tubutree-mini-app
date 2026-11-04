@@ -612,12 +612,11 @@ export class MerchantService {
     // hàng chờ của đối tác; hàng "Tubu giao hộ" nhận biến thể Pancake thật lúc duyệt.
     // Chèn dưới FOR KEY SHARE của dòng gian hàng rồi kiểm lại cờ (như checkout.assertPartnerStoresUnderLock): thu hồi đại lý giữ FOR UPDATE
     // cùng dòng này trước khi tắt cờ, nên hoặc sản phẩm bị từ chối, hoặc thu hồi thấy sản phẩm này và 409, không bao giờ cả hai cùng qua.
-    // Ảnh đầu là base64 thì thumbnail chỉ giữ đường dẫn tới nó (cần id sản phẩm nên ghi sau khi tạo): cùng ảnh không nằm hai lần trong DB.
-    const rawThumbnail = dto.thumbnail ?? dto.images?.[0] ?? null;
-    const thumbnailIsFirstData = !!rawThumbnail && rawThumbnail.startsWith('data:') && rawThumbnail === dto.images?.[0];
+    // Thumbnail giữ nguyên data URL: sản phẩm chưa từng được duyệt thì endpoint ảnh chưa phát, màn duyệt của admin cần ảnh thật.
+    // Đổi sang đường dẫn tới ảnh đầu là việc của lúc admin duyệt lần đầu (reviewMerchantProduct).
     const product = await this.prisma.$transaction(async (tx) => {
       await this.lockSellableStore(tx, store.id, userId);
-      const created = await tx.product.create({
+      return tx.product.create({
         data: {
           name: dto.name,
           slug: uniqueSlug,
@@ -630,7 +629,7 @@ export class MerchantService {
           basePrice: retailPrice,
           salePrice,
           images: dto.images ?? [],
-          thumbnail: thumbnailIsFirstData ? null : rawThumbnail,
+          thumbnail: dto.thumbnail ?? dto.images?.[0] ?? null,
           categoryIds: dto.categoryIds ?? [],
           tags: dto.tags ?? [],
           forSegment: dto.forSegment ?? [],
@@ -656,10 +655,6 @@ export class MerchantService {
           variations: true,
         },
       });
-      if (!thumbnailIsFirstData) return created;
-      const thumbnail = storedThumbnailOf(created.id, rawThumbnail, dto.images?.[0]);
-      await tx.product.update({ where: { id: created.id }, data: { thumbnail } });
-      return { ...created, thumbnail };
     }, { maxWait: 15_000, timeout: 60_000 }).catch(throwIfLockBusy);
     if (product.images.length > 0 || product.thumbnail) this.imageStale?.markStale();
 
@@ -746,6 +741,8 @@ export class MerchantService {
     const revertsToLive = liveEdit && contentChanged && sameContent(merged, contentOf(product));
     const startsDraft = liveEdit && contentChanged && !revertsToLive && !draft;
     const reReview = !liveEdit && (contentChanged || relink || codeChanged) && product.approvalStatus !== 'PENDING_REVIEW';
+    // Sau lần ghi này endpoint ảnh còn phát ảnh của sản phẩm không: đổi ảnh xoá `approvedAt` (xem ghi bên dưới) nên ảnh mới chưa phát.
+    const publicAfterWrite = !imagesChanged && (product.approvalStatus === 'APPROVED' || product.approvedAt !== null);
 
     await this.prisma.$transaction(async (tx) => {
       if (codeChanged) {
@@ -780,7 +777,7 @@ export class MerchantService {
             isActive: requestsLink ? true : dto.isActive,
             ...(tubuFulfilled ? {} : { basePrice, salePrice }),
             // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
-            ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? { ...merged, thumbnail: storedThumbnailOf(product.id, merged.thumbnail, merged.images[0]) } : {}),
+            ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? { ...merged, thumbnail: storedThumbnailOf(product.id, merged.thumbnail, merged.images[0], publicAfterWrite) } : {}),
             ...(reReview
               ? {
                   approvalStatus: 'PENDING_REVIEW' as const,

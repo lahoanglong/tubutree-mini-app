@@ -3,7 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PublicImageService } from '../../src/modules/catalog/public-image.service';
-import { publicImageVersion } from '../../src/common/public-image';
+import { publicImageRef, publicImageVersion } from '../../src/common/public-image';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
@@ -121,5 +121,47 @@ describe('PublicImageService (real Postgres)', () => {
     await merchant.updateProduct(owner.id, p.id, { name: 'Tên mới sau khi bị từ chối' });
     expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).approvalStatus).toBe('PENDING_REVIEW');
     for (const slot of ['0', 'thumb']) await expect(svc.get('product', p.id, slot, undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('thumbnail đường dẫn chỉ có khi ảnh phát được: đăng mới giữ data URL (ảnh chưa phát), admin duyệt lần đầu thì đổi sang đường dẫn và ảnh phát được', async () => {
+    const owner = await createUser(prisma, { role: 'DEALER' });
+    const tag = randCode(8).toLowerCase();
+    await prisma.storefront.create({ data: { type: 'MERCHANT', slug: `itimg-${tag}`, title: `Shop ${tag}`, ownerUserId: owner.id, commissionPct: 0.15 } });
+    const created = await merchant.createProduct(owner.id, { name: `Khăn ${tag}`, description: 'd', basePrice: 80_000, stock: 3, images: [PNG_A, PNG_B] });
+    ids.push(created.id);
+    const read = () => prisma.product.findUniqueOrThrow({ where: { id: created.id }, select: { thumbnail: true, images: true } });
+    expect((await read()).thumbnail).toBe(PNG_A);
+    for (const slot of ['0', 'thumb']) await expect(svc.get('product', created.id, slot, undefined)).rejects.toBeInstanceOf(NotFoundException);
+
+    await admin.reviewMerchantProduct('admin-it', created.id, true, undefined, false, undefined, { pancakeCode: '' });
+    const approved = await read();
+    expect(approved.thumbnail).toBe(publicImageRef('product', created.id, 0, PNG_A));
+    expect(approved.images).toEqual([PNG_A, PNG_B]);
+    expect((await svc.get('product', created.id, '0', publicImageVersion('product', created.id, 0, PNG_A))).versionOk).toBe(true);
+    expect((await svc.get('product', created.id, 'thumb', publicImageVersion('product', created.id, 'thumb', PNG_A))).mime).toBe('image/png');
+  });
+
+  it('bị từ chối ở lần duyệt đầu: thumbnail vẫn là data URL, ảnh không phát', async () => {
+    const owner = await createUser(prisma, { role: 'DEALER' });
+    const tag = randCode(8).toLowerCase();
+    await prisma.storefront.create({ data: { type: 'MERCHANT', slug: `itimg-${tag}`, title: `Shop ${tag}`, ownerUserId: owner.id, commissionPct: 0.15 } });
+    const created = await merchant.createProduct(owner.id, { name: `Khăn ${tag}`, description: 'd', basePrice: 80_000, stock: 3, images: [PNG_A] });
+    ids.push(created.id);
+    await admin.reviewMerchantProduct('admin-it', created.id, false, 'Ảnh mờ', false, undefined, { pancakeCode: '' });
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: created.id } })).thumbnail).toBe(PNG_A);
+    await expect(svc.get('product', created.id, '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('sản phẩm đang bán đổi ảnh đầu: bản chờ giữ data URL, admin duyệt bản sửa thì thumbnail là đường dẫn tới ảnh mới và ảnh mới phát được', async () => {
+    const { owner, p } = await partnerProduct('APPROVED', { pancakeLinkCode: null, isActive: true });
+    await merchant.updateProduct(owner.id, p.id, { images: [PNG_B], thumbnail: PNG_B });
+    const draft = await prisma.productEditDraft.findUniqueOrThrow({ where: { productId: p.id } });
+    expect(draft.thumbnail).toBe(PNG_B);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).thumbnail).toBe(PNG_A);
+    await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, false, draft.updatedAt.toISOString());
+    const after = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(after.images).toEqual([PNG_B]);
+    expect(after.thumbnail).toBe(publicImageRef('product', p.id, 0, PNG_B));
+    expect((await svc.get('product', p.id, '0', publicImageVersion('product', p.id, 0, PNG_B))).versionOk).toBe(true);
   });
 });

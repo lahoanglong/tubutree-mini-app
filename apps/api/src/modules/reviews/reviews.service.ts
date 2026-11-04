@@ -192,7 +192,8 @@ export class ReviewsService {
         const review = existing
           ? await this.updateOwn(userId, product, orderId, dto)
           : await this.createFirst(userId, product, orderId, dto);
-        return { ...review, images: review.images.map((img, i) => reviewImageRef(review.id, i, img)), updated: !!existing };
+        const { imageVersions: _versions, ...publicReview } = review;
+        return { ...publicReview, images: review.images.map((img, i) => reviewImageRef(review.id, i, img)), updated: !!existing };
       } catch (err) {
         const lostRace = errCode(err) === (existing ? 'P2025' : 'P2002');
         if (!lostRace) throw err;
