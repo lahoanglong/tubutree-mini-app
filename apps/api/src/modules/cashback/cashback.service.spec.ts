@@ -602,6 +602,16 @@ describe('CashbackService.adminReview', () => {
     });
   });
 
+  it('L2-07: CAS thua (tab khác vừa xử lý) → 409 với câu tải lại, không cộng pending', async () => {
+    const { svc, userUpdate, txUpdateMany } = mk(pending);
+    txUpdateMany.mockResolvedValue({ count: 0 });
+    await expect(svc.adminReview('admin1', 'c1', 'CONFIRMED')).rejects.toMatchObject({
+      status: 409,
+      message: 'Khoản này vừa được người khác xử lý — tải lại.',
+    });
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+
   it('giao dịch ĐÃ trả về Ví (PAID) → từ chối đổi trạng thái (không claw-back được)', async () => {
     const { svc, userUpdate } = mk({ ...pending, status: 'PAID' });
 

@@ -102,4 +102,22 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     const confirmed = rows.filter((r) => r.status === 'CONFIRMED').reduce((sum, r) => sum + r.userReward, 0);
     expect(await pendingOf(user.id)).toBe(confirmed);
   });
+
+  it('L2-07: hai Kế toán duyệt song song cùng một dòng → một 200, một 409; pending chỉ cộng một lần', async () => {
+    const { user, utm } = await seedClick();
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    for (let i = 0; i < 5; i++) {
+      const o = `L207-${randCode(6)}-${i}`;
+      await svc.ingest(ev(utm, o, 'PENDING'), 'accesstrade');
+      const row = await rowOf(o);
+      const results = await Promise.allSettled([
+        svc.adminReview(admin.id, row.id, 'CONFIRMED'),
+        svc.adminReview(admin.id, row.id, 'CONFIRMED'),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect([409, 400]).toContain((lost.reason as { getStatus(): number }).getStatus());
+    }
+    expect(await pendingOf(user.id)).toBe(5 * 35000);
+  });
 });

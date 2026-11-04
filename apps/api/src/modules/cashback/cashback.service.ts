@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CashbackStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -236,7 +236,9 @@ export class CashbackService {
       status,
       raw: { adminReview: { adminId, note: note ?? null, at: new Date().toISOString() } },
     };
-    await this.applyToExisting(existing, synthetic, status, existing.userReward, { manual: true });
+    const moved = await this.applyToExisting(existing, synthetic, status, existing.userReward, { manual: true });
+    // CAS thua: người khác (tab khác, postback, cron settle) đã đổi dòng này giữa lúc ta đọc và ghi. Không log như đã đổi.
+    if (!moved) throw new ConflictException('Khoản này vừa được người khác xử lý — tải lại.');
     this.logger.warn(
       `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId} đặt cashback ${existing.merchantOrderId} (${existing.provider}): ${existing.status} → ${status}${note ? ` — ${note}` : ''}`,
     );
@@ -250,18 +252,18 @@ export class CashbackService {
     status: NormalizedCashbackEvent['status'],
     userReward: number,
     opts: { manual?: boolean } = {},
-  ): Promise<void> {
+  ): Promise<boolean> {
     // Chuyển trạng thái ATOMIC bằng optimistic CAS + điều chỉnh pending trong CÙNG tx → chống 2 sự kiện song song cùng cộng
     // pending 2 lần. CAS khớp cả userReward: số trừ khỏi cashbackPending phải là số đang nằm trên dòng lúc CAS, không phải số
     // đọc ngoài tx từ trước (một sự kiện khác có thể đã sửa số tiền giữa chừng). Thua CAS thì đọc lại dòng trong tx rồi quyết định lại.
-    await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       let cur = existing;
       for (let attempt = 0; attempt < CashbackService.CAS_ATTEMPTS; attempt++) {
         // Đã settle về Ví (PAID) → BỎ QUA postback đến sau: không ghi đè status, không đụng số dư (không claw-back được tiền đã về Ví).
-        if (cur.status === 'PAID') return;
+        if (cur.status === 'PAID') return false;
         // Sự kiện đến muộn hoặc sai thứ tự (postback PENDING sau khi reconcile đã CONFIRMED) không được kéo trạng thái lùi: lùi về
         // PENDING thì khoản đó không bao giờ settle về Ví. Admin duyệt tay là quyết định tường minh nên được đi mọi hướng.
-        if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(cur.status)) return;
+        if (!opts.manual && !CashbackService.FORWARD_FROM[status].includes(cur.status)) return false;
         const wasConfirmed = cur.status === 'CONFIRMED';
         const nowConfirmed = status === 'CONFIRMED';
         const moved = await tx.cashbackTransaction.updateMany({
@@ -283,16 +285,17 @@ export class CashbackService {
           } else if (wasConfirmed && !nowConfirmed) {
             await tx.user.update({ where: { id: cur.userId }, data: { cashbackPending: { decrement: cur.userReward } } });
           }
-          return;
+          return true;
         }
-        if (opts.manual) return;
+        if (opts.manual) return false;
         const fresh = await tx.cashbackTransaction.findUnique({
           where: { id: cur.id },
           select: { id: true, userId: true, status: true, confirmedAt: true, userReward: true },
         });
-        if (!fresh) return;
+        if (!fresh) return false;
         cur = fresh;
       }
+      return false;
     });
   }
 
