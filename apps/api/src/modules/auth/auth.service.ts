@@ -295,9 +295,7 @@ export class AuthService {
       return this.issueTokens(await this.attachPhoneIfMissing(currentUser, phone));
     }
 
-    // Dòng khách đã gộp (access token cũ còn hạn) không phải khách: nâng cấp tại chỗ sẽ hồi sinh nó với mergedIntoId còn trỏ
-    // tài khoản đích, mã giới thiệu của nó vẫn quy về đích.
-    if (currentUser.mergedIntoId) return this.mergedSessionTokens(currentUser, info, phone);
+    // Dòng khách đã gộp không còn là khách (JwtStrategy cũng chặn access token của nó): rơi xuống zaloMismatch bên dưới, khách đăng nhập lại.
     const isGuest = (currentUser.zaloId?.startsWith('guest_') ?? false) && !currentUser.zaloId?.includes('_merged_');
     if (!isGuest) throw this.zaloMismatch(currentUser, info.zaloId);
 
@@ -348,7 +346,6 @@ export class AuthService {
         await this.grantWelcomeVoucher(fresh.id);
         return this.issueTokens(fresh);
       }
-      if (fresh.mergedIntoId) return this.mergedSessionTokens(fresh, info, phone);
       throw this.zaloMismatch(fresh, info.zaloId);
     } catch (err) {
       // Hai máy khách khác nhau cùng nâng cấp lên một tài khoản Zalo mới cùng lúc: máy thắng đã
@@ -358,17 +355,6 @@ export class AuthService {
       if (!winner || winner.id === currentUser.id) throw err;
       return this.issueTokens(await this.mergeGuestInto(currentUser, winner, info, phone));
     }
-  }
-
-  /**
-   * Phiên của một dòng khách đã gộp (access token cũ còn hạn, thường là client gửi lại ensurePhone sau lần gộp): đúng tài
-   * khoản Zalo của tài khoản đích thì trả token của đích như lần gộp đầu; Zalo khác thì từ chối như mọi phiên không phải khách.
-   */
-  private async mergedSessionTokens(merged: User, info: { zaloId: string }, phone: string | null): Promise<LoginResponse> {
-    const targetId = merged.mergedIntoId ? await resolveMergedUserId(this.prisma, merged.mergedIntoId) : null;
-    const target = targetId ? await this.prisma.user.findUnique({ where: { id: targetId } }) : null;
-    if (target && target.zaloId === info.zaloId) return this.issueTokens(await this.attachPhoneIfMissing(target, phone));
-    throw this.zaloMismatch(merged, info.zaloId);
   }
 
   private zaloMismatch(user: User, zaloId: string): ConflictException {
@@ -849,6 +835,8 @@ export class AuthService {
       }
       throw err;
     });
+    // Dòng khách mang mergedIntoId từ lúc commit: bỏ cache để JwtStrategy chặn access token cũ của khách ngay, không đợi hết TTL.
+    this.sessionState?.invalidate(guest.id);
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, referralNotices);
     // SĐT ghi sau khi gộp xong: số vừa bị tài khoản khác lấy (P2002) chỉ làm bỏ qua phần số, không làm hỏng cả lần gộp (transaction đã hỏng nếu lỗi nằm trong nó).
     if (Object.keys(targetPhone).length > 0) {
@@ -1068,7 +1056,7 @@ export class AuthService {
       throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.' });
     }
     // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
-    // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).
+    // nhận token của tài khoản đích).
     if (user.mergedIntoId) {
       throw new UnauthorizedException('Phiên đã hết hiệu lực, bạn đăng nhập lại nhé.');
     }

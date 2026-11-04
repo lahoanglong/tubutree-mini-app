@@ -547,10 +547,10 @@ function makeGuestMergeFixture(opts: {
   };
 }
 
-function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>, vouchers?: VouchersService) {
+function makeEnsurePhoneSvc(fixture: { prisma: PrismaService }, zaloMocks: Record<string, jest.Mock>, vouchers?: VouchersService, sessionState?: { invalidate: jest.Mock }) {
   const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
   const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
-  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac(), undefined, vouchers);
+  return new AuthService(fixture.prisma, jwt, config, zaloMocks as unknown as ZaloService, mkRbac(), undefined, vouchers, undefined, sessionState as never);
 }
 
 describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm thầm đổi user)', () => {
@@ -665,6 +665,22 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
     expect(res.user.id).toBe('target1');
     expect(fixture.state.users.get('target1')!.phone).toBe('0933333333');
     expect(fixture.state.users.get('guest1')!.mergedIntoId).toBe('target1');
+  });
+
+  it('m3: gộp xong xoá cache phiên của dòng khách để access token cũ của khách chết ngay', async () => {
+    const TARGET = { id: 'target1', zaloId: 'z-real-existing', fullName: 'Người Thật', phone: null, avatarUrl: null, role: 'CUSTOMER', isBlocked: false, pointsBalance: 0, walletBalance: 0, coinsBalance: 0, cashbackPending: 0, referralCode: 'RT1' };
+    const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+    const sessionState = { invalidate: jest.fn() };
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue(null) };
+    await makeEnsurePhoneSvc(fixture, zalo, undefined, sessionState).ensurePhoneForCurrentUser('guest1', 'code', 'at');
+    expect(sessionState.invalidate).toHaveBeenCalledWith('guest1');
+  });
+
+  it('m3: dòng khách đã gộp gọi lại ensure-phone (token cũ lọt qua) → 409 yêu cầu đăng nhập lại, không cấp token cho tài khoản đích', async () => {
+    const merged = { ...GUEST, id: 'old1', zaloId: 'guest_d_merged_1700000000000', mergedIntoId: 'target1' };
+    const fixture = makeGuestMergeFixture({ guest: merged });
+    const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'A' }), resolvePhoneNumber: jest.fn() };
+    await expect(makeEnsurePhoneSvc(fixture, zalo).ensurePhoneForCurrentUser('old1', 'code', 'at')).rejects.toBeInstanceOf(ConflictException);
   });
 
   describe('khách + zaloId/SĐT đã thuộc một user THẬT khác có từ trước → GỘP (không mất giỏ/địa chỉ/điểm/đơn của khách)', () => {
