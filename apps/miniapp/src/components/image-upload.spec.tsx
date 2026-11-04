@@ -135,7 +135,7 @@ describe('VideoUpload — dùng chung hàm tải Cloudinary với web', () => {
   });
 });
 
-describe('ImageUpload — luôn nén ảnh trước khi tải lên Cloudinary (F11)', () => {
+describe('ImageUpload — chính sách ảnh gửi đi (F11)', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
@@ -145,53 +145,111 @@ describe('ImageUpload — luôn nén ảnh trước khi tải lên Cloudinary (F
 
   const COMPRESSED = 'data:image/jpeg;base64,' + btoa('nho');
 
-  function stubCanvasPipeline() {
+  function stubCanvasPipeline(size = { width: 4000, height: 3000 }, decodeFails = false) {
     class FakeImage {
-      width = 4000;
-      height = 3000;
+      width = size.width;
+      height = size.height;
       onload: (() => void) | null = null;
       onerror: (() => void) | null = null;
       set src(_v: string) {
-        queueMicrotask(() => this.onload?.());
+        queueMicrotask(() => (decodeFails ? this.onerror?.() : this.onload?.()));
       }
     }
     vi.stubGlobal('Image', FakeImage);
+    const calls: string[] = [];
     const drawn: number[][] = [];
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: (...a: number[]) => void drawn.push(a) } as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(COMPRESSED);
-    return drawn;
+    const ctx = {
+      set fillStyle(_v: string) {
+        calls.push('fillStyle');
+      },
+      fillRect: () => void calls.push('fillRect'),
+      drawImage: (...a: number[]) => {
+        calls.push('drawImage');
+        drawn.push(a);
+      },
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
+    const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => {
+      calls.push('toDataURL');
+      return COMPRESSED;
+    });
+    return { drawn, calls, toDataURL };
   }
 
-  it('file gốc lớn: blob gửi lên là bản đã nén (cạnh dài 1600), không phải file gốc', async () => {
-    vi.stubEnv('VITE_CLOUDINARY_CLOUD_NAME', 'demo');
-    vi.stubEnv('VITE_CLOUDINARY_UPLOAD_PRESET', 'unsigned');
+  async function mount(configured: boolean, props: { maxDim?: number; quality?: number } = {}) {
+    if (configured) {
+      vi.stubEnv('VITE_CLOUDINARY_CLOUD_NAME', 'demo');
+      vi.stubEnv('VITE_CLOUDINARY_UPLOAD_PRESET', 'unsigned');
+    }
     vi.resetModules();
-    const drawn = stubCanvasPipeline();
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/a.jpg' }) });
     vi.stubGlobal('fetch', fetchMock);
     const { ImageUpload } = await import('./image-upload');
     const onChange = vi.fn();
-    const { container } = render(<ImageUpload label="Ảnh" value="" onChange={onChange} />);
-    const big = new File([new Uint8Array(6 * 1024 * 1024)], 'big.jpg', { type: 'image/jpeg' });
-    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [big] } });
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.jpg'));
-    const sent = (fetchMock.mock.calls[0]![1] as { body: FormData }).body.get('file') as Blob;
-    expect(sent.size).toBeLessThan(1024);
-    expect(sent.size).not.toBe(big.size);
-    expect(sent.type).toBe('image/jpeg');
+    const { container } = render(<ImageUpload label="Ảnh" value="" onChange={onChange} {...props} />);
+    const pick = (file: File) => fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+    const sent = () => (fetchMock.mock.calls[0]![1] as { body: FormData }).body.get('file') as Blob;
+    return { onChange, pick, fetchMock, sent };
+  }
+  const file = (type: string, bytes: number, name = 'a') => new File([new Uint8Array(bytes)], name, { type });
+
+  it('Cloudinary: PNG gửi nguyên file, không đụng canvas', async () => {
+    const { toDataURL } = stubCanvasPipeline();
+    const m = await mount(true);
+    const png = file('image/png', 3 * 1024 * 1024, 'qr.png');
+    m.pick(png);
+    await waitFor(() => expect(m.onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.jpg'));
+    expect(m.sent()).toBe(png);
+    expect(toDataURL).not.toHaveBeenCalled();
+  });
+
+  it('Cloudinary: JPEG nhỏ và cạnh dài vừa gửi nguyên', async () => {
+    const { toDataURL } = stubCanvasPipeline({ width: 1200, height: 900 });
+    const m = await mount(true);
+    const jpg = file('image/jpeg', 200 * 1024, 'a.jpg');
+    m.pick(jpg);
+    await waitFor(() => expect(m.onChange).toHaveBeenCalled());
+    expect(m.sent()).toBe(jpg);
+    expect(toDataURL).not.toHaveBeenCalled();
+  });
+
+  it('Cloudinary: JPEG lớn nén cạnh dài 1600 bất kể maxDim của nơi gọi', async () => {
+    const { drawn } = stubCanvasPipeline();
+    const m = await mount(true, { maxDim: 1000, quality: 0.5 });
+    const big = file('image/jpeg', 6 * 1024 * 1024, 'big.jpg');
+    m.pick(big);
+    await waitFor(() => expect(m.onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.jpg'));
+    expect(m.sent().size).toBeLessThan(1024);
+    expect(m.sent().type).toBe('image/jpeg');
     expect(drawn[0]!.slice(3)).toEqual([1600, 1200]);
   });
 
-  it('Cloudinary lỗi: dùng chính bản đã nén làm dự phòng', async () => {
-    vi.stubEnv('VITE_CLOUDINARY_CLOUD_NAME', 'demo');
-    vi.stubEnv('VITE_CLOUDINARY_UPLOAD_PRESET', 'unsigned');
-    vi.resetModules();
+  it('Cloudinary: không giải mã được (HEIC, quá lớn) thì gửi nguyên file, không báo lỗi', async () => {
+    stubCanvasPipeline({ width: 4000, height: 3000 }, true);
+    const m = await mount(true);
+    const heic = file('image/jpeg', 6 * 1024 * 1024, 'x.jpg');
+    m.pick(heic);
+    await waitFor(() => expect(m.onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/a.jpg'));
+    expect(m.sent()).toBe(heic);
+    expect(screen.queryByText(/Tải ảnh thất bại/)).toBeNull();
+  });
+
+  it('Cloudinary lỗi: rơi về base64 đã nén', async () => {
     stubCanvasPipeline();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
-    const { ImageUpload } = await import('./image-upload');
-    const onChange = vi.fn();
-    const { container } = render(<ImageUpload label="Ảnh" value="" onChange={onChange} />);
-    fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith(COMPRESSED));
+    const m = await mount(true);
+    m.fetchMock.mockResolvedValue({ ok: false });
+    m.pick(file('image/png', 1000, 'a.png'));
+    await waitFor(() => expect(m.onChange).toHaveBeenCalledWith(COMPRESSED));
+  });
+
+  it('base64 (chưa cấu hình Cloudinary): phủ nền trắng trước khi vẽ, tôn trọng maxDim', async () => {
+    const { calls, drawn } = stubCanvasPipeline();
+    const m = await mount(false, { maxDim: 1000 });
+    m.pick(file('image/png', 1000, 'logo.png'));
+    await waitFor(() => expect(m.onChange).toHaveBeenCalledWith(COMPRESSED));
+    expect(m.fetchMock).not.toHaveBeenCalled();
+    expect(calls.indexOf('fillRect')).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf('fillRect')).toBeLessThan(calls.indexOf('drawImage'));
+    expect(drawn[0]!.slice(3)).toEqual([1000, 750]);
   });
 });
