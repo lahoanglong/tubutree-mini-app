@@ -5,7 +5,7 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 const mocks = vi.hoisted(() => ({ http: { get: vi.fn() } }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [], useRunningFlash: () => ({ flash: ([] as { endAt?: string }[]).filter((f) => !f.endAt || Date.parse(f.endAt) > Date.now()), now: Date.now() }) }));
 // Dải gợi ý cá nhân (/products/for-you) chỉ gọi khi đã đăng nhập; đường khách vãng lai có spec riêng ở pdp-rails.spec.tsx.
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 const cfg = vi.hoisted(() => ({ returnWindowDays: undefined as number | undefined }));

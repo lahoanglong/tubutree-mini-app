@@ -6,7 +6,8 @@ export { defaultVariationFor, pickDefaultVariation } from '@tubutree/app-core/fl
 /**
  * Giá Giờ vàng (flash sale) cho web shop, cùng quy tắc với giỏ hàng và đơn: giá Giờ vàng chỉ thắng khi RẺ HƠN giá đang bán
  * (salePrice ?? giá gốc), nên khách không thấy giá nhảy giữa trang chủ/chi tiết và giỏ. Dữ liệu đợt đang chạy lấy ở trình duyệt
- * (GET /flash-sales/active, không cache) chứ không nằm trong HTML ISR 5 phút, vì đợt bắt đầu/kết thúc theo từng phút.
+ * (GET /flash-sales/active, không cache) vì đợt bắt đầu/kết thúc theo từng phút; HTML ISR 5 phút của trang chi tiết chỉ mang bản gieo sẵn
+ * (server cache 60 giây, `FlashSalesSeed`) để lần vẽ đầu khỏi nhảy, và trình duyệt luôn hỏi lại ngay sau đó.
  */
 export interface FlashItem {
   itemId: string;
@@ -46,8 +47,9 @@ const pct = (price: number, original: number) => (original > 0 && price < origin
 export function cardPricing(
   product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string },
   flash: readonly FlashItem[],
+  now?: number,
 ): CardPricing {
-  const r = sharedCardPricing(product, flash);
+  const r = sharedCardPricing(product, flash, now);
   return {
     price: r.price,
     compareAt: r.compareAt,

@@ -5,7 +5,7 @@ import { makeFlashRefetchInterval } from '@tubutree/app-core/queries/flash-sale'
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
-import type { FlashItem } from '@/lib/flash-price';
+import { runningFlash, type FlashItem } from '@/lib/flash-price';
 
 /**
  * Đợt Giờ vàng đang chạy, dùng chung cho mọi thẻ sản phẩm trên trang: một lần gọi API (không qua React Query để các test render
@@ -95,31 +95,43 @@ function subscribe(onChange: () => void): () => void {
 }
 
 /**
- * Danh sách Giờ vàng do server tải sẵn cho trang ISR (trang sản phẩm): lần dựng đầu (HTML server và hydrate) đã biết giá/thanh Giờ vàng nên không chèn
- * thanh Giờ vàng hay đổi dòng giá sau hydrate. Nằm trong context (không ghi vào kho dùng chung) vì kho là biến của tiến trình server, dùng chung
- * giữa mọi yêu cầu và mọi trang.
+ * Danh sách Giờ vàng do server tải sẵn cho trang ISR (trang sản phẩm) cùng giờ lúc server dựng HTML (`now`): lần dựng đầu (HTML server và hydrate) đã biết
+ * giá/thanh Giờ vàng nên không chèn thanh Giờ vàng hay đổi dòng giá sau hydrate. Nằm trong context (không ghi vào kho dùng chung) vì kho là biến của
+ * tiến trình server, dùng chung giữa mọi yêu cầu và mọi trang.
  */
-const ServerSeed = createContext<readonly FlashItem[] | null>(null);
+const ServerSeed = createContext<{ items: readonly FlashItem[]; now: number } | null>(null);
+
+const subscribeNever = () => () => undefined;
 
 /**
- * Ở trình duyệt gieo luôn vào kho dùng chung (cùng mảng với context, nên React không thấy snapshot đổi sau hydrate) để khối khác của trang đọc cùng
- * dữ liệu. `fetchedAt` giữ 0: effect của `useActiveFlashSales` vẫn hỏi lại ngay, vì trang ISR có thể cũ hơn 60 giây.
+ * Ở trình duyệt gieo mảng này vào kho dùng chung (cùng mảng với context, nên React không thấy snapshot đổi sau hydrate) để khối khác của trang đọc cùng
+ * dữ liệu, nhưng KHÔNG đánh dấu `loaded`: bản ISR có thể cũ tới 5 phút, nên những việc chờ "danh sách thật đã về" (chọn phân loại mở sẵn) vẫn chờ lần hỏi
+ * đầu tiên của trình duyệt. `fetchedAt` giữ 0 để effect của `useActiveFlashSales` hỏi lại ngay.
  */
-export function FlashSalesSeed({ items: seed, children }: { items: readonly FlashItem[] | undefined; children: ReactNode }) {
-  if (typeof window !== 'undefined' && seed && !loaded) {
-    items = seed;
-    loaded = true;
-  }
-  return createElement(ServerSeed.Provider, { value: seed ?? null }, children);
+export function FlashSalesSeed({ items: seed, now, children }: { items: readonly FlashItem[] | undefined; now: number; children: ReactNode }) {
+  if (typeof window !== 'undefined' && seed && !loaded && items === NONE) items = seed;
+  return createElement(ServerSeed.Provider, { value: seed ? { items: seed, now } : null }, children);
 }
 
 export function useActiveFlashSales(): readonly FlashItem[] {
   const seed = useContext(ServerSeed);
-  const current = useSyncExternalStore(subscribe, () => items, () => seed ?? NONE);
+  const current = useSyncExternalStore(subscribe, () => items, () => seed?.items ?? NONE);
   useEffect(() => {
     ensureFresh();
   }, []);
   return current;
+}
+
+/**
+ * Đợt đang chạy cho trang sản phẩm, cùng `now` để mọi chỗ lọc/tính giá khớp nhau. Lần dựng hydrate dùng giờ server lúc dựng HTML (đợt hết giữa lúc dựng và lúc tải vẫn
+ * hiện như HTML, không lệch hydrate); ngay sau đó chuyển sang giờ máy chủ đã đồng bộ, đợt đã hết thì biến mất một lần. Trang không có gieo sẵn luôn dùng giờ đồng bộ.
+ */
+export function useRunningFlash(): { flash: FlashItem[]; now: number } {
+  const seed = useContext(ServerSeed);
+  const list = useActiveFlashSales();
+  const settled = useSyncExternalStore(subscribeNever, () => true, () => false);
+  const now = seed && !settled ? seed.now : serverNow();
+  return { flash: runningFlash(list, now), now };
 }
 
 /** Đã có kết quả đầu tiên (kể cả lỗi): trang chi tiết chờ cờ này rồi mới chốt phân loại mặc định. */

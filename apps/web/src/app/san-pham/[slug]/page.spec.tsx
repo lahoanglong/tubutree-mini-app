@@ -37,7 +37,7 @@ vi.mock('@/lib/core-http-server', () => ({
   }),
 }));
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash, FlashSalesSeed: ({ children }: { children: unknown }) => children }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash, useRunningFlash: () => ({ flash: (api.flash as { endAt?: string }[]).filter((f) => !f.endAt || Date.parse(f.endAt) > Date.now()), now: Date.now() }), FlashSalesSeed: ({ children }: { children: unknown }) => children }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => api.auth }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),

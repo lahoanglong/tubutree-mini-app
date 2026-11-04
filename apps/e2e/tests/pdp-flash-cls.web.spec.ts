@@ -64,3 +64,31 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
     expect(cls).toBeLessThan(CLS_MAX);
   });
 }
+
+test('PDP Giờ vàng: đợt đã hết giữa lúc server dựng HTML và lúc tải (đồng hồ máy khách chạy trước): hydrate không lỗi, thanh Giờ vàng biến mất sau hydrate', async ({ page, api, request }) => {
+  test.skip(!flash, 'DB e2e không phải DB tạm hoặc chưa có sản phẩm để gieo đợt Giờ vàng');
+  const f = flash!;
+  const html = await request.get(`http://localhost:${process.env.E2E_WEB_PORT}/san-pham/${f.slug}`).then((r) => r.text());
+  expect(html, 'HTML server phải đã có thanh Giờ vàng (đợt còn chạy lúc dựng)').toContain('flash-price-bar');
+  // Máy khách chạy trước 7 giờ: đợt gieo ở đây kết thúc sau 6 giờ nên với trình duyệt nó đã hết, còn HTML thì dựng lúc đợt còn chạy.
+  await page.addInitScript(() => {
+    const real = Date.now.bind(Date);
+    Date.now = () => real() + 7 * 3_600_000;
+  });
+  const problems: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' && /hydrat|did not match|Minified React error #4(18|19|2\d)/i.test(m.text())) problems.push(m.text());
+  });
+  page.on('pageerror', (e) => problems.push(String(e)));
+  api.get('/flash-sales/active', []);
+  api.get('/flash-sales/me/allowance', { items: {} });
+  api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+  api.get('/me/wishlist/ids', []);
+  api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
+  const p = `/products/${f.slug}`;
+  api.allowUnmocked(`GET ${p}`, `GET ${p}/related`, `GET ${p}/bought-together`, `GET ${p}/bundles`, `GET ${p}/reviews`, `GET ${p}/stock`, 'GET /products', 'GET /products/for-you', 'GET /me/coupons', 'POST /events');
+  await page.goto(`/san-pham/${f.slug}`);
+  await expect(page.getByTestId('flash-price-bar')).toHaveCount(0, { timeout: 20_000 });
+  await page.waitForTimeout(1000);
+  expect(problems).toEqual([]);
+});

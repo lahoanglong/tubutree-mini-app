@@ -1,8 +1,8 @@
 'use client';
 
-import { cardPricing, runningFlash, variationPricing, type VariationPricing } from '@/lib/flash-price';
+import { cardPricing, variationPricing, type VariationPricing } from '@/lib/flash-price';
 import { usePdpSelection } from './pdp-selection';
-import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { formatVnd } from '@/lib/api';
 import { Badge } from '@/components/mini/badge';
@@ -17,12 +17,12 @@ type PdpVariation = { id: string; retailPrice: number; salePrice?: number | null
  * ở đây chỉ hiện thêm từ lg (khối `pdp-flash-price`), điện thoại và md không lặp.
  */
 export function PdpPrice({ product }: { product: PricedProduct & { variations: PdpVariation[] } }) {
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash, now } = useRunningFlash();
   useFlashListExpiry(flash);
   const selectedId = usePdpSelection()?.selectedId;
   const selected = product.variations.find((v) => v.id === selectedId);
   if (!selected) {
-    const pricing = cardPricing(product, flash);
+    const pricing = cardPricing(product, flash, now);
     return (
       <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span data-testid="pdp-price" className="text-2xl font-bold text-stone-900">

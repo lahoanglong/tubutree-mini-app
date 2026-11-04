@@ -80,10 +80,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     orUndefined(publicConfigQuery(http).queryFn()),
   ]);
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.
-  const flash = flashAll?.filter((it) => new Date(it.endAt).getTime() > Date.now());
+  const generatedAt = Date.now();
+  const flash = flashAll?.filter((it) => new Date(it.endAt).getTime() > generatedAt);
   const hasFlash = (flash ?? []).some((f) => product.variations.some((v) => v.id === f.variationId));
   // Có Giờ vàng ở sản phẩm này thì mở sẵn đúng phân loại mà AddToCart sẽ chốt khi danh sách về (cùng `defaultVariationFor`), để giá không đổi hai lần.
-  const initialVariation = (hasFlash ? defaultVariationFor({ slug: product.slug }, product.variations, runningFlash(flash ?? [])) : undefined) ?? product.variations.find((v) => v.stock > 0) ?? product.variations[0];
+  const initialVariation = (hasFlash ? defaultVariationFor({ slug: product.slug }, product.variations, runningFlash(flash ?? [], generatedAt), generatedAt) : undefined) ?? product.variations.find((v) => v.stock > 0) ?? product.variations[0];
 
   const images = galleryImages(product);
   const description = plainText(product.description);
@@ -109,7 +110,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       >
         ← Về trang chủ
       </BackLink>
-      <FlashSalesSeed items={flash}>
+      <FlashSalesSeed items={flash} now={generatedAt}>
       <PdpSelectionProvider initialId={initialVariation?.id ?? ''}>
         <PdpLayout
           gallery={

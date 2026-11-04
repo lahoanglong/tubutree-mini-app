@@ -43,7 +43,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 
 import AddToCart from './add-to-cart';
 import { reconcileSelection, recallCheckoutSelection } from '@/lib/checkout-selection';
-import { resetFlashSales } from '@/lib/use-flash-sales';
+import { FlashSalesSeed, resetFlashSales } from '@/lib/use-flash-sales';
 
 const VARIATIONS = [
   { id: 'v1', name: '250ml', retailPrice: 200000, salePrice: 150000, stock: 5 },
@@ -590,6 +590,20 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     const { container } = mount();
     await flush();
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
+  it('trang ISR gieo danh sách rỗng, đợt Giờ vàng ở phân loại ?v= mới bắt đầu sau khi dựng: vẫn chờ danh sách thật rồi mở đúng phân loại đó', async () => {
+    openedFrom('?v=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
+    const r = render(
+      <FlashSalesSeed items={[]} now={Date.now()}>
+        <AddToCart slug="dau-goi" variations={VARIATIONS} />
+      </FlashSalesSeed>,
+    );
+    mounted.push(r);
+    await flush();
+    expect(mocks.getActiveFlashSales).toHaveBeenCalled();
+    expect(r.container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
   });
 
   it('vào từ nơi khác: giữ phân loại mặc định dù sản phẩm có Giờ vàng ở phân loại khác', async () => {

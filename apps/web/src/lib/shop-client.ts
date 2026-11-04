@@ -195,8 +195,8 @@ export async function getProductStock(slug: string): Promise<Record<string, numb
 }
 
 /**
- * Đợt Giờ vàng đang chạy (công khai, không cache): trang chủ/chi tiết là bản ISR 5 phút nên giá Giờ vàng không thể nằm trong
- * HTML; trình duyệt hỏi lại cái này để giá hiển thị khớp giá giỏ và đơn.
+ * Đợt Giờ vàng đang chạy (công khai, không cache), do trình duyệt hỏi. Trang chủ/chi tiết là bản ISR 5 phút: trang chi tiết gieo sẵn một bản server
+ * (cache 60 giây) cho lần vẽ đầu, nên danh sách này mới là bản đúng khi trình duyệt tải xong; giá hiển thị phải khớp giá giỏ và đơn.
  */
 export async function getActiveFlashSales(): Promise<FlashItem[]> {
   return fetchActiveFlashSales(coreHttp);

@@ -14,14 +14,14 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneBand, phoneBandPad, phoneCaption, phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
-import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
+import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
-import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
+import { useFlashSalesLoaded, useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { usePdpSelection } from './pdp-selection';
 import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
@@ -115,7 +115,7 @@ export default function AddToCart({
   const cartData = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data;
   const cartCount = cartData?.itemCount ?? 0;
   const cartLines = buyFreeze ? buyFreeze.lines : cartData?.items;
-  const flash = runningFlash(useActiveFlashSales());
+  const { flash } = useRunningFlash();
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
