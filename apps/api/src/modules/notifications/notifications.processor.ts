@@ -1,6 +1,6 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import { DelayedError, type Job } from 'bullmq';
+import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
 import { INAPP_RETRY_JOB, NotificationsService, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
 import { QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY } from '../../jobs/queues';
 import { captureServerError } from '../../config/sentry';
@@ -50,9 +50,11 @@ export class NotificationsProcessor extends WorkerHost {
   @OnWorkerEvent('failed')
   async onFailed(job: Job<ZnsSendJobData> | undefined, err: Error): Promise<void> {
     if (!job || job.name !== 'zns-send') return;
-    const stalled = /stalled/i.test(err?.message ?? '');
     const attempts = job.opts?.attempts ?? 1;
-    if (!stalled && job.attemptsMade < attempts) return;
+    // Chỉ cấu trúc mới cho biết BullMQ không chạy lại nữa; câu lỗi chỉ để chọn lời giải thích (lỗi DB/mạng có chữ "stalled" ở lượt chưa cuối vẫn được chạy lại).
+    const unrecoverable = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
+    if (!unrecoverable && job.attemptsMade < attempts) return;
+    const stalled = /stalled/i.test(err?.message ?? '');
     const logId = job.data?.notificationLogId;
     if (!logId) return;
     const why = stalled ? 'job bị treo quá giới hạn của hàng đợi' : 'job hỏng ở lượt cuối, không còn lượt thử lại';

@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { DelayedError, type Job } from 'bullmq';
+import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
 import { NotificationsProcessor } from './notifications.processor';
 import { znsQuietDelayMs, type NotificationsService, type ZnsDeliveryOutcome, type ZnsSendJobData } from './notifications.service';
 
@@ -96,10 +96,23 @@ describe('NotificationsProcessor: job ZNS hỏng hẳn (sự kiện failed của
     expect(closeStuckZnsLog).not.toHaveBeenCalled();
   });
 
-  it('lỗi stalled quá giới hạn → đóng log dù attemptsMade chưa tới attempts', async () => {
+  it('UnrecoverableError ở lượt chưa cuối (BullMQ không chạy lại) → đóng log', async () => {
     const { processor, closeStuckZnsLog, job } = setupFailed();
-    await processor.onFailed(job({ attemptsMade: 1 }), new Error('job stalled more than allowable limit'));
+    await processor.onFailed(job({ attemptsMade: 1 }), new UnrecoverableError('job stalled more than allowable limit'));
     expect(closeStuckZnsLog).toHaveBeenCalledWith('log-1', expect.stringContaining('treo'));
+  });
+
+  it('lỗi có name UnrecoverableError (khác bản bullmq nạp) ở lượt chưa cuối → đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    const err = Object.assign(new Error('x'), { name: 'UnrecoverableError' });
+    await processor.onFailed(job({ attemptsMade: 1 }), err);
+    expect(closeStuckZnsLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('Error thường có chữ "stalled" ở lượt chưa cuối (BullMQ còn chạy lại) → KHÔNG đóng log', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    await processor.onFailed(job({ attemptsMade: 1 }), new Error('connection stalled: ECONNRESET'));
+    expect(closeStuckZnsLog).not.toHaveBeenCalled();
   });
 
   it('job không phải zns-send (inapp-retry cũ) → bỏ qua', async () => {
