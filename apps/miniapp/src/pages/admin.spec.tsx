@@ -723,6 +723,20 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled());
     });
 
+    it('Ca chuẩn: làm mới danh sách lỗi khi đã có dữ liệu cũ thì vẫn hiện lỗi + Thử lại (nút Thêm khoá có lời giải thích)', async () => {
+      await openShifts();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));
+      expect(await screen.findByText('Ca sáng · 08:00–12:00')).toBeInTheDocument();
+      mocks.adminGetTemplates.mockRejectedValueOnce(new Error('mạng chập chờn'));
+      fireEvent.click(screen.getByRole('button', { name: 'Xoá ca chuẩn Ca sáng' }));
+      expect(await screen.findByText('mạng chập chờn')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Tên ca'), { target: { value: 'Ca tối' } });
+      expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      await waitFor(() => expect(screen.queryByText('mạng chập chờn')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Thêm ca chuẩn' })).toBeEnabled());
+    });
+
     it('Ca chuẩn: tên trùng ca đã có (không phân biệt hoa thường) thì báo và không cho thêm', async () => {
       await openShifts();
       fireEvent.click(screen.getByRole('button', { name: 'Ca chuẩn' }));

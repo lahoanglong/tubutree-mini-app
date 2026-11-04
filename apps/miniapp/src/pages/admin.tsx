@@ -1093,7 +1093,7 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {tplQ.isLoading && <Skeleton height={60} radius="var(--radius-card)" />}
-        {tplQ.isError && !tplQ.data && (
+        {tplQ.isError && (
           <ErrorState variant="inline" message={getLoadErrorMessage(tplQ.error)} onRetry={() => void tplQ.refetch()} />
         )}
         {(tplQ.data ?? []).map((t) => (
