@@ -114,31 +114,40 @@ Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng d
 | `20261104140500_review_image_versions_backfill` | `UPDATE reviews` điền `imageVersions` cho mọi đánh giá có ảnh: giải nén mảng `images` và băm `md5` từng ảnh `data:` (base64, nặng CPU theo dung lượng ảnh, không theo số dòng). Cột `imageVersions` do `20261104140000_review_image_versions` thêm riêng trước đó (chỉ ADD COLUMN). Chỉ khoá dòng của `reviews` (row lock), không khoá bảng, không đụng `orders` (`ordersLock: false`). Chạy lại không đổi (chỉ dòng chưa có phiên bản) | Đếm trước trên PROD: `psqlq -tAc "SELECT count(*) FROM reviews WHERE EXISTS (SELECT 1 FROM unnest(images) i WHERE i LIKE 'data:image%')"`; số dòng càng lớn và ảnh càng nặng thì càng lâu, tính vào cửa sổ. Mở rộng một chiều (thêm dữ liệu, không xoá `images`), image cũ vẫn chạy; hoàn tác = image cũ, cột thừa vô hại |
 | `20261104141000_product_thumbnail_ref` | `UPDATE products` đổi `thumbnail` là ảnh base64 trùng ảnh đầu thành đường dẫn `/public-image/product/<id>/0?v=...` (băm `md5` ảnh đầu) cho sản phẩm đã từng duyệt. Chỉ khoá dòng của `products` (row lock), không khoá bảng, không đụng `orders` (`ordersLock: false`). Chạy lại không khớp dòng nào | Đếm trước trên PROD: `psqlq -tAc "SELECT count(*) FROM products WHERE thumbnail LIKE 'data:image/%'"` (và tổng `SELECT count(*) FROM products` để so); tính vào cửa sổ. Không đổi schema, image cũ vẫn chạy (`thumbnail` vẫn là chuỗi, endpoint `/public-image` đã có từ trước); hoàn tác = image cũ, thumbnail đã đổi giữ nguyên đường dẫn, muốn lại data URL gốc thì khôi phục backup (7.3) |
 | `20261104142500_feed_post_image_summary_backfill` | `UPDATE feed_posts` điền `imageCount` và `coverRef` cho bài có ảnh: giải nén mảng `images` một lần mỗi bài (`unnest` qua subquery, `md5` ảnh đầu nếu là `data:`). Chỉ khoá dòng của `feed_posts` (row lock), không khoá bảng, không đụng `orders` (`ordersLock: false`). Cột do `20261104142000_feed_post_image_summary` thêm riêng trước đó. Chạy lại không đổi (chỉ bài `imageCount = 0`) | Đếm trước trên PROD: `psqlq -tAc "SELECT count(*) FROM feed_posts WHERE cardinality(images) > 0"`; tính vào cửa sổ. Mở rộng một chiều (không xoá `images`), image cũ vẫn chạy; hoàn tác = image cũ, cột thừa vô hại |
-| `20261104160500_user_affiliate_revoked_backfill` | `UPDATE users SET affiliateRevokedAt = now()` cho bốn nhóm: khách (`role = CUSTOMER`) còn hoa hồng CTV (khi cấu hình không cho khách hưởng hoa hồng), khách còn gian hàng CTV, khách có sự kiện hạ từ CTV/đại lý về khách, và người đang là đại lý/CTV có sự kiện hạ về khách mà sau đó không có sự kiện đặt lại CTV/đại lý do admin ghi tay (`setUserRole`, sự kiện ROLE không có `reason`; thu hồi nhân viên và duyệt hồ sơ không tính). Migration thêm cột `20261104160000_user_affiliate_revoked_at` chạy riêng trước đó (chỉ ADD COLUMN nullable). Sau khi chạy, những người này không tự đăng ký lại CTV và không rút hoa hồng/nhận thưởng mốc được; cần mở lại thì admin đặt lại vai trò CTV | Chạy trước truy vấn đếm từng nhóm ở khối ngay dưới bảng (chỉ đọc; số có thể chồng nhau giữa các nhóm); thời gian tỉ lệ số user; không khoá `orders` (`ordersLock: false`); tính vào cửa sổ |
+| `20261104160500_user_affiliate_revoked_backfill` | `UPDATE users SET affiliateRevokedAt = now()` phát lại điều `setUserRole` sẽ làm, bất kể vai trò hiện tại, theo sổ `user_admin_events` (có từ `20261014150100`). Chỉ sự kiện ROLE không có `reason` (chỉ `setUserRole` ghi như vậy) đặt hoặc xoá dấu: đặt khi về khách từ CTV/đại lý, hoặc từ nhân viên/admin mà người đó còn hoa hồng hoặc gian hàng CTV; xoá khi sang CTV/đại lý. Có dấu khi sự kiện đặt/xoá GẦN NHẤT là sự kiện đặt. Cấp/thu hồi nhân viên và duyệt hồ sơ đại lý không tính. Người chưa có sự kiện ROLE nào (hạ từ trước khi có sổ): khách có gian hàng CTV, hoặc có hoa hồng khi cấu hình `affiliate.commission_eligible_roles` không có CUSTOMER. Migration thêm cột `20261104160000_user_affiliate_revoked_at` chạy riêng trước đó (chỉ ADD COLUMN nullable). Sau khi chạy, những người này không tự đăng ký lại CTV và không rút hoa hồng/nhận thưởng mốc được; cần mở lại thì admin đặt lại vai trò CTV/đại lý | Chạy trước truy vấn đếm ở khối ngay dưới bảng (chỉ đọc; mỗi dòng là một nhóm, nhóm không chồng nhau); thời gian tỉ lệ số user; không khoá `orders` (`ordersLock: false`); tính vào cửa sổ
 | `20261020120000_q19_reversal_effects_marker` | Thêm cột `orders.reversalEffectsAt` (đánh dấu phần đảo sau huỷ/trả đã xong), `UPDATE orders` điền sẵn mốc cho mọi đơn đã `CANCELLED` hoặc `RETURNED` (để cron chạy lại không quét lịch sử), rồi dựng chỉ mục từng phần `orders_reversal_effects_pending_idx` không `CONCURRENTLY`: khoá chặn ghi `orders` lúc dựng. Cột mới nullable nên image cũ vẫn chạy, nhưng không ghi mốc: đơn huỷ/trả trong lúc chạy image cũ sẽ được cron của image mới chạy lại phần đảo (idempotent). Hoàn tác = khôi phục backup (7.3). Đi kèm `ReversalEffectsResyncCron`: 5 phút một lượt, quét đơn huỷ/trả thiếu mốc quá 5 phút và cập nhật trong 14 ngày, tối đa 200 đơn mỗi lượt | Thời gian tỉ lệ số đơn; tính vào cửa sổ và vào `db.orders_lock` |
 
 
-Đếm trước trên PROD số người mà mỗi nhóm của `20261104160500_user_affiliate_revoked_backfill` sẽ đánh dấu (chỉ đọc, không ghi; chạy bằng `psqlq`):
+Đếm trước trên PROD số người mà `20261104160500_user_affiliate_revoked_backfill` sẽ đánh dấu (chỉ đọc, không ghi; chạy bằng `psqlq`). Mỗi người chỉ rơi vào một dòng: `su_kien_gan_nhat_la_ha_quyen` theo vai trò hiện tại, hoặc `ha_tu_truoc_khi_co_so`:
 
 ```bash
 psqlq -tAc "
-SELECT 'khach_con_hoa_hong' AS nhom, count(*) FROM users u WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role = 'CUSTOMER'
-  AND EXISTS (SELECT 1 FROM commissions c WHERE c.\"affiliateUserId\" = u.id)
-  AND NOT EXISTS (SELECT 1 FROM system_configs sc WHERE sc.key = 'affiliate.commission_eligible_roles' AND jsonb_typeof(sc.value) = 'array' AND sc.value @> '[\"CUSTOMER\"]'::jsonb)
+WITH last_ev AS (
+  SELECT DISTINCT ON (e.\"userId\") e.\"userId\", e.\"toValue\"
+  FROM user_admin_events e JOIN users u ON u.id = e.\"userId\"
+  WHERE e.kind = 'ROLE' AND e.reason IS NULL
+    AND (e.\"toValue\" IN ('AFFILIATE', 'DEALER')
+      OR (e.\"toValue\" = 'CUSTOMER' AND (e.\"fromValue\" IN ('AFFILIATE', 'DEALER')
+        OR (e.\"fromValue\" IN ('STAFF', 'ADMIN')
+          AND (EXISTS (SELECT 1 FROM commissions c WHERE c.\"affiliateUserId\" = u.id)
+            OR EXISTS (SELECT 1 FROM storefronts s WHERE s.\"ownerUserId\" = u.id AND s.type = 'CTV'))))))
+  ORDER BY e.\"userId\", e.\"createdAt\" DESC, e.id DESC
+)
+SELECT 'su_kien_gan_nhat_la_ha_quyen: ' || u.role AS nhom, count(*)
+FROM users u JOIN last_ev l ON l.\"userId\" = u.id
+WHERE u.\"affiliateRevokedAt\" IS NULL AND l.\"toValue\" = 'CUSTOMER'
+GROUP BY u.role
 UNION ALL
-SELECT 'khach_con_gian_hang_ctv', count(*) FROM users u WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role = 'CUSTOMER'
-  AND EXISTS (SELECT 1 FROM storefronts s WHERE s.\"ownerUserId\" = u.id AND s.type = 'CTV')
-UNION ALL
-SELECT 'khach_co_su_kien_ha_quyen', count(*) FROM users u WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role = 'CUSTOMER'
-  AND EXISTS (SELECT 1 FROM user_admin_events e WHERE e.\"userId\" = u.id AND e.kind = 'ROLE' AND e.\"fromValue\" IN ('AFFILIATE', 'DEALER') AND e.\"toValue\" = 'CUSTOMER')
-UNION ALL
-SELECT 'dai_ly_ctv_ha_roi_ve_lai_khong_qua_setUserRole', count(*) FROM users u WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role IN ('AFFILIATE', 'DEALER')
-  AND EXISTS (SELECT 1 FROM user_admin_events e WHERE e.\"userId\" = u.id AND e.kind = 'ROLE' AND e.\"fromValue\" IN ('AFFILIATE', 'DEALER') AND e.\"toValue\" = 'CUSTOMER'
-    AND NOT EXISTS (SELECT 1 FROM user_admin_events r WHERE r.\"userId\" = u.id AND r.kind = 'ROLE' AND r.reason IS NULL AND r.\"toValue\" IN ('AFFILIATE', 'DEALER') AND r.\"createdAt\" >= e.\"createdAt\"))
+SELECT 'ha_tu_truoc_khi_co_so', count(*) FROM users u
+WHERE u.\"affiliateRevokedAt\" IS NULL AND u.role = 'CUSTOMER'
+  AND NOT EXISTS (SELECT 1 FROM user_admin_events a WHERE a.\"userId\" = u.id AND a.kind = 'ROLE')
+  AND (EXISTS (SELECT 1 FROM storefronts s WHERE s.\"ownerUserId\" = u.id AND s.type = 'CTV')
+    OR (EXISTS (SELECT 1 FROM commissions c WHERE c.\"affiliateUserId\" = u.id)
+      AND NOT EXISTS (SELECT 1 FROM system_configs sc WHERE sc.key = 'affiliate.commission_eligible_roles' AND jsonb_typeof(sc.value) = 'array' AND sc.value @> '[\"CUSTOMER\"]'::jsonb)))
 "
 ```
 
-Nhóm thứ tư là những người hạ về khách rồi thành đại lý/CTV lại mà không có lần đặt lại tường minh: xem từng người trước khi deploy, vì người được duyệt hồ sơ đại lý hợp lệ sau lần hạ cũng nằm trong nhóm này và sẽ bị chặn rút cho đến khi admin đặt lại vai trò.
+Dòng theo vai trò `AFFILIATE`/`DEALER` là người hạ về khách rồi thành CTV/đại lý lại không qua `setUserRole` (tự đăng ký, duyệt hồ sơ đại lý, thu hồi nhân viên); `STAFF`/`ADMIN` là người hạ rồi lên nhân viên. Xem từng người trước khi deploy: người được duyệt hồ sơ đại lý hợp lệ sau lần hạ cũng nằm trong nhóm và sẽ bị chặn rút cho đến khi admin đặt lại vai trò.
 
 Ba truy vấn kiểm PD-3 (chỉ cần khi danh sách có `pd3_xu_to_points`; chỉ đọc):
 

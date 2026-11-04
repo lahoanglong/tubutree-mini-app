@@ -308,4 +308,81 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     });
     expect(Object.fromEntries(marks)).toEqual({ [viaStaff.u.id]: true, [reinstated.u.id]: false, [healthy.u.id]: false });
   });
+  describe('backfill phát lại đúng điều mã mới sẽ làm (sự kiện ROLE gần nhất của setUserRole quyết định)', () => {
+    async function ctvWithPhone() {
+      const ctv = await ctvWithCommission(60_000);
+      const phone = newPhone();
+      await prisma.user.update({ where: { id: ctv.id }, data: { phone } });
+      return { id: ctv.id, phone };
+    }
+    /** Giả lập trạng thái trước deploy: mã cũ chưa có cột nên không dấu nào còn lại. */
+    const preDeploy = (id: string) => prisma.user.update({ where: { id }, data: { affiliateRevokedAt: null } });
+    async function markedAfterBackfill(ids: string[]) {
+      const marks = await rolledBack(async (tx) => {
+        await tx.$executeRawUnsafe(BACKFILL_SQL);
+        return (await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, affiliateRevokedAt: true } })).map((u) => [u.id, u.affiliateRevokedAt !== null] as const);
+      });
+      return Object.fromEntries(marks);
+    }
+
+    it('B: CTV hạ về khách rồi lên nhân viên qua setUserRole hoặc addGrant → có dấu', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin, rbac } = adminServices();
+      const viaSetRole = await ctvWithPhone();
+      await admin.setUserRole(boss.id, viaSetRole.phone, 'CUSTOMER');
+      await admin.setUserRole(boss.id, viaSetRole.phone, 'STAFF');
+      const viaGrant = await ctvWithPhone();
+      await admin.setUserRole(boss.id, viaGrant.phone, 'CUSTOMER');
+      await rbac.addGrant(boss.id, viaGrant.phone, 'STAFF');
+      for (const u of [viaSetRole, viaGrant]) {
+        expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).role).toBe('STAFF');
+        await preDeploy(u.id);
+      }
+      expect(await markedAfterBackfill([viaSetRole.id, viaGrant.id])).toEqual({ [viaSetRole.id]: true, [viaGrant.id]: true });
+    });
+
+    it('A: CTV tốt được cấp rồi thu hồi nhân viên → về khách nhưng KHÔNG có dấu', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { rbac } = adminServices();
+      const good = await ctvWithPhone();
+      await rbac.addGrant(boss.id, good.phone, 'STAFF');
+      await rbac.revokeGrant(boss.id, good.phone);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: good.id } })).role).toBe('CUSTOMER');
+      expect(await markedAfterBackfill([good.id])).toEqual({ [good.id]: false });
+    });
+
+    it('hạ rồi cấp lại CTV bằng setUserRole, sau đó cấp và thu hồi nhân viên → sự kiện gần nhất là cấp lại nên KHÔNG có dấu', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin, rbac } = adminServices();
+      const u = await ctvWithPhone();
+      await admin.setUserRole(boss.id, u.phone, 'CUSTOMER');
+      await admin.setUserRole(boss.id, u.phone, 'AFFILIATE');
+      await rbac.addGrant(boss.id, u.phone, 'STAFF');
+      await rbac.revokeGrant(boss.id, u.phone);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).role).toBe('CUSTOMER');
+      expect(await markedAfterBackfill([u.id])).toEqual({ [u.id]: false });
+    });
+
+    it('nhân viên có dấu vết CTV bị hạ về khách bằng setUserRole → có dấu; nhân viên chưa từng bán thì không', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin } = adminServices();
+      const seller = await ctvWithPhone();
+      await prisma.user.update({ where: { id: seller.id }, data: { role: 'STAFF' } });
+      await admin.setUserRole(boss.id, seller.phone, 'CUSTOMER');
+      const plainPhone = newPhone();
+      const plain = await createUser(prisma, { role: 'STAFF', phone: plainPhone });
+      await admin.setUserRole(boss.id, plainPhone, 'CUSTOMER');
+      await preDeploy(seller.id);
+      expect(await markedAfterBackfill([seller.id, plain.id])).toEqual({ [seller.id]: true, [plain.id]: false });
+    });
+
+    it('CTV hạ về khách rồi tự đăng ký lại (role AFFILIATE, không có sự kiện ROLE sau lần hạ) → có dấu', async () => {
+      const boss = await createUser(prisma, { role: 'ADMIN' });
+      const { admin } = adminServices();
+      const u = await ctvWithPhone();
+      await admin.setUserRole(boss.id, u.phone, 'CUSTOMER');
+      await prisma.user.update({ where: { id: u.id }, data: { role: 'AFFILIATE', affiliateRevokedAt: null } });
+      expect(await markedAfterBackfill([u.id])).toEqual({ [u.id]: true });
+    });
+  });
 });
