@@ -4,7 +4,7 @@ import type { BrandCount } from '@tubutree/app-core/api/catalog';
 import { hubBrands } from '@tubutree/app-core/browse/hub';
 import { avatarInitial, avatarTone } from '@tubutree/app-core/initials-avatar';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { sizedImage } from '@/lib/image-src';
+import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { Section, SectionHeader, Text } from '@/components/mini';
 
 const AVATAR = 48;
@@ -62,6 +62,7 @@ export function BrandGrid({ brands, onSelect }: BrandGridProps) {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={sizedImage(b.logoUrl, AVATAR).src}
+                onError={fallBackToOriginal(b.logoUrl)}
                 alt=""
                 width={AVATAR}
                 height={AVATAR}

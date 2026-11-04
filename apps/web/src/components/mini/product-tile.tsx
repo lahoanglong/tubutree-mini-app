@@ -121,7 +121,9 @@ export function ProductTile({
   const caption = CAPTION_NAME.has(variant);
   const hasMetaRow = variant === 'grid' || variant === 'rail-md' || variant === 'rank';
   const rankSpoken = view.rank !== null && variant === 'rank' ? (rankPlain ? fillTileCopy('rank.plain') : fillTileCopy('rank.spoken', { n: view.rank })) : null;
-  const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price, noteSpoken ?? null]
+  // Nhãn đầu tên đã nằm trong tên truy cập của liên kết (aria-label), không đọc lại ở mô tả; chỉ nhãn trên ảnh (giảm %, Giờ vàng) cần ở đây.
+  const imageBadgeSpoken = view.imageBadge?.spoken ?? null;
+  const description = [rankSpoken, view.spoken.stock, imageBadgeSpoken, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price, noteSpoken ?? null]
     .filter((x): x is string => Boolean(x))
     .join(', ');
   const hasNote = note !== undefined;
@@ -179,8 +181,9 @@ export function ProductTile({
         <ProductImage
           src={view.thumbnail}
           brand={view.brandLine ?? ''}
-          // Ảnh là anh em của liên kết tên (liên kết chỉ phủ lên bằng ::after), không nằm trong nó nên alt không lặp tên liên kết.
-          alt={view.name}
+          // Trang trí: liên kết phủ lên ảnh đã gọi tên sản phẩm; alt có chữ thì trình đọc màn hình đọc tên hai lần và dừng hai lần mỗi thẻ.
+          alt=""
+
           width={IMAGE_WIDTH[variant]}
           sizes={imageSizes ?? IMAGE_SIZES[variant]}
           size={isLine ? undefined : 400}

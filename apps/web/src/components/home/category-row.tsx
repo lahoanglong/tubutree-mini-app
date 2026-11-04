@@ -4,7 +4,7 @@ import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING, CATEGORY_SCROLL_COLUMNS, CATEGORY_TILE_SIZE, categoryGridScrolls, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
-import { sizedImage } from '@/lib/image-src';
+import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { Icon, ScrollRow, SectionHeader, Skeleton, Text } from '@/components/mini';
 
 const TILE = CATEGORY_TILE_SIZE;
@@ -103,7 +103,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
                   >
                     {e.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={sizedImage(e.image, TILE).src} alt="" width={TILE} height={TILE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={sizedImage(e.image, TILE).src} onError={fallBackToOriginal(e.image)} alt="" width={TILE} height={TILE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <Icon icon={e.icon} size="lg" tone="current" />
                     )}

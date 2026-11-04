@@ -79,11 +79,18 @@ describe('BannerCarousel: ảnh slide (Pa3)', () => {
     expect(imgs).toHaveLength(3);
     for (const img of imgs) {
       expect(img.getAttribute('src')).toContain('/img?w=');
-      expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w$/);
+      expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w, https:\/\/content\.pancake\.vn\/2-26\/[a-z0-9]+\.jpg 1920w$/);
       expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px');
     }
     expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'lazy', 'lazy']);
     expect(imgs.map((i) => i.getAttribute('fetchpriority'))).toEqual(['high', null, null]);
+  });
+
+  it('ảnh gốc là ứng viên cuối của srcset (desktop 2x không bị mờ); nơi gọi truyền `sizes` riêng thì ảnh dùng đúng giá trị đó', () => {
+    mountPlain(<BannerCarousel slides={PANCAKE_SLIDES.slice(0, 1)} sizes="min(100vw - 48px, 1152px)" />);
+    const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
+    expect(img.getAttribute('srcset')!.endsWith(`${PANCAKE_SLIDES[0]!.image} 1920w`)).toBe(true);
+    expect(img.getAttribute('sizes')).toBe('min(100vw - 48px, 1152px)');
   });
 
   it('host lạ: giữ URL gốc, không srcset', () => {

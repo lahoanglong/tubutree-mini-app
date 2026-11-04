@@ -21,6 +21,8 @@ export interface BannerCarouselProps {
   slides: BannerSlide[];
   /** Dưới 5000 thì vẫn lấy 5000 (WCAG 2.2.2); chỉ để kéo dài. */
   intervalMs?: number;
+  /** `sizes` của ảnh slide; mặc định theo Trang chủ (lg chiếm 8/12 cột). */
+  sizes?: string;
 }
 
 const SETTLE_MS = 700;
@@ -41,12 +43,14 @@ const DOT_BTN: CSSProperties = {
 };
 
 /** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
-const SLIDE_SIZES = '(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px';
+export const SLIDE_SIZES = '(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), 728px';
+/** Banner Ưu đãi ở lg tràn cả khung nội dung 1200px (~1152px), không chia cột như Trang chủ. */
+export const WIDE_SLIDE_SIZES = '(max-width: 767px) calc(100vw - 32px), (max-width: 1023px) calc(100vw - 48px), min(100vw - 48px, 1152px)';
 const SLIDE_MAX_WIDTH = 728;
 
-function SlideImage({ slide, eager }: { slide: BannerSlide; eager: boolean }) {
+function SlideImage({ slide, eager, sizes }: { slide: BannerSlide; eager: boolean; sizes: string }) {
   const [failed, setFailed] = useState(false);
-  const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, SLIDE_SIZES);
+  const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, sizes, true);
   const frame: CSSProperties = { display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', borderRadius: 'var(--radius-media)', objectFit: 'cover' };
   if (failed) {
     return (
@@ -94,7 +98,7 @@ const isPauseButton = (node: EventTarget | null) => node instanceof Element && n
  * gặp trước các slide. Slide không hiện là `inert` nên Tab không rơi vào liên kết nằm ngoài khung nhìn. Cuộn ngang tự vuốt
  * (scroll-snap), không có thư viện carousel.
  */
-export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
+export function BannerCarousel({ slides, intervalMs, sizes }: BannerCarouselProps) {
   const count = slides.length;
   const trackRef = useRef<HTMLDivElement>(null);
   const settleUntil = useRef(0);
@@ -217,7 +221,7 @@ export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
             style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start' }}
           >
             <Link href={s.href} className="tubu-press" style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
-              <SlideImage slide={s} eager={i === 0} />
+              <SlideImage slide={s} eager={i === 0} sizes={sizes ?? SLIDE_SIZES} />
             </Link>
           </div>
         ))}

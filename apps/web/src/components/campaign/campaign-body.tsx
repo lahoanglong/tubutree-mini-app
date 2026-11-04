@@ -9,7 +9,7 @@ import { campaignProductsQuery } from '@tubutree/app-core/queries/campaign';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
-import { sizedImage } from '@/lib/image-src';
+import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { loadErrorText } from '@/lib/error-text';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { Button, ProductGrid, SectionHeader, Text, VoucherTicket } from '@/components/mini';
@@ -64,7 +64,7 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
   const couponsLabel = fillCopy('campaign.sectionCoupons');
   const productsLabel = fillCopy('campaign.sectionProducts');
   const showProducts = c.productCount > 0;
-  const hero = sizedImage(c.image ?? '', HERO_MAX_WIDTH, HERO_SIZES);
+  const hero = sizedImage(c.image ?? '', HERO_MAX_WIDTH, HERO_SIZES, true);
   return (
     <>
       <PageHeader title={c.title} {...(c.subtitle ? { subtitle: c.subtitle } : {})} backHref="/" backLabel={fillCopy('campaign.backHome')} />
@@ -75,7 +75,8 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
             src={hero.src}
             srcSet={hero.srcSet}
             sizes={hero.sizes}
-            alt={c.title}
+            onError={fallBackToOriginal(c.image)}
+            alt="" // trang trí: h1 ngay trên đã gọi tên
             loading="eager"
             fetchPriority="high"
             decoding="async"

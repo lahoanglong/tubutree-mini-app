@@ -12,7 +12,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { BrandActions, BrandDealerBlock } from '@/app/brand/[slug]/brand-actions';
 import type { BrandDetail, ProductCard as ProductCardData } from '@/lib/api';
 import { copyText } from '@/lib/copy-text';
-import { sizedImage } from '@/lib/image-src';
+import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { StoreLayout } from '@/components/layouts/store-layout';
 import { Badge } from '@/components/mini/badge';
 import { EmptyState } from '@/components/mini/empty-state';
@@ -224,6 +224,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                             src={img.src}
                             srcSet={img.srcSet}
                             sizes={img.sizes}
+                            onError={fallBackToOriginal(src)}
                             alt={`${b.name}, ảnh ${i + 1}`}
                             width={STORY_IMAGE_WIDTH}
                             height={160}

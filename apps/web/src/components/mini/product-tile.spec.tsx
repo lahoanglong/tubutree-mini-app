@@ -352,14 +352,23 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     const lazy = tile(v, 'grid').querySelector('img')!;
     expect(lazy.getAttribute('loading')).toBe('lazy');
     expect(lazy.getAttribute('fetchpriority')).toBeNull();
-    expect(lazy.getAttribute('alt')).toBe('Serum Bã Trầu');
+    expect(lazy.getAttribute('alt')).toBe('');
   });
 
-  it('ảnh sản phẩm có alt = tên (ảnh là anh em của liên kết tên, không nằm trong nó nên không trùng lặp tên liên kết)', () => {
+  it('ảnh sản phẩm là trang trí (alt rỗng): liên kết phủ lên đã gọi tên, alt có chữ làm đọc tên hai lần và hai điểm dừng mỗi thẻ', () => {
     const c = tile(viewOf({ thumbnail: 'https://cdn.example/a.jpg' }), 'grid');
-    const img = c.querySelector('img')!;
-    expect(img.getAttribute('alt')).toBe('Serum Bã Trầu');
-    expect(link(c).contains(img)).toBe(false);
+    expect(c.querySelector('img')!.getAttribute('alt')).toBe('');
+  });
+
+  it('nhãn đầu tên đã nằm trong tên liên kết thì không đọc lại ở mô tả; nhãn trên ảnh (giảm %) vẫn ở mô tả', () => {
+    const v = viewOf({ isFeatured: true }, 'grid');
+    const c = tile(v, 'grid');
+    const text = v.label!.text;
+    expect(link(c).getAttribute('aria-label')!.startsWith(text)).toBe(true);
+    expect(described(c)).not.toContain(v.label!.spoken);
+    const sale = viewOf({ basePrice: 52_000, salePrice: 39_000 }, 'grid');
+    expect(sale.imageBadge).not.toBeNull();
+    expect(described(tile(sale, 'grid'))).toContain(sale.imageBadge!.spoken);
   });
 
   it('tên truy cập của liên kết bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3): có nhãn đầu tên thì "nhãn tên", không thì chỉ tên', () => {
