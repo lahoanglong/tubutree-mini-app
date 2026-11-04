@@ -13,7 +13,7 @@ import { actionErrorText } from '@/lib/admin-error-text';
 export const PAYMENT_UNLINKED_OPEN_TEXT =
   'Pancake báo đã thanh toán nhưng đơn chưa gắn đúng đơn Pancake. Đối chiếu sao kê: khách đã chuyển thì bấm "Đã nhận tiền".';
 export const PAYMENT_UNLINKED_CLOSED_TEXT =
-  'Pancake báo đã thanh toán cho đơn đã huỷ/trả. Quản trị viên đối chiếu sao kê: khách đã chuyển thì ghi tiền về muộn, rồi bấm "Đã đối chiếu".';
+  'Pancake báo đã thanh toán cho đơn đã huỷ/trả. Quản trị viên đối chiếu sao kê: khách đã chuyển thì ghi tiền về muộn; việc này không tự đóng, nên bấm "Đã đối chiếu" kèm ghi chú.';
 
 /** Lời cho người không có nút trong tay (KHO/CSKH): chỉ nói việc đang chờ ai. */
 export const PAYMENT_UNLINKED_OPEN_NEUTRAL_TEXT = 'Pancake báo đã thanh toán nhưng đơn chưa gắn đúng đơn Pancake. Kế toán đang đối chiếu sao kê.';
@@ -51,12 +51,17 @@ export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { o
     queryFn: () => getOrderStatusHistory(order.id || order.code),
     enabled: flagged,
   });
-  const payments = (historyQ.data?.history ?? []).filter((h) => h.actorType === 'PANCAKE' && (h.note ?? '').startsWith(UNLINKED_HISTORY_PREFIX));
+  // Chỉ các khoản của đợt cờ hiện tại: từ mốc đầu (khoản cũ đã "Đã đối chiếu" hoặc đã PAID không hiện lại).
+  const sinceMs = order.paymentUnlinkedFirstAt ? new Date(order.paymentUnlinkedFirstAt).getTime() : 0;
+  const payments = (historyQ.data?.history ?? []).filter(
+    (h) => h.actorType === 'PANCAKE' && (h.note ?? '').startsWith(UNLINKED_HISTORY_PREFIX) && new Date(h.createdAt).getTime() >= sinceMs,
+  );
 
   const resolve = useMutation({
     mutationFn: ({ note, seenAt }: { note: string; seenAt: string }) => resolvePaymentUnlinked(order.id, note, seenAt),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.message });
+      void qc.invalidateQueries({ queryKey: ['admin-order-history', order.id] });
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void invalidateInbox(qc);
     },

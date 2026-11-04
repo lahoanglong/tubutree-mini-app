@@ -136,6 +136,8 @@ export interface AdminOrder {
   pancakeAttentionAt?: string | null;
   /** Lúc Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (chờ đối chiếu sao kê); chỉ có nghĩa khi đơn còn UNPAID. */
   paymentUnlinkedAt?: string | null;
+  /** Mốc khoản chưa gắn đầu tiên của đợt hiện tại (paymentUnlinkedAt bị đẩy lên mỗi khoản mới). */
+  paymentUnlinkedFirstAt?: string | null;
   /** Mã đơn bên kho Pancake; null = chưa lên kho. */
   pancakeOrderId?: string | null;
   /** WAITING_PAYMENT | WAITING_STOCK | PENDING | PUSHING | SYNCED | FAILED | NOT_CONFIGURED | SKIPPED | STALE (PancakeOrderService). */

@@ -26,6 +26,7 @@ const order = (over: Partial<AdminOrder> = {}): AdminOrder => ({
   paymentStatus: 'UNPAID',
   createdAt: '2026-11-04T00:00:00.000Z',
   paymentUnlinkedAt: '2026-11-04T01:00:00.000Z',
+  paymentUnlinkedFirstAt: '2026-11-04T01:00:00.000Z',
   hasRecyclingPickup: false,
   gomdonStatus: null,
   gomdonOrderId: null,
@@ -76,6 +77,41 @@ describe('PaymentUnlinkedPanel (chi tiết đơn admin)', () => {
     const closed = mount(<PaymentUnlinkedPanel order={order({ status: 'CANCELLED' })} isAdmin={false} canFinance />);
     expect(closed.container.textContent).toContain(PAYMENT_UNLINKED_CLOSED_NEUTRAL_TEXT);
     expect(closed.container.textContent).not.toContain('Đã đối chiếu');
+  });
+
+  it('chỉ liệt kê khoản chưa gắn từ mốc đầu của cờ hiện tại: khoản cũ đã đối chiếu (createdAt < paymentUnlinkedFirstAt) không hiện lại', async () => {
+    const api = mockFetch(
+      historyRoute([
+        { actorType: 'PANCAKE', note: NOTE('OLD'), createdAt: '2026-11-03T01:00:00.000Z' },
+        { actorType: 'ADMIN', note: 'Đã đối chiếu khoản Pancake báo đã thanh toán — ok', createdAt: '2026-11-03T02:00:00.000Z' },
+        { actorType: 'PANCAKE', note: NOTE('NEW'), createdAt: '2026-11-04T01:00:00.000Z' },
+      ]),
+    );
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PaymentUnlinkedPanel order={order()} isAdmin canFinance />);
+    await flush();
+    const items = Array.from(container.querySelectorAll('li')).map((l) => l.textContent ?? '');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toContain('#NEW');
+  });
+
+  it('đơn đã huỷ/trả: lời nhắc ADMIN nêu rõ ghi tiền về muộn không tự đóng, phải bấm "Đã đối chiếu" kèm ghi chú', () => {
+    const { container } = mount(<PaymentUnlinkedPanel order={order({ status: 'CANCELLED' })} isAdmin />);
+    expect(container.textContent).toContain('kèm ghi chú');
+  });
+
+  it('bấm thành công cũng làm mới lịch sử đơn (danh sách khoản chưa gắn)', async () => {
+    const api = mockFetch({ ...historyRoute(), '/payment-unlinked/resolve': { body: { ok: true, message: 'ok' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PaymentUnlinkedPanel order={order()} isAdmin canFinance />);
+    await flush();
+    const before = api.calls.filter((c) => c.url.includes('/status-history')).length;
+    click(byText(container, 'button', 'Đã đối chiếu'));
+    await flush();
+    typeInto(confirmDialog()!.querySelector('textarea'), 'đã xử lý');
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.filter((c) => c.url.includes('/status-history')).length).toBeGreaterThan(before);
   });
 
   it('liệt kê các khoản Pancake chưa gắn từ lịch sử đơn (đủ #A và #B, bỏ dòng khác)', async () => {
