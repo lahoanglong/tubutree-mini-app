@@ -9,6 +9,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/api', () => ({
   getProducts: vi.fn().mockResolvedValue([{ slug: 'sp-1' }]),
   getStorefrontList: vi.fn().mockResolvedValue([{ slug: 'cua-hang-1', updatedAt: '2026-10-01T00:00:00.000Z' }]),
+  getBrands: vi.fn().mockResolvedValue([{ brand: 'A', count: 1, slug: 'nhan-a' }]),
+  getLegalDoc: vi.fn().mockResolvedValue({ content: '# ok', vars: {} }),
 }));
 
 import robots from './app/robots';

@@ -2,11 +2,15 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchBrands, fetchCatalog, fetchCategories } from '@tubutree/app-core/api/catalog';
 import { fetchBestSellers } from '@tubutree/app-core/api/browse';
+import { categoryTrail } from '@tubutree/app-core/browse/category-tree';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import BrowseView, { type BrowseInitial } from '@/components/catalog/browse-view';
 import { firstParam, normalizeSearchQuery, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
-import { browseMetadata, browseNoindex } from '@/lib/home-seo';
+import { browseBreadcrumb, browseMetadata, browseNoindex } from '@/lib/home-seo';
+import { browseText } from '@/lib/browse-text';
+import { jsonLdScript, breadcrumbJsonLd } from '@/lib/product-seo';
 import { BROWSE_PATH, PAGE_LIMIT, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery } from '@/lib/search-state';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
@@ -25,11 +29,20 @@ function toParams(sp: Record<string, string | string[] | undefined>): URLSearchP
 }
 
 // Mỗi từ khoá và mỗi cách lọc/sắp xếp là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả
-// (cùng sản phẩm với danh mục gốc, chỉ khác lối vào). Nhãn và số trang thì mỗi biến thể có tiêu đề + canonical riêng
-// (xem home-seo) để không bị coi là bản trùng của trang gốc.
+// (cùng sản phẩm với danh mục gốc, chỉ khác lối vào). Nhãn, danh mục (đứng một mình, có thật) và số trang thì mỗi biến thể có tiêu đề + canonical
+// riêng (xem home-seo) để không bị coi là bản trùng của trang gốc.
 export async function generateMetadata({ searchParams }: { searchParams: BrowseSearchParams }): Promise<Metadata> {
   const params = toParams(await searchParams);
   if (browseNoindex(params)) return { robots: { index: false, follow: true } };
+  const categoryId = params.get('category') ?? undefined;
+  if (categoryId) {
+    // Danh mục không có trong cây (id bịa) → noindex, như nhãn lạ. Lỗi API thì để nổi lên (như nhánh nhãn): nuốt lỗi sẽ trả 200 + noindex
+    // cho danh mục thật và làm URL rớt khỏi chỉ mục.
+    const trail = categoryTrail(await fetchCategories(createServerHttp()), categoryId);
+    const node = trail.at(-1);
+    if (!node) return { robots: { index: false, follow: true } };
+    return browseMetadata({ category: { id: categoryId, name: node.name } }, true);
+  }
   const brand = firstParam(params.get('brand') ?? undefined);
   const brandKnown = brand ? (await fetchBrands(createServerHttp())).some((b) => b.brand === brand) : true;
   return browseMetadata({ brand, page: parsePage(params.get('page')) }, brandKnown);
@@ -37,6 +50,19 @@ export async function generateMetadata({ searchParams }: { searchParams: BrowseS
 
 /** Phần phụ của trang (nhãn, danh mục, danh sách đầu): lỗi thì bỏ phần đó, để BrowseView tự tải lại phía trình duyệt. */
 const orUndefined = <T,>(p: Promise<T>): Promise<T | undefined> => p.catch(() => undefined);
+
+/** BreadcrumbList cho trang nhãn / danh mục đứng một mình (cùng vệt với breadcrumb hiển thị của BrowseView); trạng thái khác không có. */
+function breadcrumbOf(params: URLSearchParams, stateBrands: string[], brands: { brand: string }[] | undefined, categories: Parameters<typeof categoryTrail>[0]) {
+  if (browseNoindex(params)) return null;
+  const home = fillCopy('browse.crumbHome');
+  const categoryId = params.get('category');
+  if (categoryId) {
+    const trail = categoryTrail(categories, categoryId);
+    return trail.length > 0 ? browseBreadcrumb({ home, browse: browseText.title, category: trail }) : null;
+  }
+  const brand = stateBrands.length === 1 ? stateBrands[0] : undefined;
+  return brand && brands?.some((b) => b.brand === brand) ? browseBreadcrumb({ home, browse: browseText.title, brand }) : null;
+}
 
 export default async function BrowsePage({ searchParams }: { searchParams: BrowseSearchParams }) {
   const params = toParams(await searchParams);
@@ -63,9 +89,11 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const initial: BrowseInitial | null = catalog
     ? { urlKey: serializeSearchState(state).toString(), page: catalog, startPage }
     : null;
+  const crumbs = breadcrumbOf(params, state.brands, brands, categories);
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:pb-0 max-md:pt-0 md:py-8`}>
       <BrowseView initial={initial} bestSellers={bestSellers} brands={brands} categories={categories} />
+      {crumbs && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd(crumbs)) }} />}
     </main>
   );
 }

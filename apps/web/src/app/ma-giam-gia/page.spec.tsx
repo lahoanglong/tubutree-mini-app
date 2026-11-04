@@ -9,7 +9,7 @@ import VouchersPage from './page';
 
 describe('/ma-giam-gia (server)', () => {
   it('metadata: tiêu đề, noindex + nofollow như /uu-dai, không canonical (noindex kèm canonical là hai tín hiệu mâu thuẫn)', () => {
-    expect(metadata.title).toBe('Mã giảm giá — Tubu Tree');
+    expect(metadata.title).toBe('Mã giảm giá');
     expect(metadata.robots).toEqual({ index: false, follow: false });
     expect(metadata.alternates).toBeUndefined();
   });

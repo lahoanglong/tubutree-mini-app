@@ -255,7 +255,7 @@ afterEach(() => {
 
 describe('/ctv/gian-hang — cổng vào theo phiên', () => {
   it('tiêu đề trang và noindex', () => {
-    expect(metadata.title).toBe('Gian hàng của tôi — Tubu Tree');
+    expect(metadata.title).toBe('Gian hàng của tôi');
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 

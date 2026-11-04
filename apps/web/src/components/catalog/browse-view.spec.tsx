@@ -147,7 +147,7 @@ describe('BrowseView — hub ở gốc', () => {
     expect(nav.pushes.at(-1)).toBe('/san-pham?all=1');
     click(buttonByName(container, 'Xem tất cả sản phẩm'));
     expect(nav.pushes.at(-1)).toBe('/san-pham?all=1');
-    click(buttonByName(container, 'Xem thương hiệu Mộc An'));
+    click(container.querySelector('a[aria-label="Xem thương hiệu Mộc An"]'));
     expect(nav.pushes.at(-1)).toBe('/san-pham?brand=M%E1%BB%99c+An');
     expect(nav.replaces).toEqual([]);
   });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getProducts: vi.fn(), getStorefrontList: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getProducts: vi.fn(), getStorefrontList: vi.fn(), getBrands: vi.fn(), getLegalDoc: vi.fn() }));
 const flags = vi.hoisted(() => ({ cashback: false }));
 vi.mock('@tubutree/app-core/features', () => ({
   get CASHBACK_ENABLED() {
@@ -16,6 +16,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProducts: mocks.getProducts,
   getStorefrontList: mocks.getStorefrontList,
+  getBrands: mocks.getBrands,
+  getLegalDoc: mocks.getLegalDoc,
 }));
 
 import sitemap from './sitemap';
@@ -29,6 +31,8 @@ const productUrls = (out: Awaited<ReturnType<typeof sitemap>>) => out.filter((e)
 beforeEach(() => {
   mocks.getProducts.mockReset().mockResolvedValue([]);
   mocks.getStorefrontList.mockReset().mockResolvedValue([]);
+  mocks.getBrands.mockReset().mockResolvedValue([]);
+  mocks.getLegalDoc.mockReset().mockResolvedValue({ content: null, vars: {} });
 });
 
 describe('sitemap', () => {
@@ -66,6 +70,26 @@ describe('sitemap', () => {
     } finally {
       routeMocks.publicStaticRoutes.mockImplementation(() => ['/']);
     }
+  });
+
+  it('thêm /brand/<slug> cho nhãn đã công khai, bỏ nhãn không có slug', async () => {
+    mocks.getBrands.mockResolvedValue([{ brand: 'A', count: 2, slug: 'nhan-a' }, { brand: 'B', count: 1, slug: null }, { brand: 'C', count: 1 }]);
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).toContain('https://app.tubutree.com/brand/nhan-a');
+    expect(urls.filter((u) => u.includes('/brand/'))).toHaveLength(1);
+  });
+
+  it('chỉ nộp trang chính sách đã có nội dung duyệt; bản nháp (content null) thì không', async () => {
+    mocks.getLegalDoc.mockImplementation(async (slug: string) => ({ content: slug === 'doi-tra' || slug === 'bao-mat' ? '# nội dung' : null, vars: {} }));
+    const urls = (await sitemap()).map((e) => e.url).filter((u) => u.includes('/chinh-sach/'));
+    expect(urls.sort()).toEqual(['https://app.tubutree.com/chinh-sach/bao-mat', 'https://app.tubutree.com/chinh-sach/doi-tra']);
+  });
+
+  it('nhãn hoặc chính sách lỗi thì ném lỗi, không nuốt', async () => {
+    mocks.getBrands.mockRejectedValueOnce(new Error('brands lỗi'));
+    await expect(sitemap()).rejects.toThrow('brands lỗi');
+    mocks.getLegalDoc.mockRejectedValueOnce(new Error('legal lỗi'));
+    await expect(sitemap()).rejects.toThrow('legal lỗi');
   });
 
   it('không bao giờ xin limit vượt trần của API', async () => {

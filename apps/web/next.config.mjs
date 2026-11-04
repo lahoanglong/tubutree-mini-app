@@ -6,6 +6,7 @@ import { sentryOrigin } from './src/lib/sentry-origin.mjs';
 import { buildMiniappRedirects } from './src/lib/miniapp-redirects.mjs';
 
 const require = createRequire(import.meta.url);
+const { HTML_LIMITED_BOT_UA_RE } = require('next/dist/shared/lib/router/utils/html-bots.js');
 const routeMap = require('@tubutree/app-core/route-map.json');
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,10 @@ const nextConfig = {
   experimental: {
     webpackBuildWorker: false,
   },
+  // Trang động trả metadata theo luồng (sau phần thân) cho mọi UA không nằm trong danh sách này; bot xem trước của Zalo và Cốc Cốc không chạy JS
+  // nên cần thẻ meta ngay trong <head>. "Zalo" cũng khớp trình duyệt trong app Zalo của người dùng thật: họ chỉ phải chờ metadata trước khi
+  // thấy thân trang ở route động, chấp nhận được. Giữ nguyên regex mặc định của Next rồi nối thêm hai token.
+  htmlLimitedBots: new RegExp(`${HTML_LIMITED_BOT_UA_RE.source}|Zalo|coccocbot`, 'i'),
   // SDK Node vá module lúc chạy: để Node tự require thay vì gói vào bundle server.
   serverExternalPackages: ['@sentry/node'],
   // Ảnh chia sẻ gian hàng đọc font và ảnh mặc định bằng readFile lúc chạy (app/s/[slug]/og-render.tsx). Next chỉ chép vào bản

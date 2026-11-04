@@ -271,7 +271,10 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
 
   it('gian hàng mẫu: noindex; gian hàng thật: không chặn công cụ tìm kiếm', async () => {
     mocks.sf = { ...SF, isSample: true };
-    expect((await meta()).robots).toEqual({ index: false, follow: false });
+    const sample = await meta();
+    expect(sample.robots).toEqual({ index: false, follow: false });
+    expect(sample.alternates).toBeUndefined();
+    expect((sample.openGraph as { url?: string }).url).toBeUndefined();
     mocks.sf = { ...SF };
     expect((await meta()).robots).toBeUndefined();
   });
@@ -279,11 +282,11 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
   it('gian hàng mẫu: tiêu đề và mô tả chia sẻ có tiền tố "Gian hàng mẫu · "; gian hàng thật thì không', async () => {
     mocks.sf = { ...SF, isSample: true };
     const m = await meta();
-    expect(m.title).toBe('Gian hàng mẫu · Shop của Linh — Tubu Tree');
+    expect(m.title).toBe('Gian hàng mẫu · Shop của Linh');
     expect(m.description).toBe('Gian hàng mẫu · Hàng sống xanh');
     expect((m.openGraph as { title?: string }).title).toBe('Gian hàng mẫu · Shop của Linh — Tubu Tree');
     mocks.sf = { ...SF };
-    expect((await meta()).title).toBe('Shop của Linh — Tubu Tree');
+    expect((await meta()).title).toBe('Shop của Linh');
   });
 
   it('ảnh chia sẻ do opengraph-image của trang dựng: metadata không nhét ảnh gốc (kể cả base64) vào og:image', async () => {
@@ -301,7 +304,7 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
   it('không có gian hàng: tiêu đề mặc định, không canonical', async () => {
     mocks.sf = null;
     const m = await meta();
-    expect(m.title).toBe('Gian hàng — Tubu Tree');
+    expect(m.title).toBe('Gian hàng');
     expect(m.alternates).toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ function readCode(raw: string): string | null {
 
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
   const code = readCode((await params).code);
-  return { title: `${code ? `Đơn ${code}` : 'Đơn hàng'} — Tubu Tree`, robots: { index: false, follow: false } };
+  return { title: `${code ? `Đơn ${code}` : 'Đơn hàng'}`, robots: { index: false, follow: false } };
 }
 
 export default function OrderDetailLayout({ children }: { children: React.ReactNode }) {

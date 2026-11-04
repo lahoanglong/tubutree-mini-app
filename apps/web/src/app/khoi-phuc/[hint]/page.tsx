@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import HomeView from '@/components/home/home-view';
 import { HOME_HINT_SLUGS, hintOfSlug, type HomeHintSlug } from '@/lib/home-restore-hint';
 import { loadHomeInitial } from '@/lib/home-initial';
+import { HOME_DESCRIPTION, HOME_TITLE } from '@/lib/home-seo';
 import { homeText } from '@/lib/home-text';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
@@ -10,7 +11,8 @@ export const revalidate = 300;
 export const dynamicParams = false;
 
 // Chỉ middleware chuyển khách có cookie phiên tới đây (URL trình duyệt vẫn là "/"); không để công cụ tìm kiếm lập chỉ mục bản này.
-export const metadata: Metadata = { alternates: { canonical: '/' }, robots: { index: false, follow: false } };
+// Khách đã đăng nhập được middleware viết lại từ "/" nên thấy đúng tiêu đề trang chủ, không phải tiêu đề mặc định của layout gốc.
+export const metadata: Metadata = { title: { absolute: HOME_TITLE }, description: HOME_DESCRIPTION, robots: { index: false, follow: false } };
 
 export const generateStaticParams = () => HOME_HINT_SLUGS.map((hint) => ({ hint }));
 

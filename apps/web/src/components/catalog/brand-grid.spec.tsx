@@ -10,7 +10,7 @@ const mount = (list: Parameters<typeof BrandGrid>[0]['brands'], onSelect = vi.fn
   mounted = render(<BrandGrid brands={list} onSelect={onSelect} />);
   return { c: mounted.container, onSelect };
 };
-const names = (c: ParentNode) => [...c.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+const names = (c: ParentNode) => [...c.querySelectorAll('a')].map((b) => b.getAttribute('aria-label'));
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
@@ -21,9 +21,19 @@ describe('BrandGrid', () => {
     const { c, onSelect } = mount(brands(5));
     const region = c.querySelector('section[aria-label="Thương hiệu"]')!;
     expect(region.querySelector('h2')!.textContent).toBe('Thương hiệu');
-    expect(region.querySelectorAll('button')).toHaveLength(5);
-    click(c.querySelector('button[aria-label="Xem thương hiệu Nhãn 03"]'));
+    expect(region.querySelectorAll('a')).toHaveLength(5);
+    click(c.querySelector('a[aria-label="Xem thương hiệu Nhãn 03"]'));
     expect(onSelect).toHaveBeenCalledWith('Nhãn 03');
+  });
+
+  it('mỗi ô là liên kết thật tới /san-pham?brand=… (crawler đi theo được); Ctrl/Cmd+nhấp không bị chặn để mở tab mới', () => {
+    const { c, onSelect } = mount(brands(5));
+    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem thương hiệu Nhãn 03"]')!;
+    expect(link.getAttribute('href')).toBe('/san-pham?brand=Nh%C3%A3n+03');
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true });
+    link.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it('dưới 4 nhãn hoặc chưa có dữ liệu: không vẽ gì (không để tiêu đề trơ)', () => {
@@ -52,7 +62,7 @@ describe('BrandGrid', () => {
 
   it('ô cao tối thiểu 44px; tên dài cắt một dòng', () => {
     const { c } = mount([{ brand: 'Một thương hiệu có cái tên rất là dài', count: 9 }, ...brands(3)]);
-    for (const b of c.querySelectorAll<HTMLElement>('button')) expect(parseFloat(b.style.minHeight)).toBeGreaterThanOrEqual(44);
+    for (const b of c.querySelectorAll<HTMLElement>('a')) expect(parseFloat(b.style.minHeight)).toBeGreaterThanOrEqual(44);
     const label = c.querySelector<HTMLElement>('[data-brand-label]')!;
     expect(label.style.whiteSpace).toBe('nowrap');
     expect(label.style.textOverflow).toBe('ellipsis');
@@ -60,7 +70,7 @@ describe('BrandGrid', () => {
 
   it('4 cột ở điện thoại như Mini, một hàng 12 ô ở lg', () => {
     const { c } = mount(brands(5));
-    const grid = c.querySelector('button')!.parentElement!;
+    const grid = c.querySelector('a')!.parentElement!;
     expect(grid.className).toContain('grid-cols-4');
     expect(grid.className).toContain('lg:grid-cols-12');
   });
