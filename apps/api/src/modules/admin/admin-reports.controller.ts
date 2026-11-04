@@ -74,26 +74,32 @@ export class AdminReportsController {
   /** CSV theo dòng hàng của đúng tập đơn mà `GET /admin/orders/export` xuất với cùng bộ lọc. */
   @AllowStaff('KE_TOAN')
   @Get('order-items/export')
-  async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response, @CurrentUser('role') role?: string) {
+  async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response, @CurrentUser('role') role?: string, @CurrentUser('sub') actorId?: string) {
     // Cùng quy ước với GET /admin/orders/export: không phải ADMIN thì tìm SĐT phải gõ đủ số.
     const where = await this.admin.adminOrderWhere(q, { exactPhoneOnly: role !== 'ADMIN' });
-    await streamCsv(res, `dong-hang-${vnDateKey()}.csv`, orderItemCsvChunks(this.prisma, where));
+    await streamCsv(res, `dong-hang-${vnDateKey()}.csv`, orderItemCsvChunks(this.prisma, where), (n) =>
+      this.admin.recordExport(actorId ?? '', 'order-items/export', q, n),
+    );
   }
 
   /** Khấu trừ TNCN của CTV theo người nhận, lệnh đã chi trong khoảng ngày chi (tối đa 366 ngày). */
   @AllowStaff('KE_TOAN')
   @Get('exports/tax')
-  async exportTax(@Query() q: ReportRangeQuery, @Res() res: Response) {
+  async exportTax(@Query() q: ReportRangeQuery, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
-    await streamCsv(res, `thue-tncn-ctv-${range.from}-${range.to}.csv`, pitCsvChunks(this.prisma, range));
+    await streamCsv(res, `thue-tncn-ctv-${range.from}-${range.to}.csv`, pitCsvChunks(this.prisma, range), (n) =>
+      this.admin.recordExport(actorId ?? '', 'exports/tax', { from: range.from, to: range.to }, n),
+    );
   }
 
   /** Lệnh rút tiền (hoa hồng CTV và Ví Tubu) theo ngày yêu cầu, lọc trạng thái nếu có. */
   @AllowStaff('KE_TOAN')
   @Get('exports/payouts')
-  async exportPayouts(@Query() q: PayoutExportQuery, @Res() res: Response) {
+  async exportPayouts(@Query() q: PayoutExportQuery, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
-    await streamCsv(res, `lenh-rut-tien-${range.from}-${range.to}.csv`, payoutCsvChunks(this.prisma, payoutExportWhere(range, q.status)));
+    await streamCsv(res, `lenh-rut-tien-${range.from}-${range.to}.csv`, payoutCsvChunks(this.prisma, payoutExportWhere(range, q.status)), (n) =>
+      this.admin.recordExport(actorId ?? '', 'exports/payouts', { from: range.from, to: range.to, status: q.status }, n),
+    );
   }
 
   /** Khoản hoàn tiền khách theo ngày tạo khoản hoàn, lọc trạng thái/loại nếu có. */
@@ -101,6 +107,8 @@ export class AdminReportsController {
   @Get('exports/refunds')
   async exportRefunds(@Query() q: RefundExportQuery, @Res() res: Response, @CurrentUser() viewer: JwtPayload) {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
-    await streamCsv(res, `hoan-tien-khach-${range.from}-${range.to}.csv`, refundCsvChunks(this.prisma, refundExportWhere(range, q.status, q.kind), { maskPhones: !seesFullOrderPhones(viewer) }));
+    await streamCsv(res, `hoan-tien-khach-${range.from}-${range.to}.csv`, refundCsvChunks(this.prisma, refundExportWhere(range, q.status, q.kind), { maskPhones: !seesFullOrderPhones(viewer) }), (n) =>
+      this.admin.recordExport(viewer.sub, 'exports/refunds', { from: range.from, to: range.to, status: q.status, kind: q.kind }, n),
+    );
   }
 }

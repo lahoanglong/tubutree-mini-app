@@ -2269,6 +2269,8 @@ export interface AdminUserDetail {
   roleHistory: AdminUserEvent[];
   blockHistory: AdminUserEvent[];
   partnerHistory?: AdminUserEvent[];
+  /** Chỉ ADMIN nhận được: 20 lần xuất CSV gần nhất của người này. */
+  recentExports?: { id: string; route: string; filters: Record<string, unknown>; rowCount: number; createdAt: string }[] | null;
   grants: { id: string; role: string; grantedBy: string; grantedByName: string | null; note: string | null; revokedAt: string | null; createdAt: string }[];
 }
 export const getUserDetail = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}/detail`);

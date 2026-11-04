@@ -2586,6 +2586,42 @@ describe('AdminService.getUserDetail — dấu thu hồi CTV', () => {
   });
 });
 
+describe('AdminService.recordExport — nhật ký xuất CSV (L1-07)', () => {
+  it('ghi người xuất, route, bộ lọc đã bỏ giá trị rỗng, số dòng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({ adminExportLog: { create } });
+    await mkAdmin(prisma).recordExport('a1', 'orders/export', { kind: 'ctv', payment: '', from: undefined, to: null, search: '0901' }, 12);
+    expect(create).toHaveBeenCalledWith({
+      data: { actorId: 'a1', route: 'orders/export', filters: { kind: 'ctv', search: '0901' }, rowCount: 12 },
+    });
+  });
+
+  it('lỗi DB khi ghi nhật ký không ném ra ngoài (file đã gửi xong)', async () => {
+    const prisma = makePrisma({ adminExportLog: { create: jest.fn().mockRejectedValue(new Error('db')) } });
+    await expect(mkAdmin(prisma).recordExport('a1', 'users/export', {}, 0)).resolves.toBeUndefined();
+  });
+
+  it('getUserDetail: withExports → 20 lần xuất gần nhất của người đó; mặc định không đọc bảng', async () => {
+    const exportsFind = jest.fn().mockResolvedValue([{ id: 'x1', route: 'exports/tax', filters: {}, rowCount: 3, createdAt: new Date() }]);
+    const mk = () =>
+      makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: null, affiliateRevokedAt: null }), findMany: jest.fn().mockResolvedValue([]) },
+        order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+        walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+        userAdminEvent: { findMany: jest.fn().mockResolvedValue([]) },
+        roleGrant: { findMany: jest.fn().mockResolvedValue([]) },
+        adminExportLog: { findMany: exportsFind },
+      });
+    const without = await mkAdmin(mk()).getUserDetail('u1');
+    expect(exportsFind).not.toHaveBeenCalled();
+    expect(without.recentExports).toBeNull();
+    const withIt = await mkAdmin(mk()).getUserDetail('u1', { withExports: true });
+    expect(exportsFind).toHaveBeenCalledWith(expect.objectContaining({ where: { actorId: 'u1' }, take: 20, orderBy: { createdAt: 'desc' } }));
+    expect(withIt.recentExports).toHaveLength(1);
+  });
+});
+
 describe('AdminService.listDealerApplications — thứ tự createdAt theo tham số order', () => {
   function daPrisma() {
     const findMany = jest.fn().mockResolvedValue([]);

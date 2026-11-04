@@ -177,6 +177,22 @@ describe('UserDetailDrawer — sổ Điểm Xanh và sổ ví đọc được b�
   });
 });
 
+describe('UserDetailDrawer — lịch sử xuất file (L1-07)', () => {
+  const X = [{ id: 'x1', route: 'exports/tax', filters: { from: '2026-10-01', to: '2026-10-31' }, rowCount: 1234, createdAt: '2026-11-02T03:00:00.000Z' }];
+
+  it('có dữ liệu thì hiện "20 lần xuất gần nhất" với tên file, số dòng, bộ lọc', async () => {
+    const text = section(await open({ ...DETAIL, recentExports: X }), '20 lần xuất gần nhất').textContent ?? '';
+    expect(text).toContain('Xuất thuế TNCN CTV');
+    expect(text).toContain('1.234 dòng');
+    expect(text).toContain('from: 2026-10-01');
+  });
+
+  it('không có dữ liệu (CSKH nhận null) thì không hiện mục', async () => {
+    const body = await open({ ...DETAIL, recentExports: null });
+    expect(body.textContent).not.toContain('lần xuất gần nhất');
+  });
+});
+
 describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
   const ev = (id: string, from: string, to: string, createdAt: string) => ({
     id, kind: 'STOREFRONT_PARTNER' as const, fromValue: from, toValue: to, reason: 'sf-9', actorId: 'a1', actorName: 'Quản trị An', createdAt,

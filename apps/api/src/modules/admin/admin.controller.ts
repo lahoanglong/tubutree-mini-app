@@ -571,13 +571,17 @@ export class AdminController {
    */
   @AllowStaff('KE_TOAN')
   @Get('orders/export')
-  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response) {
-    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }));
+  async exportOrders(@Query() q: ExportOrdersQuery, @CurrentUser('role') role: string, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
+    await streamCsv(res, `don-hang-${vnDateKey()}.csv`, await this.admin.orderCsv(q, { maskPhones: role !== 'ADMIN' }), (n) =>
+      this.admin.recordExport(actorId ?? '', 'orders/export', q, n),
+    );
   }
 
   @Get('users/export')
-  async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response) {
-    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search, q.guests === true));
+  async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
+    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search, q.guests === true), (n) =>
+      this.admin.recordExport(actorId ?? '', 'users/export', q, n),
+    );
   }
 
   /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */

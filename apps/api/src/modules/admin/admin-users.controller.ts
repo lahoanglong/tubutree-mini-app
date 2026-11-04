@@ -29,8 +29,8 @@ export class AdminUsersController {
   /** Hồ sơ + đơn + sổ ví + Điểm Xanh + lịch sử vai trò/khoá (ADMINOPS-11). CSKH xem được để trả lời khách. */
   @AllowStaff('CSKH')
   @Get(':id/detail')
-  detail(@Param('id') id: string) {
-    return this.admin.getUserDetail(id);
+  detail(@Param('id') id: string, @CurrentUser('role') role?: string) {
+    return this.admin.getUserDetail(id, { withExports: role === 'ADMIN' });
   }
 
   @Put(':id/staff-permissions')

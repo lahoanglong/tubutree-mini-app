@@ -358,6 +358,22 @@ model UserAdminEvent {
   @@map("user_admin_events")
 }
 
+/// Nhật ký xuất file CSV của admin/nhân sự: ai xuất gì, với bộ lọc nào, bao nhiêu dòng. Chỉ thêm, không sửa.
+model AdminExportLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  /// Đường dẫn route xuất, ví dụ "orders/export", "exports/tax".
+  route     String
+  /// Bộ lọc đã dùng (đã cắt bỏ giá trị rỗng).
+  filters   Json
+  rowCount  Int
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("admin_export_logs")
+}
+
 // Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.
 model RefreshToken {
   id        String    @id @default(cuid())

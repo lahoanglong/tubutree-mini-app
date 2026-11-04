@@ -806,7 +806,7 @@ export class AdminService {
    * Chi tiết một người dùng cho admin/CSKH (ADMINOPS-11): hồ sơ + số dư, đơn gần nhất, sổ ví, Điểm Xanh, lịch sử vai trò
    * (sổ user_admin_events + quyền cấp theo SĐT) và lịch sử khoá. Mỗi phần tối đa DETAIL_TAKE dòng mới nhất.
    */
-  async getUserDetail(userId: string) {
+  async getUserDetail(userId: string, opts: { withExports?: boolean } = {}) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -877,6 +877,15 @@ export class AdminService {
           _sum: { amount: true },
         })
       : null;
+    // Chỉ ADMIN xem được: lịch sử xuất file của người này (CSKH mở hồ sơ để trả lời khách, không cần thấy).
+    const recentExports = opts.withExports
+      ? await this.prisma.adminExportLog.findMany({
+          where: { actorId: userId },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { id: true, route: true, filters: true, rowCount: true, createdAt: true },
+        })
+      : null;
     const actorIds = [...new Set([...events.map((e) => e.actorId), ...partnerEvents.map((e) => e.actorId), ...grants.map((g) => g.grantedBy)].filter(Boolean) as string[])];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, phone: true } })
@@ -885,6 +894,7 @@ export class AdminService {
     const withActor = <T extends { actorId: string | null }>(e: T) => ({ ...e, actorName: e.actorId ? (actorName.get(e.actorId) ?? null) : null });
     return {
       user,
+      recentExports,
       forfeitableCommission: pending && pending._count._all > 0 ? { count: pending._count._all, amount: pending._sum.amount ?? 0 } : null,
       orders: { items: orders, total: orderTotal },
       wallet,
@@ -894,6 +904,19 @@ export class AdminService {
       partnerHistory: partnerEvents.map(withActor),
       grants: grants.map((g) => ({ ...g, grantedByName: actorName.get(g.grantedBy) ?? null })),
     };
+  }
+
+  /**
+   * Ghi nhật ký một lần xuất CSV. Gọi sau khi file đã gửi đi nên lỗi chỉ được log, không ném ra: không có ai để báo
+   * và không được làm hỏng luồng đã mở.
+   */
+  async recordExport(actorId: string, route: string, filters: object, rowCount: number): Promise<void> {
+    const clean = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+    try {
+      await this.prisma.adminExportLog.create({ data: { actorId, route, filters: clean as Prisma.InputJsonObject, rowCount } });
+    } catch (err) {
+      this.logger.error(`Không ghi được nhật ký xuất ${route} của ${actorId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   static readonly DETAIL_TAKE = 30;

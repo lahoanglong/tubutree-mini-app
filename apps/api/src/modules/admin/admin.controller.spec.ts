@@ -332,6 +332,23 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(admin.orderCsv).toHaveBeenLastCalledWith({}, { maskPhones: false });
   });
 
+  it('xuất CSV đơn và người dùng ghi nhật ký xuất: người xuất, route, bộ lọc, số dòng (L1-07)', async () => {
+    async function* rows(): AsyncGenerator<string> {
+      yield 'a\r\n';
+      yield '1\r\n';
+      yield '2\r\n';
+    }
+    const admin = { orderCsv: jest.fn().mockImplementation(async () => rows()), userCsv: jest.fn().mockImplementation(() => rows()), recordExport: jest.fn() };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { setHeader: jest.fn(), write: jest.fn(() => true), end: jest.fn() };
+    const q = { kind: 'ctv' } as never;
+    await ctrl.exportOrders(q, 'KE_TOAN', res as never, 'acc1');
+    expect(admin.recordExport).toHaveBeenLastCalledWith('acc1', 'orders/export', q, 2);
+    const uq = { search: '09' } as never;
+    await ctrl.exportUsers(uq, res as never, 'adm1');
+    expect(admin.recordExport).toHaveBeenLastCalledWith('adm1', 'users/export', uq, 2);
+  });
+
   it('xuất CSV đơn có bộ lọc mới (loại đơn, thanh toán, ngày, gian hàng): kế toán vẫn bị che SĐT, bộ lọc giữ nguyên (D1-05, D1-17)', async () => {
     async function* empty(): AsyncGenerator<string> {}
     const admin = { orderCsv: jest.fn().mockImplementation(async () => empty()) };

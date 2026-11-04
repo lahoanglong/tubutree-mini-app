@@ -54,6 +54,15 @@ function partnerReasonLabel(reason: string): string {
     : `gian hàng ${reason}`;
 }
 
+const EXPORT_LABEL: Record<string, string> = {
+  'orders/export': 'Xuất đơn hàng',
+  'users/export': 'Xuất người dùng',
+  'order-items/export': 'Xuất dòng hàng',
+  'exports/tax': 'Xuất thuế TNCN CTV',
+  'exports/payouts': 'Xuất lệnh rút tiền',
+  'exports/refunds': 'Xuất hoàn tiền khách',
+};
+
 function EventLine({ e }: { e: AdminUserEvent }) {
   const what =
     e.kind === 'ROLE'
@@ -279,6 +288,24 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
           <ul className="divide-y divide-stone-100">
             {d.partnerHistory!.map((e) => (
               <EventLine key={e.id} e={e} />
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {(d.recentExports?.length ?? 0) > 0 && (
+        <Section title="20 lần xuất gần nhất" count={d.recentExports!.length}>
+          <ul className="divide-y divide-stone-100">
+            {d.recentExports!.map((x) => (
+              <li key={x.id} className="py-2">
+                <p className="font-medium text-stone-800">
+                  {EXPORT_LABEL[x.route] ?? x.route} · {x.rowCount.toLocaleString('vi-VN')} dòng
+                </p>
+                <p className="text-xs text-stone-500">
+                  {formatDateTime(x.createdAt)}
+                  {Object.keys(x.filters).length > 0 && ` · ${Object.entries(x.filters).map(([k, v]) => `${k}: ${String(v)}`).join(', ')}`}
+                </p>
+              </li>
             ))}
           </ul>
         </Section>

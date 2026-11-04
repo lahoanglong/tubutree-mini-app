@@ -29,7 +29,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     $executeRaw: jest.fn().mockResolvedValue(0),
     $queryRaw: jest.fn().mockResolvedValue([]),
   };
-  const merged = { ...base, ...over, roleGrant: { ...(base.roleGrant as object), ...((over.roleGrant as object | undefined) ?? {}) } };
+  const merged: Record<string, unknown> = { ...base, ...over, roleGrant: { ...(base.roleGrant as object), ...((over.roleGrant as object | undefined) ?? {}) } };
   // addGrant/revokeGrant chạy trong $transaction(tx => ...) — mock tx = chính client này để
   // dùng lại các jest.fn() (roleGrant/user/dealerApplication) đã override ở trên.
   merged.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(merged));
