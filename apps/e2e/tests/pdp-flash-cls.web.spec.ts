@@ -14,6 +14,7 @@ let flash: FlashPdp | null = null;
 // Các ca dùng chung một đợt Giờ vàng gieo vào DB tạm, và bản dựng sẵn của trang chỉ đúng khi không ai xoá/gieo lại giữa chừng: chạy tuần tự trong một worker.
 // Tệp chỉ thuộc project "Web Customer Flash DB" (playwright.config.ts), chạy sau khi hai project web khách xong: trong lúc đợt còn sống, Trang chủ
 // và mọi trang server dựng đều nhúng khối Giờ vàng, nên không spec web khách nào khác được chạy song song. Khung nhìn tự đặt trong từng ca.
+// Chạy riêng: `--project="Web Customer Flash DB" --no-deps`.
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ request }, testInfo) => {
