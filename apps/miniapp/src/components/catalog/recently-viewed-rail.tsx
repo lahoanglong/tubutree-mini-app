@@ -4,6 +4,7 @@ import { useRecentlyViewed } from '../../hooks/use-recently-viewed';
 import { pruneRecentlyViewed } from '../../utils/recently-viewed';
 import { fetchProductsBySlugs } from '../../services/shop-api';
 import { shelf } from '@tubutree/app-core/merch/shelves';
+import { recentlyViewedQuerySlugs } from '@tubutree/app-core/recently-viewed-query';
 import { vi } from '../../i18n/vi';
 import { ProductCard } from '../ui/product-card';
 import { RailCell, RailShell } from '../ui/product-rail';
@@ -21,10 +22,13 @@ import { SectionHeader } from '../ui/section-header';
 export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title?: string }) {
   const stored = useRecentlyViewed();
   const slugs = stored.map((it) => it.slug);
+  // Chỉ hỏi những slug vừa trần độ dài của API (mới nhất trước); phần cũ hơn không được hỏi nên không bị dọn và, nếu lọt vào dải, hiện không giá.
+  const queried = recentlyViewedQuerySlugs(slugs);
+  const queriedSet = new Set(queried);
   const productsQ = useQuery({
-    queryKey: ['recently-viewed-products', slugs.join(',')],
-    queryFn: () => fetchProductsBySlugs(slugs),
-    enabled: slugs.length > 0,
+    queryKey: ['recently-viewed-products', queried.join(',')],
+    queryFn: () => fetchProductsBySlugs(queried),
+    enabled: queried.length > 0,
     staleTime: 30_000,
   });
   const live = new Map((productsQ.data ?? []).map((p) => [p.slug, p]));
@@ -33,15 +37,16 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
   useEffect(() => {
     if (!productsQ.isSuccess) return;
     const keep = new Set((productsQ.data ?? []).map((p) => p.slug));
-    const nextSlugs = slugs.filter((s) => keep.has(s));
+    const nextQueried = recentlyViewedQuerySlugs(slugs.filter((s) => !queriedSet.has(s) || keep.has(s)));
     // Khoá truy vấn đổi theo danh sách slug sau khi xoá: nạp sẵn dữ liệu cho khoá mới để thẻ không chớp (mất giá, ảnh cũ) và không gọi thừa.
-    if (nextSlugs.length > 0 && nextSlugs.length !== slugs.length) {
-      queryClient.setQueryData(['recently-viewed-products', nextSlugs.join(',')], (productsQ.data ?? []).filter((p) => keep.has(p.slug)));
+    // Chỉ nạp khi khoá mới không kéo thêm slug chưa từng được hỏi (món cũ nhích vào trần): khi đó để truy vấn tự chạy.
+    if (nextQueried.length > 0 && nextQueried.length !== queried.length && nextQueried.every((s) => keep.has(s))) {
+      queryClient.setQueryData(['recently-viewed-products', nextQueried.join(',')], (productsQ.data ?? []).filter((p) => keep.has(p.slug)));
     }
-    pruneRecentlyViewed(keep, new Set(slugs));
+    pruneRecentlyViewed(keep, queriedSet);
     // `slugs` không cần trong deps: `productsQ.data` thuộc khoá dựng từ chính `slugs` (không có placeholderData). Nếu thêm placeholderData thì phải chặn `productsQ.isPlaceholderData`, kẻo dọn bằng dữ liệu của danh sách cũ.
   }, [productsQ.isSuccess, productsQ.data]);
-  const items = (productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
+  const items = (productsQ.isSuccess ? stored.filter((it) => !queriedSet.has(it.slug) || live.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) return null;
   return (
     <Section id="browse-recent">

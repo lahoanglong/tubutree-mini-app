@@ -151,6 +151,21 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     expect(mocks.fetchProductsBySlugs).toHaveBeenCalledTimes(1);
   });
 
+  it('20 slug dài 120 ký tự: chuỗi gửi lên dưới 2000 ký tự (không HTTP 400), món cũ không được hỏi thì không bị dọn', async () => {
+    const long = (i: number) => `${'x'.repeat(116)}-${String(i).padStart(3, '0')}`;
+    for (let i = 0; i < 20; i++) recordRecentlyViewed({ slug: long(i), name: `SP ${i}`, thumbnail: null }, i + 1);
+    // Món mới nhất (i = 19) bị ẩn: bị dọn; bốn món cũ nhất nằm ngoài trần nên không được hỏi và phải còn nguyên.
+    mocks.fetchProductsBySlugs.mockImplementation(async (slugs: string[]) => slugs.filter((s) => s !== long(19)).map((s) => liveProduct(s)));
+    renderRail();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(19));
+    const sent = mocks.fetchProductsBySlugs.mock.calls.map(([slugs]) => (slugs as string[]).join(','));
+    for (const q of sent) expect(q.length).toBeLessThanOrEqual(2000);
+    expect(sent[0]?.split(',')).toHaveLength(16);
+    const left = JSON.parse(localStorage.getItem('tubu_recently_viewed')!).map((i: { slug: string }) => i.slug);
+    for (let i = 0; i < 4; i++) expect(left).toContain(long(i));
+    expect(left).not.toContain(long(19));
+  });
+
   it('API lỗi: không dọn lịch sử xem', async () => {
     recordRecentlyViewed({ slug: 'a', name: 'A', thumbnail: null }, 1);
     mocks.fetchProductsBySlugs.mockRejectedValue(new Error('offline'));
