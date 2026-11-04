@@ -599,3 +599,34 @@ describe('F10: đánh dấu đã đọc không nạp lại mọi trang đã cu�
     expect(mocks.paths.length).toBeLessThanOrEqual(1);
   }, 30_000);
 });
+
+describe('F10: đọc tin lúc đang nạp thêm trang', () => {
+  it('có lần nạp đang chạy khi mutation xong thì danh sách được nạp lại, không để bản cũ ghi đè tin vừa đọc', async () => {
+    vi.clearAllMocks();
+    mocks.getSummary.mockReset();
+    mocks.authStatus = 'authenticated';
+    mocks.getSummary.mockResolvedValue(summaryOf(1));
+    mocks.markNotificationRead.mockResolvedValue({ ok: true });
+    const first = Array.from({ length: 20 }, (_, i) => ({
+      id: `r${i}`,
+      templateCode: i === 0 ? 'ORDER_CONFIRMED' : 'POINTS_EARNED',
+      payload: { body: `Tin r${i}`, ...(i === 0 ? { data: { order_code: 'TT009' } } : {}) },
+      status: (i === 0 ? 'SENT' : 'READ') as 'SENT' | 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - i * 1000).toISOString(),
+    }));
+    let release: (v: unknown[]) => void = () => undefined;
+    let firstPageCalls = 0;
+    mocks.getNotifications.mockImplementation((q?: { beforeId?: string }) => {
+      if (q?.beforeId) return new Promise((r) => (release = r));
+      firstPageCalls += 1;
+      return Promise.resolve(firstPageCalls === 1 ? first : first.map((n) => ({ ...n, status: 'READ' as const })));
+    });
+    renderPage();
+    await screen.findByText('Tin r1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    fireEvent.click(screen.getByText('Tin r0').closest('[role="button"]') as HTMLElement);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledWith('r0'));
+    await waitFor(() => expect(firstPageCalls).toBeGreaterThanOrEqual(2));
+    release([]);
+  });
+});

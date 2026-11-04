@@ -164,20 +164,31 @@ export default function NotificationsPage() {
     qc.setQueryData<InfiniteData<NotificationDTO[], NotificationCursor | undefined>>(notificationsInfiniteQuery(coreHttp).queryKey, (old) =>
       old && { ...old, pages: old.pages.map((p) => p.map((n) => (n.status !== 'READ' && match(n) ? { ...n, status: 'READ' as const } : n))) },
     );
+  // Lần nạp đang bay (xem thêm, làm mới nền) có thể mang dữ liệu chụp trước lệnh đọc và ghi đè bản vừa sửa: nạp lại để lấy bản đúng.
+  const refetchIfListBusy = () => {
+    const key = notificationsInfiniteQuery(coreHttp).queryKey;
+    if (qc.isFetching({ queryKey: key }) > 0) void qc.invalidateQueries({ queryKey: key });
+  };
   const settleRead = (failed: boolean) => {
     void qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
   };
 
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    onSuccess: (_res, id) => markReadInCache((n) => n.id === id),
+    onSuccess: (_res, id) => {
+      markReadInCache((n) => n.id === id);
+      refetchIfListBusy();
+    },
     // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai vĩnh viễn mà không có tín hiệu nào.
     onSettled: (_res, err) => settleRead(err !== null),
   });
 
   const readAllMut = useMutation({
     mutationFn: () => markAllNotificationsRead(),
-    onSuccess: () => markReadInCache(() => true),
+    onSuccess: () => {
+      markReadInCache(() => true);
+      refetchIfListBusy();
+    },
     onSettled: (_res, err) => settleRead(err !== null),
   });
   const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
