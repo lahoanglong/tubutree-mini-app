@@ -20,6 +20,12 @@ describe('NotificationsService: đóng log ZNS kẹt vì job đã chết', () =>
     });
   });
 
+  it('closeStuckZnsLog: CAS theo đúng trạng thái đã thấy khi nơi gọi chỉ định `from`', async () => {
+    const { svc, updateMany } = setup(1);
+    await svc.closeStuckZnsLog('log-1', 'x', ['PENDING']);
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-1', status: { in: ['PENDING'] } }, data: { status: 'FAILED', error: 'x' } });
+  });
+
   it('closeStuckZnsLog: log đã SENT/FAILED (count 0) → false', async () => {
     const { svc } = setup(0);
     await expect(svc.closeStuckZnsLog('log-1', 'x')).resolves.toBe(false);

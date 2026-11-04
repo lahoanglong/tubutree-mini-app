@@ -500,13 +500,13 @@ export class NotificationsService {
 
   /**
    * Đóng log ZNS mà job BullMQ đã chết hẳn (hết lượt, stalled quá giới hạn, hoặc không còn trong Redis) và không ai ghi kết cục.
-   * CAS theo trạng thái cũ: hai đường cùng đóng (sự kiện của worker, cron quét, hai bản API) chỉ một lần ghi, log đã SENT/FAILED không đổi.
+   * CAS theo trạng thái cũ (`from`: nơi gọi chỉ đóng từ trạng thái nó đã dựa vào để quyết, vd log vừa sang RETRYING thì không đóng theo bằng chứng của PENDING): hai đường cùng đóng (sự kiện của worker, cron quét, hai bản API) chỉ một lần ghi, log đã SENT/FAILED không đổi.
    * Không đụng payload: log FAILED đã không chặn dedupeWhere/claimUnderDedupeLock (chỉ PENDING/RETRYING/SENT mới tính), nên không cần nhả
    * khoá; đổi khoá còn làm mất dấu vết đối soát. Không gọi Zalo và không tạo job, nên không có đường gửi đôi.
    */
-  async closeStuckZnsLog(logId: string, reason: string): Promise<boolean> {
+  async closeStuckZnsLog(logId: string, reason: string, from: readonly string[] = ['PENDING', 'RETRYING']): Promise<boolean> {
     const closed = await this.prisma.notificationLog.updateMany({
-      where: { id: logId, status: { in: ['PENDING', 'RETRYING'] } },
+      where: { id: logId, status: { in: [...from] } },
       data: { status: 'FAILED', error: reason },
     });
     return closed.count > 0;

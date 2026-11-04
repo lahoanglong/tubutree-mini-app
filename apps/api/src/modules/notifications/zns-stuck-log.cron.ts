@@ -92,7 +92,7 @@ export class ZnsStuckLogCron {
             verdict === 'CLOSE_FAILED'
               ? 'Gửi ZNS dừng: job trong hàng đợi đã hỏng hẳn mà không ghi kết cục (phát hiện khi quét log kẹt).'
               : 'Gửi ZNS dừng: không còn job trong hàng đợi, log chưa từng được gửi (phát hiện khi quét log kẹt).';
-          if (await this.notifications.closeStuckZnsLog(id, reason)) result.closed++;
+          if (await this.notifications.closeStuckZnsLog(id, reason, verdict === 'CLOSE_GONE' ? ['PENDING'] : ['PENDING', 'RETRYING'])) result.closed++;
         }
       } catch (err) {
         this.logger.error(`Quét log ZNS kẹt: ghi log ${id} lỗi: ${err instanceof Error ? err.message : err}`);

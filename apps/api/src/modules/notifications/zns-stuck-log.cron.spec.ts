@@ -58,14 +58,21 @@ describe('ZnsStuckLogCron: nhánh theo trạng thái job', () => {
   it('job failed → đóng FAILED (cả PENDING lẫn RETRYING)', async () => {
     const { cron, closeStuckZnsLog } = setup([{ id: 'a', status: 'PENDING' }, { id: 'b', status: 'RETRYING' }], { a: { state: 'failed' }, b: { state: 'failed' } });
     await expect(cron.sweepStuckZnsLogs()).resolves.toEqual({ scanned: 2, closed: 2, sent: 0, ambiguous: 0, alive: 0 });
-    expect(closeStuckZnsLog).toHaveBeenCalledWith('a', expect.stringContaining('hỏng'));
-    expect(closeStuckZnsLog).toHaveBeenCalledWith('b', expect.stringContaining('hỏng'));
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('a', expect.stringContaining('hỏng'), ['PENDING', 'RETRYING']);
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('b', expect.stringContaining('hỏng'), ['PENDING', 'RETRYING']);
   });
 
   it('không còn job + log PENDING (chưa từng được worker nhận) → đóng FAILED với lý do riêng', async () => {
     const { cron, closeStuckZnsLog } = setup([{ id: 'a', status: 'PENDING' }], {});
     await expect(cron.sweepStuckZnsLogs()).resolves.toMatchObject({ closed: 1, ambiguous: 0 });
-    expect(closeStuckZnsLog).toHaveBeenCalledWith('a', expect.stringContaining('không còn'));
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('a', expect.stringContaining('không còn'), ['PENDING']);
+  });
+
+  it('CAS theo đúng trạng thái đã thấy: job failed thì từ PENDING/RETRYING, mất job thì chỉ từ PENDING (log vừa sang RETRYING giữa lúc đọc Redis và lúc ghi không bị đóng)', async () => {
+    const { cron, closeStuckZnsLog } = setup([{ id: 'a', status: 'PENDING' }, { id: 'b', status: 'PENDING' }], { b: { state: 'failed' } });
+    await cron.sweepStuckZnsLogs();
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('a', expect.any(String), ['PENDING']);
+    expect(closeStuckZnsLog).toHaveBeenCalledWith('b', expect.any(String), ['PENDING', 'RETRYING']);
   });
 
   it('không còn job + log RETRYING (Zalo có thể đã nhận, job hoàn tất bị dọn khỏi Redis) → mơ hồ, KHÔNG đóng', async () => {

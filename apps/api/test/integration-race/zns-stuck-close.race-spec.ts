@@ -57,6 +57,13 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect([f.status, f.error]).toEqual(['FAILED', 'lý do cũ']);
   });
 
+  it('đóng với from=[PENDING]: log đã sang RETRYING giữa lúc quét và lúc ghi thì không bị đóng', async () => {
+    const log = await mkLog((await newUser()).id, null, 'PENDING');
+    await prisma.notificationLog.update({ where: { id: log.id }, data: { status: 'RETRYING' } });
+    expect(await svc.closeStuckZnsLog(log.id, 'mất job', ['PENDING'])).toBe(false);
+    expect((await row(log.id)).status).toBe('RETRYING');
+  });
+
   it('markStuckZnsSent chỉ từ RETRYING; đua với closeStuckZnsLog thì đúng một bên thắng', async () => {
     const u = await newUser();
     const pending = await mkLog(u.id, null, 'PENDING');
