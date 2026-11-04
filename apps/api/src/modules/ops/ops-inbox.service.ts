@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import { vnDateKey } from '../../common/vn-time';
+import { mapLimit } from '../../common/map-limit';
 import { COMMUNITY_MODERATORS, type StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { UNCATEGORIZED_ON_SALE_WHERE } from '../catalog/public-product';
@@ -87,6 +88,23 @@ export interface InboxViewer {
   staffPermissions?: string[];
 }
 
+/**
+ * Trần số truy vấn đếm chạy cùng lúc cho một lượt tính hộp việc. Hơn 35 count song song từ vài tab admin cùng mở chiếm hết
+ * pool (connection_limit=20) và các request khác dính P2028; 4 giữ tối đa 4 kết nối cho hộp việc, dư chỗ cho khách.
+ */
+export const INBOX_COUNT_CONCURRENCY = 4;
+/** Số liệu hộp việc trễ tối đa chừng này sau thao tác; nhân viên bấm xử lý xong sẽ thấy số cũ tới hết hạn (đặt OPS_INBOX_CACHE_TTL_MS=0 để tắt). */
+export const DEFAULT_INBOX_CACHE_TTL_MS = 20_000;
+/** `countStoresToSettle` dựng bảng kê đối soát (~9 truy vấn) cho từng gian hàng có khoản chờ nên cache lâu hơn phần còn lại. */
+export const DEFAULT_STORES_TO_SETTLE_TTL_MS = 60_000;
+
+type InboxResult = { generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number; oldestAt?: string; parts?: Record<string, number> }[] };
+interface CacheEntry<T> {
+  value: Promise<T>;
+  /** Infinity khi lượt tính còn chạy: các lượt gọi tới sau dùng chung kết quả thay vì bắt đầu lượt mới. */
+  expiresAt: number;
+}
+
 /** Ca chờ duyệt còn ý nghĩa: ngày làm việc từ hôm nay (giờ VN) trở đi. workDate là cột DATE lưu 00:00Z của ngày VN. */
 const PENDING_SHIFT_WHERE = (now: Date) => ({ status: 'PENDING' as const, workDate: { gte: new Date(vnDateKey(now)) } });
 
@@ -116,6 +134,42 @@ export class OpsInboxService {
     // Optional: chỉ để biết cầu nối Zalo đã cấu hình chưa (zaloBridgeDown); thiếu thì coi như chưa.
     @Optional() private readonly env?: ConfigService<Env, true>,
   ) {}
+
+  // Khoá = tập hộp người xem được thấy (không phải tên vai trò): hai người cùng nhóm quyền dùng chung, khác nhóm thì tách, nên
+  // staff không bao giờ nhận kết quả có hộp ngoài quyền. Số khoá tối đa là số tổ hợp nhóm quyền (nhỏ).
+  private readonly cache = new Map<string, CacheEntry<InboxResult>>();
+  private settleCache?: CacheEntry<number>;
+
+  private ttlMs(key: 'OPS_INBOX_CACHE_TTL_MS' | 'OPS_STORES_TO_SETTLE_TTL_MS', fallback: number): number {
+    const v: unknown = this.env?.get(key, { infer: true });
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback;
+  }
+
+  /** Giữ kết quả `ttl` ms sau khi xong; lượt lỗi không được nhớ. ttl 0 = không cache, không gộp lượt. */
+  private memo<T>(slot: { get(): CacheEntry<T> | undefined; set(e: CacheEntry<T> | undefined): void }, ttl: number, compute: () => Promise<T>): Promise<T> {
+    if (ttl <= 0) return compute();
+    const hit = slot.get();
+    if (hit && hit.expiresAt > Date.now()) return hit.value;
+    const entry: CacheEntry<T> = { value: compute(), expiresAt: Infinity };
+    slot.set(entry);
+    entry.value.then(
+      () => {
+        entry.expiresAt = Date.now() + ttl;
+      },
+      () => {
+        if (slot.get() === entry) slot.set(undefined);
+      },
+    );
+    return entry.value;
+  }
+
+  private cachedStoresToSettle(now: Date): Promise<number> {
+    return this.memo<number>(
+      { get: () => this.settleCache, set: (e) => void (this.settleCache = e) },
+      this.ttlMs('OPS_STORES_TO_SETTLE_TTL_MS', DEFAULT_STORES_TO_SETTLE_TTL_MS),
+      () => this.merchant.countStoresToSettle(now),
+    );
+  }
 
   private defs(now: Date): InboxDef[] {
     const p = this.prisma;
@@ -208,7 +262,7 @@ export class OpsInboxService {
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
       { key: 'consignmentPending', audience: 'ADMIN', count: () => p.merchantPancakeLink.count({ where: CONSIGNMENT_PENDING_LINK_WHERE }) },
-      { key: 'merchantToSettle', audience: ['KE_TOAN'], count: () => this.merchant.countStoresToSettle(now) },
+      { key: 'merchantToSettle', audience: ['KE_TOAN'], count: () => this.cachedStoresToSettle(now) },
       { key: 'merchantPayoutsPending', audience: ['KE_TOAN'], count: () => p.merchantPayout.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerApplications', audience: 'ADMIN', count: () => p.dealerApplication.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
@@ -282,27 +336,39 @@ export class OpsInboxService {
     return Math.max(0, Math.ceil((oldest.createdAt.getTime() + ttl * 3_600_000 - now.getTime()) / 3_600_000));
   }
 
-  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number; oldestAt?: string; parts?: Record<string, number> }[] }> {
+  async counts(viewer: InboxViewer, now = new Date()): Promise<InboxResult> {
     const perms = viewer.staffPermissions ?? [];
     const visible = this.defs(now).filter(
       (d) =>
         viewer.role === 'ADMIN' ||
         (viewer.role === 'STAFF' && (d.audience === 'STAFF' || (Array.isArray(d.audience) && d.audience.some((a) => perms.includes(a))))),
     );
-    const counts = await Promise.all(visible.map((d) => d.count()));
-    const [hoursLeft, oldest, parts] = await Promise.all([
-      Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.hoursLeft?.() : undefined))),
-      Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.oldest?.() : undefined))),
-      Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.parts?.() : undefined))),
-    ]);
+    const scope = visible.map((d) => d.key).join(',');
+    return this.memo<InboxResult>(
+      { get: () => this.cache.get(scope), set: (e) => void (e ? this.cache.set(scope, e) : this.cache.delete(scope)) },
+      this.ttlMs('OPS_INBOX_CACHE_TTL_MS', DEFAULT_INBOX_CACHE_TTL_MS),
+      () => this.compute(visible, now),
+    );
+  }
+
+  private async compute(visible: InboxDef[], now: Date): Promise<InboxResult> {
+    // Mỗi hộp là một việc: đếm xong mới hỏi các phần phụ (tuần tự trong hộp) để tổng số truy vấn song song không vượt trần.
+    const rows = await mapLimit(visible, INBOX_COUNT_CONCURRENCY, async (d) => {
+      const count = await d.count();
+      if (count <= 0) return { d, count, hoursLeft: undefined, oldest: undefined, parts: undefined };
+      const hoursLeft = await d.hoursLeft?.();
+      const oldest = await d.oldest?.();
+      const parts = await d.parts?.();
+      return { d, count, hoursLeft, oldest, parts };
+    });
     return {
       generatedAt: now.toISOString(),
-      items: visible.map((d, i) => ({
+      items: rows.map(({ d, count, hoursLeft, oldest, parts }) => ({
         key: d.key,
-        count: counts[i] ?? 0,
-        ...(hoursLeft[i] !== undefined ? { hoursLeft: hoursLeft[i] } : {}),
-        ...(oldest[i] ? { oldestAt: oldest[i]!.toISOString() } : {}),
-        ...(parts[i] ? { parts: parts[i] } : {}),
+        count,
+        ...(hoursLeft !== undefined ? { hoursLeft } : {}),
+        ...(oldest ? { oldestAt: oldest.toISOString() } : {}),
+        ...(parts ? { parts } : {}),
       })),
     };
   }

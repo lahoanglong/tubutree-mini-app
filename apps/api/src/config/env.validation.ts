@@ -61,6 +61,9 @@ export const envSchema = z.object({
   SENTRY_RELEASE: z.string().default(''), // image chưa mang git sha, đặt tay nếu muốn gắn bản phát hành
   // Endpoint /img đổi cỡ ảnh sản phẩm. Thư mục cache (rỗng = thư mục tạm của container), trần dung lượng (MB), host ảnh thêm ngoài
   // Pancake/Cloudinary (cách nhau bằng dấu phẩy; nguồn vẫn phải là ảnh đang có trong sản phẩm/nhãn).
+  // Hộp việc admin (GET /admin/ops/inbox): cache kết quả theo phạm vi người xem, và cache riêng cho số gian hàng chờ lập phiếu (ms; 0 = tắt).
+  OPS_INBOX_CACHE_TTL_MS: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().min(0).max(600_000).default(20_000)),
+  OPS_STORES_TO_SETTLE_TTL_MS: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().min(0).max(3_600_000).default(60_000)),
   IMAGE_CACHE_DIR: z.string().default(''),
   IMAGE_CACHE_MAX_MB: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().positive().max(10_240).default(512)),
   IMAGE_RESIZE_EXTRA_HOSTS: z.string().default(''),
