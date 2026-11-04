@@ -18,6 +18,7 @@ import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const LIST_KEY = ['admin-category-products'] as const;
 const OPTIONS_KEY = ['admin-category-options'] as const;
@@ -28,7 +29,7 @@ function overLimitText(over: { name: string }[] | undefined): string {
   return ` ${over.length} sản phẩm đã đủ danh mục tối đa nên chưa gán được: ${names}${over.length > 3 ? '…' : ''}. Gỡ bớt danh mục của chúng rồi gán lại.`;
 }
 
-const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 /**
  * "Sản phẩm": dựng cây danh mục hai tầng (≤8 gốc × ≤8 con), rồi gán/gỡ danh mục hàng loạt cho sản phẩm. Chỉ gán vào danh mục

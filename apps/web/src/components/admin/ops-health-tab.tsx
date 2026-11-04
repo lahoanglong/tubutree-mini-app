@@ -22,6 +22,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const PUSH_STATUS_LABELS: Record<string, string> = {
   PENDING: 'chờ đẩy',
@@ -162,7 +163,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
     setMsg({ tone: 'success', text });
     void qc.invalidateQueries({ queryKey: OPS_HEALTH_KEY });
   };
-  const fail = (e: unknown) => setMsg({ tone: 'danger', text: e instanceof Error ? e.message : 'Thao tác lỗi.' });
+  const fail = (e: unknown) => setMsg({ tone: 'danger', text: actionErrorText(e) });
   const [busy, setBusy] = useState(false);
   const msgRef = useRef<HTMLDivElement>(null);
   // Nút thao tác nằm ở các danh sách phía dưới, thông báo kết quả ở đầu trang: kéo thông báo vào tầm nhìn.
@@ -298,7 +299,7 @@ function describeTestFailure(e: unknown): TestOutcome {
   const plain = /^Gửi email thử lỗi: (.+)$/s.exec(e.message);
   if (withHint) return { ok: false, text: TEST_EMAIL_FAILED, smtpCause: smtpErrorSummary({ hint: withHint[1], raw: withHint[2] }) };
   if (plain) return { ok: false, text: TEST_EMAIL_FAILED, smtpCause: smtpErrorSummary({ raw: plain[1] }) };
-  return { ok: false, text: e.message };
+  return { ok: false, text: actionErrorText(e) };
 }
 
 /**

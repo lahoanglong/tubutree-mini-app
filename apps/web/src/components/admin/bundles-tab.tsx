@@ -8,6 +8,7 @@ import type { Tone } from '@/lib/recycling';
 import { BundleForm, KIND_LABELS } from './bundle-form';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_LINK_DANGER, LoadError, ToneBadge, chipClass } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = AdminBundleStatus | '';
 const STATUS: Record<AdminBundleStatus, { label: string; tone: Tone }> = {
@@ -18,7 +19,7 @@ const STATUS: Record<AdminBundleStatus, { label: string; tone: Tone }> = {
 };
 const FILTERS: { k: Filter; label: string }[] = [{ k: '', label: 'Tất cả' }, ...(Object.keys(STATUS) as AdminBundleStatus[]).map((k) => ({ k, label: STATUS[k].label }))];
 const STAFF_LOCK = 'Bộ do quản trị viên tạo, nhờ quản trị viên chỉnh sửa.';
-const msg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const msg = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 function summary(b: AdminBundle): string {
   const names = b.items.map((i) => i.productName).join(', ');

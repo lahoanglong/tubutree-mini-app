@@ -8,9 +8,10 @@ import { ImageUrlField } from './image-url-field';
 import { SideDrawer } from './side-drawer';
 import { useDiscardGuard } from './use-discard-guard';
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, chipClass } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const MAX_IMAGES = 8;
-const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 /**
  * Sửa một sản phẩm. Tên và giá không sửa ở đây vì đồng bộ Pancake ghi đè hai chỗ này mỗi lần chạy; ảnh, mô tả, ẩn/hiện,

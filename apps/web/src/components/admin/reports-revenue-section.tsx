@@ -8,6 +8,7 @@ import { REVENUE_MAX_DAYS, pivotRevenue, rangeError } from '@/lib/admin-reports'
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { BTN_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
  * KPI theo khoảng ngày và bảng doanh thu ngày × kênh. "Doanh thu" là tiền đã thu thật (đơn huỷ/trả/hoàn không tính, trừ phần
@@ -122,7 +123,7 @@ function ExportButtons({ range, disabled }: { range: ReportRange; disabled: bool
       const r = kind === 'orders' ? await downloadOrdersCsv({ from: range.from, to: range.to }) : await downloadOrderItemsCsv(range);
       setMsg({ ok: true, text: `Đã tải ${r.filename}.` });
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
+      setMsg({ ok: false, text: actionErrorText(e) });
     } finally {
       setBusy(null);
     }

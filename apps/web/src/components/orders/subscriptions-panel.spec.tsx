@@ -86,6 +86,12 @@ describe('SubscriptionsPanel', () => {
     expect(c.textContent).toContain('Lần kế: 15/10/2026');
   });
 
+  it('TZ-01: nextRunAt = 00:00 VN (17:00Z hôm trước) hiện đúng ngày VN, không lùi một ngày', async () => {
+    subs = [{ ...SUB, nextRunAt: '2026-11-10T17:00:00.000Z' }];
+    const c = await mount();
+    expect(c.textContent).toContain('Lần kế: 11/11/2026');
+  });
+
   it('lời giới thiệu lấy % giảm từ gói đầu, chưa có gói thì từ cấu hình công khai', async () => {
     subs = [];
     const c = await mount();

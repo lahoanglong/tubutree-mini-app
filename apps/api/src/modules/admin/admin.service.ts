@@ -595,8 +595,9 @@ export class AdminService {
       if (previousRole === 'ADMIN' && role !== 'ADMIN') {
         await assertAnotherActiveAdmin(tx, user.id, LAST_ADMIN_MESSAGE.demote);
       }
-      // Nhóm việc CSKH/KHO chỉ có nghĩa với STAFF: rời STAFF thì gỡ, lên lại STAFF phải gán lại có chủ đích.
-      const droppedPerms = role !== 'STAFF' ? (user.staffPermissions ?? []) : [];
+      // Nhóm việc CSKH/KHO chỉ có nghĩa với STAFF: rời STAFF thì gỡ, lên lại STAFF phải gán lại có chủ đích. Nâng lên STAFF từ vai trò
+      // khác cũng bỏ nhóm còn sót (vd. ghi chen lúc bị hạ) để quyền cũ không tự sống lại.
+      const droppedPerms = role !== 'STAFF' || previousRole !== 'STAFF' ? (user.staffPermissions ?? []) : [];
       const data: Prisma.UserUpdateInput = {
         role,
         ...(droppedPerms.length ? { staffPermissions: [] } : {}),
@@ -679,10 +680,15 @@ export class AdminService {
     const before = [...user.staffPermissions].sort().join(',');
     const after = [...perms].sort().join(',');
     if (before === after) return { id: userId, staffPermissions: perms, changed: false };
-    await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { staffPermissions: perms } }),
-      recordUserAdminEvent(this.prisma, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, actorId: adminId }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      // Điều kiện role nằm ở lệnh ghi: admin khác hạ tài khoản này chen sau bản đọc ở trên thì nhóm không được ghi lên tài khoản
+      // không còn STAFF (cấp lại STAFF sau đó sẽ làm nhóm sống lại).
+      const res = await tx.user.updateMany({ where: { id: userId, role: 'STAFF' }, data: { staffPermissions: perms } });
+      if (res.count === 0) {
+        throw new BadRequestException('Tài khoản vừa đổi vai trò, không còn là Nhân viên — tải lại trang.');
+      }
+      await recordUserAdminEvent(tx, { userId, kind: 'STAFF_PERMISSIONS', from: before, to: after, actorId: adminId });
+    });
     this.logger.warn(`Admin ${adminId} đổi nhóm việc nhân viên ${userId}: [${before}] → [${after}]`);
     return { id: userId, staffPermissions: perms, changed: true };
   }
@@ -1171,6 +1177,7 @@ export class AdminService {
       actorType: 'ADMIN',
       actorId: adminId,
       note: [opts.byStaff ? 'Kế toán xác nhận' : 'Admin xác nhận', bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
+      ...(bankRef ? { bankRef } : {}),
     });
     if (outcome === 'CLOSED') {
       // Đơn bị huỷ/trả giữa chừng: nhân viên không tạo khoản hoàn.
@@ -1185,6 +1192,7 @@ export class AdminService {
           amount: received,
           source: 'ADMIN',
           refKey: ADMIN_LATE_PAYMENT_REF,
+          ...(bankRef ? { bankRef } : {}),
           note: [`${opts.byStaff ? 'Kế toán' : 'Admin'} ghi nhận tiền về muộn`, bankRef ? `Mã GD ${bankRef}` : null, adminNote || null].filter(Boolean).join(' · '),
         },
       );

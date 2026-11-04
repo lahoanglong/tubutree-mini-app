@@ -9,7 +9,7 @@ async function collect(gen: AsyncGenerator<string>) {
 }
 
 function item(i: number, over: Record<string, unknown> = {}) {
-  return { productName: `SP ${i}`, variationName: 'Chai 500ml', variationId: `v${i}`, quantity: 2, unitPrice: 50_000, total: 100_000, paidTotal: 90_000, ...over };
+  return { id: `it${i}`, productName: `SP ${i}`, variationName: 'Chai 500ml', variationId: `v${i}`, quantity: 2, unitPrice: 50_000, total: 100_000, paidTotal: 90_000, ...over };
 }
 
 function order(i: number, items: Record<string, unknown>[], over: Record<string, unknown> = {}) {
@@ -28,7 +28,12 @@ function order(i: number, items: Record<string, unknown>[], over: Record<string,
   };
 }
 
-function fakePrisma(orders: Record<string, unknown>[], skus: Record<string, string>, users: Record<string, unknown>[] = []) {
+function fakePrisma(
+  orders: Record<string, unknown>[],
+  skus: Record<string, string>,
+  users: Record<string, unknown>[] = [],
+  returned: { orderItemId: string; _sum: { quantity: number; refundAmount: number } }[] = [],
+) {
   const orderFind = jest.fn(async (args: { take: number; cursor?: { id: string }; skip?: number }) => {
     const start = args.cursor ? orders.findIndex((r) => r.id === args.cursor!.id) + (args.skip ?? 0) : 0;
     return orders.slice(start, start + args.take);
@@ -37,10 +42,19 @@ function fakePrisma(orders: Record<string, unknown>[], skus: Record<string, stri
     args.where.id.in.filter((id) => skus[id]).map((id) => ({ id, sku: skus[id] })),
   );
   const userFind = jest.fn(async (args: { where: { id: { in: string[] } } }) => users.filter((u) => args.where.id.in.includes(u.id as string)));
+  const returnGroup = jest.fn(async (args: { where: { orderItemId: { in: string[] } } }) =>
+    returned.filter((r) => args.where.orderItemId.in.includes(r.orderItemId)),
+  );
   return {
-    prisma: { order: { findMany: orderFind }, variation: { findMany: variationFind }, user: { findMany: userFind } } as unknown as PrismaService,
+    prisma: {
+      order: { findMany: orderFind },
+      variation: { findMany: variationFind },
+      user: { findMany: userFind },
+      returnRequestItem: { groupBy: returnGroup },
+    } as unknown as PrismaService,
     orderFind,
     variationFind,
+    returnGroup,
   };
 }
 
@@ -90,5 +104,58 @@ describe('orderItemCsvChunks (D1-04a: CSV theo dòng hàng)', () => {
   it('đơn không có dòng hàng không sinh dòng nào', async () => {
     const { prisma } = fakePrisma([order(0, [])], {});
     expect((await collect(orderItemCsvChunks(prisma, {}))).trimEnd().split('\r\n')).toHaveLength(1);
+  });
+
+  it('TK-06: cột cuối Nơi giao, SL đã trả, Tiền đã hoàn; cột cũ giữ nguyên tên và thứ tự', async () => {
+    expect(ORDER_ITEM_CSV_HEADERS.slice(0, 15)).toEqual([
+      'Mã đơn', 'Ngày đặt', 'Trạng thái đơn', 'Loại đơn', 'Nền tảng', 'Nguồn đơn', 'CTV giới thiệu', 'Gian hàng', 'SKU',
+      'Sản phẩm', 'Phân loại', 'Số lượng', 'Đơn giá (VNĐ)', 'Thành tiền dòng (VNĐ)', 'Khách trả cho dòng (VNĐ)',
+    ]);
+    expect(ORDER_ITEM_CSV_HEADERS.slice(15)).toEqual(['Nơi giao (kho/gian hàng tự giao)', 'SL đã trả', 'Tiền đã hoàn cho dòng (VNĐ)']);
+  });
+
+  it('TK-06: dòng trả một phần 2/3 ghi SL đã trả 2 và tiền đã hoàn; nơi giao theo fulfiller; một groupBy cho cả lô', async () => {
+    const { prisma, returnGroup } = fakePrisma(
+      [
+        order(0, [item(1, { quantity: 3, total: 300_000, paidTotal: 300_000 }), item(2)], { fulfiller: 'MERCHANT', fulfillerStorefront: { title: 'Shop Giao' } }),
+        order(1, [item(3)], { fulfiller: 'TUBU', fulfillerStorefront: null }),
+      ],
+      { v1: 'A', v2: 'B', v3: 'C' },
+      [],
+      [{ orderItemId: 'it1', _sum: { quantity: 2, refundAmount: 200_000 } }],
+    );
+    const lines = (await collect(orderItemCsvChunks(prisma, {}))).trimEnd().split('\r\n');
+    const col = (name: string) => ORDER_ITEM_CSV_HEADERS.indexOf(name);
+    const r1 = lines[1]!.split(',');
+    const r2 = lines[2]!.split(',');
+    const r3 = lines[3]!.split(',');
+    expect(r1[col('Nơi giao (kho/gian hàng tự giao)')]).toBe('Gian hàng tự giao: Shop Giao');
+    expect(r1[col('SL đã trả')]).toBe('2');
+    expect(r1[col('Tiền đã hoàn cho dòng (VNĐ)')]).toBe('200000');
+    expect(r2[col('SL đã trả')]).toBe('0');
+    expect(r2[col('Tiền đã hoàn cho dòng (VNĐ)')]).toBe('0');
+    expect(r3[col('Nơi giao (kho/gian hàng tự giao)')]).toBe('Kho Tubu');
+    expect(returnGroup).toHaveBeenCalledTimes(1);
+    expect(returnGroup.mock.calls[0]![0]).toMatchObject({
+      by: ['orderItemId'],
+      where: { orderItemId: { in: ['it1', 'it2', 'it3'] }, returnRequest: { status: 'APPROVED' } },
+    });
+  });
+
+  it('TK-06: đơn RETURNED cả đơn không qua yêu cầu trả → SL đã trả = cả dòng; tiền = paidTotal khi đã REFUNDED, trống khi chưa chắc', async () => {
+    const { prisma } = fakePrisma(
+      [
+        order(0, [item(1, { quantity: 3, total: 300_000, paidTotal: 300_000 })], { status: 'RETURNED', paymentStatus: 'REFUNDED' }),
+        order(1, [item(2, { paidTotal: null })], { status: 'RETURNED', paymentStatus: 'REFUNDED' }),
+        order(2, [item(3)], { status: 'RETURNED', paymentStatus: 'UNPAID' }),
+        order(3, [item(4)], { status: 'DELIVERED', paymentStatus: 'PAID' }),
+      ],
+      {},
+    );
+    const lines = (await collect(orderItemCsvChunks(prisma, {}))).trimEnd().split('\r\n');
+    const qty = ORDER_ITEM_CSV_HEADERS.indexOf('SL đã trả');
+    const money = ORDER_ITEM_CSV_HEADERS.indexOf('Tiền đã hoàn cho dòng (VNĐ)');
+    const cells = lines.slice(1).map((l) => [l.split(',')[qty], l.split(',')[money]]);
+    expect(cells).toEqual([['3', '300000'], ['2', ''], ['2', ''], ['0', '0']]);
   });
 });

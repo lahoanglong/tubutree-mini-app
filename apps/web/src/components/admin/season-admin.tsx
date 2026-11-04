@@ -7,6 +7,7 @@ import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { VnDateInput } from './vn-date-input';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, INPUT_CLASS, Field, LoadError } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const STATUS_TEXT: Record<AdminSeason['status'], string> = { ACTIVE: 'Đang chạy', UPCOMING: 'Sắp tới', ENDED: 'Đã hết hạn' };
 
@@ -32,12 +33,12 @@ export function SeasonAdmin() {
       setF({ name: '', theme: '', region: '', start: '', end: '' });
       void qc.invalidateQueries({ queryKey: ['admin-seasons'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tạo được mùa.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const remove = useMutation({
     mutationFn: (id: string) => deleteAdminSeason(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin-seasons'] }),
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xoá được mùa.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const running = seasonsQ.data?.some((s) => s.status === 'ACTIVE');
 

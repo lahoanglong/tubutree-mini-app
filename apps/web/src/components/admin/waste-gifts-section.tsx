@@ -28,6 +28,7 @@ import {
   LoadError,
 } from './ui';
 import type { WasteSeed } from './waste-tab';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const TH = 'px-2 py-2 text-left text-xs font-medium text-stone-600';
 const TD = 'px-2 py-2 align-middle text-sm text-stone-800';
@@ -175,7 +176,7 @@ function GiftQueue({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | nul
     qc.invalidateQueries({ queryKey: ['admin-waste-gifts'] }),
     qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
   ]);
-  const onError = (e: unknown) => { setMsg(null); setErr(e instanceof Error ? e.message : 'Thao tác thất bại.'); };
+  const onError = (e: unknown) => { setMsg(null); setErr(actionErrorText(e)); };
 
   const fulfil = useMutation({
     mutationFn: ({ id, value }: { id: string; value: string }) => fulfilGiftRedemption(id, value),
@@ -281,7 +282,7 @@ function GiftCatalogue() {
 
   const sorted = [...(gifts.data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const done = () => qc.invalidateQueries({ queryKey: ['admin-waste-gifts'] });
-  const onError = (e: unknown) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+  const onError = (e: unknown) => setErr(actionErrorText(e));
 
   const patch = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<Body> }) => updateWasteGift(id, body),

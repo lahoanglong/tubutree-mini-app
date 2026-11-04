@@ -12,10 +12,14 @@ function makeItem(over: Record<string, unknown> = {}) {
 }
 
 function setup(items: unknown[], opts: { reserved?: Record<string, number>; updateManyCount?: number } = {}) {
+  // Danh sách dòng cần lấp đi qua $queryRaw (JOIN biến thể để lọc tồn ngay trong truy vấn); các lệnh còn lại của $queryRaw là
+  // khoá dòng / reserveAvailableVariationStock.
   const findMany = jest.fn().mockResolvedValue(items);
   // reserveAvailableVariationStock đi qua $queryRaw — trả "reserved" theo variationId, mặc định
   // giữ đủ toàn bộ số yêu cầu (opts.reserved override từng variation nếu cần mô phỏng thiếu hàng).
-  const queryRaw = jest.fn(async (_strings: unknown, ...vals: unknown[]) => {
+  const queryRaw = jest.fn(async (strings: unknown, ...vals: unknown[]) => {
+    const sql = Array.isArray(strings) ? strings.join('?') : '';
+    if (sql.includes('JOIN "variations"')) return findMany(sql, ...vals);
     const variationId = vals.find((v) => typeof v === 'string') as string | undefined;
     const desired = vals.find((v) => typeof v === 'number') as number | undefined;
     const cap = opts.reserved?.[variationId ?? ''] ?? desired ?? 0;
@@ -31,7 +35,7 @@ function setup(items: unknown[], opts: { reserved?: Record<string, number>; upda
   const txClient = { orderItem: { updateMany: orderItemUpdateMany }, $queryRaw: queryRaw, $executeRaw: executeRaw };
   const transaction = jest.fn((cb: (tx: typeof txClient) => unknown) => cb(txClient));
   const prisma = {
-    orderItem: { findMany, updateMany: orderItemUpdateMany, count: orderItemCount },
+    orderItem: { updateMany: orderItemUpdateMany, count: orderItemCount },
     order: { findUnique: orderFindUnique },
     $queryRaw: queryRaw,
     $executeRaw: executeRaw,
@@ -46,16 +50,32 @@ describe('DealerBackorderService.reconcile', () => {
   it('không có dòng nào đang thiếu hàng → không làm gì', async () => {
     const { svc, queryRaw } = setup([]);
     await expect(svc.reconcile()).resolves.toBe(0);
-    expect(queryRaw).not.toHaveBeenCalled();
+    expect(queryRaw).toHaveBeenCalledTimes(1); // chỉ truy vấn danh sách, không khoá/giữ kho dòng nào
   });
 
-  it('quét OrderItem còn backorderedQty > 0, đơn CHƯA huỷ/trả, FIFO theo order.createdAt', async () => {
+  it('quét dòng còn backorderedQty > 0, đơn CHƯA huỷ/trả, biến thể còn tồn, FIFO theo đơn rồi id', async () => {
     const { svc, findMany } = setup([]);
     await svc.reconcile();
-    const where = findMany.mock.calls[0]![0].where;
-    expect(where.backorderedQty).toEqual({ gt: 0 });
-    expect(where.order.status.notIn).toEqual(['CANCELLED', 'RETURNED']);
-    expect(findMany.mock.calls[0]![0].orderBy).toEqual({ order: { createdAt: 'asc' } });
+    const sql = (findMany.mock.calls[0]![0] as string).replace(/\s+/g, ' ');
+    expect(sql).toContain('oi."backorderedQty" > 0');
+    expect(sql).toContain(`NOT IN ('CANCELLED', 'RETURNED')`);
+    expect(sql).toContain('v."stock" > 0');
+    expect(sql).toContain('ORDER BY o."createdAt" ASC, oi."id" ASC');
+  });
+
+  it('TK-02: 201 dòng, 200 dòng đầu hết hàng, dòng 201 có hàng → vẫn được lấp và đơn được đẩy Pancake', async () => {
+    const stock = new Map<string, number>();
+    const all = Array.from({ length: 201 }, (_, i) => {
+      stock.set(`v${i}`, i === 200 ? 5 : 0);
+      return makeItem({ id: `i${i}`, orderId: `o${i}`, variationId: `v${i}`, backorderedQty: 2 });
+    });
+    const { svc, findMany, enqueuePush } = setup([], { reserved: { v200: 2 } });
+    // Mô phỏng truy vấn thật: lọc tồn trong SQL rồi mới LIMIT 200.
+    findMany.mockImplementation(async (sql: string) =>
+      (sql.includes('v."stock" > 0') ? all.filter((r) => (stock.get(r.variationId as string) ?? 0) > 0) : all).slice(0, 200),
+    );
+    await expect(svc.reconcile()).resolves.toBe(2);
+    expect(enqueuePush).toHaveBeenCalledWith('o200');
   });
 
   it('đủ hàng → lấp hết, ghi backorderedQty=0, đẩy Pancake vì đơn đã đủ 100%', async () => {
@@ -125,12 +145,13 @@ describe('DealerBackorderService.reconcile', () => {
   });
 
   it('không có PancakeOrderService (chưa wiring) → không throw', async () => {
-    const findMany = jest.fn().mockResolvedValue([makeItem({ backorderedQty: 4 })]);
-    const queryRaw = jest.fn().mockResolvedValue([{ reserved: 4 }]);
+    const queryRaw = jest.fn(async (strings: unknown) =>
+      Array.isArray(strings) && strings.join('?').includes('JOIN "variations"') ? [makeItem({ backorderedQty: 4 })] : [{ reserved: 4 }],
+    );
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const txClient = { orderItem: { updateMany }, $queryRaw: queryRaw, $executeRaw: jest.fn() };
     const prisma = {
-      orderItem: { findMany, updateMany, count: jest.fn().mockResolvedValue(0) },
+      orderItem: { updateMany, count: jest.fn().mockResolvedValue(0) },
       order: { findUnique: jest.fn().mockResolvedValue({ pancakeOrderId: null }) },
       $queryRaw: queryRaw,
       $transaction: jest.fn((cb: (tx: typeof txClient) => unknown) => cb(txClient)),

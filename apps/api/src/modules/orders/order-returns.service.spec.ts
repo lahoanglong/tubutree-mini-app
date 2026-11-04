@@ -270,6 +270,46 @@ describe('OrderReturnsService.review — từ chối', () => {
   });
 });
 
+describe('OrderReturnsService.review — RB-02: nhân viên không duyệt trả đơn của chính mình', () => {
+  function setup(staffPhone: string | null) {
+    const transaction = jest.fn().mockRejectedValue(new Error('đã vào giao dịch duyệt'));
+    const reversal = { reverseFinancials: jest.fn(), reversePartialReturn: jest.fn() };
+    const prisma = {
+      returnRequest: { findUnique: jest.fn().mockResolvedValue({ id: 'r1', orderId: 'o1', userId: 'ctv1', items: [] }), updateMany: jest.fn() },
+      order: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'o1', userId: 'ctv1', endCustomerKey: '0901000000', shippingAddress: { phone: '0901000000' } }),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: staffPhone }) },
+      $transaction: transaction,
+    } as unknown as PrismaService;
+    const loyalty = { pointsExpiresAt: jest.fn().mockResolvedValue(new Date()) };
+    const svc = new OrderReturnsService(prisma, {} as never, reversal as never, loyalty as never, {} as never, notifications);
+    return { svc, transaction, reversal, prisma };
+  }
+
+  it('đơn CTV đặt hộ có SĐT người nhận = SĐT nhân viên đang duyệt → 403, không vào giao dịch, không đảo tiền', async () => {
+    const { svc, transaction, reversal, prisma } = setup('+84901000000');
+    const run = svc.review('staff1', 'r1', { approve: true, shopFault: true }, { byStaff: true });
+    await expect(run).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(run).rejects.toThrow('đơn của chính mình');
+    expect(transaction).not.toHaveBeenCalled();
+    expect(reversal.reverseFinancials).not.toHaveBeenCalled();
+    expect(prisma.returnRequest.updateMany as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên duyệt đơn không liên quan → được đi tiếp vào giao dịch duyệt', async () => {
+    const { svc, transaction } = setup('0988888888');
+    await expect(svc.review('staff1', 'r1', { approve: true, shopFault: true }, { byStaff: true })).rejects.toThrow('đã vào giao dịch duyệt');
+    expect(transaction).toHaveBeenCalled();
+  });
+
+  it('quản trị viên không bị chặn theo SĐT', async () => {
+    const { svc, transaction } = setup('+84901000000');
+    await expect(svc.review('admin1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('đã vào giao dịch duyệt');
+    expect(transaction).toHaveBeenCalled();
+  });
+});
+
 describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo điểm/hoa hồng sau commit', () => {
   // Giao dịch duyệt đã commit (yêu cầu APPROVED, đơn RETURNED) nên gọi lại báo "đã xử lý": mọi việc sau commit phải chạy hết rồi mới ném.
   function setupFullApprove(over: { points?: Error; commissions?: Error } = {}) {

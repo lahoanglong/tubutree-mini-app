@@ -6,7 +6,7 @@ import type { AdminCustomerRefund, Page } from '../../web/src/lib/admin-client';
  *
  * Mock đúng dạng API thật (customer-refunds-admin.controller.ts): GET /admin/customer-refunds trả `paginated()`
  * = `{ data, meta }`, POST /admin/customer-refunds/:id/mark-paid trả dòng đã COMPLETED hoặc 400 khi khoản không
- * còn PENDING (thua race giữa hai admin). Trang không bao giờ tự chuyển tiền: UI chỉ ghi sổ việc admin đã chuyển.
+ * còn PROCESSING do chính admin giữ (phải /claim trước; thua race giữa hai admin). Trang không bao giờ tự chuyển tiền: UI chỉ ghi sổ việc admin đã chuyển.
  *
  * Mở thẳng `/admin?tab=customerRefunds` (readUrlState trong app/admin/page.tsx đọc `?tab=`).
  */
@@ -64,6 +64,11 @@ function refund(over: Partial<AdminCustomerRefund> & Pick<AdminCustomerRefund, '
   };
 }
 
+/** Khoản đã "Bắt đầu chuyển khoản" bởi chính admin đang đăng nhập: chỉ dòng này mới có nút "Đã chuyển khoản". */
+function claimed(id: string, over: Partial<AdminCustomerRefund> = {}): AdminCustomerRefund {
+  return refund({ id, status: 'PROCESSING', claimedBy: 'admin-1', claimedByName: 'Test Admin', claimedAt: '2026-10-01T04:00:00.000Z', ...over });
+}
+
 function page<T>(data: T[], p: number, limit: number, total: number): Page<T> {
   return { data, meta: { page: p, limit, total } };
 }
@@ -82,6 +87,7 @@ function mockList(api: MockApi, state: { rows: AdminCustomerRefund[] }) {
 }
 
 const MARK_PAID = '/admin/customer-refunds/:id/mark-paid';
+const CLAIM = '/admin/customer-refunds/:id/claim';
 
 test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   test.beforeEach(async ({ page: p, api }) => {
@@ -94,7 +100,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   test('hàng chờ: hiện khoản chuyển khoản tay (tên, SĐT, số tiền, lý do), huy hiệu số khoản trên tab; dòng ví không có nút', async ({ page: p, api }) => {
     const state = {
       rows: [
-        refund({ id: 'r1' }),
+        claimed('r1'),
         refund({ id: 'r2', reason: 'RETURNED', amount: 480_000, recipientName: 'Lê Văn C', phone: '0987654321' }),
         refund({ id: 'r3', method: 'WALLET', status: 'COMPLETED', customerUserId: 'user-9' }),
       ],
@@ -129,8 +135,37 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
     await expect(wallet.getByRole('button', { name: 'Đã chuyển khoản', exact: true })).toHaveCount(0);
   });
 
-  test('Đã chuyển khoản: hộp xác nhận nêu số tiền/tên/SĐT, gửi mark-paid đúng body, danh sách và huy hiệu cập nhật', async ({ page: p, api }) => {
+  test('khoản khách cuối chờ chuyển khoản (PENDING): chỉ có "Bắt đầu chuyển khoản", bấm gọi đúng /claim rồi mới có "Đã chuyển khoản"', async ({ page: p, api }) => {
     const state = { rows: [refund({ id: 'r1' })] };
+    mockList(api, state);
+    api.post(CLAIM, ({ params }) => {
+      const row = state.rows.find((r) => r.id === params.id)!;
+      Object.assign(row, { status: 'PROCESSING', claimedBy: 'admin-1', claimedByName: 'Test Admin', claimedAt: '2026-10-02T08:00:00.000Z' });
+      return row;
+    });
+
+    await p.goto('/admin?tab=customerRefunds');
+    const r1 = p.locator('[data-refund-id="r1"]');
+    await expect(r1).toBeVisible({ timeout: 15_000 });
+    await expect(r1.getByRole('button', { name: 'Bắt đầu chuyển khoản', exact: true })).toBeVisible();
+    await expect(r1.getByRole('button', { name: 'Đã chuyển khoản', exact: true })).toHaveCount(0);
+    expect(api.callsTo('POST', CLAIM)).toHaveLength(0);
+
+    await r1.getByRole('button', { name: 'Bắt đầu chuyển khoản', exact: true }).click();
+    const dialog = p.getByRole('alertdialog');
+    await expect(dialog).toBeVisible();
+    const claimed = api.waitForCall('POST', CLAIM);
+    await dialog.getByRole('button', { name: 'Bắt đầu chuyển khoản', exact: true }).click();
+    expect((await claimed).path).toBe('/admin/customer-refunds/r1/claim');
+    expect(api.callsTo('POST', MARK_PAID)).toHaveLength(0);
+
+    await expect(dialog).toHaveCount(0);
+    await p.getByRole('tab', { name: 'Đang chuyển khoản', exact: true }).click();
+    await expect(p.locator('[data-refund-id="r1"]').getByRole('button', { name: 'Đã chuyển khoản', exact: true })).toBeVisible();
+  });
+
+  test('Đã chuyển khoản: hộp xác nhận nêu số tiền/tên/SĐT, gửi mark-paid đúng body, danh sách và huy hiệu cập nhật', async ({ page: p, api }) => {
+    const state = { rows: [claimed('r1')] };
     mockList(api, state);
     api.post(MARK_PAID, ({ params, call }) => {
       const row = state.rows.find((r) => r.id === params.id)!;
@@ -182,7 +217,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   });
 
   test('Thiếu mã giao dịch ngân hàng: hộp báo nhập mã, không gọi mark-paid, hộp vẫn mở', async ({ page: p, api }) => {
-    mockList(api, { rows: [refund({ id: 'r1' })] });
+    mockList(api, { rows: [claimed('r1')] });
 
     await p.goto('/admin?tab=customerRefunds');
     await p.locator('[data-refund-id="r1"]').getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
@@ -195,7 +230,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   });
 
   test('Huỷ hộp xác nhận: đóng hộp, không gọi mark-paid, khoản vẫn chờ chuyển khoản', async ({ page: p, api }) => {
-    mockList(api, { rows: [refund({ id: 'r1' })] });
+    mockList(api, { rows: [claimed('r1')] });
 
     await p.goto('/admin?tab=customerRefunds');
     await p.locator('[data-refund-id="r1"]').getByRole('button', { name: 'Đã chuyển khoản', exact: true }).click();
@@ -209,7 +244,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   });
 
   test('thua race (400 không còn chờ chuyển khoản): hiện thông báo của API, đóng hộp, tải lại danh sách', async ({ page: p, api }) => {
-    const state = { rows: [refund({ id: 'r1' })] };
+    const state = { rows: [claimed('r1')] };
     mockList(api, state);
     const STALE = 'Khoản hoàn không còn chờ chuyển khoản.';
     api.post(MARK_PAID, () => {
@@ -231,7 +266,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   });
 
   test('lỗi máy chủ 500: giữ hộp, báo thử lại bằng tiếng Việt; bấm lại thành công thì mới đóng', async ({ page: p, api }) => {
-    const state = { rows: [refund({ id: 'r1' })] };
+    const state = { rows: [claimed('r1')] };
     mockList(api, state);
     let fail = true;
     api.post(MARK_PAID, () => {
@@ -263,8 +298,7 @@ test.describe('Admin — Hoàn tiền khách (đơn CTV lên hộ)', () => {
   test('điện thoại 390px: màn Hoàn tiền khách không tràn ngang', async ({ page: p, api }) => {
     mockList(api, {
       rows: [
-        refund({
-          id: 'r1',
+        claimed('r1', {
           recipientName: 'Nguyễn Thị Một Cái Tên Rất Dài Để Thử Ngắt Dòng',
           orderCode: 'TT-20261001-MA-DON-RAT-DAI-0000000000000001',
         }),

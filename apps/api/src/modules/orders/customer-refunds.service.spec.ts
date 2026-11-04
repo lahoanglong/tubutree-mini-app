@@ -84,6 +84,22 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
     }, undefined, 'order=TB100');
   });
 
+  it('khoản LATE_PAYMENT đang chuyển: ghi chú gõ thêm được NỐI vào adminNote cũ (giữ mã GD tiền vào), không ghi đè', async () => {
+    const { service, tx } = setup(pending({ kind: 'LATE_PAYMENT', status: 'PROCESSING', claimedBy: 'a1', adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT777' }));
+    Object.assign(tx, { $queryRaw: jest.fn().mockResolvedValue([]) });
+    Object.assign(tx.orderCustomerRefund, { findUnique: jest.fn().mockResolvedValue({ adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT777' }) });
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123', note: 'Đã chuyển lúc 10h' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT777 · Đã chuyển lúc 10h' }) }),
+    );
+  });
+
+  it('khoản không phải LATE_PAYMENT: ghi chú gõ vào vẫn là adminNote như trước', async () => {
+    const { service, tx } = setup(pending({ status: 'PROCESSING', claimedBy: 'a1' }));
+    await service.markPaid('a1', 'r1', { bankRef: 'FT123', note: 'Đã chuyển lúc 10h' });
+    expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ adminNote: 'Đã chuyển lúc 10h' }) }));
+  });
+
   it('khoản chưa khoá bằng "Bắt đầu chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
     const { service, prisma, notifications } = setup();
     await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
@@ -91,11 +107,18 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 
-  it('khoản khách cuối đơn CTV (không có tài khoản khách) → xác nhận thẳng từ hàng chờ được', async () => {
-    const { service, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
+  it('RC-01: khoản khách cuối đơn CTV PENDING → phải "Bắt đầu chuyển khoản" trước, không xác nhận thẳng', async () => {
+    const { service, prisma, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null }));
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
+    expect(prisma.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('RC-01: khoản khách cuối đơn CTV đã claim bởi chính mình → xác nhận được', async () => {
+    const { service, tx } = setup(pending({ kind: 'END_CUSTOMER', userId: null, bankAccountNo: null, status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PENDING' }] } }),
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PROCESSING', claimedBy: 'a1' }] } }),
     );
   });
 
@@ -602,11 +625,18 @@ describe('CustomerRefundsService — khoản của khách cuối đơn CTV lên 
       ...over,
     });
 
-  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: admin xác nhận thẳng từ hàng chờ, không bắt gõ tài khoản', async (kind) => {
+  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: từ hàng chờ bị chặn, phải "Bắt đầu chuyển khoản" trước', async (kind) => {
     const { service, tx } = setup(endCustomerLate({ kind }));
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow(BadRequestException);
+    await expect(service.markPaid('a1', 'r1', { bankRef: 'FT123' })).rejects.toThrow('Bắt đầu chuyển khoản');
+    expect(tx.orderCustomerRefund.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['LATE_PAYMENT', 'OVERPAYMENT', 'RETURN'])('%s không chủ tài khoản: đã bắt đầu chuyển khoản (đúng người giữ) thì xác nhận được, không bắt gõ tài khoản', async (kind) => {
+    const { service, tx } = setup(endCustomerLate({ kind, status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(tx.orderCustomerRefund.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PENDING' }] } }),
+      expect.objectContaining({ where: { id: 'r1', method: 'MANUAL_TRANSFER', OR: [{ status: 'PROCESSING', claimedBy: 'a1' }] } }),
     );
   });
 
@@ -647,7 +677,7 @@ describe('CustomerRefundsService — khoản của khách cuối đơn CTV lên 
   });
 
   it('xác nhận xong khoản không chủ tài khoản → không có ai để báo REFUND_BANK_COMPLETED', async () => {
-    const { service, notifications } = setup(endCustomerLate());
+    const { service, notifications } = setup(endCustomerLate({ status: 'PROCESSING', claimedBy: 'a1' }));
     await service.markPaid('a1', 'r1', { bankRef: 'FT123' });
     expect(notifications.notify).not.toHaveBeenCalled();
   });

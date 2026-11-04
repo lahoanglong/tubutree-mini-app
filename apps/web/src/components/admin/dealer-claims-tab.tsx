@@ -24,6 +24,7 @@ import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUC
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
   PENDING: 'warning',
@@ -154,7 +155,7 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
       void invalidateInbox(qc);
     },
     onError: (e) => {
-      setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+      setErr(actionErrorText(e));
       // Trạng thái có thể vừa bị admin khác đổi — tải lại để thấy trạng thái thật.
       void qc.invalidateQueries({ queryKey: ['admin-dealer-claims'] });
       void invalidateInbox(qc);

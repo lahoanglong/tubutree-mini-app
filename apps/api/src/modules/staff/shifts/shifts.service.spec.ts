@@ -230,6 +230,50 @@ describe('ShiftsService.copyWeek', () => {
   });
 });
 
+describe('ShiftsService.updateShift', () => {
+  const shift = {
+    id: 's1',
+    staffId: 'u1',
+    status: 'PENDING',
+    workDate: new Date('2026-07-10'),
+    startAt: new Date('2026-07-10T01:00:00Z'),
+    endAt: new Date('2026-07-10T05:00:00Z'),
+  };
+
+  it('RC-03: ghi kèm điều kiện PENDING, ca vừa được duyệt (count 0) → BadRequest', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const findFirst = jest.fn().mockResolvedValueOnce(shift).mockResolvedValueOnce({ status: 'APPROVED' });
+    const prisma = makePrisma({ shift: { findFirst, findMany: jest.fn().mockResolvedValue([]), updateMany } });
+    await expect(
+      mk(prisma).updateShift('u1', 's1', { endAt: new Date('2026-07-10T07:00:00Z') }),
+    ).rejects.toThrow('Ca vừa được duyệt, tải lại');
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 's1', staffId: 'u1', status: 'PENDING' } }),
+    );
+  });
+
+  it.each([
+    [{ status: 'REJECTED' }, 'Ca vừa bị từ chối, tải lại'],
+    [null, 'Ca không còn nữa, tải lại'],
+    [{ status: 'CANCELLED' }, 'Ca vừa đổi trạng thái, tải lại'],
+  ])('count 0, đọc lại ca = %j → lời báo đúng trạng thái', async (now, msg) => {
+    const findFirst = jest.fn().mockResolvedValueOnce(shift).mockResolvedValueOnce(now);
+    const prisma = makePrisma({
+      shift: { findFirst, findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    });
+    await expect(mk(prisma).updateShift('u1', 's1', { endAt: new Date('2026-07-10T07:00:00Z') })).rejects.toThrow(msg);
+  });
+
+  it('ca còn PENDING → ghi giờ mới và trả ca', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const endAt = new Date('2026-07-10T07:00:00Z');
+    const findFirst = jest.fn().mockResolvedValueOnce(shift).mockResolvedValueOnce({ ...shift, endAt });
+    const prisma = makePrisma({ shift: { findFirst, findMany: jest.fn().mockResolvedValue([]), updateMany } });
+    const res = await mk(prisma).updateShift('u1', 's1', { endAt });
+    expect(res).toMatchObject({ id: 's1', endAt });
+  });
+});
+
 describe('ShiftsService.approve/reject (admin)', () => {
   it('approve ca không PENDING → BadRequest', async () => {
     const prisma = makePrisma({ shift: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) } });

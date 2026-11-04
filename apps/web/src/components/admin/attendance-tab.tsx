@@ -6,6 +6,7 @@ import { listLiveAttendance, manualCheckout, type LiveAttendance } from '@/lib/a
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, Notice, ToneBadge, LoadError } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /** Nhân viên đang trong ca + nút "Chốt ra ca" cho người quên ra ca (ADMINOPS-17). Lương ngày đó tự tính lại. */
 export function AttendanceTab() {
@@ -19,7 +20,7 @@ export function AttendanceTab() {
       setMsg({ tone: 'success', text: 'Đã chốt ra ca và tính lại lương ngày đó.' });
       void qc.invalidateQueries({ queryKey: ['admin-attendance-live'] });
     },
-    onError: (e) => setMsg({ tone: 'danger', text: e instanceof Error ? e.message : 'Không chốt được ca.' }),
+    onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
   });
 
   const ask = async (s: LiveAttendance) => {

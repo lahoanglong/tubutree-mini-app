@@ -12,6 +12,7 @@ import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { formatVnDate } from '../../common/vn-time';
+import { alreadyPaidConflict, isSameConfirmation } from '../../common/payout-paid-conflict';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -1135,8 +1136,11 @@ export class MerchantFulfilmentService {
     });
     if (!payout) throw new NotFoundException('Không tìm thấy phiếu đối soát.');
     if (flipped.count === 0) {
-      if (payout.status === 'PAID') return payout;
-      throw new ConflictException('Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
+      if (payout.status === 'PAID') {
+        if (isSameConfirmation(payout, adminId, ref)) return payout;
+        throw await alreadyPaidConflict(this.prisma, payout, { noun: 'Phiếu đối soát', collected: payout.amount < 0, actorId: adminId });
+      }
+      throw new ConflictException(payout.amount < 0 ? 'Phiếu đã bị huỷ, không đánh dấu đã thu được.' : 'Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
     }
     await this.notifyOwner(payout.storefront.ownerUserId, 'MERCHANT_PAYOUT_PAID', {
       amount: Math.abs(payout.amount).toLocaleString('vi-VN'),

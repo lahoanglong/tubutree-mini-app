@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Logger, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -163,6 +163,7 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
       user: { findUnique: jest.fn().mockResolvedValue(dealer) },
       $executeRaw: jest.fn().mockResolvedValue(1),
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue(opts.bankRefHistory ?? []) },
+      orderCustomerRefund: { findMany: jest.fn().mockResolvedValue([]) },
       order: { findFirst: jest.fn().mockResolvedValue(opts.bankRefOrder ?? null) },
       dealerCreditLedger: {
         findFirst,
@@ -240,6 +241,15 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(res).not.toHaveProperty('alreadyRecorded');
   });
 
+  it('khoá Idempotency-Key đã có trong sổ, cùng số tiền: trả sổ hiện tại kèm replayed: true, không ghi thêm; ghi mới không có replayed', async () => {
+    const replayed = build({ existingClaim: { delta: -150_000 } });
+    const res = await replayed.svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { idempotencyKey: 'FT888' });
+    expect(replayed.ledgerCreate).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ replayed: true });
+    const fresh = build({ debt: 500_000 });
+    expect(await fresh.svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { idempotencyKey: 'FT889' })).not.toHaveProperty('replayed');
+  });
+
   it('khoá trùng mà báo cáo đã RECORDED (bấm đúp lần ghi nhận của chính báo cáo này): reportClosed: true', async () => {
     const { svc } = build({ existingClaim: { delta: -150_000 }, report: { status: 'RECORDED' } });
     await expect(svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { reportId: 'rp1' })).resolves.toMatchObject({ reportClosed: true, alreadyRecorded: true });
@@ -267,6 +277,26 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(note).toContain('FT123');
     expect(note).toContain('VCB');
     expect(notify).toHaveBeenCalledWith('d1', 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: '300.000' });
+  });
+
+  it('RB-01: kế toán tự ghi nhận trả nợ cho sổ công nợ của chính mình → 403, không tạo dòng sổ', async () => {
+    const { svc, ledgerCreate } = build({ dealer: { id: 'kt1', role: 'STAFF' }, existingClaim: { delta: 1 }, debt: 500_000 });
+    await expect(svc.adminRecordCreditPayment('kt1', 'kt1', 100_000, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('RB-01: sổ nợ ở tài khoản cũ đã gộp vào chính kế toán (mergedIntoId) → 403, không tạo dòng sổ', async () => {
+    const { svc, prisma, ledgerCreate } = build({ dealer: { id: 'u1', role: 'DEALER' }, debt: 500_000 });
+    const merged: Record<string, { mergedIntoId: string | null }> = { u1: { mergedIntoId: 'kt1' }, kt1: { mergedIntoId: null } };
+    (prisma.user as { findUnique: jest.Mock }).findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => merged[where.id] ?? null);
+    await expect(svc.adminRecordCreditPayment('kt1', 'u1', 100_000, { byStaff: true })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('RB-01: quản trị viên (không byStaff) vẫn ghi nhận được cho sổ của chính mình', async () => {
+    const { svc, ledgerCreate } = build({ dealer: { id: 'ad1', role: 'DEALER' }, debt: 500_000 });
+    await svc.adminRecordCreditPayment('ad1', 'ad1', 100_000);
+    expect(ledgerCreate).toHaveBeenCalledTimes(1);
   });
 
   it('số tiền VƯỢT dư nợ HIỆN TẠI (re-check trong tx) → BadRequest, KHÔNG tạo dòng ledger nào', async () => {

@@ -13,6 +13,7 @@ import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, Field } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 import { COMMISSION_STATUS, getOrderReferral } from '@/lib/commission-rates';
 import { formatVnd } from '@/lib/shop-client';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 const statusText = (s: string) => ORDER_STATUS_LABELS[s] ?? s;
 
@@ -77,7 +78,7 @@ export function OrderStatusHistory({ order }: { order: AdminOrder }) {
           {q.isLoading && <p className="text-xs text-stone-500">Đang tải lịch sử…</p>}
           {q.isError && (
             <p role="alert" className="text-xs text-danger-fg">
-              {q.error instanceof Error ? q.error.message : 'Không tải được lịch sử.'}{' '}
+              {loadErrorText(q.error)}{' '}
               <button type="button" className={`${BTN_LINK} text-xs`} onClick={() => void q.refetch()}>
                 Thử lại
               </button>
@@ -131,7 +132,7 @@ export function OrderReferralPanel({ order }: { order: AdminOrder }) {
       {q.isLoading && <p className="mt-2 text-xs text-stone-500">Đang tải…</p>}
       {q.isError && (
         <p role="alert" className="mt-2 text-xs text-danger-fg">
-          {q.error instanceof Error ? q.error.message : 'Không tải được thông tin giới thiệu.'}{' '}
+          {loadErrorText(q.error)}{' '}
           <button type="button" className={`${BTN_LINK} text-xs`} onClick={() => void q.refetch()}>
             Thử lại
           </button>
@@ -212,7 +213,7 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void qc.invalidateQueries({ queryKey: ['admin-invoice-pending-count'] });
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Ghi nhận hoá đơn thất bại.' }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
     onSettled: () => {
       inFlight.current = false;
     },

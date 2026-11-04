@@ -32,6 +32,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, F
 import { useConfirm } from './confirm-dialog';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestDetail } from './waste-request-detail';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export type WasteQueuePreset = 'toCount' | 'inTransit' | 'customerBlocked' | 'orderNotDelivered' | 'expired' | 'transitOverdue' | 'orderMismatch';
 
@@ -63,7 +64,7 @@ const canReceive = (r: AdminWasteRequestRowDTO) =>
 
 const startsOnUnmatched = (seed?: WasteSeed | null) => seed?.section === 'requests' && seed.preset === 'unmatched';
 
-const errText = (e: unknown) => (e instanceof Error ? e.message : 'Thao tác thất bại.');
+const errText = (e: unknown) => (actionErrorText(e));
 
 const CUSTOMER_CHIP_LABEL = 'Yêu cầu của khách đang xem';
 

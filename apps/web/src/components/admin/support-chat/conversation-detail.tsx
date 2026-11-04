@@ -16,6 +16,7 @@ import type { Tone } from '@/lib/recycling';
 import { useConfirm } from '../confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, INPUT_CLASS, LoadError, ToneBadge } from '../ui';
 import { CONVERSATIONS_KEY } from './conversation-list';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const REPLY_MAX = 1000;
 const FORWARD_VIEW: Record<SupportForwardStatus, { tone: Tone; text: string }> = {
@@ -26,7 +27,7 @@ const FORWARD_VIEW: Record<SupportForwardStatus, { tone: Tone; text: string }> =
 };
 const SOURCE_LABEL: Record<string, string> = { ZALO: 'Zalo', ADMIN: 'Admin' };
 
-const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 function senderLabel(m: SupportAdminMessage): string {
   if (m.sender === 'CUSTOMER') return 'Khách';

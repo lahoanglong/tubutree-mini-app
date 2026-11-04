@@ -23,9 +23,10 @@ import { useConfirm } from './confirm-dialog';
 import { DealerTierSelect } from './dealer-tier-select';
 import { useDebounced } from './search-picker';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, chipClass } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const LIST_KEY = ['admin-commission-rates'] as const;
-const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 /**
  * "Hoa hồng & giá sỉ" (D1-01, D3-01, D1-06): % hoa hồng CTV từng biến thể — nguồn duy nhất của hoa hồng, hàng đồng bộ từ

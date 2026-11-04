@@ -817,7 +817,7 @@ describe('OpsHealthTab — lỗi email vĩnh viễn và nút Gửi email thử (
       await flush();
       answerConfirm(true);
       await flush();
-      expect(cardOf(c).querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối');
+      expect(cardOf(c).querySelector('[role="alert"]')?.textContent).toContain('Chưa kết nối được tới Tubu Tree');
       expect(testButton(c)?.disabled).toBe(false);
     });
 

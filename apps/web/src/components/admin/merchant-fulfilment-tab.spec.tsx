@@ -384,6 +384,55 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(false);
   });
 
+  it('ERR-03: chi phiếu gặp 500 tiếng Anh → câu tiếng Việt, nhắc tải lại để xem trạng thái phiếu', async () => {
+    setup({ '/admin/merchant-fulfilment/payouts/mp1/paid': { status: 500, body: { statusCode: 500, message: 'Internal server error' } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    typeInto(root.querySelector('input')!, 'FT555');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const alert = root.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).not.toContain('Internal server error');
+    expect(alert).toContain('Máy chủ đang bận');
+    expect(alert).toContain('Tải lại');
+  });
+
+  it('ERR-03: 5xx mang lời tiếng Việt của máy chủ vẫn nhắc tải lại', async () => {
+    setup({ '/admin/merchant-fulfilment/payouts/mp1/paid': { status: 500, body: { statusCode: 500, message: 'Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.' } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    typeInto(root.querySelector('input')!, 'FT555');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const alert = root.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.');
+    expect(alert).toContain('Tải lại');
+  });
+
+  it("ERR-03: 5xx câu chung 'Lỗi cơ sở dữ liệu.' hiện câu chung của web và vẫn nhắc tải lại", async () => {
+    setup({ '/admin/merchant-fulfilment/payouts/mp1/paid': { status: 500, body: { statusCode: 500, message: 'Lỗi cơ sở dữ liệu.' } } });
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    typeInto(root.querySelector('input')!, 'FT555');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const alert = root.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(alert).toContain('Tải lại');
+  });
+
   it('D7-02: Enter trong ô mã giao dịch (gửi form) chỉ mở hộp xác nhận, không gọi API; "Đã thu" cũng hỏi lại', async () => {
     const NEG = { ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt: '2026-10-19T03:00:00.000Z' };
     const api = setup({

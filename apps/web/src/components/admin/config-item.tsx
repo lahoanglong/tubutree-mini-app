@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
  * Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, hoa hồng, mã giảm, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp.
@@ -62,7 +63,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
       setErr(null);
       onSaved();
     },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
   // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
   const askSave = async () => {

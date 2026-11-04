@@ -7,6 +7,7 @@ import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
 import { Notice, ToneBadge, chipClass, LoadError } from './ui';
 import { formatDate } from '@/lib/format-date';
+import { loadErrorText } from '@/lib/admin-error-text';
 
 const PAGE_SIZE = 20;
 const STATUS_CHIPS: { k: SubscriptionStatus | ''; label: string }[] = [
@@ -50,7 +51,7 @@ export function SubscriptionsTab() {
 
       {q.isError && (
         <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>
-          {(q.error as Error).message || 'Không tải được danh sách gói định kỳ.'}
+          {loadErrorText(q.error) || 'Không tải được danh sách gói định kỳ.'}
         </LoadError>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải gói định kỳ…</p>}

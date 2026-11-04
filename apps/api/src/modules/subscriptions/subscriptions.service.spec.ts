@@ -187,6 +187,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       retryDays?: number;
       dueRows?: unknown[];
       lockedIntervalWeeks?: number;
+      afterNextRunAt?: Date;
     } = {},
   ) {
     const due = opts.dueRows ?? [
@@ -198,7 +199,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         ? Promise.reject(opts.orderCreateError)
         : Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status, createdAt: new Date() }),
     );
-    const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: new Date(Date.now() + 9e9), intervalWeeks: opts.lockedIntervalWeeks ?? 4 });
+    const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: opts.afterNextRunAt ?? new Date(Date.now() + 9e9), intervalWeeks: opts.lockedIntervalWeeks ?? 4 });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const findMany = jest.fn().mockResolvedValue(due);
@@ -335,6 +336,62 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     await svc.processDue();
     const reset = subUpdate.mock.calls.find((c) => (c[0].data as { nextRunAt?: Date }).nextRunAt !== undefined);
     expect(reset).toBeUndefined();
+  });
+
+  describe('TZ-01: nextRunAt neo 0h VN, cron 03:00 không lỡ ngày hẹn', () => {
+    const WEEK = 7 * 864e5;
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+    const row = (nextRunAt: Date) => ({ id: 's1', userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 1, retryCount: 0, nextRunAt });
+
+    it('giao ngay lúc 14:23 VN ngày D → nextRunAt = 00:00 VN ngày D+7', async () => {
+      const at = new Date('2026-11-04T07:23:00.000Z'); // 14:23 VN 04/11
+      jest.useFakeTimers({ now: at });
+      const { svc, subUpdate } = makeProcess(1, { dueRows: [row(at)], afterNextRunAt: at, lockedIntervalWeeks: 1 });
+      await svc.processDue();
+      const write = subUpdate.mock.calls.find((c) => (c[0].data as { nextRunAt?: Date }).nextRunAt !== undefined);
+      expect((write![0].data.nextRunAt as Date).toISOString()).toBe('2026-11-10T17:00:00.000Z'); // 00:00 VN 11/11
+    });
+
+    it('claim lúc 03:00:00.050 VN → nextRunAt 00:00 VN của ngày đó + 7, CAS khớp giá trị đã quét', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-10T20:00:00.050Z') }); // 03:00:00.050 VN 11/11
+      const due = new Date('2026-11-10T17:00:00.000Z');
+      const { svc, updateMany } = makeProcess(1, { dueRows: [row(due)] });
+      await svc.processDue();
+      const claim = updateMany.mock.calls[0][0];
+      expect((claim.data.nextRunAt as Date).toISOString()).toBe('2026-11-17T17:00:00.000Z'); // 00:00 VN 18/11
+      expect(claim.where.nextRunAt).toEqual(due);
+    });
+
+    it('lượt D+7 03:00:00.001 vẫn lấy gói: mốc cắt là 0h VN ngày mai', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-10T20:00:00.001Z') });
+      const { svc, findMany } = makeProcess(1, { dueRows: [] });
+      await svc.processDue();
+      expect(findMany.mock.calls[0][0].where.nextRunAt).toEqual({ lt: new Date('2026-11-11T17:00:00.000Z') });
+    });
+
+    it('gói cũ nextRunAt = 14:23 VN ngày D được lấy ở cron 03:00 ngày D', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-03T20:00:00.100Z') }); // 03:00 VN 04/11
+      const { svc, findMany } = makeProcess(1, { dueRows: [] });
+      await svc.processDue();
+      const lt = (findMany.mock.calls[0][0].where.nextRunAt as { lt: Date }).lt;
+      expect(new Date('2026-11-04T07:23:00.000Z').getTime()).toBeLessThan(lt.getTime());
+      expect(new Date('2026-11-04T17:00:00.000Z').getTime()).toBeGreaterThanOrEqual(lt.getTime());
+    });
+
+    it('setStatus ACTIVE lúc 10:00 VN → 00:00 VN ngày D+7 (không giữ giờ lẻ)', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-04T03:00:00.000Z') });
+      const update = jest.fn().mockImplementation((a) => Promise.resolve({ id: 's1', ...a.data }));
+      const prisma = {
+        subscription: { findUnique: jest.fn().mockResolvedValue({ id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: new Date('2026-10-01T00:00:00Z') }), update },
+        variation: { findUnique: jest.fn().mockResolvedValue({ product: { name: 'P', storefrontId: null } }) },
+        $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
+      } as unknown as PrismaService;
+      const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).getTime()).toBe(new Date('2026-11-03T17:00:00.000Z').getTime() + WEEK);
+    });
   });
 
   it('instance khác đã claim (count=0) → KHÔNG tạo đơn trùng', async () => {
@@ -970,6 +1027,75 @@ describe('SubscriptionsService.setStatus', () => {
     const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 10, nextRunAt: future });
     await svc.setStatus('u1', 's1', 'ACTIVE');
     expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(future.toISOString());
+  });
+
+  it('TZ-01: bật lại gói cũ còn nextRunAt giờ lẻ ngay hôm nay (14:23 VN, bấm lúc 10:00) → dời về 0h VN ngày mai, không ra đơn lệch ngày', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-11T03:00:00.000Z') }); // 10:00 VN 11/11
+    try {
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: new Date('2026-11-11T07:23:00.000Z') });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe('2026-11-11T17:00:00.000Z');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: nextRunAt giờ lẻ của ngày sau hôm nay vẫn giữ nguyên (cron ngày đó nhận được)', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-11T03:00:00.000Z') });
+    try {
+      const keep = new Date('2026-11-13T07:23:00.000Z');
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: keep });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(keep.toISOString());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 01:00 VN đúng ngày hẹn (nextRunAt 0h VN hôm nay, cron 03:00 chưa chạy) → giữ nguyên, đơn ra sáng nay', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-10T18:00:00.000Z') }); // 01:00 VN 11/11
+    try {
+      const dueToday = new Date('2026-11-10T17:00:00.000Z'); // 0h VN 11/11
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 2, nextRunAt: dueToday });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(dueToday.toISOString());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 02:59 VN với nextRunAt giờ lẻ hôm nay (dữ liệu cũ) → giữ nguyên, cron 03:00 hôm nay nhận', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-10T19:59:00.000Z') }); // 02:59 VN 11/11
+    try {
+      const odd = new Date('2026-11-11T07:23:00.000Z'); // 14:23 VN 11/11
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: odd });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(odd.toISOString());
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 10:00 VN đúng ngày hẹn (cron hôm nay đã bỏ qua gói tạm dừng) → quá hạn, dời một chu kỳ tính từ 0h VN hôm nay', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-11T03:00:00.000Z') }); // 10:00 VN 11/11
+    try {
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 2, nextRunAt: new Date('2026-11-10T17:00:00.000Z') });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe('2026-11-24T17:00:00.000Z'); // 0h VN 25/11
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('TZ-01: bật lại lúc 01:00 VN khi hẹn từ hôm qua (quá hạn hẳn) → dời một chu kỳ, không ra đơn bù', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-10T18:00:00.000Z') }); // 01:00 VN 11/11
+    try {
+      const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 1, nextRunAt: new Date('2026-11-09T17:00:00.000Z') });
+      await svc.setStatus('u1', 's1', 'ACTIVE');
+      expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe('2026-11-17T17:00:00.000Z'); // 0h VN 18/11
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('ACTIVE (bật lại từ PAUSED, đã quá hạn) → dời nextRunAt + phát subscription_changed action=resumed', async () => {

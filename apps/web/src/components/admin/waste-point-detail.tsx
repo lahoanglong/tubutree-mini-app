@@ -20,6 +20,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_CLAS
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
 import { VnMonthInput } from './vn-date-input';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const MAX_STAFF = 5;
 const ROLE_LABELS: Record<WastePointStaffRole, string> = { OWNER: 'Chủ điểm', STAFF: 'Nhân viên' };
@@ -32,7 +33,7 @@ function currentMonthKey(): string {
   return `${yyyy}-${mm}`;
 }
 
-const errText = (e: unknown) => (e instanceof Error ? e.message : 'Thao tác thất bại.');
+const errText = (e: unknown) => (actionErrorText(e));
 
 export function WastePointDetail({
   point,

@@ -12,7 +12,39 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
+
+const newIdempotencyKey = () =>
+  globalThis.crypto?.randomUUID?.() ?? `dp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+
+type SentSet = { key: string; amount: number; bankRef: string; reportId: string | null; sentAt: number };
+// Quá hạn này thì coi lần gửi trước đã xong hoặc hỏng hẳn: dùng lại khoá sẽ trả bản ghi cũ và nuốt khoản thật mới cùng số tiền.
+const SENT_TTL_MS = 15 * 60 * 1000;
+const sentStorageKey = (userId: string) => `dealer-credit-idem:${userId}`;
+const readSent = (userId: string): SentSet | null => {
+  try {
+    const v = JSON.parse(window.sessionStorage.getItem(sentStorageKey(userId)) ?? 'null');
+    return v &&
+      typeof v.key === 'string' &&
+      typeof v.amount === 'number' &&
+      typeof v.bankRef === 'string' &&
+      (v.reportId === null || typeof v.reportId === 'string') &&
+      typeof v.sentAt === 'number'
+      ? v
+      : null;
+  } catch {
+    return null;
+  }
+};
+const writeSent = (userId: string, v: SentSet | null) => {
+  try {
+    if (v) window.sessionStorage.setItem(sentStorageKey(userId), JSON.stringify(v));
+    else window.sessionStorage.removeItem(sentStorageKey(userId));
+  } catch {
+    // Trình duyệt chặn lưu trữ: chỉ mất khả năng giữ khoá qua lúc gập dòng.
+  }
+};
 
 /**
  * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ NỢ
@@ -38,7 +70,7 @@ export function DealerCreditPanel({
   /** Ghi nhận cho một báo cáo chuyển khoản của đại lý: gửi kèm để báo cáo đóng cùng lúc ghi sổ. */
   reportId?: string;
   /** Gọi sau khi ghi nhận thành công, để nơi chứa panel (danh sách đại lý) tải lại số liệu và báo đúng số kế toán đã nhập. */
-  onPaid?: (result: { amount: number; balance: number; reportClosed?: boolean; alreadyRecorded?: boolean }) => void;
+  onPaid?: (result: { amount: number; balance: number; reportClosed?: boolean; alreadyRecorded?: boolean; replayed?: boolean }) => void;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
@@ -47,6 +79,8 @@ export function DealerCreditPanel({
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
+  // Khoá chống trừ nợ hai lần gắn với bộ {số tiền, mã GD, báo cáo} đã gửi: sau lỗi mạng/hết giờ (máy chủ có thể đã ghi rồi) gõ lại đúng bộ đó trong 15 phút tính từ lần gửi đầu vẫn dùng khoá cũ, kể cả sau khi gập dòng (sessionStorage). Quá 15 phút thì coi là một khoản mới, vì kế toán đã kịp thấy sổ tải lại.
+  const sent = useRef<SentSet | null>(null);
   const { confirm, dialog } = useConfirm();
 
   const userId = order.user?.id;
@@ -61,25 +95,41 @@ export function DealerCreditPanel({
   const payMut = useMutation({
     mutationFn: () => {
       const amt = Math.trunc(Number(amount));
-      const key = bankRef.trim() || undefined; // mã giao dịch làm idempotency-key nếu có
+      // Mã giao dịch được máy chủ kiểm trùng riêng, không dùng làm khoá.
+      const ref = bankRef.trim();
+      const stored = sent.current ?? readSent(userId as string);
+      const rid = reportId ?? null;
+      const reusable = !!stored && stored.amount === amt && stored.bankRef === ref && stored.reportId === rid && Date.now() - stored.sentAt <= SENT_TTL_MS;
+      const set: SentSet = reusable ? (stored as SentSet) : { key: newIdempotencyKey(), amount: amt, bankRef: ref, reportId: rid, sentAt: Date.now() };
+      sent.current = set;
+      writeSent(userId as string, set);
+      const key = set.key;
       return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key).then((r) => ({ ...r, amount: amt }));
     },
     onSuccess: (r) => {
       setMsg({
         ok: true,
-        text: r.alreadyRecorded
+        text: r.replayed
+          ? `Khoản này đã được ghi ở lần bấm trước, sổ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}. Nếu đây là một lần chuyển khác, nhập mã GD rồi ghi lại.`
+          : r.alreadyRecorded
           ? `Báo cáo này đã được ghi nhận trước đó, lần này sổ công nợ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
           : r.reportClosed === false
             ? `Mã giao dịch này đã có trong sổ từ lần ghi trước nên không ghi thêm. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
             : `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.`,
       });
+      sent.current = null;
+      writeSent(userId as string, null);
       setAmount('');
       setBankRef('');
       setNote('');
       void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
-      onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed, alreadyRecorded: r.alreadyRecorded });
+      onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed, alreadyRecorded: r.alreadyRecorded, replayed: r.replayed });
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thất bại.' }),
+    onError: (e: unknown) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      // Lỗi mạng/hết giờ: máy chủ có thể đã ghi khoản này, tải lại sổ để kế toán thấy dư nợ thật trước khi bấm lại.
+      void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
+    },
     onSettled: () => {
       inFlight.current = false;
     },

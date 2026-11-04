@@ -2429,7 +2429,10 @@ describe('AdminService.confirmOrderPayment', () => {
         findFirst: jest.fn().mockResolvedValue(order),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
       },
-      orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(null) },
+      orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+      orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
+      dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
       $queryRaw: jest.fn().mockResolvedValue([]),
     });
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
@@ -2468,6 +2471,7 @@ describe('AdminService.confirmOrderPayment', () => {
       actorType: 'ADMIN',
       actorId: 'admin-1',
       note: 'Admin xác nhận · Mã GD FT999 · khớp sao kê',
+      bankRef: 'FT999',
     });
     expect(res).toMatchObject({ ok: true, alreadyPaid: false });
     expect(res.order).toMatchObject({ id: 'o1', paymentStatus: 'PAID' });
@@ -2476,7 +2480,7 @@ describe('AdminService.confirmOrderPayment', () => {
   it('Kế toán xác nhận: ghi nhãn "Kế toán" vào lịch sử; đơn của chính mình bị chặn, không lật PAID', async () => {
     const { svc, orderStatus } = make(bankOrder({ userId: 'u-other' }));
     await svc.confirmOrderPayment('kt-1', 'TB-1', { bankRef: 'FT1' }, { byStaff: true });
-    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', { actorType: 'ADMIN', actorId: 'kt-1', note: 'Kế toán xác nhận · Mã GD FT1' });
+    expect(orderStatus.markPaid).toHaveBeenCalledWith('o1', { actorType: 'ADMIN', actorId: 'kt-1', note: 'Kế toán xác nhận · Mã GD FT1', bankRef: 'FT1' });
     const own = make(bankOrder({ userId: 'kt-1' }));
     await expect(own.svc.confirmOrderPayment('kt-1', 'TB-1', {}, { byStaff: true })).rejects.toThrow(/của chính mình/);
     expect(own.orderStatus.markPaid).not.toHaveBeenCalled();
@@ -2568,9 +2572,11 @@ describe('AdminService.confirmOrderPayment', () => {
 
   it('đơn đã có khoản tiền về muộn (webhook Pancake ghi trước) → admin bấm không tạo khoản thứ hai (R2-ADMINOPS-3)', async () => {
     const { svc, prisma } = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
-    const refunds = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock; findFirst: jest.Mock } }).orderCustomerRefund;
-    refunds.findFirst.mockResolvedValue({ id: 'r-pancake' });
+    const refunds = (prisma as unknown as { orderCustomerRefund: { createMany: jest.Mock; findFirst: jest.Mock; update: jest.Mock } }).orderCustomerRefund;
+    refunds.findFirst.mockResolvedValue({ id: 'r-pancake', adminNote: null });
+    refunds.update = jest.fn().mockResolvedValue({});
     const res = await svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT-KHAC' });
+    expect(refunds.update).toHaveBeenCalledWith({ where: { id: 'r-pancake' }, data: { adminNote: 'Mã GD FT-KHAC' } });
     expect(res).toMatchObject({ ok: true, latePayment: true });
     expect(res.message).toContain('đã được ghi trước đó');
     expect(refunds.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'LATE_PAYMENT', refKey: undefined } }));

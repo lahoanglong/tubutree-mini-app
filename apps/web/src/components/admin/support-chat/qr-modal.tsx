@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getSupportQr, startSupportQr, type SupportQrState } from '@/lib/admin-client';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../ui';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 const POLL_MS = 2000;
 const TERMINAL = new Set(['SUCCESS', 'EXPIRED', 'FAILED']);
@@ -39,7 +40,7 @@ export function QrModal({ initial, onClose, onSuccess }: { initial: SupportQrSta
           if (r.status === 'SUCCESS') onSuccess();
         })
         .catch((e: unknown) => {
-          if (!stopped) setError(e instanceof Error ? e.message : 'Không hỏi được trạng thái đăng nhập.');
+          if (!stopped) setError(loadErrorText(e));
         })
         .finally(() => {
           busy = false;
@@ -66,7 +67,7 @@ export function QrModal({ initial, onClose, onSuccess }: { initial: SupportQrSta
       setQr(await startSupportQr());
       setRound((n) => n + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không lấy được mã QR mới.');
+      setError(actionErrorText(e));
     } finally {
       setRestarting(false);
     }

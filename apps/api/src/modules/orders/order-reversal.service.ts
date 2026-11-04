@@ -4,7 +4,7 @@ import { Prisma, type Order, type OrderItem } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { DealerService } from '../dealer/dealer.service';
-import { lockVariationsInIdOrder, releaseVariationStock } from '../catalog/variation-stock';
+import { lockVariationsInIdOrder, releaseVariationStock, restockReturnedVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
 import type { ReferralNotice } from '../wallet/referral-notify';
 import type { WalletDeltaInput } from '../wallet/wallet-ledger.service';
@@ -364,16 +364,24 @@ export class OrderReversalService {
       await lockVariationsInIdOrder(tx, order.items.filter((i) => reservedQty(i) > 0).map((i) => i.variationId));
     }
 
+    // Chỉ đơn đã giao VÀ đã lên Pancake mới là hàng Pancake đã trừ: mốc đồng bộ/webhook không chứng minh được Pancake đã tính đơn, nên
+    // huỷ trước giao luôn nhả giữ chỗ. Đơn giao tay chưa từng lên Pancake thì Pancake chưa trừ gì, giữ chỗ của nó vẫn còn.
+    const goodsLeftViaPancake = order.status === 'DELIVERED' && !!order.pancakeOrderId;
+
     for (const item of order.items) {
       // Đơn đại lý đặt trước (backorder) có thể còn `backorderedQty` > 0 — phần đó CHƯA BAO
       // GIỜ được giữ từ kho thật (xem DealerService.placeOrder), nên chỉ hoàn đúng phần đã
       // giữ (`quantity - backorderedQty`). Hoàn nguyên `quantity` sẽ CỘNG KHỐNG phần chưa từng
       // trừ — tồn kho tăng ảo đúng bằng số đặt trước của đơn bị huỷ.
-      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived cộng
-      // rồi, chưa nhận thì markReceived sẽ cộng khi hàng về.
+      // Đơn vị của lần trả một phần đã duyệt không cộng ở đây dù đã nhận về hay chưa: đã nhận thì markReceived đã cộng
+      // (restockReturnedItems), chưa nhận thì sẽ cộng khi hàng về. "Cộng" chỉ đúng với biến thể tự quản kho; biến thể có
+      // pancakeStock thì Tubu không tự cộng, số tồn do Pancake báo về qua đồng bộ/webhook.
       const backordered = freshBackorder.get(item.id) ?? item.backorderedQty;
       const reserved = reservedQty(item);
-      if (opts.restock !== false && reserved > 0) await releaseVariationStock(tx, item.variationId, reserved);
+      if (opts.restock !== false && reserved > 0) {
+        if (goodsLeftViaPancake) await restockReturnedVariationStock(tx, item.variationId, reserved);
+        else await releaseVariationStock(tx, item.variationId, reserved);
+      }
       // Đơn đã chết thì không còn nhu cầu backorder nữa — xoá cờ để DealerBackorderService
       // (quét theo `backorderedQty > 0`) không tốn công lấp hàng cho một đơn không tồn tại nữa.
       if (backordered > 0) {
@@ -726,8 +734,7 @@ export class OrderReversalService {
     await lockVariationsInIdOrder(tx, plan.map((p) => p.variationId));
     let restocked = 0;
     for (const p of plan) {
-      await releaseVariationStock(tx, p.variationId, p.qty);
-      restocked += p.qty;
+      if (await restockReturnedVariationStock(tx, p.variationId, p.qty)) restocked += p.qty;
     }
     return restocked;
   }

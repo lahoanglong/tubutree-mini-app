@@ -15,6 +15,7 @@ import {
 } from '@/lib/admin-client';
 import { categoryLabel } from '@/components/game/game-utils';
 import { BTN_PRIMARY, BTN_SMALL, BTN_XS_SECONDARY, INPUT_CLASS, LoadError } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const OPTION_SLOTS = 4;
 const QUERY_KEY = ['admin-game-quiz'];
@@ -205,7 +206,7 @@ function QuizForm({
       void qc.invalidateQueries({ queryKey: QUERY_KEY });
       onDone(f.question.trim());
     },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không lưu được câu đố.'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
   const water = QUIZ_DIFFICULTY_OPTIONS.find((d) => d.value === f.difficulty)?.water;
 

@@ -85,7 +85,7 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     expect(row.textContent).toContain('Đã lưu');
   });
 
-  it('điểm không hợp lệ khoá nút Lưu; lỗi API hiện nguyên văn', async () => {
+  it('điểm không hợp lệ khoá nút Lưu; lời tiếng Anh của máy chủ hiện câu chung', async () => {
     stub({ status: 400, body: { message: 'rewardPoints must not be greater than 500000' } });
     const { container } = mount(<EngagementTab />);
     await flush();
@@ -99,7 +99,7 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     typeInto(row.querySelector('input[name="rewardPoints"]'), '25000');
     click(save);
     await flush();
-    expect(row.textContent).toContain('rewardPoints must not be greater than 500000');
+    expect(row.textContent).toContain('Có chút trục trặc, thử lại nhé');
   });
 
   it('Tạm dừng / Bật lại gửi cờ disabled đảo ngược; nhiệm vụ đang dừng có nhãn', async () => {

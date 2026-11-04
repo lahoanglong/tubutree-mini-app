@@ -30,6 +30,7 @@ import { EventsPanel } from './community-events-panel';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, ListSkeleton, LoadError, chipClass, Notice, ToneBadge } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export type { CommunityView };
 
@@ -159,7 +160,7 @@ function usePostAction<V>(fn: (v: V) => Promise<unknown>, refreshKeys: QueryKey[
         refresh();
         return;
       }
-      setErr(e instanceof Error && e.message ? e.message : failText);
+      setErr(e instanceof Error ? actionErrorText(e) : failText);
     },
   });
   return { mutate: m.mutate, pending: m.isPending, err };

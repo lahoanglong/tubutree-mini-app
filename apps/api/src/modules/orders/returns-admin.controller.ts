@@ -5,6 +5,7 @@ import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { OrderReturnsService, RETURNS_TO_RECEIVE } from './order-returns.service';
+import type { JwtPayload } from '@tubutree/shared-types';
 import { ReturnPreviewQuery, ReviewReturnDto } from './dto/return-request.dto';
 
 const RETURN_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', RETURNS_TO_RECEIVE] as const;
@@ -18,6 +19,24 @@ export class ReturnRequestsQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
+/** Tài khoản nhận hoàn của khách chỉ cần cho người duyệt hoàn (ADMIN/CSKH); KHO chỉ nhận hàng về nên không thấy. */
+const BANK_FIELDS = ['bankName', 'bankAccountNo', 'bankAccountName'] as const;
+function forViewer<T>(row: T, viewer: JwtPayload | undefined): T {
+  const sees = !viewer || viewer.role !== 'STAFF' || !!viewer.staffPermissions?.includes('CSKH');
+  if (sees || !row || typeof row !== 'object') return row;
+  const copy = { ...(row as Record<string, unknown>) };
+  for (const f of BANK_FIELDS) delete copy[f];
+  // withContext gắn thêm khoản hoàn thật (OrderCustomerRefund) lồng trong dòng, có cả số tài khoản nhận.
+  const refund = copy.refund;
+  if (refund && typeof refund === 'object') {
+    const nested = { ...(refund as Record<string, unknown>) };
+    delete nested.bankName;
+    delete nested.bankAccountNo;
+    copy.refund = nested;
+  }
+  return copy as T;
+}
+
 /** Duyệt đổi/trả theo dòng (D3): xem số tiền tính sẵn → xác nhận → nhận hàng về (cộng kho). */
 @Roles('ADMIN')
 @Controller('admin/return-requests')
@@ -26,8 +45,9 @@ export class ReturnsAdminController {
 
   @AllowStaff('CSKH', 'KHO')
   @Get()
-  list(@Query() q: ReturnRequestsQuery) {
-    return this.returns.listForAdmin(q.status, q.page, q.limit, q.order, q.q);
+  async list(@Query() q: ReturnRequestsQuery, @CurrentUser() viewer?: JwtPayload) {
+    const res = await this.returns.listForAdmin(q.status, q.page, q.limit, q.order, q.q);
+    return { ...res, data: res.data.map((r) => forViewer(r, viewer)) };
   }
 
   @AllowStaff('CSKH')
@@ -38,13 +58,13 @@ export class ReturnsAdminController {
 
   @AllowStaff('CSKH')
   @Post(':id/review')
-  review(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewReturnDto) {
-    return this.returns.review(adminId, id, dto);
+  review(@CurrentUser('sub') adminId: string, @CurrentUser('role') role: string, @Param('id') id: string, @Body() dto: ReviewReturnDto) {
+    return this.returns.review(adminId, id, dto, { byStaff: role !== 'ADMIN' });
   }
 
   @AllowStaff('KHO')
   @Post(':id/received')
-  received(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
-    return this.returns.markReceived(adminId, id);
+  async received(@CurrentUser('sub') adminId: string, @Param('id') id: string, @CurrentUser() viewer?: JwtPayload) {
+    return forViewer(await this.returns.markReceived(adminId, id), viewer);
   }
 }

@@ -35,7 +35,16 @@ import {
 } from './dealer-config';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
+import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
+import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
+
+const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
+  UNPAID: 'Chưa thanh toán',
+  PAID: 'Đã thanh toán',
+  REFUNDED: 'Đã hoàn tiền',
+  FAILED: 'Thanh toán lỗi',
+};
 
 interface BonusTier {
   min: number;
@@ -97,13 +106,6 @@ interface RewardPeriod {
 }
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
-/** `ref` đã viết thường: ghi chú lịch sử nối các phần bằng " · " nên khớp nguyên một phần, không khớp chuỗi con. */
-const noteHasBankRef = (note: string | null, ref: string) =>
-  (note ?? '')
-    .toLowerCase()
-    .split(' · ')
-    .some((part) => part.trim() === `mã gd ${ref}`);
-
 /**
  * Trần tổng 1 đơn đại lý: Order.total/OrderItem.total và DealerCreditLedger.delta là INT4, tổng vượt
  * 2.147.483.647 sẽ vỡ ở DB thành lỗi 500. Chặn sớm bằng 400 rõ ràng; đơn lớn hơn thì tách nhiều đơn.
@@ -595,6 +597,11 @@ export class DealerService {
     opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean; reportId?: string } = {},
   ) {
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
+    // Người đã mất vai trò đại lý mà còn nợ vẫn ghi nhận được (bên dưới), nên kế toán vốn là đại lý cũ có thể tự xoá nợ của mình.
+    // So cả tài khoản gốc sau gộp (mergedIntoId): sổ nợ nằm ở tài khoản cũ đã gộp vào kế toán vẫn là sổ của chính họ.
+    if (opts.byStaff && (dealerUserId === adminId || (await canonicalUserId(this.prisma, dealerUserId)) === (await canonicalUserId(this.prisma, adminId)))) {
+      throw new ForbiddenException('Không ghi nhận trả nợ cho sổ công nợ của chính mình — nhờ quản trị viên.');
+    }
     const dealer = await this.prisma.user.findUnique({
       where: { id: dealerUserId },
       select: { id: true, role: true, fullName: true, phone: true },
@@ -625,7 +632,7 @@ export class DealerService {
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
         }
-        return this.creditLedgerWithReport(dealerUserId, reportId);
+        return this.creditLedgerWithReport(dealerUserId, reportId, true);
       }
     }
 
@@ -691,7 +698,7 @@ export class DealerService {
       // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như
       // replay của cùng 1 lần xác nhận, trả kết quả hiện tại thay vì lỗi 500.
       if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.creditLedgerWithReport(dealerUserId, reportId);
+        return this.creditLedgerWithReport(dealerUserId, reportId, true);
       }
       throw err;
     }
@@ -718,8 +725,9 @@ export class DealerService {
    * RECORDED mà lần gọi này không ghi gì (người khác ghi trước, hoặc bấm đúp) thì thêm `alreadyRecorded`: số vừa nhập chưa
    * chắc là số đã vào sổ.
    */
-  private async creditLedgerWithReport(userId: string, reportId?: string) {
-    const ledger = await this.creditLedger(userId);
+  private async creditLedgerWithReport(userId: string, reportId?: string, replayed = false) {
+    // Dòng sổ không lưu reportId (chỉ refId = khoá), nên không phân biệt được khoá cũ thuộc báo cáo nào; `replayed` để màn hình biết lần này không ghi gì mới.
+    const ledger = replayed ? { ...(await this.creditLedger(userId)), replayed: true as const } : await this.creditLedger(userId);
     if (!reportId) return ledger;
     const report = await this.prisma.dealerCreditPaymentReport.findFirst({ where: { id: reportId, userId }, select: { status: true } });
     const recorded = report?.status === 'RECORDED';
@@ -1351,74 +1359,18 @@ export class DealerService {
 
   // ── Admin: xác nhận đã nhận chuyển khoản cho đơn đại lý trả trước ──
 
-  /** Khoá advisory theo mã giao dịch, tự nhả khi transaction kết thúc. */
-  private async lockBankRef(tx: Prisma.TransactionClient, bankRef: string) {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dealer-bankref:${bankRef.toLowerCase()}`}))`;
-  }
-
-  /** Mã giao dịch đã ghi ở một đơn đại lý (khác `exceptOrderId`): trả mã đơn, không có thì null. */
-  private async findOrderUsingBankRef(db: Prisma.TransactionClient | PrismaService, bankRef: string, exceptOrderId?: string) {
-    const ref = bankRef.toLowerCase();
-    const history = await db.orderStatusHistory.findMany({
-      where: {
-        note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' },
-        actorType: 'ADMIN',
-        ...(exceptOrderId ? { orderId: { not: exceptOrderId } } : {}),
-      },
-      select: { orderId: true, note: true },
-    });
-    const usedIds = history.filter((h) => noteHasBankRef(h.note, ref)).map((h) => h.orderId);
-    return usedIds.length ? db.order.findFirst({ where: { id: { in: usedIds }, type: 'DEALER' }, select: { code: true } }) : null;
-  }
-
-  /** Mã giao dịch đã ghi giảm công nợ của bất kỳ đại lý nào (refId hoặc phần "Mã GD" trong ghi chú), trừ dòng có `own` (khoá của chính lần ghi này). */
-  private async isBankRefOnPayment(
-    db: Prisma.TransactionClient | PrismaService,
-    bankRef: string,
-    own?: { userId: string; refId: string },
-  ) {
-    const ref = bankRef.toLowerCase();
-    const payments = await db.dealerCreditLedger.findMany({
-      where: {
-        refType: 'PAYMENT',
-        OR: [{ refId: { equals: bankRef, mode: 'insensitive' } }, { note: { contains: `Mã GD ${bankRef}`, mode: 'insensitive' } }],
-      },
-      select: { userId: true, refId: true, note: true },
-    });
-    return payments.some(
-      (p) => !(own && p.userId === own.userId && p.refId === own.refId) && (p.refId?.toLowerCase() === ref || noteHasBankRef(p.note, ref)),
-    );
-  }
-
   /**
    * Đường ghi trả nợ chạy Serializable nên snapshot đã chụp trước lúc chờ khoá: kiểm bằng kết nối riêng (mỗi câu một snapshot mới)
    * sau khi giữ khoá, để thấy dòng lịch sử mà bên xác nhận đơn vừa commit trước khi nhả khoá.
    */
   private async assertBankRefFreeForPayment(tx: Prisma.TransactionClient, bankRef: string, own?: { userId: string; refId: string }) {
-    await this.lockBankRef(tx, bankRef);
-    const usedOrder = await this.findOrderUsingBankRef(this.prisma, bankRef);
+    await lockBankRef(tx, bankRef);
+    const usedOrder = await findOrderUsingBankRef(this.prisma, bankRef);
     if (usedOrder) {
-      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+      throw new ConflictException(bankRefUsedByOrderMessage(bankRef, usedOrder));
     }
-    if (await this.isBankRefOnPayment(this.prisma, bankRef, own)) {
+    if (await isBankRefOnPayment(this.prisma, bankRef, own)) {
       throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
-    }
-  }
-
-  /**
-   * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn trả
-   * trước khác hoặc ở một khoản trả nợ thì 409. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB; khoá advisory theo mã
-   * giữ tới hết transaction để hai admin xác nhận song song hai đơn cùng mã không cùng lọt qua bước kiểm. Transaction này Read
-   * Committed nên mỗi câu đọc thấy dữ liệu mới nhất sau khi chờ khoá.
-   */
-  private async assertBankRefUnused(tx: Prisma.TransactionClient, bankRef: string, orderId: string) {
-    await this.lockBankRef(tx, bankRef);
-    const usedOrder = await this.findOrderUsingBankRef(tx, bankRef, orderId);
-    if (usedOrder) {
-      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để xác nhận đơn ${usedOrder.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
-    }
-    if (await this.isBankRefOnPayment(tx, bankRef)) {
-      throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
     }
   }
 
@@ -1456,7 +1408,7 @@ export class DealerService {
       );
     }
     if (order.paymentStatus !== 'UNPAID') {
-      throw new BadRequestException(`Đơn ${order.code} đang ở trạng thái thanh toán ${order.paymentStatus} — không thể xác nhận.`);
+      throw new BadRequestException(`Đơn ${order.code} đang ở trạng thái thanh toán «${PAYMENT_STATUS_LABEL_VI[order.paymentStatus] ?? order.paymentStatus}» — không thể xác nhận.`);
     }
     const debit = await this.prisma.dealerCreditLedger.findFirst({
       where: { userId: order.userId, refType: 'ORDER', refId: order.id },
@@ -1472,7 +1424,7 @@ export class DealerService {
     const adminNote = dto.note?.trim() || null;
     const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
     await this.prisma.$transaction(async (tx) => {
-      if (bankRef) await this.assertBankRefUnused(tx, bankRef, order.id);
+      if (bankRef) await assertBankRefUnusedByOrder(tx, bankRef, order.id);
       // paidAt (cột DB) và occurredAt (event) phải là CÙNG một mốc thời gian — 1 `new Date()` duy
       // nhất, không phải 2 lời gọi riêng có thể lệch vài mili-giây.
       const paidAt = new Date();

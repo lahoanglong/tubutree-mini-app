@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import type { Order, OrderItem } from '@prisma/client';
+import type { Order, OrderItem, PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import type { PancakeOrderDTO } from './pancake.types';
@@ -11,7 +11,7 @@ import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomd
 import { recyclingWeight } from '../gomdon/gomdon-weight';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
 import { GOMDON_ALERT_KIND, GomdonAlertService } from '../gomdon/gomdon-alert.service';
-import { isPrepaidMethod } from '../../orders/order-transition';
+import { isPrepaidMethod, orderStatusLabelVi } from '../../orders/order-transition';
 import { resolveDealerRecipient } from '../../dealer/dealer-recipient';
 import { DEALER_AWAITING_STOCK_WHERE, isDealerAwaitingStock } from '../../dealer/dealer-awaiting-stock';
 import { isMerchantFulfilledOrder, isPancakeFulfilledLine, TUBU_FULFILLED_ORDER_WHERE } from './pancake-fulfilment';
@@ -136,6 +136,16 @@ type OrderWithItems = Order & { items: OrderItem[] };
 export function mayExistOnPancake(order: Pick<Order, 'pancakeOrderId' | 'pancakePushClaimedAt'>): boolean {
   return Boolean(order.pancakeOrderId || order.pancakePushClaimedAt);
 }
+
+/** Nhãn phương thức thanh toán trong lời báo lỗi admin; Record đầy đủ theo enum để thêm phương thức mới thì tsc buộc điền. */
+const PAYMENT_METHOD_LABEL_VI: Record<PaymentMethod, string> = {
+  COD: 'COD',
+  ZALOPAY: 'ZaloPay',
+  VNPAY: 'VNPAY',
+  BANK_TRANSFER: 'chuyển khoản',
+  WALLET: 'ví Tubu',
+  XU: 'Xu',
+};
 
 /**
  * Đẩy đơn local → Pancake (Build Spec §8.3) và các cập nhật sau đó (đã thanh toán, huỷ).
@@ -356,10 +366,10 @@ export class PancakeOrderService {
     }
     if (gate === 'DEAD') throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả, không đẩy sang kho.`);
     if (gate === 'LEFT_WAREHOUSE') {
-      throw new BadRequestException(`Đơn ${order.code} đã ở trạng thái ${order.status} — không đẩy để tránh kho giao lần hai.`);
+      throw new BadRequestException(`Đơn ${order.code} đã ở trạng thái «${orderStatusLabelVi(order.status)}» — không đẩy để tránh kho giao lần hai.`);
     }
     if (gate === 'WAIT_PAYMENT') {
-      throw new BadRequestException(`Đơn ${order.code} trả trước (${order.paymentMethod}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`);
+      throw new BadRequestException(`Đơn ${order.code} trả trước (${PAYMENT_METHOD_LABEL_VI[order.paymentMethod] ?? order.paymentMethod}) chưa thanh toán — sẽ tự đẩy khi khách trả tiền.`);
     }
     if (gate === 'WAIT_STOCK') {
       throw new BadRequestException(`Đơn ${order.code} còn hàng đặt trước chưa về đủ — hệ thống tự đẩy sang kho khi đủ hàng.`);

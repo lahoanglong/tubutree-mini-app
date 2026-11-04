@@ -9,7 +9,7 @@ import type { NotificationsService } from '../../src/modules/notifications/notif
 import type { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import type { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { recordCumulativeLatePayment, recordLatePaymentRefund } from '../../src/modules/orders/refund-queue';
-import { createOrder, createUser, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * Nút "Đã nhận tiền" (POST /admin/orders/:id/confirm-payment → OrderStatusService.markPaid) trên
@@ -18,6 +18,8 @@ import { createOrder, createUser, summarize, warmPool } from './helpers';
  * hoa hồng / flash-sale / coupon — không liên quan việc lật thanh toán.
  */
 describe('Admin confirm-payment race (real Postgres)', () => {
+  // Mã giao dịch nay bị chặn dùng lại giữa các đơn, mà DB test giữ dữ liệu giữa các lần chạy: mỗi lần chạy dùng bộ mã riêng.
+  const RUN = randCode(6);
   let prisma: PrismaService;
   let admin: AdminService;
   let orderStatus: OrderStatusService;
@@ -116,8 +118,8 @@ describe('Admin confirm-payment race (real Postgres)', () => {
     let results;
     try {
       results = await Promise.allSettled([
-        admin.confirmOrderPayment(a1.id, order.id, { bankRef: 'FT-A1' }),
-        admin.confirmOrderPayment(a2.id, order.code, { bankRef: 'FT-A2' }),
+        admin.confirmOrderPayment(a1.id, order.id, { bankRef: `FT-A1${RUN}` }),
+        admin.confirmOrderPayment(a2.id, order.code, { bankRef: `FT-A2${RUN}` }),
       ]);
     } finally {
       spy.mockRestore();
@@ -187,8 +189,8 @@ describe('Admin confirm-payment race (real Postgres)', () => {
     const { order } = await bankTransferOrder(300_000);
     await prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
     const results = await Promise.allSettled([
-      admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT2627001' }),
-      admin.confirmOrderPayment('admin-b', order.code, { bankRef: 'FT2627001' }),
+      admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FT2627001${RUN}` }),
+      admin.confirmOrderPayment('admin-b', order.code, { bankRef: `FT2627001${RUN}` }),
     ]);
     expect(summarize(results).rejected).toHaveLength(0);
     const refunds = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
@@ -209,7 +211,7 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       const order = await cancelledUnpaid();
       expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p77:300000' })).toBe(true);
 
-      const res = await admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT2627009' });
+      const res = await admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FT2627009${RUN}` });
 
       expect(res).toMatchObject({ ok: true, latePayment: true });
       expect(res.message).toContain('đã được ghi trước đó');
@@ -223,9 +225,9 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       const before = await admin.listOrders(1, 20, undefined, order.code);
       expect(before.data.find((o) => o.id === order.id)).toMatchObject({ canRecordLatePayment: true });
 
-      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT1' });
-      await admin.confirmOrderPayment('admin-b', order.code, { bankRef: 'ft1 ' });
-      await admin.confirmOrderPayment('admin-b', order.code, { bankRef: 'FT2' });
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FT1${RUN}` });
+      await admin.confirmOrderPayment('admin-b', order.code, { bankRef: `ft1${RUN} ` });
+      await admin.confirmOrderPayment('admin-b', order.code, { bankRef: `FT2${RUN}` });
       await admin.confirmOrderPayment('admin-c', order.code);
 
       const rows = await lateRefunds(order.id);
@@ -233,12 +235,30 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       expect(rows[0]).toMatchObject({ amount: 300_000, adminNote: expect.stringContaining('FT1') });
     });
 
+    it('khoản tiền về muộn đã có từ webhook: mã GD admin vừa gõ được gắn vào khoản đó, nên không dùng lại được cho đơn khác', async () => {
+      const order = await cancelledUnpaid();
+      expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p55:300000' })).toBe(true);
+      const ref = `FT-EXIST-${RUN}`;
+
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: ref });
+      // Gõ lại cùng mã không nối thêm lần nữa.
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: ref.toLowerCase() });
+
+      const rows = await lateRefunds(order.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].adminNote).toBe(`Mã GD ${ref}`);
+
+      const other = await bankTransferOrder();
+      await expect(admin.confirmOrderPayment('admin-b', other.order.id, { bankRef: ref })).rejects.toThrow(new RegExp(`tiền về muộn của đơn ${order.code}`));
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: other.order.id } })).paymentStatus).toBe('UNPAID');
+    });
+
     it('2 admin (mã GD khác nhau) + webhook Pancake cùng lúc → đúng 1 khoản hoàn', async () => {
       const orders = await Promise.all(Array.from({ length: 5 }, () => cancelledUnpaid(250_000)));
       const results = await Promise.allSettled(
         orders.flatMap((order, i) => [
-          admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FTA${i}` }),
-          admin.confirmOrderPayment('admin-b', order.code, { bankRef: `FTB${i}` }),
+          admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FTA${i}${RUN}` }),
+          admin.confirmOrderPayment('admin-b', order.code, { bankRef: `FTB${i}${RUN}` }),
           recordLatePaymentRefund(ctx(), order, { amount: 250_000, source: 'PANCAKE', refKey: `p${i}:250000` }),
         ]),
       );
@@ -248,7 +268,7 @@ describe('Admin confirm-payment race (real Postgres)', () => {
 
     it('admin ghi tay trước, webhook Pancake báo cùng khoản tiền sau → không tạo khoản thứ hai, báo admin kiểm tra', async () => {
       const order = await cancelledUnpaid();
-      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: 'FT3' });
+      await admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FT3${RUN}` });
       notify.mockClear();
 
       expect(await recordLatePaymentRefund(ctx(), order, { amount: 300_000, source: 'PANCAKE', refKey: 'p88:300000' })).toBe(false);
@@ -268,7 +288,7 @@ describe('Admin confirm-payment race (real Postgres)', () => {
 
     it('webhook Pancake báo số CỘNG DỒN sau khi admin đã ghi tay → không tạo thêm khoản, vào "Cần xử lý Pancake"; ngược lại Pancake ghi trước thì admin không ghi thêm', async () => {
       const manualFirst = await cancelledUnpaid();
-      await admin.confirmOrderPayment('admin-a', manualFirst.code, { bankRef: 'FT4' });
+      await admin.confirmOrderPayment('admin-a', manualFirst.code, { bankRef: `FT4${RUN}` });
       notify.mockClear();
       expect(await recordCumulativeLatePayment(ctx(), manualFirst, { reportedTotal: 300_000, source: 'PANCAKE' })).toBe(0);
       expect(await recordCumulativeLatePayment(ctx(), manualFirst, { reportedTotal: 600_000, source: 'PANCAKE' })).toBe(0);
@@ -278,7 +298,7 @@ describe('Admin confirm-payment race (real Postgres)', () => {
 
       const pancakeFirst = await cancelledUnpaid();
       expect(await recordCumulativeLatePayment(ctx(), pancakeFirst, { reportedTotal: 300_000, source: 'PANCAKE' })).toBe(300_000);
-      const res = await admin.confirmOrderPayment('admin-a', pancakeFirst.code, { bankRef: 'FT5' });
+      const res = await admin.confirmOrderPayment('admin-a', pancakeFirst.code, { bankRef: `FT5${RUN}` });
       expect(res.message).toContain('đã được ghi trước đó');
       expect(await lateRefunds(pancakeFirst.id)).toHaveLength(1);
     });
@@ -287,12 +307,67 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       const orders = await Promise.all(Array.from({ length: 5 }, () => cancelledUnpaid(250_000)));
       const results = await Promise.allSettled(
         orders.flatMap((order, i) => [
-          admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FTC${i}` }),
+          admin.confirmOrderPayment('admin-a', order.code, { bankRef: `FTC${i}${RUN}` }),
           recordCumulativeLatePayment(ctx(), order, { reportedTotal: 250_000, source: 'PANCAKE' }),
         ]),
       );
       expect(summarize(results).rejected).toHaveLength(0);
       for (const order of orders) expect(await lateRefunds(order.id)).toHaveLength(1);
     });
+  });
+  it('RB-03: hai đơn lẻ khác nhau cùng mã giao dịch xác nhận song song → một đơn PAID, một bên 409 kèm mã đơn đã dùng', async () => {
+    const [o1, o2] = await Promise.all([bankTransferOrder(), bankTransferOrder()]);
+    const ref = `FT-RB03-${Date.now()}`;
+    const results = await Promise.allSettled([
+      admin.confirmOrderPayment('admin-a', o1.order.id, { bankRef: ref }),
+      admin.confirmOrderPayment('admin-b', o2.order.id, { bankRef: ref.toLowerCase() }),
+    ]);
+    const s = summarize(results);
+    expect(s.fulfilled).toHaveLength(1);
+    expect(s.rejected).toHaveLength(1);
+    expect(String((s.rejected[0] as { reason: { message?: string } }).reason?.message ?? s.rejected[0])).toMatch(/đã dùng để xác nhận đơn/);
+    const paid = await prisma.order.count({ where: { id: { in: [o1.order.id, o2.order.id] }, paymentStatus: 'PAID' } });
+    expect(paid).toBe(1);
+  });
+
+  it('RB-03: đơn lẻ xác nhận sau khi mã đã dùng ở đơn khác (tuần tự) → 409, đơn vẫn chưa trả', async () => {
+    const [o1, o2] = await Promise.all([bankTransferOrder(), bankTransferOrder()]);
+    const ref = `FT-RB03S-${Date.now()}`;
+    await admin.confirmOrderPayment('admin-a', o1.order.id, { bankRef: ref });
+    await expect(admin.confirmOrderPayment('admin-a', o2.order.id, { bankRef: ref })).rejects.toThrow(new RegExp(`đơn ${o1.order.code}`));
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o2.order.id } })).paymentStatus).toBe('UNPAID');
+  });
+
+  it('RB-03 (đường ghi muộn): FT1 đã xác nhận đơn A → ghi tiền về muộn cho đơn huỷ B với cùng FT1 → 409, không có khoản hoàn', async () => {
+    const [a, b] = await Promise.all([bankTransferOrder(), bankTransferOrder(300_000)]);
+    await prisma.order.update({ where: { id: b.order.id }, data: { status: 'CANCELLED' } });
+    const ref = `FT-RB03L-${Date.now()}`;
+    await admin.confirmOrderPayment('admin-a', a.order.id, { bankRef: ref });
+    await expect(admin.confirmOrderPayment('admin-a', b.order.code, { bankRef: ref.toLowerCase() })).rejects.toThrow(new RegExp(`đơn ${a.order.code}`));
+    expect(await prisma.orderCustomerRefund.count({ where: { orderId: b.order.id } })).toBe(0);
+  });
+
+  it('RB-03 (chiều ngược): FT1 đã ghi tiền về muộn cho đơn huỷ B → xác nhận đơn A với FT1 → 409, A vẫn chưa trả', async () => {
+    const [a, b] = await Promise.all([bankTransferOrder(), bankTransferOrder(300_000)]);
+    await prisma.order.update({ where: { id: b.order.id }, data: { status: 'CANCELLED' } });
+    const ref = `FT-RB03R-${Date.now()}`;
+    await admin.confirmOrderPayment('admin-a', b.order.code, { bankRef: ref });
+    await expect(admin.confirmOrderPayment('admin-a', a.order.id, { bankRef: ref })).rejects.toThrow(new RegExp(`đơn ${b.order.code}`));
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: a.order.id } })).paymentStatus).toBe('UNPAID');
+  });
+
+  it('RB-03 (song song): cùng FT1 xác nhận đơn A và ghi muộn cho đơn huỷ B cùng lúc → đúng một bên thành công', async () => {
+    const [a, b] = await Promise.all([bankTransferOrder(), bankTransferOrder(300_000)]);
+    await prisma.order.update({ where: { id: b.order.id }, data: { status: 'CANCELLED' } });
+    const ref = `FT-RB03P-${Date.now()}`;
+    const results = await Promise.allSettled([
+      admin.confirmOrderPayment('admin-a', a.order.id, { bankRef: ref }),
+      admin.confirmOrderPayment('admin-b', b.order.code, { bankRef: ref }),
+    ]);
+    const s = summarize(results);
+    expect(s.fulfilled).toHaveLength(1);
+    expect(s.rejected).toHaveLength(1);
+    const paid = (await prisma.order.count({ where: { id: a.order.id, paymentStatus: 'PAID' } })) + (await prisma.orderCustomerRefund.count({ where: { orderId: b.order.id } }));
+    expect(paid).toBe(1);
   });
 });

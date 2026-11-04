@@ -7,6 +7,7 @@ import { invalidateInbox, PANCAKE_RESOLVE_NOTE_MAX, resolvePancakeAttention, typ
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, FIELD_XS, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export const PANCAKE_ATTENTION_COUNT_KEY = ['admin-pancake-attention-count'] as const;
 
@@ -40,7 +41,7 @@ export function PancakeAttentionPanel({ order }: { order: AdminOrder }) {
       void qc.invalidateQueries({ queryKey: PANCAKE_ATTENTION_COUNT_KEY });
       void invalidateInbox(qc);
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Thao tác thất bại.' }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
     onSettled: () => {
       inFlight.current = false;
     },

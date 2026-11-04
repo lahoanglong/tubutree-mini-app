@@ -113,7 +113,7 @@ describe('D1 — không huỷ/hoàn tiền sau bàn giao vận chuyển (real Po
       ]),
     );
     const { errors } = summarize(results);
-    for (const e of errors) expect(e).toMatch(/CancelAfterHandoverError|Không thể chuyển đơn/);
+    for (const e of errors) expect(e).toMatch(/CancelAfterHandoverError|InvalidOrderTransitionError/);
 
     for (const { user, order } of fixtures) {
       const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });

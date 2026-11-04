@@ -8,6 +8,7 @@ import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { configValue, LOYALTY_DEFAULTS, LOYALTY_KEYS, parseCheckinPoints, parseIntInRange } from '@/lib/admin-config-forms';
 import { Field, INPUT_CLASS, Notice } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 interface NumbersForm {
   checkin: string[];
@@ -83,7 +84,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       setMsg({ ok: true, text: on ? 'Đã BẬT tích điểm tại quầy.' : 'Đã TẮT tích điểm tại quầy.' });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
   const askToggle = async (on: boolean) => {
@@ -107,7 +108,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         try {
           await setConfig(w.key, w.value);
         } catch (e) {
-          throw new Error(`${w.key}: ${e instanceof Error ? e.message : 'không lưu được'}`);
+          throw new Error(`${w.key}: ${actionErrorText(e)}`);
         }
       }
       return changed.length;
@@ -117,7 +118,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
     onError: (e) => {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' });
+      setMsg({ ok: false, text: actionErrorText(e) });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
   });

@@ -195,6 +195,7 @@ import { DEALER_APP_FILTERS, dealerAppStatusLabel } from '@/lib/dealer-applicati
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
+import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
 type Tab =
   | 'inbox'
@@ -918,7 +919,7 @@ function DealerRow({ app: a }: { app: DealerApp }) {
         return;
       } catch (e) {
         initial = reason;
-        error = e instanceof Error ? e.message : 'Không từ chối được, thử lại.';
+        error = actionErrorText(e);
       }
     }
   };
@@ -951,7 +952,7 @@ function DealerRow({ app: a }: { app: DealerApp }) {
           <button onClick={askReject} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
         </div>
       )}
-      {review.isError && <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>}
+      {review.isError && <p className="mt-1 text-xs text-danger-fg">{actionErrorText(review.error)}</p>}
       {dialog}
     </div>
   );
@@ -1339,7 +1340,7 @@ function OrdersTab({
       });
       setExportMsg({ ok: true, text: `Đã tải ${r.filename} — mọi đơn khớp bộ lọc, không chỉ trang đang xem.` });
     } catch (e) {
-      setExportMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
+      setExportMsg({ ok: false, text: actionErrorText(e) });
     } finally {
       setExporting(false);
     }
@@ -1770,7 +1771,7 @@ function OrdersTab({
       {/* Orders Table */}
       {q.isError && (
         <LoadError
-          message={`Không tải được danh sách đơn hàng${q.error instanceof Error ? `: ${q.error.message}` : '.'}`}
+          message={`Không tải được danh sách đơn hàng${q.error ? `: ${loadErrorText(q.error)}` : '.'}`}
           onRetry={() => void q.refetch()}
         />
       )}
@@ -2222,7 +2223,7 @@ function ReturnsTab({
         </div>
         <span className="text-xs text-stone-500">
           Khách trả theo dòng và số lượng. Duyệt: xem số tiền tính sẵn rồi xác nhận (hoàn tiền, đảo điểm/hoa hồng);
-          kho chỉ cộng khi bấm &quot;Đã nhận hàng về&quot;.
+          bấm &quot;Đã nhận hàng về&quot; khi hàng về kho (kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake).
         </span>
       </div>
       {q.data && (
@@ -2273,12 +2274,12 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       const r = await downloadUsersCsv(search || undefined, guests);
       setMsg({ ok: true, text: `Đã tải ${r.filename} — mọi người dùng khớp tìm kiếm, không chỉ trang đang xem.` });
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
+      setMsg({ ok: false, text: actionErrorText(e) });
     } finally {
       setExporting(false);
     }
   };
-  const onError = (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Thao tác thất bại.' });
+  const onError = (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) });
   const block = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
     onSuccess: (_r, v) => {
@@ -2517,7 +2518,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
       setTierId('');
       onDone();
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const submit = async () => {
     setMsg(null);
@@ -2716,7 +2717,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
       setMsg('Đã tạo mã giảm giá!');
       void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
     },
-    onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
+    onError: (e) => setMsg(actionErrorText(e)),
   });
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
   // Việc hằng ngày (xem mã nào đang chạy, gia hạn, tắt) lên đầu; tạo mã và lô thẻ hộp hàng sàn là việc hiếm nên nằm sau chip.
@@ -2841,7 +2842,7 @@ function BrandsTab() {
         </div>
         <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className={BTN_PRIMARY}>Tạo nhãn</button>
       </div>
-      {create.isError && <p className="text-sm text-danger-fg">{(create.error as Error).message}</p>}
+      {create.isError && <p className="text-sm text-danger-fg">{actionErrorText(create.error)}</p>}
 
       <div className="space-y-3">
         {q.isError && <LoadError message="Không tải được danh sách nhãn hàng." onRetry={() => void q.refetch()} />}
@@ -2860,7 +2861,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
   const [open, setOpen] = useState(false);
   const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
-  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
+  const onRowError = (e: unknown) => setRowErr(actionErrorText(e));
   const patch = useMutation({
     mutationFn: (body: Partial<{ isPublished: boolean }>) => updateBrand(brand.id, body),
     onSuccess: () => { setRowErr(null); refreshBrands(); },
@@ -2947,7 +2948,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               Gán chủ nhãn
             </button>
             {assignOwner.isSuccess && <span className="inline-flex items-center gap-1 text-success-fg">Đã gán <Check className="h-4 w-4" aria-hidden /></span>}
-            {assignOwner.isError && <span className="text-danger-fg">{(assignOwner.error as Error).message}</span>}
+            {assignOwner.isError && <span className="text-danger-fg">{actionErrorText(assignOwner.error)}</span>}
           </div>
 
           <BrandInfoForm brand={brand} />
@@ -3008,7 +3009,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               </Field>
               <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim() || promoStartPending || promoEndPending} className={BTN_PRIMARY}>Thêm KM</button>
             </div>
-            {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{(addPromo.error as Error).message}</p>}
+            {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{actionErrorText(addPromo.error)}</p>}
           </div>
         </div>
       )}
@@ -3086,7 +3087,7 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
       <div className="mt-2">
         <button onClick={() => save.mutate()} disabled={save.isPending} className={BTN_PRIMARY}>Lưu thông tin</button>
         {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
-        {save.isError && <span className="ml-2 text-sm text-danger-fg">{(save.error as Error).message}</span>}
+        {save.isError && <span className="ml-2 text-sm text-danger-fg">{actionErrorText(save.error)}</span>}
       </div>
     </div>
   );
@@ -3131,7 +3132,7 @@ function DealerRewardsSection() {
           </div>
         ))}
         {q.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có chương trình.</p>}
-        {del.isError && <p className="text-xs text-danger-fg">{(del.error as Error).message}</p>}
+        {del.isError && <p className="text-xs text-danger-fg">{actionErrorText(del.error)}</p>}
       </div>
       <div className="mt-2 flex flex-wrap items-end gap-2">
         <Field label="Loại phần thưởng">
@@ -3157,7 +3158,7 @@ function DealerRewardsSection() {
         </Field>
         <button onClick={() => create.mutate()} disabled={!f.title.trim()} className={BTN_PRIMARY}>Thêm</button>
       </div>
-      {create.isError && <p className="mt-1 text-xs text-danger-fg">{(create.error as Error).message}</p>}
+      {create.isError && <p className="mt-1 text-xs text-danger-fg">{actionErrorText(create.error)}</p>}
       {dialog}
     </div>
   );
@@ -3184,7 +3185,7 @@ function FlashSalesTab() {
       setMsg({ ok: true, text: 'Đã tạo đợt giờ vàng!' });
       void qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt giờ vàng' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
   const visibleSales = filterFlashSales(q.data ?? [], saleFilter);
@@ -3282,12 +3283,12 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const toggleActive = useMutation({
     mutationFn: () => updateFlashSale(sale.id, { isActive: !sale.isActive }),
     onSuccess: () => { setRowErr(null); refresh(); },
-    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
+    onError: (e) => setRowErr(actionErrorText(e)),
   });
   const delItem = useMutation({
     mutationFn: (itemId: string) => deleteFlashSaleItem(itemId),
     onSuccess: () => { setRowErr(null); refresh(); },
-    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
+    onError: (e) => setRowErr(actionErrorText(e)),
   });
   const notStarted = new Date(sale.startAt).getTime() > Date.now();
   const state = flashSaleState(sale);
@@ -3295,7 +3296,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const delSale = useMutation({
     mutationFn: () => deleteFlashSale(sale.id),
     onSuccess: () => { setRowErr(null); refresh(); },
-    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
+    onError: (e) => setRowErr(actionErrorText(e)),
   });
   // Tắt đợt đang bật làm giá sale biến mất với khách ngay (kể cả đợt đang chạy), nên hỏi trước; bật lại thì chạy luôn.
   const askToggleActive = async () => {
@@ -3341,7 +3342,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
         ...(draft.endAt !== original.endAt ? { endAt: vnLocalToIso(draft.endAt) ?? invalidVnTime() } : {}),
       }),
     onSuccess: () => { setRowErr(null); setEditing(false); refresh(); },
-    onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
+    onError: (e) => setRowErr(actionErrorText(e)),
   });
 
   const [item, setItem] = useState(EMPTY_ITEM);
@@ -3362,7 +3363,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
       setItemErr(null);
       refresh();
     },
-    onError: (e) => setItemErr(e instanceof Error ? e.message : 'Lỗi thêm sản phẩm'),
+    onError: (e) => setItemErr(actionErrorText(e)),
   });
   const itemReady = !!item.variationId.trim() && Number(item.flashPrice) >= 1 && Number(item.quota) >= 1;
 
@@ -3523,7 +3524,7 @@ function FaqTab() {
       setMsg({ ok: true, text: 'Đã thêm câu hỏi thường gặp!' });
       void qc.invalidateQueries({ queryKey: ['admin-faqs'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo câu hỏi thường gặp' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
@@ -3595,7 +3596,7 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-faqs'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
-  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
+  const onRowError = (e: unknown) => setRowErr(actionErrorText(e));
   const toggleActive = useMutation({
     mutationFn: () => updateFaq(faq.id, { isActive: !faq.isActive }),
     onSuccess: () => { setRowErr(null); refresh(); },
@@ -3668,7 +3669,7 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           >
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-sm text-danger-fg">{actionErrorText(save.error)}</p>}
         </div>
       )}
       {dialog}
@@ -3699,7 +3700,7 @@ function QuickReplyTab() {
       setMsg({ ok: true, text: 'Đã thêm mẫu tin nhanh!' });
       void qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo mẫu tin nhanh' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
@@ -3783,7 +3784,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
-  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
+  const onRowError = (e: unknown) => setRowErr(actionErrorText(e));
   const toggleActive = useMutation({
     mutationFn: () => updateQuickReply(item.id, { isActive: !item.isActive }),
     onSuccess: () => { setRowErr(null); refresh(); },
@@ -3876,7 +3877,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
           >
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-sm text-danger-fg">{actionErrorText(save.error)}</p>}
         </div>
       )}
       {dialog}
@@ -3918,7 +3919,7 @@ function ContentKitTab() {
       </div>
 
       {loadedId && q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {loadedId && q.isError && <p className="text-sm text-danger-fg">{(q.error as Error).message}</p>}
+      {loadedId && q.isError && <p className="text-sm text-danger-fg">{loadErrorText(q.error)}</p>}
       {loadedId && q.isSuccess && (
         <ContentKitEditor key={loadedId} productId={loadedId} initial={q.data} />
       )}
@@ -3955,7 +3956,7 @@ function ContentKitEditor({
       setMsg({ ok: true, text: 'Đã lưu bộ nội dung!' });
       void qc.invalidateQueries({ queryKey: ['admin-content-kit', productId] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi lưu bộ nội dung' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const setFaq = (i: number, patch: Partial<ContentKitFaq>) =>
@@ -4071,7 +4072,7 @@ function AcademyTab() {
       setMsg({ ok: true, text: 'Đã tạo khoá học!' });
       void qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo khoá học' }),
+    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
@@ -4137,7 +4138,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
   const [rowErr, setRowErr] = useState<string | null>(null);
-  const onRowError = (e: unknown) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra, vui lòng thử lại.');
+  const onRowError = (e: unknown) => setRowErr(actionErrorText(e));
   const togglePublish = useMutation({
     mutationFn: () => updateAcademyCourse(course.id, { isPublished: !course.isPublished }),
     onSuccess: () => { setRowErr(null); refresh(); },
@@ -4244,7 +4245,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
             {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
-            {save.isError && <span className="ml-2 text-sm text-danger-fg">{(save.error as Error).message}</span>}
+            {save.isError && <span className="ml-2 text-sm text-danger-fg">{actionErrorText(save.error)}</span>}
           </div>
 
           <div>
@@ -4315,7 +4316,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
               >
                 Thêm bài học
               </button>
-              {addLesson.isError && <p className="text-xs text-danger-fg">{(addLesson.error as Error).message}</p>}
+              {addLesson.isError && <p className="text-xs text-danger-fg">{actionErrorText(addLesson.error)}</p>}
             </div>
           </div>
         </div>
@@ -4369,7 +4370,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           >Xoá</button>
         </div>
       </div>
-      {del.isError && <p className="mt-1 text-xs text-danger-fg">{(del.error as Error).message}</p>}
+      {del.isError && <p className="mt-1 text-xs text-danger-fg">{actionErrorText(del.error)}</p>}
       {open && (
         <div className="mt-2 space-y-2 border-t border-stone-200 pt-2">
           <div className="flex flex-wrap items-end gap-2">
@@ -4406,7 +4407,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
           </button>
-          {save.isError && <p className="text-xs text-danger-fg">{(save.error as Error).message}</p>}
+          {save.isError && <p className="text-xs text-danger-fg">{actionErrorText(save.error)}</p>}
         </div>
       )}
       {dialog}

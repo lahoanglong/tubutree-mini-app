@@ -6,7 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { anonymizedAtOf, creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { canRefundToBank, formatVnd, maskedBank, normalizeBankDetails, type BankDetails } from './refund-destination';
-import { COD_HAND_REFUND_NOTE, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, HELD_RETURN_UNVERIFIED_REF, isCodReturnRef, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
+import { COD_HAND_REFUND_NOTE, OPEN_CUSTOMER_REFUND_STATUSES, announceBankRefund, endCustomerPayee, lockOrderRow, HELD_RETURN_UNVERIFIED_REF, isCodReturnRef, isHeldReturnRef, isUnverifiedRefundRow } from './refund-queue';
 import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD_REASONS, removeAttentionReason } from '../integrations/pancake/pancake-attention';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
@@ -319,23 +319,26 @@ export class CustomerRefundsService {
     if (!isEndCustomerRow(row) && !row.bankAccountNo && !typedBank) {
       throw new BadRequestException('Khoản này chưa có tài khoản nhận. Nhập tài khoản khách cung cấp trước khi xác nhận.');
     }
-    // Khách tự đổi được nơi nhận (khoản có chủ tài khoản) thì chỉ xác nhận được khoản đã khoá bằng "Bắt đầu chuyển khoản":
-    // xác nhận thẳng từ hàng chờ là chuyển tiền trong lúc khách vẫn có thể rút về Ví — hoàn hai lần.
-    const lockable = row.userId !== null;
-    if (lockable && row.method === 'MANUAL_TRANSFER' && row.status === 'PENDING') {
+    // Mọi khoản chuyển khoản tay phải khoá bằng "Bắt đầu chuyển khoản" trước khi chuyển tiền: khoản có chủ tài khoản để khách
+    // không rút về Ví giữa chừng; khoản khách cuối đơn CTV để hai người không cùng chuyển một khoản.
+    if (row.method === 'MANUAL_TRANSFER' && row.status === 'PENDING') {
       throw new BadRequestException('Bấm "Bắt đầu chuyển khoản" để khoá nơi nhận trước khi chuyển tiền, rồi mới xác nhận đã chuyển.');
     }
     const guard = await this.claimGuard(adminId, row, 'paid', { confirm: opts.takeOver, reason: opts.takeOverReason });
     // Đang chuyển khoản: chỉ khớp đúng người giữ khoản lúc đọc (chính mình, hoặc người được tiếp quản) — ai đó trả về hàng
-    // chờ hay nhận lại chen giữa thì câu ghi trượt. Khoản khách cuối đơn CTV (không ai đổi nơi nhận) xác nhận thẳng từ hàng chờ.
+    // chờ hay nhận lại chen giữa thì câu ghi trượt.
     const allowed: Prisma.OrderCustomerRefundWhereInput[] =
-      row.status === 'PROCESSING'
-        ? [{ status: 'PROCESSING', claimedBy: guard.claimedBy }]
-        : lockable
-          ? []
-          : [{ status: 'PENDING' }];
+      row.status === 'PROCESSING' ? [{ status: 'PROCESSING', claimedBy: guard.claimedBy }] : [];
+    const typedNote = opts.note?.trim();
     const won = await this.prisma.$transaction(async (tx) => {
       if (allowed.length === 0) return false;
+      let adminNote = typedNote;
+      if (typedNote && row.kind === 'LATE_PAYMENT') {
+        // Mã GD tiền vào của khoản tiền về muộn chỉ nằm trong adminNote (findOrderUsingBankRef tra ở đó): ghi đè là mất mã. Khoá dòng đơn để chỗ gắn thêm mã (recordLatePaymentRefund) không chen giữa lúc đọc và ghi.
+        await lockOrderRow(tx, row.orderId);
+        const cur = await tx.orderCustomerRefund.findUnique({ where: { id }, select: { adminNote: true } });
+        adminNote = [cur?.adminNote, typedNote].filter(Boolean).join(' · ');
+      }
       const res = await tx.orderCustomerRefund.updateMany({
         where: { id, method: 'MANUAL_TRANSFER', OR: allowed },
         data: {
@@ -343,7 +346,7 @@ export class CustomerRefundsService {
           completedBy: adminId,
           completedAt: new Date(),
           bankRef,
-          ...(opts.note?.trim() ? { adminNote: opts.note.trim() } : {}),
+          ...(adminNote ? { adminNote } : {}),
           ...(typedBank
             ? { bankName: typedBank.bankName, bankAccountNo: typedBank.accountNumber, bankAccountName: typedBank.accountName }
             : {}),

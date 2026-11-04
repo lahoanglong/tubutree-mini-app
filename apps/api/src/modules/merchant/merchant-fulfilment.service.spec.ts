@@ -429,6 +429,49 @@ describe('MerchantFulfilmentService — phiếu đối soát', () => {
     expect(notify).toHaveBeenCalledWith('u1', 'MERCHANT_PAYOUT_PAID', { amount: '200.000', bank_ref: 'FT123' });
   });
 
+  describe('RC-02: phiếu đã PAID', () => {
+    const paidRow = { id: 'p1', status: 'PAID', amount: 200_000, paidBy: 'admin-1', paidAt: new Date('2026-10-14T03:05:00Z'), bankRef: 'FT-A', storefront: { ownerUserId: 'u1' } };
+    function paid() {
+      const ctx = build();
+      ctx.prisma.merchantPayout.updateMany.mockResolvedValue({ count: 0 });
+      ctx.prisma.merchantPayout.findUnique.mockResolvedValue(paidRow);
+      (ctx.prisma as Record<string, unknown>).user = { findUnique: jest.fn().mockResolvedValue({ fullName: 'Admin An' }) };
+      return ctx;
+    }
+
+    it('người khác bấm sau (mã GD khác) → 409 nêu người đã xác nhận, giờ VN và mã GD, không báo đối tác lần hai', async () => {
+      const { svc, notify } = paid();
+      await expect(svc.markPayoutPaid('admin-2', 'p1', 'FT-B')).rejects.toThrow(
+        'Phiếu đối soát đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A',
+      );
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('cùng người, cùng mã GD gọi lại → vẫn thành công, không báo đối tác lần hai', async () => {
+      const { svc, notify } = paid();
+      await expect(svc.markPayoutPaid('admin-1', 'p1', 'FT-A')).resolves.toMatchObject({ id: 'p1', status: 'PAID' });
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('cùng người nhưng mã GD khác → 409 nói là chính bạn, chỉ dặn thu hồi nếu đã chuyển thêm thật', async () => {
+      const { svc } = paid();
+      const err = await svc.markPayoutPaid('admin-1', 'p1', 'FT-OTHER').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toContain('Bạn đã xác nhận khoản này lúc 10:05 14/10/2026 với mã GD «FT-A»');
+      expect((err as Error).message).toContain('Nếu bạn đã chuyển thêm một lần nữa');
+      expect((err as Error).message).not.toContain('đã được');
+    });
+
+    it('phiếu đã huỷ: câu nói "đã chuyển" với phiếu dương, "đã thu" với phiếu âm', async () => {
+      const ctx = build();
+      ctx.prisma.merchantPayout.updateMany.mockResolvedValue({ count: 0 });
+      ctx.prisma.merchantPayout.findUnique.mockResolvedValue({ ...paidRow, status: 'CANCELLED' });
+      await expect(ctx.svc.markPayoutPaid('admin-1', 'p1', 'FT-A')).rejects.toThrow('Phiếu đã bị huỷ, không đánh dấu đã chuyển được.');
+      ctx.prisma.merchantPayout.findUnique.mockResolvedValue({ ...paidRow, status: 'CANCELLED', amount: -80_000 });
+      await expect(ctx.svc.markPayoutPaid('admin-1', 'p1', 'FT-A')).rejects.toThrow('Phiếu đã bị huỷ, không đánh dấu đã thu được.');
+    });
+  });
+
   it('đánh dấu đã chuyển: chỉ phiếu PENDING, báo đối tác kèm mã giao dịch', async () => {
     const { svc, prisma, notify } = build();
     prisma.merchantPayout.updateMany.mockResolvedValue({ count: 1 });

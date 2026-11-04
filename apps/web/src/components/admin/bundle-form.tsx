@@ -21,9 +21,10 @@ import { AddonVariationPicker, type PickedAddonVariation } from './bundle-addon-
 import { ProductPicker } from './product-picker';
 import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, FIELD_CLASS, INPUT_CLASS, TOUCH_H } from './ui';
 import { VnDateTimeInput } from './vn-date-input';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 export const KIND_LABELS: Record<AdminBundleKind, string> = { BUNDLE_PCT: 'Combo giảm %', ADDON: 'Mua kèm (giá riêng)' };
-const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 /** "Giảm 11.000đ (22%)" khi đã biết cả giá bán lẫn giá kèm hợp lệ, tính đúng như giỏ (không vượt giá tham chiếu); chưa biết giá bán (món vừa chọn) thì không đoán. */
 function addonSaving(item: BundleDraftItem): string | null {

@@ -94,7 +94,18 @@ export class ShiftsService {
         throw new BadRequestException('Ca bị chồng giờ.');
       }
     }
-    return this.prisma.shift.update({ where: { id }, data: { startAt, endAt } });
+    // Điều kiện PENDING nằm ngay ở lệnh ghi: admin duyệt chen giữa bản đọc ở trên và lệnh này thì ca APPROVED không được đổi giờ
+    // (khung trả lương lấy startAt/endAt khi approvedStart/approvedEnd null).
+    const res = await this.prisma.shift.updateMany({ where: { id, staffId, status: 'PENDING' }, data: { startAt, endAt } });
+    if (res.count === 0) {
+      // Ca đổi trạng thái chen giữa bản đọc và lệnh ghi: đọc lại để báo đúng thay vì mặc định "đã duyệt".
+      const now = await this.prisma.shift.findFirst({ where: { id, staffId }, select: { status: true } });
+      if (!now) throw new BadRequestException('Ca không còn nữa, tải lại.');
+      if (now.status === 'APPROVED') throw new BadRequestException('Ca vừa được duyệt, tải lại.');
+      if (now.status === 'REJECTED') throw new BadRequestException('Ca vừa bị từ chối, tải lại.');
+      throw new BadRequestException('Ca vừa đổi trạng thái, tải lại.');
+    }
+    return this.prisma.shift.findFirst({ where: { id, staffId } });
   }
 
   async deleteShift(staffId: string, id: string) {

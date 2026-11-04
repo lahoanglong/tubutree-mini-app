@@ -18,6 +18,11 @@ import { useConfirm } from './confirm-dialog';
 import { VnMonthInput } from './vn-date-input';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
+import { actionErrorText } from '@/lib/admin-error-text';
+import { ApiError } from '@/lib/client-api';
+
+const PAID_RELOAD_HINT = 'Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa trước khi chi lần nữa.';
+const RELOAD_HINT = 'Tải lại danh sách để xem trạng thái hiện tại của lệnh.';
 
 const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
   REQUESTED: 'warning',
@@ -246,8 +251,12 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
       setBankRef('');
       void qc.invalidateQueries({ queryKey: ['admin-payouts'] });
     },
-    onError: (e) => {
-      setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+    onError: (e, a) => {
+      const text = actionErrorText(e);
+      // Chữ của máy chủ không cho biết thao tác đã ghi hay chưa (5xx vẫn có thể mang lời tiếng Việt), nên cần nhắc tải lại khi
+      // lỗi không phải 4xx; 4xx là lời nghiệp vụ đã nói rõ kết quả.
+      const unsure = !(e instanceof ApiError) || e.status >= 500;
+      setErr(unsure ? `${text} ${a === 'markPaid' ? PAID_RELOAD_HINT : RELOAD_HINT}` : text);
       // Trạng thái có thể vừa bị admin khác đổi — tải lại để thấy trạng thái thật.
       void qc.invalidateQueries({ queryKey: ['admin-payouts'] });
     },

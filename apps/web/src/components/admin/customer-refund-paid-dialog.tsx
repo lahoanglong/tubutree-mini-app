@@ -199,8 +199,10 @@ export function CustomerRefundPaidDialog({
           )}
           {claiming ? (
             <p>
-              Bấm trước khi chuyển tiền: nơi nhận được khoá, khách không đổi sang Ví Tubu được nữa. Chuyển khoản xong, bấm
-              &quot;Đã chuyển khoản&quot; kèm mã giao dịch. Chưa chuyển được thì &quot;Trả về hàng chờ&quot;.
+              {toBank
+                ? 'Bấm trước khi chuyển tiền: nơi nhận được khoá, khách không đổi sang Ví Tubu được nữa.'
+                : 'Bấm trước khi chuyển tiền: khoản này được khoá về bạn để người khác không chuyển trùng.'}{' '}
+              Chuyển khoản xong, bấm &quot;Đã chuyển khoản&quot; kèm mã giao dịch. Chưa chuyển được thì &quot;Trả về hàng chờ&quot;.
             </p>
           ) : (
             <p>

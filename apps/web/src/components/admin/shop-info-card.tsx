@@ -7,6 +7,7 @@ import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { LEGAL_PAGES, LEGAL_SLUGS, type LegalSlug } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const COMPANY_FIELDS = [
   { key: 'company.legal_name', label: 'Tên công ty', hint: 'Đúng tên trên giấy đăng ký kinh doanh. Hiện ở chân trang và các trang chính sách.', placeholder: 'Công ty TNHH ...' },
@@ -60,7 +61,7 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
       setDraft((d) => Object.fromEntries(Object.entries(d).filter(([k]) => !keys.includes(k))));
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
-    onError: (e, keys) => setMsg({ key: keys[0]!, ok: false, text: e instanceof Error ? e.message : 'Không lưu được, thử lại sau.' }),
+    onError: (e, keys) => setMsg({ key: keys[0]!, ok: false, text: actionErrorText(e) }),
   });
 
   const companyKeys = COMPANY_FIELDS.map((f) => f.key as string);

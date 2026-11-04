@@ -13,6 +13,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { BTN_WARNING, FIELD_XS, Field } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
  * Hiện "Xác nhận đã nhận chuyển khoản" khi: đơn ĐẠI LÝ, còn UNPAID, BE xác nhận KHÔNG phải đơn "Ghi công
@@ -55,7 +56,7 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
       void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
       void invalidateInbox(qc);
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thanh toán thất bại.' }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
     onSettled: () => {
       inFlight.current = false;
     },

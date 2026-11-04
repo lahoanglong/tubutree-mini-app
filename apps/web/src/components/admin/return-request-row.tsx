@@ -16,6 +16,7 @@ import { PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { EvidenceImages } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H, Field } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 const REJECT_NOTE_MIN = 3;
 
@@ -36,7 +37,7 @@ function destinationText(d: AdminReturnPreview['destination']) {
 }
 
 function errorText(e: unknown, fallback: string) {
-  return e instanceof Error && e.message ? e.message : fallback;
+  return e instanceof Error ? actionErrorText(e) : fallback;
 }
 
 /**
@@ -109,7 +110,7 @@ export function ReturnRow({
   const askReceived = async () => {
     const ok = await confirm({
       title: 'Đã nhận hàng trả về?',
-      message: `Xác nhận kho đã nhận hàng trả của đơn ${orderCode}? Hàng sẽ được cộng lại vào kho ngay.`,
+      message: `Xác nhận kho đã nhận hàng trả của đơn ${orderCode}? Kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake.`,
       confirmLabel: 'Đã nhận hàng về',
     });
     if (ok) received.mutate();
@@ -345,7 +346,7 @@ export function ReturnRow({
                   <p className="mt-1 text-xs text-stone-600">
                     {p.returnTo?.kind === 'MERCHANT'
                       ? `Hàng trả về ${p.returnTo.name}, không về kho Tubu — gian hàng xác nhận nhận hàng và tự cộng kho; khoản đã quyết toán cho gian hàng được trừ lại ở kỳ sau.`
-                      : 'Kho chỉ cộng lại khi bấm "Đã nhận hàng về".'}
+                      : 'Bấm "Đã nhận hàng về" khi hàng về kho. Kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake.'}
                   </p>
                   {approve.isError && (
                     <p role="alert" className="mt-2 text-sm text-danger-fg">
@@ -396,7 +397,7 @@ export function ReturnRow({
             !!r.items?.length &&
             (r.receivedAt ? (
               <div>
-                {merchantStore ? `${merchantStore} đã nhận hàng trả` : 'Đã nhận hàng về'} lúc {formatDateTime(r.receivedAt)} (đã cộng kho).
+                {merchantStore ? `${merchantStore} đã nhận hàng trả` : 'Đã nhận hàng về'} lúc {formatDateTime(r.receivedAt)} ({merchantStore ? 'đã cộng kho' : 'tồn kho lấy theo Pancake'}).
               </div>
             ) : merchantStore ? (
               <div className="pt-1 text-warning-fg">Hàng trả về gian hàng {merchantStore} — chờ gian hàng xác nhận đã nhận.</div>

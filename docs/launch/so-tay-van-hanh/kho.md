@@ -40,7 +40,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 | Đã hủy | Đã hủy |
 | Đang hoàn, Hoàn một phần, Đã xoá | Nhãn đỏ "Pancake: cần xử lý" |
 | Bạn sửa món, giảm giá hoặc phí ship của đơn khiến tổng tiền đổi | Nhãn đỏ "Pancake: cần xử lý", lý do "Tổng tiền Pancake lệch với Tubu" kèm số lệch. Tubu không đổi tổng đơn của khách. |
-| Đã hoàn | Đơn tự huỷ (chưa giao) hoặc "Đã trả hàng" (đã giao); tồn kho cộng lại |
+| Đã hoàn | Đơn tự huỷ (chưa giao) hoặc "Đã trả hàng" (đã giao); tồn kho lấy theo Pancake |
 
 **Chỉ bấm "Đã nhận" hoặc "Đã thu tiền" khi hàng đã giao thật.** Không bấm hoàn thành hàng loạt: khách nhận điểm, hoa hồng bắt đầu giữ, đơn không huỷ được nữa.
 
@@ -54,7 +54,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 **Nhận hàng trả (khách trả hàng đã duyệt).**
 1. CSKH duyệt trong Tubu. Đơn hiện nhãn đỏ "Pancake: cần xử lý" với lời nhắc "Khách trả cả đơn" hoặc "Khách trả một phần đơn".
 2. Trên Pancake tạo phiếu: trả cả đơn thì tạo phiếu trả hàng. Trả một phần thì tạo phiếu **"Hoàn một phần"**, **không** dùng "Đã hoàn" cho cả đơn.
-3. Hàng về, kiểm số lượng và tình trạng. Mở **Quản trị › Bán hàng › Đổi / Trả**, bộ lọc "Chờ nhận hàng về" (kho mở sẵn bộ lọc này). Bấm **"Đã nhận hàng về"**. Mỗi yêu cầu bấm một lần. Tubu cộng tồn.
+3. Hàng về, kiểm số lượng và tình trạng. Mở **Quản trị › Bán hàng › Đổi / Trả**, bộ lọc "Chờ nhận hàng về" (kho mở sẵn bộ lọc này). Bấm **"Đã nhận hàng về"**. Mỗi yêu cầu bấm một lần. Kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake. Tubu chỉ tự cộng tồn với hàng không lấy tồn từ Pancake.
 4. Lời nhắc tự mất khi hàng đã nhận. Không tự mất thì mở đơn, ghi chú, bấm "Đã xử lý".
 5. Không hoàn tiền tay. Tiền và điểm do hệ thống tính lúc CSKH duyệt.
 
@@ -94,7 +94,7 @@ Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sa
 
 **Khách gọi đổi địa chỉ.** **Không sửa địa chỉ trên Pancake**, Tubu không biết và hoàn tiền, đối soát theo địa chỉ cũ. Chưa giao hãng: báo CSKH huỷ và khách đặt lại. Đã giao hãng: gọi hãng, nhờ CSKH báo khách. Xem [cskh.md](cskh.md).
 
-**COD khách không nhận.** Pancake báo "Đang hoàn", đơn hiện nhãn đỏ. CSKH gọi khách. Hàng về kho thì đặt "Đã hoàn" trên Pancake. Tubu tự huỷ đơn và cộng tồn. Không cần hoàn tiền vì COD chưa thu. Nút "Đã xử lý" bấm sau khi xong.
+**COD khách không nhận.** Pancake báo "Đang hoàn", đơn hiện nhãn đỏ. CSKH gọi khách. Hàng về kho thì đặt "Đã hoàn" trên Pancake. Tubu tự huỷ đơn; tồn kho Tubu lấy theo Pancake. Không cần hoàn tiền vì COD chưa thu. Nút "Đã xử lý" bấm sau khi xong.
 
 **Pancake báo "Hoàn một phần" mà không có yêu cầu trả trên Tubu.** Nhãn đỏ cho biết chưa có yêu cầu. Báo CSKH: khách gửi yêu cầu trả đúng dòng trong app, CSKH duyệt, hệ thống tự hoàn tiền và điểm. Không hoàn tay.
 

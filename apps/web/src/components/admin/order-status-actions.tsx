@@ -12,6 +12,7 @@ import {
   invalidateInbox,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import { actionErrorText } from '@/lib/admin-error-text';
 import { parseVndInput } from '@/lib/loyalty-pos';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
 import { BTN_WARNING, FIELD_XS, TOUCH_H, Field } from './ui';
@@ -161,6 +162,8 @@ export function OrderStatusActions({
   const statusMut = useMutation({
     mutationFn: ({ status, note }: { status: string; note?: string }) => updateOrderStatus(order.id || order.code, status, note),
     onSuccess: refresh,
+    // Lỗi thường do đơn vừa đổi trạng thái ở nơi khác: tải lại để nút bấm khớp trạng thái thật.
+    onError: refresh,
   });
 
   const resyncMut = useMutation({
@@ -197,7 +200,7 @@ export function OrderStatusActions({
       refresh();
       onPaid?.(r.message, r.alreadyPaid);
     },
-    onError: (e: unknown) => setPayMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thanh toán thất bại.' }),
+    onError: (e: unknown) => setPayMsg({ ok: false, text: actionErrorText(e) }),
     onSettled: () => {
       payInFlight.current = false;
     },
@@ -333,7 +336,7 @@ export function OrderStatusActions({
       )}
       {resyncMut.isError && (
         <p role="alert" className="text-xs text-danger-fg">
-          {resyncMut.error instanceof Error ? resyncMut.error.message : 'Không chạy lại được việc sau giao.'}
+          {actionErrorText(resyncMut.error)}
         </p>
       )}
 
@@ -348,7 +351,7 @@ export function OrderStatusActions({
           {statusMut.isPending && <span className="text-xs text-stone-500">Đang cập nhật…</span>}
           {statusMut.isError && (
             <span role="alert" className="text-xs text-danger-fg">
-              {(statusMut.error as Error).message}
+              {actionErrorText(statusMut.error)}
             </span>
           )}
         </div>

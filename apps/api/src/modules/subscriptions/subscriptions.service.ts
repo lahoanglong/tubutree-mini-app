@@ -49,6 +49,8 @@ export const MAX_SUBSCRIPTION_QUANTITY = 999;
  */
 export const SUBSCRIPTION_COD_MAX = 5_000_000;
 
+/** Giờ VN cron processDue chạy mỗi ngày; setStatus dựa vào mốc này để biết bật lại có kịp đơn hôm nay không. */
+const SUBSCRIPTION_CRON_HOUR_VN = 3;
 /** Cron mỗi đêm quét tối đa PAGE gói/trang, tối đa MAX_PAGES trang (chặn vòng lặp vô hạn nếu dữ liệu bất thường). */
 const DUE_PAGE_SIZE = 200;
 const DUE_MAX_PAGES = 50;
@@ -523,11 +525,27 @@ export class SubscriptionsService {
       });
       if (isPartnerOwnedVariation(variation)) throw partnerGoodsError('SUBSCRIPTION', variation?.product.name);
     }
-    // Khi bật lại từ PAUSED, dời nextRunAt tới chu kỳ kế nếu đã quá hạn.
-    const nextRunAt =
-      status === 'ACTIVE' && sub.nextRunAt < new Date()
-        ? this.addWeeks(new Date(), sub.intervalWeeks)
-        : sub.nextRunAt;
+    // Bật lại: cron 03:00 VN nhận mọi gói có nextRunAt trước 0h VN ngày mai, nên chỉ cần biết cron hôm nay còn chạy không.
+    // - Ngày hẹn từ mai trở đi: giữ nguyên (giờ lẻ của ngày đó vẫn ra đúng ngày).
+    // - Hẹn hôm nay và cron hôm nay chưa chạy: giữ nguyên, đơn ra sáng nay đúng ngày "Lần kế" khách thấy. Không so nextRunAt
+    //   với giờ bấm: nextRunAt neo 0h VN nên luôn nhỏ hơn giờ bấm, so vậy thì gói chưa lỡ kỳ nào cũng bị dời cả một chu kỳ.
+    // - Hẹn hôm nay mà cron đã chạy (gói đang tạm dừng nên bị bỏ qua): nextRunAt còn ở tương lai (giờ lẻ của dữ liệu cũ) thì
+    //   dời sang 0h ngày mai; đã qua thì gói đã lỡ kỳ, dời một chu kỳ tính từ hôm nay để không ra đơn bù ngoài lịch.
+    let nextRunAt = sub.nextRunAt;
+    if (status === 'ACTIVE') {
+      const resumeNow = new Date();
+      const todayVn = startOfVnDay(resumeNow);
+      const tomorrowVn = new Date(todayVn.getTime() + 864e5);
+      const cronStillToRunToday = resumeNow.getTime() < todayVn.getTime() + SUBSCRIPTION_CRON_HOUR_VN * 3600e3;
+      if (sub.nextRunAt >= tomorrowVn || (sub.nextRunAt >= todayVn && cronStillToRunToday)) {
+        nextRunAt = sub.nextRunAt;
+      } else if (sub.nextRunAt >= resumeNow) {
+        nextRunAt = tomorrowVn;
+      } else {
+        const resumed = this.addWeeks(todayVn, sub.intervalWeeks);
+        nextRunAt = resumed < tomorrowVn ? tomorrowVn : resumed;
+      }
+    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const updated = await tx.subscription.update({ where: { id }, data: { status, nextRunAt, retryCount: 0 } });
@@ -582,26 +600,29 @@ export class SubscriptionsService {
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi tạo đơn từng subscription
    * đã được cô lập ở try/catch trong vòng lặp bên dưới.
    */
-  @Cron('0 3 * * *', { timeZone: CRON_TZ })
+  @Cron(`0 ${SUBSCRIPTION_CRON_HOUR_VN} * * *`, { timeZone: CRON_TZ })
   @TrackCron()
   async processDue(): Promise<void> {
     try {
       const now = new Date();
+      // Đến hạn theo NGÀY VN: cron 03:00 phải lấy cả gói hẹn 14:23 của cùng ngày (gói cũ còn lưu giờ lẻ), nên mốc cắt là 0h VN ngày mai.
+      const dueBefore = new Date(startOfVnDay(now).getTime() + 864e5);
+      const claimBase = startOfVnDay(now);
       let created = 0;
       // Cũ nhất trước và quét hết các trang: trước đây take 200 không orderBy nên phần dư dồn sang đêm sau, mà gói đã
       // claim thì rời tập "đến hạn" nên trang kế luôn là các gói chưa xử lý.
       for (let page = 0; page < DUE_MAX_PAGES; page++) {
         const due = await this.prisma.subscription.findMany({
-          where: { status: 'ACTIVE', nextRunAt: { lte: now } },
+          where: { status: 'ACTIVE', nextRunAt: { lt: dueBefore } },
           orderBy: [{ nextRunAt: 'asc' }, { id: 'asc' }],
           take: DUE_PAGE_SIZE,
         });
         for (const sub of due) {
           // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
           // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
-          const nextRunAt = this.addWeeks(now, sub.intervalWeeks);
+          const nextRunAt = this.addWeeks(claimBase, sub.intervalWeeks);
           const claimed = await this.prisma.subscription.updateMany({
-            where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: now } },
+            where: { id: sub.id, status: 'ACTIVE', nextRunAt: sub.nextRunAt },
             data: { nextRunAt },
           });
           if (claimed.count === 0) continue; // instance khác đã claim
@@ -863,7 +884,7 @@ export class SubscriptionsService {
     // Đơn đầu giao ngay ghi trong tx tạo gói: kỳ kế tính từ hôm nay (cron thì đã dời ở bước claim).
     let nextRunAt = after.nextRunAt;
     if (nextRunAt.getTime() <= cycleAt.getTime()) {
-      nextRunAt = this.addWeeks(cycleAt, after.intervalWeeks);
+      nextRunAt = this.addWeeks(startOfVnDay(cycleAt), after.intervalWeeks);
       await tx.subscription.update({ where: { id: sub.id }, data: { nextRunAt } });
     } else if (scannedIntervalWeeks !== undefined && after.intervalWeeks !== scannedIntervalWeeks) {
       // Khách đổi chu kỳ chen giữa bước claim và khoá dòng: PATCH tính từ đơn kỳ trước nên ngày kế có thể sát hôm nay.

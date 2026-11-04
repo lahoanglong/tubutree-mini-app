@@ -17,6 +17,7 @@ import { getCommunes, getProvinces } from '@/lib/geo-client';
 import { WASTE_ITEM_STATUS_LABELS, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Slot = { open: string; close: string };
 type Hours = Partial<Record<WasteWeekday, Slot[]>>;
@@ -244,7 +245,7 @@ export function WastePointForm({
   // API từ chối món chỉ kho nhận ở điểm đại lý; khoá ô để admin không phải đoán qua lỗi 400.
   const warehouseOnlyIds = new Set(warehouse ? [] : items.filter((i) => i.warehouseOnly).map((i) => i.id));
 
-  const onError = (e: unknown) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
+  const onError = (e: unknown) => setErr(actionErrorText(e));
   const create = useMutation({
     mutationFn: (body: WastePointUpsertRequest) => createWastePoint(body),
     onSuccess: (p) => { setErr(null); onSaved(p); },

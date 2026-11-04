@@ -2,6 +2,7 @@ import type { AdminCustomerRefund, AdminCustomerRefundFilter, AdminCustomerRefun
 import type { Tone } from './recycling';
 import { ApiError } from './client-api';
 import { formatVnd } from './shop-client';
+import { actionErrorText, isBusinessMessage } from './error-text';
 
 /** Tiền tố khoá query của mọi truy vấn hoàn tiền khách (danh sách, số đếm), để invalidate một lần sau khi ghi. */
 export const CUSTOMER_REFUNDS_QUERY_KEY = 'admin-customer-refunds';
@@ -72,13 +73,6 @@ const REASON_LABEL: Record<string, string> = {
 
 /** BE lưu `reason` là chuỗi tự do (trạng thái đơn); giá trị chưa biết hiện nguyên văn để admin vẫn đối chiếu được. */
 export const refundReasonLabel = (reason: string) => REASON_LABEL[reason] ?? reason;
-
-/**
- * Khoản của khách có tài khoản: khách tự đổi được nơi nhận (sang Ví Tubu) tới khi admin bấm "Bắt đầu chuyển khoản".
- * Admin phải khoá trước khi chuyển tiền, rồi mới xác nhận "Đã chuyển khoản" (CustomerRefundsService.claim/markPaid).
- * Khoản khách cuối đơn CTV (không có tài khoản) không ai đổi được nên xác nhận thẳng.
- */
-export const needsClaim = (r: Pick<AdminCustomerRefund, 'userId'>) => r.userId !== null;
 
 /** Lý do tiếp quản tối thiểu — khớp CustomerRefundsService.claimGuard. */
 export const TAKE_OVER_REASON_MIN = 5;
@@ -184,5 +178,5 @@ export function markPaidFailure(e: unknown, action: RefundAction = 'paid'): Mark
       message: `Máy chủ đang gặp lỗi nên chưa rõ khoản này đã được ghi nhận chưa. Bấm "${button}" để thử lại; nếu đã ghi nhận, danh sách sẽ tự cập nhật.`,
     };
   }
-  return { stale: false, message: e.message || 'Không ghi nhận được. Thử lại sau ít phút.' };
+  return { stale: false, message: isBusinessMessage(e.message) ? e.message : actionErrorText(e) };
 }

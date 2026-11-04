@@ -28,7 +28,6 @@ import {
   customerRefundView,
   markPaidFailure,
   needsBankAccount,
-  needsClaim,
   overpaidAmountError,
   overpaymentFailure,
   refundKindLabel,
@@ -42,6 +41,7 @@ import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refun
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 import { useDebounced } from '@/lib/use-debounced';
+import { loadErrorText } from '@/lib/admin-error-text';
 import { searchEmptyHint } from './search-empty-hint';
 
 const PAGE_SIZE = 20;
@@ -448,7 +448,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
       {q.isError && (
         <Notice tone="danger" role="alert">
           <div className="flex flex-wrap items-center gap-2">
-            <span>Không tải được danh sách hoàn tiền.</span>
+            <span>Không tải được danh sách hoàn tiền. {loadErrorText(q.error)}</span>
             <button type="button" className={BTN_SECONDARY} disabled={q.isFetching} onClick={() => void q.refetch()}>
               Thử lại
             </button>
@@ -695,7 +695,7 @@ export function CustomerRefundRow({
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
           {recorded ? (
             <span className="text-xs text-stone-500">Đã ghi nhận, đang cập nhật danh sách…</span>
-          ) : view === 'PENDING' && needsClaim(r) ? (
+          ) : view === 'PENDING' ? (
             <>
               <button type="button" className={BTN_WARNING} onClick={() => onAction('claim')}>
                 Bắt đầu chuyển khoản
@@ -704,7 +704,7 @@ export function CustomerRefundRow({
             </>
           ) : (
             <>
-              {view === 'PROCESSING' && r.claimedAt && (
+              {r.claimedAt && (
                 <span className="w-full text-xs text-stone-500">
                   Bắt đầu chuyển lúc {fmtDate(r.claimedAt)}
                   {claimHolderSuffix(r, meId)} — khách không đổi được nơi nhận.
@@ -719,7 +719,7 @@ export function CustomerRefundRow({
               <button type="button" className={BTN_WARNING} onClick={() => onAction('paid')}>
                 {`Đã chuyển khoản${takeOverTag}`}
               </button>
-              {view === 'PROCESSING' && onRelease && (
+              {onRelease && (
                 <button type="button" className={BTN_SECONDARY} disabled={releasing} onClick={onRelease}>
                   {releasing ? 'Đang trả…' : `Trả về hàng chờ${takeOverTag}`}
                 </button>

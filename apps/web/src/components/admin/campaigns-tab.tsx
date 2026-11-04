@@ -9,6 +9,7 @@ import type { Tone } from '@/lib/recycling';
 import { AUDIENCE_LABELS, CampaignForm, PLACEMENT_LABELS } from './campaign-form';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, LoadError, ToneBadge, chipClass } from './ui';
+import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = CampaignPlacement | '';
 const FILTERS: { k: Filter; label: string }[] = [
@@ -22,7 +23,7 @@ const STATUS: Record<AdminCampaignStatus, { label: string; tone: Tone }> = {
   ended: { label: 'Đã kết thúc', tone: 'neutral' },
   off: { label: 'Đang tắt', tone: 'warning' },
 };
-const msg = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
+const msg = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
 
 /** Form đang mở thì Sửa và Tắt/Bật của dòng bị khoá: Tắt rồi Lưu form sẽ bật lại chiến dịch (form giữ giá trị lúc mở), Sửa dòng khác làm mất bản nháp. */
 const FORM_OPEN_HINT = 'Đóng form đang mở trước.';

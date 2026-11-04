@@ -97,6 +97,86 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
   });
 });
 
+describe('PayoutRow — ERR-03: lỗi khi chi tiền', () => {
+  it('máy chủ trả 500 "Internal server error" → câu tiếng Việt, nhắc tải lại để xem lệnh đã sang "Đã chi" chưa', async () => {
+    const api = mockFetch({ '/mark-paid': { status: 500, body: { statusCode: 500, message: 'Internal server error' } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('Internal server error');
+    expect(text).toContain('Máy chủ đang bận');
+    expect(text).toContain('Tải lại danh sách để xem');
+  });
+
+  it('5xx mang lời tiếng Việt của máy chủ vẫn nhắc tải lại để xem lệnh đã sang "Đã chi" chưa', async () => {
+    const api = mockFetch({ '/mark-paid': { status: 500, body: { statusCode: 500, message: 'Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.' } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Ngân hàng đối tác chưa phản hồi, chưa ghi nhận khoản chi.');
+    expect(text).toContain('Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa');
+  });
+
+  it('5xx câu chung "Lỗi cơ sở dữ liệu." hiện câu chung của web và vẫn nhắc tải lại để xem lệnh đã sang "Đã chi" chưa', async () => {
+    const api = mockFetch({ '/mark-paid': { status: 500, body: { statusCode: 500, message: 'Lỗi cơ sở dữ liệu.' } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(text).toContain('Tải lại danh sách để xem lệnh đã sang "Đã chi" chưa');
+  });
+
+  it('duyệt gặp 5xx: nhắc tải lại chung, không nhắc chuyện "Đã chi"', async () => {
+    const api = mockFetch({ '/approve': { status: 500, body: { statusCode: 500, message: 'Lỗi cơ sở dữ liệu.' } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout()} />);
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(text).toContain('Tải lại danh sách để xem trạng thái hiện tại');
+    expect(text).not.toContain('Đã chi');
+  });
+
+  it('lỗi 409 nghiệp vụ không thêm lời nhắc tải lại', async () => {
+    const msg = 'Lệnh rút đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A.';
+    const api = mockFetch({ '/mark-paid': { status: 409, body: { statusCode: 409, message: msg } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).not.toContain('Tải lại');
+  });
+
+  it('lời nghiệp vụ tiếng Việt của máy chủ (409 đã có người xác nhận) vẫn hiện nguyên văn', async () => {
+    const msg = 'Phiếu đã được Admin An xác nhận chuyển lúc 10:05 14/10/2026, mã GD FT-A.';
+    const api = mockFetch({ '/mark-paid': { status: 409, body: { statusCode: 409, message: msg } }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.textContent).toContain(msg);
+  });
+});
+
 // D7-01, D7-16: duyệt rút tiền không còn đường từ chối trên giao diện, nên "Duyệt" và "Đã chuyển khoản" phải hỏi lại, nêu rõ
 // ai nhận, số tiền, ngân hàng, STK và dùng tông danger.
 describe('PayoutRow — hỏi lại khi duyệt và khi chi (D7-01, D7-16)', () => {

@@ -57,12 +57,16 @@ export class RbacService {
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
     this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone)}) ${user.role} → ${best}`);
-    // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì không đụng nhóm hiện có của user.
+    // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì nhóm sau khi nâng lên STAFF là rỗng (không giữ nhóm cũ của user).
     const invitedPerms =
       best === 'STAFF' ? normalizePermissions(grants.filter((g) => g.role === 'STAFF').flatMap((g) => g.staffPermissions ?? [])) : [];
+    // Từ vai trò khác lên STAFF thì nhóm luôn bị đặt lại theo lời mời (cùng luật setUserRole): nhóm sót lại từ vai trò cũ
+    // không được sống lại thành quyền mà không ai gán. Người đã là STAFF không đi vào nhánh này (RANK không nâng).
+    const resetPerms = best === 'STAFF';
+    const oldPerms = user.staffPermissions ?? [];
     const updated = await db.user.update({
       where: { id: user.id },
-      data: { role: best, ...(invitedPerms.length ? { staffPermissions: invitedPerms } : {}) },
+      data: { role: best, ...(resetPerms ? { staffPermissions: invitedPerms } : {}) },
     });
     await recordUserAdminEvent(db, {
       userId: user.id,
@@ -72,13 +76,13 @@ export class RbacService {
       reason: 'Áp quyền cấp theo SĐT',
       actorId,
     });
-    if (invitedPerms.length) {
+    if (resetPerms && (invitedPerms.length || oldPerms.length)) {
       await recordUserAdminEvent(db, {
         userId: user.id,
         kind: 'STAFF_PERMISSIONS',
-        from: (user.staffPermissions ?? []).join(','),
+        from: oldPerms.join(','),
         to: invitedPerms.join(','),
-        reason: 'Áp nhóm việc của lời mời',
+        reason: invitedPerms.length ? 'Áp nhóm việc của lời mời' : 'Bỏ nhóm cũ khi nâng lên nhân viên',
         actorId,
       });
     }
@@ -89,8 +93,8 @@ export class RbacService {
    * Admin thêm quyền theo SĐT. Không tạo grant trùng (cùng phone+role còn hiệu lực).
    * Bọc trong $transaction: tạo grant + áp role ngay là 1 thao tác atomic — tránh trạng thái
    * nửa vời (grant đã tạo nhưng role chưa nâng, hoặc ngược lại) nếu 1 bước lỗi giữa chừng.
-   * `permissions` (chỉ với STAFF): nhóm việc của lời mời, chép sang user khi lời mời được áp. Không truyền thì lời mời không ghi nhóm và
-   * nhóm đã lưu của user giữ nguyên. Truyền lại cho lời mời đang chờ thì cập nhật nhóm của lời mời; người đã là STAFF mà admin chọn ít nhất
+   * `permissions` (chỉ với STAFF): nhóm việc của lời mời, chép sang user khi lời mời được áp và nâng user lên STAFF. Không truyền thì lời mời
+   * không ghi nhóm, user được nâng lên STAFF với nhóm rỗng (nhóm cũ không sống lại); người đã là STAFF không đi qua bước nâng nên nhóm đang có giữ nguyên. Truyền lại cho lời mời đang chờ thì cập nhật nhóm của lời mời; người đã là STAFF mà admin chọn ít nhất
    * một nhóm thì nhóm cũ bị THAY bằng nhóm vừa chọn ngay (`permissionsChanged`), còn danh sách rỗng không xoá nhóm họ đang có.
    */
   async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[]) {
@@ -111,24 +115,23 @@ export class RbacService {
         await tx.roleGrant.update({ where: { id: existing.id }, data: { staffPermissions: perms } });
       }
       if (!existing) {
-        try {
-          await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId, staffPermissions: perms } });
-          this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
-        } catch (err) {
-          // findFirst rồi create trong 1 $transaction READ COMMITTED (mặc định) vẫn không atomic —
-          // 2 request addGrant() đồng thời cho CÙNG phone+role có thể cùng qua check "chưa có
-          // grant" trước khi tx đầu commit. Partial unique index role_grants_active_phone_role_key
-          // (phone,role WHERE revokedAt IS NULL) chặn ở DB, request thua ăn P2002 → coi như ĐÃ cấp
-          // (idempotent), tiếp tục áp role cho user thay vì rollback/throw lỗi DB thô.
-          if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
-        }
+        // findFirst rồi create trong $transaction READ COMMITTED không atomic: hai addGrant đồng thời cùng phone+role cùng qua
+        // check "chưa có". ON CONFLICT DO NOTHING (skipDuplicates) trên partial unique index role_grants_active_phone_role_key
+        // để bản thua là no-op; bắt P2002 trong tx sẽ làm Postgres huỷ tx (25P02) ở bước applyGrants ngay sau.
+        const { count } = await tx.roleGrant.createMany({
+          data: [{ phone: normalized, role, grantedBy: adminId, staffPermissions: perms }],
+          skipDuplicates: true,
+        });
+        if (count > 0) this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
       }
       // Áp ngay nếu user đã tồn tại
       let applied = false;
       let permissionsChanged = false;
       if (user) {
-        const updated = await this.applyGrants(user, tx, adminId);
-        applied = updated.role !== user.role;
+        // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
+        const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
+        const updated = await this.applyGrants(fresh, tx, adminId);
+        applied = updated.role !== fresh.role;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
           await tx.user.update({ where: { id: user.id }, data: { staffPermissions: perms } });
