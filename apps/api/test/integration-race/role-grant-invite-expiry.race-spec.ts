@@ -96,6 +96,16 @@ describe('Lời mời quyền theo SĐT hết hạn sau 7 ngày (real Postgres)'
     expect(rows[1]!.expiresAt).toBeNull();
   });
 
+  it('lý do nằm lại ở grant: tạo ghi note, thu hồi nối thêm "Thu hồi: ..." vào note cũ', async () => {
+    const phone = newPhone();
+    await rbac.addGrant(boss.id, phone, 'STAFF', undefined, 'kho mới');
+    expect((await grantOf(phone)).note).toBe('kho mới');
+    await rbac.revokeGrant(boss.id, phone, 'nhập nhầm');
+    const g = await prisma.roleGrant.findFirstOrThrow({ where: { phone } });
+    expect(g.revokedAt).not.toBeNull();
+    expect(g.note).toBe('kho mới | Thu hồi: nhập nhầm');
+  });
+
   it('thu hồi lời mời đang chờ bằng revokeGrant', async () => {
     const phone = newPhone();
     await rbac.addGrant(boss.id, phone, 'STAFF');

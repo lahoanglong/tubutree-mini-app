@@ -13,6 +13,9 @@ import { activeGrantWhere } from './active-grant';
 import { DEFAULT_GRANT_INVITE_TTL_DAYS, STAFF_GRANT_INVITE_TTL_DAYS_KEY, grantInviteTtlDays } from './grant-invite-config';
 import { losesPartnerStore } from '../../merchant/partner-store';
 
+/** Lý do ghi vào sổ khi client đã phát hành (Mini App bản cũ) cấp/thu hồi quyền mà không gửi lý do. */
+export const LEGACY_NO_REASON = '(không có lý do — Mini App bản cũ)';
+
 const RANK: Record<UserRole, number> = {
   CUSTOMER: 0,
   AFFILIATE: 1,
@@ -164,13 +167,13 @@ export class RbacService {
         await tx.roleGrant.update({ where: { id: existing.id }, data: { staffPermissions: perms } });
       }
       // Mời lại lời mời đang chờ (người chưa có tài khoản) là gia hạn một kỳ.
-      if (existing && !user) await tx.roleGrant.update({ where: { id: existing.id }, data: { expiresAt: await this.inviteExpiry() } });
+      if (existing && !user) await tx.roleGrant.update({ where: { id: existing.id }, data: { expiresAt: await this.inviteExpiry(), ...(reason ? { note: reason } : {}) } });
       if (!existing) {
         // findFirst rồi create trong $transaction READ COMMITTED không atomic: hai addGrant đồng thời cùng phone+role cùng qua
         // check "chưa có". ON CONFLICT DO NOTHING (skipDuplicates) trên partial unique index role_grants_active_phone_role_key
         // để bản thua là no-op; bắt P2002 trong tx sẽ làm Postgres huỷ tx (25P02) ở bước applyGrants ngay sau.
         const { count } = await tx.roleGrant.createMany({
-          data: [{ phone: normalized, role, grantedBy: adminId, staffPermissions: perms, expiresAt: user ? null : await this.inviteExpiry() }],
+          data: [{ phone: normalized, role, grantedBy: adminId, staffPermissions: perms, expiresAt: user ? null : await this.inviteExpiry(), note: reason ?? null }],
           skipDuplicates: true,
         });
         if (count > 0) this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
@@ -197,6 +200,18 @@ export class RbacService {
           });
         }
       }
+      // Mời người đã có đủ quyền thì không đổi gì ở users, nhưng ai làm và vì sao vẫn phải có một dòng trong lịch sử.
+      if (user && !applied && !permissionsChanged) {
+        const current = (await tx.user.findUnique({ where: { id: user.id }, select: { role: true } }))?.role ?? user.role;
+        await recordUserAdminEvent(tx, {
+          userId: user.id,
+          kind: 'ROLE',
+          from: current,
+          to: current,
+          reason: `Cấp quyền ${role} theo SĐT (đã có sẵn): ${reason ?? 'không ghi lý do'}`,
+          actorId: adminId,
+        });
+      }
       return { granted: role, applied, permissionsChanged };
     });
   }
@@ -215,10 +230,15 @@ export class RbacService {
     const partnerCfg = await this.fulfilment?.settlementConfig();
     return this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
+      const revokedAt = new Date();
       const { count } = await tx.roleGrant.updateMany({
         where: { phone: normalized, revokedAt: null },
-        data: { revokedAt: new Date() },
+        data: { revokedAt },
       });
+      // Lời mời chưa có tài khoản không có dòng lịch sử người dùng nào để ghi lý do, nên lý do nằm ở chính grant (nối vào ghi chú cũ).
+      if (reason && count > 0) {
+        await tx.$executeRaw`UPDATE "role_grants" SET "note" = CASE WHEN "note" IS NULL OR "note" = '' THEN ${`Thu hồi: ${reason}`} ELSE "note" || ${` | Thu hồi: ${reason}`} END WHERE "phone" = ${normalized} AND "revokedAt" = ${revokedAt}`;
+      }
       // Grant đã khoá ở lệnh trên; khoá tiếp dòng users (cùng thứ tự với applyGrants) rồi mới đọc role, để một lần applyGrants đang chạy
       // không nâng người này sau khi ta đã đọc role cũ.
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "phone" = ${normalized} FOR NO KEY UPDATE`;
