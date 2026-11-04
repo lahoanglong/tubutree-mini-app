@@ -62,9 +62,9 @@ describe('parseOwnImagePath', () => {
 });
 
 describe('width, định dạng, khoá cache', () => {
-  it('chỉ bốn bề rộng cố định', () => {
-    expect([160, 320, 640, 960].every(isAllowedWidth)).toBe(true);
-    expect([0, 100, 161, 1200, NaN].some(isAllowedWidth)).toBe(false);
+  it('chỉ sáu bề rộng cố định (thẻ 160/320, chi tiết 640/960, banner 1280/1920)', () => {
+    expect([160, 320, 640, 960, 1280, 1920].every(isAllowedWidth)).toBe(true);
+    expect([0, 100, 161, 1000, 1200, 2400, NaN].some(isAllowedWidth)).toBe(false);
   });
   it('webp khi trình duyệt nhận, không thì jpeg', () => {
     expect(negotiateFormat('image/avif,image/webp,*/*')).toBe('webp');
