@@ -114,7 +114,7 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     const api = mockFetch({
       '/admin/ops/health': { body: { ...HEALTH, problems: [] } },
       '/admin/pancake/sync': { body: { synced: 12, stockOverwritten: false } },
-      '/admin/products/recompute-sold': { body: { updated: 7 } },
+      '/admin/products/recompute-sold': { body: { updated: 7, zeroed: 2, scanned: 10 } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const c = await mount(<OpsHealthTab />);
@@ -140,8 +140,23 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     answerConfirm(true);
     await flush();
     expect(api.calls.some((x) => x.url.includes('/admin/products/recompute-sold') && x.init?.method === 'POST')).toBe(true);
-    expect(c.textContent).toContain('Đã tính lại số đã bán cho 7 sản phẩm.');
+    expect(c.textContent).toContain('Đã tính lại số đã bán: 7 sản phẩm đổi số, 2 sản phẩm về 0 (đã xét 10 sản phẩm).');
     expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+
+  it('tính lại số đã bán khi không có gì đổi: báo số đã đúng, không hiện "0 sản phẩm" như job hỏng', async () => {
+    const api = mockFetch({
+      '/admin/ops/health': { body: { ...HEALTH, problems: [] } },
+      '/admin/products/recompute-sold': { body: { updated: 0, zeroed: 0, scanned: 12 } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const c = await mount(<OpsHealthTab />);
+    click(byText(c, 'button', 'Tính lại số đã bán'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(c.textContent).toContain('Số đã bán đã đúng, không sản phẩm nào cần đổi (đã xét 12 sản phẩm).');
+    expect(c.textContent).not.toContain('cho 0 sản phẩm');
   });
 
   it('Redis không phản hồi: bảng hàng đợi đổi thành thông báo lỗi', async () => {

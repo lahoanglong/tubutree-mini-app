@@ -626,6 +626,24 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     });
   });
 
+  it('recomputeSoldCounts: trả thêm zeroed (dòng đưa về 0) và scanned (sản phẩm có đơn đã xét) để bấm tay không giống job hỏng khi không có gì đổi', async () => {
+    const { prisma } = (() => {
+      const groupBy = jest.fn().mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 2 } }]).mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 2 } }]);
+      const p = {
+        orderItem: { groupBy },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) },
+        product: {
+          update: jest.fn((a: unknown) => a),
+          updateMany: jest.fn().mockResolvedValue({ count: 3 }),
+          findMany: jest.fn().mockResolvedValue([{ id: 'p1', soldApp: 2, soldApp30d: 2 }]),
+        },
+        $transaction: jest.fn(async (ops: unknown[]) => ops),
+      } as unknown as PrismaService;
+      return { prisma: p };
+    })();
+    await expect(new CatalogService(prisma).recomputeSoldCounts()).resolves.toEqual({ updated: 0, zeroed: 3, scanned: 1 });
+  });
+
   it('recomputeSoldCounts: cửa sổ 30 ngày tính theo deliveredAt, đúng 30 × 24 giờ trước bây giờ', async () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 31, 3, 0, 0));
     try {

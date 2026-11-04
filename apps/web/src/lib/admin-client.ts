@@ -2118,7 +2118,9 @@ export const sendOpsTestEmail = () => apiFetch<{ ok: true; message: string }>('/
 /** Đồng bộ danh mục Pancake ngay (không ghi đè tồn kho trừ khi `withStock`). */
 export const runPancakeSync = (withStock = false) =>
   apiFetch<{ synced: number; stockOverwritten: boolean }>(`/admin/pancake/sync${withStock ? '?withStock=1' : ''}`, { method: 'POST' });
-export const recomputeSoldCounts = () => apiFetch<{ updated: number }>('/admin/products/recompute-sold', { method: 'POST' });
+/** `updated`: sản phẩm đổi số theo đơn; `zeroed`: sản phẩm đưa về 0 vì không còn đơn; `scanned`: sản phẩm có đơn đã xét. */
+export const recomputeSoldCounts = () =>
+  apiFetch<{ updated: number; zeroed: number; scanned: number }>('/admin/products/recompute-sold', { method: 'POST' });
 /** "Chạy lại" webhook Pancake/Gomdon lỗi hoặc kẹt — đặt lại số lần thử rồi đưa vào hàng đợi. */
 export const retryOpsWebhookEvent = (source: OpsWebhookEvent['source'], id: string) =>
   apiFetch<{ ok: true; message: string }>(`/admin/ops/webhook-events/${source}/${encodeURIComponent(id)}/retry`, { method: 'POST' });

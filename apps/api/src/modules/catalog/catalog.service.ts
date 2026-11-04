@@ -945,7 +945,7 @@ export class CatalogService {
    * Đơn DELIVERED chưa có `deliveredAt` (dữ liệu trước khi có cột này) không vào cửa sổ 30 ngày: chấp nhận được vì
    * cửa sổ ngắn hơn tuổi của dữ liệu đó.
    */
-  async recomputeSoldCounts(): Promise<{ updated: number }> {
+  async recomputeSoldCounts(): Promise<{ updated: number; zeroed: number; scanned: number }> {
     const since = new Date(Date.now() - SOLD_WINDOW_DAYS * 864e5);
     const [grouped, grouped30d] = await Promise.all([
       this.prisma.orderItem.groupBy({
@@ -1011,11 +1011,13 @@ export class CatalogService {
       await this.prisma.$transaction(ops);
       written += ops.length;
     }
-    await this.prisma.product.updateMany({
+    const zeroed = await this.prisma.product.updateMany({
       where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
       data: { soldApp: 0, soldApp30d: 0 },
     });
-    return { updated: written };
+    // `updated` chỉ đếm dòng đổi số theo đơn; dòng đưa về 0 và số sản phẩm có đơn đã xét trả riêng để màn admin phân biệt
+    // "đã đúng, không cần đổi" với "job không chạy được".
+    return { updated: written, zeroed: zeroed.count, scanned: ids.length };
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */
