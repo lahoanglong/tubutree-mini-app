@@ -6,9 +6,9 @@ const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
 const widthsOf = (srcSet: string | undefined) => (srcSet ?? '').split(', ').map((e) => e.split(' ')[1]);
 
 describe('sizedImage: srcset theo bề rộng (Pa1)', () => {
-  it('ảnh Pancake: mô tả w trên 160/320/640/960, không có mô tả 1x/2x', () => {
+  it('ảnh Pancake: mô tả w trên 160/320/480/640/960, không có mô tả 1x/2x', () => {
     const img = sizedImage(PANCAKE, 360, '50vw');
-    expect(widthsOf(img.srcSet)).toEqual(['160w', '320w', '640w', '960w']);
+    expect(widthsOf(img.srcSet)).toEqual(['160w', '320w', '480w', '640w', '960w']);
     expect(img.srcSet).not.toMatch(/\dx(,|$)/);
     expect(img.sizes).toBe('50vw');
   });
@@ -27,19 +27,19 @@ describe('sizedImage: srcset theo bề rộng (Pa1)', () => {
   });
 
   it('src (khi trình duyệt không hiểu srcset) là bản đủ cho cssWidth', () => {
-    expect(sizedImage(PANCAKE, 360).src).toContain('/img?w=640&u=');
+    expect(sizedImage(PANCAKE, 360).src).toContain('/img?w=480&u=');
   });
 });
 
 describe('sizedImage: bản 1280/1920 đã đổi cỡ cho banner/hero (màn 2x–3x không mờ, không tải ảnh gốc)', () => {
   it('wide thêm w=1280 và w=1920 qua bộ đổi cỡ sau 960w; mặc định không thêm', () => {
     const img = sizedImage(PANCAKE, 728, '728px', true);
-    expect(widthsOf(img.srcSet)).toEqual(['160w', '320w', '640w', '960w', '1280w', '1920w']);
+    expect(widthsOf(img.srcSet)).toEqual(['160w', '320w', '480w', '640w', '960w', '1280w', '1920w']);
     const entries = img.srcSet!.split(', ');
     expect(entries.at(-2)).toContain('/img?w=1280&u=');
     expect(entries.at(-1)).toContain('/img?w=1920&u=');
     expect(img.srcSet).not.toContain(`${PANCAKE} `);
-    expect(widthsOf(sizedImage(PANCAKE, 728).srcSet)).toEqual(['160w', '320w', '640w', '960w']);
+    expect(widthsOf(sizedImage(PANCAKE, 728).srcSet)).toEqual(['160w', '320w', '480w', '640w', '960w']);
   });
 
   it('host lạ vẫn chỉ có URL gốc, không srcset', () => {

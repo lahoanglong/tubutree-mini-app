@@ -6,15 +6,15 @@ const decode = (url: string) => new URL(url).searchParams.get('u');
 
 describe('pickImageWidth', () => {
   it('bề rộng nhỏ nhất đủ dùng, tối đa 960', () => {
-    expect([100, 160, 161, 340, 400, 640, 641, 2000].map(pickImageWidth)).toEqual([160, 160, 320, 640, 640, 640, 960, 960]);
+    expect([100, 160, 161, 340, 400, 481, 640, 641, 2000].map(pickImageWidth)).toEqual([160, 160, 320, 480, 480, 640, 640, 960, 960]);
   });
 });
 
 describe('imageVariants', () => {
-  it('thẻ SP 170px: 1x = 320, 2x = 640, kèm srcset', () => {
+  it('thẻ SP 170px: 1x = 320, 2x = 480, kèm srcset', () => {
     const v = imageVariants('https://content.pancake.vn/2-26/a.jpg', 170, API)!;
     expect(v.src).toBe(`${API}/img?w=320&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')}`);
-    expect(v.srcSet).toBe(`${v.src} 1x, ${API}/img?w=640&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')} 2x`);
+    expect(v.srcSet).toBe(`${v.src} 1x, ${API}/img?w=480&u=${encodeURIComponent('https://content.pancake.vn/2-26/a.jpg')} 2x`);
   });
 
   it('ô nhỏ 64px: 1x và 2x cùng 160 thì không có srcset', () => {
@@ -50,7 +50,7 @@ describe('imageVariants', () => {
 describe('resizedImageUrl và WIDE_IMAGE_WIDTHS', () => {
   it('bề rộng thêm 1280/1920 không đổi IMAGE_WIDTHS: pickImageWidth và imageVariants vẫn tối đa 960', () => {
     expect(WIDE_IMAGE_WIDTHS).toEqual([1280, 1920]);
-    expect(IMAGE_WIDTHS).toEqual([160, 320, 640, 960]);
+    expect(IMAGE_WIDTHS).toEqual([160, 320, 480, 640, 960]);
     expect(pickImageWidth(2000)).toBe(960);
     expect(imageVariants('https://content.pancake.vn/a.jpg', 1000, API)!.src).toContain('w=960');
   });

@@ -2,7 +2,7 @@
  * Ảnh sản phẩm theo đúng bề rộng hiển thị: API đổi cỡ ảnh Pancake/Cloudinary/ảnh của chính nó (GET {api}/img?u=&w=) thành bản nhỏ
  * webp, thay vì tải ảnh gốc hàng trăm KB cho thẻ rộng ~170px. Chỉ nhận các bề rộng cố định của API (RESIZE_WIDTHS ở apps/api).
  */
-export const IMAGE_WIDTHS: readonly number[] = [160, 320, 640, 960];
+export const IMAGE_WIDTHS: readonly number[] = [160, 320, 480, 640, 960];
 
 /**
  * Bề rộng thêm cho ảnh tràn khung (banner, hero chiến dịch) ở màn 2x–3x; API nhận chúng (RESIZE_WIDTHS) nhưng thẻ SP và Mini App không dùng,

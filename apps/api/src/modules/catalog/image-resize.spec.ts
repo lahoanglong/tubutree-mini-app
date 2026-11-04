@@ -1,3 +1,4 @@
+import { IMAGE_WIDTHS, WIDE_IMAGE_WIDTHS } from '../../../../../packages/app-core/src/image-src';
 import { cacheKey, isAllowedWidth, isPrivateAddress, negotiateFormat, parseOwnImagePath, parseRemoteSource } from './image-resize';
 
 describe('parseRemoteSource (chống SSRF)', () => {
@@ -62,8 +63,11 @@ describe('parseOwnImagePath', () => {
 });
 
 describe('width, định dạng, khoá cache', () => {
-  it('chỉ sáu bề rộng cố định (thẻ 160/320, chi tiết 640/960, banner 1280/1920)', () => {
-    expect([160, 320, 640, 960, 1280, 1920].every(isAllowedWidth)).toBe(true);
+  it('mọi bề rộng web/Mini App xin (app-core) đều được API nhận, nếu không /img trả 400', () => {
+    expect([...IMAGE_WIDTHS, ...WIDE_IMAGE_WIDTHS].every(isAllowedWidth)).toBe(true);
+  });
+  it('chỉ bảy bề rộng cố định (thẻ 160/320/480, chi tiết 640/960, banner 1280/1920)', () => {
+    expect([160, 320, 480, 640, 960, 1280, 1920].every(isAllowedWidth)).toBe(true);
     expect([0, 100, 161, 1000, 1200, 2400, NaN].some(isAllowedWidth)).toBe(false);
   });
   it('webp khi trình duyệt nhận, không thì jpeg', () => {
