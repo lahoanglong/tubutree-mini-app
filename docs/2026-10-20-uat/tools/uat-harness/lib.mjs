@@ -232,7 +232,7 @@ export async function realLogin(L, key, { web = false } = {}) {
   const rt = await mintRefresh(L, u.id);
   const res = await fetch(`${L.apiUrl127}/auth/refresh`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...(web ? { 'x-client': 'web' } : {}) },
+    headers: { 'content-type': 'application/json', ...(web ? { 'x-client': 'web', origin: L.webUrl } : {}) },
     body: JSON.stringify({ refreshToken: rt }),
   });
   const text = await res.text();

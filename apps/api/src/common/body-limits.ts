@@ -169,7 +169,7 @@ function makeJwtChecker(accessSecret: string, refreshTtlDays: number) {
 /**
  * json + urlencoded theo nhóm route; parser dựng một lần cho mỗi mức trần.
  * `inflate: false` ở tầng của app (mặc định và lớn): thân nén (gzip/deflate/br) bị 415 thay vì giải nén trước khi xác thực,
- * đây là lớp chặn bom nén. Webhook đối tác vẫn giải nén (đối tác như Gomdon gửi gzip và bỏ sự kiện sau vài lần lỗi), trần
+ * đây là lớp chặn bom nén. Webhook đối tác vẫn giải nén (đối tác có thể gửi gzip và bỏ sự kiện sau vài lần lỗi), trần
  * 1 MB/10 MB tính trên kích thước sau giải nén. Tầng 10 MB của app chỉ mở cho request có Bearer hợp lệ, nhưng `/auth/guest`
  * cấp JWT cho bất kỳ ai nên đó không phải hàng rào chống ẩn danh; nó chỉ giữ thân lớn khỏi request không từng đăng nhập.
  */
