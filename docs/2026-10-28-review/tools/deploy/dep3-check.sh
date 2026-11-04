@@ -46,5 +46,5 @@ $DC logs --since 10m api </dev/null 2>&1 | grep -iE '\berror\b' | grep -v -iE 'E
 echo "-- đĩa và cache ảnh"
 df -h / | tail -1
 $DC exec -T api sh -c 'du -sh "${IMAGE_CACHE_DIR:-/tmp/tubu-img-cache}" 2>/dev/null || echo "chưa có cache"' </dev/null
-$DC exec -T api sh -c 'd="${IMAGE_CACHE_DIR:-/tmp/tubu-img-cache}"; if [ -w "$d" ]; then echo "cache ảnh ghi được: $d"; else echo "FAIL cache ảnh KHÔNG ghi được: $d (runbook 1.19)"; fi' </dev/null
+$DC exec -T api sh -c 'd="${IMAGE_CACHE_DIR:-/tmp/tubu-img-cache}"; if [ -w "$d" ]; then echo "cache ảnh ghi được: $d"; else echo "FAIL cache ảnh KHÔNG ghi được: $d (runbook 1.19)"; fi; grep -q " $d " /proc/mounts || echo "FAIL cache ảnh không nằm trên volume: $d (mất mỗi lần deploy, runbook 1.19)"' </dev/null
 cat .last-deployed-sha

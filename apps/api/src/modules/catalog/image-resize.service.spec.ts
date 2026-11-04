@@ -66,6 +66,7 @@ describe('ImageResizeService', () => {
     const again = await svc.get(src, 320, 'webp');
     expect(again.data.toString()).toBe('tu-dia');
     expect(again.etag).toBe(out.etag);
+    expect(own.get).toHaveBeenCalledTimes(1);
   });
 
   it('không phóng to ảnh nhỏ hơn bề rộng xin', async () => {
@@ -340,6 +341,54 @@ describe('ImageResizeService — cache ở volume bền qua lần dựng lại c
     const ok = await live.svc.get(src, 480, 'webp');
     expect((await sharp(ok.data).metadata()).width).toBe(480);
     expect(live.own.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('ảnh của API đã xác nhận: 60 giây sau kiểm lại DB, ảnh đã bị gỡ thì 404 dù còn trong cache', async () => {
+    const src = '/public-image/brand/b1/logo?v=abc';
+    const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: true })) };
+    const { svc } = make(own as never);
+    await svc.get(src, 160, 'webp');
+    await svc.get(src, 320, 'webp');
+    expect(own.get).toHaveBeenCalledTimes(2);
+    await svc.get(src, 160, 'webp');
+    expect(own.get).toHaveBeenCalledTimes(2);
+    own.get.mockImplementation(async () => Promise.reject(new NotFoundException()));
+    const now = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now + 61_000);
+    try {
+      await expect(svc.get(src, 160, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    } finally {
+      clock.mockRestore();
+    }
+    expect(own.get).toHaveBeenCalledTimes(3);
+  });
+
+  it('DB lỗi khi kiểm ảnh của API: 503 và không tính vào hạn mức sai ?v= của IP', async () => {
+    const own = { get: jest.fn(async () => Promise.reject(new Error('db down'))) };
+    const { svc } = make(own as never);
+    for (let i = 0; i < 31; i++) await expect(svc.get(`/public-image/product/p${i}/0?v=x`, 160, 'webp', '4.4.4.4')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(own.get).toHaveBeenCalledTimes(31);
+    own.get.mockImplementation(async () => ({ mime: 'image/png', data: png, versionOk: true }) as never);
+    await expect(svc.get('/public-image/product/ok/0?v=x', 160, 'webp', '4.4.4.4')).resolves.toBeDefined();
+  });
+
+  it('prune: file không xoá được vẫn được tính vào dung lượng, lần quét không lỗi', async () => {
+    process.env.IMAGE_CACHE_MAX_MB = '1';
+    const sub = join(dir, 'ee');
+    require('node:fs').mkdirSync(sub);
+    const stuck = join(sub, 'stuck');
+    writeFileSync(stuck, Buffer.alloc(10));
+    const longAgo = new Date(Date.now() - 20 * 24 * 3600 * 1000);
+    utimesSync(stuck, longAgo, longAgo);
+    const { svc } = make();
+    const fsp = require('node:fs').promises;
+    const rm = jest.spyOn(fsp, 'rm').mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+    try {
+      await expect(svc.prune()).resolves.toEqual({ removed: 0, bytes: 10 });
+    } finally {
+      rm.mockRestore();
+    }
+    expect((svc as unknown as { cacheBytes: number }).cacheBytes).toBe(10);
   });
 
   it('các lần ghi đầu tiên cùng lúc chỉ quét thư mục cache một lần và cộng đủ dung lượng đã ghi', async () => {

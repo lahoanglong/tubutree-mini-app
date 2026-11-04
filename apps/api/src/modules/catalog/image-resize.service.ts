@@ -55,6 +55,9 @@ const REGISTRY_MISS_RELOAD_MS = 30_000;
 /** Ảnh của chính API sai ?v= hoặc không có: mỗi lần vẫn tốn một lần đọc DB và một chỗ trong hàng đợi, nên giới hạn theo phút. */
 const OWN_MISSES_PER_MIN = 30;
 const MAX_MISS_TRACKED = 5000;
+/** Ảnh của API vừa được DB xác nhận (còn công khai, đúng ?v=) thì phát bản đã cache mà không đọc lại DB trong ngần này. */
+const OWN_VERIFIED_TTL_MS = 60_000;
+const MAX_OWN_VERIFIED = 5000;
 const PRUNE_MIN_GAP_WHEN_FULL_MS = 10 * 1000;
 /** Dọn tới 80% trần để còn chỗ ghi ảnh mới, không dừng ghi ngay sát trần. */
 const PRUNE_LOW_WATER = 0.8;
@@ -87,6 +90,8 @@ export class ImageResizeService {
   private registryLoad: Promise<void> | null = null;
   private retryAfter = 0;
   private readonly ownMisses = new Map<string, { start: number; count: number }>();
+  /** Ảnh của API (khoá `ownRef`) đã được DB xác nhận, tới thời điểm hết hạn. */
+  private readonly ownVerified = new Map<string, number>();
 
   constructor(
     private readonly own: PublicImageService,
@@ -99,7 +104,7 @@ export class ImageResizeService {
   keyFor(source: unknown, width: number, format: ResizeFormat): string | null {
     if (!isAllowedWidth(width)) return null;
     const own = parseOwnImagePath(source);
-    if (own) return cacheKey(`own:${own.kind}/${own.id}/${own.slot}?v=${own.version ?? ''}`, width, format);
+    if (own) return cacheKey(ownRef(own), width, format);
     const remote = parseRemoteSource(source);
     return remote ? cacheKey(remote.toString(), width, format) : null;
   }
@@ -112,8 +117,13 @@ export class ImageResizeService {
     const etag = `"${key}"`;
     // Kiểm trước khi phát bản đã cache (cache ở volume, còn qua deploy): ảnh bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) không được phát tiếp tới 14 ngày nữa.
     // Ảnh của chính API kiểm trong job (`produce`): DB xác nhận còn công khai và đúng ?v= rồi mới phát bản đã cache.
-    if (!parseOwnImagePath(source)) {
+    const own = parseOwnImagePath(source);
+    if (!own) {
       if (!(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
+      const hit = await this.readCache(key);
+      if (hit) return { data: hit, mime, etag };
+    } else if ((this.ownVerified.get(ownRef(own)) ?? 0) > Date.now()) {
+      // DB vừa xác nhận trong 60 giây: trang nhiều ảnh không xếp hàng đổi cỡ (và không đọc DB) chỉ để phát bản đã có trên đĩa.
       const hit = await this.readCache(key);
       if (hit) return { data: hit, mime, etag };
     }
@@ -213,6 +223,15 @@ export class ImageResizeService {
     }
   }
 
+  private noteOwnVerified(ref: string): void {
+    const now = Date.now();
+    if (this.ownVerified.size >= MAX_OWN_VERIFIED) {
+      for (const [k, until] of this.ownVerified) if (until <= now) this.ownVerified.delete(k);
+      if (this.ownVerified.size >= MAX_OWN_VERIFIED) this.ownVerified.clear();
+    }
+    this.ownVerified.set(ref, now + OWN_VERIFIED_TTL_MS);
+  }
+
   private async produce(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
     const own = parseOwnImagePath(source) !== null;
     if (own && this.ownMissLimited(client)) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
@@ -243,11 +262,16 @@ export class ImageResizeService {
   private async loadSource(source: string, client: string): Promise<Buffer> {
     const own = parseOwnImagePath(source);
     if (own) {
-      const found = await this.own.get(own.kind, own.id, own.slot, own.version).catch(() => null);
+      const found = await this.own.get(own.kind, own.id, own.slot, own.version).catch((e: unknown) => {
+        // DB lỗi không phải lỗi của khách: 503, không tính vào hạn mức sai ?v= của IP.
+        if (e instanceof NotFoundException) return null;
+        throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+      });
       if (!found || !found.versionOk) {
         this.noteOwnMiss(client);
         throw new NotFoundException('Không tìm thấy ảnh.');
       }
+      this.noteOwnVerified(ownRef(own));
       return found.data;
     }
     const url = parseRemoteSource(source);
@@ -329,7 +353,7 @@ export class ImageResizeService {
 
   private async writeCache(key: string, data: Buffer): Promise<void> {
     const file = this.pathFor(key);
-    if (this.cacheBytes === null) await (this.firstScan ??= this.prune().catch(() => undefined));
+    if (this.cacheBytes === null) await (this.firstScan ??= this.prune().catch((e: Error) => this.log.warn(`Quét cache ảnh lỗi: ${e.message}`)));
     if ((this.cacheBytes ?? 0) + data.length > this.maxBytes) {
       if (Date.now() - this.lastPrune > PRUNE_MIN_GAP_WHEN_FULL_MS) {
         this.lastPrune = Date.now();
@@ -391,7 +415,8 @@ export class ImageResizeService {
     files.sort((a, b) => a.mtime - b.mtime);
     for (const f of files) {
       if (now - f.mtime <= CACHE_MAX_AGE_MS && total <= target) break;
-      await fs.rm(f.path, { force: true });
+      // Không xoá được (file thuộc user khác): giữ trong tổng để dung lượng không bị đếm thiếu.
+      if (!(await fs.rm(f.path, { force: true }).then(() => true, () => false))) continue;
       total -= f.size;
       removed += 1;
     }
@@ -399,4 +424,9 @@ export class ImageResizeService {
     this.cacheBytes = total + (this.writtenBytes - writtenAtStart);
     return { removed, bytes: total };
   }
+}
+
+/** Định danh ảnh của API kèm phiên bản (?v=), không gồm bề rộng/định dạng. */
+function ownRef(own: NonNullable<ReturnType<typeof parseOwnImagePath>>): string {
+  return `own:${own.kind}/${own.id}/${own.slot}?v=${own.version ?? ''}`;
 }
