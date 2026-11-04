@@ -61,6 +61,12 @@
       "miniapp": "apps/miniapp/src/components/ui/chip.tsx",
       "web": "apps/web/src/components/mini/chip.tsx",
       "props": "ChipProps",
+      "propsDiff": {
+        "webOnly": [
+          "href"
+        ],
+        "reason": "chip thương hiệu ở Trang chủ web là liên kết thật tới /brand/[slug] để công cụ tìm kiếm đi theo được; Mini không có trang để bò"
+      },
       "screens": [
         "/",
         "/about",
