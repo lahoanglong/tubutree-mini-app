@@ -1,3 +1,4 @@
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { BadRequestException } from '@nestjs/common';
 import { ACCOUNT_DELETION_BLOCKED, AccountDeletionService, type DeletionBlocker, type PartnerStoreBlockersPort } from './account-deletion.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -89,6 +90,23 @@ describe('AccountDeletionService — gian hàng đối tác của chủ', () => 
       .process('req-1', 'admin-1')
       .catch(() => undefined);
     expect(sessions.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('xử lý xong: đánh dấu danh sách ảnh của /img cũ (ảnh gian hàng của chủ bị gỡ); bị từ chối hoặc đã xử lý rồi thì không', async () => {
+    const stale = new ImageRegistryStale();
+    const mk = (b: ReturnType<typeof build>) =>
+      new AccountDeletionService(
+        { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(b.tx)) } as unknown as PrismaService,
+        b.port,
+        undefined,
+        undefined,
+        stale,
+      );
+    const blocked = build(['1 đơn tự giao chưa xong']);
+    await mk(blocked).process('req-1', 'admin-1').catch(() => undefined);
+    expect(stale.isStale()).toBe(false);
+    await mk(build([])).process('req-1', 'admin-1');
+    expect(stale.isStale()).toBe(true);
   });
 
   it('không có cổng đối tác (không nối MerchantModule): bỏ qua kiểm gian hàng như trước', async () => {

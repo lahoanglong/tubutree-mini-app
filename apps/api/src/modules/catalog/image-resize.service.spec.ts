@@ -505,6 +505,27 @@ describe('ImageResizeService — danh sách ảnh nạp lại ở nền (stale-w
     now.mockRestore();
   });
 
+  it('đang lùi sau lần nạp lỗi: URL chưa đăng ký không kéo thêm truy vấn DB (chỉ miss, cờ cũ còn bật)', async () => {
+    let call = 0;
+    const queryRaw = jest.fn(async () => {
+      if (call++ === 0) return [{ u: URL_A }];
+      throw new Error('db down');
+    });
+    const { stale, isReg } = setup(queryRaw);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await isReg(URL_A);
+    stale.markStale();
+    now.mockReturnValue(1_001_000);
+    expect(await isReg('https://content.pancake.vn/lạ-1.jpg')).toBe(false);
+    await tick();
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    now.mockReturnValue(1_010_000);
+    for (let i = 0; i < 5; i++) expect(await isReg(`https://content.pancake.vn/lạ-${i + 2}.jpg`)).toBe(false);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
   it('lần nạp đầu lỗi thì 503 (chưa có danh sách nào để dùng tạm)', async () => {
     const { isReg } = setup(jest.fn().mockRejectedValue(new Error('db down')));
     await expect(isReg(URL_A)).rejects.toThrow('Máy chủ đang bận');

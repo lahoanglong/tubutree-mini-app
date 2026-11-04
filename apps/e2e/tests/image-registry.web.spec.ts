@@ -28,7 +28,7 @@ async ({}, testInfo) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { PrismaClient } = require(path.resolve(__dirname, '../../api/node_modules/@prisma/client')) as { PrismaClient: new (o: unknown) => any };
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { registrySql } = require(path.resolve(__dirname, '../../api/src/modules/catalog/image-registry-query')) as { registrySql: (hosts?: string[], cloud?: string) => unknown };
+  const { registrySql } = require(path.resolve(__dirname, '../../api/src/modules/catalog/image-registry-query')) as { registrySql: (hosts?: string[], cloud?: string, vis?: { eligibleRoles: string[]; requireApproval: boolean }) => unknown };
   const { publicStorefrontWhere } = require(path.resolve(__dirname, '../../api/src/modules/storefront/storefront-visibility')) as {
     publicStorefrontWhere: (o: { eligibleRoles: string[]; requireApproval: boolean }) => unknown;
   };
@@ -59,15 +59,31 @@ async ({}, testInfo) => {
     await withOwner('demoted', uDemoted.id);
     const uPending = await owner('pen', {});
     await withOwner('pending', uPending.id, { approvedAt: null });
-    const vis = { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: true };
-    const visible = (await prisma.storefront.findMany({ where: publicStorefrontWhere(vis), select: { coverUrl: true } })) as { coverUrl: string | null }[];
-    const visibleCovers = new Set(visible.map((r) => r.coverUrl));
-    const rowsMirror = (await prisma.$queryRaw(registrySql(undefined, ''))) as { u: string }[];
-    const registryMirror = new Set(rowsMirror.map((r) => r.u));
-    for (const [tag, cover] of Object.entries(covers)) {
-      expect(registryMirror.has(cover), `registrySql lệch publicStorefrontWhere ở gian hàng ${tag}`).toBe(visibleCovers.has(cover));
+    const uAdmin = await owner('adm', { role: 'ADMIN' });
+    const uMerchantBlocked = await owner('mblk', { isBlocked: true });
+    await withOwner('admin', uAdmin.id);
+    await withOwner('partner-unapproved', (await owner('par', {})).id, { approvedAt: null, isPartner: true });
+    await withOwner('merchant-blocked', uMerchantBlocked.id, { type: 'MERCHANT' });
+    await withOwner('merchant-demoted', (await owner('mdem', { role: 'CUSTOMER' })).id, { type: 'MERCHANT' });
+    covers.ownerless = `${CLOUD}/reg-own-ownerless-${rand}.jpg`;
+    await prisma.storefront.create({ data: { type: 'CTV', slug: `reg-o-ownerless-${rand}`, title: 'ownerless', coverUrl: covers.ownerless, ...published, approvedAt: new Date() } });
+    for (const vis of [
+      { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: true },
+      { eligibleRoles: ['AFFILIATE', 'DEALER'], requireApproval: false },
+      { eligibleRoles: ['DEALER'], requireApproval: true },
+    ]) {
+      const visible = (await prisma.storefront.findMany({ where: publicStorefrontWhere(vis), select: { coverUrl: true } })) as { coverUrl: string | null }[];
+      const visibleCovers = new Set<string | undefined>(visible.map((r) => r.coverUrl ?? undefined));
+      const rowsMirror = (await prisma.$queryRaw(registrySql(undefined, '', vis))) as { u: string }[];
+      const registryMirror = new Set(rowsMirror.map((r) => r.u));
+      for (const [tag, cover] of Object.entries(covers)) {
+        expect(registryMirror.has(cover), `registrySql lệch publicStorefrontWhere ở gian hàng ${tag} với ${JSON.stringify(vis)}`).toBe(visibleCovers.has(cover));
+      }
+      if (vis.requireApproval && vis.eligibleRoles.length === 2) {
+        expect(visibleCovers.has(covers.ok) && visibleCovers.has(covers.admin) && visibleCovers.has(covers['partner-unapproved'])).toBe(true);
+        expect(visibleCovers.has(covers.blocked) || visibleCovers.has(covers.demoted) || visibleCovers.has(covers.pending) || visibleCovers.has(covers.ownerless)).toBe(false);
+      }
     }
-    expect(visibleCovers.has(covers.ok) && !visibleCovers.has(covers.blocked) && !visibleCovers.has(covers.demoted) && !visibleCovers.has(covers.pending)).toBe(true);
     const rows = (await prisma.$queryRaw(registrySql(undefined, ''))) as { u: string }[];
     const registry = new Set(rows.map((r) => r.u));
     console.log(`registry rows: ${rows.length}; có Cloudinary chiến dịch=${registry.has(CAMP_OK)}, bìa gian hàng=${registry.has(SF_COVER_OK)}`);
