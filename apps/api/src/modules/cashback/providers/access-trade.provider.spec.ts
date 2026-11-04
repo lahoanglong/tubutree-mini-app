@@ -33,8 +33,16 @@ describe('AccessTradeProvider.parseWebhook', () => {
     });
   });
 
-  it.each(['paid', 'cancelled', '', 'constructor', undefined, 7])('trạng thái lạ %p → null, không map thành PENDING', (status) => {
-    expect(makeProvider().parseWebhook(post({ status: status as never }))).toBeNull();
+  it.each([['Approved', 'CONFIRMED'], [' REJECTED ', 'REJECTED'], ['Pending', 'PENDING']])('trạng thái %p viết hoa/thừa khoảng trắng vẫn map đúng → %s, không đánh dấu lạ', (status, expected) => {
+    const e = makeProvider().parseWebhook(post({ status: status as never }))!;
+    expect(e.status).toBe(expected);
+    expect(e.unknownStatus).toBeUndefined();
+  });
+
+  it.each(['hold', 'paid', '', 'constructor', undefined, 7])('trạng thái lạ %p → vẫn trả sự kiện PENDING kèm unknownStatus, không mất postback', (status) => {
+    const e = makeProvider().parseWebhook(post({ status: status as never }))!;
+    expect(e.status).toBe('PENDING');
+    expect(e.unknownStatus).toBe(String(status));
   });
 
   it('pending → PENDING; rejected → REJECTED', () => {

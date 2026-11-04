@@ -44,6 +44,12 @@ export class AccessTradeProvider implements CashbackProvider {
     return this.tokenMatches(headers['x-accesstrade-token']);
   }
 
+  private static readonly STATUS_MAP = new Map<string, NormalizedCashbackEvent['status']>([
+    ['pending', 'PENDING'],
+    ['approved', 'CONFIRMED'],
+    ['rejected', 'REJECTED'],
+  ]);
+
   /**
    * Số tiền: chấp nhận cả chuỗi số và số thập phân rồi LÀM TRÒN, thay vì loại bỏ.
    *
@@ -51,12 +57,6 @@ export class AccessTradeProvider implements CashbackProvider {
    * (chuỗi) đều trả null → controller trả 2xx im lặng → sàn coi như đã giao, không gửi lại.
    * Khoản hoàn tiền của khách biến mất mà không có bản ghi nào và không ai biết.
    */
-  private static readonly STATUS_MAP = new Map<string, NormalizedCashbackEvent['status']>([
-    ['pending', 'PENDING'],
-    ['approved', 'CONFIRMED'],
-    ['rejected', 'REJECTED'],
-  ]);
-
   private static toAmount(v: unknown): number | null {
     const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
     if (!Number.isFinite(n) || n < 0) return null; // chống cộng số dư âm (forge/bug)
@@ -77,18 +77,20 @@ export class AccessTradeProvider implements CashbackProvider {
       );
       return null;
     }
-    // Trạng thái lạ KHÔNG được coi là PENDING: sàn thêm trạng thái mới (vd "paid") sẽ kéo khoản đã CONFIRMED về PENDING.
-    const status = typeof p.status === 'string' ? AccessTradeProvider.STATUS_MAP.get(p.status) : undefined;
-    if (!status) {
-      this.logger.warn(`Postback ${p.order_id} có trạng thái lạ (${String(p.status)}) — bỏ qua.`);
-      return null;
-    }
+    // Trạng thái lạ (vd "hold") không được đổi dòng đã có: lõi chỉ cho tạo dòng PENDING mới (không đụng tiền). Trả null ở đây thì
+    // postback đầu tiên của một đơn mất hẳn, vì controller vẫn trả 2xx và sàn không gửi lại.
+    const raw = typeof p.status === 'string' ? p.status : undefined;
+    const mapped = raw === undefined ? undefined : AccessTradeProvider.STATUS_MAP.get(raw.trim().toLowerCase());
+    const unknownStatus = mapped ? undefined : String(p.status);
+    if (unknownStatus !== undefined) this.logger.warn(`Postback ${p.order_id} có trạng thái lạ (${unknownStatus}) — chỉ tạo dòng PENDING nếu chưa có.`);
+    const status = mapped ?? 'PENDING';
     return {
       clickRef: p.utm_content,
       merchantOrderId: p.order_id,
       orderAmount,
       commission,
       status,
+      ...(unknownStatus !== undefined ? { unknownStatus } : {}),
       raw: body,
     };
   }

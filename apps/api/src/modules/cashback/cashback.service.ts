@@ -140,7 +140,8 @@ export class CashbackService {
     });
 
     if (existing) {
-      await this.applyToExisting(existing, event, status, userReward);
+      // Trạng thái lạ của sàn không có ý nghĩa với dòng đã có (không có gì để chuyển).
+      if (event.unknownStatus === undefined) await this.applyToExisting(existing, event, status, userReward);
     } else {
       // Atomic create + cộng pending. @@unique([provider, merchantOrderId]) → sự kiện thứ 2 song
       // song ném P2002.
@@ -162,7 +163,7 @@ export class CashbackService {
             return { ok: false };
           }
           this.logger.warn(`Ingest trùng (${provider}, ${event.merchantOrderId}) (race) — áp dụng như update.`);
-          await this.applyToExisting(winner, event, status, userReward);
+          if (event.unknownStatus === undefined) await this.applyToExisting(winner, event, status, userReward);
         } else {
           throw err;
         }
