@@ -122,10 +122,14 @@ export class ImageResizeService {
       if (!(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
       const hit = await this.readCache(key);
       if (hit) return { data: hit, mime, etag };
-    } else if ((this.ownVerified.get(ownRef(own)) ?? 0) > Date.now()) {
+    } else {
+      // Có ảnh vừa được ghi/đổi (admin, đồng bộ, đối tác): bỏ mọi xác nhận cũ, lần tới kiểm lại DB.
+      if (this.stale.isStale()) this.ownVerified.clear();
       // DB vừa xác nhận trong 60 giây: trang nhiều ảnh không xếp hàng đổi cỡ (và không đọc DB) chỉ để phát bản đã có trên đĩa.
-      const hit = await this.readCache(key);
-      if (hit) return { data: hit, mime, etag };
+      if ((this.ownVerified.get(ownRef(own)) ?? 0) > Date.now()) {
+        const hit = await this.readCache(key);
+        if (hit) return { data: hit, mime, etag };
+      }
     }
     let job = this.inFlight.get(key);
     if (!job) {
@@ -164,6 +168,7 @@ export class ImageResizeService {
   /** Gọi sau khi lưu ảnh sản phẩm: lần tra kế tiếp nạp lại danh sách (ở nền), không đợi hết 5 phút. */
   invalidateRegistry(): void {
     this.stale.markStale();
+    this.ownVerified.clear();
   }
 
   /**

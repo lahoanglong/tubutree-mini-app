@@ -363,6 +363,22 @@ describe('ImageResizeService — cache ở volume bền qua lần dựng lại c
     expect(own.get).toHaveBeenCalledTimes(3);
   });
 
+  it('ảnh vừa được ghi/đổi (đánh dấu cũ): xác nhận cũ bị bỏ, lần sau kiểm lại DB ngay, không chờ 60 giây', async () => {
+    const src = '/public-image/campaign/c1/cover?v=abc';
+    const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: true })) };
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(own as never, prismaWith() as never, stale);
+    await svc.get(src, 160, 'webp');
+    own.get.mockImplementation(async () => Promise.reject(new NotFoundException()));
+    stale.markStale();
+    await expect(svc.get(src, 160, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    const viaAdmin = make(ownImages(png));
+    await viaAdmin.svc.get(src, 320, 'webp');
+    viaAdmin.svc.invalidateRegistry();
+    await viaAdmin.svc.get(src, 320, 'webp');
+    expect(viaAdmin.own.get).toHaveBeenCalledTimes(2);
+  });
+
   it('DB lỗi khi kiểm ảnh của API: 503 và không tính vào hạn mức sai ?v= của IP', async () => {
     const own = { get: jest.fn(async () => Promise.reject(new Error('db down'))) };
     const { svc } = make(own as never);
