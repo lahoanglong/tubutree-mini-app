@@ -117,6 +117,14 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 - Gói h: review Opus vòng 2 APPROVE (0/0/2), sửa nốt: spec composer nâng trần thời gian (2e90facb2); composer web `try/finally` + `maxLength` story trang chủ nhãn (h2 9312a58aa, 4f cho phép). Gộp h (bcd4e85b8), h2 (ec235295f).
 - Gate tích hợp 9 gói (ec235295f): PASS mọi bước trừ `tsc-e2e` (fixture e2e hồ sơ đại lý còn `cccdFrontUrl`) và `vitest-app-core` (luật xưng hô: "vui lòng" ở lời lỗi ảnh đại lý của gói b). Sửa bba00bc2d. jest 13467/13467, vitest web 9824, Mini App 6683 (cả UTC), build OK. Race 2704/2705, drift 0: đỏ `milestone-second-order-vouchers-chunked` lần thứ 3; gốc là cron second-order dừng sau 25 trang sắp theo userId, chạy cả bộ thì khách một đơn của spec khác đứng trước. Sửa spec d8ba967cf (nâng trần trang trong lúc chạy).
 - Gói c vòng 2: REQUEST_CHANGES (0/2/4). M1 CTV bị hạ trước deploy hoặc hạ từ STAFF vẫn rút được (dấu là chốt duy nhất); M2 đơn chưa gắn Pancake đã huỷ sinh khoản hoàn PENDING, khách tự rút vào Ví. Đang sửa: chặn theo dấu HOẶC role CUSTOMER, đặt dấu khi về CUSTOMER từ mọi vai trò, migration backfill riêng; đơn chưa gắn không tạo dòng hoàn, chỉ ghim Cần xử lý.
+- Gói c: sửa vòng 2 (migration backfill 20261104160500), phần tiền qua thêm 4 vòng Opus tới APPROVE. Gộp a2b7c5a4c.
+- Gói j (sau review chéo cả nhánh, không BLOCKER/MAJOR, 4 MINOR): thu hồi quyền nhân viên và duyệt hồ sơ đại lý không đụng dấu thu hồi; người bị thu hồi không được ghi công đơn mới; backfill phát lại sổ `user_admin_events`; Pancake khoá dòng đơn khi ghim lý do; index `cashback_clicks.clickedAt` (20261104170000); 3 backfill của e vào `HEAVY_MIGRATIONS`. Gộp 1dbd1c5e6. Vòng 4: backfill chỉ tính dấu vết CTV có trước sự kiện hạ; Pancake bỏ qua đơn đã thanh toán trước khi khoá. Gộp d79ceeb85.
+- Gói k (L1-01, hồi quy của W8): khoản Pancake báo đã thanh toán mà không gắn đúng đơn chỉ nằm trong ô chữ `pancakeAttention`, bị luồng khác ghi đè hoặc KHO xoá, tiền rơi khỏi mọi hàng đợi. Sửa: cột `orders.paymentUnlinkedAt` (phiên bản CAS) + `paymentUnlinkedFirstAt` (migration 20261104180000, 180100). Đơn mở: hộp việc Kế toán, tự gỡ khi "Đã nhận tiền", cron hết hạn hoãn huỷ 48 giờ. Đơn đã huỷ/trả: hộp việc ADMIN, chỉ ADMIN đóng (`POST /admin/orders/:id/payment-unlinked/resolve`, ghi chú + `seenAt`, có khoản mới thì 409). Ghi tiền về muộn không tự đóng cờ. `resyncReversalEffects` bỏ qua dòng lịch sử cùng trạng thái. Opus 3 vòng: vòng 1 1 Major + 4 Minor, vòng 2 và 3 APPROVE. Gộp a05833577.
+- Gộp main 9ae52887d (#166) vào nhánh: 0ff3ce3ef. Lượt kiểm cuối ở 0ff3ce3ef, tất cả xanh:
+  - gate FAIL 0: vitest app-core 2681; Mini App 6694 (cả UTC); web 593 file / 10079 test; jest api 573 suite / 13622 test; vite build OK; bundle Mini App entry 665/207 KB, tổng 2229/867 KB.
+  - DB sạch `migrate deploy` (12 migration mới so với 42050c881), `migrate diff --exit-code` = 0.
+  - Race 350 suite / 2746 test.
+  - Playwright: Mini App 475 pass (10 skip), web 701 pass (138 skip).
 
 ## Lưu ý cho chủ
 - A2: cron tự chuyển Ví sẽ warn mỗi giờ cho CTV đã bị hạ mà còn hoa hồng APPROVED, cho tới khi xử lý số hoa hồng đó.
@@ -130,6 +138,9 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 - Sau deploy gói e, ba câu kiểm phải ra 0: `feed_posts` có ảnh mà `imageCount`=0; `products` thumbnail `data:` trùng `images[1]`; `reviews` có ảnh mà `imageVersions` rỗng.
 - Gói g: kiểm tay `/admin` bằng STAFF không có tab inbox; mở thẳng `?tab=payouts`, `?tab=dealerClaims` từ thẻ Việc cần xử lý.
 - CSP: web phải thêm `report-uri https://api.tubutree.com/api/csp-report` (2a làm ở next.config).
+- Gói k: Kế toán thấy hộp việc "Chờ đối chiếu sao kê" cho đơn mở có khoản Pancake chưa gắn; đơn đó không bị cron hết hạn huỷ trong 48 giờ. Đơn đã huỷ/trả có khoản như vậy nằm ở hộp việc riêng của ADMIN; chỉ ADMIN đóng, phải ghi chú.
+- Migration 20261104160500 đã sửa tại chỗ trong lúc review; DB nào đã áp bản cũ (chỉ DB thử cục bộ) phải dựng lại. PROD chưa áp.
+- Câu đếm trong runbook §1.0 cho các migration nặng phải chạy trên PROD trước deploy: cần chủ cho phép đọc.
 
 ## Việc hạ tầng / của chủ (ghi lại, phiên này không làm)
 - Rule Rate Limiting Cloudflare cho trang HTML; vhost `app.` chỉ nhận dải IP Cloudflare (`RemoteIPTrustedProxy` như vhost `api.`).
