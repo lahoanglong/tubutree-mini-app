@@ -184,9 +184,11 @@ export class CouponsService {
     const scoped = couponScopedSubtotal(coupon, subtotal, lines);
 
     assertPerUserLimit(coupon, usedCount.redemptions);
-    // Chỉ check pre-flight để UX tốt; kiểm cuối ATOMIC ở redeem() (updateMany guard usedCount<usageLimit). Đọc đúng cột usedCount
-    // (redeemInTx tăng và release giảm cùng bộ đếm khi mã có trần) để báo trước khớp với chốt cuối thay vì đếm lại bảng redemption.
-    assertUsageLimit(coupon, coupon.usedCount);
+    if (coupon.usageLimit != null) {
+      // Chỉ check pre-flight để UX tốt; kiểm cuối ATOMIC ở redeem() (updateMany guard usedCount<usageLimit).
+      const totalUsed = await this.prisma.couponRedemption.count({ where: { couponId: coupon.id } });
+      assertUsageLimit(coupon, totalUsed);
+    }
 
     return { code: coupon.code, ...couponAmount(coupon, scoped.subtotal), productIds: scoped.productIds };
   }
@@ -225,11 +227,15 @@ export class CouponsService {
     const rows = await this.prisma.coupon.findMany({ where: { code: { in: wanted } } });
     const byCode = new Map(rows.map((c) => [c.code, c]));
     const ids = rows.map((c) => c.id);
+    const limitedIds = rows.filter((c) => c.usageLimit != null).map((c) => c.id);
     const claimIds = rows.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
-    const [user, mine, claims, priorOrder] = await Promise.all([
+    const [user, mine, all, claims, priorOrder] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true, role: true } }),
       ids.length
         ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: ids } }, _count: { _all: true } })
+        : [],
+      limitedIds.length
+        ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: limitedIds } }, _count: { _all: true } })
         : [],
       claimIds.length
         ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
@@ -237,6 +243,7 @@ export class CouponsService {
       rows.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
     ]);
     const usedByUser = new Map(mine.map((g) => [g.couponId, g._count._all]));
+    const totalUsed = new Map(all.map((g) => [g.couponId, g._count._all]));
     const claimedCouponIds = new Set(claims.map((c) => c.couponId));
     const now = new Date();
     for (const code of wanted) {
@@ -250,7 +257,7 @@ export class CouponsService {
         assertCouponWindow(coupon, now);
         const scoped = couponScopedSubtotal(coupon, subtotal, lines);
         assertPerUserLimit(coupon, usedByUser.get(coupon.id) ?? 0);
-        assertUsageLimit(coupon, coupon.usedCount);
+        assertUsageLimit(coupon, totalUsed.get(coupon.id) ?? 0);
         out.set(coupon.code, { code: coupon.code, ...couponAmount(coupon, scoped.subtotal), productIds: scoped.productIds });
       } catch (err) {
         if (!(err instanceof BadRequestException)) throw err;
