@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 /**
- * DATABASE_URL đặt statement_timeout 30s cho mọi kết nối của app (runbook §1.2). Việc chạy tay hoặc nền mà một câu lệnh hợp lý
+ * DB_SESSION_OPTIONS đặt statement_timeout 30s cho mọi kết nối của API (runbook §1.19). Việc chạy tay hoặc nền mà một câu lệnh hợp lý
  * có thể lâu hơn thế thì gọi hàm này ngay đầu transaction: giá trị chỉ sống tới hết transaction (set_config local = true).
  */
 export const LONG_STATEMENT_TIMEOUT = '120s';
