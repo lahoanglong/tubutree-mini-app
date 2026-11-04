@@ -366,9 +366,12 @@ model RefreshToken {
   revokedAt DateTime?
   // Thu hồi vì đã xoay sang token mới (khác logout/khoá). Chỉ token xoay mới được dùng lại trong khoảng ân hạn.
   rotatedAt DateTime?
+  /// Token cha đã xoay ra token này: logout thu hồi theo họ để token vừa xoay không mở lại phiên trong khoảng ân hạn.
+  parentId  String?
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([parentId])
   // Thống kê DAU theo ngày tạo token (analytics-aggregation.service.ts).
   @@index([createdAt])
   // data-retention xoá theo (revokedAt < cutoff OR expiresAt < cutoff). "refresh_tokens_revokedAt_idx" ("revokedAt") WHERE

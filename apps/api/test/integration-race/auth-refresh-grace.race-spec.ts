@@ -4,8 +4,11 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { AuthService } from '../../src/modules/auth/auth.service';
+import { SessionStateService } from '../../src/modules/auth/session-state.service';
+import { JwtStrategy } from '../../src/modules/auth/strategies/jwt.strategy';
 import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import type { JwtPayload } from '@tubutree/shared-types';
 import type { Env } from '../../src/config/env.validation';
 import { randCode, summarize, warmPool } from './helpers';
 
@@ -18,6 +21,8 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let auth: AuthService;
+  let strategy: JwtStrategy;
+  let sessions: SessionStateService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
@@ -32,7 +37,9 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     };
     const config = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
     const rbac = { applyGrants: async <T>(u: T) => u } as unknown as RbacService;
-    auth = new AuthService(prisma, new JwtService(), config, {} as ZaloService, rbac);
+    sessions = new SessionStateService(prisma);
+    auth = new AuthService(prisma, new JwtService(), config, {} as ZaloService, rbac, undefined, undefined, undefined, sessions);
+    strategy = new JwtStrategy(config, sessions);
   });
 
   afterAll(async () => {
@@ -95,5 +102,31 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     const { login } = await guestSession();
     await auth.logout(login.refreshToken);
     await expect(auth.refresh(login.refreshToken)).rejects.toThrow('không hợp lệ');
+  });
+
+  const decode = (jwt: string) => new JwtService().decode(jwt) as JwtPayload & { iat: number };
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('L1-03: phát hiện reuse → access token cũ bị 401 sau khi cache hết hạn (hoặc ngay khi invalidate)', async () => {
+    const { login, userId } = await guestSession();
+    const next = await auth.refresh(login.refreshToken);
+    await expect(strategy.validate(decode(login.accessToken))).resolves.toMatchObject({ sub: userId });
+    const old = new Date(Date.now() - 60_000);
+    await prisma.refreshToken.updateMany({ where: { userId, rotatedAt: { not: null } }, data: { rotatedAt: old, revokedAt: old } });
+    await sleep(1100);
+    await expect(auth.refresh(login.refreshToken)).rejects.toThrow('đã được sử dụng');
+    sessions.invalidate(userId);
+    await expect(strategy.validate(decode(login.accessToken))).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
+    await expect(strategy.validate(decode(next.accessToken))).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
+  });
+
+  it('L1-03: logout khi token cha còn ân hạn → cha không đổi được nữa, con (do tab khác đổi) bị thu hồi', async () => {
+    const { login } = await guestSession();
+    const child = await auth.refresh(login.refreshToken);
+    const sibling = await auth.refresh(login.refreshToken);
+    await auth.logout(child.refreshToken);
+    await expect(auth.refresh(login.refreshToken)).rejects.toThrow('không hợp lệ');
+    await expect(auth.refresh(sibling.refreshToken)).rejects.toThrow('không hợp lệ');
+    await expect(auth.refresh(child.refreshToken)).rejects.toThrow('không hợp lệ');
   });
 });
