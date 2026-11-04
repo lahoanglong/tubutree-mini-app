@@ -560,6 +560,35 @@ describe('evaluateDb', () => {
     });
   });
 
+  describe('hạn chờ Postgres của API (db.session_timeouts)', () => {
+    const noOpts = envWith({ DB_SESSION_OPTIONS: undefined });
+    it('đặt đúng và kết nối đọc ra khớp thì PASS', () => expect(status(GOOD_DB, 'db.session_timeouts')).toBe('PASS'));
+    it('Postgres in 1min cho 60s vẫn khớp (so theo mili giây)', () => {
+      const env = envWith({ DB_SESSION_OPTIONS: '-c statement_timeout=60s -c lock_timeout=10000ms' });
+      const db = dbWith({ sessionTimeouts: { statement_timeout: '1min', lock_timeout: '10s', idle_in_transaction_session_timeout: '0' } });
+      expect(status(db, 'db.session_timeouts', 'post-deploy', env)).toBe('PASS');
+    });
+    it('đã đặt mà kết nối đọc ra khác thì FAIL, nêu khoá lệch', () => {
+      const db = dbWith({ sessionTimeouts: { statement_timeout: '0', lock_timeout: '10s', idle_in_transaction_session_timeout: '30s' } });
+      const r = byId(run(db), 'db.session_timeouts');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('statement_timeout');
+      expect(r.detail).not.toContain('lock_timeout');
+    });
+    it('chưa đặt thì WARN, trỏ runbook 1.19', () => {
+      const r = byId(run(GOOD_DB, 'post-deploy', noOpts), 'db.session_timeouts');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('chưa đặt hạn chờ Postgres (runbook 1.19)');
+    });
+    it('chưa đặt: WARN kể cả khi kết nối đọc ra 0', () => {
+      const db = dbWith({ sessionTimeouts: { statement_timeout: '0', lock_timeout: '0', idle_in_transaction_session_timeout: '0' } });
+      expect(status(db, 'db.session_timeouts', 'pre-deploy', noOpts)).toBe('WARN');
+    });
+    it('chuỗi sai định dạng thì FAIL (API sẽ không khởi động)', () => {
+      expect(status(GOOD_DB, 'db.session_timeouts', 'post-deploy', envWith({ DB_SESSION_OPTIONS: '-c work_mem=1GB' }))).toBe('FAIL');
+    });
+  });
+
   describe('công tắc thu gom Gomdon', () => {
     const noCreds = envWith({ GOMDON_PHONE: '', GOMDON_PASSWORD: '' });
     it('bật và có tài khoản thì PASS', () => expect(status(GOOD_DB, 'db.gomdon_toggle')).toBe('PASS'));

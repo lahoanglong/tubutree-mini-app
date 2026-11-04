@@ -5,6 +5,7 @@ import { toShippingEta } from '../../modules/system-config/shipping-eta';
 import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
 import { sameProvince } from '@tubutree/shared-types';
 import { envValue } from './secrets';
+import { parseDbSessionOptions, pgDurationToMs, type DbSessionOptionName } from '../../prisma/db-session-options';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
 const G_DB = 'Cơ sở dữ liệu';
@@ -114,6 +115,8 @@ export interface DbSnapshot {
   znsTemplates: ZnsTemplateRow[];
   /** COD_MAX_PER_ORDER trong code (checkout-split.ts). */
   codMaxPerOrder: number;
+  /** current_setting của ba hạn chờ, đọc trên kết nối dựng đúng như API (cùng DB_SESSION_OPTIONS). */
+  sessionTimeouts: Record<DbSessionOptionName, string>;
   demoData?: DemoDataSnapshot;
   /** Phần collector không đọc được vì schema DB cũ hơn mã (P2021/P2022): mã lỗi theo từng phần. Vắng nghĩa là đọc đủ. */
   degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'demoData', string>>;
@@ -536,6 +539,25 @@ function codCapCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.cod_cap', title, `cố định ${vnd(COD_CAP_VND)} mỗi đơn con (hằng số trong mã, không chỉnh qua cấu hình)`);
 }
 
+function sessionTimeoutsCheck(s: DbSnapshot, env: Env): CheckResult {
+  const title = 'Hạn chờ Postgres của API';
+  const raw = envValue(env, 'DB_SESSION_OPTIONS');
+  if (!raw) {
+    return warn(G_DB, 'db.session_timeouts', title, 'chưa đặt hạn chờ Postgres (runbook 1.19)', 'Thêm DB_SESSION_OPTIONS vào /opt/tubutree/.env rồi tạo lại api (runbook mục 1.19); thiếu thì một câu lệnh hay khoá treo giữ kết nối tới khi cạn pool.');
+  }
+  const parsed = parseDbSessionOptions(raw);
+  if (!parsed.ok) {
+    return fail(G_DB, 'db.session_timeouts', title, `DB_SESSION_OPTIONS sai định dạng: ${parsed.errors.join(' ')}`, 'Sửa theo mẫu trong .env.production.example (runbook 1.19); API không khởi động với giá trị này.');
+  }
+  const mismatched = (Object.entries(parsed.settings) as [DbSessionOptionName, string][])
+    .filter(([name, want]) => pgDurationToMs(s.sessionTimeouts[name]) !== pgDurationToMs(want))
+    .map(([name, want]) => `${name}: khai báo ${want}, kết nối đọc ra ${s.sessionTimeouts[name]}`);
+  if (mismatched.length > 0) {
+    return fail(G_DB, 'db.session_timeouts', title, mismatched.join('; '), 'Tạo lại api sau khi sửa .env (docker compose up -d --no-deps api) rồi chạy lại; nếu vẫn lệch, kiểm DATABASE_URL không tự mang options= (runbook 1.19).');
+  }
+  return pass(G_DB, 'db.session_timeouts', title, Object.entries(parsed.settings).map(([name, v]) => `${name}=${v}`).join(', '));
+}
+
 function gomdonToggleChecks(s: DbSnapshot, env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const toggle = s.configs['shipping.gomdon.recycling_enabled'];
@@ -678,6 +700,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
       miniappBaseUrlCheck(s, ctx.env),
     ]),
     codCapCheck(s),
+    sessionTimeoutsCheck(s, ctx.env),
     ...configPart(gomdonToggleChecks(s, ctx.env)),
     ...part('membershipTiers', [membershipTierCheck(s, ctx.phase)]),
     ...part('dealerTiers', [dealerTierCheck(s)]),

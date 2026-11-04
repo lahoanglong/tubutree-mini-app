@@ -13,7 +13,7 @@ interface FakeDemo {
   coupons: Row[];
 }
 
-function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; migrations?: Row[]; demo?: FakeDemo; failing?: Record<string, unknown> }) {
+function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; migrations?: Row[]; demo?: FakeDemo; failing?: Record<string, unknown>; timeouts?: [string, string, string] }) {
   const demo = opts.demo ?? { found: 0, active: 0, activeVariations: 0, coupons: [] };
   const sql: string[] = [];
   const tables = new Set(opts.tables);
@@ -26,6 +26,7 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
       const q = strings.join('?');
       sql.push(q);
       if (q.includes('to_regclass')) return [{ ok: tables.has(String(values[0]).replace('public.', '')) ? values[0] : null }];
+      if (q.includes('current_setting')) return [{ statement_timeout: opts.timeouts?.[0] ?? '0', lock_timeout: opts.timeouts?.[1] ?? '0', idle_in_transaction_session_timeout: opts.timeouts?.[2] ?? '0' }];
       if (q.includes('_prisma_migrations')) return opts.migrations ?? [];
       throw new Error(`câu lệnh không ngờ: ${q}`);
     }),
@@ -58,6 +59,13 @@ describe('collectDbSnapshot', () => {
     await collectDbSnapshot(prisma, ['m1']);
     expect(sql[0]).toBe('SET TRANSACTION READ ONLY');
     for (const q of sql.slice(1)) expect(q.trim()).toMatch(/^(SELECT|SAVEPOINT|RELEASE SAVEPOINT)/i);
+  });
+
+  it('đọc ba hạn chờ Postgres ngay trên kết nối đang dùng', async () => {
+    const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, timeouts: ['30s', '10s', '30s'] });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.sessionTimeouts).toEqual({ statement_timeout: '30s', lock_timeout: '10s', idle_in_transaction_session_timeout: '30s' });
+    expect(sql.some((q) => q.includes("current_setting('statement_timeout')"))).toBe(true);
   });
 
   it('gom đúng số liệu từ các bảng', async () => {
