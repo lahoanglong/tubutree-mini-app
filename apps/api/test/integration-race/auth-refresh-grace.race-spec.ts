@@ -161,4 +161,26 @@ describe('AuthService.refresh — ân hạn khi refresh đồng thời (real Pos
     await prisma.user.update({ where: { id: userId }, data: { sessionsRevokedAt: new Date(Date.now() + 1000) } });
     await expect(auth.refresh(login.refreshToken)).rejects.toThrow('không hợp lệ');
   });
+
+  it('m4: logout bằng C (P→C ở tab A; P→S→S1 ở tab B) → cả họ chết, kể cả cháu S1', async () => {
+    const { login } = await guestSession();
+    const c = await auth.refresh(login.refreshToken);
+    const sTok = await auth.refresh(login.refreshToken);
+    const s1 = await auth.refresh(sTok.refreshToken);
+    await auth.logout(c.refreshToken);
+    await expect(auth.refresh(s1.refreshToken)).rejects.toThrow('không hợp lệ');
+    await expect(auth.refresh(sTok.refreshToken)).rejects.toThrow('không hợp lệ');
+    await expect(auth.refresh(login.refreshToken)).rejects.toThrow('không hợp lệ');
+  });
+
+  it('m4: refresh song song với logout cùng họ (20 lần) → không còn token con nào sống', async () => {
+    const survivors: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const { login, userId } = await guestSession();
+      const c = await auth.refresh(login.refreshToken);
+      await Promise.allSettled([auth.refresh(login.refreshToken), auth.logout(c.refreshToken)]);
+      survivors.push(await prisma.refreshToken.count({ where: { userId, revokedAt: null } }));
+    }
+    expect(survivors.filter((n) => n > 0)).toEqual([]);
+  });
 });

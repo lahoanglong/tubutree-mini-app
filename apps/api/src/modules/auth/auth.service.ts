@@ -1014,7 +1014,7 @@ export class AuthService {
   /**
    * Thu hồi token đang dùng và cả họ của nó: token cha vừa xoay trong khoảng ân hạn vẫn đổi được lấy cặp
    * mới, nên không xoá ân hạn thì một tab khác mở lại phiên vừa đăng xuất. Xoá ân hạn TRƯỚC rồi mới thu hồi
-   * các con, để lượt đổi song song không kịp sinh token mới giữa hai bước. Chỉ đụng họ của token này, không
+   * mọi hậu duệ, để lượt đổi song song không kịp sinh token mới giữa hai bước. Chỉ đụng họ của token này, không
    * đụng thiết bị khác của cùng user; muốn cắt mọi thiết bị dùng logoutAll.
    */
   async logout(refreshToken: string): Promise<void> {
@@ -1041,8 +1041,16 @@ export class AuthService {
         cursor = parent.parentId;
       }
       if (ancestors.length === 0) return;
-      await this.prisma.refreshToken.updateMany({ where: { id: { in: ancestors } }, data: { rotatedAt: null } });
-      await this.prisma.refreshToken.updateMany({ where: { parentId: { in: ancestors }, revokedAt: null }, data: { revokedAt: now } });
+      await this.prisma.refreshToken.updateMany({ where: { id: { in: ancestors } }, data: { revokedAt: now, rotatedAt: null } });
+      // Mọi hậu duệ (con, cháu...) chết, kể cả token đã xoay còn ân hạn: xoá rotatedAt để chúng không đổi ra token con mới.
+      await this.prisma.$executeRaw`
+        WITH RECURSIVE d AS (
+          SELECT id FROM refresh_tokens WHERE "parentId" = ANY(${ancestors}::text[])
+          UNION
+          SELECT t.id FROM refresh_tokens t JOIN d ON t."parentId" = d.id
+        )
+        UPDATE refresh_tokens SET "revokedAt" = COALESCE("revokedAt", ${now}), "rotatedAt" = NULL
+        WHERE id IN (SELECT id FROM d)`;
     } catch (err) {
       this.logger.warn(`Revoke refresh token thất bại khi logout: ${err}`);
     }

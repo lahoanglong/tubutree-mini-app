@@ -829,7 +829,8 @@ describe('AuthService.logout', () => {
       return tokens[where.id!] ?? null;
     });
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    return { ...makeService({ refreshToken: { findUnique, updateMany, create: jest.fn() } }), findUnique, updateMany };
+    const executeRaw = jest.fn().mockResolvedValue(3);
+    return { ...makeService({ refreshToken: { findUnique, updateMany, create: jest.fn() }, $executeRaw: executeRaw }), findUnique, updateMany, executeRaw };
   }
   const hashOf = (t: string) => createHash('sha256').update(t).digest('hex');
   const live = (over: object) => ({ id: 'c', userId: 'u1', parentId: null, rotatedAt: null, hash: hashOf('tok'), ...over });
@@ -844,29 +845,28 @@ describe('AuthService.logout', () => {
 
   it('token cha vừa xoay trong ân hạn → mất ân hạn (rotatedAt=null) và mọi con còn sống của nó bị thu hồi', async () => {
     const parent = { id: 'p', userId: 'u1', parentId: null, rotatedAt: new Date(Date.now() - 5_000) };
-    const { svc, updateMany } = logoutSvc({ c: live({ parentId: 'p' }), p: parent });
+    const { svc, updateMany, executeRaw } = logoutSvc({ c: live({ parentId: 'p' }), p: parent });
     await svc.logout('tok');
-    const calls = updateMany.mock.calls.map(([a]) => a);
-    expect(calls).toContainEqual({ where: { id: { in: ['p'] } }, data: { rotatedAt: null } });
-    expect(calls).toContainEqual({ where: { parentId: { in: ['p'] }, revokedAt: null }, data: { revokedAt: expect.any(Date) } });
-    // mất ân hạn phải đi trước khi thu hồi con, để tab khác không đổi cha lấy token mới giữa hai bước
-    const order = updateMany.mock.calls.map(([a]) => ('rotatedAt' in (a.data ?? {}) ? 'grace' : 'children'));
-    expect(order.indexOf('grace')).toBeLessThan(order.lastIndexOf('children'));
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['p'] } }, data: { revokedAt: expect.any(Date), rotatedAt: null } });
+    // thu hồi MỌI hậu duệ (CTE đệ quy theo parentId) chạy sau khi tổ tiên đã mất ân hạn
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(String((executeRaw.mock.calls[0]![0] as string[]).join('?'))).toMatch(/WITH RECURSIVE[\s\S]*"parentId"/);
+    expect(updateMany.mock.invocationCallOrder.at(-1)!).toBeLessThan(executeRaw.mock.invocationCallOrder[0]!);
   });
 
   it('tab giữ chính token đã xoay mà đăng xuất → token đó cũng mất ân hạn, con của nó bị thu hồi', async () => {
-    const { svc, updateMany } = logoutSvc({ c: live({ rotatedAt: new Date(Date.now() - 2_000) }) });
+    const { svc, updateMany, executeRaw } = logoutSvc({ c: live({ rotatedAt: new Date(Date.now() - 2_000) }) });
     await svc.logout('tok');
-    const calls = updateMany.mock.calls.map(([a]) => a);
-    expect(calls).toContainEqual({ where: { id: { in: ['c'] } }, data: { rotatedAt: null } });
-    expect(calls).toContainEqual({ where: { parentId: { in: ['c'] }, revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['c'] } }, data: { revokedAt: expect.any(Date), rotatedAt: null } });
+    expect(executeRaw).toHaveBeenCalledTimes(1);
   });
 
   it('token cha xoay đã quá ân hạn → không đụng tới', async () => {
     const parent = { id: 'p', userId: 'u1', parentId: null, rotatedAt: new Date(Date.now() - 120_000) };
-    const { svc, updateMany } = logoutSvc({ c: live({ parentId: 'p' }), p: parent });
+    const { svc, updateMany, executeRaw } = logoutSvc({ c: live({ parentId: 'p' }), p: parent });
     await svc.logout('tok');
     expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 
   it('logout xong, dùng lại token vừa xoay trong ân hạn → refresh trả 401 (rotatedAt đã bị xoá)', async () => {
