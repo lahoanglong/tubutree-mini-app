@@ -309,18 +309,20 @@ export class AffiliateService {
   async findEligibleReferrer(referralCode: string, buyerId: string): Promise<string | null> {
     const ref = await this.prisma.user.findUnique({
       where: { referralCode: referralCode.toUpperCase() },
-      select: { id: true, role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_STOREFRONT_SELECT },
+      select: { id: true, role: true, isBlocked: true, mergedIntoId: true, affiliateRevokedAt: true, storefronts: SAMPLE_STOREFRONT_SELECT },
     });
     // Tài khoản bị khoá không ghi công đơn mới; hoa hồng đã tạo cho đơn cũ giữ nguyên. Chủ gian hàng mẫu không nhận hoa hồng.
     // Dòng khách đã gộp vào tài khoản khác (auth.service gộp bỏ lại vai trò CTV ở dòng cũ) không còn người dùng nên không ghi công.
-    if (!ref || ref.id === buyerId || ref.isBlocked || ref.mergedIntoId || ref.storefronts.length > 0) return null;
+    // Người đã bị thu hồi quyền bán (affiliateRevokedAt) không tích hoa hồng mới dù cấu hình cho khách hưởng hoa hồng: không thì hoa hồng
+    // dồn lại và được trả khi họ được cấp lại CTV.
+    if (!ref || ref.id === buyerId || ref.isBlocked || ref.mergedIntoId || ref.affiliateRevokedAt || ref.storefronts.length > 0) return null;
     return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
   }
 
   /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
   async isCommissionEligible(userId: string): Promise<boolean> {
-    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_STOREFRONT_SELECT } });
-    return !!u && !u.isBlocked && !u.mergedIntoId && u.storefronts.length === 0 && (await this.commissionEligibleRoles()).has(u.role);
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true, mergedIntoId: true, affiliateRevokedAt: true, storefronts: SAMPLE_STOREFRONT_SELECT } });
+    return !!u && !u.isBlocked && !u.mergedIntoId && !u.affiliateRevokedAt && u.storefronts.length === 0 && (await this.commissionEligibleRoles()).has(u.role);
   }
 
   /** Điều kiện khách thấy một gian hàng (storefront/storefront-visibility.ts) tính từ cấu hình hiện hành. */

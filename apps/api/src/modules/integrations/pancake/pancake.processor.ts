@@ -747,17 +747,27 @@ export class PancakeProcessor extends WorkerHost {
   private async holdUnattachedPayment(order: Order, data: Record<string, unknown>, reported: number): Promise<void> {
     const rawId = data['id'] ?? data['order_id'];
     const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
-    const closed = isClosedOrder(order.status);
     const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đúng đơn Pancake: chờ Kế toán xác nhận`;
     // Chỉ ghi lý do LẦN ĐẦU cho mỗi cặp (đơn, đơn Pancake): dòng lịch sử là dấu, nên Kế toán bấm "Đã xử lý" cho #A rồi thì webhook sau của #A không ghi
     // lại còn #B khác vẫn được ghim. Nối vào hàng "Cần xử lý Pancake" không đè lý do khác, và chỉ khi đơn còn UNPAID để không đua với nút
     // "Đã nhận tiền" (markPaid vừa gỡ lý do).
-    const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
-    if (logged) return;
-    await appendPancakeAttention(this.prisma, order.id, closed ? ATTENTION_PAYMENT_UNLINKED_CLOSED : ATTENTION_PAYMENT_UNLINKED, [], { onlyUnpaid: true });
-    await this.prisma.orderStatusHistory.create({
-      data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'PANCAKE', note },
+    // Khoá dòng đơn trước khi tìm dấu: hai worker cùng cặp (đơn, đơn Pancake) không còn cùng thấy "chưa ghi" rồi ghi đôi và báo đôi.
+    // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời nhắc và dòng lịch sử.
+    const written = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR NO KEY UPDATE`;
+      const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true } });
+      if (!locked) return null;
+      const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+      if (logged) return null;
+      const isClosed = isClosedOrder(locked.status);
+      await appendPancakeAttention(tx, order.id, isClosed ? ATTENTION_PAYMENT_UNLINKED_CLOSED : ATTENTION_PAYMENT_UNLINKED, [], { onlyUnpaid: true });
+      await tx.orderStatusHistory.create({
+        data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note },
+      });
+      return { closed: isClosed };
     });
+    if (!written) return;
+    const { closed } = written;
     const amount = reported > 0 ? `${formatVnd(reported)}/${formatVnd(order.total)}` : formatVnd(order.total);
     const next = closed
       ? 'Đơn đã huỷ/trả nên không có nút "Đã nhận tiền" và hệ thống KHÔNG tạo khoản hoàn: Kế toán đối chiếu sao kê, khách đã chuyển thì ghi tiền về muộn của đơn rồi hoàn theo luồng đó.'

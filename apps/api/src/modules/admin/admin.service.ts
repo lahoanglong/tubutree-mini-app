@@ -410,7 +410,6 @@ export class AdminService {
           // Merge vào metadata đọc từ dòng đã khoá — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz, kể cả ghi chen vừa xong).
           data: {
             role: 'DEALER',
-            ...(await affiliateRevocationPatch(tx, app.userId, applicant.role, 'DEALER')),
             ...(droppedPerms.length ? { staffPermissions: [] } : {}),
             metadata: { ...((applicant.metadata as Record<string, unknown> | null) ?? {}), dealerTierId: tierId } as Prisma.InputJsonObject,
           },
