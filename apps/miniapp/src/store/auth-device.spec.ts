@@ -25,9 +25,12 @@ vi.mock('../services/zmp-bridge', () => ({
 vi.mock('../services/first-touch', () => ({ loadFirstTouch: vi.fn(async () => undefined) }));
 
 import { getStorage, setStorage, removeStorage } from 'zmp-sdk/apis';
+import { setUnauthorizedHandler, refreshTokens } from '../services/api';
 import { getDeviceId, useAuthStore, resetDeviceIdCacheForTests } from './auth';
 import { saveRecentCustomer, loadRecentCustomers } from '../components/affiliate/recent-customers';
 
+// auth.ts đăng ký handler 401 một lần lúc load module, trước beforeEach.
+const unauthorizedHandler = vi.mocked(setUnauthorizedHandler).mock.calls[0]?.[0];
 const mockedGet = vi.mocked(getStorage);
 const mockedSet = vi.mocked(setStorage);
 const mockedRemove = vi.mocked(removeStorage);
@@ -99,5 +102,23 @@ describe('logout xoá khách gần đây của CTV (SEC-F3)', () => {
     expect(loadRecentCustomers('u1')).toEqual([]);
     expect(loadRecentCustomers('u2')).toEqual([]);
     expect(localStorage.getItem('other_key')).toBe('x');
+  });
+
+  it('refresh bị từ chối (401) giữa phiên cũng xoá khách gần đây', async () => {
+    const c = { recipient: 'A', phone: '0900000001', street: 's', province: 'p', provinceCode: '1', ward: 'w', wardCode: '2', usedAt: 1 };
+    saveRecentCustomer('u1', c);
+    mockedGet.mockResolvedValue({ tubu_refresh_token: 'stored' });
+    vi.mocked(refreshTokens).mockRejectedValue({ isHttpError: true, response: { status: 401 } });
+    expect(await unauthorizedHandler!()).toBeNull();
+    expect(loadRecentCustomers('u1')).toEqual([]);
+  });
+
+  it('refresh lỗi mạng (không bị từ chối) thì giữ khách gần đây', async () => {
+    const c = { recipient: 'A', phone: '0900000001', street: 's', province: 'p', provinceCode: '1', ward: 'w', wardCode: '2', usedAt: 1 };
+    saveRecentCustomer('u1', c);
+    mockedGet.mockResolvedValue({ tubu_refresh_token: 'stored' });
+    vi.mocked(refreshTokens).mockRejectedValue({ isHttpError: true, message: 'Network Error', response: undefined });
+    await unauthorizedHandler!();
+    expect(loadRecentCustomers('u1')).toHaveLength(1);
   });
 });

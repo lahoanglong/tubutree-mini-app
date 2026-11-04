@@ -83,7 +83,6 @@ async function flush(): Promise<void> {
 beforeEach(() => {
   vi.clearAllMocks();
   resetDeviceIdCacheForTests();
-  resetDeviceIdCacheForTests();
   mockedSetStorage.mockResolvedValue(undefined as never);
   mockedRemoveStorage.mockResolvedValue(undefined as never);
   mockedGetStorage.mockResolvedValue({});

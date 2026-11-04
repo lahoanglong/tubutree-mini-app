@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, type CSSProperties, type ReactNode } from 'react';
+import { memo, useCallback, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import { ProductCard, type ProductCardProps } from './product-card';
@@ -53,7 +53,9 @@ export function ProductGrid({
   onOpen,
 }: ProductGridProps) {
   const onOpenRef = useRef(onOpen);
-  onOpenRef.current = onOpen;
+  useLayoutEffect(() => {
+    onOpenRef.current = onOpen;
+  });
   const stableOpen = useCallback((p: ProductCardData, i: number) => onOpenRef.current?.(p, i), []);
   if (loading) {
     return (
