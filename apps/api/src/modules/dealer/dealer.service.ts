@@ -139,6 +139,12 @@ function bonusForRevenue(revenue: number, sortedTiers: BonusTier[]) {
  * Giá đại lý = giá lẻ × (1 - chiết khấu bậc), kẹp theo dealer.max_discount_pct.
  * Đơn B2B có thể ghi công nợ (DealerCreditLedger).
  */
+/** Mini App bắt `code` này để làm mới trạng thái hồ sơ thay vì để khách kẹt ở form. */
+const DEALER_APPLICATION_PENDING = {
+  code: 'DEALER_APPLICATION_PENDING',
+  message: 'Bạn đã có đơn đăng ký đang chờ duyệt.',
+};
+
 @Injectable()
 export class DealerService {
   private readonly logger = new Logger(DealerService.name);
@@ -162,7 +168,7 @@ export class DealerService {
     const pending = await this.prisma.dealerApplication.findFirst({
       where: { userId, status: 'PENDING' },
     });
-    if (pending) throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
+    if (pending) throw new BadRequestException(DEALER_APPLICATION_PENDING);
     try {
       const created = await this.prisma.dealerApplication.create({ data: { ...dto, userId }, select: DEALER_APPLICATION_LIST_SELECT });
       await notifyAdmins(
@@ -180,7 +186,7 @@ export class DealerService {
       // dealer_applications_pending_user_key (userId WHERE status='PENDING') chặn ở DB, request
       // thua ăn P2002 → trả đúng message nghiệp vụ thay vì lộ lỗi DB thô.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new BadRequestException('Bạn đã có đơn đăng ký đang chờ duyệt.');
+        throw new BadRequestException(DEALER_APPLICATION_PENDING);
       }
       throw err;
     }

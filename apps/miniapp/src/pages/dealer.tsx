@@ -38,6 +38,7 @@ import {
   type PricelistRow,
   type DealerOrderRules,
 } from '../services/dealer-api';
+import { errorCode } from '@tubutree/app-core/api/error-status';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatDate, formatRatePct, formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -144,7 +145,11 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
       openSnackbar({ text: 'Đã gửi hồ sơ đăng ký đại lý!', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['dealer-me'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
+      if (errorCode(e) === 'DEALER_APPLICATION_PENDING') void qc.invalidateQueries({ queryKey: ['dealer-me'] });
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
   });
 
   const set = (k: keyof DealerApplyInput) => (e: { target: { value: string } }) =>
