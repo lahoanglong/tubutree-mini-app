@@ -18,7 +18,6 @@ import {
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
-  appendPancakeAttention,
   clearPancakeAttention,
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
