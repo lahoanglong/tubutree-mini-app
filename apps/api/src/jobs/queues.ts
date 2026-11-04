@@ -1,6 +1,8 @@
 /** Tên các queue BullMQ dùng chung. */
 export const QUEUE_PANCAKE_EVENTS = 'pancake-events';
 export const QUEUE_NOTIFICATIONS = 'notifications';
+/** Thử lại tin trong app (job `inapp-retry`): tách khỏi QUEUE_NOTIFICATIONS để ZNS chậm hoặc bị limiter không giữ các job này. */
+export const QUEUE_NOTIFICATIONS_INAPP_RETRY = 'notifications-inapp-retry';
 export const QUEUE_ZALO_OA_EVENTS = 'zalo-oa-events';
 /** Đẩy đơn local → Pancake (outbound, khác QUEUE_PANCAKE_EVENTS là webhook inbound).
  * Trước đây pushOrder() gọi trực tiếp trong checkout.service, lỗi chỉ log rồi mất — đơn

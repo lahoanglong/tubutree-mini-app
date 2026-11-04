@@ -651,6 +651,33 @@ Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-de
 - [ ] Bước 7 chạy dưới `env DB_SESSION_OPTIONS=`
 - [ ] Câu kiểm trên ra `[{"st":"30s","lt":"10s","it":"30s"}]`
 
+### 1.20 Hàng thông báo tách đôi, worker ZNS 5 chỗ (hard/1105, L3-06)
+
+- Job thử lại tin trong app (`inapp-retry`) chuyển sang hàng mới `notifications-inapp-retry` (worker riêng, concurrency 2). Hàng `notifications` chỉ còn job `zns-send`: worker concurrency 5 và limiter 10 job/giây (mức tự chọn: Zalo không công bố trần theo giây, chỉ hạn mức ngày của OA). Gọi Zalo hết hạn sau 10 giây (trước đó 25 giây).
+- Hai log ZNS cùng (khách, `dedupeKey`) chạy song song thì chỉ log ra đời trước gửi; log sau đóng `FAILED` với lý do "Bỏ qua: tin cho cùng sự kiện đã có ở log …" và job báo warn "log đã đóng". Đây không phải lỗi gửi.
+- Không có migration, không cần biến môi trường. `go-live:check` mục Redis giờ đếm 9 hàng đợi.
+
+**Lên bản mới.** Job `inapp-retry` đã nằm trong hàng cũ `notifications` lúc deploy KHÔNG mất: `NotificationsProcessor` (worker của hàng `notifications`) vẫn xử lý tên job đó. Không cần xả trước khi lên bản.
+
+**Quay API về bản cũ (rollback).** Bản cũ không có worker cho hàng `notifications-inapp-retry`, nên job còn trong hàng mới đó sẽ nằm im tới khi lên lại bản mới (tin trong app của sự kiện đó không tới; ZNS không ảnh hưởng). Xả trước khi quay, trên VPS:
+
+```bash
+for st in wait active delayed prioritized; do
+  k=bull:notifications-inapp-retry:$st
+  t=$($DC exec -T redis redis-cli type $k | tr -d '\r')
+  case $t in list) n=$($DC exec -T redis redis-cli llen $k);; zset) n=$($DC exec -T redis redis-cli zcard $k);; *) n=0;; esac
+  echo "$st=$n"
+done
+```
+
+1. Cả bốn số bằng 0: quay bình thường.
+2. Còn job `delayed`/`wait`: chờ tối đa 15 phút (6 lượt, backoff 30 giây nhân đôi; worker mới vẫn đang chạy) rồi đếm lại; hàng này thường rỗng vì lỗi ghi tin trong app hiếm.
+3. Vẫn còn sau 15 phút và buộc phải quay: ghi lại để làm sau, không xoá khoá Redis bằng tay. Mỗi job mang `dedupeKey`, nên khi lên lại bản mới worker xử lý tiếp và không gửi trùng. Tin đã gửi trực tiếp cho khách không bị ảnh hưởng.
+
+Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý tiếp bình thường (concurrency 1, hạn chờ 25 giây).
+
+- [ ] Sau deploy: `$DC logs --since 10m api | grep -ciE 'ZNS|notifications'` không có lỗi khởi tạo worker; `go-live:check` Redis PASS (9 hàng đợi)
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

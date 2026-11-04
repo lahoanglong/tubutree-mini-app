@@ -5,7 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
 import { znsFailureText, type ZnsSendResult } from '../integrations/zns/zns-result';
-import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
+import { QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -27,7 +27,7 @@ export interface ZnsSendJobData {
 }
 
 /**
- * Lần gửi ZNS đầu tiên cũng đi qua queue để request đặt hàng/thanh toán không phải chờ Zalo (timeout 25s mỗi lần
+ * Lần gửi ZNS đầu tiên cũng đi qua queue để request đặt hàng/thanh toán không phải chờ Zalo (timeout 10s mỗi lần
  * gọi, xem ZNS_REQUEST_TIMEOUT_MS). Backoff dài hơn mặc định của queue (2s): ZNS lỗi tạm thời thường là Zalo gián đoạn hoặc access token chờ làm
  * mới nên thử lại sau vài chục giây là vô ích. 6 lần ≈ 15 phút.
  */
@@ -121,6 +121,8 @@ export class NotificationsService {
     @InjectQueue(QUEUE_NOTIFICATIONS) private readonly notificationsQueue?: Queue,
     // Optional như queue: khởi tạo trực tiếp không có cấu hình thì dùng mặc định trong mã.
     @Optional() private readonly config?: SystemConfigService,
+    // Hàng riêng cho job thử lại tin trong app; không có (khởi tạo trực tiếp) thì notifyWithRetry trả LOST khi lỗi như khi không có hàng.
+    @InjectQueue(QUEUE_NOTIFICATIONS_INAPP_RETRY) private readonly inAppRetryQueue?: Queue,
   ) {}
 
   /**
@@ -206,7 +208,7 @@ export class NotificationsService {
 
   /**
    * Như notifySafe nhưng tin không được mất (vd "đã xuất hoá đơn": nút admin không bấm lại được sau ISSUED): lỗi thì xếp
-   * job thử lại vào QUEUE_NOTIFICATIONS cùng `dedupeKey`, nên lượt thử lại và mọi nơi khác gọi cùng khoá chỉ ghi một tin. Không ném.
+   * job thử lại vào QUEUE_NOTIFICATIONS_INAPP_RETRY cùng `dedupeKey`, nên lượt thử lại và mọi nơi khác gọi cùng khoá chỉ ghi một tin. Không ném.
    * Trả SENT (đã gửi, đã có tin cho khoá này, hoặc khách tắt nhóm tin), QUEUED (đã xếp hàng thử lại) hay LOST (không có hàng đợi hoặc
    * xếp hàng lỗi: ghi log error và báo Sentry để không mất im lặng). `context` là nhãn ngắn kiểu `order=<mã>`.
    * Chỉ bảo đảm tin trong app: mẫu kênh ZNS mà bước ZNS lỗi sau khi tin trong app đã lưu thì lượt thử lại thấy khoá và dừng, ZNS không
@@ -225,11 +227,11 @@ export class NotificationsService {
     } catch (err) {
       const what = `${templateCode} cho ${userId}${context ? ` (${context})` : ''}`;
       const reason = err instanceof Error ? err.message : String(err);
-      const queue = this.notificationsQueue;
+      const queue = this.inAppRetryQueue;
       if (queue) {
         const job: InAppRetryJobData = { userId, templateCode, data, dedupeKey: opts.dedupeKey, ...(context ? { context } : {}) };
         try {
-          await withQueueTimeout(queue.add(INAPP_RETRY_JOB, job, INAPP_RETRY_JOB_OPTIONS), `${QUEUE_NOTIFICATIONS} ${INAPP_RETRY_JOB}`);
+          await withQueueTimeout(queue.add(INAPP_RETRY_JOB, job, INAPP_RETRY_JOB_OPTIONS), `${QUEUE_NOTIFICATIONS_INAPP_RETRY} ${INAPP_RETRY_JOB}`);
           this.logger.warn(`Gửi tin ${what} lỗi (${reason}), đã xếp hàng thử lại.`);
           return 'QUEUED';
         } catch (queueErr) {
@@ -430,6 +432,15 @@ export class NotificationsService {
       if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
     }
 
+    const earlier = await this.earlierLogForSameEvent(job.notificationLogId);
+    if (earlier) {
+      await this.prisma.notificationLog.updateMany({
+        where: { ...where, status: { in: ['PENDING', 'RETRYING'] } },
+        data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã có ở log ${earlier}.` },
+      });
+      return 'SKIPPED';
+    }
+
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
     if (result.ok) {
       await this.markZnsSent(job.notificationLogId);
@@ -442,6 +453,29 @@ export class NotificationsService {
     }
     await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error } });
     return 'FAILED';
+  }
+
+  /**
+   * Hai log ZNS cùng (khách, dedupeKey) chỉ được gửi một: log ra đời trước (sentAt, rồi id) thắng, log sau bỏ qua. Xếp thứ tự
+   * thay cho khoá nên hai worker chạy song song không cần chờ nhau và không giữ kết nối trong lúc gọi Zalo. Log không mang
+   * dedupeKey (tin thường) hoặc đã nhả khoá thì không có gì để so.
+   */
+  private async earlierLogForSameEvent(logId: string): Promise<string | null> {
+    const mine = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { id: true, userId: true, sentAt: true, payload: true } });
+    const key = (mine?.payload as { dedupeKey?: unknown } | null)?.dedupeKey;
+    if (!mine || typeof key !== 'string' || /:failed:[^:]+$/.test(key)) return null;
+    const earlier = await this.prisma.notificationLog.findFirst({
+      where: {
+        userId: mine.userId,
+        channel: 'ZNS',
+        id: { not: mine.id },
+        payload: { path: ['dedupeKey'], equals: key },
+        status: { in: ['PENDING', 'RETRYING', 'SENT'] },
+        OR: [{ sentAt: { lt: mine.sentAt } }, { sentAt: mine.sentAt, id: { lt: mine.id } }],
+      },
+      select: { id: true },
+    });
+    return earlier?.id ?? null;
   }
 
   /**

@@ -7,10 +7,11 @@ import { maskPhone } from '../../../common/mask-pii';
 import { interpretZnsBody, interpretZnsException, znsFailure, type ZnsSendResult } from './zns-result';
 
 /**
- * Hạn chờ phản hồi của một lần gọi ZNS. Gọi chạy trong worker nền (không nằm trên đường đặt hàng/thanh toán) nên chờ lâu
- * không làm khách chậm; hết hạn mà Zalo vẫn xử lý thì lần gửi lại làm khách nhận hai tin xác nhận và tốn phí hai lần.
+ * Hạn chờ phản hồi của một lần gọi ZNS. Chạy trong worker nền (không nằm trên đường đặt hàng/thanh toán) nhưng worker chỉ có
+ * 5 chỗ: gọi treo 25 giây thì 5 cuộc treo là cả hàng đứng. Hết hạn mà Zalo vẫn xử lý thì lượt thử lại gửi cùng tracking_id
+ * (id NotificationLog) để Zalo đối soát, không phải một tin mới.
  */
-export const ZNS_REQUEST_TIMEOUT_MS = 25_000;
+export const ZNS_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * Ví dụ của Zalo ZNS dùng SĐT quốc tế 84xxxxxxxxx, còn User.phone lưu 0xxxxxxxxx. Chỉ đổi đúng dạng 0 + 9 số; dạng khác

@@ -243,3 +243,43 @@ describe('NotificationsService: tin báo trước hạ hạng gửi lại ZNS sa
     expect(m.add).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('NotificationsService.deliverZns: hai log cùng dedupeKey chạy song song (L3-06)', () => {
+  const MINE = { id: 'log-2', userId: 'u1', sentAt: new Date('2026-11-05T01:00:00Z'), payload: { data: {}, dedupeKey: 'k1' } };
+
+  function withDedupe(sibling: unknown) {
+    const s = setup({ payload: MINE.payload });
+    const findFirst = jest.fn().mockResolvedValue(sibling);
+    const findUnique = jest.fn().mockResolvedValue({ ...MINE, status: 'RETRYING' });
+    (s.svc as unknown as { prisma: Record<string, Record<string, jest.Mock>> }).prisma.notificationLog.findFirst = findFirst;
+    (s.svc as unknown as { prisma: Record<string, Record<string, jest.Mock>> }).prisma.notificationLog.findUnique = findUnique;
+    return { ...s, findFirst };
+  }
+
+  it('có log cùng khoá ra đời trước và chưa thất bại: bỏ qua, không gọi Zalo, đóng log này', async () => {
+    const { svc, sendTemplate, updateMany, findFirst } = withDedupe({ id: 'log-1' });
+    expect(await svc.deliverZns(JOB, false)).toBe('SKIPPED');
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        channel: 'ZNS',
+        id: { not: 'log-2' },
+        payload: { path: ['dedupeKey'], equals: 'k1' },
+        status: { in: ['PENDING', 'RETRYING', 'SENT'] },
+        OR: [{ sentAt: { lt: MINE.sentAt } }, { sentAt: MINE.sentAt, id: { lt: 'log-2' } }],
+      },
+      select: { id: true },
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } },
+      data: { status: 'FAILED', error: expect.stringContaining('log-1') },
+    });
+  });
+
+  it('không có log trước cùng khoá: gửi bình thường', async () => {
+    const { svc, sendTemplate } = withDedupe(null);
+    expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
+});

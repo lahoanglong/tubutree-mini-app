@@ -2,8 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.validation';
-import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS, QUEUE_PANCAKE_PUSH, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD, QUEUE_SUPPORT_CHAT_NOTIFY } from './queues';
-import { NotificationsProcessor } from '../modules/notifications/notifications.processor';
+import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY, QUEUE_ZALO_OA_EVENTS, QUEUE_PANCAKE_PUSH, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD, QUEUE_SUPPORT_CHAT_NOTIFY } from './queues';
+import { InAppRetryProcessor, NotificationsProcessor } from '../modules/notifications/notifications.processor';
 
 /**
  * Cấu hình BullMQ root (kết nối Redis qua REDIS_URL) + đăng ký các queue.
@@ -30,6 +30,7 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
     BullModule.registerQueue(
       { name: QUEUE_PANCAKE_EVENTS },
       { name: QUEUE_NOTIFICATIONS },
+      { name: QUEUE_NOTIFICATIONS_INAPP_RETRY },
       { name: QUEUE_ZALO_OA_EVENTS },
       { name: QUEUE_PANCAKE_PUSH },
       { name: QUEUE_GOMDON_PUSH },
@@ -43,7 +44,7 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
   // thuộc NotificationsService (được NotificationsModule export + @Global()); không cần
   // registerQueue lại vì QueueModule đã @Global() export toàn bộ Queue (cùng cách
   // ZaloOaEventsProcessor dùng QUEUE_ZALO_OA_EVENTS từ module khác).
-  providers: [NotificationsProcessor],
+  providers: [NotificationsProcessor, InAppRetryProcessor],
   exports: [BullModule],
 })
 export class QueueModule {}
