@@ -21,6 +21,40 @@ async function waitFor(cond: () => boolean, timeoutMs = 5000) {
   }
 }
 
+// Các tab tải lười (next/dynamic) nạp lần đầu mất cả giây vì phải biên dịch: nạp sẵn để mỗi ca test chỉ chờ vài lượt flush như trước.
+beforeAll(async () => {
+  await Promise.all([
+    import('@/components/admin/dealer-claims-tab'),
+    import('@/components/admin/dealer-accounts-tab'),
+    import('@/components/admin/dealer-price-history-tab'),
+    import('@/components/admin/commission-rates-tab'),
+    import('@/components/admin/product-categories-tab'),
+    import('@/components/admin/engagement-tab'),
+    import('@/components/admin/external-orders-tab'),
+    import('@/components/admin/external-claims-tab'),
+    import('@/components/admin/support-chat-tab'),
+    import('@/components/admin/payout-admin-tab'),
+    import('@/components/admin/customer-refunds-tab'),
+    import('@/components/admin/cashback-tab'),
+    import('@/components/admin/pos-credits-tab'),
+    import('@/components/admin/reviews-tab'),
+    import('@/components/admin/subscriptions-tab'),
+    import('@/components/admin/ops-health-tab'),
+    import('@/components/admin/attendance-tab'),
+    import('@/components/admin/staff-roster-tab'),
+    import('@/components/admin/shift-approval-tab'),
+    import('@/components/admin/payroll-admin-tab'),
+    import('@/components/admin/storefronts-tab'),
+    import('@/components/admin/merchant-products-tab'),
+    import('@/components/admin/merchant-fulfilment-tab'),
+    import('@/components/admin/campaigns-tab'),
+    import('@/components/admin/bundles-tab'),
+    import('@/components/admin/notification-templates-tab'),
+    import('@/components/admin/reports-tab'),
+    import('./analytics-tab'),
+  ]);
+}, 60_000);
+
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
