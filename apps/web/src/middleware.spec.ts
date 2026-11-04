@@ -112,6 +112,12 @@ describe('middleware: hub /san-pham dùng bản ISR', () => {
     expect(res.headers.get('location')).toBe('https://tubutree.com/san-pham');
   });
 
+  it('vào thẳng đường dẫn nội bộ kèm query: 308 về /san-pham giữ nguyên query (utm, ref)', () => {
+    const res = at('/hub-san-pham?utm_source=zalo&ref=AN1');
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe('https://tubutree.com/san-pham?utm_source=zalo&ref=AN1');
+  });
+
   it('host gian hàng (subdomain) không bị rewrite', () => {
     expect(rewriteOf(at('/san-pham', 'ctv-an.tubutree.com'))).toBeNull();
   });
