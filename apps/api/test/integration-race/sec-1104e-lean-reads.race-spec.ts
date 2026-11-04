@@ -3,11 +3,13 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { storedThumbnailFor } from '../../src/common/public-image';
 import { loadFeedImages } from '../../src/modules/feed/feed-images';
+import { OrdersService } from '../../src/modules/orders/orders.service';
+import { PurchasedItemsService } from '../../src/modules/orders/purchased-items.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { WishlistService } from '../../src/modules/wishlist/wishlist.service';
 import { CartService } from '../../src/modules/cart/cart.service';
 import type { PrismaService } from '../../src/prisma/prisma.service';
-import { createUser, randCode } from './helpers';
+import { createOrder, createUser, randCode } from './helpers';
 
 /**
  * sec-1104-e: các đường nóng không kéo cột nặng (ảnh base64, văn bản dài, giá sỉ) về Node. SQL thật đi qua Prisma, nên đọc câu
@@ -208,6 +210,48 @@ describe('sec-1104-e: đường đọc nhẹ (real Postgres)', () => {
       expect(once[0]).toEqual({ imageCount: 4, coverRef: expect.stringMatching(/^[0-9a-f]{32}$/) });
       expect(once[3]).toEqual({ imageCount: 2, coverRef: null });
       expect((await prisma.feedPost.findUniqueOrThrow({ where: { id: multi }, select: { images: true } })).images).toEqual(before.images);
+    });
+  });
+
+  describe('đơn của khách', () => {
+    it('danh sách đơn: không đọc shippingHistory/invoiceRequest, các trường còn lại như cũ; chi tiết đơn vẫn có đủ', async () => {
+      const history = [{ status: 'SHIPPING', at: '2026-11-04T01:00:00.000Z' }];
+      const order = await createOrder(prisma as unknown as PrismaService, {
+        userId: ids.user,
+        shippingHistory: history,
+        invoiceRequest: { companyName: 'Cty IT', taxCode: '0123456789' },
+        items: { create: { variationId: ids.variation, productName: `IT lean ${tag}`, variationName: 'Mặc định', unitPrice: 100_000, quantity: 1, total: 100_000 } as never },
+      });
+      const cfg = { get: async <T>(_k: string, fb?: T) => fb as T };
+      const svc = new OrdersService(prisma as unknown as PrismaService, {} as never, {} as never, {} as never, cfg as never, {} as never, {} as never);
+      queries = [];
+      const page = await svc.list(ids.user, {}, 1, 20);
+      const orderQueries = queries.filter((q) => /FROM "(public"\.")?orders"/.test(q) && /"shippingAddress"/.test(q));
+      expect(orderQueries.length).toBeGreaterThan(0);
+      expect(orderQueries.filter((q) => q.includes('"shippingHistory"') || q.includes('"invoiceRequest"'))).toEqual([]);
+      const row = page.data.find((o) => o.id === order.id)!;
+      expect(row).toMatchObject({ code: order.code, status: 'CONFIRMED', total: 100_000, paymentMethod: 'COD', canCancel: expect.any(Boolean) });
+      expect(row).not.toHaveProperty('shippingHistory');
+      expect(row.items[0]).toMatchObject({ productName: `IT lean ${tag}`, quantity: 1, thumbnail: expect.stringMatching(/^\/public-image\/product\//) });
+      const detail = await svc.detailView(ids.user, order.code);
+      expect(detail.shippingHistory).toEqual(history);
+      expect(detail.invoiceRequest).toEqual({ companyName: 'Cty IT', taxCode: '0123456789' });
+      await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+      await prisma.order.delete({ where: { id: order.id } });
+    });
+
+    it('hàng đã mua: không đọc cột images của sản phẩm, thumbnail dự phòng là ảnh đầu', async () => {
+      const order = await createOrder(prisma as unknown as PrismaService, {
+        userId: ids.user,
+        status: 'DELIVERED',
+        items: { create: { variationId: ids.variation, productName: `IT lean ${tag}`, variationName: 'Mặc định', unitPrice: 100_000, quantity: 1, total: 100_000 } as never },
+      });
+      queries = [];
+      const out = await new PurchasedItemsService(prisma as unknown as PrismaService).list(ids.user);
+      expect(queries.filter((q) => /"products"\."images"/.test(q))).toEqual([]);
+      expect(out.items[0]!.thumbnail).toMatch(new RegExp(`^/public-image/product/${ids.product}/0\\?v=[0-9a-f]{16}$`));
+      await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
+      await prisma.order.delete({ where: { id: order.id } });
     });
   });
 });
