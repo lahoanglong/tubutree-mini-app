@@ -296,7 +296,9 @@ export class CashbackService {
         const moved = await tx.cashbackTransaction.updateMany({
           where: { id: cur.id, status: cur.status, userReward: cur.userReward, ...(opts.manual ? {} : { adminReviewedAt: null }) },
           data: {
-            ...(opts.manual ? { adminReviewedAt: new Date(), adminReviewedBy: opts.reviewedBy ?? null } : {}),
+            ...(opts.manual
+              ? { adminReviewedAt: new Date(), adminReviewedBy: opts.reviewedBy ?? null, conflictNotifiedAt: null, conflictPayload: Prisma.DbNull }
+              : {}),
             // confirmedAt set MỚI khi chuyển từ chưa-confirmed sang confirmed (reset đồng hồ hold);
             // giữ nguyên khi đã confirmed. Tránh REJECTED→CONFIRMED giữ confirmedAt cũ → settle ngay.
             status,

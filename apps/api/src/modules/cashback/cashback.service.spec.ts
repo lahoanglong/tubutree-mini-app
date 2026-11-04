@@ -324,6 +324,9 @@ describe('CashbackService.ingest', () => {
       const data = updateMany.mock.calls[0][0].data;
       expect(data.adminReviewedAt).toBeInstanceOf(Date);
       expect(data.adminReviewedBy).toBe('kt1');
+      // Quyết định tay mới làm mất hiệu lực dấu "đã báo lệch" cũ, để lần lệch sau (vd sàn đòi lại sau PAID) được báo lại.
+      expect(data.conflictNotifiedAt).toBeNull();
+      expect(data.conflictPayload).toBe(Prisma.DbNull);
       expect(updateMany.mock.calls[0][0].where).toEqual({ id: 'tx1', status: 'PENDING', userReward: 35000 });
     });
 

@@ -160,4 +160,32 @@ describe('Cashback: máy trạng thái dưới đồng thời (real Postgres)', 
     expect(after.walletBalance).toBe(35000);
     expect(after.cashbackPending).toBe(0);
   });
+
+  it('M2: dòng đã báo lệch (L2-02) rồi Kế toán duyệt lại và PAID → sàn báo rejected vẫn có cảnh báo lần 2, payload mới', async () => {
+    const { user, utm } = await seedClick();
+    const admin = await createUser(prisma, { role: 'ADMIN' });
+    const o = `M2-${randCode(6)}`;
+    await svc.ingest(ev(utm, o, 'PENDING'), 'accesstrade');
+    const id = (await rowOf(o)).id;
+    await svc.adminReview(admin.id, id, 'REJECTED');
+    await svc.ingest({ ...ev(utm, o, 'CONFIRMED'), raw: { status: 'approved-1' } }, 'accesstrade');
+    expect((await rowOf(o)).conflictNotifiedAt).not.toBeNull();
+    const firstCalls = notify.mock.calls.length;
+    expect(firstCalls).toBeGreaterThan(0);
+
+    await svc.adminReview(admin.id, id, 'CONFIRMED');
+    const reset = await rowOf(o);
+    expect(reset.conflictNotifiedAt).toBeNull();
+    expect(reset.conflictPayload).toBeNull();
+
+    await prisma.cashbackTransaction.update({ where: { id }, data: { confirmedAt: new Date(Date.now() - 90 * 86400_000) } });
+    await svc.settleConfirmed();
+    expect((await rowOf(o)).status).toBe('PAID');
+    await svc.ingest({ ...ev(utm, o, 'REJECTED'), raw: { status: 'rejected-2' } }, 'accesstrade');
+    const after = await rowOf(o);
+    expect(after.conflictNotifiedAt).not.toBeNull();
+    expect(after.conflictPayload).toEqual({ status: 'rejected-2' });
+    expect(notify.mock.calls.length).toBeGreaterThan(firstCalls);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).walletBalance).toBe(35000);
+  });
 });
