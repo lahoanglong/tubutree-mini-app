@@ -56,6 +56,7 @@ import { CskhModule } from './modules/cskh/cskh.module';
 import { SupportChatModule } from './modules/support-chat/support-chat.module';
 import { ExternalPointsModule } from './modules/external-points/external-points.module';
 import { OpsModule } from './modules/ops/ops.module';
+import { CspReportModule } from './modules/csp-report/csp-report.module';
 import { ZaloOaModule } from './modules/integrations/zalo-oa/zalo-oa.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -121,6 +122,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     SupportChatModule,
     ExternalPointsModule,
     OpsModule,
+    CspReportModule,
     ZaloOaModule,
   ],
   providers: [
