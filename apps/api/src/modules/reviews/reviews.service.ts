@@ -20,11 +20,23 @@ const errCode = (err: unknown): string | undefined =>
  * Ảnh đánh giá trong danh sách công khai. Ảnh base64 (khi chưa cấu hình Cloudinary) nặng tới ~700 nghìn ký tự/ảnh nên
  * không nhúng trong JSON: trả đường dẫn tương đối tới API (`/reviews/:id/images/:i`) để trình duyệt tải lười và cache;
  * `v` là mã băm nội dung để sửa đánh giá không dính ảnh cũ trong cache. Ảnh https (Cloudinary) giữ nguyên.
+ *
+ * Cột `imageVersions` lưu sẵn phần tử tương ứng của `images`: ảnh base64 là mã băm md5 10 ký tự hex, ảnh https là chính URL.
+ * Nhờ vậy danh sách công khai dựng được đường dẫn mà không phải đọc (và băm) cột `images` của cả trăm đánh giá. Phải ghi
+ * cùng lúc với `images` ở mọi chỗ tạo/sửa đánh giá; migration đã điền cho dữ liệu cũ.
  */
+export function reviewImageVersions(images: readonly string[]): string[] {
+  return images.map((img) => (img.startsWith('data:') ? createHash('md5').update(img).digest('hex').slice(0, 10) : img));
+}
+
+const IMAGE_VERSION_RE = /^[0-9a-f]{10}$/;
+
+export function reviewImageRefFromVersion(reviewId: string, index: number, entry: string): string {
+  return IMAGE_VERSION_RE.test(entry) ? `/reviews/${reviewId}/images/${index}?v=${entry}` : entry;
+}
+
 export function reviewImageRef(reviewId: string, index: number, image: string): string {
-  if (!image.startsWith('data:')) return image;
-  const version = createHash('sha1').update(image).digest('hex').slice(0, 10);
-  return `/reviews/${reviewId}/images/${index}?v=${version}`;
+  return reviewImageRefFromVersion(reviewId, index, reviewImageVersions([image])[0]!);
 }
 
 /** Số lần thử lại khi tạo/sửa thua một request đồng thời của chính người đó (tạo cùng lúc, hoặc xoá đúng lúc sửa). */
@@ -234,6 +246,7 @@ export class ReviewsService {
           rating: dto.rating,
           comment: dto.comment,
           images: dto.images ?? [],
+          imageVersions: reviewImageVersions(dto.images ?? []),
           videoUrl: dto.videoUrl ?? null,
           pointsEarned,
         },
@@ -301,6 +314,7 @@ export class ReviewsService {
           rating: dto.rating,
           comment: dto.comment ?? null,
           images: dto.images ?? [],
+          imageVersions: reviewImageVersions(dto.images ?? []),
           videoUrl: dto.videoUrl ?? null,
         },
       });
@@ -337,14 +351,23 @@ export class ReviewsService {
    * không chỉ trên các dòng trả về.
    */
   async listByProduct(slug: string) {
-    const product = await this.prisma.product.findUnique({ where: { slug } });
+    const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const where = { productId: product.id, isVisible: true };
     const [reviews, byRating, videoCount] = await Promise.all([
       this.prisma.review.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: { user: { select: { fullName: true } } },
+        // Không chọn `images`: base64 tới ~700 nghìn ký tự/ảnh, phải giải nén TOAST cả trăm dòng cho mỗi lượt xem trang.
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          imageVersions: true,
+          videoUrl: true,
+          createdAt: true,
+          user: { select: { fullName: true } },
+        },
         take: LIST_LIMIT,
       }),
       this.prisma.review.groupBy({ by: ['rating'], where, _count: { _all: true } }),
@@ -368,7 +391,7 @@ export class ReviewsService {
         id: r.id,
         rating: r.rating,
         comment: r.comment,
-        images: r.images.map((img, i) => reviewImageRef(r.id, i, img)),
+        images: r.imageVersions.map((entry, i) => reviewImageRefFromVersion(r.id, i, entry)),
         videoUrl: r.videoUrl,
         createdAt: r.createdAt,
         author: publicDisplayName(r.user.fullName, 'Khách Tubu'),
@@ -412,8 +435,14 @@ export class ReviewsService {
 
   /** Byte của ảnh base64 thứ `index` trong một đánh giá đang hiện (đích của `reviewImageRef`). */
   async getImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
-    const review = await this.prisma.review.findUnique({ where: { id: reviewId }, select: { isVisible: true, images: true } });
-    const image = review?.isVisible && Number.isInteger(index) && index >= 0 ? review.images[index] : undefined;
+    // Chỉ đọc đúng phần tử cần (mảng Postgres đánh số từ 1) thay vì đưa cả mảng ảnh về Node.
+    const safeIndex = Number.isInteger(index) && index >= 0 && index < 1000 ? index : -1;
+    const rows =
+      safeIndex < 0
+        ? []
+        : await this.prisma.$queryRaw<{ isVisible: boolean; image: string | null }[]>`
+            SELECT "isVisible", "images"[${safeIndex + 1}::int] AS "image" FROM "reviews" WHERE "id" = ${reviewId}`;
+    const image = rows[0]?.isVisible ? rows[0].image : undefined;
     const decoded = decodeServedImage(image);
     if (!decoded) throw new NotFoundException('Không tìm thấy ảnh.');
     return decoded;

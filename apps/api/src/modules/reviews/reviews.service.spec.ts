@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { ReviewsService } from './reviews.service';
+import { ReviewsService, reviewImageRef, reviewImageVersions } from './reviews.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -108,6 +108,7 @@ describe('ReviewsService.create', () => {
           rating: 2,
           comment: 'đổi ý',
           images: ['x.jpg'],
+          imageVersions: ['x.jpg'],
           videoUrl: 'https://res.cloudinary.com/x/video/upload/v1/rv2.mp4',
         },
       });
@@ -135,7 +136,7 @@ describe('ReviewsService.create', () => {
       const prisma = withExisting();
       await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 4 } as never);
       const p = prisma as unknown as P;
-      expect(p.review.update.mock.calls[0][0].data).toEqual({ rating: 4, comment: null, images: [], videoUrl: null });
+      expect(p.review.update.mock.calls[0][0].data).toEqual({ rating: 4, comment: null, images: [], imageVersions: [], videoUrl: null });
     });
 
     it('ghi engagement_action review_updated CÙNG tx, pointsEarned = 0', async () => {
@@ -642,8 +643,8 @@ describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
   it('trả videoUrl trong items + videoCount đếm review có video', async () => {
     const prisma = listPrisma(
       [
-        { id: 'r1', rating: 5, comment: 'tốt', images: [], videoUrl: 'https://x/v.mp4', createdAt: new Date(), user: { fullName: 'An', avatarUrl: null } },
-        { id: 'r2', rating: 4, comment: 'ổn', images: ['a.jpg'], videoUrl: null, createdAt: new Date(), user: { fullName: 'Bình', avatarUrl: null } },
+        { id: 'r1', rating: 5, comment: 'tốt', imageVersions: [], videoUrl: 'https://x/v.mp4', createdAt: new Date(), user: { fullName: 'An', avatarUrl: null } },
+        { id: 'r2', rating: 4, comment: 'ổn', imageVersions: ['https://res.cloudinary.com/x/a.jpg'], videoUrl: null, createdAt: new Date(), user: { fullName: 'Bình', avatarUrl: null } },
       ],
       [{ rating: 5, n: 1 }, { rating: 4, n: 1 }],
       1,
@@ -660,7 +661,7 @@ describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
 describe('ReviewsService.listByProduct: tên người đánh giá rút gọn (B-109)', () => {
   it('họ tên đầy đủ thành "Lại N.", tên số điện thoại thành "Khách Tubu", tên trống thành "Khách Tubu"', async () => {
     const mk = (id: string, fullName: string | null) => ({
-      id, rating: 5, comment: null, images: [], videoUrl: null, createdAt: new Date(), user: { fullName, avatarUrl: null },
+      id, rating: 5, comment: null, imageVersions: [], videoUrl: null, createdAt: new Date(), user: { fullName, avatarUrl: null },
     });
     const prisma = listPrisma([mk('r1', 'Nguyễn Thị Quay Lại'), mk('r2', '0912345678'), mk('r3', null), mk('r4', 'Bình')], [{ rating: 5, n: 4 }], 0);
     const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
@@ -673,7 +674,7 @@ describe('ReviewsService.listByProduct: tên người đánh giá rút gọn (B-
 // tính trên mọi đánh giá đang hiện (khớp reviewCount/ratingAvg của sản phẩm), không trên 100 dòng mới nhất.
 describe('ReviewsService.listByProduct — thống kê trên mọi đánh giá đang hiện', () => {
   const row = (id: string, rating: number) => ({
-    id, rating, comment: null, images: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null },
+    id, rating, comment: null, imageVersions: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null },
   });
 
   it('150 đánh giá đang hiện mà chỉ trả 100 dòng → count/average/distribution vẫn theo 150', async () => {
@@ -728,11 +729,11 @@ describe('ReviewsService.findOwn (nội dung đầy đủ để sửa đánh gi�
 describe('ReviewsService.listByProduct — ảnh base64 không nhúng trong JSON (R2-ENGAGE-3)', () => {
   const PNG = 'data:image/png;base64,iVBORw0KGgo=';
   const row = (over: Record<string, unknown>) => ({
-    id: 'r1', rating: 5, comment: null, images: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null }, ...over,
+    id: 'r1', rating: 5, comment: null, imageVersions: [], videoUrl: null, createdAt: new Date(), user: { fullName: 'An', avatarUrl: null }, ...over,
   });
 
   it('ảnh data URL → đường dẫn tải ảnh riêng kèm mã phiên bản; ảnh https giữ nguyên', async () => {
-    const prisma = listPrisma([row({ images: [PNG, 'https://res.cloudinary.com/x/a.jpg'] })], [{ rating: 5, n: 1 }]);
+    const prisma = listPrisma([row({ imageVersions: reviewImageVersions([PNG, 'https://res.cloudinary.com/x/a.jpg']) })], [{ rating: 5, n: 1 }]);
     const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
     expect(r.items[0]!.images[0]).toMatch(/^\/reviews\/r1\/images\/0\?v=[0-9a-f]{10}$/);
     expect(r.items[0]!.images[1]).toBe('https://res.cloudinary.com/x/a.jpg');
@@ -741,7 +742,7 @@ describe('ReviewsService.listByProduct — ảnh base64 không nhúng trong JSON
 
   it('mã phiên bản đổi khi ảnh đổi (sửa đánh giá không bị cache ảnh cũ)', async () => {
     const list = async (img: string) =>
-      (await new ReviewsService(listPrisma([row({ images: [img] })]), analytics, loyalty).listByProduct('tinh-dau')).items[0]!.images[0];
+      (await new ReviewsService(listPrisma([row({ imageVersions: reviewImageVersions([img]) })]), analytics, loyalty).listByProduct('tinh-dau')).items[0]!.images[0];
     expect(await list(PNG)).not.toBe(await list('data:image/png;base64,AAAA'));
   });
 });
@@ -783,24 +784,37 @@ describe('ReviewsService.create — phản hồi không nhúng ảnh base64 (R3-
 });
 
 describe('ReviewsService.getImage', () => {
-  const svc = (review: unknown) =>
-    new ReviewsService(makePrisma({ review: { findUnique: jest.fn().mockResolvedValue(review) } }), analytics, loyalty);
+  /** `$queryRaw` trả đúng một phần tử `images[idx]` do câu SQL chọn, không phải cả mảng. */
+  const svc = (row: { isVisible: boolean; image: string | null } | null) => {
+    const prisma = makePrisma({ $queryRaw: jest.fn().mockResolvedValue(row ? [row] : []) });
+    return { service: new ReviewsService(prisma, analytics, loyalty), queryRaw: (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw };
+  };
   const PNG_B64 = 'iVBORw0KGgo=';
 
-  it('trả đúng loại ảnh + byte của ảnh base64 thứ i trong đánh giá đang hiện', async () => {
-    const img = await svc({ isVisible: true, images: ['https://x/a.jpg', `data:image/png;base64,${PNG_B64}`] }).getImage('r1', 1);
+  it('trả đúng loại ảnh + byte của ảnh base64 trong đánh giá đang hiện; truy vấn chỉ lấy một phần tử mảng', async () => {
+    const { service, queryRaw } = svc({ isVisible: true, image: `data:image/png;base64,${PNG_B64}` });
+    const img = await service.getImage('r1', 1);
     expect(img.mime).toBe('image/png');
     expect(img.data.equals(Buffer.from(PNG_B64, 'base64'))).toBe(true);
+    const [strings, ...values] = queryRaw.mock.calls[0]!;
+    expect((strings as string[]).join('?')).toMatch(/"images"\[\?::int\] AS "image"/);
+    expect(values).toEqual([2, 'r1']);
   });
 
   it.each([
     ['đánh giá không tồn tại', null, 0],
-    ['đánh giá bị ẩn', { isVisible: false, images: [`data:image/png;base64,${PNG_B64}`] }, 0],
-    ['chỉ số ngoài phạm vi', { isVisible: true, images: [`data:image/png;base64,${PNG_B64}`] }, 3],
-    ['ảnh https (không phải base64)', { isVisible: true, images: ['https://res.cloudinary.com/x/a.jpg'] }, 0],
-    ['SVG/HTML không phải ảnh raster', { isVisible: true, images: ['data:image/svg+xml;base64,PHN2Zy8+'] }, 0],
-  ])('%s → NotFound', async (_name, review, index) => {
-    await expect(svc(review).getImage('r1', index as number)).rejects.toBeInstanceOf(NotFoundException);
+    ['đánh giá bị ẩn', { isVisible: false, image: `data:image/png;base64,${PNG_B64}` }, 0],
+    ['chỉ số ngoài phạm vi', { isVisible: true, image: null }, 3],
+    ['ảnh https (không phải base64)', { isVisible: true, image: 'https://res.cloudinary.com/x/a.jpg' }, 0],
+    ['SVG/HTML không phải ảnh raster', { isVisible: true, image: 'data:image/svg+xml;base64,PHN2Zy8+' }, 0],
+  ])('%s → NotFound', async (_name, row, index) => {
+    await expect(svc(row).service.getImage('r1', index as number)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it.each([-1, 1.5, Number.NaN, 5_000_000_000])('chỉ số không hợp lệ %s → NotFound, không chạy truy vấn', async (index) => {
+    const { service, queryRaw } = svc({ isVisible: true, image: `data:image/png;base64,${PNG_B64}` });
+    await expect(service.getImage('r1', index)).rejects.toBeInstanceOf(NotFoundException);
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 });
 
@@ -1260,7 +1274,7 @@ describe('ReviewsService.listByProduct: không trả ảnh đại diện của n
     const prisma = makePrisma({
       review: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 'r1', rating: 5, comment: 'tốt', images: [], videoUrl: null, createdAt: new Date('2026-10-01'), user: { fullName: 'Lại Văn Nam', avatarUrl: AVATAR } },
+          { id: 'r1', rating: 5, comment: 'tốt', imageVersions: [], videoUrl: null, createdAt: new Date('2026-10-01'), user: { fullName: 'Lại Văn Nam', avatarUrl: AVATAR } },
         ]),
         groupBy: jest.fn().mockResolvedValue([{ rating: 5, _count: { _all: 1 } }]),
         count: jest.fn().mockResolvedValue(0),
@@ -1271,5 +1285,44 @@ describe('ReviewsService.listByProduct: không trả ảnh đại diện của n
     expect(out.items[0]).not.toHaveProperty('avatar');
     expect(JSON.stringify(out)).not.toContain(AVATAR);
     expect(JSON.stringify((prisma.review.findMany as jest.Mock).mock.calls)).not.toContain('avatarUrl');
+  });
+});
+
+describe('ReviewsService.listByProduct: không kéo cột images (base64) của 100 đánh giá', () => {
+  const B64 = `data:image/jpeg;base64,${'A'.repeat(500)}`;
+
+  it('findMany chọn imageVersions, không chọn images', async () => {
+    const prisma = listPrisma([]);
+    await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
+    const args = prisma.review.findMany.mock.calls[0][0];
+    expect(args.include).toBeUndefined();
+    expect(args.select).toBeDefined();
+    expect(args.select.images).toBeUndefined();
+    expect(args.select.imageVersions).toBe(true);
+  });
+
+  it('dựng đường dẫn ảnh từ imageVersions; URL https giữ nguyên; khớp reviewImageRef của ảnh gốc', async () => {
+    const prisma = listPrisma([
+      {
+        id: 'r1', rating: 5, comment: null, imageVersions: [reviewImageVersions([B64])[0], 'https://res.cloudinary.com/x/y.jpg'],
+        videoUrl: null, createdAt: new Date(), user: { fullName: 'An' },
+      },
+    ]);
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
+    expect(r.items[0]!.images).toEqual([reviewImageRef('r1', 0, B64), 'https://res.cloudinary.com/x/y.jpg']);
+    expect(r.items[0]!.images[0]).toMatch(/^\/reviews\/r1\/images\/0\?v=[0-9a-f]{10}$/);
+  });
+});
+
+describe('ReviewsService: ghi imageVersions cùng images', () => {
+  it('tạo mới ghi imageVersions đúng thứ tự ảnh (base64 → mã md5, https → URL)', async () => {
+    const B64 = `data:image/jpeg;base64,${'B'.repeat(300)}`;
+    const URL = 'https://res.cloudinary.com/x/y.jpg';
+    const prisma = makePrisma();
+    await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', { rating: 5, images: [B64, URL] } as never);
+    const data = (prisma as unknown as { review: { create: jest.Mock } }).review.create.mock.calls[0][0].data;
+    expect(data.images).toEqual([B64, URL]);
+    expect(data.imageVersions).toEqual([reviewImageVersions([B64])[0], URL]);
+    expect(data.imageVersions[0]).toMatch(/^[0-9a-f]{10}$/);
   });
 });
