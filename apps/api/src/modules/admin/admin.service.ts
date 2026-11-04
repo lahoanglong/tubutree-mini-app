@@ -1485,6 +1485,24 @@ export class AdminService {
     return { ok: true, message: `Đơn ${order.code} đã rời hàng đợi cần xử lý Pancake.` };
   }
 
+  /**
+   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (cờ paymentUnlinkedAt). Gỡ bằng CAS theo cờ còn đặt: hai
+   * ADMIN bấm cùng lúc thì đúng một bên thắng, bên kia nhận 400. Không động vào paymentStatus hay tiền: việc ghi tiền về muộn/hoàn làm ở đường riêng
+   * trước đó; đây chỉ đóng việc chờ đối chiếu và để lại ai/lúc nào/vì sao.
+   */
+  async resolvePaymentUnlinked(adminId: string, idOrCode: string, note: string) {
+    const order = await this.resolveOrderRef(idOrCode);
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, paymentUnlinkedAt: { not: null } },
+      data: { paymentUnlinkedAt: null },
+    });
+    if (r.count === 0) throw new BadRequestException(`Đơn ${order.code} không còn khoản Pancake báo đã thanh toán chờ đối chiếu.`);
+    const cleanNote = note.trim().replace(/\s+/g, ' ').slice(0, 500);
+    this.logger.warn(`Admin ${adminId} đánh dấu đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code} (${order.status}) — ghi chú: ${cleanNote}.`);
+    await this.logHandledInHistory(adminId, order, 'Đã đối chiếu khoản Pancake báo đã thanh toán', cleanNote);
+    return { ok: true, message: `Đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code}.` };
+  }
+
   async markGomdonHandled(adminId: string, idOrCode: string, note?: string) {
     const order = await this.resolveOrderRef(idOrCode);
     const cleanNote = note?.trim().replace(/\s+/g, ' ').slice(0, 500);

@@ -21,6 +21,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
   ValidateNested,
   registerDecorator,
@@ -28,6 +29,7 @@ import {
 import type { ValidationArguments, ValidationOptions } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
+import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
@@ -449,6 +451,11 @@ export class ResolvePancakeAttentionDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
+export class ResolvePaymentUnlinkedDto {
+  /** Bắt buộc: khoản tiền khách chuyển đã được đối chiếu thế nào (vd "đã ghi tiền về muộn theo sao kê VCB 04/11"). */
+  @Trim() @IsString() @MinLength(3) @MaxLength(500) note!: string;
+}
+
 export class SetUserRoleDto {
   @IsString() phone!: string;
   @IsIn(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'])
@@ -584,6 +591,15 @@ export class AdminController {
     @Body() dto: ResolvePancakeAttentionDto,
   ) {
     return this.admin.resolvePancakeAttention(adminId, id, dto.note);
+  }
+
+  /**
+   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake. Chỉ ADMIN (không @AllowStaff): đơn mở thì Kế toán
+   * đóng bằng "Đã nhận tiền", đơn đã huỷ/trả thì quản trị viên đóng sau khi ghi tiền về muộn hoặc hoàn.
+   */
+  @Post('orders/:id/payment-unlinked/resolve')
+  resolvePaymentUnlinked(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ResolvePaymentUnlinkedDto) {
+    return this.admin.resolvePaymentUnlinked(adminId, id, dto.note);
   }
 
   /** "Đã xuất hoá đơn VAT": ISSUED (+ link nếu có), báo khách. Luật nằm ở AdminService.issueOrderInvoice. */

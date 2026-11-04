@@ -2584,6 +2584,7 @@ describe('AdminService.confirmOrderPayment', () => {
       order: {
         findFirst: jest.fn().mockResolvedValue(order),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ ...order, paymentStatus: 'PAID', status: 'CONFIRMED' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       orderCustomerRefund: { createMany: jest.fn().mockResolvedValue({ count: 1 }), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
@@ -2700,6 +2701,16 @@ describe('AdminService.confirmOrderPayment', () => {
       status: 'PENDING',
       adminNote: 'Admin ghi nhận tiền về muộn · Mã GD FT2627001',
     });
+  });
+
+  it('ghi tiền về muộn cho đơn đã huỷ gỡ cờ "Pancake báo đã thanh toán chờ đối chiếu" (đơn đóng vẫn UNPAID nên không tự rời hàng đợi); đơn mở gỡ trong câu lật PAID của markPaid', async () => {
+    const closed = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
+    await closed.svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
+    const updateMany = (closed.prisma as unknown as { order: { updateMany: jest.Mock } }).order.updateMany;
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } });
+    const open = make(bankOrder());
+    await open.svc.confirmOrderPayment('admin-1', 'TB-1', {});
+    expect(open.orderStatus.markPaid).toHaveBeenCalledTimes(1);
   });
 
   it('R3-MONEY-3: khách chỉ chuyển 50.000 cho đơn đã huỷ → khoản hoàn ghi đúng số tiền thực nhận, không phải tổng đơn', async () => {

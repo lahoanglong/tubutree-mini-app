@@ -354,7 +354,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     // Guard theo trạng thái HIỆN TẠI trong DB: chỉ lật CONFIRMED khi đơn còn PENDING_PAYMENT.
     expect(orderUpdateMany).toHaveBeenCalledWith({
       where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);
@@ -557,7 +557,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     });
     await proc.onPaymentReconcile(paidPayload);
     expect(statusFlips(orderUpdateMany)).toEqual([
-      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date) } },
+      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null } },
     ]);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);

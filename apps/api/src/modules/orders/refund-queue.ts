@@ -323,6 +323,9 @@ export async function recordLatePaymentRefund(
         data: { adminNote: [prior.adminNote, `Mã GD ${input.bankRef}`].filter(Boolean).join(' · ') },
       });
     }
+    // Admin đã đối chiếu và ghi tiền về muộn: khoản "Pancake báo đã thanh toán, chờ đối chiếu" của đơn đóng xong. Đơn đóng vẫn UNPAID nên
+    // không tự rời hàng đợi; cùng tx với dòng hoàn để không có dòng hoàn mà cờ còn, hay ngược lại. Nguồn Pancake không được gỡ cờ.
+    if (viaAdmin) await tx.order.updateMany({ where: { id: order.id, paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } });
     if (prior) return viaAdmin ? ('EXISTS' as const) : ('ADMIN_RECORDED' as const);
     const created = await tx.orderCustomerRefund.createMany({
       data: [lateRow(order, refKey, input.amount, input.note)],
