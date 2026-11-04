@@ -329,7 +329,8 @@ export function memberCardView(opts: {
  */
 export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string): string {
   const who = [greeting, card.tierName].filter(Boolean).join(' · ');
-  return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ') + `. ${action}`;
+  // Dấu cách (không phải dấu phẩy) giữa các phần: tên truy cập phải chứa nguyên chữ nhìn thấy (WCAG 2.5.3).
+  return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(' ') + `. ${action}`;
 }
 
 // ---- Gợi ý cuộn vô tận ----

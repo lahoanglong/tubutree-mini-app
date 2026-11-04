@@ -46,6 +46,7 @@ vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 
 import BrowseView from './browse-view';
+import { PRIORITY_CARDS } from '@/components/mini';
 
 const product = (n: number) => ({
   id: `p${n}`, slug: `sp-${n}`, brand: 'Tubu', name: `Sản phẩm ${n}`, thumbnail: null, basePrice: 100000 + n,
@@ -189,6 +190,17 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     expect(container.querySelector('[role="group"][aria-label="Sắp xếp"]')).not.toBeNull();
     expect(http.get.mock.calls.some(([p]) => p === '/search/suggest')).toBe(false);
     expect(productCalls()[0]).toEqual({ page: 1, limit: 20 });
+  });
+
+  it('ảnh ưu tiên: PRIORITY_CARDS thẻ đầu của lưới eager + fetchpriority=high, các thẻ sau lazy', async () => {
+    nav.search = LIST;
+    routes['/products'] = (q) => pageOf(Array.from({ length: 8 }, (_, i) => ({ ...product(i + 1), thumbnail: `https://cdn.example/${i + 1}.jpg` })), 8, Number(q?.page ?? 1));
+    const { container } = mount();
+    await flush();
+    const imgs = Array.from(container.querySelectorAll('ul img'));
+    expect(imgs).toHaveLength(8);
+    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual([...Array(PRIORITY_CARDS).fill('eager'), ...Array(8 - PRIORITY_CARDS).fill('lazy')]);
+    expect(imgs.filter((i) => i.getAttribute('fetchpriority') === 'high')).toHaveLength(PRIORITY_CARDS);
   });
 
   it('?page=2 ở gốc là danh sách (không phải hub): tải trang 2', async () => {

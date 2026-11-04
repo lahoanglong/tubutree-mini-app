@@ -22,6 +22,20 @@ afterEach(() => {
   mounted = null;
 });
 
+describe('CategoryTiles: ảnh', () => {
+  it('/img lỗi (404): ô lùi về ảnh gốc một lần và gắn data-fell-back; gốc cũng lỗi thì để yên', () => {
+    const original = 'https://content.pancake.vn/2-26/cat.jpg';
+    const { c } = mount({ entries: [entry(1, original)] });
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?');
+    act(() => void img.dispatchEvent(new Event('error')));
+    expect(img.getAttribute('src')).toBe(original);
+    expect(img.dataset.fellBack).toBe('1');
+    act(() => void img.dispatchEvent(new Event('error')));
+    expect(img.getAttribute('src')).toBe(original);
+  });
+});
+
 describe('CategoryTiles', () => {
   it('vùng "Danh mục" có tiêu đề h2; 10 danh mục chỉ hiện 8 ô + ô "Tất cả" ở cuối', () => {
     const { c } = mount({ entries: many(10) });

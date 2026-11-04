@@ -28,7 +28,7 @@ describe('OffersPointsStrip — dải Điểm Xanh gọn ở trang Ưu đãi', (
     expect(screen.getByRole('region', { name: /Điểm Xanh/ })).toBeInTheDocument();
     expect(screen.getByText('Mầm Xanh')).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: /Hạng và lịch sử điểm/ });
-    await waitFor(() => expect(btn).toHaveAccessibleName(/Mầm Xanh, 120 điểm/));
+    await waitFor(() => expect(btn).toHaveAccessibleName(/Mầm Xanh 120 điểm/));
     fireEvent.click(btn);
     expect(mocks.navigate).toHaveBeenCalledWith('/loyalty');
   });

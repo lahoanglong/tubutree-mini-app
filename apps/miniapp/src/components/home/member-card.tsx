@@ -108,13 +108,17 @@ export function MemberCard() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', ...(card.tierName ? { flexShrink: 0, maxWidth: '60%' } : {}) }}>{greeting}</span>
+              {/* Dấu cách thật giữa lời chào và dấu chấm giữa (không vẽ trong flex, khoảng cách do paddingLeft): axe bỏ NBSP khi so chữ nhìn thấy với tên truy cập (WCAG 2.5.3). */}
+              {card.tierName && ' '}
               {card.tierName && (
-                <span style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {'\u00A0· '}
+                <span style={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', paddingLeft: '0.25em' }}>
+                  {'· '}
                   <Icon icon={Leaf} size="sm" tone="brand" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
                 </span>
               )}
             </Text>
+            {/* Khoảng trắng giữa hai dòng khối: chữ nhìn thấy "Mầm Xanh 0 điểm" khớp tên truy cập (WCAG 2.5.3). */}
+            {' '}
             {loyaltyFailed ? (
               <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {homeCopy.member.tierFailed}

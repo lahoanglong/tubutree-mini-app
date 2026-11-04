@@ -151,8 +151,10 @@ export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } 
   if (from == null && !placeholder) return null;
   // Chưa có số thật: giấu hẳn, giữ chỗ. Đang tải phiên mà đã có ngưỡng chung: giấu chỉ khi <html> có `data-restoring` (khách chưa từng đăng nhập thấy chữ ngay).
   const hideClass = from == null ? 'invisible' : phase === 'loading' ? '[html[data-restoring]_&]:invisible' : '';
+  // Móc ngữ nghĩa cho test: 'always' = luôn giấu chữ, 'restoring' = giấu chỉ khi <html> có data-restoring (không phải đọc lớp Tailwind).
+  const restoreMask = from == null ? 'always' : phase === 'loading' ? 'restoring' : undefined;
   return (
-    <p data-testid="pdp-freeship" aria-hidden={from == null ? true : undefined} className={`text-sm font-medium text-forest-700 ${phoneBrandLabel} ${hideClass}`}>
+    <p data-testid="pdp-freeship" data-restore-mask={restoreMask} aria-hidden={from == null ? true : undefined} className={`text-sm font-medium text-forest-700 ${phoneBrandLabel} ${hideClass}`}>
       {freeshipLine(from ?? cfg.freeshipThreshold)}
     </p>
   );
@@ -199,7 +201,7 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
   }, [settled, hasOffers]);
   if (list.length === 0) {
     return offersSlotNeeded(phase, couponsQ.isPending) ? (
-      <div data-testid="pdp-offers-slot" aria-hidden="true" className={phase === 'authenticated' ? OFFERS_SLOT_AUTH_CLASS : OFFERS_SLOT_CLASS} />
+      <div data-testid="pdp-offers-slot" data-restore-mask="restoring" aria-hidden="true" className={phase === 'authenticated' ? OFFERS_SLOT_AUTH_CLASS : OFFERS_SLOT_CLASS} />
     ) : null;
   }
 

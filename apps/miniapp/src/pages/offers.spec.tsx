@@ -255,7 +255,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
   it('tên đọc của thẻ Điểm Xanh chứa hạng và số điểm đang hiển thị', async () => {
     renderPage();
     const card = await screen.findByRole('button', { name: /Hạng và lịch sử điểm/ });
-    await waitFor(() => expect(card).toHaveAccessibleName(/Mầm Xanh, 120 điểm/));
+    await waitFor(() => expect(card).toHaveAccessibleName(/Mầm Xanh 120 điểm/));
   });
 
   it('chưa có số hạng: không đoán "Mầm Xanh", giữ chỗ thanh tiến độ; lỗi thì báo và "Thử lại" gọi lại', async () => {

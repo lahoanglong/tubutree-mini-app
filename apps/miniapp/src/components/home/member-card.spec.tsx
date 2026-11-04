@@ -56,12 +56,13 @@ describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
     expect(screen.getByText('Chào bạn')).toBeInTheDocument();
   });
 
-  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng đầu phần hạng không bị dòng flex nuốt', async () => {
+  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng giữa lời chào và hạng là ký tự văn bản thật (flex không vẽ)', async () => {
     mocks.fullName = 'Trần Văn An';
     mocks.loyalty.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
     render(<MemberCard />);
     const tier = (await screen.findByText(/Mầm Xanh/)).closest('span')!;
-    expect(tier.textContent).toMatch(/^\u00A0· /);
+    expect(tier.textContent).toMatch(/^· /);
+    expect(tier.previousSibling?.textContent).toBe(' ');
     mocks.loyalty.mockImplementation(() => new Promise(() => {}));
   });
 });

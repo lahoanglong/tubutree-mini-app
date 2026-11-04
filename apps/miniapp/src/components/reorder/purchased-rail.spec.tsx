@@ -125,7 +125,7 @@ describe('PurchasedRail', () => {
   it('chạm thẻ → trang sản phẩm', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
     renderRail();
-    fireEvent.click(await screen.findByRole('button', { name: 'Nước rửa chén' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Nước rửa chén/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
   });
 
@@ -303,7 +303,7 @@ describe('Mua lại ở Trang chủ (Q6)', () => {
     expect(within(region).getByRole('heading', { level: 2, name: 'Mua lại' })).toBeInTheDocument();
     fireEvent.click(within(region).getByRole('button', { name: 'Xem tất cả Mua lại' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=delivered');
-    fireEvent.click(within(region).getByRole('button', { name: 'Nước rửa chén' }));
+    fireEvent.click(within(region).getByRole('button', { name: /^Nước rửa chén/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
   });
 

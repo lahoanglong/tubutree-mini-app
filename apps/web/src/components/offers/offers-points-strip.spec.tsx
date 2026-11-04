@@ -36,7 +36,7 @@ describe('OffersPointsStrip (web) — dải Điểm Xanh gọn ở trang Ưu đ�
     expect(c.querySelector('section[aria-label*="Điểm Xanh"]')).not.toBeNull();
     expect(c.textContent).toContain('Mầm Xanh');
     const btn = c.querySelector<HTMLButtonElement>('button[aria-label$="Hạng và lịch sử điểm"]')!;
-    expect(btn.getAttribute('aria-label')).toMatch(/Mầm Xanh, 120 điểm/);
+    expect(btn.getAttribute('aria-label')).toMatch(/Mầm Xanh 120 điểm/);
     click(btn);
     expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/diem-xanh');
   });

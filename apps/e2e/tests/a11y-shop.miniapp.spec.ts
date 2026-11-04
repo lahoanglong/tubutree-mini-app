@@ -1,6 +1,6 @@
 import { test, expect, makeUser, mockSession, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
-import { blockingViolations, runAxe, staleBaseline, type AxeViolation } from './support/axe';
+import { blockingViolations, runAxe, runAxeRules, staleBaseline, type AxeViolation } from './support/axe';
 import type { AxeBaselineEntry } from './support/a11y-baseline';
 import { mockFlashSlots, mockNoSession } from './support/flash-slot-mocks';
 import { BRAND_SLUG, SHOP_SLUG, mockBrandPage, mockShopPage } from './support/shop-page-mocks';
@@ -59,6 +59,10 @@ test.describe('axe smoke Mini App 375px: serious/critical', () => {
       const found = await runAxe(page);
       expect(blockingViolations('miniapp', screen.name, found)).toEqual([]);
       expect(staleBaseline('miniapp', screen.name, found)).toEqual([]);
+      // WCAG 2.5.3: luật experimental nên không nằm trong runAxe; bắt nút có tên truy cập không bắt đầu bằng chữ nhìn thấy (cùng kiểm với a11y-shop.web).
+      const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
+      const nodes = mismatch.flatMap((v) => v.nodes.map((n) => ({ target: n.target.join(' '), html: n.html ?? '' })));
+      expect(nodes.map((n) => `${screen.name}: label-content-name-mismatch ${n.target} ${n.html.slice(0, 160)}`)).toEqual([]);
     });
   }
 });

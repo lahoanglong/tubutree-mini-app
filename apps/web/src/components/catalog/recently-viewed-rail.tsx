@@ -28,8 +28,10 @@ const subscribeNever = () => () => undefined;
  * `reserve`: trang Danh mục dựng sẵn (ISR) không biết khách đã xem gì, nên HTML đầu không có dải; script ở <head> (`recentlyViewedBootScript`) đặt
  * `data-has-recent` lên <html> khi máy có mục đã xem, và chỉ khi đó CSS mới giữ chỗ `RESERVED_HEIGHT` cho tới khi dải thật dựng ở lần hydrate.
  * Khách chưa xem gì không có thuộc tính nên không mất chỗ nào.
+ *
+ * `priorityCount`: số thẻ đầu tải ảnh ngay. Dải chỉ dựng ở trình duyệt (không có trong HTML server) nên không tranh chỗ với ảnh ưu tiên của kệ phía dưới trong HTML đầu.
  */
-export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve = false }: { title?: string; reserve?: boolean }) {
+export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve = false, priorityCount = 0 }: { title?: string; reserve?: boolean; priorityCount?: number }) {
   const hydrated = useSyncExternalStore(subscribeNever, () => true, () => false);
   const stored = useRecentlyViewed();
   const slugs = stored.map((it) => it.slug);
@@ -43,7 +45,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
     <Section id="browse-recent" label={title}>
       <SectionHeader title={title} />
       <RailShell label={title}>
-        {items.map((it) => {
+        {items.map((it, index) => {
           const product = bySlug.get(it.slug);
           return (
             <RailCell key={it.slug} variant="rail-sm">
@@ -59,8 +61,10 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
                   ...product,
                   slug: it.slug,
                   name: it.name,
-                  thumbnail: it.thumbnail ?? product?.thumbnail ?? null,
+                  // Ảnh hiện hành thắng: URL lưu ở máy có thể là ảnh cũ đã bị thay, /img không còn nhận (404) nên thẻ phải lùi về ảnh gốc.
+                  thumbnail: product?.thumbnail ?? it.thumbnail ?? null,
                 }}
+                priority={index < priorityCount}
                 variant="rail-sm"
                 hidePrice={!product}
               />
