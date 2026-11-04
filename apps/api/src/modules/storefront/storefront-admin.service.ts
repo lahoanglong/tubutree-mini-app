@@ -151,7 +151,8 @@ export class StorefrontAdminService {
     });
     const sf = await this.summaryOf(id);
     if (count === 1) {
-      // Danh sách ảnh cho /img chỉ gồm gian hàng khách thấy được; gỡ thì phải thu hồi ngay, không đợi TTL.
+      // Danh sách ảnh cho /img chỉ gồm gian hàng khách thấy được. Đánh dấu cũ để lần tra kế tiếp nạp lại ở nền: ảnh bị gỡ khỏi danh sách sau lần nạp đó,
+      // yêu cầu đầu tiên ngay sau khi gỡ vẫn có thể được phục vụ.
       this.imageStale?.markStale();
       this.logger.warn(`Admin ${adminId} gỡ đăng gian hàng ${id} (chủ ${sf.ownerUserId ?? 'không có'}): ${reason}`);
       await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_TAKEN_DOWN', { store: sf.title, reason });

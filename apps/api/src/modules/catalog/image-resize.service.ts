@@ -138,7 +138,8 @@ export class ImageResizeService {
     // Có người đã bắt đầu một lần nạp mới trong lúc ta chờ (cờ cũ đã được họ xoá): chờ nốt lần đó thay vì tưởng đã nạp xong.
     if (!this.registry.has(raw) && this.registryLoad) await this.registryLoad.catch(() => undefined);
     if (this.registry.has(raw)) return true;
-    if (this.stale.isStale() || Date.now() - this.registryLoadedAt >= REGISTRY_MISS_RELOAD_MS) await this.load(true);
+    // Đang lùi sau lần nạp lỗi (retryAfter) thì không truy vấn: URL lạ không được kéo DB lúc DB đang sự cố.
+    if (Date.now() >= this.retryAfter && (this.stale.isStale() || Date.now() - this.registryLoadedAt >= REGISTRY_MISS_RELOAD_MS)) await this.load(true);
     return this.registry.has(raw);
   }
 

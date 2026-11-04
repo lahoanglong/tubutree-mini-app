@@ -204,6 +204,7 @@ Lưu ý về `ops.yml`, hành động `set-env` (xem nhánh `set-env` trong `.gi
 Ghi chú về `THROTTLE_BYPASS_TOKEN`: production nên đặt (xem [docs/2026-10-review/impl/PA-2.md](../2026-10-review/impl/PA-2.md)). Web render phía máy chủ gọi API từ một IP, nên không có token thì khi đông các lượt render cùng dính giới hạn 300 yêu cầu/phút cho mỗi route và khách thấy lỗi 429. Token dài dưới 32 ký tự thì API không khởi động. Không thêm tiền tố `NEXT_PUBLIC_` (sẽ lộ ra trình duyệt). `go-live:check` báo WARN khi chưa đặt, FAIL khi quá ngắn. Theo dõi 429 bằng `$DC logs --since 1h web | grep -c 429`.
 
 - [ ] `.env` đủ khoá, `THROTTLE_BYPASS_TOKEN` đã đặt (≥ 32 ký tự, cùng giá trị cho api và web)
+- [ ] Trước deploy: `grep CLOUDINARY_CLOUD_NAME .env` (trong `/opt/tubutree`) ra đúng một dòng `CLOUDINARY_CLOUD_NAME=<tên>`, phần tên khớp `/^[A-Za-z0-9_-]*$/` (không dấu nháy, không khoảng trắng, không chú thích cùng dòng), nếu không API không khởi động
 - [ ] `CLOUDINARY_CLOUD_NAME` (api) = `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` (web build, lấy từ cùng khoá) = `VITE_CLOUDINARY_CLOUD_NAME` (Mini App) và đúng cloud đang chứa banner hiện có
 
 ### 1.4 Chọn giờ (mục 3) và báo trước
