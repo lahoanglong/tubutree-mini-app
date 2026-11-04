@@ -6,7 +6,7 @@ import { LIKE_ESCAPE } from './search-text';
 import { CARD_PRODUCT_SELECT } from './card-select';
 
 /** Câu xếp hạng chọn vài cột nhỏ; câu lấy thẻ chọn CARD_PRODUCT_SELECT (có `variations`). */
-const isRank = (args: { select?: object }) => Boolean(args.select) && !('variations' in (args.select as object));
+const isRank = (args: { select?: unknown }) => Boolean(args.select) && !('variations' in (args.select as object));
 
 const card = (id: string) => ({
   id,
