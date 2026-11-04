@@ -20,3 +20,13 @@ describe('trang ISR theo [slug]', () => {
     expect(read(route)).not.toMatch(/generateStaticParams/);
   });
 });
+
+describe('hub /san-pham (middleware viết lại sang app/hub-san-pham)', () => {
+  it('là trang tĩnh ISR: force-static, revalidate, không đọc cookies/headers hay searchParams', () => {
+    const src = read('hub-san-pham');
+    expect(src).toMatch(/export const dynamic = 'force-static';/);
+    expect(src).toMatch(/export const revalidate = \d+;/);
+    expect(src).not.toMatch(/from 'next\/headers'/);
+    expect(src).not.toMatch(/searchParams/);
+  });
+});

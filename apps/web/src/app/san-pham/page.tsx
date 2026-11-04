@@ -71,8 +71,11 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const http = createServerHttp();
   // Gốc không tham số, trang 1 là hub: KHÔNG tải danh sách, chỉ kệ Bán chạy nhất (HTML đầu có sản phẩm cho crawler).
   const hub = isBrowseHub(state, startPage);
+  // Từ khoá là chữ tự do (vô hạn URL, đã noindex): mỗi từ khoá tải ở máy chủ là một lượt gọi API mang token vượt throttle và một file
+  // Data Cache không bao giờ xoá. Để BrowseView tải ở trình duyệt; các trạng thái hữu hạn (nhãn, danh mục, sắp xếp, trang) vẫn dựng sẵn.
+  const serverCatalog = !hub && state.q === '';
   const [catalog, bestSellers, brands, categories] = await Promise.all([
-    hub ? undefined : orUndefined(fetchCatalog(http, toCatalogQuery(state, startPage, PAGE_LIMIT))),
+    serverCatalog ? orUndefined(fetchCatalog(http, toCatalogQuery(state, startPage, PAGE_LIMIT))) : undefined,
     hub ? orUndefined(fetchBestSellers(http, shelf('browse.bestSellers').maxItems)) : undefined,
     orUndefined(fetchBrands(http)),
     orUndefined(fetchCategories(http)),

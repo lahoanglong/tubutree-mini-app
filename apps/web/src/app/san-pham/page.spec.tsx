@@ -93,18 +93,34 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
     expect(props.categories).toEqual(CATEGORIES);
   });
 
-  it('?q= cắt khoảng trắng đầu cuối, ?sort/?minPrice/?inStock/?rating/?brand đi đúng tham số API như Mini App; urlKey là khoá chuẩn', async () => {
-    await render({ q: '  dầu gội ', sort: 'price_asc', minPrice: '100000', inStock: '1', rating: '4', brand: 'Tubu' });
+  it('?sort/?minPrice/?inStock/?rating/?brand đi đúng tham số API như Mini App; urlKey là khoá chuẩn', async () => {
+    await render({ sort: 'price_asc', minPrice: '100000', inStock: '1', rating: '4', brand: 'Tubu' });
     expect(productCalls()[0]![1]).toEqual({
-      query: { page: 1, limit: 20, q: 'dầu gội', sort: 'price_asc', brand: 'Tubu', minPrice: 100000, inStock: 'true', minRating: 4 },
+      query: { page: 1, limit: 20, sort: 'price_asc', brand: 'Tubu', minPrice: 100000, inStock: 'true', minRating: 4 },
     });
     const key = (mocks.view.mock.calls[0]![0] as { initial: { urlKey: string } }).initial.urlKey;
-    expect(key).toBe(new URLSearchParams({ q: 'dầu gội', brand: 'Tubu', minPrice: '100000', inStock: '1', rating: '4', sort: 'price_asc' }).toString());
+    expect(key).toBe(new URLSearchParams({ brand: 'Tubu', minPrice: '100000', inStock: '1', rating: '4', sort: 'price_asc' }).toString());
   });
 
-  it('?q lặp lại (mảng) lấy giá trị đầu; rỗng thì không gửi q', async () => {
-    await render({ q: ['a', 'b'] });
-    expect(productCalls().at(-1)![1]).toEqual({ query: { page: 1, limit: 20, q: 'a' } });
+  it('?q= (từ khoá tự do): máy chủ KHÔNG tải danh sách, BrowseView tải ở trình duyệt (initial = null); nhãn + danh mục vẫn dựng sẵn', async () => {
+    for (const o of [{ q: '  dầu gội ' }, { q: 'gội', brand: 'Tubu', sort: 'newest' }, { q: ['a', 'b'] }, { q: 'x', page: '3' }]) {
+      mocks.get.mockClear();
+      mocks.view.mockReset();
+      await render(o);
+      expect(productCalls(), JSON.stringify(o)).toEqual([]);
+      const props = mocks.view.mock.calls[0]![0] as { initial: unknown; brands: unknown; categories: unknown };
+      expect(props.initial, JSON.stringify(o)).toBeNull();
+      expect(props.brands).toEqual(BRANDS);
+      expect(props.categories).toEqual(CATEGORIES);
+    }
+  });
+
+  it('nhãn có thật (không từ khoá) vẫn tải danh sách ở máy chủ', async () => {
+    await render({ brand: 'Tubu' });
+    expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 20, brand: 'Tubu' } }]]);
+  });
+
+  it('?q chỉ có khoảng trắng coi như không có từ khoá: vẫn tải ở máy chủ', async () => {
     await render({ q: '   ', all: '1' });
     expect(productCalls().at(-1)![1]).toEqual({ query: { page: 1, limit: 20 } });
   });
