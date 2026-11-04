@@ -16,9 +16,16 @@ export const DEFAULT_VAT_INVOICE_HOSTS: readonly string[] = [
   ...UPLOAD_IMAGE_HOSTS,
 ];
 
-/** Người đặt env hay dán cả link (`https://a.vn/`) hoặc tên có dấu chấm cuối: chỉ giữ phần tên miền để mục đó vẫn khớp. */
+/** Người đặt env hay dán cả link (`https://user@a.vn:443/`) hoặc tên có dấu chấm cuối: chỉ giữ phần tên miền để mục đó vẫn khớp. */
 function normalizeHostEntry(entry: string): string {
-  return entry.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/[/?#].*$/, '').replace(/\.$/, '');
+  return entry
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/^[^@]*@/, '')
+    .replace(/:\d*$/, '')
+    .replace(/\.$/, '');
 }
 
 /** Env có giá trị thì THAY hẳn danh sách mặc định (quản trị viên chủ động chọn đúng nhà cung cấp mình dùng). Tách theo dấu phẩy, chấm phẩy hoặc khoảng trắng. */

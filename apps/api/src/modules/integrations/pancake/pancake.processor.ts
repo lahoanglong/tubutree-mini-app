@@ -12,6 +12,7 @@ import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
 import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
+  ATTENTION_INVOICE_URL_REJECTED,
   ATTENTION_PARTIAL_RETURN_ACK,
   ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
@@ -879,11 +880,17 @@ export class PancakeProcessor extends WorkerHost {
     // nhận thông báo "đã xuất hoá đơn" trùng lặp dù order đã ISSUED từ trước.
     if (order.invoiceStatus === 'ISSUED') return;
     // Khách thấy link thành nút "Tải PDF": cùng luật với link Kế toán nhập. Link bị loại thì không ghi (giữ link cũ) nhưng
-    // vẫn đặt ISSUED và báo khách; log nêu lý do (có tên miền) để quản trị viên thêm nhà cung cấp thật vào ALLOWED_VAT_INVOICE_HOSTS.
+    // vẫn đặt ISSUED và báo khách. Đơn vào hàng "Cần xử lý Pancake" và admin nhận báo, vì sau khi ISSUED không còn chỗ nhập lại link.
+    // Gắn trước khi lật ISSUED: lật xong mà ghi lỗi thì lần thử lại dừng ở guard ISSUED phía trên và việc này mất dấu.
     const incoming = data['invoice_url'] ? String(data['invoice_url']).trim() : '';
     const urlError = incoming ? vatInvoiceUrlError(incoming) : null;
     const safeUrl = incoming && !urlError ? incoming : undefined;
-    if (urlError) this.logger.warn(`Bỏ qua invoice_url từ Pancake cho đơn ${order.code}: ${urlError}`);
+    if (urlError) {
+      await this.flagAttention(
+        order,
+        `${ATTENTION_INVOICE_URL_REJECTED}, khách chưa có nút "Tải PDF". ${urlError} Gửi hoá đơn cho khách qua chat CSKH.`,
+      );
+    }
     await this.prisma.order.update({
       where: { id: order.id },
       data: { invoiceStatus: 'ISSUED', invoiceUrl: safeUrl ?? order.invoiceUrl },

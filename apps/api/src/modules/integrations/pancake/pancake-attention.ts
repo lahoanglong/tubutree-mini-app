@@ -57,6 +57,8 @@ export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Kh
 export const ATTENTION_UNDERPAID = 'Khách chuyển thiếu';
 /** Tổng tiền đơn trên Pancake khác `order.total` (đơn bị sửa trên Pancake) — tự gỡ khi tổng trùng lại. */
 export const ATTENTION_TOTAL_MISMATCH = 'Tổng tiền Pancake lệch với Tubu';
+/** Pancake báo đã xuất hoá đơn nhưng link không qua kiểm (common/vat-invoice-url): đơn vẫn ISSUED, khách không có nút "Tải PDF". */
+export const ATTENTION_INVOICE_URL_REJECTED = 'Link hoá đơn VAT từ Pancake bị bỏ';
 
 /**
  * Hàng đợi "Cần xử lý Pancake": ghi lý do lên đơn + báo ADMIN in-app (cùng cơ chế PancakeProcessor.flagAttention).
