@@ -7,6 +7,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserBlockService } from './user-block.service';
 import { AdminService } from './admin.service';
 import { AllowStaff } from '../../common/staff-permissions';
+import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import { ForfeitCommissionsDto } from './dto/forfeit-commissions.dto';
 
 export class BlockUserDto {
@@ -33,6 +34,8 @@ export class AdminUsersController {
   ) {}
 
   /** Hồ sơ + đơn + sổ ví + Điểm Xanh + lịch sử vai trò/khoá (ADMINOPS-11). CSKH xem được để trả lời khách. */
+  // Chi tiết một khách theo id: không trần thì CSKH lật từng id lấy SĐT và số dư, lách qua giới hạn của danh sách. ADMIN không bị.
+  @StaffLookupThrottle(30)
   @AllowStaff('CSKH')
   @Get(':id/detail')
   detail(@Param('id') id: string, @CurrentUser('role') role?: string) {

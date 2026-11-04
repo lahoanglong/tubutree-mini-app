@@ -14,7 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../decorators/public.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AppThrottlerGuard } from './app-throttler.guard';
-import { throttlerOptions } from './throttle.config';
+import { StaffLookupThrottle, throttlerOptions } from './throttle.config';
 
 /**
  * Chính sách Q-22 (C-005, C-033), chạy qua HTTP thật với đúng thứ tự guard toàn cục của
@@ -36,6 +36,12 @@ class ProbeController {
 
   @Get('private')
   priv() {
+    return { ok: true };
+  }
+
+  @StaffLookupThrottle(5)
+  @Get('staff-lookup')
+  staffLookup() {
     return { ok: true };
   }
 }
@@ -73,7 +79,12 @@ async function bootApp(bypassToken: string): Promise<{ app: INestApplication; ba
         },
       },
       { provide: PrismaService, useValue: {} },
-      { provide: SessionStateService, useValue: { get: async () => ({ role: 'CUSTOMER', isBlocked: false }) } },
+      {
+        provide: SessionStateService,
+        useValue: {
+          get: async (id: string) => ({ role: id.startsWith('staff-') ? 'STAFF' : id.startsWith('admin-') ? 'ADMIN' : 'CUSTOMER', isBlocked: false }),
+        },
+      },
       { provide: APP_GUARD, useClass: JwtAuthGuard },
       { provide: APP_GUARD, useClass: AppThrottlerGuard },
     ],
@@ -270,6 +281,33 @@ describe('AppThrottlerGuard (Q-22)', () => {
       ({ app, base } = await bootApp(''));
       const codes = await hitMany(base, DEFAULT_LIMIT + 2, ssrCall('10.0.0.7', { 'x-throttle-bypass': '' }));
       expect(count429(codes)).toBe(2);
+    });
+  });
+
+  describe('StaffLookupThrottle: trần tra cứu khách chỉ áp cho nhân viên STAFF', () => {
+    let app: INestApplication;
+    let base: string;
+    beforeAll(async () => {
+      ({ app, base } = await bootApp(BYPASS));
+    });
+    afterAll(async () => {
+      await app.close();
+    });
+    const call = (sub: string, ip: string): Call => ({ path: '/probe/staff-lookup', ip, headers: { authorization: `Bearer ${tokenFor(sub)}` } });
+
+    it('STAFF: quá 5 lượt/phút thì 429', async () => {
+      const codes = await hitMany(base, 8, () => call('staff-1', '10.1.0.1'));
+      expect(count429(codes)).toBe(3);
+    });
+
+    it('ADMIN: không bị trần này', async () => {
+      const codes = await hitMany(base, 20, () => call('admin-1', '10.1.0.2'));
+      expect(count429(codes)).toBe(0);
+    });
+
+    it('khách thường không bị trần này (route vẫn bị trần mặc định)', async () => {
+      const codes = await hitMany(base, 20, () => call('cus-1', '10.1.0.3'));
+      expect(count429(codes)).toBe(0);
     });
   });
 });

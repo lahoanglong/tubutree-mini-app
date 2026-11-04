@@ -1,6 +1,6 @@
 import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import type { Response } from 'express';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Transform, Type } from 'class-transformer';
@@ -500,8 +500,8 @@ export class AdminController {
   }
 
   @AllowStaff('CSKH')
-  // Mỗi lần gõ ở ô tìm khách là một lượt gọi: trần riêng để một tài khoản CSKH không quét cả danh sách khách bằng cách gọi liên tục.
-  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  // Mỗi lần gõ ở ô tìm khách là một lượt gọi: trần riêng để một tài khoản CSKH không quét cả danh sách khách bằng cách gọi liên tục (ADMIN không bị).
+  @StaffLookupThrottle(30)
   @Get('users')
   users(@Query() q: ListUsersQuery, @CurrentUser() viewer: JwtPayload) {
     if (viewer.role === 'STAFF') assertStaffUserListQuery(q);

@@ -2,12 +2,20 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
+import { AdminController } from './admin.controller';
 import { AdminUsersController, BlockUserDto } from './admin-users.controller';
 import type { UserBlockService } from './user-block.service';
 
 describe('AdminUsersController — khoá/mở khoá người dùng', () => {
   it('chỉ ADMIN', () => {
     expect(Reflect.getMetadata(ROLES_KEY, AdminUsersController)).toEqual(['ADMIN']);
+  });
+
+  it('chi tiết khách và danh sách người dùng cùng có trần tra cứu 30 lượt/phút cho nhân viên (m3)', () => {
+    for (const handler of [AdminUsersController.prototype.detail, AdminController.prototype.users]) {
+      expect(Reflect.getMetadata('THROTTLER:LIMITstaffLookup', handler)).toBe(30);
+      expect(Reflect.getMetadata('tubu:staff-lookup-throttle', handler)).toBe(true);
+    }
   });
 
   it('chuyển đúng admin đang thao tác, id và lý do sang service', async () => {
