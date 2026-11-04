@@ -41,9 +41,9 @@ export class VouchersService {
   /**
    * Số grant() chạy cùng lúc trong mỗi lô của mọi cron dùng grantInChunks (welcome, birthday, winback, milestone, second-order);
    * mỗi grant giữ 1 kết nối Prisma ngắn hạn. Welcome chạy mỗi giờ nên trùng giờ với second-order lúc 10:00: tối đa 20 grant
-   * cùng lúc, bằng connection_limit=20 của docker-compose.vietnix.yml (khoá lượt chạy của các cron là lease trong cron_leases,
-   * không giữ kết nối). Hàng chờ pool (pool_timeout=30) hấp thụ phần vượt, nên khi tăng GRANT_CONCURRENCY hoặc thêm
-   * cron chạy cùng giờ phải tính lại tổng này.
+   * = connection_limit=20 của docker-compose.vietnix.yml, cộng truy vấn review-invite 10:00 và HTTP: phần vượt xếp hàng chờ
+   * pool (pool_timeout=30). Khoá lượt chạy của các cron là lease trong cron_leases, không giữ kết nối. Tăng GRANT_CONCURRENCY
+   * hoặc thêm cron chạy cùng giờ thì phải tính lại tổng này.
    */
   private static readonly GRANT_CONCURRENCY = 10;
   /** Số dòng log lỗi từng user mỗi lượt; phần còn lại chỉ nằm trong dòng tổng kết. */

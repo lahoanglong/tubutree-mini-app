@@ -1557,10 +1557,7 @@ export class AffiliateService {
     try {
       // Khoá lượt chạy (cron_leases): hai tiến trình cùng chạy thì bên thua bỏ qua.
       const run = await runExclusive(this.prisma, 'cron:affiliate.approve_due', () => this.approveDueAndMaybeTransfer(now));
-      if (!run.acquired) {
-        markCronSkipped('LOCKED');
-        return;
-      }
+      if (!run.acquired) markCronSkipped('LOCKED');
       await this.notifyMilestoneRevokes(now);
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);

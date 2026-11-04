@@ -233,6 +233,13 @@ describe('AffiliateService.approveDueCommissions (duyệt mỗi giờ, chuyển 
     expect(t.prisma.cronRun.upsert).not.toHaveBeenCalled();
   });
 
+  it('thua khoá lượt chạy: vẫn gọi notifyMilestoneRevokes (báo thu hồi mốc không phụ thuộc lượt duyệt)', async () => {
+    const t = cron({ locked: false });
+    const revokes = jest.spyOn(t.svc as unknown as { notifyMilestoneRevokes: (n: Date) => Promise<void> }, 'notifyMilestoneRevokes').mockResolvedValue(undefined);
+    await t.svc.approveDueCommissions(NINE_VN);
+    expect(revokes).toHaveBeenCalledWith(NINE_VN);
+  });
+
   it('lỗi DB giữa chừng không ném (cron không được sập process)', async () => {
     const t = cron();
     t.prisma.returnRequest.findMany.mockRejectedValue(new Error('db down'));

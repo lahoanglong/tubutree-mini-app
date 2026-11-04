@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { runExclusive } from '../../src/common/cron-leader/run-exclusive';
 import { DeliveredEffectsResyncCron } from '../../src/modules/orders/delivered-effects-resync.cron';
@@ -108,6 +109,26 @@ describe('runExclusive (real Postgres)', () => {
     g.open();
     await first;
     expect((await prisma.cronLease.findUniqueOrThrow({ where: { name: leaseName(k) } })).holder).toBe('lượt-khác');
+  });
+
+  it('mất lease giữa chừng (dòng bị xoá): lần gia hạn kế ghi log mất lease và không tạo lại dòng', async () => {
+    const k = `${key}-lost`;
+    const ttlMs = 600;
+    const g = gate();
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      const first = runExclusive(prisma, k, async () => { await g.promise; }, { ttlMs });
+      await sleep(100);
+      await prisma.cronLease.delete({ where: { name: leaseName(k) } });
+      await sleep(ttlMs);
+      expect(await prisma.cronLease.findUnique({ where: { name: leaseName(k) } })).toBeNull();
+      expect(error.mock.calls.filter(([m]) => String(m).includes('Mất khoá'))).toHaveLength(1);
+      g.open();
+      await first;
+    } finally {
+      g.open();
+      error.mockRestore();
+    }
   });
 
   it('(e) cron đã chuyển đang chạy việc dài: không có kết nối "idle in transaction" nào của DB này', async () => {

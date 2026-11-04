@@ -14,9 +14,8 @@ export type ExclusivePrisma = Pick<PrismaService, '$queryRaw' | '$executeRaw'>;
  * Chạy `fn` khi giành được khoá lượt chạy `run:<key>` trong cron_leases; một lượt khác (replica này hay khác) đang giữ thì trả
  * { acquired: false } mà không chạy `fn`.
  *
- * Thay cho `$transaction(() => pg_try_advisory_xact_lock + việc dài trên kết nối khác)`: transaction đó chiếm một kết nối pool ở
- * trạng thái "idle in transaction" suốt lượt, còn phần việc bên trong xin thêm kết nối — nhiều cron trùng giờ thì cạn pool.
- * Lease chỉ cần một câu lệnh ngắn lúc giành, lúc gia hạn (mỗi ttl/3) và lúc nhả nên không giữ kết nối nào giữa các lần.
+ * Không giữ transaction suốt lượt: mỗi cron một kết nối "idle in transaction" cộng kết nối của phần việc sẽ làm cạn pool khi
+ * nhiều cron trùng giờ. Lease chỉ cần một câu lệnh ngắn lúc giành, lúc gia hạn (mỗi ttl/3) và lúc nhả nên không giữ kết nối nào giữa các lần.
  *
  * Process chết giữa lượt thì lease tự hết hạn sau ttl (khác khoá advisory, nhả ngay khi đứt kết nối). Gia hạn thấy lease đã
  * thuộc lượt khác thì chỉ ghi log lỗi: `fn` đang chạy dở không dừng giữa chừng được an toàn.
@@ -32,22 +31,28 @@ export async function runExclusive<T>(
   const lease = await RunLease.tryAcquire(prisma, name, ttlMs);
   if (!lease) return { acquired: false };
 
-  let renewing = false;
+  let inflight: Promise<void> | null = null;
   let lostLogged = false;
+  // UPDATE thuần (không INSERT): lease đã bị lượt khác nhận rồi nhả thì dòng không còn, gia hạn kiểu upsert sẽ tạo lại dòng và
+  // che mất việc hai lượt đã chạy chồng nhau.
+  const renew = async (): Promise<void> => {
+    const rows = await prisma.$queryRaw<{ name: string }[]>`
+      UPDATE cron_leases
+         SET "expiresAt" = (now() AT TIME ZONE 'UTC') + make_interval(secs => ${ttlMs / 1000}::double precision),
+             "updatedAt" = (now() AT TIME ZONE 'UTC')
+       WHERE name = ${name} AND holder = ${lease.holder} AND "expiresAt" >= (now() AT TIME ZONE 'UTC')
+      RETURNING name`;
+    if (rows.length === 0 && !lostLogged) {
+      lostLogged = true;
+      logger.error(`Mất khoá lượt chạy ${name} giữa chừng: khoá đã hết hạn hoặc bị lượt khác nhận; có thể hai lượt đang chạy chồng nhau.`);
+    }
+  };
   const timer = setInterval(() => {
-    if (renewing) return;
-    renewing = true;
-    lease
-      .renew()
-      .then((ok) => {
-        if (!ok && !lostLogged) {
-          lostLogged = true;
-          logger.error(`Mất khoá lượt chạy ${name} giữa chừng: một lượt khác đã nhận khoá; có thể hai lượt đang chạy chồng nhau.`);
-        }
-      })
+    if (inflight || lostLogged) return;
+    inflight = renew()
       .catch((err: unknown) => logger.warn(`Gia hạn khoá lượt chạy ${name} lỗi: ${err instanceof Error ? err.message : err}`))
       .finally(() => {
-        renewing = false;
+        inflight = null;
       });
   }, Math.max(1, Math.floor(ttlMs / 3)));
   timer.unref();
@@ -56,6 +61,8 @@ export async function runExclusive<T>(
     return { acquired: true, value: await fn() };
   } finally {
     clearInterval(timer);
+    // Lần gia hạn đang bay mà DELETE commit trước thì nó chưa thấy dòng nào; chờ nó xong rồi mới nhả.
+    await inflight;
     try {
       await prisma.$executeRaw`DELETE FROM cron_leases WHERE name = ${name} AND holder = ${lease.holder}`;
     } catch {

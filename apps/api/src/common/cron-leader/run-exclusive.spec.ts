@@ -34,7 +34,7 @@ describe('runExclusive', () => {
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
-  it('gia hạn mỗi ttl/3; gia hạn thấy lease đã mất thì ghi log lỗi đúng một lần mà không dừng fn', async () => {
+  it('gia hạn mỗi ttl/3; gia hạn thấy lease đã mất thì ghi log lỗi một lần, không gia hạn tiếp, không dừng fn', async () => {
     jest.useFakeTimers();
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const prisma = fakePrisma([true, true, false, false]);
@@ -43,10 +43,39 @@ describe('runExclusive', () => {
     await jest.advanceTimersByTimeAsync(1000);
     await jest.advanceTimersByTimeAsync(1000);
     await jest.advanceTimersByTimeAsync(1000);
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(4);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(3);
     expect(error).toHaveBeenCalledTimes(1);
     finish();
     await expect(run).resolves.toEqual({ acquired: true, value: 'xong' });
     error.mockRestore();
+  });
+
+  it('đang gia hạn dở khi fn xong: DELETE chỉ chạy sau khi lần gia hạn đó kết thúc', async () => {
+    jest.useFakeTimers();
+    const order: string[] = [];
+    let endRenew!: () => void;
+    const prisma = {
+      $queryRaw: jest.fn(async (strings: TemplateStringsArray) => {
+        if (/INSERT/.test(strings.join(''))) return [{ holder: 'h' }];
+        order.push('renew-start');
+        await new Promise<void>((r) => (endRenew = r));
+        order.push('renew-end');
+        return [{ name: 'x' }];
+      }),
+      $executeRaw: jest.fn(async () => {
+        order.push('delete');
+        return 1;
+      }),
+    };
+    let finish!: () => void;
+    const run = runExclusive(prisma as never, 'k', () => new Promise<void>((r) => (finish = r)), { ttlMs: 3000 });
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(order).toEqual(['renew-start']);
+    finish();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(order).toEqual(['renew-start']);
+    endRenew();
+    await run;
+    expect(order).toEqual(['renew-start', 'renew-end', 'delete']);
   });
 });
