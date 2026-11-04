@@ -37,3 +37,27 @@ describe('next.config CSP', () => {
     expect(media?.split(' ')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'https://res.cloudinary.com']));
   });
 });
+
+describe('next.config htmlLimitedBots', () => {
+  const re = nextConfig.htmlLimitedBots as RegExp;
+
+  it('Googlebot desktop và điện thoại nhận metadata trong <head> (không theo luồng)', () => {
+    expect(re.test('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')).toBe(true);
+    expect(re.test('Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/131.0.6778.139 Safari/537.36')).toBe(true);
+    expect(re.test('Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.139 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')).toBe(true);
+  });
+
+  it('Chrome desktop thường không bị coi là bot', () => {
+    expect(re.test('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')).toBe(false);
+  });
+});
+
+describe('next.config cacheHandler', () => {
+  it('dùng isr-cache-handler.mjs (đường dẫn tuyệt đối, file có thật)', async () => {
+    const { existsSync } = await import('node:fs');
+    const { isAbsolute } = await import('node:path');
+    expect(nextConfig.cacheHandler).toMatch(/isr-cache-handler\.mjs$/);
+    expect(isAbsolute(nextConfig.cacheHandler!)).toBe(true);
+    expect(existsSync(nextConfig.cacheHandler!)).toBe(true);
+  });
+});

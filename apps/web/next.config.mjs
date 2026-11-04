@@ -67,8 +67,11 @@ const nextConfig = {
   },
   // Trang động trả metadata theo luồng (sau phần thân) cho mọi UA không nằm trong danh sách này; bot xem trước của Zalo và Cốc Cốc không chạy JS
   // nên cần thẻ meta ngay trong <head>. "Zalo" cũng khớp trình duyệt trong app Zalo của người dùng thật: họ chỉ phải chờ metadata trước khi
-  // thấy thân trang ở route động, chấp nhận được. Giữ nguyên regex mặc định của Next rồi nối thêm hai token.
-  htmlLimitedBots: new RegExp(`${HTML_LIMITED_BOT_UA_RE.source}|Zalo|coccocbot`, 'i'),
+  // thấy thân trang ở route động, chấp nhận được. Googlebot có chạy JS nhưng đọc robots/canonical theo HTML đầu: metadata rơi vào <body> khi
+  // generateMetadata về sau phần thân (nhãn/danh mục lạ ở /san-pham) thì noindex và canonical bị bỏ qua. Giữ nguyên regex mặc định của Next rồi nối thêm.
+  htmlLimitedBots: new RegExp(`${HTML_LIMITED_BOT_UA_RE.source}|Googlebot|Zalo|coccocbot`, 'i'),
+  // Không lưu trang 404 của slug lạ vào cache ISR (đầy đĩa khi bot quét): xem isr-cache-handler.mjs. Next tự chép file này vào bản standalone.
+  cacheHandler: path.join(dirname, 'isr-cache-handler.mjs'),
   // SDK Node vá module lúc chạy: để Node tự require thay vì gói vào bundle server.
   serverExternalPackages: ['@sentry/node'],
   // Ảnh chia sẻ gian hàng đọc font và ảnh mặc định bằng readFile lúc chạy (app/s/[slug]/og-render.tsx). Next chỉ chép vào bản

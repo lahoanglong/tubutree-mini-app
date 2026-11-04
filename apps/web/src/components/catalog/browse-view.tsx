@@ -29,7 +29,7 @@ import { PRIORITY_CARDS, ProductGrid, SortBar } from '@/components/mini';
 import { ListingBreadcrumb, ListingLayout, type BreadcrumbItem } from '@/components/layouts/listing-layout';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
-import { BrowsePager } from './browse-pager';
+import { BrowsePager, pagedHref } from './browse-pager';
 import { PhoneCartButton } from '@/components/phone-cart-button';
 import { phoneBrandText } from '@/lib/phone-ui';
 import { ActiveFilters } from './active-filters';
@@ -153,6 +153,13 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     enabled: !hubState,
   });
   const firstPage = products.data?.pages[0];
+  // Link phân trang cũ (?page=9 khi danh sách chỉ còn 3 trang) mà máy chủ không dựng sẵn: về trang cuối thay vì báo "không có sản phẩm"
+  // dưới tiêu đề "45 sản phẩm". Trang cuối luôn nhỏ hơn trang hiện tại nên mỗi lần replace lùi ít nhất một trang, không lặp.
+  const lastPageOfTotal = firstPage && firstPage.meta.total > 0 ? Math.ceil(firstPage.meta.total / PAGE_LIMIT) : 0;
+  const pastLastPage = !seeded && page > 1 && !!firstPage && firstPage.data.length === 0 && lastPageOfTotal > 0 && lastPageOfTotal < page;
+  useEffect(() => {
+    if (pastLastPage) router.replace(pagedHref(state, lastPageOfTotal, new URLSearchParams(window.location.search)), { scroll: false });
+  }, [pastLastPage, lastPageOfTotal, router, state]);
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
   const listLength = list.length;
   const fetchingMore = products.isFetchingNextPage;
@@ -392,7 +399,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             <ListHeading
               title={listTitle}
               count={products.isError && list.length === 0 ? undefined : (firstPage?.meta.total ?? 0)}
-              isLoading={products.isLoading}
+              isLoading={products.isLoading || pastLastPage}
             />
             {brandSlug && !state.q && (
               <p className="mb-2 text-sm">
@@ -425,7 +432,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               <h2 id="danh-sach-san-pham" tabIndex={-1} className="sr-only">
                 Danh sách sản phẩm
               </h2>
-              {products.isLoading ? (
+              {products.isLoading || pastLastPage ? (
                 <ProductGridSkeleton count={8} className={GRID_PRODUCTS_WITH_FILTER} />
               ) : products.isError && list.length === 0 ? (
                 <ErrorState message={errorMessage(products.error)} onRetry={() => void products.refetch()} retryLabel={browseText.retry} />

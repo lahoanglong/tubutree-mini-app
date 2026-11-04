@@ -65,6 +65,20 @@ export const MAX_QUERY_LENGTH = QUERY_LIMIT;
  */
 export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all'];
 
+/** Tham số dùng một lần hoặc chỉ có nghĩa với trạng thái cũ: `focus`, và `page`. */
+const TRANSIENT_KEYS = ['focus', 'page'];
+
+/**
+ * Nối tham số lạ (utm, ref, s…) của URL cũ vào `next` theo đúng thứ tự gốc, sau các tham số chuẩn. Chỉ là phần đuôi của URL: khoá danh sách
+ * (máy chủ lẫn React Query) dựng từ trạng thái chuẩn hoá nên không đổi theo chúng.
+ */
+export function appendForeignParams(next: URLSearchParams, prev: URLSearchParams): URLSearchParams {
+  for (const [key, value] of prev) {
+    if (!TRANSIENT_KEYS.includes(key) && !SEARCH_PARAM_KEYS.includes(key)) next.append(key, value);
+  }
+  return next;
+}
+
 function intParam(v: string | null): number | undefined {
   if (v == null || v.trim() === '') return undefined;
   const n = Number(v);

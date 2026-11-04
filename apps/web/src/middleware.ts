@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { HUB, isHubQuery } from './lib/browse-hub-route';
 import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
 import { isLegalSlug } from './lib/legal';
 import { tenantSubdomain } from './lib/tenant-subdomain';
@@ -31,6 +32,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Bản tĩnh của hub chỉ đi qua rewrite bên dưới; vào thẳng thì về đường dẫn thật để không có hai URL cho một trang.
+  if (pathname === HUB) return NextResponse.redirect(new URL('/san-pham', request.url), 308);
+
   const slugRoute = SLUG_ROUTE.exec(pathname);
   if (slugRoute && !isPlausibleSlug(slugRoute[1] ?? '', slugRoute[2] ?? '')) {
     // Đường dẫn không tồn tại nên Next dựng not-found.tsx của site với mã 404.
@@ -59,6 +63,9 @@ export function middleware(request: NextRequest) {
       },
     });
   }
+
+  // Hub /san-pham giống nhau cho mọi khách: phục vụ bản ISR (app/hub-san-pham) thay vì dựng lại mỗi lượt; URL trình duyệt không đổi.
+  if (pathname === '/san-pham' && isHubQuery(url.searchParams)) return NextResponse.rewrite(new URL(HUB, request.url));
 
   // Khách đã có cookie phiên: Trang chủ dựng sẵn khung chờ đúng loại khách (xem app/khoi-phuc/[hint]/page.tsx), URL vẫn là "/".
   // Hai bản khác nhau theo cookie; Next không giữ Vary trên "/", nên cache chung phía trước phải bỏ qua khi có cookie (xem runbook 0.3).
