@@ -100,3 +100,12 @@ export function fontScaleBootScript(): string {
     "if(typeof s==='string'&&Object.prototype.hasOwnProperty.call(m,s)){var e=document.documentElement;e.style.fontSize=m[s];e.setAttribute('data-font-scale',s)}}catch(e){}})()"
   );
 }
+
+/**
+ * Script chạy ở <head> trước khi vẽ: máy còn nhớ lần trước khách có mã giảm giá dùng được (localStorage.tubu_offers_hint = '1', do `PdpCoupons` ghi) thì đặt
+ * `data-has-offers`. Trang sản phẩm dựng sẵn không biết khách có mã hay không; chỗ giữ 44px cho hàng "Ưu đãi" chỉ nên hiện khi khách đang khôi phục phiên VÀ
+ * thường có mã, vì giữ chỗ cho khách không có mã rồi gỡ đi cũng là một lần xê dịch.
+ */
+export function offersHintBootScript(): string {
+  return "(function(){try{if(localStorage.getItem('tubu_offers_hint')==='1')document.documentElement.setAttribute('data-has-offers','')}catch(e){}})()";
+}

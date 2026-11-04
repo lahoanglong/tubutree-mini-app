@@ -158,7 +158,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <PdpPrice product={product} />
                 {soldText && <PdpSold text={soldText} product={product} slot="price" />}
               </div>
-              <PdpPointsEarn product={product} />
+              <PdpPointsEarn product={product} initialConfig={publicConfig} />
               {/* Gian hàng tạm nghỉ thì khối mua không dựng ("Tạm thời chưa mua được"), nên không nhắc chốt sớm. */}
               {!unavailableText && <PdpLowStock slug={product.slug} variations={product.variations} />}
               {shortDesc && shortDesc !== description && (

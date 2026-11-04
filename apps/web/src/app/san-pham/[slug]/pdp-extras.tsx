@@ -36,7 +36,7 @@ import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-ea
 import { percentLabel, pointsBoostOf } from '@/lib/points-boost';
 import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
-import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
+import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_HINT_KEY, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
 import { getCart } from '@/lib/shop-client';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -89,10 +89,10 @@ function tierEarnFor(phase: string, tierId: string | null | undefined, loyalty: 
 }
 
 /** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
-export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
+export function PdpPointsEarn({ product, initialConfig }: { product: PointsEarnProduct; initialConfig?: PublicConfig }) {
   const amount = usePdpAmount(product);
   const phase = useAuthPhase();
-  const config = usePublicConfig();
+  const config = usePublicConfig(initialConfig);
   const { user } = useAuth();
   const tier = tierEarnFor(phase, user?.tierId, config.loyalty);
   const preview = pointsEarnPreview(amount, config.loyalty, tier?.multiplier ?? null);
@@ -187,6 +187,16 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
   const [open, setOpen] = useState(false);
   const { notice, notify } = useGameNotice();
   const list = pdpCoupons(couponsQ.data, productId);
+  const settled = couponsQ.isSuccess;
+  const hasOffers = list.length > 0;
+  useEffect(() => {
+    if (!settled) return;
+    try {
+      localStorage.setItem(OFFERS_HINT_KEY, hasOffers ? '1' : '0');
+    } catch {
+      /* chế độ riêng tư hoặc bị chặn: bỏ qua, chỉ mất việc giữ chỗ lần sau */
+    }
+  }, [settled, hasOffers]);
   if (list.length === 0) {
     return offersSlotNeeded(phase) ? <div data-testid="pdp-offers-slot" aria-hidden="true" className={OFFERS_SLOT_CLASS} /> : null;
   }

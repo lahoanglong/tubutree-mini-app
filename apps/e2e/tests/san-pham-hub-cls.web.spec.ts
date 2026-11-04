@@ -32,7 +32,7 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
     });
     api.allowUnmocked('GET /products/best-sellers', 'GET /categories', 'GET /brands', 'GET /me/coupons', 'POST /events');
     await page.goto('/san-pham');
-    const rail = page.getByRole('region', { name: 'Đã xem gần đây' });
+    const rail = page.locator('#browse-recent');
     await expect(rail).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     await page.waitForTimeout(800);

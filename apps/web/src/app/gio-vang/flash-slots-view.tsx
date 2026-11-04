@@ -57,7 +57,8 @@ const STRIP: CSSProperties = {
 
 function ListSkeleton() {
   return (
-    <div data-testid="flash-items-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 16px 0' }}>
+    // Cao tối thiểu một màn hình: danh sách thật dài hơn khung chờ bốn thẻ, nên không có chỗ này thì chân trang đang hiện trong màn hình bị đẩy ra ngoài khi món về (một lần xê dịch).
+    <div data-testid="flash-items-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 16px 0', minHeight: '100svh' }}>
       {[0, 1, 2, 3].map((i) => (
         <ProductTileSkeleton key={i} variant="line" note footerHeight={SOLD_FOOTER_HEIGHT} />
       ))}

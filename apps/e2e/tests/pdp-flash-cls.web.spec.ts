@@ -12,10 +12,24 @@ const HOUR = 3_600_000;
 let flash: FlashPdp | null = null;
 
 test.beforeAll(async ({ request }) => {
+  test.setTimeout(150_000);
   flash = await seedFlashPdp(request);
+  if (!flash) return;
+  // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường): dò bằng các sản phẩm khác cùng đợt,
+  // mỗi lần một sản phẩm (HTML đã dựng của một trang giữ 5 phút), tới khi HTML có thanh Giờ vàng; rồi mới đo trang chính.
+  const web = `http://localhost:${process.env.E2E_WEB_PORT}`;
+  for (const slug of flash.probeSlugs) {
+    const html = await request.get(`${web}/san-pham/${slug}`).then((r) => r.text()).catch(() => '');
+    if (html.includes('flash-price-bar')) return;
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
 });
 test.afterAll(async () => {
-  if (flash) await removeFlashPdp(flash.saleId);
+  test.setTimeout(120_000);
+  if (!flash) return;
+  await removeFlashPdp(flash.saleId);
+  // Bộ nhớ đệm fetch của Next còn giữ đợt này tới 60 giây: đợi hết rồi mới trả sân cho spec sau, kẻo trang dựng sẵn của chúng (Trang chủ) dựng lại trong lúc đó và nhúng khối Giờ vàng của đợt đã xoá.
+  await new Promise((r) => setTimeout(r, 65_000));
 });
 
 for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280', width: 1280, height: 800 }]) {
@@ -38,7 +52,8 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
     api.get('/me/wishlist/ids', []);
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
-    api.allowUnmocked('GET /products/:slug', 'GET /products/:slug/related', 'GET /products/:slug/bought-together', 'GET /products/:slug/bundles', 'GET /products/:slug/reviews', 'GET /products/:slug/stock', 'GET /products', 'GET /products/for-you', 'GET /me/coupons', 'POST /events');
+    const p = `/products/${f.slug}`;
+    api.allowUnmocked(`GET ${p}`, `GET ${p}/related`, `GET ${p}/bought-together`, `GET ${p}/bundles`, `GET ${p}/reviews`, `GET ${p}/stock`, 'GET /products', 'GET /products/for-you', 'GET /me/coupons', 'POST /events');
     await page.goto(`/san-pham/${f.slug}`);
     await expect(page.getByTestId('flash-price-bar')).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready.then(() => undefined));

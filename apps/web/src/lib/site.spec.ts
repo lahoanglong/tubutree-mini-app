@@ -252,3 +252,27 @@ describe('fontScaleBootScript', () => {
     }
   });
 });
+
+describe('offersHintBootScript', () => {
+  const run = async (raw: string | null | 'throw') => {
+    const { offersHintBootScript } = await loadSite();
+    const attrs: string[] = [];
+    new Function('localStorage', 'document', offersHintBootScript())(
+      {
+        getItem: (k: string) => {
+          expect(k).toBe('tubu_offers_hint');
+          if (raw === 'throw') throw new Error('blocked');
+          return raw;
+        },
+      },
+      { documentElement: { setAttribute: (k: string) => attrs.push(k) } },
+    );
+    return attrs;
+  };
+  it("nhớ có mã ('1') thì đặt data-has-offers; còn lại thì không", async () => {
+    expect(await run('1')).toEqual(['data-has-offers']);
+    expect(await run('0')).toEqual([]);
+    expect(await run(null)).toEqual([]);
+    expect(await run('throw')).toEqual([]);
+  });
+});

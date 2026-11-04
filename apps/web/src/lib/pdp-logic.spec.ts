@@ -65,11 +65,11 @@ describe('freeshipPlaceholder: dòng freeship giấu chữ khi chưa có số ch
 });
 
 describe('chỗ giữ cho hàng Ưu đãi (PdpCoupons)', () => {
-  it('chỉ giữ khi đang khôi phục phiên, cao 44px (h-11) và chỉ hiện khi <html> có data-restoring', () => {
+  it('chỉ giữ khi đang khôi phục phiên, cao 44px (h-11) và chỉ hiện khi <html> có data-restoring và data-has-offers', () => {
     expect(offersSlotNeeded('loading')).toBe(true);
     for (const p of ['guest', 'authenticated', 'unavailable'] as const) expect(offersSlotNeeded(p)).toBe(false);
     expect(OFFERS_SLOT_CLASS).toContain('h-11');
     expect(OFFERS_SLOT_CLASS).toContain('hidden');
-    expect(OFFERS_SLOT_CLASS).toContain('[html[data-restoring]_&]:block');
+    expect(OFFERS_SLOT_CLASS).toContain('[html[data-restoring][data-has-offers]_&]:block');
   });
 });

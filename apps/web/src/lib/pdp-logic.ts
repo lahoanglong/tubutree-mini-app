@@ -55,11 +55,15 @@ export function freeshipPlaceholder(p: { phase: AuthPhase; cartThreshold: number
   return p.phase === 'loading' || (p.phase === 'authenticated' && p.cartThreshold === undefined);
 }
 
+/** Khoá localStorage nhớ khách có mã dùng được ở lần xem trước (đọc bởi `offersHintBootScript`, ghi bởi `PdpCoupons`). */
+export const OFFERS_HINT_KEY = 'tubu_offers_hint';
+
 /**
- * Hàng "Ưu đãi ›" chỉ hiện khi ví có mã của khách đã đăng nhập: trong lúc khôi phục phiên giữ chỗ 44px (CSS chỉ cho chỗ này hiện khi <html> có
- * `data-restoring`, nên khách chưa từng đăng nhập không mất chỗ nào), để hàng không chèn lên đầu khối ưu đãi khi mã về.
+ * Hàng "Ưu đãi ›" chỉ hiện khi ví có mã của khách đã đăng nhập: trong lúc khôi phục phiên giữ chỗ 44px để hàng không chèn lên đầu khối ưu đãi khi mã về.
+ * CSS chỉ cho chỗ này hiện khi <html> có `data-restoring` (đang khôi phục) VÀ `data-has-offers` (lần trước khách có mã): khách chưa từng đăng nhập hay không có
+ * mã không mất chỗ nào, nên không phải gỡ chỗ giữ đi (một lần xê dịch khác).
  */
-export const OFFERS_SLOT_CLASS = 'hidden h-11 [html[data-restoring]_&]:block';
+export const OFFERS_SLOT_CLASS = 'hidden h-11 [html[data-restoring][data-has-offers]_&]:block';
 export function offersSlotNeeded(phase: AuthPhase): boolean {
   return phase === 'loading';
 }
