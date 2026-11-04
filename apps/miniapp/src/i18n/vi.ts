@@ -3,7 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
-import { BRAND_BADGE, ERROR_NETWORK, REQUIRED_FIELD, overStockMessage } from '@tubutree/app-core/client-copy';
+import { BRAND_BADGE, ERROR_NETWORK, NOT_FOUND_TITLE, REQUIRED_FIELD, STOREFRONT_NOT_FOUND, STOREFRONT_PUBLIC_TITLE, overStockMessage } from '@tubutree/app-core/client-copy';
 import { orderCopy } from '@tubutree/app-core/account-copy';
 import { CART_EMPTY, CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -39,7 +39,7 @@ export const vi = {
     sessionStorage: 'Máy chưa đọc hay lưu được dữ liệu đăng nhập. Bạn mở lại ứng dụng rồi thử lại nhé.',
     sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau khoảng một phút nhé.',
     title: 'Chưa tải được trang này',
-    notFoundTitle: 'Không tìm thấy',
+    notFoundTitle: NOT_FOUND_TITLE,
     needHelp: 'Cần hỗ trợ?',
     callHotline: (phone: string) => `Gọi ${phone}`,
   },
@@ -583,8 +583,8 @@ export const vi = {
   },
 
   storefront: {
-    publicTitle: 'Gian hàng',
-    notFound: 'Gian hàng này không tồn tại hoặc đã ngừng hoạt động.',
+    publicTitle: STOREFRONT_PUBLIC_TITLE,
+    notFound: STOREFRONT_NOT_FOUND,
     statsOtherProducts: (n: number) => `${n} sản phẩm khác`,
     statsOrderLevel: 'Phí ship, giảm giá, chênh lệch hoàn tiền',
     renameCollection: 'Đổi tên bộ sưu tập',

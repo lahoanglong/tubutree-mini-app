@@ -254,7 +254,7 @@ export function ConfigSheet({
   onUnpublish: () => void;
 }) {
   return (
-    <Sheet open={open} onClose={onClose} title="Cấu hình gian hàng">
+    <Sheet open={open} onClose={onClose} title={BUILDER_COPY.configTitle}>
       {open && <ConfigForm sf={sf} onClose={onClose} onSaved={onSaved} unpublishLabel={unpublishLabel} onUnpublish={onUnpublish} />}
     </Sheet>
   );

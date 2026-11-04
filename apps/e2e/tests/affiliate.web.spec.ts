@@ -332,7 +332,7 @@ test.describe('Web khách: CTV', () => {
     api.patch('/storefront/me', SF());
     await page.goto('/ctv/gian-hang');
     await page.getByRole('button', { name: 'Cài đặt' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Cấu hình gian hàng' });
+    const dialog = page.getByRole('dialog', { name: 'Cài đặt gian hàng' });
     await dialog.getByLabel('Hotline kho liên hệ').fill('0988111222');
     await dialog.getByRole('button', { name: 'Lưu cấu hình gian hàng' }).click();
     await expect.poll(() => api.callsTo('PATCH', '/storefront/me')).toHaveLength(1);

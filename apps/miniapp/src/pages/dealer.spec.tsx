@@ -462,7 +462,7 @@ describe('DealerPage — đơn hàng, công nợ, báo cáo', () => {
     openTab('Công nợ');
     expect(await screen.findByText('3.000.000đ')).toBeInTheDocument();
     expect(screen.getByText(/Chưa có giao dịch công nợ/)).toBeInTheDocument();
-    const amount = screen.getByPlaceholderText('Số tiền đã chuyển');
+    const amount = screen.getByLabelText('Số tiền đã chuyển');
     const pay = screen.getByRole('button', { name: 'Báo đã chuyển khoản' });
     fireEvent.change(amount, { target: { value: '4000000' } });
     expect(pay).toBeDisabled();

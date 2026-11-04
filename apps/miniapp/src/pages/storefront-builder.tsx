@@ -55,8 +55,6 @@ import { CARD_MARGIN, SCROLL_BODY } from '../components/storefront-builder/share
 import { StatsSection } from '../components/storefront-builder/stats-panel';
 import { StorefrontSignupFlow } from './storefront-signup';
 
-const CONFIG_TITLE = 'Cài đặt gian hàng';
-
 /** Mỗi nhánh render có đúng một h1 và cùng nền; trang chi tiết khối tự vẽ h1 (tên khối) nên không dùng PageHeader. */
 function BuilderShell({ children, style, bare }: { children: ReactNode; style?: CSSProperties; bare?: boolean }) {
   return (
@@ -525,7 +523,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
         </div>
       </BottomSheet>
 
-      <BottomSheet open={configOpen} onClose={() => setConfigOpen(false)} title={CONFIG_TITLE}>
+      <BottomSheet open={configOpen} onClose={() => setConfigOpen(false)} title={BUILDER_COPY.configTitle}>
         <MerchantConfigSheet
           sf={sf}
           onSaved={() => void refresh()}

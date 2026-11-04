@@ -1171,7 +1171,13 @@ describe('thống kê và hành trình gian hàng', () => {
     expect(labels).toEqual(['Đơn hàng', 'Doanh thu', 'Hoa hồng']);
     for (const b of stats.querySelectorAll('[data-testid="builder-stat"]')) {
       expect(b.lastElementChild!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
-      expect(b.firstElementChild!.className).toContain('text-[length:var(--type-body-md-size)]');
+      expect(b.firstElementChild!.className).toContain('whitespace-nowrap');
+      const value = b.firstElementChild as HTMLElement;
+      expect(value.className).toContain('md:text-[length:var(--type-body-md-size)]');
+      expect(value.className).toContain('lg:text-[length:calc(var(--type-body-md-size)*var(--stat-scale))]');
+      expect(value.className).toContain('overflow-hidden');
+      expect(value.className).toContain('text-ellipsis');
+      expect(Number(value.style.getPropertyValue('--stat-scale'))).toBeGreaterThan(0);
     }
   });
 

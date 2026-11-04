@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, TrendingUp } from 'lucide-react';
 import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
+import { statValueFontSize } from '@tubutree/app-core/commerce/stat-value-fit';
 import { getStorefrontStats } from '../../services/storefront-api';
 import { formatVnd } from '../../utils/format';
 import { vi } from '../../i18n/vi';
@@ -12,8 +13,8 @@ import { CARD_MARGIN } from './shared';
 
 function StatBox({ value, label, tone }: { value: string; label: string; tone?: 'brand' }) {
   return (
-    <div data-testid="builder-stat" style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: 10, textAlign: 'center' }}>
-      <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{value}</Text>
+    <div data-testid="builder-stat" style={{ flex: 1, minWidth: 0, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', padding: '10px var(--p-space-2)', textAlign: 'center' }}>
+      <Text variant="body-md" tone={tone} as="div" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: statValueFontSize(value) }}>{value}</Text>
       <Text variant="caption" tone="tertiary" as="div">{label}</Text>
     </div>
   );
