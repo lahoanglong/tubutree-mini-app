@@ -1,4 +1,3 @@
-import { once } from 'node:events';
 import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -312,8 +311,10 @@ export function createCsvRecordCounter() {
 }
 
 /**
- * Ghi file CSV xuống response từng đoạn. `audit` (nếu có) được gọi đúng một lần khi luồng kết thúc, kể cả khi dừng giữa chừng,
- * với số dòng dữ liệu đã gửi đi; lỗi của chính audit không làm hỏng luồng.
+ * Ghi file CSV xuống response từng đoạn. `audit` (nếu có) được gọi đúng một lần với số dòng dữ liệu ĐÃ GỬI đi: khi luồng
+ * kết thúc, khi lỗi giữa chừng, hoặc khi khách ngắt kết nối (res 'close'). Khách ngắt thì vòng đọc DB dừng ngay, không đọc
+ * thêm lô nào. Nhật ký ghi SAU res.end() và không được await: ghi chậm hay lỗi không giữ kết nối; lỗi của audit chỉ bị nuốt
+ * (hàm audit tự log).
  */
 export async function streamCsv(
   res: Response,
@@ -322,15 +323,29 @@ export async function streamCsv(
   audit?: (rowCount: number) => unknown,
 ) {
   const counter = createCsvRecordCounter();
-  const report = async () => {
-    if (!audit) return;
+  let closed = false;
+  let reported = false;
+  const report = () => {
+    if (reported || !audit) return;
+    reported = true;
     try {
-      await audit(counter.dataRows());
+      const pending = audit(counter.dataRows());
+      if (pending instanceof Promise) pending.catch(() => undefined);
     } catch {
-      // Không còn gì để báo cho người gọi: file đã gửi. Lỗi ghi nhật ký xuất do hàm audit tự log.
+      // Không còn gì để báo: file đã gửi.
     }
   };
+  let wake: (() => void) | undefined;
+  res.on('close', () => {
+    closed = true;
+    wake?.();
+    report();
+  });
   const first = await chunks.next();
+  if (closed) {
+    await chunks.return(undefined);
+    return;
+  }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-store');
@@ -340,14 +355,26 @@ export async function streamCsv(
     res.write(first.value);
   }
   try {
-    for await (const chunk of chunks) {
-      counter.push(chunk);
-      if (!res.write(chunk)) await once(res, 'drain');
+    if (!first.done) {
+      for (;;) {
+        if (closed) break;
+        const next = await chunks.next();
+        if (next.done || closed) break;
+        counter.push(next.value);
+        if (!res.write(next.value)) {
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+            res.once('drain', resolve);
+          });
+          wake = undefined;
+        }
+      }
     }
-    await report();
+    if (closed) await chunks.return(undefined);
     res.end();
+    report();
   } catch (err) {
-    await report();
+    report();
     res.destroy(err instanceof Error ? err : new Error(String(err)));
   }
 }

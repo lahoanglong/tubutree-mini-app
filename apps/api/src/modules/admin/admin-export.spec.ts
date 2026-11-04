@@ -312,6 +312,40 @@ describe('streamCsv', () => {
     await streamCsv(res, 'f.csv', gen(), audit);
     expect(audit).toHaveBeenCalledWith(1);
   });
+
+  it('khách ngắt sau lô đầu: không đọc lô sau, audit ghi đúng số dòng đã gửi, đúng một lần', async () => {
+    const { out, res } = sink();
+    const audit = jest.fn();
+    const secondBatch = jest.fn();
+    async function* gen() {
+      yield 'a\r\n1\r\n2\r\n';
+      secondBatch();
+      yield '3\r\n';
+    }
+    const write = out.write.bind(out);
+    let writes = 0;
+    out.write = ((chunk: unknown) => {
+      const ok = write(chunk as string);
+      if (++writes === 2) out.emit('close');
+      return ok;
+    }) as typeof out.write;
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(secondBatch).not.toHaveBeenCalled();
+    expect(audit).toHaveBeenCalledTimes(1);
+    expect(audit).toHaveBeenCalledWith(2);
+  });
+
+  it('audit chậm không giữ kết nối: res.end() chạy trước khi audit xong', async () => {
+    const { out, res } = sink();
+    let release!: () => void;
+    const audit = jest.fn(() => new Promise<void>((r) => (release = r)));
+    async function* gen() {
+      yield 'a\r\n1\r\n';
+    }
+    await streamCsv(res, 'f.csv', gen(), audit);
+    expect(out.writableEnded).toBe(true);
+    release();
+  });
 });
 
 // D1-04a: kế toán/marketing phải thấy đơn đến từ nền tảng nào, kênh nào, CTV nào, gian hàng nào ngay trong file CSV.
