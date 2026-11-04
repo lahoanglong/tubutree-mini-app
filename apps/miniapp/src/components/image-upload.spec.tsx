@@ -242,6 +242,31 @@ describe('ImageUpload — chính sách ảnh gửi đi (F11)', () => {
     await waitFor(() => expect(m.onChange).toHaveBeenCalledWith(COMPRESSED));
   });
 
+  it('base64: PNG/WebP nhỏ và cạnh dài vừa trả data URL gốc, không qua canvas (giữ trong suốt)', async () => {
+    const { toDataURL } = stubCanvasPipeline({ width: 800, height: 600 });
+    for (const type of ['image/png', 'image/webp']) {
+      const m = await mount(false, { maxDim: 1000 });
+      m.pick(file(type, 100 * 1024, 'logo'));
+      await waitFor(() => expect(m.onChange).toHaveBeenCalled());
+      expect(m.onChange.mock.calls[0]![0]).toMatch(new RegExp(`^data:${type};base64,`));
+      expect(toDataURL).not.toHaveBeenCalled();
+    }
+  });
+
+  it('base64: PNG quá 400KB hoặc cạnh dài quá maxDim vẫn nén JPEG nền trắng', async () => {
+    const big = stubCanvasPipeline({ width: 800, height: 600 });
+    const a = await mount(false, { maxDim: 1000 });
+    a.pick(file('image/png', 401 * 1024, 'big.png'));
+    await waitFor(() => expect(a.onChange).toHaveBeenCalledWith(COMPRESSED));
+    expect(big.calls).toContain('fillRect');
+    vi.restoreAllMocks();
+    const wide = stubCanvasPipeline({ width: 3000, height: 2000 });
+    const b = await mount(false, { maxDim: 1000 });
+    b.pick(file('image/png', 50 * 1024, 'wide.png'));
+    await waitFor(() => expect(b.onChange).toHaveBeenCalledWith(COMPRESSED));
+    expect(wide.calls).toContain('fillRect');
+  });
+
   it('base64 (chưa cấu hình Cloudinary): phủ nền trắng trước khi vẽ, tôn trọng maxDim', async () => {
     const { calls, drawn } = stubCanvasPipeline();
     const m = await mount(false, { maxDim: 1000 });

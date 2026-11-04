@@ -78,12 +78,18 @@ function renderJpeg(img: HTMLImageElement, maxDim: number, quality: number): str
   return canvas.toDataURL('image/jpeg', quality);
 }
 
+const KEEP_TYPES: ReadonlySet<string> = new Set(['image/png', 'image/webp']);
+/** 400KB nhị phân ≈ 540k ký tự base64, dưới trần nhỏ nhất của API (700k). */
+const KEEP_RASTER_BYTES = 400 * 1024;
+
 /**
  * Nén ảnh client-side bằng HTMLCanvasElement + FileReader.
  * Chuyển đổi tệp ảnh bất kỳ sang chuỗi Base64 Data URL JPEG dung lượng nhẹ (~150-250KB).
  */
 export async function readAndCompressImage(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
   const { src, img } = await decodeImage(file);
+  // PNG/WebP nhỏ và vừa cỡ giữ nguyên: qua JPEG sẽ mất độ trong suốt (logo, QR). API nhận png/webp và tự kiểm chữ ký.
+  if (KEEP_TYPES.has(file.type) && file.size <= KEEP_RASTER_BYTES && Math.max(img.width, img.height) <= maxDim) return src;
   return renderJpeg(img, maxDim, quality) ?? src;
 }
 
