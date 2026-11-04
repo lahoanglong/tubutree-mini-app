@@ -62,7 +62,9 @@ describe('POST /api/csp-report', () => {
 
   it('cùng vi phạm gửi lặp trong một phút chỉ ghi một dòng', async () => {
     for (let i = 0; i < 5; i++) expect((await post(JSON.stringify(legacy('https://dup.example.com/x.js')), 'application/csp-report')).status).toBe(204);
-    expect(warn).toHaveBeenCalledTimes(1);
+    // Spy bắt mọi Logger.warn trong tiến trình; chỉ đếm dòng của báo cáo CSP để warn lạ không làm đỏ, và in đủ dòng khi đỏ.
+    const cspLines = warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('CSP chặn') || l.startsWith('Lược'));
+    expect(cspLines).toEqual([expect.stringContaining('https://dup.example.com/x.js')]);
   });
 
   it('thân sai dạng vẫn 204, không ghi log', async () => {
