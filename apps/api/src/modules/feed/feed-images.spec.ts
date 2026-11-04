@@ -73,15 +73,16 @@ describe('loadFeedImages', () => {
     expect(r.get('p1')).toEqual({ count: 2, images: ['http://img/ok.jpg'] });
   });
 
-  it('chế độ chỉ-bìa: một lượt cho cả trang, lấy phần tử đầu bằng chỉ số mảng, không bung cả mảng ảnh bằng unnest', async () => {
+  it('chế độ chỉ-bìa: một lượt cho cả trang, chỉ đọc hai cột tóm tắt imageCount/coverRef, không đụng cột images', async () => {
     const { db, $queryRaw } = makeDb([]);
     await loadFeedImages(db, ['p1', 'p2', 'p3'], true);
     expect($queryRaw).toHaveBeenCalledTimes(1);
     const [strings, ...values] = $queryRaw.mock.calls[0] as [string[], ...unknown[]];
     const sql = strings.join('?');
     expect(sql).not.toContain('unnest');
-    expect(sql).toContain('"images"[1]');
-    expect(sql).toContain('cardinality');
+    expect(sql).not.toContain('"images"');
+    expect(sql).toContain('"imageCount"');
+    expect(sql).toContain('"coverRef"');
     expect(values).toEqual([['p1', 'p2', 'p3']]);
   });
 

@@ -2512,6 +2512,10 @@ model FeedPost {
   title         String?
   body          String
   images        String[]
+  // Tóm tắt của images do trigger feed_posts_image_summary_sync giữ (đừng ghi tay): số ảnh, và ảnh bìa (URL https nguyên văn hoặc
+  // md5(id:0:ảnh) cho ảnh base64). Danh sách bảng tin đọc hai cột này thay vì giải nén mảng ảnh.
+  imageCount    Int                @default(0)
+  coverRef      String?
   meta          Json?
   isPinned      Boolean            @default(false)
   bestCommentId String?            @unique
