@@ -3518,72 +3518,70 @@ function FlashSaleItemsPanel({ sale, ended }: { sale: AdminFlashSaleSummary; end
 
   return (
     <div className="mt-2">
-        <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({items.length})</div>
-        <div className="space-y-1">
-          {items.map((it) => (
-            <div key={it.id} className={LIST_ITEM_CLASS}>
-              <span className="min-w-0 break-words">
-                {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
-              </span>
-              <FlashItemOrder key={`${it.id}:${it.sortOrder ?? 0}`} itemId={it.id} sortOrder={it.sortOrder} label={variationLabels.labelFor(it.variationId)} onSaved={() => void refresh()} />
-              <button
-                onClick={async () => {
-                  const label = variationLabels.labelFor(it.variationId);
-                  const ok = await confirm({
-                    title: 'Xoá sản phẩm khỏi đợt',
-                    message: `Xoá "${label}" khỏi đợt "${sale.title}"? Đã bán ${it.soldCount}/${it.quota}. Không hoàn tác được.`,
-                    confirmLabel: 'Xoá sản phẩm',
-                    cancelLabel: 'Giữ lại',
-                    tone: 'danger',
-                  });
-                  if (ok) delItem.mutate(it.id);
-                }}
-                className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
-              >Xoá</button>
-            </div>
-          ))}
-          {items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
+      <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm trong đợt ({items.length})</div>
+      <div className="space-y-1">
+        {items.map((it) => (
+          <div key={it.id} className={LIST_ITEM_CLASS}>
+            <span className="min-w-0 break-words">
+              {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
+            </span>
+            <FlashItemOrder key={`${it.id}:${it.sortOrder ?? 0}`} itemId={it.id} sortOrder={it.sortOrder} label={variationLabels.labelFor(it.variationId)} onSaved={() => void refresh()} />
+            <button
+              onClick={async () => {
+                const label = variationLabels.labelFor(it.variationId);
+                const ok = await confirm({
+                  title: 'Xoá sản phẩm khỏi đợt',
+                  message: `Xoá "${label}" khỏi đợt "${sale.title}"? Đã bán ${it.soldCount}/${it.quota}. Không hoàn tác được.`,
+                  confirmLabel: 'Xoá sản phẩm',
+                  cancelLabel: 'Giữ lại',
+                  tone: 'danger',
+                });
+                if (ok) delItem.mutate(it.id);
+              }}
+              className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+            >Xoá</button>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
+      </div>
+      {ended ? (
+        <p className="mt-2 text-xs text-stone-500">Đợt đã kết thúc, không thêm sản phẩm được nữa.</p>
+      ) : (
+        <>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <ProductPicker
+          mode="variation"
+          label="Chọn biến thể sản phẩm cho đợt giờ vàng"
+          value={pickedVariation}
+          onChange={(v) => {
+            setPickedVariation(v);
+            setItem((cur) => ({ ...cur, variationId: v?.id ?? '' }));
+          }}
+          className="min-w-[14rem] flex-1"
+        />
+        <div className="w-28">
+          <Field label="Giá flash (đ)">
+            <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 59000" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: e.target.value })} className={`${field} w-full`} />
+          </Field>
         </div>
-
-        {ended ? (
-          <p className="mt-2 text-xs text-stone-500">Đợt đã kết thúc, không thêm sản phẩm được nữa.</p>
-        ) : (
-          <>
-        <div className="mt-2 flex flex-wrap items-end gap-2">
-          <ProductPicker
-            mode="variation"
-            label="Chọn biến thể sản phẩm cho đợt giờ vàng"
-            value={pickedVariation}
-            onChange={(v) => {
-              setPickedVariation(v);
-              setItem((cur) => ({ ...cur, variationId: v?.id ?? '' }));
-            }}
-            className="min-w-[14rem] flex-1"
-          />
-          <div className="w-28">
-            <Field label="Giá flash (đ)">
-              <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 59000" value={item.flashPrice} onChange={(e) => setItem({ ...item, flashPrice: e.target.value })} className={`${field} w-full`} />
-            </Field>
-          </div>
-          <div className="w-32">
-            <Field label="Số lượng bán (quota)">
-              <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 20" value={item.quota} onChange={(e) => setItem({ ...item, quota: e.target.value })} className={`${field} w-full`} />
-            </Field>
-          </div>
-          <div className="w-32">
-            <Field label="Giới hạn mỗi khách">
-              <input type="number" min={1} step={1} inputMode="numeric" placeholder="mặc định" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-full`} />
-            </Field>
-          </div>
-          <button onClick={() => addItem.mutate()} disabled={!itemReady || addItem.isPending} className={BTN_PRIMARY}>
-            Thêm SP
-          </button>
+        <div className="w-32">
+          <Field label="Số lượng bán (quota)">
+            <input type="number" min={1} step={1} inputMode="numeric" placeholder="vd 20" value={item.quota} onChange={(e) => setItem({ ...item, quota: e.target.value })} className={`${field} w-full`} />
+          </Field>
         </div>
-        <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
-          </>
-        )}
-        {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
-      
+        <div className="w-32">
+          <Field label="Giới hạn mỗi khách">
+            <input type="number" min={1} step={1} inputMode="numeric" placeholder="mặc định" value={item.perUserLimit} onChange={(e) => setItem({ ...item, perUserLimit: e.target.value })} className={`${field} w-full`} />
+          </Field>
+        </div>
+        <button onClick={() => addItem.mutate()} disabled={!itemReady || addItem.isPending} className={BTN_PRIMARY}>
+          Thêm SP
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-stone-500">Gõ tên sản phẩm (không cần dấu) hoặc SKU rồi chọn đúng biến thể.</p>
+        </>
+      )}
+      {itemErr && <p className="mt-1 text-sm text-danger-fg">{itemErr}</p>}
       {rowErr && <p className="mt-1 text-sm text-danger-fg">{rowErr}</p>}
       {dialog}
     </div>
