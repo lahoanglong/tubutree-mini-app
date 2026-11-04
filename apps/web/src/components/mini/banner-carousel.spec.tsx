@@ -70,7 +70,7 @@ afterEach(() => {
   Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
 });
 
-const PANCAKE_SLIDES: BannerSlide[] = SLIDES.map((s) => ({ ...s, image: `https://content.pancake.vn/2-26/${s.id}.jpg` }));
+const PANCAKE_SLIDES: BannerSlide[] = SLIDES.map((s) => ({ ...s, image: `https://res.cloudinary.com/tubutree/image/upload/v1/${s.id}.jpg` }));
 
 describe('BannerCarousel: ảnh slide (Pa3)', () => {
   it('ảnh đi qua bộ đổi cỡ: srcset theo w, sizes theo khung; slide 0 eager + fetchpriority high, còn lại lazy', () => {
@@ -94,6 +94,13 @@ describe('BannerCarousel: ảnh slide (Pa3)', () => {
     expect(img.getAttribute('sizes')).toBe('min(100vw - 48px, 1152px)');
   });
 
+  it('ảnh Pancake (không có trong danh sách của /img cho banner): giữ URL gốc, không srcset, không tốn lượt 404', () => {
+    mountPlain(<BannerCarousel slides={[{ ...SLIDES[0]!, image: 'https://content.pancake.vn/2-26/a.jpg' }]} />);
+    const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
+    expect(img.getAttribute('src')).toBe('https://content.pancake.vn/2-26/a.jpg');
+    expect(img.hasAttribute('srcset')).toBe(false);
+  });
+
   it('host lạ: giữ URL gốc, không srcset', () => {
     mountPlain(<BannerCarousel slides={SLIDES.slice(0, 1)} />);
     const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
@@ -105,7 +112,7 @@ describe('BannerCarousel: ảnh slide (Pa3)', () => {
   it('bản đổi cỡ lỗi thì thử ảnh gốc một lần rồi mới rơi về chữ alt', () => {
     mountPlain(<BannerCarousel slides={PANCAKE_SLIDES.slice(0, 1)} />);
     fire(document.querySelector('[aria-roledescription="slide"] img')!, new Event('error'));
-    expect(document.querySelector('[aria-roledescription="slide"] img')!.getAttribute('src')).toBe('https://content.pancake.vn/2-26/a.jpg');
+    expect(document.querySelector('[aria-roledescription="slide"] img')!.getAttribute('src')).toBe('https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg');
     fire(document.querySelector('[aria-roledescription="slide"] img')!, new Event('error'));
     expect(document.querySelector('[aria-roledescription="slide"] img')).toBeNull();
   });

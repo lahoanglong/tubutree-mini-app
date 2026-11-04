@@ -73,7 +73,7 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
   });
 
   it('ảnh đầu trang qua bộ đổi cỡ (srcset w + sizes), eager + fetchpriority high vì là ảnh to nhất màn đầu', async () => {
-    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://content.pancake.vn/2-26/hero.jpg' }} initialProducts={page([1, 2, 3], 1, 3)} />);
+    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://res.cloudinary.com/tubutree/image/upload/v1/hero.jpg' }} initialProducts={page([1, 2, 3], 1, 3)} />);
     const img = c.querySelector('img')!;
     expect(img.getAttribute('src')).toContain('/img?w=960&u=');
     expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
@@ -82,8 +82,15 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     expect(img.getAttribute('fetchpriority')).toBe('high');
   });
 
+  it('ảnh đầu trang không phải Cloudinary/API (vd Pancake): giữ URL gốc, không srcset', async () => {
+    const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://content.pancake.vn/2-26/hero.jpg' }} initialProducts={page([1], 1, 1)} />);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('https://content.pancake.vn/2-26/hero.jpg');
+    expect(img.hasAttribute('srcset')).toBe(false);
+  });
+
   it('bản đổi cỡ (1x hoặc 1280/1920) lỗi thì lùi về ảnh gốc đúng một lần, lỗi tiếp thì để yên', async () => {
-    const orig = 'https://content.pancake.vn/2-26/hero.jpg';
+    const orig = 'https://res.cloudinary.com/tubutree/image/upload/v1/hero.jpg';
     const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: orig }} initialProducts={page([1], 1, 1)} />);
     const img = c.querySelector('img')!;
     expect(img.getAttribute('src')).toContain('/img?w=');

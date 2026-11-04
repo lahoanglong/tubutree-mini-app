@@ -9,11 +9,26 @@ export interface SizedImage extends ImageVariants {
 }
 
 /**
+ * Ảnh trên host upload tin cậy (Cloudinary) hoặc ảnh của chính API. Banner chiến dịch và ảnh đại diện/bìa gian hàng chỉ những ảnh này có trong danh sách
+ * của /img (CTV dán được mọi host https, nên API không đưa host khác vào danh sách): ảnh khác giữ nguyên URL, không tốn một lượt 404 rồi mới lùi về ảnh gốc.
+ */
+export function isUploadedImage(src: string): boolean {
+  if (src.startsWith('/public-image/')) return true;
+  try {
+    const url = new URL(src);
+    return url.hostname === 'res.cloudinary.com' || url.origin === new URL(API_BASE).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ảnh gốc làm ảnh dự phòng khi ảnh đổi cỡ không có (host lạ, base64) hoặc chưa tải được.
  * `cssWidth` là bề rộng hiển thị lớn nhất (CSS px); `sizes` là bề rộng thật theo khung nhìn (mặc định đúng `cssWidth`).
  * srcset dùng mô tả w (không dùng 1x/2x): ô lưới ~165px ở máy 2x chỉ cần bản 320 chứ không phải 640.
  */
-export function sizedImage(src: string, cssWidth: number, sizes?: string, wide = false): SizedImage {
+export function sizedImage(src: string, cssWidth: number, sizes?: string, wide = false, uploadedOnly = false): SizedImage {
+  if (uploadedOnly && !isUploadedImage(src)) return { src };
   const one = imageVariants(src, cssWidth, API_BASE);
   if (!one) return { src };
   // Tới màn 3x thì bản kế tiếp là thừa; bản 960 chỉ dành cho ảnh to (PDP).
@@ -46,11 +61,11 @@ export function fallBackToOriginal(original: string) {
  * Ảnh đổi cỡ kèm đường lùi: nếu bản đổi cỡ lỗi (API đổi cỡ tạm hỏng, nguồn không tải được) thì thử ảnh gốc một lần rồi mới báo lỗi
  * để nơi gọi rơi về hình lá. `fallBack()` trả true khi đã chuyển sang ảnh gốc (nơi gọi không báo lỗi lần này).
  */
-export function useSizedImage(src: string | null | undefined, cssWidth: number, sizes?: string, wide = false): { img: SizedImage | null; fallBack: () => boolean } {
+export function useSizedImage(src: string | null | undefined, cssWidth: number, sizes?: string, wide = false, uploadedOnly = false): { img: SizedImage | null; fallBack: () => boolean } {
   const [original, setOriginal] = useState(false);
   useEffect(() => setOriginal(false), [src]);
   if (!src) return { img: null, fallBack: () => false };
-  const sized = sizedImage(src, cssWidth, sizes, wide);
+  const sized = sizedImage(src, cssWidth, sizes, wide, uploadedOnly);
   const resized = sized.src !== src;
   return {
     img: original ? { src } : sized,

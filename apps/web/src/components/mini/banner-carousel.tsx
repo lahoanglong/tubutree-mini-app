@@ -43,14 +43,15 @@ const DOT_BTN: CSSProperties = {
   cursor: 'pointer',
 };
 
-/** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
+/** `sizes` của banner Ưu đãi: từ lg tràn cả khung nội dung (~1152px) thay vì chiếm 8/12 cột như Trang chủ. */
 export { BANNER_WIDE_SLIDE_SIZES as WIDE_SLIDE_SIZES };
+/** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
 const SLIDE_SIZES = BANNER_SLIDE_SIZES;
 const SLIDE_MAX_WIDTH = 728;
 
 function SlideImage({ slide, eager, sizes }: { slide: BannerSlide; eager: boolean; sizes: string }) {
   const [failed, setFailed] = useState(false);
-  const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, sizes, true);
+  const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, sizes, true, true);
   const frame: CSSProperties = { display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', borderRadius: 'var(--radius-media)', objectFit: 'cover' };
   if (failed) {
     return (

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { fallBackToOriginal, sizedImage } from './image-src';
+import { fallBackToOriginal, isUploadedImage, sizedImage } from './image-src';
 
 const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
 const widthsOf = (srcSet: string | undefined) => (srcSet ?? '').split(', ').map((e) => e.split(' ')[1]);
@@ -61,5 +61,20 @@ describe('fallBackToOriginal: bộ đổi cỡ lỗi thì lùi về ảnh gốc 
     img.setAttribute('src', 'https://orig/other.jpg');
     handler({ currentTarget: img });
     expect(img.getAttribute('src')).toBe('https://orig/other.jpg');
+  });
+});
+
+describe('isUploadedImage / uploadedOnly: chỉ ảnh có trong danh sách /img của gian hàng và chiến dịch', () => {
+  const CLOUD = 'https://res.cloudinary.com/tubutree/image/upload/v1/a.jpg';
+  it('Cloudinary và ảnh của API: có; Pancake, host lạ, base64, rác: không', () => {
+    expect(isUploadedImage(CLOUD)).toBe(true);
+    expect(isUploadedImage('/public-image/campaign/c1/cover?v=abc')).toBe(true);
+    for (const s of [PANCAKE, 'https://evil.example/a.jpg', 'data:image/png;base64,AAAA', 'not a url', '']) expect(isUploadedImage(s)).toBe(false);
+  });
+
+  it('uploadedOnly: Pancake giữ URL gốc dù resizer đổi cỡ được; Cloudinary vẫn có srcset', () => {
+    expect(sizedImage(PANCAKE, 728, '728px', true, true)).toEqual({ src: PANCAKE });
+    expect(sizedImage(CLOUD, 728, '728px', true, true).srcSet).toContain('1920w');
+    expect(sizedImage(PANCAKE, 728, '728px', true).srcSet).toContain('1920w');
   });
 });

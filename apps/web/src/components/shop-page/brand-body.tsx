@@ -80,6 +80,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
             header={
               <ShopHeader
                 inStoreGrid
+                imageSource="brand"
                 title={b.name}
                 coverUrl={b.coverUrl}
                 avatarUrl={b.logoUrl}

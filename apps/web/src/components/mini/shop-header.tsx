@@ -30,6 +30,11 @@ export interface ShopHeaderProps {
    * thì không có lớp `lg:` nào và bố cục điện thoại giữ ở mọi khổ, nên dựng ngoài `StoreLayout` (vd xem trước gian hàng) không vỡ.
    */
   inStoreGrid?: boolean;
+  /**
+   * Nguồn ảnh. `storefront` (mặc định): ảnh do CTV dán, chỉ ảnh Cloudinary/của API có trong danh sách của /img nên chỉ ảnh đó đi qua bộ đổi cỡ.
+   * `brand`: ảnh thương hiệu do admin nhập, mọi URL https đều có trong danh sách.
+   */
+  imageSource?: 'storefront' | 'brand';
 }
 
 /** Cao bìa ở điện thoại. Lớp `h-[120px]` của bìa phải bằng số này (Tailwind chỉ nhận lớp viết nguyên văn; `shop-header.spec` giữ hai số khớp). */
@@ -65,11 +70,11 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
  * bên phải, số liệu ngay dưới thông tin), avatar không còn đè mép bìa mà đứng đầu hàng tên. Phần khác nhau giữa điện thoại và lg nằm ở lớp
  * Tailwind (không ở style nội tuyến, vì style nội tuyến đè lớp `lg:`); các lớp `lg:` viết nguyên văn trong `LG` để Tailwind quét được.
  */
-export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false }: ShopHeaderProps) {
+export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false, imageSource = 'storefront' }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
   const noteId = useId();
-  const cover = useSizedImage(coverUrl, 960, COVER_SIZES);
-  const avatar = useSizedImage(avatarUrl, 72, AVATAR_SIZES);
+  const cover = useSizedImage(coverUrl, 960, COVER_SIZES, false, imageSource === 'storefront');
+  const avatar = useSizedImage(avatarUrl, 72, AVATAR_SIZES, false, imageSource === 'storefront');
   const long = (note ?? '').length > NOTE_FOLD_CHARS;
   const lg = (key: keyof typeof LG) => (inStoreGrid ? ` ${LG[key]}` : '');
   return (

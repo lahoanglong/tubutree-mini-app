@@ -514,9 +514,10 @@
       "props": "ShopHeaderProps",
       "propsDiff": {
         "webOnly": [
-          "inStoreGrid"
+          "inStoreGrid",
+          "imageSource"
         ],
-        "reason": "đặt ô của đầu shop vào lưới StoreLayout từ lg; Mini không có khổ lg"
+        "reason": "đặt ô của đầu shop vào lưới StoreLayout từ lg; Mini không có khổ lg; ảnh gian hàng CTV dán mọi host https nên web chỉ đổi cỡ ảnh Cloudinary; Mini không có bộ đổi cỡ theo nguồn"
       },
       "screens": [
         "/brand/:slug",

@@ -25,7 +25,7 @@ describe('ShopHeader (web)', () => {
   });
 
   it('có ảnh bìa: là thẻ img phủ kín khung (absolute, object-fit cover), eager + fetchpriority high, không dùng nền CSS', () => {
-    mount(<ShopHeader title="Shop" coverUrl="https://content.pancake.vn/a/cover.jpg" />);
+    mount(<ShopHeader title="Shop" coverUrl="https://res.cloudinary.com/tubutree/image/upload/v1/cover.jpg" />);
     const cover = q('shop-cover')!;
     const img = cover.querySelector('img')!;
     expect(cover.style.background).not.toContain('url(');
@@ -58,11 +58,21 @@ describe('ShopHeader (web)', () => {
   });
 
   it('avatar đi qua bộ đổi cỡ 160w kèm width/height', () => {
-    mount(<ShopHeader title="Gian hàng Lan" avatarUrl="https://content.pancake.vn/a/av.jpg" />);
+    mount(<ShopHeader title="Gian hàng Lan" avatarUrl="https://res.cloudinary.com/tubutree/image/upload/v1/av.jpg" />);
     const img = q('shop-avatar')!.querySelector('img')!;
     expect(img.getAttribute('src')).toContain('/img?w=160&u=');
     expect(img.getAttribute('width')).toBe('56');
     expect(img.getAttribute('height')).toBe('56');
+  });
+
+  it('gian hàng CTV: ảnh trên host khác (Pancake, cloud khác) giữ URL gốc; thương hiệu (admin nhập) thì mọi host https đi qua bộ đổi cỡ', () => {
+    mount(<ShopHeader title="Shop" coverUrl="https://content.pancake.vn/a/cover.jpg" avatarUrl="https://evil.example/av.jpg" />);
+    expect(q('shop-cover')!.querySelector('img')!.getAttribute('src')).toBe('https://content.pancake.vn/a/cover.jpg');
+    expect(q('shop-avatar')!.querySelector('img')!.getAttribute('src')).toBe('https://evil.example/av.jpg');
+    document.body.replaceChildren();
+    mount(<ShopHeader title="Hiệu" imageSource="brand" coverUrl="https://content.pancake.vn/a/cover.jpg" avatarUrl="https://content.pancake.vn/a/av.jpg" />);
+    expect(q('shop-cover')!.querySelector('img')!.getAttribute('src')).toContain('/img?w=');
+    expect(q('shop-avatar')!.querySelector('img')!.getAttribute('src')).toContain('/img?w=160&u=');
   });
 
   it('verified: dấu tích có tên "Đã được Tubu Tree duyệt"; không verified thì không có', () => {

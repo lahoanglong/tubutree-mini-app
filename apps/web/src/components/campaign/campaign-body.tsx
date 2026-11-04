@@ -65,7 +65,7 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
   const couponsLabel = fillCopy('campaign.sectionCoupons');
   const productsLabel = fillCopy('campaign.sectionProducts');
   const showProducts = c.productCount > 0;
-  const hero = sizedImage(c.image ?? '', HERO_MAX_WIDTH, HERO_SIZES, true);
+  const hero = sizedImage(c.image ?? '', HERO_MAX_WIDTH, HERO_SIZES, true, true);
   return (
     <>
       <PageHeader title={c.title} {...(c.subtitle ? { subtitle: c.subtitle } : {})} backHref="/" backLabel={fillCopy('campaign.backHome')} />
