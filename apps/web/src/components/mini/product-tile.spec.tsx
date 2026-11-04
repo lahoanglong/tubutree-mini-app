@@ -352,7 +352,32 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     const lazy = tile(v, 'grid').querySelector('img')!;
     expect(lazy.getAttribute('loading')).toBe('lazy');
     expect(lazy.getAttribute('fetchpriority')).toBeNull();
-    expect(lazy.getAttribute('alt')).toBe('');
+    expect(lazy.getAttribute('alt')).toBe('Serum Bã Trầu');
+  });
+
+  it('ảnh sản phẩm có alt = tên (ảnh là anh em của liên kết tên, không nằm trong nó nên không trùng lặp tên liên kết)', () => {
+    const c = tile(viewOf({ thumbnail: 'https://cdn.example/a.jpg' }), 'grid');
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('alt')).toBe('Serum Bã Trầu');
+    expect(link(c).contains(img)).toBe(false);
+  });
+
+  it('tên truy cập của liên kết bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3): có nhãn đầu tên thì "nhãn tên", không thì chỉ tên', () => {
+    const labelled = tile(viewOf({ isFeatured: true }, 'grid'), 'grid');
+    const visible = link(labelled).textContent!.trim();
+    expect(viewOf({ isFeatured: true }, 'grid').label).not.toBeNull();
+    expect(link(labelled).getAttribute('aria-label')!.startsWith(visible.slice(0, visible.length - 'Serum Bã Trầu'.length).trim())).toBe(true);
+    expect(link(labelled).getAttribute('aria-label')).toBe(`${viewOf({ isFeatured: true }, 'grid').label!.text} Serum Bã Trầu`);
+    expect(link(tile(viewOf({}, 'grid'), 'grid')).getAttribute('aria-label')).toBe('Serum Bã Trầu');
+  });
+
+  it('imageSizes của nơi gọi thắng sizes mặc định của biến thể; kệ có sizes bằng bề rộng ô', () => {
+    const v = (variant: CardVariant) => viewOf({ thumbnail: 'https://content.pancake.vn/a.jpg' }, variant);
+    expect(tile(v('rail-md'), 'rail-md').querySelector('img')!.getAttribute('sizes')).toBe('148px');
+    expect(tile(v('flash'), 'flash').querySelector('img')!.getAttribute('sizes')).toBe('128px');
+    expect(tile(v('line'), 'line').querySelector('img')!.getAttribute('sizes')).toBe('64px');
+    expect(tile(v('grid'), 'grid', { imageSizes: '33vw' }).querySelector('img')!.getAttribute('sizes')).toBe('33vw');
+    expect(tile(v('grid'), 'grid').querySelector('img')!.getAttribute('sizes')).toContain('calc((100vw - 44px) / 2)');
   });
 });
 

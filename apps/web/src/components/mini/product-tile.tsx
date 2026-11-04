@@ -7,6 +7,7 @@ import { Zap } from 'lucide-react';
 import type { CardBadge, CardVariant, ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { GRID_IMAGE_SIZES } from '@/lib/product-grid';
 import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
 import { PriceTag } from './price-tag';
@@ -35,6 +36,8 @@ export interface ProductTileProps {
   noteSpoken?: string;
   /** Ảnh LCP (thẻ đầu màn hình): tải ngay, ưu tiên cao. */
   priority?: boolean;
+  /** `sizes` của ảnh; thiếu thì theo bề rộng ô của biến thể (kệ 128/148px, thẻ dòng 64px, thẻ lưới theo lưới mặc định). */
+  imageSizes?: string;
   /** Nút tim do nơi gọi dựng (cần đăng nhập + API riêng). */
   wishlist?: ReactNode;
   /** Nút nổi trên ảnh (giỏ nhanh): góc phải dưới vùng ảnh, trên lớp phủ của liên kết tên; caller chỉ đưa nút. */
@@ -62,6 +65,11 @@ const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
   new: 'brand',
   freeship: 'success',
 };
+
+/** Bề rộng hiển thị lớn nhất của ảnh theo biến thể (CSS px) để chọn các bản srcset; ô lưới 2 cột ở 767px rộng ~361px. */
+const IMAGE_WIDTH: Record<CardVariant, number> = { grid: 360, 'rail-md': 148, 'rail-sm': 128, flash: 128, rank: 360, line: 64 };
+/** `sizes` mặc định khi không có lưới nào truyền: kệ có bề rộng ô cố định (token `--tile-w-*`), thẻ lưới theo lưới mặc định. */
+const IMAGE_SIZES: Record<CardVariant, string> = { grid: GRID_IMAGE_SIZES, 'rail-md': '148px', 'rail-sm': '128px', flash: '128px', rank: '128px', line: '64px' };
 
 const STACKED: ReadonlySet<CardVariant> = new Set(['rail-sm', 'rail-md', 'flash', 'rank']);
 const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
@@ -94,6 +102,7 @@ export function ProductTile({
   note,
   noteSpoken,
   priority = false,
+  imageSizes,
   wishlist,
   imageOverlay,
   footer,
@@ -167,7 +176,16 @@ export function ProductTile({
           ...(dimMedia ? { opacity: 0.55 } : null),
         }}
       >
-        <ProductImage src={view.thumbnail} brand={view.brandLine ?? ''} width={isLine ? 64 : undefined} size={isLine ? undefined : 400} priority={priority} />
+        <ProductImage
+          src={view.thumbnail}
+          brand={view.brandLine ?? ''}
+          // Ảnh là anh em của liên kết tên (liên kết chỉ phủ lên bằng ::after), không nằm trong nó nên alt không lặp tên liên kết.
+          alt={view.name}
+          width={IMAGE_WIDTH[variant]}
+          sizes={imageSizes ?? IMAGE_SIZES[variant]}
+          size={isLine ? undefined : 400}
+          priority={priority}
+        />
         <div aria-hidden>
           {!isLine && variant === 'rank' && view.rank !== null && (
             <span
@@ -255,13 +273,13 @@ export function ProductTile({
             {view.brandLine}
           </Text>
         )}
-        {/* Tên truy cập = tên sản phẩm (không kèm nhãn đầu tên, giá, meta: những thứ đó nằm ở mô tả). */}
+        {/* Tên truy cập = chữ nhìn thấy của liên kết (nhãn đầu tên + tên; WCAG 2.5.3 cần tên bắt đầu bằng chữ hiện), không kèm giá, meta: những thứ đó nằm ở mô tả. */}
         <Link
           href={href}
           // PDP là trang ISR: prefetch mặc định kéo trọn RSC (~58 KB) cho mỗi thẻ trong khung nhìn; chỉ tải khi bấm như trước.
           prefetch={false}
           className={`${STRETCHED_LINK_CLASS} md:transition-colors md:group-hover:text-forest-700`}
-          aria-label={view.name}
+          aria-label={label ? `${label.text} ${view.name}` : view.name}
           aria-describedby={descId}
           onClick={onOpen}
           style={LINK_RESET}
