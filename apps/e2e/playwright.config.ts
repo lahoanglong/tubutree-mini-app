@@ -102,6 +102,12 @@ const miniappServer: WebServer = {
   reuseExistingServer: !process.env.CI,
 };
 
+// Spec tham quan chỉ để chụp ảnh so giao diện: không đưa vào CI làm ca skipped.
+const VISUAL_TOUR = process.env.VISUAL_DIR ? [] : [/visual-tour\./];
+// Spec gieo đợt Giờ vàng thật vào DB tạm: trong lúc đợt còn (và 60 giây cache fetch của Next sau đó) mọi trang server dựng, Trang chủ trước hết,
+// đều nhúng khối Giờ vàng mà spec khác mock là rỗng ở trình duyệt, nên bố cục nhảy. Chạy ở project riêng sau khi hai project web khách xong.
+const FLASH_DB_SPEC = /pdp-flash-cls\.web\.spec\.ts/;
+
 const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
   {
     name: 'API',
@@ -121,12 +127,21 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
     name: 'Web Customer',
     use: { ...devices['Desktop Chrome'], baseURL: WEB_URL },
     testMatch: /.*\.web\.spec\.ts/,
+    testIgnore: [...VISUAL_TOUR, FLASH_DB_SPEC],
   },
   {
     name: 'Web Customer Mobile',
     use: { ...devices['Pixel 7'], baseURL: WEB_URL },
     // ds-parity.shop.spec.ts chạy ở project này và ở "Zalo Mini App": mỗi bên đo trang của mình so với bảng chuẩn chung (support/ds-parity.ts).
     testMatch: [/.*\.web\.spec\.ts/, /.*ds-parity\.shop\.spec\.ts/],
+    testIgnore: [...VISUAL_TOUR, FLASH_DB_SPEC],
+  },
+  {
+    // Chỉ chạy khi hai project trên đã xong (và xanh): không trang web khách nào khác được dựng trong lúc đợt Giờ vàng gieo còn sống.
+    name: 'Web Customer Flash DB',
+    use: { ...devices['Desktop Chrome'], baseURL: WEB_URL },
+    testMatch: FLASH_DB_SPEC,
+    dependencies: ['Web Customer', 'Web Customer Mobile'],
   },
   {
     name: 'Zalo Mini App',
@@ -137,8 +152,8 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
 
 export default defineConfig({
   testDir: './tests',
-  // Spec tham quan chỉ để chụp ảnh so giao diện: không đưa vào CI làm ca skipped.
-  testIgnore: process.env.VISUAL_DIR ? undefined : /visual-tour\./,
+  // Project nào tự đặt testIgnore thì thay hẳn dòng này, nên các project đó gộp VISUAL_TOUR vào danh sách của mình.
+  testIgnore: VISUAL_TOUR,
   globalSetup: './global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
