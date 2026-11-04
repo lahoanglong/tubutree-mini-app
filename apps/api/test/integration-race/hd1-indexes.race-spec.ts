@@ -58,6 +58,18 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
     expect(await def('notification_logs_userId_channel_status_idx')).toMatch(/\("userId", channel, status\)$/);
   });
 
+  it('voucher mốc: index theo hậu tố kỳ 8 ký tự của reason và id, chỉ dòng code MILESTONE%', async () => {
+    expect(await def('coupons_milestone_period_idx')).toMatch(
+      /\("right"\(\("scopeMeta" ->> 'reason'::text\), 8\), id\) WHERE \(code ~~ 'MILESTONE%'::text\)$/,
+    );
+  });
+
+  it('khách vãng lai: index một phần theo id với đủ ba điều kiện role, phone, zaloId khớp literal của câu đếm', async () => {
+    expect(await def('users_guest_idx')).toMatch(
+      /\(id\) WHERE \(\(role = 'CUSTOMER'::"UserRole"\) AND \(phone IS NULL\) AND \("zaloId" ~~ 'guest_%'::text\)\)$/,
+    );
+  });
+
   it('L3-11: lịch sử điểm của khách theo (userId, createdAt DESC, id DESC) đúng thứ tự keyset của getPointsTransactions', async () => {
     expect(await def('points_transactions_userId_createdAt_id_idx')).toMatch(
       /\("userId", "createdAt" DESC, id DESC\)$/,
