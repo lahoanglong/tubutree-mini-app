@@ -34,7 +34,7 @@ import { createQueryClient } from '../services/query-client';
 import type { QueryClient } from '@tanstack/react-query';
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
-import { useAuthStore, setLogoutCleanup } from './auth';
+import { useAuthStore, setLogoutCleanup, resetDeviceIdCacheForTests } from './auth';
 import { markCtvTouched, wasCtvTouched } from './storefront-context';
 import { vi as copy } from '../i18n/vi';
 
@@ -82,6 +82,8 @@ async function flush(): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetDeviceIdCacheForTests();
+  resetDeviceIdCacheForTests();
   mockedSetStorage.mockResolvedValue(undefined as never);
   mockedRemoveStorage.mockResolvedValue(undefined as never);
   mockedGetStorage.mockResolvedValue({});
