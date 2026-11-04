@@ -604,7 +604,6 @@ export class AdminService {
       const data: Prisma.UserUpdateInput = {
         role,
         ...(droppedPerms.length ? { staffPermissions: [] } : {}),
-        ...(await affiliateRevocationPatch(tx, user.id, previousRole, role)),
       };
       // Gian hàng khoá trước dòng users (cùng thứ tự với checkout); vướng mắc đối tác thì 409 và vai trò không đổi.
       // Đặt về CUSTOMER/AFFILIATE khi người này không vừa rơi từ DEALER/STAFF/ADMIN (vd. lần thu hồi quyền nhân viên bị gian hàng chặn
@@ -615,6 +614,8 @@ export class AdminService {
           spareAdminToggled: !losesPartnerStore(previousRole, role),
         });
       }
+      // Tính dấu SAU khi gian hàng đối tác (MERCHANT) đã chuyển về CTV: chủ gian hàng đối tác không hoa hồng vẫn có dấu vết CTV khi về khách.
+      Object.assign(data, await affiliateRevocationPatch(tx, user.id, previousRole, role));
       if (dealerTierId) {
         // Gộp dealerTierId vào metadata đọc từ dòng users đã khoá (như duyệt hồ sơ), không phải bản findUnique ở trên: ghi metadata chen
         // giữa (nhóm da, onboardedAt) không bị ghi đè. Khoá users đứng cuối thứ tự khoá, sau gian hàng.

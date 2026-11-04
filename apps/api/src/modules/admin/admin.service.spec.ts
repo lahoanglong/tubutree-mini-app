@@ -593,6 +593,17 @@ describe('AdminService.setUserRole', () => {
         },
       });
 
+    it('STAFF chủ gian hàng đối tác (MERCHANT, không hoa hồng) → CUSTOMER: dấu tính SAU khi gian hàng đã thành CTV', async () => {
+      const prisma = withRole('STAFF');
+      let converted = false;
+      fulfilment.clearPartnerOnRoleLoss.mockImplementationOnce(async () => {
+        converted = true;
+      });
+      (prisma as unknown as { storefront: { findFirst: jest.Mock } }).storefront.findFirst.mockImplementation(async () => (converted ? { id: 's1' } : null));
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      expect(((prisma.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date }).affiliateRevokedAt).toBeInstanceOf(Date);
+    });
+
     it('STAFF còn hoa hồng → CUSTOMER: đặt dấu thu hồi; CUSTOMER → AFFILIATE: xoá dấu', async () => {
       const toCustomer = withRole('STAFF');
       (toCustomer as unknown as { commission: { findFirst: jest.Mock } }).commission.findFirst.mockResolvedValue({ id: 'c1' });

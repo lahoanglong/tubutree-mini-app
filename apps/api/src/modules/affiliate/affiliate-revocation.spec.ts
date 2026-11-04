@@ -29,9 +29,15 @@ describe('affiliateRevocationPatch', () => {
 });
 
 describe('isAffiliateBlocked', () => {
-  it('có dấu hoặc là khách → chặn; nhân viên, admin, CTV, đại lý không dấu → qua', () => {
-    expect(isAffiliateBlocked({ role: 'AFFILIATE', affiliateRevokedAt: new Date() })).toBe(true);
-    expect(isAffiliateBlocked({ role: 'CUSTOMER', affiliateRevokedAt: null })).toBe(true);
-    for (const role of ['STAFF', 'ADMIN', 'AFFILIATE', 'DEALER']) expect(isAffiliateBlocked({ role, affiliateRevokedAt: null })).toBe(false);
+  const DEFAULT = new Set(['AFFILIATE', 'DEALER']);
+  it('có dấu hoặc là khách (cấu hình mặc định) → chặn; nhân viên, admin, CTV, đại lý không dấu → qua', () => {
+    expect(isAffiliateBlocked({ role: 'AFFILIATE', affiliateRevokedAt: new Date() }, DEFAULT)).toBe(true);
+    expect(isAffiliateBlocked({ role: 'CUSTOMER', affiliateRevokedAt: null }, DEFAULT)).toBe(true);
+    for (const role of ['STAFF', 'ADMIN', 'AFFILIATE', 'DEALER']) expect(isAffiliateBlocked({ role, affiliateRevokedAt: null }, DEFAULT)).toBe(false);
+  });
+  it('cấu hình cho khách hưởng hoa hồng: khách không dấu qua, có dấu vẫn chặn', () => {
+    const withCustomer = new Set(['AFFILIATE', 'DEALER', 'CUSTOMER']);
+    expect(isAffiliateBlocked({ role: 'CUSTOMER', affiliateRevokedAt: null }, withCustomer)).toBe(false);
+    expect(isAffiliateBlocked({ role: 'CUSTOMER', affiliateRevokedAt: new Date() }, withCustomer)).toBe(true);
   });
 });

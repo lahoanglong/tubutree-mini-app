@@ -1579,6 +1579,21 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   describe('quyền CTV', () => {
     const svcOf = (prisma: PrismaService) => new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
 
+    describe('cấu hình cho khách hưởng hoa hồng (affiliate.commission_eligible_roles có CUSTOMER)', () => {
+      const withCustomer = {
+        get: async <T>(k: string, fb?: T): Promise<T> =>
+          (k === 'affiliate.commission_eligible_roles' ? ['AFFILIATE', 'DEALER', 'CUSTOMER'] : k === 'affiliate.pit_withhold_threshold' ? 2_000_000 : fb) as T,
+      } as unknown as SystemConfigService;
+      const svcWith = (prisma: PrismaService) => new AffiliateService(prisma, withCustomer, pricing, pancakeOrder, coins, analytics);
+
+      it('khách không dấu rút được; có dấu vẫn 403', async () => {
+        const ok = makePrisma({ role: 'CUSTOMER' });
+        await expect(svcWith(ok.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true });
+        const revoked = makePrisma({ role: 'CUSTOMER', revokedAt: new Date() });
+        await expect(svcWith(revoked.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
+      });
+    });
+
     it('dấu thu hồi + hoa hồng APPROVED → 403, không đánh dấu PAID, không đụng Ví', async () => {
       const { prisma, updateMany, userUpdate, payoutCreate } = makePrisma({ role: 'CUSTOMER', revokedAt: new Date() });
       await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);

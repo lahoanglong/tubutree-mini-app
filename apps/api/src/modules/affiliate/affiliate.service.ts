@@ -355,7 +355,7 @@ export class AffiliateService {
   private async assertNotRevoked(db: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<void> {
     const user = await db.user.findUnique({ where: { id: userId }, select: { role: true, affiliateRevokedAt: true } });
     if (user?.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
-    if (user?.role === 'CUSTOMER') throw new ForbiddenException(AFFILIATE_NOT_CTV_MESSAGE);
+    if (user?.role === 'CUSTOMER' && !(await this.commissionEligibleRoles()).has('CUSTOMER')) throw new ForbiddenException(AFFILIATE_NOT_CTV_MESSAGE);
   }
 
   async createLink(userId: string, targetType: string, targetId?: string) {
@@ -1691,8 +1691,9 @@ export class AffiliateService {
       });
       const byUser = new Map<string, { ids: string[]; total: number }>();
       const revokedUsers = new Set<string>();
+      const eligibleRoles = await this.commissionEligibleRoles();
       for (const r of rows) {
-        if (r.user && isAffiliateBlocked(r.user)) {
+        if (r.user && isAffiliateBlocked(r.user, eligibleRoles)) {
           revokedUsers.add(r.affiliateUserId);
           continue;
         }

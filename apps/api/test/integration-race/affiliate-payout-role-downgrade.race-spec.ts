@@ -157,4 +157,27 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     expect(await marks()).toEqual(first);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: withCommission.id } })).affiliateRevokedAt).toEqual(at);
   });
+
+  it('backfill với cấu hình cho khách hưởng hoa hồng: khách chỉ có hoa hồng không bị đánh dấu, người có lịch sử hạ quyền vẫn bị', async () => {
+    const onlyCommission = await ctvWithCommission(40_000);
+    await prisma.user.update({ where: { id: onlyCommission.id }, data: { role: 'CUSTOMER' } });
+    const demoted = await createUser(prisma, { role: 'CUSTOMER' });
+    await prisma.userAdminEvent.create({ data: { userId: demoted.id, kind: 'ROLE', fromValue: 'DEALER', toValue: 'CUSTOMER' } });
+    const key = 'affiliate.commission_eligible_roles';
+    const before = await prisma.systemConfig.findUnique({ where: { key } });
+    await prisma.systemConfig.upsert({
+      where: { key },
+      update: { value: ['AFFILIATE', 'DEALER', 'CUSTOMER'] },
+      create: { key, value: ['AFFILIATE', 'DEALER', 'CUSTOMER'], category: 'affiliate' },
+    });
+    try {
+      const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104160500_user_affiliate_revoked_backfill/migration.sql'), 'utf8');
+      await prisma.$executeRawUnsafe(sql);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: onlyCommission.id } })).affiliateRevokedAt).toBeNull();
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: demoted.id } })).affiliateRevokedAt).not.toBeNull();
+    } finally {
+      if (before) await prisma.systemConfig.update({ where: { key }, data: { value: before.value as object } });
+      else await prisma.systemConfig.delete({ where: { key } });
+    }
+  });
 });

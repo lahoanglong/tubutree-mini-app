@@ -5,7 +5,14 @@ SET "affiliateRevokedAt" = now()
 WHERE u."role" = 'CUSTOMER'
   AND u."affiliateRevokedAt" IS NULL
   AND (
-    EXISTS (SELECT 1 FROM "commissions" c WHERE c."affiliateUserId" = u."id")
+    -- Hoa hồng của khách chỉ là dấu vết CTV cũ khi cấu hình KHÔNG cho khách hưởng hoa hồng; có CUSTOMER trong khoá thì khách tích hoa hồng bình thường.
+    (
+      EXISTS (SELECT 1 FROM "commissions" c WHERE c."affiliateUserId" = u."id")
+      AND NOT EXISTS (
+        SELECT 1 FROM "system_configs" sc
+        WHERE sc."key" = 'affiliate.commission_eligible_roles' AND jsonb_typeof(sc."value") = 'array' AND sc."value" @> '["CUSTOMER"]'::jsonb
+      )
+    )
     OR EXISTS (SELECT 1 FROM "storefronts" s WHERE s."ownerUserId" = u."id" AND s."type" = 'CTV')
     OR EXISTS (
       SELECT 1 FROM "user_admin_events" e

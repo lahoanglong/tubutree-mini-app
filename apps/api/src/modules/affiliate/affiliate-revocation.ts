@@ -23,7 +23,13 @@ export async function affiliateRevocationPatch(
   return commission || storefront ? { affiliateRevokedAt: new Date() } : {};
 }
 
-/** CUSTOMER không dấu cũng bị chặn: CTV hạ trước khi có dấu, hay đi qua nhân viên, không còn quyền rút hoa hồng/nhận thưởng. */
-export function isAffiliateBlocked(user: { role: string; affiliateRevokedAt: Date | null } | null): boolean {
-  return !user || user.affiliateRevokedAt !== null || user.role === 'CUSTOMER';
+/**
+ * Chặn rút hoa hồng/nhận thưởng: có dấu thu hồi, hoặc là khách khi cấu hình không cho khách hưởng hoa hồng (CTV hạ trước khi có dấu, hay đi qua
+ * nhân viên). Cấu hình có CUSTOMER thì khách tích hoa hồng bình thường nên rút được; người bị hạ quyền vẫn bị chặn theo dấu.
+ */
+export function isAffiliateBlocked(
+  user: { role: string; affiliateRevokedAt: Date | null } | null,
+  eligibleRoles: ReadonlySet<string>,
+): boolean {
+  return !user || user.affiliateRevokedAt !== null || (user.role === 'CUSTOMER' && !eligibleRoles.has('CUSTOMER'));
 }

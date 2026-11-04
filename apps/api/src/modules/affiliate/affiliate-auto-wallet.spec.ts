@@ -14,11 +14,11 @@ import type { NotificationsService } from '../notifications/notifications.servic
 const noop = {} as never;
 type Row = { id: string; affiliateUserId: string; amount: number; user?: { role: string; affiliateRevokedAt: Date | null } };
 
-function build(opts: { rows?: Row[]; flag?: unknown; payout?: { amount: number; taxWithheld: number } | null } = {}) {
+function build(opts: { rows?: Row[]; flag?: unknown; eligible?: string[]; payout?: { amount: number; taxWithheld: number } | null } = {}) {
   const flagValue = 'flag' in opts ? opts.flag : undefined;
   const config = {
     get: async <T>(k: string, fb?: T): Promise<T> =>
-      (k === AFFILIATE_AUTO_WALLET_TRANSFER_KEY && flagValue !== undefined ? flagValue : fb) as T,
+      (k === AFFILIATE_AUTO_WALLET_TRANSFER_KEY && flagValue !== undefined ? flagValue : k === 'affiliate.commission_eligible_roles' && opts.eligible ? opts.eligible : fb) as T,
   } as unknown as SystemConfigService;
   const findMany = jest.fn().mockResolvedValue(opts.rows ?? []);
   const payoutFindUnique = jest.fn().mockResolvedValue(opts.payout === undefined ? { amount: 0, taxWithheld: 0 } : opts.payout);
@@ -93,6 +93,19 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     const credited = await t.svc.autoTransferApprovedToWallet();
     expect([...credited]).toEqual(['b']);
     expect(t.requestPayout).toHaveBeenCalledTimes(1);
+  });
+
+  it('cấu hình cho khách hưởng hoa hồng: khách không dấu được chuyển, người có dấu vẫn bị bỏ qua', async () => {
+    const t = build({
+      eligible: ['AFFILIATE', 'DEALER', 'CUSTOMER'],
+      rows: [
+        ...rows('a', 10_000).map((r) => ({ ...r, user: { role: 'CUSTOMER', affiliateRevokedAt: null } })),
+        ...rows('b', 7_000).map((r) => ({ ...r, user: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } })),
+      ],
+    });
+    t.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 1, note: '' });
+    const credited = await t.svc.autoTransferApprovedToWallet();
+    expect([...credited]).toEqual(['a']);
   });
 
   it('khoá idempotency xác định theo tập commission: đảo thứ tự dòng vẫn cùng khoá, thêm một khoản thì khác khoá', async () => {
