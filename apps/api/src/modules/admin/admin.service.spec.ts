@@ -746,6 +746,47 @@ describe('AdminService.setUserRole', () => {
     expect(out.role).toBe('CUSTOMER');
   });
 
+  describe('AFFILIATE_REVOKE: sổ ghi mọi lần dấu thu hồi CTV đổi giá trị', () => {
+    const MARK = new Date('2026-10-01T03:00:00.000Z');
+    const withUser = (role: string, affiliateRevokedAt: Date | null) =>
+      makePrisma({
+        user: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role, affiliateRevokedAt, staffPermissions: [] }),
+          update: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'X', fullName: 'X' }),
+          count: jest.fn().mockResolvedValue(3),
+        },
+      });
+    const events = (prisma: PrismaService) =>
+      (prisma.userAdminEvent.create as jest.Mock).mock.calls.map((c) => c[0].data as { kind: string; fromValue: string | null; toValue: string | null; actorId: string });
+
+    it('DEALER→DEALER trên người có dấu: xoá dấu và ghi AFFILIATE_REVOKE (from ISO, to null)', async () => {
+      const prisma = withUser('DEALER', MARK);
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'DEALER', 't1');
+      expect(events(prisma)).toEqual([expect.objectContaining({ kind: 'AFFILIATE_REVOKE', fromValue: MARK.toISOString(), toValue: null, actorId: 'admin1' })]);
+    });
+
+    it('CTV→CUSTOMER: ghi ROLE và AFFILIATE_REVOKE (from null, to ISO)', async () => {
+      const prisma = withUser('AFFILIATE', null);
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      const list = events(prisma);
+      expect(list.map((e) => e.kind)).toEqual(['ROLE', 'AFFILIATE_REVOKE']);
+      expect(list[1]).toMatchObject({ fromValue: null, actorId: 'admin1' });
+      expect(Number.isNaN(Date.parse(list[1].toValue as string))).toBe(false);
+    });
+
+    it('STAFF→STAFF không đụng dấu: không ghi AFFILIATE_REVOKE', async () => {
+      const prisma = withUser('STAFF', MARK);
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF');
+      expect(events(prisma).filter((e) => e.kind === 'AFFILIATE_REVOKE')).toEqual([]);
+    });
+
+    it('khách không dấu được đặt lại CUSTOMER: dấu vẫn null, không ghi sổ', async () => {
+      const prisma = withUser('CUSTOMER', null);
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      expect(events(prisma)).toEqual([]);
+    });
+  });
+
   // C-008 (A5N-03, Q-07): cấp DEALER thẳng qua đây trước đây không gán bậc → dealerContext trả tier null
   // và luồng CREDIT bỏ qua hạn mức công nợ. Gán DEALER bắt buộc kèm bậc tồn tại, ghi metadata.dealerTierId.
   describe('gán DEALER bắt buộc chọn bậc (C-008)', () => {

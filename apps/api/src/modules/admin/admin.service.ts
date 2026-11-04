@@ -675,6 +675,18 @@ export class AdminService {
       if (previousRole !== role) {
         await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: previousRole, to: role, actorId: adminId });
       }
+      // Dấu đổi giá trị mà vai trò không đổi (DEALER→DEALER mở lại quyền rút) vẫn phải có dòng sổ: lịch sử vai trò không nói được ai mở lại.
+      const markBefore = user.affiliateRevokedAt ?? null;
+      const markAfter = 'affiliateRevokedAt' in data ? ((data.affiliateRevokedAt as Date | null | undefined) ?? null) : markBefore;
+      if ((markBefore === null) !== (markAfter === null)) {
+        await recordUserAdminEvent(tx, {
+          userId: user.id,
+          kind: 'AFFILIATE_REVOKE',
+          from: markBefore?.toISOString() ?? null,
+          to: markAfter?.toISOString() ?? null,
+          actorId: adminId,
+        });
+      }
       if (droppedPerms.length) {
         await recordUserAdminEvent(tx, {
           userId: user.id,
@@ -791,7 +803,7 @@ export class AdminService {
       }),
       // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
       this.prisma.userAdminEvent.findMany({
-        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT'] } },
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT', 'AFFILIATE_REVOKE'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
