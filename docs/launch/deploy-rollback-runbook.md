@@ -593,6 +593,95 @@ Lượt ngày đầu tiên sau deploy (chưa có dòng `AffiliateService.dailyWa
 - API cũ nhận `w=480` thì trả 400: web lùi về ảnh gốc một lần (`fallBackToOriginal`), Mini App ở mục 2x (và 3x) cũng lùi về ảnh gốc. Ảnh không vỡ nhưng nặng.
 - Quay API về `:prev-*` thiếu `w=480` thì Mini App bản mới nhận 400 như trên. Nếu quay API qua mốc này và phải giữ lâu thì cân nhắc đẩy lại Mini App bản cũ.
 
+### 1.19 Hạn chờ của Postgres đặt trong `DATABASE_URL` (hard/1105, L3-05)
+
+Mã API chỉ đổi `maxWait` mặc định của `$transaction` từ 2 giây lên 5 giây (`PRISMA_TRANSACTION_OPTIONS`, `apps/api/src/prisma/prisma.service.ts`); chỗ nào tự truyền `maxWait`/`timeout` thì giữ nguyên. Ba hạn chờ phía Postgres do bước deploy áp, qua tham số `options` của `DATABASE_URL` (không dùng `ALTER ROLE`, để migrate và công cụ dùng role `tubu` không bị ảnh hưởng ngầm):
+
+| Tham số | Giá trị | Vì sao |
+|---|---|---|
+| `statement_timeout` | `30s` | một câu lệnh treo không giữ kết nối pool vô hạn; mọi truy vấn của app đều có chỉ mục hoặc lô nhỏ |
+| `lock_timeout` | `10s` | chờ khoá dòng/bảng quá 10 giây thì báo lỗi (mã `55P03`, `throwIfLockBusy` đã đổi thành 409 ở các đường tiền) thay vì xếp hàng dồn |
+| `idle_in_transaction_session_timeout` | `30s` | transaction mở mà không gửi lệnh nào 30 giây thì Postgres cắt, nhả khoá |
+
+Dạng URL-encoded đúng (một tham số `options`, các cờ cách nhau bằng `%20`, dấu `=` là `%3D`):
+
+```
+DATABASE_URL=postgresql://<user>:<mật khẩu đã mã hoá URL>@postgres:5432/<db>?connection_limit=20&pool_timeout=30&options=-c%20statement_timeout%3D30s%20-c%20lock_timeout%3D10s%20-c%20idle_in_transaction_session_timeout%3D30s
+```
+
+Đã thử trên Prisma 5.22 + Postgres 16: một `PrismaClient` dùng URL này đọc ra `statement_timeout=30s`, `lock_timeout=10s`, `idle_in_transaction_session_timeout=30s`, và `prisma migrate deploy`/`migrate diff` vẫn chạy bình thường với URL có `options`.
+
+**Việc của 4f (gói deploy).** `docker-compose.vietnix.yml` dòng `DATABASE_URL:` của service `api` đang kết thúc bằng `?connection_limit=20&pool_timeout=30`. Đề xuất (không sửa trong gói này): thêm đuôi `${DB_SESSION_OPTIONS:-}` vào cuối dòng đó, và đặt trong `/opt/tubutree/.env` đúng một dòng
+
+```
+DB_SESSION_OPTIONS=&options=-c%20statement_timeout%3D30s%20-c%20lock_timeout%3D10s%20-c%20idle_in_transaction_session_timeout%3D30s
+```
+
+Compose chỉ thay biến lúc tạo container, nên tạo lại `api` (bước 9) là đủ; không đụng `postgres`/`redis` (xem cảnh báo ở mục 1.5).
+
+**Migration KHÔNG chạy với options này.** Hai chỗ chạy `prisma migrate deploy` bằng cùng `DATABASE_URL` của `api`: bước 7 (`$DC run --rm --no-deps api pnpm exec prisma migrate deploy`) và `CMD` của `apps/api/Dockerfile` (`prisma migrate deploy && node dist/main.js`). Chỉ mục hay backfill dài sẽ bị cắt ở 30 giây và để migration dở (`finished_at IS NULL`). Quyết định: bước migrate riêng (bước 7) chạy với URL KHÔNG có options bằng cách xoá biến ngay trên dòng lệnh:
+
+```bash
+env DB_SESSION_OPTIONS= $DC run --rm --no-deps api pnpm exec prisma migrate deploy
+```
+
+Biến đặt trong shell thắng `.env` khi compose thay biến, nên container migrate nhận URL trơn. `CMD` của Dockerfile chạy lại `migrate deploy` lúc container khởi động: sau bước 7 không còn gì chờ áp nên xong ngay; nếu ai bỏ bước 7 mà còn migration chờ, lệnh đó chạy dưới options và có thể bị cắt, API không lên (an toàn, không để lại trạng thái hỏng ngoài migration dở: xử lý theo mục 7.1). Đề xuất cho 4f nếu muốn gỡ hẳn rủi ro đó: đổi `CMD` thành chạy migrate với `DATABASE_URL` đã bỏ phần `options` (không sửa ở gói này vì `Dockerfile` là của 4f).
+
+Migration của gói hd2 (`20261105140000_payouts_status_index`) chỉ dựng chỉ mục `payouts_status_idx` trên `payouts` (bảng nhỏ, vài chục đến vài trăm dòng): không phải migration nặng, không vào `HEAVY_MIGRATIONS`, vẫn chạy dưới URL trơn như mọi migration.
+
+**Việc chạy lâu: đã xét từng chỗ.**
+
+| Việc | Có thể > 30 giây một câu? | Xử lý |
+|---|---|---|
+| Xuất CSV (`streamCsv`, `orderCsvChunks`, `userCsvChunks`) | Không: đọc từng lô 500 dòng, mỗi lô một câu `findMany` ngắn; không giữ transaction | Không cần |
+| Dọn log (`DataRetentionService.deleteInBatches`) | Không: mỗi câu `DELETE ... LIMIT 5000` rồi nghỉ 200 ms, cột lọc có chỉ mục theo thời gian | Không cần. Nếu một lô vẫn bị cắt (`57014`) thì cron ghi lỗi và lượt sau làm tiếp từ chỗ còn lại |
+| Go-live collect (`config/go-live/collect.ts`) | Không: tx đã có `timeout: 30_000` của Prisma, bằng hạn của Postgres; toàn `count`/`findMany` trên cột có chỉ mục | Không cần |
+| Dọn dữ liệu demo (`config/demo-data/cleanup.ts`, chạy tay ở bước 7c) | Có thể: tx đặt `timeout: 60_000` và quét `products`/`variations`/`coupons` theo điều kiện chuỗi | Đã thêm `allowLongStatements(tx)` (`SET LOCAL statement_timeout = 120s` qua `set_config(..., true)`) ở đầu cả hai tx (xem trước và áp) |
+| Backfill/recompute nền (`recomputeSoldCounts` và các cron sổ) | Thuộc gói hd1 (index/truy vấn của hd1) | Không đổi ở gói này; nếu hd1 giữ một câu dài thì tự bọc `allowLongStatements` |
+| Script chạy tay qua `$DC run --rm --no-deps api ...`: `scripts/reconcile-points.ts` (`pnpm reconcile:points`), `scripts/reconcile-wallet.ts` (`pnpm reconcile:wallet`), `scripts/backfill-analytics-2026-09.ts`, `scripts/backfill-ns1.ts`, `prisma/cleanup-demo-data.ts` (bước 7c), `prisma/seed-reference.ts` (bước 7b) | Có: quét/đối soát/ghi cả bảng (sổ điểm, ví, analytics), một câu có thể quá 30 giây | Chạy bằng URL không options: `env DB_SESSION_OPTIONS= $DC run --rm --no-deps api pnpm <lệnh>`. `go-live:check` và `scripts/sample-storefronts.ts` chỉ đọc/ghi ít, để mặc định |
+| Backup/`pg_dump` (bước 6) | Có | Chạy bằng `psql`/`pg_dump` của container `postgres`, không qua `DATABASE_URL` của app nên không dính options |
+
+**Câu kiểm sau deploy (bước 9 trở đi).** `psqlq -c "SHOW statement_timeout"` KHÔNG chứng minh được gì: `psql` mở phiên riêng không có `options`, luôn ra `0`. Phải hỏi qua đúng kết nối của app (role app, cùng URL):
+
+```bash
+$DC exec -T api node -e "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.\$queryRaw\`SELECT current_setting('statement_timeout') AS st, current_setting('lock_timeout') AS lt, current_setting('idle_in_transaction_session_timeout') AS it\`.then(r=>{console.log(JSON.stringify(r));return p.\$disconnect()})"
+```
+
+Kỳ vọng đúng một dòng `[{"st":"30s","lt":"10s","it":"30s"}]`. Kiểm thêm log API 10 phút đầu: `$DC logs --since 10m api | grep -ciE '57014|55P03|P2028'` nên là 0 hoặc rất ít; nhiều hơn thì nâng `statement_timeout` rồi tạo lại `api`, không gỡ cả ba.
+
+Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-deps api` (hoặc quay API về `:prev-*`: ảnh cũ không biết `maxWait` 5 giây nhưng vẫn chạy được với URL có options).
+
+- [ ] `.env` có `DB_SESSION_OPTIONS` (do 4f) và compose đã nối vào `DATABASE_URL`
+- [ ] Bước 7 chạy dưới `env DB_SESSION_OPTIONS=`
+- [ ] Câu kiểm trên ra `[{"st":"30s","lt":"10s","it":"30s"}]`
+
+### 1.20 Hàng thông báo tách đôi, worker ZNS 5 chỗ (hard/1105, L3-06)
+
+- Job thử lại tin trong app (`inapp-retry`) chuyển sang hàng mới `notifications-inapp-retry` (worker riêng, concurrency 2). Hàng `notifications` chỉ còn job `zns-send`: worker concurrency 5 và limiter 10 job/giây (mức tự chọn: Zalo không công bố trần theo giây, chỉ hạn mức ngày của OA).
+- Hai log ZNS cùng (khách, `dedupeKey`) chạy song song: worker nhận quyền gửi trong một khoá advisory ngắn (không giữ khi gọi Zalo) và có ba kết cục. (1) Log kia đã SENT: log này đóng `FAILED` với lý do "Bỏ qua: tin cho cùng sự kiện đã gửi ở log <id>." (job báo warn "log đã đóng", không phải lỗi gửi). (2) Log kia đang RETRYING (đang gửi hoặc chờ thử lại): log này hoãn, vẫn PENDING và không gọi Zalo, BullMQ thử lại sau; tới lượt cuối mà log kia vẫn RETRYING thì đóng `FAILED` với lý do "Không gửi: log <id> cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ." (3) Log kia FAILED hẳn hoặc không có: log này gửi bình thường. Lưu ý đã biết: log kẹt RETRYING vì job hỏng hẳn sẽ chặn tin cùng khoá cho tới lượt cuối (có từ trước).
+- Không có migration, không cần biến môi trường. `go-live:check` mục Redis giờ đếm 9 hàng đợi.
+
+**Lên bản mới.** Job `inapp-retry` đã nằm trong hàng cũ `notifications` lúc deploy KHÔNG mất: `NotificationsProcessor` (worker của hàng `notifications`) vẫn xử lý tên job đó. Không cần xả trước khi lên bản.
+
+**Quay API về bản cũ (rollback).** Bản cũ không có worker cho hàng `notifications-inapp-retry`, nên job còn trong hàng mới đó sẽ nằm im tới khi lên lại bản mới (tin trong app của sự kiện đó không tới; ZNS không ảnh hưởng). Xả trước khi quay, trên VPS:
+
+```bash
+for st in wait active delayed prioritized; do
+  k=bull:notifications-inapp-retry:$st
+  t=$($DC exec -T redis redis-cli type $k | tr -d '\r')
+  case $t in list) n=$($DC exec -T redis redis-cli llen $k);; zset) n=$($DC exec -T redis redis-cli zcard $k);; *) n=0;; esac
+  echo "$st=$n"
+done
+```
+
+1. Cả bốn số bằng 0: quay bình thường.
+2. Còn job `delayed`/`wait`: chờ tối đa 15 phút (6 lượt, backoff 30 giây nhân đôi; worker mới vẫn đang chạy) rồi đếm lại; hàng này thường rỗng vì lỗi ghi tin trong app hiếm.
+3. Vẫn còn sau 15 phút và buộc phải quay: ghi lại để làm sau, không xoá khoá Redis bằng tay. Mỗi job mang `dedupeKey`, nên khi lên lại bản mới worker xử lý tiếp và không gửi trùng. Tin đã gửi trực tiếp cho khách không bị ảnh hưởng.
+
+Job `zns-send` nằm ở hàng `notifications` như cũ nên bản cũ xử lý tiếp bình thường (concurrency 1).
+
+- [ ] Sau deploy: `$DC logs --since 10m api | grep -ciE 'ZNS|notifications'` không có lỗi khởi tạo worker; `go-live:check` Redis PASS (9 hàng đợi)
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

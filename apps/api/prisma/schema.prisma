@@ -1856,6 +1856,8 @@ model Payout {
   adminNote       String?
 
   @@index([userId])
+  // Hộp việc admin đếm hàng đợi rút hoa hồng theo status. Không dùng partial: Prisma gửi status là tham số nên generic plan không chọn được index một phần.
+  @@index([status])
   @@map("payouts")
 }
 

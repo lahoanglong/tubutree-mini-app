@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { PUBLIC_PRODUCT_WHERE } from '../../modules/catalog/public-product';
+import { allowLongStatements } from '../../common/long-statement';
 import {
   DEMO_BRANDS,
   DEMO_CATEGORIES,
@@ -298,6 +299,7 @@ export async function previewDemoCleanup(prisma: PrismaClient, now: Date = new D
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+      await allowLongStatements(tx);
       return planDemoCleanup(tx, now);
     },
     { timeout: 60_000, maxWait: 10_000 },
@@ -316,6 +318,7 @@ export async function applyDemoCleanup(
   const keep = opts.keepCoupons ?? [];
   return prisma.$transaction(
     async (tx) => {
+      await allowLongStatements(tx);
       const plan = await planDemoCleanup(tx, now);
       if (!hasDemoData(plan)) throw new NoDemoDataError();
       // Ghi lại id từng dòng trước khi đổi rồi đổi theo đúng id đó: số in ra và khối hoàn tác khớp đúng dòng đã đổi.

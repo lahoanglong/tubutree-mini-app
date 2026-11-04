@@ -2,8 +2,18 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { DelayedError, type Job } from 'bullmq';
 import { INAPP_RETRY_JOB, NotificationsService, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
-import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
+import { QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY } from '../../jobs/queues';
 import { captureServerError } from '../../config/sentry';
+
+/**
+ * concurrency 5: mỗi job chủ yếu chờ Zalo (tối đa 25 giây), một worker tuần tự (mặc định 1) dồn hàng khi chiến dịch gửi hàng loạt.
+ * limiter 10 job/giây là mức TỰ CHỌN thận trọng, không phải con số của Zalo: tài liệu ZNS công bố hạn mức theo ngày của OA
+ * (xem API "Lấy thông tin quota ZNS"), không công bố trần theo giây. Hết hạn mức ngày thì Zalo trả lỗi nhóm hạn mức, đã được
+ * coi là lỗi vĩnh viễn (zns-result). Nâng limiter chỉ khi đo thấy hàng đợi tồn mà Zalo không từ chối.
+ */
+export const ZNS_WORKER_OPTIONS = { concurrency: 5, limiter: { max: 10, duration: 1000 } };
+/** Chỉ ghi DB, không gọi Zalo nên không cần limiter. */
+export const INAPP_RETRY_WORKER_OPTIONS = { concurrency: 2 };
 
 /**
  * Worker gửi ZNS. notify() chỉ ghi NotificationLog (PENDING) rồi xếp job vào QUEUE_NOTIFICATIONS, nên request đặt
@@ -19,7 +29,7 @@ import { captureServerError } from '../../config/sentry';
  * lỗi cho BullMQ; lỗi vĩnh viễn (số điện thoại, mẫu chưa duyệt, hết hạn mức...) đã được ghi FAILED nên job kết thúc
  * luôn, không đốt hết các lượt thử.
  */
-@Processor(QUEUE_NOTIFICATIONS)
+@Processor(QUEUE_NOTIFICATIONS, ZNS_WORKER_OPTIONS)
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
 
@@ -28,25 +38,9 @@ export class NotificationsProcessor extends WorkerHost {
   }
 
   async process(job: Job<ZnsSendJobData | InAppRetryJobData>, token?: string): Promise<void> {
-    if (job.name === INAPP_RETRY_JOB) return this.retryInApp(job as Job<InAppRetryJobData>);
+    // Chỉ còn job xếp trước khi hàng riêng ra đời (còn nằm trong hàng này lúc deploy); job mới đi QUEUE_NOTIFICATIONS_INAPP_RETRY.
+    if (job.name === INAPP_RETRY_JOB) return retryInApp(this.notifications, this.logger, job as Job<InAppRetryJobData>);
     return this.sendZns(job as Job<ZnsSendJobData>, token);
-  }
-
-  /** Tin trong app không dời theo giờ yên tĩnh ZNS. Chỉ bù tin trong app: tin đã lưu thì notify() dừng ở khoá, ZNS lỗi trước đó không gửi nốt. */
-  private async retryInApp(job: Job<InAppRetryJobData>): Promise<void> {
-    const { userId, templateCode, data, dedupeKey, context } = job.data;
-    try {
-      await this.notifications.notify(userId, templateCode, data, { dedupeKey });
-    } catch (err) {
-      const attempts = job.opts.attempts ?? 1;
-      if (job.attemptsMade + 1 >= attempts) {
-        this.logger.error(
-          `Gửi tin ${templateCode} cho ${userId}${context ? ` (${context})` : ''} THẤT BẠI sau ${attempts} lượt: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        captureServerError(err);
-      }
-      throw err;
-    }
   }
 
   private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<void> {
@@ -61,7 +55,7 @@ export class NotificationsProcessor extends WorkerHost {
     const outcome = await this.notifications.deliverZns(job.data, job.attemptsMade + 1 >= attempts);
     if (outcome === 'SENT') return;
     if (outcome === 'SKIPPED') {
-      this.logger.warn(`Bỏ qua job ZNS đến muộn của notificationLog ${job.data.notificationLogId}: log đã đóng và khoá đã nhả để gửi lại.`);
+      this.logger.warn(`Bỏ qua job ZNS đến muộn của notificationLog ${job.data.notificationLogId}: log đã đóng (khoá đã nhả để gửi lại, hoặc đã có tin cho cùng sự kiện).`);
       return;
     }
     if (outcome === 'FAILED') {
@@ -69,5 +63,36 @@ export class NotificationsProcessor extends WorkerHost {
       return;
     }
     throw new Error('Gửi ZNS thất bại tạm thời, chờ BullMQ thử lại');
+  }
+}
+
+/** Tin trong app không dời theo giờ yên tĩnh ZNS. Chỉ bù tin trong app: tin đã lưu thì notify() dừng ở khoá, ZNS lỗi trước đó không gửi nốt. */
+async function retryInApp(notifications: NotificationsService, logger: Logger, job: Job<InAppRetryJobData>): Promise<void> {
+  const { userId, templateCode, data, dedupeKey, context } = job.data;
+  try {
+    await notifications.notify(userId, templateCode, data, { dedupeKey });
+  } catch (err) {
+    const attempts = job.opts.attempts ?? 1;
+    if (job.attemptsMade + 1 >= attempts) {
+      logger.error(
+        `Gửi tin ${templateCode} cho ${userId}${context ? ` (${context})` : ''} THẤT BẠI sau ${attempts} lượt: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      captureServerError(err);
+    }
+    throw err;
+  }
+}
+
+/** Worker của QUEUE_NOTIFICATIONS_INAPP_RETRY: tách khỏi worker ZNS để Zalo chậm hay limiter không chặn tin trong app. */
+@Processor(QUEUE_NOTIFICATIONS_INAPP_RETRY, INAPP_RETRY_WORKER_OPTIONS)
+export class InAppRetryProcessor extends WorkerHost {
+  private readonly logger = new Logger(InAppRetryProcessor.name);
+
+  constructor(private readonly notifications: NotificationsService) {
+    super();
+  }
+
+  process(job: Job<InAppRetryJobData>): Promise<void> {
+    return retryInApp(this.notifications, this.logger, job);
   }
 }

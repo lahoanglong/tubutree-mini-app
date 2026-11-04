@@ -6,13 +6,13 @@ const status = (s: RedisSnapshot, id: string) => byId(evaluateRedis(s), id).stat
 const patch = (p: Partial<RedisSnapshot>): RedisSnapshot => ({ ...GOOD_REDIS, ...p });
 
 describe('evaluateRedis', () => {
-  it('khớp đúng 8 hàng đợi của ops', () => {
-    expect([...EXPECTED_QUEUES].sort()).toEqual(['gomdon-events', 'gomdon-push', 'notifications', 'pancake-events', 'pancake-push', 'support-chat-forward', 'support-chat-notify', 'zalo-oa-events']);
+  it('khớp đúng 9 hàng đợi của ops', () => {
+    expect([...EXPECTED_QUEUES].sort()).toEqual(['gomdon-events', 'gomdon-push', 'notifications', 'notifications-inapp-retry', 'pancake-events', 'pancake-push', 'support-chat-forward', 'support-chat-notify', 'zalo-oa-events']);
   });
 
   it('tiêu đề hàng đợi đếm theo độ dài danh sách, cả khi Redis lỗi lẫn khi một hàng đợi hỏng', () => {
     const n = `Đủ ${EXPECTED_QUEUES.length} hàng đợi truy cập được`;
-    expect(n).toContain('8');
+    expect(n).toContain('9');
     expect(byId(evaluateRedis(GOOD_REDIS), 'queues.reachable').title).toBe(n);
     expect(byId(evaluateRedis(patch({ reachable: false })), 'queues.reachable').title).toBe(n);
     expect(byId(evaluateRedis(patch({ queues: GOOD_REDIS.queues.filter((q) => q.name !== 'gomdon-push') })), 'queues.reachable').title).toBe(n);
