@@ -72,6 +72,8 @@ export interface FlashSlotItemDTO {
 // và CronLeader chỉ cho một instance chạy.
 /** Trần số món trả về của /flash-sales/upcoming (và khối trong /home): 2 ngày × ~6 khung × vài chục món vẫn nằm gọn, trước đây không có trần. */
 const UPCOMING_MAX_ITEMS = 200;
+/** Chặn số trang đọc khi nhiều món hết giảm liên tiếp: 10 × 200 = 2000 dòng đã vượt xa dữ liệu thật. */
+const UPCOMING_MAX_PAGES = 10;
 const STARTED_REMINDER_PAGE = 500;
 const STARTED_REMINDER_MAX_PAGES = 200;
 const STARTED_REMINDER_BUDGET_MS = 50_000;
@@ -821,7 +823,7 @@ export class FlashSaleService {
 
   /** Danh sách item flash SẮP diễn ra (chưa bắt đầu) — cho FE mục "Sắp diễn ra" + nút Nhắc tôi. Không `userId` (khách): không đọc nhắc, `reminded=false`. */
   async listUpcoming(userId?: string, now: Date = new Date()) {
-    const items = await this.prisma.flashSaleItem.findMany({
+    const args = {
       where: {
         variation: SELLABLE_VARIATION_WHERE,
         // Cùng cửa sổ với listSlots: mọi món trên trang Giờ vàng vẫn có cờ `reminded`; đợt xa hơn chưa có gì để nhắc.
@@ -834,8 +836,18 @@ export class FlashSaleService {
       },
       orderBy: [{ flashSale: { startAt: 'asc' } }, { id: 'asc' }],
       take: UPCOMING_MAX_ITEMS,
-    });
-    return items.filter(isStillDiscounted).map((it) => ({
+    } satisfies Prisma.FlashSaleItemFindManyArgs;
+    // isStillDiscounted so hai cột của hai bảng (flashPrice với giá đang bán) nên không đưa được vào `where`: đọc từng trang tới khi
+    // đủ món còn giảm, để món hết giảm không chiếm chỗ của món còn giảm phía sau.
+    const items: Awaited<ReturnType<typeof this.prisma.flashSaleItem.findMany<typeof args>>> = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < UPCOMING_MAX_PAGES && items.length < UPCOMING_MAX_ITEMS; page++) {
+      const rows = await this.prisma.flashSaleItem.findMany({ ...args, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+      items.push(...rows.filter(isStillDiscounted).slice(0, UPCOMING_MAX_ITEMS - items.length));
+      if (rows.length < UPCOMING_MAX_ITEMS) break;
+      cursor = rows[rows.length - 1]!.id;
+    }
+    return items.map((it) => ({
       itemId: it.id,
       variationId: it.variationId,
       productSlug: it.variation.product.slug,

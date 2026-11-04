@@ -769,6 +769,27 @@ describe('FlashSaleService.listUpcoming', () => {
     expect(args.orderBy).toEqual([{ flashSale: { startAt: 'asc' } }, { id: 'asc' }]);
   });
 
+  it('L3-12: món hết giảm (flashPrice >= giá đang bán) không chiếm chỗ trong 200 món: đọc tiếp trang sau tới khi đủ', async () => {
+    const dead = (i: number) => row({ id: `d${i}`, flashPrice: 120000 });
+    const page1 = Array.from({ length: 200 }, (_, i) => dead(i));
+    const page2 = [row({ id: 'ok1' }), row({ id: 'ok2' })];
+    const findMany = jest.fn().mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
+    expect(list.map((i) => i.itemId)).toEqual(['ok1', 'ok2']);
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: 'd199' }, skip: 1, take: 200 });
+  });
+
+  it('L3-12: đủ 200 món còn giảm thì dừng, không đọc thêm', async () => {
+    const page1 = Array.from({ length: 200 }, (_, i) => row({ id: `ok${i}` }));
+    const findMany = jest.fn().mockResolvedValue(page1);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
+    expect(list).toHaveLength(200);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
   it('trả item sắp diễn ra kèm reminded=false khi user chưa đặt nhắc', async () => {
     const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row()]) } } as any;
     const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
