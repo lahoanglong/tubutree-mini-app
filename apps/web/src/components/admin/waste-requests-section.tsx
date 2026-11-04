@@ -142,6 +142,7 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
           className={`${FIELD_CLASS} w-72 max-w-full`}
           aria-label="Mã yêu cầu, mã đơn hoặc mã vận đơn"
           placeholder="Mã yêu cầu, mã đơn hoặc mã vận đơn"
+          maxLength={64}
           value={code}
           onChange={(e) => setCode(e.target.value)}
         />
@@ -409,7 +410,7 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
       </div>
       <label className="block text-xs">
         <span className="font-medium text-stone-700">Mã TR- trên kiện</span>
-        <input name="parcelCode" type="text" className={`${INPUT_CLASS} mt-1`} value={parcelCode} onChange={(e) => setParcelCode(e.target.value)} />
+        <input name="parcelCode" type="text" className={`${INPUT_CLASS} mt-1`} maxLength={32} value={parcelCode} onChange={(e) => setParcelCode(e.target.value)} />
       </label>
       {isMail && (
         <>
@@ -590,16 +591,16 @@ function UnmatchedView({ isAdmin }: { isAdmin: boolean }) {
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="block text-xs">
             <span className="font-medium text-stone-700">Hãng vận chuyển (tuỳ chọn)</span>
-            <input name="carrier" type="text" className={`${INPUT_CLASS} mt-1`} value={carrier} onChange={(e) => setCarrier(e.target.value)} />
+            <input name="carrier" type="text" className={`${INPUT_CLASS} mt-1`} maxLength={60} value={carrier} onChange={(e) => setCarrier(e.target.value)} />
           </label>
           <label className="block text-xs">
             <span className="font-medium text-stone-700">Mã vận đơn (tuỳ chọn)</span>
-            <input name="trackingCode" type="text" className={`${INPUT_CLASS} mt-1`} value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} />
+            <input name="trackingCode" type="text" className={`${INPUT_CLASS} mt-1`} maxLength={64} value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} />
           </label>
         </div>
         <label className="block text-xs">
           <span className="font-medium text-stone-700">Mô tả kiện</span>
-          <input name="description" type="text" className={`${INPUT_CLASS} mt-1`} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <input name="description" type="text" className={`${INPUT_CLASS} mt-1`} maxLength={200} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
         {descTooLong && <p className="text-xs text-danger-fg">{`Mô tả tối đa ${DESCRIPTION_MAX} ký tự`}</p>}
         <button type="submit" className={BTN_PRIMARY} disabled={!canCreate || create.isPending}>Ghi kiện</button>
@@ -719,6 +720,7 @@ function MatchPanel({ busy, onSubmit }: { busy: boolean; onSubmit: (requestId: s
           className={`${FIELD_CLASS} w-72 max-w-full`}
           aria-label="Mã yêu cầu, mã đơn hoặc mã vận đơn để khớp"
           placeholder="Mã yêu cầu, mã đơn hoặc mã vận đơn"
+          maxLength={64}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => {

@@ -307,7 +307,7 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
         ))}
         <div className="space-y-2 border-t border-stone-200 pt-3">
           <Field label="Tên ca">
-            <input placeholder="Tên ca (VD Ca sáng)" value={name} onChange={(e) => setName(e.target.value)} className={INPUT_CLASS} />
+            <input placeholder="Tên ca (VD Ca sáng)" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} className={INPUT_CLASS} />
           </Field>
           <div className="flex gap-2">
             <div className="flex-1">

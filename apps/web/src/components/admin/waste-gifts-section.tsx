@@ -220,7 +220,7 @@ function GiftQueue({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | nul
             )}
             {action?.id === r.id && action.kind === 'fulfil' && (
               <div className="space-y-2">
-                <Field label="Mã nhận quà QG-"><input name="fulfilCode" className={INPUT_CLASS} autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+                <Field label="Mã nhận quà QG-"><input name="fulfilCode" className={INPUT_CLASS} autoComplete="off" maxLength={40} value={code} onChange={(e) => setCode(e.target.value)} /></Field>
                 <div className="flex gap-2">
                   <button type="button" className={BTN_XS_PRIMARY} disabled={code.trim() === '' || fulfil.isPending} onClick={() => fulfil.mutate({ id: r.id, value: code.trim() })}>Xác nhận trao</button>
                   <button type="button" className={BTN_XS_SECONDARY} onClick={close}>Đóng</button>
@@ -402,21 +402,21 @@ function GiftCatalogue() {
                 </select>
               </Field>
             )}
-            <Field label="Tên quà"><input name="name" className={INPUT_CLASS} value={f.name} onChange={(e) => setForm({ name: e.target.value })} /></Field>
-            {!isTree && <Field label="Mô tả"><input name="description" className={INPUT_CLASS} value={f.description} onChange={(e) => setForm({ description: e.target.value })} /></Field>}
-            {!isTree && <Field label="Nhãn"><input name="label" className={INPUT_CLASS} value={f.label} onChange={(e) => setForm({ label: e.target.value })} /></Field>}
+            <Field label="Tên quà"><input name="name" className={INPUT_CLASS} maxLength={120} value={f.name} onChange={(e) => setForm({ name: e.target.value })} /></Field>
+            {!isTree && <Field label="Mô tả"><input name="description" className={INPUT_CLASS} maxLength={500} value={f.description} onChange={(e) => setForm({ description: e.target.value })} /></Field>}
+            {!isTree && <Field label="Nhãn"><input name="label" className={INPUT_CLASS} maxLength={40} value={f.label} onChange={(e) => setForm({ label: e.target.value })} /></Field>}
             {!isTree && <Field label="Giá điểm"><input name="pointsCost" inputMode="numeric" className={INPUT_CLASS} value={f.pointsCost} onChange={(e) => setForm({ pointsCost: e.target.value })} /></Field>}
             <Field label="Trạng thái">
               <select name="status" className={`${FIELD_CLASS} w-full`} value={f.status} onChange={(e) => setForm({ status: e.target.value as WasteGiftStatus })}>
                 {STATUSES.map((s) => <option key={s} value={s}>{WASTE_GIFT_STATUS_LABELS[s]}</option>)}
               </select>
             </Field>
-            <Field label="Ảnh (đường dẫn)"><input name="imageUrl" className={INPUT_CLASS} value={f.imageUrl} onChange={(e) => setForm({ imageUrl: e.target.value })} /></Field>
+            <Field label="Ảnh (đường dẫn)"><input name="imageUrl" className={INPUT_CLASS} maxLength={500} value={f.imageUrl} onChange={(e) => setForm({ imageUrl: e.target.value })} /></Field>
             {!isTree && <Field label="Tồn kho, để trống nếu không giới hạn"><input name="stock" inputMode="numeric" className={INPUT_CLASS} value={f.stock} onChange={(e) => setForm({ stock: e.target.value })} /></Field>}
           </div>
           {!isTree && f.kind !== 'VOUCHER' && (
             <Field label="Hướng dẫn nhận quà">
-              <textarea name="claimInstructions" rows={2} className={INPUT_CLASS} value={f.claimInstructions} onChange={(e) => setForm({ claimInstructions: e.target.value })} />
+              <textarea name="claimInstructions" rows={2} className={INPUT_CLASS} maxLength={1000} value={f.claimInstructions} onChange={(e) => setForm({ claimInstructions: e.target.value })} />
             </Field>
           )}
           {f.kind === 'VOUCHER' && (
