@@ -42,7 +42,14 @@ function withPlainTimeout<T>(command: Promise<T>, label: string, ms: number): Pr
     timer = setTimeout(() => reject(new QueueTimeoutError(label, ms)), ms);
   });
   command.catch(() => undefined);
-  return Promise.race([command, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([command, timeout])
+    .then((value) => {
+      // Redis trả lời được: đóng breaker để enqueue thường không còn bị chặn trong khi /health báo Redis đã lên. Lỗi/quá hạn của lời gọi này không đếm.
+      breakerFailures = 0;
+      breakerOpenUntil = 0;
+      return value;
+    })
+    .finally(() => clearTimeout(timer));
 }
 
 let breakerFailures = 0;
@@ -57,7 +64,7 @@ export function resetQueueBreaker(): void {
 
 /**
  * `breaker: false` cho lời gọi sức khoẻ (quét 9 hàng đợi, ping): lô nặng hoặc event loop bận có thể quá hạn khi Redis vẫn khoẻ, và
- * lúc breaker mở chính lời gọi này phải chạy thật để báo Redis đã lên lại. Không bị chặn và không đếm vào breaker.
+ * lúc breaker mở chính lời gọi này phải chạy thật để báo Redis đã lên lại. Không bị chặn và lỗi/quá hạn không đếm; thành công thì đóng breaker.
  */
 export function withQueueTimeout<T>(command: Promise<T>, label: string, ms = QUEUE_COMMAND_TIMEOUT_MS, opts: { breaker?: boolean } = {}): Promise<T> {
   if (opts.breaker === false) return withPlainTimeout(command, label, ms);

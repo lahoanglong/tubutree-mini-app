@@ -71,4 +71,20 @@ describe('withQueueTimeout: breaker khi Redis sập (L3-07)', () => {
     for (let i = 0; i < QUEUE_BREAKER_THRESHOLD; i++) await failOnce();
     await expect(withQueueTimeout(Promise.resolve('up'), 'health ping', 50, { breaker: false })).resolves.toBe('up');
   });
+
+  it('lời gọi sức khoẻ thành công đóng breaker đang mở (enqueue thường chạy lại ngay, không đợi 30 giây)', async () => {
+    for (let i = 0; i < QUEUE_BREAKER_THRESHOLD; i++) await failOnce();
+    await expect(withQueueTimeout(Promise.resolve('x'), 'blocked', 50)).rejects.toThrow(/tạm ngắt|breaker/i);
+    await expect(withQueueTimeout(Promise.resolve('up'), 'health ping', 50, { breaker: false })).resolves.toBe('up');
+    await expect(withQueueTimeout(Promise.resolve('ok'), 'enqueue', 50)).resolves.toBe('ok');
+  });
+
+  it('lời gọi sức khoẻ thành công đặt lại bộ đếm; lỗi/quá hạn của nó vẫn không đếm', async () => {
+    await failOnce();
+    await failOnce();
+    await withQueueTimeout(Promise.resolve('up'), 'health ping', 50, { breaker: false });
+    await failOnce();
+    await failOnce();
+    await expect(withQueueTimeout(Promise.resolve('ok'), 'enqueue', 50)).resolves.toBe('ok');
+  });
 });
