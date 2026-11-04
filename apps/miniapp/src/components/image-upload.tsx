@@ -72,7 +72,7 @@ function renderJpeg(img: HTMLImageElement, maxDim: number, quality: number): str
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = 'white';
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(img, 0, 0, width, height);
   return canvas.toDataURL('image/jpeg', quality);
