@@ -188,6 +188,19 @@ describe('seed mẫu thông báo', () => {
       expect(old).toBe(bodiesAfterMigrations(DIR).get('POINTS_EXPIRING'));
       expect(bodiesAfterMigrations().get('POINTS_EXPIRING')).toBe(NEW_BODY);
     });
+
+    it('PROD còn bản "điểm Xanh" viết thường (đã áp 20261010150000 trước khi file được sửa sang chữ hoa): migration bổ sung khớp cả hai bản cũ', () => {
+      const OLD_LOWER = '⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿';
+      const fix = readFileSync(join(MIGRATIONS_DIR, '20261104100000_points_expiring_template_lowercase_variant', 'migration.sql'), 'utf-8');
+      const m = /UPDATE "notification_templates" SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'\s+AND "bodyTemplate" IN \(([\s\S]*?)\);/.exec(fix);
+      expect(m).not.toBeNull();
+      const [, next, code, list] = m!;
+      expect(code).toBe('POINTS_EXPIRING');
+      expect(next).toBe(NEW_BODY);
+      const olds = [...list!.matchAll(/'([^']*)'/g)].map((x) => x[1]);
+      expect(olds).toEqual([OLD_LOWER, update![3]]);
+      expect(OLD_LOWER.replace('điểm Xanh', 'Điểm Xanh')).toBe(update![3]);
+    });
   });
 
   describe('mẫu tin gói định kỳ + đơn thứ 2 (C-015, C-017): migration và seed nói cùng một câu', () => {
