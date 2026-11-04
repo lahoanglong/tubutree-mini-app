@@ -109,12 +109,19 @@ SQL, ReDoS, CSV, path traversal, SSRF `/img`, XSS lưu trữ, upload SVG: ổn.
 - Gói e: review Opus vòng 2 APPROVE (0/0/1). Minor m-new1: sản phẩm bị từ chối giữ thumbnail dạng đường dẫn, gửi duyệt lại thì admin thấy ảnh vỡ (404). Đang sửa: nhánh từ chối trả thumbnail về data URL trong cùng tx. Full jest của tôi ở 726bf80e9: 13099/13099, 1 suite (catalog.service.spec) lỗi lúc máy tải; chạy riêng 3 lần đều xanh 440/440.
 - Gói h (sec-1104-h): các Minor còn sót từ review (khoá throttle IPv6 ở affiliate click + ai-advisor, ảnh minh chứng ở màn lương nhân viên, nén ảnh composer chat CSKH, trần chữ thương hiệu) và F7 (key duyệt danh mục, chỉ sửa phía miniapp).
 - Gói i (sec-1104-i): D12, khoá lượt cron bằng lease trong `cron_leases` thay cho tx giữ kết nối pool.
+- Gói e: m-new1 sửa ở 03d3a66e0 (unit 246/246, race public-image 10/10 tôi chạy lại); gộp vào tích hợp 6a4b361ee. Race đầy đủ của e: 1 đỏ `milestone-second-order-vouchers-chunked`, chạy riêng 2/2 xanh (lỗi theo tải, gặp lại ở lượt race của c).
+- Gói i: 40f52fc9a, 745e16d1b (16 cron chuyển sang `runExclusive`). Review Opus APPROVE (0/0/5 Minor): gia hạn đang bay dựng lại lease sau DELETE; mất lease rồi lấy lại không log; `notifyMilestoneRevokes` không chạy khi LOCKED; 3 comment sai; 1 comment kể lịch sử. Sửa hết ở d463eb0c0 (gia hạn chỉ UPDATE, chờ gia hạn dở rồi mới DELETE). Gộp vào tích hợp 19567a693.
+- Gói h: 5 mục (40af3212b..af3c21eb0), tôi thêm regex base64 jpg/gif khớp `STAFF_IMAGE` (1ae8b4496, 6f341dcb5). Review Opus REQUEST_CHANGES: M1 Mini App admin lọc mất QR VietQR (`img.vietqr.io`) do API dựng; Minor nút QR xét giá trị thô, spec composer 12MB chậm, `browse.spec` mất mock `suggestProducts`, trần `story` 5000 có thể chặn dữ liệu thật. Full vitest Mini App của tôi đỏ 3 test `support-chat.spec` (mock thiếu `prepareForCloudinary`). Đang sửa; trần story nâng 20000.
+- Gói h2 (sec-1104-h2, tách từ h): composer chat CSKH web nén ảnh như Mini App (41e612ba4). 4f cho phép sửa `support-chat/composer.tsx`, `account/*` và một dòng mock ở `app/ho-tro/chat/page.spec.tsx`.
+- Gói c: sửa theo review ở c30f14077 (M1 `User.affiliateRevokedAt`, migration 20261104160000), f8de0ee32 (M2 W8: lật PAID chỉ khi `pancakeOrderId` khớp), a6f974077, bc45337dd, 8cfb77075. Đang review Opus vòng 2 và kiểm full.
 
 ## Lưu ý cho chủ
 - A2: cron tự chuyển Ví sẽ warn mỗi giờ cho CTV đã bị hạ mà còn hoa hồng APPROVED, cho tới khi xử lý số hoa hồng đó.
 - A4: sau deploy xem log "Zalo từ chối appsecret_proof"; không có thì có thể bật "bắt buộc appsecret_proof" trong Zalo Developers.
 - W8: webhook `is_paid` tới trước khi `pushOrder` lưu `pancakeOrderId` (cửa sổ ngắn) thì đơn chờ Kế toán thay vì tự PAID.
 - Trước khi bật gian hàng theo tên miền con (B4): đối chiếu bản ghi DNS thật trên Cloudflare; nhãn nào không phải web (n8n, WordPress, link-bio…) phải thêm vào `RESERVED_STOREFRONT_IDENTIFIERS`, vì danh sách này đang là hàng rào cookie đăng nhập.
+- Story thương hiệu: trần 20000 ký tự (gói h). Nên kiểm `SELECT max(length(story)) FROM brands` trên PROD trước deploy (cần chủ cho đọc).
+- Ảnh chuyển lương/QR trên Mini App chỉ hiện khi là https của res.cloudinary.com, img.vietqr.io hoặc base64 raster; dòng cũ ở host khác sẽ không hiện.
 - Retention cashback: click cũ hơn số ngày giữ mà postback tới sau đó thì vẫn mất (rất hiếm).
 - D9 (image-resize unnest products.images mỗi 5 phút) chưa sửa: làm khi catalog đối tác lớn (cột `imageUrls` + trigger như D7).
 - Sau deploy gói e, ba câu kiểm phải ra 0: `feed_posts` có ảnh mà `imageCount`=0; `products` thumbnail `data:` trùng `images[1]`; `reviews` có ảnh mà `imageVersions` rỗng.
