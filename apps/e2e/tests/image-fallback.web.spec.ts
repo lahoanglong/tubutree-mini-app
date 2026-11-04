@@ -14,7 +14,9 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 const rand = Math.random().toString(36).slice(2, 8);
 const ORIGINAL = `https://content.pancake.vn/2-26/fb-${rand}.jpg`;
-const SEEN = [{ slug: 'da-xem-fb', name: 'Đã xem FB', thumbnail: null, viewedAt: 1_700_000_000_000 }];
+// URL lưu ở máy là ảnh CŨ của sản phẩm; API trả ảnh hiện hành (ORIGINAL): dải phải dùng ảnh hiện hành và không bao giờ đụng tới URL cũ.
+const STALE = `https://content.pancake.vn/2-26/fb-cu-${rand}.jpg`;
+const SEEN = [{ slug: 'da-xem-fb', name: 'Đã xem FB', thumbnail: STALE, viewedAt: 1_700_000_000_000 }];
 const card = { id: 'da-xem-fb', name: 'Đã xem FB', slug: 'da-xem-fb', brand: 'Tubu', thumbnail: ORIGINAL, basePrice: 99_000, salePrice: null, ratingAvg: 0, reviewCount: 0, sold: 0, inStock: true, isFeatured: false, repVariationId: 'v-fb' };
 
 function mockHub(api: MockApi): void {
@@ -32,7 +34,9 @@ async function openHub(page: import('@playwright/test').Page, seen: unknown[]): 
   const requests: string[] = [];
   page.on('request', (r) => {
     const u = r.url();
-    if (/\/api\/img\?/.test(u) || u === ORIGINAL) requests.push(u);
+    // Chỉ đếm request của đúng ảnh thẻ đang kiểm (bản đổi cỡ qua /img hoặc chính ảnh gốc), không đếm ảnh khác của trang (ô danh mục, thương hiệu, Bán chạy).
+    const viaImg = /\/api\/img\?/.test(u) && new URL(u).searchParams.get('u') === ORIGINAL;
+    if (viaImg || u === ORIGINAL || u === STALE || new URL(u).searchParams.get('u') === STALE) requests.push(u);
   });
   await page.addInitScript((s) => {
     try {
@@ -57,6 +61,8 @@ test.describe('thẻ sản phẩm (dải Đã xem gần đây)', () => {
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
     await expect(page.locator('#browse-recent [data-testid="product-image-fallback"]')).toHaveCount(0);
     expect(requests.filter((u) => u === ORIGINAL)).toHaveLength(1);
+    // K6: không một request nào tới URL cũ lưu ở máy.
+    expect(requests.filter((u) => u.includes(`fb-cu-${rand}`))).toEqual([]);
   });
 
   test('cả /img lẫn ảnh gốc đều hỏng: hình lá, tối đa 2 lượt tải ảnh (không lặp)', async ({ page, api }) => {

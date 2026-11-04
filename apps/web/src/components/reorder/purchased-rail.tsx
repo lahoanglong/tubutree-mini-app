@@ -89,7 +89,6 @@ function CompactRebuyCard({
     <Card variant="raised" padding={12}>
       <button
         type="button"
-        aria-label={item.productName}
         className="tubu-press"
         onClick={() => {
           const href = productHref(encodeURIComponent(item.slug), null, item.variationId);
@@ -150,7 +149,6 @@ function RebuyLine({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
         <div style={{ height: PURCHASED_LINE_HEIGHT, padding: 12, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             type="button"
-            aria-label={item.productName}
             className="tubu-press"
             onClick={() => {
               const href = productHref(encodeURIComponent(item.slug), null, item.variationId);

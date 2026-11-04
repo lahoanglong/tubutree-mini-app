@@ -98,6 +98,8 @@ for (const vp of [{ name: 'web375x812', width: 375, height: 812 }, { name: 'web3
     expect(snap.recent[0]!.src).toContain('moi-');
     expect(snap.recent[0]!.src).not.toContain('cu-');
     expect(snap.lcp, 'LCP phải là một phần tử').not.toBeNull();
+    // LCP phải là ảnh (không phải đoạn chữ, khi đó kiểm loading qua được một cách rỗng) và không lazy.
+    expect(snap.lcp!.tag).toBe('IMG');
     expect(snap.lcp!.loading).not.toBe('lazy');
     expect(snap.high).toBeLessThanOrEqual(4);
   });

@@ -23,6 +23,8 @@ describe('PdpFreeship: HTML server', () => {
     expect(out).toContain('data-testid="pdp-freeship"');
     expect(out).toContain('350.000');
     expect(out).toContain('data-restore-mask="restoring"');
+    // Móc và lớp CSS cùng một nguồn: mặt nạ "restoring" đi kèm đúng lớp giấu theo data-restoring.
+    expect(out.replaceAll('&amp;', '&')).toMatch(/data-restore-mask="restoring"[^>]*class="[^"]*\[html\[data-restoring\]_&\]:invisible/);
   });
   it('khách vãng lai: chữ hiện hẳn, không giấu', () => {
     auth.phase = 'guest';
@@ -36,6 +38,7 @@ describe('PdpFreeship: HTML server', () => {
     const out = html(<PdpFreeship initialConfig={CONFIG} />);
     expect(out).toContain('data-testid="pdp-freeship"');
     expect(out).toContain('data-restore-mask="always"');
+    expect(out).toMatch(/data-restore-mask="always"[^>]*class="[^"]*\binvisible\b/);
     expect(out).toContain('aria-hidden="true"');
     auth.phase = 'loading';
   });
@@ -48,6 +51,8 @@ describe('PdpCoupons: chỗ giữ 44px khi đang khôi phục phiên', () => {
     expect(out).toContain('data-testid="pdp-offers-slot"');
     expect(out).toContain('data-restore-mask="restoring"');
     expect(out).toContain('aria-hidden="true"');
+    auth.phase = 'authenticated';
+    expect(html(<PdpCoupons productId="p" product={product} />)).toContain('data-restore-mask="hint"');
     auth.phase = 'guest';
     expect(html(<PdpCoupons productId="p" product={product} />)).not.toContain('pdp-offers-slot');
     auth.phase = 'loading';

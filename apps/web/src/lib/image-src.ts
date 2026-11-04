@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { IMAGE_WIDTHS, WIDE_IMAGE_WIDTHS, imageVariants, pickImageWidth, resizedImageUrl, type ImageVariants } from '@tubutree/app-core/image-src';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
@@ -62,8 +62,9 @@ export function fallBackToOriginal(original: string) {
  * để nơi gọi rơi về hình lá. `fallBack()` trả true khi đã chuyển sang ảnh gốc (nơi gọi không báo lỗi lần này).
  */
 export function useSizedImage(src: string | null | undefined, cssWidth: number, sizes?: string, wide = false, uploadedOnly = false): { img: SizedImage | null; fallBack: () => boolean } {
-  const [original, setOriginal] = useState(false);
-  useEffect(() => setOriginal(false), [src]);
+  // Cờ gắn với đúng `src` đã lỗi: đổi `src` (dữ liệu hiện hành về) thì không dùng ảnh gốc của `src` mới ở lượt render đầu, trước khi effect kịp xoá cờ.
+  const [origFor, setOrigFor] = useState<string | null>(null);
+  const original = !!src && origFor === src;
   if (!src) return { img: null, fallBack: () => false };
   const sized = sizedImage(src, cssWidth, sizes, wide, uploadedOnly);
   const resized = sized.src !== src;
@@ -71,7 +72,7 @@ export function useSizedImage(src: string | null | undefined, cssWidth: number, 
     img: original ? { src } : sized,
     fallBack: () => {
       if (!resized || original) return false;
-      setOriginal(true);
+      setOrigFor(src);
       return true;
     },
   };

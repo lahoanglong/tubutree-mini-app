@@ -305,7 +305,6 @@ function CompactRebuyCard({
     <Card variant="raised" padding={12}>
       <button
         type="button"
-        aria-label={item.productName}
         className="tubu-press"
         onClick={onOpen}
         style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}

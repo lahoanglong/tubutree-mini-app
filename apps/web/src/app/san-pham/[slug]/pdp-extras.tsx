@@ -36,7 +36,7 @@ import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-ea
 import { percentLabel, pointsBoostOf } from '@/lib/points-boost';
 import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
-import { freeshipLine, freeshipPlaceholder, groupBuyPitch, OFFERS_HINT_KEY, OFFERS_SLOT_AUTH_CLASS, OFFERS_SLOT_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
+import { freeshipLine, freeshipPlaceholder, groupBuyPitch, FREESHIP_MASK_CLASS, OFFERS_HINT_KEY, OFFERS_SLOT_MASK_CLASS, offersSlotNeeded, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
 import { getCart } from '@/lib/shop-client';
 import { useRunningFlash } from '@/lib/use-flash-sales';
@@ -150,9 +150,9 @@ export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } 
   const placeholder = freeshipPlaceholder({ phase, cartThreshold, cartFailed: cartQ.isError });
   if (from == null && !placeholder) return null;
   // Chưa có số thật: giấu hẳn, giữ chỗ. Đang tải phiên mà đã có ngưỡng chung: giấu chỉ khi <html> có `data-restoring` (khách chưa từng đăng nhập thấy chữ ngay).
-  const hideClass = from == null ? 'invisible' : phase === 'loading' ? '[html[data-restoring]_&]:invisible' : '';
-  // Móc ngữ nghĩa cho test: 'always' = luôn giấu chữ, 'restoring' = giấu chỉ khi <html> có data-restoring (không phải đọc lớp Tailwind).
+  // `data-restore-mask` và lớp CSS suy từ cùng một giá trị (pdp-logic): test đọc móc ngữ nghĩa, không đọc tên lớp Tailwind.
   const restoreMask = from == null ? 'always' : phase === 'loading' ? 'restoring' : undefined;
+  const hideClass = restoreMask ? FREESHIP_MASK_CLASS[restoreMask] : '';
   return (
     <p data-testid="pdp-freeship" data-restore-mask={restoreMask} aria-hidden={from == null ? true : undefined} className={`text-sm font-medium text-forest-700 ${phoneBrandLabel} ${hideClass}`}>
       {freeshipLine(from ?? cfg.freeshipThreshold)}
@@ -200,8 +200,9 @@ export function PdpCoupons({ productId, product, divider = true }: { productId: 
     }
   }, [settled, hasOffers]);
   if (list.length === 0) {
+    const slotMask = phase === 'authenticated' ? 'hint' : 'restoring';
     return offersSlotNeeded(phase, couponsQ.isPending) ? (
-      <div data-testid="pdp-offers-slot" data-restore-mask="restoring" aria-hidden="true" className={phase === 'authenticated' ? OFFERS_SLOT_AUTH_CLASS : OFFERS_SLOT_CLASS} />
+      <div data-testid="pdp-offers-slot" data-restore-mask={slotMask} aria-hidden="true" className={OFFERS_SLOT_MASK_CLASS[slotMask]} />
     ) : null;
   }
 

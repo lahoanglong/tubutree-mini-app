@@ -329,8 +329,15 @@ export function memberCardView(opts: {
  */
 export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string): string {
   const who = [greeting, card.tierName].filter(Boolean).join(' · ');
-  // Dấu cách (không phải dấu phẩy) giữa các phần: tên truy cập phải chứa nguyên chữ nhìn thấy (WCAG 2.5.3).
-  return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(' ') + `. ${action}`;
+  return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ') + `. ${action}`;
+}
+
+/**
+ * Tên đọc của dải Điểm Xanh ở Ưu đãi: theo ĐÚNG thứ tự chữ nhìn thấy (hạng, "Hạng và lịch sử điểm", điểm, giá trị quy đổi) để tên bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3);
+ * axe bỏ dấu câu khi so, dấu phẩy chỉ giữ nhịp ngắt cho trình đọc màn hình.
+ */
+export function offersPointsAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, detail: string): string {
+  return [card.tierName, detail, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ');
 }
 
 // ---- Gợi ý cuộn vô tận ----
