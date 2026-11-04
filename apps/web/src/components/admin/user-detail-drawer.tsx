@@ -299,7 +299,7 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
             {d.recentExports!.map((x) => (
               <li key={x.id} className="py-2">
                 <p className="font-medium text-stone-800">
-                  {EXPORT_LABEL[x.route] ?? x.route} · {x.rowCount.toLocaleString('vi-VN')} dòng
+                  {EXPORT_LABEL[x.route] ?? x.route} · {x.rowCount} dòng
                 </p>
                 <p className="text-xs text-stone-500">
                   {formatDateTime(x.createdAt)}

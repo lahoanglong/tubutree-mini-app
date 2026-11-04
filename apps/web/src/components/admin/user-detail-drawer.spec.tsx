@@ -183,7 +183,7 @@ describe('UserDetailDrawer — lịch sử xuất file (L1-07)', () => {
   it('có dữ liệu thì hiện "20 lần xuất gần nhất" với tên file, số dòng, bộ lọc', async () => {
     const text = section(await open({ ...DETAIL, recentExports: X }), '20 lần xuất gần nhất').textContent ?? '';
     expect(text).toContain('Xuất thuế TNCN CTV');
-    expect(text).toContain('1.234 dòng');
+    expect(text).toContain('1234 dòng');
     expect(text).toContain('from: 2026-10-01');
   });
 
