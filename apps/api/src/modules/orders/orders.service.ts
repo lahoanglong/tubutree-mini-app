@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { decodeKeysetCursor, encodeKeysetCursor, KEYSET_ORDER, keysetAfter } from '../../common/keyset-cursor';
 import { paginated, skipTake } from '../../common/pagination';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CartService } from '../cart/cart.service';
@@ -40,6 +41,8 @@ export interface OrderListFilter {
   group?: OrderStatusGroup;
   /** Tìm theo mã đơn hoặc tên sản phẩm trong đơn (không phân biệt hoa thường, không cần gõ dấu). */
   q?: string;
+  /** Con trỏ keyset (createdAt, id) của trang trước; có thì bỏ qua `page`. Không dùng cùng `q` (tìm kiếm giữ phân trang offset). */
+  cursor?: string;
 }
 
 /** Số đơn tối đa quét khi tìm kiếm: khách thật chỉ có vài chục đơn; trần này chặn tài khoản khổng lồ làm nặng truy vấn. */
@@ -212,19 +215,25 @@ export class OrdersService {
   ) {}
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
-    const where: Prisma.OrderWhereInput = { userId, ...statusWhere(filter) };
+    const base: Prisma.OrderWhereInput = { userId, ...statusWhere(filter) };
     const needle = foldVietnamese((filter.q ?? '').replace(/^\s*#/, ''));
-    if (needle) return this.search(where, needle, page, limit, userId);
-    const [items, total] = await this.prisma.$transaction([
+    if (needle) return this.search(base, needle, page, limit, userId);
+    const cursor = filter.cursor ? decodeKeysetCursor(filter.cursor) : null;
+    const [fetched, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        ...skipTake(page, limit),
+        where: cursor ? { AND: [base, keysetAfter(cursor)] } : base,
+        orderBy: KEYSET_ORDER,
+        ...(cursor ? { take: limit + 1 } : skipTake(page, limit)),
         select: ORDER_LIST_SELECT,
       }),
-      this.prisma.order.count({ where }),
+      this.prisma.order.count({ where: base }),
     ]);
-    return paginated(await this.attachItemMedia(items, userId), page, limit, total);
+    const hasMore = cursor ? fetched.length > limit : page * limit < total;
+    const items = cursor ? fetched.slice(0, limit) : fetched;
+    const last = items[items.length - 1];
+    const result = paginated(await this.attachItemMedia(items, userId), page, limit, total);
+    result.meta.nextCursor = hasMore && last ? encodeKeysetCursor(last) : null;
+    return result;
   }
 
   /**

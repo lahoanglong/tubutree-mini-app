@@ -108,7 +108,8 @@ export interface WalletTxn {
 
 export interface WalletTxnPage {
   data: WalletTxn[];
-  meta: { page: number; limit: number; total: number };
+  /** nextCursor: con trỏ trang kế (null khi hết); API cũ không trả. */
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 
 export interface ReferralMilestone {
@@ -277,8 +278,8 @@ export function tierProgressPercent(ov: LoyaltyOverview): number {
 
 // Wallet
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
-export const getWalletTransactions = (page: number, limit = 20) =>
-  api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit } }).then((r) => r.data);
+export const getWalletTransactions = (page: number, limit = 20, cursor?: string) =>
+  api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit, ...(cursor ? { cursor } : {}) } }).then((r) => r.data);
 
 // Notifications
 export interface NotificationDTO {

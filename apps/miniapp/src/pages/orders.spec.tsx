@@ -156,6 +156,21 @@ describe('OrdersPage (tab gốc)', () => {
     expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
   });
 
+  it('phân trang theo con trỏ: trang 2 gửi nextCursor; đơn lặp giữa hai trang chỉ hiện một lần', async () => {
+    mocks.fetchOrders
+      .mockResolvedValueOnce({ data: [ORDER], meta: { page: 1, limit: 20, total: 22, nextCursor: 'cur-1' } })
+      .mockResolvedValueOnce({
+        data: [ORDER, { ...ORDER, id: 'o2', code: 'TUBU-778' }],
+        meta: { page: 2, limit: 20, total: 22, nextCursor: null },
+      });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    expect(await screen.findByRole('button', { name: 'Đơn TUBU-778' })).toBeInTheDocument();
+    expect(mocks.fetchOrders).toHaveBeenLastCalledWith({}, 2, 20, 'cur-1');
+    expect(screen.getAllByRole('button', { name: `Đơn ${ORDER.code}` })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
+  });
+
   it('tab "Tất cả" rỗng → trạng thái trống có CTA mua đơn đầu', async () => {
     mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 20, total: 0 } });
     renderPage();

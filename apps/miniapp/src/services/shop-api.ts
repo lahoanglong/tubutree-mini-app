@@ -12,7 +12,7 @@ import { IMAGE_UPLOAD_TIMEOUT_MS } from './http';
 /** Shape phân trang backend trả về (§12.1): { data, meta }. */
 export interface PageResponse<T> {
   data: T[];
-  meta: { page: number; limit: number; total: number };
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 
 export interface ProductCard {
@@ -679,13 +679,14 @@ export interface OrderListFilter {
 
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
-export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20) => {
+export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20, cursor?: string) => {
   return api
     .get<PageResponse<OrderView>>('/orders', {
       params: {
         ...(filter.status ? { status: filter.status } : filter.group ? { group: filter.group } : {}),
         page,
         limit,
+        ...(cursor ? { cursor } : {}),
       },
     })
     .then((r) => r.data);

@@ -27,7 +27,7 @@ export class PaginationQuery {
 
 export interface PaginatedResult<T> {
   data: T[];
-  meta: { page: number; limit: number; total: number };
+  meta: { page: number; limit: number; total: number; nextCursor?: string | null };
 }
 
 export function paginated<T>(data: T[], page: number, limit: number, total: number): PaginatedResult<T> {

@@ -1,6 +1,7 @@
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { OrderStatus } from '@tubutree/shared-types';
+import { KeysetCursorField } from '../../../common/keyset-cursor';
 import { PaginationQuery } from '../../../common/pagination';
 import { ORDER_STATUS_GROUP_KEYS, type OrderStatusGroup } from '../order-status-groups';
 import { VARIATION_ID_RE } from '../variation-id';
@@ -17,6 +18,9 @@ export class OrderListQuery extends PaginationQuery {
 
   /** Tìm theo mã đơn hoặc tên sản phẩm; tối đa 100 ký tự (cùng trần với tìm sản phẩm). */
   @IsOptional() @IsString() @MaxLength(100) q?: string;
+
+  /** Con trỏ keyset do `meta.nextCursor` của trang trước trả về; có thì bỏ qua `page`. */
+  @KeysetCursorField() cursor?: string;
 }
 
 export class RepurchaseItemDto {
