@@ -13,7 +13,7 @@ import { writableTempDb } from './support/waste-db';
  * ảnh cho phần tử đang ẩn ở khổ này. Ảnh sản phẩm/banner đi qua `{api}/img` (host Pancake), nên spec chặn `/api/img` và trả một PNG nhiễu: không phụ thuộc mạng, và đủ
  * "entropy" (Chrome không tính ảnh dưới ~0,05 bit/điểm ảnh vào LCP, ảnh 1×1 làm LCP rơi về một đoạn chữ).
  * Danh sách /san-pham do máy chủ web dựng từ DB e2e (thumbnail null): spec gán tạm ảnh cho sản phẩm rồi trả lại (chỉ ghi DB tạm, như a11y-db.ts).
- * Ngưỡng "tối đa 4 ảnh high": banner slide 0 + 2 thẻ Giờ vàng đầu + dấu logo Trang chủ (next/image priority tự đặt fetchpriority=high).
+ * Ngưỡng ảnh high: Trang chủ tối đa 3 (banner slide 0 + 2 thẻ Giờ vàng đầu; dấu logo Trang chủ chỉ eager, không ưu tiên), /san-pham tối đa 4 (PRIORITY_CARDS).
  */
 test.use({ viewport: { width: 375, height: 812 } });
 
@@ -82,7 +82,10 @@ function mockImages(api: MockApi): void {
       endAt: new Date(now + 3 * HOUR).toISOString(), serverNow: new Date(now).toISOString(),
     }));
   });
-  mockCampaigns(api, { home: [campaignBanner('thu', { title: 'Giữa Thu', image: PANCAKE(100) }), campaignBanner('dong', { title: 'Đông về', image: PANCAKE(101) })] });
+  mockCampaigns(api, {
+    home: [campaignBanner('thu', { title: 'Giữa Thu', image: PANCAKE(100) }), campaignBanner('dong', { title: 'Đông về', image: PANCAKE(101) })],
+    offers: [campaignBanner('uu-dai', { title: 'Ưu đãi lớn', image: PANCAKE(102) })],
+  });
 }
 
 interface Snapshot {
@@ -125,12 +128,14 @@ async function measure(page: Page): Promise<Snapshot> {
 
 // `minPrice=1` không lọc mất món nào nhưng cho danh sách một khoá bộ nhớ đệm riêng của máy chủ web: ảnh gán tạm không lọt vào trang của spec khác.
 const ROUTES = [
-  { name: 'Trang chủ', path: '/', ready: '[data-ds="product-tile"]', dbThumbs: false },
-  { name: 'Danh mục /san-pham', path: '/san-pham?all=1&minPrice=1', ready: '[data-ds="product-tile"]', dbThumbs: true },
+  { name: 'Trang chủ', path: '/', ready: '[data-ds="product-tile"]', dbThumbs: false, maxHigh: 3 },
+  { name: 'Danh mục /san-pham', path: '/san-pham?all=1&minPrice=1', ready: '[data-ds="product-tile"]', dbThumbs: true, maxHigh: 4 },
 ];
 
 for (const route of ROUTES) {
-  test(`LCP ${route.name} 375×812: ảnh high trong màn đầu, LCP không lazy`, async ({ page, api }) => {
+  test(`LCP ${route.name} 375×812: ảnh high trong màn đầu, LCP không lazy`, async ({ page, api }, testInfo) => {
+    // Ca ghi DB chỉ chạy ở một project: hai project chạy song song (fullyParallel) trên cùng DB, bản này trả lại ảnh về null giữa chừng bản kia.
+    test.skip(route.dbThumbs && testInfo.project.name !== 'Web Customer Mobile', 'ca ghi DB chỉ chạy ở project Web Customer Mobile');
     const seeded = route.dbThumbs ? (await setDbThumbs(true)) !== null : true;
     test.skip(!seeded, 'DB không phải DB tạm: không gán được ảnh cho sản phẩm');
     try {
@@ -158,7 +163,7 @@ async function run(page: Page, api: MockApi, route: (typeof ROUTES)[number]): Pr
   // 1. Mọi ảnh fetchpriority=high nằm trong màn đầu.
   for (const h of snap.high) expect(h.top, `ảnh high ngoài màn đầu: ${h.src}`).toBeLessThan(snap.vh);
   expect(snap.high.length, 'phải có ảnh ưu tiên').toBeGreaterThan(0);
-  expect(snap.high.length).toBeLessThanOrEqual(4);
+  expect(snap.high.length).toBeLessThanOrEqual(route.maxHigh);
 
   // 2. LCP là ảnh không lazy, fetchpriority=high; ảnh đổi cỡ (/img?) dùng srcset theo w.
   expect(snap.lcp, 'LCP phải là một phần tử').not.toBeNull();
@@ -170,3 +175,22 @@ async function run(page: Page, api: MockApi, route: (typeof ROUTES)[number]): Pr
   // 3. Không preload ảnh của phần tử đang ẩn ở khổ này.
   expect(snap.preloads.filter((p) => p.hidden), `preload ảnh cho phần tử ẩn: ${JSON.stringify(snap.preloads)}`).toEqual([]);
 }
+
+test.describe('banner Ưu đãi: sizes khớp bề rộng thật', () => {
+  for (const vw of [1024, 1280, 1440]) {
+    test(`${vw}px: ảnh banner rộng min(100vw - 48px, 1152px) và chọn ảnh gốc ở 1x khi khung > 960`, async ({ page, api }) => {
+      mockImages(api);
+      await page.setViewportSize({ width: vw, height: 900 });
+      await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
+      await page.route('https://content.pancake.vn/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
+      await page.goto('/uu-dai');
+      const img = page.locator('[data-offers-banner] img').first();
+      await expect(img).toBeVisible({ timeout: 20_000 });
+      const expected = Math.min(vw - 48, 1152);
+      const box = await img.boundingBox();
+      expect(Math.abs(box!.width - expected), `bề rộng ảnh ${box!.width} so với sizes ${expected}`).toBeLessThanOrEqual(1);
+      const current = await img.evaluate((el: HTMLImageElement) => el.currentSrc);
+      if (expected > 960) expect(current).toContain('lcp-102.jpg');
+    });
+  }
+});
