@@ -828,6 +828,7 @@ export class AdminService {
         isBlocked: true,
         blockedAt: true,
         blockedReason: true,
+        affiliateRevokedAt: true,
         createdAt: true,
         tier: { select: { name: true } },
       },
