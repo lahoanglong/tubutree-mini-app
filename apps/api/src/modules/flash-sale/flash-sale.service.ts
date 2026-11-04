@@ -70,6 +70,8 @@ export interface FlashSlotItemDTO {
 // Nhắc "đã bắt đầu": mỗi trang 500, lặp trang trong một lượt cron tới khi hết người hoặc hết ngân sách thời gian. Ngân sách chỉ để
 // một lượt không kéo dài mãi (kiểm sau mỗi trang, không khoá); lượt chồng lên vẫn an toàn nhờ claim `updateMany where notifiedAt: null`
 // và CronLeader chỉ cho một instance chạy.
+/** Trần số món trả về của /flash-sales/upcoming (và khối trong /home): 2 ngày × ~6 khung × vài chục món vẫn nằm gọn, trước đây không có trần. */
+const UPCOMING_MAX_ITEMS = 200;
 const STARTED_REMINDER_PAGE = 500;
 const STARTED_REMINDER_MAX_PAGES = 200;
 const STARTED_REMINDER_BUDGET_MS = 50_000;
@@ -822,14 +824,16 @@ export class FlashSaleService {
     const items = await this.prisma.flashSaleItem.findMany({
       where: {
         variation: SELLABLE_VARIATION_WHERE,
-        flashSale: { isActive: true, startAt: { gt: now }, endAt: { gt: now } },
+        // Cùng cửa sổ với listSlots: mọi món trên trang Giờ vàng vẫn có cờ `reminded`; đợt xa hơn chưa có gì để nhắc.
+        flashSale: { isActive: true, startAt: { gt: now, lt: vnHorizonEnd(now) }, endAt: { gt: now } },
       },
       include: {
         flashSale: { select: { startAt: true } },
         variation: { include: { product: { select: { slug: true, name: true, thumbnail: true } } } },
         ...(userId ? { reminders: { where: { userId }, select: { id: true } } } : {}),
       },
-      orderBy: { flashSale: { startAt: 'asc' } },
+      orderBy: [{ flashSale: { startAt: 'asc' } }, { id: 'asc' }],
+      take: UPCOMING_MAX_ITEMS,
     });
     return items.filter(isStillDiscounted).map((it) => ({
       itemId: it.id,

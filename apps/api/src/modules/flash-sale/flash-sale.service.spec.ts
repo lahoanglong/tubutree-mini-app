@@ -5,6 +5,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { LifecycleService } from '../lifecycle/lifecycle.service';
+import { vnHorizonEnd } from './flash-slots';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
 
@@ -758,6 +759,16 @@ describe('FlashSaleService.listUpcoming', () => {
     ...over,
   });
 
+  it('L3-12: chỉ lấy đợt bắt đầu trong hôm nay và ngày mai (cùng cửa sổ trang Giờ vàng) và tối đa 200 dòng, thứ tự ổn định', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
+    const args = findMany.mock.calls[0][0];
+    expect(args.where.flashSale).toEqual({ isActive: true, startAt: { gt: NOW, lt: vnHorizonEnd(NOW) }, endAt: { gt: NOW } });
+    expect(args.take).toBe(200);
+    expect(args.orderBy).toEqual([{ flashSale: { startAt: 'asc' } }, { id: 'asc' }]);
+  });
+
   it('trả item sắp diễn ra kèm reminded=false khi user chưa đặt nhắc', async () => {
     const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row()]) } } as any;
     const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
@@ -778,9 +789,9 @@ describe('FlashSaleService.listUpcoming', () => {
     const prisma = { flashSaleItem: { findMany } } as any;
     await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
     const arg = findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } }, flashSale: { isActive: true, startAt: { gt: NOW }, endAt: { gt: NOW } } });
+    expect(arg.where).toEqual({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } }, flashSale: { isActive: true, startAt: { gt: NOW, lt: vnHorizonEnd(NOW) }, endAt: { gt: NOW } } });
     expect(arg.include.reminders).toEqual({ where: { userId: 'u1' }, select: { id: true } });
-    expect(arg.orderBy).toEqual({ flashSale: { startAt: 'asc' } });
+    expect(arg.orderBy).toEqual([{ flashSale: { startAt: 'asc' } }, { id: 'asc' }]);
   });
 
   it('khách chưa đăng nhập (không userId): không truy vấn reminders, mọi món reminded=false', async () => {
