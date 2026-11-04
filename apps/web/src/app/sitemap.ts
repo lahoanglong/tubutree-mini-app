@@ -47,9 +47,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (b.slug) base.push({ url: `${SITE_URL}/brand/${encodeURIComponent(b.slug)}`, changeFrequency: 'weekly', priority: 0.6 });
   }
   // Cùng quy tắc với generateMetadata của /chinh-sach/[loai]: chưa có nội dung đã duyệt (content === null) thì trang noindex nên không nộp.
-  const legalDocs = await Promise.all(LEGAL_SLUGS.map(async (slug) => ({ slug, doc: await getLegalDoc(slug) })));
-  for (const { slug, doc } of legalDocs) {
-    if (doc.content !== null) base.push({ url: `${SITE_URL}/chinh-sach/${slug}`, changeFrequency: 'monthly', priority: 0.4 });
+  // getLegalDoc không có lối thoát lúc build như getProducts/getBrands (API chưa chạy thì ném và làm hỏng `next build`):
+  // lúc build bỏ qua, sitemap được dựng lại ở runtime theo revalidate. Runtime vẫn để lỗi nổi lên.
+  if (process.env.NEXT_PHASE !== 'phase-production-build') {
+    const legalDocs = await Promise.all(LEGAL_SLUGS.map(async (slug) => ({ slug, doc: await getLegalDoc(slug) })));
+    for (const { slug, doc } of legalDocs) {
+      if (doc.content !== null) base.push({ url: `${SITE_URL}/chinh-sach/${slug}`, changeFrequency: 'monthly', priority: 0.4 });
+    }
   }
   const storefronts = await getStorefrontList();
   for (const s of storefronts) {
