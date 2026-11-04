@@ -37,7 +37,7 @@ export class NotificationsProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ZnsSendJobData | InAppRetryJobData>, token?: string): Promise<void> {
+  async process(job: Job<ZnsSendJobData | InAppRetryJobData>, token?: string): Promise<'SENT' | void> {
     // Chỉ còn job xếp trước khi hàng riêng ra đời (còn nằm trong hàng này lúc deploy); job mới đi QUEUE_NOTIFICATIONS_INAPP_RETRY.
     if (job.name === INAPP_RETRY_JOB) return retryInApp(this.notifications, this.logger, job as Job<InAppRetryJobData>);
     return this.sendZns(job as Job<ZnsSendJobData>, token);
@@ -65,7 +65,8 @@ export class NotificationsProcessor extends WorkerHost {
     }
   }
 
-  private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<void> {
+  /** Trả 'SENT' làm returnvalue của job: dấu vết để ZnsStuckLogCron ghi nốt SENT khi markZnsSent đã nuốt lỗi ghi. */
+  private async sendZns(job: Job<ZnsSendJobData>, token?: string): Promise<'SENT' | void> {
     // Lượt thử lại do BullMQ xếp theo backoff nên có thể rơi sau 21h dù lượt đầu đã được dời; dời tiếp tới hết giờ yên tĩnh.
     // moveToDelayed + DelayedError không tính là một lượt thử (attemptsMade giữ nguyên), và chạy trước deliverZns để log vẫn còn nguyên trạng thái.
     const quietMs = await this.notifications.quietDelayMs();
@@ -75,7 +76,7 @@ export class NotificationsProcessor extends WorkerHost {
     }
     const attempts = job.opts.attempts ?? 1;
     const outcome = await this.notifications.deliverZns(job.data, job.attemptsMade + 1 >= attempts);
-    if (outcome === 'SENT') return;
+    if (outcome === 'SENT') return 'SENT';
     if (outcome === 'SKIPPED') {
       this.logger.warn(`Bỏ qua job ZNS đến muộn của notificationLog ${job.data.notificationLogId}: log đã đóng (khoá đã nhả để gửi lại, hoặc đã có tin cho cùng sự kiện).`);
       return;

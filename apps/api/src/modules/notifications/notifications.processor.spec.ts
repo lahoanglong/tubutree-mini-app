@@ -34,9 +34,9 @@ describe('NotificationsProcessor', () => {
     await expect(run('RETRY').result).rejects.toThrow('thất bại tạm thời');
   });
 
-  it('SENT → không ghi gì, không ném', async () => {
+  it("SENT → không ghi gì, không ném, trả 'SENT' làm returnvalue của job", async () => {
     const { result, error, warn } = run('SENT');
-    await expect(result).resolves.toBeUndefined();
+    await expect(result).resolves.toBe('SENT');
     expect(error).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
   });
@@ -67,7 +67,7 @@ describe('NotificationsProcessor: lượt thử lại không gửi trong giờ y
     const notifications = { deliverZns, quietDelayMs: jest.fn(async () => znsQuietDelayMs(new Date(), 21, 8)) } as unknown as NotificationsService;
     const moveToDelayed = jest.fn();
     const job = { data: DATA, opts: { attempts: 6 }, attemptsMade: 0, moveToDelayed } as unknown as Job<ZnsSendJobData>;
-    await expect(new NotificationsProcessor(notifications).process(job, 'tok')).resolves.toBeUndefined();
+    await expect(new NotificationsProcessor(notifications).process(job, 'tok')).resolves.toBe('SENT');
     expect(moveToDelayed).not.toHaveBeenCalled();
     expect(deliverZns).toHaveBeenCalledWith(DATA, false);
   });
