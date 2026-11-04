@@ -112,6 +112,33 @@ describe('deliverZns song song cùng dedupeKey (real Postgres)', () => {
     expect(hits).toBe(0);
   });
 
+  it('log bị đóng "Bỏ qua" vì log kia đã SENT: nhả khoá, job sống lại (khôi phục Redis, retry tay) ra SKIPPED, Zalo không được gọi', async () => {
+    const u = await newUser();
+    const key = `it-dedupe-revive-skip:${Date.now()}`;
+    await mkLog(u.id, key, 1, { status: 'SENT' });
+    const b = await mkLog(u.id, key, 2);
+    expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SKIPPED');
+    const closed = await prisma.notificationLog.findUniqueOrThrow({ where: { id: b.id } });
+    expect(closed.status).toBe('FAILED');
+    expect(closed.payload).toEqual({ data: { n: '2' }, dedupeKey: `${key}:failed:${b.id}` });
+    expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SKIPPED');
+    expect(hits).toBe(0);
+  });
+
+  it('log bị đóng "Không gửi" ở lượt cuối vì log kia vẫn RETRYING: nhả khoá, job sống lại ra SKIPPED, giữ dedupeWithinMs', async () => {
+    const u = await newUser();
+    const key = `it-dedupe-revive-final:${Date.now()}`;
+    await mkLog(u.id, key, 1, { status: 'RETRYING' });
+    const b = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_DEDUPE', channel: 'ZNS', payload: { data: {}, dedupeKey: key, dedupeWithinMs: 3_600_000 }, status: 'PENDING' },
+    });
+    expect(await svc.deliverZns(jobOf(b.id, 2), true)).toBe('FAILED');
+    const closed = await prisma.notificationLog.findUniqueOrThrow({ where: { id: b.id } });
+    expect(closed.payload).toEqual({ data: {}, dedupeKey: `${key}:failed:${b.id}`, dedupeWithinMs: 3_600_000 });
+    expect(await svc.deliverZns(jobOf(b.id, 2), false)).toBe('SKIPPED');
+    expect(hits).toBe(0);
+  });
+
   it('dedupeWithinMs: log SENT cũ hơn cửa sổ không chặn tin mới cùng khoá', async () => {
     const u = await newUser();
     const key = `it-dedupe-window:${Date.now()}`;

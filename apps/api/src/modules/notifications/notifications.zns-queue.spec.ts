@@ -281,7 +281,7 @@ describe('NotificationsService.deliverZns: hai log cùng dedupeKey chạy song s
     });
     expect(txUpdateMany).toHaveBeenCalledWith({
       where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } },
-      data: { status: 'FAILED', error: expect.stringContaining('log-1') },
+      data: { status: 'FAILED', error: expect.stringContaining('log-1'), payload: { data: {}, dedupeKey: 'k1:failed:log-2' } },
     });
   });
 
@@ -298,7 +298,7 @@ describe('NotificationsService.deliverZns: hai log cùng dedupeKey chạy song s
     expect(sendTemplate).not.toHaveBeenCalled();
     expect(txUpdateMany).toHaveBeenCalledWith({
       where: { id: 'log-2', status: { in: ['PENDING', 'RETRYING'] } },
-      data: { status: 'FAILED', error: expect.stringContaining('log-1') },
+      data: { status: 'FAILED', error: expect.stringContaining('log-1'), payload: { data: {}, dedupeKey: 'k1:failed:log-2' } },
     });
   });
 

@@ -77,6 +77,18 @@ export { ZNS_REVIEW_PREFIX };
 
 const releasedZnsDedupeKey = (dedupeKey: string, logId: string) => `${dedupeKey}:failed:${logId}`;
 
+/**
+ * Payload của log ZNS sắp đóng FAILED với khoá chống trùng đã nhả (`<khoá>:failed:<id>`, giữ nguyên `data` và `dedupeWithinMs`), hoặc undefined
+ * nếu log không có khoá hay khoá đã nhả. Mọi chỗ đóng log ZNS mà log đó còn có thể được job chạy lại phải ghi kèm payload này: không thì job
+ * sống lại (khôi phục Redis, retry tay) thấy FAILED chưa nhả khoá và gửi tiếp (isReleasedZnsLog), trong khi tin cùng sự kiện đã đi bằng log khác.
+ */
+function releasedPayload(payload: unknown, logId: string): Prisma.InputJsonObject | undefined {
+  const p = payload as { dedupeKey?: unknown } | null;
+  const key = p?.dedupeKey;
+  if (typeof key !== 'string' || /:failed:[^:]+$/.test(key)) return undefined;
+  return { ...p, dedupeKey: releasedZnsDedupeKey(key, logId) } as Prisma.InputJsonObject;
+}
+
 /** Log ZNS đã đóng vì không xếp được hàng đợi và đã nhả khoá chống trùng (xem dispatchZns). */
 function isReleasedZnsLog(payload: unknown, logId: string): boolean {
   const key = (payload as { dedupeKey?: unknown } | null)?.dedupeKey;
@@ -500,12 +512,18 @@ export class NotificationsService {
       });
       const sent = others.find((o) => o.status === 'SENT');
       if (sent) {
-        await tx.notificationLog.updateMany({ where: closable, data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã gửi ở log ${sent.id}.` } });
+        await tx.notificationLog.updateMany({
+          where: closable,
+          data: { status: 'FAILED', error: `Bỏ qua: tin cho cùng sự kiện đã gửi ở log ${sent.id}.`, payload: releasedPayload(mine.payload, logId) },
+        });
         return 'SKIPPED' as const;
       }
       if (others.length > 0) {
         if (!finalAttempt) return 'RETRY' as const;
-        await tx.notificationLog.updateMany({ where: closable, data: { status: 'FAILED', error: `Không gửi: log ${others[0]!.id} cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ.` } });
+        await tx.notificationLog.updateMany({
+          where: closable,
+          data: { status: 'FAILED', error: `Không gửi: log ${others[0]!.id} cùng sự kiện vẫn đang gửi hoặc thử lại sau nhiều lượt chờ.`, payload: releasedPayload(mine.payload, logId) },
+        });
         return 'FAILED' as const;
       }
       const claimed = await tx.notificationLog.updateMany({ where: closable, data: { status: 'RETRYING' } });
@@ -524,10 +542,9 @@ export class NotificationsService {
   async closeStuckZnsLog(logId: string, reason: string, from: readonly string[] = ['PENDING', 'RETRYING']): Promise<boolean> {
     const log = await this.prisma.notificationLog.findUnique({ where: { id: logId }, select: { payload: true } });
     if (!log) return false;
-    const payload = log.payload as { dedupeKey?: unknown } | null;
-    const key = payload?.dedupeKey;
     // Chỉ closer ghi payload của log đang PENDING/RETRYING nên đọc rồi ghi kèm CAS theo status là đủ; key đã nhả (đường khác đóng trước) thì không nhả lần hai.
-    const release = typeof key === 'string' && !/:failed:[^:]+$/.test(key) ? { payload: { ...payload, dedupeKey: releasedZnsDedupeKey(key, logId) } as Prisma.InputJsonObject } : {};
+    const released = releasedPayload(log.payload, logId);
+    const release = released ? { payload: released } : {};
     const closed = await this.prisma.notificationLog.updateMany({
       where: { id: logId, status: { in: [...from] } },
       data: { status: 'FAILED', error: reason, ...release },
