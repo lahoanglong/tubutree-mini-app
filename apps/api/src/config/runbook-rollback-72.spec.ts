@@ -55,3 +55,20 @@ describe('runbook 7.2: chỉ mục đánh giá cũ chỉ dựng khi r8 còn ch�
     expect(para).toContain(R8);
   });
 });
+
+describe('runbook 1.19: DB_SESSION_OPTIONS phải có trong .env trước bước check-env', () => {
+  const start = RUNBOOK.indexOf('### 1.19 ');
+  const sec = RUNBOOK.slice(start, RUNBOOK.indexOf('### 1.20 '));
+
+  it('dặn thêm trước bước 4 và kiểm giá trị compose đọc ra bằng $DC config', () => {
+    expect(sec).toContain('TRƯỚC bước 4');
+    expect(sec).toContain('$DC config | grep DB_SESSION_OPTIONS');
+  });
+
+  it('checklist không còn mốc "trước bước 9" cho dòng .env', () => {
+    const line = sec.split('\n').find((l) => l.startsWith('- [ ] `.env` có dòng `DB_SESSION_OPTIONS`')) ?? '';
+    expect(line).not.toBe('');
+    expect(line).not.toContain('trước bước 9');
+    expect(line).toMatch(/trước bước 4/i);
+  });
+});

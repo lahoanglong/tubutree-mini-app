@@ -612,6 +612,14 @@ Mã API đổi `maxWait` mặc định của `$transaction` từ 2 giây lên 5 
 DB_SESSION_OPTIONS='-c statement_timeout=30s -c lock_timeout=10s -c idle_in_transaction_session_timeout=30s'
 ```
 
+Thêm dòng này TRƯỚC bước 4 của mục 5 (bước chạy `check-env` bằng image mới; `tools/deploy/deploy.sh` cũng chạy nó ở bước 2/6), không phải trước bước 9: thêm sau đó mà compose còn giữ nháy trong giá trị thì `check-env` đã không còn cơ hội chặn, API tạo ở bước 9 báo lỗi định dạng và khởi động lại liên tục, cả trang ngừng. Trước khi chạy `check-env`, xem compose đọc ra giá trị gì:
+
+```bash
+$DC config | grep DB_SESSION_OPTIONS
+```
+
+Kỳ vọng đúng một dòng `DB_SESSION_OPTIONS: -c statement_timeout=30s -c lock_timeout=10s -c idle_in_transaction_session_timeout=30s`: giá trị không còn nháy đơn dính ở đầu hoặc cuối, đủ dấu cách giữa các cờ và đủ dấu `=` (đã thử với Docker Compose v5.6: nháy đơn bao ngoài trong `.env` bị bỏ, khoảng trắng và `=` giữ nguyên). Còn nháy trong giá trị, hoặc thiếu dòng: sửa `.env` rồi xem lại; DỪNG nếu `check-env` ở bước 4 báo `DB_SESSION_OPTIONS`.
+
 Không sửa compose, không sửa `CMD` của Dockerfile: `api` đã có `env_file: .env`, nên biến tới container khi nó được tạo lại ở bước 9. Biến đó cũng vào container chạy `run --rm` của bước 7, 7b, 7c, nhưng Prisma CLI chỉ đọc `DATABASE_URL`, nên không ảnh hưởng.
 
 Định dạng bị kiểm lúc khởi động (`env.validation.ts`) và bởi bước kiểm `.env` của deploy: chỉ nhận các cặp `-c <tên>=<giá trị>`, tên thuộc ba tên trong bảng, giá trị là số kèm `ms`, `s` hoặc `min` (hoặc số trần, tính bằng mili giây). Sai định dạng, trùng tên, hoặc `DATABASE_URL` đã tự mang `options=` thì API KHÔNG khởi động, kèm thông báo tiếng Việt nêu đúng chỗ sai.
@@ -642,7 +650,7 @@ Kỳ vọng đúng một dòng `[{"st":"30s","lt":"10s","it":"30s"}]`. `pnpm go-
 
 Rollback: xoá dòng `DB_SESSION_OPTIONS` khỏi `.env` rồi `$DC up -d --no-deps api` (không cần quay image: ảnh cũ không đọc biến này, vẫn chạy với `DATABASE_URL` trơn).
 
-- [ ] `.env` có dòng `DB_SESSION_OPTIONS` đúng mẫu, trước bước 9
+- [ ] `.env` có dòng `DB_SESSION_OPTIONS` đúng mẫu, đã thêm TRƯỚC bước 4, và `$DC config | grep DB_SESSION_OPTIONS` ra giá trị không nháy
 - [ ] `go-live:check` không còn WARN `db.session_timeouts`
 - [ ] Câu kiểm trên ra `[{"st":"30s","lt":"10s","it":"30s"}]`
 
