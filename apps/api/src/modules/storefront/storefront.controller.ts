@@ -24,9 +24,8 @@ export class UpdateStorefrontDto {
   @OptionalNotNull() @IsString() @MaxLength(200) headerNote?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) avatarUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
-  @OptionalNotNull() @IsString() theme?: string;
-  // Không tìm thấy danh sách theme hợp lệ tường minh trong storefront.service.ts để dùng @IsIn —
-  // chỉ ràng buộc themeColor (mã hex #rrggbb, khớp default '#16a34a' ở getPublicBySlug).
+  // Chưa có danh sách theme cố định (mặc định 'leaf-orange'); màu thật nằm ở themeColor (mã hex #rrggbb, mặc định '#16a34a').
+  @OptionalNotNull() @IsString() @MaxLength(40) theme?: string;
   @OptionalNotNull() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'themeColor phải là mã màu hex dạng #rrggbb.' }) themeColor?: string;
   @OptionalNotNull() @IsString() subdomain?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) bankName?: string;
@@ -63,9 +62,9 @@ class UpdateItemDto {
   @OptionalNotNull() @IsBoolean() isHidden?: boolean;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) orderedIds!: string[]; }
-class PickerQuery {
+export class PickerQuery {
   @IsOptional() @IsString() search?: string;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) limit?: number;
 }
 

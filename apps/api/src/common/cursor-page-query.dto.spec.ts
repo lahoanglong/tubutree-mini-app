@@ -25,9 +25,12 @@ describe('CursorPageQuery: cursor/take từ query string', () => {
     }
   });
 
-  it('take số kiểu cũ vẫn nhận để clamp ở service (âm, thập phân, rất lớn)', async () => {
-    for (const take of ['-5', '0', '1.5', '999999999999999999999999999']) {
+  it('take chỉ nhận số nguyên dương tối đa 4 chữ số (clamp ở service lo phần còn lại)', async () => {
+    for (const take of ['1', '20', '200', '9999']) {
       await expect(as({ take })).resolves.toMatchObject({ take });
+    }
+    for (const take of ['1.5', '-1', '-5', '0', '1e3', '10000', '007', '+5', ' 5', '999999999999999999999999999']) {
+      await expect(as({ take })).rejects.toThrow();
     }
   });
 
