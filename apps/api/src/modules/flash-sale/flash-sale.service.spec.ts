@@ -5,6 +5,12 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { LifecycleService } from '../lifecycle/lifecycle.service';
+import { vnHorizonEnd } from './flash-slots';
+import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+
+jest.mock('../../common/cron-leader/run-exclusive');
+beforeEach(() => (runExclusive as jest.Mock).mockImplementation(holdsLease(true)));
 
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
@@ -753,6 +759,37 @@ describe('FlashSaleService.listUpcoming', () => {
     ...over,
   });
 
+  it('L3-12: chỉ lấy đợt bắt đầu trong hôm nay và ngày mai (cùng cửa sổ trang Giờ vàng) và tối đa 200 dòng, thứ tự ổn định', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
+    const args = findMany.mock.calls[0][0];
+    expect(args.where.flashSale).toEqual({ isActive: true, startAt: { gt: NOW, lt: vnHorizonEnd(NOW) }, endAt: { gt: NOW } });
+    expect(args.take).toBe(200);
+    expect(args.orderBy).toEqual([{ flashSale: { startAt: 'asc' } }, { id: 'asc' }]);
+  });
+
+  it('L3-12: món hết giảm (flashPrice >= giá đang bán) không chiếm chỗ trong 200 món: đọc tiếp trang sau tới khi đủ', async () => {
+    const dead = (i: number) => row({ id: `d${i}`, flashPrice: 120000 });
+    const page1 = Array.from({ length: 200 }, (_, i) => dead(i));
+    const page2 = [row({ id: 'ok1' }), row({ id: 'ok2' })];
+    const findMany = jest.fn().mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
+    expect(list.map((i) => i.itemId)).toEqual(['ok1', 'ok2']);
+    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(findMany.mock.calls[1][0]).toMatchObject({ cursor: { id: 'd199' }, skip: 1, take: 200 });
+  });
+
+  it('L3-12: đủ 200 món còn giảm thì dừng, không đọc thêm', async () => {
+    const page1 = Array.from({ length: 200 }, (_, i) => row({ id: `ok${i}` }));
+    const findMany = jest.fn().mockResolvedValue(page1);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
+    expect(list).toHaveLength(200);
+    expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
   it('trả item sắp diễn ra kèm reminded=false khi user chưa đặt nhắc', async () => {
     const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row()]) } } as any;
     const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
@@ -773,9 +810,9 @@ describe('FlashSaleService.listUpcoming', () => {
     const prisma = { flashSaleItem: { findMany } } as any;
     await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming('u1', NOW);
     const arg = findMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } }, flashSale: { isActive: true, startAt: { gt: NOW }, endAt: { gt: NOW } } });
+    expect(arg.where).toEqual({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } }, flashSale: { isActive: true, startAt: { gt: NOW, lt: vnHorizonEnd(NOW) }, endAt: { gt: NOW } } });
     expect(arg.include.reminders).toEqual({ where: { userId: 'u1' }, select: { id: true } });
-    expect(arg.orderBy).toEqual({ flashSale: { startAt: 'asc' } });
+    expect(arg.orderBy).toEqual([{ flashSale: { startAt: 'asc' } }, { id: 'asc' }]);
   });
 
   it('khách chưa đăng nhập (không userId): không truy vấn reminders, mọi món reminded=false', async () => {
@@ -846,7 +883,7 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
     expect(findMany).toHaveBeenCalledTimes(3);
   });
 
-  it('hết ngân sách thời gian giữa chừng: dừng sau trang hiện tại, phần còn lại để lượt phút sau', async () => {
+  it('hết ngân sách thời gian giữa chừng: dừng ngay ở dòng đang xét (không đợi hết trang 500), phần còn lại để lượt phút sau', async () => {
     const all = Array.from({ length: 1200 }, (_, i) => reminderRow({ id: `r${String(i).padStart(4, '0')}`, userId: `u${i}` }));
     const findMany = jest.fn(async (args: { where: { id?: { gt: string } }; take: number }) => {
       const after = args.where.id?.gt;
@@ -855,16 +892,45 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
     const prisma = { flashSaleReminder: { findMany, updateMany: jest.fn().mockResolvedValue({ count: 1 }) } } as any;
     const notify = jest.fn().mockResolvedValue(undefined);
     const realNow = Date.now.bind(Date);
-    let calls = 0;
-    // Lần đọc đồng hồ đầu là mốc bắt đầu; các lần sau đã quá 50 giây.
-    const spy = jest.spyOn(Date, 'now').mockImplementation(() => (calls++ === 0 ? realNow() : realNow() + 51_000));
+    // Đồng hồ vượt 50 giây ngay sau dòng thứ 10 được gửi.
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => realNow() + (notify.mock.calls.length >= 10 ? 51_000 : 0));
     try {
       await new FlashSaleService(prisma, config, { notify } as unknown as NotificationsService, lifecycle).notifyStartedFlashSales(now);
     } finally {
       spy.mockRestore();
     }
-    expect(notify).toHaveBeenCalledTimes(500);
+    expect(notify).toHaveBeenCalledTimes(10);
     expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('lượt khác (replica hay lượt chồng) đang giữ khoá lượt chạy: không đọc nhắc, không gửi', async () => {
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(false));
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { flashSaleReminder: { findMany, updateMany: jest.fn() } } as any;
+    const notify = jest.fn();
+    await new FlashSaleService(prisma, config, { notify } as unknown as NotificationsService, lifecycle).notifyStartedFlashSales(now);
+    expect(findMany).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    expect(runExclusive).toHaveBeenCalledWith(prisma, 'flash-sale-started-reminders', expect.any(Function), expect.anything());
+  });
+
+  it('hai lượt cron chồng nhau: chỉ lượt giành được khoá làm việc, người nhận nhắc đúng một lần', async () => {
+    let held = false;
+    (runExclusive as jest.Mock).mockImplementation(async (_p: unknown, _k: string, fn: () => Promise<unknown>) => {
+      if (held) return { acquired: false };
+      held = true;
+      return { acquired: true, value: await fn() };
+    });
+    const rows = [reminderRow({ id: 'r1', userId: 'u1' })];
+    const findMany = jest.fn(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+      return rows;
+    });
+    const prisma = { flashSaleReminder: { findMany, updateMany: jest.fn().mockResolvedValue({ count: 1 }) } } as any;
+    const notify = jest.fn().mockResolvedValue(undefined);
+    const svc = new FlashSaleService(prisma, config, { notify } as unknown as NotificationsService, lifecycle);
+    await Promise.all([svc.notifyStartedFlashSales(now), svc.notifyStartedFlashSales(now)]);
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 
   it('claim thất bại (count 0, cron khác đã nhắc) → KHÔNG notify', async () => {

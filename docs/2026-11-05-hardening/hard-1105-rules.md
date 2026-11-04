@@ -31,7 +31,7 @@
 ## Tự kiểm trước khi báo (dán đuôi output thật)
 1. `tsc --noEmit` cho mọi app bị đổi.
 2. eslint cho mọi app bị đổi.
-3. jest apps/api TOÀN BỘ, không chỉ thư mục đã đổi.
+3. jest apps/api TOÀN BỘ, không chỉ thư mục đã đổi. Máy dùng chung: luôn `npx jest --silent --maxWorkers=2`.
 4. Chạy race TOÀN BỘ trên DB mới, cổng `<PORT>` ghi trong brief của gói:
 
    ```bash
@@ -51,7 +51,7 @@
 
    Không pipe lệnh này, vì pipe làm mất exit code. Kỳ vọng exit 0.
 6. Dừng DB: `bash docs/2026-10-20-uat/tools/pg-native.sh stop <PORT>`.
-7. vitest cho mọi app frontend bị đổi.
+7. vitest cho mọi app frontend bị đổi, chạy với `VITEST_MIN_FORKS=1 VITEST_MAX_FORKS=2 VITEST_MIN_THREADS=1 VITEST_MAX_THREADS=2` (đặt MAX mà thiếu MIN thì vitest báo "minThreads and maxThreads must not conflict" và không chạy test nào).
 
 Không chạy `gate.sh` hay `pw-gate.sh`: người điều phối tự chạy.
 

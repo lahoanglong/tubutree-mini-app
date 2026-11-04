@@ -5,6 +5,7 @@ import { toShippingEta } from '../../modules/system-config/shipping-eta';
 import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
 import { sameProvince } from '@tubutree/shared-types';
 import { envValue } from './secrets';
+import { parseDbSessionOptions, pgDurationToMs, type DbSessionOptionName } from '../../prisma/db-session-options';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
 const G_DB = 'Cơ sở dữ liệu';
@@ -16,17 +17,26 @@ export const REQUIRED_MIGRATIONS = [
   '20261015150000_r8_multi_reviews_unique_per_order',
 ] as const;
 const ORDERS_LOCK_MIGRATION = REQUIRED_MIGRATIONS[0];
+const MULTI_REVIEWS_MIGRATION = REQUIRED_MIGRATIONS[2];
 
 /**
- * Ba migration của đợt, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một cột trên bảng trả hàng cũ) và migration
- * waste_exchange chỉ thêm bảng và cột mới mà image cũ không đọc. Image cũ vẫn chạy được trên schema có đủ sáu cái, nên quay lại
- * bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ gồm sáu cái này.
+ * Migration mà image cũ vẫn chạy đúng trên schema sau khi áp: quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ
+ * gồm tên trong danh sách này. Gồm ba migration của đợt đầu, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một
+ * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc) và bảy migration đợt hardening
+ * 05/11 chỉ dựng chỉ mục (không đổi dữ liệu, không đổi cột).
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   ...REQUIRED_MIGRATIONS,
   '20261015160000_r9_sync_stock_same_clock_markers',
   '20261015170000_r10_legacy_returns_received',
   '20261020000000_waste_exchange',
+  '20261105130000_hd1_coupon_milestone_period_idx',
+  '20261105130100_hd1_users_guest_partial_idx',
+  '20261105130200_hd1_notification_inapp_indexes',
+  '20261105130300_hd1_points_history_index',
+  '20261105130400_hd1_feed_new_order_index',
+  '20261105130500_hd1_reviews_public_list_index',
+  '20261105140000_payouts_status_index',
 ];
 
 /**
@@ -64,6 +74,9 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261104160500_user_affiliate_revoked_backfill', ordersLock: false },
   { name: '20261104180000_order_payment_unlinked', ordersLock: true },
   { name: '20261104180100_order_payment_unlinked_first_at', ordersLock: false },
+  { name: '20261105130100_hd1_users_guest_partial_idx', ordersLock: false },
+  { name: '20261105130200_hd1_notification_inapp_indexes', ordersLock: false },
+  { name: '20261105130300_hd1_points_history_index', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;
@@ -111,6 +124,8 @@ export interface DbSnapshot {
   znsTemplates: ZnsTemplateRow[];
   /** COD_MAX_PER_ORDER trong code (checkout-split.ts). */
   codMaxPerOrder: number;
+  /** current_setting của ba hạn chờ, đọc trên kết nối dựng đúng như API (cùng DB_SESSION_OPTIONS). */
+  sessionTimeouts: Record<DbSessionOptionName, string>;
   demoData?: DemoDataSnapshot;
   /** Phần collector không đọc được vì schema DB cũ hơn mã (P2021/P2022): mã lỗi theo từng phần. Vắng nghĩa là đọc đủ. */
   degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'demoData', string>>;
@@ -199,13 +214,22 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
     const scopeTitle = 'Phạm vi migration sẽ áp';
     out.push(
       extra.length === 0
-        ? pass(G_DB, 'db.pending_scope', scopeTitle, `chỉ các migration của đợt (${pending.length}): quay lại bằng image cũ (runbook 7.2) hợp lệ`)
+        ? pass(
+            G_DB,
+            'db.pending_scope',
+            scopeTitle,
+            `chỉ các migration của đợt (${pending.length}): quay lại bằng image cũ (runbook 7.2) hợp lệ${heavy.length > 0 ? `; nặng: ${listNames(heavy, HEAVY_MIGRATIONS.length)}` : ''}; ${
+              pending.includes(MULTI_REVIEWS_MIGRATION)
+                ? 'r8 còn chờ: 7.2 đếm đánh giá trùng và dựng lại chỉ mục đánh giá cũ'
+                : 'r8 đã áp từ trước: 7.2 bỏ qua bước đếm đánh giá trùng và chỉ mục đánh giá cũ'
+            }`,
+          )
         : warn(
             G_DB,
             'db.pending_scope',
             scopeTitle,
             `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, HEAVY_MIGRATIONS.length)}` : ''}`,
-            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài sáu cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
+            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài IMAGE_COMPATIBLE_MIGRATIONS (db-checks.ts, runbook 7.0): chỉ còn khôi phục bản backup (runbook 7.3).',
           ),
     );
   }
@@ -533,6 +557,25 @@ function codCapCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.cod_cap', title, `cố định ${vnd(COD_CAP_VND)} mỗi đơn con (hằng số trong mã, không chỉnh qua cấu hình)`);
 }
 
+function sessionTimeoutsCheck(s: DbSnapshot, env: Env): CheckResult {
+  const title = 'Hạn chờ Postgres của API';
+  const raw = envValue(env, 'DB_SESSION_OPTIONS');
+  if (!raw) {
+    return warn(G_DB, 'db.session_timeouts', title, 'chưa đặt hạn chờ Postgres (runbook 1.19)', 'Thêm DB_SESSION_OPTIONS vào /opt/tubutree/.env rồi tạo lại api (runbook mục 1.19); thiếu thì một câu lệnh hay khoá treo giữ kết nối tới khi cạn pool.');
+  }
+  const parsed = parseDbSessionOptions(raw);
+  if (!parsed.ok) {
+    return fail(G_DB, 'db.session_timeouts', title, `DB_SESSION_OPTIONS sai định dạng: ${parsed.errors.join(' ')}`, 'Sửa theo mẫu trong .env.production.example (runbook 1.19); API không khởi động với giá trị này.');
+  }
+  const mismatched = (Object.entries(parsed.settings) as [DbSessionOptionName, string][])
+    .filter(([name, want]) => pgDurationToMs(s.sessionTimeouts[name]) !== pgDurationToMs(want))
+    .map(([name, want]) => `${name}: khai báo ${want}, kết nối đọc ra ${s.sessionTimeouts[name]}`);
+  if (mismatched.length > 0) {
+    return fail(G_DB, 'db.session_timeouts', title, mismatched.join('; '), 'Tạo lại api sau khi sửa .env (docker compose up -d --no-deps api) rồi chạy lại; nếu vẫn lệch, kiểm DATABASE_URL không tự mang options= (runbook 1.19).');
+  }
+  return pass(G_DB, 'db.session_timeouts', title, Object.entries(parsed.settings).map(([name, v]) => `${name}=${v}`).join(', '));
+}
+
 function gomdonToggleChecks(s: DbSnapshot, env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const toggle = s.configs['shipping.gomdon.recycling_enabled'];
@@ -675,6 +718,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
       miniappBaseUrlCheck(s, ctx.env),
     ]),
     codCapCheck(s),
+    sessionTimeoutsCheck(s, ctx.env),
     ...configPart(gomdonToggleChecks(s, ctx.env)),
     ...part('membershipTiers', [membershipTierCheck(s, ctx.phase)]),
     ...part('dealerTiers', [dealerTierCheck(s)]),

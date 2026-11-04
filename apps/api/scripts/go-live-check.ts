@@ -11,6 +11,7 @@
  */
 import * as path from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { buildDatasourceUrl } from '../src/prisma/db-session-options';
 import { collectBackupSnapshot, collectDbSnapshot, collectRedisSnapshot, listExpectedMigrations } from '../src/config/go-live/collect';
 import { exitCodeFor, formatReport } from '../src/config/go-live/report';
 import { parseEnvFile, parsePhase, runGoLiveCheck } from '../src/config/go-live/run';
@@ -20,7 +21,15 @@ async function main(): Promise<number> {
   const envFile = parseEnvFile(args);
   if (envFile) process.loadEnvFile(envFile);
   const phase = parsePhase(args);
-  const prisma = new PrismaClient();
+  // Cùng cách PrismaService dựng URL, để số đọc ra là hạn chờ mà API thật sẽ nhận.
+  // Chuỗi sai thì dùng kết nối trơn: chính bước kiểm db.session_timeouts báo FAIL kèm lý do.
+  let sessionUrl: string | undefined;
+  try {
+    sessionUrl = buildDatasourceUrl(process.env.DATABASE_URL, process.env.DB_SESSION_OPTIONS);
+  } catch {
+    sessionUrl = undefined;
+  }
+  const prisma = new PrismaClient(sessionUrl ? { datasourceUrl: sessionUrl } : undefined);
   try {
     const results = await runGoLiveCheck(
       { env: process.env, phase },

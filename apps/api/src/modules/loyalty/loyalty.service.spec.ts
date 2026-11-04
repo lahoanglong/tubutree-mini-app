@@ -184,10 +184,23 @@ describe('LoyaltyService.getCouponHistory', () => {
     perUserLimit: 1,
     ...over,
   });
-  function prismaFor(coupons: unknown[], redemptions: { couponId: string; n: number; at: string }[] = []) {
+  // Mô phỏng DB: findMany theo `id in` trả đúng các mã có id trong danh sách; claimIds/personalIds là kết quả hai nhánh tra bằng index.
+  function prismaFor(
+    coupons: { id: string }[],
+    redemptions: { couponId: string; n: number; at: string }[] = [],
+    branches: { claimIds?: string[]; personalIds?: string[] } = {},
+  ) {
     const groupBy = jest.fn().mockResolvedValue(redemptions.map((r) => ({ couponId: r.couponId, _count: { _all: r.n }, _max: { redeemedAt: new Date(r.at) } })));
-    const findMany = jest.fn().mockResolvedValue(coupons);
-    return { prisma: { coupon: { findMany }, couponRedemption: { groupBy } } as unknown as PrismaService, findMany, groupBy };
+    const findMany = jest.fn(async (args: { where: { id: { in: string[] } } }) => coupons.filter((c) => args.where.id.in.includes(c.id)));
+    const claimFindMany = jest.fn().mockResolvedValue((branches.claimIds ?? []).map((couponId) => ({ couponId })));
+    const queryRaw = jest.fn().mockResolvedValue((branches.personalIds ?? []).map((id) => ({ id })));
+    return {
+      prisma: { coupon: { findMany }, couponRedemption: { groupBy }, couponClaim: { findMany: claimFindMany }, $queryRaw: queryRaw } as unknown as PrismaService,
+      findMany,
+      groupBy,
+      claimFindMany,
+      queryRaw,
+    };
   }
 
   it('mã đã dùng hết lượt của khách là "used" kèm lần dùng gần nhất, dù mã còn hạn', async () => {
@@ -197,13 +210,13 @@ describe('LoyaltyService.getCouponHistory', () => {
   });
 
   it('mã dùng một phần (perUserLimit 3, mới dùng 1) và mã chưa dùng còn hạn vẫn nằm ở ví, không vào lịch sử', async () => {
-    const { prisma } = prismaFor([mk('PART', { perUserLimit: 3 }), mk('FRESH')], [{ couponId: 'PART', n: 1, at: '2026-11-10T00:00:00Z' }]);
+    const { prisma } = prismaFor([mk('PART', { perUserLimit: 3 }), mk('FRESH')], [{ couponId: 'PART', n: 1, at: '2026-11-10T00:00:00Z' }], { personalIds: ['FRESH'] });
     expect(await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW)).toEqual([]);
   });
 
   it('mã đã nhận hoặc của riêng khách mà hết hạn chưa dùng hết là "expired"; dùng hết rồi hết hạn thì vẫn là "used"', async () => {
     const past = new Date(NOW.getTime() - 3 * DAY);
-    const { prisma } = prismaFor([mk('OLD', { endAt: past }), mk('BOTH', { endAt: past })], [{ couponId: 'BOTH', n: 1, at: '2026-11-01T00:00:00Z' }]);
+    const { prisma } = prismaFor([mk('OLD', { endAt: past }), mk('BOTH', { endAt: past })], [{ couponId: 'BOTH', n: 1, at: '2026-11-01T00:00:00Z' }], { claimIds: ['OLD', 'BOTH'] });
     const out = await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW);
     expect(Object.fromEntries(out.map((c) => [c.code, c.state]))).toEqual({ OLD: 'expired', BOTH: 'used' });
     expect(out.find((c) => c.code === 'OLD')!.usedAt).toBeNull();
@@ -214,23 +227,39 @@ describe('LoyaltyService.getCouponHistory', () => {
     expect(await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW)).toEqual([]);
   });
 
-  it('chỉ lấy mã đã nhận (CLAIM) hoặc của riêng khách hết hạn trong 90 ngày; mã PUBLIC hết hạn khách chưa dùng không có', async () => {
-    const { prisma, findMany } = prismaFor([]);
+  it('tách ba nhánh, mỗi nhánh đi bằng index: lượt dùng, claim theo userId, mã riêng theo scopeMeta->>userId (partial index)', async () => {
+    const { prisma, findMany, claimFindMany, queryRaw } = prismaFor([], [{ couponId: 'U1', n: 1, at: '2026-11-14T00:00:00Z' }], { claimIds: ['K1'], personalIds: ['P1'] });
     await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW);
     const since = new Date(NOW.getTime() - 90 * DAY);
-    expect(findMany.mock.calls[0]![0].where).toEqual({
-      OR: [
-        { scope: 'CLAIM', claims: { some: { userId: 'me' } }, endAt: { lt: NOW, gte: since } },
-        { scope: 'USER_GROUP', scopeMeta: { path: ['userId'], equals: 'me' }, endAt: { lt: NOW, gte: since } },
-      ],
-    });
+    expect(claimFindMany.mock.calls[0]![0].where).toEqual({ userId: 'me' });
+    const sql = (queryRaw.mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toContain(`"scopeMeta" ->> 'userId'`);
+    expect(sql).not.toContain('#>');
+    expect(queryRaw.mock.calls[0]!.slice(1)).toEqual(['me', NOW, since]);
+    const wheres = findMany.mock.calls.map((c) => c[0].where);
+    expect(wheres).toContainEqual({ id: { in: ['U1'] } });
+    expect(wheres).toContainEqual({ id: { in: ['K1'] }, scope: 'CLAIM', endAt: { lt: NOW, gte: since } });
+    expect(wheres).toContainEqual({ id: { in: ['P1'] } });
+    expect(wheres.every((w) => !('OR' in w))).toBe(true);
   });
 
-  it('mã đã dùng được đọc theo id từ lượt dùng của khách; mới nhất trước, tối đa 50 dòng', async () => {
-    const many = Array.from({ length: 60 }, (_, i) => mk(`C${i}`, { endAt: new Date(NOW.getTime() - (i + 1) * DAY) }));
-    const { prisma, findMany } = prismaFor(many, [{ couponId: 'U1', n: 1, at: '2026-11-14T00:00:00Z' }]);
+  it('mã nằm ở nhiều nhánh (đã dùng + đã nhận) chỉ ra một dòng', async () => {
+    const past = new Date(NOW.getTime() - 3 * DAY);
+    const { prisma } = prismaFor([mk('DUP', { endAt: past })], [{ couponId: 'DUP', n: 1, at: '2026-11-01T00:00:00Z' }], { claimIds: ['DUP'], personalIds: ['DUP'] });
     const out = await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW);
-    expect(findMany.mock.calls[0]![0].where.OR[0]).toEqual({ id: { in: ['U1'] } });
+    expect(out.map((c) => c.code)).toEqual(['DUP']);
+  });
+
+  it('không có nhánh nào thì không gọi findMany coupon', async () => {
+    const { prisma, findMany } = prismaFor([]);
+    expect(await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW)).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('mới nhất trước, tối đa 50 dòng', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => mk(`C${i}`, { endAt: new Date(NOW.getTime() - (i + 1) * DAY) }));
+    const { prisma } = prismaFor(many, [], { personalIds: many.map((m) => m.id) });
+    const out = await new LoyaltyService(prisma, makeConfig()).getCouponHistory('me', NOW);
     expect(out).toHaveLength(50);
     expect(out[0]!.code).toBe('C0');
     expect(out[49]!.code).toBe('C49');

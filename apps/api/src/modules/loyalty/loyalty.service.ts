@@ -953,15 +953,24 @@ export class LoyaltyService {
       take: COUPON_HISTORY_LIMIT,
     });
     const usage = new Map(used.map((u) => [u.couponId, { n: u._count._all, at: u._max.redeemedAt }]));
-    const coupons = await this.prisma.coupon.findMany({
-      where: {
-        OR: [
-          ...(used.length > 0 ? [{ id: { in: used.map((u) => u.couponId) } }] : []),
-          { scope: 'CLAIM', claims: { some: { userId } }, endAt: { lt: now, gte: since } },
-          { scope: 'USER_GROUP', scopeMeta: { path: ['userId'], equals: userId }, endAt: { lt: now, gte: since } },
-        ],
-      },
-    });
+    // Ba nhánh tra riêng để mỗi nhánh đi bằng index: OR + EXISTS + `scopeMeta #> path` trong một câu khiến planner chỉ còn
+    // BitmapOr trên khoảng endAt rồi lọc lại hàng chục nghìn dòng. Nhánh mã riêng dùng `->>` đúng biểu thức của partial index.
+    const range = { endAt: { lt: now, gte: since } };
+    const [claims, personal] = await Promise.all([
+      this.prisma.couponClaim.findMany({ where: { userId }, select: { couponId: true } }),
+      this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM coupons
+        WHERE scope = 'USER_GROUP' AND "scopeMeta" ->> 'userId' = ${userId}
+          AND "endAt" < ${now} AND "endAt" >= ${since}`,
+    ]);
+    const byId = (ids: string[], extra: Prisma.CouponWhereInput = {}) =>
+      ids.length > 0 ? this.prisma.coupon.findMany({ where: { id: { in: ids }, ...extra } }) : Promise.resolve([]);
+    const found = await Promise.all([
+      byId(used.map((u) => u.couponId)),
+      byId(claims.map((c) => c.couponId), { scope: 'CLAIM', ...range }),
+      byId(personal.map((r) => r.id)),
+    ]);
+    const coupons = [...new Map(found.flat().map((c) => [c.id, c])).values()];
     const items = coupons.flatMap((c) => {
       const u = usage.get(c.id);
       // perUserLimit <= 0 = không giới hạn (như getAvailableCoupons): dùng bao nhiêu lần cũng không "hết lượt".

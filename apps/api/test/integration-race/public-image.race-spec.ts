@@ -123,7 +123,7 @@ describe('PublicImageService (real Postgres)', () => {
     for (const slot of ['0', 'thumb']) await expect(svc.get('product', p.id, slot, undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('đã công khai (thumbnail đường dẫn) → xin liên kết → admin từ chối → đổi mã lần nữa: danh sách chờ duyệt trả data URL, không phải đường dẫn 404', async () => {
+  it('đã công khai (thumbnail đường dẫn) → xin liên kết → admin từ chối → đổi mã lần nữa: danh sách chờ duyệt trả đường dẫn của admin (phát được), không phải đường dẫn công khai 404', async () => {
     const catalogVariation = async () => {
       const tag = randCode(8);
       const cat = await product({ fulfilment: 'TUBU', images: [], thumbnail: null, variations: { create: { sku: `itimg-c-${tag}`, name: 'V', attributes: {}, retailPrice: 1000, stock: 5, pancakeId: `itimg-pk-c-${tag}` } } });
@@ -139,7 +139,8 @@ describe('PublicImageService (real Postgres)', () => {
     await merchant.updateProduct(owner.id, p.id, { pancakeCode: await catalogVariation() });
     expect(await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ approvalStatus: 'PENDING_REVIEW', approvedAt: null });
     const listed = (await admin.listPendingMerchantProducts(1, 200)).data.find((x) => x.id === p.id);
-    expect(listed?.thumbnail).toBe(PNG_A);
+    expect(listed?.thumbnail).toMatch(new RegExp(`^/admin/merchant-products/${p.id}/images/product/thumb\\?v=[0-9a-f]{10}$`));
+    expect((await admin.merchantProductImage(p.id, 'product', 'thumb')).data.equals(Buffer.from(PNG_A.split(',')[1]!, 'base64'))).toBe(true);
     await expect(svc.get('product', p.id, '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 

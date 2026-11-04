@@ -439,15 +439,16 @@ export class VouchersService {
   /** Voucher mốc đã cấp trong kỳ cho mọi khách (mọi bậc, kể cả bậc đã bị xoá khỏi cấu hình), gom theo userId trong scopeMeta. */
   private async milestoneReceived(period: string): Promise<Map<string, { codes: Set<string>; sum: number }>> {
     const out = new Map<string, { codes: Set<string>; sum: number }>();
-    let after: string | undefined;
+    // Hậu tố kỳ so bằng right(..., 8) và `code LIKE 'MILESTONE%'` viết literal để khớp đúng index coupons_milestone_period_idx
+    // (partial + biểu thức). `LIKE '%-yyyy-mm'` không dùng được index nào, và tham số hoá `code LIKE $1` thì partial index không được chọn.
+    const suffix = `-${period}`;
+    let after = '';
     for (;;) {
-      const page = await this.prisma.coupon.findMany({
-        where: { code: { startsWith: 'MILESTONE' }, scopeMeta: { path: ['reason'], string_ends_with: `-${period}` } },
-        select: { id: true, code: true, value: true, scopeMeta: true },
-        orderBy: { id: 'asc' },
-        take: VouchersService.MILESTONE_RECEIVED_PAGE,
-        ...(after ? { cursor: { id: after }, skip: 1 } : {}),
-      });
+      const page = await this.prisma.$queryRaw<{ id: string; code: string; value: number; scopeMeta: unknown }[]>`
+        SELECT id, code, value, "scopeMeta" FROM coupons
+        WHERE code LIKE 'MILESTONE%' AND right("scopeMeta" ->> 'reason', 8) = ${suffix} AND id > ${after}
+        ORDER BY id
+        LIMIT ${VouchersService.MILESTONE_RECEIVED_PAGE}`;
       for (const c of page) {
         const meta = c.scopeMeta as { userId?: unknown; reason?: unknown } | null;
         if (typeof meta?.userId !== 'string' || typeof meta.reason !== 'string' || !/^MILESTONE\d+-/.test(meta.reason)) continue;

@@ -7,8 +7,9 @@ import { maskPhone } from '../../../common/mask-pii';
 import { interpretZnsBody, interpretZnsException, znsFailure, type ZnsSendResult } from './zns-result';
 
 /**
- * Hạn chờ phản hồi của một lần gọi ZNS. Gọi chạy trong worker nền (không nằm trên đường đặt hàng/thanh toán) nên chờ lâu
- * không làm khách chậm; hết hạn mà Zalo vẫn xử lý thì lần gửi lại làm khách nhận hai tin xác nhận và tốn phí hai lần.
+ * Hạn chờ phản hồi của một lần gọi ZNS. Gọi chạy trong worker nền (không nằm trên đường đặt hàng/thanh toán) và worker xử lý 5 job
+ * song song nên chờ lâu không làm khách chậm cũng không nghẽn hàng; hết hạn mà Zalo vẫn xử lý thì lượt thử lại làm khách nhận hai
+ * tin xác nhận và tốn phí hai lần, nên không đặt ngắn.
  */
 export const ZNS_REQUEST_TIMEOUT_MS = 25_000;
 

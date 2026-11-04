@@ -160,3 +160,33 @@ describe('envSchema — CLOUDINARY_CLOUD_NAME', () => {
     expect(envSchema.safeParse({ ...PROD_BASE, CLOUDINARY_CLOUD_NAME: v }).success).toBe(false);
   });
 });
+
+describe('envSchema — DB_SESSION_OPTIONS', () => {
+  const OK = '-c statement_timeout=30s -c lock_timeout=10s -c idle_in_transaction_session_timeout=30s';
+
+  it('không đặt hoặc rỗng → boot, giá trị undefined', () => {
+    for (const v of [undefined, '']) {
+      const r = envSchema.safeParse({ ...PROD_BASE, DB_SESSION_OPTIONS: v });
+      expect(r.success).toBe(true);
+      if (r.success) expect(r.data.DB_SESSION_OPTIONS).toBeUndefined();
+    }
+  });
+
+  it('đúng định dạng → boot', () => {
+    expect(envSchema.safeParse({ ...PROD_BASE, DB_SESSION_OPTIONS: OK }).success).toBe(true);
+  });
+
+  it('tên lạ hoặc giá trị sai → không boot, báo đúng khoá', () => {
+    for (const bad of ['-c work_mem=64MB', '-c statement_timeout=abc']) {
+      const r = envSchema.safeParse({ ...PROD_BASE, DB_SESSION_OPTIONS: bad });
+      expect(r.success).toBe(false);
+      if (!r.success) expect(r.error.issues.some((i) => i.path.includes('DB_SESSION_OPTIONS'))).toBe(true);
+    }
+  });
+
+  it('DATABASE_URL đã có options= mà DB_SESSION_OPTIONS cũng đặt → không boot', () => {
+    const r = envSchema.safeParse({ ...PROD_BASE, DATABASE_URL: 'postgresql://u:p@db:5432/tubu?options=-c%20lock_timeout%3D1s', DB_SESSION_OPTIONS: OK });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => i.path.includes('DB_SESSION_OPTIONS') && /options=/.test(i.message))).toBe(true);
+  });
+});

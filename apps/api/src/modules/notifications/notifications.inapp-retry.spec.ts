@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import { NotificationsService, INAPP_RETRY_JOB, INAPP_RETRY_JOB_OPTIONS, type InAppRetryJobData } from './notifications.service';
-import { NotificationsProcessor } from './notifications.processor';
+import { InAppRetryProcessor, NotificationsProcessor } from './notifications.processor';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -15,11 +15,13 @@ function setup(opts: { add?: jest.Mock | null } = {}) {
   const prisma = {} as PrismaService;
   const analytics = { recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
   const add = opts.add === undefined ? jest.fn().mockResolvedValue({}) : opts.add;
-  const svc = new NotificationsService(prisma, {} as ZnsClient, analytics, add ? ({ add } as never) : undefined);
+  const znsAdd = jest.fn().mockResolvedValue({});
+  // Hàng ZNS (tham số thứ 4) tách khỏi hàng thử lại tin trong app (tham số thứ 6): job thử lại không được vào hàng ZNS.
+  const svc = new NotificationsService(prisma, {} as ZnsClient, analytics, { add: znsAdd } as never, undefined, add ? ({ add } as never) : undefined);
   const notify = jest.spyOn(svc, 'notify');
   const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
   const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-  return { svc, notify, add, error, warn };
+  return { svc, notify, add, znsAdd, error, warn };
 }
 
 afterEach(() => {
@@ -37,7 +39,7 @@ describe('NotificationsService.notifyWithRetry: tin phụ sau thao tác đã xon
   });
 
   it('lỗi tạm thời (DB chập chờn) → xếp job thử lại cùng dedupeKey, không ném, ghi warn', async () => {
-    const { svc, notify, add, warn } = setup();
+    const { svc, notify, add, znsAdd, warn } = setup();
     notify.mockRejectedValue(new Error('Connection terminated unexpectedly'));
     await expect(svc.notifyWithRetry('u1', 'INVOICE_ISSUED', { order_code: 'T1' }, { dedupeKey: KEY }, 'order=T1')).resolves.toBe('QUEUED');
     expect(add).toHaveBeenCalledWith(
@@ -45,6 +47,7 @@ describe('NotificationsService.notifyWithRetry: tin phụ sau thao tác đã xon
       { userId: 'u1', templateCode: 'INVOICE_ISSUED', data: { order_code: 'T1' }, dedupeKey: KEY, context: 'order=T1' },
       INAPP_RETRY_JOB_OPTIONS,
     );
+    expect(znsAdd).not.toHaveBeenCalled();
     expect(INAPP_RETRY_JOB_OPTIONS.attempts).toBeGreaterThanOrEqual(5);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('order=T1'));
     expect(captureServerError).not.toHaveBeenCalled();
@@ -67,7 +70,19 @@ describe('NotificationsService.notifyWithRetry: tin phụ sau thao tác đã xon
   });
 });
 
-describe('NotificationsProcessor: job inapp-retry', () => {
+describe('InAppRetryProcessor: hàng riêng của job inapp-retry', () => {
+  it('xử lý job bằng notify cùng dedupeKey, ném khi lỗi để BullMQ thử lại', async () => {
+    const notify = jest.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('db down'));
+    const processor = new InAppRetryProcessor({ notify } as unknown as NotificationsService);
+    const data: InAppRetryJobData = { userId: 'u1', templateCode: 'INVOICE_ISSUED', data: {}, dedupeKey: KEY };
+    const job = { name: INAPP_RETRY_JOB, data, opts: { attempts: 6 }, attemptsMade: 0 } as unknown as Job<InAppRetryJobData>;
+    await expect(processor.process(job)).resolves.toBeUndefined();
+    expect(notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', {}, { dedupeKey: KEY });
+    await expect(processor.process(job)).rejects.toThrow('db down');
+  });
+});
+
+describe('NotificationsProcessor: job inapp-retry cũ còn nằm trong hàng notifications lúc deploy', () => {
   const DATA: InAppRetryJobData = { userId: 'u1', templateCode: 'INVOICE_ISSUED', data: { order_code: 'T1' }, dedupeKey: KEY, context: 'order=T1' };
 
   function run(notifyImpl: jest.Mock, attemptsMade = 0) {

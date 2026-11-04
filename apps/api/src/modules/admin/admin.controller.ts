@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import type { Response } from 'express';
@@ -33,7 +33,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { PaginationQuery } from '../../common/pagination';
+import { MAX_PAGE, PAGE_TOO_DEEP_MSG, PaginationQuery } from '../../common/pagination';
 import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
 import type { DealerApplicationImageField } from './admin.service';
 import { streamCsv } from './admin-export';
@@ -422,6 +422,15 @@ export class ListReviewsQuery extends PaginationQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
 }
 
+/**
+ * Hàng chờ duyệt mang nội dung đầy đủ của từng sản phẩm: service kẹp 50 dòng/trang (mặc định 20), nhẹ hơn trần chung 100.
+ * DTO không chặn `limit` lớn vì web bản cũ vẫn gửi 100 trong lúc deploy; trả 400 sẽ làm hỏng màn duyệt.
+ */
+export class PendingMerchantProductsQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_PAGE, { message: PAGE_TOO_DEEP_MSG }) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) limit = 20;
+}
+
 export class ListLinkedMerchantProductsQuery extends PaginationQuery {
   /** PENDING = liên kết nhận lại hàng Tubu đang bán còn chờ admin xác nhận hàng ký gửi. */
   @IsOptional() @IsIn(['PENDING']) consignment?: 'PENDING';
@@ -548,6 +557,14 @@ export class AdminController {
   @Get('reviews')
   reviews(@Query() q: ListReviewsQuery) {
     return this.admin.listReviews(q.page, q.limit, q.visibility, q.rating);
+  }
+
+  /** Ảnh base64 của đánh giá (kể cả đã ẩn): danh sách trả đường dẫn này thay vì nhúng nguyên văn. */
+  @Get('reviews/:id/images/:index')
+  async reviewImage(@Param('id') id: string, @Param('index', ParseIntPipe) index: number, @Res({ passthrough: true }) res: Response) {
+    const { mime, data } = await this.admin.reviewImage(id, index);
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    return new StreamableFile(data, { type: mime });
   }
 
   /** Gói mua định kỳ (chỉ xem). */
@@ -782,8 +799,22 @@ export class AdminController {
 
   // ── Duyệt sản phẩm do đối tác đăng ──
   @Get('merchant-products/pending')
-  listPendingMerchantProducts(@Query() q: PaginationQuery) {
+  listPendingMerchantProducts(@Query() q: PendingMerchantProductsQuery) {
     return this.admin.listPendingMerchantProducts(q.page, q.limit);
+  }
+
+  /** Ảnh base64 của sản phẩm chờ duyệt (`product` = bản đang có, `draft` = bản sửa chờ duyệt): chỉ admin, không đi qua đường dẫn công khai. */
+  @Get('merchant-products/:id/images/:source/:slot')
+  async merchantProductImage(
+    @Param('id') id: string,
+    @Param('source') source: string,
+    @Param('slot') slot: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if ((source !== 'product' && source !== 'draft') || !/^(thumb|0|[1-9]\d?)$/.test(slot)) throw new NotFoundException('Không tìm thấy ảnh.');
+    const { mime, data } = await this.admin.merchantProductImage(id, source, slot === 'thumb' ? 'thumb' : Number(slot));
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    return new StreamableFile(data, { type: mime });
   }
 
   @Post('merchant-products/:id/review')

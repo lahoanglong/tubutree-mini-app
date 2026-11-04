@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MIN_WEBHOOK_SECRET_LENGTH, shortWebhookSecretKeys } from './webhook-secrets';
 import { resolveOpsEmailConfig } from './ops-email-config';
+import { dbSessionOptionsIssues } from '../prisma/db-session-options';
 
 /** Validate biến môi trường khi app khởi động (fail-fast). */
 export const envSchema = z.object({
@@ -11,6 +12,8 @@ export const envSchema = z.object({
   // app lặng lẽ listen ở port 0 (OS cấp ngẫu nhiên) rồi vỡ reverse-proxy/health-check.
   PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().url(),
+  // Chỉ API nhận hạn chờ này (PrismaService nối vào URL lúc chạy); prisma CLI vẫn dùng DATABASE_URL trơn. Dạng và tên cho phép: prisma/db-session-options.ts.
+  DB_SESSION_OPTIONS: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().optional()),
   // .url(): REDIS_URL='' (set nhưng rỗng, vd interpolation lỗi trong docker-compose/.env) trước
   // đây qua được z.string() thô → default() KHÔNG áp dụng (chỉ áp cho undefined) → BullMQ/ioredis
   // nhận connection string rỗng, hàng đợi webhook/notification/OA events ngừng xử lý ÂM THẦM (queue
@@ -61,6 +64,9 @@ export const envSchema = z.object({
   SENTRY_RELEASE: z.string().default(''), // image chưa mang git sha, đặt tay nếu muốn gắn bản phát hành
   // Endpoint /img đổi cỡ ảnh sản phẩm. Thư mục cache (rỗng = thư mục tạm của container), trần dung lượng (MB), host ảnh thêm ngoài
   // Pancake/Cloudinary (cách nhau bằng dấu phẩy; nguồn vẫn phải là ảnh đang có trong sản phẩm/nhãn).
+  // Hộp việc admin (GET /admin/ops/inbox): cache kết quả theo phạm vi người xem, và cache riêng cho số gian hàng chờ lập phiếu (ms; 0 = tắt).
+  OPS_INBOX_CACHE_TTL_MS: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().min(0).max(600_000).default(20_000)),
+  OPS_STORES_TO_SETTLE_TTL_MS: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().min(0).max(3_600_000).default(60_000)),
   IMAGE_CACHE_DIR: z.string().default(''),
   IMAGE_CACHE_MAX_MB: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().positive().max(10_240).default(512)),
   IMAGE_RESIZE_EXTRA_HOSTS: z.string().default(''),
@@ -163,6 +169,9 @@ export const envSchema = z.object({
   AI_ADVISOR_GLOBAL_PER_MIN: z.string().default(''),
   AI_ADVISOR_MAX_CONCURRENT: z.string().default(''),
 }).superRefine((env, ctx) => {
+  for (const message of dbSessionOptionsIssues(env.DATABASE_URL, env.DB_SESSION_OPTIONS)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['DB_SESSION_OPTIONS'], message });
+  }
   const email = resolveOpsEmailConfig(env);
   if (email.state === 'misconfigured') {
     for (const issue of email.issues) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.key], message: issue.message });

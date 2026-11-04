@@ -135,21 +135,60 @@ describe('evaluateDb', () => {
       expect(byId(run(s, 'pre-deploy'), 'db.orders_lock').detail).toContain('~14 giây');
     });
 
-    it('sáu migration của đợt (ba chính và hai migration nhỏ sau đó) chờ áp: db.pending_scope vẫn PASS', () => {
+    it('mọi migration trong danh sách tương thích image (đợt đầu và đợt hardening 05/11) chờ áp: db.pending_scope vẫn PASS', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
-      expect(extraSmall).toHaveLength(3);
+      for (const m of ['20261015160000_r9_sync_stock_same_clock_markers', '20261015170000_r10_legacy_returns_received', '20261020000000_waste_exchange']) {
+        expect(extraSmall).toContain(m);
+      }
       const s = behind(1_000, extraSmall);
       const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('PASS');
-      expect(r.detail).toContain('(6)');
+      expect(r.detail).toContain(`(${required.length + extraSmall.length})`);
     });
 
-    it('sáu migration của đợt cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài đợt', () => {
+    it('nhánh PASS cũng nêu migration nặng chờ áp (130100, 130200, 130300 không được biến mất khỏi kết quả)', () => {
+      const phase2 = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => m.startsWith('20261105'));
+      const r = byId(run(behind(1_000, phase2), 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('; nặng:');
+      for (const n of ['20261105130100_hd1_users_guest_partial_idx', '20261105130200_hd1_notification_inapp_indexes', '20261105130300_hd1_points_history_index']) {
+        expect(r.detail).toContain(n);
+      }
+    });
+
+    it('nhánh PASS nói rõ bước đếm đánh giá trùng và chỉ mục cũ chỉ áp khi r8 còn chờ', () => {
+      const R8 = '20261015150000_r8_multi_reviews_unique_per_order';
+      const without = byId(run(dbWith({ expectedMigrations: ['20261105140000_payouts_status_index', ...GOOD_DB.expectedMigrations], orderCount: 1_000 }), 'pre-deploy'), 'db.pending_scope');
+      expect(without.status).toBe('PASS');
+      expect(without.detail).toContain('r8 đã áp');
+      expect(without.detail).toContain('bỏ qua');
+      const withR8 = byId(run(dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => m !== R8), orderCount: 1_000 }), 'pre-deploy'), 'db.pending_scope');
+      expect(withR8.status).toBe('PASS');
+      expect(withR8.detail).toContain('r8 còn chờ');
+      expect(withR8.detail).toContain('đánh giá trùng');
+    });
+
+    it('bảy migration chỉ thêm chỉ mục của đợt hardening 05/11 nằm trong danh sách tương thích image', () => {
+      const phase2 = [
+        '20261105130000_hd1_coupon_milestone_period_idx',
+        '20261105130100_hd1_users_guest_partial_idx',
+        '20261105130200_hd1_notification_inapp_indexes',
+        '20261105130300_hd1_points_history_index',
+        '20261105130400_hd1_feed_new_order_index',
+        '20261105130500_hd1_reviews_public_list_index',
+        '20261105140000_payouts_status_index',
+      ];
+      for (const m of phase2) expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(m);
+      const r = byId(run(behind(1_000, phase2), 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('PASS');
+    });
+
+    it('migration tương thích image cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài danh sách', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
       const s = behind(1_000, [...extraSmall, P1]);
       const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('WARN');
-      expect(r.detail).toContain('7 migration chờ áp, 1 cái nằm ngoài');
+      expect(r.detail).toContain(`${required.length + extraSmall.length + 1} migration chờ áp, 1 cái nằm ngoài`);
     });
 
     it('thêm p1, p4, p8, pd3: db.pending_scope WARN, nêu tên migration nặng và chỉ đường 7.3', () => {
@@ -200,7 +239,7 @@ describe('evaluateDb', () => {
     describe('quét thư mục migrations', () => {
       const dir = join(__dirname, '../../../prisma/migrations');
       const inProd = '20261010080000_dealer_volume_bigint';
-      const tables = '(?:orders|order_items|users|points_transactions)';
+      const tables = '(?:orders|order_items|users|points_transactions|notification_logs)';
       const heavySql = [
         new RegExp(`UPDATE "${tables}"`, 'i'),
         new RegExp(`DELETE FROM "${tables}"`, 'i'),
@@ -221,12 +260,14 @@ describe('evaluateDb', () => {
         const touchesOrders = dynamicOrders || heavyStmts.some((st) => /["']orders["']/i.test(st));
         return { heavy: heavyStmts.length > 0 || dynamic, touchesOrders };
       };
+      // Đã chạy trên PROD từ trước khi bộ quét xét notification_logs; INSERT ... SELECT chỉ thêm dòng nên không cần cửa sổ deploy riêng.
+      const preDatedNotificationLogs = ['20261012160000_pd3_xu_converted_notice'];
       const scanned = readdirSync(dir)
-        .filter((n) => /^\d/.test(n) && n > inProd)
+        .filter((n) => /^\d/.test(n) && n > inProd && !preDatedNotificationLogs.includes(n))
         .map((n) => ({ n, ...scan(n) }));
       const listed = new Map(HEAVY_MIGRATIONS.map((h) => [h.name, h.ordersLock]));
 
-      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions đều nằm trong HEAVY_MIGRATIONS', () => {
+      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions, notification_logs đều nằm trong HEAVY_MIGRATIONS', () => {
         expect(scanned.filter((m) => m.heavy && !listed.has(m.n)).map((m) => m.n)).toEqual([]);
       });
 
@@ -555,6 +596,35 @@ describe('evaluateDb', () => {
       const r = byId(run(GOOD_DB), 'db.cod_cap');
       expect(r.status).toBe('PASS');
       expect(r.detail).toContain('hằng số trong mã');
+    });
+  });
+
+  describe('hạn chờ Postgres của API (db.session_timeouts)', () => {
+    const noOpts = envWith({ DB_SESSION_OPTIONS: undefined });
+    it('đặt đúng và kết nối đọc ra khớp thì PASS', () => expect(status(GOOD_DB, 'db.session_timeouts')).toBe('PASS'));
+    it('Postgres in 1min cho 60s vẫn khớp (so theo mili giây)', () => {
+      const env = envWith({ DB_SESSION_OPTIONS: '-c statement_timeout=60s -c lock_timeout=10000ms' });
+      const db = dbWith({ sessionTimeouts: { statement_timeout: '1min', lock_timeout: '10s', idle_in_transaction_session_timeout: '0' } });
+      expect(status(db, 'db.session_timeouts', 'post-deploy', env)).toBe('PASS');
+    });
+    it('đã đặt mà kết nối đọc ra khác thì FAIL, nêu khoá lệch', () => {
+      const db = dbWith({ sessionTimeouts: { statement_timeout: '0', lock_timeout: '10s', idle_in_transaction_session_timeout: '30s' } });
+      const r = byId(run(db), 'db.session_timeouts');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('statement_timeout');
+      expect(r.detail).not.toContain('lock_timeout');
+    });
+    it('chưa đặt thì WARN, trỏ runbook 1.19', () => {
+      const r = byId(run(GOOD_DB, 'post-deploy', noOpts), 'db.session_timeouts');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('chưa đặt hạn chờ Postgres (runbook 1.19)');
+    });
+    it('chưa đặt: WARN kể cả khi kết nối đọc ra 0', () => {
+      const db = dbWith({ sessionTimeouts: { statement_timeout: '0', lock_timeout: '0', idle_in_transaction_session_timeout: '0' } });
+      expect(status(db, 'db.session_timeouts', 'pre-deploy', noOpts)).toBe('WARN');
+    });
+    it('chuỗi sai định dạng thì FAIL (API sẽ không khởi động)', () => {
+      expect(status(GOOD_DB, 'db.session_timeouts', 'post-deploy', envWith({ DB_SESSION_OPTIONS: '-c work_mem=1GB' }))).toBe('FAIL');
     });
   });
 

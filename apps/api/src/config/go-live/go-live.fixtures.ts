@@ -30,6 +30,7 @@ export const GOOD_ENV: Env = {
   NODE_ENV: 'production',
   DATABASE_URL: 'postgresql://tubu:db-pass-zz91@postgres:5432/tubutree?connection_limit=20&pool_timeout=30',
   REDIS_URL: 'redis://redis:6379',
+  DB_SESSION_OPTIONS: '-c statement_timeout=30s -c lock_timeout=10s -c idle_in_transaction_session_timeout=30s',
   JWT_ACCESS_SECRET: 'k9Zq-access-Vb3nT7xW2mLpR8sYd4HfGc6JaQe1UoNi',
   JWT_REFRESH_SECRET: 'h5Ty-refresh-Pw0cZ8nKd3VbXr7MsLq2EgJf9AuOi4Nm',
   CORS_ORIGINS: 'https://app.tubutree.com,https://tubutree.com',
@@ -130,6 +131,7 @@ export const GOOD_DB: DbSnapshot = {
     { code: 'WELCOME', channel: 'INAPP', zaloTemplateId: null },
   ],
   codMaxPerOrder: 5_000_000,
+  sessionTimeouts: { statement_timeout: '30s', lock_timeout: '10s', idle_in_transaction_session_timeout: '30s' },
 };
 
 export const GOOD_REDIS: RedisSnapshot = {
@@ -138,7 +140,7 @@ export const GOOD_REDIS: RedisSnapshot = {
   maxmemoryPolicy: 'noeviction',
   maxmemoryBytes: 150 * 1024 * 1024,
   appendonly: 'yes',
-  queues: ['pancake-push', 'pancake-events', 'gomdon-push', 'gomdon-events', 'notifications', 'zalo-oa-events', 'support-chat-forward', 'support-chat-notify'].map((name) => ({
+  queues: ['pancake-push', 'pancake-events', 'gomdon-push', 'gomdon-events', 'notifications', 'notifications-inapp-retry', 'zalo-oa-events', 'support-chat-forward', 'support-chat-notify'].map((name) => ({
     name,
     ok: true,
     counts: { waiting: 0, active: 0, delayed: 0, failed: 0 },

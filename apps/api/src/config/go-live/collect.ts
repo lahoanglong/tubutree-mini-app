@@ -44,6 +44,12 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         return Boolean(rows[0]?.ok);
       };
 
+      const timeoutRows = await tx.$queryRaw<DbSnapshot['sessionTimeouts'][]>`
+        SELECT current_setting('statement_timeout') AS statement_timeout,
+               current_setting('lock_timeout') AS lock_timeout,
+               current_setting('idle_in_transaction_session_timeout') AS idle_in_transaction_session_timeout`;
+      const sessionTimeouts = timeoutRows[0] ?? { statement_timeout: '?', lock_timeout: '?', idle_in_transaction_session_timeout: '?' };
+
       let appliedMigrations: string[] = [];
       let unfinishedMigrations: string[] = [];
       if (await exists('_prisma_migrations')) {
@@ -128,6 +134,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         pendingAdminGrants: admin.pendingAdminGrants,
         znsTemplates,
         codMaxPerOrder: COD_MAX_PER_ORDER,
+        sessionTimeouts,
         demoData,
         ...(Object.keys(degraded).length > 0 ? { degraded } : {}),
       } satisfies DbSnapshot;

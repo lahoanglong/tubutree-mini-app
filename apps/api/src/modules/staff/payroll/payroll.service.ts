@@ -327,9 +327,32 @@ export class PayrollService {
         await this.recomputeStaffMonth(id, year, month);
       }
     }
+    // Không chọn `proofImageUrl` (ảnh xác nhận đã chuyển, có thể là base64): danh sách này không hiện nó.
     const [profiles, monthRows] = await Promise.all([
-      this.prisma.staffProfile.findMany({ where: { userId: { in: ids } } }),
-      this.prisma.payrollMonth.findMany({ where: { staffId: { in: ids }, year, month } }),
+      this.prisma.staffProfile.findMany({
+        where: { userId: { in: ids } },
+        select: { id: true, userId: true, hourlyRate: true, bankBin: true, bankAccountNo: true, bankAccountName: true, qrImageUrl: true, active: true, createdAt: true, updatedAt: true },
+      }),
+      this.prisma.payrollMonth.findMany({
+        where: { staffId: { in: ids }, year, month },
+        select: {
+          id: true,
+          staffId: true,
+          year: true,
+          month: true,
+          totalMinutes: true,
+          gross: true,
+          totalFines: true,
+          net: true,
+          status: true,
+          finalizedAt: true,
+          paidAt: true,
+          paidBy: true,
+          note: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
     ]);
     const profileMap = new Map(profiles.map((p) => [p.userId, p]));
     const monthMap = new Map(monthRows.map((r) => [r.staffId, r]));
@@ -340,10 +363,16 @@ export class PayrollService {
       // tạo bản ghi rỗng chỉ vì admin mở màn hình.
       const monthRow =
         monthMap.get(m.id) ?? { staffId: m.id, year, month, totalMinutes: 0, gross: 0, totalFines: 0, net: 0, status: 'OPEN' };
+      // Ảnh QR tĩnh đã nằm ở `qrImageUrl` của dòng: không lặp lại trong `profile` (cùng một chuỗi base64 sẽ đi hai lần).
+      let profileOut: Omit<NonNullable<typeof profile>, 'qrImageUrl'> | null = null;
+      if (profile) {
+        const { qrImageUrl: _qr, ...rest } = profile;
+        profileOut = rest;
+      }
       return {
         staff: m,
         month: monthRow,
-        profile,
+        profile: profileOut,
         qrImageUrl: this.buildQr(profile, monthRow.net, `Luong T${month}/${year} ${m.fullName ?? ''}`.trim()),
       };
     });

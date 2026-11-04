@@ -9,6 +9,7 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { StorefrontService } from './storefront.service';
 import { StorefrontQuestService } from './storefront-quest.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
+import { MAX_PAGE, PAGE_TOO_DEEP_MSG } from '../../common/pagination';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary),
 // nên trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn (body limit là 10MB).
@@ -64,7 +65,7 @@ class UpdateItemDto {
 class ReorderDto { @IsArray() @IsString({ each: true }) orderedIds!: string[]; }
 export class PickerQuery {
   @IsOptional() @IsString() search?: string;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10_000) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_PAGE, { message: PAGE_TOO_DEEP_MSG }) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) limit?: number;
 }
 

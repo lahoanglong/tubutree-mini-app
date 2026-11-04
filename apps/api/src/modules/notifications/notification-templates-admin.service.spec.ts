@@ -26,12 +26,12 @@ function setup() {
         { templateCode: 'ORDER_SHIPPING', channel: 'ZNS', status: 'FAILED', _count: { _all: 3 } },
         { templateCode: 'ORDER_SHIPPING', channel: 'ZNS', status: 'RETRYING', _count: { _all: 1 } },
       ]),
-      findMany: jest.fn().mockResolvedValue([
-        { templateCode: 'ORDER_SHIPPING', error: 'ZNS lỗi -118: user not exist', sentAt: new Date('2026-10-01T00:00:00Z') },
-      ]),
     },
+    $queryRaw: jest.fn().mockResolvedValue([
+      { templateCode: 'ORDER_SHIPPING', error: 'ZNS lỗi -118: user not exist', sentAt: new Date('2026-10-01T00:00:00Z') },
+    ]),
   } as unknown as PrismaService;
-  return { svc: new NotificationTemplatesAdminService(prisma), update };
+  return { svc: new NotificationTemplatesAdminService(prisma), update, prisma };
 }
 
 describe('NotificationTemplatesAdminService', () => {
@@ -43,6 +43,18 @@ describe('NotificationTemplatesAdminService', () => {
     expect(byCode.ORDER_SHIPPING).toMatchObject({ delivery: 'ZNS', sent30d: { INAPP: 0, ZNS: 12 } });
     expect(byCode.GAME_STREAK).toMatchObject({ delivery: 'INAPP' });
     expect(rows[0]!.code).toBe('ORDER_CONFIRMED');
+  });
+
+  it('L3-16: lỗi ZNS gần nhất mỗi mẫu lấy bằng DISTINCT ON trong SQL (literal ZNS/FAILED cho partial index), không kéo mọi dòng lỗi về Node', async () => {
+    const { svc, prisma } = setup();
+    await svc.list(new Date('2026-10-31T00:00:00Z'));
+    const call = (prisma.$queryRaw as jest.Mock).mock.calls[0]!;
+    const sql = (call[0] as string[]).join('?');
+    expect(sql).toContain('DISTINCT ON ("templateCode")');
+    expect(sql).toContain(`channel = 'ZNS' AND status = 'FAILED'`);
+    expect(sql).toContain('ORDER BY "templateCode", "sentAt" DESC, id DESC');
+    expect(call[1]).toEqual(new Date('2026-10-01T00:00:00Z'));
+    expect((prisma.notificationLog as unknown as { findMany?: unknown }).findMany).toBeUndefined();
   });
 
   it('R2-ENGAGE-1: lượt ZNS lỗi không tính vào "đã gửi", admin thấy số lỗi và lý do gần nhất', async () => {
@@ -144,7 +156,8 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
         findUnique: jest.fn(async ({ where }: { where: { code: string } }) => rows.find((t) => t.code === where.code) ?? null),
         update,
       },
-      notificationLog: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
+      notificationLog: { groupBy: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const config = { get: jest.fn((k: string) => (k === 'ZALO_OA_ID' ? env.oaId : undefined)) };
     const sys = { get: jest.fn(async (k: string, fb: unknown) => (k === 'app.miniapp_base_url' ? (env.miniapp ?? fb) : fb)) };
@@ -274,7 +287,8 @@ describe('NotificationTemplatesAdminService.list — nhắc hạ hạng gửi ZN
   const build = (znsKey: unknown, row: object = tier) => {
     const prisma = {
       notificationTemplate: { findMany: jest.fn().mockResolvedValue([row]) },
-      notificationLog: { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
+      notificationLog: { groupBy: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
     const sys = { get: jest.fn(async (k: string, fb: unknown) => (k === 'loyalty.tier_drop_zns_template_id' ? znsKey : fb)) };
     return new NotificationTemplatesAdminService(prisma, undefined, sys as never);

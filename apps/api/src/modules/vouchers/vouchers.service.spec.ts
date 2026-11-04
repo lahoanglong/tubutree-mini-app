@@ -388,15 +388,23 @@ function makeCouponStore(opts: { failOn?: string[]; failAll?: boolean } = {}) {
   });
   const coupon = {
     findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null),
-    // Mô phỏng truy vấn theo kỳ của milestoneReceived: lọc theo hậu tố kỳ ở scopeMeta.reason như SQL thật.
-    findMany: jest.fn(async ({ where }: { where?: { scopeMeta?: { string_ends_with?: string } } } = {}) =>
-      [...store.values()]
-        .filter((c) => c.code.startsWith('MILESTONE') && String(c.scopeMeta.reason ?? '').endsWith(where?.scopeMeta?.string_ends_with ?? ''))
-        .map((c, i) => ({ id: `id${i}`, code: c.code, value: c.value, scopeMeta: c.scopeMeta })),
-    ),
     create,
   };
-  return { store, create, coupon, maxInFlight: () => maxInFlight };
+  // Mô phỏng câu raw của milestoneReceived: tham số là [hậu tố kỳ, id đã đọc tới, cỡ trang], như SQL thật lọc theo hậu tố reason.
+  const receivedRows = ([suffix, after, take]: unknown[]) =>
+    [...store.values()]
+      .filter((c) => c.code.startsWith('MILESTONE') && String(c.scopeMeta.reason ?? '').endsWith(String(suffix)))
+      .map((c, i) => ({ id: `id${String(i).padStart(6, '0')}`, code: c.code, value: c.value, scopeMeta: c.scopeMeta }))
+      .filter((r) => r.id > String(after))
+      .slice(0, Number(take));
+  return { store, create, coupon, receivedRows, maxInFlight: () => maxInFlight };
+}
+
+const isReceivedSql = (s: TemplateStringsArray) => s.join('?').includes("LIKE 'MILESTONE%'");
+type RawMock = (s: TemplateStringsArray, ...a: unknown[]) => Promise<unknown>;
+/** Câu đọc voucher mốc đã cấp đi qua $queryRaw cùng câu chi tiêu; tách theo nội dung SQL. */
+function withMilestoneReceived(k: { receivedRows: (a: unknown[]) => unknown[] }, base: RawMock): RawMock {
+  return async (s, ...a) => (isReceivedSql(s) ? k.receivedRows(a) : base(s, ...a));
 }
 
 function spyLoggers(svc: VouchersService) {
@@ -413,7 +421,7 @@ describe('VouchersService.milestoneVouchers — xử lý từng lô song song c�
   function setup(rows: { userId: string; spent: bigint }[], opts: { failOn?: string[]; failAll?: boolean } = {}) {
     const k = makeCouponStore(opts);
     const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => (isCurrentPeriodCall(a) ? rows : []));
-    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
+    const prisma = { $queryRaw: withMilestoneReceived(k, queryRaw), coupon: k.coupon } as unknown as PrismaService;
     const notify = mockNotifier();
     const svc = new VouchersService(prisma, makeConfig(), notify);
     return { svc, ...k, ...spyLoggers(svc) };
@@ -604,7 +612,8 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
 
   it('quét kỳ cách 2 tháng: đơn tạo 28/9 đủ điều kiện sau 4/11 vẫn được cấp, mã mang khoá 2026-09', async () => {
     const create = jest.fn().mockResolvedValue({});
-    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+    const queryRaw = jest.fn(async (s: TemplateStringsArray, ...a: unknown[]) => {
+      if (isReceivedSql(s)) return [];
       const start = a.find((x): x is Date => x instanceof Date)!;
       return start.toISOString() === '2026-08-31T17:00:00.000Z' ? [{ userId: 'u1', spent: BigInt(1_200_000) }] : [];
     });
@@ -622,7 +631,8 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
 
   it('đơn của kỳ tháng trước cấp mã mang khoá tháng trước (không dán nhãn tháng này)', async () => {
     const create = jest.fn().mockResolvedValue({});
-    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+    const queryRaw = jest.fn(async (s: TemplateStringsArray, ...a: unknown[]) => {
+      if (isReceivedSql(s)) return [];
       const start = a.find((x): x is Date => x instanceof Date)!;
       return start.toISOString() === '2026-08-31T17:00:00.000Z' ? [{ userId: 'u1', spent: BigInt(5_500_000) }] : [];
     });
@@ -660,11 +670,12 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
 describe('VouchersService.milestoneVouchers — bù chênh lệch bậc trong cùng tháng (L2-05)', () => {
   function setup(spent: { value: bigint }) {
     const k = makeCouponStore();
-    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+    const queryRaw = jest.fn(async (s: TemplateStringsArray, ...a: unknown[]) => {
+      if (isReceivedSql(s)) return [];
       const start = a.find((x): x is Date => x instanceof Date)!;
       return start.getTime() === startOfVnMonth(new Date(Date.now())).getTime() ? [{ userId: 'u1', spent: spent.value }] : [];
     });
-    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
+    const prisma = { $queryRaw: withMilestoneReceived(k, queryRaw), coupon: k.coupon } as unknown as PrismaService;
     const svc = new VouchersService(prisma, makeConfig(), mockNotifier());
     spyLoggers(svc);
     const values = () => [...k.store.values()].map((c) => c.value).sort((a, b) => a - b);
@@ -721,11 +732,12 @@ describe('VouchersService.milestoneVouchers — bù chênh lệch bậc trong c�
   it('m2: admin đổi bậc 3tr thành 2,5tr sau khi đã cấp 100k → không cấp thêm (đã nhận tính theo coupon đã cấp, không theo cấu hình)', async () => {
     pinTime('2026-10-15T03:00:00Z');
     const k = makeCouponStore();
-    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+    const queryRaw = jest.fn(async (s: TemplateStringsArray, ...a: unknown[]) => {
+      if (isReceivedSql(s)) return [];
       const start = a.find((x): x is Date => x instanceof Date)!;
       return start.getTime() === startOfVnMonth(new Date(Date.now())).getTime() ? [{ userId: 'u1', spent: BigInt(3_500_000) }] : [];
     });
-    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
+    const prisma = { $queryRaw: withMilestoneReceived(k, queryRaw), coupon: k.coupon } as unknown as PrismaService;
     const oldCfg = makeConfig();
     await new VouchersService(prisma, oldCfg, mockNotifier()).milestoneVouchers();
     expect([...k.store.values()].map((c) => c.value)).toEqual([100_000]);
@@ -758,7 +770,8 @@ describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ 
   function setup(userIds: string[], config: Record<string, unknown> = {}, createImpl?: jest.Mock) {
     const create = createImpl ?? jest.fn().mockResolvedValue({});
     const args: unknown[][] = [];
-    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+    const queryRaw = jest.fn(async (s: TemplateStringsArray, ...a: unknown[]) => {
+      if (isReceivedSql(s)) return [];
       if (!isCurrentPeriodCall(a)) return [];
       args.push(a);
       const cursor = a.find((x): x is string => typeof x === 'string') ?? '';
@@ -814,7 +827,7 @@ describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ 
 
 /** Các tham số Date của từng lần gọi $queryRaw (template tag → args nằm sau mảng strings), theo thứ tự gọi. */
 function queryDates(prisma: PrismaService): Date[][] {
-  return ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls.map((call: unknown[]) =>
+  return ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls.filter((call: unknown[]) => !isReceivedSql(call[0] as TemplateStringsArray)).map((call: unknown[]) =>
     call.slice(1).filter((a): a is Date => a instanceof Date),
   );
 }
@@ -1017,5 +1030,22 @@ describe('VouchersService.grantWelcomeNow', () => {
     prismaInternal.coupon.findUnique.mockResolvedValue({ id: 'c1' });
     await expect(svc.grantWelcomeNow('u1')).resolves.toBe(false);
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('VouchersService.milestoneVouchers — đọc voucher mốc đã cấp bằng biểu thức khớp index', () => {
+  it('lọc right(scopeMeta->>reason, 8) và code LIKE literal, keyset theo id, không dùng ends-with', async () => {
+    const calls: { sql: string; args: unknown[] }[] = [];
+    const queryRaw = jest.fn(async (s: TemplateStringsArray, ...a: unknown[]) => {
+      calls.push({ sql: s.join('?'), args: a });
+      return [];
+    });
+    const svc = new VouchersService({ $queryRaw: queryRaw } as unknown as PrismaService, makeConfig(), mockNotifier());
+    await (svc as unknown as { milestoneReceived(p: string): Promise<unknown> }).milestoneReceived('2026-10');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.sql).toContain(`code LIKE 'MILESTONE%'`);
+    expect(calls[0]!.sql).toContain(`right("scopeMeta" ->> 'reason', 8) = ?`);
+    expect(calls[0]!.sql).toContain('ORDER BY id');
+    expect(calls[0]!.args).toEqual(['-2026-10', '', 5000]);
   });
 });

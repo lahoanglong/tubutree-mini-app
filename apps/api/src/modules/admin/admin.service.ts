@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
 import { decodeServedImage } from '../../common/served-image';
+import { reviewAdminImageRefFromVersion, reviewImageRefFromVersion } from '../reviews/reviews.service';
 import { isUploadedMediaUrl } from '../../common/uploaded-image';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -14,6 +15,7 @@ import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
 import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
+import { TtlMemo } from '../../common/ttl-memo';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
@@ -69,7 +71,7 @@ import {
   CONSIGNMENT_PENDING_LINK_WHERE,
   PANCAKE_CODE_CHANGED,
   type MerchantReviewSeen,
-  describePancakeLink,
+  describePancakeLinks,
   linkTubuFulfilledVariation,
   seenValue,
   unlinkTubuFulfilledVariation,
@@ -105,6 +107,12 @@ import {
 
 function reviewConflict(code: string, message: string) {
   return new ConflictException({ statusCode: 409, error: 'Conflict', code, message });
+}
+
+/** `data:<md5 10 ký tự>` do pendingImageRefs trả cho ảnh base64 thành đường dẫn route admin; URL và đường dẫn công khai giữ nguyên. */
+function adminProductImageRef(productId: string, source: 'product' | 'draft', slot: 'thumb' | number, tag: string | null): string | null {
+  if (!tag) return null;
+  return tag.startsWith('data:') ? `/admin/merchant-products/${productId}/images/${source}/${slot}?v=${tag.slice(5)}` : tag;
 }
 
 function staleEditReview() {
@@ -254,6 +262,7 @@ export type DealerApplicationImageField = keyof typeof DEALER_APPLICATION_IMAGE_
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  private readonly userCounts = new TtlMemo<number>(60_000);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -461,11 +470,25 @@ export class AdminService {
     return this.prisma.dealerApplication.findUnique({ where: { id }, select: DEALER_APPLICATION_LIST_SELECT });
   }
 
+  /**
+   * Không có ô tìm kiếm thì đếm bằng SQL literal: Prisma gửi `role = CAST($1 ...) AND "zaloId" LIKE $2` dạng tham số nên
+   * planner không chứng minh được partial index users_guest_idx (điều kiện GUEST_USER_WHERE), chỉ SQL literal mới dùng nó.
+   */
+  private async countGuestUsers(searchWhere?: Prisma.UserWhereInput): Promise<number> {
+    if (searchWhere) return this.prisma.user.count({ where: { AND: [GUEST_USER_WHERE, searchWhere] } });
+    const rows = await this.prisma.$queryRaw<{ n: bigint | number }[]>`
+      SELECT count(*) AS n FROM users WHERE role = 'CUSTOMER' AND phone IS NULL AND "zaloId"::text LIKE 'guest_%'`;
+    return Number(rows[0]?.n ?? 0);
+  }
+
   // ── Users & orders ──
   async listUsers(page: number, limit: number, search?: string, includeGuests = false) {
     const searchWhere = adminUserSearchWhere(search);
     const where = adminUserListWhere(search, includeGuests);
-    const [items, total, guestCount] = await this.prisma.$transaction([
+    // Đếm cả bảng users mỗi lượt mở/lật trang là lượt quét tuần tự chỉ để vẽ số tổng; cache 60 giây theo đúng bộ lọc
+    // (đổi trang hay limit không đổi khoá). Số tổng có thể cũ tới một TTL, danh sách thì luôn đọc mới.
+    const filterKey = `${includeGuests ? 'g' : 'r'}:${search?.trim() ?? ''}`;
+    const [items, total, guestCount] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -476,10 +499,13 @@ export class AdminService {
           isBlocked: true, blockedAt: true, blockedReason: true,
         },
       }),
-      this.prisma.user.count({ where }),
-      this.prisma.user.count({ where: searchWhere ? { AND: [GUEST_USER_WHERE, searchWhere] } : GUEST_USER_WHERE }),
+      this.userCounts.get(`total:${filterKey}`, () => this.prisma.user.count({ where })),
+      this.userCounts.get(`guest:${search?.trim() ?? ''}`, () => this.countGuestUsers(searchWhere)),
     ]);
-    return { ...paginated(items, page, limit, total), guestCount };
+    // Số tổng nhớ có thể cũ hơn danh sách vừa đọc: không để nó nhỏ hơn số dòng đã chắc chắn tồn tại tới trang này.
+    // Trang rỗng (vượt cuối) không chứng minh gì về số dòng nên giữ số đếm.
+    const seen = items.length > 0 ? (page - 1) * limit + items.length : 0;
+    return { ...paginated(items, page, limit, Math.max(total, seen)), guestCount };
   }
 
   // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
@@ -575,7 +601,7 @@ export class AdminService {
           id: true,
           rating: true,
           comment: true,
-          images: true,
+          imageVersions: true,
           videoUrl: true,
           isVisible: true,
           isVerified: true,
@@ -586,7 +612,23 @@ export class AdminService {
       }),
       this.prisma.review.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    // Ảnh base64 nặng tới ~700 nghìn ký tự/ảnh nên không nhúng trong JSON: trả đường dẫn để trình duyệt tải từng ảnh.
+    const data = items.map(({ imageVersions, ...r }) => ({
+      ...r,
+      images: imageVersions.map((entry, i) => (r.isVisible ? reviewImageRefFromVersion(r.id, i, entry) : reviewAdminImageRefFromVersion(r.id, i, entry))),
+    }));
+    return paginated(data, page, limit, total);
+  }
+
+  /** Ảnh base64 thứ `index` của một đánh giá (kể cả đã ẩn) cho màn duyệt; chỉ đọc đúng phần tử cần, không kéo cả mảng ảnh. */
+  async reviewImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
+    if (!Number.isInteger(index) || index < 0 || index >= 1000) throw new NotFoundException('Không tìm thấy ảnh.');
+    // `?v=` của đường dẫn chỉ để trình duyệt đổi cache, cố ý không đối chiếu: luôn phát ảnh hiện tại; lúc duyệt đã kiểm phiên bản.
+    const rows = await this.prisma.$queryRaw<{ image: string | null }[]>`
+      SELECT "images"[${index + 1}::int] AS "image" FROM "reviews" WHERE "id" = ${reviewId}`;
+    const decoded = decodeServedImage(rows[0]?.image);
+    if (!decoded) throw new NotFoundException('Không tìm thấy ảnh.');
+    return decoded;
   }
 
   /** Gói mua định kỳ để CSKH tra (chỉ xem; khách tự tạm dừng/huỷ trong app). Không trả addressId. */
@@ -998,9 +1040,9 @@ export class AdminService {
         SELECT SUM(balance) AS outstanding
         FROM (SELECT SUM(delta) AS balance FROM dealer_credit_ledgers GROUP BY "userId") b
         WHERE balance > 0`,
-      this.prisma.user.count({ where: REAL_USER_WHERE }),
-      this.prisma.user.count({ where: GUEST_USER_WHERE }),
-      this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
+      this.userCounts.get('dash:real', () => this.prisma.user.count({ where: REAL_USER_WHERE })),
+      this.userCounts.get('dash:guest', () => this.countGuestUsers()),
+      this.userCounts.get('dash:affiliate', () => this.prisma.user.count({ where: { role: 'AFFILIATE' } })),
       this.prisma.product.count(),
       this.prisma.plantedTree.count(),
       this.prisma.order.findMany({
@@ -2042,17 +2084,38 @@ export class AdminService {
    * Hàng chờ duyệt: sản phẩm mới/bị sửa khi chưa bán, và sản phẩm ĐANG BÁN có bản sửa nội dung chờ duyệt (R3-MERCHANT-4).
    * Dòng có bản sửa mang nội dung MỚI ở các trường thường (cái admin sẽ duyệt) và nội dung đang bán ở `live` để đối chiếu.
    */
-  async listPendingMerchantProducts(page: number, limit: number) {
+  async listPendingMerchantProducts(page: number, requestedLimit: number) {
+    const limit = Math.min(requestedLimit, 50);
     const where = PENDING_MERCHANT_PRODUCT_WHERE;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
-        include: {
-          storefront: {
-            select: { id: true, title: true, subdomain: true, ownerUserId: true },
-          },
-          variations: { orderBy: VARIATION_ORDER_BY },
-          editDraft: true,
+        // Không chọn `images`/`thumbnail`: ảnh tải thẳng lên là base64 tới ~1,5 MB/ảnh, cả bản sống lẫn bản nháp (xem pendingImageRefs).
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          brand: true,
+          brandId: true,
+          categoryIds: true,
+          tags: true,
+          description: true,
+          shortDesc: true,
+          ingredients: true,
+          certifications: true,
+          basePrice: true,
+          salePrice: true,
+          isActive: true,
+          approvalStatus: true,
+          rejectReason: true,
+          fulfilment: true,
+          pancakeLinkCode: true,
+          storefrontId: true,
+          createdAt: true,
+          updatedAt: true,
+          storefront: { select: { id: true, title: true, subdomain: true, ownerUserId: true } },
+          variations: { orderBy: VARIATION_ORDER_BY, select: { id: true, name: true, sku: true, retailPrice: true, salePrice: true, stock: true, isActive: true } },
+          editDraft: { select: { name: true, description: true, shortDesc: true, updatedAt: true } },
         },
         // Bản sửa mới của sản phẩm cũ phải nổi lên đầu như sản phẩm mới đăng.
         orderBy: { updatedAt: 'desc' },
@@ -2061,22 +2124,58 @@ export class AdminService {
       this.prisma.product.count({ where }),
     ]);
     // Màn duyệt phải thấy sản phẩm nào (thương hiệu, tồn, lượt bán) sẽ bị chuyển khi bấm Duyệt (R2-MERCHANT-1).
-    const data = await Promise.all(
-      items.map(async ({ editDraft, ...p }) => {
-        const shown = editDraft
-          ? { name: editDraft.name, description: editDraft.description, shortDesc: editDraft.shortDesc, images: editDraft.images, thumbnail: editDraft.thumbnail }
-          : {};
-        return {
-          ...p,
-          ...shown,
-          isEdit: !!editDraft,
-          editVersion: editDraft ? editDraft.updatedAt.toISOString() : null,
-          live: editDraft ? { name: p.name, description: p.description, shortDesc: p.shortDesc, thumbnail: p.thumbnail } : null,
-          pancakeLink: await describePancakeLink(this.prisma, p),
-        };
-      }),
-    );
+    const [imageRefs, links] = await Promise.all([this.pendingImageRefs(items.map((p) => p.id)), describePancakeLinks(this.prisma, items)]);
+    const data = items.map(({ editDraft, ...p }) => {
+      const img = imageRefs.get(p.id);
+      const source = editDraft ? 'draft' : 'product';
+      const shown = editDraft
+        ? { name: editDraft.name, description: editDraft.description, shortDesc: editDraft.shortDesc, thumbnail: img?.draftThumb ?? null, images: img?.draftImages ?? [] }
+        : { thumbnail: img?.thumb ?? null, images: img?.images ?? [] };
+      return {
+        ...p,
+        ...shown,
+        thumbnail: adminProductImageRef(p.id, source, 'thumb', shown.thumbnail),
+        images: shown.images.map((tag, i) => adminProductImageRef(p.id, source, i, tag) as string),
+        isEdit: !!editDraft,
+        editVersion: editDraft ? editDraft.updatedAt.toISOString() : null,
+        live: editDraft ? { name: p.name, description: p.description, shortDesc: p.shortDesc, thumbnail: adminProductImageRef(p.id, 'product', 'thumb', img?.thumb ?? null) } : null,
+        pancakeLink: links.get(p.id) ?? null,
+      };
+    });
     return paginated(data, page, limit, total);
+  }
+
+  /**
+   * Ảnh của cả trang hàng chờ duyệt bằng MỘT truy vấn, tính mã băm ngay trong Postgres: Node chỉ nhận `data:<10 ký tự md5>` cho ảnh
+   * base64 (hoặc nguyên URL/đường dẫn) chứ không nhận chính ảnh, nên một trang 50 dòng không còn có thể đẩy heap 512 MB tới OOM.
+   */
+  private async pendingImageRefs(ids: string[]) {
+    const out = new Map<string, { thumb: string | null; images: string[]; draftThumb: string | null; draftImages: string[] | null }>();
+    if (ids.length === 0) return out;
+    const rows = await this.prisma.$queryRaw<{ id: string; thumb: string | null; images: string[]; draftThumb: string | null; draftImages: string[] | null }[]>`
+      SELECT p."id" AS "id",
+        CASE WHEN p."thumbnail" LIKE 'data:%' THEN 'data:' || left(md5(p."thumbnail"), 10) ELSE p."thumbnail" END AS "thumb",
+        ARRAY(SELECT CASE WHEN e LIKE 'data:%' THEN 'data:' || left(md5(e), 10) ELSE e END FROM unnest(p."images") WITH ORDINALITY AS t(e, n) ORDER BY n) AS "images",
+        CASE WHEN d."thumbnail" LIKE 'data:%' THEN 'data:' || left(md5(d."thumbnail"), 10) ELSE d."thumbnail" END AS "draftThumb",
+        CASE WHEN d."id" IS NULL THEN NULL
+          ELSE ARRAY(SELECT CASE WHEN e LIKE 'data:%' THEN 'data:' || left(md5(e), 10) ELSE e END FROM unnest(d."images") WITH ORDINALITY AS t(e, n) ORDER BY n) END AS "draftImages"
+      FROM "products" p LEFT JOIN "product_edit_drafts" d ON d."productId" = p."id"
+      WHERE p."id" IN (${Prisma.join(ids)})`;
+    for (const r of rows) out.set(r.id, r);
+    return out;
+  }
+
+  /** Ảnh base64 của sản phẩm chờ duyệt (bản đang có hoặc bản sửa chờ duyệt) cho màn duyệt; chỉ đọc đúng một ảnh, không kéo cả mảng. */
+  async merchantProductImage(productId: string, source: 'product' | 'draft', slot: 'thumb' | number): Promise<{ mime: string; data: Buffer }> {
+    if (slot !== 'thumb' && !(Number.isInteger(slot) && slot >= 0 && slot < 1000)) throw new NotFoundException('Không tìm thấy ảnh.');
+    // `?v=` của đường dẫn chỉ để đổi cache, cố ý không đối chiếu: luôn phát ảnh hiện tại; lúc duyệt đã kiểm editVersion/updatedAt (lệch thì 409).
+    const table = Prisma.raw(source === 'draft' ? '"product_edit_drafts"' : '"products"');
+    const key = Prisma.raw(source === 'draft' ? '"productId"' : '"id"');
+    const column = slot === 'thumb' ? Prisma.raw('"thumbnail"') : Prisma.sql`"images"[${slot + 1}::int]`;
+    const rows = await this.prisma.$queryRaw<{ image: string | null }[]>(Prisma.sql`SELECT ${column} AS "image" FROM ${table} WHERE ${key} = ${productId} LIMIT 1`);
+    const decoded = decodeServedImage(rows[0]?.image);
+    if (!decoded) throw new NotFoundException('Không tìm thấy ảnh.');
+    return decoded;
   }
 
   /**

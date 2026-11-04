@@ -23,8 +23,9 @@ describe('DTO sửa gian hàng: theme', () => {
 
 describe('PickerQuery (me/products): page/limit', () => {
   const pick = (value: unknown) => pipe.transform(value, { type: 'query', metatype: PickerQuery });
-  it("page '1e20' → 400; '10000' hợp lệ", async () => {
+  it("page '1e20' và '1001' → 400; '1000' hợp lệ", async () => {
     await expect(pick({ page: '1e20' })).rejects.toBeInstanceOf(BadRequestException);
-    await expect(pick({ page: '10000' })).resolves.toBeDefined();
+    await expect(pick({ page: '1001' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(pick({ page: '1000' })).resolves.toBeDefined();
   });
 });

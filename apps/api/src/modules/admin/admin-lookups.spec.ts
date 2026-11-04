@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { PAGE_TOO_DEEP_MSG } from '../../common/pagination';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
@@ -8,6 +9,7 @@ import {
   AdminController,
   ListReviewsQuery,
   ListSubscriptionsQuery,
+  PendingMerchantProductsQuery,
   ListUsersQuery,
   ProductSearchQuery,
   VariationLookupQuery,
@@ -110,15 +112,31 @@ describe('AdminService.lookupVariations — nhãn cho Variation ID đã lưu', (
 describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
   it('không search → mặc định chỉ tài khoản thật (bỏ phiên khách vãng lai), kèm số khách vãng lai riêng; guests=1 → không lọc', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const count = jest.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(2);
-    const res = await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
+    const count = jest.fn().mockResolvedValueOnce(5);
+    const queryRaw = jest.fn().mockResolvedValue([{ n: 2 }]);
+    const res = await mkAdmin({ user: { findMany, count }, $queryRaw: queryRaw, $transaction: tx }).listUsers(1, 20);
     expect(findMany.mock.calls[0]![0].where).toEqual(REAL_USER_WHERE);
+    expect(count).toHaveBeenCalledTimes(1);
     expect(count).toHaveBeenNthCalledWith(1, { where: REAL_USER_WHERE });
-    expect(count).toHaveBeenNthCalledWith(2, { where: GUEST_USER_WHERE });
     expect(res).toMatchObject({ guestCount: 2, meta: { total: 5 } });
     const all = jest.fn().mockResolvedValue(0);
-    await mkAdmin({ user: { findMany, count: all }, $transaction: tx }).listUsers(1, 20, undefined, true);
+    await mkAdmin({ user: { findMany, count: all }, $queryRaw: queryRaw, $transaction: tx }).listUsers(1, 20, undefined, true);
     expect(findMany.mock.calls[1]![0].where).toBeUndefined();
+  });
+
+  it('số khách vãng lai không search đếm bằng SQL literal khớp partial index users_guest_idx; có search thì dùng Prisma cùng where cũ', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(1);
+    const queryRaw = jest.fn().mockResolvedValue([{ n: 4 }]);
+    const admin = mkAdmin({ user: { findMany, count }, $queryRaw: queryRaw, $transaction: tx });
+    const noSearch = await admin.listUsers(1, 20);
+    const sql = (queryRaw.mock.calls[0]![0] as string[]).join('?');
+    expect(sql).toContain(`role = 'CUSTOMER' AND phone IS NULL AND "zaloId"::text LIKE 'guest_%'`);
+    expect(noSearch.guestCount).toBe(4);
+    queryRaw.mockClear();
+    await admin.listUsers(1, 20, '0901');
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(count).toHaveBeenLastCalledWith({ where: { AND: [GUEST_USER_WHERE, expect.anything()] } });
   });
 
   it('file xuất người dùng cùng tập với danh sách: mặc định bỏ khách vãng lai, guests=1 mới xuất đủ', async () => {
@@ -158,11 +176,70 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
   });
 });
 
+describe('AdminService.listUsers — cache số đếm 60 giây theo bộ lọc (L3-09)', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(3);
+    const queryRaw = jest.fn().mockResolvedValue([{ n: 3 }]);
+    return { findMany, count, queryRaw, admin: mkAdmin({ user: { findMany, count }, $queryRaw: queryRaw, $transaction: tx }) };
+  }
+  const counted = (h: { count: jest.Mock; queryRaw: jest.Mock }) => h.count.mock.calls.length + h.queryRaw.mock.calls.length;
+
+  it('hai lượt liên tiếp cùng bộ lọc: danh sách đọc hai lần, số đếm (tổng + khách vãng lai) chỉ đếm một lần', async () => {
+    const h = setup();
+    await h.admin.listUsers(1, 20);
+    await h.admin.listUsers(2, 20);
+    expect(h.findMany).toHaveBeenCalledTimes(2);
+    expect(counted(h)).toBe(2);
+  });
+
+  it('bộ lọc khác (tìm kiếm, bao gồm khách) đếm riêng; chỉ đổi trang/limit thì không đếm lại', async () => {
+    const h = setup();
+    await h.admin.listUsers(1, 20);
+    await h.admin.listUsers(1, 20, '0901');
+    expect(counted(h)).toBe(4);
+    // bao gồm khách chỉ đổi số tổng; số khách vãng lai không phụ thuộc cờ đó nên dùng lại
+    await h.admin.listUsers(1, 20, undefined, true);
+    expect(counted(h)).toBe(5);
+    await h.admin.listUsers(3, 50, '0901');
+    await h.admin.listUsers(1, 20, '  0901  ');
+    expect(counted(h)).toBe(5);
+  });
+});
+
+describe('AdminService.listUsers — số tổng nhớ không thấp hơn số dòng đang trả', () => {
+  const row = (id: string) => ({ id });
+  const mk = (count: jest.Mock, findMany: jest.Mock) =>
+    mkAdmin({ user: { findMany, count }, $queryRaw: jest.fn().mockResolvedValue([{ n: 0 }]), $transaction: tx });
+
+  it('tổng nhớ là 0 nhưng lượt sau đã có 1 dòng → meta.total = 1', async () => {
+    const count = jest.fn().mockResolvedValue(0);
+    const findMany = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([row('u1')]);
+    const admin = mk(count, findMany);
+    expect((await admin.listUsers(1, 20)).meta.total).toBe(0);
+    expect((await admin.listUsers(1, 20)).meta.total).toBe(1);
+  });
+
+  it('trang vượt cuối (items rỗng) giữ nguyên số đếm, không bị thổi phồng theo page × limit', async () => {
+    const count = jest.fn().mockResolvedValue(30);
+    const findMany = jest.fn().mockResolvedValue([]);
+    const admin = mk(count, findMany);
+    expect((await admin.listUsers(3, 20)).meta.total).toBe(30);
+    expect((await admin.listUsers(1000, 100)).meta.total).toBe(30);
+  });
+
+  it('trang 3 limit 20 có 5 dòng mà tổng nhớ nhỏ hơn → total ít nhất 45', async () => {
+    const count = jest.fn().mockResolvedValue(10);
+    const findMany = jest.fn().mockResolvedValue(Array.from({ length: 5 }, (_, i) => row(`u${i}`)));
+    expect((await mk(count, findMany).listUsers(3, 20)).meta.total).toBeGreaterThanOrEqual(45);
+  });
+});
+
 describe('AdminService.listUsers — hai lô Điểm Xanh (PD-3)', () => {
   it('select cả pointsConvertedBalance để nhân viên thấy điểm không hết hạn khi xử lý khiếu nại quy đổi', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
-    await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
+    await mkAdmin({ user: { findMany, count }, $queryRaw: jest.fn().mockResolvedValue([{ n: 0 }]), $transaction: tx }).listUsers(1, 20);
     expect(findMany.mock.calls[0]![0].select).toMatchObject({ pointsBalance: true, pointsConvertedBalance: true });
   });
 });
@@ -181,7 +258,7 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     id: 'r1',
     rating: 1,
     comment: 'Spam link',
-    images: [],
+    imageVersions: [],
     videoUrl: null,
     isVisible: true,
     isVerified: true,
@@ -208,6 +285,103 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     expect(findMany.mock.calls[1]![0].skip).toBe(10);
     await svc.listReviews(1, 20);
     expect(findMany.mock.calls[2]![0].where).toEqual({});
+  });
+});
+
+describe('AdminService.listReviews — ảnh không nhúng base64 (L3-03)', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'r1', rating: 5, comment: 'ok', imageVersions: [], videoUrl: null, isVisible: true, isVerified: true,
+    createdAt: new Date('2026-10-01T00:00:00Z'), user: { id: 'u1', fullName: 'Lan', phone: '0900000001' },
+    product: { id: 'p1', name: 'SP', slug: 'sp' }, ...over,
+  });
+
+  it('chọn imageVersions, không chọn images', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await mkAdmin({ review: { findMany, count: jest.fn().mockResolvedValue(0) }, $transaction: tx }).listReviews(1, 20);
+    const select = findMany.mock.calls[0]![0].select;
+    expect(select).toMatchObject({ imageVersions: true });
+    expect(select).not.toHaveProperty('images');
+  });
+
+  it('đánh giá đang hiện: ảnh base64 thành đường dẫn công khai /reviews/:id/images/:i, ảnh https giữ nguyên, không còn data:image', async () => {
+    const findMany = jest.fn().mockResolvedValue([row({ imageVersions: ['0123456789', 'https://cdn/x.jpg'] })]);
+    const out = await mkAdmin({ review: { findMany, count: jest.fn().mockResolvedValue(1) }, $transaction: tx }).listReviews(1, 20);
+    expect(out.data[0]!.images).toEqual(['/reviews/r1/images/0?v=0123456789', 'https://cdn/x.jpg']);
+    expect(out.data[0]).not.toHaveProperty('imageVersions');
+    expect(JSON.stringify(out)).not.toContain('data:image');
+  });
+
+  it('đánh giá đã ẩn: ảnh base64 đi qua đường dẫn của admin (đường dẫn công khai không phát ảnh của đánh giá ẩn)', async () => {
+    const findMany = jest.fn().mockResolvedValue([row({ isVisible: false, imageVersions: ['0123456789', 'https://cdn/x.jpg'] })]);
+    const out = await mkAdmin({ review: { findMany, count: jest.fn().mockResolvedValue(1) }, $transaction: tx }).listReviews(1, 20, 'hidden');
+    expect(out.data[0]!.images).toEqual(['/admin/reviews/r1/images/0?v=0123456789', 'https://cdn/x.jpg']);
+  });
+});
+
+describe('AdminService.reviewImage — ảnh đánh giá cho admin (L3-03)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  it('trả byte ảnh kể cả đánh giá đã ẩn; chỉ đọc đúng một phần tử mảng', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ image: PNG }]);
+    const out = await mkAdmin({ $queryRaw: queryRaw }).reviewImage('r1', 1);
+    expect(out.mime).toBe('image/png');
+    expect(out.data.length).toBeGreaterThan(0);
+    expect(JSON.stringify(queryRaw.mock.calls[0])).toContain('images');
+  });
+  it('không có dòng, chỉ số ngoài khoảng hoặc ảnh không phải raster → 404', async () => {
+    await expect(mkAdmin({ $queryRaw: jest.fn().mockResolvedValue([]) }).reviewImage('r1', 0)).rejects.toThrow('Không tìm thấy ảnh.');
+    const q = jest.fn();
+    await expect(mkAdmin({ $queryRaw: q }).reviewImage('r1', 1000)).rejects.toThrow('Không tìm thấy ảnh.');
+    expect(q).not.toHaveBeenCalled();
+    await expect(mkAdmin({ $queryRaw: jest.fn().mockResolvedValue([{ image: 'data:image/svg+xml;base64,PHN2Zz4=' }]) }).reviewImage('r1', 0)).rejects.toThrow('Không tìm thấy ảnh.');
+  });
+});
+
+describe('Hàng chờ duyệt sản phẩm đối tác — controller (L3-02)', () => {
+  const check = async (raw: Record<string, unknown>) => {
+    const q = plainToInstance(PendingMerchantProductsQuery, raw);
+    return { q, errors: await validate(q) };
+  };
+  it('mặc định 20 dòng; limit lớn (web cũ gửi 100) vẫn hợp lệ, trần 50 do service kẹp', async () => {
+    expect((await check({})).q).toMatchObject({ page: 1, limit: 20 });
+    expect((await check({ limit: '50' })).errors).toHaveLength(0);
+    expect((await check({ limit: '51' })).errors).toHaveLength(0);
+    expect((await check({ limit: '100' })).errors).toHaveLength(0);
+    expect((await check({ limit: '0' })).errors).toHaveLength(1);
+  });
+
+  it('page trần 1000 như PaginationQuery: 1000 qua, 1001 báo 400 kèm lời nhắn thu hẹp bộ lọc', async () => {
+    expect((await check({ page: '1000' })).errors).toHaveLength(0);
+    const { errors } = await check({ page: '1001' });
+    expect(errors).toHaveLength(1);
+    expect(Object.values(errors[0]!.constraints ?? {})).toContain(PAGE_TOO_DEEP_MSG);
+  });
+
+  const route = (m: string) => {
+    const fn = (AdminController.prototype as unknown as Record<string, unknown>)[m]!;
+    return [Reflect.getMetadata(METHOD_METADATA, fn as object), Reflect.getMetadata(PATH_METADATA, fn as object)];
+  };
+  it('route ảnh nằm dưới controller chỉ ADMIN, không @Public', () => {
+    expect(route('merchantProductImage')).toEqual([RequestMethod.GET, 'merchant-products/:id/images/:source/:slot']);
+    expect(Reflect.getMetadata(ROLES_KEY, AdminController)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata('isPublic', AdminController.prototype.merchantProductImage)).toBeUndefined();
+  });
+
+  it.each([['other', '0'], ['product', 'abc'], ['draft', '01'], ['product', '-1'], ['product', '123']])('nguồn %s ô %s → 404 trước khi chạm DB', async (source, slot) => {
+    const admin = { merchantProductImage: jest.fn() };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await expect(ctrl.merchantProductImage('p1', source, slot, { set: jest.fn() } as never)).rejects.toThrow('Không tìm thấy ảnh.');
+    expect(admin.merchantProductImage).not.toHaveBeenCalled();
+  });
+
+  it('nguồn và ô hợp lệ → gọi service, ảnh không cache công khai', async () => {
+    const set = jest.fn();
+    const admin = { merchantProductImage: jest.fn().mockResolvedValue({ mime: 'image/png', data: Buffer.from('x') }) };
+    const ctrl = new AdminController(admin as never, {} as never);
+    await ctrl.merchantProductImage('p1', 'draft', 'thumb', { set } as never);
+    await ctrl.merchantProductImage('p1', 'product', '3', { set } as never);
+    expect(admin.merchantProductImage).toHaveBeenNthCalledWith(1, 'p1', 'draft', 'thumb');
+    expect(admin.merchantProductImage).toHaveBeenNthCalledWith(2, 'p1', 'product', 3);
+    expect(set.mock.calls[0]![0]['Cache-Control']).toBe('private, no-store');
   });
 });
 
@@ -252,6 +426,7 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     expect(route('lookupVariations')).toEqual([RequestMethod.GET, 'variations/lookup']);
     expect(route('dealerTiers')).toEqual([RequestMethod.GET, 'dealer-tiers']);
     expect(route('reviews')).toEqual([RequestMethod.GET, 'reviews']);
+    expect(route('reviewImage')).toEqual([RequestMethod.GET, 'reviews/:id/images/:index']);
     expect(route('subscriptions')).toEqual([RequestMethod.GET, 'subscriptions']);
   });
 

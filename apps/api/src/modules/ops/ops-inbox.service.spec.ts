@@ -74,7 +74,7 @@ const build = (
     countOverdue: jest.fn().mockResolvedValue(0),
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
-  const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService), { get: () => over.bridgeUrl ?? 'http://bridge:3110' } as never);
+  const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService), { get: (k: string) => (k.startsWith('OPS_') ? 0 : (over.bridgeUrl ?? 'http://bridge:3110')) } as never);
   return { svc, config, dealerClaimCount, productCount, linkCount, payoutCount, withdrawalCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount, supportConvCount, bridgeFind };
 };
 
@@ -372,8 +372,15 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
 
   it('mỗi khoá đếm đúng một hàng đợi bằng bộ lọc dùng chung và số rơi đúng khoá', async () => {
     const { svc, wasteReqCount, unmatchedCount, pointCount, giftCount } = build();
-    wasteReqCount.mockResolvedValueOnce(3).mockResolvedValueOnce(1).mockResolvedValueOnce(4).mockResolvedValueOnce(2);
-    pointCount.mockResolvedValueOnce(5).mockResolvedValueOnce(6);
+    // Theo điều kiện lọc, không theo thứ tự gọi: hộp việc đếm có giới hạn song song nên thứ tự bắt đầu không cố định.
+    const byWhere = new Map<string, number>([
+      [JSON.stringify({ where: WASTE_TO_COUNT_WHERE }), 3],
+      [JSON.stringify({ where: wasteCustomerBlockedWhere() }), 1],
+      [JSON.stringify({ where: wasteOrderMismatchWhere() }), 4],
+      [JSON.stringify({ where: wasteTransitOverdueWhere(now, 30) }), 2],
+    ]);
+    wasteReqCount.mockImplementation(async (args: unknown) => byWhere.get(JSON.stringify(args)) ?? 0);
+    pointCount.mockImplementation(async (args: { where: unknown }) => (JSON.stringify(args.where) === JSON.stringify(WASTE_POINTS_PENDING_WHERE) ? 5 : 6));
     unmatchedCount.mockResolvedValueOnce(7);
     giftCount.mockResolvedValueOnce(8);
 

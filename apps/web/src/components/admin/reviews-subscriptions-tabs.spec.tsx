@@ -159,6 +159,36 @@ const SUB = {
   variation: { id: 'v1', name: 'Chai 500ml', sku: 'NRC-500', product: { id: 'p1', name: 'Nước rửa chén Lá Sả' } },
 };
 
+describe('ReviewsTab — ảnh theo đường dẫn (L3-03)', () => {
+  it('đánh giá đang hiện: ảnh mở thẳng qua đường dẫn công khai của API, không tải qua token', async () => {
+    const r = { ...REVIEW, images: ['/reviews/r1/images/0?v=0123456789'], videoUrl: null };
+    const calls = stub(() => ({ body: page([r]) }));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    expect(container.querySelector('img')?.getAttribute('src')).toMatch(/\/reviews\/r1\/images\/0\?v=0123456789$/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('đánh giá đã ẩn: ảnh lấy qua route admin bằng fetch có token rồi hiện blob', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:review-hidden');
+    URL.revokeObjectURL = vi.fn();
+    const hidden = { ...REVIEW, id: 'r2', isVisible: false, images: ['/admin/reviews/r2/images/0?v=0123456789'], videoUrl: null };
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url.includes('/admin/reviews/r2/images/0')) return new Response('x', { status: 200, headers: { 'Content-Type': 'image/png' } });
+        return new Response(JSON.stringify(page([hidden])), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    const { container } = mount(<ReviewsTab />);
+    for (let i = 0; i < 5; i++) await flush();
+    expect(calls.some((u) => u.endsWith('/admin/reviews/r2/images/0?v=0123456789'))).toBe(true);
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('blob:review-hidden');
+  });
+});
+
 describe('SubscriptionsTab', () => {
   it('liệt kê gói định kỳ: khách, sản phẩm × số lượng, chu kỳ, lần giao kế tiếp, trạng thái; chỉ xem', async () => {
     const calls = stub(() => ({ body: page([SUB, { ...SUB, id: 's2', status: 'PAUSED' }, { ...SUB, id: 's3', status: 'CANCELLED', lastOrderId: null }]) }));

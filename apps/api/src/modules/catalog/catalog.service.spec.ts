@@ -1,7 +1,7 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { LIKE_ESCAPE } from './search-text';
 import { CARD_PRODUCT_SELECT } from './card-select';
 
@@ -181,17 +181,16 @@ describe('CatalogService.getBySlug — PDP không nhúng ảnh đánh giá (R2-E
     const findUnique = jest.fn().mockResolvedValue(null);
     const prisma = { product: { findUnique } } as unknown as PrismaService;
     await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
-    const arg = findUnique.mock.calls[0]![0] as { include: { reviews: { select: Record<string, unknown> } } };
-    expect(arg.include.reviews.select).not.toHaveProperty('images');
-    expect(arg.include.reviews.select).toMatchObject({ rating: true, comment: true });
+    const arg = findUnique.mock.calls[0]![0] as { select: { reviews: { select: Record<string, unknown> } } };
+    expect(arg.select.reviews.select).not.toHaveProperty('images');
+    expect(arg.select.reviews.select).toMatchObject({ rating: true, comment: true });
   });
 });
 
 describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)', () => {
-  it('product trả về không có pancakeId', async () => {
+  it('select sản phẩm không chọn pancakeId nên PDP không có khoá nội bộ Pancake', async () => {
     const findUnique = jest.fn().mockResolvedValue({
       id: 'p1',
-      pancakeId: 'pk-123',
       slug: 'tinh-dau',
       isActive: true,
       approvalStatus: 'APPROVED',
@@ -202,8 +201,8 @@ describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)
     });
     const prisma = { product: { findUnique } } as unknown as PrismaService;
     const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect((findUnique.mock.calls[0]![0] as { select: object }).select).not.toHaveProperty('pancakeId');
     expect(JSON.stringify(r)).not.toContain('pancakeId');
-    expect(JSON.stringify(r)).not.toContain('pk-123');
     expect(r.sold).toBe(3);
     expect(r.variations[0]).toMatchObject({ id: 'v1', sku: 'S1' });
   });
@@ -212,8 +211,8 @@ describe('CatalogService.getBySlug — không lộ ID nội bộ Pancake (C-036)
     const findUnique = jest.fn().mockResolvedValue(null);
     const prisma = { product: { findUnique } } as unknown as PrismaService;
     await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
-    const arg = findUnique.mock.calls[0]![0] as { include: { variations: { select: object } } };
-    expect(arg.include.variations.select).not.toHaveProperty('pancakeId');
+    const arg = findUnique.mock.calls[0]![0] as { select: { variations: { select: object } } };
+    expect(arg.select.variations.select).not.toHaveProperty('pancakeId');
   });
 });
 
@@ -331,8 +330,8 @@ describe('CatalogService.getBySlug — liên kết sang trang nhãn hàng (BUYER
     const r = await new CatalogService({ product: { findUnique } } as unknown as PrismaService).getBySlug('tinh-dau');
     expect(r.brandSlug).toBe('hector');
     expect(r).not.toHaveProperty('brandRef');
-    const arg = findUnique.mock.calls[0]![0] as { include: { brandRef: { select: object } } };
-    expect(arg.include.brandRef.select).toEqual({ slug: true, isPublished: true });
+    const arg = findUnique.mock.calls[0]![0] as { select: { brandRef: { select: object } } };
+    expect(arg.select.brandRef.select).toEqual({ slug: true, isPublished: true });
   });
 
   it('nhãn chưa công khai (trang /brand/:slug sẽ 404) hoặc sản phẩm không gắn nhãn → brandSlug null', async () => {
@@ -510,7 +509,7 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
 
 describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
   it('recomputeSoldCounts: gom đơn DELIVERED theo product (tổng và 30 ngày), chỉ chạm dòng CẦN đổi', async () => {
-    const tx = jest.fn().mockResolvedValue([]);
+    const tx = jest.fn((ops: Promise<unknown>[]) => Promise.all(ops));
     const groupBy = jest
       .fn()
       .mockResolvedValueOnce([
@@ -524,13 +523,15 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
       variation: { findMany: jest.fn().mockResolvedValue([
         { id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p1' }, { id: 'v3', productId: 'p2' },
       ]) },
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      product: { updateMany: jest.fn((x: { where: { OR?: unknown } }) => Promise.resolve({ count: x.where.OR ? 0 : 1 })), findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', soldApp: 0, soldApp30d: 0 }, { id: 'p2', soldApp: 0, soldApp30d: 0 },
+      ]) },
       $transaction: tx,
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).recomputeSoldCounts();
     // p1 = 5 + 3 = 8 (gộp 2 biến thể), trong đó 3 trong 30 ngày; p2 chỉ có đơn cũ nên 30 ngày = 0
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 8, soldApp30d: 3 } });
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 0 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 8, soldApp30d: 3 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 0 } });
     // Đưa về 0 CHỈ những dòng đang khác 0 và không còn đơn nào — `updateMany` không điều kiện sẽ
     // khoá MỌI dòng products suốt transaction, chặn đứng cron đồng bộ và mọi thao tác sửa SP.
     expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
@@ -551,18 +552,117 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     const prisma = {
       orderItem: { groupBy },
       variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p2' }]) },
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
-      $transaction: jest.fn().mockResolvedValue([]),
+      product: { updateMany: jest.fn((x: { where: { OR?: unknown } }) => Promise.resolve({ count: x.where.OR ? 0 : 1 })), findMany: jest.fn().mockResolvedValue([
+        { id: 'p1', soldApp: 0, soldApp30d: 0 }, { id: 'p2', soldApp: 0, soldApp30d: 0 },
+      ]) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
     const r = await new CatalogService(prisma).recomputeSoldCounts();
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 9, soldApp30d: 9 } });
-    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 4 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 9, soldApp30d: 9 } });
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 4 } });
     // p2 nằm trong notIn: không bị đưa về 0 oan.
     expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
       where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], id: { notIn: ['p1', 'p2'] } },
       data: { soldApp: 0, soldApp30d: 0 },
     });
     expect(r.updated).toBe(2);
+  });
+
+  describe('recomputeSoldCounts: chỉ ghi dòng có số đổi, chia lô (L3-19)', () => {
+    const build = (count: number, current: (i: number) => { soldApp: number; soldApp30d: number } | null) => {
+      const rows = Array.from({ length: count }, (_, i) => ({ variationId: `v${i}`, _sum: { quantity: 2 } }));
+      const groupBy = jest.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce(rows);
+      const batches: number[] = [];
+      const prisma = {
+        orderItem: { groupBy },
+        variation: { findMany: jest.fn(async ({ where }: { where: { id: { in: string[] } } }) => where.id.in.map((id) => ({ id, productId: `p${id.slice(1)}` }))) },
+        product: {
+          updateMany: jest.fn((x: { where: { OR?: unknown } }) => Promise.resolve({ count: x.where.OR ? 0 : 1 })),
+          findMany: jest.fn(async ({ where }: { where: { id: { in: string[] } } }) =>
+            where.id.in.flatMap((id) => {
+              const cur = current(Number(id.slice(1)));
+              return cur ? [{ id, ...cur }] : [];
+            }),
+          ),
+        },
+        $transaction: jest.fn(async (ops: Promise<unknown>[]) => {
+          batches.push(ops.length);
+          return Promise.all(ops);
+        }),
+      } as unknown as PrismaService;
+      return { prisma, batches };
+    };
+
+    const writes = (prisma: unknown) => (prisma as any).product.updateMany.mock.calls.filter(([x]: [{ where: { OR?: unknown } }]) => !x.where.OR);
+
+    it('dòng đã đúng số thì không update, không mở transaction', async () => {
+      const { prisma, batches } = build(40, () => ({ soldApp: 2, soldApp30d: 2 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(writes(prisma)).toHaveLength(0);
+      expect(batches).toEqual([]);
+      expect(r.updated).toBe(0);
+    });
+
+    it('chỉ dòng lệch được ghi: 4 trong 40 dòng lệch → 4 update trong một lô', async () => {
+      const { prisma, batches } = build(40, (i) => (i % 13 === 0 ? { soldApp: 1, soldApp30d: 2 } : { soldApp: 2, soldApp30d: 2 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(writes(prisma)).toHaveLength(4);
+      expect(batches).toEqual([4]);
+      expect(r.updated).toBe(4);
+    });
+
+    it('1201 dòng cần đổi → ba lô 500 + 500 + 201, mỗi lô một transaction', async () => {
+      const { prisma, batches } = build(1201, () => ({ soldApp: 0, soldApp30d: 0 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(batches).toEqual([500, 500, 201]);
+      expect(r.updated).toBe(1201);
+    });
+
+    it('sản phẩm bị xoá giữa chừng (không còn dòng) → bỏ qua, không làm hỏng cả lượt', async () => {
+      const { prisma, batches } = build(10, (i) => (i === 3 ? null : { soldApp: 0, soldApp30d: 0 }));
+      const r = await new CatalogService(prisma).recomputeSoldCounts();
+      expect(batches).toEqual([9]);
+      expect(r.updated).toBe(9);
+    });
+  });
+
+  it('recomputeSoldCounts: sản phẩm bị xoá giữa findMany và ghi không làm hỏng cả lô, không tính vào updated, bước đưa về 0 vẫn chạy', async () => {
+    const rows = [1, 2, 3].map((i) => ({ variationId: `v${i}`, _sum: { quantity: 2 } }));
+    const gone = 'p3';
+    const notFound = Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+    const product = {
+      findMany: jest.fn().mockResolvedValue([1, 2, 3].map((i) => ({ id: `p${i}`, soldApp: 0, soldApp30d: 0 }))),
+      update: jest.fn((a: { where: { id: string } }) => (a.where.id === gone ? Promise.reject(notFound) : Promise.resolve({}))),
+      updateMany: jest.fn((a: { where: { id?: string; OR?: unknown } }) =>
+        Promise.resolve({ count: a.where.OR ? 4 : a.where.id === gone ? 0 : 1 }),
+      ),
+    };
+    const prisma = {
+      orderItem: { groupBy: jest.fn().mockResolvedValueOnce(rows).mockResolvedValueOnce(rows) },
+      variation: { findMany: jest.fn().mockResolvedValue([1, 2, 3].map((i) => ({ id: `v${i}`, productId: `p${i}` }))) },
+      product,
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).recomputeSoldCounts();
+    expect(r).toEqual({ updated: 2, zeroed: 4, scanned: 3 });
+    expect(product.updateMany.mock.calls.some(([a]) => a.where.OR)).toBe(true);
+  });
+
+  it('recomputeSoldCounts: trả thêm zeroed (dòng đưa về 0) và scanned (sản phẩm có đơn đã xét) để bấm tay không giống job hỏng khi không có gì đổi', async () => {
+    const { prisma } = (() => {
+      const groupBy = jest.fn().mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 2 } }]).mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 2 } }]);
+      const p = {
+        orderItem: { groupBy },
+        variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) },
+        product: {
+          updateMany: jest.fn().mockResolvedValue({ count: 3 }),
+          findMany: jest.fn().mockResolvedValue([{ id: 'p1', soldApp: 2, soldApp30d: 2 }]),
+        },
+        $transaction: jest.fn(async (ops: unknown[]) => ops),
+      } as unknown as PrismaService;
+      return { prisma: p };
+    })();
+    await expect(new CatalogService(prisma).recomputeSoldCounts()).resolves.toEqual({ updated: 0, zeroed: 3, scanned: 1 });
   });
 
   it('recomputeSoldCounts: cửa sổ 30 ngày tính theo deliveredAt, đúng 30 × 24 giờ trước bây giờ', async () => {
@@ -572,7 +672,7 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
       const prisma = {
         orderItem: { groupBy },
         variation: { findMany: jest.fn().mockResolvedValue([]) },
-        product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+        product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
         $transaction: jest.fn().mockResolvedValue([]),
       } as unknown as PrismaService;
       await new CatalogService(prisma).recomputeSoldCounts();
@@ -588,7 +688,7 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     const prisma = {
       orderItem: { groupBy: jest.fn().mockResolvedValue([]) },
       variation: { findMany: jest.fn().mockResolvedValue([]) },
-      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn().mockResolvedValue([]),
     } as unknown as PrismaService;
 
@@ -1423,17 +1523,17 @@ describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () =
   });
 
   it('R3-MERCHANT-4: lý do từ chối bản sửa là lời nhắn riêng cho đối tác, không lộ ra PDP công khai', async () => {
-    const prisma = {
-      product: { findUnique: jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null, rejectReason: 'Ảnh vi phạm' }) },
-    } as unknown as PrismaService;
+    const findUnique = jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null });
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
     const r = await new CatalogService(prisma, config as never).getBySlug('xa-phong');
+    expect((findUnique.mock.calls[0]![0] as { select: object }).select).not.toHaveProperty('rejectReason');
     expect(r).not.toHaveProperty('rejectReason');
   });
 
   it('R3-MERCHANT-3: PDP lấy thêm trạng thái tạm nghỉ và chủ gian hàng từ DB', async () => {
     const findUnique = jest.fn().mockResolvedValue({ ...base, fulfilment: 'TUBU', storefront: null });
     await new CatalogService({ product: { findUnique } } as unknown as PrismaService, config as never).getBySlug('xa-phong');
-    expect(findUnique.mock.calls[0][0].include.storefront.select).toMatchObject({
+    expect(findUnique.mock.calls[0][0].select.storefront.select).toMatchObject({
       ordersPausedAt: true,
       owner: { select: { role: true, isBlocked: true } },
     });
@@ -1885,5 +1985,34 @@ describe('CatalogService.cardsByIds (trang chiến dịch)', () => {
     const { svc, findMany } = setup([]);
     expect(await svc.cardsByIds([])).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('CatalogService.getBySlug — select tường minh (L3-01)', () => {
+  it('chọn đúng các cột scalar của Product trừ cột nội bộ không ra công khai; không dùng include', async () => {
+    const findUnique = jest.fn().mockResolvedValue(null);
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    await expect(new CatalogService(prisma).getBySlug('x')).rejects.toBeInstanceOf(NotFoundException);
+    const arg = findUnique.mock.calls[0]![0] as { include?: unknown; select: Record<string, unknown> };
+    expect(arg.include).toBeUndefined();
+    const scalars = Object.keys(arg.select).filter((k) => arg.select[k] === true);
+    const all = Object.values(Prisma.ProductScalarFieldEnum) as string[];
+    expect(all.filter((c) => !scalars.includes(c)).sort()).toEqual(['affiliateBlocked', 'approvedAt', 'nameSearch', 'pancakeHold', 'pancakeId', 'pancakeLinkCode', 'rejectReason', 'soldApp30d']);
+    expect(scalars.filter((c) => !all.includes(c))).toEqual([]);
+    for (const rel of ['variations', 'brandRef', 'reviews', 'storefront']) expect(arg.select).toHaveProperty(rel);
+  });
+
+  it('phản hồi giữ nguyên với ảnh URL và ảnh base64: base64 thành đường dẫn ảnh công khai, URL giữ nguyên', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const row = {
+      id: 'p1', slug: 'tinh-dau', isActive: true, approvalStatus: 'APPROVED', soldExternal: 1, soldApp: 2, fulfilment: 'TUBU', storefrontId: null,
+      images: ['https://cdn/x.jpg', png], thumbnail: null, variations: [], brandRef: null, storefront: null, reviews: [],
+    };
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue(row) } } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).getBySlug('tinh-dau');
+    expect(r.images[0]).toBe('https://cdn/x.jpg');
+    expect(r.images[1]).toMatch(/^\/public-image\/product\/p1\/1\?v=[0-9a-f]{16}$/);
+    expect(r.thumbnail).toBe('https://cdn/x.jpg');
+    expect(r.sold).toBe(3);
   });
 });
