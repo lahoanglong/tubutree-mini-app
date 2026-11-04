@@ -24,6 +24,9 @@ describe('resolveDealerImage', () => {
   it('byte raster → blob URL', async () => {
     expect(await resolveDealerImage({ type: 'image/jpeg', blob: new Blob(['x']) })).toEqual({ src: 'blob:cccd', revoke: true });
   });
+  it('image/jpg (API phục vụ data URL jpg) → blob URL', async () => {
+    expect(await resolveDealerImage({ type: 'image/jpg', blob: new Blob(['x']) })).toEqual({ src: 'blob:cccd', revoke: true });
+  });
   it('JSON { url } https → hiện ảnh', async () => {
     const url = 'https://res.cloudinary.com/tubu/image/upload/v1/a.jpg';
     expect(await resolveDealerImage(jsonRes({ url }))).toEqual({ src: url, revoke: false });

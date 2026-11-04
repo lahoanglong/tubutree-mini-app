@@ -138,6 +138,11 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it('ô ghi chú giới hạn 500 ký tự như API', () => {
+    mount();
+    expect(document.querySelector('textarea')?.getAttribute('maxlength')).toBe('500');
+  });
+
   it('chưa có khách gần đây thì không hiện hàng chip', () => {
     mount();
     expect(text()).not.toContain('Khách gần đây');

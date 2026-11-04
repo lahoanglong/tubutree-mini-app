@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getDealerAppImage, type DealerAppImageField } from '@/lib/admin-client';
 import { safeEvidenceImage } from './evidence-images';
 
-const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 
 /**
  * Chuyển phản hồi của route ảnh hồ sơ thành địa chỉ an toàn cho thẻ img: byte raster → blob URL, JSON `{ url }` → chỉ nhận
