@@ -67,6 +67,11 @@ export interface FlashSlotItemDTO {
 }
 
 /** Quota giảm theo từng đơn và khung bắt đầu/kết thúc đúng mốc: cache RAM chỉ đủ gom request đồng thời (cùng TTL với khối Giờ vàng của /home). */
+// Nhắc "đã bắt đầu": mỗi trang 500, lặp trang trong một lượt cron tới khi hết người hoặc hết ngân sách thời gian (dưới 1 phút để
+// lượt sau không chồng lên).
+const STARTED_REMINDER_PAGE = 500;
+const STARTED_REMINDER_MAX_PAGES = 200;
+const STARTED_REMINDER_BUDGET_MS = 50_000;
 const SLOT_CACHE_TTL_MS = 3_000;
 const SLOT_CACHE_MAX_KEYS = 50;
 
@@ -877,51 +882,60 @@ export class FlashSaleService {
       // (không có đường dọn), tích tụ dần cho tới khi lấp hết hạn mức 500 — mà truy vấn lại
       // không có orderBy, nên 500 dòng lấy ra có thể không chứa dòng nào thuộc sale đang chạy.
       // Kết quả: không ai được nhắc, không lỗi, không log.
-      const reminders = await this.prisma.flashSaleReminder.findMany({
-        where: {
-          notifiedAt: null,
-          // Hàng ngừng bán giữa chừng: không nhắc; dòng nhắc nằm lại tới khi đợt kết thúc rồi được đóng sổ bên dưới.
-          item: { variation: SELLABLE_VARIATION_WHERE, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
-        },
-        include: {
-          item: {
-            include: {
-              flashSale: { select: { isActive: true, startAt: true, endAt: true } },
-              variation: { include: { product: { select: { name: true, slug: true } } } },
+      const baseWhere: Prisma.FlashSaleReminderWhereInput = {
+        notifiedAt: null,
+        // Hàng ngừng bán giữa chừng: không nhắc; dòng nhắc nằm lại tới khi đợt kết thúc rồi được đóng sổ bên dưới.
+        item: { variation: SELLABLE_VARIATION_WHERE, flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } } },
+      };
+      // Lặp trang trong cùng lượt (có hạn thời gian): mỗi phút chỉ 500 người thì 5000 người đăng ký nhắc sẽ bị trễ 10 phút.
+      // Con trỏ theo id để dòng vừa trả cờ về null (gửi lỗi) không bị lấy lại ngay trong lượt này.
+      const deadline = Date.now() + STARTED_REMINDER_BUDGET_MS;
+      let sent = 0;
+      let cursor: string | undefined;
+      for (let page = 0; page < STARTED_REMINDER_MAX_PAGES; page++) {
+        const reminders = await this.prisma.flashSaleReminder.findMany({
+          where: cursor ? { ...baseWhere, id: { gt: cursor } } : baseWhere,
+          include: {
+            item: {
+              include: {
+                flashSale: { select: { isActive: true, startAt: true, endAt: true } },
+                variation: { include: { product: { select: { name: true, slug: true } } } },
+              },
             },
           },
-        },
-        orderBy: { id: 'asc' },
-        take: 500,
-      });
-
-      let sent = 0;
-      for (const r of reminders) {
-        const sale = r.item.flashSale;
-        const started = sale.isActive && sale.startAt <= now && sale.endAt > now;
-        if (!started) continue;
-
-        // Atomic claim chống double-send khi cron chạy chồng.
-        const claimed = await this.prisma.flashSaleReminder.updateMany({
-          where: { id: r.id, notifiedAt: null },
-          data: { notifiedAt: now },
+          orderBy: { id: 'asc' },
+          take: STARTED_REMINDER_PAGE,
         });
-        if (claimed.count === 0) continue;
+        if (reminders.length === 0) break;
+        cursor = reminders[reminders.length - 1]!.id;
+        for (const r of reminders) {
+          const sale = r.item.flashSale;
+          const started = sale.isActive && sale.startAt <= now && sale.endAt > now;
+          if (!started) continue;
 
-        try {
-          const { name, slug } = r.item.variation.product;
-          const data: Record<string, string> = { product: name };
-          if (slug) data.product_slug = slug;
-          await this.notifications.notify(r.userId, 'FLASH_STARTING', data);
-          sent++;
-        } catch (err) {
-          // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,
-          // và không có dấu vết nào. Trả cờ về để lượt cron sau thử lại.
-          this.logger.error(`Nhắc giờ vàng lỗi (reminder=${r.id}): ${err instanceof Error ? err.message : err}`);
-          await this.prisma.flashSaleReminder
-            .updateMany({ where: { id: r.id, notifiedAt: now }, data: { notifiedAt: null } })
-            .catch(() => undefined);
+          // Atomic claim chống double-send khi cron chạy chồng.
+          const claimed = await this.prisma.flashSaleReminder.updateMany({
+            where: { id: r.id, notifiedAt: null },
+            data: { notifiedAt: now },
+          });
+          if (claimed.count === 0) continue;
+
+          try {
+            const { name, slug } = r.item.variation.product;
+            const data: Record<string, string> = { product: name };
+            if (slug) data.product_slug = slug;
+            await this.notifications.notify(r.userId, 'FLASH_STARTING', data);
+            sent++;
+          } catch (err) {
+            // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,
+            // và không có dấu vết nào. Trả cờ về để lượt cron sau thử lại.
+            this.logger.error(`Nhắc giờ vàng lỗi (reminder=${r.id}): ${err instanceof Error ? err.message : err}`);
+            await this.prisma.flashSaleReminder
+              .updateMany({ where: { id: r.id, notifiedAt: now }, data: { notifiedAt: null } })
+              .catch(() => undefined);
+          }
         }
+        if (reminders.length < STARTED_REMINDER_PAGE || Date.now() >= deadline) break;
       }
       if (sent) this.logger.log(`Flash-starting reminders sent: ${sent}`);
 

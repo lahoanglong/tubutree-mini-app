@@ -10,6 +10,7 @@ import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { startOfNextVnMonth, startOfVnMonth, VN_OFFSET_MS } from '../../common/vn-time';
+import { getTemplateCached } from './notification-template-cache';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 import { captureServerError } from '../../config/sentry';
@@ -128,8 +129,9 @@ export class NotificationsService {
       }
       znsOnly = true;
     }
-    const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: templateCode } });
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const tpl = await getTemplateCached(this.prisma, templateCode);
+    // Chỉ các cột dưới đây được dùng: số điện thoại cho ZNS và hai cờ nhóm tin của isAllowedByPrefs.
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true } });
     if (!isAllowedByPrefs(templateCode, user)) {
       this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: khách đã tắt nhóm tin này.`);
       return;
