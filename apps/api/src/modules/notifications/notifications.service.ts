@@ -546,8 +546,25 @@ export class NotificationsService {
 
   /** Job đã hoàn tất và báo SENT (Zalo đã nhận) mà log còn RETRYING vì markZnsSent ghi lỗi: ghi nốt SENT, chỉ từ RETRYING. */
   async markStuckZnsSent(logId: string): Promise<boolean> {
-    const updated = await this.prisma.notificationLog.updateMany({ where: { id: logId, status: 'RETRYING' }, data: { status: 'SENT', error: null } });
-    return updated.count > 0;
+    return (await this.writeSent(logId, 'RETRYING')) > 0;
+  }
+
+  /**
+   * Ghi SENT. Log đã bị đóng và nhả khoá (`<khoá>:failed:<id>`, xem closeStuckZnsLog) mà worker còn sống vẫn gọi Zalo thành công thì phải
+   * khôi phục khoá gốc ngay trong CÙNG câu UPDATE: nếu không, log SENT mang khoá đã nhả sẽ không còn bị dedupeWhere/claimUnderDedupeLock
+   * thấy và lần notify(retryZns) sau cùng khoá gửi tin lần nữa. Chỉ khôi phục khoá đã nhả của chính log này; `data`, `dedupeWithinMs` giữ nguyên.
+   * `onlyFrom`: chỉ ghi khi log đang ở trạng thái đó (CAS); bỏ trống là ghi vô điều kiện như đường gửi thường. Trả số dòng đã ghi.
+   */
+  private async writeSent(logId: string, onlyFrom?: string): Promise<number> {
+    const suffix = `:failed:${logId}`;
+    return this.prisma.$executeRaw`
+      UPDATE notification_logs
+         SET status = 'SENT', "error" = NULL,
+             payload = CASE
+               WHEN jsonb_typeof(payload -> 'dedupeKey') = 'string' AND right(payload ->> 'dedupeKey', ${suffix.length}::int) = ${suffix}
+               THEN jsonb_set(payload, '{dedupeKey}', to_jsonb(left(payload ->> 'dedupeKey', length(payload ->> 'dedupeKey') - ${suffix.length}::int)))
+               ELSE payload END
+       WHERE id = ${logId} AND (${onlyFrom ?? null}::text IS NULL OR status = ${onlyFrom ?? null}::text)`;
   }
 
   /**
@@ -558,7 +575,7 @@ export class NotificationsService {
     const delays = NotificationsService.SENT_WRITE_RETRY_DELAYS_MS;
     for (let attempt = 0; ; attempt++) {
       try {
-        await this.prisma.notificationLog.update({ where: { id: logId }, data: { status: 'SENT', error: null } });
+        await this.writeSent(logId);
         return;
       } catch (err) {
         if (attempt >= delays.length) {

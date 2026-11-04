@@ -10,6 +10,8 @@ function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: 
   let seq = 0;
   const create = jest.fn().mockImplementation(async () => ({ id: `log-${++seq}` }));
   const update = jest.fn().mockResolvedValue({});
+  // Ghi SENT là một câu SQL thô (khôi phục khoá đã nhả trong cùng câu, xem writeSent); executeRaw đếm các lần ghi đó.
+  const executeRaw = jest.fn().mockResolvedValue(1);
   // Câu nhận log của deliverZns (status in [...]) chỉ thắng khi log còn PENDING/RETRYING; câu đóng log của dispatchZns (status: 'PENDING') luôn khớp.
   const claimable = ['PENDING', 'RETRYING'].includes(opts.status ?? 'PENDING');
   const updateMany = jest.fn().mockImplementation(async ({ where }: { where: { status: string | { in: string[] } } }) => ({
@@ -20,13 +22,17 @@ function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: 
     notificationTemplate: { findUnique: jest.fn().mockResolvedValue(ZNS_TEMPLATE) },
     user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0900000000' }) },
     notificationLog: { create, update, updateMany, findUnique },
+    $executeRaw: executeRaw,
   } as unknown as PrismaService;
   const add = opts.queueAdd ?? jest.fn().mockResolvedValue({});
   const sendTemplate = opts.sendTemplate ?? jest.fn().mockResolvedValue({ ok: true });
   const analytics = { recordBestEffort: jest.fn().mockResolvedValue(undefined) } as unknown as AnalyticsEventsService;
   const svc = new NotificationsService(prisma, { sendTemplate } as unknown as ZnsClient, analytics, { add } as never);
-  return { svc, create, update, updateMany, add, sendTemplate };
+  return { svc, create, update, updateMany, add, sendTemplate, executeRaw };
 }
+
+/** Chuỗi SQL của lần gọi $executeRaw thứ n (tagged template). */
+const sqlOf = (executeRaw: jest.Mock, n = 0) => (executeRaw.mock.calls[n]![0] as TemplateStringsArray).join('?');
 
 describe('NotificationsService: ZNS đi qua hàng đợi', () => {
   it('R2-ENGAGE-2: notify() không chờ Zalo — ZNS treo vẫn trả về ngay, chỉ ghi log PENDING và xếp job', async () => {
@@ -70,26 +76,28 @@ describe('NotificationsService.deliverZns', () => {
   });
 
   it('thành công → SENT, xoá lỗi của lượt trước', async () => {
-    const { svc, update } = setup();
+    const { svc, executeRaw } = setup();
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');
-    expect(update).toHaveBeenCalledWith({ where: { id: 'log-2' }, data: { status: 'SENT', error: null } });
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(sqlOf(executeRaw)).toMatch(/SET status = 'SENT', "error" = NULL/);
+    expect(executeRaw.mock.calls[0]).toContain('log-2');
   });
 
   it('L2-03: ghi SENT lỗi một lần sau khi Zalo đã nhận → ghi lại được, không gửi lần hai', async () => {
-    const { svc, update, sendTemplate } = setup();
-    update.mockRejectedValueOnce(new Error('db blip'));
+    const { svc, executeRaw, sendTemplate } = setup();
+    executeRaw.mockRejectedValueOnce(new Error('db blip'));
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');
     expect(sendTemplate).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(update).toHaveBeenLastCalledWith({ where: { id: 'log-2' }, data: { status: 'SENT', error: null } });
+    expect(executeRaw).toHaveBeenCalledTimes(2);
+    expect(sqlOf(executeRaw, 1)).toMatch(/SET status = 'SENT'/);
   });
 
   it('L2-03: ghi SENT lỗi cả 3 lần → nuốt lỗi (job không ném để BullMQ gửi lại), Zalo chỉ được gọi một lần', async () => {
-    const { svc, update, sendTemplate } = setup();
-    update.mockRejectedValue(new Error('db down'));
+    const { svc, executeRaw, sendTemplate } = setup();
+    executeRaw.mockRejectedValue(new Error('db down'));
     await expect(svc.deliverZns(JOB, false)).resolves.toBe('SENT');
     expect(sendTemplate).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledTimes(3);
+    expect(executeRaw).toHaveBeenCalledTimes(3);
   });
 
   it('HTTP 200 + error != 0 không phải SENT: lỗi vĩnh viễn → FAILED ngay (kể cả còn lượt), lưu mã + lý do', async () => {
@@ -136,10 +144,10 @@ describe('NotificationsService.deliverZns', () => {
 
   // Tin thường (không retryZns) không mang khoá để nhả và không có đường gửi lại nào khác ngoài job này.
   it('log FAILED vì xếp hàng quá hạn nhưng không có khoá để nhả (tin thường) → job chạy muộn vẫn gửi và log thành SENT', async () => {
-    const { svc, sendTemplate, update } = setup({ status: 'FAILED', payload: { data: {} } });
+    const { svc, sendTemplate, executeRaw } = setup({ status: 'FAILED', payload: { data: {} } });
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');
     expect(sendTemplate).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith({ where: { id: 'log-2' }, data: { status: 'SENT', error: null } });
+    expect(sqlOf(executeRaw)).toMatch(/SET status = 'SENT'/);
   });
 
   it('log FAILED mang khoá của log khác (không phải khoá đã nhả của chính nó) → vẫn gửi', async () => {

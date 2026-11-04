@@ -77,6 +77,51 @@ describe('đóng log ZNS kẹt (real Postgres)', () => {
     expect((await row(stuck.id)).status).toBe('FAILED');
   });
 
+  it('worker còn sống ghi SENT sau khi log bị đóng và nhả khoá: khoá gốc được khôi phục trong cùng câu ghi, notify(retryZns) cùng khoá bị chặn', async () => {
+    const u = await newUser();
+    const key = `it-stuck-revive-sent:${Date.now()}`;
+    await prisma.notificationTemplate.upsert({
+      where: { code: 'IT_STUCK_TPL' },
+      update: {},
+      create: { id: 'it-stuck-tpl', code: 'IT_STUCK_TPL', channel: 'ZNS', zaloTemplateId: 'zt-it', bodyTemplate: 'x' },
+    });
+    await prisma.notificationLog.create({ data: { userId: u.id, templateCode: 'IT_STUCK_TPL', channel: 'INAPP', payload: { body: 'x', data: {}, dedupeKey: key }, status: 'SENT' } });
+    const stuck = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_STUCK_TPL', channel: 'ZNS', payload: { data: { a: '1' }, dedupeKey: key, dedupeWithinMs: 3_600_000 }, status: 'RETRYING' },
+    });
+    await svc.closeStuckZnsLog(stuck.id, 'job hỏng');
+    expect((await row(stuck.id)).payload).toMatchObject({ dedupeKey: `${key}:failed:${stuck.id}` });
+    // Worker A vẫn sống: Zalo đã nhận, ghi SENT (đường ghi của deliverZns).
+    await (svc as unknown as { markZnsSent(id: string): Promise<void> }).markZnsSent(stuck.id);
+    const after = await row(stuck.id);
+    expect(after.status).toBe('SENT');
+    expect(after.payload).toEqual({ data: { a: '1' }, dedupeKey: key, dedupeWithinMs: 3_600_000 });
+    const znsCount = () => prisma.notificationLog.count({ where: { userId: u.id, channel: 'ZNS' } });
+    const before = await znsCount();
+    await svc.notify(u.id, 'IT_STUCK_TPL', {}, { dedupeKey: key, retryZns: true });
+    expect(await znsCount()).toBe(before);
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('markStuckZnsSent cũng khôi phục khoá đã nhả của chính log đó; khoá của log khác hoặc khoá thường giữ nguyên', async () => {
+    const u = await newUser();
+    const key = `it-stuck-restore:${Date.now()}`;
+    const released = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_STUCK', channel: 'ZNS', payload: { data: {}, dedupeKey: `${key}:failed:placeholder` }, status: 'RETRYING' },
+    });
+    await prisma.notificationLog.update({ where: { id: released.id }, data: { payload: { data: {}, dedupeKey: `${key}:failed:${released.id}` } } });
+    expect(await svc.markStuckZnsSent(released.id)).toBe(true);
+    expect((await row(released.id)).payload).toEqual({ data: {}, dedupeKey: key });
+    const other = await prisma.notificationLog.create({
+      data: { userId: u.id, templateCode: 'IT_STUCK', channel: 'ZNS', payload: { data: {}, dedupeKey: `${key}:failed:log-khac` }, status: 'RETRYING' },
+    });
+    await svc.markStuckZnsSent(other.id);
+    expect((await row(other.id)).payload).toEqual({ data: {}, dedupeKey: `${key}:failed:log-khac` });
+    const plain = await mkLog(u.id, null, 'RETRYING');
+    await svc.markStuckZnsSent(plain.id);
+    expect((await row(plain.id)).payload).toEqual({ data: {} });
+  });
+
   it('markStuckZnsSent chỉ từ RETRYING; đua với closeStuckZnsLog thì đúng một bên thắng', async () => {
     const u = await newUser();
     const pending = await mkLog(u.id, null, 'PENDING');

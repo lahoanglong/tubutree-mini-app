@@ -54,10 +54,14 @@ describe('NotificationsService: đóng log ZNS kẹt vì job đã chết', () =>
     await expect(svc.closeStuckZnsLog('log-1', 'x')).resolves.toBe(false);
   });
 
-  it('markStuckZnsSent: CAS chỉ từ RETRYING sang SENT, xoá error', async () => {
-    const { svc, updateMany } = setup(1);
+  it('markStuckZnsSent: CAS chỉ từ RETRYING sang SENT, xoá error, khôi phục khoá đã nhả của chính log trong cùng câu UPDATE', async () => {
+    const { svc, executeRaw } = setup(1);
     await expect(svc.markStuckZnsSent('log-1')).resolves.toBe(true);
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'log-1', status: 'RETRYING' }, data: { status: 'SENT', error: null } });
+    const sqlText = (executeRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
+    expect(sqlText).toContain("SET status = 'SENT', \"error\" = NULL");
+    expect(sqlText).toContain("jsonb_set(payload, '{dedupeKey}'");
+    expect(executeRaw.mock.calls[0]!.slice(1)).toEqual(expect.arrayContaining([':failed:log-1', 'log-1', 'RETRYING']));
+    await expect(setup(0).svc.markStuckZnsSent('log-1')).resolves.toBe(false);
   });
 
   it('markZnsLogForReview: đánh dấu bằng tiền tố ở cột error, giữ status; true khi ghi được, false khi đã đánh dấu hoặc đổi trạng thái', async () => {
