@@ -374,7 +374,7 @@ describe.each([
 
 /** Kho coupon trong bộ nhớ: findUnique/create theo code như unique thật; đo số create đang chạy cùng lúc. */
 function makeCouponStore(opts: { failOn?: string[]; failAll?: boolean } = {}) {
-  const store = new Map<string, { code: string; value: number; endAt: Date }>();
+  const store = new Map<string, { code: string; value: number; endAt: Date; scopeMeta: { userId: string; reason?: string } }>();
   let inFlight = 0;
   let maxInFlight = 0;
   const create = jest.fn(async ({ data }: { data: { code: string; value: number; endAt: Date; scopeMeta: { userId: string } } }) => {
@@ -383,12 +383,17 @@ function makeCouponStore(opts: { failOn?: string[]; failAll?: boolean } = {}) {
     await new Promise((r) => setTimeout(r, 5));
     inFlight--;
     if (opts.failAll || opts.failOn?.includes(data.scopeMeta.userId)) throw new Error(`db down ${data.scopeMeta.userId}`);
-    store.set(data.code, { code: data.code, value: data.value, endAt: data.endAt });
+    store.set(data.code, { code: data.code, value: data.value, endAt: data.endAt, scopeMeta: (data as { scopeMeta: { userId: string; reason?: string } }).scopeMeta });
     return {};
   });
   const coupon = {
     findUnique: jest.fn(async ({ where }: { where: { code: string } }) => store.get(where.code) ?? null),
-    findMany: jest.fn(async ({ where }: { where: { code: { in: string[] } } }) => where.code.in.flatMap((code) => (store.has(code) ? [{ code, value: store.get(code)!.value }] : []))),
+    // Mô phỏng truy vấn theo kỳ của milestoneReceived: lọc theo hậu tố kỳ ở scopeMeta.reason như SQL thật.
+    findMany: jest.fn(async ({ where }: { where?: { scopeMeta?: { string_ends_with?: string } } } = {}) =>
+      [...store.values()]
+        .filter((c) => c.code.startsWith('MILESTONE') && String(c.scopeMeta.reason ?? '').endsWith(where?.scopeMeta?.string_ends_with ?? ''))
+        .map((c, i) => ({ id: `id${i}`, code: c.code, value: c.value, scopeMeta: c.scopeMeta })),
+    ),
     create,
   };
   return { store, create, coupon, maxInFlight: () => maxInFlight };
@@ -711,6 +716,22 @@ describe('VouchersService.milestoneVouchers — bù chênh lệch bậc trong c�
     spent.value = BigInt(1_200_000);
     await svc.milestoneVouchers();
     expect(values()).toEqual([100_000]);
+  });
+
+  it('m2: admin đổi bậc 3tr thành 2,5tr sau khi đã cấp 100k → không cấp thêm (đã nhận tính theo coupon đã cấp, không theo cấu hình)', async () => {
+    pinTime('2026-10-15T03:00:00Z');
+    const k = makeCouponStore();
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      const start = a.find((x): x is Date => x instanceof Date)!;
+      return start.getTime() === startOfVnMonth(new Date(Date.now())).getTime() ? [{ userId: 'u1', spent: BigInt(3_500_000) }] : [];
+    });
+    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
+    const oldCfg = makeConfig();
+    await new VouchersService(prisma, oldCfg, mockNotifier()).milestoneVouchers();
+    expect([...k.store.values()].map((c) => c.value)).toEqual([100_000]);
+    const newCfg = makeConfig({ 'voucher.milestones': [{ spend: 1_000_000, reward: 30_000 }, { spend: 2_500_000, reward: 100_000 }, { spend: 5_000_000, reward: 200_000 }] });
+    await new VouchersService(prisma, newCfg, mockNotifier()).milestoneVouchers();
+    expect([...k.store.values()].map((c) => c.value)).toEqual([100_000]);
   });
 
   it('sang tháng sau tính lại từ đầu: đạt 1tr tháng mới vẫn nhận đủ 30k', async () => {

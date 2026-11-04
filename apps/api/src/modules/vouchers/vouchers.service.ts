@@ -36,6 +36,7 @@ export class VouchersService {
   private static readonly BATCH_PAGE = 500;
   /** Kích thước trang keyset của milestone: quét hết khách đạt mốc trong tháng, không có trần số trang. */
   private static readonly MILESTONE_PAGE = 1000;
+  private static readonly MILESTONE_RECEIVED_PAGE = 5000;
   /** Số tháng trước tháng hiện tại mà milestoneVouchers còn quét (đơn giao muộn + hạn đổi/trả có thể đủ điều kiện sau 1 tháng). */
   private static readonly MILESTONE_LOOKBACK_MONTHS = 3;
   /**
@@ -372,6 +373,9 @@ export class VouchersService {
         // Phân trang keyset theo userId: trước đây `GROUP BY ... LIMIT 1000` không ORDER BY nên khách ngoài 1000 dòng đầu
         // không bao giờ được xét, lượt nào cũng lấy lại đúng nhóm đó. HAVING loại người dưới mốc thấp nhất ngay trong SQL
         // để trang không bị chiếm bởi khách không đủ điều kiện; kết quả cấp không đổi vì hit chỉ có khi spent >= mốc thấp nhất.
+        // Đã nhận trong kỳ đọc từ chính các coupon đã cấp (scopeMeta.reason), không dựng mã từ cấu hình bậc hiện tại: admin đổi bậc
+        // giữa tháng thì mã theo bậc cũ vẫn tính. Một lần mỗi kỳ vì mỗi khách chỉ xuất hiện một lần trong kỳ.
+        const received = await this.milestoneReceived(period);
         let cursor = '';
         for (;;) {
           // Chi tiêu RÒNG: trả MỘT PHẦN vẫn để đơn ở DELIVERED với nguyên `total`, nên trừ tiền hàng + ship đã hoàn của các
@@ -409,7 +413,6 @@ export class VouchersService {
             const hit = byDescSpend.find((m) => spent >= m.spend);
             return hit ? [{ userId: r.userId, hit }] : [];
           });
-          const received = await this.milestoneReceived(hits.map((h) => h.userId), milestones, period);
           // Bù chênh lệch: tổng voucher mốc trong tháng bằng thưởng của bậc cao nhất đạt được, không cấp chồng cả hai bậc.
           // Voucher đã cấp tính theo giá trị lúc cấp, dù khách đã dùng hay chưa.
           const grants = hits.flatMap(({ userId, hit }) => {
@@ -433,26 +436,29 @@ export class VouchersService {
     }
   }
 
-  /** Voucher mốc đã cấp cho từng khách trong kỳ (mọi bậc), tính theo mã tất định của grant(). */
-  private async milestoneReceived(
-    userIds: string[],
-    milestones: { spend: number }[],
-    period: string,
-  ): Promise<Map<string, { codes: Set<string>; sum: number }>> {
+  /** Voucher mốc đã cấp trong kỳ cho mọi khách (mọi bậc, kể cả bậc đã bị xoá khỏi cấu hình), gom theo userId trong scopeMeta. */
+  private async milestoneReceived(period: string): Promise<Map<string, { codes: Set<string>; sum: number }>> {
     const out = new Map<string, { codes: Set<string>; sum: number }>();
-    if (userIds.length === 0) return out;
-    const owner = new Map<string, string>();
-    for (const userId of userIds) for (const m of milestones) owner.set(voucherCode(`MILESTONE${m.spend}-${period}`, userId), userId);
-    const found = await this.prisma.coupon.findMany({ where: { code: { in: [...owner.keys()] } }, select: { code: true, value: true } });
-    for (const c of found) {
-      const userId = owner.get(c.code);
-      if (!userId) continue;
-      const cur = out.get(userId) ?? { codes: new Set<string>(), sum: 0 };
-      cur.codes.add(c.code);
-      cur.sum += Number(c.value);
-      out.set(userId, cur);
+    let after: string | undefined;
+    for (;;) {
+      const page = await this.prisma.coupon.findMany({
+        where: { code: { startsWith: 'MILESTONE' }, scopeMeta: { path: ['reason'], string_ends_with: `-${period}` } },
+        select: { id: true, code: true, value: true, scopeMeta: true },
+        orderBy: { id: 'asc' },
+        take: VouchersService.MILESTONE_RECEIVED_PAGE,
+        ...(after ? { cursor: { id: after }, skip: 1 } : {}),
+      });
+      for (const c of page) {
+        const meta = c.scopeMeta as { userId?: unknown; reason?: unknown } | null;
+        if (typeof meta?.userId !== 'string' || typeof meta.reason !== 'string' || !/^MILESTONE\d+-/.test(meta.reason)) continue;
+        const cur = out.get(meta.userId) ?? { codes: new Set<string>(), sum: 0 };
+        cur.codes.add(c.code);
+        cur.sum += Number(c.value);
+        out.set(meta.userId, cur);
+      }
+      if (page.length < VouchersService.MILESTONE_RECEIVED_PAGE) return out;
+      after = page[page.length - 1]!.id;
     }
-    return out;
   }
 
   /**
