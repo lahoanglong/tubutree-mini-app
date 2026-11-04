@@ -980,7 +980,7 @@ describe('recomputeSoldMessage', () => {
 
   it('API cũ thiếu zeroed/scanned: coi là 0, không in "undefined"', () => {
     const old = { updated: 5 } as { updated: number; zeroed: number; scanned: number };
-    expect(recomputeSoldMessage(old)).toBe('Đã tính lại số đã bán: 5 sản phẩm đổi số, 0 sản phẩm về 0 (xét 0 sản phẩm có đơn đã giao).');
-    expect(recomputeSoldMessage({} as typeof old)).toBe('Số đã bán đã đúng, không sản phẩm nào cần đổi (xét 0 sản phẩm có đơn đã giao).');
+    expect(recomputeSoldMessage(old)).toBe('Đã tính lại số đã bán: 5 sản phẩm đổi số, 0 sản phẩm về 0.');
+    expect(recomputeSoldMessage({} as typeof old)).toBe('Số đã bán đã đúng, không sản phẩm nào cần đổi.');
   });
 });
