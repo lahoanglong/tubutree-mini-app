@@ -146,7 +146,7 @@ function ReorderLineRow({
         {line.available ? (
           <>
             <PriceTag value={line.unitPrice} size="sm" />
-            <QuantitySelector value={qty} max={line.maxQuantity} size="md" onChange={(n) => onChange({ checked, quantity: n })} />
+            <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
           </>
         ) : (
           <Text variant="caption" tone="danger" as="div">

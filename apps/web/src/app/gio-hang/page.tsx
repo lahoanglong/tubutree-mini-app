@@ -106,9 +106,12 @@ export default function CartPage() {
   const undoHold = useAutoDismiss(!!removedLine, UNDO_WINDOW_MS, () => setRemovedLine(null), removedLine);
   // Dòng vừa xoá bị gỡ khỏi cây kéo theo nút Xoá đang giữ focus: chuyển focus sang "Hoàn tác" để bàn phím không rơi về đầu trang.
   // Chỉ khi nút Xoá đang có vòng lấy nét (người dùng bàn phím): chuột/cảm ứng không bị giữ đồng hồ vì một focus họ không thấy.
+  // Đợi phản hồi chậm thì khách có thể đã Tab sang ô khác (vd gõ mã giảm giá): chỉ kéo focus khi nó đang rơi về body, không giật khỏi chỗ khách đang làm.
+  const focusIsFree = () => !document.activeElement || document.activeElement === document.body;
   const focusUndo = useRef(false);
+  const removeOrigin = useRef<Element | null>(null);
   useEffect(() => {
-    if (removedLine && focusUndo.current) undoRef.current?.focus();
+    if (removedLine && focusUndo.current && (focusIsFree() || document.activeElement === removeOrigin.current)) undoRef.current?.focus();
     focusUndo.current = false;
   }, [removedLine]);
   // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
@@ -116,8 +119,6 @@ export default function CartPage() {
   const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
   // Bấm "Hoàn tác" bằng bàn phím làm thanh hoàn tác biến mất khi nó đang giữ focus: đưa focus tới dòng vừa thêm lại (hoặc tiêu đề trang nếu dòng không còn).
   const restoreFocus = useRef<{ variationId: string } | null>(null);
-  // Đợi phản hồi chậm thì khách có thể đã Tab sang ô khác (vd gõ mã giảm giá): chỉ kéo focus khi nó đang rơi về body, không giật khỏi chỗ khách đang làm.
-  const focusIsFree = () => !document.activeElement || document.activeElement === document.body;
   const focusHeading = () => {
     if (!focusIsFree()) return;
     const h = document.querySelector<HTMLElement>('main h1');
@@ -138,6 +139,7 @@ export default function CartPage() {
     else focusHeading();
   }, [cartQ.data, cartQ.dataUpdatedAt]);
   const removeWithUndo = (line: CartLine) => {
+    removeOrigin.current = document.activeElement;
     try {
       focusUndo.current = !!document.activeElement?.matches(':focus-visible');
     } catch {

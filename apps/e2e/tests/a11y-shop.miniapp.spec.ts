@@ -41,7 +41,7 @@ const SCREENS: Screen[] = [
   { name: 'Chi tiết sản phẩm', path: `/product/${CATALOG[0]!.slug}`, ready: 'h1', setup: (api) => mockDiscovery(api) },
   { name: 'Gian hàng CTV', path: `/s/${SHOP_SLUG}`, ready: 'h1', setup: mockShopPage },
   { name: 'Thương hiệu', path: `/brand/${BRAND_SLUG}`, ready: 'h1', setup: mockBrandPage },
-  { name: 'Ưu đãi', path: '/offers', ready: VOUCHER_READY, setup: (api) => { mockNoSession(api); mockFlash(api); mockCollectable(api); } },
+  { name: 'Ưu đãi', path: '/offers', ready: VOUCHER_READY, setup: (api) => { mockNoSession(api); mockFlash(api); mockCollectable(api); api.allowUnmocked('POST /events'); } },
   { name: 'Giờ vàng', path: '/flash-sale', ready: '[data-ds="product-tile"][data-ds-variant="line"]', setup: (api) => { mockNoSession(api); mockFlashSlots(api); } },
   {
     name: 'Giỏ có combo', path: '/cart', ready: '[data-testid="cart-combo-group"]',

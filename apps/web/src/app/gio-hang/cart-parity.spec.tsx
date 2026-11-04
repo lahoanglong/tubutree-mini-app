@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   added: [] as { variationId: string; quantity: number }[],
   removeError: null as Error | null,
   hang: false,
+  removeGate: null as Promise<void> | null,
   addError: null as Error | null,
   coupons: [] as unknown[],
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
@@ -35,6 +36,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     return state.cart;
   },
   removeCartItem: async (id: string) => {
+    if (state.removeGate) await state.removeGate;
     if (state.removeError) throw state.removeError;
     state.removed.push(id);
     return state.cart;
@@ -74,6 +76,7 @@ beforeEach(() => {
   state.added = [];
   state.removeError = null;
   state.hang = false;
+  state.removeGate = null;
   state.addError = null;
   state.cart = cartOf([line({})]);
   state.coupons = [];
@@ -179,6 +182,28 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     click(undoButton(container)!);
     await flush();
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it('xoá bằng bàn phím nhưng máy chủ trả chậm: khách đã Tab sang ô khác thì focus không nhảy sang Hoàn tác', async () => {
+    let release!: () => void;
+    state.removeGate = new Promise<void>((r) => { release = r; });
+    const { container } = await mount();
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, sel: string) {
+      return sel === ':focus-visible' ? this === document.activeElement : realMatches.call(this, sel);
+    });
+    const remove = button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng')!;
+    remove.focus();
+    click(remove);
+    const other = document.createElement('input');
+    container.appendChild(other);
+    other.focus();
+    release();
+    await flush();
+    expect(undoButton(container)).toBeDefined();
+    expect(document.activeElement).toBe(other);
+    vi.restoreAllMocks();
+    other.remove();
   });
 
   it('hoàn tác bằng bàn phím nhưng phản hồi về chậm: khách đã focus sang ô khác thì không bị kéo focus về dòng', async () => {

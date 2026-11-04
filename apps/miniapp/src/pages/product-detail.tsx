@@ -1115,10 +1115,10 @@ export default function ProductDetailPage() {
                 loading={buyNowMutation.isPending}
                 disabled={!selected}
                 onPress={handleBuyNow}
-                aria-label={`Mua ngay ${formatVnd(line.lineTotal)}`}
+                aria-label={`${buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'} ${formatVnd(line.lineTotal)}`}
                 style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
               >
-                <span style={BUY_NOW_LINE}>Mua ngay</span>
+                <span style={BUY_NOW_LINE}>{buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'}</span>
                 {/* Khoảng trắng giữa hai khối (flex không vẽ ra) để chữ nhìn thấy khớp aria-label (WCAG 2.5.3). */}
                 {' '}
                 <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500 }}>

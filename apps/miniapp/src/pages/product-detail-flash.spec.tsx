@@ -482,4 +482,15 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     await new Promise((r) => setTimeout(r, 20));
     expect(mocks.fetchFlashAllowance).not.toHaveBeenCalled();
   });
+
+  it('đang xử lý Mua ngay: tên truy cập của nút đổi theo chữ nhìn thấy ("Đang xử lý… <giá>"), như web', async () => {
+    mocks.fetchFlashAllowance.mockResolvedValue([]);
+    mocks.addToCart.mockReturnValue(new Promise(() => {}));
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName(/^Mua ngay \d/));
+    fireEvent.click(buyNow());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Đang xử lý… \d/ })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /^Mua ngay/ })).toBeNull();
+  });
 });
