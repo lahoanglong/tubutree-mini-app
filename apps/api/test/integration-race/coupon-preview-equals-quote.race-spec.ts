@@ -384,6 +384,8 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     const order = await createOrder(prisma, { userId: other.id });
     const usedUpRow = await prisma.coupon.findUniqueOrThrow({ where: { code: usedUp } });
     await prisma.couponRedemption.create({ data: { couponId: usedUpRow.id, userId: other.id, orderId: order.id } });
+    // redeem() ghi redemption và tăng usedCount cùng transaction; báo trước đọc usedCount nên dữ liệu mồi phải giữ cặp đó.
+    await prisma.coupon.update({ where: { id: usedUpRow.id }, data: { usedCount: 1 } });
     const forTier = await coupon(b.userId, 'PERCENT', 20, { tierId: tier.id });
 
     const { byCode } = await expectPreviewEqualsQuote(b);

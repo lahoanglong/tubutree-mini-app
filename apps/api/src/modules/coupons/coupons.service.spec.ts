@@ -89,7 +89,7 @@ describe('CouponsService.validateAndCompute', () => {
   });
 
   it('hết tổng lượt (usageLimit) → lỗi', async () => {
-    const svc = makeService(coupon({ usageLimit: 100 }), [0, 100]); // user 0, tổng 100
+    const svc = makeService(coupon({ usageLimit: 100, usedCount: 100 }));
     await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('hết lượt sử dụng');
   });
 });
@@ -113,6 +113,15 @@ describe('CouponsService.validateAndCompute — số câu SQL (R-82)', () => {
       include: { _count: { select: { redemptions: { where: { userId: 'u1' } } } } },
     });
     expect(prisma.couponRedemption.count).not.toHaveBeenCalled();
+  });
+
+  it('tổng lượt có trần đọc từ cột usedCount (cùng bộ đếm với chốt atomic ở redeem), không đếm bảng redemption', async () => {
+    const { prisma, svc } = setup(coupon({ usageLimit: 100, usedCount: 99 }), 0, 12345);
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).resolves.toBeDefined();
+    expect(prisma.couponRedemption.count).not.toHaveBeenCalled();
+    const full = setup(coupon({ usageLimit: 100, usedCount: 100 }), 0, 0);
+    await expect(full.svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('hết lượt sử dụng');
+    expect(full.prisma.couponRedemption.count).not.toHaveBeenCalled();
   });
 
   it('lượt đã dùng đạt giới hạn từ số đếm kèm theo → vẫn báo hết lượt', async () => {
@@ -687,7 +696,7 @@ describe('CouponsService.previewMany', () => {
     }
   });
 
-  it('cả ví: một lần đọc mã, một lần đọc người dùng, tối đa hai lần đếm lượt; kết quả theo đúng thứ tự ví', async () => {
+  it('cả ví: một lần đọc mã, một lần đọc người dùng, một lần đếm lượt của khách; kết quả theo đúng thứ tự ví', async () => {
     const rows = [
       coupon({ id: 'c2', code: 'X2', isActive: true, scope: 'PUBLIC' }),
       coupon({ id: 'c1', code: 'X1', isActive: true, scope: 'PUBLIC', usageLimit: 3 }),
@@ -702,7 +711,25 @@ describe('CouponsService.previewMany', () => {
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany.mock.calls[0][0]).toEqual({ where: { code: { in: ['X1', 'X2', 'GONE'] } } });
     expect(findUnique).toHaveBeenCalledTimes(1);
-    expect(groupBy).toHaveBeenCalledTimes(2);
+    expect(groupBy).toHaveBeenCalledTimes(1);
+    expect(groupBy.mock.calls[0][0].where).toEqual({ userId: 'u1', couponId: { in: ['c2', 'c1'] } });
+  });
+
+  it('mã có trần: hết lượt theo usedCount, không đếm redemption toàn bảng', async () => {
+    const rows = [
+      coupon({ id: 'c1', code: 'FULL', isActive: true, scope: 'PUBLIC', usageLimit: 3, usedCount: 3 }),
+      coupon({ id: 'c2', code: 'OPEN', isActive: true, scope: 'PUBLIC', usageLimit: 3, usedCount: 2 }),
+    ];
+    const groupBy = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      coupon: { findMany: jest.fn().mockResolvedValue(rows) },
+      user: { findUnique: jest.fn().mockResolvedValue(REAL_USER) },
+      couponRedemption: { groupBy },
+    } as unknown as PrismaService;
+    const out = await new CouponsService(prisma).previewMany(['FULL', 'OPEN'], 'u1', 100000);
+    expect((out.get('FULL') as Error).message).toContain('hết lượt sử dụng');
+    expect(out.get('OPEN')).toMatchObject({ code: 'OPEN' });
+    expect(groupBy.mock.calls.every(([a]) => a.where.userId === 'u1')).toBe(true);
   });
 
   it('ví hơn 50 mã: xét đúng 50 mã ĐẦU theo thứ tự ví (thẻ khách thấy trước), không theo id', async () => {
