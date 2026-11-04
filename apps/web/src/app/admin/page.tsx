@@ -174,6 +174,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { STAFF_USER_MAX_PAGE, staffUserSearchProblem } from '@/lib/staff-user-search';
 
 type Tab =
   | 'inbox'
@@ -2273,8 +2274,14 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [guests, setGuests] = useState(false);
-  const q = useQuery({ queryKey: ['admin-users', page, search, guests], queryFn: () => listUsers(page, search || undefined, guests) });
-  const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
+  // CSKH (không phải ADMIN) chỉ tra từng khách: chưa gõ từ khoá hợp lệ thì không gọi API, và chỉ xem tối đa STAFF_USER_MAX_PAGE trang.
+  const searchProblem = isAdmin ? null : staffUserSearchProblem(search);
+  const q = useQuery({
+    queryKey: ['admin-users', page, search, guests],
+    queryFn: () => listUsers(page, search || undefined, guests),
+    enabled: !searchProblem,
+  });
+  const totalPages = q.data ? Math.min(Math.ceil(q.data.meta.total / q.data.meta.limit), isAdmin ? Infinity : STAFF_USER_MAX_PAGE) : 1;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -2373,7 +2380,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
         <input
           type="search"
           aria-label="Tìm theo SĐT, tên hoặc mã người dùng"
-          placeholder="Tìm theo SĐT, tên hoặc mã người dùng…"
+          placeholder={isAdmin ? 'Tìm theo SĐT, tên hoặc mã người dùng…' : 'SĐT đủ 10 số, mã khách hoặc tên từ 3 ký tự…'}
           maxLength={100}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -2407,7 +2414,9 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       {msg && (
         <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}
-      {q.isError ? (
+      {searchProblem ? (
+        <Notice tone="info">{searchProblem}</Notice>
+      ) : q.isError ? (
         <LoadError message="Không tải được danh sách người dùng." onRetry={() => void q.refetch()} />
       ) : (
         <>

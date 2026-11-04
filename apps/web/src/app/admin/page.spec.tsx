@@ -991,6 +991,46 @@ describe('admin/page — tab Người dùng', () => {
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined, false]);
   });
 
+  describe('L1-06: CSKH phải tìm mới thấy khách', () => {
+    const asCskh = () => {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    };
+    const search = async (container: HTMLElement, text: string) => {
+      typeInto(container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), text);
+      act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
+      await flush();
+    };
+
+    it('CSKH mở tab: chưa gọi API, hiện gợi ý; gõ thiếu thì báo lý do và vẫn không gọi', async () => {
+      asCskh();
+      mocks.listUsersArgs = [];
+      const { container } = await openUsers();
+      expect(mocks.listUsersArgs).toEqual([]);
+      expect(container.textContent).toContain('Nhập số điện thoại đủ 10 số, mã khách hàng, hoặc ít nhất 3 ký tự của tên để tìm khách.');
+      await search(container, 'An');
+      expect(mocks.listUsersArgs).toEqual([]);
+      await search(container, '0944');
+      expect(mocks.listUsersArgs).toEqual([]);
+      expect(container.textContent).toContain('đủ 10 số');
+    });
+
+    it('CSKH gõ SĐT đủ 10 số thì mới gọi API', async () => {
+      asCskh();
+      mocks.listUsersArgs = [];
+      const { container } = await openUsers();
+      await search(container, '0944444444');
+      expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0944444444', false]);
+    });
+
+    it('ADMIN vẫn thấy danh sách ngay khi mở, không có gợi ý bắt buộc', async () => {
+      mocks.listUsersArgs = [];
+      const { container } = await openUsers();
+      expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined, false]);
+      expect(container.textContent).not.toContain('để tìm khách.');
+    });
+  });
+
   it('khoá người dùng: bắt buộc nhập lý do trong hộp thoại, gửi đúng id + lý do, báo thành công', async () => {
     mocks.blockUser.mockReset().mockResolvedValue({ id: 'u1', isBlocked: true, blockedAt: null, blockedReason: 'Bom hàng COD', revokedSessions: 2 });
     const { container } = await openUsers();
@@ -2617,6 +2657,10 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     const { container } = await mount();
     expect(navItems(container)).toContain('Người dùng');
     expect(navItems(container)).toContain('CSKH mẫu tin nhanh');
+    // CSKH phải tìm mới thấy khách (L1-06): gõ đủ SĐT rồi mới có danh sách.
+    typeInto(container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), '0944444444');
+    act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
+    await flush();
     const labels = [...container.querySelectorAll('button')].map((b) => b.textContent);
     expect(labels).not.toContain('Khoá');
     expect(labels).not.toContain('Cấp quyền');

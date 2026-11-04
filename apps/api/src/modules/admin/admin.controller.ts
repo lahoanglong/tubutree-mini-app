@@ -1,5 +1,6 @@
 import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Transform, Type } from 'class-transformer';
@@ -33,6 +34,7 @@ import { PaginationQuery } from '../../common/pagination';
 import { AdminService, DEALER_APPLICATION_IMAGE_COLUMNS } from './admin.service';
 import type { DealerApplicationImageField } from './admin.service';
 import { streamCsv } from './admin-export';
+import { assertStaffUserListQuery } from './admin-users-staff-limits';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { vnDateKey } from '../../common/vn-time';
 import { CatalogService } from '../catalog/catalog.service';
@@ -495,8 +497,11 @@ export class AdminController {
   }
 
   @AllowStaff('CSKH')
+  // Mỗi lần gõ ở ô tìm khách là một lượt gọi: trần riêng để một tài khoản CSKH không quét cả danh sách khách bằng cách gọi liên tục.
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   @Get('users')
-  users(@Query() q: ListUsersQuery) {
+  users(@Query() q: ListUsersQuery, @CurrentUser() viewer: JwtPayload) {
+    if (viewer.role === 'STAFF') assertStaffUserListQuery(q);
     return this.admin.listUsers(q.page, q.limit, q.search, q.guests === true);
   }
 
