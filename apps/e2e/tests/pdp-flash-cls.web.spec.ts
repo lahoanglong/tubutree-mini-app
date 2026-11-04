@@ -20,15 +20,17 @@ test.beforeAll(async ({ request }, testInfo) => {
   if (testInfo.project.name !== 'Web Customer') return;
   flash = await seedFlashPdp(request);
   if (!flash) return;
-  // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường), và trang chi tiết dựng lại sau tối đa 60 giây:
-  // hỏi chính trang chính mỗi 5 giây tới khi HTML có thanh Giờ vàng (lần dựng lại chạy nền, lần hỏi kế tiếp thấy bản mới).
+  // Bản server của Next giữ danh sách Giờ vàng trong bộ nhớ đệm fetch tới 60 giây (Trang chủ của spec trước đã gọi cùng đường), và trang chi tiết dựng lại sau tối đa 60 giây.
+  // Cả hai đều trả bản cũ rồi mới làm mới ở nền, nên lần dựng lại đầu tiên có thể vẫn đọc danh sách cũ: tệ nhất khoảng 3 phút (60 giây fetch + hai lượt dựng lại 60 giây).
+  // Hỏi chính trang mỗi 5 giây tới khi HTML có thanh Giờ vàng.
   const web = `http://localhost:${process.env.E2E_WEB_PORT}`;
-  for (let i = 0; i < 24; i++) {
+  const deadline = Date.now() + 200_000;
+  while (Date.now() < deadline) {
     const html = await request.get(`${web}/san-pham/${flash.slug}`).then((r) => r.text()).catch(() => '');
     if (html.includes('flash-price-bar')) return;
     await new Promise((r) => setTimeout(r, 5_000));
   }
-  throw new Error(`HTML của /san-pham/${flash.slug} không có thanh Giờ vàng sau 2 phút: bản dựng sẵn không thấy đợt vừa gieo`);
+  throw new Error(`HTML của /san-pham/${flash.slug} không có thanh Giờ vàng sau 200 giây: bản dựng sẵn không thấy đợt vừa gieo`);
 });
 test.afterAll(async () => {
   test.setTimeout(120_000);
