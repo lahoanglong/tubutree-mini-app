@@ -986,6 +986,16 @@ describe('RbacService: đánh dấu danh sách ảnh /img cũ (ImageRegistryStal
       expect(stale.markStale).not.toHaveBeenCalled();
     });
 
+    it('lượt song song đã nâng người này (dòng khoá đã là STAFF) → KHÔNG ghi, KHÔNG đánh dấu, trả vai trò mới', async () => {
+      const stale = mkStale();
+      const prisma = makePrisma({ roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]) } });
+      (prisma.$queryRaw as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([{ role: 'STAFF', staffPermissions: [] }]);
+      const out = await new RbacService(prisma, undefined, undefined, stale as never).applyGrants(mkUser());
+      expect(out.role).toBe('STAFF');
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(stale.markStale).not.toHaveBeenCalled();
+    });
+
     it('ghi vai trò lỗi → ném lỗi, KHÔNG đánh dấu', async () => {
       const stale = mkStale();
       const prisma = makePrisma({
@@ -1007,6 +1017,14 @@ describe('RbacService: đánh dấu danh sách ảnh /img cũ (ImageRegistryStal
       expect(out.applied).toBe(true);
       expect(insideCalls).toBe(0);
       expect(stale.markStale).toHaveBeenCalledTimes(1);
+    });
+
+    it('lý do của admin đi xuống dòng ROLE khi nâng ngay (L1-08)', async () => {
+      const tx = addTx({ before: mkUser(), after: mkUser({ role: 'STAFF' }) });
+      await new RbacService(txPrisma(tx)).addGrant('admin1', '0900000001', 'STAFF', undefined, 'Nhân viên kho mới');
+      expect(tx.userAdminEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'ROLE', reason: 'Cấp quyền theo SĐT: Nhân viên kho mới', actorId: 'admin1' }),
+      });
     });
 
     it('chưa có tài khoản (applied=false) → KHÔNG đánh dấu', async () => {

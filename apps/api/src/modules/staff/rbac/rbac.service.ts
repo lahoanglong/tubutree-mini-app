@@ -61,24 +61,26 @@ export class RbacService {
    * (setUserRole thu hồi grant trong tx của nó) thì grant vừa bị thu hồi không được dùng để nâng lại người đó.
    */
   async applyGrants(user: User): Promise<User> {
-    const updated = await this.applyGrantsWith(this.prisma, user, null);
+    const { user: updated, changed } = await this.applyGrantsWith(this.prisma, user, null);
     // Vai trò quyết định gian hàng CTV của người này có hiện công khai không, nên danh sách ảnh /img phải nạp lại (ghi thẳng, đã commit).
-    if (updated !== user) this.imageStale?.markStale();
+    // Chỉ lượt đã ghi vai trò mới đánh dấu: lượt song song thấy người này đã được lượt khác nâng thì lượt kia đã đánh dấu.
+    if (changed) this.imageStale?.markStale();
     return updated;
   }
 
   /**
-   * Thân của applyGrants, ghi qua `db` và không đánh dấu ảnh: người gọi đánh dấu sau khi tx commit. Không đổi gì thì trả lại đúng `user`.
+   * Thân của applyGrants, ghi qua `db` và không đánh dấu ảnh: người gọi đánh dấu sau khi tx commit.
+   * `changed` = lượt này đã ghi vai trò. `user` trả về là bản đọc từ dòng đã khoá khi có vào giao dịch, nên có thể khác bản của người gọi dù `changed` = false.
    * `db` là client gốc thì tự mở giao dịch; là tx (addGrant) thì dùng luôn tx đó. Không có grant cao hơn thì không mở gì.
    */
-  private async applyGrantsWith(db: Db, user: User, actorId: string | null, reason?: string): Promise<User> {
-    if (!user.phone) return user;
+  private async applyGrantsWith(db: Db, user: User, actorId: string | null, reason?: string): Promise<{ user: User; changed: boolean }> {
+    if (!user.phone) return { user, changed: false };
     if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId, reason);
     const peek = await db.roleGrant.findMany({
       where: { phone: user.phone, ...activeGrantWhere() },
       select: { role: true },
     });
-    if (!this.highestGrant(peek, user.role)) return user;
+    if (!this.highestGrant(peek, user.role)) return { user, changed: false };
     return db.$transaction((tx) => this.raiseFromGrants(user, tx, actorId, reason)).catch(throwIfLockBusy);
   }
 
@@ -88,7 +90,12 @@ export class RbacService {
     return RANK[best] > RANK[current] ? best : null;
   }
 
-  private async raiseFromGrants(stale: User, db: Prisma.TransactionClient, actorId: string | null, reason?: string): Promise<User> {
+  private async raiseFromGrants(
+    stale: User,
+    db: Prisma.TransactionClient,
+    actorId: string | null,
+    reason?: string,
+  ): Promise<{ user: User; changed: boolean }> {
     // Thứ tự khoá ở mọi đường đổi quyền: lockAdminRoster, rồi role_grants, rồi users. Khoá grant của SĐT này trước (cùng thứ tự
     // với setUserRole/revokeGrant/addGrant) nên không có vòng chờ; sau khi giành được khoá, đọc lại role và grant cho đúng.
     await db.$queryRaw`SELECT "id" FROM "role_grants" WHERE "phone" = ${stale.phone} ORDER BY "id" FOR NO KEY UPDATE`;
@@ -104,9 +111,9 @@ export class RbacService {
     const expiredIds = open.filter((g) => g.expiresAt && g.expiresAt <= now).map((g) => g.id);
     if (expiredIds.length) await db.roleGrant.updateMany({ where: { id: { in: expiredIds }, revokedAt: null }, data: { revokedAt: now } });
     const grants = open.filter((g) => !expiredIds.includes(g.id));
-    if (grants.length === 0) return user;
+    if (grants.length === 0) return { user, changed: false };
     const best = this.highestGrant(grants, user.role);
-    if (!best) return user; // không nâng / không hạ
+    if (!best) return { user, changed: false }; // không nâng / không hạ
     this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone!)}) ${user.role} → ${best}`);
     // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì nhóm sau khi nâng lên STAFF là rỗng (không giữ nhóm cũ của user).
     const invitedPerms =
@@ -139,7 +146,7 @@ export class RbacService {
         actorId,
       });
     }
-    return updated;
+    return { user: updated, changed: true };
   }
 
   /**
@@ -196,7 +203,7 @@ export class RbacService {
       if (user) {
         // Bản đọc đầu tx có thể cũ: request thua createMany đã chờ bên thắng commit, nên role/nhóm của user có thể đã đổi.
         const fresh = (await tx.user.findUnique({ where: { id: user.id } })) ?? user;
-        const updated = await this.applyGrantsWith(tx, fresh, adminId, reason);
+        const { user: updated } = await this.applyGrantsWith(tx, fresh, adminId, reason);
         applied = updated.role !== fresh.role;
         // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
         if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
