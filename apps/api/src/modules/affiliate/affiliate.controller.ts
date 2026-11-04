@@ -15,7 +15,7 @@ import {
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { clientIp } from '../../common/throttle/throttle.config';
+import { clientIp, throttleIpTracker } from '../../common/throttle/throttle.config';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
@@ -84,7 +84,7 @@ export class AffiliateController {
   // mặc định của AppThrottlerGuard đếm theo userId khi có JWT, nên một tài khoản bất kỳ gửi kèm token sẽ né được trần theo IP.
   // Chỉ ảnh hưởng con số "click" CTV thấy, không đụng tới tiền.
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 30, getTracker: (req) => `ip:${clientIp(req as unknown as Request)}` } })
+  @Throttle({ default: { ttl: 60_000, limit: 30, getTracker: (req) => `ip:${throttleIpTracker(req as unknown as Request)}` } })
   @Post('click')
   @HttpCode(HttpStatus.OK)
   click(@Body() dto: LinkClickDto, @Req() req: Request) {
