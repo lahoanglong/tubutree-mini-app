@@ -9,7 +9,7 @@ import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
 jest.mock('../../common/cron-leader/run-exclusive');
 
 type LogRow = { id: string; status: 'PENDING' | 'RETRYING' };
-type JobSpec = { state: string; returnvalue?: unknown } | null | Error;
+type JobSpec = { state: string; returnvalue?: unknown; failedReason?: string } | null | Error;
 
 function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: boolean; acquired?: boolean } = {}) {
   (runExclusive as jest.Mock).mockImplementation(holdsLease(opts.acquired ?? true));
@@ -25,7 +25,7 @@ function setup(logs: LogRow[], jobs: Record<string, JobSpec>, opts: { noQueue?: 
     const spec = jobs[jobId.replace(/^zns-/, '')];
     if (spec instanceof Error) throw spec;
     if (!spec) return undefined;
-    return { getState: async () => spec.state, returnvalue: spec.returnvalue };
+    return { getState: async () => spec.state, returnvalue: spec.returnvalue, failedReason: spec.failedReason };
   });
   const cron = new ZnsStuckLogCron(prisma, notifications, opts.noQueue ? undefined : ({ getJob } as unknown as Queue));
   return { cron, findMany, closeStuckZnsLog, markStuckZnsSent, markZnsLogForReview, getJob };
@@ -82,6 +82,21 @@ describe('ZnsStuckLogCron: nhánh theo trạng thái job', () => {
     await expect(cron.sweepStuckZnsLogs()).resolves.toEqual({ scanned: 2, closed: 2, sent: 0, ambiguous: 0, alive: 0 });
     expect(closeStuckZnsLog).toHaveBeenCalledWith('a', expect.stringContaining('hỏng'), ['PENDING', 'RETRYING']);
     expect(closeStuckZnsLog).toHaveBeenCalledWith('b', expect.stringContaining('hỏng'), ['PENDING', 'RETRYING']);
+  });
+
+  it('job failed: lý do gồm failedReason rút gọn một dòng; mọi lý do và ghi chú đối soát là tiếng Việt không chữ "job"', async () => {
+    const { cron, closeStuckZnsLog, markZnsLogForReview } = setup(
+      [{ id: 'a', status: 'RETRYING' }, { id: 'b', status: 'PENDING' }, { id: 'c', status: 'RETRYING' }],
+      { a: { state: 'failed', failedReason: 'Invalid `prisma.x()` invocation:\n\n  SELECT ' + 'z'.repeat(500) }, c: { state: 'completed' } },
+    );
+    await cron.sweepStuckZnsLogs();
+    const failedReason = closeStuckZnsLog.mock.calls.find((c) => c[0] === 'a')![1] as string;
+    expect(failedReason).toContain('Invalid `prisma.x()` invocation:');
+    expect(failedReason).not.toMatch(/\n/);
+    expect(failedReason.length).toBeLessThan(330);
+    const gone = closeStuckZnsLog.mock.calls.find((c) => c[0] === 'b')![1] as string;
+    const note = markZnsLogForReview.mock.calls[0]![2] as string;
+    for (const text of [failedReason, gone, note]) expect(text).not.toMatch(/\bjob\b/i);
   });
 
   it('không còn job + log PENDING (chưa từng được worker nhận) → đóng FAILED với lý do riêng', async () => {
@@ -190,5 +205,6 @@ describe('ZnsStuckLogCron: an toàn', () => {
     expect(warn).not.toHaveBeenCalled();
     await setup([{ id: 'a', status: 'PENDING' }], { a: { state: 'failed' } }).cron.sweepStuckZnsLogs();
     expect(info.mock.calls.length + warn.mock.calls.length).toBe(1);
+    expect(warn.mock.calls[0]![0]).not.toMatch(/ambiguous|\bjob\b/i);
   });
 });

@@ -46,6 +46,14 @@ export interface InAppRetryJobData {
 }
 
 export const INAPP_RETRY_JOB = 'inapp-retry';
+/** Tên job gửi ZNS trong QUEUE_NOTIFICATIONS (dispatchZns xếp, processor và sự kiện failed lọc theo tên này). */
+export const ZNS_SEND_JOB = 'zns-send';
+
+/** Câu lỗi thô (Prisma tiếng Anh nhiều dòng, có khi kèm câu truy vấn) thành một dòng ngắn để đặt sau câu tiếng Việt trong cột `error`, hiện ở trang admin. */
+export function oneLineReason(raw: unknown, max = 160): string {
+  const text = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 /**
  * Lỗi ghi tin trong app gần như luôn là DB hay kết nối chập chờn: 6 lần, 30 giây nhân đôi (≈ 15 phút) như ZNS. Không đặt jobId:
@@ -346,7 +354,7 @@ export class NotificationsService {
     const job: ZnsSendJobData = { notificationLogId: log.id, phone, templateId, templateData: data };
     try {
       await withQueueTimeout(
-        queue.add('zns-send', job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}`, ...(delay > 0 ? { delay } : {}) }),
+        queue.add(ZNS_SEND_JOB, job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}`, ...(delay > 0 ? { delay } : {}) }),
         `${QUEUE_NOTIFICATIONS} ${log.id}`,
       );
     } catch (err) {

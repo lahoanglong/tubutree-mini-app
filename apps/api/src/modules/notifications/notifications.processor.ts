@@ -1,7 +1,7 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
-import { INAPP_RETRY_JOB, NotificationsService, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
+import { INAPP_RETRY_JOB, NotificationsService, oneLineReason, ZNS_SEND_JOB, type InAppRetryJobData, type ZnsSendJobData } from './notifications.service';
 import { QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY } from '../../jobs/queues';
 import { captureServerError } from '../../config/sentry';
 
@@ -49,7 +49,7 @@ export class NotificationsProcessor extends WorkerHost {
    */
   @OnWorkerEvent('failed')
   async onFailed(job: Job<ZnsSendJobData> | undefined, err: Error): Promise<void> {
-    if (!job || job.name !== 'zns-send') return;
+    if (!job || job.name !== ZNS_SEND_JOB) return;
     const attempts = job.opts?.attempts ?? 1;
     // Chỉ cấu trúc mới cho biết BullMQ không chạy lại nữa; câu lỗi chỉ để chọn lời giải thích (lỗi DB/mạng có chữ "stalled" ở lượt chưa cuối vẫn được chạy lại).
     const unrecoverable = err instanceof UnrecoverableError || err?.name === 'UnrecoverableError';
@@ -57,9 +57,9 @@ export class NotificationsProcessor extends WorkerHost {
     const stalled = /stalled/i.test(err?.message ?? '');
     const logId = job.data?.notificationLogId;
     if (!logId) return;
-    const why = stalled ? 'job bị treo quá giới hạn của hàng đợi' : 'job hỏng ở lượt cuối, không còn lượt thử lại';
+    const why = stalled ? 'tác vụ gửi bị treo quá giới hạn của hàng đợi' : 'tác vụ gửi hỏng ở lượt cuối, không còn lượt thử lại';
     try {
-      const closed = await this.notifications.closeStuckZnsLog(logId, `Gửi ZNS dừng: ${why} (${String(err?.message ?? err).slice(0, 300)}).`);
+      const closed = await this.notifications.closeStuckZnsLog(logId, `Gửi ZNS dừng: ${why}. Chi tiết kỹ thuật: ${oneLineReason(err?.message ?? err)}`);
       if (closed) this.logger.warn(`Đã đóng log ZNS ${logId} thành FAILED vì ${why}.`);
     } catch (closeErr) {
       this.logger.error(`Không đóng được log ZNS ${logId} sau khi job hỏng hẳn: ${closeErr instanceof Error ? closeErr.message : closeErr}`);

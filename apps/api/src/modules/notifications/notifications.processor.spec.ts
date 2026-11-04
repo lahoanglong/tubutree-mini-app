@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
 import { NotificationsProcessor } from './notifications.processor';
-import { znsQuietDelayMs, type NotificationsService, type ZnsDeliveryOutcome, type ZnsSendJobData } from './notifications.service';
+import { ZNS_SEND_JOB, znsQuietDelayMs, type NotificationsService, type ZnsDeliveryOutcome, type ZnsSendJobData } from './notifications.service';
 
 const DATA: ZnsSendJobData = { notificationLogId: 'log-1', phone: '0900000000', templateId: 'zt-1', templateData: {} };
 
@@ -79,7 +79,7 @@ describe('NotificationsProcessor: job ZNS hỏng hẳn (sự kiện failed của
     const processor = new NotificationsProcessor({ closeStuckZnsLog } as unknown as NotificationsService);
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const job = (over: Record<string, unknown> = {}) =>
-      ({ name: 'zns-send', data: DATA, opts: { attempts: 6 }, attemptsMade: 6, ...over }) as unknown as Job<ZnsSendJobData>;
+      ({ name: ZNS_SEND_JOB, data: DATA, opts: { attempts: 6 }, attemptsMade: 6, ...over }) as unknown as Job<ZnsSendJobData>;
     return { processor, closeStuckZnsLog, error, job };
   }
 
@@ -88,6 +88,17 @@ describe('NotificationsProcessor: job ZNS hỏng hẳn (sự kiện failed của
     await processor.onFailed(job(), new Error('db down'));
     expect(closeStuckZnsLog).toHaveBeenCalledTimes(1);
     expect(closeStuckZnsLog).toHaveBeenCalledWith('log-1', expect.stringMatching(/lượt cuối.*db down/));
+  });
+
+  it('lý do ghi cho admin: tiếng Việt không chữ "job", chi tiết lỗi thô gọn một dòng và cắt ngắn (Prisma tiếng Anh nhiều dòng kèm câu truy vấn)', async () => {
+    const { processor, closeStuckZnsLog, job } = setupFailed();
+    const raw = 'Invalid `prisma.notificationLog.update()` invocation:\n\n  SELECT * FROM "notification_logs"\n  WHERE id = \'x\' ' + 'y'.repeat(500);
+    await processor.onFailed(job(), new Error(raw));
+    const reason = closeStuckZnsLog.mock.calls[0]![1] as string;
+    expect(reason).not.toMatch(/\n/);
+    expect(reason).not.toMatch(/\bjob\b/i);
+    expect(reason.length).toBeLessThan(330);
+    expect(reason).toMatch(/^Gửi ZNS dừng: /);
   });
 
   it('lượt chưa cuối (BullMQ sẽ chạy lại) → không đóng log', async () => {

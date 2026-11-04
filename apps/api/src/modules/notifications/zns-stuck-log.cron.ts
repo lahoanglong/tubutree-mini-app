@@ -3,7 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NotificationsService, ZNS_REVIEW_PREFIX } from './notifications.service';
+import { NotificationsService, oneLineReason, ZNS_REVIEW_PREFIX } from './notifications.service';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
@@ -78,9 +78,9 @@ export class ZnsStuckLogCron {
     const logs = [...pending, ...retrying].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime()).slice(0, ZnsStuckLogCron.BATCH);
 
     // Đọc hết trạng thái job trước, ghi sau: Redis chập chờn giữa chừng thì bỏ cả lượt, không đóng log nào trên bằng chứng nửa vời.
-    const verdicts: { id: string; status: string; verdict: Verdict }[] = [];
+    const verdicts: { id: string; status: string; verdict: Verdict; failedReason?: string }[] = [];
     try {
-      for (const log of logs) verdicts.push({ id: log.id, status: log.status, verdict: await this.judge(queue, log.id, log.status) });
+      for (const log of logs) verdicts.push({ id: log.id, status: log.status, ...(await this.judge(queue, log.id, log.status)) });
     } catch (err) {
       this.logger.warn(`Quét log ZNS kẹt: đọc Redis lỗi, bỏ lượt này (${err instanceof Error ? err.message : err})`);
       markCronSkipped('REDIS');
@@ -88,7 +88,7 @@ export class ZnsStuckLogCron {
     }
 
     const result = { scanned: logs.length, closed: 0, sent: 0, ambiguous: 0, alive: 0 };
-    for (const { id, status, verdict } of verdicts) {
+    for (const { id, status, verdict, failedReason } of verdicts) {
       try {
         if (verdict === 'ALIVE') result.alive++;
         else if (verdict === 'AMBIGUOUS') {
@@ -100,8 +100,8 @@ export class ZnsStuckLogCron {
         } else {
           const reason =
             verdict === 'CLOSE_FAILED'
-              ? 'Gửi ZNS dừng: job trong hàng đợi đã hỏng hẳn mà không ghi kết cục (phát hiện khi quét log kẹt).'
-              : 'Gửi ZNS dừng: không còn job trong hàng đợi, log chưa từng được gửi (phát hiện khi quét log kẹt).';
+              ? `Gửi ZNS dừng: tác vụ gửi trong hàng đợi đã hỏng hẳn mà không ghi kết cục (phát hiện khi quét log kẹt).${failedReason ? ` Chi tiết kỹ thuật: ${oneLineReason(failedReason)}` : ''}`
+              : 'Gửi ZNS dừng: không còn tác vụ gửi trong hàng đợi, log chưa từng được gửi (phát hiện khi quét log kẹt).';
           if (await this.notifications.closeStuckZnsLog(id, reason, verdict === 'CLOSE_GONE' ? ['PENDING'] : ['PENDING', 'RETRYING'])) result.closed++;
         }
       } catch (err) {
@@ -111,21 +111,23 @@ export class ZnsStuckLogCron {
     }
     // ambiguous chỉ đếm log MỚI bị đánh dấu ở lượt này, nên dòng cảnh báo không lặp lại mỗi 30 phút cho cùng một log.
     if (result.closed + result.sent + result.ambiguous > 0) {
-      this.logger.warn(`Quét log ZNS kẹt: ${JSON.stringify(result)} (ambiguous: không rõ Zalo đã nhận tin chưa, log giữ nguyên trạng thái và đã đánh dấu chờ đối soát tay).`);
+      this.logger.warn(
+        `Quét log ZNS kẹt (${result.scanned} log): đã đóng ${result.closed}, ghi nốt đã gửi ${result.sent}, chưa rõ ${result.ambiguous}, còn chạy ${result.alive}. Log "chưa rõ" (không biết Zalo đã nhận tin chưa) giữ nguyên trạng thái và được đánh dấu chờ đối soát tay.`,
+      );
     }
     return result;
   }
 
-  private async judge(queue: Queue, logId: string, status: string): Promise<Verdict> {
+  private async judge(queue: Queue, logId: string, status: string): Promise<{ verdict: Verdict; failedReason?: string }> {
     const job = await withQueueTimeout(queue.getJob(`zns-${logId}`), `${QUEUE_NOTIFICATIONS} getJob ${logId}`, undefined, { breaker: false });
     if (!job) {
       // Log RETRYING đã qua tay worker (Zalo có thể đã nhận): job completed bị dọn khỏi Redis (removeOnComplete 1000) trông y như job mất.
       // Đóng FAILED ở đây không tự gửi gì, nhưng gỡ khoá chống trùng cho lần notify() sau: chỉ đóng khi chắc Zalo chưa được gọi (PENDING).
-      return status === 'PENDING' ? 'CLOSE_GONE' : 'AMBIGUOUS';
+      return { verdict: status === 'PENDING' ? 'CLOSE_GONE' : 'AMBIGUOUS' };
     }
     const state = await withQueueTimeout(job.getState(), `${QUEUE_NOTIFICATIONS} getState ${logId}`, undefined, { breaker: false });
-    if (state === 'failed') return 'CLOSE_FAILED';
-    if (state === 'completed') return status === 'RETRYING' && job.returnvalue === ZnsStuckLogCron.SENT_RETURN ? 'MARK_SENT' : 'AMBIGUOUS';
-    return 'ALIVE';
+    if (state === 'failed') return { verdict: 'CLOSE_FAILED', failedReason: job.failedReason };
+    if (state === 'completed') return { verdict: status === 'RETRYING' && job.returnvalue === ZnsStuckLogCron.SENT_RETURN ? 'MARK_SENT' : 'AMBIGUOUS' };
+    return { verdict: 'ALIVE' };
   }
 }
