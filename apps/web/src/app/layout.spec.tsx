@@ -43,6 +43,33 @@ describe('RootLayout — thanh đầu theo khu vực', () => {
   });
 });
 
+// A11Y-10: liên kết bỏ qua là điểm dừng Tab đầu; nút lùi nổi đứng trước nội dung (không phải điểm dừng cuối sau chân trang).
+describe('RootLayout — thứ tự Tab và liên kết bỏ qua', () => {
+  const html = renderToStaticMarkup(
+    <RootLayout>
+      <main>Nội dung</main>
+    </RootLayout>,
+  );
+
+  it('liên kết "Bỏ qua đến nội dung" là phần tử tab được đầu tiên trong body và trỏ tới #main-content', () => {
+    const body = html.slice(html.indexOf('<body'));
+    expect(body.indexOf('href="#main-content"')).toBeGreaterThan(-1);
+    expect(body.search(/<(a|button|input|select|textarea)\b/)).toBe(body.indexOf('<a href="#main-content"'));
+    expect(html).toContain('Bỏ qua đến nội dung');
+    expect(html).toMatch(/<a href="#main-content" class="sr-only focus:not-sr-only/);
+  });
+
+  it('khối nội dung có id main-content và tabIndex -1 để nhận focus từ liên kết bỏ qua', () => {
+    expect(html).toMatch(/<div id="main-content" tabindex="-1" class="flex-1[^"]*">\s*<main>/);
+  });
+
+  it('nút Quay lại nổi đứng trước nội dung trang trong DOM', () => {
+    const src = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
+    expect(src.indexOf('<BackButton')).toBeLessThan(src.indexOf('{children}'));
+    expect(src.indexOf('<BackButton')).toBeLessThan(src.indexOf('<SiteFooter />'));
+  });
+});
+
 // PC-7: ô tìm kiếm không được nháy trên host gian hàng CTV — xem tenantHostBootScript ở lib/site.ts.
 describe('RootLayout — đánh dấu host gian hàng trước khi vẽ', () => {
   const html = renderToStaticMarkup(

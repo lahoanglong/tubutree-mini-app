@@ -20,6 +20,7 @@ import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { addressText, formatVnDate, isStartDateAllowed, startDateRange, subscriptionWalletBlockedReason } from '@/lib/subscription-options';
 import { actionErrorText } from '@/lib/error-text';
+import { useRovingGroup } from '@/lib/use-roving-group';
 
 const INTERVALS = [4, 6, 8, 10];
 
@@ -81,6 +82,8 @@ export function SubscribeSheet({
 }) {
   const router = useRouter();
   const qc = useQueryClient();
+  const payGroup = useRovingGroup();
+  const addrGroup = useRovingGroup();
   const [weeks, setWeeks] = useState(4);
   const [startMode, setStartMode] = useState<'now' | 'date'>('now');
   const [startDate, setStartDate] = useState('');
@@ -218,7 +221,7 @@ export function SubscribeSheet({
       )}
 
       <SectionLabel>Thanh toán mỗi kỳ</SectionLabel>
-      <div role="radiogroup" aria-label="Thanh toán mỗi kỳ">
+      <div ref={payGroup.ref} onKeyDown={payGroup.onKeyDown} role="radiogroup" aria-label="Thanh toán mỗi kỳ">
         {SUBSCRIPTION_PAYMENT_METHODS.map((m) => (
           <RadioRow
             key={m}
@@ -251,7 +254,7 @@ export function SubscribeSheet({
           </button>
         </div>
       ) : (
-        <div role="radiogroup" aria-label="Giao tới">
+        <div ref={addrGroup.ref} onKeyDown={addrGroup.onKeyDown} role="radiogroup" aria-label="Giao tới">
           {addresses.map((a) => (
             <RadioRow
               key={a.id}

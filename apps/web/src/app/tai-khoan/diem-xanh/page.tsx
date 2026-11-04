@@ -332,8 +332,8 @@ export default function LoyaltyPage() {
             {txnQ.hasNextPage && (
               <button
                 type="button"
-                disabled={txnQ.isFetchingNextPage}
-                onClick={() => void txnQ.fetchNextPage()}
+                aria-disabled={txnQ.isFetchingNextPage || undefined}
+                onClick={() => !txnQ.isFetchingNextPage && void txnQ.fetchNextPage()}
                 className={`${miniBtnSecondary} mt-3 w-full`}
               >
                 {txnQ.isFetchingNextPage ? 'Đang tải…' : txnQ.isFetchNextPageError ? 'Chưa tải được, bấm để thử lại' : 'Xem thêm'}

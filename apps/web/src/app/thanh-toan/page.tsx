@@ -80,7 +80,8 @@ import { clearSubmitted } from '@/lib/recycle-wizard';
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
 
-const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
+// has-[:focus-visible]: ô radio của thẻ địa chỉ bị sr-only ở điện thoại nên vòng lấy nét phải hiện trên cả thẻ.
+const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[color:var(--color-border-focus)]';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-[var(--color-border-selected)] bg-[var(--color-bg-subtle)]' : 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)]'}`;
 // Mini App: dòng phương thức thanh toán không viền/nền, cách nhau bằng khoảng đệm (checkout.tsx: padding 12px 0).
@@ -576,11 +577,11 @@ export default function CheckoutPage() {
           </section>
 
           <section data-mini-block="payment" className={`${MINI_BAND} max-md:order-5`}>
-            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Phương thức thanh toán</h2>
+            <h2 id="pay-methods-heading" className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Phương thức thanh toán</h2>
             {zeroNote ? (
               <p className="mt-2 text-sm text-[color:var(--color-text-brand)]">{zeroNote}</p>
             ) : (
-              <div className="mt-2 space-y-2">
+              <div role="radiogroup" aria-labelledby="pay-methods-heading" className="mt-2 space-y-2">
                 {paymentMethods.map((p) => {
                   const reason = p.hint;
                   return (

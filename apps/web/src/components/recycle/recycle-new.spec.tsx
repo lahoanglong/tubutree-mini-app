@@ -101,9 +101,9 @@ const mount = async () => {
 const bar = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!;
 const barButton = (c: HTMLElement, name: string) => byText(bar(c), 'button', name) as HTMLButtonElement;
 const card = (c: HTMLElement, name: string) => byText(c, '[data-item]', name)!;
-const qtyOf = (c: HTMLElement, item: string) => card(c, item).querySelector<HTMLInputElement>('input[aria-label="Số lượng"]')?.value;
+const qtyOf = (c: HTMLElement, item: string) => card(c, item).querySelector<HTMLInputElement>('input[aria-label^="Số lượng"]')?.value;
 const stepper = (c: HTMLElement, item: string, label: 'Tăng số lượng' | 'Giảm số lượng') =>
-  card(c, item).querySelector<HTMLElement>(`button[aria-label="${label}"]`)!;
+  card(c, item).querySelector<HTMLElement>(`button[aria-label^="${label}"]`)!;
 const methods = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="radio"]')).map((r) => r.getAttribute('data-method'));
 const method = (c: HTMLElement, m: string) => c.querySelector<HTMLElement>(`[data-method="${m}"]`)!;
 const check = (c: HTMLElement, text: string) => byText(c, 'label', text)!.querySelector<HTMLInputElement>('input')!;

@@ -26,6 +26,7 @@ import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHi
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 
 /** Số voucher hiện sẵn trong panel tại chỗ (từ md); trong bảng trượt của điện thoại hiện đủ như Mini App. */
 const VISIBLE_COUPONS = 3;
@@ -132,12 +133,12 @@ export function CouponBox({
   const [err, setErr] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [applyWarning, setApplyWarning] = useState<string | null>(null);
-  const warnTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(warnTimer.current), []);
+  // Lời báo tự tắt nhưng dừng đồng hồ khi trỏ/focus đang ở trên nó (WCAG 2.2.1); `warnSeq` đếm lại khi cùng một chữ được báo lần nữa.
+  const [warnSeq, setWarnSeq] = useState(0);
+  const warnHold = useAutoDismiss(!!applyWarning, APPLY_WARNING_MS, () => setApplyWarning(null), warnSeq);
   const showApplyWarning = (text: string | null) => {
-    clearTimeout(warnTimer.current);
     setApplyWarning(text);
-    if (text) warnTimer.current = setTimeout(() => setApplyWarning(null), APPLY_WARNING_MS);
+    setWarnSeq((n) => n + 1);
   };
   // Thu gọn mặc định: ô nhập + danh sách voucher dài hàng trăm px, đẩy nút thanh toán xuống khỏi màn điện thoại.
   const [open, setOpen] = useState(false);
@@ -490,16 +491,19 @@ export function CouponBox({
           </button>
         </div>
       )}
-      {currentCode && notice && (
-        <p role="status" data-testid="coupon-notice" className="mt-2 text-caption text-warning-fg">
-          {notice}
-        </p>
-      )}
-      {applyWarning && !(currentCode && notice) && (
-        <p role="status" data-testid="coupon-apply-warning" className="mt-2 text-caption text-warning-fg">
-          {applyWarning}
-        </p>
-      )}
+      {/* Vùng báo luôn có mặt trong cây, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
+      <div role="status">
+        {currentCode && notice && (
+          <p data-testid="coupon-notice" className="mt-2 text-caption text-warning-fg">
+            {notice}
+          </p>
+        )}
+        {applyWarning && !(currentCode && notice) && (
+          <p data-testid="coupon-apply-warning" {...warnHold} className="mt-2 text-caption text-warning-fg">
+            {applyWarning}
+          </p>
+        )}
+      </div>
       {err && (!inSheet || !open) && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {err}

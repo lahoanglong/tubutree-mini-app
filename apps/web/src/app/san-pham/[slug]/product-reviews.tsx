@@ -39,6 +39,7 @@ import { EvidenceUpload } from '@/components/evidence-upload';
 import { pdpBand, pdpSectionTitle } from './pdp-sections';
 import { reviewVideoConfig } from './review-video-config';
 import { actionErrorText } from '@/lib/error-text';
+import { useRovingGroup } from '@/lib/use-roving-group';
 
 // Mã tải video (Cloudinary, đo độ dài) chỉ cần khi khách mở form đánh giá: tách khỏi First Load của trang sản phẩm.
 const ReviewVideoUpload = dynamic(() => import('./review-video-upload').then((m) => m.ReviewVideoUpload), { ssr: false });
@@ -441,6 +442,7 @@ function ReviewForm({
   const commentId = useId();
   const [rating, setRating] = useState(initial?.rating ?? 5);
   const [comment, setComment] = useState(initial?.comment ?? '');
+  const starsGroup = useRovingGroup();
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [videoUrl, setVideoUrl] = useState<string | null>(initial?.videoUrl ?? null);
   // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
@@ -485,7 +487,7 @@ function ReviewForm({
       <h3 className="text-base font-semibold text-stone-900">{isEdit ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}</h3>
       {note && <p className="mt-1 text-sm text-stone-600">{note}</p>}
       {isEdit && (hidden || initial?.isVisible === false) && <p className="mt-1 text-sm text-warning-fg">{EDIT_HIDDEN_NOTE}</p>}
-      <div role="radiogroup" aria-label="Số sao" className="mt-2 flex gap-1">
+      <div ref={starsGroup.ref} onKeyDown={starsGroup.onKeyDown} role="radiogroup" aria-label="Số sao" className="mt-2 flex gap-1">
         {[1, 2, 3, 4, 5].map((i) => (
           <button
             key={i}

@@ -410,6 +410,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                           <div className="flex items-center gap-3">
                             <QuantitySelector
                               size="sm"
+                              itemLabel={l.itemName}
                               min={0}
                               max={l.declaredQty}
                               value={received[l.itemId] ?? 0}

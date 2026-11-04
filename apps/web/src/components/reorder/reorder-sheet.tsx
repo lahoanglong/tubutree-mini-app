@@ -132,7 +132,7 @@ function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: L
   const checked = line.available && (value?.checked ?? false);
   const qty = value?.quantity ?? line.defaultQuantity;
   return (
-    <div data-testid="reorder-line" className={`flex items-start gap-2.5 ${line.available ? '' : 'opacity-50'}`}>
+    <div data-testid="reorder-line" className="flex items-start gap-2.5">
       <label className="flex h-11 w-11 flex-none items-center justify-center">
         <input
           type="checkbox"
@@ -143,14 +143,17 @@ function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: L
           className="h-5 w-5 accent-[color:var(--color-action-primary-bg)]"
         />
       </label>
-      <ProductThumb src={line.thumbnail} alt="" size={56} />
+      {/* Mờ chỉ ảnh: chữ giải thích mờ theo cả dòng chỉ còn 2,3:1 (WCAG 1.4.3). */}
+      <div className={`flex-none ${line.available ? '' : 'opacity-50'}`}>
+        <ProductThumb src={line.thumbnail} alt="" size={56} />
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate text-sm font-semibold text-stone-900">{line.productName}</p>
+        <p className={`truncate text-sm font-semibold ${line.available ? 'text-stone-900' : 'text-[color:var(--color-text-secondary)]'}`}>{line.productName}</p>
         {line.variationName && <p className="text-xs text-stone-600">{line.variationName}</p>}
         {line.available ? (
           <>
             <p className="text-sm font-bold text-stone-900">{formatVnd(line.unitPrice)}</p>
-            <QuantitySelector value={qty} max={line.maxQuantity} size="md" onChange={(n) => onChange({ checked, quantity: n })} />
+            <QuantitySelector value={qty} max={line.maxQuantity} size="md" itemLabel={line.productName} onChange={(n) => onChange({ checked, quantity: n })} />
           </>
         ) : (
           <p className="text-xs text-danger-fg">{reorderText.unavailable}</p>

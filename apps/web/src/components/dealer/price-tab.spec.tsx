@@ -25,7 +25,7 @@ async function placeWith(button: 'Trả trước' | 'Ghi công nợ', order: Rec
   vi.stubGlobal('fetch', fn);
   mounted = render(<PriceTab creditLimit={50_000_000} debt={0} />);
   await flush();
-  click(mounted.container.querySelector('[aria-label="Tăng số lượng"]'));
+  click(mounted.container.querySelector('[aria-label^="Tăng số lượng"]'));
   await flush();
   click(byText(mounted.container, 'button', button));
   await flush();

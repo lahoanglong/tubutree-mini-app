@@ -122,7 +122,7 @@ function OrdersPageBody() {
             )}
             {orders.hasNextPage && (
               <div className="mt-3 text-center">
-                <button type="button" disabled={orders.isFetchingNextPage} onClick={() => void orders.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+                <button type="button" aria-disabled={orders.isFetchingNextPage || undefined} onClick={() => !orders.isFetchingNextPage && void orders.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
                   {orders.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
                 </button>
               </div>

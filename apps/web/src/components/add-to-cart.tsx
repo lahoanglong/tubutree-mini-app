@@ -273,7 +273,7 @@ export default function AddToCart({
 
   // Thêm giỏ và Mua ngay chung cửa kiểm tra phiên: chưa đăng nhập thì nhớ món + ý định rồi sang đăng nhập, quay lại làm nốt.
   const submit = async (buyNow: boolean, chosen?: { id: string; quantity: number }) => {
-    if (phase === 'loading' || blockedReason) return;
+    if (phase === 'loading' || blockedReason || busy) return;
     // Điện thoại: từ 2 phân loại thì hỏi chọn trong bảng như Mini App. Máy tính đã có ô chọn ngay cạnh nút.
     if (!chosen && needsVariationPicker(variations) && isPhoneWidth()) {
       setSheetOpened(true);
@@ -332,9 +332,11 @@ export default function AddToCart({
   const buyTotal = formatVnd(line?.lineTotal ?? 0);
   const addLabel = !available ? fillTileCopy('stock.out') : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${addTotal}`;
   const buyLabel = busy && buying ? 'Đang xử lý…' : 'Mua ngay';
-  const cannotBuy = busy || !available || phase === 'loading';
-  const status = (msg || warn) && (
-    <div role="status" className="space-y-1 text-sm">
+  // `busy` chỉ aria-disabled (nút đang giữ focus không bị trình duyệt đẩy về body); trạng thái cố định mới `disabled`.
+  const cannotBuy = !available || phase === 'loading';
+  const hasStatus = !!(msg || warn);
+  const statusBody = (
+    <>
       {msg && (
         <p className={success ? 'text-success-fg' : 'text-danger-fg'}>
           {msg}{' '}
@@ -346,8 +348,9 @@ export default function AddToCart({
         </p>
       )}
       {warn && <p className="text-warning-fg">{warn}</p>}
-    </div>
+    </>
   );
+
 
   // Điện thoại: gốc là `contents` để chip và Số lượng thành khối con của cột thông tin trang sản phẩm, xếp bằng `order` như Mini App
   // (Ưu đãi/Vận chuyển → ghi chú → chip → Số lượng → Combo/Mua kèm → Đánh giá nhanh). Không có dòng "Phân loại ›": chip đã đủ tên, giá,
@@ -390,7 +393,7 @@ export default function AddToCart({
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
-        <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
+        <button type="button" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
           {addLabel}
         </button>
       </div>
@@ -404,11 +407,14 @@ export default function AddToCart({
           <p className={`text-sm text-[var(--color-text-secondary)] md:pt-2 ${phoneCaption} ${phoneBandPad} max-md:pb-3`}>{overLimitText}</p>
         )}
       </div>
-      <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
+      <button type="button" onClick={onBuyNow} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
         {buyLabel}
       </button>
 
-      {status && <div className="mt-3 hidden md:block">{status}</div>}
+      {/* Vùng báo luôn có mặt trong cây, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
+      <div role="status" className={`hidden space-y-1 text-sm md:block ${hasStatus ? 'mt-3' : ''}`}>
+        {statusBody}
+      </div>
 
       {needsVariationPicker(variations) && sheetOpened && (
         <VariationSheet
@@ -429,7 +435,9 @@ export default function AddToCart({
       )}
 
       <StickyActionBar label="Mua hàng">
-        {status && <div className="mb-2">{status}</div>}
+        <div role="status" className={`space-y-1 text-sm ${hasStatus ? 'mb-2' : ''}`}>
+          {statusBody}
+        </div>
         <div className="flex items-center gap-2.5">
           <Link
             href="/gio-hang"
@@ -441,15 +449,14 @@ export default function AddToCart({
           </Link>
           {available ? (
             <div className="flex min-w-0 flex-1 gap-2.5">
-              <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
+              <button type="button" onClick={onAdd} disabled={cannotBuy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
               {/* Hai dòng (nhãn + giá) như Mini App: một dòng "Mua ngay · giá" tràn ở 320-390px. */}
               <button
                 type="button"
                 onClick={onBuyNow}
-                disabled={cannotBuy}
-                aria-label={`${buyLabel} · ${buyTotal}`}
+                disabled={cannotBuy} aria-disabled={busy || undefined}
                 className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
               >
                 <span className="block max-w-full truncate">{buyLabel}</span>

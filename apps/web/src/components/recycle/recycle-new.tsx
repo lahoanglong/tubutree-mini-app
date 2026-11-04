@@ -58,6 +58,7 @@ import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
+import { useRovingGroup } from '@/lib/use-roving-group';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WasteItemStep } from './waste-item-step';
@@ -115,6 +116,7 @@ function Actions({ label, summary, children }: { label: string; summary?: ReactN
 const CONSENT_KEY = 'tubu.waste.consents';
 
 export function RecycleNew() {
+  const methodGroup = useRovingGroup();
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
@@ -530,7 +532,7 @@ export function RecycleNew() {
           <p className="text-sm font-semibold text-stone-900">Hiện chưa có cách giao nào đang mở, bạn quay lại sau nhé.</p>
         </div>
       ) : (
-        <div role="radiogroup" aria-label="Cách giao" className="grid gap-3 md:grid-cols-3">
+        <div ref={methodGroup.ref} onKeyDown={methodGroup.onKeyDown} role="radiogroup" aria-label="Cách giao" className="grid gap-3 md:grid-cols-3">
           {order.map(renderCard)}
         </div>
       )}

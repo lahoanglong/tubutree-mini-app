@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   removed: [] as string[],
   added: [] as { variationId: string; quantity: number }[],
   removeError: null as Error | null,
+  hang: false,
   addError: null as Error | null,
   coupons: [] as unknown[],
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
@@ -30,6 +31,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   removeCoupon: async () => state.cart,
   updateCartItem: async (id: string, q: number) => {
     state.updates.push({ id, q });
+    if (state.hang) return new Promise(() => undefined);
     return state.cart;
   },
   removeCartItem: async (id: string) => {
@@ -71,6 +73,7 @@ beforeEach(() => {
   state.removed = [];
   state.added = [];
   state.removeError = null;
+  state.hang = false;
   state.addError = null;
   state.cart = cartOf([line({})]);
   state.coupons = [];
@@ -102,18 +105,69 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     const { container } = await mount();
     click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
-    const box = container.querySelector<HTMLElement>('[role="status"].fixed')!;
+    const box = container.querySelector<HTMLElement>('[role="status"] .fixed')!;
     expect(box.className).not.toMatch(/\bbottom-32\b/);
     expect(box.className).toContain('--sticky-bar-h');
   });
 
-  it('thanh hoàn tác tự tắt sau 3,5 giây', async () => {
+  it('A11Y-05: thanh hoàn tác tự tắt sau 10 giây (không phải 3,5 giây), và còn mở ở giây thứ 9', async () => {
     const { container } = await mount();
     vi.useFakeTimers();
     click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
     expect(undoButton(container)).toBeDefined();
-    await act(async () => { await vi.advanceTimersByTimeAsync(3600); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(9000); });
+    expect(undoButton(container)).toBeDefined();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(undoButton(container)).toBeUndefined();
+  });
+
+  it('A11Y-05: xoá xong, focus chuyển sang nút Hoàn tác; đồng hồ dừng khi focus ở trong thanh, rời đi thì đếm lại đủ 10 giây', async () => {
+    const { container } = await mount();
+    vi.useFakeTimers();
+    const remove = button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng')!;
+    remove.focus();
+    // jsdom không có :focus-visible (nút vừa nhận focus bằng bàn phím thì trình duyệt thật trả true).
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, sel: string) {
+      return sel === ':focus-visible' ? this === remove : realMatches.call(this, sel);
+    });
+    click(remove);
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(document.activeElement).toBe(undoButton(container));
+    vi.restoreAllMocks();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(undoButton(container)).toBeDefined();
+    const bar = container.querySelector<HTMLElement>('[role="status"] .fixed')!;
+    act(() => { undoButton(container)!.blur(); bar.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(9000); });
+    expect(undoButton(container)).toBeDefined();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(undoButton(container)).toBeUndefined();
+  });
+
+  it('A11Y-05: xoá bằng chuột (nút không có vòng lấy nét) thì không kéo focus sang Hoàn tác, thanh vẫn tự tắt sau 10 giây', async () => {
+    const { container } = await mount();
+    vi.useFakeTimers();
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(document.activeElement).not.toBe(undoButton(container));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_100); });
+    expect(undoButton(container)).toBeUndefined();
+  });
+
+  it('A11Y-05: rê chuột lên thanh cũng dừng đồng hồ', async () => {
+    const { container } = await mount();
+    vi.useFakeTimers();
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    const bar = container.querySelector<HTMLElement>('[role="status"] .fixed')!;
+    act(() => { undoButton(container)!.blur(); bar.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body })); });
+    act(() => { bar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(undoButton(container)).toBeDefined();
+    act(() => { bar.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_100); });
     expect(undoButton(container)).toBeUndefined();
   });
 
@@ -134,6 +188,38 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Hết hàng rồi');
     expect(undoButton(container)).toBeUndefined();
+  });
+
+  it('A11Y-03: bấm "+" khi máy chủ chưa trả lời: nút chỉ aria-disabled, vẫn giữ focus, bấm thêm không gửi lần hai', async () => {
+    state.hang = true;
+    const { container } = await mount();
+    const plus = button(container, 'Tăng số lượng Dầu gội bồ kết')!;
+    plus.focus();
+    click(plus);
+    await flush();
+    expect(state.updates).toEqual([{ id: 'i1', q: 3 }]);
+    expect(plus.getAttribute('aria-disabled')).toBe('true');
+    expect(plus.disabled).toBe(false);
+    expect(document.activeElement).toBe(plus);
+    click(plus);
+    click(button(container, 'Giảm số lượng Dầu gội bồ kết')!);
+    expect(state.updates).toHaveLength(1);
+    const trash = button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng')!;
+    click(trash);
+    expect(state.removed).toEqual([]);
+    expect(trash.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('A11Y-02: vùng báo hoàn tác có sẵn trong cây trước khi xoá; sau khi xoá, chính nút đó chứa thanh "Đã bỏ khỏi giỏ"', async () => {
+    const { container } = await mount();
+    const region = container.querySelector('[data-testid="undo-region"]')!;
+    expect(region).not.toBeNull();
+    expect(region.textContent).toBe('');
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
+    await flush();
+    expect(region.isConnected).toBe(true);
+    expect(region.textContent).toContain('Đã bỏ khỏi giỏ');
+    expect(region.querySelector('[data-surface="inverse"]')).not.toBeNull();
   });
 
   it('tên và ảnh sản phẩm là liên kết tới trang sản phẩm', async () => {

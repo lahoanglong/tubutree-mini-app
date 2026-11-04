@@ -1,7 +1,7 @@
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[], hydrated: false as boolean | 'real' }));
+const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[], hydrated: false as boolean | 'real', path: '/' }));
 const DEFAULTS = { auth: mocks.auth, cart: mocks.cart, notifications: mocks.notifications };
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 // Mặc định như máy chủ/hydrate đầu (useHydrated=false); ca cần pha phiên thật bật true để giả lập sau hydrate; 'real' chạy hook thật.
@@ -19,7 +19,7 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/vuon-xanh', '/mua-chung', '/tai-khoan/thong-bao'].includes(p) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => mocks.path }));
 
 import SiteHeader from './site-header';
 
@@ -30,6 +30,7 @@ afterEach(() => {
   mocks.cart = DEFAULTS.cart;
   mocks.notifications = DEFAULTS.notifications;
   mocks.hydrated = false;
+  mocks.path = '/';
 });
 
 describe('SiteHeader', () => {
@@ -145,5 +146,16 @@ describe('SiteHeader', () => {
   it('khách chưa đăng nhập không có chuông', () => {
     mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
     expect(render()).not.toContain('/tai-khoan/thong-bao');
+  });
+
+  it('A11Y-11: hai nav đặt tên đúng vai, chữ cái đầu ở nút tài khoản bị ẩn khỏi tên, mục đang mở có gạch chân ngoài màu', () => {
+    mocks.auth = { user: { fullName: 'Nguyễn Văn An' }, status: 'authenticated', initialized: true, sessionUnavailable: false };
+    mocks.path = '/vuon-xanh';
+    const out = render();
+    expect(out).toContain('<nav aria-label="Tài khoản và giỏ hàng"');
+    expect(out).toContain('<nav aria-label="Điều hướng chính" data-desktop-nav');
+    expect(out).not.toContain('aria-label="Mục chính"');
+    expect(out).toMatch(/<div aria-hidden="true"[^>]*>N<\/div>/);
+    expect(out).toMatch(/aria-current="page"[^>]*underline decoration-2/);
   });
 });

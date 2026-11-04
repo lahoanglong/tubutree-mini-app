@@ -246,9 +246,9 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
           <div style={{ position: 'relative', zIndex: 1, marginTop: 8 }}>
             <button
               type="button"
-              disabled={pending}
-              onClick={onToggleRemind}
-              className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition disabled:opacity-60 ${
+              aria-disabled={pending || undefined}
+              onClick={() => !pending && onToggleRemind()}
+              className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition aria-disabled:opacity-60 ${
                 item.reminded ? 'bg-forest-50 text-forest-700' : 'bg-forest-600 text-stone-0 hover:bg-forest-700'
               }`}
             >

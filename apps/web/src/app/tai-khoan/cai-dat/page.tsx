@@ -17,6 +17,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { useRovingGroup } from '@/lib/use-roving-group';
 
 const LOAD_FAILED = 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.';
 const SAVE_FAILED = 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.';
@@ -29,6 +30,7 @@ const FONT_OPTIONS: { scale: FontScale; label: string; glyph: string }[] = [
 
 /** Cài đặt (cùng nội dung với `settings.tsx` của Mini App): thông báo lưu trên server, cỡ chữ, liên kết hồ sơ/địa chỉ, đăng xuất, xoá tài khoản. */
 export default function SettingsPage() {
+  const fontGroup = useRovingGroup();
   const { logout } = useAuth();
   const phase = useAuthPhase();
   const qc = useQueryClient();
@@ -128,7 +130,7 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="Hiển thị · Cỡ chữ">
-        <div role="radiogroup" aria-label="Cỡ chữ" className="flex gap-2">
+        <div ref={fontGroup.ref} onKeyDown={fontGroup.onKeyDown} role="radiogroup" aria-label="Cỡ chữ" className="flex gap-2">
           {FONT_OPTIONS.map(({ scale, label, glyph }) => {
             const active = fontScale === scale;
             return (

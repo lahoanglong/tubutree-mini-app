@@ -463,3 +463,54 @@ describe('/tai-khoan/ho-so — ảnh đại diện', () => {
     expect(mocks.auth.updateProfile).toHaveBeenCalledWith({ fullName: 'Lan', avatarUrl: null });
   });
 });
+
+describe('/tai-khoan/ho-so — truy cập (A11Y-02, A11Y-16)', () => {
+  it('A11Y-16: ô ngày sinh được mô tả bằng dòng gợi ý có định dạng ngày/tháng/năm (không chỉ placeholder)', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    const input = field(container, 'Ngày sinh');
+    const hint = document.getElementById(input.getAttribute('aria-describedby')!.split(' ')[0]!)!;
+    expect(hint.textContent).toContain('Nhận mã giảm giá quà tặng vào tháng sinh nhật');
+    expect(hint.textContent).toContain('ngày/tháng/năm');
+    expect(hint.querySelector('.sr-only')).not.toBeNull();
+  });
+
+  it('A11Y-16: đã có ngày sinh (ô chỉ đọc) vẫn có mô tả nhưng không thêm câu định dạng', async () => {
+    const { container } = await mount();
+    const hint = document.getElementById(field(container, 'Ngày sinh').getAttribute('aria-describedby')!)!;
+    expect(hint.textContent).toContain('CSKH');
+    expect(hint.textContent).not.toContain('ngày/tháng/năm');
+  });
+
+  it('A11Y-16: hộp xác nhận ngày sinh (alertdialog) mở ra thì nhận focus, chỉ một lần (vẽ lại không giật focus)', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '03/02/1991');
+    click(saveBtn(container));
+    await flush(2);
+    const dialog = container.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(document.activeElement).toBe(dialog);
+    expect(dialog.getAttribute('tabindex')).toBe('-1');
+    const no = byText(dialog, 'button', 'Sửa lại') ?? dialog.querySelectorAll('button')[1]!;
+    (no as HTMLElement).focus();
+    await flush(2);
+    expect(document.activeElement).toBe(no);
+  });
+
+  it('A11Y-02: vùng báo ảnh đại diện role=status có sẵn trong cây; lời báo đến thì chính nút đó chứa chữ', async () => {
+    const { container } = await mount();
+    const region = container.querySelector('form [role="status"]:not(p)')!;
+    expect(region).not.toBeNull();
+    expect(region.textContent).toBe('');
+    mocks.compress.mockRejectedValue(new Error('không đọc được'));
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })], configurable: true });
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(8);
+    expect(region.isConnected).toBe(true);
+    expect(container.querySelector('form [role="status"]:not(p)')).toBe(region);
+    expect(region.textContent).not.toBe('');
+  });
+});

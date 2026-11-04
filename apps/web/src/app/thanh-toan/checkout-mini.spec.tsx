@@ -333,3 +333,24 @@ describe('/thanh-toan — thẻ tóm tắt khớp Mini ở 375 (nhãn trơn, ch�
     expect(c.textContent).not.toContain('-15.000đ');
   });
 });
+
+describe('/thanh-toan — truy cập (A11Y-09)', () => {
+  it('phương thức thanh toán nằm trong radiogroup được đặt tên bằng tiêu đề của khối; mọi radio nằm trong nhóm đó', async () => {
+    const c = await mount();
+    const group = c.querySelector<HTMLElement>('[role="radiogroup"][aria-labelledby]')!;
+    expect(group).not.toBeNull();
+    expect(document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent).toBe('Phương thức thanh toán');
+    const pay = Array.from(c.querySelectorAll<HTMLInputElement>('input[name="pay"]'));
+    expect(pay.length).toBeGreaterThan(0);
+    expect(pay.every((r) => group.contains(r))).toBe(true);
+  });
+
+  it('thẻ địa chỉ và dòng thanh toán dùng viền focus theo :focus-visible của ô radio bên trong (radio địa chỉ bị sr-only ở điện thoại)', async () => {
+    const c = await mount();
+    const card = c.querySelector<HTMLElement>('[data-ds="checkout-address-card"]')!;
+    expect(card.className).toContain('has-[:focus-visible]:outline');
+    expect(card.querySelector('input')!.className).toContain('max-md:sr-only');
+    const payRow = c.querySelector<HTMLInputElement>('input[name="pay"]')!.closest('label')!;
+    expect(payRow.className).toContain('has-[:focus-visible]:outline');
+  });
+});
