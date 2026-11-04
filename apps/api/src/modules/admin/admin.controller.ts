@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Patch, Post, Put, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StaffLookupThrottle } from '../../common/throttle/throttle.config';
 import type { Response } from 'express';
@@ -548,6 +548,14 @@ export class AdminController {
   @Get('reviews')
   reviews(@Query() q: ListReviewsQuery) {
     return this.admin.listReviews(q.page, q.limit, q.visibility, q.rating);
+  }
+
+  /** Ảnh base64 của đánh giá (kể cả đã ẩn): danh sách trả đường dẫn này thay vì nhúng nguyên văn. */
+  @Get('reviews/:id/images/:index')
+  async reviewImage(@Param('id') id: string, @Param('index', ParseIntPipe) index: number, @Res({ passthrough: true }) res: Response) {
+    const { mime, data } = await this.admin.reviewImage(id, index);
+    res.set({ 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    return new StreamableFile(data, { type: mime });
   }
 
   /** Gói mua định kỳ (chỉ xem). */

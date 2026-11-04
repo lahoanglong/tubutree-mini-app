@@ -39,6 +39,8 @@ export interface DealerApp {
   status: string;
   createdAt: string;
 }
+/** Ảnh trong danh sách của admin (đường dẫn `/admin/...` do API trả thay cho base64): cần token nên tải bằng apiBlob. */
+export const getAdminImage = (ref: string) => apiBlob(ref);
 export type DealerAppImageField = 'cccdFront' | 'cccdBack' | 'storeFront';
 /** Ảnh hồ sơ đại lý: API trả byte ảnh (base64 đã giải mã) hoặc JSON `{ url }` cho ảnh trên host upload. */
 export const getDealerAppImage = (id: string, field: DealerAppImageField) =>

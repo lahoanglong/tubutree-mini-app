@@ -11,6 +11,7 @@ import {
 } from '@/lib/admin-client';
 import { reviewStarCount, safeHttpsLink } from '@/lib/admin-pickers';
 import { useConfirm } from './confirm-dialog';
+import { AdminImage, isAdminImageRef } from './admin-image';
 import { safeEvidenceImage } from './evidence-images';
 import { PageNav } from './page-nav';
 import { BTN_LINK, Notice, ToneBadge, chipClass, LoadError } from './ui';
@@ -138,7 +139,10 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
     mut.mutate(!hide);
   };
 
-  const images = r.images.map(safeEvidenceImage).filter((x): x is { src: string; href: string | null } => x !== null);
+  // Ảnh của đánh giá đã ẩn không đi qua đường dẫn công khai: cần token admin nên không mở ở tab mới được.
+  const images = r.images
+    .map((raw) => (isAdminImageRef(raw) ? { admin: raw } : safeEvidenceImage(raw)))
+    .filter((x): x is { admin: string } | { src: string; href: string | null } => x !== null);
   const video = safeHttpsLink(r.videoUrl);
 
   return (
@@ -157,6 +161,11 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
       {(images.length > 0 || video) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {images.map((img, i) => {
+            if ('admin' in img) {
+              return (
+                <AdminImage key={i} src={img.admin} alt={`Ảnh đánh giá ${i + 1}`} className="h-16 w-16 rounded-control border border-stone-200 object-cover" />
+              );
+            }
             const thumb = (
               // eslint-disable-next-line @next/next/no-img-element
               <img

@@ -251,6 +251,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/return-requests/:id/received': [KHO],
   'POST /admin/return-requests/:id/review': [CSKH],
   'GET /admin/reviews': ADMIN_ONLY,
+  'GET /admin/reviews/:id/images/:index': ADMIN_ONLY,
   'GET /admin/shift-templates': ADMIN_ONLY,
   'POST /admin/shift-templates': ADMIN_ONLY,
   'DELETE /admin/shift-templates/:id': ADMIN_ONLY,

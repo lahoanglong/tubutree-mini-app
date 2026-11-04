@@ -181,7 +181,7 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     id: 'r1',
     rating: 1,
     comment: 'Spam link',
-    images: [],
+    imageVersions: [],
     videoUrl: null,
     isVisible: true,
     isVerified: true,
@@ -208,6 +208,54 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     expect(findMany.mock.calls[1]![0].skip).toBe(10);
     await svc.listReviews(1, 20);
     expect(findMany.mock.calls[2]![0].where).toEqual({});
+  });
+});
+
+describe('AdminService.listReviews — ảnh không nhúng base64 (L3-03)', () => {
+  const row = (over: Record<string, unknown>) => ({
+    id: 'r1', rating: 5, comment: 'ok', imageVersions: [], videoUrl: null, isVisible: true, isVerified: true,
+    createdAt: new Date('2026-10-01T00:00:00Z'), user: { id: 'u1', fullName: 'Lan', phone: '0900000001' },
+    product: { id: 'p1', name: 'SP', slug: 'sp' }, ...over,
+  });
+
+  it('chọn imageVersions, không chọn images', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await mkAdmin({ review: { findMany, count: jest.fn().mockResolvedValue(0) }, $transaction: tx }).listReviews(1, 20);
+    const select = findMany.mock.calls[0]![0].select;
+    expect(select).toMatchObject({ imageVersions: true });
+    expect(select).not.toHaveProperty('images');
+  });
+
+  it('đánh giá đang hiện: ảnh base64 thành đường dẫn công khai /reviews/:id/images/:i, ảnh https giữ nguyên, không còn data:image', async () => {
+    const findMany = jest.fn().mockResolvedValue([row({ imageVersions: ['0123456789', 'https://cdn/x.jpg'] })]);
+    const out = await mkAdmin({ review: { findMany, count: jest.fn().mockResolvedValue(1) }, $transaction: tx }).listReviews(1, 20);
+    expect(out.data[0]!.images).toEqual(['/reviews/r1/images/0?v=0123456789', 'https://cdn/x.jpg']);
+    expect(out.data[0]).not.toHaveProperty('imageVersions');
+    expect(JSON.stringify(out)).not.toContain('data:image');
+  });
+
+  it('đánh giá đã ẩn: ảnh base64 đi qua đường dẫn của admin (đường dẫn công khai không phát ảnh của đánh giá ẩn)', async () => {
+    const findMany = jest.fn().mockResolvedValue([row({ isVisible: false, imageVersions: ['0123456789', 'https://cdn/x.jpg'] })]);
+    const out = await mkAdmin({ review: { findMany, count: jest.fn().mockResolvedValue(1) }, $transaction: tx }).listReviews(1, 20, 'hidden');
+    expect(out.data[0]!.images).toEqual(['/admin/reviews/r1/images/0?v=0123456789', 'https://cdn/x.jpg']);
+  });
+});
+
+describe('AdminService.reviewImage — ảnh đánh giá cho admin (L3-03)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  it('trả byte ảnh kể cả đánh giá đã ẩn; chỉ đọc đúng một phần tử mảng', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([{ image: PNG }]);
+    const out = await mkAdmin({ $queryRaw: queryRaw }).reviewImage('r1', 1);
+    expect(out.mime).toBe('image/png');
+    expect(out.data.length).toBeGreaterThan(0);
+    expect(JSON.stringify(queryRaw.mock.calls[0])).toContain('images');
+  });
+  it('không có dòng, chỉ số ngoài khoảng hoặc ảnh không phải raster → 404', async () => {
+    await expect(mkAdmin({ $queryRaw: jest.fn().mockResolvedValue([]) }).reviewImage('r1', 0)).rejects.toThrow('Không tìm thấy ảnh.');
+    const q = jest.fn();
+    await expect(mkAdmin({ $queryRaw: q }).reviewImage('r1', 1000)).rejects.toThrow('Không tìm thấy ảnh.');
+    expect(q).not.toHaveBeenCalled();
+    await expect(mkAdmin({ $queryRaw: jest.fn().mockResolvedValue([{ image: 'data:image/svg+xml;base64,PHN2Zz4=' }]) }).reviewImage('r1', 0)).rejects.toThrow('Không tìm thấy ảnh.');
   });
 });
 
@@ -252,6 +300,7 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     expect(route('lookupVariations')).toEqual([RequestMethod.GET, 'variations/lookup']);
     expect(route('dealerTiers')).toEqual([RequestMethod.GET, 'dealer-tiers']);
     expect(route('reviews')).toEqual([RequestMethod.GET, 'reviews']);
+    expect(route('reviewImage')).toEqual([RequestMethod.GET, 'reviews/:id/images/:index']);
     expect(route('subscriptions')).toEqual([RequestMethod.GET, 'subscriptions']);
   });
 

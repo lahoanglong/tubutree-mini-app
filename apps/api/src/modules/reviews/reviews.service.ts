@@ -35,6 +35,11 @@ export function reviewImageRefFromVersion(reviewId: string, index: number, entry
   return IMAGE_VERSION_RE.test(entry) ? `/reviews/${reviewId}/images/${index}?v=${entry}` : entry;
 }
 
+/** Ảnh của đánh giá đã ẩn: đường dẫn công khai không phát ảnh đó, admin lấy qua route riêng (cần đăng nhập). */
+export function reviewAdminImageRefFromVersion(reviewId: string, index: number, entry: string): string {
+  return IMAGE_VERSION_RE.test(entry) ? `/admin/reviews/${reviewId}/images/${index}?v=${entry}` : entry;
+}
+
 export function reviewImageRef(reviewId: string, index: number, image: string): string {
   return reviewImageRefFromVersion(reviewId, index, reviewImageVersions([image])[0]!);
 }

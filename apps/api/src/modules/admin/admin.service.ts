@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
 import { decodeServedImage } from '../../common/served-image';
+import { reviewAdminImageRefFromVersion, reviewImageRefFromVersion } from '../reviews/reviews.service';
 import { isUploadedMediaUrl } from '../../common/uploaded-image';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -575,7 +576,7 @@ export class AdminService {
           id: true,
           rating: true,
           comment: true,
-          images: true,
+          imageVersions: true,
           videoUrl: true,
           isVisible: true,
           isVerified: true,
@@ -586,7 +587,22 @@ export class AdminService {
       }),
       this.prisma.review.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    // Ảnh base64 nặng tới ~700 nghìn ký tự/ảnh nên không nhúng trong JSON: trả đường dẫn để trình duyệt tải từng ảnh.
+    const data = items.map(({ imageVersions, ...r }) => ({
+      ...r,
+      images: imageVersions.map((entry, i) => (r.isVisible ? reviewImageRefFromVersion(r.id, i, entry) : reviewAdminImageRefFromVersion(r.id, i, entry))),
+    }));
+    return paginated(data, page, limit, total);
+  }
+
+  /** Ảnh base64 thứ `index` của một đánh giá (kể cả đã ẩn) cho màn duyệt; chỉ đọc đúng phần tử cần, không kéo cả mảng ảnh. */
+  async reviewImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
+    if (!Number.isInteger(index) || index < 0 || index >= 1000) throw new NotFoundException('Không tìm thấy ảnh.');
+    const rows = await this.prisma.$queryRaw<{ image: string | null }[]>`
+      SELECT "images"[${index + 1}::int] AS "image" FROM "reviews" WHERE "id" = ${reviewId}`;
+    const decoded = decodeServedImage(rows[0]?.image);
+    if (!decoded) throw new NotFoundException('Không tìm thấy ảnh.');
+    return decoded;
   }
 
   /** Gói mua định kỳ để CSKH tra (chỉ xem; khách tự tạm dừng/huỷ trong app). Không trả addressId. */
