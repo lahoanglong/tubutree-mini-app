@@ -18,6 +18,8 @@ import { writableTempDb } from './support/waste-db';
 test.use({ viewport: { width: 375, height: 812 } });
 
 const PANCAKE = (n: number) => `https://content.pancake.vn/2-26/lcp-${n}.jpg`;
+// Banner chiến dịch chỉ đi qua /img khi ảnh ở host upload (Cloudinary): API không đưa ảnh Pancake của banner vào danh sách đổi cỡ.
+const CLOUD = (n: number) => `https://res.cloudinary.com/tubutree/image/upload/v1/lcp-${n}.jpg`;
 const HOUR = 3_600_000;
 
 /** PNG RGB nhiễu 160×160 (~75 KB): đủ entropy để Chrome tính vào LCP dù ảnh được kéo giãn ra khung 343×137. */
@@ -83,8 +85,8 @@ function mockImages(api: MockApi): void {
     }));
   });
   mockCampaigns(api, {
-    home: [campaignBanner('thu', { title: 'Giữa Thu', image: PANCAKE(100) }), campaignBanner('dong', { title: 'Đông về', image: PANCAKE(101) })],
-    offers: [campaignBanner('uu-dai', { title: 'Ưu đãi lớn', image: PANCAKE(102) })],
+    home: [campaignBanner('thu', { title: 'Giữa Thu', image: CLOUD(100) }), campaignBanner('dong', { title: 'Đông về', image: CLOUD(101) })],
+    offers: [campaignBanner('uu-dai', { title: 'Ưu đãi lớn', image: CLOUD(102) })],
   });
 }
 
@@ -194,7 +196,7 @@ test.describe('banner Ưu đãi: sizes khớp bề rộng thật và chọn bả
       test('bề rộng ảnh = sizes; currentSrc là /img?w= đúng bậc, không phải ảnh gốc', async ({ page, api }) => {
         mockImages(api);
         await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
-        await page.route('https://content.pancake.vn/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
+        await page.route('https://res.cloudinary.com/**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
         await page.goto('/uu-dai');
         const img = page.locator('[data-offers-banner] img').first();
         await expect(img).toBeVisible({ timeout: 20_000 });
@@ -203,7 +205,7 @@ test.describe('banner Ưu đãi: sizes khớp bề rộng thật và chọn bả
         await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.currentSrc)).not.toBe('');
         const current = await img.evaluate((el: HTMLImageElement) => el.currentSrc);
         expect(current, `currentSrc ${current}`).toMatch(new RegExp(`/img\\?w=${c.picks}&u=`));
-        expect(current.startsWith('https://content.pancake.vn/'), 'không được chọn ảnh gốc của host nguồn').toBe(false);
+        expect(current.startsWith('https://res.cloudinary.com/'), 'không được chọn ảnh gốc của host nguồn').toBe(false);
       });
     });
   }
