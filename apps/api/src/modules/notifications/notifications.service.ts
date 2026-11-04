@@ -107,6 +107,9 @@ export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED' | 'SKIPPED';
  */
 @Injectable()
 export class NotificationsService {
+  /** Khoảng nghỉ giữa các lần ghi lại SENT: 3 lần thử tổng cộng. */
+  private static readonly SENT_WRITE_RETRY_DELAYS_MS = [100, 300];
+
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
@@ -429,7 +432,7 @@ export class NotificationsService {
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
     if (result.ok) {
-      await this.prisma.notificationLog.update({ where, data: { status: 'SENT', error: null } });
+      await this.markZnsSent(job.notificationLogId);
       return 'SENT';
     }
     const error = znsFailureText(result);
@@ -439,6 +442,26 @@ export class NotificationsService {
     }
     await this.prisma.notificationLog.update({ where, data: { status: 'FAILED', error } });
     return 'FAILED';
+  }
+
+  /**
+   * Zalo đã nhận tin. Ghi SENT lỗi (DB chớp tắt) mà ném ra thì BullMQ chạy lại job và khách nhận tin lần hai, nên thử lại vài lần
+   * rồi nuốt lỗi: log còn RETRYING (nhận lúc bắt đầu) là dấu vết đủ để admin đối chiếu, tin đôi thì không gỡ được.
+   */
+  private async markZnsSent(logId: string): Promise<void> {
+    const delays = NotificationsService.SENT_WRITE_RETRY_DELAYS_MS;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.prisma.notificationLog.update({ where: { id: logId }, data: { status: 'SENT', error: null } });
+        return;
+      } catch (err) {
+        if (attempt >= delays.length) {
+          this.logger.error(`ZNS log ${logId} đã gửi thành công nhưng ghi SENT lỗi sau ${attempt + 1} lần: ${err instanceof Error ? err.message : err}`);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      }
+    }
   }
 
   async getPrefs(userId: string): Promise<NotificationPrefs> {

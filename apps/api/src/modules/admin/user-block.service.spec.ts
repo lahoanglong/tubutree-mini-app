@@ -39,6 +39,21 @@ describe('UserBlockService.block — luôn còn một quản trị viên hoạt 
     expect(tx.$executeRaw.mock.invocationCallOrder[0]!).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
   });
 
+  it('khoá dòng users rồi mới lấy mốc: mốc bằng giờ lúc có khoá', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-05T03:00:00.000Z') });
+    try {
+      const { svc, tx } = txWith({ id: 'u3', role: 'CUSTOMER', isBlocked: false }, 0);
+      const locked = new Date('2026-11-05T03:00:01.700Z');
+      tx.$executeRaw.mockImplementationOnce(async () => 0).mockImplementationOnce(async () => { jest.setSystemTime(locked); return 1; });
+      await svc.block('admin1', 'u3', 'farm voucher');
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
+      expect(tx.$executeRaw.mock.invocationCallOrder[1]!).toBeLessThan(tx.user.update.mock.invocationCallOrder[0]!);
+      expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ blockedAt: locked, sessionsRevokedAt: locked }) }));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('khoá khách hàng → không cần đếm admin', async () => {
     const { svc, tx } = txWith({ id: 'u3', role: 'CUSTOMER', isBlocked: false }, 0);
     await svc.block('admin1', 'u3', 'farm voucher');
@@ -55,5 +70,52 @@ describe('UserBlockService: khoá/mở khoá đổi gian hàng nào khách thấ
     const bad = txWith(null, 1);
     await expect(bad.svc.block('admin1', 'u3', 'x')).rejects.toThrow();
     expect(bad.stale.isStale()).toBe(false);
+  });
+});
+
+describe('UserBlockService.revokeSessions — cắt phiên không khoá tài khoản (L1-04)', () => {
+  function revokeSvc(found = 1) {
+    const order: string[] = [];
+    const tx = {
+      $executeRaw: jest.fn(async () => { order.push('khoá'); return found; }),
+      user: { updateMany: jest.fn(async () => { order.push('mốc'); return { count: found }; }) },
+      userAdminEvent: { create: jest.fn(async () => { order.push('sổ'); return {}; }) },
+      refreshToken: { updateMany: jest.fn(async () => { order.push('thu hồi'); return { count: 3 }; }) },
+    };
+    const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const sessions = { invalidate: jest.fn() };
+    return { svc: new UserBlockService(prisma, sessions as unknown as SessionStateService), tx, sessions, order };
+  }
+
+  it('ghi mốc TRƯỚC, thu hồi refresh token, ghi SESSIONS_REVOKED có lý do, xoá cache sau commit; không đụng isBlocked', async () => {
+    const { svc, tx, sessions, order } = revokeSvc();
+    const out = await svc.revokeSessions('admin1', 'u9', '  Nghi lộ phiên  ');
+    expect(out).toEqual({ id: 'u9', revokedSessions: 3 });
+    expect(order).toEqual(['khoá', 'mốc', 'thu hồi', 'sổ']);
+    expect(tx.user.updateMany).toHaveBeenCalledWith({ where: { id: 'u9' }, data: { sessionsRevokedAt: expect.any(Date) } });
+    expect(tx.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u9', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(tx.userAdminEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u9', kind: 'SESSIONS_REVOKED', reason: 'Nghi lộ phiên', actorId: 'admin1', toValue: '3' }),
+    });
+    expect(sessions.invalidate).toHaveBeenCalledWith('u9');
+  });
+
+  it('m5: admin tự cắt phiên của chính mình → 400 kèm hướng dẫn, không ghi gì', async () => {
+    const { svc, tx } = revokeSvc();
+    await expect(svc.revokeSessions('admin1', 'admin1', 'thử cắt')).rejects.toThrow('Không tự cắt phiên của chính mình. Dùng Đăng xuất mọi thiết bị trong Cài đặt.');
+    expect(tx.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('lý do rỗng sau khi cắt khoảng trắng → 400, không ghi gì', async () => {
+    const { svc, tx } = revokeSvc();
+    await expect(svc.revokeSessions('admin1', 'u9', '   ')).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.user.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('không có người dùng → 404, không thu hồi, không ghi sổ', async () => {
+    const { svc, tx } = revokeSvc(0);
+    await expect(svc.revokeSessions('admin1', 'u9', 'nghi lộ phiên')).rejects.toThrow('Không tìm thấy');
+    expect(tx.userAdminEvent.create).not.toHaveBeenCalled();
+    expect(tx.refreshToken.updateMany).not.toHaveBeenCalled();
   });
 });

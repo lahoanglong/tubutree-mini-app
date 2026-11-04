@@ -24,6 +24,7 @@ export const THROTTLE_DEFAULT_LIMIT = 300;
 export const AUTH_IDENTITY_LIMIT = 10;
 export const AUTH_IP_LIMIT = 30;
 export const SSR_LIMIT = 3000;
+export const STAFF_LOOKUP_LIMIT = 30;
 
 /** Header web SSR gửi kèm (giá trị = THROTTLE_BYPASS_TOKEN). */
 export const THROTTLE_BYPASS_HEADER = 'x-throttle-bypass';
@@ -44,6 +45,7 @@ export function hasValidBypass(req: Request): boolean {
 const isBypass = (ctx: ExecutionContext): boolean => hasValidBypass(ctx.switchToHttp().getRequest<Request>());
 
 const AUTH_IP_THROTTLE = 'tubu:auth-ip-throttle';
+const STAFF_LOOKUP_THROTTLE = 'tubu:staff-lookup-throttle';
 
 export type AuthIdentity = (req: Request) => string | undefined;
 
@@ -93,6 +95,15 @@ export const throttlerOptions: ThrottlerModuleOptions = {
       skipIf: (ctx: ExecutionContext) => !isBypass(ctx),
     },
     {
+      // Chỉ route gắn @StaffLookupThrottle và chỉ khi người gọi là nhân viên (STAFF): ADMIN và các vai trò khác không bị trần này.
+      name: 'staffLookup',
+      ttl: THROTTLE_TTL_MS,
+      limit: STAFF_LOOKUP_LIMIT,
+      skipIf: (ctx: ExecutionContext) =>
+        Reflect.getMetadata(STAFF_LOOKUP_THROTTLE, ctx.getHandler()) !== true ||
+        ctx.switchToHttp().getRequest<{ user?: { role?: string } }>().user?.role !== 'STAFF',
+    },
+    {
       name: 'authIp',
       ttl: THROTTLE_TTL_MS,
       limit: AUTH_IP_LIMIT,
@@ -101,6 +112,14 @@ export const throttlerOptions: ThrottlerModuleOptions = {
     },
   ],
 };
+
+/**
+ * Route tra cứu khách mà nhân viên CSKH không được quét hàng loạt: trần `limit` lượt mỗi phút cho mỗi tài khoản nhân viên (STAFF),
+ * ADMIN không đổi. Trần riêng cho từng route, đếm theo userId như `default`.
+ */
+export function StaffLookupThrottle(limit: number = STAFF_LOOKUP_LIMIT) {
+  return applyDecorators(SetMetadata(STAFF_LOOKUP_THROTTLE, true), Throttle({ staffLookup: { ttl: THROTTLE_TTL_MS, limit } }));
+}
 
 /**
  * Route đăng nhập/refresh: đếm theo định danh của chính người gọi (deviceId, token) thay vì IP,

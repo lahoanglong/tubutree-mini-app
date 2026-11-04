@@ -11,7 +11,7 @@ import { RewardPointsService } from '../../src/modules/wallet/reward-points.serv
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { vnDateParts } from '../../src/common/vn-time';
-import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createOrder, createUser, pinConfig, randCode, summarize, warmPool } from './helpers';
 
 /**
  * D3-03: CTV được duyệt lên đại lý (role DEALER) giữ gian hàng CTV và hoa hồng đã ghi.
@@ -24,6 +24,9 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
   let prisma: PrismaService;
   let affiliate: AffiliateService;
   let storefront: StorefrontService;
+
+  // Khôi phục khoá thuế dùng chung để spec chạy sau không phụ thuộc thứ tự.
+  let restorePit: Array<() => Promise<void>> = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -44,11 +47,11 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
     storefront = moduleRef.get(StorefrontService);
-    await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
-    await setConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000);
+    restorePit = [await pinConfig(prisma, 'affiliate.pit_withhold_pct', 0.1), await pinConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000)];
   });
 
   afterAll(async () => {
+    for (const restore of restorePit.reverse()) await restore();
     await moduleRef?.close();
   });
 

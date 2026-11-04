@@ -64,7 +64,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     const t = build({ rows: [...rows('a', 10_000, 5_000), ...rows('b', 7_000)] });
     t.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 1, note: '' });
     const credited = await t.svc.autoTransferApprovedToWallet();
-    expect(t.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } });
+    expect(t.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false }, order: { status: 'DELIVERED' } });
     expect(t.requestPayout).toHaveBeenCalledTimes(2);
     expect(t.requestPayout).toHaveBeenCalledWith('a', 15_000, 'WALLET_BALANCE', undefined, expect.stringMatching(/^auto-wallet:a:/));
     expect(t.requestPayout).toHaveBeenCalledWith('b', 7_000, 'WALLET_BALANCE', undefined, expect.stringMatching(/^auto-wallet:b:/));

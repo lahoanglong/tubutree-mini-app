@@ -26,7 +26,7 @@ describe('PublicCache chỉ áp cho response thành công (C-039)', () => {
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ controllers: [FakeController] }).compile();
     app = mod.createNestApplication();
-    await app.listen(0);
+    await app.listen(0, '127.0.0.1');
     base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   });
   afterAll(() => app.close());

@@ -1,4 +1,4 @@
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -52,6 +52,12 @@ describe('CashbackController.webhook', () => {
     const r = await ctrl.webhook('accesstrade', {}, { 'x-accesstrade-token': 'ok' });
     expect(r).toEqual({ ok: false });
     expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it('m4: ingest báo thua CAS (retry) → 503 để sàn gửi lại', async () => {
+    const { ctrl, ingest } = make();
+    ingest.mockResolvedValueOnce({ ok: false, retry: true });
+    await expect(ctrl.webhook('accesstrade', body, { 'x-accesstrade-token': 'ok' })).rejects.toThrow(ServiceUnavailableException);
   });
 
   it('provider lạ → NotFoundException', async () => {

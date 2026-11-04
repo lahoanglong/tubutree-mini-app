@@ -32,15 +32,17 @@ enum RoleGrantRole {
 /// Cấp quyền theo SĐT — áp cả khi user CHƯA mở app. Khi login/refresh, auth áp grant
 /// cao nhất còn hiệu lực nếu cao hơn role hiện tại. Chỉ quản STAFF/ADMIN (CTV/đại lý đi DealerApplication).
 model RoleGrant {
-  id        String        @id @default(cuid())
-  phone     String
-  role      RoleGrantRole
-  grantedBy String // adminId, hoặc "seed" cho admin gán sẵn ban đầu
-  note      String?
-  revokedAt DateTime? // null = còn hiệu lực
+  id               String        @id @default(cuid())
+  phone            String
+  role             RoleGrantRole
+  grantedBy        String // adminId, hoặc "seed" cho admin gán sẵn ban đầu
+  note             String?
+  revokedAt        DateTime? // null = còn hiệu lực
+  /// Hạn của lời mời chưa áp (SĐT chưa có tài khoản); null = đã áp hoặc không có hạn. applyGrants bỏ qua lời mời quá hạn.
+  expiresAt        DateTime?
   /// Nhóm việc (common/staff-permissions.ts) chép sang User.staffPermissions khi lời mời được áp; chỉ có nghĩa với role STAFF.
-  staffPermissions String[] @default([])
-  createdAt DateTime      @default(now())
+  staffPermissions String[]      @default([])
+  createdAt        DateTime      @default(now())
 
   // Chống race ở RbacService.addGrant() (findFirst rồi create, 2 request cấp quyền đồng thời cho
   // CÙNG SĐT+role có thể tạo 2 grant active trùng): partial unique index
@@ -343,7 +345,7 @@ model User {
 model UserAdminEvent {
   id        String   @id @default(cuid())
   userId    String
-  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK
+  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK | STOREFRONT_PARTNER | WALLET_FORFEIT | COMMISSION_FORFEIT | AFFILIATE_REVOKE | SESSIONS_REVOKED
   kind      String
   fromValue String?
   toValue   String?
@@ -356,6 +358,37 @@ model UserAdminEvent {
   @@map("user_admin_events")
 }
 
+/// Nhật ký xuất file CSV của admin/nhân sự: ai xuất gì, với bộ lọc nào, bao nhiêu dòng. Chỉ thêm, không sửa.
+model AdminExportLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  /// Đường dẫn route xuất, ví dụ "orders/export", "exports/tax".
+  route     String
+  /// Bộ lọc đã dùng (đã cắt bỏ giá trị rỗng).
+  filters   Json
+  rowCount  Int
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("admin_export_logs")
+}
+
+/// Lịch sử đổi % hoa hồng CTV của biến thể (Variation.affiliateRate): ai đổi từ bao nhiêu sang bao nhiêu. NULL = mức mặc định.
+/// Chỉ thêm, ghi cùng giao dịch với lần đổi % (đặt tay, theo sản phẩm, áp hàng loạt, nhập CSV).
+model CommissionRateHistory {
+  id          String   @id @default(cuid())
+  variationId String
+  fromPct     Decimal?
+  toPct       Decimal?
+  actorId     String
+  createdAt   DateTime @default(now())
+
+  @@index([variationId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("commission_rate_history")
+}
+
 // Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.
 model RefreshToken {
   id        String    @id @default(cuid())
@@ -366,9 +399,12 @@ model RefreshToken {
   revokedAt DateTime?
   // Thu hồi vì đã xoay sang token mới (khác logout/khoá). Chỉ token xoay mới được dùng lại trong khoảng ân hạn.
   rotatedAt DateTime?
+  /// Token cha đã xoay ra token này: logout thu hồi theo họ để token vừa xoay không mở lại phiên trong khoảng ân hạn.
+  parentId  String?
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([parentId])
   // Thống kê DAU theo ngày tạo token (analytics-aggregation.service.ts).
   @@index([createdAt])
   // data-retention xoá theo (revokedAt < cutoff OR expiresAt < cutoff). "refresh_tokens_revokedAt_idx" ("revokedAt") WHERE
@@ -746,15 +782,15 @@ model DealerRewardClaim {
 }
 
 model ReferralTouch {
-  id             String   @id @default(cuid())
-  userId         String   @unique // khách đã đăng nhập
+  id             String    @id @default(cuid())
+  userId         String    @unique // khách đã đăng nhập
   referrerUserId String // CTV được công (đã resolve từ referralCode lúc ghi)
   storefrontSlug String? // chỉ set khi đến từ gian hàng CTV (kind=ctv); brand → null
-  kind           String   @default("ctv") // ctv | brand
+  kind           String    @default("ctv") // ctv | brand
   expiresAt      DateTime // clickedAt + config(affiliate.attribution_days, mặc định 7 ngày)
   clickedAt      DateTime? // lúc khách bấm link; null ở dòng ghi trước khi có cột
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([expiresAt])
   @@map("referral_touches")
@@ -1688,21 +1724,21 @@ model Commission {
 // @@unique(userId, milestoneId, monthKey) là khoá idempotency: 2 request claim đồng thời → request
 // thua ăn P2002 trên insert → rollback cả tx cấp xu → không bao giờ cộng 2 lần.
 model CtvMilestoneClaim {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
   milestoneId  String // id trong CTV_MONTHLY_MILESTONES (vd 'milestone-3m')
   monthKey     String // 'YYYY-MM' theo giờ VN
   rewardXu     Int
-  rewardPoints Int      @default(0) // PD-3: thưởng mốc bằng Điểm Xanh (lượt L2 ghi)
+  rewardPoints Int       @default(0) // PD-3: thưởng mốc bằng Điểm Xanh (lượt L2 ghi)
   revenue      BigInt // doanh số đã chốt tại lúc nhận (đối soát)
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   // CTV-01: đảo hoa hồng làm doanh số tháng rơi dưới ngưỡng thì thu hồi điểm mốc (revokedAt đặt, revokeCount tăng); doanh số lên
   // lại thì nhận lại trên cùng dòng này (revokedAt về null). revokeDebt = phần điểm không thu được vì số dư thiếu, trừ vào lần nhận lại.
   revokedAt    DateTime?
-  revokeCount  Int      @default(0)
-  revokeDebt   Int      @default(0)
-  revokeTaken  Int      @default(0) // điểm thực trừ khỏi số dư ở lần thu hồi gần nhất
+  revokeCount  Int       @default(0)
+  revokeDebt   Int       @default(0)
+  revokeTaken  Int       @default(0) // điểm thực trừ khỏi số dư ở lần thu hồi gần nhất
 
   @@unique([userId, milestoneId, monthKey])
   @@map("ctv_milestone_claims")
@@ -2033,19 +2069,25 @@ enum CashbackStatus {
 }
 
 model CashbackTransaction {
-  id              String         @id @default(cuid())
-  userId          String
-  user            User           @relation(fields: [userId], references: [id])
-  clickId         String?
-  provider        String         @default("accesstrade")
-  merchantOrderId String
-  orderAmount     Int
-  commission      Int
-  userReward      Int
-  status          CashbackStatus @default(PENDING)
-  postbackPayload Json
-  confirmedAt     DateTime?
-  paidAt          DateTime?
+  id                 String         @id @default(cuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [id])
+  clickId            String?
+  provider           String         @default("accesstrade")
+  merchantOrderId    String
+  orderAmount        Int
+  commission         Int
+  userReward         Int
+  status             CashbackStatus @default(PENDING)
+  postbackPayload    Json
+  confirmedAt        DateTime?
+  paidAt             DateTime?
+  // Quyết định tay của Kế toán/ADMIN: sự kiện của sàn (postback, đối soát) không ghi đè dòng đã có dấu này.
+  adminReviewedAt    DateTime?
+  adminReviewedBy    String?
+  // Sàn báo khác quyết định của Kế toán hoặc báo "rejected" sau khi đã PAID: báo ADMIN đúng một lần mỗi dòng, giữ payload để đối chiếu.
+  conflictNotifiedAt DateTime?
+  conflictPayload    Json?
 
   @@unique([provider, merchantOrderId])
   @@index([userId, status])
@@ -2243,17 +2285,17 @@ model GameProfile {
 /// Sổ các lần cộng nước có nguồn ngoài game (hiện chỉ `ORDER_DELIVERED`, refId = id đơn). Unique (reason, refId) là khoá chống
 /// cộng hai lần cho một đơn; cộng delta theo tuần giờ VN để áp trần tuần.
 model GameWaterEvent {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   delta     Int
   reason    String
   refId     String?
   /// Đơn giao khi khách chưa có hồ sơ game: delta 0 và chờ tới lần mở game đầu tiên (cộng nếu giao trong `game.order_seeds_pending_days` ngày).
-  pending   Boolean  @default(false)
+  pending   Boolean   @default(false)
   /// Đơn chờ quá hạn khi khách mở game: không cộng, giữ dòng để đối soát.
   expiredAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@unique([reason, refId])
   @@index([userId, createdAt])
@@ -2948,14 +2990,14 @@ model GameQuizAttempt {
 }
 
 model Mission {
-  id           String  @id
-  code         String  @unique
+  id           String    @id
+  code         String    @unique
   title        String
   description  String
   rewardPoints Int
   rewardCoupon String?
-  goal         Int     @default(1)
-  isRepeatable Boolean @default(false)
+  goal         Int       @default(1)
+  isRepeatable Boolean   @default(false)
   /// Cách chấm tiến độ (common/mission-kinds.ts). NULL = suy từ `code` (4 nhiệm vụ seed).
   kind         String?
   /// Có giá trị = nhiệm vụ đang tạm dừng: không hiện cho khách, không nhận thưởng được.
@@ -2990,23 +3032,23 @@ model MissionProgress {
 // ============================================================
 
 model Review {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  productId    String
-  product      Product  @relation(fields: [productId], references: [id])
-  orderId      String
-  rating       Int
-  comment      String?
-  images       String[]
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  orderId       String
+  rating        Int
+  comment       String?
+  images        String[]
   // Phần tử tương ứng của images: mã md5 10 ký tự hex cho ảnh bắt đầu bằng "data:", chính chuỗi đó cho ảnh khác (URL). Danh sách
   // công khai đọc cột này thay vì images (base64 nặng). Do trigger reviews_image_versions_sync giữ theo images (đừng ghi tay).
   imageVersions String[] @default([])
-  videoUrl     String? // review video (UGC §6.14.9)
-  pointsEarned Int      @default(0)
-  isVerified   Boolean  @default(true)
-  isVisible    Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  videoUrl      String? // review video (UGC §6.14.9)
+  pointsEarned  Int      @default(0)
+  isVerified    Boolean  @default(true)
+  isVisible     Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
   // Một đánh giá cho mỗi lần mua (đơn) của sản phẩm. Thứ tự cột để các truy vấn theo (khách, sản phẩm) vẫn dùng tiền tố chỉ mục.
   @@unique([userId, productId, orderId])
@@ -3514,37 +3556,37 @@ model ExternalOrder {
 /// Điểm chờ của một đơn ngoài (bước 2/3, chưa ghi dòng nào ở bước 1). Chỉ khi tới hạn mới ghi ĐÚNG một dòng vào
 /// points_transactions. Partial unique SQL: "external_points_claims_code_key" ON ("claimedCode") WHERE "claimedCode" IS NOT NULL.
 model ExternalPointsClaim {
-  id              String             @id @default(cuid())
-  externalOrderId String             @unique
-  externalOrder   ExternalOrder      @relation(fields: [externalOrderId], references: [id])
-  userId          String?
-  kind            ExternalClaimKind
-  state           ExternalClaimState @default(PENDING)
-  ratePct         Decimal            @db.Decimal(6, 4)
-  multiplier      Decimal            @db.Decimal(6, 3)
-  points          Int                @default(0)
-  countsForTier   Boolean            @default(false)
-  claimedCode     String?
-  releaseAt       DateTime?
-  holdUntil       DateTime?
-  creditedAt      DateTime?
-  pointsTxId      String?
-  voidReason      String?
-  reviewReason    String?
-  decidedById     String?
+  id                 String             @id @default(cuid())
+  externalOrderId    String             @unique
+  externalOrder      ExternalOrder      @relation(fields: [externalOrderId], references: [id])
+  userId             String?
+  kind               ExternalClaimKind
+  state              ExternalClaimState @default(PENDING)
+  ratePct            Decimal            @db.Decimal(6, 4)
+  multiplier         Decimal            @db.Decimal(6, 3)
+  points             Int                @default(0)
+  countsForTier      Boolean            @default(false)
+  claimedCode        String?
+  releaseAt          DateTime?
+  holdUntil          DateTime?
+  creditedAt         DateTime?
+  pointsTxId         String?
+  voidReason         String?
+  reviewReason       String?
+  decidedById        String?
   /// Claim PHONE: SĐT trên đơn LÚC TẠO claim. Liên kết và trần tháng theo SĐT dùng cột này, không dùng `external_orders.phone` (nhân viên sửa được).
   /// Xoá về null cùng luật retention với `external_orders.phone`.
-  orderPhone      String?
+  orderPhone         String?
   /// Claim PHONE: id nhân viên tạo đơn trên Pancake (payload `creator.id`), để áp trần điểm tự cộng theo người tạo.
-  creatorRef      String?
+  creatorRef         String?
   /// Claim PHONE: tiền hàng của đơn ở lần kiểm gần nhất (tạo, liên kết, duyệt); releaseClaim chuyển REVIEW khi tiền hàng hiện tại lớn hơn số này.
   /// Lúc cộng ghi lại đúng tiền hàng đã cộng, nên với claim CREDITED chi tiêu 12 tháng xét hạng dùng số này, sửa đơn về sau không làm hạng nhảy.
   /// Claim SCAN: chỉ ghi lúc duyệt (tiền hàng người kiểm đã thấy), không ghi lại lúc cộng; releaseClaim cộng đúng số điểm đã chốt khi tiền hàng không vượt số này.
   creditedGoodsValue Int?
   /// Ngày VN 'YYYY-MM-DD' lúc tạo claim, để đếm trần ngày.
-  dayKey          String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  dayKey             String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@index([orderPhone])
   @@index([creatorRef, createdAt])

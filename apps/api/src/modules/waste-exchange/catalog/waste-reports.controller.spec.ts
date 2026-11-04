@@ -18,7 +18,7 @@ async function errorKeys<T extends object>(cls: new () => T, plain: Record<strin
 describe('WasteReportsController', () => {
   const proto = WasteReportsController.prototype;
   const reports = { overview: jest.fn(), csv: jest.fn(), adminPointReport: jest.fn(), pointReport: jest.fn() };
-  const prisma = {};
+  const prisma = { adminExportLog: { create: jest.fn() } };
   const controller = new WasteReportsController(reports as never, prisma as never);
 
   beforeEach(() => {
@@ -76,5 +76,17 @@ describe('WasteReportsController', () => {
     expect(assertActiveAdmin).toHaveBeenCalledWith(prisma, 'a1');
     expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="doi-rac-2026-10.csv"');
     expect(result).toBe('csv-text');
+  });
+
+  it('monthlyCsv ghi nhật ký xuất (người xuất, tháng, số dòng không tính tiêu đề); lỗi ghi không chặn file', async () => {
+    reports.csv.mockResolvedValue('a,b\r\n1,2\r\n3,4\r\n');
+    prisma.adminExportLog.create.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('db down'));
+    const res = { setHeader: jest.fn() };
+
+    await controller.monthlyCsv('a1', { month: '2026-10' }, res as never);
+    expect(prisma.adminExportLog.create).toHaveBeenCalledWith({
+      data: { actorId: 'a1', route: 'admin/waste/reports/monthly', filters: { month: '2026-10' }, rowCount: 2 },
+    });
+    await expect(controller.monthlyCsv('a1', { month: '2026-10' }, res as never)).resolves.toBe('a,b\r\n1,2\r\n3,4\r\n');
   });
 });

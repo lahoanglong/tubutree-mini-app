@@ -71,8 +71,8 @@ describe('Cổng người bán cho chủ CUSTOMER còn phiếu đối soát (rea
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
-    await app.listen(0);
-    base = (await app.getUrl()).replace('[::1]', 'localhost');
+    await app.listen(0, '127.0.0.1');
+    base = (await app.getUrl());
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     await setConfig(prisma, 'merchant.settlement_hold_days', 1);

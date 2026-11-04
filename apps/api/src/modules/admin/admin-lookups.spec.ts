@@ -275,7 +275,7 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     expect(admin.listReviews).toHaveBeenCalledWith(2, 10, 'hidden', 1);
     await ctl.subscriptions(Object.assign(new ListSubscriptionsQuery(), { page: 1, limit: 20, status: 'PAUSED' }));
     expect(admin.listSubscriptions).toHaveBeenCalledWith(1, 20, 'PAUSED');
-    await ctl.users(Object.assign(new ListUsersQuery(), { page: 1, limit: 8, search: '090' }));
+    await ctl.users(Object.assign(new ListUsersQuery(), { page: 1, limit: 8, search: '090' }), { sub: 'a1', role: 'ADMIN' } as never);
     expect(admin.listUsers).toHaveBeenCalledWith(1, 8, '090', false);
   });
 

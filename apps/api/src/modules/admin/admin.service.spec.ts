@@ -1,3 +1,5 @@
+jest.mock('../affiliate/ctv-milestone-revoke', () => ({ revokeLostCtvMilestones: jest.fn().mockResolvedValue([]) }));
+import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
 import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { OrderReversalService } from '../orders/order-reversal.service';
@@ -545,6 +547,19 @@ describe('AdminService.setStaffPermissions', () => {
   });
 });
 
+describe('AdminService.setStaffPermissions — lý do (L1-08)', () => {
+  it('ghi lý do admin vào dòng STAFF_PERMISSIONS', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const tx = { user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, userAdminEvent: { create } };
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ role: 'STAFF', staffPermissions: [] }) },
+      $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
+    });
+    await mkAdmin(prisma).setStaffPermissions('admin1', 'u1', ['KHO'], 'Chuyển sang kho');
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: 'STAFF_PERMISSIONS', reason: 'Chuyển sang kho', actorId: 'admin1' }) });
+  });
+});
+
 describe('AdminService.setUserRole', () => {
   it('SĐT không tồn tại → NotFound (không tự tạo user như script SSH cũ)', async () => {
     const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });
@@ -563,7 +578,7 @@ describe('AdminService.setUserRole', () => {
       (rbac.revokeGrantsAbove as jest.Mock).mockClear();
       await mkAdmin(prisma).setUserRole('admin1', typed, 'STAFF');
       expect(findUnique).toHaveBeenCalledWith({ where: { phone: '0899625240' } });
-      expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'STAFF');
+      expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'STAFF', expect.anything());
     },
   );
 
@@ -598,7 +613,7 @@ describe('AdminService.setUserRole', () => {
       user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(3) },
     });
     await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
-    expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'CUSTOMER');
+    expect(rbac.revokeGrantsAbove).toHaveBeenCalledWith('0899625240', 'CUSTOMER', expect.anything());
   });
 
   describe('gian hàng đối tác của chủ khi đổi vai trò (luật B)', () => {
@@ -736,14 +751,41 @@ describe('AdminService.setUserRole', () => {
     expect(order).toEqual(['lock', 'read', 'count', 'update']);
   });
 
-  it('rbac.revokeGrantsAbove lỗi → vẫn trả kết quả đổi role thành công (best-effort, không rollback role)', async () => {
+  it('L1-02: thu hồi grant chạy trong cùng giao dịch, sau khoá danh sách admin, bằng đúng tx đó', async () => {
+    const order: string[] = [];
+    const prisma = makePrisma({
+      $executeRaw: jest.fn(async () => {
+        order.push('lock');
+        return 0;
+      }),
+      user: {
+        findUnique: jest.fn(async () => ({ id: 'u1', phone: '0899625240', role: 'ADMIN' })),
+        update: jest.fn(async () => {
+          order.push('update');
+          return { id: 'u1', phone: '0899625240', role: 'CUSTOMER', fullName: 'X' };
+        }),
+        count: jest.fn().mockResolvedValue(3),
+      },
+    });
+    (rbac.revokeGrantsAbove as jest.Mock).mockClear().mockImplementationOnce(async (_p: string, _r: string, db: unknown) => {
+      order.push(db === prisma ? 'revoke-in-tx' : 'revoke-outside');
+      return 1;
+    });
+    await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+    expect(order[0]).toBe('lock');
+    expect(order).toContain('revoke-in-tx');
+    expect(order).not.toContain('revoke-outside');
+    expect(order.indexOf('revoke-in-tx')).toBeGreaterThan(order.indexOf('lock'));
+  });
+
+  it('L1-02: thu hồi grant lỗi → ném lỗi và role không đổi (giao dịch rollback), không nuốt', async () => {
     const update = jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'CUSTOMER', fullName: 'X' });
     const prisma = makePrisma({
       user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0899625240', role: 'ADMIN' }), update, count: jest.fn().mockResolvedValue(3) },
     });
     (rbac.revokeGrantsAbove as jest.Mock).mockRejectedValueOnce(new Error('db down'));
-    const out = await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
-    expect(out.role).toBe('CUSTOMER');
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER')).rejects.toThrow('db down');
+    expect(update).not.toHaveBeenCalled();
   });
 
   // C-008 (A5N-03, Q-07): cấp DEALER thẳng qua đây trước đây không gán bậc → dealerContext trả tier null
@@ -2483,6 +2525,194 @@ describe('AdminService.listLinkedMerchantProducts — lọc liên kết ký gử
  * tổng đơn về ví mà KHÔNG nhìn thấy số tiền mình đang hoàn.
  */
 /** Hàng đợi chờ duyệt (PENDING / REQUESTED) cần xem CŨ NHẤT trước — web gửi order=asc. */
+describe('AdminService.forfeitRevokedCommissions', () => {
+  function forfeitPrisma(opts: { rows?: { id: string; amount: number; approvedAt?: Date | null }[]; user?: { affiliateRevokedAt: Date | null } | null; updateCount?: number }) {
+    const rows = opts.rows ?? [{ id: 'c1', amount: 60_000 }, { id: 'c2', amount: 40_000 }];
+    const queries: string[] = [];
+    const updateMany = jest.fn().mockResolvedValue({ count: opts.updateCount ?? rows.length });
+    const eventCreate = jest.fn().mockResolvedValue({});
+    const tx = {
+      $queryRaw: jest.fn(async (strings: TemplateStringsArray) => {
+        const text = strings.join('?');
+        queries.push(text.includes('"commissions"') ? 'commissions' : text.includes('"users"') ? 'users' : 'other');
+        if (text.includes('"commissions"')) return rows;
+        return opts.user === undefined ? [{ affiliateRevokedAt: new Date('2026-10-01T00:00:00Z') }] : opts.user ? [opts.user] : [];
+      }),
+      commission: { updateMany },
+      userAdminEvent: { create: eventCreate },
+    };
+    const prisma = makePrisma({ $transaction: jest.fn((cb: (t: unknown) => Promise<unknown>) => cb(tx)) });
+    return { prisma, queries, updateMany, eventCreate };
+  }
+
+  it('thu hồi mốc thưởng tháng của CTV cho mỗi tháng có hoa hồng bị huỷ (một lần mỗi tháng), cùng giao dịch', async () => {
+    const revoke = revokeLostCtvMilestones as jest.Mock;
+    revoke.mockClear();
+    const oct = new Date('2026-10-05T03:00:00Z');
+    const t = forfeitPrisma({ rows: [{ id: 'c1', amount: 1, approvedAt: oct }, { id: 'c2', amount: 2, approvedAt: new Date('2026-10-20T03:00:00Z') }, { id: 'c3', amount: 3, approvedAt: new Date('2026-09-20T03:00:00Z') }, { id: 'c4', amount: 4, approvedAt: null }] });
+    await mkAdmin(t.prisma).forfeitRevokedCommissions('admin1', 'u1', 'Quyết định của quản lý');
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(revoke.mock.calls.map((c) => c[1])).toEqual(['u1', 'u1']);
+    expect(t.updateMany.mock.invocationCallOrder[0]).toBeLessThan(revoke.mock.invocationCallOrder[0]!);
+  });
+
+  it('khoá hoa hồng trước rồi tới dòng người dùng (cùng thứ tự với requestPayout), huỷ mọi khoản, ghi COMMISSION_FORFEIT kèm lý do', async () => {
+    const t = forfeitPrisma({});
+    const out = await mkAdmin(t.prisma).forfeitRevokedCommissions('admin1', 'u1', '  Đã thu hồi quyền, huỷ theo quyết định  ');
+    expect(out).toEqual({ cancelled: 2, amount: 100_000 });
+    expect(t.queries).toEqual(['commissions', 'users']);
+    expect(t.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['c1', 'c2'] }, status: 'APPROVED', payoutBatchId: null }, data: { status: 'REJECTED' } });
+    expect(t.eventCreate.mock.calls[0][0].data).toMatchObject({
+      userId: 'u1',
+      kind: 'COMMISSION_FORFEIT',
+      fromValue: '100000',
+      toValue: '0',
+      actorId: 'admin1',
+    });
+    expect(t.eventCreate.mock.calls[0][0].data.reason).toContain('Đã thu hồi quyền, huỷ theo quyết định');
+  });
+
+  it('người không có dấu thu hồi → 409, không đụng hoa hồng', async () => {
+    const t = forfeitPrisma({ user: { affiliateRevokedAt: null } });
+    await expect(mkAdmin(t.prisma).forfeitRevokedCommissions('admin1', 'u1', 'lý do hợp lệ')).rejects.toBeInstanceOf(ConflictException);
+    expect(t.updateMany).not.toHaveBeenCalled();
+    expect(t.eventCreate).not.toHaveBeenCalled();
+  });
+
+  it('không còn hoa hồng chờ rút (bên kia thắng trước) → 409; người không tồn tại → 404', async () => {
+    await expect(mkAdmin(forfeitPrisma({ rows: [] }).prisma).forfeitRevokedCommissions('admin1', 'u1', 'lý do hợp lệ')).rejects.toBeInstanceOf(ConflictException);
+    await expect(mkAdmin(forfeitPrisma({ user: null }).prisma).forfeitRevokedCommissions('admin1', 'u1', 'lý do hợp lệ')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('lý do trống hoặc dưới 3 ký tự → 400 trước khi mở giao dịch', async () => {
+    const t = forfeitPrisma({});
+    await expect(mkAdmin(t.prisma).forfeitRevokedCommissions('admin1', 'u1', '  a ')).rejects.toBeInstanceOf(BadRequestException);
+    expect(t.prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminService.getUserDetail — dấu thu hồi CTV', () => {
+  it.each([[new Date('2026-10-01T00:00:00Z')], [null]])('trả affiliateRevokedAt %p và đọc nó từ DB', async (mark) => {
+    const userFindUnique = jest.fn().mockResolvedValue({ id: 'u1', phone: null, affiliateRevokedAt: mark });
+    const aggregate = { aggregate: jest.fn().mockResolvedValue({ _count: { _all: 2 }, _sum: { amount: 100_000 } }) };
+    const prisma = makePrisma({
+      user: { findUnique: userFindUnique, findMany: jest.fn().mockResolvedValue([]) },
+      order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      userAdminEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      roleGrant: { findMany: jest.fn().mockResolvedValue([]) },
+      commission: aggregate,
+    });
+    const out = await mkAdmin(prisma).getUserDetail('u1');
+    expect(userFindUnique.mock.calls[0][0].select.affiliateRevokedAt).toBe(true);
+    expect(out.user.affiliateRevokedAt).toEqual(mark);
+    expect(out.forfeitableCommission).toEqual(mark ? { count: 2, amount: 100_000 } : null);
+    expect(aggregate.aggregate).toHaveBeenCalledTimes(mark ? 1 : 0);
+  });
+});
+
+describe('AdminService.getUserDetail — lịch sử vai trò và khoá', () => {
+  const at = (n: number) => new Date(Date.UTC(2026, 10, 1, 0, n));
+  const ev = (id: string, kind: string, n: number, actorId: string | null = null) => ({ id, kind, actorId, createdAt: at(n) });
+  function setup(common: unknown[], sessions: unknown[]) {
+    const findMany = jest.fn().mockImplementation(({ where }: { where: { kind: unknown } }) => {
+      if (where.kind === 'SESSIONS_REVOKED') return Promise.resolve(sessions);
+      if (where.kind === 'STOREFRONT_PARTNER') return Promise.resolve([]);
+      return Promise.resolve(common);
+    });
+    const prisma = makePrisma({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: null, affiliateRevokedAt: null }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'a1', fullName: 'Admin', phone: null }]),
+      },
+      order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      userAdminEvent: { findMany },
+      roleGrant: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    return { prisma, findMany };
+  }
+
+  it('dòng cắt phiên lấy riêng 20 dòng: 100 dòng mới nhất không đẩy mất BLOCK / AFFILIATE_REVOKE cũ, blockHistory gộp sắp giảm dần', async () => {
+    const sessions = Array.from({ length: 20 }, (_, i) => ev(`s${i}`, 'SESSIONS_REVOKED', 100 - i, 'a1'));
+    const common = [ev('b1', 'BLOCK', 5, 'a1'), ev('r1', 'AFFILIATE_REVOKE', 4), ev('u1e', 'UNBLOCK', 2)];
+    const { prisma, findMany } = setup(common, sessions);
+    const out = await mkAdmin(prisma).getUserDetail('u1');
+    const commonWhere = findMany.mock.calls.map((c) => c[0]).find((a) => typeof a.where.kind === 'object' && 'in' in a.where.kind);
+    expect(commonWhere.where.kind.in).not.toContain('SESSIONS_REVOKED');
+    expect(commonWhere.take).toBe(100);
+    const sessCall = findMany.mock.calls.map((c) => c[0]).find((a) => a.where.kind === 'SESSIONS_REVOKED');
+    expect(sessCall).toMatchObject({ where: { userId: 'u1', kind: 'SESSIONS_REVOKED' }, orderBy: { createdAt: 'desc' }, take: 20 });
+    expect(out.blockHistory.map((e) => e.id)).toEqual([...sessions.map((e) => e.id), 'b1', 'u1e']);
+    expect(out.roleHistory.map((e) => e.id)).toEqual(['r1']);
+    expect(out.blockHistory[0]!.actorName).toBe('Admin');
+  });
+
+  it('COMMISSION_FORFEIT vào roleHistory, WALLET_FORFEIT vào blockHistory', async () => {
+    const common = [ev('cf', 'COMMISSION_FORFEIT', 9), ev('wf', 'WALLET_FORFEIT', 8), ev('ro', 'ROLE', 7), ev('sp', 'STAFF_PERMISSIONS', 6)];
+    const { prisma, findMany } = setup(common, []);
+    const out = await mkAdmin(prisma).getUserDetail('u1');
+    const kinds = findMany.mock.calls.map((c) => c[0].where.kind).find((k) => typeof k === 'object').in;
+    expect(kinds).toEqual(expect.arrayContaining(['COMMISSION_FORFEIT', 'WALLET_FORFEIT']));
+    expect(out.roleHistory.map((e) => e.id)).toEqual(['cf', 'ro', 'sp']);
+    expect(out.blockHistory.map((e) => e.id)).toEqual(['wf']);
+  });
+});
+
+describe('AdminService.recordExport — nhật ký xuất CSV (L1-07)', () => {
+  it('ghi người xuất, route, bộ lọc đã bỏ giá trị rỗng, số dòng', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({ adminExportLog: { create } });
+    await mkAdmin(prisma).recordExport('a1', 'orders/export', { kind: 'ctv', payment: '', from: undefined, to: null, search: '0901' }, 12);
+    expect(create).toHaveBeenCalledWith({
+      data: { actorId: 'a1', route: 'orders/export', filters: { kind: 'ctv', search: '0901' }, rowCount: 12 },
+    });
+  });
+
+  it('lỗi DB khi ghi nhật ký không ném ra ngoài (file đã gửi xong)', async () => {
+    const prisma = makePrisma({ adminExportLog: { create: jest.fn().mockRejectedValue(new Error('db')) } });
+    await expect(mkAdmin(prisma).recordExport('a1', 'users/export', {}, 0)).resolves.toBeUndefined();
+  });
+
+  it('getUserDetail: withExports → 20 lần xuất gần nhất của người đó; mặc định không đọc bảng', async () => {
+    const exportsFind = jest.fn().mockResolvedValue([{ id: 'x1', route: 'exports/tax', filters: {}, rowCount: 3, createdAt: new Date() }]);
+    const mk = () =>
+      makePrisma({
+        user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: null, affiliateRevokedAt: null }), findMany: jest.fn().mockResolvedValue([]) },
+        order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+        walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+        userAdminEvent: { findMany: jest.fn().mockResolvedValue([]) },
+        roleGrant: { findMany: jest.fn().mockResolvedValue([]) },
+        adminExportLog: { findMany: exportsFind },
+      });
+    const without = await mkAdmin(mk()).getUserDetail('u1');
+    expect(exportsFind).not.toHaveBeenCalled();
+    expect(without.recentExports).toBeNull();
+    const withIt = await mkAdmin(mk()).getUserDetail('u1', undefined, { withExports: true });
+    expect(exportsFind).toHaveBeenCalledWith(expect.objectContaining({ where: { actorId: 'u1' }, take: 20, orderBy: { createdAt: 'desc' } }));
+    expect(withIt.recentExports).toHaveLength(1);
+  });
+});
+
+describe('AdminService.getUserDetail — hạn của lời mời quyền', () => {
+  it('select grant có expiresAt để drawer báo "đã hết hạn"', async () => {
+    const grantFind = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0900000001', affiliateRevokedAt: null }), findMany: jest.fn().mockResolvedValue([]) },
+      order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      userAdminEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      roleGrant: { findMany: grantFind },
+    });
+    await mkAdmin(prisma).getUserDetail('u1');
+    expect(grantFind).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ expiresAt: true, revokedAt: true }) }));
+  });
+});
+
 describe('AdminService.listDealerApplications — thứ tự createdAt theo tham số order', () => {
   function daPrisma() {
     const findMany = jest.fn().mockResolvedValue([]);
@@ -2509,9 +2739,22 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
     expect(Object.keys(select)).not.toEqual(expect.arrayContaining(['cccdFrontUrl']));
     for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(select[col]).toBeUndefined();
     expect(out.data).toEqual([
-      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
-      { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false, applicantAffiliateRevoked: false },
+      { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true, applicantAffiliateRevoked: false },
     ]);
+  });
+
+  it('applicantAffiliateRevoked: true chỉ cho người nộp hồ sơ có dấu thu hồi CTV', async () => {
+    const userFindMany = jest.fn().mockResolvedValue([{ id: 'u1', affiliateRevokedAt: new Date('2026-10-01T00:00:00Z') }]);
+    const prisma = makePrisma({
+      dealerApplication: { findMany: jest.fn().mockResolvedValue([{ id: 'a1', userId: 'u1' }, { id: 'a2', userId: 'u2' }]), count: jest.fn().mockResolvedValue(2) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      user: { findMany: userFindMany },
+    });
+    const out = await mkAdmin(prisma).listDealerApplications(undefined, 1, 20);
+    expect(out.data.map((a) => [a.id, a.applicantAffiliateRevoked])).toEqual([['a1', true], ['a2', false]]);
+    expect(userFindMany.mock.calls[0][0].where).toEqual({ id: { in: ['u1', 'u2'] }, affiliateRevokedAt: { not: null } });
   });
 
   describe('dealerApplicationImage', () => {
