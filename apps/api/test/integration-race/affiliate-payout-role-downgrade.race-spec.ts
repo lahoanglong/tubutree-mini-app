@@ -274,4 +274,38 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     });
     expect(Object.fromEntries(marks)).toEqual({ [onlyCommission.id]: false, [demoted.id]: true });
   });
+
+  it('m2 backfill: đại lý từng bị hạ về khách rồi về lại DEALER qua nhân viên (trạng thái trước deploy) bị đặt dấu; đại lý được admin đặt lại tường minh thì không', async () => {
+    const boss = await createUser(prisma, { role: 'ADMIN' });
+    const { admin, rbac } = adminServices();
+    const app = (userId: string, phone: string) =>
+      prisma.dealerApplication.create({ data: { userId, status: 'APPROVED', businessName: 'IT', ownerName: 'IT', phone, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' } });
+    const tier = await prisma.dealerTier.create({ data: { id: `tier-${randCode(6)}`, name: 'T', minOrderVolume: 0, discountRules: {} } });
+    const dealerUser = async () => {
+      const phone = newPhone();
+      const u = await createUser(prisma, { role: 'DEALER', phone });
+      await app(u.id, phone);
+      return { u, phone };
+    };
+
+    const viaStaff = await dealerUser();
+    await admin.setUserRole(boss.id, viaStaff.phone, 'CUSTOMER');
+    await rbac.addGrant(boss.id, viaStaff.phone, 'STAFF');
+    await rbac.revokeGrant(boss.id, viaStaff.phone);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: viaStaff.u.id } })).role).toBe('DEALER');
+    await prisma.user.update({ where: { id: viaStaff.u.id }, data: { affiliateRevokedAt: null } });
+
+    const reinstated = await dealerUser();
+    await admin.setUserRole(boss.id, reinstated.phone, 'CUSTOMER');
+    await admin.setUserRole(boss.id, reinstated.phone, 'DEALER', tier.id);
+    await prisma.user.update({ where: { id: reinstated.u.id }, data: { affiliateRevokedAt: null } });
+
+    const healthy = await dealerUser();
+
+    const marks = await rolledBack(async (tx) => {
+      await tx.$executeRawUnsafe(BACKFILL_SQL);
+      return (await tx.user.findMany({ where: { id: { in: [viaStaff.u.id, reinstated.u.id, healthy.u.id] } }, select: { id: true, affiliateRevokedAt: true } })).map((u) => [u.id, u.affiliateRevokedAt !== null] as const);
+    });
+    expect(Object.fromEntries(marks)).toEqual({ [viaStaff.u.id]: true, [reinstated.u.id]: false, [healthy.u.id]: false });
+  });
 });
