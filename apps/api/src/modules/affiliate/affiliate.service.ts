@@ -141,6 +141,8 @@ function parseClickedAgo(raw: unknown, maxMs: number): number | null {
   return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? Math.min(raw, maxMs) : null;
 }
 
+const AFFILIATE_REVOKED_MESSAGE = 'Tài khoản đã bị thu hồi quyền CTV. Liên hệ CSKH nếu cần mở lại.';
+
 @Injectable()
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
@@ -168,6 +170,7 @@ export class AffiliateService {
     if (!canRegisterAsAffiliate(user.role)) {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
+    if (user.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
     // Khách theo deviceId tạo được vô hạn: hoa hồng và Ví chỉ dành cho tài khoản đã có Zalo thật hoặc SĐT.
     if (!isRealUser(user)) throw new BadRequestException(AFFILIATE_REAL_USER_REQUIRED_MSG);
     const data: Prisma.UserUpdateInput = {};
@@ -201,7 +204,7 @@ export class AffiliateService {
 
     return {
       isAffiliate: access.hasAccess,
-      canRegister: canRegisterAsAffiliate(user.role),
+      canRegister: canRegisterAsAffiliate(user.role) && !user.affiliateRevokedAt,
       canOrderForCustomer: canPlaceOrderForCustomer(user.role),
       canOpenStorefront: access.canOpenStorefront,
       referralCode: user.referralCode,
@@ -337,12 +340,19 @@ export class AffiliateService {
     return { referrerUserId: t.referrerUserId, storefrontSlug: t.storefrontSlug, kind: t.kind };
   }
 
-  /** Chặn người đã mất quyền CTV (bị hạ về khách): công cụ CTV chỉ mở cho người còn quyền, kể cả ngoại lệ đại lý còn dấu vết hoa hồng. */
+  /** createLink: công cụ CTV chỉ mở cho người còn quyền (kể cả ngoại lệ đại lý còn dấu vết hoa hồng) và chưa bị thu hồi. */
   private async assertAffiliateAccess(db: Parameters<typeof affiliateAccess>[0] & Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<void> {
-    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
+    const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, role: true, affiliateRevokedAt: true } });
+    if (user?.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
     if (!user || !(await affiliateAccess(db, user)).hasAccess) {
       throw new ForbiddenException('Tài khoản của bạn không còn quyền Cộng tác viên nên không dùng được chức năng này. Vui lòng liên hệ Tubu Tree để được hỗ trợ.');
     }
+  }
+
+  /** Rút hoa hồng và nhận thưởng chặn theo dấu thu hồi, không theo vai trò: CTV được nâng nhân viên vẫn rút được khoản đã duyệt. */
+  private async assertNotRevoked(db: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<void> {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { affiliateRevokedAt: true } });
+    if (user?.affiliateRevokedAt) throw new ForbiddenException(AFFILIATE_REVOKED_MESSAGE);
   }
 
   async createLink(userId: string, targetType: string, targetId?: string) {
@@ -1393,7 +1403,7 @@ export class AffiliateService {
     taxIdInput?: string,
   ) {
     if (method !== 'WALLET_BALANCE') throw new BadRequestException(WALLET_ONLY_MESSAGE);
-    await this.assertAffiliateAccess(this.prisma, userId);
+    await this.assertNotRevoked(this.prisma, userId);
     // Không đọc `affiliate.tubu_wallet_multiplier` ở đây: walletBalance là VND thật (Ví dùng trả tiền hàng), nên nhân hệ
     // số ở đường chuyển hoa hồng vào Ví là in tiền thật (1.000.000đ hoa hồng thành 1.497.000đ ở hệ số cũ 1.5). Chuyển
     // vào Ví luôn 1:1 (credited = total), bất kể SystemConfig còn giá trị gì cho key này. Key vẫn được `system-config`
@@ -1463,10 +1473,10 @@ export class AffiliateService {
           SELECT "id", "amount" FROM "commissions"
           WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
           ORDER BY "id" FOR NO KEY UPDATE`;
-        // Khoá dòng người dùng sau dòng hoa hồng (cùng thứ tự với đường thu hồi) rồi đọc lại vai trò: admin hạ quyền cùng lúc thì hoặc
-        // thấy vai trò mới và từ chối, hoặc đợi lần rút này xong. Kiểm ở đầu hàm chỉ là đường nhanh, không chặn được cuộc đua.
+        // Khoá dòng người dùng sau dòng hoa hồng (cùng thứ tự với đường thu hồi) rồi đọc lại dấu thu hồi: admin hạ quyền cùng lúc thì
+        // hoặc thấy dấu mới và từ chối, hoặc đợi lần rút này xong. Kiểm ở đầu hàm chỉ là đường nhanh, không chặn được cuộc đua.
         await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
-        await this.assertAffiliateAccess(tx, userId);
+        await this.assertNotRevoked(tx, userId);
         const total = rows.reduce((s, c) => s + c.amount, 0);
         // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
@@ -1673,16 +1683,22 @@ export class AffiliateService {
       const rows = await this.prisma.commission.findMany({
         // CTV bị khoá giữ nguyên tiền ở APPROVED: chuyển vào Ví sẽ ghi thu nhập chịu thuế và cộng tiền cho tài khoản đang bị xem xét.
         where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } },
-        select: { id: true, affiliateUserId: true, amount: true },
+        select: { id: true, affiliateUserId: true, amount: true, user: { select: { affiliateRevokedAt: true } } },
         orderBy: { id: 'asc' },
       });
       const byUser = new Map<string, { ids: string[]; total: number }>();
+      const revokedUsers = new Set<string>();
       for (const r of rows) {
+        if (r.user?.affiliateRevokedAt) {
+          revokedUsers.add(r.affiliateUserId);
+          continue;
+        }
         const cur = byUser.get(r.affiliateUserId) ?? { ids: [], total: 0 };
         cur.ids.push(r.id);
         cur.total += r.amount;
         byUser.set(r.affiliateUserId, cur);
       }
+      if (revokedUsers.size > 0) this.logger.log(`Bỏ qua ${revokedUsers.size} tài khoản bị thu hồi quyền CTV còn hoa hồng đã duyệt.`);
       for (const [userId, { ids, total }] of byUser) {
         if (total <= 0) continue;
         candidates++;
@@ -2089,6 +2105,7 @@ export class AffiliateService {
         // Khoá CTV trước khi đọc doanh số: lần đảo hoa hồng chạy song song commit sau khi ta đọc doanh số cũ sẽ không thấy claim
         // chưa commit này và không thu lại được thưởng (xem revokeLostCtvMilestones).
         await lockCtvForMilestones(tx, userId);
+        await this.assertNotRevoked(tx, userId);
         const revenue = await this.confirmedRevenue(tx, userId, month);
         if (revenue < milestone.threshold) {
           throw new BadRequestException(

@@ -182,7 +182,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
         commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { commissionableTotal: revenue } }) },
         ctvMilestoneClaim: { create: claimCreate, findUnique: jest.fn().mockResolvedValue(null) },
         $queryRaw: jest.fn().mockResolvedValue([{ pointsBalance: 0 }]),
-        user: { update: jest.fn() },
+        user: { update: jest.fn(), findUnique: jest.fn().mockResolvedValue({ affiliateRevokedAt: null }) },
       };
     }
 
@@ -306,6 +306,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
             },
           },
           user: {
+            findUnique: async () => ({ affiliateRevokedAt: null }),
             update: async ({ data }: { data: Record<string, { increment: number }> }) => {
               if (data.pointsBalance) pending.points += data.pointsBalance.increment;
               if (data.walletBalance) pending.wallet += data.walletBalance.increment;

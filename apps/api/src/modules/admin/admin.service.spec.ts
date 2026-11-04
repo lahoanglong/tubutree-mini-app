@@ -743,6 +743,7 @@ describe('AdminService.setUserRole', () => {
         where: { id: 'u1' },
         data: {
           role: 'DEALER',
+          affiliateRevokedAt: null,
           metadata: { onboardedAt: '2026-09-01', segments: ['home'], dealerTierId: 'dealer_l3' },
         },
         select: { id: true, phone: true, fullName: true, role: true },
@@ -759,7 +760,7 @@ describe('AdminService.setUserRole', () => {
       });
       await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'AFFILIATE', 'dealer_l3');
       expect(tierFind).not.toHaveBeenCalled();
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE' } }));
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE', affiliateRevokedAt: null } }));
     });
   });
 });

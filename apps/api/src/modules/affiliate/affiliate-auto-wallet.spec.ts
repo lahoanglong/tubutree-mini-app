@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { AffiliateService, PIT_TAX_ID_REQUIRED } from './affiliate.service';
 import { CTV_NOTIFICATION } from './ctv-notification-codes';
 import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from './affiliate-auto-transfer-config';
@@ -12,7 +12,7 @@ import type { AnalyticsEventsService } from '../analytics/analytics-events.servi
 import type { NotificationsService } from '../notifications/notifications.service';
 
 const noop = {} as never;
-type Row = { id: string; affiliateUserId: string; amount: number };
+type Row = { id: string; affiliateUserId: string; amount: number; user?: { affiliateRevokedAt: Date | null } };
 
 function build(opts: { rows?: Row[]; flag?: unknown; payout?: { amount: number; taxWithheld: number } | null } = {}) {
   const flagValue = 'flag' in opts ? opts.flag : undefined;
@@ -65,6 +65,21 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     expect(t.requestPayout).toHaveBeenCalledWith('a', 15_000, 'WALLET_BALANCE', undefined, expect.stringMatching(/^auto-wallet:a:/));
     expect(t.requestPayout).toHaveBeenCalledWith('b', 7_000, 'WALLET_BALANCE', undefined, expect.stringMatching(/^auto-wallet:b:/));
     expect([...credited].sort()).toEqual(['a', 'b']);
+  });
+
+  it('tài khoản có dấu thu hồi bị bỏ qua: không gọi requestPayout, không warn, một dòng log info', async () => {
+    const t = build({ rows: [...rows('a', 10_000).map((r) => ({ ...r, user: { affiliateRevokedAt: new Date() } })), ...rows('b', 7_000)] });
+    t.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 1, note: '' });
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const credited = await t.svc.autoTransferApprovedToWallet();
+    expect(t.requestPayout).toHaveBeenCalledTimes(1);
+    expect(t.requestPayout.mock.calls[0]![0]).toBe('b');
+    expect([...credited]).toEqual(['b']);
+    expect(warn).not.toHaveBeenCalled();
+    expect(log.mock.calls.filter((c) => String(c[0]).includes('thu hồi quyền CTV'))).toHaveLength(1);
+    log.mockRestore();
+    warn.mockRestore();
   });
 
   it('khoá idempotency xác định theo tập commission: đảo thứ tự dòng vẫn cùng khoá, thêm một khoản thì khác khoá', async () => {

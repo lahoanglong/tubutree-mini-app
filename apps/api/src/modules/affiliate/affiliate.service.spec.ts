@@ -1544,6 +1544,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     /** Phần thuế giữ dư đã hoàn về Ví của các lệnh đó (Q2b). */
     priorRefunded?: number;
     role?: string;
+    revokedAt?: Date | null;
     /** Dấu vết của đại lý: gian hàng CTV hoặc dòng hoa hồng. */
     dealerStorefront?: boolean;
     dealerCommission?: boolean;
@@ -1552,7 +1553,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: opts.priorGross ?? null, taxWithheld: opts.priorTax ?? null, taxRefunded: opts.priorRefunded ?? null } });
     const executeRaw = jest.fn().mockResolvedValue(1);
     const userUpdate = jest.fn().mockResolvedValue({});
-    const userFindUnique = jest.fn().mockResolvedValue({ id: 'u1', role: opts.role ?? 'AFFILIATE', personalTaxId: opts.taxId ?? null });
+    const userFindUnique = jest.fn().mockResolvedValue({ id: 'u1', role: opts.role ?? 'AFFILIATE', personalTaxId: opts.taxId ?? null, affiliateRevokedAt: opts.revokedAt ?? null });
     const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
     const updateMany = jest.fn().mockResolvedValue({ count: opts.markCount ?? rows.length });
     // Hoa hồng khả dụng đọc bằng SELECT ... FOR NO KEY UPDATE (đợi lần trả một phần đang cắt amount rồi đọc số đã cắt).
@@ -1578,40 +1579,56 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   describe('quyền CTV', () => {
     const svcOf = (prisma: PrismaService) => new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
 
-    it('khách thường có hoa hồng APPROVED → 403, không đánh dấu PAID, không đụng Ví', async () => {
-      const { prisma, updateMany, userUpdate, payoutCreate } = makePrisma({ role: 'CUSTOMER' });
+    it('dấu thu hồi + hoa hồng APPROVED → 403, không đánh dấu PAID, không đụng Ví', async () => {
+      const { prisma, updateMany, userUpdate, payoutCreate } = makePrisma({ role: 'CUSTOMER', revokedAt: new Date() });
       await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
       expect(updateMany).not.toHaveBeenCalled();
       expect(userUpdate).not.toHaveBeenCalled();
       expect(payoutCreate).not.toHaveBeenCalled();
     });
 
-    it('CTV (AFFILIATE) → qua', async () => {
-      const { prisma } = makePrisma({ role: 'AFFILIATE' });
+    it('chặn theo dấu, không theo vai trò: CTV được nâng nhân viên (không dấu) vẫn rút được', async () => {
+      const { prisma } = makePrisma({ role: 'STAFF' });
       await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true, credited: 100_000 });
     });
 
-    it('ngoại lệ: đại lý còn dòng hoa hồng hoặc gian hàng CTV → qua; đại lý thuần → 403', async () => {
-      const a = makePrisma({ role: 'DEALER', dealerCommission: true });
-      await expect(svcOf(a.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true });
-      const b = makePrisma({ role: 'DEALER', dealerStorefront: true });
+    it('CTV (AFFILIATE) và đại lý không dấu → qua', async () => {
+      const a = makePrisma({ role: 'AFFILIATE' });
+      await expect(svcOf(a.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true, credited: 100_000 });
+      const b = makePrisma({ role: 'DEALER' });
       await expect(svcOf(b.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).resolves.toMatchObject({ ok: true });
-      const c = makePrisma({ role: 'DEALER' });
-      await expect(svcOf(c.prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    it('vai trò bị hạ giữa lúc chờ khoá (đọc lại trong transaction thấy CUSTOMER) → 403, không đánh dấu PAID', async () => {
+    it('dấu xuất hiện giữa lúc chờ khoá (đọc lại trong transaction thấy dấu) → 403, không đánh dấu PAID', async () => {
       const { prisma, userFindUnique, updateMany } = makePrisma({ role: 'AFFILIATE' });
-      userFindUnique.mockResolvedValueOnce({ id: 'u1', role: 'AFFILIATE' }).mockResolvedValueOnce({ id: 'u1', role: 'CUSTOMER' });
+      userFindUnique.mockResolvedValueOnce({ affiliateRevokedAt: null }).mockResolvedValueOnce({ affiliateRevokedAt: new Date() });
       await expect(svcOf(prisma).requestPayout('u1', 100_000, 'WALLET_BALANCE')).rejects.toBeInstanceOf(ForbiddenException);
       expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('register: có dấu → 403; getMe canRegister=false', async () => {
+      const mk = (affiliateRevokedAt: Date | null) =>
+        ({
+          user: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt, walletBalance: 0 }),
+            update: jest.fn(),
+          },
+          commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0 } }), findFirst: jest.fn().mockResolvedValue(null) },
+          storefront: { findFirst: jest.fn().mockResolvedValue(null) },
+        }) as unknown as PrismaService;
+      const revoked = mk(new Date());
+      await expect(svcOf(revoked).register('u1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect((revoked.user.update as jest.Mock)).not.toHaveBeenCalled();
+      const ok = mk(null);
+      await expect(svcOf(ok).register('u1')).resolves.toMatchObject({ ok: true });
     });
 
     it('createLink: khách thường 403 và không tạo link; CTV qua', async () => {
       const create = jest.fn().mockResolvedValue({ id: 'l1' });
       const mk = (role: string) =>
-        ({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', role }) }, affiliateLink: { create } }) as unknown as PrismaService;
+        ({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', role, affiliateRevokedAt: role === 'REVOKED' ? new Date() : null }) }, affiliateLink: { create } }) as unknown as PrismaService;
       await expect(svcOf(mk('CUSTOMER')).createLink('u1', 'PRODUCT', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(svcOf(mk('REVOKED')).createLink('u1', 'PRODUCT', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
       expect(create).not.toHaveBeenCalled();
       await expect(svcOf(mk('AFFILIATE')).createLink('u1', 'PRODUCT', 'p1')).resolves.toEqual({ id: 'l1' });
     });

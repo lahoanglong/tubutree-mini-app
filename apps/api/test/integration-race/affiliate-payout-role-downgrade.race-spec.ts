@@ -8,6 +8,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import { CTV_MONTHLY_MILESTONES } from '../../src/modules/affiliate/ctv-milestones';
 import { createOrder, createUser, randCode, sleep, warmPool } from './helpers';
 
 describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real Postgres)', () => {
@@ -71,7 +72,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
   it('hạ quyền đã giữ khoá dòng người dùng trước khi rút bắt đầu → rút bị 403, Ví và hoa hồng không đổi', async () => {
     const ctv = await ctvWithCommission(100_000);
     const downgrade = prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER' } });
+      await tx.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } });
       await sleep(400);
     });
     await sleep(100);
@@ -87,7 +88,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
       const ctv = await ctvWithCommission(100_000);
       const [res] = await Promise.all([
         Promise.allSettled([affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`)]).then((r) => r[0]),
-        prisma.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER' } }),
+        prisma.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } }),
       ]);
       const s = await state(ctv.id);
       if (res.status === 'fulfilled') {
@@ -97,5 +98,29 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
         expect(s).toEqual({ balance: 0, payouts: 0, paid: 0, approved: 1, ledger: 0 });
       }
     }
+  });
+
+  it('hạ về khách có dấu: đăng ký lại 403, rút 403; admin cấp lại CTV (xoá dấu) thì rút được', async () => {
+    const ctv = await ctvWithCommission(100_000);
+    await prisma.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } });
+    await expect(affiliate.register(ctv.id)).rejects.toBeInstanceOf(ForbiddenException);
+    expect((await affiliate.getMe(ctv.id)).canRegister).toBe(false);
+    await expect(affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`)).rejects.toBeInstanceOf(ForbiddenException);
+    await prisma.user.update({ where: { id: ctv.id }, data: { role: 'AFFILIATE', affiliateRevokedAt: null } });
+    await affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`);
+    expect(await state(ctv.id)).toEqual({ balance: 100_000, payouts: 1, paid: 1, approved: 0, ledger: 1 });
+  });
+
+  it('CTV được nâng nhân viên (không dấu) vẫn rút được hoa hồng đã duyệt', async () => {
+    const ctv = await ctvWithCommission(100_000);
+    await prisma.user.update({ where: { id: ctv.id }, data: { role: 'STAFF' } });
+    await affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`);
+    expect(await state(ctv.id)).toEqual({ balance: 100_000, payouts: 1, paid: 1, approved: 0, ledger: 1 });
+  });
+
+  it('claimMilestone: có dấu thu hồi → 403 trước khi tính doanh số', async () => {
+    const ctv = await ctvWithCommission(100_000);
+    await prisma.user.update({ where: { id: ctv.id }, data: { role: 'CUSTOMER', affiliateRevokedAt: new Date() } });
+    await expect(affiliate.claimMilestone(ctv.id, CTV_MONTHLY_MILESTONES[0].id)).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
