@@ -3,10 +3,12 @@ import type { Queue } from 'bullmq';
 import { ZnsStuckLogCron } from './zns-stuck-log.cron';
 import { ZNS_REVIEW_PREFIX, type NotificationsService } from './notifications.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { captureServerError } from '../../config/sentry';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
 
 jest.mock('../../common/cron-leader/run-exclusive');
+jest.mock('../../config/sentry', () => ({ captureServerError: jest.fn() }));
 
 type LogRow = { id: string; status: 'PENDING' | 'RETRYING' };
 type JobSpec = { state: string; returnvalue?: unknown; failedReason?: string } | null | Error;
@@ -37,7 +39,10 @@ beforeEach(() => {
   info = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
   warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  (captureServerError as jest.Mock).mockClear();
+});
 
 describe('ZnsStuckLogCron: truy vấn', () => {
   it('mỗi trạng thái PENDING và RETRYING một truy vấn: ZNS, sentAt cũ hơn 1 giờ, chưa đánh dấu chờ đối soát, cũ nhất trước, tối đa 200', async () => {
@@ -206,5 +211,20 @@ describe('ZnsStuckLogCron: an toàn', () => {
     await setup([{ id: 'a', status: 'PENDING' }], { a: { state: 'failed' } }).cron.sweepStuckZnsLogs();
     expect(info.mock.calls.length + warn.mock.calls.length).toBe(1);
     expect(warn.mock.calls[0]![0]).not.toMatch(/ambiguous|\bjob\b/i);
+  });
+
+  it('có log MỚI đánh dấu chờ đối soát: báo Sentry đúng một lần mỗi lượt quét (không theo từng log)', async () => {
+    const { cron } = setup([{ id: 'a', status: 'RETRYING' }, { id: 'b', status: 'RETRYING' }], {});
+    await cron.sweepStuckZnsLogs();
+    expect(captureServerError).toHaveBeenCalledTimes(1);
+    expect((captureServerError as jest.Mock).mock.calls[0]![0].message).toMatch(/2 log.*chờ đối soát/);
+  });
+
+  it('không có log mơ hồ mới (kể cả log đã đánh dấu từ trước) → không báo Sentry', async () => {
+    const { cron, markZnsLogForReview } = setup([{ id: 'a', status: 'RETRYING' }], {});
+    markZnsLogForReview.mockResolvedValue(false);
+    await cron.sweepStuckZnsLogs();
+    await setup([{ id: 'b', status: 'PENDING' }], { b: { state: 'failed' } }).cron.sweepStuckZnsLogs();
+    expect(captureServerError).not.toHaveBeenCalled();
   });
 });

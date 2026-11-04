@@ -54,6 +54,16 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
 const ALL_TABLES = ['_prisma_migrations', 'orders', 'waste_points', 'system_configs', 'users', 'role_grants', 'notification_templates'];
 
 describe('collectDbSnapshot', () => {
+  it('đếm log ZNS PENDING/RETRYING mang tiền tố chờ đối soát tay vào znsReviewPending', async () => {
+    const { prisma, sql } = fakePrisma({ tables: [...ALL_TABLES, 'notification_logs'], counts: { notification_logs: 4 } });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.znsReviewPending).toBe(4);
+    const q = sql.find((x) => x.includes('FROM "notification_logs"'))!;
+    expect(q).toContain("channel = 'ZNS'");
+    expect(q).toContain("status IN ('PENDING', 'RETRYING')");
+    expect(q).toContain('Chờ đối soát tay: %');
+  });
+
   it('mở transaction READ ONLY trước mọi câu lệnh khác và chỉ chạy SELECT', async () => {
     const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, counts: { orders: 321 } });
     await collectDbSnapshot(prisma, ['m1']);

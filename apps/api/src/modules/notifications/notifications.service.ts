@@ -14,6 +14,7 @@ import { getTemplateCached } from './notification-template-cache';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 import { captureServerError } from '../../config/sentry';
+import { ZNS_REVIEW_PREFIX } from './zns-review-prefix';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -72,8 +73,7 @@ const DEFAULT_QUIET_END_HOUR = 8;
 const DEFAULT_PROMO_MONTHLY_CAP = 2;
 const HOUR_MS = 3_600_000;
 
-/** Tiền tố cột `error` của log đã được cron quét log kẹt xét và để lại chờ đối soát tay: cron bỏ qua log có tiền tố này ở các lượt sau. */
-export const ZNS_REVIEW_PREFIX = 'Chờ đối soát tay: ';
+export { ZNS_REVIEW_PREFIX };
 
 const releasedZnsDedupeKey = (dedupeKey: string, logId: string) => `${dedupeKey}:failed:${logId}`;
 

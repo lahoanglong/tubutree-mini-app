@@ -3,7 +3,8 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NotificationsService, oneLineReason, ZNS_REVIEW_PREFIX } from './notifications.service';
+import { NotificationsService, oneLineReason } from './notifications.service';
+import { ZNS_REVIEW_PREFIX } from './zns-review-prefix';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
@@ -110,6 +111,10 @@ export class ZnsStuckLogCron {
       }
     }
     // ambiguous chỉ đếm log MỚI bị đánh dấu ở lượt này, nên dòng cảnh báo không lặp lại mỗi 30 phút cho cùng một log.
+    // Log "chưa rõ" chặn gửi lại tin cùng sự kiện cho tới khi người đối soát: không để chỉ nằm trong log, báo Sentry một lần mỗi lượt quét.
+    if (result.ambiguous > 0) {
+      captureServerError(new Error(`Quét log ZNS kẹt: ${result.ambiguous} log chờ đối soát tay (không rõ Zalo đã nhận tin chưa), xem runbook 1.20.`));
+    }
     if (result.closed + result.sent + result.ambiguous > 0) {
       this.logger.warn(
         `Quét log ZNS kẹt (${result.scanned} log): đã đóng ${result.closed}, ghi nốt đã gửi ${result.sent}, chưa rõ ${result.ambiguous}, còn chạy ${result.alive}. Log "chưa rõ" (không biết Zalo đã nhận tin chưa) giữ nguyên trạng thái và được đánh dấu chờ đối soát tay.`,

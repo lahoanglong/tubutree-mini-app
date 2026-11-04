@@ -738,6 +738,16 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain('2/3');
       expect(r.detail).toContain('ORDER_CONFIRMED');
     });
+    it('log ZNS chờ đối soát tay: 0 thì PASS (cả khi chưa đo), > 0 thì WARN nêu số log và cách đối soát', () => {
+      expect(byId(run(dbWith({ znsReviewPending: 0 })), 'db.zns_review_pending').status).toBe('PASS');
+      expect(byId(run(dbWith({})), 'db.zns_review_pending').status).toBe('PASS');
+      const r = byId(run(dbWith({ znsReviewPending: 3 })), 'db.zns_review_pending');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('3');
+      expect(r.hint).toContain('Chờ đối soát tay');
+      expect(r.hint).toContain('1.20');
+      expect(r.hint).not.toMatch(/\bjob\b/i);
+    });
     it('kênh khác ZNS không bị tính', () => {
       const s = dbWith({ znsTemplates: [{ code: 'X', channel: 'INAPP', zaloTemplateId: null }, { code: 'Y', channel: 'ZNS', zaloTemplateId: '1' }] });
       expect(byId(run(s), 'db.zns_templates').status).toBe('PASS');
