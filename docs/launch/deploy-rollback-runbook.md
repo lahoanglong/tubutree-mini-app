@@ -1221,7 +1221,7 @@ Kỳ vọng: `api=healthy`, log có "No pending migrations to apply" và không 
 
 Bản đợt 29/10 trở đi: đọc mục 1.13 trước (quay image tách tài khoản khách vãng lai và làm Mini App bản mới lỗi đếm đơn).
 
-Chỉ đúng khi image cũ khớp schema sau migrate (mục 7.0). Hai điều kiện BẮT BUỘC (nếu không thoả, sang 7.3):
+Chỉ đúng khi image cũ khớp schema sau migrate (mục 7.0). Điều kiện 1 luôn BẮT BUỘC; điều kiện 2 chỉ khi `.pending-migrations` có migration đánh giá nhiều lần (nếu không thoả, sang 7.3):
 
 1. Danh sách chờ áp đã áp ở mục 5 bước 7 chỉ gồm tên trong danh sách tương thích image (`IMAGE_COMPATIBLE_MIGRATIONS` trong `apps/api/src/config/go-live/db-checks.ts`), không thêm cái nào khác:
 
@@ -1231,7 +1231,7 @@ cat .pending-migrations
 
 Mọi dòng phải nằm trong các tên này (PROD đã ở bản gần đây thì có thể chỉ thấy một vài dòng trong số đó): `20261014213300_r6_admin_orders_recipient_search`, `20261015070000_r8_refill_locations_table`, `20261015150000_r8_multi_reviews_unique_per_order`, `20261015160000_r9_sync_stock_same_clock_markers`, `20261015170000_r10_legacy_returns_received`, `20261020000000_waste_exchange`, và bảy migration chỉ dựng chỉ mục của đợt hardening 05/11: `20261105130000_hd1_coupon_milestone_period_idx`, `20261105130100_hd1_users_guest_partial_idx`, `20261105130200_hd1_notification_inapp_indexes`, `20261105130300_hd1_points_history_index`, `20261105130400_hd1_feed_new_order_index`, `20261105130500_hd1_reviews_public_list_index`, `20261105140000_payouts_status_index`. Danh sách này phải khớp `IMAGE_COMPATIBLE_MIGRATIONS` (mỗi lần thêm một tên vào mã thì thêm vào đây). Có dòng tên khác, hoặc không còn file: DỪNG, đây là trường hợp 7.3 (7.0 nói vì sao: p8, PD-3... không quay lại được bằng image).
 
-2. Không có đánh giá trùng. Kiểm này làm trong khối lệnh dưới, SAU khi đã dừng API và web, vì nếu API mới còn phục vụ thì khách vẫn ghi thêm đánh giá giữa lúc kiểm và lúc dựng chỉ mục.
+2. Chỉ áp khi `.pending-migrations` có `20261015150000_r8_multi_reviews_unique_per_order` (PROD còn chờ r8): không có đánh giá trùng. Khi r8 đã áp từ trước (PROD tháng 10 trở đi, danh sách chờ chỉ còn migration chỉ mục), BỎ QUA điều kiện này: image trước đó đã cho nhiều đánh giá mỗi sản phẩm, và dựng lại chỉ mục cũ sẽ chặn đánh giá thứ hai (hoặc dừng giữa chừng khi web và api đã tắt). Kiểm này làm trong khối lệnh dưới, SAU khi đã dừng API và web, vì nếu API mới còn phục vụ thì khách vẫn ghi thêm đánh giá giữa lúc kiểm và lúc dựng chỉ mục.
 
 Các bước, dán nguyên cả khối (khối chạy trong một shell con có `set -e`: lệnh nào lỗi thì cả khối dừng ngay và API cũ KHÔNG được bật):
 
@@ -1239,11 +1239,16 @@ Các bước, dán nguyên cả khối (khối chạy trong một shell con có 
 (
   set -euo pipefail
   . ./.rollback-images
+  [ -f .pending-migrations ] || { echo "DỪNG: không còn .pending-migrations, đây là trường hợp 7.3"; exit 1; }
   $DC stop web api
-  DUP=$(psqlq -tAc 'SELECT count(*) FROM (SELECT 1 FROM reviews GROUP BY "userId", "productId" HAVING count(*) > 1) d')
-  echo "số cặp (khách, sản phẩm) có nhiều hơn một đánh giá: $DUP"
-  [ "$DUP" = 0 ] || { echo "DỪNG: còn đánh giá trùng, chưa dựng chỉ mục, KHÔNG bật API cũ. API và web đang dừng: xem hướng dẫn ngay dưới khối này"; exit 1; }
-  psqlq -v ON_ERROR_STOP=1 -c 'CREATE UNIQUE INDEX "reviews_userId_productId_key" ON "reviews"("userId", "productId")'
+  if grep -qx 20261015150000_r8_multi_reviews_unique_per_order .pending-migrations; then
+    DUP=$(psqlq -tAc 'SELECT count(*) FROM (SELECT 1 FROM reviews GROUP BY "userId", "productId" HAVING count(*) > 1) d')
+    echo "số cặp (khách, sản phẩm) có nhiều hơn một đánh giá: $DUP"
+    [ "$DUP" = 0 ] || { echo "DỪNG: còn đánh giá trùng, chưa dựng chỉ mục, KHÔNG bật API cũ. API và web đang dừng: xem hướng dẫn ngay dưới khối này"; exit 1; }
+    psqlq -v ON_ERROR_STOP=1 -c 'CREATE UNIQUE INDEX "reviews_userId_productId_key" ON "reviews"("userId", "productId")'
+  else
+    echo "r8 không nằm trong danh sách chờ áp: bỏ qua đếm đánh giá trùng và chỉ mục cũ"
+  fi
   docker tag "${API_NAME%%:*}:rollback" "$API_NAME"
   docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME"
   $DC up -d --no-build --no-deps api
@@ -1253,15 +1258,15 @@ Các bước, dán nguyên cả khối (khối chạy trong một shell con có 
 echo "mã thoát khối: $?"
 ```
 
-Kỳ vọng: in `CREATE INDEX`, rồi hai id image giống nhau, và `mã thoát khối: 0`. Mã thoát khác 0: chỉ mục chưa dựng được hoặc còn đánh giá trùng, API cũ chưa bật. Lúc này khách đang không đặt được hàng (API và web dừng): gọi ngay Tech lead và Chủ shop. Hoặc Chủ shop và Tech lead chọn đánh giá nào giữ (xoá hoặc gộp các đánh giá còn lại; xem các cặp trùng bằng `psqlq -c 'SELECT "userId", "productId", count(*) FROM reviews GROUP BY 1,2 HAVING count(*) > 1'`) rồi dán lại khối lệnh cho tới khi ra `mã thoát khối: 0`, hoặc khôi phục backup (7.3). Lệnh `$DC stop web api` trong khối chạy lại được vô hại.
+Kỳ vọng: in `CREATE INDEX` (chỉ khi r8 còn chờ; ngược lại in dòng "bỏ qua"), rồi hai id image giống nhau, và `mã thoát khối: 0`. Mã thoát khác 0: chỉ mục chưa dựng được hoặc còn đánh giá trùng, API cũ chưa bật. Lúc này khách đang không đặt được hàng (API và web dừng): gọi ngay Tech lead và Chủ shop. Hoặc Chủ shop và Tech lead chọn đánh giá nào giữ (xoá hoặc gộp các đánh giá còn lại; xem các cặp trùng bằng `psqlq -c 'SELECT "userId", "productId", count(*) FROM reviews GROUP BY 1,2 HAVING count(*) > 1'`) rồi dán lại khối lệnh cho tới khi ra `mã thoát khối: 0`, hoặc khôi phục backup (7.3). Lệnh `$DC stop web api` trong khối chạy lại được vô hại.
 
-Giải thích: dựng lại chỉ mục cũ để code cũ chạy đúng ràng buộc của nó. Chỉ mục mới `reviews_userId_productId_orderId_key` cứ để đó (vô hại với code cũ). Hai id in ra phải giống nhau: chứng tỏ container API đang chạy đúng image cũ. Image cũ chạy `prisma migrate deploy` trên DB đã có thêm các migration mới sẽ báo "No pending migrations to apply" và không kẹt (đã thử cục bộ: thư mục migration bản cũ chạy với DB đã migrate đủ, kết quả đúng như vậy; mục 8 của `99-release-readiness.md` ghi nhận cùng hành vi cho lần phát hành trước).
+Giải thích: khi r8 còn chờ, dựng lại chỉ mục cũ để code cũ chạy đúng ràng buộc của nó; khi r8 đã áp từ trước, khối chỉ dừng hai dịch vụ, gắn lại hai image `:rollback` và bật lại. Chỉ mục mới `reviews_userId_productId_orderId_key` cứ để đó (vô hại với code cũ). Hai id in ra phải giống nhau: chứng tỏ container API đang chạy đúng image cũ. Image cũ chạy `prisma migrate deploy` trên DB đã có thêm các migration mới sẽ báo "No pending migrations to apply" và không kẹt (đã thử cục bộ: thư mục migration bản cũ chạy với DB đã migrate đủ, kết quả đúng như vậy; mục 8 của `99-release-readiness.md` ghi nhận cùng hành vi cho lần phát hành trước).
 
 Quay API và web cùng nhau (hai lệnh `docker tag` ở khối trên đã gắn lại cả hai). Không quay API một mình: web admin mới gửi `expectedAmount` khi duyệt/chi lệnh rút, API cũ từ chối vì `forbidNonWhitelisted` (400), admin không duyệt hay chi được. Báo admin và kế toán tải lại mọi tab Quản trị (như bước 12): tab đã mở từ lúc web mới chạy vẫn giữ mã web mới, bấm Duyệt hoặc Đã chi sẽ bị 400.
 
 Sau khi quay image: màn Quản trị, Sức khoẻ hệ thống và `curl .../api/health` phải ổn. Dữ liệu phát sinh sau deploy được giữ nguyên.
 
-**Khi sau này phát hành lại bản mới (sau 7.2) phải gỡ chỉ mục cũ**, nếu không tính năng đánh giá nhiều lần sẽ bị chặn âm thầm (migration đã ghi là áp rồi nên sẽ không chạy lại):
+**Chỉ khi khối trên đã dựng chỉ mục cũ (`20261015150000_r8_multi_reviews_unique_per_order` nằm trong `.pending-migrations`): khi sau này phát hành lại bản mới (sau 7.2) phải gỡ chỉ mục cũ**, nếu không tính năng đánh giá nhiều lần sẽ bị chặn âm thầm (migration đã ghi là áp rồi nên sẽ không chạy lại):
 
 ```bash
 psqlq -c 'DROP INDEX "reviews_userId_productId_key"'
