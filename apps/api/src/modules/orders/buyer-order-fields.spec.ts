@@ -28,8 +28,9 @@ describe('forBuyer — cột đồng bộ Pancake/Gomdon của Order (R5-SYNC-4)
   });
 
   it('paymentUnlinkedAt (khoản Pancake báo đã thanh toán chờ đối chiếu) không tới người mua', () => {
-    const out = forBuyer({ code: 'TUBU1', total: 100_000, paymentUnlinkedAt: new Date() }) as Record<string, unknown>;
+    const out = forBuyer({ code: 'TUBU1', total: 100_000, paymentUnlinkedAt: new Date(), paymentUnlinkedFirstAt: new Date() }) as Record<string, unknown>;
     expect(out).not.toHaveProperty('paymentUnlinkedAt');
+    expect(out).not.toHaveProperty('paymentUnlinkedFirstAt');
     expect(out).toMatchObject({ code: 'TUBU1', total: 100_000 });
   });
 

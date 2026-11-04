@@ -1193,6 +1193,7 @@ model Order {
   /// Lúc Pancake báo đã thanh toán mà đơn Tubu chưa gắn đúng đơn Pancake (tiền chờ đối chiếu sao kê). Tách khỏi pancakeAttention vì ô chữ
   /// bị nhiều đường ghi đè/xoá cả ô và nút "Đã xử lý" của KHO gỡ được; cờ này chỉ Kế toán (đơn mở) hoặc ADMIN gỡ. Có nghĩa khi paymentStatus = UNPAID.
   paymentUnlinkedAt      DateTime?
+  paymentUnlinkedFirstAt DateTime?
   /// Lúc hệ thống thử tự huỷ (hết hạn thanh toán) mà đơn đã bàn giao vận chuyển — D1 không cho huỷ nữa. Cron hết hạn bỏ qua
   /// đơn này (không thử lại, không nhắc lại mỗi lượt); người vận hành xử lý theo lời nhắc ở "Cần xử lý Pancake".
   autoCancelBlockedAt    DateTime?

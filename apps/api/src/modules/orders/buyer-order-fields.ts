@@ -14,6 +14,7 @@ export const BUYER_HIDDEN_ORDER_FIELDS = [
   'pancakeAttention',
   'pancakeAttentionAt',
   'paymentUnlinkedAt',
+  'paymentUnlinkedFirstAt',
   'autoCancelBlockedAt',
   'pancakePushStatus',
   'pancakeSyncError',
