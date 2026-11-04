@@ -33,4 +33,10 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
       /\("userId"\) WHERE \(\(channel = 'INAPP'::text\) AND \(status <> 'READ'::text\)\)$/,
     );
   });
+
+  it('L3-11: lịch sử điểm của khách theo (userId, createdAt DESC, id DESC) đúng thứ tự keyset của getPointsTransactions', async () => {
+    expect(await def('points_transactions_userId_createdAt_id_idx')).toMatch(
+      /\("userId", "createdAt" DESC, id DESC\)$/,
+    );
+  });
 });

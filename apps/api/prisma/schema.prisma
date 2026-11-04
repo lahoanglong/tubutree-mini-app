@@ -1362,6 +1362,8 @@ model PointsTransaction {
 
   @@index([userId])
   @@index([userId, refId])
+  // getPointsTransactions: WHERE userId ORDER BY createdAt DESC, id DESC LIMIT n (keyset) — khỏi sắp lại cả sổ điểm của khách.
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   // Cron loyalty-expiry.service.ts (expirePoints/remindExpiringPoints) quét
   // WHERE delta>0 AND expiresAt <=/BETWEEN now — không có index này sẽ full-scan bảng lớn mỗi đêm.
   @@index([expiresAt])
