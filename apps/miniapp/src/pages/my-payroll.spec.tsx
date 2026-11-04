@@ -206,19 +206,29 @@ describe('Lương của tôi theo DS v2 (C-076, C-114)', () => {
 
   it('đã trả kèm ảnh xác nhận thì hiện ảnh; chưa trả thì không', async () => {
     mocks.getMyPayroll.mockImplementation((y: number, m: number) =>
-      Promise.resolve(payroll(y, m, { status: 'PAID', proofImageUrl: 'https://img.test/proof.jpg' })),
+      Promise.resolve(payroll(y, m, { status: 'PAID', proofImageUrl: 'https://res.cloudinary.com/t/proof.jpg' })),
     );
     const paid = renderPage();
-    expect(await screen.findByAltText('Xác nhận chuyển khoản')).toHaveAttribute('src', 'https://img.test/proof.jpg');
+    expect(await screen.findByAltText('Xác nhận chuyển khoản')).toHaveAttribute('src', 'https://res.cloudinary.com/t/proof.jpg');
     expect(screen.getByText('Ảnh xác nhận đã chuyển:')).toBeInTheDocument();
     paid.unmount();
 
     mocks.getMyPayroll.mockImplementation((y: number, m: number) =>
-      Promise.resolve(payroll(y, m, { status: 'FINALIZED', proofImageUrl: 'https://img.test/proof.jpg' })),
+      Promise.resolve(payroll(y, m, { status: 'FINALIZED', proofImageUrl: 'https://res.cloudinary.com/t/proof.jpg' })),
     );
     renderPage();
     await screen.findByText('Thực nhận tháng 3/2026');
     expect(screen.queryByAltText('Xác nhận chuyển khoản')).not.toBeInTheDocument();
+  });
+
+  it('ảnh xác nhận là javascript:, http:// lạ hay svg thì không đổ vào img', async () => {
+    for (const bad of ['javascript:alert(1)', 'http://evil.example/p.jpg', 'data:image/svg+xml;base64,PHN2Zz4=']) {
+      mocks.getMyPayroll.mockImplementation((y: number, m: number) => Promise.resolve(payroll(y, m, { status: 'PAID', proofImageUrl: bad })));
+      const r = renderPage();
+      await screen.findByText('Thực nhận tháng 3/2026');
+      expect(screen.queryByAltText('Xác nhận chuyển khoản')).not.toBeInTheDocument();
+      r.unmount();
+    }
   });
 
   it('chưa có công thì báo trống; lỗi tải thì có Thử lại gọi lại API', async () => {

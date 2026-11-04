@@ -46,6 +46,7 @@ import { TimeInput } from '../components/ui/time-input';
 import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
 import { formatVnd } from '../utils/format';
+import { safeImageUrl } from '../utils/safe-image-url';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -137,6 +138,7 @@ function PayrollSection() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-payroll', ym.year, ym.month] });
 
   const [qrRow, setQrRow] = useState<AdminPayrollRow | null>(null);
+  const qrSrc = qrRow ? safeImageUrl(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) : null;
   const [rateRow, setRateRow] = useState<AdminPayrollRow | null>(null);
   const [rateVal, setRateVal] = useState('');
   const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
@@ -304,9 +306,7 @@ function PayrollSection() {
           <Text variant="price-xl" tone="brand">
             {formatVnd(qrRow?.month.net ?? 0)}
           </Text>
-          {qrRow && (qrRow.qrImageUrl || qrRow.profile?.qrImageUrl) && (
-            <img src={(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) as string} alt="QR" style={{ maxWidth: 260, width: '100%' }} />
-          )}
+          {qrSrc && <img src={qrSrc} alt="QR" style={{ maxWidth: 260, width: '100%' }} />}
           {qrRow?.profile?.bankAccountNo && (
             <Text variant="body-sm">
               {qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}
