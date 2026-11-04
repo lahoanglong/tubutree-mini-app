@@ -221,14 +221,14 @@ describe('evaluateDb', () => {
         const touchesOrders = dynamicOrders || heavyStmts.some((st) => /["']orders["']/i.test(st));
         return { heavy: heavyStmts.length > 0 || dynamic, touchesOrders };
       };
-      // Backfill cũ có INSERT ... SELECT vào notification_logs, chỉ thêm dòng và đã áp trước khi bộ quét biết bảng này; chờ chủ quyết có đưa vào HEAVY_MIGRATIONS không.
+      // Đã chạy trên PROD từ trước khi bộ quét xét notification_logs; INSERT ... SELECT chỉ thêm dòng nên không cần cửa sổ deploy riêng.
       const preDatedNotificationLogs = ['20261012160000_pd3_xu_converted_notice'];
       const scanned = readdirSync(dir)
         .filter((n) => /^\d/.test(n) && n > inProd && !preDatedNotificationLogs.includes(n))
         .map((n) => ({ n, ...scan(n) }));
       const listed = new Map(HEAVY_MIGRATIONS.map((h) => [h.name, h.ordersLock]));
 
-      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions đều nằm trong HEAVY_MIGRATIONS', () => {
+      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions, notification_logs đều nằm trong HEAVY_MIGRATIONS', () => {
         expect(scanned.filter((m) => m.heavy && !listed.has(m.n)).map((m) => m.n)).toEqual([]);
       });
 
