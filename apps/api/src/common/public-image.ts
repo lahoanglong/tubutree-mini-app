@@ -46,3 +46,22 @@ export function storedThumbnailFor(productId: string, firstImage: string | undef
   if (!firstImage) return null;
   return firstImage.startsWith('data:') ? publicImageRef('product', productId, 0, firstImage) : firstImage;
 }
+
+const FIRST_IMAGE_REF_RE = new RegExp(`^${PUBLIC_IMAGE_PREFIX}/product/[A-Za-z0-9_-]+/0\\?v=[0-9a-f]+$`);
+
+/**
+ * Thumbnail đem lưu cho dữ liệu nhập tay (đối tác, bản sửa chờ duyệt): data URL trùng đúng ảnh đầu thì chỉ lưu đường dẫn tới ảnh đó,
+ * như `storedThumbnailFor`; đường dẫn tới ảnh đầu đã lưu thì dựng lại theo ảnh đầu hiện tại (mã `v` đi theo nội dung). Data URL khác
+ * ảnh đầu không có chỗ để trỏ (endpoint ảnh chỉ phục vụ phần tử của `images`) nên giữ nguyên.
+ */
+export function storedThumbnailOf(productId: string, thumbnail: string | null | undefined, firstImage: string | undefined): string | null {
+  if (!thumbnail) return null;
+  if (FIRST_IMAGE_REF_RE.test(thumbnail)) return storedThumbnailFor(productId, firstImage);
+  return thumbnail.startsWith('data:') && thumbnail === firstImage ? publicImageRef('product', productId, 0, firstImage) : thumbnail;
+}
+
+/** Thumbnail chính là ảnh đầu: đường dẫn `/public-image/product/<id>/0?v=…` đã lưu, hay đúng chuỗi của ảnh đầu. */
+export function isFirstImageThumb(thumbnail: string | null | undefined, firstImage: string | undefined): boolean {
+  if (!thumbnail) return false;
+  return thumbnail === firstImage || FIRST_IMAGE_REF_RE.test(thumbnail);
+}

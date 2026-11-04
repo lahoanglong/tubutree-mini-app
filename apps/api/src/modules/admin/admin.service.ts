@@ -23,6 +23,7 @@ import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.servi
 import { ImageResizeService } from '../catalog/image-resize.service';
 import { losesPartnerStore } from '../merchant/partner-store';
 import { throwIfLockBusy } from '../../common/lock-busy';
+import { storedThumbnailOf } from '../../common/public-image';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import {
@@ -2087,7 +2088,7 @@ export class AdminService {
               description: draft.description,
               shortDesc: draft.shortDesc,
               images: draft.images,
-              thumbnail: draft.thumbnail,
+              thumbnail: storedThumbnailOf(product.id, draft.thumbnail, draft.images[0]),
               rejectReason: null,
             }
           : { rejectReason: reason },

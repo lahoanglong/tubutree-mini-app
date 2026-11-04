@@ -1798,6 +1798,16 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(notifications.notify).toHaveBeenCalledWith('owner-1', 'MERCHANT_PRODUCT_EDIT_APPROVED', expect.objectContaining({ product_name: 'Nến thơm sả' }));
     });
 
+    it('duyệt bản sửa có ảnh đầu base64: thumbnail ghi đường dẫn tới ảnh đầu, không chép lại cả ảnh; ảnh https giữ nguyên', async () => {
+      const DATA = `data:image/png;base64,${'iVBORw0KGgo='.repeat(20)}`;
+      const { prisma, productUpdate } = setup();
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ ...product, editDraft: { ...draft, images: [DATA, 'https://x/y.jpg'], thumbnail: DATA } });
+      await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, updatedAt.toISOString());
+      const data = productUpdate.mock.calls[0][0].data;
+      expect(data.images[0]).toBe(DATA);
+      expect(data.thumbnail).toMatch(/^\/public-image\/product\/p1\/0\?v=[0-9a-f]{16}$/);
+    });
+
     it('từ chối → nội dung đang bán giữ nguyên, bản chờ bị xoá, lý do lưu ở rejectReason, đối tác được báo', async () => {
       const { prisma, productUpdate, productUpdateMany } = setup();
       await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền', false, updatedAt.toISOString());

@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { storedThumbnailFor } from '../../src/common/public-image';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { WishlistService } from '../../src/modules/wishlist/wishlist.service';
 import { CartService } from '../../src/modules/cart/cart.service';
@@ -70,5 +73,43 @@ describe('sec-1104-e: đường đọc nhẹ (real Postgres)', () => {
     expect(priced.items).toHaveLength(1);
     expect(priced.items[0]).toMatchObject({ variationId: ids.variation, quantity: 2, unitPrice: 100_000, total: 200_000, productName: `IT lean ${tag}` });
     expect(queries.filter((q) => /FROM "(public"\.")?(products|variations)"/.test(q) && heavy(q))).toEqual([]);
+  });
+
+  describe('migration 20261104141000: thumbnail data URL → đường dẫn ảnh đầu', () => {
+    const png = (n: number) => `data:image/png;base64,${Buffer.alloc(n, n).toString('base64')}`;
+    const made: string[] = [];
+    const mk = (suffix: string, thumbnail: string | null, images: string[]) =>
+      prisma.product
+        .create({ data: { brand: `IT ${tag}`, slug: `it-th-${tag}-${suffix}`, name: `IT th ${suffix}`, description: 'd', basePrice: 1, thumbnail, images } })
+        .then((p) => {
+          made.push(p.id);
+          return p;
+        });
+
+    afterAll(async () => {
+      await prisma.product.deleteMany({ where: { id: { in: made } } });
+    });
+
+    it('dựng đúng chuỗi của storedThumbnailFor; chỉ đổi dòng trùng ảnh đầu; chạy lại không đổi gì', async () => {
+      const A = png(300);
+      const B = png(400);
+      const same = await mk('same', A, [A, B]);
+      const diff = await mk('diff', B, [A]);
+      const https = await mk('https', 'https://res.cloudinary.com/x/t.jpg', ['https://res.cloudinary.com/x/t.jpg']);
+      const svg = await mk('svg', 'data:image/svg+xml;base64,PHN2Zy8+', ['data:image/svg+xml;base64,PHN2Zy8+']);
+      const none = await mk('none', null, [A]);
+
+      const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104141000_product_thumbnail_ref/migration.sql'), 'utf8');
+      const statement = sql.replace(/^--.*$/gm, '').trim().replace(/;$/, ''); // một câu UPDATE duy nhất
+      for (let run = 0; run < 2; run++) await prisma.$executeRawUnsafe(statement); // lần hai: không đổi gì
+
+      const read = async (id: string) => (await prisma.product.findUniqueOrThrow({ where: { id }, select: { thumbnail: true, images: true } }));
+      expect((await read(same.id)).thumbnail).toBe(storedThumbnailFor(same.id, A));
+      expect((await read(same.id)).images).toEqual([A, B]);
+      expect((await read(diff.id)).thumbnail).toBe(B);
+      expect((await read(https.id)).thumbnail).toBe('https://res.cloudinary.com/x/t.jpg');
+      expect((await read(svg.id)).thumbnail).toBe('data:image/svg+xml;base64,PHN2Zy8+');
+      expect((await read(none.id)).thumbnail).toBeNull();
+    });
   });
 });
