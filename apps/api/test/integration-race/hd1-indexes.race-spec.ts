@@ -25,13 +25,37 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
     return rows[0]?.indexdef ?? '';
   }
 
-  it('L3-10: tin in-app theo (userId, sentAt DESC, id DESC) chỉ kênh INAPP; tin chưa đọc chỉ INAPP và status <> READ', async () => {
-    expect(await def('notification_logs_inapp_feed_idx')).toMatch(
-      /\("userId", "sentAt" DESC, id DESC\) WHERE \(channel = 'INAPP'::text\)$/,
+  it('L3-10: hộp tin và số chưa đọc dùng index (userId, channel, ...) kể cả khi Prisma chạy prepared statement bằng generic plan', async () => {
+    // Index một phần WHERE channel='INAPP' không bao giờ được chọn khi channel là tham số ($n); phải là index thường có channel trong khoá.
+    const plan = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
+      await tx.$executeRawUnsafe('SET LOCAL plan_cache_mode = force_generic_plan');
+      await tx.$executeRawUnsafe(
+        `PREPARE hd1_feed(text, text, int) AS SELECT id FROM notification_logs WHERE "userId" = $1 AND channel = $2 ORDER BY "sentAt" DESC, id DESC LIMIT $3`,
+      );
+      await tx.$executeRawUnsafe(
+        `PREPARE hd1_unread(text, text, text) AS SELECT count(*) FROM notification_logs WHERE "userId" = $1 AND channel = $2 AND status <> $3`,
+      );
+      try {
+        const feed = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_feed('u', 'INAPP', 20)`);
+        const unread = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`EXPLAIN EXECUTE hd1_unread('u', 'INAPP', 'READ')`);
+        return {
+          feed: feed.map((r) => r['QUERY PLAN']).join('\n'),
+          unread: unread.map((r) => r['QUERY PLAN']).join('\n'),
+        };
+      } finally {
+        await tx.$executeRawUnsafe('DEALLOCATE ALL');
+      }
+    });
+    expect(plan.feed).toContain('notification_logs_userId_channel_sentAt_id_idx');
+    expect(plan.unread).toContain('notification_logs_userId_channel_status_idx');
+  });
+
+  it('L3-10: định nghĩa hai index hộp tin không có WHERE', async () => {
+    expect(await def('notification_logs_userId_channel_sentAt_id_idx')).toMatch(
+      /\("userId", channel, "sentAt" DESC, id DESC\)$/,
     );
-    expect(await def('notification_logs_inapp_unread_idx')).toMatch(
-      /\("userId"\) WHERE \(\(channel = 'INAPP'::text\) AND \(status <> 'READ'::text\)\)$/,
-    );
+    expect(await def('notification_logs_userId_channel_status_idx')).toMatch(/\("userId", channel, status\)$/);
   });
 
   it('L3-11: lịch sử điểm của khách theo (userId, createdAt DESC, id DESC) đúng thứ tự keyset của getPointsTransactions', async () => {
