@@ -204,6 +204,58 @@ describe('seed mẫu thông báo', () => {
     });
   });
 
+  describe('mốc PROD: bản thử cb92dc8 dựng bằng prisma:seed, chữ seed đổi sau đó chỉ lên PROD qua migration', () => {
+    // Lời mẫu PROD giữ từ lần prisma:seed bản thử cb92dc8 (cb92dc8:apps/api/prisma/seed.ts). seed:reference ở mỗi lần deploy chỉ
+    // tạo mẫu còn thiếu, không ghi đè, và INSERT của migration sau đó có ON CONFLICT DO NOTHING. Nên mã nào có chữ seed khác bản
+    // này thì phải có migration UPDATE khớp đúng từng byte bản này, không thì PROD và dev nói hai câu khác nhau.
+    const LAST_BASELINE_MIGRATION = '20261010080000_dealer_volume_bigint';
+    const baseline = JSON.parse(
+      readFileSync(join(__dirname, '../../../test/fixtures/prod-baseline-cb92dc8-notification-templates.json'), 'utf-8'),
+    ) as { code: string; bodyTemplate: string }[];
+    const later = readdirSync(MIGRATIONS_DIR)
+      .filter((d) => d > LAST_BASELINE_MIGRATION && statSync(join(MIGRATIONS_DIR, d)).isDirectory())
+      .map((d) => readFileSync(join(MIGRATIONS_DIR, d, 'migration.sql'), 'utf-8'));
+    const quoted = (body: string) => `'${body.replace(/'/g, "''")}'`;
+    const quotedE = (body: string) => `E'${body.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
+
+    it('mốc có thật: thư mục migration cuối của cb92dc8 còn trong repo, mốc có đủ mã cốt lõi', () => {
+      expect(readdirSync(MIGRATIONS_DIR)).toContain(LAST_BASELINE_MIGRATION);
+      expect(baseline.map((b) => b.code)).toEqual(expect.arrayContaining(['INVOICE_ISSUED', 'POINTS_EXPIRING', 'ORDER_CONFIRMED']));
+    });
+
+    it('mã nào có chữ seed khác bản PROD gốc thì có migration sau mốc chứa nguyên văn bản gốc', () => {
+      const changed = baseline.filter((b) => byCode.has(b.code) && byCode.get(b.code)!.bodyTemplate !== b.bodyTemplate);
+      expect(changed.length).toBeGreaterThan(0);
+      const missing = changed
+        .filter((b) => !later.some((sql) => sql.includes(quoted(b.bodyTemplate)) || sql.includes(quotedE(b.bodyTemplate))))
+        .map((b) => b.code);
+      expect(missing).toEqual([]);
+    });
+
+    it('INVOICE_ISSUED: PROD giữ "Hóa đơn" (bỏ dấu kiểu cũ), migration đổi đúng bản đó sang chữ seed "Hoá đơn"', () => {
+      const old = baseline.find((b) => b.code === 'INVOICE_ISSUED')!.bodyTemplate;
+      expect(old).toBe('Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.');
+      const sql = readFileSync(join(MIGRATIONS_DIR, '20261104120000_invoice_issued_template_spelling', 'migration.sql'), 'utf-8');
+      const m = /UPDATE "notification_templates" SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'\s+AND "bodyTemplate" = '([^']*)';/.exec(sql);
+      expect(m).not.toBeNull();
+      expect(m!.slice(1)).toEqual([byCode.get('INVOICE_ISSUED')!.bodyTemplate, 'INVOICE_ISSUED', old]);
+      expect(byCode.get('INVOICE_ISSUED')!.bodyTemplate).toBe('Hoá đơn VAT cho đơn {{order_code}} đã được phát hành.');
+    });
+
+    it('lời mẫu ở seed, ở mốc PROD và mọi file migration đều ở dạng NFC (so từng byte với PROD mới khớp)', () => {
+      const notNfc = (s: string) => s !== s.normalize('NFC');
+      expect(templates.filter((t) => notNfc(t.bodyTemplate)).map((t) => t.code)).toEqual([]);
+      expect(baseline.filter((b) => notNfc(b.bodyTemplate)).map((b) => b.code)).toEqual([]);
+      const dirs = readdirSync(MIGRATIONS_DIR).filter((d) => statSync(join(MIGRATIONS_DIR, d)).isDirectory());
+      expect(dirs.filter((d) => notNfc(readFileSync(join(MIGRATIONS_DIR, d, 'migration.sql'), 'utf-8')))).toEqual([]);
+    });
+  });
+
+  it('lời mẫu ở seed bỏ dấu kiểu mới: hoá, hoà, khoẻ, thuỷ (không viết hóa, hòa, khỏe, thủy)', () => {
+    const oldStyle = /[óòỏõọ][ae](?![\p{L}])|[úùủũụ]y(?![\p{L}])/iu;
+    expect(templates.filter((t) => oldStyle.test(t.bodyTemplate)).map((t) => `${t.code}: ${t.bodyTemplate}`)).toEqual([]);
+  });
+
   describe('mẫu tin gói định kỳ + đơn thứ 2 (C-015, C-017): migration và seed nói cùng một câu', () => {
     const CODES = [
       'SUBSCRIPTION_PAUSED',

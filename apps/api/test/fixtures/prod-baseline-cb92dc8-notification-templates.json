@@ -1,0 +1,174 @@
+[
+  {
+    "code": "ACCOUNT_DELETION_REQUESTED",
+    "bodyTemplate": "🗑️ Khách {{user}} (SĐT {{phone}}) yêu cầu xoá tài khoản. Vào trang quản trị (Tài khoản → Yêu cầu xoá) để xử lý."
+  },
+  {
+    "code": "BIRTHDAY_VOUCHER",
+    "bodyTemplate": "Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}."
+  },
+  {
+    "code": "CART_ABANDONED",
+    "bodyTemplate": "🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé."
+  },
+  {
+    "code": "CASHBACK_PAID",
+    "bodyTemplate": "Hoàn tiền {{amount}}đ từ mua sắm sàn ngoài đã vào Ví Tubu 🌿 Đổi sang TubuXu để nhận thêm 20% nhé!"
+  },
+  {
+    "code": "COMMUNITY_BEST_ANSWER",
+    "bodyTemplate": "Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm TubuXu thưởng."
+  },
+  {
+    "code": "COMMUNITY_EXPERT_REPLIED",
+    "bodyTemplate": "🌿 Chuyên gia Tubu vừa trả lời câu hỏi \"{{title}}\" của bạn."
+  },
+  {
+    "code": "COMMUNITY_NEW_ANSWER",
+    "bodyTemplate": "💬 {{author}} vừa trả lời câu hỏi \"{{title}}\" của bạn."
+  },
+  {
+    "code": "COMMUNITY_POST_APPROVED",
+    "bodyTemplate": "🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng."
+  },
+  {
+    "code": "DEALER_BONUS_ADJUSTED",
+    "bodyTemplate": "Thưởng doanh số {{quarter}} đã được điều chỉnh do đơn {{order_code}} bị huỷ/trả: thu hồi {{amount}}đ (cộng lại vào công nợ đại lý). Thưởng {{quarter}} còn lại: {{remaining}}đ. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé."
+  },
+  {
+    "code": "DEALER_BONUS_PAID",
+    "bodyTemplate": "🎁 Thưởng doanh số {{quarter}}: bạn được cộng {{amount}}đ vào công nợ đại lý (doanh số {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿"
+  },
+  {
+    "code": "DEALER_CREDIT_PAYMENT_CONFIRMED",
+    "bodyTemplate": "✅ Tubu Tree đã xác nhận nhận {{amount}}đ trả nợ của bạn — công nợ đã được cập nhật. Cảm ơn bạn 🌿"
+  },
+  {
+    "code": "DEALER_CREDIT_PAYMENT_REPORTED",
+    "bodyTemplate": "📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận."
+  },
+  {
+    "code": "DEALER_REWARD_CLAIM_APPROVED",
+    "bodyTemplate": "✅ Yêu cầu nhận thưởng \"{{reward}}\" ({{period}}) đã được duyệt. Tubu Tree sẽ liên hệ để trao thưởng cho bạn 🌿"
+  },
+  {
+    "code": "DEALER_REWARD_CLAIM_NEW",
+    "bodyTemplate": "📥 Đại lý {{dealer}} yêu cầu nhận thưởng \"{{reward}}\" ({{period}}, doanh số đã chốt {{volume}}đ). Vào trang quản trị để duyệt."
+  },
+  {
+    "code": "DEALER_REWARD_CLAIM_PAID",
+    "bodyTemplate": "🎁 Tubu Tree đã trao thưởng \"{{reward}}\" ({{period}}) cho bạn. Cảm ơn bạn đã đồng hành 🌿"
+  },
+  {
+    "code": "DEALER_REWARD_CLAIM_REJECTED",
+    "bodyTemplate": "Yêu cầu nhận thưởng \"{{reward}}\" ({{period}}) chưa được duyệt. Lý do: {{reason}}. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé."
+  },
+  {
+    "code": "FLASH_STARTING",
+    "bodyTemplate": "⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé."
+  },
+  {
+    "code": "GAME_CHECKIN_REMINDER",
+    "bodyTemplate": "🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿"
+  },
+  {
+    "code": "GAME_TREE_THIRSTY",
+    "bodyTemplate": "🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧"
+  },
+  {
+    "code": "GAME_WATER_GIFT",
+    "bodyTemplate": "🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿"
+  },
+  {
+    "code": "GROUP_BUY_SUCCESS",
+    "bodyTemplate": "🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}}đ để mua với giá nhóm. Đặt hàng ngay nhé 🛒"
+  },
+  {
+    "code": "INVOICE_ISSUED",
+    "bodyTemplate": "Hóa đơn VAT cho đơn {{order_code}} đã được phát hành."
+  },
+  {
+    "code": "MILESTONE_VOUCHER",
+    "bodyTemplate": "Cảm ơn bạn đã tin dùng Tubu! Tặng voucher tri ân {{code}} giảm {{value}}đ, dùng trước {{expires}} 🌿"
+  },
+  {
+    "code": "OPS_GOMDON_ALERT",
+    "bodyTemplate": "⚠️ Vận đơn thu gom đơn {{order_code}}: {{message}}"
+  },
+  {
+    "code": "ORDER_CANCELLED",
+    "bodyTemplate": "Đơn {{order_code}} đã bị hủy."
+  },
+  {
+    "code": "ORDER_CONFIRMED",
+    "bodyTemplate": "Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿"
+  },
+  {
+    "code": "ORDER_DELIVERED",
+    "bodyTemplate": "Đơn {{order_code}} đã giao thành công. Điểm Xanh đã được cộng!"
+  },
+  {
+    "code": "ORDER_PACKED",
+    "bodyTemplate": "Đơn {{order_code}} đã được đóng gói, chuẩn bị giao."
+  },
+  {
+    "code": "ORDER_RETURNED",
+    "bodyTemplate": "Đơn {{order_code}} đã được hoàn trả."
+  },
+  {
+    "code": "ORDER_SHIPPING",
+    "bodyTemplate": "Đơn {{order_code}} đang được giao đến bạn."
+  },
+  {
+    "code": "POINTS_EXPIRING",
+    "bodyTemplate": "⏳ Bạn có {{points}} điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿"
+  },
+  {
+    "code": "PRICE_DROP_ALERT",
+    "bodyTemplate": "{{product}} bạn yêu thích đang giảm giá! Xem ngay 💚"
+  },
+  {
+    "code": "REORDER_REMINDER",
+    "bodyTemplate": "{{product}} của bạn dự kiến sắp hết. Đặt lại ngay để không gián đoạn nhé! 🛒"
+  },
+  {
+    "code": "RETURN_APPROVED",
+    "bodyTemplate": "Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt. Tiền đã hoàn vào Ví Tubu 🌿"
+  },
+  {
+    "code": "RETURN_APPROVED_NO_REFUND",
+    "bodyTemplate": "Yêu cầu đổi/trả đơn {{order_code}} đã được duyệt."
+  },
+  {
+    "code": "RETURN_REQUESTED",
+    "bodyTemplate": "Đã nhận yêu cầu đổi/trả đơn {{order_code}}. Tubu sẽ phản hồi trong 24h."
+  },
+  {
+    "code": "STOREFRONT_TRENDING_PRODUCTS",
+    "bodyTemplate": "✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!"
+  },
+  {
+    "code": "SUBSCRIPTION_ORDER",
+    "bodyTemplate": "Đơn định kỳ {{order_code}} đã được tạo tự động. Cảm ơn bạn đã đồng hành 🌿"
+  },
+  {
+    "code": "SUBSCRIPTION_ORDER_FAILED",
+    "bodyTemplate": "Đơn định kỳ kỳ này chưa đặt được: {{reason}}. Lịch vẫn giữ, Tubu sẽ thử lại kỳ sau 🌿"
+  },
+  {
+    "code": "SUBSCRIPTION_PAUSED",
+    "bodyTemplate": "Lịch đặt định kỳ tạm dừng (sản phẩm hết hàng hoặc địa chỉ không hợp lệ). Vui lòng kiểm tra lại."
+  },
+  {
+    "code": "VOUCHER_EXPIRING",
+    "bodyTemplate": "⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!"
+  },
+  {
+    "code": "WELCOME_VOUCHER",
+    "bodyTemplate": "Chào mừng bạn đến Tubu Tree! Tặng voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 🎁"
+  },
+  {
+    "code": "WINBACK_VOUCHER",
+    "bodyTemplate": "Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚"
+  }
+]

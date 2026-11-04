@@ -86,6 +86,14 @@ describe('NotificationTemplatesAdminService', () => {
     await expect(svc.update('ORDER_CONFIRMED', { zaloTemplateId: 'abc-1' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('nội dung gõ dấu dạng tổ hợp (NFD, vd bàn phím macOS) → lưu dạng NFC như seed và migration', async () => {
+    const { svc, update } = setup();
+    const nfd = 'Hoá đơn {{order_code}} đã xong.'.normalize('NFD');
+    expect(nfd).not.toBe(nfd.normalize('NFC'));
+    await svc.update('ORDER_CONFIRMED', { bodyTemplate: ` ${nfd} ` });
+    expect(update).toHaveBeenCalledWith({ where: { code: 'ORDER_CONFIRMED' }, data: { bodyTemplate: 'Hoá đơn {{order_code}} đã xong.' } });
+  });
+
   it('biến không thuộc mẫu → 400 nêu biến sai và biến dùng được; không ghi gì', async () => {
     const { svc, update } = setup();
     await expect(svc.update('ORDER_CONFIRMED', { bodyTemplate: 'Tặng mã {{code}}' })).rejects.toThrow('{{order_code}}');
