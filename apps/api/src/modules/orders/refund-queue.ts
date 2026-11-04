@@ -329,10 +329,8 @@ export async function recordLatePaymentRefund(
       skipDuplicates: true,
     });
     if (created.count === 0) return 'EXISTS' as const;
-    // Admin đã đối chiếu và ghi tiền về muộn: khoản "Pancake báo đã thanh toán, chờ đối chiếu" của đơn đóng xong. Đơn đóng vẫn UNPAID nên
-    // không tự rời hàng đợi; cùng tx với dòng hoàn để không có dòng hoàn mà cờ còn. Chỉ gỡ khi dòng hoàn MỚI được tạo: khoản đã có (EXISTS)
-    // không chứng minh khoản Pancake đang chờ đã được ghi, nên cờ còn đó cho admin đóng có chủ đích bằng "Đã đối chiếu". Nguồn Pancake không gỡ cờ.
-    if (viaAdmin) await tx.order.updateMany({ where: { id: order.id, paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } });
+    // Không gỡ cờ paymentUnlinkedAt ở đây: cờ gộp nhiều khoản Pancake chưa gắn của đơn, mà dòng ADMIN:manual chỉ có một cho mỗi đơn nên khoản
+    // sau không ghi được nữa. Admin đóng cờ bằng "Đã đối chiếu" (CAS theo mốc đã xem).
     return 'CREATED' as const;
   });
   if (outcome === 'ADMIN_RECORDED') {

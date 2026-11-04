@@ -107,7 +107,7 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
     }
   });
 
-  it('tuần tự: webhook đặt cờ, ADMIN ghi tiền về muộn gỡ cờ, webhook lặp cùng cặp sau đó không đặt lại cờ (dấu lịch sử chặn)', async () => {
+  it('tuần tự: webhook đặt cờ, ADMIN ghi tiền về muộn (CREATED) KHÔNG gỡ cờ, webhook lặp cùng cặp không đổi mốc (dấu lịch sử chặn); #B tới sau vẫn giữ cờ', async () => {
     const user = await createUser(prisma);
     const adm = await createUser(prisma, { role: 'ADMIN' });
     const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
@@ -115,9 +115,12 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).not.toBeNull();
     const res = await admin.confirmOrderPayment(adm.id, order.id, { bankRef: `FT${Date.now()}` });
     expect(res).toMatchObject({ latePayment: true });
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).toBeNull();
+    const kept = await flagOf(order.id);
+    expect(kept).not.toBeNull();
     await hold(order, 'PK-L1');
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).toBeNull();
+    expect(await flagOf(order.id)).toEqual(kept);
+    await hold(order, 'PK-L2');
+    expect((await flagOf(order.id))!.getTime()).toBeGreaterThan(kept!.getTime());
   });
 
   it('đơn đã huỷ đã có dòng LATE_PAYMENT Pancake, khoản #B chưa gắn đặt cờ: ADMIN ghi tiền về muộn (EXISTS) KHÔNG gỡ cờ', async () => {
