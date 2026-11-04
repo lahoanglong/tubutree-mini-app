@@ -83,9 +83,15 @@ describe('FlashSaleService.listSalesPage (L4-06)', () => {
     expect(all.findMany.mock.calls[0]![0].where).toEqual({ AND: [] });
   });
 
-  it('cursor hỏng → 400 tiếng Việt, không query', async () => {
+  it.each([
+    ['rác'],
+    ['+010000-01-01T00:00:00.000Z|x'], // năm ≥ 10000: JS coi hợp lệ nhưng Prisma không đổi được sang DateTime
+    ['2026-11-04T10:00:00.000Z|a\u0000'], // NUL trong id làm Postgres báo 22021
+    ['2026-11-04T10:00:00.000Z|'],
+    ['2026-11-04T10:00:00Z|abc'],
+  ])('cursor hỏng %j → 400 tiếng Việt, không query', async (cursor) => {
     const { service, findMany } = make([]);
-    await expect(service.listSalesPage({ cursor: 'rác' })).rejects.toThrow('Con trỏ trang không hợp lệ.');
+    await expect(service.listSalesPage({ cursor })).rejects.toThrow('Con trỏ trang không hợp lệ.');
     expect(findMany).not.toHaveBeenCalled();
   });
 });
@@ -118,6 +124,8 @@ describe('ListFlashSalesQuery (DTO)', () => {
     [{ status: 'live' }, 'Trạng thái chỉ nhận một trong: open, ended, all.'],
     [{ take: '0' }, 'Số dòng mỗi trang phải là số nguyên dương'],
     [{ take: '1.5' }, 'Số dòng mỗi trang phải là số nguyên dương'],
+    [{ cursor: '+010000-01-01T00:00:00.000Z|x' }, 'Con trỏ trang không hợp lệ.'],
+    [{ cursor: '2026-11-04T10:00:00.000Z|a\u0000' }, 'Con trỏ trang không hợp lệ.'],
   ])('%j → 400', async (q, msg) => {
     await expect(run(q)).rejects.toMatchObject({ response: { message: [expect.stringContaining(msg)] } });
   });

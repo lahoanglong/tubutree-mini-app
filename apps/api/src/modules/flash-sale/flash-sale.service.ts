@@ -147,6 +147,8 @@ const vnd = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 
 const FLASH_ADMIN_PAGE_DEFAULT = 20;
 const FLASH_ADMIN_PAGE_MAX = 50;
+/** Con trỏ do chính API sinh (`ISO|id`); chỉ nhận đúng dạng đó để không đẩy năm ≥ 10000 hay NUL xuống Prisma/Postgres (500). */
+export const FLASH_ADMIN_CURSOR_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[A-Za-z0-9_-]{1,64}$/;
 const ADMIN_ITEM_SELECT = { id: true, variationId: true, flashPrice: true, quota: true, soldCount: true, perUserLimit: true, sortOrder: true } as const;
 
 @Injectable()
@@ -681,9 +683,10 @@ export class FlashSaleService {
     if (q.status === 'open') and.push({ endAt: { gte: new Date() } });
     if (q.status === 'ended') and.push({ endAt: { lt: new Date() } });
     if (q.cursor) {
-      const [iso, id] = q.cursor.split('|');
-      const at = new Date(iso ?? '');
-      if (!id || Number.isNaN(at.getTime())) throw new BadRequestException('Con trỏ trang không hợp lệ.');
+      if (!FLASH_ADMIN_CURSOR_RE.test(q.cursor)) throw new BadRequestException('Con trỏ trang không hợp lệ.');
+      const [iso, id] = q.cursor.split('|') as [string, string];
+      const at = new Date(iso);
+      if (Number.isNaN(at.getTime())) throw new BadRequestException('Con trỏ trang không hợp lệ.');
       and.push({ OR: [{ startAt: { lt: at } }, { startAt: at, id: { lt: id } }] });
     }
     const rows = await this.prisma.flashSale.findMany({

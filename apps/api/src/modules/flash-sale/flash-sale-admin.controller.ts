@@ -8,7 +8,7 @@ import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import type { CouponActor } from '../admin/coupon-input-rules';
-import { FlashSaleService } from './flash-sale.service';
+import { FLASH_ADMIN_CURSOR_RE, FlashSaleService } from './flash-sale.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
 export class CreateSaleDto {
@@ -20,7 +20,7 @@ export class CreateSaleDto {
 export class ListFlashSalesQuery {
   @IsOptional() @Transform(emptyToUndefined) @IsIn(['open', 'ended', 'all']) status?: 'open' | 'ended' | 'all';
   @IsOptional() @Transform(emptyToUndefined) @Matches(/^[1-9]\d{0,3}$/, { message: 'Số dòng mỗi trang phải là số nguyên dương.' }) take?: string;
-  @IsOptional() @Transform(emptyToUndefined) @IsString() @MaxLength(100) cursor?: string;
+  @IsOptional() @Transform(emptyToUndefined) @IsString() @MaxLength(100) @Matches(FLASH_ADMIN_CURSOR_RE, { message: 'Con trỏ trang không hợp lệ.' }) cursor?: string;
 }
 class UpdateSaleDto {
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
