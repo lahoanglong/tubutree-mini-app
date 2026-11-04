@@ -459,6 +459,17 @@ describe('Trang Giờ vàng (web): trạng thái tải, rỗng, lỗi', () => {
     expect(tabs(r.container)).toHaveLength(0);
   });
 
+  it('khung chờ cao đúng phần đầu thật: dải tab 56px + dải đồng hồ 44px liền nhau (không khe), rồi mới tới danh sách', () => {
+    const r = render(<FlashSlotsView />);
+    mounted.push(r);
+    const root = r.container.querySelector<HTMLElement>('[data-testid="flash-slots-loading"]')!;
+    expect(root.style.gap).toBe('');
+    const [tabsBar, strip, list] = Array.from(root.children) as HTMLElement[];
+    expect(tabsBar!.style.height).toBe('56px');
+    expect(strip!.style.height).toBe('44px');
+    expect(list!.getAttribute('data-testid')).toBe('flash-items-loading');
+  });
+
   it('không có khung nào: trạng thái rỗng, nút dẫn tới danh mục sản phẩm', async () => {
     state.slots = { slots: [] };
     const c = await mount();
