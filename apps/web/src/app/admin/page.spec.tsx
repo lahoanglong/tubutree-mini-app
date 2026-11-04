@@ -336,13 +336,13 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     deletePromotion: (...args: unknown[]) => mocks.deletePromotion(...args),
     createDealerReward: (...args: unknown[]) => mocks.createDealerReward(...args),
     deleteDealerReward: (...args: unknown[]) => mocks.deleteDealerReward(...args),
-    // Giả lập phân trang keyset của API: lọc theo hạn kết thúc, startAt giảm dần, trang theo con trỏ là id dòng cuối.
+    // Giả lập phân trang keyset của API: lọc theo hạn kết thúc, startAt tăng dần cho open và giảm dần cho còn lại, trang theo con trỏ là id dòng cuối.
     listFlashSalesPage: async (p: { status: 'open' | 'ended' | 'all'; cursor?: string; take?: number }) => {
       mocks.flashSalePageCalls.push(p);
       const now = Date.now();
       const rows = (mocks.flashSales as FlashSaleMock[])
         .filter((x) => p.status === 'all' || (new Date(x.endAt).getTime() < now) === (p.status === 'ended'))
-        .sort((a, b) => b.startAt.localeCompare(a.startAt));
+        .sort((a, b) => (p.status === 'open' ? a.startAt.localeCompare(b.startAt) : b.startAt.localeCompare(a.startAt)));
       const from = p.cursor ? rows.findIndex((x) => x.id === p.cursor) + 1 : 0;
       const take = p.take ?? 20;
       const page = rows.slice(from, from + take);
@@ -1975,7 +1975,7 @@ describe('admin/page — tab Flash Sale: trạng thái theo thời gian (QTUI-04
     click(btn(container, 'Tải thêm'));
     await flush();
     expect(container.querySelectorAll('[data-flash-sale-row]')).toHaveLength(25);
-    expect(mocks.flashSalePageCalls[1]).toMatchObject({ status: 'open', cursor: 's5' });
+    expect(mocks.flashSalePageCalls[1]).toMatchObject({ status: 'open', cursor: 's19' });
     expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Tải thêm')).toBe(false);
   });
 

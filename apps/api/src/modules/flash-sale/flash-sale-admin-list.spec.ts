@@ -64,11 +64,27 @@ describe('FlashSaleService.listSalesPage (L4-06)', () => {
     expect(last.nextCursor).toBeNull();
   });
 
-  it('cursor → điều kiện keyset (startAt, id) nhỏ hơn dòng cuối của trang trước', async () => {
-    const { service, findMany } = make([]);
+  it('ended/all/không status: giảm dần; cursor → keyset (startAt, id) nhỏ hơn dòng cuối của trang trước, kể cả trùng startAt', async () => {
     const at = new Date('2026-11-04T10:00:00.000Z');
-    await service.listSalesPage({ cursor: `${at.toISOString()}|s005` });
-    expect(findMany.mock.calls[0]![0].where).toEqual({ AND: [{ OR: [{ startAt: { lt: at } }, { startAt: at, id: { lt: 's005' } }] }] });
+    for (const status of ['ended', 'all', undefined] as const) {
+      const { service, findMany } = make([]);
+      await service.listSalesPage({ status, cursor: `${at.toISOString()}|s005` });
+      const arg = findMany.mock.calls[0]![0];
+      expect(arg.orderBy).toEqual([{ startAt: 'desc' }, { id: 'desc' }]);
+      expect(arg.where.AND).toContainEqual({ OR: [{ startAt: { lt: at } }, { startAt: at, id: { lt: 's005' } }] });
+    }
+  });
+
+  it('open: đợt sớm nhất lên đầu (startAt tăng dần, id tăng dần) để đợt đang chạy không bị đẩy xuống trang sau; cursor so sánh lớn hơn', async () => {
+    const at = new Date('2026-11-04T10:00:00.000Z');
+    const first = make([]);
+    await first.service.listSalesPage({ status: 'open' });
+    expect(first.findMany.mock.calls[0]![0].orderBy).toEqual([{ startAt: 'asc' }, { id: 'asc' }]);
+    const next = make([]);
+    await next.service.listSalesPage({ status: 'open', cursor: `${at.toISOString()}|s005` });
+    const arg = next.findMany.mock.calls[0]![0];
+    expect(arg.orderBy).toEqual([{ startAt: 'asc' }, { id: 'asc' }]);
+    expect(arg.where.AND).toContainEqual({ OR: [{ startAt: { gt: at } }, { startAt: at, id: { gt: 's005' } }] });
   });
 
   it('status open = chưa quá giờ kết thúc, ended = đã quá, all = không lọc', async () => {

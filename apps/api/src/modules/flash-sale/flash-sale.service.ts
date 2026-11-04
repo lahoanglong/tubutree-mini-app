@@ -674,11 +674,14 @@ export class FlashSaleService {
   }
 
   /**
-   * Một trang đợt flash sale cho tab Giờ vàng (admin), keyset theo (startAt, id) giảm dần, không kèm item: item chỉ
+   * Một trang đợt flash sale cho tab Giờ vàng (admin), keyset theo (startAt, id) (tăng dần cho `open`, giảm dần cho còn lại), không kèm item: item chỉ
    * tải khi mở một đợt (`getSale`). `open` = chưa quá giờ kết thúc, khớp cách tab phân loại "đã kết thúc".
    */
   async listSalesPage(q: { status?: 'open' | 'ended' | 'all'; take?: string; cursor?: string }) {
     const take = Math.min(Math.max(Number(q.take) || FLASH_ADMIN_PAGE_DEFAULT, 1), FLASH_ADMIN_PAGE_MAX);
+    // `open` đi từ đợt sớm nhất: đợt đang chạy hay sắp chạy nằm trang đầu dù đã tạo sẵn nhiều khung xa (generate-slots).
+    const dir = q.status === 'open' ? 'asc' : 'desc';
+    const cmp = dir === 'asc' ? 'gt' : 'lt';
     const and: Prisma.FlashSaleWhereInput[] = [];
     if (q.status === 'open') and.push({ endAt: { gte: new Date() } });
     if (q.status === 'ended') and.push({ endAt: { lt: new Date() } });
@@ -687,11 +690,11 @@ export class FlashSaleService {
       const [iso, id] = q.cursor.split('|') as [string, string];
       const at = new Date(iso);
       if (Number.isNaN(at.getTime())) throw new BadRequestException('Con trỏ trang không hợp lệ.');
-      and.push({ OR: [{ startAt: { lt: at } }, { startAt: at, id: { lt: id } }] });
+      and.push({ OR: [{ startAt: { [cmp]: at } }, { startAt: at, id: { [cmp]: id } }] });
     }
     const rows = await this.prisma.flashSale.findMany({
       where: { AND: and },
-      orderBy: [{ startAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ startAt: dir }, { id: dir }],
       take: take + 1,
       select: { id: true, title: true, startAt: true, endAt: true, isActive: true, _count: { select: { items: true } } },
     });
