@@ -231,7 +231,7 @@ describe('AdminService.markGomdonHandled — "Đã xử lý tay"', () => {
     });
   });
 
-  it('đơn RETURNED chưa có mốc đảo sau huỷ/trả: vẫn đánh dấu đã xử lý nhưng không ghi dòng lịch sử cùng trạng thái', async () => {
+  it('đơn RETURNED chưa có mốc đảo sau huỷ/trả: vẫn đánh dấu đã xử lý và vẫn ghi dòng lịch sử cùng trạng thái (resync không còn nhầm dòng đó là dòng đóng đơn)', async () => {
     const history = jest.fn().mockResolvedValue({});
     const markHandled = jest.fn().mockResolvedValue(ok);
     const admin = mkAdmin(
@@ -241,7 +241,7 @@ describe('AdminService.markGomdonHandled — "Đã xử lý tay"', () => {
     jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
     await expect(admin.markGomdonHandled('admin-1', 'TB-9')).resolves.toEqual(ok);
     expect(markHandled).toHaveBeenCalled();
-    expect(history).not.toHaveBeenCalled();
+    expect(history).toHaveBeenCalledWith({ data: expect.objectContaining({ orderId: 'o1', fromStatus: 'RETURNED', toStatus: 'RETURNED', actorType: 'ADMIN' }) });
   });
 
   it('service từ chối thì không ghi lịch sử', async () => {

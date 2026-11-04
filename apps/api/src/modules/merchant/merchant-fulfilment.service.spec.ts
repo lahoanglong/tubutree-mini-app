@@ -805,7 +805,7 @@ describe('Q8: hàng "Tubu giao hộ" vào bảng kê theo từng dòng hàng', (
     expect(queryOf(prisma.$queryRaw.mock.calls[1]).values).toContainEqual(new Date('2026-10-01T00:00:00Z'));
     expect(sql).toContain(`(NOT l."takeover" OR (l."consignmentConfirmedAt" IS NOT NULL AND o."createdAt" >= l."consignmentConfirmedAt"))`);
     expect(sql).toContain(`(l."unlinkedAt" IS NULL OR o."createdAt" < l."unlinkedAt")`);
-    expect(sql).toContain(`FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED'`);
+    expect(sql).toContain(`FROM "order_status_history" h WHERE h."orderId" = o."id" AND h."toStatus" = 'DELIVERED' AND h."fromStatus" <> 'DELIVERED')`);
     expect(prisma.orderItem.findMany.mock.calls[1][0].where).toEqual({ orderId: { in: ['o1', 'o2'] } });
   });
 

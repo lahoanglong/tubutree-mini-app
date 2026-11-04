@@ -187,6 +187,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/orders/:id/gomdon/retry': [KHO],
   'POST /admin/orders/:id/issue-invoice': [KE_TOAN],
   'POST /admin/orders/:id/pancake-attention/resolve': [KHO],
+  'POST /admin/orders/:id/payment-unlinked/resolve': ADMIN_ONLY,
   'GET /admin/orders/:id/referral': ADMIN_ONLY,
   'POST /admin/orders/:id/resync-delivered-effects': ADMIN_ONLY,
   'PUT /admin/orders/:id/status': [CSKH, KHO],

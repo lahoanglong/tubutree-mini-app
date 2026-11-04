@@ -1,4 +1,3 @@
-import { ATTENTION_PAYMENT_UNLINKED } from '../integrations/pancake/pancake-attention';
 import 'reflect-metadata';
 import { BadRequestException, ForbiddenException, NotFoundException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
@@ -63,7 +62,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     const res = await svc.confirmDealerOrderPayment('admin1', 'DLR1', { bankRef: ' FT26270001 ', note: 'VCB 27/09' });
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', type: 'DEALER', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(historyCreate).toHaveBeenCalledTimes(1);
     const h = historyCreate.mock.calls[0]![0].data;
@@ -113,19 +112,12 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     expect(analytics.record.mock.calls[0][0]).not.toBe(prisma);
   });
 
-  it('xác nhận đã nhận tiền → gỡ lý do "Pancake báo đã thanh toán nhưng đơn chưa gắn Pancake", giữ lý do khác', async () => {
-    const { svc, prisma, updateMany } = build(DEALER_ORDER);
-    ((prisma.order as { findUnique: jest.Mock }).findUnique).mockResolvedValue({ pancakeAttention: `Lý do khác | ${ATTENTION_PAYMENT_UNLINKED}` });
-    await svc.confirmDealerOrderPayment('admin1', 'DLR1', {});
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', pancakeAttention: `Lý do khác | ${ATTENTION_PAYMENT_UNLINKED}` }, data: { pancakeAttention: 'Lý do khác' } });
-  });
-
   it('đơn đã PACKED/SHIPPING/DELIVERED mà còn UNPAID → chỉ lật PAID, giữ nguyên trạng thái giao hàng', async () => {
     const { svc, updateMany, historyCreate, analytics } = build({ ...DEALER_ORDER, status: 'SHIPPING' });
     await svc.confirmDealerOrderPayment('admin1', 'o1', {});
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', type: 'DEALER', paymentStatus: 'UNPAID', status: 'SHIPPING' },
-      data: { paymentStatus: 'PAID', paidAt: expect.any(Date) },
+      data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(historyCreate.mock.calls[0]![0].data).toMatchObject({ fromStatus: 'SHIPPING', toStatus: 'SHIPPING', actorId: 'admin1' });
     expect(analytics.record).toHaveBeenCalledTimes(1);

@@ -1349,7 +1349,8 @@ export class AdminService {
 
   /**
    * Vết "Đã xử lý" trong lịch sử đơn (cùng trạng thái, khách không thấy: dòng giờ hành trình bỏ dòng cùng trạng thái). Việc đã đóng
-   * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác.
+   * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác. Đơn huỷ/trả chưa xong phần đảo cũng được ghi: cron chạy lại
+   * (resyncReversalEffects) chỉ coi dòng có fromStatus khác toStatus là dòng đóng đơn nên dòng ghi chú này không làm nó nhầm.
    */
   private async logHandledInHistory(
     adminId: string,
@@ -1357,13 +1358,6 @@ export class AdminService {
     what: string,
     note?: string,
   ) {
-    // Đơn đã huỷ/trả mà phần đảo sau commit chưa xong: cron chạy lại (resyncReversalEffects) lấy dòng lịch sử MỚI NHẤT có toStatus = trạng
-    // thái đơn làm "dòng đóng đơn" để biết ai đóng và gửi tin từ lúc nào. Một dòng cùng trạng thái của admin chen vào sẽ làm cron gửi
-    // lại tin huỷ/trả, nhầm người huỷ, hoặc xếp huỷ Pancake lần nữa — nên chưa ghi, chỉ để lại log.
-    if ((order.status === 'CANCELLED' || order.status === 'RETURNED') && !order.reversalEffectsAt) {
-      this.logger.warn(`Đơn ${order.code} ${order.status} chưa xong phần đảo sau huỷ/trả: không ghi dòng "đã xử lý" vào lịch sử để cron chạy lại không nhầm dòng đóng đơn.`);
-      return;
-    }
     try {
       await this.prisma.orderStatusHistory.create({
         data: {
@@ -1483,6 +1477,33 @@ export class AdminService {
     );
     await this.logHandledInHistory(adminId, order, `Đã xử lý việc Pancake: ${order.pancakeAttention ?? ''}`.trimEnd(), cleanNote);
     return { ok: true, message: `Đơn ${order.code} đã rời hàng đợi cần xử lý Pancake.` };
+  }
+
+  /**
+   * "Đã đối chiếu" khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (cờ paymentUnlinkedAt). Gỡ bằng CAS theo mốc cờ người bấm
+   * đã thấy: hai ADMIN bấm cùng lúc thì đúng một bên thắng, bên kia nhận 400; khoản Pancake mới tới giữa chừng (mốc đổi, cờ còn) thì 409. Không động vào paymentStatus hay tiền: việc ghi tiền về muộn/hoàn làm ở đường riêng
+   * trước đó; đây chỉ đóng việc chờ đối chiếu và để lại ai/lúc nào/vì sao.
+   */
+  async resolvePaymentUnlinked(adminId: string, idOrCode: string, note: string, seenAt: string) {
+    const order = await this.resolveOrderRef(idOrCode);
+    const seen = new Date(seenAt);
+    if (Number.isNaN(seen.getTime())) throw new BadRequestException('Mốc đã xem (seenAt) không hợp lệ.');
+    // CAS theo ĐÚNG mốc người bấm đã thấy: khoản Pancake mới đẩy mốc lên nên bấm trên mốc cũ không đóng luôn khoản chưa ai xem.
+    const r = await this.prisma.order.updateMany({
+      where: { id: order.id, paymentUnlinkedAt: seen },
+      data: { paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
+    });
+    if (r.count === 0) {
+      const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { paymentUnlinkedAt: true } });
+      if (now?.paymentUnlinkedAt) {
+        throw new ConflictException(`Có khoản Pancake mới báo đã thanh toán cho đơn ${order.code} — tải lại để xem trước khi đóng.`);
+      }
+      throw new BadRequestException(`Đơn ${order.code} không còn khoản Pancake báo đã thanh toán chờ đối chiếu.`);
+    }
+    const cleanNote = note.trim().replace(/\s+/g, ' ').slice(0, 500);
+    this.logger.warn(`Admin ${adminId} đánh dấu đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code} (${order.status}) — ghi chú: ${cleanNote}.`);
+    await this.logHandledInHistory(adminId, order, 'Đã đối chiếu khoản Pancake báo đã thanh toán', cleanNote);
+    return { ok: true, message: `Đã đối chiếu khoản Pancake báo đã thanh toán của đơn ${order.code}.` };
   }
 
   async markGomdonHandled(adminId: string, idOrCode: string, note?: string) {

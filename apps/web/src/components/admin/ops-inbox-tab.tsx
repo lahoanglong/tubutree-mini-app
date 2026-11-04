@@ -17,6 +17,8 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   pancakeUnsynced: { title: 'Đơn chưa lên Pancake', hint: 'Đơn còn ở kho mà kho Pancake chưa có' },
   gomdonAttention: { title: 'Cần xử lý thu gom', hint: 'Vận đơn Gomdon lỗi / hoàn / huỷ không được' },
   customerRefunds: { title: 'Hoàn tiền khách', hint: 'Chờ đối soát, chờ chuyển khoản hoặc đang chuyển khoản' },
+  paymentUnlinked: { title: 'Pancake báo đã thanh toán — chờ đối chiếu sao kê', hint: 'Đơn chưa gắn đúng đơn Pancake nên hệ thống không tự nhận tiền. Đối chiếu sao kê, khách đã chuyển thì bấm "Đã nhận tiền". Khách chưa chuyển thì đơn tự huỷ sau 48 giờ và chuyển cho quản trị viên' },
+  paymentUnlinkedClosed: { title: 'Pancake báo đã thanh toán cho đơn đã huỷ/trả', hint: 'Quản trị viên đối chiếu sao kê: khách đã chuyển thì ghi tiền về muộn, rồi bấm "Đã đối chiếu"' },
   returnsPending: { title: 'Yêu cầu đổi / trả chờ duyệt', hint: 'Khách gửi, chưa ai duyệt' },
   returnsToReceive: { title: 'Hàng trả chờ nhận về kho', hint: 'Đã duyệt, kho chưa bấm "Đã nhận hàng"' },
   merchantOverdue: { title: 'Đơn đối tác quá hạn giao', hint: 'Gian hàng tự giao quá hạn xác nhận / gửi / giao' },
@@ -66,6 +68,7 @@ const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { deale
  */
 const INBOX_TAB: Partial<Record<InboxKey, string>> = {
   pancakeAttention: 'orders', pancakeUnsynced: 'orders', gomdonAttention: 'orders', invoicePending: 'orders', bankTransferToConfirm: 'orders', dealerTransferToConfirm: 'orders',
+  paymentUnlinked: 'orders', paymentUnlinkedClosed: 'orders',
   returnsPending: 'returns', returnsToReceive: 'returns',
   merchantOverdue: 'merchantFulfilment', merchantToSettle: 'merchantFulfilment', merchantPayoutsPending: 'merchantFulfilment',
   merchantProducts: 'merchantProducts', consignmentPending: 'merchantProducts',

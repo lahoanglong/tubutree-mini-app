@@ -68,7 +68,7 @@ export const ORDER_LIST_SELECT = {
   fulfiller: true, fulfillerStorefrontId: true, merchantCommissionPct: true, checkoutGroup: true, merchantAcceptedAt: true, shippedAt: true, merchantSlaNotifiedAt: true, placedForCustomer: true,
   commission: true, source: true, platform: true, paidAt: true, subscriptionId: true, endCustomerKey: true, couponCode: true, note: true,
   hasRecyclingPickup: true, recyclingNote: true, gomdonOrderId: true, gomdonPartnerCode: true, gomdonStatus: true, gomdonStatusAt: true, gomdonCancelStatus: true, gomdonCancelRetrySince: true,
-  gomdonAttempt: true, deliveredAt: true, deliveredEffectsAt: true, reversalEffectsAt: true, reviewInvitedAt: true, pancakeAttention: true, pancakeAttentionAt: true, autoCancelBlockedAt: true,
+  gomdonAttempt: true, deliveredAt: true, deliveredEffectsAt: true, reversalEffectsAt: true, reviewInvitedAt: true, pancakeAttention: true, pancakeAttentionAt: true, paymentUnlinkedAt: true, paymentUnlinkedFirstAt: true, autoCancelBlockedAt: true,
   pancakePaidReported: true, pancakePushStatus: true, pancakeSyncError: true, pancakePushAttempts: true, pancakeLastAttemptAt: true, pancakePushClaimedAt: true, pancakePaymentSynced: true, pancakeCancelStatus: true,
   createdAt: true, updatedAt: true,
   items: true,

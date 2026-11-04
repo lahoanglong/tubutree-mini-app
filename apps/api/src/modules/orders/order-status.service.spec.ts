@@ -1,4 +1,3 @@
-import { ATTENTION_PAYMENT_UNLINKED } from '../integrations/pancake/pancake-attention';
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { OrderStatusService, InvalidOrderTransitionError } from './order-status.service';
@@ -959,25 +958,6 @@ describe('OrderStatusService.markPaid', () => {
     });
   });
 
-  it('lật PAID → gỡ đúng lý do "đã thanh toán nhưng đơn chưa gắn Pancake" trong CÙNG tx, giữ lý do khác', async () => {
-    const other = 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển';
-    const { svc, tx } = make([pending()], [1], `${other} | ${ATTENTION_PAYMENT_UNLINKED}`);
-    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
-    expect(tx.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', pancakeAttention: `${other} | ${ATTENTION_PAYMENT_UNLINKED}` },
-      data: { pancakeAttention: other },
-    });
-  });
-
-  it('lật PAID: ô chỉ có lý do này → ô được xoá hẳn (đơn rời hàng đợi)', async () => {
-    const { svc, tx } = make([pending()], [1], ATTENTION_PAYMENT_UNLINKED);
-    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
-    expect(tx.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', pancakeAttention: ATTENTION_PAYMENT_UNLINKED },
-      data: { pancakeAttention: null, pancakeAttentionAt: null },
-    });
-  });
-
   it('PENDING_PAYMENT+UNPAID → lật PAID + CONFIRMED có guard, ghi lịch sử (ai bấm) + order_paid trong CÙNG tx, báo khách', async () => {
     const { svc, tx, analytics, notifications } = make([pending()]);
 
@@ -1007,6 +987,13 @@ describe('OrderStatusService.markPaid', () => {
       }),
     );
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, expect.stringMatching(/^order=/));
+  });
+
+  it('lật PAID gỡ luôn cờ paymentUnlinkedAt trong CÙNG câu lật (đơn rời hàng đợi chờ đối chiếu, không để cờ mồ côi)', async () => {
+    const { svc, tx } = make([pending()]);
+    await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
+    const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
+    expect(call[0].data).toMatchObject({ paymentStatus: 'PAID', paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null });
   });
 
   it('đơn đã xác nhận trước khi tiền về → chỉ lật PAID, giữ trạng thái', async () => {

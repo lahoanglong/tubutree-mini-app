@@ -134,6 +134,10 @@ export interface AdminOrder {
   /** Lý do đơn nằm trong hàng đợi "Cần xử lý Pancake" (webhook mâu thuẫn / bị chặn); null = không cần xử lý. */
   pancakeAttention?: string | null;
   pancakeAttentionAt?: string | null;
+  /** Lúc Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (chờ đối chiếu sao kê); chỉ có nghĩa khi đơn còn UNPAID. */
+  paymentUnlinkedAt?: string | null;
+  /** Mốc khoản chưa gắn đầu tiên của đợt hiện tại (paymentUnlinkedAt bị đẩy lên mỗi khoản mới). */
+  paymentUnlinkedFirstAt?: string | null;
   /** Mã đơn bên kho Pancake; null = chưa lên kho. */
   pancakeOrderId?: string | null;
   /** WAITING_PAYMENT | WAITING_STOCK | PENDING | PUSHING | SYNCED | FAILED | NOT_CONFIGURED | SKIPPED | STALE (PancakeOrderService). */
@@ -487,12 +491,15 @@ export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
 export type OrderListPlatform = 'miniapp' | 'web';
 /** Hàng đợi của hộp việc, đúng điều kiện của số đếm (không có ô chọn riêng trên bộ lọc). */
 export type OrderQueue = 'bank_transfer_to_confirm' | 'dealer_transfer_to_confirm';
+/** Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake: open = đơn còn mở (Kế toán đóng bằng "Đã nhận tiền"), closed = đơn đã huỷ/trả (ADMIN đóng). */
+export type PaymentUnlinkedFilter = 'open' | 'closed';
 /** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
 export interface OrderListExtra {
   kind?: OrderKind;
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
   queue?: OrderQueue;
+  paymentUnlinked?: PaymentUnlinkedFilter;
   referrerUserId?: string;
   /** Khách đặt đơn (từ hồ sơ khách: "Xem tất cả đơn"). */
   userId?: string;
@@ -587,6 +594,14 @@ export const resolvePancakeAttention = (orderId: string, note: string) => {
     { method: 'POST', body: trimmed ? { note: trimmed } : {} },
   );
 };
+
+export const PAYMENT_UNLINKED_NOTE_MIN = 3;
+/** POST /admin/orders/:id/payment-unlinked/resolve — chỉ ADMIN; seenAt = paymentUnlinkedAt đang hiển thị (khoản mới tới thì API trả 409); ghi chú bắt buộc (API chặn dưới 3 ký tự sau khi cắt khoảng trắng). */
+export const resolvePaymentUnlinked = (orderId: string, note: string, seenAt: string) =>
+  apiFetch<{ ok: boolean; message: string }>(`/admin/orders/${encodeURIComponent(orderId)}/payment-unlinked/resolve`, {
+    method: 'POST',
+    body: { note: note.trim().slice(0, PANCAKE_RESOLVE_NOTE_MAX), seenAt },
+  });
 
 /** POST /admin/pancake/orders/:id/push — "Đẩy lại Pancake" cho đơn chưa lên kho (API tự chặn đơn huỷ/đã rời kho). */
 export const retryPancakePush = (orderId: string) =>
@@ -1781,6 +1796,8 @@ export type InboxKey =
   | 'pancakeUnsynced'
   | 'gomdonAttention'
   | 'customerRefunds'
+  | 'paymentUnlinked'
+  | 'paymentUnlinkedClosed'
   | 'returnsPending'
   | 'returnsToReceive'
   | 'merchantOverdue'

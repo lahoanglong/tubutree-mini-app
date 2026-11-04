@@ -1,7 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
-import { ATTENTION_PAYMENT_UNLINKED, ATTENTION_PAYMENT_UNLINKED_CLOSED } from './pancake-attention';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -135,6 +134,8 @@ type UpdateManyArgs = { where: Record<string, unknown>; data: Record<string, unk
 /** Lần lật trạng thái/thanh toán đơn (khác lần ghi hàng đợi "Cần xử lý Pancake" dùng chung mock updateMany). */
 const statusFlips = (m: jest.Mock) =>
   m.mock.calls.map(([a]) => a as UpdateManyArgs).filter((a) => a?.data && ('status' in a.data || 'paymentStatus' in a.data));
+const unlinkedFlags = (m: jest.Mock) =>
+  m.mock.calls.map(([a]) => a as UpdateManyArgs).filter((a) => a?.data && 'paymentUnlinkedAt' in a.data);
 const attentionFlags = (m: jest.Mock) =>
   m.mock.calls
     .map(([a]) => a as UpdateManyArgs)
@@ -353,7 +354,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     // Guard theo trạng thái HIỆN TẠI trong DB: chỉ lật CONFIRMED khi đơn còn PENDING_PAYMENT.
     expect(orderUpdateMany).toHaveBeenCalledWith({
       where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);
@@ -383,37 +384,68 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(notifications.notify).not.toHaveBeenCalled();
       expect(historyCreate).toHaveBeenCalledTimes(1);
       expect(historyCreate.mock.calls[0]![0].data).toMatchObject({ orderId: 'o1', actorType: 'PANCAKE', fromStatus: 'PENDING_PAYMENT', toStatus: 'PENDING_PAYMENT' });
-      expect(historyCreate.mock.calls[0]![0].data.note).toContain('chờ Kế toán xác nhận');
+      expect(historyCreate.mock.calls[0]![0].data.note).toContain('chờ đối chiếu sao kê');
+      expect(historyCreate.mock.calls[0]![0].data.createdAt).toEqual(unlinkedFlags(orderUpdateMany)[0]!.data.paymentUnlinkedFirstAt);
       expect(alerts.alert).toHaveBeenCalledTimes(1);
-      expect(alerts.alert.mock.calls[0]![1]).toContain('Chờ Kế toán');
-      expect(attentionFlags(orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
+      expect(alerts.alert.mock.calls[0]![1]).toContain('Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"');
+      // Cờ riêng, mỗi cặp Pancake mới đẩy mốc lên mới nhất (resolve phải thấy đúng mốc đó); không đụng ô chữ pancakeAttention.
+      expect(unlinkedFlags(orderUpdateMany)).toEqual([
+        { where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: expect.any(Date), paymentUnlinkedFirstAt: expect.any(Date) } },
+      ]);
+      expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
     });
 
-    it('ô đang có lý do khác → nối sau, không mất lý do cũ (ghi có điều kiện theo giá trị đã đọc)', async () => {
+    it('ô đang có lý do khác → không đụng ô chữ, chỉ đặt cờ tiền', async () => {
       const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, pancakeAttention: 'Chưa đẩy được đơn sang Pancake' });
       await t.proc.onPaymentReconcile(paidPayload);
-      expect(attentionFlags(t.orderUpdateMany)).toEqual([`Chưa đẩy được đơn sang Pancake | ${ATTENTION_PAYMENT_UNLINKED}`]);
-      expect(t.orderUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'o1', pancakeAttention: 'Chưa đẩy được đơn sang Pancake', paymentStatus: 'UNPAID' } }));
-      expect(statusFlips(t.orderUpdateMany)).toHaveLength(0);
+      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
+      expect(statusFlips(t.orderUpdateMany).filter((a) => 'status' in a.data || a.data.paymentStatus)).toHaveLength(0);
     });
 
-    it('webhook lặp khi ô đã có lý do này → không nối trùng', async () => {
-      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, pancakeAttention: `Lý do khác | ${ATTENTION_PAYMENT_UNLINKED}` });
+    it('cờ đã có: mốc mới LUÔN lớn hơn mốc cũ (kể cả cùng/ sau mili giây hiện tại), mốc đầu tiên giữ nguyên', async () => {
+      const first = new Date('2026-11-04T01:00:00.000Z');
+      const prev = new Date(Date.now() + 60_000);
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, paymentUnlinkedAt: prev, paymentUnlinkedFirstAt: first });
       await t.proc.onPaymentReconcile(paidPayload);
-      await t.proc.onPaymentReconcile(paidPayload);
-      for (const v of attentionFlags(t.orderUpdateMany)) expect(v.split(' | ').filter((x) => x === ATTENTION_PAYMENT_UNLINKED)).toHaveLength(1);
+      const [flip] = unlinkedFlags(t.orderUpdateMany);
+      expect(flip!.data.paymentUnlinkedAt).toEqual(new Date(prev.getTime() + 1));
+      expect(flip!.data.paymentUnlinkedFirstAt).toEqual(first);
     });
 
-    it('đơn đã huỷ/trả: KHÔNG tạo dòng hoàn, KHÔNG báo khách; chỉ ghim lý do (không bảo bấm "Đã nhận tiền") và báo ADMIN', async () => {
+    it('webhook lặp cùng đơn Pancake: dòng lịch sử chặn lần hai (không đặt cờ lại, không báo lại)', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null }, undefined, alerts);
+      await t.proc.onPaymentReconcile(paidPayload);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
+      (t.prisma.orderStatusHistory.findFirst as jest.Mock).mockResolvedValue({ id: 'h1' });
+      await t.proc.onPaymentReconcile(paidPayload);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
+      expect(t.historyCreate).toHaveBeenCalledTimes(1);
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
+    });
+
+    it('đơn mở và đơn đóng dùng CÙNG chữ ghi chú lịch sử (khoá chống trùng không phụ thuộc trạng thái đơn)', async () => {
+      const open = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
+      const closed = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
+      await open.proc.onPaymentReconcile(paidPayload);
+      await closed.proc.onPaymentReconcile(paidPayload);
+      expect(open.historyCreate.mock.calls[0]![0].data.note).toBe(closed.historyCreate.mock.calls[0]![0].data.note);
+    });
+
+    it('đơn đã huỷ/trả: KHÔNG tạo dòng hoàn, KHÔNG báo khách; chỉ đặt cờ (không bảo bấm "Đã nhận tiền") và báo ADMIN', async () => {
       const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
       const t = setup({ id: 'o2', code: 'TUBU2', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null }, undefined, alerts);
       await t.proc.onPaymentReconcile(paidPayload);
       expect(lateRefunds(t.prisma)).toHaveLength(0);
       expect(t.notifications.notify).not.toHaveBeenCalled();
-      expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED_CLOSED]);
-      expect(ATTENTION_PAYMENT_UNLINKED_CLOSED).not.toContain('bấm "Đã nhận tiền"');
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
+      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
       expect(alerts.alert).toHaveBeenCalledTimes(1);
-      expect(alerts.alert.mock.calls[0]![1]).not.toContain('bấm "Đã nhận tiền"');
+      const msg = alerts.alert.mock.calls[0]![1] as string;
+      expect(msg).toContain('quản trị viên đối chiếu sao kê');
+      expect(msg).toContain('bấm "Đã đối chiếu"');
+      expect(msg).not.toContain('bấm "Đã nhận tiền"');
     });
 
     it('dấu "đã ghi lý do" theo cặp (đơn, đơn Pancake): đã chốt #p1 thì #p1 không ghim lại, #p2 vẫn được ghim', async () => {
@@ -422,30 +454,37 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
         where.note?.includes('#p1)') ? { id: 'h1' } : null,
       );
       await t.proc.onPaymentReconcile({ id: 'p1', is_paid: true });
-      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(0);
       await t.proc.onPaymentReconcile({ id: 'p2', is_paid: true });
-      expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
     });
 
     it('đơn đã gắn nhưng webhook KHÔNG có id (khớp nhờ mã trong note) → không lật PAID, giữ chờ Kế toán', async () => {
       const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: 'p1' });
       await t.proc.onPaymentReconcile({ is_paid: true, note: 'Order code: TUBU1' });
       expect(statusFlips(t.orderUpdateMany)).toHaveLength(0);
-      expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
     });
 
     it('đã chốt lần đầu (dòng lịch sử có sẵn, Kế toán bấm "Đã xử lý") → webhook sau không ghi lại lý do', async () => {
       const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
       (t.prisma.orderStatusHistory.findFirst as jest.Mock).mockResolvedValue({ id: 'h1' });
       await t.proc.onPaymentReconcile(paidPayload);
-      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(0);
+    });
+
+    it('đơn đã PAID (đã gắn hay chưa) → không đặt cờ chờ đối chiếu', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 100000, pancakeOrderId: null });
+      await t.proc.onPaymentReconcile(paidPayload);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(0);
+      expect(t.historyCreate).not.toHaveBeenCalled();
     });
 
     it('đơn chưa gắn đã PAID (admin xác nhận tay) → Pancake báo vượt tổng không tạo khoản trả vượt, không ghi gì', async () => {
       const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 100000, pancakeOrderId: null });
       await t.proc.onPaymentReconcile({ id: 'p1', is_paid: true, prepaid: 300000 });
       expect(t.prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
-      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+      expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(0);
     });
 
     it('đơn đã gắn id KHÁC id trong webhook (đơn Pancake lạ mang mã này) → không lật PAID', async () => {
@@ -529,7 +568,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     });
     await proc.onPaymentReconcile(paidPayload);
     expect(statusFlips(orderUpdateMany)).toEqual([
-      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date) } },
+      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null } },
     ]);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);

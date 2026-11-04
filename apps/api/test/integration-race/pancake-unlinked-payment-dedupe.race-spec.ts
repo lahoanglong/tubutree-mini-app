@@ -4,7 +4,6 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
-import { ATTENTION_PAYMENT_UNLINKED_CLOSED } from '../../src/modules/integrations/pancake/pancake-attention';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { createOrder, createUser, warmPool } from './helpers';
 
@@ -55,19 +54,20 @@ describe('Giữ khoản thanh toán chưa gắn Pancake: hai worker đua cùng c
       expect(alerts.alert).toHaveBeenCalledTimes(2);
     }
   });
-  it('đơn bị huỷ chen vào giữa lúc đọc đơn và lúc khoá → quyết định theo trạng thái SAU khoá: lý do "đã huỷ/trả", lịch sử fromStatus CANCELLED', async () => {
+  it('đơn bị huỷ chen vào giữa lúc đọc đơn và lúc khoá → quyết định theo trạng thái SAU khoá: báo ADMIN theo lời đơn đã huỷ/trả, lịch sử fromStatus CANCELLED, cờ tiền đặt, ô chữ không đụng', async () => {
     const user = await createUser(prisma);
     const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
     const stale = { ...order };
     await prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
     await proc.holdUnattachedPayment(stale, { id: 'PK-C' }, 100_000);
-    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { pancakeAttention: true } });
-    expect(after.pancakeAttention).toContain(ATTENTION_PAYMENT_UNLINKED_CLOSED);
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { pancakeAttention: true, paymentUnlinkedAt: true } });
+    expect(after.paymentUnlinkedAt).not.toBeNull();
+    expect(after.pancakeAttention).toBeNull();
     const row = await prisma.orderStatusHistory.findFirstOrThrow({ where: { orderId: order.id, actorType: 'PANCAKE' } });
     expect([row.fromStatus, row.toStatus]).toEqual(['CANCELLED', 'CANCELLED']);
     expect(alerts.alert.mock.calls[0][1]).toContain('Đơn đã huỷ/trả');
   });
-  it('markPaid commit trước khi khoá: bản đơn cũ báo UNPAID nhưng DB đã PAID → không ghi lịch sử, không báo động, không ghim lý do', async () => {
+  it('markPaid commit trước khi khoá: bản đơn cũ báo UNPAID nhưng DB đã PAID → không ghi lịch sử, không báo động, không đặt cờ', async () => {
     const user = await createUser(prisma);
     const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
     const stale = { ...order };
@@ -75,6 +75,17 @@ describe('Giữ khoản thanh toán chưa gắn Pancake: hai worker đua cùng c
     await proc.holdUnattachedPayment(stale, { id: 'PK-D' }, 100_000);
     expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id, actorType: 'PANCAKE' } })).toBe(0);
     expect(alerts.alert).not.toHaveBeenCalled();
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { pancakeAttention: true } })).pancakeAttention).toBeNull();
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).toBeNull();
+  });
+  it('cặp khác trên đơn đã có cờ: đẩy mốc lên mới nhất (resolve theo mốc cũ sẽ 409), vẫn ghi dấu và báo ADMIN', async () => {
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+    await proc.holdUnattachedPayment(order, { id: 'PK-E' }, 100_000);
+    const first = (await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt;
+    expect(first).not.toBeNull();
+    await proc.holdUnattachedPayment(order, { id: 'PK-F' }, 100_000);
+    const second = (await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt;
+    expect(second!.getTime()).toBeGreaterThan(first!.getTime());
+    expect(alerts.alert).toHaveBeenCalledTimes(2);
   });
 });

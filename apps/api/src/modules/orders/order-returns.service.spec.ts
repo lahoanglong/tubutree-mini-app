@@ -234,6 +234,20 @@ describe('OrderReturnsService.request — hạn đổi/trả tính từ mốc gi
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('dòng ghi chú DELIVERED→DELIVERED mới hơn không làm lệch mốc giao: vẫn tính từ lần lật thật (9 ngày → quá hạn)', async () => {
+    const rows = [
+      { fromStatus: 'SHIPPING', toStatus: 'DELIVERED', createdAt: new Date(Date.now() - 9 * DAY) },
+      { fromStatus: 'DELIVERED', toStatus: 'DELIVERED', createdAt: new Date(Date.now() - 1 * DAY) },
+    ];
+    const { svc, create } = makeService(deliveredOrder({ deliveredAt: null }));
+    (svc as unknown as { prisma: { orderStatusHistory: { findFirst: jest.Mock } } }).prisma.orderStatusHistory.findFirst.mockImplementation(
+      async (a: { where: { toStatus: string; fromStatus?: { not: string } } }) =>
+        rows.filter((r) => r.toStatus === a.where.toStatus && (!a.where.fromStatus || r.fromStatus !== a.where.fromStatus.not)).sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime())[0] ?? null,
+    );
+    await expect(svc.request('u1', 'TUBU1', { reason: 'lỗi sản phẩm' })).rejects.toThrow('Quá hạn đổi/trả');
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('đơn chưa giao → 400; đơn của người khác → 404', async () => {
     await expect(makeService(deliveredOrder({ status: 'SHIPPING' })).svc.request('u1', 'TUBU1', { reason: 'lỗi sản phẩm' })).rejects.toBeInstanceOf(
       BadRequestException,

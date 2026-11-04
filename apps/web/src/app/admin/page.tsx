@@ -82,6 +82,7 @@ import {
   type InvoiceFilter,
   type OrderListExtra,
   type OrderQueue,
+  type PaymentUnlinkedFilter,
   orderExtraFilters,
   downloadOrdersCsv,
   downloadUsersCsv,
@@ -103,6 +104,7 @@ import {
   PancakeAttentionPanel,
 } from '@/components/admin/pancake-attention';
 import { PancakeSyncBadge, PancakeSyncPanel } from '@/components/admin/pancake-sync';
+import { PaymentUnlinkedBadge, PaymentUnlinkedPanel } from '@/components/admin/payment-unlinked-panel';
 import { DealerPaymentPanel } from '@/components/admin/dealer-payment-panel';
 import { ClaimCampaignPanel } from '@/components/admin/claim-campaign-panel';
 import { FlashItemOrder } from '@/components/admin/flash-item-order';
@@ -417,8 +419,8 @@ function firstAllowedTab(allowed: ReadonlySet<Tab>): Tab {
  * F5 không mất chỗ đang xem. Đọc window.location sau khi mount (không dùng useSearchParams — trang
  * client thuần, tránh bắt buộc Suspense boundary khi build).
  */
-type OrdersUrlExtras = { status: string; invoice: InvoiceFilter | ''; queue: OrderQueue | '' };
-const NO_ORDERS_URL_EXTRAS: OrdersUrlExtras = { status: '', invoice: '', queue: '' };
+type OrdersUrlExtras = { status: string; invoice: InvoiceFilter | ''; queue: OrderQueue | ''; paymentUnlinked: PaymentUnlinkedFilter | '' };
+const NO_ORDERS_URL_EXTRAS: OrdersUrlExtras = { status: '', invoice: '', queue: '', paymentUnlinked: '' };
 
 function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pancake: PancakeFilter | ''; orders: OrdersUrlExtras } {
   if (typeof window === 'undefined') return { tab: null, recycling: '', pancake: '', orders: NO_ORDERS_URL_EXTRAS };
@@ -429,6 +431,7 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
   const s = sp.get('status');
   const i = sp.get('invoice');
   const q = sp.get('queue');
+  const pu = sp.get('paymentUnlinked');
   return {
     tab: t && TAB_KEYS.has(t as Tab) ? (t as Tab) : null,
     recycling: r === 'attention' || r === 'all' ? r : '',
@@ -437,6 +440,7 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
       status: s && ORDER_STATUS_CHIPS.some((c) => c.k === s) ? s : '',
       invoice: i === 'pending' || i === 'issued' || i === 'all' ? i : '',
       queue: q === 'bank_transfer_to_confirm' || q === 'dealer_transfer_to_confirm' ? q : '',
+      paymentUnlinked: pu === 'open' || pu === 'closed' ? pu : '',
     },
   };
 }
@@ -450,6 +454,7 @@ function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: Panca
   if (tab === 'orders' && orders.status) sp.set('status', orders.status);
   if (tab === 'orders' && orders.invoice) sp.set('invoice', orders.invoice);
   if (tab === 'orders' && orders.queue) sp.set('queue', orders.queue);
+  if (tab === 'orders' && orders.paymentUnlinked) sp.set('paymentUnlinked', orders.paymentUnlinked);
   const qs = sp.toString();
   window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
 }
@@ -485,13 +490,13 @@ export default function AdminPage() {
     if (u.recycling) setOrdersRecycling(u.recycling);
     if (u.pancake) setOrdersPancake(u.pancake);
     // Link/F5 mang trạng thái, hoá đơn hoặc hàng đợi chuyển khoản: gieo cho tab Đơn hàng mở đúng bộ lọc đó.
-    if (u.tab === 'orders' && (u.orders.status || u.orders.invoice || u.orders.queue)) {
+    if (u.tab === 'orders' && (u.orders.status || u.orders.invoice || u.orders.queue || u.orders.paymentUnlinked)) {
       setOrderSeed({
         search: '',
         n: 1,
         status: u.orders.status || undefined,
         invoice: u.orders.invoice || undefined,
-        extra: u.orders.queue ? { queue: u.orders.queue, order: 'asc' } : undefined,
+        extra: u.orders.queue ? { queue: u.orders.queue, order: 'asc' } : u.orders.paymentUnlinked ? { paymentUnlinked: u.orders.paymentUnlinked, order: 'asc' } : undefined,
       });
     }
   }, []);
@@ -601,6 +606,13 @@ export default function AdminPage() {
       setTabState('orders');
       return writeUrlState('orders', '');
     }
+    if (k === 'paymentUnlinked' || k === 'paymentUnlinkedClosed') {
+      setOrdersRecycling('');
+      setOrdersPancake('');
+      setOrderSeed({ search: '', n: Date.now(), extra: { paymentUnlinked: k === 'paymentUnlinked' ? 'open' : 'closed', order: 'asc' } });
+      setTabState('orders');
+      return writeUrlState('orders', '', '', { ...NO_ORDERS_URL_EXTRAS, paymentUnlinked: k === 'paymentUnlinked' ? 'open' : 'closed' });
+    }
     if (k === 'accountDeletionPending') {
       setTab('users');
       return setDeletionSeed(Date.now());
@@ -635,6 +647,8 @@ export default function AdminPage() {
         | 'invoicePending'
         | 'bankTransferToConfirm'
         | 'dealerTransferToConfirm'
+        | 'paymentUnlinked'
+        | 'paymentUnlinkedClosed'
         | 'storefrontsPending'
         | 'accountDeletionPending'
         | 'externalPoints'
@@ -1356,8 +1370,8 @@ function OrdersTab({
   const expandedOrder = q.data?.data.find((o) => (o.id || o.code) === expandedId) ?? null;
   // F5 và link gửi đồng nghiệp giữ trạng thái, hoá đơn và hàng đợi chuyển khoản (thu gom/Pancake do trang cha ghi).
   useEffect(() => {
-    writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '' });
-  }, [recycling, pancake, status, invoice, extra.queue]);
+    writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '', paymentUnlinked: extra.paymentUnlinked ?? '' });
+  }, [recycling, pancake, status, invoice, extra.queue, extra.paymentUnlinked]);
   const inboxQ = useOpsInbox({ enabled: inboxEnabled });
   const inboxCount = (k: InboxKey) => inboxQ.data?.items.find((i) => i.key === k)?.count;
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
@@ -1803,6 +1817,7 @@ function OrdersTab({
                     {o.fulfiller === 'MERCHANT' && <ToneBadge tone="info">Gian hàng tự giao</ToneBadge>}
                     <RecyclingBadge order={o} />
                     <PancakeAttentionBadge order={o} />
+                    <PaymentUnlinkedBadge order={o} />
                     <PancakeSyncBadge order={o} />
                   </span>
                   <span className="mt-1 block text-xs text-stone-600">
@@ -1875,6 +1890,7 @@ function OrdersTab({
                             )}
                             <RecyclingBadge order={o} />
                             <PancakeAttentionBadge order={o} />
+                            <PaymentUnlinkedBadge order={o} />
                             <PancakeSyncBadge order={o} />
                           </div>
                           <div className="mt-1 space-y-1 md:hidden">
@@ -2103,6 +2119,7 @@ function OrderDetailBody({
     <div className="space-y-3">
       <OrderCustomerLine order={o} onOpenProfile={onOpenProfile} />
       <OrderPaymentSummary order={o} isAdmin={isAdmin} />
+      <PaymentUnlinkedPanel order={o} isAdmin={isAdmin} canFinance={canFinance} />
       {canWarehouse && <PancakeAttentionPanel order={o} />}
       {canWarehouse && <PancakeSyncPanel order={o} />}
 

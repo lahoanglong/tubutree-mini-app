@@ -328,7 +328,10 @@ export async function recordLatePaymentRefund(
       data: [lateRow(order, refKey, input.amount, input.note)],
       skipDuplicates: true,
     });
-    return created.count === 0 ? ('EXISTS' as const) : ('CREATED' as const);
+    if (created.count === 0) return 'EXISTS' as const;
+    // Không gỡ cờ paymentUnlinkedAt ở đây: cờ gộp nhiều khoản Pancake chưa gắn của đơn, mà dòng ADMIN:manual chỉ có một cho mỗi đơn nên khoản
+    // sau không ghi được nữa. Admin đóng cờ bằng "Đã đối chiếu" (CAS theo mốc đã xem).
+    return 'CREATED' as const;
   });
   if (outcome === 'ADMIN_RECORDED') {
     await flagRefundAttention(ctx, order, adminRecordedReason(order, input.amount, input.source));
