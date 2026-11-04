@@ -48,6 +48,7 @@ import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../
 import { hasDealerCreditDebit } from '../../orders/dealer-credit-debit';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
+import { vatInvoiceUrlError } from '../../../common/vat-invoice-url';
 
 /** Số cặp (đơn, mã vận đơn lạ) nhớ để không báo trùng — Pancake gửi lại webhook mỗi lần đơn đổi. */
 const WAYBILL_CONFLICT_MEMORY = 500;
@@ -877,12 +878,15 @@ export class PancakeProcessor extends WorkerHost {
     // phía Pancake) — không có guard này thì mỗi lần redeliver lại notify() thêm 1 lần, khách
     // nhận thông báo "đã xuất hoá đơn" trùng lặp dù order đã ISSUED từ trước.
     if (order.invoiceStatus === 'ISSUED') return;
+    // Khách thấy link thành nút "Tải PDF": cùng luật với link Kế toán nhập. Link bị loại thì không ghi (giữ link cũ) nhưng
+    // vẫn đặt ISSUED và báo khách; log nêu lý do (có tên miền) để quản trị viên thêm nhà cung cấp thật vào ALLOWED_VAT_INVOICE_HOSTS.
+    const incoming = data['invoice_url'] ? String(data['invoice_url']).trim() : '';
+    const urlError = incoming ? vatInvoiceUrlError(incoming) : null;
+    const safeUrl = incoming && !urlError ? incoming : undefined;
+    if (urlError) this.logger.warn(`Bỏ qua invoice_url từ Pancake cho đơn ${order.code}: ${urlError}`);
     await this.prisma.order.update({
       where: { id: order.id },
-      data: {
-        invoiceStatus: 'ISSUED',
-        invoiceUrl: data['invoice_url'] ? String(data['invoice_url']) : order.invoiceUrl,
-      },
+      data: { invoiceStatus: 'ISSUED', invoiceUrl: safeUrl ?? order.invoiceUrl },
     });
     await this.notifications.notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code });
   }

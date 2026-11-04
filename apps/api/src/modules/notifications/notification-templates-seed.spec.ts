@@ -170,6 +170,26 @@ describe('seed mẫu thông báo', () => {
     });
   });
 
+  describe('TK-04: tin nhắc Điểm Xanh nói tổng trong số ngày tới và ngày sớm nhất', () => {
+    const NEW_BODY = 'Bạn có {{points}} Điểm Xanh hết hạn trong {{days}} ngày tới, sớm nhất vào {{date}}.';
+    const DIR = '20261104070000_points_expiring_template_days';
+    const sql = readFileSync(join(MIGRATIONS_DIR, DIR, 'migration.sql'), 'utf-8');
+    const update = /UPDATE "notification_templates" SET "bodyTemplate" = '([^']*)'\s+WHERE "code" = '([A-Z_]+)'\s+AND "bodyTemplate" = '([^']*)';/.exec(sql);
+
+    it('seed dùng đúng câu chủ đã duyệt', () => {
+      expect(byCode.get('POINTS_EXPIRING')!.bodyTemplate).toBe(NEW_BODY);
+    });
+
+    it('migration đổi đúng mã, sang đúng câu của seed, và chỉ khi nội dung còn là bản mặc định trước đó', () => {
+      expect(update).not.toBeNull();
+      const [, next, code, old] = update!;
+      expect(code).toBe('POINTS_EXPIRING');
+      expect(next).toBe(NEW_BODY);
+      expect(old).toBe(bodiesAfterMigrations(DIR).get('POINTS_EXPIRING'));
+      expect(bodiesAfterMigrations().get('POINTS_EXPIRING')).toBe(NEW_BODY);
+    });
+  });
+
   describe('mẫu tin gói định kỳ + đơn thứ 2 (C-015, C-017): migration và seed nói cùng một câu', () => {
     const CODES = [
       'SUBSCRIPTION_PAUSED',

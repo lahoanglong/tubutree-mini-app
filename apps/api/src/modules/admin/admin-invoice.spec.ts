@@ -128,23 +128,38 @@ describe('AdminService.issueOrderInvoice', () => {
     const order = baseOrder();
     const { prisma, updateMany } = fakePrisma(order);
     const { svc, notify } = mkAdmin(prisma);
-    const out = await svc.issueOrderInvoice('admin1', 'o1', { invoiceUrl: 'https://hoadon.example.vn/abc' });
+    const out = await svc.issueOrderInvoice('admin1', 'o1', { invoiceUrl: 'https://hoadon.meinvoice.vn/abc' });
     const call = updateMany.mock.calls[0]![0];
     expect(call.where.id).toBe('o1');
     expect(JSON.stringify(call.where)).toContain('ISSUED'); // guard loại đơn đã ISSUED
-    expect(call.data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.example.vn/abc' });
-    expect(order).toMatchObject({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.example.vn/abc' });
+    expect(call.data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.meinvoice.vn/abc' });
+    expect(order).toMatchObject({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.meinvoice.vn/abc' });
     expect(notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TB-900' });
-    expect(out).toMatchObject({ ok: true, order: { code: 'TB-900', invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.example.vn/abc' } });
+    expect(out).toMatchObject({ ok: true, order: { code: 'TB-900', invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.meinvoice.vn/abc' } });
+  });
+
+  it('link ngoài danh sách hoặc nội bộ → 400, không updateMany, không báo khách (cả ADMIN lẫn STAFF)', async () => {
+    for (const bad of ['https://evil.example.com/hd.pdf', 'https://evilmeinvoice.vn/x', 'https://127.0.0.1/x', 'https://localhost/x', 'http://abc.meinvoice.vn/x']) {
+      const { prisma, updateMany } = fakePrisma(baseOrder());
+      const { svc, notify } = mkAdmin(prisma);
+      await expect(svc.issueOrderInvoice('admin1', 'o1', { invoiceUrl: bad })).rejects.toBeInstanceOf(BadRequestException);
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+    }
+  });
+
+  it('câu lỗi ngoài danh sách nêu tên miền và gợi ý ALLOWED_VAT_INVOICE_HOSTS', async () => {
+    const { prisma } = fakePrisma(baseOrder());
+    await expect(mkAdmin(prisma).svc.issueOrderInvoice('a1', 'o1', { invoiceUrl: 'https://evil.example.com/x' })).rejects.toThrow(/evil\.example\.com.*ALLOWED_VAT_INVOICE_HOSTS/);
   });
 
   it('xuất không link: giữ invoiceUrl cũ (giống webhook Pancake thiếu invoice_url), vẫn ISSUED + báo khách', async () => {
-    const order = baseOrder({ invoiceUrl: 'https://cu.example.vn/x' });
+    const order = baseOrder({ invoiceUrl: 'https://cu.meinvoice.vn/x' });
     const { prisma, updateMany } = fakePrisma(order);
     const { svc, notify } = mkAdmin(prisma);
     await svc.issueOrderInvoice('admin1', 'o1', {});
     expect(updateMany.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED' });
-    expect(order.invoiceUrl).toBe('https://cu.example.vn/x');
+    expect(order.invoiceUrl).toBe('https://cu.meinvoice.vn/x');
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
@@ -193,7 +208,7 @@ describe('Controller + DTO — issue-invoice / lọc invoice', () => {
 
   it('IssueInvoiceDto: link tuỳ chọn nhưng phải là https hợp lệ, ≤ 500 ký tự (chặn javascript:/http)', async () => {
     expect(await validate(plainToInstance(IssueInvoiceDto, {}))).toHaveLength(0);
-    expect(await validate(plainToInstance(IssueInvoiceDto, { invoiceUrl: 'https://hoadon.example.vn/abc?x=1' }))).toHaveLength(0);
+    expect(await validate(plainToInstance(IssueInvoiceDto, { invoiceUrl: 'https://hoadon.meinvoice.vn/abc?x=1' }))).toHaveLength(0);
     for (const bad of ['javascript:alert(1)', 'http://hd.vn/1', 'không phải link', `https://hd.vn/${'a'.repeat(500)}`]) {
       const errs = await validate(plainToInstance(IssueInvoiceDto, { invoiceUrl: bad }));
       expect(errs.some((e) => e.property === 'invoiceUrl')).toBe(true);

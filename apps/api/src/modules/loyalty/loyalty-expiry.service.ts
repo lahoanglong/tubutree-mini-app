@@ -6,7 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatPoints } from '../../common/format-points';
-import { formatVnDate, vnDateKey, vnDateParts } from '../../common/vn-time';
+import { formatVnDate, startOfVnDay, vnDateKey, vnDateParts } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
   MILESTONE_REVOKE_PREFIX,
@@ -498,7 +498,7 @@ export class LoyaltyExpiryService {
 
   /**
    * Cron 8h sáng: nhắc user có điểm sắp hết hạn trong cửa sổ (config point_expiry_reminder_days).
-   * Dedup qua NotificationLog: bỏ qua nếu đã gửi POINTS_EXPIRING trong ≤ reminderDays ngày.
+   * Dedup qua NotificationLog: mỗi người nhận POINTS_EXPIRING tối đa một lần trong reminderDays ngày VN liên tiếp (mặc định 7 = mỗi tuần).
    *
    * Cùng lỗi thiếu orderBy/cursor như expirePoints() (candidate cũ chiếm chỗ vĩnh viễn khi vượt
    * BATCH) — phân trang bằng keyset y hệt cho nhất quán trong cùng file.
@@ -558,8 +558,9 @@ export class LoyaltyExpiryService {
     const { expiringSoon } = computePointExpiry(txns, now, windowMs);
     if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) return false;
 
-    // Dedup: đã nhắc trong kỳ (POINTS_EXPIRING trong ≤ reminderDays) → bỏ qua (chống spam).
-    const since = new Date(now.getTime() - reminderDays * DAY);
+    // Dedup theo ngày VN: đã nhắc trong (reminderDays - 1) ngày trước hôm nay hoặc hôm nay thì bỏ qua. Mốc `now - reminderDays*DAY`
+    // trượt vài giây so với lúc ghi log tin trước, khiến tin kế dời sang ngày thứ reminderDays+1 và bỏ sót lô hết hạn trong ngày đó.
+    const since = new Date(startOfVnDay(now).getTime() - (reminderDays - 1) * DAY);
     const recent = await this.prisma.notificationLog.findFirst({
       where: { userId, templateCode: 'POINTS_EXPIRING', sentAt: { gte: since } },
       select: { id: true },
@@ -569,6 +570,7 @@ export class LoyaltyExpiryService {
     await this.notifications
       .notifySafe(userId, 'POINTS_EXPIRING', {
         points: formatPoints(expiringSoon.amount),
+        days: String(reminderDays),
         date: formatVnDate(expiringSoon.earliestExpiresAt),
       }); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;

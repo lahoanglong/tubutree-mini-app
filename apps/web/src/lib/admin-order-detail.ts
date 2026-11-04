@@ -50,13 +50,39 @@ export function canIssueInvoice(o: {
   return !!o.invoiceRequest && o.invoiceStatus !== 'ISSUED' && o.status !== 'CANCELLED' && o.status !== 'RETURNED';
 }
 
+function isInternalHost(host: string): boolean {
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || host.endsWith('.local')) return true;
+  const v4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(host);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+  }
+  if (host.startsWith('[')) {
+    const m = /^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/.exec(host);
+    if (m) {
+      const hi = parseInt(m[1]!, 16);
+      return isInternalHost(`${hi >> 8}.${hi & 255}.0.0`);
+    }
+    return host === '[::]' || host === '[::1]' || /^\[f[cd]/.test(host) || /^\[fe[89ab]/.test(host);
+  }
+  return false;
+}
+
 /** Link hoá đơn tuỳ chọn; có thì phải là https hợp lệ ≤ 500 ký tự (khớp IssueInvoiceDto). null = hợp lệ. */
 export function invoiceUrlError(raw: string): string | null {
   const v = raw.trim();
   if (!v) return null;
   if (v.length > INVOICE_URL_MAX) return `Link tối đa ${INVOICE_URL_MAX} ký tự.`;
   try {
-    if (new URL(v).protocol === 'https:') return null;
+    const u = new URL(v);
+    if (u.protocol === 'https:') {
+      if (u.username || u.password) return 'Link hoá đơn không được kèm tài khoản/mật khẩu.';
+      // Máy chủ mới biết danh sách tên miền được phép (env); ở đây chỉ chặn sớm địa chỉ nội bộ rõ ràng.
+      const h = u.hostname.toLowerCase().replace(/\.$/, '');
+      if (isInternalHost(h)) return 'Link hoá đơn không được trỏ tới địa chỉ nội bộ.';
+      return null;
+    }
   } catch {
     /* rơi xuống thông báo chung */
   }

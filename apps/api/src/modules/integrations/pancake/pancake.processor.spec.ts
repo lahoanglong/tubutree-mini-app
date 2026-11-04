@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
 import { OrderReversalService } from '../../orders/order-reversal.service';
@@ -1669,5 +1670,59 @@ describe('PancakeProcessor — variation.stock_changed tới không theo thứ t
     expect(q.sql).toContain('"pancakeStockSyncReadAt" < ?');
     expect(q.values).toContainEqual(RECEIVED_AT);
     expect(saved(prisma).status).toBe('PROCESSED');
+  });
+});
+
+describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
+  const order = {
+    id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', note: null, pancakeOrderId: 'p1', fulfiller: 'TUBU',
+    fulfillerStorefrontId: null, invoiceStatus: 'REQUESTED', invoiceUrl: 'https://cu.meinvoice.vn/x', shippingHistory: [], items: [],
+  };
+  function run(invoiceUrl: unknown) {
+    const ctx = setup(order);
+    (ctx.prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
+      id: 'e1', status: 'RECEIVED', eventType: 'invoice.issued', rawPayload: { id: 'p1', invoice_url: invoiceUrl },
+    });
+    return { ...ctx, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
+  }
+
+  it('link https công khai → ghi link mới, ISSUED, báo khách', async () => {
+    const { go, orderUpdate, notifications } = run('https://abc.meinvoice.vn/inv/1');
+    await go();
+    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' });
+  });
+
+  it.each([
+    'https://127.0.0.1/x', 'https://192.168.1.5/inv', 'https://localhost/x', 'http://evil.vn/x', 'https://u:p@evil.vn/x',
+    'https://hoadon-tubu.evil.com/x.pdf', 'https://8.8.8.8/x', 'https://[::127.0.0.1]/x',
+  ])('link bị loại %s → giữ link cũ, vẫn ISSUED và báo khách', async (bad) => {
+    const { go, orderUpdate, notifications } = run(bad);
+    await go();
+    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
+    expect(notifications.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('link ngoài danh sách: log nêu tên miền để quản trị viên thêm vào ALLOWED_VAT_INVOICE_HOSTS', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { go } = run('https://hoadon.nha-cung-cap-moi.vn/x.pdf');
+      await go();
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/TUBU1.*hoadon\.nha-cung-cap-moi\.vn.*ALLOWED_VAT_INVOICE_HOSTS/));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('link có khoảng trắng hai đầu → ghi bản đã cắt khoảng trắng', async () => {
+    const { go, orderUpdate } = run('  https://abc.meinvoice.vn/inv/2 ');
+    await go();
+    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/2' });
+  });
+
+  it('không có invoice_url → giữ link cũ, vẫn ISSUED', async () => {
+    const { go, orderUpdate } = run(undefined);
+    await go();
+    expect(orderUpdate.mock.calls[0]![0].data).toEqual({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://cu.meinvoice.vn/x' });
   });
 });

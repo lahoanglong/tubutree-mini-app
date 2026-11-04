@@ -63,6 +63,8 @@ export const envSchema = z.object({
   IMAGE_CACHE_DIR: z.string().default(''),
   IMAGE_CACHE_MAX_MB: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().positive().max(10_240).default(512)),
   IMAGE_RESIZE_EXTRA_HOSTS: z.string().default(''),
+  // Tên miền được phép làm link hoá đơn VAT (dấu phẩy, `*.x` gồm tên miền con). Trống = danh sách mặc định (common/vat-invoice-url.ts); có giá trị = thay hẳn.
+  ALLOWED_VAT_INVOICE_HOSTS: z.string().default(''),
   // Pancake POS
   PANCAKE_BASE_URL: z.string().default('https://pos.pages.fm/api/v1'),
   PANCAKE_API_KEY: z.string().default(''),

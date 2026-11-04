@@ -82,4 +82,16 @@ describe('invoiceUrlError — khớp IssueInvoiceDto (https, ≤ 500)', () => {
     expect(invoiceUrlError('hoadon của tôi')).toMatch(/https/);
     expect(invoiceUrlError(`https://hd.vn/${'a'.repeat(500)}`)).toMatch(/500/);
   });
+  it.each([
+    'https://localhost/x', 'https://app.localhost/x', 'https://127.0.0.1/x', 'https://10.0.0.1/x', 'https://172.16.0.1/x', 'https://172.31.0.1/x',
+    'https://192.168.1.1/x', 'https://169.254.169.254/x', 'https://0.0.0.0/x', 'https://[::1]/x', 'https://[fe80::1]/x', 'https://[fd00::1]/x',
+    'https://[::ffff:127.0.0.1]/x', 'https://db.internal/x', 'https://nas.local/x',
+  ])('địa chỉ nội bộ %s → báo lỗi', (u) => {
+    expect(invoiceUrlError(u)).toMatch(/nội bộ/);
+  });
+  it('user:pass → báo lỗi; IP công khai và 172.32 không bị chặn phía client', () => {
+    expect(invoiceUrlError('https://user:pw@abc.meinvoice.vn/x')).toMatch(/tài khoản/);
+    expect(invoiceUrlError('https://172.32.0.1/x')).toBeNull();
+    expect(invoiceUrlError('https://abc.meinvoice.vn/x')).toBeNull();
+  });
 });
