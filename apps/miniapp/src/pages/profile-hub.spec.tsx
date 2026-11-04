@@ -265,7 +265,7 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /^2 mã\s*Mã giảm giá$/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/offers?section=coupons');
-    fireEvent.click(await screen.findByRole('button', { name: /^Ví Tubu: / }));
+    fireEvent.click(await screen.findByRole('button', { name: /Ví Tubu$/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/wallet', { state: { from: '/profile' } });
   });
 });
