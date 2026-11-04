@@ -118,4 +118,18 @@ describe('TabErrorBoundary: chunk tab cũ sau khi deploy', () => {
     expect(r.container.textContent).toContain('Mục này đang gặp lỗi');
     expect(byText(r.container, 'button', 'Thử lại')).not.toBeNull();
   });
+
+  it('mất mạng: không tự tải lại, không dùng lượt claim, hiện câu mất kết nối và nút Tải lại trang', () => {
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    const r = mountChunk(named('ChunkLoadError', 'Loading chunk 1 failed.'));
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(r.container.textContent).toContain('Mất kết nối. Có mạng lại thì bấm Tải lại trang.');
+    expect(r.container.textContent).not.toContain('vừa được cập nhật');
+    expect(sessionStorage.length).toBe(0);
+    click(byText(r.container, 'button', 'Tải lại trang'));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    online.mockReturnValue(true);
+    mountChunk(named('ChunkLoadError', 'x'));
+    expect(reloadPage).toHaveBeenCalledTimes(2);
+  });
 });

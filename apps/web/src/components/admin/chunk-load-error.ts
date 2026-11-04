@@ -7,6 +7,9 @@ export function isChunkLoadError(error: unknown): boolean {
   return error.name === 'ChunkLoadError' || CHUNK_MESSAGE.test(error.message);
 }
 
+/** Mất mạng cũng làm tải chunk thất bại: tải lại trang lúc đó chỉ ra màn "Không có kết nối" của trình duyệt. */
+export const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+
 /**
  * True nếu được phép tự tải lại trang lúc này. Mỗi đường dẫn một lần mỗi 60 giây để bản vẫn hỏng không kẹt vòng tải lại;
  * không ghi được sessionStorage thì không tự tải (không có cách chặn vòng lặp), người dùng vẫn có nút.
