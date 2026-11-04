@@ -627,6 +627,47 @@ describe('PayrollService.adminMonth — GET không ghi dữ liệu tháng cũ', 
   });
 });
 
+/**
+ * Màn Lương của admin có một dòng cho mỗi nhân sự. Ảnh QR tĩnh và ảnh xác nhận đã chuyển có thể là base64 hàng trăm KB: ảnh QR
+ * đã nằm ở `qrImageUrl` của dòng nên không lặp lại trong `profile`, còn ảnh xác nhận không ai đọc ở danh sách này.
+ */
+describe('PayrollService.adminMonth — select gọn (L3-17)', () => {
+  const PROFILE = { bankBin: '970436', bankAccountNo: '123', bankAccountName: 'A', qrImageUrl: 'data:image/png;base64,AAAA', hourlyRate: 30000, active: true };
+
+  function mkPrisma() {
+    const profileFindMany = jest.fn().mockResolvedValue([{ userId: 'u1', ...PROFILE }]);
+    const monthFindMany = jest.fn().mockResolvedValue([
+      { staffId: 'u1', year: 2020, month: 1, totalMinutes: 60, gross: 100, totalFines: 0, net: 100, status: 'PAID', finalizedAt: null, paidAt: null, paidBy: null, note: null },
+    ]);
+    const prisma = makePrisma({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1', fullName: 'A', phone: '01' }]) },
+      staffProfile: { findMany: profileFindMany },
+      payrollMonth: { findMany: monthFindMany },
+    });
+    return { prisma, profileFindMany, monthFindMany };
+  }
+
+  it('không chọn cột ảnh xác nhận đã chuyển của tháng lương', async () => {
+    const { prisma, monthFindMany } = mkPrisma();
+    await mk(prisma).adminMonth(2020, 1);
+    const select = monthFindMany.mock.calls[0]![0].select as Record<string, boolean>;
+    expect(select).toBeDefined();
+    expect(select).not.toHaveProperty('proofImageUrl');
+    expect(select).toMatchObject({ staffId: true, status: true, net: true, totalMinutes: true });
+  });
+
+  it('hồ sơ chọn đúng cột cần, QR ở dòng giữ nguyên nhưng không lặp lại trong profile', async () => {
+    const { prisma, profileFindMany } = mkPrisma();
+    const rows = await mk(prisma).adminMonth(2020, 1);
+    expect(profileFindMany.mock.calls[0]![0].select).toBeDefined();
+    expect(rows[0]!.qrImageUrl).toBe(PROFILE.qrImageUrl);
+    expect(rows[0]!.profile).toMatchObject({ hourlyRate: 30000, bankAccountNo: '123', bankAccountName: 'A', active: true });
+    expect(rows[0]!.profile).not.toHaveProperty('qrImageUrl');
+    expect(JSON.stringify(rows).split('data:image').length - 1).toBe(1);
+    expect(rows[0]!.month).not.toHaveProperty('proofImageUrl');
+  });
+});
+
 describe('PayrollService.recomputeStaffMonth — không kiểm trạng thái tháng lặp lại cho từng ngày', () => {
   it('tháng 26 ngày công → chỉ 1 lần đọc PayrollMonth để kiểm khoá, không phải 26', async () => {
     const days = Array.from({ length: 26 }, (_, i) => ({

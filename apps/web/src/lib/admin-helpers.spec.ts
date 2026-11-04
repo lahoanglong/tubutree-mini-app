@@ -262,7 +262,7 @@ describe('admin-client — endpoint mới gọi đúng đường dẫn/body', ()
       data: [{ id: 'p1' }],
       meta: { page: 1, limit: 100, total: 1 },
     });
-    expect(f.mock.calls[0]![0]).toContain('/admin/merchant-products/pending?page=1&limit=100');
+    expect(f.mock.calls[0]![0]).toContain('/admin/merchant-products/pending?page=1&limit=20');
 
     // BE cũ (hoặc bản build khác) trả mảng trần — vẫn phải ra Page<T> hợp lệ, không .map thẳng lên mảng lỗi kiểu.
     f = stubFetch([{ id: 'p2' }]);

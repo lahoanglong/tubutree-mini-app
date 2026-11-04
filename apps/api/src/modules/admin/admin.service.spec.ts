@@ -1796,16 +1796,37 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
 });
 
 describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () => {
-  it('listPendingMerchantProducts lấy sản phẩm chờ duyệt và sản phẩm đang bán có bản sửa chờ duyệt, có phân trang thật', async () => {
-    const findMany = jest.fn().mockResolvedValue([
-      { id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW', editDraft: null },
-    ]);
-    const count = jest.fn().mockResolvedValue(1);
+  /** Dòng ảnh do truy vấn thô trả: chỉ mã băm của base64, không có chính ảnh. */
+  const imgRow = (id: string, over: Record<string, unknown> = {}) => ({ id, thumb: null, images: [], draftThumb: null, draftImages: null, ...over });
+
+  function pendingPrisma(rows: unknown[], imageRows: unknown[] = rows.map((r) => imgRow((r as { id: string }).id)), links: { variations?: unknown[]; stores?: unknown[] } = {}) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const count = jest.fn().mockResolvedValue(rows.length);
+    const queryRaw = jest.fn().mockResolvedValue(imageRows);
+    const variationFindMany = jest.fn().mockResolvedValue(links.variations ?? []);
+    const variationFindUnique = jest.fn();
+    const storefrontFindMany = jest.fn().mockResolvedValue(links.stores ?? []);
+    const storefrontFindUnique = jest.fn();
     const prisma = makePrisma({
       product: { findMany, count },
-      // listUsers/listOrders pattern: $transaction([findMany, count]) — mock chạy THẬT mảng.
+      variation: { findMany: variationFindMany, findUnique: variationFindUnique },
+      storefront: { findMany: storefrontFindMany, findUnique: storefrontFindUnique },
+      $queryRaw: queryRaw,
       $transaction: jest.fn((arr) => Promise.all(arr)),
     });
+    const queries = () => findMany.mock.calls.length + count.mock.calls.length + queryRaw.mock.calls.length + variationFindMany.mock.calls.length + storefrontFindMany.mock.calls.length + variationFindUnique.mock.calls.length + storefrontFindUnique.mock.calls.length;
+    return { prisma, findMany, queryRaw, variationFindMany, variationFindUnique, storefrontFindMany, storefrontFindUnique, queries };
+  }
+
+  it('limit=100 (web cũ) bị kẹp còn 50 dòng, meta phản ánh trần thật', async () => {
+    const { prisma, findMany } = pendingPrisma([{ id: 'p1', name: 'A', approvalStatus: 'PENDING_REVIEW', editDraft: null }]);
+    const res = await mkAdmin(prisma).listPendingMerchantProducts(2, 100);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 50, take: 50 }));
+    expect(JSON.stringify(res)).toContain('"limit":50');
+  });
+
+  it('listPendingMerchantProducts lấy sản phẩm chờ duyệt và sản phẩm đang bán có bản sửa chờ duyệt, có phân trang thật', async () => {
+    const { prisma, findMany } = pendingPrisma([{ id: 'p1', name: 'Nước giặt sinh học', approvalStatus: 'PENDING_REVIEW', editDraft: null }]);
     const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1819,25 +1840,117 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
   });
 
   it('R3-MERCHANT-4: dòng có bản sửa hiện nội dung MỚI để admin duyệt, kèm nội dung đang bán để đối chiếu', async () => {
-    const live = {
-      id: 'p1', name: 'Nến thơm', description: 'Mô tả cũ', shortDesc: 'cũ', images: ['a.jpg'], thumbnail: 'a.jpg',
-      approvalStatus: 'APPROVED', pancakeLinkCode: null,
-    };
-    const editDraft = { id: 'd1', productId: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', shortDesc: 'mới', images: ['b.jpg'], thumbnail: 'b.jpg', updatedAt: new Date() };
-    const findMany = jest.fn().mockResolvedValue([{ ...live, editDraft }, { id: 'p2', name: 'Mới', approvalStatus: 'PENDING_REVIEW', editDraft: null }]);
-    const prisma = makePrisma({
-      product: { findMany, count: jest.fn().mockResolvedValue(2) },
-      $transaction: jest.fn((arr) => Promise.all(arr)),
-    });
+    const updatedAt = new Date();
+    const live = { id: 'p1', name: 'Nến thơm', description: 'Mô tả cũ', shortDesc: 'cũ', approvalStatus: 'APPROVED', pancakeLinkCode: null };
+    const editDraft = { name: 'Nến thơm sả', description: 'Mô tả mới', shortDesc: 'mới', updatedAt };
+    const { prisma } = pendingPrisma(
+      [{ ...live, editDraft }, { id: 'p2', name: 'Mới', approvalStatus: 'PENDING_REVIEW', editDraft: null }],
+      [imgRow('p1', { thumb: 'a.jpg', images: ['a.jpg'], draftThumb: 'b.jpg', draftImages: ['b.jpg'] }), imgRow('p2')],
+    );
     const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
     const [edit, fresh] = res.data as unknown as Record<string, unknown>[];
     expect(edit).toMatchObject({
-      id: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', thumbnail: 'b.jpg', isEdit: true,
+      id: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', thumbnail: 'b.jpg', images: ['b.jpg'], isEdit: true,
       live: { name: 'Nến thơm', description: 'Mô tả cũ', shortDesc: 'cũ', thumbnail: 'a.jpg' },
     });
     expect(edit).not.toHaveProperty('editDraft');
-    expect((edit as { editVersion: string }).editVersion).toBe(editDraft.updatedAt.toISOString());
+    expect((edit as { editVersion: string }).editVersion).toBe(updatedAt.toISOString());
     expect(fresh).toMatchObject({ id: 'p2', name: 'Mới', isEdit: false, live: null, editVersion: null });
+  });
+
+  describe('L3-02: payload nhẹ và số truy vấn cố định', () => {
+    const product = (i: number, over: Record<string, unknown> = {}) => ({
+      id: `p${i}`, name: `SP ${i}`, approvalStatus: 'PENDING_REVIEW', storefrontId: 'sf1', pancakeLinkCode: null, editDraft: null, ...over,
+    });
+
+    it('findMany dùng select, không lấy cột ảnh; ảnh lấy bằng một truy vấn thô cho cả trang', async () => {
+      const { prisma, findMany, queryRaw } = pendingPrisma([product(1), product(2)]);
+      await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
+      const arg = findMany.mock.calls[0]![0] as { include?: unknown; select: Record<string, unknown> };
+      expect(arg.include).toBeUndefined();
+      expect(arg.select).not.toHaveProperty('images');
+      expect(arg.select).not.toHaveProperty('thumbnail');
+      expect(arg.select.editDraft).toMatchObject({ select: expect.not.objectContaining({ images: true, thumbnail: true }) });
+      expect(queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('ảnh base64 đi ra thành đường dẫn admin theo mã băm, ảnh https và đường dẫn công khai giữ nguyên, không có data:image', async () => {
+      const { prisma } = pendingPrisma(
+        [product(1), product(2, { editDraft: { name: 'n', description: 'd', shortDesc: null, updatedAt: new Date() } })],
+        [
+          imgRow('p1', { thumb: 'data:0123456789', images: ['data:0123456789', 'https://cdn/x.jpg'] }),
+          imgRow('p2', { thumb: '/public-image/product/p2/0?v=aaaaaaaaaaaaaaaa', images: [], draftThumb: 'data:abcdef0123', draftImages: ['data:abcdef0123'] }),
+        ],
+      );
+      const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
+      const [a, b] = res.data as unknown as { thumbnail: string; images: string[]; live: { thumbnail: string } | null }[];
+      expect(a!.thumbnail).toBe('/admin/merchant-products/p1/images/product/thumb?v=0123456789');
+      expect(a!.images).toEqual(['/admin/merchant-products/p1/images/product/0?v=0123456789', 'https://cdn/x.jpg']);
+      expect(b!.thumbnail).toBe('/admin/merchant-products/p2/images/draft/thumb?v=abcdef0123');
+      expect(b!.images).toEqual(['/admin/merchant-products/p2/images/draft/0?v=abcdef0123']);
+      expect(b!.live!.thumbnail).toBe('/public-image/product/p2/0?v=aaaaaaaaaaaaaaaa');
+      expect(JSON.stringify(res)).not.toContain('data:image');
+    });
+
+    it('số truy vấn không tăng theo số dòng, kể cả khi mọi dòng đều có mã Pancake', async () => {
+      const run = async (n: number) => {
+        const rows = Array.from({ length: n }, (_, i) => product(i, { pancakeLinkCode: `PK-${i}` }));
+        const h = pendingPrisma(rows);
+        await mkAdmin(h.prisma).listPendingMerchantProducts(1, 50);
+        expect(h.variationFindUnique).not.toHaveBeenCalled();
+        expect(h.storefrontFindUnique).not.toHaveBeenCalled();
+        return h.queries();
+      };
+      const few = await run(2);
+      const many = await run(40);
+      expect(many).toBe(few);
+      expect(many).toBeLessThanOrEqual(5);
+    });
+
+    it('liên kết Pancake của cả trang gom thành một truy vấn biến thể và một truy vấn gian hàng', async () => {
+      const variation = (code: string, productId: string) => ({
+        pancakeId: code, name: `BT ${code}`, stock: 5, retailPrice: 100, salePrice: null, isActive: true,
+        product: {
+          id: productId, name: 'Gốc', slug: 'goc', brand: 'B', brandId: 'b1', brandRef: null, isActive: true, approvalStatus: 'APPROVED', soldApp: 3, soldExternal: 2,
+          reviewCount: 1, storefrontId: null, storefront: null, _count: { variations: 2 },
+        },
+      });
+      const { prisma, variationFindMany, storefrontFindMany } = pendingPrisma(
+        [product(1, { pancakeLinkCode: ' PK-1 ' }), product(2, { pancakeLinkCode: 'PK-2' }), product(3)],
+        undefined,
+        { variations: [variation('PK-1', 'p1'), variation('PK-2', 'origin')], stores: [{ id: 'sf1', brandId: 'b1' }] },
+      );
+      const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
+      expect(variationFindMany).toHaveBeenCalledTimes(1);
+      expect(variationFindMany.mock.calls[0]![0].where).toEqual({ pancakeId: { in: ['PK-1', 'PK-2'] } });
+      expect(storefrontFindMany).toHaveBeenCalledTimes(1);
+      const [a, b, c] = res.data as unknown as { pancakeLink: { state: string; brandMatchesStore: boolean; origin: { id: string } | null } | null }[];
+      expect(a!.pancakeLink).toMatchObject({ state: 'LINKED', origin: null, brandMatchesStore: true });
+      expect(b!.pancakeLink).toMatchObject({ state: 'TAKEOVER', origin: { id: 'origin' }, brandMatchesStore: true });
+      expect(c!.pancakeLink).toBeNull();
+    });
+
+    it('mã không có biến thể nào → UNAVAILABLE', async () => {
+      const { prisma } = pendingPrisma([product(1, { pancakeLinkCode: 'PK-X' })]);
+      const res = await mkAdmin(prisma).listPendingMerchantProducts(1, 20);
+      expect((res.data[0] as unknown as { pancakeLink: unknown }).pancakeLink).toMatchObject({ code: 'PK-X', state: 'UNAVAILABLE', variation: null });
+    });
+  });
+
+  describe('L3-02: ảnh của sản phẩm chờ duyệt qua route admin', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    it.each([['product', 'thumb'], ['product', 2], ['draft', 'thumb'], ['draft', 0]] as const)('nguồn %s, ô %s → byte ảnh', async (source, slot) => {
+      const queryRaw = jest.fn().mockResolvedValue([{ image: PNG }]);
+      const out = await mkAdmin(makePrisma({ $queryRaw: queryRaw })).merchantProductImage('p1', source, slot);
+      expect(out.mime).toBe('image/png');
+      expect(queryRaw).toHaveBeenCalledTimes(1);
+    });
+    it('không có dòng hoặc không phải raster → 404', async () => {
+      await expect(mkAdmin(makePrisma({ $queryRaw: jest.fn().mockResolvedValue([]) })).merchantProductImage('p1', 'product', 0)).rejects.toThrow('Không tìm thấy ảnh.');
+      await expect(
+        mkAdmin(makePrisma({ $queryRaw: jest.fn().mockResolvedValue([{ image: 'data:image/svg+xml;base64,PHN2Zz4=' }]) })).merchantProductImage('p1', 'draft', 'thumb'),
+      ).rejects.toThrow('Không tìm thấy ảnh.');
+    });
   });
 
   describe('R3-MERCHANT-4: duyệt hoặc từ chối bản sửa của sản phẩm đang bán', () => {
