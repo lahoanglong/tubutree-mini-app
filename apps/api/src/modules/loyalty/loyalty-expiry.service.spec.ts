@@ -1410,10 +1410,10 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
       });
       await svc.remindExpiringPoints();
       expect(notify.mock.calls[0][2]).toMatchObject({ points: '100', days: '14', date: formatVnDate(new Date('2026-11-08T10:00:00.000Z')) });
-      expect(notifFindFirst.mock.calls[0][0].where.sentAt.gte).toEqual(new Date(Date.now() - 14 * DAY));
+      expect(notifFindFirst.mock.calls[0][0].where.sentAt.gte).toEqual(new Date('2026-10-21T17:00:00.000Z'));
     });
 
-    it('chu kỳ nhắc giữ mỗi tuần: tra NotificationLog POINTS_EXPIRING của 7 ngày qua, có thì không gửi', async () => {
+    it('chu kỳ nhắc giữ mỗi tuần: tra NotificationLog POINTS_EXPIRING từ 0h VN của 6 ngày trước, có thì không gửi', async () => {
       jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
       const { svc, notify, notifFindFirst } = setup({
         candidates: [{ userId: 'u1' }],
@@ -1422,10 +1422,49 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
       });
       await svc.remindExpiringPoints();
       expect(notifFindFirst).toHaveBeenCalledWith({
-        where: { userId: 'u1', templateCode: 'POINTS_EXPIRING', sentAt: { gte: new Date('2026-10-28T01:00:00.000Z') } },
+        where: { userId: 'u1', templateCode: 'POINTS_EXPIRING', sentAt: { gte: new Date('2026-10-28T17:00:00.000Z') } },
         select: { id: true },
       });
       expect(notify).not.toHaveBeenCalled();
+    });
+
+    describe('cron 8h hằng ngày: tin trước ghi log muộn vài giây vẫn không đẩy tin kế sang ngày thứ 8', () => {
+      const sentDay0 = new Date('2026-11-04T01:00:05.000Z');
+      async function runAt(nowIso: string) {
+        jest.useFakeTimers({ now: new Date(nowIso), doNotFake: ['nextTick', 'setImmediate'] });
+        const ctx = setup({
+          candidates: [{ userId: 'u1' }],
+          userTxns: [tx('a', 40, '2025-11-01', new Date(new Date(nowIso).getTime() + 2 * DAY).toISOString())],
+          recentLog: null,
+        });
+        ctx.notifFindFirst.mockImplementation(async (args: { where: { sentAt: { gte: Date } } }) =>
+          sentDay0 >= args.where.sentAt.gte ? { id: 'log-day0' } : null,
+        );
+        await ctx.svc.remindExpiringPoints();
+        return ctx.notify;
+      }
+
+      it('ngày thứ 7 lúc 8h (log ngày 0 lúc 08:00:05) → gửi', async () => {
+        expect(await runAt('2026-11-11T01:00:00.000Z')).toHaveBeenCalledTimes(1);
+      });
+      it('ngày thứ 6 lúc 8h → chưa gửi', async () => {
+        expect(await runAt('2026-11-10T01:00:00.000Z')).not.toHaveBeenCalled();
+      });
+      it('cùng ngày 0, cron chạy lại lúc 23:59 VN → chưa gửi', async () => {
+        expect(await runAt('2026-11-04T16:59:00.000Z')).not.toHaveBeenCalled();
+      });
+    });
+
+    it('cấu hình 1 ngày: mỗi ngày VN nhắc một lần', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-04T01:00:00.000Z'), doNotFake: ['nextTick', 'setImmediate'] });
+      const { svc, notifFindFirst } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 40, '2025-11-01', '2026-11-04T20:00:00.000Z')],
+        recentLog: null,
+        reminderDays: 1,
+      });
+      await svc.remindExpiringPoints();
+      expect(notifFindFirst.mock.calls[0][0].where.sentAt.gte).toEqual(new Date('2026-11-03T17:00:00.000Z'));
     });
 
     it('lô hết hạn sau cửa sổ không làm tin được gửi', async () => {
