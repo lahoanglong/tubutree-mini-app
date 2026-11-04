@@ -74,6 +74,9 @@ export class RbacService {
   }
 
   private async raiseFromGrants(stale: User, db: Prisma.TransactionClient, actorId: string | null, reason?: string): Promise<User> {
+    // Thứ tự khoá ở mọi đường đổi quyền: lockAdminRoster, rồi role_grants, rồi users. Khoá grant của SĐT này trước (cùng thứ tự
+    // với setUserRole/revokeGrant/addGrant) nên không có vòng chờ; sau khi giành được khoá, đọc lại role và grant cho đúng.
+    await db.$queryRaw`SELECT "id" FROM "role_grants" WHERE "phone" = ${stale.phone} ORDER BY "id" FOR NO KEY UPDATE`;
     const [locked] = await db.$queryRaw<{ role: UserRole; staffPermissions: string[] }[]>`
       SELECT "role", "staffPermissions" FROM "users" WHERE "id" = ${stale.id} FOR NO KEY UPDATE`;
     const user: User = locked ? { ...stale, role: locked.role, staffPermissions: locked.staffPermissions } : stale;
@@ -216,6 +219,9 @@ export class RbacService {
         where: { phone: normalized, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      // Grant đã khoá ở lệnh trên; khoá tiếp dòng users (cùng thứ tự với applyGrants) rồi mới đọc role, để một lần applyGrants đang chạy
+      // không nâng người này sau khi ta đã đọc role cũ.
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "phone" = ${normalized} FOR NO KEY UPDATE`;
       const user = await tx.user.findUnique({ where: { phone: normalized } });
       // Cùng hai lối khoá tổ chức ra ngoài như AdminService.setUserRole: nút "Thu hồi" trong
       // app hiện ngay trên dòng của chính admin đang đăng nhập và không hỏi lại lần nào.

@@ -97,7 +97,7 @@ describe('RbacService.applyGrants', () => {
 });
 
 describe('RbacService.applyGrants: khoá dòng người dùng rồi đọc lại (L1-02)', () => {
-  it('có grant cao hơn: mở giao dịch, khoá dòng users FOR NO KEY UPDATE rồi mới đọc lại grant và nâng', async () => {
+  it('có grant cao hơn: mở giao dịch, khoá role_grants rồi users FOR NO KEY UPDATE, sau đó mới đọc lại grant và nâng', async () => {
     const order: string[] = [];
     const prisma = makePrisma({
       roleGrant: {
@@ -113,14 +113,16 @@ describe('RbacService.applyGrants: khoá dòng người dùng rồi đọc lại
         }),
       },
       $queryRaw: jest.fn(async (s: TemplateStringsArray) => {
-        order.push(/FOR NO KEY UPDATE/.test(s.join('?')) ? 'lock' : 'raw');
+        const sql = s.join('?');
+        order.push(/FOR NO KEY UPDATE/.test(sql) ? (/role_grants/.test(sql) ? 'lock-grants' : 'lock-users') : 'raw');
         return [{ role: 'CUSTOMER', staffPermissions: [] }];
       }),
     });
     const out = await new RbacService(prisma).applyGrants(mkUser());
     expect(out.role).toBe('ADMIN');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(['grants', 'lock', 'grants', 'update']);
+    // Thứ tự khoá thống nhất: role_grants trước, users sau, rồi mới đọc lại grant và ghi.
+    expect(order).toEqual(['grants', 'lock-grants', 'lock-users', 'grants', 'update']);
   });
 
   it('grant bị thu hồi trong lúc chờ khoá (đọc lại không còn) → không nâng, trả nguyên user', async () => {
@@ -594,6 +596,7 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
   function txWith(user: Record<string, unknown> | null, otherActiveAdmins = 3) {
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(0),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       user: {
         findUnique: jest.fn().mockResolvedValue(user),
@@ -634,6 +637,15 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
     expect(lockAt).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
   });
 
+  it('khoá dòng users (sau khi khoá grant) trước khi đọc role', async () => {
+    const { prisma, tx } = txWith({ id: 'u2', role: 'STAFF' }, 3);
+    await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240', 'nghỉ việc');
+    const userLock = tx.$queryRaw.mock.calls.findIndex((c: unknown[]) => /FROM "users"[\s\S]*FOR NO KEY UPDATE/.test((c[0] as string[]).join('?')));
+    expect(userLock).toBeGreaterThanOrEqual(0);
+    expect(tx.roleGrant.updateMany.mock.invocationCallOrder[0]!).toBeLessThan(tx.$queryRaw.mock.invocationCallOrder[userLock]!);
+    expect(tx.$queryRaw.mock.invocationCallOrder[userLock]!).toBeLessThan(tx.user.findUnique.mock.invocationCallOrder[0]!);
+  });
+
   it('thu hồi một ADMIN khi còn admin khác → vẫn hạ role như cũ', async () => {
     const { prisma, tx } = txWith({ id: 'u2', role: 'ADMIN' }, 1);
     const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0899625240');
@@ -646,6 +658,7 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
   function txFor(role: string, base: 'CUSTOMER' | 'DEALER') {
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(0),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: role as User['role'] })), update: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(2) },
       commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },

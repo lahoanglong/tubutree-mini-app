@@ -639,7 +639,7 @@ export class AdminService {
     const { updated, previousRole, revoked } = await this.prisma.$transaction(async (tx) => {
       await lockAdminRoster(tx);
       // Thu hồi mọi RoleGrant (STAFF/ADMIN) xếp hạng CAO HƠN role vừa gán, cùng giao dịch với lệnh đổi role: applyGrants (chỉ nâng, chạy ở mỗi
-      // lần refresh token) khoá dòng users rồi đọc lại grant, nên hoặc thấy grant đã thu hồi, hoặc đợi giao dịch này xong. Lỗi ở đây phải làm
+      // lần refresh token) khoá grant của SĐT rồi dòng users và đọc lại grant, nên hoặc thấy grant đã thu hồi, hoặc đợi giao dịch này xong. Lỗi ở đây phải làm
       // hỏng cả lệnh (không được nuốt): role hạ mà grant còn thì lần refresh kế tự nâng lại. Đặt trước lệnh ghi users để thứ tự khoá
       // (grant rồi tới users) trùng addGrant/revokeGrant.
       const revoked = await this.rbac.revokeGrantsAbove(normalized, role, tx);

@@ -53,6 +53,45 @@ describe('Hạ ADMIN→CUSTOMER chạy song song với các lần refresh token 
     }
   });
 
+  // m1: thứ tự khoá thống nhất lockAdminRoster, role_grants, users. Thứ tự cũ (applyGrants: users rồi grants) đảo với setUserRole/revokeGrant.
+  it('20 vòng applyGrants song song setUserRole: không vòng nào bị deadlock (40P01) hay lỗi khoá', async () => {
+    for (let round = 0; round < 20; round++) {
+      const phone = newPhone();
+      const target = await createUser(prisma, { role: 'CUSTOMER', phone });
+      await prisma.roleGrant.create({ data: { phone, role: 'STAFF', grantedBy: boss.id } });
+      const refresh = async (i: number) => {
+        await sleep(i);
+        await rbac.applyGrants(await prisma.user.findUniqueOrThrow({ where: { id: target.id } }));
+      };
+      const res = await Promise.allSettled([admin.setUserRole(boss.id, phone, 'AFFILIATE'), refresh(0), refresh(1), refresh(2)]);
+      const errs = res.flatMap((r) => (r.status === 'rejected' ? [String((r.reason as Error)?.message ?? r.reason)] : []));
+      expect(errs).toEqual([]);
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: target.id }, select: { role: true } });
+      const active = await prisma.roleGrant.count({ where: { phone, revokedAt: null, role: 'STAFF' } });
+      // Hoặc role hạ về AFFILIATE và grant bị thu hồi, hoặc refresh thắng trước (STAFF) rồi setUserRole hạ: cuối cùng luôn AFFILIATE.
+      expect({ role: after.role, active }).toEqual({ role: 'AFFILIATE', active: 0 });
+    }
+  });
+
+  it('20 vòng applyGrants song song revokeGrant: không deadlock, không có user STAFF mà không còn grant hiệu lực', async () => {
+    for (let round = 0; round < 20; round++) {
+      const phone = newPhone();
+      const target = await createUser(prisma, { role: 'CUSTOMER', phone });
+      await prisma.roleGrant.create({ data: { phone, role: 'STAFF', grantedBy: boss.id } });
+      const refresh = async (i: number) => {
+        await sleep(i);
+        await rbac.applyGrants(await prisma.user.findUniqueOrThrow({ where: { id: target.id } }));
+      };
+      const res = await Promise.allSettled([rbac.revokeGrant(boss.id, phone, 'het han hop dong'), refresh(0), refresh(1), refresh(2)]);
+      const errs = res.flatMap((r) => (r.status === 'rejected' ? [String((r.reason as Error)?.message ?? r.reason)] : []));
+      expect(errs).toEqual([]);
+      const after = await prisma.user.findUniqueOrThrow({ where: { id: target.id }, select: { role: true } });
+      const active = await prisma.roleGrant.count({ where: { phone, revokedAt: null } });
+      expect(after.role === 'STAFF' && active === 0).toBe(false);
+      expect(after.role).toBe('CUSTOMER');
+    }
+  });
+
   it('refresh sau khi bị hạ không nâng lại: ba lần refresh liên tiếp vẫn CUSTOMER', async () => {
     const phone = newPhone();
     const target = await createUser(prisma, { role: 'ADMIN', phone });
