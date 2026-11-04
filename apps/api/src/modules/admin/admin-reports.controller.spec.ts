@@ -83,6 +83,34 @@ describe('AdminReportsController', () => {
     expect(adminOrderWhere).toHaveBeenCalledWith({ search: '0901' }, { exactPhoneOnly: true });
   });
 
+  it('mọi route xuất CSV ghi nhật ký xuất với người xuất, route và bộ lọc đã chuẩn hoá (L1-07)', async () => {
+    const recordExport = jest.fn();
+    const empty = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      order: { findMany: empty },
+      payout: { findMany: empty },
+      orderCustomerRefund: { findMany: empty },
+      $queryRaw: empty,
+    };
+    const admin = { adminOrderWhere: jest.fn().mockResolvedValue({}), recordExport };
+    const ctrl = new AdminReportsController(prisma as never, admin as never, {} as never);
+    const mkRes = () => {
+      const out = new PassThrough();
+      out.resume();
+      return Object.assign(out, { setHeader: jest.fn() }) as unknown as Response;
+    };
+    const q = { from: '2026-10-01', to: '2026-10-07' };
+    await ctrl.exportOrderItems({ search: '09' } as never, mkRes(), 'ADMIN', 'u1');
+    expect(recordExport).toHaveBeenLastCalledWith('u1', 'order-items/export', { search: '09' }, 0);
+    await ctrl.exportTax(q, mkRes(), 'u2');
+    expect(recordExport).toHaveBeenLastCalledWith('u2', 'exports/tax', q, expect.any(Number));
+    await ctrl.exportPayouts({ ...q, status: 'PAID' } as never, mkRes(), 'u3');
+    expect(recordExport).toHaveBeenLastCalledWith('u3', 'exports/payouts', { ...q, status: 'PAID' }, expect.any(Number));
+    await ctrl.exportRefunds({ ...q, kind: 'RETURN' } as never, mkRes(), { sub: 'u4', role: 'ADMIN' } as never);
+    expect(recordExport).toHaveBeenLastCalledWith('u4', 'exports/refunds', { ...q, status: undefined, kind: 'RETURN' }, expect.any(Number));
+    expect(recordExport).toHaveBeenCalledTimes(4);
+  });
+
   it('GET revenue chuyển khoảng ngày cho báo cáo', async () => {
     const revenueReport = jest.fn().mockResolvedValue({ ok: true });
     const ctrl = new AdminReportsController({} as never, {} as never, { revenueReport } as never);

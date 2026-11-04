@@ -257,9 +257,10 @@ test.describe('Web admin nhân sự và lương', () => {
     await page.getByRole('button', { name: 'Quản trị', exact: true }).click();
     await page.getByRole('button', { name: 'Lưu quyền' }).click();
     await expect(page.getByRole('alertdialog')).toContainText('cấp quyền ADMIN');
+    await page.getByRole('alertdialog').getByRole('textbox').fill('Quản lý mới của công ty');
     const sent = api.waitForCall('POST', '/admin/staff/grant');
     await page.getByRole('button', { name: 'Cấp quyền ADMIN' }).click();
-    expect((await sent).body).toEqual({ phone: '0944444444', role: 'ADMIN' });
+    expect((await sent).body).toEqual({ phone: '0944444444', role: 'ADMIN', reason: 'Quản lý mới của công ty' });
     await expect(page.getByText('Đã lưu quyền (sẽ áp khi họ mở app).')).toBeVisible();
   });
 

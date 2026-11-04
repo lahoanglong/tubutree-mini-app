@@ -191,6 +191,7 @@ export class SystemConfigService {
     'merchant.ship_sla_hours': { min: 1, max: 336, note: 'số giờ', integer: true },
     'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
     'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },
+    'staff.grant_invite_ttl_days': { min: 1, max: 30, note: 'số ngày', integer: true },
     'orders.dealer_pending_payment_ttl_hours': { min: 1, max: 720, note: 'số giờ', integer: true },
     'dealer.min_order_value_vnd': { min: 0, max: 100_000_000, note: 'đồng tiền hàng tối thiểu của một đơn đại lý (0 = không chặn)', integer: true },
     'dealer.free_ship_threshold_vnd': { min: 0, max: 500_000_000, note: 'đồng tiền hàng từ mức này đơn đại lý miễn phí giao', integer: true },

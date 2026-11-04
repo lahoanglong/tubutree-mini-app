@@ -6,7 +6,7 @@ const pipe = createValidationPipe();
 const run = (value: unknown) => pipe.transform(value, { type: 'body', metatype: GrantRoleDto }) as Promise<GrantRoleDto>;
 
 describe('GrantRoleDto: nhóm việc', () => {
-  const base = { phone: '0900000001', role: 'STAFF' };
+  const base = { phone: '0900000001', role: 'STAFF', reason: 'Nhân viên kho mới' };
 
   it('không có permissions vẫn hợp lệ (như trước)', async () => {
     await expect(run(base)).resolves.toMatchObject(base);

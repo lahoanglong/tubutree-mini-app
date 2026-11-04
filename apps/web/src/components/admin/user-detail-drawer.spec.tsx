@@ -2,7 +2,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { UserDetailDrawer } from './user-detail-drawer';
-import { answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerAsk, answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminUserDetail } from '@/lib/admin-client';
 import type { WasteUserFlagsDTO } from '@tubutree/shared-types';
 
@@ -32,6 +32,7 @@ const DETAIL: AdminUserDetail = {
     isBlocked: false,
     blockedAt: null,
     blockedReason: null,
+    affiliateRevokedAt: null,
     createdAt: '2026-09-01T03:00:00.000Z',
     tier: null,
   },
@@ -69,6 +70,54 @@ async function open(
   await flush();
   return document.body;
 }
+
+describe('UserDetailDrawer — dấu thu hồi quyền CTV (A2)', () => {
+  it('có dấu: hiện câu cố định, ngày theo giờ Việt Nam (17h UTC đã sang ngày hôm sau)', async () => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, affiliateRevokedAt: '2026-10-20T18:00:00.000Z' } });
+    expect(section(body, 'Hồ sơ').textContent).toContain(
+      'Đã thu hồi quyền CTV ngày 21/10/2026. Hoa hồng cũ bị giữ; đổi vai trò sang CTV hoặc Đại lý để cấp lại.',
+    );
+  });
+  it('không dấu: không hiện', async () => {
+    const body = await open();
+    expect(body.textContent).not.toContain('Đã thu hồi quyền CTV');
+  });
+});
+
+describe('UserDetailDrawer — huỷ hoa hồng chờ rút của CTV bị thu hồi (A3)', () => {
+  const REVOKED = { ...DETAIL, user: { ...DETAIL.user, affiliateRevokedAt: '2026-10-20T18:00:00.000Z' }, forfeitableCommission: { count: 2, amount: 100000 } };
+  const forfeitCall = () => calls.find((c) => c.url.includes('/admin/users/u1/forfeit-commissions'));
+
+  it('admin thấy nút khi có dấu và còn hoa hồng; không có dấu, không còn khoản, hoặc không phải admin thì không thấy', async () => {
+    expect(byText(await open(REVOKED), 'button', 'Huỷ hoa hồng chờ rút')).not.toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(byText(await open({ ...REVOKED, forfeitableCommission: null }), 'button', 'Huỷ hoa hồng chờ rút')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(byText(await open(DETAIL), 'button', 'Huỷ hoa hồng chờ rút')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(byText(await open(REVOKED, NO_FLAGS, false), 'button', 'Huỷ hoa hồng chờ rút')).toBeNull();
+  });
+
+  it('bấm nút nêu số khoản và số tiền, bắt buộc lý do rồi gửi POST kèm lý do', async () => {
+    const body = await open(REVOKED);
+    click(byText(body, 'button', 'Huỷ hoa hồng chờ rút'));
+    await flush();
+    const dialog = document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('2 khoản');
+    expect(dialog.textContent).toContain('100.000');
+    answerConfirm(true);
+    await flush();
+    expect(forfeitCall()).toBeUndefined();
+    typeInto(document.querySelector('[role="alertdialog"] textarea'), 'Quyết định của quản lý');
+    answerConfirm(true);
+    await flush();
+    expect(forfeitCall()!.init!.method).toBe('POST');
+    expect(JSON.parse(String(forfeitCall()!.init!.body))).toEqual({ reason: 'Quyết định của quản lý' });
+  });
+});
 
 const section = (root: HTMLElement, title: string) => root.querySelector(`section[aria-label="${title}"]`)!;
 
@@ -128,6 +177,22 @@ describe('UserDetailDrawer — sổ Điểm Xanh và sổ ví đọc được b�
   });
 });
 
+describe('UserDetailDrawer — lịch sử xuất file (L1-07)', () => {
+  const X = [{ id: 'x1', route: 'exports/tax', filters: { from: '2026-10-01', to: '2026-10-31' }, rowCount: 1234, createdAt: '2026-11-02T03:00:00.000Z' }];
+
+  it('có dữ liệu thì hiện "20 lần xuất gần nhất" với tên file, số dòng, bộ lọc', async () => {
+    const text = section(await open({ ...DETAIL, recentExports: X }), '20 lần xuất gần nhất').textContent ?? '';
+    expect(text).toContain('Xuất thuế TNCN CTV');
+    expect(text).toContain('1234 dòng');
+    expect(text).toContain('from: 2026-10-01');
+  });
+
+  it('không có dữ liệu (CSKH nhận null) thì không hiện mục', async () => {
+    const body = await open({ ...DETAIL, recentExports: null });
+    expect(body.textContent).not.toContain('lần xuất gần nhất');
+  });
+});
+
 describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
   const ev = (id: string, from: string, to: string, createdAt: string) => ({
     id, kind: 'STOREFRONT_PARTNER' as const, fromValue: from, toValue: to, reason: 'sf-9', actorId: 'a1', actorName: 'Quản trị An', createdAt,
@@ -158,6 +223,33 @@ describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
   });
 });
 
+describe('UserDetailDrawer — lời mời quyền theo SĐT hết hạn', () => {
+  const grant = (over: Record<string, unknown>) => ({
+    id: 'g1', role: 'STAFF', grantedBy: 'a1', grantedByName: 'Admin', note: null, revokedAt: null, expiresAt: null, createdAt: '2026-10-20T03:00:00.000Z', ...over,
+  });
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+
+  it('lời mời có hạn đã qua mà chưa thu hồi hiện "đã hết hạn"; chưa tới hạn, không hạn, hoặc đã thu hồi thì không', async () => {
+    const text = async (g: Record<string, unknown>) => {
+      const body = await open({ ...DETAIL, grants: [grant(g)] } as AdminUserDetail);
+      return body.textContent ?? '';
+    };
+    expect(await text({ expiresAt: past })).toContain('đã hết hạn');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(await text({ expiresAt: future })).not.toContain('đã hết hạn');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(await text({ expiresAt: null })).not.toContain('đã hết hạn');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    const revoked = await text({ expiresAt: past, revokedAt: past });
+    expect(revoked).toContain('đã thu hồi');
+    expect(revoked).not.toContain('đã hết hạn');
+  });
+});
+
 describe('UserDetailDrawer — nhóm việc nhân viên (D1-05)', () => {
   it('ADMIN chọn được cả 4 nhóm (CSKH, Kho, Marketing, Kế toán); lưu gửi đúng tập nhóm đã tick', async () => {
     const staff: AdminUserDetail = { ...DETAIL, user: { ...DETAIL.user, role: 'STAFF', staffPermissions: ['KE_TOAN'] } };
@@ -177,9 +269,14 @@ describe('UserDetailDrawer — nhóm việc nhân viên (D1-05)', () => {
     click(box('Marketing'));
     click(byText(form, 'button', 'Lưu nhóm việc'));
     await flush();
+    expect(api.calls.find((c) => c.url.includes('/staff-permissions'))).toBeUndefined();
+    answerAsk('Chuyển sang marketing');
+    await flush();
     const put = api.calls.find((c) => c.url.includes('/staff-permissions'))!;
     expect(put.init!.method).toBe('PUT');
-    expect(JSON.parse(String(put.init!.body)).permissions.sort()).toEqual(['KE_TOAN', 'MARKETING']);
+    const sent = JSON.parse(String(put.init!.body));
+    expect(sent.permissions.sort()).toEqual(['KE_TOAN', 'MARKETING']);
+    expect(sent.reason).toBe('Chuyển sang marketing');
   });
 });
 

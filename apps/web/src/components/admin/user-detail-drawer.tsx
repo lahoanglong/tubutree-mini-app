@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatVnd } from '@/lib/shop-client';
 import {
+  forfeitUserCommissions,
   getUserDetail,
   getWasteUserFlags,
   setStaffPermissions,
@@ -14,7 +15,7 @@ import {
   type StaffPermission,
 } from '@/lib/admin-client';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
-import { formatDateTime } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
@@ -53,6 +54,15 @@ function partnerReasonLabel(reason: string): string {
     : `gian hàng ${reason}`;
 }
 
+const EXPORT_LABEL: Record<string, string> = {
+  'orders/export': 'Xuất đơn hàng',
+  'users/export': 'Xuất người dùng',
+  'order-items/export': 'Xuất dòng hàng',
+  'exports/tax': 'Xuất thuế TNCN CTV',
+  'exports/payouts': 'Xuất lệnh rút tiền',
+  'exports/refunds': 'Xuất hoàn tiền khách',
+};
+
 function EventLine({ e }: { e: AdminUserEvent }) {
   const what =
     e.kind === 'ROLE'
@@ -63,9 +73,13 @@ function EventLine({ e }: { e: AdminUserEvent }) {
           ? `Gian hàng đối tác: ${onOff(e.fromValue)} → ${onOff(e.toValue)}`
           : e.kind === 'WALLET_FORFEIT'
             ? `Xoá tài khoản: bỏ số dư Ví ${formatVnd(Number(e.fromValue ?? 0))}`
-            : e.kind === 'BLOCK'
-              ? 'Khoá tài khoản'
-              : 'Mở khoá';
+            : e.kind === 'AFFILIATE_REVOKE'
+              ? e.toValue
+                ? 'Thu hồi quyền CTV'
+                : 'Mở lại quyền CTV'
+              : e.kind === 'BLOCK'
+                ? 'Khoá tài khoản'
+                : 'Mở khoá';
   return (
     <li className="py-1.5">
       <div className="font-medium text-stone-900">{what}</div>
@@ -138,6 +152,14 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
           <div className="mt-2">
             <ToneBadge tone="danger">Đã khoá {u.blockedAt ? formatDateTime(u.blockedAt) : ''}</ToneBadge>
             {u.blockedReason && <p className="mt-1 text-xs text-stone-600">Lý do: {u.blockedReason}</p>}
+          </div>
+        )}
+        {u.affiliateRevokedAt && (
+          <div className="mt-2">
+            <Notice tone="warning">
+              Đã thu hồi quyền CTV ngày {formatDate(u.affiliateRevokedAt)}. Hoa hồng cũ bị giữ; đổi vai trò sang CTV hoặc Đại lý để cấp lại.
+            </Notice>
+            {isAdmin && d.forfeitableCommission && <ForfeitCommissions userId={u.id} pending={d.forfeitableCommission} />}
           </div>
         )}
       </Section>
@@ -250,6 +272,9 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
                 <div className="font-medium text-stone-900">
                   Cấp quyền theo SĐT: {roleLabel(g.role)}
                   {g.revokedAt && <span className="text-danger-fg"> · đã thu hồi {formatDateTime(g.revokedAt)}</span>}
+                  {!g.revokedAt && g.expiresAt && new Date(g.expiresAt).getTime() <= Date.now() && (
+                    <span className="text-danger-fg"> · đã hết hạn {formatDateTime(g.expiresAt)}</span>
+                  )}
                 </div>
                 <div className="text-xs text-stone-500">
                   {formatDateTime(g.createdAt)} · {g.grantedByName ?? g.grantedBy}
@@ -271,6 +296,24 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
         </Section>
       )}
 
+      {(d.recentExports?.length ?? 0) > 0 && (
+        <Section title="20 lần xuất gần nhất" count={d.recentExports!.length}>
+          <ul className="divide-y divide-stone-100">
+            {d.recentExports!.map((x) => (
+              <li key={x.id} className="py-2">
+                <p className="font-medium text-stone-800">
+                  {EXPORT_LABEL[x.route] ?? x.route} · {x.rowCount} dòng
+                </p>
+                <p className="text-xs text-stone-500">
+                  {formatDateTime(x.createdAt)}
+                  {Object.keys(x.filters).length > 0 && ` · ${Object.entries(x.filters).map(([k, v]) => `${k}: ${String(v)}`).join(', ')}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       <Section title="Lịch sử khoá">
         {d.blockHistory.length === 0 ? (
           <p className="text-stone-500">Chưa từng bị khoá.</p>
@@ -286,12 +329,59 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
   );
 }
 
+function ForfeitCommissions({ userId, pending }: { userId: string; pending: { count: number; amount: number } }) {
+  const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
+  const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const run = useMutation({
+    mutationFn: (reason: string) => forfeitUserCommissions(userId, reason),
+    onSuccess: (r) => {
+      setMsg({ tone: 'success', text: `Đã huỷ ${r.cancelled} khoản hoa hồng, tổng ${formatVnd(r.amount)}.` });
+      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+    },
+    onError: (e) => {
+      setMsg({ tone: 'danger', text: actionErrorText(e) });
+      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+    },
+  });
+  const start = async () => {
+    const reason = await ask({
+      title: 'Huỷ hoa hồng chờ rút',
+      message: `Huỷ ${pending.count} khoản hoa hồng đã duyệt, tổng ${formatVnd(pending.amount)}, của người đã bị thu hồi quyền CTV? Không hoàn tác được và tiền không vào Ví.`,
+      confirmLabel: 'Huỷ hoa hồng',
+      cancelLabel: 'Giữ lại',
+      tone: 'danger',
+      input: { label: 'Lý do', required: true, maxLength: 500, validate: (t) => (t.trim().length < 3 ? 'Lý do cần ít nhất 3 ký tự.' : null) },
+    });
+    if (reason) run.mutate(reason);
+  };
+  return (
+    <div className="mt-2">
+      <button type="button" className={BTN_DANGER_OUTLINE} disabled={run.isPending} onClick={() => void start()}>
+        Huỷ hoa hồng chờ rút
+      </button>
+      <p className="mt-1 text-xs text-stone-500">
+        Còn {pending.count} khoản, {formatVnd(pending.amount)} đang chờ.
+      </p>
+      {msg && (
+        <div className="mt-2">
+          <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
+            {msg.text}
+          </Notice>
+        </div>
+      )}
+      {dialog}
+    </div>
+  );
+}
+
 function StaffPermissionsForm({ userId, current }: { userId: string; current: StaffPermission[] }) {
   const qc = useQueryClient();
+  const { ask, dialog } = useConfirm();
   const [perms, setPerms] = useState<StaffPermission[]>(current);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const save = useMutation({
-    mutationFn: () => setStaffPermissions(userId, perms),
+    mutationFn: (reason: string) => setStaffPermissions(userId, perms, reason),
     onSuccess: (r) => {
       setMsg({ tone: 'success', text: r.changed ? 'Đã lưu nhóm việc — có hiệu lực ở lần thao tác kế tiếp của nhân viên.' : 'Không có gì thay đổi.' });
       void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
@@ -299,6 +389,21 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
     onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
+  const askSave = async () => {
+    setMsg(null);
+    const reason = await ask({
+      title: 'Lưu nhóm việc',
+      message: 'Đổi nhóm việc của nhân viên này? Có hiệu lực ở lần thao tác kế tiếp của họ.',
+      confirmLabel: 'Lưu nhóm việc',
+      input: { label: 'Lý do đổi nhóm việc', placeholder: 'VD: chuyển sang phụ trách kho', required: true, maxLength: 500 },
+    });
+    if (reason === null) return;
+    if (reason.length < 3) {
+      setMsg({ tone: 'danger', text: 'Lý do cần ít nhất 3 ký tự.' });
+      return;
+    }
+    save.mutate(reason);
+  };
   return (
     <Section title="Nhóm việc nhân viên">
       <p className="text-xs text-stone-500">Không chọn nhóm nào: nhân viên chỉ dùng quầy thu ngân, tab Đổi rác (hàng đợi kho, quà chờ nhận) và chấm công.</p>
@@ -315,7 +420,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </label>
         ))}
       </div>
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className={`${BTN_PRIMARY} mt-2`}>
+      <button type="button" disabled={!dirty || save.isPending} onClick={() => void askSave()} className={`${BTN_PRIMARY} mt-2`}>
         {save.isPending ? 'Đang lưu…' : 'Lưu nhóm việc'}
       </button>
       {msg && (
@@ -325,6 +430,7 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </Notice>
         </div>
       )}
+      {dialog}
     </Section>
   );
 }

@@ -51,7 +51,7 @@ export class UserBlockService {
     return result;
   }
 
-  async unblock(adminId: string, userId: string) {
+  async unblock(adminId: string, userId: string, reason?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, metadata: true } });
     if (!user) throw new NotFoundException('Không tìm thấy người dùng.');
     const meta = user.metadata as Record<string, unknown> | null;
@@ -64,7 +64,7 @@ export class UserBlockService {
         data: { isBlocked: false, blockedAt: null, blockedReason: null, blockedById: null },
         select: { id: true, isBlocked: true, blockedAt: true, blockedReason: true },
       }),
-      recordUserAdminEvent(this.prisma, { userId, kind: 'UNBLOCK', actorId: adminId }),
+      recordUserAdminEvent(this.prisma, { userId, kind: 'UNBLOCK', reason, actorId: adminId }),
     ]);
     this.sessions.invalidate(userId);
     this.imageStale?.markStale();

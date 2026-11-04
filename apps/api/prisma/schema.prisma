@@ -38,6 +38,8 @@ model RoleGrant {
   grantedBy String // adminId, hoặc "seed" cho admin gán sẵn ban đầu
   note      String?
   revokedAt DateTime? // null = còn hiệu lực
+  /// Hạn của lời mời chưa áp (SĐT chưa có tài khoản); null = đã áp hoặc không có hạn. applyGrants bỏ qua lời mời quá hạn.
+  expiresAt DateTime?
   /// Nhóm việc (common/staff-permissions.ts) chép sang User.staffPermissions khi lời mời được áp; chỉ có nghĩa với role STAFF.
   staffPermissions String[] @default([])
   createdAt DateTime      @default(now())
@@ -343,7 +345,7 @@ model User {
 model UserAdminEvent {
   id        String   @id @default(cuid())
   userId    String
-  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK
+  /// ROLE | STAFF_PERMISSIONS | BLOCK | UNBLOCK | STOREFRONT_PARTNER | WALLET_FORFEIT | AFFILIATE_REVOKE
   kind      String
   fromValue String?
   toValue   String?
@@ -354,6 +356,37 @@ model UserAdminEvent {
 
   @@index([userId, createdAt])
   @@map("user_admin_events")
+}
+
+/// Nhật ký xuất file CSV của admin/nhân sự: ai xuất gì, với bộ lọc nào, bao nhiêu dòng. Chỉ thêm, không sửa.
+model AdminExportLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  /// Đường dẫn route xuất, ví dụ "orders/export", "exports/tax".
+  route     String
+  /// Bộ lọc đã dùng (đã cắt bỏ giá trị rỗng).
+  filters   Json
+  rowCount  Int
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("admin_export_logs")
+}
+
+/// Lịch sử đổi % hoa hồng CTV của biến thể (Variation.affiliateRate): ai đổi từ bao nhiêu sang bao nhiêu. NULL = mức mặc định.
+/// Chỉ thêm, ghi cùng giao dịch với lần đổi % (đặt tay, theo sản phẩm, áp hàng loạt, nhập CSV).
+model CommissionRateHistory {
+  id          String   @id @default(cuid())
+  variationId String
+  fromPct     Decimal?
+  toPct       Decimal?
+  actorId     String
+  createdAt   DateTime @default(now())
+
+  @@index([variationId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("commission_rate_history")
 }
 
 // Refresh token lưu hash (rotation). Phục vụ Zalo auth flow Phase 0.

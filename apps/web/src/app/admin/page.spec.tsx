@@ -67,6 +67,7 @@ const mocks = vi.hoisted(() => ({
   returnsArgs: [] as unknown[][],
   wasteArgs: [] as unknown[][],
   dealerArgs: [] as unknown[][],
+  dealerRevoked: false,
   statusCountsCalls: [] as unknown[][],
   statusCountsMode: 'ok' as 'ok' | 'fail' | 'pending',
   orders: [] as unknown[],
@@ -133,7 +134,7 @@ const mocks = vi.hoisted(() => ({
   userDetail: vi.fn(),
 }));
 
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth, useViewerRole: () => mocks.auth.user?.role }));
 vi.mock('@/lib/admin-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/admin-client')>();
   const order = (status: string, i: number) => ({
@@ -277,6 +278,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           hasCccdFront: true,
           hasCccdBack: false,
           hasStoreFront: false,
+          applicantAffiliateRevoked: mocks.dealerRevoked,
           status: 'PENDING',
           createdAt: '2026-10-01T00:00:00.000Z',
         },
@@ -378,6 +380,7 @@ beforeEach(() => {
   mocks.returnsArgs = [];
   mocks.wasteArgs = [];
   mocks.dealerArgs = [];
+  mocks.dealerRevoked = false;
   mocks.statusCountsCalls = [];
   mocks.statusCountsMode = 'ok';
   mocks.orders = [];
@@ -1037,6 +1040,46 @@ describe('admin/page — tab Người dùng', () => {
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined, false]);
   });
 
+  describe('L1-06: CSKH phải tìm mới thấy khách', () => {
+    const asCskh = () => {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    };
+    const search = async (container: HTMLElement, text: string) => {
+      typeInto(container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), text);
+      act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
+      await flush();
+    };
+
+    it('CSKH mở tab: chưa gọi API, hiện gợi ý; gõ thiếu thì báo lý do và vẫn không gọi', async () => {
+      asCskh();
+      mocks.listUsersArgs = [];
+      const { container } = await openUsers();
+      expect(mocks.listUsersArgs).toEqual([]);
+      expect(container.textContent).toContain('Nhập số điện thoại đủ 10 số, mã khách hàng, hoặc ít nhất 3 ký tự của tên để tìm khách.');
+      await search(container, 'An');
+      expect(mocks.listUsersArgs).toEqual([]);
+      await search(container, '0944');
+      expect(mocks.listUsersArgs).toEqual([]);
+      expect(container.textContent).toContain('đủ 10 số');
+    });
+
+    it('CSKH gõ SĐT đủ 10 số thì mới gọi API', async () => {
+      asCskh();
+      mocks.listUsersArgs = [];
+      const { container } = await openUsers();
+      await search(container, '0944444444');
+      expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0944444444', false]);
+    });
+
+    it('ADMIN vẫn thấy danh sách ngay khi mở, không có gợi ý bắt buộc', async () => {
+      mocks.listUsersArgs = [];
+      const { container } = await openUsers();
+      expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined, false]);
+      expect(container.textContent).not.toContain('để tìm khách.');
+    });
+  });
+
   it('khoá người dùng: bắt buộc nhập lý do trong hộp thoại, gửi đúng id + lý do, báo thành công', async () => {
     mocks.blockUser.mockReset().mockResolvedValue({ id: 'u1', isBlocked: true, blockedAt: null, blockedReason: 'Bom hàng COD', revokedSessions: 2 });
     const { container } = await openUsers();
@@ -1068,10 +1111,8 @@ describe('admin/page — tab Người dùng', () => {
     expect(status.textContent).toContain('Lý do: Farm voucher');
     act(() => (container.querySelector('button[aria-label="Mở khoá Trần Cường"]') as HTMLButtonElement).click());
     await flush();
-    const accept = [...document.body.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Mở khoá')!;
-    act(() => (accept as HTMLButtonElement).click());
-    await flush();
-    expect(mocks.unblockUser).toHaveBeenCalledWith('u3');
+    await answerDialog(true, 'Đã xác minh với khách');
+    expect(mocks.unblockUser).toHaveBeenCalledWith('u3', 'Đã xác minh với khách');
   });
 
   it('F6 — mở khoá xong danh sách người dùng chỉ tải lại một lần (không còn refetch thừa ngoài lần làm cũ chung)', async () => {
@@ -1087,9 +1128,7 @@ describe('admin/page — tab Người dùng', () => {
     const before = mocks.listUsersArgs.length;
     act(() => (container.querySelector('button[aria-label="Mở khoá Trần Cường"]') as HTMLButtonElement).click());
     await flush();
-    const accept = [...document.body.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Mở khoá')!;
-    act(() => (accept as HTMLButtonElement).click());
-    await flush();
+    await answerDialog(true, 'Đã xác minh với khách');
     expect(mocks.listUsersArgs.length - before).toBe(1);
   });
 
@@ -1152,7 +1191,7 @@ describe('admin/page — tab Người dùng', () => {
     mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'CUSTOMER', role: 'CUSTOMER' });
     act(() => grant.click());
     await flush();
-    await answerDialog(true);
+    await answerDialog(true, 'Nhân viên mới');
     const ok = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Đã đổi'))!;
     expect(ok.className).toContain('text-success-fg');
 
@@ -1161,7 +1200,7 @@ describe('admin/page — tab Người dùng', () => {
     mocks.setUserRole.mockRejectedValueOnce(new Error('Không tìm thấy SĐT'));
     act(() => grant.click());
     await flush();
-    await answerDialog(true);
+    await answerDialog(true, 'Nhân viên mới');
     const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tìm thấy SĐT')!;
     expect(bad.className).toContain('text-danger-fg');
     expect(mocks.setUserRole).toHaveBeenCalledTimes(2);
@@ -1189,8 +1228,8 @@ describe('admin/page — tab Người dùng', () => {
     act(() => grant.click());
     await flush();
     mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
-    await answerDialog(true);
-    expect(mocks.setUserRole).toHaveBeenCalledWith('0955555555', 'CUSTOMER', undefined);
+    await answerDialog(true, 'Khách rút khỏi chương trình');
+    expect(mocks.setUserRole).toHaveBeenCalledWith('0955555555', 'CUSTOMER', 'Khách rút khỏi chương trình', undefined);
   });
 
   it('Q24: hạ về Khách hàng nói rõ chỉ là tạm ngừng, người này tự đăng ký CTV lại được; đích khác không nói câu này', async () => {
@@ -1261,7 +1300,7 @@ describe('admin/page — tab Người dùng', () => {
     const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
     act(() => grant.click());
     await flush();
-    await answerDialog(true);
+    await answerDialog(true, 'Khách rút khỏi chương trình');
     expect(roleSelect.value).toBe('');
     expect(grant.disabled).toBe(true);
   });
@@ -2663,6 +2702,10 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     const { container } = await mount();
     expect(navItems(container)).toContain('Người dùng');
     expect(navItems(container)).toContain('CSKH mẫu tin nhanh');
+    // CSKH phải tìm mới thấy khách (L1-06): gõ đủ SĐT rồi mới có danh sách.
+    typeInto(container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), '0944444444');
+    act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
+    await flush();
     const labels = [...container.querySelectorAll('button')].map((b) => b.textContent);
     expect(labels).not.toContain('Khoá');
     expect(labels).not.toContain('Cấp quyền');
@@ -3567,7 +3610,7 @@ describe('admin/page — UAT ui-admin-2', () => {
       mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
       click(btn(container, 'Cấp quyền'));
       await flush();
-      await answerDialog(true);
+      await answerDialog(true, 'Khách rút khỏi chương trình');
       const msg = para(container, 'Đã đổi 0955555555: Nhân viên → Khách hàng');
       expect(msg).toBeDefined();
       expect(container.textContent).not.toMatch(/STAFF|CUSTOMER/);
@@ -3771,6 +3814,21 @@ describe('admin/page — UAT ui-admin-2', () => {
       expect(text).toContain('Nếu tài khoản đang là Quản trị: mất toàn quyền quản trị');
       expect(text).toContain('mất toàn bộ nhóm việc');
       await answerDialog(false);
+    });
+  });
+
+  describe('A2: hồ sơ đại lý của người từng bị thu hồi quyền CTV', () => {
+    const WARNING = 'Người này từng bị thu hồi quyền CTV. Duyệt hồ sơ không mở lại quyền rút hoa hồng.';
+    it('có dấu thu hồi thì hiện câu cảnh báo', async () => {
+      mocks.dealerRevoked = true;
+      window.history.replaceState(null, '', '/admin?tab=dealers');
+      const { container } = await mount();
+      expect(container.textContent).toContain(WARNING);
+    });
+    it('không có dấu thì không hiện', async () => {
+      window.history.replaceState(null, '', '/admin?tab=dealers');
+      const { container } = await mount();
+      expect(container.textContent).not.toContain('từng bị thu hồi quyền CTV');
     });
   });
 
