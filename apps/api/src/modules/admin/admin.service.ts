@@ -1,5 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
+import { decodeServedImage } from '../../common/served-image';
+import { isUploadedMediaUrl } from '../../common/uploaded-image';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
@@ -237,6 +240,13 @@ const ORDER_LIST_REFUNDS = {
   select: { id: true, kind: true, method: true, status: true, amount: true, createdAt: true, completedAt: true },
 } satisfies Prisma.Order$customerRefundsArgs;
 
+export const DEALER_APPLICATION_IMAGE_COLUMNS = {
+  cccdFront: 'cccdFrontUrl',
+  cccdBack: 'cccdBackUrl',
+  storeFront: 'storeFrontUrl',
+} as const;
+export type DealerApplicationImageField = keyof typeof DEALER_APPLICATION_IMAGE_COLUMNS;
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -300,13 +310,47 @@ export class AdminService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.dealerApplication.findMany({
         where,
+        select: DEALER_APPLICATION_LIST_SELECT,
         // Hàng chờ duyệt (PENDING) web gửi order=asc — hồ sơ cũ nhất lên đầu.
         orderBy: { createdAt: order ?? 'desc' },
         ...skipTake(page, limit),
       }),
       this.prisma.dealerApplication.count({ where }),
     ]);
-    return paginated(items, page, limit, total);
+    // Ảnh có thể là base64 hàng trăm KB: danh sách chỉ báo có/không (xoá tài khoản đặt ảnh về chuỗi rỗng), ảnh lấy từng tấm qua dealerApplicationImage.
+    const flagRows = items.length
+      ? await this.prisma.$queryRaw<{ id: string; hasCccdFront: boolean; hasCccdBack: boolean; hasStoreFront: boolean }[]>`
+          SELECT "id",
+            COALESCE("cccdFrontUrl", '') <> '' AS "hasCccdFront",
+            COALESCE("cccdBackUrl", '') <> '' AS "hasCccdBack",
+            COALESCE("storeFrontUrl", '') <> '' AS "hasStoreFront"
+          FROM "dealer_applications"
+          WHERE "id" IN (${Prisma.join(items.map((a) => a.id))})`
+      : [];
+    const flags = new Map(flagRows.map((r) => [r.id, r]));
+    const data = items.map((a) => ({
+      ...a,
+      hasCccdFront: flags.get(a.id)?.hasCccdFront ?? false,
+      hasCccdBack: flags.get(a.id)?.hasCccdBack ?? false,
+      hasStoreFront: flags.get(a.id)?.hasStoreFront ?? false,
+    }));
+    return paginated(data, page, limit, total);
+  }
+
+  /** Một ảnh của hồ sơ đại lý: ảnh base64 trả byte, ảnh host upload (Cloudinary) trả URL để web tự hiện. */
+  async dealerApplicationImage(
+    id: string,
+    field: DealerApplicationImageField,
+  ): Promise<{ kind: 'data'; mime: string; data: Buffer } | { kind: 'url'; url: string }> {
+    const column = DEALER_APPLICATION_IMAGE_COLUMNS[field];
+    if (!column) throw new NotFoundException('Không tìm thấy ảnh.');
+    const app = await this.prisma.dealerApplication.findUnique({ where: { id }, select: { [column]: true } });
+    const value = (app as Record<string, string | null> | null)?.[column];
+    if (!value) throw new NotFoundException('Không tìm thấy ảnh.');
+    const decoded = decodeServedImage(value);
+    if (decoded) return { kind: 'data', ...decoded };
+    if (isUploadedMediaUrl(value)) return { kind: 'url', url: value };
+    throw new NotFoundException('Không tìm thấy ảnh.');
   }
 
   async reviewDealerApplication(
@@ -316,7 +360,7 @@ export class AdminService {
     tierId?: string,
     reason?: string,
   ) {
-    const app = await this.prisma.dealerApplication.findUnique({ where: { id } });
+    const app = await this.prisma.dealerApplication.findUnique({ where: { id }, select: DEALER_APPLICATION_LIST_SELECT });
     if (!app) throw new NotFoundException('Không tìm thấy đơn đăng ký.');
     if (app.status !== 'PENDING') throw new BadRequestException('Đơn đã được xử lý.');
 
@@ -402,7 +446,7 @@ export class AdminService {
         reason: reason?.trim() || 'Hồ sơ chưa đủ điều kiện',
       })
       .catch((e: unknown) => this.logger.warn(`Báo kết quả hồ sơ đại lý ${id} lỗi: ${(e as Error).message}`));
-    return this.prisma.dealerApplication.findUnique({ where: { id } });
+    return this.prisma.dealerApplication.findUnique({ where: { id }, select: DEALER_APPLICATION_LIST_SELECT });
   }
 
   // ── Users & orders ──

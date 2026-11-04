@@ -164,6 +164,24 @@ describe('AdminService.reviewDealerApplication', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'DEALER_APPLICATION_REJECTED', expect.objectContaining({ reason: 'Thiếu ảnh CCCD' }));
   });
 
+  it('không đọc/trả cột ảnh: cả lần đọc đầu và kết quả cuối đều có select', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'd1', status: 'PENDING', userId: 'u1' });
+    const { $transaction } = makeApproveTx({});
+    const prisma = makePrisma({
+      dealerApplication: { findUnique, updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1', name: 'Bạc' }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+      $transaction,
+    });
+    await mkAdmin(prisma).reviewDealerApplication('admin1', 'd1', true, 't1');
+    const dealerCalls = findUnique.mock.calls.filter(([a]) => a.where.id === 'd1');
+    expect(dealerCalls.length).toBeGreaterThanOrEqual(2);
+    for (const [arg] of dealerCalls) {
+      expect(arg.select).toBeDefined();
+      for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(arg.select[col]).toBeUndefined();
+    }
+  });
+
   it('đơn không tồn tại → NotFound', async () => {
     const prisma = makePrisma({ dealerApplication: { findUnique: jest.fn().mockResolvedValue(null) } });
     await expect(mkAdmin(prisma).reviewDealerApplication('a1', 'x', true, 't1')).rejects.toBeInstanceOf(
@@ -2382,6 +2400,52 @@ describe('AdminService.listDealerApplications — thứ tự createdAt theo tham
     });
     return { prisma, findMany };
   }
+
+  it('select không chứa cột ảnh; kết quả có cờ có/không ảnh, không lộ nội dung ảnh', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'a1', businessName: 'A' }, { id: 'a2', businessName: 'B' }]);
+    const prisma = makePrisma({
+      dealerApplication: { findMany, count: jest.fn().mockResolvedValue(2) },
+      $transaction: jest.fn((arr) => Promise.all(arr)),
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 'a1', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
+        { id: 'a2', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+      ]),
+    });
+    const out = await mkAdmin(prisma).listDealerApplications(undefined, 1, 20);
+    const select = findMany.mock.calls[0][0].select;
+    expect(select).toBeDefined();
+    expect(Object.keys(select)).not.toEqual(expect.arrayContaining(['cccdFrontUrl']));
+    for (const col of ['cccdFrontUrl', 'cccdBackUrl', 'storeFrontUrl']) expect(select[col]).toBeUndefined();
+    expect(out.data).toEqual([
+      { id: 'a1', businessName: 'A', hasCccdFront: true, hasCccdBack: false, hasStoreFront: false },
+      { id: 'a2', businessName: 'B', hasCccdFront: true, hasCccdBack: true, hasStoreFront: true },
+    ]);
+  });
+
+  describe('dealerApplicationImage', () => {
+    const svc = (value: string | null | undefined) =>
+      mkAdmin(makePrisma({ dealerApplication: { findUnique: jest.fn().mockResolvedValue(value === undefined ? null : { cccdFrontUrl: value }) } }));
+    const jpeg = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64')}`;
+    it('base64 raster → byte + mime', async () => {
+      const r = await svc(jpeg).dealerApplicationImage('a1', 'cccdFront');
+      expect(r).toMatchObject({ kind: 'data', mime: 'image/jpeg' });
+      expect((r as { data: Buffer }).data.equals(Buffer.from([0xff, 0xd8, 0xff, 0xe0]))).toBe(true);
+    });
+    it('URL Cloudinary → trả URL', async () => {
+      const url = 'https://res.cloudinary.com/tubu/image/upload/v1/a.jpg';
+      expect(await svc(url).dealerApplicationImage('a1', 'cccdFront')).toEqual({ kind: 'url', url });
+    });
+    it.each([['javascript:alert(1)'], ['data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='], ['https://evil.example/a.jpg'], [null]])(
+      'giá trị cũ không hợp lệ %p → 404',
+      async (v) => {
+        await expect(svc(v).dealerApplicationImage('a1', 'cccdFront')).rejects.toThrow(NotFoundException);
+      },
+    );
+    it('hồ sơ không có → 404; tên trường lạ → 404', async () => {
+      await expect(svc(undefined).dealerApplicationImage('x', 'cccdFront')).rejects.toThrow(NotFoundException);
+      await expect(svc(jpeg).dealerApplicationImage('a1', 'password' as never)).rejects.toThrow(NotFoundException);
+    });
+  });
 
   it('order=asc → orderBy createdAt asc; bỏ trống → desc như cũ', async () => {
     const c = daPrisma();

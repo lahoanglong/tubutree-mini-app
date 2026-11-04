@@ -4,7 +4,7 @@ import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 
 /** MST doanh nghiệp 10 số (chi nhánh thêm -3 số); từ 01/07/2025 cá nhân và hộ kinh doanh dùng số CCCD 12 số làm MST. */
-const TAX_CODE_RE = /^(\d{10}(-\d{3})?|\d{12})$/;
+export const TAX_CODE_RE = /^(\d{10}(-\d{3})?|\d{12})$/;
 
 export class InvoiceRequestDto {
   @IsString() @Matches(TAX_CODE_RE, { message: 'Mã số thuế gồm 10 số (chi nhánh thêm -3 số) hoặc 12 số.' }) taxCode!: string;

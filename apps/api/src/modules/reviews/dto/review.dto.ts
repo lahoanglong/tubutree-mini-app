@@ -9,7 +9,7 @@ export class CreateReviewDto {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
-  @IsUploadedImage(PUBLIC_CONTENT_IMAGE, { each: true, message: 'Ảnh đánh giá phải là ảnh đã tải lên từ ứng dụng.' })
+  @IsUploadedImage({ ...PUBLIC_CONTENT_IMAGE, verifySignature: true }, { each: true, message: 'Ảnh đánh giá phải là ảnh đã tải lên từ ứng dụng.' })
   images?: string[];
   // Review video (UGC §6.14.9) — chỉ video khách tải lên Cloudinary qua ứng dụng; không có đường base64.
   @IsOptional() @IsUploadedMediaUrl({ message: 'Video đánh giá phải là video đã tải lên từ ứng dụng.' }) videoUrl?: string;

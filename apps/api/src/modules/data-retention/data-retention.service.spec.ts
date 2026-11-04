@@ -50,6 +50,7 @@ describe('DataRetentionService (C-046)', () => {
     expect(RETENTION_POLICY.notification_logs.defaultDays).toBe(180);
     expect(RETENTION_POLICY.webhook_events.defaultDays).toBe(90);
     expect(RETENTION_POLICY.refresh_tokens.defaultDays).toBe(30);
+    expect(RETENTION_POLICY.cashback_clicks.defaultDays).toBe(180);
   });
 
   describe('resolveRetentionDays', () => {
@@ -102,11 +103,12 @@ describe('DataRetentionService (C-046)', () => {
         support_messages: 0,
         support_forwards: 0,
         support_recall_tombstones: 0,
+        cashback_clicks: 0,
       },
       truncated: false,
     });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(12);
-    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(13);
+    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
     expect(cutoffs).toEqual([
       NOW.getTime() - 395 * DAY,
       NOW.getTime() - 60 * DAY,
@@ -120,6 +122,7 @@ describe('DataRetentionService (C-046)', () => {
       NOW.getTime() - 365 * DAY,
       NOW.getTime() - 365 * DAY,
       NOW.getTime() - 2 * DAY,
+      NOW.getTime() - 180 * DAY,
     ]);
   });
 
@@ -165,7 +168,7 @@ describe('DataRetentionService (C-046)', () => {
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0 });
     expect(res).toMatchObject({ truncated: false });
     expect((res as { deleted: Record<string, number> }).deleted.analytics_events).toBe(7);
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 11);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 12);
     expect(call(prisma, 0).values).toContain(3);
   });
 
@@ -173,7 +176,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make({ batchCounts: [3, 3, 3, 3] });
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: -1 });
     expect(res).toMatchObject({ truncated: true });
-    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(13);
+    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(14);
   });
 
   it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
@@ -194,8 +197,8 @@ describe('DataRetentionService (C-046)', () => {
     } finally {
       now.mockRestore();
     }
-    // analytics_events chỉ được 400/5 = 80 ms (16 lô); phần còn lại chia cho các bảng sau.
-    expect(perTable['"analytics_events"']).toBe(16);
+    // analytics_events chỉ được 400/6 ≈ 67 ms (14 lô); phần còn lại chia cho các bảng sau.
+    expect(perTable['"analytics_events"']).toBe(14);
     expect(perTable['"refresh_tokens"']).toBeGreaterThan(16);
   });
 
@@ -203,7 +206,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make();
     prisma.$executeRaw.mockRejectedValueOnce(new Error('boom'));
     const res = await svc.runAll({ now: NOW, pauseMs: 0 });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 11);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 12);
     expect((res as { deleted: Record<string, number> }).deleted).not.toHaveProperty('analytics_events');
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty('refresh_tokens');
   });

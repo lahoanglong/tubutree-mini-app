@@ -95,6 +95,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/dashboard/stats': ADMIN_ONLY,
   'GET /admin/dashboard/today': ADMIN_ONLY,
   'GET /admin/dealer-applications': ADMIN_ONLY,
+  'GET /admin/dealer-applications/:id/images/:field': ADMIN_ONLY,
   'POST /admin/dealer-applications/:id/review': ADMIN_ONLY,
   'POST /admin/dealer-orders/:id/confirm-payment': [KE_TOAN],
   'GET /admin/dealer-prices/history': ADMIN_ONLY,

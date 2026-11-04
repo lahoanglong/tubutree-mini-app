@@ -187,6 +187,7 @@ import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { StaffRosterTab } from '@/components/admin/staff-roster-tab';
 import { ShiftApprovalTab } from '@/components/admin/shift-approval-tab';
 import { PayrollAdminTab } from '@/components/admin/payroll-admin-tab';
+import { DealerAppImage } from '@/components/admin/dealer-app-image';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
@@ -932,11 +933,10 @@ function DealerRow({ app: a }: { app: DealerApp }) {
       </div>
       <div className="break-words text-sm text-stone-600">{a.ownerName} · {a.phone}</div>
       <div className="break-words text-sm text-stone-600">{a.address}</div>
-      <div className="mt-2 flex gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {a.cccdFrontUrl && <img src={a.cccdFrontUrl} alt="CCCD trước" className="h-16 rounded-control border border-stone-200" />}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {a.cccdBackUrl && <img src={a.cccdBackUrl} alt="CCCD sau" className="h-16 rounded-control border border-stone-200" />}
+      <div className="mt-2 flex flex-wrap gap-3">
+        {a.hasCccdFront && <DealerAppImage appId={a.id} field="cccdFront" label="CCCD trước" />}
+        {a.hasCccdBack && <DealerAppImage appId={a.id} field="cccdBack" label="CCCD sau" />}
+        {a.hasStoreFront && <DealerAppImage appId={a.id} field="storeFront" label="mặt tiền cửa hàng" />}
       </div>
       {a.status === 'PENDING' && (
         <div className="mt-3 flex flex-wrap items-center gap-2">

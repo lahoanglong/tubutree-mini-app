@@ -757,6 +757,18 @@ describe('PancakeProcessor.onShippingUpdated', () => {
     });
   });
 
+  it.each([['javascript:alert(1)'], ['data:text/html,<h1>x</h1>'], ['https://u:p@x.vn/t']])(
+    'tracking_link %s không phải http(s) an toàn → không ghi vào đơn',
+    async (link) => {
+      const { proc, orderUpdate } = setup({
+        id: 'o1', code: 'TUBU1', userId: 'u1', status: 'SHIPPING', shippingPartner: null, shippingCode: null,
+        shippingStatus: null, trackingLink: null, shippingHistory: [],
+      });
+      await proc.onShippingUpdated({ id: 'p1', partner_name: 'GHN', tracking_number: 'GHN1', shipping_status: 'delivering', tracking_link: link });
+      expect(orderUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ trackingLink: null }) }));
+    },
+  );
+
   it('tích luỹ timeline nhiều mốc (shippingHistory) khi trạng thái thay đổi', async () => {
     const initialHistory = [
       { at: '2026-09-18T10:00:00.000Z', status: 'ready_to_pick', carrier: 'GHN', code: 'GHN001' },

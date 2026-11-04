@@ -96,6 +96,11 @@ describe('CtvOrderSheet — khách gần đây, giảm chạm (C-064)', () => {
     mocks.quoteCtvOrder.mockRejectedValue(new Error('chưa có báo giá'));
   });
 
+  it('ô ghi chú giới hạn 500 ký tự như API', () => {
+    renderSheet();
+    expect(document.querySelector('textarea')?.getAttribute('maxlength')).toBe('500');
+  });
+
   it('chưa có khách gần đây thì không hiện hàng chip', () => {
     renderSheet();
     expect(screen.queryByText('Khách gần đây')).toBeNull();

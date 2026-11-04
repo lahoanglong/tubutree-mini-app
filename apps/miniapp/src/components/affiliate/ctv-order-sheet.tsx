@@ -451,6 +451,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
           placeholder={t.notePlaceholder}
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          maxLength={500}
           rows={2}
         />
       </div>

@@ -792,6 +792,15 @@ describe('StorefrontService.getPublicList', () => {
 });
 
 describe('StorefrontService.getPublicBySlug', () => {
+  it('JSON công khai không trả `theme` (chuỗi do chủ gian hàng gõ, web/miniapp không đọc); themeColor vẫn trả', async () => {
+    const row = { id: 's1', slug: 'abcd1234', title: 'Shop', theme: '<script>x</script>', themeColor: '#16a34a', isPublished: true, collections: [], type: 'MERCHANT' };
+    const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(row) } });
+    const affiliateTier = { getPublicTier: jest.fn().mockResolvedValue(null), commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as never;
+    const r = await new StorefrontService(prisma, config, affiliateTier).getPublicBySlug('abcd1234');
+    expect(r).not.toHaveProperty('theme');
+    expect(r.themeColor).toBe('#16a34a');
+  });
+
   // SELLER-4: khách vào qua subdomain riêng (khác mã giới thiệu) thì web phải lấy mã từ API, không suy từ URL.
   it('gian hàng CTV trả mã giới thiệu của chủ; gian hàng khác không trả', async () => {
     const row = { id: 's1', slug: 'abcd1234', subdomain: 'lan-xanh', title: 'Shop', isPublished: true, collections: [], owner: { referralCode: 'ABCD1234' } };

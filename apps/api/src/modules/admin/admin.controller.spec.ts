@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { NotFoundException, RequestMethod, StreamableFile, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import {
@@ -292,6 +292,23 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     }
   });
 
+  it('route ảnh hồ sơ đại lý: byte + nosniff; URL → JSON; tên trường lạ → 404', async () => {
+    const admin = {
+      dealerApplicationImage: jest
+        .fn()
+        .mockResolvedValueOnce({ kind: 'data', mime: 'image/png', data: Buffer.from('x') })
+        .mockResolvedValueOnce({ kind: 'url', url: 'https://res.cloudinary.com/a.jpg' }),
+    };
+    const ctrl = new AdminController(admin as never, {} as never);
+    const res = { set: jest.fn() };
+    const file = await ctrl.dealerAppImage('a1', 'cccdFront', res as never);
+    expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store' }));
+    expect(file).toBeInstanceOf(StreamableFile);
+    expect(await ctrl.dealerAppImage('a1', 'cccdBack', res as never)).toEqual({ url: 'https://res.cloudinary.com/a.jpg' });
+    await expect(ctrl.dealerAppImage('a1', 'constructor', res as never)).rejects.toThrow(NotFoundException);
+    expect(Reflect.getMetadata('roles', AdminController)).toEqual(['ADMIN']);
+  });
+
   it('controller chuyển order xuống AdminService (thiếu → undefined, service mặc định desc)', async () => {
     const admin = {
       listDealerApplications: jest.fn().mockResolvedValue({ data: [], meta: {} }),
@@ -574,6 +591,23 @@ describe('trần mảng rows của nhập giá đại lý và đã bán ngoài',
     expect(await validate(plainToInstance(ImportSoldExternalDto, { rows: soldRows(500) }))).toHaveLength(0);
     const over = await validate(plainToInstance(ImportSoldExternalDto, { rows: soldRows(501) }));
     expect(over.some((e) => e.property === 'rows')).toBe(true);
+  });
+
+  it('mỗi phần tử rows được kiểm kiểu: phần tử không phải object, sku quá dài, số âm/không phải số → lỗi', async () => {
+    const bad = (cls: new () => object, rows: unknown[], extra: object = {}) =>
+      validate(plainToInstance(cls, { ...extra, rows })).then((e) => e.some((x) => x.property === 'rows'));
+    for (const rows of [['x'], [null], [{ sku: 'x'.repeat(101), count: 1 }], [{ sku: 'A', count: -1 }], [{ sku: 'A', count: 'abc' }], [{ sku: 'A' }]]) {
+      expect(await bad(ImportSoldExternalDto, rows)).toBe(true);
+    }
+    for (const rows of [['x'], [{ sku: 'x'.repeat(101), price: 1000 }], [{ sku: 'A', price: -1 }], [{ sku: 'A', price: 1e15 }], [{ sku: 'A', price: 'abc' }]]) {
+      expect(await bad(ImportDealerPricesDto, rows, { tierId: 't1' })).toBe(true);
+    }
+  });
+
+  it('csv nhập đã bán ngoài có trần độ dài như csv giá đại lý', async () => {
+    expect(await validate(plainToInstance(ImportSoldExternalDto, { csv: 'a'.repeat(300_000) }))).toHaveLength(0);
+    const over = await validate(plainToInstance(ImportSoldExternalDto, { csv: 'a'.repeat(300_001) }));
+    expect(over.some((e) => e.property === 'csv')).toBe(true);
   });
 
   it('dealer-prices import (và preview): 500 dòng hợp lệ, 501 dòng bị từ chối ở rows', async () => {
