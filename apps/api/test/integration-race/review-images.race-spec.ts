@@ -7,6 +7,8 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { ReviewsController } from '../../src/modules/reviews/reviews.controller';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { ReviewsService, reviewImageVersions } from '../../src/modules/reviews/reviews.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
@@ -129,10 +131,7 @@ describe('Ảnh đánh giá base64 phục vụ qua endpoint riêng (real Postgre
 
   it('migration backfill: dựng lại imageVersions từ images giống mã ứng dụng ghi (md5 10 ký tự, URL giữ nguyên)', async () => {
     await prisma.$executeRaw`UPDATE "reviews" SET "imageVersions" = '{}' WHERE "id" = ${reviewId}`;
-    const sql = (await import('node:fs')).readFileSync(
-      require('node:path').join(__dirname, '../../prisma/migrations/20261104140000_review_image_versions/migration.sql'),
-      'utf8',
-    );
+    const sql = readFileSync(join(__dirname, '../../prisma/migrations/20261104140000_review_image_versions/migration.sql'), 'utf8');
     const statements = sql.replace(/^--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean);
     for (let run = 0; run < 2; run++) for (const stmt of statements) await prisma.$executeRawUnsafe(stmt); // chạy lại không đổi gì
     const row = await prisma.review.findUnique({ where: { id: reviewId }, select: { imageVersions: true } });

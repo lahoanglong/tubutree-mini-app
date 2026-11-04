@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
+import { CARD_PRODUCT_SELECT, CARD_VARIATION_SELECT, withCoverImages } from './card-select';
 import { VARIATION_ORDER_BY, cardPriceWithFlash, cardPrices, sortVariationsByPrice, type FlashOffer } from './variation-order';
 import { activeFlashWhere, isStillDiscounted } from '../flash-sale/flash-active';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -96,7 +97,6 @@ function priceRange(min?: number, max?: number): PriceBounds | undefined {
 const inPriceRange = (value: number, r: PriceBounds) => (r.gte == null || value >= r.gte) && (r.lte == null || value <= r.lte);
 
 type CardVariation = { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number };
-const CARD_VARIATION_SELECT = { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } satisfies Prisma.VariationSelect;
 
 /** Giá khách thấy trên thẻ: giá đang bán của phân loại đại diện, hoặc giá Giờ vàng thắng (xem `cardPriceWithFlash`). */
 function standingOf(p: { id: string; basePrice: number; salePrice: number | null; variations: CardVariation[] }, offers: ReadonlyMap<string, FlashOffer[]>): number {
@@ -117,7 +117,8 @@ type CardRow = {
   brand: string;
   name: string;
   thumbnail: string | null;
-  images: string[];
+  /** Thiếu thì `toCards` tự nạp ảnh đầu cho thẻ không có thumbnail (xem `withCoverImages`). */
+  images?: readonly string[];
   basePrice: number;
   salePrice: number | null;
   isFeatured: boolean;
@@ -216,7 +217,7 @@ export class CatalogService {
         // tự giữa hai lần query → cuộn vô hạn ở Browse hiện trùng hoặc sót SP giữa các trang.
         orderBy: [this.orderBy(sort), { id: 'asc' }],
         ...skipTake(page, limit),
-        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+        select: CARD_PRODUCT_SELECT,
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -342,7 +343,7 @@ export class CatalogService {
     if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
     const rows = await this.prisma.product.findMany({
       where: { AND: [where, { id: { in: pageIds } }] },
-      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+      select: CARD_PRODUCT_SELECT,
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
     const ordered = pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
@@ -586,7 +587,7 @@ export class CatalogService {
    * Không dùng `rankCache`: khoá theo từng slug sẽ đẩy khoá Bán chạy ra khỏi bộ nhớ có trần.
    */
   async related(slug: string) {
-    const product = await this.prisma.product.findUnique({ where: { slug } });
+    const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true, brand: true } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const where = { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } };
     const siblings = await this.prisma.product.findMany({ where, select: { id: true, soldApp: true, soldExternal: true } });
@@ -597,7 +598,7 @@ export class CatalogService {
     if (ids.length === 0) return [];
     const rows = await this.prisma.product.findMany({
       where: { AND: [where, { id: { in: ids } }] },
-      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+      select: CARD_PRODUCT_SELECT,
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
     // Trả cùng shape card với /products để FE dùng chung ProductCard.
@@ -606,7 +607,7 @@ export class CatalogService {
 
   /** "Thường mua kèm" (§6.12): co-occurrence trên đơn 90 ngày gần nhất. */
   async boughtTogether(slug: string) {
-    const product = await this.prisma.product.findUnique({ where: { slug } });
+    const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
     const hit = this.boughtTogetherCache.get(product.id);
     let ids = hit && hit.expiresAt > Date.now() ? hit.ids : null;
@@ -638,7 +639,7 @@ export class CatalogService {
     if (ids.length === 0) return [];
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids }, ...PUBLIC_PRODUCT_WHERE },
-      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+      select: CARD_PRODUCT_SELECT,
     });
     const byId = new Map(products.map((p) => [p.id, p]));
     return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
@@ -649,7 +650,7 @@ export class CatalogService {
     if (ids.length === 0) return [];
     const products = await this.prisma.product.findMany({
       where: { id: { in: [...ids] }, ...PUBLIC_PRODUCT_WHERE },
-      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+      select: CARD_PRODUCT_SELECT,
     });
     const byId = new Map(products.map((p) => [p.id, p]));
     return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
@@ -696,7 +697,9 @@ export class CatalogService {
     });
     const followedBrandIds = follows.map((f) => f.brandId);
 
-    let items: CardRow[] = [];
+    // Hai bước: chọn ứng viên chỉ với cột xếp hạng, rồi nạp thẻ (kèm phân loại) cho đúng các món được chọn.
+    const RANK_SELECT = { id: true, soldExternal: true, soldApp: true } satisfies Prisma.ProductSelect;
+    let items: { id: string; soldExternal: number; soldApp: number }[] = [];
     if (categorySet.length > 0 || followedBrandIds.length > 0) {
       const or: Prisma.ProductWhereInput[] = [];
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
@@ -707,7 +710,7 @@ export class CatalogService {
         // take:200 — trước đây không giới hạn nên load HẾT sản phẩm khớp rồi mới sort+cắt 10
         // trong JS; catalog càng lớn càng nặng. 200 ứng viên là đủ dư để sort lấy top 10.
         take: 200,
-        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+        select: RANK_SELECT,
       });
     }
 
@@ -715,7 +718,7 @@ export class CatalogService {
       items = await this.prisma.product.findMany({
         where: { ...PUBLIC_PRODUCT_WHERE, isFeatured: true },
         take: 200,
-        include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+        select: RANK_SELECT,
       });
     }
 
@@ -733,7 +736,13 @@ export class CatalogService {
           .sort((a, b) => seedHash(known.seed!, a.id) - seedHash(known.seed!, b.id))
           .slice(0, TAKE)
       : sorted.slice(0, TAKE);
-    return this.toCards(picked);
+    if (picked.length === 0) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { ...PUBLIC_PRODUCT_WHERE, id: { in: picked.map((p) => p.id) } },
+      select: CARD_PRODUCT_SELECT,
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return this.toCards(picked.map((p) => byId.get(p.id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
   }
 
   async brands() {
@@ -904,9 +913,9 @@ export class CatalogService {
    */
   private async toCards(rows: readonly CardRow[]) {
     if (rows.length === 0) return [];
-    const [loved, stores] = await Promise.all([this.lovedThresholds(), this.storesOfCards(rows)]);
+    const [loved, stores, withImages] = await Promise.all([this.lovedThresholds(), this.storesOfCards(rows), withCoverImages(this.prisma, rows)]);
     return Promise.all(
-      rows.map(async (p) => {
+      withImages.map(async (p) => {
         const sold = (p.soldExternal ?? 0) + (p.soldApp ?? 0); // tổng "đã bán" (sàn ngoài + app)
         return {
           id: p.id,

@@ -3,7 +3,10 @@ import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import { LIKE_ESCAPE } from './search-text';
-import { VARIATION_ORDER_BY } from './variation-order';
+import { CARD_PRODUCT_SELECT } from './card-select';
+
+/** Câu xếp hạng chọn vài cột nhỏ; câu lấy thẻ chọn CARD_PRODUCT_SELECT (có `variations`). */
+const isRank = (args: { select?: object }) => Boolean(args.select) && !('variations' in (args.select as object));
 
 const card = (id: string) => ({
   id,
@@ -283,6 +286,7 @@ describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọ
     const productFindMany = jest
       .fn()
       .mockResolvedValueOnce([{ id: 'p1', categoryIds: ['C'] }])
+      .mockResolvedValueOnce([card('p2')])
       .mockResolvedValueOnce([card('p2')]);
     const prisma = {
       orderItem: { findMany: jest.fn().mockResolvedValue([{ variationId: 'v1' }]) },
@@ -413,7 +417,8 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
         { ...card('p1'), soldExternal: 100, soldApp: 0 }, // đã mua, bán chạy nhất
         { ...card('p2'), soldExternal: 5, soldApp: 0 },
         { ...card('p3'), soldExternal: 10, soldApp: 20 },
-      ]);
+      ])
+      .mockResolvedValueOnce([card('p1'), card('p2'), card('p3')]);
     const { prisma, svc } = setup({
       orderItem: { findMany: orderItemFindMany },
       variation: { findMany: variationFindMany },
@@ -436,7 +441,8 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
       .mockResolvedValueOnce([
         { ...card('p1'), isFeatured: true, soldExternal: 50, soldApp: 0 },
         { ...card('pf'), isFeatured: true, soldExternal: 1, soldApp: 0 },
-      ]);
+      ])
+      .mockResolvedValueOnce([card('p1'), card('pf')]);
     const { svc } = setup({
       orderItem: { findMany: jest.fn().mockResolvedValue([{ variationId: 'v1' }]) },
       variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]) },
@@ -455,7 +461,7 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
     const r = await svc.getForYou('u-moi');
 
     expect(r.map((c) => c.id)).toEqual(['pf1']);
-    expect(productFindMany).toHaveBeenCalledTimes(1);
+    expect(productFindMany).toHaveBeenCalledTimes(2); // ứng viên, rồi thẻ của món được chọn
     expect(productFindMany.mock.calls[0][0].where).toMatchObject({ isActive: true, isFeatured: true });
   });
 
@@ -838,7 +844,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
   it('tab Liên quan (không sort) khi có q: thứ tự trang theo thứ tự SQL đã xếp, không theo isFeatured', async () => {
     const queryRaw = jest.fn().mockResolvedValue([{ id: 'p3' }, { id: 'p1' }, { id: 'p2' }]);
     const findMany = jest.fn(async (args: { select?: unknown; where: { AND?: { id?: { in: string[] } }[] } }) =>
-      args.select ? [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] : [card('p1'), card('p2'), card('p3')],
+      isRank(args) ? [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] : [card('p1'), card('p2'), card('p3')],
     );
     const prisma = {
       product: { findMany, count: jest.fn() },
@@ -853,7 +859,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
   it('Liên quan: trang 2 giữ thứ tự của trang 1 dù số đã bán đổi giữa hai lượt tải, và không ghi vào rankCache', async () => {
     const first = [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }];
     const queryRaw = jest.fn().mockResolvedValueOnce(first).mockResolvedValueOnce([{ id: 'p3' }, { id: 'p1' }, { id: 'p2' }]);
-    const findMany = jest.fn(async (args: { select?: unknown }) => (args.select ? [{ id: 'p3' }, { id: 'p2' }, { id: 'p1' }] : [card('p1'), card('p2'), card('p3')]));
+    const findMany = jest.fn(async (args: { select?: unknown }) => (isRank(args) ? [{ id: 'p3' }, { id: 'p2' }, { id: 'p1' }] : [card('p1'), card('p2'), card('p3')]));
     const prisma = {
       product: { findMany, count: jest.fn() },
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
@@ -1011,7 +1017,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     });
     expect(findMany.mock.calls[1][0]).toEqual({
       where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
-      include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
+      select: CARD_PRODUCT_SELECT,
     });
   });
 
@@ -1032,7 +1038,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
   });
 
   it('xếp theo giá hoặc lọc giá không dùng bộ nhớ 60 giây (giá và Giờ vàng đổi là thấy ngay)', async () => {
-    const row = { id: 'a', basePrice: 100_000, salePrice: null, variations: [] };
+    const row = { id: 'a', basePrice: 100_000, salePrice: null, variations: [], images: [] };
     const findMany = jest.fn().mockResolvedValue([row]);
     const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService;
     const svc = new CatalogService(prisma);
@@ -1791,7 +1797,7 @@ describe('CatalogService.list — seed ngày (Gợi ý hôm nay)', () => {
 
   function svcWith() {
     const findMany = jest.fn().mockImplementation(async (args: { select?: unknown; where: { AND?: { id?: { in: string[] } }[] } }) =>
-      args.select ? POOL : cardsFor(...(args.where.AND?.[1]?.id?.in ?? [])),
+      isRank(args) ? POOL : cardsFor(...(args.where.AND?.[1]?.id?.in ?? [])),
     );
     const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService;
     return { findMany, svc: new CatalogService(prisma) };
