@@ -596,7 +596,10 @@ export class NotificationsService {
     const delays = NotificationsService.SENT_WRITE_RETRY_DELAYS_MS;
     for (let attempt = 0; ; attempt++) {
       try {
-        await this.writeSent(logId);
+        // $executeRaw không ném khi không trúng dòng nào (khác update của Prisma ném P2025): log biến mất sau khi Zalo đã nhận thì phải lên log lỗi.
+        if ((await this.writeSent(logId)) === 0) {
+          this.logger.error(`ZNS log ${logId} đã gửi thành công nhưng không còn dòng log để ghi SENT.`);
+        }
         return;
       } catch (err) {
         if (attempt >= delays.length) {

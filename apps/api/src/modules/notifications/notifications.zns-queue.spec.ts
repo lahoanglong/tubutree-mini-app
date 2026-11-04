@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
@@ -91,6 +92,19 @@ describe('NotificationsService.deliverZns', () => {
     expect(sendTemplate).toHaveBeenCalledTimes(1);
     expect(executeRaw).toHaveBeenCalledTimes(2);
     expect(sqlOf(executeRaw, 1)).toMatch(/SET status = 'SENT'/);
+  });
+
+  it('ghi SENT trúng 0 dòng (log không còn) → logger.error, không ném và không gửi lại', async () => {
+    const { svc, executeRaw, sendTemplate } = setup();
+    executeRaw.mockResolvedValue(0);
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+      expect(sendTemplate).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('log-2'));
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('L2-03: ghi SENT lỗi cả 3 lần → nuốt lỗi (job không ném để BullMQ gửi lại), Zalo chỉ được gọi một lần', async () => {
