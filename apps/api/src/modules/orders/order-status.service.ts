@@ -628,7 +628,8 @@ export class OrderStatusService {
     if (order.reversalEffectsAt) return { outcome: 'ALREADY_DONE' };
 
     const closure = await this.prisma.orderStatusHistory.findFirst({
-      where: { orderId: order.id, toStatus: order.status },
+      // Dòng ghi chú cùng trạng thái (fromStatus = toStatus: dấu PANCAKE, "Đã xử lý" của admin…) không phải lần đóng đơn.
+      where: { orderId: order.id, toStatus: order.status, fromStatus: { not: order.status } },
       orderBy: { createdAt: 'desc' },
       select: { actorType: true, createdAt: true },
     });

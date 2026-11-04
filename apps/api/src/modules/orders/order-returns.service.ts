@@ -943,7 +943,7 @@ export class OrderReturnsService {
   private async lastDeliveredAt(orderId: string): Promise<Date | null> {
     const h = await this.prisma.orderStatusHistory
       ?.findFirst({
-        where: { orderId, toStatus: 'DELIVERED' },
+        where: { orderId, toStatus: 'DELIVERED', fromStatus: { not: 'DELIVERED' } },
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true },
       })
