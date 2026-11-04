@@ -2,8 +2,11 @@ import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { UPLOAD_IMAGE_HOSTS } from '../../common/uploaded-image';
 
-/** Bề rộng (px) được phép: thẻ SP 160/320, chi tiết 640/960 (1x và 2x). Số khác bị từ chối để cache không phình theo tham số tuỳ ý. */
-export const RESIZE_WIDTHS: readonly number[] = [160, 320, 640, 960];
+/**
+ * Bề rộng (px) được phép: thẻ SP 160/320, chi tiết 640/960 (1x và 2x), banner/hero 1280/1920 (khung rộng ở màn 2x–3x). Số khác bị từ chối để cache không
+ * phình theo tham số tuỳ ý. Ảnh nguồn nhỏ hơn bề rộng xin thì giữ nguyên cỡ (sharp `withoutEnlargement`), không phóng to.
+ */
+export const RESIZE_WIDTHS: readonly number[] = [160, 320, 640, 960, 1280, 1920];
 
 /** Host nguồn tin cậy: CDN ảnh Pancake và Cloudinary (cùng danh sách host upload). Thêm host qua IMAGE_RESIZE_EXTRA_HOSTS. */
 export const PANCAKE_IMAGE_HOSTS: readonly string[] = ['content.pancake.vn'];

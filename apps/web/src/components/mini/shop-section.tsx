@@ -38,6 +38,8 @@ export interface ShopSectionProps {
   onSeeAll?: () => void;
   /** Xem trước ở màn dựng gian hàng: "Thêm cả combo" không ghi giỏ và không đòi đăng nhập. */
   preview?: boolean;
+  /** Số thẻ đầu tải ảnh ngay: chỉ khối đầu của trang shop (sát màn đầu) truyền 2. Lưới `lg` của kệ không truyền: dưới lg nó ẩn nên ảnh eager vẫn bị tải. */
+  priorityCount?: number;
 }
 
 const asCard = (it: ShopSectionItem): ProductCardType => ({ ...it.product, isFeatured: it.product.isFeatured ?? false });
@@ -114,7 +116,7 @@ function ComboSection({ collection, pct, preview }: { collection: ShopSectionPro
  * Combo chỉ là combo khi có ít nhất hai sản phẩm khác nhau và `%` giảm hợp lệ (API cũng chỉ giảm khi đủ); không thì hiện như hàng dòng,
  * để không quảng cáo "mua cả bộ" cho thứ không giảm gì. "Thêm cả combo" là một lệnh của máy chủ: thêm hết hoặc không món nào.
  */
-export function ShopSection({ collection, showBrand, onSeeAll, preview = false }: ShopSectionProps) {
+export function ShopSection({ collection, showBrand, onSeeAll, preview = false, priorityCount = 0 }: ShopSectionProps) {
   if (collection.items.length === 0) return null;
   const view = collectionView(collection);
   const distinct = new Set(collection.items.map((it) => it.product.id)).size;
@@ -143,8 +145,9 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
     <Section id={`shop-col-${collection.id}`}>
       <SectionHeader title={collection.title} action={action} />
       {layout === 'rail' && (
+        // Kệ ít món có hai bản (kệ dưới lg, lưới từ lg), mỗi bản `display:none` ở một khổ; ảnh eager vẫn tải dù bị ẩn nên ưu tiên chỉ cấp cho kệ hiện ở mọi khổ.
         <div data-testid="shop-rail" className={railAsGrid ? 'lg:hidden' : undefined}>
-          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
+          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} priorityCount={railAsGrid ? 0 : priorityCount} />
         </div>
       )}
       {railAsGrid && (
@@ -155,12 +158,12 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
       )}
       {layout === 'grid' && (
         <div data-testid="shop-grid">
-          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} priorityCount={priorityCount} />
         </div>
       )}
       {layout === 'line' && (
         <div data-testid="shop-line">
-          <ProductGrid items={cards} variant="line" className={LINE_GRID} showBrand={showBrand} noteOf={noteOf} />
+          <ProductGrid items={cards} variant="line" className={LINE_GRID} showBrand={showBrand} noteOf={noteOf} priorityCount={priorityCount} />
         </div>
       )}
     </Section>

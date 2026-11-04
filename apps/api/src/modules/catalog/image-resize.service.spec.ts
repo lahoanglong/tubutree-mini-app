@@ -113,6 +113,17 @@ describe('ImageResizeService', () => {
     expect(typeof opts.lookup).toBe('function');
   });
 
+  it('ảnh nguồn đã bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) thì 404 dù bản đổi cỡ còn trong cache đĩa; ảnh của chính API không bị ảnh hưởng', async () => {
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    const url = 'https://content.pancake.vn/a.png';
+    await make().svc.get(url, 160, 'jpeg');
+    expect(readdirSync(dir).length).toBe(1);
+    await expect(make(undefined, prismaWith([])).svc.get(url, 160, 'jpeg')).rejects.toBeInstanceOf(NotFoundException);
+    const own = make();
+    await own.svc.get('/public-image/product/p1/thumb?v=abc', 160, 'jpeg');
+    await expect(make(undefined, prismaWith([])).svc.get('/public-image/product/p1/thumb?v=abc', 160, 'jpeg')).resolves.toBeDefined();
+  });
+
   it('bước phân giải DNS chặn địa chỉ nội bộ (cả dạng all: true) và cho qua địa chỉ công cộng', async () => {
     fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
     await make().svc.get('https://content.pancake.vn/dns.png', 160, 'webp');
@@ -414,3 +425,88 @@ describe('ImageResizeService — ảnh mới từ đồng bộ/đối tác (R-18
   });
 });
 
+
+describe('ImageResizeService — danh sách ảnh nạp lại ở nền (stale-while-revalidate)', () => {
+  const URL_A = 'https://content.pancake.vn/a.jpg';
+  const setup = (queryRaw: jest.Mock) => {
+    const stale = new ImageRegistryStale();
+    const svc = new ImageResizeService(ownImages(png) as never, { $queryRaw: queryRaw } as never, stale);
+    const isReg = (u: string) => (svc as unknown as { isRegistered(u: string): Promise<boolean> }).isRegistered(u);
+    return { stale, svc, isReg };
+  };
+  const tick = () => new Promise((r) => setImmediate(r));
+
+  it('lần nạp đầu phải chờ; hết hạn TTL hoặc bị đánh dấu cũ thì dùng danh sách hiện có, không chờ truy vấn DB', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let call = 0;
+    const queryRaw = jest.fn(async () => {
+      if (call++ === 0) return [{ u: URL_A }];
+      await gate;
+      return [{ u: URL_A }];
+    });
+    const { stale, isReg } = setup(queryRaw);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    expect(await isReg(URL_A)).toBe(true);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    stale.markStale();
+    now.mockReturnValue(1_000_000 + 6 * 60_000);
+    // Nạp lại đang treo ở DB nhưng ảnh đã có trong danh sách thì trả lời ngay.
+    expect(await isReg(URL_A)).toBe(true);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    release();
+    await tick();
+    now.mockRestore();
+  });
+
+  it('ảnh không có trong danh sách (trượt) vẫn chờ lần nạp đang chạy để thấy ảnh mới', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let call = 0;
+    const queryRaw = jest.fn(async () => {
+      if (call++ === 0) return [];
+      await gate;
+      return [{ u: URL_A }];
+    });
+    const { stale, isReg } = setup(queryRaw);
+    await isReg('https://content.pancake.vn/none.jpg');
+    stale.markStale();
+    const p = isReg(URL_A);
+    await tick();
+    release();
+    expect(await p).toBe(true);
+  });
+
+  it('nạp lại lỗi: giữ danh sách cũ để vẫn phục vụ, giữ cờ cũ, không thử lại trong 30 giây', async () => {
+    let call = 0;
+    const queryRaw = jest.fn(async () => {
+      if (call++ === 0) return [{ u: URL_A }];
+      throw new Error('db down');
+    });
+    const { stale, isReg } = setup(queryRaw);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await isReg(URL_A);
+    stale.markStale();
+    now.mockReturnValue(1_001_000);
+    expect(await isReg(URL_A)).toBe(true);
+    await tick();
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect(stale.isStale()).toBe(true);
+    now.mockReturnValue(1_010_000);
+    expect(await isReg(URL_A)).toBe(true);
+    await tick();
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    now.mockReturnValue(1_040_000);
+    await isReg(URL_A);
+    await tick();
+    expect(queryRaw).toHaveBeenCalledTimes(3);
+    now.mockRestore();
+  });
+
+  it('lần nạp đầu lỗi thì 503 (chưa có danh sách nào để dùng tạm)', async () => {
+    const { isReg } = setup(jest.fn().mockRejectedValue(new Error('db down')));
+    await expect(isReg(URL_A)).rejects.toThrow('Máy chủ đang bận');
+  });
+});

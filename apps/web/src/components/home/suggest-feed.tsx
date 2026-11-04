@@ -11,7 +11,7 @@ import { serverNow } from '@tubutree/app-core/server-clock';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
-import { Button, Chip, PRIORITY_CARDS, ProductGrid, ScrollRow, SectionHeader, Text } from '@/components/mini';
+import { Button, Chip, ProductGrid, ScrollRow, SectionHeader, Text } from '@/components/mini';
 import { HomeBlockError } from './home-block-error';
 
 // Từ lg lưới 5–6 cột và có thanh đầu trang đủ lối vào Danh mục: dừng ở 48 món (đủ 8 hàng 6 cột) rồi mời "Xem thêm" ở trang sản phẩm.
@@ -113,7 +113,8 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude }: 
         pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
       ) : (
         <>
-          <ProductGrid items={items} variant="grid" priorityCount={categoryId === null ? PRIORITY_CARDS : 0} />
+          {/* Khối cuối trang chủ, nằm dưới màn đầu: tải lười, không đặt ảnh ưu tiên. */}
+          <ProductGrid items={items} variant="grid" />
           <div ref={sentinel} aria-hidden style={{ height: 1 }} />
           {canLoadMore ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>

@@ -1,3 +1,4 @@
+import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import 'reflect-metadata';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { StorefrontAdminService } from './storefront-admin.service';
@@ -27,13 +28,15 @@ function setup(over: { storefront?: Record<string, jest.Mock> } = {}) {
     ...over.storefront,
   };
   const notify = jest.fn().mockResolvedValue(undefined);
+  const stale = new ImageRegistryStale();
   const svc = new StorefrontAdminService(
     { storefront } as unknown as PrismaService,
     config,
     affiliate,
     { notify } as unknown as NotificationsService,
+    stale,
   );
-  return { svc, storefront, notify };
+  return { svc, storefront, notify, stale };
 }
 
 describe('StorefrontAdminService.list', () => {
@@ -297,5 +300,22 @@ describe('StorefrontAdminService.detail', () => {
   it('không tồn tại → 404', async () => {
     const { svc } = setup({ storefront: { findUnique: jest.fn().mockResolvedValue(null) } });
     await expect(svc.detail('nope')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('StorefrontAdminService: danh sách ảnh của /img nạp lại khi khách thấy gian hàng khác đi', () => {
+  it('gỡ đăng, đăng lại, duyệt, bỏ duyệt đều đánh dấu cũ; lệnh không đổi dòng nào thì không', async () => {
+    for (const run of [
+      (svc: StorefrontAdminService) => svc.takeDown('a', 's1', 'lý do'),
+      (svc: StorefrontAdminService) => svc.reinstate('a', 's1'),
+      (svc: StorefrontAdminService) => svc.setApproved('a', 's1', false),
+    ]) {
+      const { svc, stale } = setup();
+      await run(svc);
+      expect(stale.isStale()).toBe(true);
+    }
+    const { svc, stale } = setup({ storefront: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findUnique: jest.fn().mockResolvedValue(row()) } });
+    await svc.takeDown('a', 's1', 'lý do');
+    expect(stale.isStale()).toBe(false);
   });
 });

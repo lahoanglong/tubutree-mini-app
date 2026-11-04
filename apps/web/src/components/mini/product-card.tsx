@@ -31,6 +31,8 @@ export interface ProductCardProps {
   note?: string;
   /** Thẻ nằm trên màn hình đầu: tải ảnh ngay thay vì chờ cuộn tới (`PRIORITY_CARDS` thẻ đầu). */
   priority?: boolean;
+  /** `sizes` của ảnh thẻ (lưới truyền theo lớp cột của nó); thiếu thì thẻ tự chọn theo biến thể. */
+  imageSizes?: string;
   /** Mặc định có tim ở thẻ đủ rộng (grid, rail-md, rank); gian hàng xem trước tắt vì khách chưa đăng nhập vào đó. */
   showWishlist?: boolean;
   /** Nút nổi trên ảnh (giỏ nhanh); hết hàng thì không vẽ. */
@@ -63,6 +65,7 @@ export function ProductCard({
   showBrand,
   note,
   priority,
+  imageSizes,
   showWishlist = true,
   imageOverlay,
   onAdd,
@@ -99,6 +102,7 @@ export function ProductCard({
       note={note}
       rankPlain={rankPlain}
       priority={priority}
+      imageSizes={imageSizes}
       onAdd={onAdd}
       addLabel={addLabel}
       hidePrice={hidePrice}

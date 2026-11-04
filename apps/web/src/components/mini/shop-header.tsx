@@ -4,6 +4,8 @@
 import { useId, useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import { CheckCircle2, Sprout } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useSizedImage } from '@/lib/image-src';
+import { SHOP_AVATAR_SIZES, SHOP_COVER_SIZES } from '@/lib/image-sizes';
 import { Heading, Text } from './text';
 
 export interface ShopHeaderProps {
@@ -28,6 +30,11 @@ export interface ShopHeaderProps {
    * thì không có lớp `lg:` nào và bố cục điện thoại giữ ở mọi khổ, nên dựng ngoài `StoreLayout` (vd xem trước gian hàng) không vỡ.
    */
   inStoreGrid?: boolean;
+  /**
+   * Nguồn ảnh. `storefront` (mặc định): ảnh do CTV dán, chỉ ảnh Cloudinary/của API có trong danh sách của /img nên chỉ ảnh đó đi qua bộ đổi cỡ.
+   * `brand`: ảnh thương hiệu do admin nhập, mọi URL https đều có trong danh sách.
+   */
+  imageSource?: 'storefront' | 'brand';
 }
 
 /** Cao bìa ở điện thoại. Lớp `h-[120px]` của bìa phải bằng số này (Tailwind chỉ nhận lớp viết nguyên văn; `shop-header.spec` giữ hai số khớp). */
@@ -48,6 +55,11 @@ const LG = {
   note: 'lg:col-span-2 lg:col-start-2 lg:row-start-3 lg:mt-0',
 } as const;
 
+/** Bìa: điện thoại tràn 100vw (cao 120px); từ lg là ô trái 5/12 của khung 1200px (store-layout) ~500px. */
+const COVER_SIZES = SHOP_COVER_SIZES;
+/** Avatar: 56px, từ lg 72px (`LG.avatar`). */
+const AVATAR_SIZES = SHOP_AVATAR_SIZES;
+
 const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
 
 /**
@@ -58,11 +70,11 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
  * bên phải, số liệu ngay dưới thông tin), avatar không còn đè mép bìa mà đứng đầu hàng tên. Phần khác nhau giữa điện thoại và lg nằm ở lớp
  * Tailwind (không ở style nội tuyến, vì style nội tuyến đè lớp `lg:`); các lớp `lg:` viết nguyên văn trong `LG` để Tailwind quét được.
  */
-export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false }: ShopHeaderProps) {
+export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false, imageSource = 'storefront' }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
   const noteId = useId();
-  // Ngoặc kép quanh URL + mã hoá ký tự phá chuỗi (", \, xuống dòng) để URL lạ không thoát khỏi url().
-  const background = coverUrl ? `url("${coverUrl.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--color-bg-cover)';
+  const cover = useSizedImage(coverUrl, 960, COVER_SIZES, false, imageSource === 'storefront');
+  const avatar = useSizedImage(avatarUrl, 72, AVATAR_SIZES, false, imageSource === 'storefront');
   const long = (note ?? '').length > NOTE_FOLD_CHARS;
   const lg = (key: keyof typeof LG) => (inStoreGrid ? ` ${LG[key]}` : '');
   return (
@@ -71,8 +83,24 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
         data-testid="shop-cover"
         aria-hidden="true"
         className={`h-[120px]${lg('cover')}`}
-        style={{ background }}
-      />
+        style={{ position: 'relative', overflow: 'hidden', background: 'var(--color-bg-cover)' }}
+      >
+        {/* Thẻ img thay cho nền CSS: nền CSS không có srcset, `fetchpriority`, và trình duyệt chỉ thấy nó sau khi tải CSS. Bìa là ảnh to nhất màn đầu của shop nên ưu tiên cao. */}
+        {cover.img && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={cover.img.src}
+            srcSet={cover.img.srcSet}
+            sizes={cover.img.sizes}
+            alt=""
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            onError={() => void cover.fallBack()}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+          />
+        )}
+      </div>
       <div className={`px-4${lg('info')}`}>
         <div className={`-mt-7 flex items-end justify-between gap-3${lg('avatarRow')}`}>
           <div className={`relative h-14 w-14 flex-none${lg('avatar')}`}>
@@ -83,8 +111,19 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
                 border: '3px solid var(--color-bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
               }}
             >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {avatar.img ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatar.img.src}
+                  srcSet={avatar.img.srcSet}
+                  sizes={avatar.img.sizes}
+                  alt=""
+                  width={56}
+                  height={56}
+                  decoding="async"
+                  onError={() => void avatar.fallBack()}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               ) : (
                 <Sprout size={28} color="var(--color-text-inverse)" aria-hidden="true" />
               )}
@@ -95,7 +134,7 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
               </span>
             )}
           </div>
-          {action && <div className={`flex-none pb-0.5${lg('action')}`}>{action}</div>}
+          {action && <div className={`relative flex-none pb-0.5${lg('action')}`}>{action}</div>}
         </div>
         <div className={`mt-2 min-w-0${lg('name')}`}>
           <Heading variant="title-lg" as={titleAs} style={{ minWidth: 0, ...CLAMP_2 }}>

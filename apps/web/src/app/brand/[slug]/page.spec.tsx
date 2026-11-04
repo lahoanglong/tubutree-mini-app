@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ReactElement } from 'react';
+import { act, type ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import BrandPage, { generateMetadata, revalidate } from './page';
@@ -293,6 +293,17 @@ describe('trang thương hiệu — tab Câu chuyện', () => {
     const imgs = c.querySelectorAll('[role="region"][aria-label="Ảnh câu chuyện thương hiệu"] img');
     expect(imgs).toHaveLength(2);
     expect(imgs[0]!.getAttribute('alt')).toBe('Fuwa3e, ảnh 1');
+  });
+
+  it('ảnh câu chuyện qua bộ đổi cỡ; bộ đổi cỡ lỗi thì lùi về ảnh gốc một lần', async () => {
+    const orig = 'https://content.pancake.vn/2-26/story.jpg';
+    mocks.brand = { ...BRAND, ...WITH_STORY, storyImages: [orig] };
+    const c = await live();
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đọc câu chuyện'))!);
+    const img = c.querySelector('[role="region"][aria-label="Ảnh câu chuyện thương hiệu"] img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=');
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
   });
 
   it('nút "Đọc câu chuyện" nới vùng chạm bằng tubu-hit-44 chứ không dùng min-h-11 chiếm chỗ thật (G6 #24)', async () => {

@@ -143,9 +143,9 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
         action={seeAll ? { to: seeAll } : undefined}
       />
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
-        {live.map((item) => (
+        {live.map((item, i) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} priority={i < FLASH_PRIORITY_CARDS} />
           </RailCell>
         ))}
       </RailShell>
@@ -198,12 +198,15 @@ function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null
   );
 }
 
+/** Giờ vàng đứng sát màn đầu (dưới banner và lối tắt): hai thẻ đầu, vừa trong 375px, là ứng viên LCP. */
+const FLASH_PRIORITY_CARDS = 2;
+
 /**
  * Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). Về giá thường đúng mốc `endAt`
  * dù danh sách chưa tải lại. Danh sách dựng sẵn (ISR) có thể cũ hơn giờ trình duyệt: trước hydrate coi suất còn giờ (đúng như HTML máy chủ đã vẽ),
  * sau hydrate tính theo giờ máy chủ thật.
  */
-export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
+export function ActiveFlashCard({ item, reserveVariation, priority = false }: { item: FlashSaleActiveItem; reserveVariation: boolean; priority?: boolean }) {
   const hydrated = useHydrated();
   useFlashExpiry(item.endAt);
   const end = Date.parse(item.endAt);
@@ -214,6 +217,7 @@ export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleAct
     <ProductTile
       view={view}
       variant="flash"
+      priority={priority}
       // Sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân loại, mà trang chi tiết mặc định chọn phân loại đầu còn hàng:
       // mở ra là giá thường, không nhãn, không đếm ngược. `?v=` mở đúng phân loại có suất (chỉ khi suất thật sự rẻ hơn).
       href={productHref(encodeURIComponent(item.productSlug), view.isFlash ? item.variationId : null)}

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { LayoutGrid } from 'lucide-react';
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import type { CategoryEntry } from '@/lib/browse-categories';
@@ -79,6 +80,15 @@ describe('CategoryTiles', () => {
     mounted?.unmount();
     const { c } = mount({ isLoading: false, placeholderCount: 3 });
     for (const b of c.querySelectorAll<HTMLElement>('button')) expect(b.style.minHeight).toBe(`${HUB_TILE_HEIGHT}px`);
+  });
+
+  it('ảnh danh mục qua bộ đổi cỡ; bộ đổi cỡ lỗi thì lùi về ảnh gốc', () => {
+    const orig = 'https://content.pancake.vn/2-26/c.jpg';
+    const { c } = mount({ entries: [entry(1, orig)] });
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=');
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
   });
 
   it('ô cao tối thiểu 88px (vùng chạm); ảnh danh mục thay icon và chỉ để trang trí', () => {

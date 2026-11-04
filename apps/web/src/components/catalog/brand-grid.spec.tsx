@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import { BrandGrid } from './brand-grid';
 
@@ -34,6 +35,15 @@ describe('BrandGrid', () => {
     link.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(false);
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('logo thương hiệu qua bộ đổi cỡ; bộ đổi cỡ lỗi thì lùi về ảnh gốc', () => {
+    const orig = 'https://content.pancake.vn/2-26/logo.jpg';
+    const { c } = mount([{ brand: 'A', count: 5, logoUrl: orig }, ...brands(4)]);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=');
+    act(() => { img.dispatchEvent(new Event('error')); });
+    expect(img.getAttribute('src')).toBe(orig);
   });
 
   it('dưới 4 nhãn hoặc chưa có dữ liệu: không vẽ gì (không để tiêu đề trơ)', () => {
