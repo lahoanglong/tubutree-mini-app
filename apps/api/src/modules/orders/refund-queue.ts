@@ -323,15 +323,17 @@ export async function recordLatePaymentRefund(
         data: { adminNote: [prior.adminNote, `Mã GD ${input.bankRef}`].filter(Boolean).join(' · ') },
       });
     }
-    // Admin đã đối chiếu và ghi tiền về muộn: khoản "Pancake báo đã thanh toán, chờ đối chiếu" của đơn đóng xong. Đơn đóng vẫn UNPAID nên
-    // không tự rời hàng đợi; cùng tx với dòng hoàn để không có dòng hoàn mà cờ còn, hay ngược lại. Nguồn Pancake không được gỡ cờ.
-    if (viaAdmin) await tx.order.updateMany({ where: { id: order.id, paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } });
     if (prior) return viaAdmin ? ('EXISTS' as const) : ('ADMIN_RECORDED' as const);
     const created = await tx.orderCustomerRefund.createMany({
       data: [lateRow(order, refKey, input.amount, input.note)],
       skipDuplicates: true,
     });
-    return created.count === 0 ? ('EXISTS' as const) : ('CREATED' as const);
+    if (created.count === 0) return 'EXISTS' as const;
+    // Admin đã đối chiếu và ghi tiền về muộn: khoản "Pancake báo đã thanh toán, chờ đối chiếu" của đơn đóng xong. Đơn đóng vẫn UNPAID nên
+    // không tự rời hàng đợi; cùng tx với dòng hoàn để không có dòng hoàn mà cờ còn. Chỉ gỡ khi dòng hoàn MỚI được tạo: khoản đã có (EXISTS)
+    // không chứng minh khoản Pancake đang chờ đã được ghi, nên cờ còn đó cho admin đóng có chủ đích bằng "Đã đối chiếu". Nguồn Pancake không gỡ cờ.
+    if (viaAdmin) await tx.order.updateMany({ where: { id: order.id, paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } });
+    return 'CREATED' as const;
   });
   if (outcome === 'ADMIN_RECORDED') {
     await flagRefundAttention(ctx, order, adminRecordedReason(order, input.amount, input.source));

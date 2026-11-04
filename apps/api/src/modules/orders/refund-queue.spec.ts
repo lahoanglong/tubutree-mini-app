@@ -107,7 +107,7 @@ describe('MONEY-1: tiền về muộn của đơn CTV lên hộ là khoản củ
     expect(createdRow()).toMatchObject({ refKey: `ADMIN:${ADMIN_LATE_PAYMENT_REF}`, userId: null, phone: '0912345678', adminNote: 'Mã GD FT1' });
   });
 
-  it('admin ghi tiền về muộn gỡ cờ paymentUnlinkedAt trong CÙNG tx (đơn đã huỷ vẫn UNPAID nên không tự rời hàng đợi); khoản đã có cũng gỡ; nguồn Pancake thì không', async () => {
+  it('admin ghi tiền về muộn gỡ cờ paymentUnlinkedAt trong CÙNG tx (đơn đã huỷ vẫn UNPAID nên không tự rời hàng đợi); khoản đã có (EXISTS) KHÔNG gỡ; nguồn Pancake thì không', async () => {
     const clear = { where: { id: 'o1', paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } };
     const created = setup();
     await recordLatePaymentRefund(created.ctx, regularOrder() as never, { amount: 300_000, source: 'ADMIN', refKey: ADMIN_LATE_PAYMENT_REF });
@@ -116,7 +116,7 @@ describe('MONEY-1: tiền về muộn của đơn CTV lên hộ là khoản củ
     const existed = setup();
     existed.tx.orderCustomerRefund.findFirst.mockResolvedValue({ id: 'r9', adminNote: 'Mã GD FT1' });
     await recordLatePaymentRefund(existed.ctx, regularOrder() as never, { amount: 300_000, source: 'ADMIN', refKey: ADMIN_LATE_PAYMENT_REF });
-    expect(existed.tx.order.updateMany).toHaveBeenCalledWith(clear);
+    expect(existed.tx.order.updateMany).not.toHaveBeenCalled();
 
     const webhook = setup();
     await recordLatePaymentRefund(webhook.ctx, regularOrder() as never, { amount: 300_000, source: 'PANCAKE', refKey: 'p1:300000' });

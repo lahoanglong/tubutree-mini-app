@@ -116,4 +116,17 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
     await hold(order, 'PK-L1');
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).toBeNull();
   });
+
+  it('đơn đã huỷ đã có dòng LATE_PAYMENT Pancake, khoản #B chưa gắn đặt cờ: ADMIN ghi tiền về muộn (EXISTS) KHÔNG gỡ cờ', async () => {
+    const user = await createUser(prisma);
+    const adm = await createUser(prisma, { role: 'ADMIN' });
+    const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 200_000, pancakeOrderId: null });
+    await prisma.orderCustomerRefund.create({
+      data: { orderId: order.id, orderCode: order.code, kind: 'LATE_PAYMENT', refKey: 'PANCAKE:paid:200000', userId: user.id, amount: 200_000, method: 'MANUAL_TRANSFER', status: 'PENDING', reason: 'CANCELLED' },
+    });
+    await hold(order, 'PK-B');
+    await admin.confirmOrderPayment(adm.id, order.id, { bankRef: `FT${Date.now()}` });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true } })).paymentUnlinkedAt).not.toBeNull();
+    expect(await prisma.orderCustomerRefund.count({ where: { orderId: order.id, kind: 'LATE_PAYMENT' } })).toBe(1);
+  });
 });
