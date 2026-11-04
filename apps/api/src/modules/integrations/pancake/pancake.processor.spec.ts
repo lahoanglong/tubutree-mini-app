@@ -149,10 +149,11 @@ describe('PancakeProcessor.extractOrderCode', () => {
     expect(proc.extractOrderCode({ note: 'Order code: TUBU20260613001 | [THU COD 230.000đ]' })).toBe('TUBU20260613001');
     expect(proc.extractOrderCode({ note: 'Kho ghi chú\nOrder code: TUBU20260613001' })).toBe('TUBU20260613001');
   });
-  it('"Order code: …" nằm giữa câu khách tự viết → không khớp', () => {
-    expect(proc.extractOrderCode({ note: 'Khách ghi Order code: TUBU123 giùm em' })).toBeNull();
-    expect(proc.extractOrderCode({ note: 'Khách dặn giao chiều - Order code: TUBU20260613001' })).toBeNull();
-    expect(proc.extractOrderCode({ note: 'Order code: TUBU123abc giao nhanh' })).toBeNull();
+  it('ghi chú nhân viên sửa ("GẤP Order code: …", đổi size, NBSP) vẫn ra mã: phân loại sai về phía đơn app', () => {
+    expect(proc.extractOrderCode({ note: 'GẤP Order code: TUBU20260613001' })).toBe('TUBU20260613001');
+    expect(proc.extractOrderCode({ note: 'Order code: TUBU20260613001 - đổi size' })).toBe('TUBU20260613001');
+    expect(proc.extractOrderCode({ note: 'Order code:\u00a0TUBU20260613001' })).toBe('TUBU20260613001');
+    expect(proc.extractOrderCode({ note: 'Khách ghi Order code: TUBU123 giùm em' })).toBe('TUBU123');
   });
   it('mọi tiền tố mã đơn (đơn đại lý DLR, đơn định kỳ TUBUSUB) trong "Order code: …"', () => {
     expect(proc.extractOrderCode({ note: 'Order code: DLR12345678901 | ghi chú' })).toBe('DLR12345678901');
@@ -391,7 +392,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, pancakeAttention: 'Chưa đẩy được đơn sang Pancake' });
       await t.proc.onPaymentReconcile(paidPayload);
       expect(attentionFlags(t.orderUpdateMany)).toEqual([`Chưa đẩy được đơn sang Pancake | ${ATTENTION_PAYMENT_UNLINKED}`]);
-      expect(t.orderUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'o1', pancakeAttention: 'Chưa đẩy được đơn sang Pancake' } }));
+      expect(t.orderUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'o1', pancakeAttention: 'Chưa đẩy được đơn sang Pancake', paymentStatus: 'UNPAID' } }));
       expect(statusFlips(t.orderUpdateMany)).toHaveLength(0);
     });
 
@@ -402,13 +403,44 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       for (const v of attentionFlags(t.orderUpdateMany)) expect(v.split(' | ').filter((x) => x === ATTENTION_PAYMENT_UNLINKED)).toHaveLength(1);
     });
 
-    it('đơn đã huỷ/trả: không ghim vào hàng đợi (chỉ dấu lịch sử và báo ADMIN)', async () => {
+    it('đơn đã huỷ/trả: tạo dòng hoàn PENDING chờ Kế toán như cũ, cộng lý do Cần xử lý và báo ADMIN', async () => {
       const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
       const t = setup({ id: 'o2', code: 'TUBU2', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null }, undefined, alerts);
       await t.proc.onPaymentReconcile(paidPayload);
-      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
-      expect(alerts.alert).toHaveBeenCalledTimes(1);
+      expect(lateRefunds(t.prisma)).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 100000, status: 'PENDING' })]);
+      expect(attentionFlags(t.orderUpdateMany)).toEqual([ATTENTION_PAYMENT_UNLINKED]);
+      expect(alerts.alert).toHaveBeenCalled();
     });
+
+    it('đã chốt lần đầu (dòng lịch sử có sẵn, Kế toán bấm "Đã xử lý") → webhook sau không ghi lại lý do', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
+      (t.prisma.orderStatusHistory.findFirst as jest.Mock).mockResolvedValue({ id: 'h1' });
+      await t.proc.onPaymentReconcile(paidPayload);
+      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+    });
+
+    it('đơn chưa gắn đã PAID (admin xác nhận tay) → Pancake báo vượt tổng không tạo khoản trả vượt, không ghi gì', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 100000, pancakeOrderId: null });
+      await t.proc.onPaymentReconcile({ id: 'p1', is_paid: true, prepaid: 300000 });
+      expect(t.prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+      expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
+    });
+
+    it('đơn đã gắn id KHÁC id trong webhook (đơn Pancake lạ mang mã này) → không lật PAID', async () => {
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: 'p-real' });
+      (t.prisma.order.findFirst as jest.Mock).mockResolvedValueOnce(null);
+      await t.proc.onPaymentReconcile({ id: 'p-other', is_paid: true, note: 'Order code: TUBU1' });
+      expect(statusFlips(t.orderUpdateMany)).toHaveLength(0);
+    });
+
+    it.each(['GẤP Order code: TUBU1', 'Order code: TUBU1 - đổi size', 'Order code:\u00a0TUBU1', 'Order code: TUBU1', 'ghi chú\nOrder code: TUBU1 | COD'])(
+      'ghi chú nhân viên sửa %j: đã gắn id khớp → PAID',
+      async (note) => {
+        const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: 'p1' });
+        await t.proc.onPaymentReconcile({ id: 'p1', is_paid: true, note });
+        expect(statusFlips(t.orderUpdateMany)).toHaveLength(1);
+      },
+    );
 
     it('Pancake gửi lại cùng sự kiện (đã có dấu) → không ghi dấu, không báo thêm', async () => {
       const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
@@ -423,13 +455,10 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(alerts.alert).not.toHaveBeenCalled();
     });
 
-    it('chuyển thiếu hoặc đơn đã huỷ cũng không đi đường ghi nhận tiền (không "Khách chuyển thiếu", không khoản hoàn)', async () => {
+    it('chuyển thiếu cũng không đi đường ghi nhận tiền (không "Khách chuyển thiếu", không khoản hoàn)', async () => {
       const under = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
       await under.proc.onPaymentReconcile({ id: 'p1', prepaid: 50000 });
       expect(attentionFlags(under.orderUpdateMany).filter((a) => a.startsWith('Khách chuyển thiếu'))).toHaveLength(0);
-      const cancelled = setup({ id: 'o2', code: 'TUBU2', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null });
-      await cancelled.proc.onPaymentReconcile(paidPayload);
-      expect(cancelled.prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
     });
 
     it('đơn đã gắn đúng đơn Pancake → vẫn lật PAID như cũ', async () => {

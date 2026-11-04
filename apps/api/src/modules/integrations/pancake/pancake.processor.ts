@@ -135,6 +135,8 @@ function latestPancakeAt(history: unknown[]): Date | null {
   return latest;
 }
 
+const UNLINKED_HISTORY_PREFIX = 'Pancake báo đã thanh toán (đơn Pancake #';
+
 @Processor(QUEUE_PANCAKE_EVENTS)
 export class PancakeProcessor extends WorkerHost {
   private readonly logger = new Logger(PancakeProcessor.name);
@@ -675,6 +677,10 @@ export class PancakeProcessor extends WorkerHost {
     const order = await this.findOrder(data);
     if (!order) return null;
     if (order.paymentMethod !== 'BANK_TRANSFER') return null;
+    // Đơn chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó (hay nhân viên sửa
+    // ghi chú) cũng khớp. Cờ is_paid của đơn như vậy chưa đủ để lật PAID, ghi khoản hoàn hay tính trả vượt: chốt ở đây, trước mọi nhánh tiền.
+    // Đơn đã gắn id khác với id trong webhook không tới được đây (resolveOrder trả `foreign`, bỏ qua và báo ở nhánh khác).
+    if (!order.pancakeOrderId) return this.onUnattachedPayment(order, data);
     if (order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED') {
       // Đơn đã nhận đủ: Pancake báo vượt tổng đơn có thể là khách chuyển dư (chuyển hai lần) — R3-MONEY-1.
       await this.recordOverpayment(order, pancakePaidAmountAfterPaid(data));
@@ -687,12 +693,6 @@ export class PancakeProcessor extends WorkerHost {
     if (await hasDealerCreditDebit(this.prisma, order)) return null;
     const flaggedPaid = isPancakeOrderPaid(data, order.total);
     const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
-    // Đơn Tubu chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó cũng khớp.
-    // Cờ is_paid của đơn như vậy chưa đủ để lật PAID hay ghi khoản hoàn: để Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền".
-    if (!order.pancakeOrderId) {
-      if (flaggedPaid || reported > 0) await this.holdUnattachedPayment(order, data, reported);
-      return null;
-    }
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
       await this.recordLatePancakePayment(order, reported);
       return null;
@@ -720,19 +720,31 @@ export class PancakeProcessor extends WorkerHost {
     return null;
   }
 
+  private async onUnattachedPayment(order: Order, data: Record<string, unknown>): Promise<null> {
+    if (order.paymentStatus !== 'UNPAID') return null;
+    if (await hasDealerCreditDebit(this.prisma, order)) return null;
+    const flaggedPaid = isPancakeOrderPaid(data, order.total);
+    const reported = pancakePaidAmount(data) || (flaggedPaid ? order.total : 0);
+    if (!flaggedPaid && !(reported > 0)) return null;
+    // Đơn đã huỷ/trả: giữ lối cũ, khoản về muộn thành dòng hoàn PENDING cho Kế toán xác minh (không tự chi), cộng lý do Cần xử lý.
+    if (isClosedOrder(order.status)) await this.recordLatePancakePayment(order, reported);
+    await this.holdUnattachedPayment(order, data, reported);
+    return null;
+  }
+
   /**
-   * Dấu bền trong lịch sử đơn (không nằm ô pancakeAttention vì nhiều luồng ghi đè cả ô) + báo ADMIN một lần cho mỗi đơn Pancake.
-   * Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ Kế toán.
+   * Giữ khoản "đã thanh toán" của đơn chưa gắn Pancake cho Kế toán: lần đầu thì nối lý do vào ô pancakeAttention (tự gỡ khi đơn sang PAID),
+   * ghi dòng lịch sử đơn làm dấu đã xử lý và báo ADMIN. Đơn vẫn nhận phần vận chuyển/trạng thái của cùng sự kiện; chỉ phần tiền chờ Kế toán.
    */
   private async holdUnattachedPayment(order: Order, data: Record<string, unknown>, reported: number): Promise<void> {
     const rawId = data['id'] ?? data['order_id'];
     const pancakeRef = rawId === null || rawId === undefined || rawId === '' ? '?' : String(rawId);
-    const note = `Pancake báo đã thanh toán (đơn Pancake #${pancakeRef}) nhưng đơn Tubu chưa gắn đơn Pancake nào: chờ Kế toán xác nhận`;
-    // Nối vào hàng "Cần xử lý Pancake" (không đè lý do khác); lặp lại là no-op về nội dung và khôi phục dòng nếu bị ghi đè sau đó.
-    // Đơn đã huỷ/trả không còn việc gỡ nên không ghim.
-    if (!isClosedOrder(order.status)) await appendPancakeAttention(this.prisma, order.id, ATTENTION_PAYMENT_UNLINKED);
-    const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+    const note = `${UNLINKED_HISTORY_PREFIX}${pancakeRef}) nhưng đơn Tubu chưa gắn đơn Pancake nào: chờ Kế toán xác nhận`;
+    // Chỉ ghi lý do LẦN ĐẦU cho mỗi đơn (dòng lịch sử là dấu): Kế toán bấm "Đã xử lý" rồi thì webhook sau không ghi lại. Nối vào hàng
+    // "Cần xử lý Pancake" không đè lý do khác, và chỉ khi đơn còn UNPAID để không đua với nút "Đã nhận tiền" (markPaid vừa gỡ lý do).
+    const logged = await this.prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note: { startsWith: UNLINKED_HISTORY_PREFIX } }, select: { id: true } });
     if (logged) return;
+    await appendPancakeAttention(this.prisma, order.id, ATTENTION_PAYMENT_UNLINKED, [], { onlyUnpaid: true });
     await this.prisma.orderStatusHistory.create({
       data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'PANCAKE', note },
     });

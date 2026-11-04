@@ -201,16 +201,18 @@ export async function appendPancakeAttention(
   orderId: string,
   reason: string,
   supersededPrefixes: string[] = [],
+  opts: { onlyUnpaid?: boolean } = {},
 ): Promise<void> {
   for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
-    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, paymentStatus: true } });
     if (!row) return;
+    if (opts.onlyUnpaid && row.paymentStatus !== 'UNPAID') return;
     const kept = (row.pancakeAttention ? row.pancakeAttention.split(ATTENTION_SEPARATOR) : []).filter(
       (part) => !supersededPrefixes.some((prefix) => part.startsWith(prefix)),
     );
     const next = appendAttentionReason(kept.join(ATTENTION_SEPARATOR) || null, reason);
     const r = await db.order.updateMany({
-      where: { id: orderId, pancakeAttention: row.pancakeAttention },
+      where: { id: orderId, pancakeAttention: row.pancakeAttention, ...(opts.onlyUnpaid ? { paymentStatus: 'UNPAID' as const } : {}) },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
     });
     if (r.count === 1) return;
