@@ -20,6 +20,7 @@ import { clearHomeHints, dropForeignHomeHints } from '@tubutree/app-core/home-la
 import { browserStorage } from '../utils/recently-viewed';
 import { isHttpError } from '../services/http';
 import { isGuestUser } from '../utils/guest-user';
+import { clearAllRecentCustomers } from '../components/affiliate/recent-customers';
 import { clearCtvTouched } from './storefront-context';
 import { CATALOG_KEYS, getQueryClient } from '../services/query-client';
 import { errorCode } from '@tubutree/app-core/api/error-status';
@@ -59,8 +60,9 @@ function withStorageTimeout<T>(call: () => Promise<T>): Promise<T> {
 /** Id vừa sinh mà lần ghi hết trần (có thể vẫn đang ghi): lần sau dùng lại đúng id này, id khác là một tài khoản Khách khác. */
 let unsavedDeviceId: string | null = null;
 
-/** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
-export async function getDeviceId(): Promise<string> {
+let deviceIdPromise: Promise<string> | null = null;
+
+async function readOrCreateDeviceId(): Promise<string> {
   // Không đọc được thì ném, không sinh id mới: id mới là một tài khoản Khách khác.
   const res = await withStorageTimeout(() => getStorage({ keys: [DEVICE_KEY] }));
   const existing = (res as Record<string, unknown>)[DEVICE_KEY];
@@ -70,6 +72,25 @@ export async function getDeviceId(): Promise<string> {
   await withStorageTimeout(() => setStorage({ data: { [DEVICE_KEY]: id } }));
   unsavedDeviceId = null;
   return id;
+}
+
+/**
+ * ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). Mọi request đều hỏi nó nên promise được giữ ở mức
+ * module: chỉ lần đầu đọc storage (cầu nối native, trần 3 giây). Không có đường nào đổi hay xoá deviceId; lỗi không được giữ lại.
+ */
+export function getDeviceId(): Promise<string> {
+  if (!deviceIdPromise) {
+    const p = readOrCreateDeviceId();
+    deviceIdPromise = p;
+    p.catch(() => {
+      if (deviceIdPromise === p) deviceIdPromise = null;
+    });
+  }
+  return deviceIdPromise;
+}
+
+export function resetDeviceIdCacheForTests(): void {
+  deviceIdPromise = null;
 }
 
 interface AuthState {
@@ -491,6 +512,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user: null, status: 'idle', error: undefined });
       clearHomeHints(browserStorage());
       clearCtvTouched();
+      clearAllRecentCustomers();
       try {
         browserStorage()?.removeItem(INVOICE_KEY);
       } catch {
@@ -553,6 +575,7 @@ setUnauthorizedHandler(async () => {
         status: 'idle',
         error: isAccountBlocked(err) ? getErrorMessage(err) : undefined,
       });
+      clearAllRecentCustomers();
       onLogoutCleanup?.();
     } else {
       // Mạng/429/5xx: chưa biết phiên còn hay không. 'error' (như restore()) để useSessionRecovery tự thử lại, thay vì mời đăng nhập.

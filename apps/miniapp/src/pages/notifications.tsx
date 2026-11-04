@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { Page, useNavigate } from 'zmp-ui';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { ME_SUMMARY_KEY } from '@tubutree/app-core/api/me-summary';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
   ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle, Star, Tag, Users, type LucideIcon,
@@ -157,17 +158,38 @@ export default function NotificationsPage() {
   // Tin gói định kỳ chỉ có nút "Xem gói" khi khách đã có gói (đặt trên web): tra khi mở đúng loại tin đó.
   const { hasSubscription } = useHasSubscription(phase === 'authenticated' && !!selectedNotif?.templateCode.startsWith('SUBSCRIPTION'));
 
+  // Đánh dấu đã đọc sửa thẳng cache danh sách (không nạp lại mọi trang đã cuộn của infinite query) và chỉ làm mới số chưa đọc.
+  // Lệnh hỏng thì mới nạp lại danh sách để giao diện khớp lại với máy chủ; không hiện toast vì đây là thao tác nền.
+  const markReadInCache = (match: (n: NotificationDTO) => boolean) =>
+    qc.setQueryData<InfiniteData<NotificationDTO[], NotificationCursor | undefined>>(notificationsInfiniteQuery(coreHttp).queryKey, (old) =>
+      old && { ...old, pages: old.pages.map((p) => p.map((n) => (n.status !== 'READ' && match(n) ? { ...n, status: 'READ' as const } : n))) },
+    );
+  // Lần nạp đang bay (xem thêm, làm mới nền) có thể mang dữ liệu chụp trước lệnh đọc và ghi đè bản vừa sửa: nạp lại để lấy bản đúng.
+  const refetchIfListBusy = () => {
+    const key = notificationsInfiniteQuery(coreHttp).queryKey;
+    if (qc.isFetching({ queryKey: key }) > 0) void qc.invalidateQueries({ queryKey: key });
+  };
+  const settleRead = (failed: boolean) => {
+    void qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
+  };
+
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
-    // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai
-    // vĩnh viễn mà không có tín hiệu nào. Nạp lại trong CẢ HAI trường hợp để giao diện khớp lại
-    // với máy chủ; không hiện toast vì đây là thao tác nền, báo lỗi chỉ thành nhiễu.
-    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: (_res, id) => {
+      markReadInCache((n) => n.id === id);
+      refetchIfListBusy();
+    },
+    // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai vĩnh viễn mà không có tín hiệu nào.
+    onSettled: (_res, err) => settleRead(err !== null),
   });
 
   const readAllMut = useMutation({
     mutationFn: () => markAllNotificationsRead(),
-    onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      markReadInCache(() => true);
+      refetchIfListBusy();
+    },
+    onSettled: (_res, err) => settleRead(err !== null),
   });
   const unreadCount = summaryUnread ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 

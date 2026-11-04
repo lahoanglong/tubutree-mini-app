@@ -36,11 +36,15 @@ export function useBlockQuery<T>(q: UseQueryResult<T>): BlockQuery<T> {
     q.data === undefined && q.isPending && q.errorUpdateCount > 0 && seen.current !== null && seen.current.at === q.errorUpdatedAt;
   return {
     data: q.data,
+    // Getter: React Query chỉ theo dõi thuộc tính được ĐỌC. Đọc isFetching ở đây sẽ dựng lại cả component gọi hook ở mỗi nhịp poll,
+    // nên để khối nào cần (nút "Thử lại" đang tải) tự đọc.
+    get isFetching() {
+      return q.isFetching;
+    },
     isLoading: q.isLoading && !retryingAfterFailure,
     isPending: q.isPending && !retryingAfterFailure,
     isError: q.isError || retryingAfterFailure,
     error: q.isError ? q.error : retryingAfterFailure ? seen.current?.error : null,
-    isFetching: q.isFetching,
     refetch: q.refetch,
   };
 }
