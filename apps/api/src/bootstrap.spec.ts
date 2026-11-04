@@ -149,4 +149,88 @@ describe('bootstrap — khởi động API (R5-SYNC-2)', () => {
     expect((await fetch(`${base}/products?q=a%00`)).status).toBe(400);
     expect((await fetch(`${base}/products`, { headers: { authorization: 'Bearer x' } })).headers.get('cache-control')).toBe('private, no-store');
   });
+
+  describe('CORS và refresh cookie (A1/W2/F1)', () => {
+    const ENV_KEYS = ['NODE_ENV', 'CORS_ORIGINS'] as const;
+    const saved: Record<string, string | undefined> = {};
+    beforeEach(() => {
+      for (const k of ENV_KEYS) saved[k] = process.env[k];
+    });
+    afterEach(() => {
+      for (const k of ENV_KEYS) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    });
+
+    @Controller()
+    class AuthStub {
+      @Post('auth/refresh') refresh() { return { ok: true }; }
+      @Post('auth/logout') logout() { return { ok: true }; }
+    }
+    async function start(env: 'production' | 'test') {
+      process.env.NODE_ENV = env;
+      process.env.CORS_ORIGINS = 'https://app.tubutree.com';
+      const app = await bootstrap(rootModule(leaseTable().prisma(), { n: 0 }, [AuthStub]), { port: 0, exit: jest.fn(), logger: false });
+      opened.push(app!);
+      process.env.NODE_ENV = 'test';
+      return `http://127.0.0.1:${(app!.getHttpServer().address() as AddressInfo).port}`;
+    }
+    const acao = (base: string, origin: string) => fetch(`${base}/`, { headers: { Origin: origin } }).then((r) => r.headers.get('access-control-allow-origin'));
+
+    it('production: http, cổng lạ và subdomain http không được phản chiếu; https subdomain thì có', async () => {
+      const base = await start('production');
+      expect(await acao(base, 'http://evil.tubutree.com')).toBeNull();
+      expect(await acao(base, 'http://app.tubutree.com')).toBeNull();
+      expect(await acao(base, 'https://evil.tubutree.com:8443')).toBeNull();
+      expect(await acao(base, 'https://app.tubutree.com')).toBe('https://app.tubutree.com');
+      expect(await acao(base, 'https://shop.tubutree.com')).toBe('https://shop.tubutree.com');
+      expect(await acao(base, 'https://h5.zdn.vn')).toBe('https://h5.zdn.vn');
+    });
+
+    it('non-production vẫn nhận http://localhost', async () => {
+      const base = await start('test');
+      expect(await acao(base, 'http://localhost:3000')).toBe('http://localhost:3000');
+    });
+
+    it('preflight trả access-control-max-age 7200', async () => {
+      const base = await start('production');
+      const res = await fetch(`${base}/api/auth/refresh`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://app.tubutree.com', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'x-client' },
+      });
+      expect(res.headers.get('access-control-max-age')).toBe('7200');
+    });
+
+    it.each(['refresh', 'logout'])('%s chế độ cookie: Origin Zalo, lạ hoặc thiếu → 403 tiếng Việt', async (route) => {
+      const base = await start('production');
+      for (const origin of ['https://h5.zdn.vn', 'https://evil.example', undefined]) {
+        const res = await fetch(`${base}/api/auth/${route}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-client': 'web', cookie: 'tubu_rt=abc', ...(origin ? { Origin: origin } : {}) },
+          body: '{}',
+        });
+        expect(res.status).toBe(403);
+        expect(((await res.json()) as { message: string }).message).toMatch(/Tubu Tree/);
+      }
+    });
+
+    it('refresh chế độ cookie với Origin web đúng danh sách → chạy', async () => {
+      const base = await start('production');
+      const res = await fetch(`${base}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-client': 'web', Origin: 'https://app.tubutree.com' },
+        body: '{}',
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it('refresh chế độ thân (Mini App, không x-client, không Origin) vẫn chạy', async () => {
+      const base = await start('production');
+      const miniApp = await fetch(`${base}/api/auth/refresh`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ refreshToken: 'x' }) });
+      expect(miniApp.status).toBe(201);
+      const zalo = await fetch(`${base}/api/auth/refresh`, { method: 'POST', headers: { 'content-type': 'application/json', Origin: 'https://h5.zdn.vn' }, body: JSON.stringify({ refreshToken: 'x' }) });
+      expect(zalo.status).toBe(201);
+    });
+  });
 });

@@ -5,6 +5,7 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { bodyParserErrorHandler, createBodyParsers, eventsBodyParser, pancakeWebhookTokenGuard, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
+import { buildCorsPolicy, cookieAuthOriginGuard, FALLBACK_WEB_ORIGINS } from './common/cors';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
@@ -80,25 +81,11 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
     .map((o) => o.trim())
     .filter((o) => o.length > 0);
   // Allowlist tĩnh từ env (prod rỗng → fallback domain chính thức).
-  const staticAllow = corsOrigins.length > 0 ? corsOrigins : ['https://tubutree.com', 'https://app.tubutree.com'];
+  const staticAllow = corsOrigins.length > 0 ? corsOrigins : FALLBACK_WEB_ORIGINS;
   if (isProd && corsOrigins.length === 0) {
     bootLogger.warn('CORS_ORIGINS chưa cấu hình ở production — fallback về domain chính thức.');
   }
-  // Origin webview Zalo Mini App — LUÔN cho phép (backend này phục vụ Mini App Zalo, không
-  // phụ thuộc env). Nếu thiếu → trình duyệt Zalo chặn MỌI response API: không load được sản phẩm,
-  // không login, Ví/Cá nhân trắng (đúng lỗi gặp trên thiết bị). Bao gồm h5.zdn.vn, *.zadn.vn, zalo.me.
-  const zaloOriginRe = /^https:\/\/([a-z0-9-]+\.)*(zdn\.vn|zadn\.vn|zalo\.me)$/i;
-  // Cho phép domain chính và TẤT CẢ subdomain đối tác (*.tubutree.com) phục vụ Multi-tenancy Storefront.
-  const tubuOriginRe = /^https?:\/\/([a-z0-9-]+\.)*tubutree\.com(:[0-9]+)?$/i;
-  const corsOrigin = (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-    // Không có Origin (app native/WebView không gửi, health check, server-to-server, curl) → cho qua.
-    if (!origin) return cb(null, true);
-    if (zaloOriginRe.test(origin)) return cb(null, true);
-    if (tubuOriginRe.test(origin)) return cb(null, true);
-    if (staticAllow.includes(origin)) return cb(null, true);
-    if (!isProd) return cb(null, true); // dev: mở hết cho tiện test local
-    return cb(null, false); // prod + origin lạ → chặn (không set Allow-Origin)
-  };
+  const { corsOrigin, isWebOrigin } = buildCorsPolicy(isProd, staticAllow);
 
   const app = await NestFactory.create<NestExpressApplication>(rootModule, {
     logger: opts.logger ?? new CronAwareLogger(),
@@ -107,7 +94,8 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   // nên 413/400 do parser/guard trả sẽ thiếu Access-Control-Allow-Origin và trình duyệt chỉ thấy lỗi mạng.
   // Retry-After và Content-Disposition không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
   // (khác origin) không đọc được thời gian chờ khi bị 429, và web admin không đọc được tên file CSV do máy chủ đặt.
-  app.enableCors({ origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After', 'Content-Disposition'] });
+  app.enableCors({ origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After', 'Content-Disposition'], maxAge: 7200 });
+  app.use(cookieAuthOriginGuard(isWebOrigin));
 
   // Graceful shutdown: dọn dẹp kết nối Prisma và queue khi container nhận SIGTERM/SIGINT.
   app.enableShutdownHooks();
