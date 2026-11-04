@@ -650,7 +650,7 @@ describe('OpsInboxService — khoản Pancake báo đã thanh toán chờ đối
     t.orderCount.mockImplementation(((a?: { where?: Record<string, unknown> }) => Promise.resolve(unlinkedCount(a))) as never);
     const orderFindFirst = (t.svc as unknown as { prisma: { order: { findFirst: jest.Mock } } }).prisma.order.findFirst;
     orderFindFirst.mockImplementation(async (a?: { where?: Record<string, unknown> }) =>
-      JSON.stringify(a?.where) === JSON.stringify(OPEN) ? { paymentUnlinkedAt: new Date('2026-11-04T01:00:00Z') } : null,
+      JSON.stringify(a?.where) === JSON.stringify(OPEN) ? { paymentUnlinkedFirstAt: new Date('2026-11-04T01:00:00Z'), paymentUnlinkedAt: new Date('2026-11-04T09:00:00Z') } : null,
     );
     return { ...t, orderFindFirst };
   };
@@ -660,6 +660,13 @@ describe('OpsInboxService — khoản Pancake báo đã thanh toán chờ đối
     const res = await svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
     expect(find(res, 'paymentUnlinked')).toMatchObject({ key: 'paymentUnlinked', count: 2, oldestAt: '2026-11-04T01:00:00.000Z' });
     expect(find(res, 'paymentUnlinkedClosed')).toBeUndefined();
+  });
+
+  it('oldest tính theo paymentUnlinkedFirstAt (#A lúc T0, #B đẩy paymentUnlinkedAt lên T1 → vẫn T0)', async () => {
+    const { svc, orderFindFirst } = mk();
+    await svc.counts({ role: 'ADMIN' });
+    expect(orderFindFirst).toHaveBeenCalledWith({ where: OPEN, orderBy: { paymentUnlinkedFirstAt: 'asc' }, select: { paymentUnlinkedFirstAt: true } });
+    expect(orderFindFirst).toHaveBeenCalledWith({ where: CLOSED, orderBy: { paymentUnlinkedFirstAt: 'asc' }, select: { paymentUnlinkedFirstAt: true } });
   });
 
   it('KHO (và CSKH, MARKETING, chưa có nhóm) không thấy cả hai: KHO không đóng được khoản tiền này', async () => {

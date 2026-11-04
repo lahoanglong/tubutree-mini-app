@@ -25,7 +25,7 @@ describe('AdminService.resolvePaymentUnlinked ("Đã đối chiếu" khoản Pan
     const history = jest.fn().mockResolvedValue({});
     const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order()), updateMany }, orderStatusHistory: { create: history } };
     const res = await mkAdmin(prisma).resolvePaymentUnlinked('admin1', 'TUBU1', '  đã ghi tiền về muộn  ', SEEN);
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentUnlinkedAt: new Date(SEEN) }, data: { paymentUnlinkedAt: null } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentUnlinkedAt: new Date(SEEN) }, data: { paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null } });
     expect(history).toHaveBeenCalledWith({
       data: {
         orderId: 'o1',

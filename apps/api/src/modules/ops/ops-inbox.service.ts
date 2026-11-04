@@ -129,18 +129,18 @@ export class OpsInboxService {
       { key: 'customerRefunds', audience: ['KE_TOAN'], count: () => p.orderCustomerRefund.count({ where: { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } }) },
       // Pancake báo đã thanh toán mà đơn chưa gắn đơn Pancake: hệ thống không tự PAID và không tự hoàn. Đơn còn mở: Kế toán đối chiếu sao kê rồi bấm
       // "Đã nhận tiền" (tự rời khi PAID). Đơn đã huỷ/trả: tiền khách có thể đã về, chỉ ADMIN ghi tiền về muộn/hoàn rồi bấm "Đã đối chiếu".
-      // KHO không thấy: KHO không đóng được khoản này.
+      // KHO không thấy: KHO không đóng được khoản này. "Cũ nhất" tính theo paymentUnlinkedFirstAt (paymentUnlinkedAt bị đẩy lên mỗi cặp mới).
       {
         key: 'paymentUnlinked',
         audience: ['KE_TOAN'],
         count: () => p.order.count({ where: PAYMENT_UNLINKED_OPEN_WHERE }),
-        oldest: async () => (await p.order.findFirst({ where: PAYMENT_UNLINKED_OPEN_WHERE, orderBy: { paymentUnlinkedAt: 'asc' }, select: { paymentUnlinkedAt: true } }))?.paymentUnlinkedAt,
+        oldest: async () => (await p.order.findFirst({ where: PAYMENT_UNLINKED_OPEN_WHERE, orderBy: { paymentUnlinkedFirstAt: 'asc' }, select: { paymentUnlinkedFirstAt: true } }))?.paymentUnlinkedFirstAt,
       },
       {
         key: 'paymentUnlinkedClosed',
         audience: 'ADMIN',
         count: () => p.order.count({ where: PAYMENT_UNLINKED_CLOSED_WHERE }),
-        oldest: async () => (await p.order.findFirst({ where: PAYMENT_UNLINKED_CLOSED_WHERE, orderBy: { paymentUnlinkedAt: 'asc' }, select: { paymentUnlinkedAt: true } }))?.paymentUnlinkedAt,
+        oldest: async () => (await p.order.findFirst({ where: PAYMENT_UNLINKED_CLOSED_WHERE, orderBy: { paymentUnlinkedFirstAt: 'asc' }, select: { paymentUnlinkedFirstAt: true } }))?.paymentUnlinkedFirstAt,
       },
       {
         key: 'returnsPending',

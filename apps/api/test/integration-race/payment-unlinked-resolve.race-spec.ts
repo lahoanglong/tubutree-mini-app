@@ -143,10 +143,11 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
       const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
       await hold(order, `PK-A${i}`);
       const seenA = (await flagOf(order.id))!;
-      await new Promise((r) => setTimeout(r, 5));
       await hold(order, `PK-B${i}`);
       const seenB = (await flagOf(order.id))!;
       expect(seenB.getTime()).toBeGreaterThan(seenA.getTime());
+      const firstAt = async () => (await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedFirstAt: true } })).paymentUnlinkedFirstAt;
+      expect(await firstAt()).toEqual(seenA);
 
       const err = await admin.resolvePaymentUnlinked(adm.id, order.id, 'đã đối chiếu A', seenA.toISOString()).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ConflictException);
@@ -155,7 +156,33 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
 
       await expect(admin.resolvePaymentUnlinked(adm.id, order.id, 'đã đối chiếu A và B', seenB.toISOString())).resolves.toMatchObject({ ok: true });
       expect(await flagOf(order.id)).toBeNull();
+      expect(await firstAt()).toBeNull();
     }
+  });
+
+  it('hai cặp khác nhau tới CÙNG LÚC (cùng mili giây): hai mốc vẫn khác nhau (tăng ngặt), mốc đầu tiên không đổi sau cặp thứ hai; hộp việc oldest = mốc đầu', async () => {
+    for (let i = 0; i < 10; i++) {
+      const user = await createUser(prisma);
+      const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+      await hold(order, `PK-A${i}`);
+      const a = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true, paymentUnlinkedFirstAt: true } });
+      expect(a.paymentUnlinkedFirstAt).toEqual(a.paymentUnlinkedAt);
+      await Promise.all([hold(order, `PK-B${i}`), hold(order, `PK-C${i}`)]);
+      const b = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { paymentUnlinkedAt: true, paymentUnlinkedFirstAt: true } });
+      expect(b.paymentUnlinkedFirstAt).toEqual(a.paymentUnlinkedFirstAt);
+      expect(b.paymentUnlinkedAt!.getTime()).toBeGreaterThanOrEqual(a.paymentUnlinkedAt!.getTime() + 2);
+    }
+  });
+
+  it('hộp việc: oldest của paymentUnlinked tính theo mốc đầu, không trẻ lại khi khoản #B tới', async () => {
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, { userId: user.id, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
+    await prisma.order.updateMany({ where: { paymentUnlinkedAt: { not: null }, id: { not: order.id } }, data: { paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null } });
+    await hold(order, 'PK-O1');
+    const t0 = (await flagOf(order.id))!;
+    await hold(order, 'PK-O2');
+    const item = (await inbox.counts({ role: 'ADMIN' })).items.find((i) => i.key === 'paymentUnlinked');
+    expect(item?.oldestAt).toBe(t0.toISOString());
   });
 
   it('resolve với seenA song song với khoản #B tới: hoặc resolve thắng rồi #B đặt lại cờ, hoặc #B đẩy mốc trước nên resolve 409 — không bao giờ mất cờ của #B (10 vòng)', async () => {
@@ -165,7 +192,6 @@ describe('Cờ paymentUnlinkedAt: webhook, KHO "Đã xử lý" và ADMIN "Đã �
       const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100_000, pancakeOrderId: null });
       await hold(order, `PK-A${i}`);
       const seenA = (await flagOf(order.id))!;
-      await new Promise((r) => setTimeout(r, 3));
       await Promise.allSettled([hold(order, `PK-B${i}`), admin.resolvePaymentUnlinked(adm.id, order.id, 'đã đối chiếu A', seenA.toISOString())]);
       expect(await flagOf(order.id)).not.toBeNull();
     }

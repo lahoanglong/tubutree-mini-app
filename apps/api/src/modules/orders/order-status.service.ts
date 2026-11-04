@@ -806,7 +806,7 @@ export class OrderStatusService {
         const flip = await tx.order.updateMany({
           where: { id: order.id, paymentStatus: 'UNPAID', status: order.status },
           // Đơn đã PAID thì khoản "Pancake báo đã thanh toán, chờ đối chiếu" xong: gỡ cờ cùng câu lật để không còn cờ mồ côi trên đơn đã thu tiền.
-          data: { paymentStatus: 'PAID', paidAt, paymentUnlinkedAt: null, ...(toStatus !== order.status ? { status: toStatus } : {}) },
+          data: { paymentStatus: 'PAID', paidAt, paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null, ...(toStatus !== order.status ? { status: toStatus } : {}) },
         });
         if (flip.count === 0) return false;
         await tx.orderStatusHistory.create({

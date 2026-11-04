@@ -993,7 +993,7 @@ describe('OrderStatusService.markPaid', () => {
     const { svc, tx } = make([pending()]);
     await svc.markPaid('TUBU1', { actorType: 'ADMIN', actorId: 'a1' });
     const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
-    expect(call[0].data).toMatchObject({ paymentStatus: 'PAID', paymentUnlinkedAt: null });
+    expect(call[0].data).toMatchObject({ paymentStatus: 'PAID', paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null });
   });
 
   it('đơn đã xác nhận trước khi tiền về → chỉ lật PAID, giữ trạng thái', async () => {

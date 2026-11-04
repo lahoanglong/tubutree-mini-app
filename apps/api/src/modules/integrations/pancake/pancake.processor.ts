@@ -753,12 +753,18 @@ export class PancakeProcessor extends WorkerHost {
     // Trạng thái đọc lại SAU khoá: bản `order` của nơi gọi có thể cũ hơn lần huỷ/trả vừa commit, mà trạng thái quyết định lời báo và dòng lịch sử.
     const written = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR NO KEY UPDATE`;
-      const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true, paymentStatus: true } });
+      const locked = await tx.order.findUnique({ where: { id: order.id }, select: { status: true, paymentStatus: true, paymentUnlinkedAt: true, paymentUnlinkedFirstAt: true } });
       // Đơn đã PAID (nút "Đã nhận tiền" commit trước khoá): không còn gì chờ đối chiếu, không đặt cờ, không ghi dấu, không báo.
       if (!locked || locked.paymentStatus !== 'UNPAID') return null;
       const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
       if (logged) return null;
-      await tx.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: new Date() } });
+      // Mốc là phiên bản CAS của "Đã đối chiếu": tăng NGẶT (dưới khoá dòng đơn) để hai cặp trong cùng một mili giây vẫn cho hai mốc khác nhau.
+      const now = new Date();
+      const stamp = locked.paymentUnlinkedAt && locked.paymentUnlinkedAt.getTime() >= now.getTime() ? new Date(locked.paymentUnlinkedAt.getTime() + 1) : now;
+      await tx.order.updateMany({
+        where: { id: order.id, paymentStatus: 'UNPAID' },
+        data: { paymentUnlinkedAt: stamp, paymentUnlinkedFirstAt: locked.paymentUnlinkedFirstAt ?? stamp },
+      });
       await tx.orderStatusHistory.create({
         data: { orderId: order.id, fromStatus: locked.status, toStatus: locked.status, actorType: 'PANCAKE', note },
       });

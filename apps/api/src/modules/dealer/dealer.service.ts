@@ -1438,6 +1438,7 @@ export class DealerService {
           paymentStatus: 'PAID',
           paidAt,
           paymentUnlinkedAt: null,
+          paymentUnlinkedFirstAt: null,
           ...(toStatus !== order.status ? { status: 'CONFIRMED' as const } : {}),
         },
       });

@@ -354,7 +354,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     // Guard theo trạng thái HIỆN TẠI trong DB: chỉ lật CONFIRMED khi đơn còn PENDING_PAYMENT.
     expect(orderUpdateMany).toHaveBeenCalledWith({
       where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
-      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null },
+      data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);
@@ -389,7 +389,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(alerts.alert.mock.calls[0]![1]).toContain('Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"');
       // Cờ riêng, mỗi cặp Pancake mới đẩy mốc lên mới nhất (resolve phải thấy đúng mốc đó); không đụng ô chữ pancakeAttention.
       expect(unlinkedFlags(orderUpdateMany)).toEqual([
-        { where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: expect.any(Date) } },
+        { where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: expect.any(Date), paymentUnlinkedFirstAt: expect.any(Date) } },
       ]);
       expect(attentionFlags(orderUpdateMany)).toHaveLength(0);
     });
@@ -400,6 +400,16 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
       expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
       expect(statusFlips(t.orderUpdateMany).filter((a) => 'status' in a.data || a.data.paymentStatus)).toHaveLength(0);
+    });
+
+    it('cờ đã có: mốc mới LUÔN lớn hơn mốc cũ (kể cả cùng/ sau mili giây hiện tại), mốc đầu tiên giữ nguyên', async () => {
+      const first = new Date('2026-11-04T01:00:00.000Z');
+      const prev = new Date(Date.now() + 60_000);
+      const t = setup({ id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 100000, pancakeOrderId: null, paymentUnlinkedAt: prev, paymentUnlinkedFirstAt: first });
+      await t.proc.onPaymentReconcile(paidPayload);
+      const [flip] = unlinkedFlags(t.orderUpdateMany);
+      expect(flip!.data.paymentUnlinkedAt).toEqual(new Date(prev.getTime() + 1));
+      expect(flip!.data.paymentUnlinkedFirstAt).toEqual(first);
     });
 
     it('webhook lặp cùng đơn Pancake: dòng lịch sử chặn lần hai (không đặt cờ lại, không báo lại)', async () => {
@@ -557,7 +567,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     });
     await proc.onPaymentReconcile(paidPayload);
     expect(statusFlips(orderUpdateMany)).toEqual([
-      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null } },
+      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null } },
     ]);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);

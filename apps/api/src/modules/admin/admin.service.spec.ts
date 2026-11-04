@@ -2703,11 +2703,11 @@ describe('AdminService.confirmOrderPayment', () => {
     });
   });
 
-  it('ghi tiền về muộn cho đơn đã huỷ gỡ cờ "Pancake báo đã thanh toán chờ đối chiếu" (đơn đóng vẫn UNPAID nên không tự rời hàng đợi); đơn mở gỡ trong câu lật PAID của markPaid', async () => {
+  it('ghi tiền về muộn cho đơn đã huỷ KHÔNG gỡ cờ "Pancake báo đã thanh toán chờ đối chiếu" (chỉ Đã đối chiếu đóng); đơn mở gỡ trong câu lật PAID của markPaid', async () => {
     const closed = make(bankOrder({ status: 'CANCELLED', userId: 'u9' }), 'CLOSED');
     await closed.svc.confirmOrderPayment('admin-1', 'TB-1', { bankRef: 'FT1' });
     const updateMany = (closed.prisma as unknown as { order: { updateMany: jest.Mock } }).order.updateMany;
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentUnlinkedAt: { not: null } }, data: { paymentUnlinkedAt: null } });
+    expect(updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ paymentUnlinkedAt: null }) }));
     const open = make(bankOrder());
     await open.svc.confirmOrderPayment('admin-1', 'TB-1', {});
     expect(open.orderStatus.markPaid).toHaveBeenCalledTimes(1);

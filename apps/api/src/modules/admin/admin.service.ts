@@ -1491,7 +1491,7 @@ export class AdminService {
     // CAS theo ĐÚNG mốc người bấm đã thấy: khoản Pancake mới đẩy mốc lên nên bấm trên mốc cũ không đóng luôn khoản chưa ai xem.
     const r = await this.prisma.order.updateMany({
       where: { id: order.id, paymentUnlinkedAt: seen },
-      data: { paymentUnlinkedAt: null },
+      data: { paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     if (r.count === 0) {
       const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { paymentUnlinkedAt: true } });
