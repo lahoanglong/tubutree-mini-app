@@ -876,8 +876,8 @@ export class PancakeProcessor extends WorkerHost {
     const order = await this.findOrder(data);
     if (!order) return;
     // Khách thấy link trên đơn (web: nút "Tải PDF"): cùng luật với link Kế toán nhập. Link bị loại thì không ghi (giữ link cũ) nhưng vẫn
-    // đặt ISSUED và báo khách. Sau ISSUED không còn chỗ nhập lại link, nên báo in-app ADMIN + CSKH để gửi hoá đơn qua chat. Không ghi vào
-    // ô pancakeAttention: nhiều luồng khác gỡ hoặc ghi đè cả ô.
+    // đặt ISSUED và báo khách. Sau ISSUED admin không còn chỗ nhập lại link (chỉ invoice.issued sau đó của Pancake điền được), nên báo
+    // in-app ADMIN + CSKH để gửi hoá đơn qua chat. Không ghi vào ô pancakeAttention: nhiều luồng khác gỡ hoặc ghi đè cả ô.
     const incoming = data['invoice_url'] ? String(data['invoice_url']).trim() : '';
     const urlError = incoming ? vatInvoiceUrlError(incoming) : null;
     const safeUrl = incoming && !urlError ? incoming : undefined;
@@ -893,7 +893,8 @@ export class PancakeProcessor extends WorkerHost {
     if (!flipped) {
       // Đơn đã ISSUED: admin bấm "Đã xuất hoá đơn" (có thể không kèm link), một invoice.issued khác, hoặc lượt trước của chính sự kiện
       // này đã lật rồi lỗi trước khi báo khách. Bổ sung link khi đơn chưa có (không đè link đã có), không báo admin, rồi bảo đảm khách
-      // có đúng một tin: cùng dedupeKey với nút admin và job thử lại; tin gửi trước khi có khoá thì nhận theo order_code.
+      // có đúng một tin: cùng dedupeKey với nút admin và job thử lại; tin gửi trước khi có khoá thì nhận theo order_code. Chặn trùng dựa
+      // vào notification_logs, mà data-retention xoá log sau 180 ngày: invoice.issued tới sau mốc đó thì khách nhận thêm một tin.
       if (safeUrl) {
         await this.prisma.order.updateMany({
           where: { id: order.id, invoiceStatus: 'ISSUED', OR: [{ invoiceUrl: null }, { invoiceUrl: '' }] },

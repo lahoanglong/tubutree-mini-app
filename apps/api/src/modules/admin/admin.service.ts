@@ -1272,7 +1272,7 @@ export class AdminService {
     });
     if (res.count === 0) throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — bạn tải lại nhé.`);
     this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hoá đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
-    // Đơn đã ISSUED thì không còn đường nào báo lại: lỗi gửi thì xếp hàng thử lại (cùng khoá với webhook Pancake, khách nhận đúng một tin).
+    // Nút này không bấm lại được sau ISSUED: lỗi gửi thì xếp hàng thử lại (cùng khoá với webhook Pancake, khách nhận đúng một tin).
     await this.notifications
       .notifyWithRetry(order.userId, 'INVOICE_ISSUED', { order_code: order.code }, { dedupeKey: invoiceIssuedDedupeKey(order.id) }, `order=${order.code}`)
       .catch((e) => this.logger.error(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));

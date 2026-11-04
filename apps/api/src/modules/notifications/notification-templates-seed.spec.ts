@@ -223,13 +223,12 @@ describe('seed mẫu thông báo', () => {
       expect(baseline.map((b) => b.code)).toEqual(expect.arrayContaining(['INVOICE_ISSUED', 'POINTS_EXPIRING', 'ORDER_CONFIRMED']));
     });
 
-    it('mã nào có chữ seed khác bản PROD gốc thì có migration sau mốc chứa nguyên văn bản gốc', () => {
+    it('mã nào có chữ seed khác bản PROD gốc thì có migration sau mốc chứa nguyên văn bản gốc và nguyên văn chữ seed hiện tại', () => {
       const changed = baseline.filter((b) => byCode.has(b.code) && byCode.get(b.code)!.bodyTemplate !== b.bodyTemplate);
       expect(changed.length).toBeGreaterThan(0);
-      const missing = changed
-        .filter((b) => !later.some((sql) => sql.includes(quoted(b.bodyTemplate)) || sql.includes(quotedE(b.bodyTemplate))))
-        .map((b) => b.code);
-      expect(missing).toEqual([]);
+      const inLater = (body: string) => later.some((sql) => sql.includes(quoted(body)) || sql.includes(quotedE(body)));
+      expect(changed.filter((b) => !inLater(b.bodyTemplate)).map((b) => `${b.code}: thiếu bản gốc`)).toEqual([]);
+      expect(changed.filter((b) => !inLater(byCode.get(b.code)!.bodyTemplate)).map((b) => `${b.code}: thiếu chữ seed hiện tại`)).toEqual([]);
     });
 
     it('INVOICE_ISSUED: PROD giữ "Hóa đơn" (bỏ dấu kiểu cũ), migration đổi đúng bản đó sang chữ seed "Hoá đơn"', () => {

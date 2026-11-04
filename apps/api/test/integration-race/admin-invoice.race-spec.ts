@@ -90,7 +90,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     }
   });
 
-  it('điểm 1: admin xuất không kèm link, Pancake gửi link hợp lệ -> bổ sung link; gửi lại link khác không đè; khách đúng 1 tin', async () => {
+  it('admin xuất không kèm link, Pancake gửi link hợp lệ -> bổ sung link; gửi lại link khác không đè; khách đúng 1 tin', async () => {
     const u = await createUser(prisma, {});
     const pancakeOrderId = `pk-${randCode()}`;
     const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', invoiceRequest: REQUEST, invoiceStatus: 'REQUESTED', pancakeOrderId });
@@ -107,7 +107,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     expect(await notices(u.id)).toBe(1);
   });
 
-  it('điểm 2: webhook lật ISSUED rồi ghi tin khách lỗi -> lượt chạy lại (cron redrive) gửi đúng 1 tin', async () => {
+  it('webhook lật ISSUED rồi ghi tin khách lỗi -> lượt chạy lại (cron redrive) gửi đúng 1 tin', async () => {
     const u = await createUser(prisma, {});
     const pancakeOrderId = `pk-${randCode()}`;
     const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', invoiceRequest: REQUEST, invoiceStatus: 'REQUESTED', pancakeOrderId });
@@ -119,7 +119,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     expect(await notices(u.id)).toBe(1);
   });
 
-  it('điểm 2: job thử lại của nút admin chạy cùng lúc với webhook gửi bù -> khách đúng 1 tin (cùng dedupeKey)', async () => {
+  it('job thử lại của nút admin chạy cùng lúc với webhook gửi bù -> khách đúng 1 tin (cùng dedupeKey)', async () => {
     for (let round = 0; round < 5; round++) {
       const u = await createUser(prisma, {});
       const pancakeOrderId = `pk-${randCode()}`;
@@ -136,7 +136,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     }
   });
 
-  it('điểm 2: tin "đã xuất hoá đơn" gửi trước khi có dedupeKey (chỉ mang order_code) -> webhook gửi lại không báo trùng', async () => {
+  it('tin "đã xuất hoá đơn" gửi trước khi có dedupeKey (chỉ mang order_code) -> webhook gửi lại không báo trùng', async () => {
     const u = await createUser(prisma, {});
     const pancakeOrderId = `pk-${randCode()}`;
     const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', invoiceRequest: REQUEST, invoiceStatus: 'ISSUED', pancakeOrderId });

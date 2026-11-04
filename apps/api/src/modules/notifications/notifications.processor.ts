@@ -32,7 +32,7 @@ export class NotificationsProcessor extends WorkerHost {
     return this.sendZns(job as Job<ZnsSendJobData>, token);
   }
 
-  /** Tin trong app không dời theo giờ yên tĩnh ZNS. Mẫu kênh ZNS thì notify() tự dời phần ZNS qua job zns-send của nó. */
+  /** Tin trong app không dời theo giờ yên tĩnh ZNS. Chỉ bù tin trong app: tin đã lưu thì notify() dừng ở khoá, ZNS lỗi trước đó không gửi nốt. */
   private async retryInApp(job: Job<InAppRetryJobData>): Promise<void> {
     const { userId, templateCode, data, dedupeKey, context } = job.data;
     try {

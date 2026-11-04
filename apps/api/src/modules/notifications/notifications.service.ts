@@ -200,10 +200,12 @@ export class NotificationsService {
   }
 
   /**
-   * Như notifySafe nhưng tin không được mất (vd "đã xuất hoá đơn" sau khi đơn đã ISSUED, không còn đường nào báo lại): lỗi thì xếp
+   * Như notifySafe nhưng tin không được mất (vd "đã xuất hoá đơn": nút admin không bấm lại được sau ISSUED): lỗi thì xếp
    * job thử lại vào QUEUE_NOTIFICATIONS cùng `dedupeKey`, nên lượt thử lại và mọi nơi khác gọi cùng khoá chỉ ghi một tin. Không ném.
-   * Trả SENT (đã gửi hoặc đã có tin cho khoá này), QUEUED (đã xếp hàng thử lại) hay LOST (không có hàng đợi hoặc xếp hàng lỗi: ghi
-   * log error và báo Sentry để không mất im lặng). `context` là nhãn ngắn kiểu `order=<mã>`.
+   * Trả SENT (đã gửi, đã có tin cho khoá này, hoặc khách tắt nhóm tin), QUEUED (đã xếp hàng thử lại) hay LOST (không có hàng đợi hoặc
+   * xếp hàng lỗi: ghi log error và báo Sentry để không mất im lặng). `context` là nhãn ngắn kiểu `order=<mã>`.
+   * Chỉ bảo đảm tin trong app: mẫu kênh ZNS mà bước ZNS lỗi sau khi tin trong app đã lưu thì lượt thử lại thấy khoá và dừng, ZNS không
+   * gửi nốt (`retryZns` chỉ dành cho nơi gọi tự tuần tự hoá các lượt, ở đây nút admin và webhook chạy song song).
    */
   async notifyWithRetry(
     userId: string,

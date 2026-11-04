@@ -1790,7 +1790,7 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     expect(customerNotices()).toEqual([]);
   });
 
-  it('điểm 1: admin bấm "Đã xuất hoá đơn" không kèm link, Pancake gửi link hợp lệ → bổ sung link cho đơn ISSUED, không lật lại, không báo ai', async () => {
+  it('admin bấm "Đã xuất hoá đơn" không kèm link, Pancake gửi link hợp lệ → bổ sung link cho đơn ISSUED, không lật lại, không báo ai', async () => {
     const { go, issuedWrites, urlFills, adminAlerts, customerNotices } = run('https://abc.meinvoice.vn/inv/7', null, { invoiceStatus: 'ISSUED', invoiceUrl: null }, true);
     await go();
     expect(issuedWrites()).toEqual([]);
@@ -1802,7 +1802,7 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     expect(customerNotices()).toEqual([]);
   });
 
-  it('điểm 1: đơn ISSUED, link Pancake bị loại → không ghi link, không báo admin (admin đã tự xuất), chỉ ghi warn', async () => {
+  it('đơn ISSUED, link Pancake bị loại → không ghi link, không báo admin (admin đã tự xuất), chỉ ghi warn', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const { go, urlFills, adminAlerts } = run('https://hoadon-tubu.evil.com/x.pdf', null, { invoiceStatus: 'ISSUED', invoiceUrl: null }, true);
     await go();
