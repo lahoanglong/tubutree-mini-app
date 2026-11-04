@@ -1,4 +1,5 @@
 import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import axios from 'axios';
 import { ZaloService } from './zalo.service';
 
@@ -85,5 +86,29 @@ describe('ZaloService — Zalo tạm lỗi khác với mã sai: khách biết b�
     (axios.get as jest.Mock).mockRejectedValue(axiosError(401));
     const rejected = await make().getUserInfo('tok').catch((e: unknown) => e);
     expect(rejected).toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('ZaloService.getUserInfo — appsecret_proof', () => {
+  const make = (secret: string | null) => new ZaloService({ get: jest.fn().mockReturnValue(secret) } as never);
+  const ok = () => (axios.get as jest.Mock).mockResolvedValue({ data: { id: 'z1', name: 'A' } });
+  const headersOfLastCall = () => (axios.get as jest.Mock).mock.calls.at(-1)![1].headers as Record<string, string>;
+
+  it('có app secret: gửi appsecret_proof = HMAC-SHA256 hex của access_token với khoá là secret', async () => {
+    ok();
+    await make('s3cret').getUserInfo('tok-123');
+    expect(headersOfLastCall()).toEqual({
+      access_token: 'tok-123',
+      appsecret_proof: createHmac('sha256', 's3cret').update('tok-123').digest('hex'),
+    });
+    expect(headersOfLastCall().appsecret_proof).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('không có secret (rỗng hoặc thiếu): chỉ gửi access_token như cũ', async () => {
+    ok();
+    await make('').getUserInfo('tok-123');
+    expect(headersOfLastCall()).toEqual({ access_token: 'tok-123' });
+    await make(null).getUserInfo('tok-123');
+    expect(headersOfLastCall()).toEqual({ access_token: 'tok-123' });
   });
 });

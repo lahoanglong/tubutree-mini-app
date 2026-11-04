@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'node:crypto';
 import axios, { AxiosError } from 'axios';
 import type { Env } from '../../config/env.validation';
 import { normalizeZaloPhone } from '../../common/phone';
@@ -73,9 +74,14 @@ export class ZaloService {
    */
   async getUserInfo(accessToken: string): Promise<ZaloUserInfo> {
     try {
+      // appsecret_proof buộc access token chỉ dùng được bởi máy chủ giữ app secret: token lộ ra ngoài không đổi được lấy hồ sơ người dùng.
+      const secret = this.config.get('ZALO_APP_SECRET', { infer: true });
       const res = await axios.get(`${this.graphBase}/me`, {
         params: { fields: 'id,name,picture' },
-        headers: { access_token: accessToken },
+        headers: {
+          access_token: accessToken,
+          ...(secret ? { appsecret_proof: createHmac('sha256', secret).update(accessToken).digest('hex') } : {}),
+        },
         timeout: 8000,
       });
       const data = res.data as {
