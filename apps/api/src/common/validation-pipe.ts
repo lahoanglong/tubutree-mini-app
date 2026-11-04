@@ -260,8 +260,12 @@ const TEMPLATES: Record<string, (subject: string, original: string) => string> =
   isEnum: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
   minLength: (s, o) => `${s} phải có ít nhất ${trailingNumber(o)} ký tự.`,
   length: (s, o) => {
-    const [, min, max] = o.match(/(\d+) and shorter than or equal to (\d+)/) ?? [];
-    return min && max ? `${s} phải dài từ ${min} đến ${max} ký tự.` : `${s} không hợp lệ.`;
+    const range = o.match(/equal to (\d+) and shorter than or equal to (\d+)/);
+    if (range) return `${s} phải dài từ ${range[1]} đến ${range[2]} ký tự.`;
+    const max = o.match(/shorter than or equal to (\d+)/)?.[1];
+    if (max) return `${s} không được dài quá ${max} ký tự.`;
+    const min = o.match(/longer than or equal to (\d+)/)?.[1];
+    return min ? `${s} phải có ít nhất ${min} ký tự.` : `${s} không hợp lệ.`;
   },
   maxLength: (s, o) => `${s} không được dài quá ${trailingNumber(o)} ký tự.`,
   min: (s, o) => `${s} không được nhỏ hơn ${trailingNumber(o)}.`,
