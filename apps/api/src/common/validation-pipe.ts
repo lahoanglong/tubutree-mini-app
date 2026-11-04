@@ -259,6 +259,10 @@ const TEMPLATES: Record<string, (subject: string, original: string) => string> =
   isIn: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
   isEnum: (s, o) => `${s} chỉ nhận một trong: ${allowedValues(o) || 'các giá trị được phép'}.`,
   minLength: (s, o) => `${s} phải có ít nhất ${trailingNumber(o)} ký tự.`,
+  length: (s, o) => {
+    const [, min, max] = o.match(/(\d+) and shorter than or equal to (\d+)/) ?? [];
+    return min && max ? `${s} phải dài từ ${min} đến ${max} ký tự.` : `${s} không hợp lệ.`;
+  },
   maxLength: (s, o) => `${s} không được dài quá ${trailingNumber(o)} ký tự.`,
   min: (s, o) => `${s} không được nhỏ hơn ${trailingNumber(o)}.`,
   max: (s, o) => `${s} không được lớn hơn ${trailingNumber(o)}.`,

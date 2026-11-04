@@ -12,6 +12,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Length,
   Max,
   MaxLength,
   Min,
@@ -87,6 +88,7 @@ class LineDto {
 class SampleDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
   @IsOptional() @IsString() @MinLength(5) @MaxLength(20) comment?: string;
+  @IsOptional() @IsString() @Length(2, 6) title?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(2) @IsUploadedImage({}, { each: true }) images?: string[];
   @IsOptional() @IsIn(['COD', 'BANK']) method?: string;
   @IsOptional() @IsEmail() email?: string;
@@ -122,6 +124,8 @@ describe('createValidationPipe — thông điệp lỗi tiếng Việt', () => {
     expect(await sampleMessagesOf({ rating: 0 })).toEqual(['Số sao không được nhỏ hơn 1.']);
     expect(await sampleMessagesOf({ rating: 5, comment: 'ngắn' })).toEqual(['Nội dung đánh giá phải có ít nhất 5 ký tự.']);
     expect(await sampleMessagesOf({ rating: 5, comment: 'x'.repeat(21) })).toEqual(['Nội dung đánh giá không được dài quá 20 ký tự.']);
+    expect(await sampleMessagesOf({ rating: 5, title: 'x' })).toEqual(['Tiêu đề phải dài từ 2 đến 6 ký tự.']);
+    expect(await sampleMessagesOf({ rating: 5, title: 'x'.repeat(7) })).toEqual(['Tiêu đề phải dài từ 2 đến 6 ký tự.']);
   });
 
   it('kiểu dữ liệu, giá trị cho phép, email, thiếu trường', async () => {
