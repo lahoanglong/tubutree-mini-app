@@ -161,7 +161,8 @@ export class NotificationTemplatesAdminService {
       data.zaloTemplateId = id || null;
     }
     if (dto.bodyTemplate !== undefined) {
-      const body = dto.bodyTemplate.trim();
+      // NFC như seed và migration: UPDATE mẫu có điều kiện so từng byte, bàn phím macOS có thể gửi dấu dạng tổ hợp.
+      const body = dto.bodyTemplate.normalize('NFC').trim();
       if (!body) throw new BadRequestException('Nội dung thông báo không được để trống.');
       const problem = templateVariableProblem(code, body);
       if (problem) throw new BadRequestException(problem);

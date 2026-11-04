@@ -76,7 +76,7 @@ import {
 import { startOfVnDay } from '../../common/vn-time';
 import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
-import { vatInvoiceUrlError } from '../../common/vat-invoice-url';
+import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../common/vat-invoice-url';
 import {
   actorLabel,
   actorUserId,
@@ -1272,9 +1272,10 @@ export class AdminService {
     });
     if (res.count === 0) throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — bạn tải lại nhé.`);
     this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hoá đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
+    // Nút này không bấm lại được sau ISSUED: lỗi gửi thì xếp hàng thử lại (cùng khoá với webhook Pancake, khách nhận đúng một tin).
     await this.notifications
-      .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })
-      .catch((e) => this.logger.warn(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
+      .notifyWithRetry(order.userId, 'INVOICE_ISSUED', { order_code: order.code }, { dedupeKey: invoiceIssuedDedupeKey(order.id) }, `order=${order.code}`)
+      .catch((e) => this.logger.error(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
     return {
       ok: true,
       message: `Đã ghi nhận xuất hoá đơn VAT cho đơn ${order.code}.`,

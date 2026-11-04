@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
 import { OrderReversalService } from '../../orders/order-reversal.service';
@@ -1677,9 +1678,14 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     id: 'o1', code: 'TUBU1', userId: 'u1', status: 'DELIVERED', note: null, pancakeOrderId: 'p1', fulfiller: 'TUBU',
     fulfillerStorefrontId: null, invoiceStatus: 'REQUESTED', invoiceUrl: 'https://cu.meinvoice.vn/x', shippingHistory: [], items: [],
   };
-  function run(invoiceUrl: unknown, pancakeAttention: string | null = null) {
+  const KEY = { dedupeKey: 'invoice-issued:o1' };
+
+  /** `over`: trạng thái đơn lúc webhook tới; `noticeSent`: khách đã có tin INVOICE_ISSUED của đơn này chưa. */
+  function run(invoiceUrl: unknown, pancakeAttention: string | null = null, over: Record<string, unknown> = {}, noticeSent = false) {
     const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
-    const ctx = setup({ ...order, pancakeAttention }, undefined, alerts);
+    const ord: Record<string, unknown> = { ...order, pancakeAttention, ...over };
+    const ctx = setup(ord, undefined, alerts);
+    (ctx.prisma.notificationLog.findFirst as jest.Mock).mockResolvedValue(noticeSent ? { id: 'log-1' } : null);
     (ctx.prisma.pancakeWebhookEvent.findUnique as jest.Mock).mockResolvedValue({
       id: 'e1', status: 'RECEIVED', eventType: 'invoice.issued', rawPayload: { id: 'p1', invoice_url: invoiceUrl },
     });
@@ -1687,7 +1693,9 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     const adminAlerts = () => notify.mock.calls.filter(([, code]) => code === 'OPS_PANCAKE_ALERT');
     const customerNotices = () => notify.mock.calls.filter(([, code]) => code === 'INVOICE_ISSUED');
     const issuedWrites = () => ctx.orderUpdateMany.mock.calls.filter(([a]) => a?.data?.invoiceStatus === 'ISSUED').map(([a]) => a);
-    return { ...ctx, alerts, adminAlerts, customerNotices, issuedWrites, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
+    const urlFills = () =>
+      ctx.orderUpdateMany.mock.calls.filter(([a]) => a?.data && 'invoiceUrl' in a.data && !('invoiceStatus' in a.data)).map(([a]) => a);
+    return { ...ctx, ord, alerts, adminAlerts, customerNotices, issuedWrites, urlFills, go: () => ctx.proc.process({ data: { eventId: 'e1' } }) };
   }
 
   it('link https công khai → ghi link mới, ISSUED, báo khách', async () => {
@@ -1698,7 +1706,7 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
       data: { invoiceStatus: 'ISSUED', invoiceUrl: 'https://abc.meinvoice.vn/inv/1' },
     }]);
     expect(orderUpdate).not.toHaveBeenCalled();
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }, KEY);
   });
 
   it.each([
@@ -1708,7 +1716,7 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     const { go, prisma, issuedWrites, customerNotices, adminAlerts } = run(bad);
     await go();
     expect(issuedWrites().map((a) => a.data)).toEqual([{ invoiceStatus: 'ISSUED' }]);
-    expect(customerNotices()).toEqual([['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }]]);
+    expect(customerNotices()).toEqual([['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }, KEY]]);
     const alerts = adminAlerts();
     expect(alerts).toHaveLength(1);
     expect(alerts[0]!.slice(0, 2)).toEqual(['admin1', 'OPS_PANCAKE_ALERT']);
@@ -1754,23 +1762,69 @@ describe('PancakeProcessor — invoice.issued ghi invoiceUrl (RB-04)', () => {
     expect(customerNotices()).toHaveLength(1);
   });
 
-  it('tin cho khách lỗi sau khi đã báo admin → admin đã có việc (lần thử lại dừng ở guard ISSUED)', async () => {
-    const { go, notifications, adminAlerts } = run('https://hoadon-tubu.evil.com/x.pdf');
+  it('tin cho khách lỗi sau khi đã lật ISSUED → sự kiện lỗi để thử lại; lần thử lại báo khách đúng một lần, không báo admin lần hai', async () => {
+    const { go, ord, notifications, adminAlerts, customerNotices, issuedWrites } = run('https://hoadon-tubu.evil.com/x.pdf');
+    let fail = true;
     (notifications.notify as jest.Mock).mockImplementation(async (_u: string, code: string) => {
-      if (code === 'INVOICE_ISSUED') throw new Error('zns down');
+      if (code === 'INVOICE_ISSUED' && fail) throw new Error('db down');
     });
-    await go().catch(() => undefined);
+    await expect(go()).rejects.toThrow('db down');
     expect(adminAlerts()).toHaveLength(1);
+    ord.invoiceStatus = 'ISSUED';
+    fail = false;
+    await go();
+    expect(issuedWrites()).toHaveLength(1);
+    expect(adminAlerts()).toHaveLength(1);
+    expect(customerNotices()).toEqual([
+      ['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }, KEY],
+      ['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }, KEY],
+    ]);
   });
 
-  it.each(['https://abc.meinvoice.vn/inv/9', 'https://hoadon-tubu.evil.com/x.pdf'])(
-    'đơn vừa được lật ISSUED ở nơi khác (admin bấm "Đã xuất hoá đơn", hoặc invoice.issued khác chạy cùng lúc), link %s → không báo trùng',
-    async (url) => {
-      const { go, orderUpdateMany, issuedWrites, notifications } = run(url);
+  it('đơn đã ISSUED: kiểm khách đã có tin theo order_code (cả tin cũ chưa có dedupeKey), có rồi thì không báo lại', async () => {
+    const { go, prisma, customerNotices } = run(undefined, null, { invoiceStatus: 'ISSUED' }, true);
+    await go();
+    expect((prisma.notificationLog.findFirst as jest.Mock).mock.calls[0]![0].where).toEqual({
+      userId: 'u1', templateCode: 'INVOICE_ISSUED', channel: 'INAPP', payload: { path: ['data', 'order_code'], equals: 'TUBU1' },
+    });
+    expect(customerNotices()).toEqual([]);
+  });
+
+  it('admin bấm "Đã xuất hoá đơn" không kèm link, Pancake gửi link hợp lệ → bổ sung link cho đơn ISSUED, không lật lại, không báo ai', async () => {
+    const { go, issuedWrites, urlFills, adminAlerts, customerNotices } = run('https://abc.meinvoice.vn/inv/7', null, { invoiceStatus: 'ISSUED', invoiceUrl: null }, true);
+    await go();
+    expect(issuedWrites()).toEqual([]);
+    expect(urlFills()).toEqual([{
+      where: { id: 'o1', invoiceStatus: 'ISSUED', OR: [{ invoiceUrl: null }, { invoiceUrl: '' }] },
+      data: { invoiceUrl: 'https://abc.meinvoice.vn/inv/7' },
+    }]);
+    expect(adminAlerts()).toEqual([]);
+    expect(customerNotices()).toEqual([]);
+  });
+
+  it('đơn ISSUED, link Pancake bị loại → không ghi link, không báo admin (admin đã tự xuất), chỉ ghi warn', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const { go, urlFills, adminAlerts } = run('https://hoadon-tubu.evil.com/x.pdf', null, { invoiceStatus: 'ISSUED', invoiceUrl: null }, true);
+    await go();
+    expect(urlFills()).toEqual([]);
+    expect(adminAlerts()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('TUBU1'));
+    warn.mockRestore();
+  });
+
+  it.each([
+    ['https://abc.meinvoice.vn/inv/9', true, 0],
+    ['https://hoadon-tubu.evil.com/x.pdf', true, 0],
+    ['https://abc.meinvoice.vn/inv/9', false, 1],
+  ])(
+    'đơn vừa được lật ISSUED ở nơi khác (admin bấm, hoặc invoice.issued khác chạy cùng lúc), link %s, khách đã có tin=%s → không báo admin, báo khách %i lần qua dedupeKey chung',
+    async (url, noticeSent, notices) => {
+      const { go, orderUpdateMany, issuedWrites, adminAlerts, customerNotices } = run(url, null, {}, noticeSent);
       orderUpdateMany.mockResolvedValue({ count: 0 });
       await go();
       expect(issuedWrites()).toHaveLength(1);
-      expect(notifications.notify).not.toHaveBeenCalled();
+      expect(adminAlerts()).toEqual([]);
+      expect(customerNotices()).toEqual(Array.from({ length: notices }, () => ['u1', 'INVOICE_ISSUED', { order_code: 'TUBU1' }, KEY]));
     },
   );
 
