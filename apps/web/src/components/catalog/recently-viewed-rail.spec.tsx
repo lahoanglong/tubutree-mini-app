@@ -152,4 +152,13 @@ describe('RecentlyViewedRail: trần độ dài slugs của API', () => {
     for (const card of Array.from(cards)) expect(card.textContent).toContain('50.000');
     expect(JSON.parse(localStorage.getItem('tubu_recently_viewed')!)).toHaveLength(10);
   });
+
+  it('10 món slug 210 ký tự, API chưa trả lời: chỉ vẽ món nằm trong lần hỏi, thẻ ngoài trần không hiện thoáng qua', async () => {
+    const wide = (i: number) => `${'y'.repeat(206)}-${String(i).padStart(3, '0')}`;
+    const stored10 = Array.from({ length: 10 }, (_, i) => ({ slug: wide(i), name: `SP ${i}`, thumbnail: `https://content.pancake.vn/2-26/stored-${i}.jpg`, viewedAt: 1_700_000_000_000 - i }));
+    http.get.mockImplementation(() => new Promise(() => undefined));
+    const c = await mount(<RecentlyViewedRail />, stored10);
+    expect(c.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(9);
+    expect(c.textContent).not.toContain('SP 9');
+  });
 });

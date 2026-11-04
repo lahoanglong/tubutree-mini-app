@@ -23,7 +23,8 @@ describe('recentlyViewedQuerySlugs', () => {
     expect(out).toEqual(slugs.slice(0, 16));
   });
 
-  it('một slug dài hơn trần bị bỏ qua, các slug còn lại vẫn giữ', () => {
-    expect(recentlyViewedQuerySlugs(['a', 'z'.repeat(11), 'b'], 10)).toEqual(['a', 'b']);
+  it('gặp slug dài hơn trần thì dừng: kết quả luôn là phần đầu của danh sách', () => {
+    expect(recentlyViewedQuerySlugs(['a', 'z'.repeat(11), 'b'], 10)).toEqual(['a']);
+    expect(recentlyViewedQuerySlugs(['z'.repeat(11), 'a'], 10)).toEqual([]);
   });
 });

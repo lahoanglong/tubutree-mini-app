@@ -48,7 +48,8 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
   }, [productsQ.isSuccess, productsQ.data]);
   // Sau khi API trả lời chỉ hiện món đã hỏi VÀ được trả về: món ngoài trần (slug dài) không có giá để in và không biết còn bán hay đã ẩn (thẻ có thể dẫn tới 404), nên không vẽ; nó vẫn nằm trong kho, không bị dọn.
   // Không gây nhảy dọc: chiều cao dải do thẻ quyết định (mọi thẻ cùng khổ), bớt thẻ chỉ ngắn dải theo chiều ngang; dải chỉ thu lại khi không còn thẻ nào, như trường hợp mọi món bị ẩn.
-  const items = (productsQ.isSuccess ? stored.filter((it) => queriedSet.has(it.slug) && live.has(it.slug)) : stored).slice(0, shelf('browse.recent').maxItems);
+  // Trước khi API trả lời cũng chỉ vẽ món nằm trong `queried` (phần đầu của kho), nên thẻ ngoài trần không hiện thoáng qua rồi biến mất.
+  const items = stored.filter((it) => queriedSet.has(it.slug) && (!productsQ.isSuccess || live.has(it.slug))).slice(0, shelf('browse.recent').maxItems);
   if (items.length === 0) return null;
   return (
     <Section id="browse-recent">
