@@ -2046,6 +2046,12 @@ model CashbackTransaction {
   postbackPayload Json
   confirmedAt     DateTime?
   paidAt          DateTime?
+  // Quyết định tay của Kế toán/ADMIN: sự kiện của sàn (postback, đối soát) không ghi đè dòng đã có dấu này.
+  adminReviewedAt DateTime?
+  adminReviewedBy String?
+  // Sàn báo khác quyết định của Kế toán hoặc báo "rejected" sau khi đã PAID: báo ADMIN đúng một lần mỗi dòng, giữ payload để đối chiếu.
+  conflictNotifiedAt DateTime?
+  conflictPayload    Json?
 
   @@unique([provider, merchantOrderId])
   @@index([userId, status])

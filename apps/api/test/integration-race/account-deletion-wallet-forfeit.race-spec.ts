@@ -18,7 +18,7 @@ import { exportPaymentStatus } from '../../src/modules/admin/admin-export';
 import { NO_PARTIAL_RETURNS } from '../../src/modules/orders/return-ledger';
 import { WALLET_DESTINATION } from '../../src/modules/orders/refund-destination';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
-import { createOrder, createUser, randCode, setConfig, sleep, warmPool } from './helpers';
+import { createOrder, createUser, pinConfig, randCode, setConfig, sleep, warmPool } from './helpers';
 
 /**
  * Xoá tài khoản khi Ví còn tiền: khách đồng ý bỏ đúng số dư đã thấy; lúc xử lý Ví bị trừ về 0 bằng một dòng ADJUST trong cùng giao dịch
@@ -31,6 +31,9 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
   let users: UsersService;
   let affiliate: AffiliateService;
   let admin: { id: string };
+
+  // Khôi phục khoá thuế dùng chung để spec chạy sau không phụ thuộc thứ tự.
+  let restorePit: Array<() => Promise<void>> = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -52,12 +55,12 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     affiliate = moduleRef.get(AffiliateService);
     users = new UsersService(prisma);
     admin = await createUser(prisma, { role: 'ADMIN' });
-    await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
-    await setConfig(prisma, 'affiliate.pit_withhold_threshold', 5_000_000);
+    restorePit = [await pinConfig(prisma, 'affiliate.pit_withhold_pct', 0.1), await pinConfig(prisma, 'affiliate.pit_withhold_threshold', 5_000_000)];
   });
 
   const requestUserIds: string[] = [];
   afterAll(async () => {
+    for (const restore of restorePit.reverse()) await restore();
     // Yêu cầu PENDING còn sót chiếm 100 dòng đầu của danh sách admin, làm các spec khác không thấy yêu cầu của mình.
     await prisma.accountDeletionRequest.deleteMany({ where: { userId: { in: requestUserIds } } });
     await moduleRef?.close();

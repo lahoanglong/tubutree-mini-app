@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -49,7 +49,10 @@ export class CashbackController {
     }
     const event = provider.parseWebhook(body);
     if (!event) return { ok: false };
-    return this.cashback.ingest(event, provider.key);
+    const result = await this.cashback.ingest(event, provider.key);
+    // Lỗi tạm phía ta (thua CAS liên tiếp): trả 503 để sàn gửi lại; các ca ok:false còn lại là dữ liệu sai, gửi lại cũng vô ích.
+    if ('retry' in result && result.retry) throw new ServiceUnavailableException('Chưa xử lý được, vui lòng gửi lại.');
+    return result;
   }
 
   /** Alias tương thích ngược (deprecated) — trỏ vào provider accesstrade. */

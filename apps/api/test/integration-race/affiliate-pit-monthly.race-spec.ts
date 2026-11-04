@@ -7,7 +7,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
-import { createOrder, createUser, legacyBankCommissionPayout, randCode, setConfig, sleep, warmPool } from './helpers';
+import { createOrder, createUser, pinConfig, legacyBankCommissionPayout, randCode, sleep, warmPool } from './helpers';
 
 /**
  * Q2: thuế TNCN 10% xét trên TỔNG các lần rút hoa hồng trong tháng VN (ngưỡng 2.000.000đ), truy thu phần các lần nhỏ trước.
@@ -18,6 +18,9 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
   let prisma: PrismaService;
   let affiliate: AffiliateService;
   const MST = '079201001234';
+
+  // Khôi phục khoá thuế dùng chung để spec chạy sau không phụ thuộc thứ tự.
+  let restorePit: Array<() => Promise<void>> = [];
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -35,11 +38,11 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
-    await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
-    await setConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000);
+    restorePit = [await pinConfig(prisma, 'affiliate.pit_withhold_pct', 0.1), await pinConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000)];
   });
 
   afterAll(async () => {
+    for (const restore of restorePit.reverse()) await restore();
     await moduleRef?.close();
   });
 

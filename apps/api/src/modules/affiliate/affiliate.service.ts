@@ -420,7 +420,7 @@ export class AffiliateService {
         _sum: { amount: true },
       }),
       this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null, order: { status: 'DELIVERED' } },
         _sum: { amount: true },
       }),
       this.prisma.affiliateLink.aggregate({
@@ -1440,12 +1440,15 @@ export class AffiliateService {
       if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
     }
 
-    // "Khả dụng" = APPROVED và CHƯA thuộc batch payout nào (payoutBatchId null).
+    // "Khả dụng" = APPROVED, CHƯA thuộc batch payout nào (payoutBatchId null) và đơn còn DELIVERED: đơn đã RETURNED/CANCELLED mà
+    // hoa hồng chưa kịp đảo không tính, nếu không số "khả dụng" lớn hơn số cron/khoá chọn được và rút toàn bộ luôn bị từ chối.
     const approved = await this.prisma.commission.aggregate({
-      where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+      where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null, order: { status: 'DELIVERED' } },
       _sum: { amount: true },
+      _count: { _all: true },
     });
     const available = approved._sum.amount ?? 0;
+    const availableCount = approved._count._all;
     if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để chuyển vào Ví.');
     if (amount > available) throw new BadRequestException('Số dư hoa hồng khả dụng không đủ.');
     // Bug đã sửa: trước đây 'amount' chỉ được VALIDATE (amount > available → throw ở trên) nhưng
@@ -1475,15 +1478,23 @@ export class AffiliateService {
         // Khoá dòng khi đọc: lần trả một phần cắt amount của hoa hồng APPROVED giữ khoá tới lúc commit. Đọc không khoá thì thấy amount
         // cũ, updateMany đợi khoá rồi vẫn khớp (điều kiện WHERE không có amount) và Ví nhận nhiều hơn hoa hồng còn lại. Thứ tự khoá
         // hoa hồng rồi tới Ví CTV trùng với đường thu hồi nên không deadlock.
+        // JOIN đơn trong cùng câu khoá: đơn đã RETURNED commit mà reverseCommissionsForOrder chưa kịp chạy thì hoa hồng của đơn đó
+        // chưa bị đảo, và không có điều kiện này sẽ lọt vào khoản rút. Chỉ khoá dòng hoa hồng (OF c), không khoá đơn: đường trả hàng
+        // khoá đơn trước hoa hồng, khoá ngược thứ tự ở đây sẽ deadlock.
         const rows = await tx.$queryRaw<{ id: string; amount: number }[]>`
-          SELECT "id", "amount" FROM "commissions"
-          WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
-          ORDER BY "id" FOR NO KEY UPDATE`;
+          SELECT c."id", c."amount" FROM "commissions" c
+          JOIN "orders" o ON o."id" = c."orderId"
+          WHERE c."affiliateUserId" = ${userId} AND c."status" = 'APPROVED' AND c."payoutBatchId" IS NULL AND o."status" = 'DELIVERED'
+          ORDER BY c."id" FOR NO KEY UPDATE OF c`;
         // Khoá dòng người dùng sau dòng hoa hồng (cùng thứ tự với đường thu hồi) rồi đọc lại dấu thu hồi: admin hạ quyền cùng lúc thì
         // hoặc thấy dấu mới và từ chối, hoặc đợi lần rút này xong. Kiểm ở đầu hàm chỉ là đường nhanh, không chặn được cuộc đua.
         await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
         await this.assertNotRevoked(tx, userId);
         const total = rows.reduce((s, c) => s + c.amount, 0);
+        // Đơn bị trả/huỷ (hoặc hoa hồng đổi trạng thái) giữa lúc tính `available` và lúc khoá làm tập dòng khác đi: không rút một phần,
+        // bảo người dùng thử lại. So SỐ DÒNG chứ không so tổng tiền: trả một phần chỉ cắt `amount` của dòng, và đường đó đã được thiết
+        // kế để lần rút này đọc số đã cắt sau khi khoá (xem chú thích khoá dòng ở trên).
+        if (rows.length !== availableCount) throw new ConflictException('Số hoa hồng khả dụng vừa thay đổi, bạn tải lại rồi thử lại nhé.');
         // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
@@ -1678,7 +1689,7 @@ export class AffiliateService {
       if (enabled !== true) return { credited, ok: true };
       const rows = await this.prisma.commission.findMany({
         // CTV bị khoá giữ nguyên tiền ở APPROVED: chuyển vào Ví sẽ ghi thu nhập chịu thuế và cộng tiền cho tài khoản đang bị xem xét.
-        where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } },
+        where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false }, order: { status: 'DELIVERED' } },
         select: { id: true, affiliateUserId: true, amount: true, user: { select: { role: true, affiliateRevokedAt: true } } },
         orderBy: { id: 'asc' },
       });
