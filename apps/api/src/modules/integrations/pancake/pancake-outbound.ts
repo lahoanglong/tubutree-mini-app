@@ -1,4 +1,5 @@
 import type { PancakeCreateOrderResponse, PancakeOrderDTO } from './pancake.types';
+import { NOTE_ORDER_CODE } from './pancake-webhook-dedupe';
 
 /**
  * Lỗi gọi Pancake POS (đơn hàng). `transient`: lỗi mạng/timeout/5xx/429 — Pancake CÓ THỂ đã xử lý lệnh, thử lại
@@ -70,9 +71,6 @@ export function extractPancakeOrderId(res: PancakeCreateOrderResponse | null | u
   const raw = res?.data?.id ?? res?.data?.order_id ?? res?.id ?? res?.order_id;
   return raw === null || raw === undefined || raw === '' ? null : String(raw);
 }
-
-/** Ghi chú kho luôn mở đầu bằng "Order code: <mã>" — webhook và tra cứu đơn đọc mã từ đây. */
-const NOTE_ORDER_CODE = /Order code:\s*([A-Z]+\d+)/;
 
 /** Đơn Pancake này mang đúng mã đơn Tubu (custom_id, extension hoặc ghi chú) — không khớp theo chuỗi con. */
 export function pancakeOrderHasCode(o: PancakeOrderDTO, code: string): boolean {

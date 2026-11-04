@@ -55,6 +55,13 @@ export const ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU =
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */
 export const ATTENTION_UNDERPAID = 'Khách chuyển thiếu';
+/**
+ * Đơn Pancake mang mã đơn Tubu báo đã thanh toán, nhưng không chứng minh được đó là đơn Pancake Tubu đã đẩy (đơn Tubu chưa gắn đơn Pancake
+ * nào, hoặc webhook không có id): không tự PAID. Nối vào ô (không đè), tự gỡ khi đơn sang PAID ở bất kỳ đường nào; "Đã xử lý" gỡ như lý do thường.
+ */
+export const ATTENTION_PAYMENT_UNLINKED = 'Pancake báo đã thanh toán nhưng đơn chưa gắn đúng đơn Pancake — Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"';
+/** Cùng việc cho đơn đã huỷ/trả: không có nút "Đã nhận tiền", tiền thật về thì Kế toán ghi tiền về muộn qua đường admin. */
+export const ATTENTION_PAYMENT_UNLINKED_CLOSED = 'Pancake báo đã thanh toán nhưng đơn đã huỷ/trả và chưa gắn đúng đơn Pancake — Kế toán đối chiếu sao kê, khách đã chuyển thì ghi tiền về muộn của đơn';
 /** Tổng tiền đơn trên Pancake khác `order.total` (đơn bị sửa trên Pancake) — tự gỡ khi tổng trùng lại. */
 export const ATTENTION_TOTAL_MISMATCH = 'Tổng tiền Pancake lệch với Tubu';
 
@@ -146,7 +153,7 @@ export const ATTENTION_SEPARATOR = ' | ';
 
 /** Nối một lý do vào hàng cần xử lý mà không làm mất lý do đang có (cùng dấu nối với việc ghi dấu trạng thái bị chặn). */
 export const appendAttentionReason = (current: string | null | undefined, reason: string): string =>
-  current && !current.split(ATTENTION_SEPARATOR).includes(reason) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
+  !current ? reason : current.split(ATTENTION_SEPARATOR).includes(reason) ? current : `${current}${ATTENTION_SEPARATOR}${reason}`;
 
 /**
  * Gỡ đúng một lý do khỏi hàng cần xử lý (khi việc đó đã có người quyết); hết lý do thì đơn rời hàng đợi. Ghi có điều kiện theo giá trị
@@ -196,16 +203,18 @@ export async function appendPancakeAttention(
   orderId: string,
   reason: string,
   supersededPrefixes: string[] = [],
+  opts: { onlyUnpaid?: boolean } = {},
 ): Promise<void> {
   for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
-    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, paymentStatus: true } });
     if (!row) return;
+    if (opts.onlyUnpaid && row.paymentStatus !== 'UNPAID') return;
     const kept = (row.pancakeAttention ? row.pancakeAttention.split(ATTENTION_SEPARATOR) : []).filter(
       (part) => !supersededPrefixes.some((prefix) => part.startsWith(prefix)),
     );
     const next = appendAttentionReason(kept.join(ATTENTION_SEPARATOR) || null, reason);
     const r = await db.order.updateMany({
-      where: { id: orderId, pancakeAttention: row.pancakeAttention },
+      where: { id: orderId, pancakeAttention: row.pancakeAttention, ...(opts.onlyUnpaid ? { paymentStatus: 'UNPAID' as const } : {}) },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
     });
     if (r.count === 1) return;

@@ -52,6 +52,13 @@ describe('classifyPancakeOrder', () => {
     expect(classifyPancakeOrder(fixture('synthetic-app.json'), MAP).kind).toBe('APP');
   });
 
+  it.each(['GẤP Order code: TUBU20261001', 'Order code: TUBU20261001 - đổi size', 'Order code:\u00a0TUBU20261001', 'Order code: TUBU20261001', 'ghi chú\nOrder code: TUBU20261001 | COD'])(
+    'ghi chú nhân viên sửa %j vẫn là đơn app',
+    (note) => {
+      expect(classifyPancakeOrder({ marketplace_id: -3, is_from_ecommerce: true, note }, MAP)).toEqual({ kind: 'APP', channel: null });
+    },
+  );
+
   it('custom_id không theo mẫu Tubu thì không phải đơn app', () => {
     expect(classifyPancakeOrder({ custom_id: 'SHOP123' }, MAP).kind).toBe('UNKNOWN');
     expect(classifyPancakeOrder({ custom_id: 'TUBU' }, MAP).kind).toBe('UNKNOWN');

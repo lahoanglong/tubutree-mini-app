@@ -3,7 +3,8 @@ import { UserRole } from '@prisma/client';
 /**
  * Vai trò được ghi công đơn hàng và hưởng hoa hồng CTV. Khách thường chia sẻ link (`?ref=<mã khách>` ở nút chia sẻ sản phẩm,
  * mua chung) chỉ nhận thưởng "giới thiệu bạn bè" bằng điểm, đi theo `User.referredById` lúc tạo tài khoản, không qua đơn.
- * Chủ dự án muốn khách thường cũng hưởng hoa hồng thì thêm "CUSTOMER" vào khoá này.
+ * Chủ dự án muốn khách thường cũng hưởng hoa hồng thì thêm "CUSTOMER" vào khoá này: khi đó khách vừa tích vừa rút được hoa hồng. Người bị admin hạ
+ * quyền CTV vẫn bị chặn rút theo dấu `User.affiliateRevokedAt`, không theo khoá này.
  */
 export const COMMISSION_ELIGIBLE_ROLES_KEY = 'affiliate.commission_eligible_roles';
 export const DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];

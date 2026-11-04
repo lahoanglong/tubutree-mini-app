@@ -11,7 +11,8 @@ vi.mock('./zmp-bridge', () => ({
 }));
 vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 
-import { acquireLocationPayload } from './attendance-api';
+import { api } from './api';
+import { acquireLocationPayload, checkin, heartbeat } from './attendance-api';
 
 type GeoCb = (e: { code: number; message?: string }) => void;
 
@@ -77,5 +78,67 @@ describe('acquireLocationPayload', () => {
   it('không truyền callback vẫn trả {} và không ném', async () => {
     stubGeolocation((_ok, err) => err({ code: 1 }));
     await expect(acquireLocationPayload()).resolves.toEqual({});
+  });
+});
+
+describe('máy chủ từ chối toạ độ thô', () => {
+  const REFUSED = 'Mở Tubu Tree trong Zalo và cho phép quyền vị trí để chấm công.';
+  const refusal = { response: { status: 400, data: { message: REFUSED } } };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.requestZaloLocationStrict.mockRejectedValue(new Error('zalo fail'));
+  });
+  afterEach(() => stubGeolocation(null));
+
+  it('sau lần bị từ chối: không hỏi GPS thô nữa, báo đúng lời máy chủ; Zalo có token trở lại thì hết chặn', async () => {
+    stubGeolocation((ok) => ok({ coords: { latitude: 10.5, longitude: 106.5 } }));
+    const loc = await acquireLocationPayload();
+    expect(loc).toEqual({ lat: 10.5, lng: 106.5 });
+    vi.mocked(api.post).mockRejectedValueOnce(refusal);
+    await expect(heartbeat(loc)).rejects.toBe(refusal);
+
+    const getCurrentPosition = vi.fn();
+    Object.defineProperty(globalThis.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition } });
+    const onFailure = vi.fn();
+    await expect(acquireLocationPayload(onFailure)).resolves.toEqual({});
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith(REFUSED);
+
+    mocks.requestZaloLocationStrict.mockResolvedValue({ token: 't1' });
+    mocks.getZaloAccessToken.mockResolvedValue({ accessToken: 'a1' });
+    await expect(acquireLocationPayload()).resolves.toEqual({ locationToken: 't1', zaloAccessToken: 'a1' });
+    mocks.requestZaloLocationStrict.mockRejectedValue(new Error('zalo fail'));
+    stubGeolocation((ok) => ok({ coords: { latitude: 1, longitude: 2 } }));
+    await expect(acquireLocationPayload()).resolves.toEqual({ lat: 1, lng: 2 });
+  });
+
+  it('hết 10 phút thì tự thử lại GPS (admin có thể đã bật IP văn phòng)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-11-04T08:00:00Z'));
+      vi.mocked(api.post).mockRejectedValueOnce(refusal);
+      await expect(heartbeat({ lat: 1, lng: 2 })).rejects.toBe(refusal);
+      await expect(acquireLocationPayload()).resolves.toEqual({});
+      vi.setSystemTime(new Date('2026-11-04T08:10:01Z'));
+      stubGeolocation((ok) => ok({ coords: { latitude: 5, longitude: 6 } }));
+      await expect(acquireLocationPayload()).resolves.toEqual({ lat: 5, lng: 6 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('checkin bị từ chối toạ độ thô cũng ghi nhớ; lỗi 400 khác không ghi nhớ', async () => {
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 400, data: { message: 'Không tìm thấy ca đã duyệt.' } } });
+    await expect(checkin({ shiftId: 's', lat: 1, lng: 2 })).rejects.toBeTruthy();
+    stubGeolocation((ok) => ok({ coords: { latitude: 3, longitude: 4 } }));
+    await expect(acquireLocationPayload()).resolves.toEqual({ lat: 3, lng: 4 });
+
+    vi.mocked(api.post).mockRejectedValueOnce(refusal);
+    await expect(checkin({ shiftId: 's', lat: 3, lng: 4 })).rejects.toBe(refusal);
+    await expect(acquireLocationPayload()).resolves.toEqual({});
+    mocks.requestZaloLocationStrict.mockResolvedValue({ token: 't' });
+    mocks.getZaloAccessToken.mockResolvedValue({ accessToken: 'a' });
+    await acquireLocationPayload();
   });
 });

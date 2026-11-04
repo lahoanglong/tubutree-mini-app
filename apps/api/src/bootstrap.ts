@@ -4,7 +4,7 @@ import { Logger, type NestApplicationOptions, type Type } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { bodyParserErrorHandler, createBodyParsers, eventsBodyParser, pancakeWebhookTokenGuard, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
+import { bodyParserErrorHandler, createBodyParsers, cspReportBodyParsers, eventsBodyParser, pancakeWebhookTokenGuard, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
 import { buildCorsPolicy, cookieAuthOriginGuard, FALLBACK_WEB_ORIGINS } from './common/cors';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
@@ -106,6 +106,8 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   app.set('trust proxy', 1);
   // /events nhận tối đa 50 sự kiện × 4KB props (+ envelope, escape unicode): parser riêng đặt TRƯỚC parser theo nhóm route (body đã parse thì parser sau bỏ qua).
   app.use('/api/events', eventsBodyParser());
+  // Báo cáo CSP của trình duyệt: hai content-type riêng, trần 32kb.
+  app.use('/api/csp-report', ...cspReportBodyParsers());
   // Webhook Pancake (thân tới 10mb): kiểm token trước khi parse.
   app.use(pancakeWebhookTokenGuard);
   // Secret đọc từ process.env: ConfigModule đã nạp .env vào đó và JwtStrategy dùng cùng giá trị.

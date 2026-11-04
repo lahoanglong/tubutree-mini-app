@@ -93,6 +93,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     dealerTier: { findUnique: jest.fn().mockResolvedValue({ id: 't1' }) },
+    commission: { findFirst: jest.fn().mockResolvedValue(null) },
+    storefront: { findFirst: jest.fn().mockResolvedValue(null) },
     user: { findUnique: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
     returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
@@ -131,7 +133,8 @@ function makeApproveTx(opts: {
       $executeRaw: executeRaw,
       $queryRaw: queryRaw,
       dealerApplication: { updateMany: dealerAppUpdateMany },
-      storefront: { updateMany: storefrontUpdateMany },
+      storefront: { updateMany: storefrontUpdateMany, findFirst: jest.fn().mockResolvedValue(null) },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) },
       userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
       user: {
         update: userUpdate,
@@ -235,6 +238,7 @@ describe('AdminService.reviewDealerApplication', () => {
     );
     const meta = (userUpdate.mock.calls[0][0] as { data: { metadata: Record<string, unknown>; role: string } }).data;
     expect(meta.role).toBe('DEALER');
+    expect((meta as { affiliateRevokedAt?: Date | null }).affiliateRevokedAt).toBeNull();
     expect(meta.metadata).toEqual({ segments: ['mom_baby'], onboardedAt: '2026-01-01', dealerTierId: 't1' });
     // Gian hàng sẵn có (mọi loại trừ BRAND) được đánh dấu đối tác trong cùng transaction, không đổi loại.
     expect(storefrontUpdateMany).toHaveBeenCalledWith({ where: { ownerUserId: 'u1', type: { not: 'BRAND' } }, data: { isPartner: true } });
@@ -607,6 +611,28 @@ describe('AdminService.setUserRole', () => {
         },
       });
 
+    it('STAFF chủ gian hàng đối tác (MERCHANT, không hoa hồng) → CUSTOMER: dấu tính SAU khi gian hàng đã thành CTV', async () => {
+      const prisma = withRole('STAFF');
+      let converted = false;
+      fulfilment.clearPartnerOnRoleLoss.mockImplementationOnce(async () => {
+        converted = true;
+      });
+      (prisma as unknown as { storefront: { findFirst: jest.Mock } }).storefront.findFirst.mockImplementation(async () => (converted ? { id: 's1' } : null));
+      await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      expect(((prisma.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date }).affiliateRevokedAt).toBeInstanceOf(Date);
+    });
+
+    it('STAFF còn hoa hồng → CUSTOMER: đặt dấu thu hồi; CUSTOMER → AFFILIATE: xoá dấu', async () => {
+      const toCustomer = withRole('STAFF');
+      (toCustomer as unknown as { commission: { findFirst: jest.Mock } }).commission.findFirst.mockResolvedValue({ id: 'c1' });
+      await mkAdmin(toCustomer).setUserRole('admin1', '0899625240', 'CUSTOMER');
+      const set = (toCustomer.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date | null };
+      expect(set.affiliateRevokedAt).toBeInstanceOf(Date);
+      const back = withRole('CUSTOMER');
+      await mkAdmin(back).setUserRole('admin1', '0899625240', 'AFFILIATE');
+      expect(((back.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date | null }).affiliateRevokedAt).toBeNull();
+    });
+
     it.each([
       ['DEALER', 'CUSTOMER', true],
       ['DEALER', 'AFFILIATE', true],
@@ -761,6 +787,7 @@ describe('AdminService.setUserRole', () => {
         where: { id: 'u1' },
         data: {
           role: 'DEALER',
+          affiliateRevokedAt: null,
           metadata: { onboardedAt: '2026-09-01', segments: ['home'], dealerTierId: 'dealer_l3' },
         },
         select: { id: true, phone: true, fullName: true, role: true },
@@ -777,7 +804,7 @@ describe('AdminService.setUserRole', () => {
       });
       await mkAdmin(prisma).setUserRole('admin1', '0899625240', 'AFFILIATE', 'dealer_l3');
       expect(tierFind).not.toHaveBeenCalled();
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE' } }));
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'AFFILIATE', affiliateRevokedAt: null } }));
     });
   });
 });

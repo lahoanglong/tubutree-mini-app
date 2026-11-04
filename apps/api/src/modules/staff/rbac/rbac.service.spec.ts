@@ -22,6 +22,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       updateMany: jest.fn(),
     },
     user: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
+    commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(0),
@@ -254,6 +255,23 @@ describe('RbacService.addGrant', () => {
 });
 
 describe('RbacService.revokeGrant', () => {
+  it.each([
+    ['còn hoa hồng', { commission: true, storefront: false }, true],
+    ['còn gian hàng CTV', { commission: false, storefront: true }, true],
+    ['chưa từng bán', { commission: false, storefront: false }, false],
+  ])('nhân viên về CUSTOMER %s → đặt dấu thu hồi = %s', async (_label, traces, marked) => {
+    const prisma = makePrisma({
+      roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })), update: jest.fn().mockResolvedValue(mkUser({ role: 'CUSTOMER' })) },
+      commission: { findFirst: jest.fn().mockResolvedValue(traces.commission ? { id: 'c' } : null) },
+      storefront: { findFirst: jest.fn().mockResolvedValue(traces.storefront ? { id: 's' } : null) },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
+    });
+    await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
+    const data = (prisma.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date };
+    expect(data.affiliateRevokedAt instanceof Date).toBe(marked);
+  });
+
   it('thu hồi grant + hạ user STAFF về CUSTOMER (không có đơn đại lý)', async () => {
     const prisma = makePrisma({
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -261,6 +279,7 @@ describe('RbacService.revokeGrant', () => {
         findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })),
         update: jest.fn().mockResolvedValue(mkUser({ role: 'CUSTOMER' })),
       },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     });
     const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
@@ -278,11 +297,12 @@ describe('RbacService.revokeGrant', () => {
         findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })),
         update: jest.fn().mockResolvedValue(mkUser({ role: 'DEALER' })),
       },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue({ id: 'app1' }) },
     });
     const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
     expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { role: 'DEALER' } }),
+      expect.objectContaining({ data: { role: 'DEALER', affiliateRevokedAt: null } }),
     );
     expect(out.downgraded).toBe(true);
   });
@@ -353,6 +373,7 @@ describe('RbacService.revokeGrant — không tự khoá tổ chức ra ngoài', 
         update: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(otherActiveAdmins),
       },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
       userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     };
@@ -400,6 +421,7 @@ describe('RbacService.revokeGrant — gian hàng đối tác của chủ (luật
       $executeRaw: jest.fn().mockResolvedValue(0),
       roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: role as User['role'] })), update: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(2) },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },
       dealerApplication: { findFirst: jest.fn().mockResolvedValue(base === 'DEALER' ? { id: 'app' } : null) },
       userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     };

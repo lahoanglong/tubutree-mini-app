@@ -1,4 +1,4 @@
-import { verifyPresence, type AttnConfig } from './verify';
+import { isIpEnforced, verifyPresence, type AttnConfig } from './verify';
 
 const OFFICE = { lat: 10.7769, lng: 106.7009 };
 const base: AttnConfig = {
@@ -39,5 +39,13 @@ describe('verifyPresence', () => {
   it('chỉ có IP (không toạ độ) + đúng IP → ok', () => {
     const r = verifyPresence({ ...base, lat: null, lng: null }, '113.161.1.5', 0, 0);
     expect(r).toEqual({ ok: true, distanceM: 0 });
+  });
+});
+
+describe('isIpEnforced', () => {
+  it('chỉ bật khi cờ bật và có IP', () => {
+    expect(isIpEnforced({ enforceIp: true, officeIps: ['1.2.3.4'] })).toBe(true);
+    expect(isIpEnforced({ enforceIp: true, officeIps: [] })).toBe(false);
+    expect(isIpEnforced({ enforceIp: false, officeIps: ['1.2.3.4'] })).toBe(false);
   });
 });

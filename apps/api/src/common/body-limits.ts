@@ -120,6 +120,25 @@ function rawGuard(maxNodes: number, maxDepth: number) {
   };
 }
 
+export const CSP_REPORT_BODY_LIMIT = '32kb';
+export const CSP_REPORT_CONTENT_TYPES = ['application/csp-report', 'application/reports+json'] as const;
+export const CSP_REPORT_UNSUPPORTED_MESSAGE = 'Chỉ nhận báo cáo CSP (application/csp-report hoặc application/reports+json).';
+
+/**
+ * /api/csp-report: trình duyệt gửi báo cáo bằng hai content-type riêng mà parser JSON chung không nhận. Content-type khác bị 415 tại
+ * đây (không để thân rơi xuống parser chung rồi thành `{}`), thân quá 32kb bị 413 bởi parser này.
+ */
+export function cspReportBodyParsers(): RequestHandler[] {
+  const parse = json({ type: [...CSP_REPORT_CONTENT_TYPES], limit: CSP_REPORT_BODY_LIMIT, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) });
+  const typeGuard: RequestHandler = (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase();
+    if (!(CSP_REPORT_CONTENT_TYPES as readonly string[]).includes(type)) return reject(res, 415, CSP_REPORT_UNSUPPORTED_MESSAGE);
+    next();
+  };
+  return [typeGuard, parse];
+}
+
 /** Parser riêng của /api/events: cùng chốt charset và quét thô (rawGuard) như các route khác, trần dung lượng riêng 512 KB. */
 export function eventsBodyParser(): RequestHandler {
   return json({ limit: '512kb', verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH), inflate: false });

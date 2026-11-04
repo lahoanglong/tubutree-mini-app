@@ -235,6 +235,8 @@ model User {
   dob                    DateTime?
   avatarUrl              String?
   role                   UserRole        @default(CUSTOMER)
+  /// Dấu thu hồi quyền bán: admin hạ CTV/đại lý về khách. Có dấu thì không tự đăng ký lại CTV, không rút hoa hồng, không nhận thưởng mốc.
+  affiliateRevokedAt     DateTime?
   /// Nhóm việc của STAFF ngoài quầy/chấm công (common/staff-permissions.ts): CSKH, KHO. Chỉ có tác dụng khi role = STAFF.
   staffPermissions       String[]        @default([])
   tierId                 String?

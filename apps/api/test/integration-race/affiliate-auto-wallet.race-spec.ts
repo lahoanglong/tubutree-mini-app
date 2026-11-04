@@ -147,6 +147,23 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect((logs[0]!.payload as { body: string }).body).toBe('Tubu Tree đã chuyển 100.000đ hoa hồng (2 đơn) vào Ví của bạn.');
   });
 
+  it('khách (CUSTOMER) hoặc người có dấu thu hồi còn hoa hồng APPROVED: cron không chuyển; STAFF được nâng từ CTV vẫn chuyển', async () => {
+    const customer = await ctv({ role: 'CUSTOMER' });
+    const revoked = await ctv({ role: 'CUSTOMER', affiliateRevokedAt: new Date() });
+    const staff = await ctv({ role: 'STAFF' });
+    for (const u of [customer, revoked, staff]) await commissionFor(u.id, 30_000);
+    const credited = await affiliate.autoTransferApprovedToWallet();
+    expect(credited.has(customer.id) || credited.has(revoked.id)).toBe(false);
+    expect(credited.has(staff.id)).toBe(true);
+    for (const u of [customer, revoked]) {
+      const st = await state(u.id);
+      expect(st.balance).toBe(0);
+      expect(st.payouts).toHaveLength(0);
+      expect(st.commissions.every((c) => c.status === 'APPROVED')).toBe(true);
+    }
+    expect((await state(staff.id)).balance).toBe(30_000);
+  });
+
   it('chạy lại sau khi đã chuyển: không cộng thêm, không báo thêm', async () => {
     const a = await ctv();
     await commissionFor(a.id, 50_000);

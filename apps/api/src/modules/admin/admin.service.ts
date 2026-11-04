@@ -1,3 +1,4 @@
+import { affiliateRevocationPatch } from '../affiliate/affiliate-revocation';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
@@ -409,6 +410,7 @@ export class AdminService {
           // Merge vào metadata đọc từ dòng đã khoá — KHÔNG ghi đè (giữ segments/onboardedAt từ onboarding quiz, kể cả ghi chen vừa xong).
           data: {
             role: 'DEALER',
+            ...(await affiliateRevocationPatch(tx, app.userId, applicant.role, 'DEALER')),
             ...(droppedPerms.length ? { staffPermissions: [] } : {}),
             metadata: { ...((applicant.metadata as Record<string, unknown> | null) ?? {}), dealerTierId: tierId } as Prisma.InputJsonObject,
           },
@@ -657,6 +659,8 @@ export class AdminService {
           spareAdminToggled: !losesPartnerStore(previousRole, role),
         });
       }
+      // Tính dấu SAU khi gian hàng đối tác (MERCHANT) đã chuyển về CTV: chủ gian hàng đối tác không hoa hồng vẫn có dấu vết CTV khi về khách.
+      Object.assign(data, await affiliateRevocationPatch(tx, user.id, previousRole, role));
       if (dealerTierId) {
         // Gộp dealerTierId vào metadata đọc từ dòng users đã khoá (như duyệt hồ sơ), không phải bản findUnique ở trên: ghi metadata chen
         // giữa (nhóm da, onboardedAt) không bị ghi đè. Khoá users đứng cuối thứ tự khoá, sau gian hàng.
