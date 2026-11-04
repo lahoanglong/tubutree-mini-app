@@ -12,6 +12,7 @@ import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
+import { SkipLink } from '@/components/skip-link';
 import { SITE_URL, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -42,13 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ErrorReporter />
           <AppGates />
           <PdpNavSkeleton />
-          {/* Liên kết bỏ qua là điểm dừng Tab đầu tiên của trang (WCAG 2.4.1); chỉ hiện khi được lấy nét. */}
-          <a
-            href="#main-content"
-            className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-control focus:bg-[var(--color-bg-surface)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[color:var(--color-text-primary)] focus:shadow-card"
-          >
-            Bỏ qua đến nội dung
-          </a>
+          <SkipLink />
           {/* Nút lùi nổi (position: fixed) đặt trước nội dung để thứ tự Tab/đọc màn hình khớp vị trí: ở điện thoại nó là điểm dừng đầu của trang con, không phải cuối cùng sau chân trang. */}
           <HideOnPortals>
             <BackButton className="md:!hidden" />
@@ -57,8 +52,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SiteHeader />
           </HideOnPortals>
           <PortalHeader />
-          {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. tabIndex -1: đích của liên kết bỏ qua nhận được focus mà không thành điểm dừng Tab. */}
-          <div id="main-content" tabIndex={-1} className="flex-1 outline-none">
+          {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. Đích của liên kết bỏ qua tự nhận tabindex khi được kích hoạt (SkipLink). */}
+          <div id="main-content" className="flex-1 outline-none">
             {children}
           </div>
           <HideOnPortals>

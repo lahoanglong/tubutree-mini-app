@@ -9,12 +9,12 @@ const BLOCKING = new Set(['serious', 'critical']);
 export interface AxeViolation {
   id: string;
   impact: 'minor' | 'moderate' | 'serious' | 'critical' | null;
-  nodes: { target: string[] }[];
+  nodes: { target: string[]; html?: string }[];
 }
 
 declare global {
   interface Window {
-    axe: { run(context: Document, options: object): Promise<{ violations: AxeViolation[] }> };
+    axe: { run(context: Document, options: object): Promise<{ violations: (Omit<AxeViolation, 'nodes'> & { nodes: { target: string[]; html: string }[] })[] }> };
   }
 }
 
@@ -63,6 +63,6 @@ export async function runAxeRules(page: Page, ruleIds: readonly string[]): Promi
   if (!(await page.evaluate(() => typeof window.axe !== 'undefined'))) await page.addScriptTag({ content: axeSource });
   return page.evaluate(async (ids) => {
     const result = await window.axe.run(document, { runOnly: { type: 'rule', values: ids }, resultTypes: ['violations'] });
-    return result.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.map((n) => ({ target: n.target as string[] })) }));
+    return result.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.map((n) => ({ target: n.target as string[], html: n.html })) }));
   }, [...ruleIds]);
 }

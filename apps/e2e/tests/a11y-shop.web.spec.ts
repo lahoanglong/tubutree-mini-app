@@ -107,11 +107,20 @@ test.describe('axe smoke web 375px: serious/critical', () => {
       expect(staleBaseline('web', screen.name, found)).toEqual([]);
       // WCAG 2.5.3: luật experimental nên không nằm trong runAxe; Lighthouse trên PROD đã bắt nút "Mua ngay · giá" ở thanh dính của chi tiết sản phẩm.
       const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
-      const nodes = mismatch.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
+      // Lọc theo HTML của nút (có lớp `!py-1` và chữ nhìn thấy), không theo selector: selector axe không bao giờ chứa chữ của nút nên lọc theo chữ ở đó không bắt được gì.
+      const nodes = mismatch.flatMap((v) => v.nodes.map((n) => ({ target: n.target.join(' '), html: n.html ?? '' })));
       // Thẻ sản phẩm, ô thương hiệu, tab giờ vàng và dải điểm ở Tài khoản còn lệch nhãn: thuộc phần việc khác nên chỉ ghi chú, chưa chặn.
-      const own = nodes.filter((t) => t.includes('!py-1') || /Mua ngay|Thêm vào giỏ/.test(t));
-      if (nodes.length > own.length) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.join(' | ').slice(0, 500) });
-      expect(own.map((t) => `${screen.name}: label-content-name-mismatch ${t}`)).toEqual([]);
+      const own = nodes.filter((n) => n.html.includes('!py-1') || /Mua ngay|Thêm vào giỏ/.test(n.html));
+      if (nodes.length > own.length) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.map((n) => n.target).join(' | ').slice(0, 500) });
+      expect(own.map((n) => `${screen.name}: label-content-name-mismatch ${n.target} ${n.html.slice(0, 120)}`)).toEqual([]);
+      if (screen.name === 'Chi tiết sản phẩm') {
+        // Kiểm trực tiếp: tên truy cập của nút "Mua ngay" ở thanh dính phải bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3), không dựa vào việc axe có bắt được hay không.
+        const buy = page.locator('[data-testid="sticky-bar"] button:has-text("Mua ngay")').first();
+        await expect(buy).toBeVisible();
+        const visible = (await buy.innerText()).replace(/\s+/g, ' ').trim();
+        expect(visible).toMatch(/^Mua ngay/);
+        await expect(buy).toHaveAccessibleName(new RegExp(`^${visible.replace(/[.*+?^${'$'}{}()|[\]\\]/g, '\\$&')}`));
+      }
     });
   }
 });
@@ -190,9 +199,9 @@ test.describe('axe web: màn khách đã đăng nhập ở 375 / 768 / 1440', ()
         expect(blockingViolations('web', key, found)).toEqual([]);
         expect(staleBaseline('web', key, found)).toEqual([]);
         const mismatch = await runAxeRules(page, ['label-content-name-mismatch']);
-        const nodes = mismatch.flatMap((v) => v.nodes.map((n) => n.target.join(' ')));
-        if (nodes.length > 0) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.join(' | ').slice(0, 500) });
-        expect(nodes.filter((t) => t.includes('!py-1'))).toEqual([]);
+        const nodes = mismatch.flatMap((v) => v.nodes.map((n) => ({ target: n.target.join(' '), html: n.html ?? '' })));
+        if (nodes.length > 0) test.info().annotations.push({ type: 'label-in-name-ngoai-pham-vi', description: nodes.map((n) => n.target).join(' | ').slice(0, 500) });
+        expect(nodes.filter((n) => n.html.includes('!py-1')).map((n) => `${key}: ${n.target} ${n.html.slice(0, 120)}`)).toEqual([]);
       });
     }
   }

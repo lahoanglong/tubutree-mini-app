@@ -146,6 +146,41 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     expect(undoButton(container)).toBeUndefined();
   });
 
+  it('hoàn tác bằng bàn phím: thanh biến mất thì focus sang dòng vừa thêm lại; không thấy dòng thì sang tiêu đề trang; chuột không kéo focus', async () => {
+    const realMatches = Element.prototype.matches;
+    const asKeyboard = () =>
+      vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, sel: string) {
+        return sel === ':focus-visible' ? this === document.activeElement : realMatches.call(this, sel);
+      });
+    const { container } = await mount();
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
+    await flush();
+    asKeyboard();
+    undoButton(container)!.focus();
+    click(undoButton(container)!);
+    await flush();
+    const restored = container.querySelector<HTMLElement>('[data-testid="cart-line"][data-variation-id="v1"]')!;
+    expect(document.activeElement).toBe(restored.querySelector('input[type="checkbox"]'));
+    vi.restoreAllMocks();
+
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
+    await flush();
+    state.cart = cartOf([line({ id: 'i2', variationId: 'v2', productName: 'Xà phòng' })]);
+    asKeyboard();
+    undoButton(container)!.focus();
+    click(undoButton(container)!);
+    await flush();
+    expect(document.activeElement).toBe(container.querySelector('main h1'));
+    vi.restoreAllMocks();
+
+    (document.activeElement as HTMLElement).blur();
+    click(button(container, 'Xoá Xà phòng khỏi giỏ hàng'));
+    await flush();
+    click(undoButton(container)!);
+    await flush();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('A11Y-05: xoá bằng chuột (nút không có vòng lấy nét) thì không kéo focus sang Hoàn tác, thanh vẫn tự tắt sau 10 giây', async () => {
     const { container } = await mount();
     vi.useFakeTimers();

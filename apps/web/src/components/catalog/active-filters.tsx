@@ -42,7 +42,14 @@ export function ActiveFilters({ chips, filtersIgnored, onPatch, emptyFocusId = '
               ariaLabel={browseText.removeFilter(c.label)}
               style={{ background: 'var(--color-action-primary-bg)', color: 'var(--color-action-primary-fg)', boxShadow: 'none' }}
               onPress={() => {
-                focusAfter.current = i;
+                // Chỉ bàn phím cần được đưa focus đi tiếp; chuột/cảm ứng không có vòng lấy nét nên không bị giật focus.
+                let keyboard = false;
+                try {
+                  keyboard = !!document.activeElement?.matches(':focus-visible');
+                } catch {
+                  keyboard = false;
+                }
+                focusAfter.current = keyboard ? i : null;
                 onPatch(c.patch);
               }}
             >

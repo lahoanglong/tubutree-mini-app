@@ -114,6 +114,25 @@ export default function CartPage() {
   // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
   // Hết giờ Giờ vàng khi khách đang xem: lấy lại giỏ để máy chủ tính lại giá, không cần tải trang.
   const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
+  // Bấm "Hoàn tác" bằng bàn phím làm thanh hoàn tác biến mất khi nó đang giữ focus: đưa focus tới dòng vừa thêm lại (hoặc tiêu đề trang nếu dòng không còn).
+  const restoreFocus = useRef<{ variationId: string } | null>(null);
+  const focusHeading = () => {
+    const h = document.querySelector<HTMLElement>('main h1');
+    if (!h) return;
+    h.tabIndex = -1;
+    h.addEventListener('blur', () => h.removeAttribute('tabindex'), { once: true });
+    h.focus();
+  };
+  useEffect(() => {
+    const want = restoreFocus.current;
+    if (!want) return;
+    restoreFocus.current = null;
+    const lines = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="cart-line"]'));
+    const row = lines.find((l) => l.dataset.variationId === want.variationId);
+    const target = row?.querySelector<HTMLElement>('input[type="checkbox"]');
+    if (target) target.focus();
+    else focusHeading();
+  }, [cartQ.data, cartQ.dataUpdatedAt]);
   const removeWithUndo = (line: CartLine) => {
     try {
       focusUndo.current = !!document.activeElement?.matches(':focus-visible');
@@ -130,10 +149,22 @@ export default function CartPage() {
   const undoRemove = () => {
     if (!removedLine) return;
     const line = removedLine;
+    let viaKeyboard = false;
+    try {
+      viaKeyboard = !!document.activeElement?.matches(':focus-visible');
+    } catch {
+      viaKeyboard = false;
+    }
     setRemovedLine(null);
     addToCart(line.variationId, line.quantity)
-      .then((c) => qc.setQueryData(cartKey(), c))
-      .catch((e: unknown) => setUndoError(actionErrorText(e)));
+      .then((c) => {
+        if (viaKeyboard) restoreFocus.current = { variationId: line.variationId };
+        qc.setQueryData(cartKey(), c);
+      })
+      .catch((e: unknown) => {
+        setUndoError(actionErrorText(e));
+        if (viaKeyboard) focusHeading();
+      });
   };
   // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
   // nút của đúng item đó (item khác vẫn thao tác được bình thường).
@@ -238,7 +269,7 @@ export default function CartPage() {
     const busy = busyItemId === it.id;
     const compareAt = lineCompareAt(it);
     return (
-      <div key={it.id} data-testid="cart-line" className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
+      <div key={it.id} data-testid="cart-line" data-variation-id={it.variationId} className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
         <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
           <span className={miniCheckboxWrap}>
             <input

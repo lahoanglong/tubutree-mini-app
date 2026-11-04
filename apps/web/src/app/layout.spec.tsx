@@ -59,8 +59,9 @@ describe('RootLayout — thứ tự Tab và liên kết bỏ qua', () => {
     expect(html).toMatch(/<a href="#main-content" class="sr-only focus:not-sr-only/);
   });
 
-  it('khối nội dung có id main-content và tabIndex -1 để nhận focus từ liên kết bỏ qua', () => {
-    expect(html).toMatch(/<div id="main-content" tabindex="-1" class="flex-1[^"]*">\s*<main>/);
+  it('khối nội dung có id main-content và không có tabindex cố định (SkipLink gắn khi kích hoạt, nên bấm chuột vào chữ không focus khung bọc)', () => {
+    expect(html).toMatch(/<div id="main-content" class="flex-1[^"]*">\s*<main>/);
+    expect(html).not.toMatch(/id="main-content"[^>]*tabindex/);
   });
 
   it('nút Quay lại nổi đứng trước nội dung trang trong DOM', () => {

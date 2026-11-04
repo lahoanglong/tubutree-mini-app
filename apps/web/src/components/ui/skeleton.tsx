@@ -22,10 +22,11 @@ export function ProductCardSkeleton() {
 /**
  * Lưới khung chờ: 2 cột trên điện thoại, nhiều cột hơn từ md. Tự là vùng `status` bận kèm chữ đọc "Đang tải sản phẩm…" (thẻ khung chờ aria-hidden nên
  * trình đọc màn hình không biết gì đang tải); chỗ gọi đã nằm trong một vùng status khác thì truyền `status={false}` để không lồng hai vùng.
+ * Không đặt aria-busy: luật chân trang gọn trong globals.css ẩn chân trang theo mọi khối aria-busy, mà lưới này là một phần của trang chứ không phải khung chờ cả trang.
  */
 export function ProductGridSkeleton({ count = 6, className = GRID_PRODUCTS, status = true }: { count?: number; className?: string; status?: boolean }) {
   return (
-    <div className={className} {...(status ? { role: 'status', 'aria-busy': true } : null)}>
+    <div className={className} {...(status ? { role: 'status' } : null)}>
       {status && <span className="sr-only">Đang tải sản phẩm…</span>}
       {Array.from({ length: count }, (_, i) => (
         <ProductCardSkeleton key={i} />

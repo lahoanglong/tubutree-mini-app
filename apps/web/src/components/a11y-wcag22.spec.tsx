@@ -94,6 +94,46 @@ describe('A11Y-13 mũi tên chuyển mục trong nhóm radio/tab', () => {
     expect(document.activeElement).toBe(radios(container)[3]);
   });
 
+  it('mọi mục khoá (hết suất): vẫn còn một điểm dừng Tab, mục khoá còn focus được', () => {
+    function AllLocked() {
+      const g = useRovingGroup();
+      return (
+        <div ref={g.ref} onKeyDown={g.onKeyDown} role="radiogroup" aria-label="Chọn">
+          {['a', 'b'].map((k) => (
+            <button key={k} type="button" role="radio" aria-checked="false" aria-disabled="true">
+              {k}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    const { container } = mount(<AllLocked />);
+    expect(radios(container).map((r) => r.tabIndex)).toEqual([0, -1]);
+  });
+
+  it('activate=false: mũi tên chỉ chuyển focus, không bấm mục; Home/End cũng vậy', () => {
+    const onClick = vi.fn();
+    function Manual() {
+      const g = useRovingGroup({ activate: false });
+      return (
+        <div ref={g.ref} onKeyDown={g.onKeyDown} role="radiogroup" aria-label="Chọn">
+          {['a', 'b', 'c'].map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={k === 'a'} onClick={onClick}>
+              {k}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    const { container } = mount(<Manual />);
+    radios(container)[0]!.focus();
+    key('ArrowDown');
+    expect(document.activeElement).toBe(radios(container)[1]);
+    key('End');
+    expect(document.activeElement).toBe(radios(container)[2]);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('SegmentedTabs của mini: mũi tên trái/phải đổi tab và focus, chỉ tab đang chọn có tabindex 0', () => {
     const onChange = vi.fn();
     function Tabs() {
@@ -179,11 +219,11 @@ describe('A11Y-14 / A11Y-15 sheet', () => {
 });
 
 describe('A11Y-21 khung chờ lưới sản phẩm', () => {
-  it('là vùng status bận có chữ đọc; status={false} thì không lồng vùng thứ hai', () => {
+  it('là vùng status có chữ đọc, không aria-busy (luật chân trang gọn ẩn theo aria-busy); status={false} thì không lồng vùng thứ hai', () => {
     const c = mount(<ProductGridSkeleton count={2} />).container;
     const region = c.firstElementChild!;
     expect(region.getAttribute('role')).toBe('status');
-    expect(region.getAttribute('aria-busy')).toBe('true');
+    expect(region.hasAttribute('aria-busy')).toBe(false);
     expect(region.textContent).toBe('Đang tải sản phẩm…');
     const nested = mount(
       <div role="status" aria-busy="true">
@@ -242,6 +282,11 @@ describe('A11Y-18 chip bỏ lọc', () => {
 
   it('là nút thường (không aria-pressed); gỡ chip thì focus sang chip kế, hết chip thì sang tiêu đề kết quả', () => {
     const onPatch = vi.fn();
+    // jsdom không có :focus-visible; bàn phím thì trình duyệt thật trả true cho nút đang giữ focus.
+    const realMatches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (this: Element, sel: string) {
+      return sel === ':focus-visible' ? this === document.activeElement : realMatches.call(this, sel);
+    });
     const { container } = mount(<Host onPatch={onPatch} />);
     const btn = (name: string) => container.querySelector<HTMLElement>(`button[aria-label="${name}"]`);
     expect(btn('Bỏ lọc Tubu')!.hasAttribute('aria-pressed')).toBe(false);
@@ -252,6 +297,7 @@ describe('A11Y-18 chip bỏ lọc', () => {
     click(btn('Bỏ lọc Còn hàng'));
     expect(container.querySelector('button')).toBeNull();
     expect(document.activeElement).toBe(container.querySelector('#danh-sach-san-pham'));
+    vi.restoreAllMocks();
   });
 });
 

@@ -189,6 +189,16 @@ describe('ReorderSheet', () => {
     expect(mocks.trackReorderClicked).toHaveBeenCalledTimes(1);
   });
 
+  it('dòng hết hàng chỉ mờ ảnh, chữ không bị opacity (đủ tương phản)', () => {
+    renderSheet(<ReorderSheet target={ORDER} source="order_card" onClose={() => {}} />);
+    const rows = screen.getAllByTestId('reorder-line');
+    const unavailable = rows.find((r) => r.textContent?.includes(copy.reorder.unavailable))!;
+    expect(unavailable.style.opacity).toBe('');
+    const dimmed = Array.from(unavailable.querySelectorAll<HTMLElement>('div')).find((d) => d.style.opacity === '0.5')!;
+    expect(dimmed).toBeTruthy();
+    expect(dimmed.textContent).toBe('');
+  });
+
   it('target=null → không hiện gì', () => {
     renderSheet(<ReorderSheet target={null} source="order_card" onClose={() => {}} />);
     expect(screen.queryByRole('button', { name: /Thêm vào giỏ/ })).toBeNull();

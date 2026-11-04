@@ -116,7 +116,7 @@ function Actions({ label, summary, children }: { label: string; summary?: ReactN
 const CONSENT_KEY = 'tubu.waste.consents';
 
 export function RecycleNew() {
-  const methodGroup = useRovingGroup();
+  const methodGroup = useRovingGroup({ activate: false });
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();

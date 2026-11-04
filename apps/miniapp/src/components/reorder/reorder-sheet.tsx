@@ -125,14 +125,17 @@ function ReorderLineRow({
   return (
     <div
       data-testid="reorder-line"
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, opacity: line.available ? 1 : 0.5 }}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}
     >
       <Checkbox checked={checked} disabled={!line.available} onChange={() => onChange({ checked: !checked, quantity: qty })}>
         <span style={SR_ONLY}>{vi.reorder.selectLine(line.productName)}</span>
       </Checkbox>
-      <ProductThumb src={line.thumbnail} alt="" size={56} />
+      {/* Mờ chỉ ảnh: chữ giải thích mờ theo cả dòng chỉ còn 2,3:1 (WCAG 1.4.3). */}
+      <div style={{ flex: 'none', opacity: line.available ? 1 : 0.5 }}>
+        <ProductThumb src={line.thumbnail} alt="" size={56} />
+      </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Text variant="body-sm" as="div" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Text variant="body-sm" tone={line.available ? 'primary' : 'secondary'} as="div" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {line.productName}
         </Text>
         {line.variationName && (

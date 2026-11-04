@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WastePreviewDTO, WastePreviewRequest } from '@tubutree/shared-types';
 import { byText, click, flush, render, selectValue, type Rendered } from '@/test-utils/dom';
@@ -671,5 +672,23 @@ describe('Thể lệ từ bước 2: quay lại không mất ô đồng ý', () 
     await flush(3);
     expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(false);
     expect(c.textContent).not.toContain('Thể lệ vừa được cập nhật');
+  });
+  it('mũi tên trong nhóm Cách giao chỉ chuyển focus, không chọn lại nên không xoá ô đồng ý; Space chọn', async () => {
+    atStep2(PICKED);
+    const c = await mount();
+    click(check(c, CONSENT));
+    await flush(3);
+    const radios = Array.from(c.querySelectorAll<HTMLElement>('[role="radiogroup"][aria-label="Cách giao"] [role="radio"]'));
+    expect(radios.length).toBeGreaterThanOrEqual(2);
+    const sel = radios.findIndex((r) => r.getAttribute('aria-checked') === 'true');
+    radios[sel]!.focus();
+    const press = (k: string) => act(() => void document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })));
+    press('ArrowDown');
+    expect(document.activeElement).not.toBe(radios[sel]);
+    press('ArrowUp');
+    await flush(3);
+    expect(document.activeElement).toBe(radios[sel]);
+    expect(radios[sel]!.getAttribute('aria-checked')).toBe('true');
+    expect(check(c, CONSENT).checked).toBe(true);
   });
 });

@@ -163,4 +163,22 @@ test.describe('A11Y-10: liên kết bỏ qua và nút Quay lại', () => {
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => !!document.activeElement?.closest('#main-content'))).toBe(true);
   });
+
+  test('bấm chuột vào chữ giữa trang rồi Tab: focus đi tiếp từ chỗ đã bấm, không nhảy về đầu vùng nội dung', async ({ page, api }) => {
+    mockBuyer(api);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/gio-hang');
+    const line = page.getByTestId('cart-line').first();
+    await expect(line).toBeVisible({ timeout: 20_000 });
+    await line.click({ position: { x: 3, y: 3 } });
+    expect(await page.evaluate(() => document.getElementById('main-content')?.hasAttribute('tabindex'))).toBe(false);
+    await page.keyboard.press('Tab');
+    const after = await page.evaluate(() => {
+      const line = document.querySelector('[data-testid="cart-line"]')!;
+      const active = document.activeElement!;
+      return { inMain: !!active.closest('#main-content'), followsLine: line === active || !!(line.compareDocumentPosition(active) & (Node.DOCUMENT_POSITION_FOLLOWING | Node.DOCUMENT_POSITION_CONTAINED_BY)) };
+    });
+    expect(after.inMain).toBe(true);
+    expect(after.followsLine).toBe(true);
+  });
 });
