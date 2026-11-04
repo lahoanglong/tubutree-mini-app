@@ -45,4 +45,10 @@ describe('hd1: định nghĩa index (real Postgres)', () => {
       /\(status, "isPinned" DESC, "createdAt" DESC, id DESC\)$/,
     );
   });
+
+  it('L3-13: đánh giá công khai theo (productId, isVisible, createdAt DESC) đúng where + orderBy của listByProduct', async () => {
+    expect(await def('reviews_productId_isVisible_createdAt_idx')).toMatch(
+      /\("productId", "isVisible", "createdAt" DESC\)$/,
+    );
+  });
 });

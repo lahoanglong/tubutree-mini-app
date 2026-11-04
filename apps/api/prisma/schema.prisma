@@ -3057,6 +3057,8 @@ model Review {
   // Một đánh giá cho mỗi lần mua (đơn) của sản phẩm. Thứ tự cột để các truy vấn theo (khách, sản phẩm) vẫn dùng tiền tố chỉ mục.
   @@unique([userId, productId, orderId])
   @@index([productId])
+  // listByProduct: WHERE productId AND isVisible ORDER BY createdAt DESC LIMIT n — khỏi sắp lại mọi đánh giá của sản phẩm.
+  @@index([productId, isVisible, createdAt(sort: Desc)])
   @@map("reviews")
 }
 
