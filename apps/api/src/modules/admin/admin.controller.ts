@@ -12,6 +12,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -21,6 +22,7 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
   registerDecorator,
 } from 'class-validator';
 import type { ValidationArguments, ValidationOptions } from 'class-validator';
@@ -267,16 +269,24 @@ export class UpdateCouponDto {
 }
 /** Trần mảng `rows` của hai đường nhập hàng loạt; khớp trần mảng của bộ đọc thân request để lỗi nêu đúng trường. Client admin chỉ gửi csv. */
 const IMPORT_ROWS_MAX = 500;
+class DealerPriceRowDto {
+  @IsString() @MaxLength(100) sku!: string;
+  @IsNumber({ allowNaN: false, allowInfinity: false }) @Min(0) @Max(1_000_000_000_000) price!: number;
+}
+class SoldExternalRowDto {
+  @IsString() @MaxLength(100) sku!: string;
+  @IsNumber({ allowNaN: false, allowInfinity: false }) @Min(0) @Max(1_000_000_000_000) count!: number;
+}
 export class ImportDealerPricesDto {
   @IsString() @IsNotEmpty() @MaxLength(100) tierId!: string;
   // Dán trực tiếp 2 cột Excel "sku,giá" (mỗi dòng 1 SKU). Hoặc gửi rows JSON.
   @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) rows?: { sku: string; price: number }[];
+  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) @ValidateNested({ each: true }) @Type(() => DealerPriceRowDto) rows?: DealerPriceRowDto[];
 }
 export class ImportSoldExternalDto {
   // Dán "sku,số-đã-bán" (mỗi dòng 1 SKU) — tổng đã bán gom từ sàn ngoài. Hoặc rows JSON.
-  @IsOptional() @IsString() csv?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) rows?: { sku: string; count: number }[];
+  @IsOptional() @IsString() @MaxLength(DEALER_PRICE_CSV_MAX_LENGTH) csv?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(IMPORT_ROWS_MAX) @ValidateNested({ each: true }) @Type(() => SoldExternalRowDto) rows?: SoldExternalRowDto[];
 }
 class UpdateOrderStatusDto {
   @IsIn(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'RETURNED', 'CANCELLED'])

@@ -593,6 +593,23 @@ describe('trần mảng rows của nhập giá đại lý và đã bán ngoài',
     expect(over.some((e) => e.property === 'rows')).toBe(true);
   });
 
+  it('mỗi phần tử rows được kiểm kiểu: phần tử không phải object, sku quá dài, số âm/không phải số → lỗi', async () => {
+    const bad = (cls: new () => object, rows: unknown[], extra: object = {}) =>
+      validate(plainToInstance(cls, { ...extra, rows })).then((e) => e.some((x) => x.property === 'rows'));
+    for (const rows of [['x'], [null], [{ sku: 'x'.repeat(101), count: 1 }], [{ sku: 'A', count: -1 }], [{ sku: 'A', count: 'abc' }], [{ sku: 'A' }]]) {
+      expect(await bad(ImportSoldExternalDto, rows)).toBe(true);
+    }
+    for (const rows of [['x'], [{ sku: 'x'.repeat(101), price: 1000 }], [{ sku: 'A', price: -1 }], [{ sku: 'A', price: 1e15 }], [{ sku: 'A', price: 'abc' }]]) {
+      expect(await bad(ImportDealerPricesDto, rows, { tierId: 't1' })).toBe(true);
+    }
+  });
+
+  it('csv nhập đã bán ngoài có trần độ dài như csv giá đại lý', async () => {
+    expect(await validate(plainToInstance(ImportSoldExternalDto, { csv: 'a'.repeat(300_000) }))).toHaveLength(0);
+    const over = await validate(plainToInstance(ImportSoldExternalDto, { csv: 'a'.repeat(300_001) }));
+    expect(over.some((e) => e.property === 'csv')).toBe(true);
+  });
+
   it('dealer-prices import (và preview): 500 dòng hợp lệ, 501 dòng bị từ chối ở rows', async () => {
     expect(await validate(plainToInstance(ImportDealerPricesDto, { tierId: 't1', rows: priceRows(500) }))).toHaveLength(0);
     const over = await validate(plainToInstance(ImportDealerPricesDto, { tierId: 't1', rows: priceRows(501) }));
