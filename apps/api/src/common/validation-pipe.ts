@@ -193,6 +193,7 @@ export const FIELD_LABELS: Record<string, string> = {
   startMin: 'Giờ bắt đầu',
   status: 'Trạng thái',
   stock: 'Tồn kho',
+  storefront: 'Gian hàng',
   storeFrontUrl: 'Đường dẫn gian hàng',
   story: 'Câu chuyện',
   subdomain: 'Tên miền phụ',

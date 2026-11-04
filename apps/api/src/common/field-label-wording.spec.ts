@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { CreateFaqDto } from '../modules/faq/dto/faq.dto';
 import { CreateQuickReplyDto } from '../modules/cskh/dto/quick-reply.dto';
+import { ListOrdersQuery } from '../modules/admin/admin.controller';
 import { DealerRewardDto } from '../modules/brand/dto/brand.dto';
 import { createValidationPipe } from './validation-pipe';
 
@@ -17,5 +18,9 @@ describe('nhãn lỗi trùng chữ trên màn quản trị', () => {
 
   it('threshold là ô "Mốc doanh số" của chương trình thưởng đại lý', async () => {
     expect(await messages(DealerRewardDto, { type: 'TOUR', title: 'Tour', threshold: -1 })).toEqual(['Mốc doanh số không được nhỏ hơn 0.']);
+  });
+
+  it('storefront là ô "Gian hàng" của bộ lọc đơn', async () => {
+    expect(await messages(ListOrdersQuery, { storefront: 'x'.repeat(101) })).toEqual(['Gian hàng không được dài quá 100 ký tự.']);
   });
 });
