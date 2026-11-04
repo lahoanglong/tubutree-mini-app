@@ -74,14 +74,16 @@ describe('Rút hoa hồng bỏ qua đơn đã RETURNED (real Postgres)', () => {
     const u = await createUser(prisma, { role: 'AFFILIATE' });
     const ok = await commissionFor(u.id, 40_000, 'DELIVERED');
     const returned = await commissionFor(u.id, 60_000, 'RETURNED');
-    await affiliate.requestPayout(u.id, 100_000, 'WALLET_BALANCE');
+    await affiliate.requestPayout(u.id, 40_000, 'WALLET_BALANCE');
     const s = await state(u.id);
     expect(s.balance).toBe(40_000);
     expect(s.commissions.find((c) => c.id === ok.id)!.status).toBe('PAID');
     expect(s.commissions.find((c) => c.id === returned.id)!.status).toBe('APPROVED');
   });
 
-  it('chạy cùng lúc đơn bị RETURNED: không bao giờ có hoa hồng PAID của đơn đã RETURNED nếu RETURNED commit trước câu khoá', async () => {
+  // Ca bất biến, KHÔNG phải ca bắt lỗi: RETURNED commit trước hay sau câu khoá đều hợp lệ, miễn Ví khớp tổng hoa hồng PAID.
+  // Ca bắt lỗi (RETURNED commit trước) nằm ở ca tuần tự phía trên và ca cron phía dưới.
+  it('bất biến: RETURNED chạy song song với rút → Ví luôn khớp tổng hoa hồng PAID', async () => {
     const u = await createUser(prisma, { role: 'AFFILIATE' });
     await commissionFor(u.id, 30_000, 'DELIVERED');
     const target = await commissionFor(u.id, 50_000, 'DELIVERED');
@@ -95,13 +97,34 @@ describe('Rút hoa hồng bỏ qua đơn đã RETURNED (real Postgres)', () => {
     expect(s.balance).toBe(paid);
   });
 
+  it('đơn RETURNED commit ngay giữa lúc tính khả dụng và lúc khoá: 409, không rút một phần', async () => {
+    const u = await createUser(prisma, { role: 'AFFILIATE' });
+    await commissionFor(u.id, 30_000, 'DELIVERED');
+    const target = await commissionFor(u.id, 50_000, 'DELIVERED');
+    // Chèn RETURNED đúng sau câu aggregate của requestPayout (khe hở giữa tính khả dụng và khoá).
+    const agg = jest.spyOn(prisma.commission, 'aggregate');
+    const realAgg = agg.getMockImplementation();
+    agg.mockImplementationOnce((async (args: never) => {
+      agg.mockRestore();
+      const r = await prisma.commission.aggregate(args);
+      await prisma.order.update({ where: { id: target.orderId }, data: { status: 'RETURNED' } });
+      return r;
+    }) as never);
+    void realAgg;
+    await expect(affiliate.requestPayout(u.id, 80_000, 'WALLET_BALANCE')).rejects.toMatchObject({ status: 409 });
+    const s = await state(u.id);
+    expect(s.balance).toBe(0);
+    expect(s.commissions.every((c) => c.status === 'APPROVED')).toBe(true);
+  });
+
   it('cron tự chuyển: hoa hồng của đơn RETURNED không vào Ví (ở lại APPROVED chờ đường thu hồi)', async () => {
     const u = await createUser(prisma, { role: 'AFFILIATE' });
-    await commissionFor(u.id, 25_000, 'DELIVERED');
+    const delivered = await commissionFor(u.id, 25_000, 'DELIVERED');
     const returned = await commissionFor(u.id, 75_000, 'RETURNED');
     await affiliate.autoTransferApprovedToWallet();
     const s = await state(u.id);
-    expect(s.balance).toBeLessThanOrEqual(25_000);
+    expect(s.balance).toBe(25_000);
+    expect(s.commissions.find((c) => c.id === delivered.id)!.status).toBe('PAID');
     expect(s.commissions.find((c) => c.id === returned.id)!.status).toBe('APPROVED');
   });
 

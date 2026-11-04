@@ -420,7 +420,7 @@ export class AffiliateService {
         _sum: { amount: true },
       }),
       this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+        where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null, order: { status: 'DELIVERED' } },
         _sum: { amount: true },
       }),
       this.prisma.affiliateLink.aggregate({
@@ -1440,9 +1440,10 @@ export class AffiliateService {
       if (existing) throw new BadRequestException('Idempotency-Key đã được sử dụng, bạn thử lại nhé.');
     }
 
-    // "Khả dụng" = APPROVED và CHƯA thuộc batch payout nào (payoutBatchId null).
+    // "Khả dụng" = APPROVED, CHƯA thuộc batch payout nào (payoutBatchId null) và đơn còn DELIVERED: đơn đã RETURNED/CANCELLED mà
+    // hoa hồng chưa kịp đảo không tính, nếu không số "khả dụng" lớn hơn số cron/khoá chọn được và rút toàn bộ luôn bị từ chối.
     const approved = await this.prisma.commission.aggregate({
-      where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
+      where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null, order: { status: 'DELIVERED' } },
       _sum: { amount: true },
     });
     const available = approved._sum.amount ?? 0;
@@ -1488,6 +1489,8 @@ export class AffiliateService {
         await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
         await this.assertNotRevoked(tx, userId);
         const total = rows.reduce((s, c) => s + c.amount, 0);
+        // Đơn đổi trạng thái giữa lúc tính `available` và lúc khoá: không rút một phần, bảo người dùng thử lại với số mới.
+        if (total !== available) throw new ConflictException('Số hoa hồng khả dụng vừa thay đổi, bạn tải lại rồi thử lại nhé.');
         // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
