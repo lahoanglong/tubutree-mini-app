@@ -4,6 +4,7 @@ import {
   DEALER_PENDING_PAYMENT_TTL_KEY,
   DEFAULT_DEALER_PENDING_PAYMENT_TTL_HOURS,
   DEFAULT_PENDING_PAYMENT_TTL_HOURS,
+  PAYMENT_UNLINKED_HOLD_HOURS,
   PENDING_PAYMENT_TTL_KEY,
   PendingPaymentExpiryCron,
 } from './pending-payment-expiry.cron';
@@ -117,10 +118,20 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     expect(prisma.order.findMany.mock.calls[0][0].where).toMatchObject({ autoCancelBlockedAt: null });
   });
 
-  it('bỏ qua đơn đang có cờ "Pancake báo đã thanh toán, chờ đối chiếu" — Kế toán đối chiếu trước, không tự huỷ đơn có thể đã được trả', async () => {
+  it('đơn có cờ "Pancake báo đã thanh toán, chờ đối chiếu" chỉ được hoãn tự huỷ 48 giờ kể từ khoản đầu tiên (paymentUnlinkedFirstAt); quá hạn thì cron huỷ như thường', async () => {
     const { cron, prisma } = make();
     await cron.expireStale(NOW);
-    expect(prisma.order.findMany.mock.calls[0][0].where).toMatchObject({ paymentUnlinkedAt: null });
+    const hold = new Date(NOW.getTime() - PAYMENT_UNLINKED_HOLD_HOURS * HOUR);
+    expect(PAYMENT_UNLINKED_HOLD_HOURS).toBe(48);
+    expect(prisma.order.findMany.mock.calls[0][0].where.AND).toEqual([
+      {
+        OR: [
+          { paymentUnlinkedAt: null },
+          { paymentUnlinkedFirstAt: { lt: hold } },
+          { paymentUnlinkedFirstAt: null, paymentUnlinkedAt: { lt: hold } },
+        ],
+      },
+    ]);
   });
 
   it('đơn chuyển khoản chờ tiền có thể đã lên Pancake → huỷ qua cổng Pancake (D1, PANCAKE-2)', async () => {

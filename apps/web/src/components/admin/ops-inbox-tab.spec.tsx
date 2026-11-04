@@ -481,6 +481,7 @@ describe('OpsInboxTab — khoản Pancake báo đã thanh toán chờ đối chi
       { key: 'paymentUnlinkedClosed', count: 1 },
     ]);
     expect(INBOX_LABELS.paymentUnlinked.title).toBe('Pancake báo đã thanh toán — chờ đối chiếu sao kê');
+    expect(INBOX_LABELS.paymentUnlinked.hint).toContain('Khách chưa chuyển thì đơn tự huỷ sau 48 giờ và chuyển cho quản trị viên');
     expect(INBOX_LABELS.paymentUnlinkedClosed.title).toBe('Pancake báo đã thanh toán cho đơn đã huỷ/trả');
     const onOpen = vi.fn();
     const r = render(<OpsInboxTab onOpen={onOpen} onOpenHealth={vi.fn()} isAdmin />);
