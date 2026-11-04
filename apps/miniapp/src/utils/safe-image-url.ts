@@ -1,4 +1,4 @@
-const IMAGE_HOSTS: readonly string[] = ['res.cloudinary.com', 'content.pancake.vn'];
+const IMAGE_HOSTS: readonly string[] = ['res.cloudinary.com', 'img.vietqr.io'];
 const RASTER_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 /**

@@ -241,7 +241,7 @@ function PayrollSection() {
               >
                 Đơn giá
               </Button>
-              {(row.qrImageUrl || row.profile?.qrImageUrl) && (
+              {safeImageUrl(row.qrImageUrl ?? row.profile?.qrImageUrl) && (
                 <Button variant="secondary" aria-label={`QR chuyển · ${name}`} onPress={() => setQrRow(row)}>
                   QR chuyển
                 </Button>
