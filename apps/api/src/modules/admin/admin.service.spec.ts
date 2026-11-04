@@ -2648,6 +2648,22 @@ describe('AdminService.recordExport — nhật ký xuất CSV (L1-07)', () => {
   });
 });
 
+describe('AdminService.getUserDetail — hạn của lời mời quyền', () => {
+  it('select grant có expiresAt để drawer báo "đã hết hạn"', async () => {
+    const grantFind = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0900000001', affiliateRevokedAt: null }), findMany: jest.fn().mockResolvedValue([]) },
+      order: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      walletTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findMany: jest.fn().mockResolvedValue([]) },
+      userAdminEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      roleGrant: { findMany: grantFind },
+    });
+    await mkAdmin(prisma).getUserDetail('u1');
+    expect(grantFind).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ expiresAt: true, revokedAt: true }) }));
+  });
+});
+
 describe('AdminService.listDealerApplications — thứ tự createdAt theo tham số order', () => {
   function daPrisma() {
     const findMany = jest.fn().mockResolvedValue([]);

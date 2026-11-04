@@ -223,6 +223,33 @@ describe('UserDetailDrawer — lịch sử gian hàng đối tác', () => {
   });
 });
 
+describe('UserDetailDrawer — lời mời quyền theo SĐT hết hạn', () => {
+  const grant = (over: Record<string, unknown>) => ({
+    id: 'g1', role: 'STAFF', grantedBy: 'a1', grantedByName: 'Admin', note: null, revokedAt: null, expiresAt: null, createdAt: '2026-10-20T03:00:00.000Z', ...over,
+  });
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+
+  it('lời mời có hạn đã qua mà chưa thu hồi hiện "đã hết hạn"; chưa tới hạn, không hạn, hoặc đã thu hồi thì không', async () => {
+    const text = async (g: Record<string, unknown>) => {
+      const body = await open({ ...DETAIL, grants: [grant(g)] } as AdminUserDetail);
+      return body.textContent ?? '';
+    };
+    expect(await text({ expiresAt: past })).toContain('đã hết hạn');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(await text({ expiresAt: future })).not.toContain('đã hết hạn');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(await text({ expiresAt: null })).not.toContain('đã hết hạn');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    const revoked = await text({ expiresAt: past, revokedAt: past });
+    expect(revoked).toContain('đã thu hồi');
+    expect(revoked).not.toContain('đã hết hạn');
+  });
+});
+
 describe('UserDetailDrawer — nhóm việc nhân viên (D1-05)', () => {
   it('ADMIN chọn được cả 4 nhóm (CSKH, Kho, Marketing, Kế toán); lưu gửi đúng tập nhóm đã tick', async () => {
     const staff: AdminUserDetail = { ...DETAIL, user: { ...DETAIL.user, role: 'STAFF', staffPermissions: ['KE_TOAN'] } };

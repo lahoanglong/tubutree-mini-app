@@ -874,7 +874,7 @@ export class AdminService {
         ? this.prisma.roleGrant.findMany({
             where: { phone: user.phone },
             orderBy: { createdAt: 'desc' },
-            select: { id: true, role: true, grantedBy: true, note: true, revokedAt: true, createdAt: true },
+            select: { id: true, role: true, grantedBy: true, note: true, revokedAt: true, expiresAt: true, createdAt: true },
           })
         : Promise.resolve([]),
     ]);

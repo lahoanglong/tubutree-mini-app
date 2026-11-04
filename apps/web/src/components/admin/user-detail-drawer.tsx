@@ -272,6 +272,9 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
                 <div className="font-medium text-stone-900">
                   Cấp quyền theo SĐT: {roleLabel(g.role)}
                   {g.revokedAt && <span className="text-danger-fg"> · đã thu hồi {formatDateTime(g.revokedAt)}</span>}
+                  {!g.revokedAt && g.expiresAt && new Date(g.expiresAt).getTime() <= Date.now() && (
+                    <span className="text-danger-fg"> · đã hết hạn {formatDateTime(g.expiresAt)}</span>
+                  )}
                 </div>
                 <div className="text-xs text-stone-500">
                   {formatDateTime(g.createdAt)} · {g.grantedByName ?? g.grantedBy}

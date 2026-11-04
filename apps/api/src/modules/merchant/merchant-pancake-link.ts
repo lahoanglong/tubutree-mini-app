@@ -303,6 +303,7 @@ export async function unlinkTubuFulfilledVariation(
   });
   if (closed.count === 0) return null;
 
+  // Đọc % sau khi đã giữ khoá biến thể ở trên (FOR NO KEY UPDATE tới commit), nên giá trị khớp đúng giá trị bị ghi đè ngay dưới.
   const rateBefore = link.affiliateRateCaptured
     ? (await tx.variation.findUnique({ where: { id: link.variationId }, select: { affiliateRate: true } }))?.affiliateRate ?? null
     : null;
