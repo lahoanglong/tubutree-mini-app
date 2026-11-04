@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/client-api';
 import { actionErrorText } from '@/lib/error-text';
@@ -15,32 +16,28 @@ export function LogoutAllSection() {
   const logoutAllM = useMutation({
     mutationFn: () => apiFetch('/auth/logout-all', { method: 'POST' }),
     onSuccess: () => void logout(),
+    onError: () => setConfirming(false),
   });
 
-  if (!confirming) {
-    return (
+  return (
+    <>
       <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
         Đăng xuất mọi thiết bị
       </button>
-    );
-  }
-  return (
-    <div className={`${ui.card} p-4 ${mini.card}`}>
-      <p className="text-sm font-bold text-stone-900">Đăng xuất khỏi mọi thiết bị?</p>
-      <p className="mt-1 text-xs text-stone-700">Mọi máy đang đăng nhập tài khoản này, kể cả máy này, sẽ phải đăng nhập lại.</p>
       {logoutAllM.isError && (
-        <p role="alert" className={`mt-2 ${ui.error}`}>
+        <p role="alert" className={ui.error}>
           {actionErrorText(logoutAllM.error)}
         </p>
       )}
-      <div className="mt-3 flex gap-2">
-        <button type="button" disabled={logoutAllM.isPending} onClick={() => setConfirming(false)} className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary}`}>
-          Huỷ
-        </button>
-        <button type="button" disabled={logoutAllM.isPending} onClick={() => logoutAllM.mutate()} className={`${ui.btnPrimary} flex-1`}>
-          Đăng xuất mọi máy
-        </button>
-      </div>
-    </div>
+      <ConfirmSheet
+        open={confirming}
+        title="Đăng xuất khỏi mọi thiết bị?"
+        message="Mọi máy đang đăng nhập tài khoản này, kể cả máy này, sẽ phải đăng nhập lại."
+        confirmLabel="Đăng xuất mọi máy"
+        loading={logoutAllM.isPending}
+        onConfirm={() => logoutAllM.mutate()}
+        onCancel={() => setConfirming(false)}
+      />
+    </>
   );
 }

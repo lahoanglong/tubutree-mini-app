@@ -156,13 +156,12 @@ export default function SettingsPage() {
         <LinkRow href="/tai-khoan/dia-chi" label="Sổ địa chỉ" last />
       </Section>
 
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-2">
         <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
           Đăng xuất
         </button>
+        <LogoutAllSection />
       </div>
-
-      <LogoutAllSection />
 
       <AccountDeletionSection />
     </div>,

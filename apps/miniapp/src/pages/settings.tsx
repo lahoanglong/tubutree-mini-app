@@ -172,14 +172,13 @@ export default function SettingsPage() {
       </Section>
 
       {canLogout && (
-        <div style={{ padding: 16 }}>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
           <Button fullWidth variant="secondary" onPress={() => void logout()}>
             Đăng xuất
           </Button>
+          <LogoutAllSection />
         </div>
       )}
-
-      {canLogout && <LogoutAllSection />}
 
       {canLogout && <AccountDeletionSection />}
       <div style={{ height: 16 }} />

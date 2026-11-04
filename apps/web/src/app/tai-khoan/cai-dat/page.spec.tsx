@@ -242,8 +242,8 @@ describe('/tai-khoan/cai-dat: liên kết, theo dõi OA, đăng xuất', () => {
     const { container } = await mount();
     click(byText(container, 'button', 'Đăng xuất mọi thiết bị'));
     expect(mocks.apiFetch).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Đăng xuất khỏi mọi thiết bị?');
-    click(byText(container, 'button', 'Đăng xuất mọi máy'));
+    expect(document.body.textContent).toContain('Đăng xuất khỏi mọi thiết bị?');
+    click(byText(document.body, 'button', 'Đăng xuất mọi máy'));
     await flush(4);
     expect(mocks.apiFetch).toHaveBeenCalledWith('/auth/logout-all', { method: 'POST' });
     expect(mocks.auth.logout).toHaveBeenCalledTimes(1);
@@ -253,7 +253,7 @@ describe('/tai-khoan/cai-dat: liên kết, theo dõi OA, đăng xuất', () => {
     mocks.apiFetch.mockRejectedValueOnce(new Error('boom'));
     const { container } = await mount();
     click(byText(container, 'button', 'Đăng xuất mọi thiết bị'));
-    click(byText(container, 'button', 'Đăng xuất mọi máy'));
+    click(byText(document.body, 'button', 'Đăng xuất mọi máy'));
     await flush(4);
     expect(mocks.auth.logout).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
@@ -262,7 +262,8 @@ describe('/tai-khoan/cai-dat: liên kết, theo dõi OA, đăng xuất', () => {
   it('Huỷ ở hộp xác nhận: không gọi máy chủ', async () => {
     const { container } = await mount();
     click(byText(container, 'button', 'Đăng xuất mọi thiết bị'));
-    click(byText(container, 'button', 'Huỷ'));
+    click(byText(document.body, 'button', 'Huỷ'));
+    await flush(2);
     expect(mocks.apiFetch).not.toHaveBeenCalled();
     expect(byText(container, 'button', 'Đăng xuất mọi thiết bị')).not.toBeNull();
   });

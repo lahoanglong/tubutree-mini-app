@@ -341,7 +341,7 @@ describe('UserDetailDrawer — Cắt phiên (L1-04)', () => {
   it('lịch sử ghi dòng cắt phiên kèm số phiên và lý do', async () => {
     const body = await open({
       ...DETAIL,
-      blockHistory: [{ id: 'e1', userId: 'u1', kind: 'SESSIONS_REVOKED', fromValue: null, toValue: '2', reason: 'Nghi lộ phiên', actorId: 'a1', actorName: 'Admin', createdAt: '2026-11-05T03:00:00.000Z' } as never],
+      blockHistory: [{ id: 'e1', kind: 'SESSIONS_REVOKED', fromValue: null, toValue: '2', reason: 'Nghi lộ phiên', actorId: 'a1', actorName: 'Admin', createdAt: '2026-11-05T03:00:00.000Z' }],
     });
     const text = section(body, 'Lịch sử khoá').textContent ?? '';
     expect(text).toContain('Cắt mọi phiên đăng nhập (2 phiên)');
