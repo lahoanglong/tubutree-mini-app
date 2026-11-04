@@ -76,7 +76,7 @@ describe('ảnh đổi cỡ (R-5)', () => {
     const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" sizes="170px" /></div>);
     const img = container.querySelector('img')!;
     expect(img.getAttribute('src')).toContain('/img?w=320&u=');
-    expect(img.getAttribute('srcset')).toMatch(/w=160&u=[^ ]+ 160w, .*w=320&u=[^ ]+ 320w, .*w=640&u=[^ ]+ 640w$/);
+    expect(img.getAttribute('srcset')).toMatch(/w=160&u=[^ ]+ 160w, .*w=320&u=[^ ]+ 320w, .*w=480&u=[^ ]+ 480w, .*w=640&u=[^ ]+ 640w$/);
     expect(img.getAttribute('srcset')).not.toMatch(/\dx\b/);
     expect(img.getAttribute('sizes')).toBe('170px');
   });

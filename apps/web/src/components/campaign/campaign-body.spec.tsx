@@ -76,7 +76,7 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: 'https://res.cloudinary.com/tubutree/image/upload/v1/hero.jpg' }} initialProducts={page([1, 2, 3], 1, 3)} />);
     const img = c.querySelector('img')!;
     expect(img.getAttribute('src')).toContain('/img?w=960&u=');
-    expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
+    expect(img.getAttribute('srcset')).toMatch(/ 160w, .* 320w, .* 480w, .* 640w, .* 960w, .*\/img\?w=1280&u=.* 1280w, .*\/img\?w=1920&u=.* 1920w$/);
     expect(img.getAttribute('sizes')).toBe('(max-width: 767px) calc(100vw - 32px), 768px');
     expect(img.getAttribute('loading')).toBe('eager');
     expect(img.getAttribute('fetchpriority')).toBe('high');

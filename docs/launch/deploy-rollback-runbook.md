@@ -545,6 +545,12 @@ Lượt ngày đầu tiên sau deploy (chưa có dòng `AffiliateService.dailyWa
 - Quay API về `:prev` thì phải quay cả web về bản trước; Mini App Live mới cũng phải kéo về bản cũ.
 - Mini App Live cũ (chưa gửi `clickedAgoMs`) vẫn chạy như trước: máy chủ ghi `clickedAt = now`, hạn tính từ lúc nhận, cho tới khi Mini App mới lên Live.
 
+### 1.18 Ảnh đổi cỡ thêm bề rộng 480: thứ tự deploy
+
+- API nhận `w=480` ở `/img` (trước đó 400). Web và Mini App mới xin `w=480`, nên deploy API cùng lúc hoặc trước web, và chỉ đẩy bản Mini App (ZMP) SAU khi API đã chạy.
+- API cũ nhận `w=480` thì trả 400: web lùi về ảnh gốc một lần (`fallBackToOriginal`), Mini App ở mục 2x (và 3x) cũng lùi về ảnh gốc. Ảnh không vỡ nhưng nặng.
+- Quay API về `:prev-*` thiếu `w=480` thì Mini App bản mới nhận 400 như trên. Nếu quay API qua mốc này và phải giữ lâu thì cân nhắc đẩy lại Mini App bản cũ.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
