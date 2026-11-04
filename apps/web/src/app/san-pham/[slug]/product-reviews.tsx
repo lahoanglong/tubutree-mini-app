@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video } from 'lucide-react';
+import { REVIEW_NEEDS_PURCHASE } from '@tubutree/app-core/review-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useHydrated } from '@/lib/use-hydrated';
 import { apiMediaUrl } from '@/lib/client-api';
@@ -182,7 +183,7 @@ export function ProductReviews({ slug }: { slug: string }) {
                 Sửa đánh giá của bạn
               </button>
             ) : elig.reason === 'NOT_PURCHASED' ? (
-              <span className="text-sm text-stone-600">Mua và nhận hàng để đánh giá</span>
+              <span className="text-sm text-stone-600">{REVIEW_NEEDS_PURCHASE}</span>
             ) : null}
           </>
         )}

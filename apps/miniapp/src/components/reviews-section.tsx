@@ -16,7 +16,7 @@ import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { filterReviews, reviewFilterChips, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
-import { REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
+import { REVIEW_NEEDS_PURCHASE, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -190,7 +190,7 @@ export function ReviewsSection({
         )}
         {status === 'authenticated' && elig?.reason === 'NOT_PURCHASED' && (
           <Text variant="caption" tone="tertiary">
-            Mua &amp; nhận hàng để đánh giá
+            {REVIEW_NEEDS_PURCHASE}
           </Text>
         )}
       </div>

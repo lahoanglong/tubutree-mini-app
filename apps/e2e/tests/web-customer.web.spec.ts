@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { PRODUCT_NOT_FOUND } from '../../../packages/app-core/src/client-copy';
 
 /**
  * Smoke web khách (Next, public). Server Next gọi API từ phía server nên không mock được: chạy với API thật
@@ -45,7 +46,9 @@ test.describe('Web khách (smoke)', () => {
     expect(res?.status()).toBe(404);
     await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
     await expect(page.locator('main')).toHaveCount(1);
-    await expect(page.getByRole('heading', { level: 1, name: 'Không tìm thấy trang' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Chi tiết sản phẩm' })).toHaveCount(1);
+    await expect(page.getByText(PRODUCT_NOT_FOUND)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Về trang chủ' })).toBeVisible();
     expect(health.pageErrors).toEqual([]);
     expect(health.serverErrors).toEqual([]);
   });

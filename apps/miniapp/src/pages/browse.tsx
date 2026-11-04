@@ -3,6 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { ChevronRight } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { findCategory, chipScope } from '@tubutree/app-core/browse/category-tree';
+import { softBreakLongWords } from '@tubutree/app-core/browse/soft-break';
 import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
 import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
 import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
@@ -77,16 +78,6 @@ const browseHref = (patch: Partial<SearchState>) => `/browse?${serializeSearchSt
  * thì MỌI trang đã tải vẫn hiện ngay nên khôi phục đủ sâu; hết cache thì chỉ có trang 1 và trình duyệt kẹp vị trí về cuối trang 1 —
  * chấp nhận (không tải ngầm hàng loạt trang chỉ để cuộn).
  */
-/** Từ khoá một dải dài không dấu cách (tối đa 100 ký tự) tràn khung 375px ở tiêu đề "Không tìm thấy": chèn điểm ngắt vô hình để xuống dòng được. */
-function softBreakLongWords(q: string): string {
-  return q.replace(/\S{14,}/g, (w) => {
-    // Cắt theo cụm grapheme (emoji ZWJ, chữ + dấu NFD không bị tách); runtime thiếu Intl.Segmenter thì lùi về điểm mã.
-    const Seg = (Intl as unknown as { Segmenter?: new (l: string, o: { granularity: 'grapheme' }) => { segment(s: string): Iterable<{ segment: string }> } }).Segmenter;
-    const units = Seg ? Array.from(new Seg('vi', { granularity: 'grapheme' }).segment(w), (x) => x.segment) : Array.from(w);
-    return units.map((u, i) => ((i + 1) % 12 === 0 && i + 1 < units.length ? `${u}\u200B` : u)).join('');
-  });
-}
-
 export default function BrowsePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();

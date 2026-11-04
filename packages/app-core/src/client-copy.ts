@@ -8,6 +8,8 @@ export const ERROR_NETWORK = 'Mất kết nối. Kiểm tra mạng rồi thử l
 export const AVATAR_READ_FAILED = 'Không tải được ảnh. Thử lại sau ít phút.';
 export const loadMoreFailed = (what: string): string => `Không tải thêm được ${what}. Bạn thử lại nhé.`;
 
+export const PRODUCT_NOT_FOUND = 'Không tìm thấy sản phẩm này.';
+
 export const REQUIRED_FIELD = 'Bạn điền giúp Tubu mục này nhé';
 export const BANK_NAME_REQUIRED = 'Nhập tên ngân hàng nhận tiền hoàn.';
 export const ACCOUNT_NUMBER_INVALID = 'Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.';

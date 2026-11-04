@@ -16,7 +16,8 @@ export function ErrorState({
   message = ERROR_GENERIC,
   onRetry,
   retryLabel = 'Thử lại',
-  title = 'Chưa tải được trang này',
+  title,
+  onHome,
   variant = 'page',
   showSupport,
 }: {
@@ -25,6 +26,8 @@ export function ErrorState({
   retryLabel?: string;
   /** Dòng tiêu đề đậm trên chữ báo lỗi (Mini App: "Chưa tải được trang này"). */
   title?: string;
+  /** Có thì thay "Thử lại" bằng "Về trang chủ" (lỗi 404: bấm lại cũng không khác đi) và tiêu đề mặc định thành "Không tìm thấy", như Mini App. */
+  onHome?: () => void;
   variant?: 'page' | 'inline';
   showSupport?: boolean;
 }) {
@@ -39,11 +42,11 @@ export function ErrorState({
       <span aria-hidden="true" className={`flex items-center justify-center rounded-full bg-warning-bg text-warning-fg ${inline ? 'h-11 w-11' : 'h-14 w-14'}`}>
         <TriangleAlert className={inline ? 'h-[22px] w-[22px]' : 'h-7 w-7'} strokeWidth={1.75} />
       </span>
-      <p className="font-display text-lg font-semibold text-stone-900">{title}</p>
+      <p className="font-display text-lg font-semibold text-stone-900">{title ?? (onHome ? 'Không tìm thấy' : 'Chưa tải được trang này')}</p>
       <p data-testid="error-message" className="max-w-xs text-sm text-stone-700">{message}</p>
-      {onRetry && (
-        <button type="button" onClick={onRetry} className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:bg-forest-50 max-md:hover:bg-forest-100 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}>
-          {retryLabel}
+      {(onHome || onRetry) && (
+        <button type="button" onClick={onHome ?? onRetry} className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:bg-forest-50 max-md:hover:bg-forest-100 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}>
+          {onHome ? 'Về trang chủ' : retryLabel}
         </button>
       )}
       {(showSupport ?? !inline) && hasQuery && <SupportHotline />}
