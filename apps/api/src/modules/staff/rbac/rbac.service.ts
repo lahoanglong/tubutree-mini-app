@@ -195,9 +195,12 @@ export class RbacService {
           }
         }
         role = base;
+        // Vai trò gốc DEALER chỉ suy từ đơn đại lý còn APPROVED (admin hạ đại lý qua setUserRole không đụng tới đơn), nên đường này
+        // chỉ được đặt dấu, không bao giờ xoá: cấp lại CTV/đại lý là quyết định tường minh của admin ở setUserRole.
+        const revocation = await affiliateRevocationPatch(tx, user.id, user.role, base);
         await tx.user.update({
           where: { id: user.id },
-          data: { role: base, ...(await affiliateRevocationPatch(tx, user.id, user.role, base)), ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
+          data: { role: base, ...(revocation.affiliateRevokedAt ? { affiliateRevokedAt: revocation.affiliateRevokedAt } : {}), ...(user.staffPermissions?.length ? { staffPermissions: [] } : {}) },
         });
         await recordUserAdminEvent(tx, { userId: user.id, kind: 'ROLE', from: user.role, to: base, reason: 'Thu hồi quyền nhân viên', actorId: adminId });
         if (user.staffPermissions?.length) {

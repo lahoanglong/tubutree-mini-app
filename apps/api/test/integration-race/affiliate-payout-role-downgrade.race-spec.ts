@@ -11,6 +11,9 @@ import { RewardPointsService } from '../../src/modules/wallet/reward-points.serv
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { CTV_MONTHLY_MILESTONES } from '../../src/modules/affiliate/ctv-milestones';
+import { AdminService } from '../../src/modules/admin/admin.service';
+import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
+import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { createOrder, createUser, randCode, sleep, warmPool } from './helpers';
 
 describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real Postgres)', () => {
@@ -133,6 +136,31 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     await expect(affiliate.requestPayout(ctv.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`)).rejects.toBeInstanceOf(ForbiddenException);
     await expect(affiliate.claimMilestone(ctv.id, CTV_MONTHLY_MILESTONES[0].id)).rejects.toBeInstanceOf(ForbiddenException);
     expect(await state(ctv.id)).toEqual({ balance: 0, payouts: 0, paid: 0, approved: 1, ledger: 0 });
+  });
+
+  it('đại lý bị admin hạ về khách (có dấu) → cấp rồi thu hồi nhân viên về DEALER (đơn còn APPROVED): dấu còn nguyên, rút vẫn 403', async () => {
+    const created = await ctvWithCommission(100_000);
+    const boss = await createUser(prisma, { role: 'ADMIN' });
+    const dealer = await prisma.user.update({ where: { id: created.id }, data: { role: 'DEALER', phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}` } });
+    await prisma.dealerApplication.create({
+      data: { userId: dealer.id, status: 'APPROVED', businessName: 'IT', ownerName: 'IT', phone: dealer.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
+    });
+    const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, moduleRef.get(SystemConfigService));
+    const rbac = new RbacService(prisma, fulfilment);
+    const none = {} as never;
+    const admin = new AdminService(prisma, none, none, none, none, none, none, rbac, none, none, fulfilment);
+    const mark = async () => (await prisma.user.findUniqueOrThrow({ where: { id: dealer.id } })).affiliateRevokedAt;
+
+    await admin.setUserRole(boss.id, dealer.phone!, 'CUSTOMER');
+    expect(await mark()).not.toBeNull();
+    await rbac.addGrant(boss.id, dealer.phone!, 'STAFF');
+    expect(await mark()).not.toBeNull();
+    await rbac.revokeGrant(boss.id, dealer.phone!);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: dealer.id } });
+    expect(after.role).toBe('DEALER');
+    expect(after.affiliateRevokedAt).not.toBeNull();
+    await expect(affiliate.requestPayout(dealer.id, 100_000, 'WALLET_BALANCE', undefined, `rd-${randCode(10)}`)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(await state(dealer.id)).toEqual({ balance: 0, payouts: 0, paid: 0, approved: 1, ledger: 0 });
   });
 
   it('migration backfill: đặt dấu cho khách có dấu vết CTV, bỏ qua khách thường và CTV đang hoạt động; chạy lại không đổi', async () => {

@@ -302,9 +302,24 @@ describe('RbacService.revokeGrant', () => {
     });
     const out = await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
     expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { role: 'DEALER', affiliateRevokedAt: null } }),
+      expect.objectContaining({ data: { role: 'DEALER' } }),
     );
     expect(out.downgraded).toBe(true);
+  });
+
+  it('người đã bị đặt dấu thu hồi CTV: thu hồi nhân viên về DEALER (đơn đại lý còn APPROVED) KHÔNG xoá dấu', async () => {
+    const prisma = makePrisma({
+      roleGrant: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', affiliateRevokedAt: new Date() })),
+        update: jest.fn().mockResolvedValue(mkUser({ role: 'DEALER' })),
+      },
+      commission: { findFirst: jest.fn().mockResolvedValue(null) }, storefront: { findFirst: jest.fn().mockResolvedValue(null) },
+      dealerApplication: { findFirst: jest.fn().mockResolvedValue({ id: 'app1' }) },
+    });
+    await new RbacService(prisma, fulfilment()).revokeGrant('admin1', '0900000001');
+    const data = (prisma.user.update as jest.Mock).mock.calls[0][0].data as { affiliateRevokedAt?: Date | null };
+    expect(data.affiliateRevokedAt).not.toBeNull();
   });
 
   it('user đang DEALER → thu hồi grant nhưng KHÔNG hạ (không phải STAFF/ADMIN)', async () => {
