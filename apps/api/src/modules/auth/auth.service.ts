@@ -17,6 +17,7 @@ import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-not
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
 import { ExternalChatService } from '../external-points/external-chat.service';
+import { activeGrantWhere } from '../staff/rbac/active-grant';
 import { guestZaloId, isHashedGuestKey, legacyGuestZaloId } from './device-id';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
@@ -405,7 +406,7 @@ export class AuthService {
       this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id} (role=${user.role}, khoá=${user.isBlocked}): ${tail}, cần admin xử lý`);
       return {};
     }
-    const grants = await this.prisma.roleGrant.findFirst({ where: { phone: { in: [user.phone, zaloPhone] }, revokedAt: null }, select: { phone: true } });
+    const grants = await this.prisma.roleGrant.findFirst({ where: { phone: { in: [user.phone, zaloPhone] }, ...activeGrantWhere() }, select: { phone: true } });
     if (grants) {
       this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id}: ${tail}, một trong hai số đang có grant quyền, cần admin xử lý`);
       return {};

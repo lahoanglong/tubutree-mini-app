@@ -109,7 +109,7 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
       const dealerTierCount = await guarded('dealerTiers', 0, () => count('dealer_tiers'));
       const admin = await guarded('admin', { adminCount: 0, pendingAdminGrants: 0 }, async () => ({
         adminCount: await count('users', `"role" = 'ADMIN'`),
-        pendingAdminGrants: await count('role_grants', `"role" = 'ADMIN' AND "revokedAt" IS NULL`),
+        pendingAdminGrants: await count('role_grants', `"role" = 'ADMIN' AND "revokedAt" IS NULL AND ("expiresAt" IS NULL OR "expiresAt" > now())`),
       }));
       const demoData = await guarded<DbSnapshot['demoData']>('demoData', undefined, async () =>
         (await exists('products')) && (await exists('coupons')) ? await collectDemoData(tx) : undefined,

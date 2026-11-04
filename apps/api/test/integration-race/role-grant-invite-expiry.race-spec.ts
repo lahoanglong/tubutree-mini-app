@@ -14,6 +14,11 @@ describe('Lời mời quyền theo SĐT hết hạn sau 7 ngày (real Postgres)'
   let rbac: RbacService;
   let boss: { id: string };
   const BACKFILL_SQL = readFileSync(join(__dirname, '../../prisma/migrations/20261105100100_role_grant_expires_backfill/migration.sql'), 'utf8');
+  // $executeRawUnsafe chạy được đúng một câu lệnh mỗi lần: bỏ dòng chú thích rồi tách theo dấu chấm phẩy cuối câu.
+  const runBackfill = async (tx: { $executeRawUnsafe: (q: string) => Promise<number> }) => {
+    const statements = BACKFILL_SQL.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').split(';').map((x) => x.trim()).filter(Boolean);
+    for (const q of statements) await tx.$executeRawUnsafe(q);
+  };
   const DAY = 864e5;
   const newPhone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
 
@@ -83,16 +88,18 @@ describe('Lời mời quyền theo SĐT hết hạn sau 7 ngày (real Postgres)'
   it('migration backfill: lời mời chưa áp được 7 ngày, grant của người đã có tài khoản giữ nguyên, chạy lại không đổi', async () => {
     const pending = newPhone();
     const applied = newPhone();
+    const pendingAdmin = newPhone();
+    await prisma.roleGrant.create({ data: { phone: pendingAdmin, role: 'ADMIN', grantedBy: boss.id, note: 'moi cu' } });
     await prisma.roleGrant.create({ data: { phone: pending, role: 'STAFF', grantedBy: boss.id } });
     await createUser(prisma, { role: 'STAFF', phone: applied });
     await prisma.roleGrant.create({ data: { phone: applied, role: 'STAFF', grantedBy: boss.id } });
     let out: Record<string, Date | null> = {};
     await prisma
       .$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(BACKFILL_SQL);
+        await runBackfill(tx);
         const first = await tx.roleGrant.findMany({ where: { phone: { in: [pending, applied] } } });
         const firstAt = Object.fromEntries(first.map((g) => [g.phone, g.expiresAt]));
-        await tx.$executeRawUnsafe(BACKFILL_SQL);
+        await runBackfill(tx);
         const second = await tx.roleGrant.findMany({ where: { phone: { in: [pending, applied] } } });
         expect(Object.fromEntries(second.map((g) => [g.phone, g.expiresAt]))).toEqual(firstAt);
         out = firstAt;
@@ -103,5 +110,35 @@ describe('Lời mời quyền theo SĐT hết hạn sau 7 ngày (real Postgres)'
       });
     expect(out[pending]!.getTime()).toBeGreaterThan(Date.now() + 6.9 * DAY);
     expect(out[applied]).toBeNull();
+    // Lời mời ADMIN cho số chưa có tài khoản bị thu hồi, không gia hạn.
+    const adminRow = await prisma.roleGrant.findFirstOrThrow({ where: { phone: pendingAdmin } });
+    expect(adminRow.revokedAt).toBeNull(); // giao dịch của test đã rollback
+  });
+
+  it('migration backfill: lời mời ADMIN chưa áp bị thu hồi kèm ghi chú (chạy thật, không rollback)', async () => {
+    const pendingAdmin = newPhone();
+    const g = await prisma.roleGrant.create({ data: { phone: pendingAdmin, role: 'ADMIN', grantedBy: boss.id, note: 'moi cu' } });
+    await runBackfill(prisma);
+    const after = await prisma.roleGrant.findUniqueOrThrow({ where: { id: g.id } });
+    expect(after.revokedAt).not.toBeNull();
+    expect(after.note).toContain('moi cu');
+    expect(after.note).toContain('Thu hồi tự động');
+    expect(after.expiresAt).toBeNull();
+  });
+
+  // M1: lời mời ADMIN quá hạn không được sống lại khi một lời mời khác chạm vào người đó.
+  it('lời mời ADMIN quá hạn, người đó đăng ký rồi admin mời STAFF → cuối cùng STAFF, grant ADMIN bị thu hồi, refresh kế tiếp vẫn STAFF', async () => {
+    const phone = newPhone();
+    await prisma.roleGrant.create({ data: { phone, role: 'ADMIN', grantedBy: boss.id, expiresAt: new Date(Date.now() - DAY) } });
+    const user = await createUser(prisma, { role: 'CUSTOMER', phone });
+    expect((await rbac.applyGrants(user)).role).toBe('CUSTOMER');
+    const out = await rbac.addGrant(boss.id, phone, 'STAFF', undefined, 'nhan vien kho');
+    expect(out.applied).toBe(true);
+    const fresh = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(fresh.role).toBe('STAFF');
+    const adminGrant = await prisma.roleGrant.findFirstOrThrow({ where: { phone, role: 'ADMIN' } });
+    expect(adminGrant.revokedAt).not.toBeNull();
+    expect((await rbac.applyGrants(fresh)).role).toBe('STAFF');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role).toBe('STAFF');
   });
 });

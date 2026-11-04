@@ -9,6 +9,7 @@ import { throwIfLockBusy } from '../../../common/lock-busy';
 import { STAFF_PERMISSIONS, isStaffPermission, type StaffPermission } from '../../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
+import { activeGrantWhere } from './active-grant';
 import { DEFAULT_GRANT_INVITE_TTL_DAYS, STAFF_GRANT_INVITE_TTL_DAYS_KEY, grantInviteTtlDays } from './grant-invite-config';
 import { losesPartnerStore } from '../../merchant/partner-store';
 
@@ -59,7 +60,7 @@ export class RbacService {
     if (!user.phone) return user;
     if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId, reason);
     const peek = await db.roleGrant.findMany({
-      where: { phone: user.phone, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      where: { phone: user.phone, ...activeGrantWhere() },
       select: { role: true },
     });
     if (!this.highestGrant(peek, user.role)) return user;
@@ -76,10 +77,15 @@ export class RbacService {
     const [locked] = await db.$queryRaw<{ role: UserRole; staffPermissions: string[] }[]>`
       SELECT "role", "staffPermissions" FROM "users" WHERE "id" = ${stale.id} FOR NO KEY UPDATE`;
     const user: User = locked ? { ...stale, role: locked.role, staffPermissions: locked.staffPermissions } : stale;
-    const grants = await db.roleGrant.findMany({
-      where: { phone: user.phone!, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-      select: { role: true, staffPermissions: true },
+    const now = new Date();
+    const open = await db.roleGrant.findMany({
+      where: { phone: user.phone!, revokedAt: null },
+      select: { id: true, role: true, staffPermissions: true, expiresAt: true },
     });
+    // Lời mời quá hạn là lời mời đã thu hồi: ghi lại để không ai (kể cả lần cấp sau) xoá hạn rồi dùng nó.
+    const expiredIds = open.filter((g) => g.expiresAt && g.expiresAt <= now).map((g) => g.id);
+    if (expiredIds.length) await db.roleGrant.updateMany({ where: { id: { in: expiredIds }, revokedAt: null }, data: { revokedAt: now } });
+    const grants = open.filter((g) => !expiredIds.includes(g.id));
     if (grants.length === 0) return user;
     const best = this.highestGrant(grants, user.role);
     if (!best) return user; // không nâng / không hạ
@@ -96,7 +102,7 @@ export class RbacService {
       data: { role: best, ...(resetPerms ? { staffPermissions: invitedPerms } : {}) },
     });
     // Lời mời đã được áp thì hết là lời mời: bỏ hạn để về sau không có gì tự thu hồi quyền của người đã nhận.
-    await db.roleGrant.updateMany({ where: { phone: user.phone!, revokedAt: null, expiresAt: { not: null } }, data: { expiresAt: null } });
+    await db.roleGrant.updateMany({ where: { id: { in: grants.map((g) => g.id) }, expiresAt: { not: null } }, data: { expiresAt: null } });
     await recordUserAdminEvent(db, {
       userId: user.id,
       kind: 'ROLE',
@@ -141,7 +147,7 @@ export class RbacService {
         throw new BadRequestException('Chỉ cấp quyền quản trị cho số điện thoại đã có tài khoản. Nhờ người đó đăng nhập Tubu Tree một lần trước.');
       }
       const existing = await tx.roleGrant.findFirst({
-        where: { phone: normalized, role, revokedAt: null },
+        where: { phone: normalized, role, ...activeGrantWhere() },
         select: { id: true, staffPermissions: true },
       });
       if (existing && role === 'STAFF' && permissions && !samePermissions(existing.staffPermissions ?? [], perms)) {
@@ -294,7 +300,7 @@ export class RbacService {
     });
     const memberPhones = new Set(members.map((m) => m.phone).filter(Boolean) as string[]);
     const grants = await this.prisma.roleGrant.findMany({
-      where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      where: activeGrantWhere(),
       select: { phone: true, role: true, staffPermissions: true, createdAt: true, expiresAt: true },
       orderBy: { createdAt: 'desc' },
     });

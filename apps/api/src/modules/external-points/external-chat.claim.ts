@@ -9,6 +9,7 @@ import type { ClaimNotifier } from './external-claim-status';
 import { loadChatConfig, loadStaffMap } from './external-chat.config';
 import { CHAT_SKIP_TEXT, chatCarrierOk, creatorStaffUserId, evaluateChatClaim, holdUntilOf, linkableMemberPhone, phoneVerifiedFresh, releaseAtOf } from './external-chat.rules';
 import { pancakeCreatorId, pancakeCreatorRefs } from './external-order.mapper';
+import { activeGrantWhere } from '../staff/rbac/active-grant';
 import { settlePoints } from './external-claim.rules';
 
 const logger = new Logger('ExternalChat');
@@ -83,7 +84,7 @@ export async function resolveMemberByPhone(tx: Pick<Tx, 'user'>, phone: string, 
 export async function phoneBelongsToStaff(tx: Pick<Tx, 'user' | 'roleGrant'>, phone: string): Promise<boolean> {
   const [user, grant] = await Promise.all([
     tx.user.findFirst({ where: { phone, role: { in: ['STAFF', 'ADMIN'] } }, select: { id: true } }),
-    tx.roleGrant.findFirst({ where: { phone, revokedAt: null }, select: { id: true } }),
+    tx.roleGrant.findFirst({ where: { phone, ...activeGrantWhere() }, select: { id: true } }),
   ]);
   return !!user || !!grant;
 }

@@ -313,11 +313,31 @@ describe('RbacService: lời mời quyền theo SĐT hết hạn (L1-05)', () =>
   it('nâng quyền xong thì bỏ hạn của các grant đã áp (expiresAt = null)', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = makePrisma({
-      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]), updateMany },
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ id: 'g1', role: 'STAFF', staffPermissions: [], expiresAt: new Date(Date.now() + DAY) }]), updateMany },
       user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },
     });
     await new RbacService(prisma).applyGrants(mkUser());
-    expect(updateMany).toHaveBeenCalledWith({ where: { phone: '0900000001', revokedAt: null, expiresAt: { not: null } }, data: { expiresAt: null } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['g1'] }, expiresAt: { not: null } }, data: { expiresAt: null } });
+  });
+
+  // M1: lời mời ADMIN quá hạn không được sống lại khi một lần cấp khác chạm vào người đó.
+  it('grant quá hạn gặp ở lần nâng quyền thì bị thu hồi, không được xoá hạn và không được dùng để nâng', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = makePrisma({
+      roleGrant: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'gA', role: 'ADMIN', staffPermissions: [], expiresAt: new Date(Date.now() - DAY) },
+          { id: 'gS', role: 'STAFF', staffPermissions: [], expiresAt: new Date(Date.now() + DAY) },
+        ]),
+        updateMany,
+      },
+      user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },
+    });
+    await new RbacService(prisma).applyGrants(mkUser());
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ role: 'STAFF' }) }));
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['gA'] }, revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ['gS'] }, expiresAt: { not: null } }, data: { expiresAt: null } });
+    expect(updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: { in: expect.arrayContaining(['gA']) }, expiresAt: { not: null } }) }));
   });
 
   it('listStaff: chỉ lấy lời mời chưa hết hạn và trả kèm hạn', async () => {

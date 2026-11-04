@@ -289,7 +289,7 @@ describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedA
   it('tài khoản CUSTOMER không bị chặn: kiểm grant theo cả số cũ lẫn số mới trong một truy vấn', async () => {
     const { svc, roleGrant } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, null, '0987654321');
     await svc.loginWithZaloMiniApp('c', 'at', 'pt');
-    expect(roleGrant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: { in: ['0901234567', '0987654321'] }, revokedAt: null } }));
+    expect(roleGrant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { phone: { in: ['0901234567', '0987654321'] }, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }] } }));
   });
 
   it('số mới bị người khác lấy giữa lúc kiểm và lúc ghi (P2002): vẫn đăng nhập, giữ số cũ', async () => {
